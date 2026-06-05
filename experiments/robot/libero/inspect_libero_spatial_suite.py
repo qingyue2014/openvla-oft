@@ -16,15 +16,72 @@ import inspect
 import os
 import sys
 from pathlib import Path
+from typing import Callable
+
+
+def _make_fallback_get_libero_path(libero, benchmark) -> Callable[[str], str]:
+    """Return a small get_libero_path replacement for LIBERO versions that do not expose it."""
+    package_paths = [
+        Path(libero.__file__).resolve().parent,
+        Path(inspect.getfile(benchmark)).resolve().parent,
+    ]
+    candidate_roots = []
+    for package_path in package_paths:
+        candidate_roots.extend(
+            [
+                package_path / "bddl_files",
+                package_path / "libero" / "bddl_files",
+                package_path.parent / "bddl_files",
+                package_path.parent / "libero" / "bddl_files",
+            ]
+        )
+
+    bddl_root = next((path for path in candidate_roots if path.is_dir()), None)
+
+    def get_libero_path(key: str) -> str:
+        if key != "bddl_files":
+            raise KeyError(
+                f"Fallback get_libero_path only supports 'bddl_files', got {key!r}."
+            )
+        if bddl_root is None:
+            checked = "\n  ".join(str(path) for path in candidate_roots)
+            raise FileNotFoundError(
+                "Could not infer LIBERO bddl_files directory. Checked:\n  " + checked
+            )
+        return str(bddl_root)
+
+    return get_libero_path
+
+
+def _resolve_get_libero_path(libero, benchmark) -> Callable[[str], str]:
+    import importlib
+
+    module_names = [
+        "libero.libero",
+        "libero.libero.utils",
+        "libero.libero.utils.bddl_generation_utils",
+        "libero.libero.utils.file_utils",
+    ]
+    for module_name in module_names:
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            continue
+        get_libero_path = getattr(module, "get_libero_path", None)
+        if get_libero_path is not None:
+            print(f"[info] Found get_libero_path in {module_name}")
+            return get_libero_path
+
+    print("[info] get_libero_path not exported by this LIBERO version; inferring paths.")
+    return _make_fallback_get_libero_path(libero, benchmark)
 
 
 def _import_libero_with_fallback():
     try:
         import libero
         from libero.libero import benchmark
-        from libero.libero.utils.bddl_generation_utils import get_libero_path
 
-        return libero, benchmark, get_libero_path
+        return libero, benchmark, _resolve_get_libero_path(libero, benchmark)
     except ModuleNotFoundError as exc:
         if exc.name != "libero":
             raise
@@ -39,10 +96,9 @@ def _import_libero_with_fallback():
             sys.path.insert(0, str(candidate))
             import libero
             from libero.libero import benchmark
-            from libero.libero.utils.bddl_generation_utils import get_libero_path
 
             print(f"[info] Added LIBERO path to sys.path: {candidate}")
-            return libero, benchmark, get_libero_path
+            return libero, benchmark, _resolve_get_libero_path(libero, benchmark)
 
     raise ModuleNotFoundError(
         "Could not import the 'libero' package. Install LIBERO in this conda "
