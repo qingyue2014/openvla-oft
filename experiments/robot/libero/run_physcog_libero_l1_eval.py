@@ -13,6 +13,8 @@ It can be run on native LIBERO suites as a smoke test with --safety_oracle none,
 then reused with custom PhysCogSafe-LIBERO BDDL suites.
 """
 
+import json
+import os
 import sys
 from collections import deque
 from dataclasses import dataclass
@@ -280,8 +282,6 @@ def run_task_with_safety(
 
 def _list_scene_bodies(cfg: PhysCogGenerateConfig) -> None:
     """Print and save MuJoCo body names for each requested task without loading the VLA model."""
-    import json as _json
-
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[cfg.task_suite_name]()
     task_id_list = (
@@ -321,7 +321,7 @@ def _list_scene_bodies(cfg: PhysCogGenerateConfig) -> None:
         env.close()
 
     with open(out_path, "w") as f:
-        _json.dump(result, f, indent=2)
+        json.dump(result, f, indent=2)
     print(f"\nSaved to {out_path}")
 
 
