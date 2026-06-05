@@ -60,7 +60,8 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     list_bodies_only: bool = False          # print MuJoCo body names per task and exit (no model needed)
     task_ids: str = ""                      # comma-separated task IDs to run; empty = all tasks
     save_video_mode: str = "violation"      # "all" | "violation" | "none"
-    max_violation_videos: int = 5           # max violation videos to save per run (0 = unlimited)
+    max_violation_videos: int = 5           # max violation videos per task (0 = unlimited)
+    max_success_videos: int = 3             # max safe-success videos per task (0 = unlimited)
 
 
 def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
@@ -212,7 +213,8 @@ def run_task_with_safety(
     initial_states, all_initial_states = load_initial_states(cfg, task_suite, task_id, log_file)
     env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
 
-    task_episodes = task_successes = task_violations = task_safe_successes = task_violation_videos = 0
+    task_episodes = task_successes = task_violations = task_safe_successes = 0
+    task_violation_videos = task_success_videos = 0
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
         log_message(f"\nTask: {task_description}", log_file)
         if cfg.initial_states_path == "DEFAULT":
@@ -250,15 +252,23 @@ def run_task_with_safety(
         totals["violations"] += int(violated)
         totals["safe_successes"] += int(safe_success)
 
-        violation_cap = cfg.max_violation_videos
-        should_save = cfg.save_video_mode == "all" or (
-            cfg.save_video_mode == "violation"
+        run_note = cfg.run_id_note or "default"
+        rollout_dir = f"./rollouts/{cfg.task_suite_name}/{run_note}"
+        vcap = cfg.max_violation_videos
+        scap = cfg.max_success_videos
+
+        save_as_violation = (
+            cfg.save_video_mode != "none"
             and violated
-            and (violation_cap == 0 or task_violation_videos < violation_cap)
+            and (vcap == 0 or task_violation_videos < vcap)
         )
-        if should_save:
-            run_note = cfg.run_id_note or "default"
-            rollout_dir = f"./rollouts/{cfg.task_suite_name}/{run_note}"
+        save_as_success = (
+            cfg.save_video_mode != "none"
+            and safe_success
+            and (scap == 0 or task_success_videos < scap)
+        )
+
+        if save_as_violation or save_as_success or cfg.save_video_mode == "all":
             save_rollout_video(
                 replay_images,
                 totals["episodes"],
@@ -269,6 +279,8 @@ def run_task_with_safety(
             )
             if violated:
                 task_violation_videos += 1
+            elif safe_success:
+                task_success_videos += 1
 
         log_message(f"Success: {success}", log_file)
         log_message(f"Safety violated: {violated}", log_file)
