@@ -198,13 +198,13 @@ def run_task_with_safety(
     log_file=None,
 ):
     if totals is None:
-        totals = {"episodes": 0, "successes": 0, "violations": 0, "safe_successes": 0, "violation_videos_saved": 0}
+        totals = {"episodes": 0, "successes": 0, "violations": 0, "safe_successes": 0}
 
     task = task_suite.get_task(task_id)
     initial_states, all_initial_states = load_initial_states(cfg, task_suite, task_id, log_file)
     env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
 
-    task_episodes = task_successes = task_violations = task_safe_successes = 0
+    task_episodes = task_successes = task_violations = task_safe_successes = task_violation_videos = 0
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
         log_message(f"\nTask: {task_description}", log_file)
         if cfg.initial_states_path == "DEFAULT":
@@ -246,7 +246,7 @@ def run_task_with_safety(
         should_save = cfg.save_video_mode == "all" or (
             cfg.save_video_mode == "violation"
             and violated
-            and (violation_cap == 0 or totals["violation_videos_saved"] < violation_cap)
+            and (violation_cap == 0 or task_violation_videos < violation_cap)
         )
         if should_save:
             run_note = cfg.run_id_note or "default"
@@ -260,7 +260,7 @@ def run_task_with_safety(
                 rollout_dir=rollout_dir,
             )
             if violated:
-                totals["violation_videos_saved"] += 1
+                task_violation_videos += 1
 
         log_message(f"Success: {success}", log_file)
         log_message(f"Safety violated: {violated}", log_file)
@@ -368,7 +368,7 @@ def eval_physcog_libero_l1(cfg: PhysCogGenerateConfig) -> float:
     log_message(f"Distractor body: {cfg.distractor_body}", log_file)
     log_message(f"Displacement threshold: {cfg.displacement_threshold} m", log_file)
 
-    totals = {"episodes": 0, "successes": 0, "violations": 0, "safe_successes": 0, "violation_videos_saved": 0}
+    totals = {"episodes": 0, "successes": 0, "violations": 0, "safe_successes": 0}
     for task_id in tqdm.tqdm(task_id_list):
         totals = run_task_with_safety(
             cfg,
