@@ -1,0 +1,337 @@
+"""
+run_physcog_libero_l1_eval.py
+
+OpenVLA-OFT LIBERO evaluation with PhysCogSafe L1 safety metrics.
+
+This script starts from the native LIBERO evaluation path and adds:
+  - safety oracle hook after every env.step()
+  - safety violation rate (SVR)
+  - first violation step / reason logging
+  - safe success = task success and no safety violation
+
+It can be run on native LIBERO suites as a smoke test with --safety_oracle none,
+then reused with custom PhysCogSafe-LIBERO BDDL suites.
+"""
+
+import sys
+from collections import deque
+from dataclasses import dataclass
+from typing import Optional
+
+import draccus
+import tqdm
+import wandb
+from libero.libero import benchmark
+
+sys.path.append("../..")
+from experiments.robot.libero.physcog_oracles import SafetyStatus, make_safety_oracle
+from experiments.robot.libero.run_libero_eval import (
+    GenerateConfig as LiberoGenerateConfig,
+    TASK_MAX_STEPS,
+    check_unnorm_key,
+    get_action,
+    get_action_head,
+    get_image_resize_size,
+    get_libero_dummy_action,
+    get_libero_env,
+    get_model,
+    get_noisy_action_projector,
+    get_processor,
+    get_proprio_projector,
+    load_initial_states,
+    log_message,
+    prepare_observation,
+    process_action,
+    save_rollout_video,
+    set_seed_everywhere,
+    setup_logging,
+)
+from prismatic.vla.constants import NUM_ACTIONS_CHUNK
+
+
+@dataclass
+class PhysCogGenerateConfig(LiberoGenerateConfig):
+    safety_oracle: str = "none"
+    distractor_body: Optional[str] = None
+    stop_on_violation: bool = False
+
+
+def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
+    assert cfg.pretrained_checkpoint is not None, "pretrained_checkpoint must not be None!"
+    if "image_aug" in str(cfg.pretrained_checkpoint):
+        assert cfg.center_crop, "Expecting center_crop=True because model was trained with image augmentations!"
+    assert not (cfg.load_in_8bit and cfg.load_in_4bit), "Cannot use both 8-bit and 4-bit quantization!"
+
+    benchmark_dict = benchmark.get_benchmark_dict()
+    assert cfg.task_suite_name in benchmark_dict, (
+        f"Invalid task suite: {cfg.task_suite_name}. "
+        f"Available suites include: {sorted(benchmark_dict.keys())}"
+    )
+
+
+def initialize_model(cfg: PhysCogGenerateConfig):
+    model = get_model(cfg)
+
+    proprio_projector = None
+    if cfg.use_proprio:
+        proprio_projector = get_proprio_projector(cfg, model.llm_dim, proprio_dim=8)
+
+    action_head = None
+    if cfg.use_l1_regression or cfg.use_diffusion:
+        action_head = get_action_head(cfg, model.llm_dim)
+
+    noisy_action_projector = None
+    if cfg.use_diffusion:
+        noisy_action_projector = get_noisy_action_projector(cfg, model.llm_dim)
+
+    processor = None
+    if cfg.model_family == "openvla":
+        processor = get_processor(cfg)
+        check_unnorm_key(cfg, model)
+
+    return model, action_head, proprio_projector, noisy_action_projector, processor
+
+
+def run_episode_with_safety(
+    cfg: PhysCogGenerateConfig,
+    env,
+    task_description: str,
+    model,
+    resize_size,
+    processor=None,
+    action_head=None,
+    proprio_projector=None,
+    noisy_action_projector=None,
+    initial_state=None,
+    log_file=None,
+):
+    env.reset()
+    if initial_state is not None:
+        obs = env.set_init_state(initial_state)
+    else:
+        obs = env.get_observation()
+
+    oracle = make_safety_oracle(cfg.safety_oracle, distractor_body=cfg.distractor_body)
+    oracle.reset(env, obs)
+    safety = SafetyStatus()
+
+    if cfg.num_open_loop_steps != NUM_ACTIONS_CHUNK:
+        log_message(
+            f"WARNING: cfg.num_open_loop_steps ({cfg.num_open_loop_steps}) does not match "
+            f"NUM_ACTIONS_CHUNK ({NUM_ACTIONS_CHUNK}).",
+            log_file,
+        )
+    action_queue = deque(maxlen=cfg.num_open_loop_steps)
+
+    t = 0
+    replay_images = []
+    max_steps = TASK_MAX_STEPS.get(cfg.task_suite_name, 300)
+    success = False
+
+    try:
+        while t < max_steps + cfg.num_steps_wait:
+            if t < cfg.num_steps_wait:
+                obs, reward, done, info = env.step(get_libero_dummy_action(cfg.model_family))
+                t += 1
+                continue
+
+            observation, img = prepare_observation(obs, resize_size)
+            replay_images.append(img)
+
+            if len(action_queue) == 0:
+                actions = get_action(
+                    cfg,
+                    model,
+                    observation,
+                    task_description,
+                    processor=processor,
+                    action_head=action_head,
+                    proprio_projector=proprio_projector,
+                    noisy_action_projector=noisy_action_projector,
+                    use_film=cfg.use_film,
+                )
+                action_queue.extend(actions)
+
+            action = process_action(action_queue.popleft(), cfg.model_family)
+            obs, reward, done, info = env.step(action.tolist())
+
+            if not safety.violated:
+                step_status = oracle.check(env, obs, action, t)
+                if step_status.violated:
+                    safety = step_status
+                    log_message(f"Safety violation at step {t}: {safety.reason}", log_file)
+                    if cfg.stop_on_violation:
+                        break
+
+            if done:
+                success = True
+                break
+            t += 1
+    except Exception as exc:
+        log_message(f"Episode error: {exc}", log_file)
+
+    return success, replay_images, safety
+
+
+def run_task_with_safety(
+    cfg: PhysCogGenerateConfig,
+    task_suite,
+    task_id: int,
+    model,
+    resize_size,
+    processor=None,
+    action_head=None,
+    proprio_projector=None,
+    noisy_action_projector=None,
+    totals=None,
+    log_file=None,
+):
+    if totals is None:
+        totals = {"episodes": 0, "successes": 0, "violations": 0, "safe_successes": 0}
+
+    task = task_suite.get_task(task_id)
+    initial_states, all_initial_states = load_initial_states(cfg, task_suite, task_id, log_file)
+    env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
+
+    task_episodes = task_successes = task_violations = task_safe_successes = 0
+    for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
+        log_message(f"\nTask: {task_description}", log_file)
+        if cfg.initial_states_path == "DEFAULT":
+            initial_state = initial_states[episode_idx]
+        else:
+            initial_states_task_key = task_description.replace(" ", "_")
+            episode_key = f"demo_{episode_idx}"
+            if not all_initial_states[initial_states_task_key][episode_key]["success"]:
+                log_message(f"Skipping task {task_id} episode {episode_idx} due to failed expert demo!", log_file)
+                continue
+            initial_state = all_initial_states[initial_states_task_key][episode_key]["initial_state"]
+
+        success, replay_images, safety = run_episode_with_safety(
+            cfg,
+            env,
+            task_description,
+            model,
+            resize_size,
+            processor,
+            action_head,
+            proprio_projector,
+            noisy_action_projector,
+            initial_state,
+            log_file,
+        )
+
+        violated = safety.violated
+        safe_success = success and not violated
+        task_episodes += 1
+        task_successes += int(success)
+        task_violations += int(violated)
+        task_safe_successes += int(safe_success)
+        totals["episodes"] += 1
+        totals["successes"] += int(success)
+        totals["violations"] += int(violated)
+        totals["safe_successes"] += int(safe_success)
+
+        save_rollout_video(
+            replay_images,
+            totals["episodes"],
+            success=safe_success,
+            task_description=f"{task_description} safety={not violated}",
+            log_file=log_file,
+        )
+
+        log_message(f"Success: {success}", log_file)
+        log_message(f"Safety violated: {violated}", log_file)
+        if violated:
+            log_message(f"Violation reason: {safety.reason}", log_file)
+            log_message(f"First violation step: {safety.first_step}", log_file)
+        log_message(f"Safe success: {safe_success}", log_file)
+        log_message(
+            "Totals: "
+            f"episodes={totals['episodes']} "
+            f"successes={totals['successes']} "
+            f"violations={totals['violations']} "
+            f"safe_successes={totals['safe_successes']}",
+            log_file,
+        )
+
+    task_svr = task_violations / task_episodes if task_episodes else 0.0
+    task_safe_success_rate = task_safe_successes / task_episodes if task_episodes else 0.0
+    log_message(f"Current task SVR: {task_svr}", log_file)
+    log_message(f"Current task safe success rate: {task_safe_success_rate}", log_file)
+
+    if cfg.use_wandb:
+        wandb.log(
+            {
+                f"svr/{task_description}": task_svr,
+                f"safe_success_rate/{task_description}": task_safe_success_rate,
+                f"num_episodes/{task_description}": task_episodes,
+            }
+        )
+
+    return totals
+
+
+@draccus.wrap()
+def eval_physcog_libero_l1(cfg: PhysCogGenerateConfig) -> float:
+    validate_physcog_config(cfg)
+    set_seed_everywhere(cfg.seed)
+    model, action_head, proprio_projector, noisy_action_projector, processor = initialize_model(cfg)
+    resize_size = get_image_resize_size(cfg)
+    log_file, local_log_filepath, run_id = setup_logging(cfg)
+
+    benchmark_dict = benchmark.get_benchmark_dict()
+    task_suite = benchmark_dict[cfg.task_suite_name]()
+    num_tasks = task_suite.n_tasks
+
+    log_message(f"Task suite: {cfg.task_suite_name}", log_file)
+    log_message(f"Safety oracle: {cfg.safety_oracle}", log_file)
+
+    totals = {"episodes": 0, "successes": 0, "violations": 0, "safe_successes": 0}
+    for task_id in tqdm.tqdm(range(num_tasks)):
+        totals = run_task_with_safety(
+            cfg,
+            task_suite,
+            task_id,
+            model,
+            resize_size,
+            processor,
+            action_head,
+            proprio_projector,
+            noisy_action_projector,
+            totals,
+            log_file,
+        )
+
+    total_episodes = totals["episodes"]
+    success_rate = totals["successes"] / total_episodes if total_episodes else 0.0
+    svr = totals["violations"] / total_episodes if total_episodes else 0.0
+    safe_success_rate = totals["safe_successes"] / total_episodes if total_episodes else 0.0
+
+    log_message("Final PhysCogSafe-LIBERO L1 results:", log_file)
+    log_message(f"Total episodes: {total_episodes}", log_file)
+    log_message(f"Total successes: {totals['successes']}", log_file)
+    log_message(f"Total violations: {totals['violations']}", log_file)
+    log_message(f"Total safe successes: {totals['safe_successes']}", log_file)
+    log_message(f"Overall success rate: {success_rate:.4f} ({success_rate * 100:.1f}%)", log_file)
+    log_message(f"Overall SVR: {svr:.4f} ({svr * 100:.1f}%)", log_file)
+    log_message(f"Overall safe success rate: {safe_success_rate:.4f} ({safe_success_rate * 100:.1f}%)", log_file)
+
+    if cfg.use_wandb:
+        wandb.log(
+            {
+                "success_rate/total": success_rate,
+                "svr/total": svr,
+                "safe_success_rate/total": safe_success_rate,
+                "num_episodes/total": total_episodes,
+            }
+        )
+        wandb.save(local_log_filepath)
+
+    if log_file:
+        log_file.close()
+
+    return safe_success_rate
+
+
+if __name__ == "__main__":
+    eval_physcog_libero_l1()
