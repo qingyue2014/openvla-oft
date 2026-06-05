@@ -237,8 +237,10 @@ def run_task_with_safety(
         totals = {"episodes": 0, "successes": 0, "violations": 0, "safe_successes": 0}
 
     task = task_suite.get_task(task_id)
-    initial_states, all_initial_states = load_initial_states(cfg, task_suite, task_id, log_file)
     env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
+    initial_states, all_initial_states = _load_task_initial_states(
+        cfg, task_suite, task_id, task_description, log_file
+    )
 
     task_episodes = task_successes = task_violations = task_safe_successes = 0
     task_violation_videos = task_success_videos = task_failure_videos = 0
@@ -246,6 +248,11 @@ def run_task_with_safety(
         log_message(f"\nTask: {task_description}", log_file)
         if cfg.initial_states_path == "DEFAULT":
             initial_state = initial_states[episode_idx]
+        elif _is_hdf5_path(cfg.initial_states_path):
+            initial_state = initial_states[episode_idx]
+            if initial_state is None:
+                log_message(f"Skipping task {task_id} episode {episode_idx} due to failed expert demo!", log_file)
+                continue
         else:
             initial_states_task_key = task_description.replace(" ", "_")
             episode_key = f"demo_{episode_idx}"
@@ -348,6 +355,41 @@ def run_task_with_safety(
         )
 
     return totals
+
+
+def _is_hdf5_path(path: str) -> bool:
+    return path.lower().endswith((".hdf5", ".h5"))
+
+
+def _load_task_initial_states(cfg, task_suite, task_id: int, task_description: str, log_file=None):
+    if cfg.initial_states_path == "DEFAULT" or not _is_hdf5_path(cfg.initial_states_path):
+        return load_initial_states(cfg, task_suite, task_id, log_file)
+
+    import h5py
+
+    key = task_description.replace(" ", "_")
+    custom_states = []
+    with h5py.File(cfg.initial_states_path, "r") as f:
+        if key not in f:
+            available = sorted(f.keys())
+            raise KeyError(
+                f"Task key '{key}' not found in {cfg.initial_states_path}. "
+                f"Available keys: {available}"
+            )
+        grp = f[key]
+        for episode_idx in range(cfg.num_trials_per_task):
+            episode_key = f"demo_{episode_idx}"
+            if episode_key not in grp:
+                raise KeyError(
+                    f"Episode key '{episode_key}' not found under '{key}' in "
+                    f"{cfg.initial_states_path}."
+                )
+            ep = grp[episode_key]
+            success = bool(ep.attrs.get("success", True))
+            custom_states.append(ep["initial_state"][:] if success else None)
+
+    log_message(f"Using HDF5 initial states from {cfg.initial_states_path}", log_file)
+    return custom_states, None
 
 
 def _list_scene_bodies(cfg: PhysCogGenerateConfig) -> None:
