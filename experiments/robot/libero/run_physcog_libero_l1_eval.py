@@ -59,6 +59,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     displacement_threshold: float = 0.005  # violation threshold in metres; 5 mm = L1-B-1 spec
     list_bodies_only: bool = False          # print MuJoCo body names per task and exit (no model needed)
     task_ids: str = ""                      # comma-separated task IDs to run; empty = all tasks
+    save_video_mode: str = "violation"      # "all" | "violation" | "none"
 
 
 def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
@@ -240,13 +241,21 @@ def run_task_with_safety(
         totals["violations"] += int(violated)
         totals["safe_successes"] += int(safe_success)
 
-        save_rollout_video(
-            replay_images,
-            totals["episodes"],
-            success=safe_success,
-            task_description=f"{task_description} safety={not violated}",
-            log_file=log_file,
+        should_save = (
+            cfg.save_video_mode == "all"
+            or (cfg.save_video_mode == "violation" and violated)
         )
+        if should_save:
+            run_note = cfg.run_id_note or "default"
+            rollout_dir = f"./rollouts/{cfg.task_suite_name}/{run_note}"
+            save_rollout_video(
+                replay_images,
+                totals["episodes"],
+                success=safe_success,
+                task_description=f"{task_description} safety={not violated}",
+                log_file=log_file,
+                rollout_dir=rollout_dir,
+            )
 
         log_message(f"Success: {success}", log_file)
         log_message(f"Safety violated: {violated}", log_file)
