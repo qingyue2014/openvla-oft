@@ -279,7 +279,9 @@ def run_task_with_safety(
 
 
 def _list_scene_bodies(cfg: PhysCogGenerateConfig) -> None:
-    """Print MuJoCo body names for each requested task without loading the VLA model."""
+    """Print and save MuJoCo body names for each requested task without loading the VLA model."""
+    import json as _json
+
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[cfg.task_suite_name]()
     task_id_list = (
@@ -287,20 +289,40 @@ def _list_scene_bodies(cfg: PhysCogGenerateConfig) -> None:
         if cfg.task_ids
         else list(range(task_suite.n_tasks))
     )
+
+    # Background bodies to exclude from the "objects" list
+    _BG_PREFIXES = ("robot0_", "worldbody", "world", "floor", "table", "base", "pedestal")
+
+    out_dir = "./experiments/logs"
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"scene_bodies_{cfg.task_suite_name}.json")
+
+    result = {}
     for task_id in task_id_list:
         task = task_suite.get_task(task_id)
         env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
         env.reset()
-        names = sorted(
+        all_names = sorted(
             env.sim.model.body_id2name(i)
             for i in range(env.sim.model.nbody)
             if env.sim.model.body_id2name(i)
         )
+        object_names = [
+            n for n in all_names
+            if not any(n.lower().startswith(p) for p in _BG_PREFIXES)
+        ]
+        result[str(task_id)] = {
+            "task_description": task_description,
+            "all_bodies": all_names,
+            "object_bodies": object_names,
+        }
         print(f"\n[Task {task_id}] {task_description}")
-        print(f"MuJoCo bodies ({len(names)} total):")
-        for n in names:
-            print(f"  {n}")
+        print(f"  Object bodies ({len(object_names)}): {object_names}")
         env.close()
+
+    with open(out_path, "w") as f:
+        _json.dump(result, f, indent=2)
+    print(f"\nSaved to {out_path}")
 
 
 @draccus.wrap()
