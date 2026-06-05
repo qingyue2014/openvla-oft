@@ -27,11 +27,13 @@ Top-down layout (task6 main variant, robot at bottom):
 
           [plate]              y ≈ +0.30
 
-  [cookie] [bowl_1] [ramekin]  y ≈ +0.08   ← bowl starts at corridor entrance
+  [cookie]          [ramekin]  y ≈ +0.08   ← corridor posts
+          [bowl_1]             y ≈ +0.045  ← graspable corridor entrance
 
-The robot reaches from the south side into the gap to grasp bowl_1, then must
-move it north to the plate.  The approach gap is wide enough for the arm alone,
-but the combined arm+bowl swept volume is too wide to pass straight through.
+The robot reaches from the south side into the entrance pocket to grasp bowl_1,
+then must move it north to the plate.  Pre-grasp reachability is intentionally
+easy; the L1-B-2 challenge is the post-grasp swept volume near the corridor
+posts.
 
 After grasping bowl_1, robot carries it through the corridor to the plate.
 Corridor gap = arm_width + margin → arm alone fits; arm + bowl does NOT.
@@ -172,11 +174,11 @@ TABLE_Z = 0.825
 #   bowl_2 radius      ≈ 0.060 m   arm width       ≈ 0.080 m
 #   bowl_1 diameter    ≈ 0.120 m
 #
-# Variant A (cookies + bowl_1 + ramekin on the same y-line):
+# Variant A (cookies + bowl_1 + ramekin):
 #   cookie center to bowl center ≈ 0.11 m, satisfying "next to the cookie box"
 #   corridor is object-position-only; no synthetic obstacle is added.
-#   The robot can reach in to grasp bowl_1, but carrying bowl_1 straight north
-#   through the object row would sweep the held bowl into the corridor posts.
+#   bowl_1 is slightly south of the corridor posts so the model can grasp it;
+#   carrying it straight north would sweep the held bowl into a corridor post.
 #
 # Variant B (ramekin + bowl_2):
 #   left inner edge  = RAMEKIN_X + 0.040 = -0.12 + 0.040 = -0.080
@@ -190,10 +192,11 @@ VARIANTS = {
         "left_wall":    "cookies_1_main",
         "right_wall":   "glazed_rim_porcelain_ramekin_1_main",
         # Main L1-B-2 layout:
-        #   [cookie] [bowl_1] [ramekin] at the corridor entrance.
+        #   [cookie] [ramekin] form the corridor posts.
+        #   bowl_1 starts slightly south of the posts, in a graspable pocket.
         # The bowl is ~11 cm from the cookie box center, preserving the
         # official task's "next to the cookie box" relation.
-        "bowl_xyz":     np.array([-0.02,  0.08, TABLE_Z + 0.04]),
+        "bowl_xyz":     np.array([-0.03,  0.045, TABLE_Z + 0.04]),
         "plate_xyz":    np.array([ 0.00,  0.30, TABLE_Z + 0.01]),
         "left_xyz":     np.array([-0.13,  0.08, TABLE_Z + 0.05]),   # cookie box
         "right_xyz":    np.array([ 0.13,  0.08, TABLE_Z + 0.04]),   # ramekin
@@ -244,7 +247,7 @@ def _set_pose(sim, body_name: str, pos: np.ndarray, quat_wxyz: np.ndarray) -> No
     sim.forward()
 
 
-UPRIGHT_QUAT = np.array([0.0, 0.0, 0.0, 1.0])   # wxyz, no rotation
+UPRIGHT_QUAT = np.array([1.0, 0.0, 0.0, 0.0])   # MuJoCo free-joint quaternion is wxyz
 
 
 def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
