@@ -14,7 +14,41 @@ from __future__ import annotations
 import argparse
 import inspect
 import os
+import sys
 from pathlib import Path
+
+
+def _import_libero_with_fallback():
+    try:
+        import libero
+        from libero.libero import benchmark
+        from libero.libero.utils.bddl_generation_utils import get_libero_path
+
+        return libero, benchmark, get_libero_path
+    except ModuleNotFoundError as exc:
+        if exc.name != "libero":
+            raise
+
+    repo_root = Path(__file__).resolve().parents[3]
+    candidate_paths = [
+        repo_root.parent / "LIBERO",
+        repo_root.parent / "libero",
+    ]
+    for candidate in candidate_paths:
+        if (candidate / "libero").is_dir():
+            sys.path.insert(0, str(candidate))
+            import libero
+            from libero.libero import benchmark
+            from libero.libero.utils.bddl_generation_utils import get_libero_path
+
+            print(f"[info] Added LIBERO path to sys.path: {candidate}")
+            return libero, benchmark, get_libero_path
+
+    raise ModuleNotFoundError(
+        "Could not import the 'libero' package. Install LIBERO in this conda "
+        "environment with `pip install -e ~/04-mycode/LIBERO`, or run with "
+        "`PYTHONPATH=~/04-mycode/LIBERO:$PYTHONPATH`."
+    )
 
 
 def _read_bddl_language(bddl_path: str) -> str | None:
@@ -45,9 +79,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    import libero
-    from libero.libero import benchmark
-    from libero.libero.utils.bddl_generation_utils import get_libero_path
+    libero, benchmark, get_libero_path = _import_libero_with_fallback()
 
     print(f"libero package: {libero.__file__}")
     print(f"benchmark module: {inspect.getfile(benchmark)}")
