@@ -14,7 +14,7 @@ Variant A  (--variant task6)   task_id = 6
   Task: "pick up the black bowl next to the cookie box and place it on the plate"
   Corridor: cookies_1_main (left) + ramekin (right)
   Held:     akita_black_bowl_1_main
-  "next to the cookie box" → bowl starts at corridor entrance, next to cookies ✓
+  "next to the cookie box" → bowl starts between the corridor posts, close to cookies ✓
 
 Variant B  (--variant task1)   task_id = 1
   Task: "pick up the black bowl next to the ramekin and place it on the plate"
@@ -23,13 +23,15 @@ Variant B  (--variant task1)   task_id = 1
   "next to the ramekin" → bowl_1 starts at corridor entrance, next to ramekin ✓
 ─────────────────────────────────────────────────────────────────────────────
 
-Top-down layout (both variants, robot at bottom):
+Top-down layout (task6 main variant, robot at bottom):
 
           [plate]              y ≈ +0.30
-              |
-  [left wall] | [right wall]   y ≈ +0.10   ← corridor
-              |
-           [bowl_1]            y ≈ -0.05   ← robot picks up here
+
+  [cookie] [bowl_1] [ramekin]  y ≈ +0.08   ← bowl starts at corridor entrance
+
+The robot reaches from the south side into the gap to grasp bowl_1, then must
+move it north to the plate.  The approach gap is wide enough for the arm alone,
+but the combined arm+bowl swept volume is too wide to pass straight through.
 
 After grasping bowl_1, robot carries it through the corridor to the plate.
 Corridor gap = arm_width + margin → arm alone fits; arm + bowl does NOT.
@@ -97,10 +99,11 @@ TABLE_Z = 0.825
 #   bowl_2 radius      ≈ 0.060 m   arm width       ≈ 0.080 m
 #   bowl_1 diameter    ≈ 0.120 m
 #
-# Variant A (cookies + ramekin):
-#   left inner edge  = COOKIE_X  + 0.065 = -0.13 + 0.065 = -0.065
-#   right inner edge = RAMEKIN_X - 0.040 = +0.13 - 0.040 = +0.090
-#   gap ≈ 0.155 m  →  arm (0.08) fits; arm+bowl (0.20) does NOT  ✓
+# Variant A (cookies + bowl_1 + ramekin on the same y-line):
+#   cookie center to bowl center ≈ 0.11 m, satisfying "next to the cookie box"
+#   corridor is object-position-only; no synthetic obstacle is added.
+#   The robot can reach in to grasp bowl_1, but carrying bowl_1 straight north
+#   through the object row would sweep the held bowl into the corridor posts.
 #
 # Variant B (ramekin + bowl_2):
 #   left inner edge  = RAMEKIN_X + 0.040 = -0.12 + 0.040 = -0.080
@@ -113,11 +116,14 @@ VARIANTS = {
         "held_body":    "akita_black_bowl_1_main",
         "left_wall":    "cookies_1_main",
         "right_wall":   "glazed_rim_porcelain_ramekin_1_main",
-        # Positions — update x offsets from probe geom half-extents
-        "bowl_xyz":     np.array([ 0.00, -0.05, TABLE_Z + 0.04]),
+        # Main L1-B-2 layout:
+        #   [cookie] [bowl_1] [ramekin] at the corridor entrance.
+        # The bowl is ~11 cm from the cookie box center, preserving the
+        # official task's "next to the cookie box" relation.
+        "bowl_xyz":     np.array([-0.02,  0.08, TABLE_Z + 0.04]),
         "plate_xyz":    np.array([ 0.00,  0.30, TABLE_Z + 0.01]),
-        "left_xyz":     np.array([-0.13,  0.10, TABLE_Z + 0.05]),   # cookie box
-        "right_xyz":    np.array([ 0.13,  0.10, TABLE_Z + 0.04]),   # ramekin
+        "left_xyz":     np.array([-0.13,  0.08, TABLE_Z + 0.05]),   # cookie box
+        "right_xyz":    np.array([ 0.13,  0.08, TABLE_Z + 0.04]),   # ramekin
     },
     "task1": {
         "task_id": 1,
@@ -133,7 +139,7 @@ VARIANTS = {
     },
 }
 
-BOWL_JITTER  = 0.015   # ± 1.5 cm per episode (bowl only)
+BOWL_JITTER  = 0.005   # ± 0.5 cm; keep the "next to" relation and corridor geometry tight
 PLATE_JITTER = 0.015   # corridor posts stay fixed for consistent gap
 
 
