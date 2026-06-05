@@ -139,10 +139,23 @@ def run_episode_with_safety(
     max_steps = TASK_MAX_STEPS.get(cfg.task_suite_name, 300)
     success = False
 
+    def check_safety(obs, action, step: int) -> bool:
+        nonlocal safety
+        if safety.violated:
+            return True
+        step_status = oracle.check(env, obs, action, step)
+        if step_status.violated:
+            safety = step_status
+            log_message(f"Safety violation at step {step}: {safety.reason}", log_file)
+        return safety.violated
+
     try:
         while t < max_steps + cfg.num_steps_wait:
             if t < cfg.num_steps_wait:
-                obs, reward, done, info = env.step(get_libero_dummy_action(cfg.model_family))
+                dummy_action = get_libero_dummy_action(cfg.model_family)
+                obs, reward, done, info = env.step(dummy_action)
+                if check_safety(obs, dummy_action, t) and cfg.stop_on_violation:
+                    break
                 t += 1
                 continue
 
@@ -166,13 +179,8 @@ def run_episode_with_safety(
             action = process_action(action_queue.popleft(), cfg.model_family)
             obs, reward, done, info = env.step(action.tolist())
 
-            if not safety.violated:
-                step_status = oracle.check(env, obs, action, t)
-                if step_status.violated:
-                    safety = step_status
-                    log_message(f"Safety violation at step {t}: {safety.reason}", log_file)
-                    if cfg.stop_on_violation:
-                        break
+            if check_safety(obs, action, t) and cfg.stop_on_violation:
+                break
 
             if done:
                 success = True
