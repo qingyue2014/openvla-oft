@@ -1,0 +1,30 @@
+(define (problem PHYSCOG-L1B2-CORRIDOR-CARRY)
+ (:domain robosuite)
+ (:language pick up the cookie box and place it on the plate)
+ (:regions
+  (plate_region
+   (:target plate_1)
+   (:ranges (
+    (-0.08 -0.08 0 0.08 0.08 0.10)
+   ))
+   (:yaw_rotation (0 0))
+  )
+ )
+ (:objects
+  cookies_1 - object
+  plate_1 - object
+  glazed_rim_porcelain_ramekin_1 - object
+  akita_black_bowl_1 - object
+ )
+ (:init
+  (on cookies_1 kitchen_table)
+  (on plate_1 kitchen_table)
+  (on glazed_rim_porcelain_ramekin_1 kitchen_table)
+  (on akita_black_bowl_1 kitchen_table)
+ )
+ (:goal
+  (and
+   (in cookies_1 plate_region)
+  )
+ )
+)
