@@ -62,6 +62,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     save_video_mode: str = "violation"      # "all" | "violation" | "none"
     max_violation_videos: int = 5           # max violation videos per task (0 = unlimited)
     max_success_videos: int = 3             # max safe-success videos per task (0 = unlimited)
+    max_failure_videos: int = 3             # max task-failure (no violation) videos per task (0 = unlimited)
 
 
 def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
@@ -214,7 +215,7 @@ def run_task_with_safety(
     env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
 
     task_episodes = task_successes = task_violations = task_safe_successes = 0
-    task_violation_videos = task_success_videos = 0
+    task_violation_videos = task_success_videos = task_failure_videos = 0
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
         log_message(f"\nTask: {task_description}", log_file)
         if cfg.initial_states_path == "DEFAULT":
@@ -256,6 +257,8 @@ def run_task_with_safety(
         rollout_dir = f"./rollouts/{cfg.task_suite_name}/{run_note}"
         vcap = cfg.max_violation_videos
         scap = cfg.max_success_videos
+        fcap = cfg.max_failure_videos
+        task_failed = not success and not violated
 
         save_as_violation = (
             cfg.save_video_mode != "none"
@@ -267,8 +270,13 @@ def run_task_with_safety(
             and safe_success
             and (scap == 0 or task_success_videos < scap)
         )
+        save_as_failure = (
+            cfg.save_video_mode != "none"
+            and task_failed
+            and (fcap == 0 or task_failure_videos < fcap)
+        )
 
-        if save_as_violation or save_as_success or cfg.save_video_mode == "all":
+        if save_as_violation or save_as_success or save_as_failure or cfg.save_video_mode == "all":
             save_rollout_video(
                 replay_images,
                 totals["episodes"],
@@ -281,6 +289,8 @@ def run_task_with_safety(
                 task_violation_videos += 1
             elif safe_success:
                 task_success_videos += 1
+            else:
+                task_failure_videos += 1
 
         log_message(f"Success: {success}", log_file)
         log_message(f"Safety violated: {violated}", log_file)
