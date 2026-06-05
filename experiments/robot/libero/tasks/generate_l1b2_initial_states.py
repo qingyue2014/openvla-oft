@@ -76,16 +76,89 @@ Eval commands:
 """
 
 import argparse
+import inspect
+import importlib
 import os
 import sys
+from pathlib import Path
 
 import h5py
 import numpy as np
 
-sys.path.append(os.path.join(os.path.dirname(__file__), "../../.."))
 
-from libero.libero import benchmark, get_libero_path
-from libero.libero.envs import OffScreenRenderEnv
+def _import_libero_modules():
+    """Import LIBERO from the active env or a sibling ~/04-mycode/LIBERO checkout."""
+    try:
+        from libero.libero import benchmark
+        from libero.libero.envs import OffScreenRenderEnv
+        import libero
+    except ModuleNotFoundError as exc:
+        if exc.name != "libero":
+            raise
+        repo_root = Path(__file__).resolve().parents[4]
+        for candidate in (repo_root.parent / "LIBERO", repo_root.parent / "libero"):
+            if (candidate / "libero").is_dir():
+                sys.path.insert(0, str(candidate))
+                from libero.libero import benchmark
+                from libero.libero.envs import OffScreenRenderEnv
+                import libero
+                print(f"[info] Added LIBERO path to sys.path: {candidate}")
+                break
+        else:
+            raise ModuleNotFoundError(
+                "Could not import 'libero'. Install it with `pip install -e ~/04-mycode/LIBERO`, "
+                "or run with `PYTHONPATH=~/04-mycode/LIBERO:$PYTHONPATH`."
+            )
+
+    get_libero_path = _resolve_get_libero_path(libero, benchmark)
+    return benchmark, get_libero_path, OffScreenRenderEnv
+
+
+def _resolve_get_libero_path(libero, benchmark):
+    for module_name in (
+        "libero.libero",
+        "libero.libero.utils",
+        "libero.libero.utils.bddl_generation_utils",
+        "libero.libero.utils.file_utils",
+    ):
+        try:
+            module = importlib.import_module(module_name)
+        except Exception:
+            continue
+        get_libero_path = getattr(module, "get_libero_path", None)
+        if get_libero_path is not None:
+            return get_libero_path
+
+    package_paths = [
+        Path(libero.__file__).resolve().parent if getattr(libero, "__file__", None) else None,
+        Path(inspect.getfile(benchmark)).resolve().parent,
+    ]
+    candidate_roots = []
+    for package_path in package_paths:
+        if package_path is None:
+            continue
+        candidate_roots.extend(
+            [
+                package_path / "bddl_files",
+                package_path / "libero" / "bddl_files",
+                package_path.parent / "bddl_files",
+                package_path.parent / "libero" / "bddl_files",
+            ]
+        )
+    bddl_root = next((path for path in candidate_roots if path.is_dir()), None)
+    if bddl_root is None:
+        checked = "\n  ".join(str(path) for path in candidate_roots)
+        raise FileNotFoundError("Could not infer LIBERO bddl_files directory. Checked:\n  " + checked)
+
+    def get_libero_path(key):
+        if key != "bddl_files":
+            raise KeyError(f"Fallback get_libero_path only supports 'bddl_files', got {key!r}.")
+        return str(bddl_root)
+
+    return get_libero_path
+
+
+benchmark, get_libero_path, OffScreenRenderEnv = _import_libero_modules()
 
 
 # ── Geometry constants (UPDATE after running probe_object_positions.py) ───────
