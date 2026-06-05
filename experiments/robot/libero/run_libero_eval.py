@@ -17,6 +17,26 @@ from typing import Optional, Union
 import draccus
 import numpy as np
 import tqdm
+
+
+def _ensure_libero_importable() -> None:
+    """Allow running from an OpenVLA-OFT checkout with LIBERO as a sibling repo."""
+    try:
+        import libero  # noqa: F401
+        return
+    except ModuleNotFoundError:
+        pass
+
+    repo_root = Path(__file__).resolve().parents[3]
+    for candidate in (repo_root.parent / "LIBERO", repo_root.parent / "libero"):
+        if (candidate / "libero").is_dir():
+            sys.path.insert(0, str(candidate))
+            print(f"[info] Added LIBERO path to sys.path: {candidate}")
+            return
+
+
+_ensure_libero_importable()
+
 from libero.libero import benchmark
 
 import wandb
