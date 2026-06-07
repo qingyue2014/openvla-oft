@@ -195,7 +195,7 @@ VARIANTS = {
         #   [cookie] [ramekin] form left/right posts in agentview.
         #   bowl_1 starts lower than the posts, avoiding initial overlap.
         #   plate stays close to LIBERO's default visible target region.
-        "bowl_xyz":     np.array([-0.08,  0.035, TABLE_Z + 0.04]),
+        "bowl_xyz":     np.array([-0.02,  0.005, TABLE_Z + 0.04]),
         "plate_xyz":    np.array([ 0.07,  0.19, TABLE_Z + 0.01]),
         "left_xyz":     np.array([ 0.07, -0.075, TABLE_Z + 0.05]),   # cookie box
         "right_xyz":    np.array([ 0.12,  0.075, TABLE_Z + 0.04]),   # ramekin
