@@ -29,6 +29,7 @@ import h5py
 
 from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     OffScreenRenderEnv,
+    _find_free_joint_qadr,
     benchmark,
     get_libero_path,
 )
@@ -58,7 +59,10 @@ for name in [
 ]:
     bid = env.sim.model.body_name2id(name)
     pos = env.sim.data.body_xpos[bid]
-    print(f"{name:42s} x={pos[0]: .4f} y={pos[1]: .4f} z={pos[2]: .4f}")
+    qadr = _find_free_joint_qadr(env.sim, name)
+    quat = env.sim.data.qpos[qadr + 3:qadr + 7] if qadr >= 0 else None
+    quat_text = " ".join(f"{v: .4f}" for v in quat) if quat is not None else "NO_FREE_JOINT"
+    print(f"{name:42s} x={pos[0]: .4f} y={pos[1]: .4f} z={pos[2]: .4f} quat_wxyz=[{quat_text}]")
 
 env.close()
 
@@ -66,7 +70,7 @@ print("\nExpected xy positions:")
 print("  cookies_1_main                       x=-0.1300 y= 0.0800")
 print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1300 y= 0.0800")
 print("  akita_black_bowl_1_main              x=-0.0300 y= 0.0450  +/- 0.005 jitter")
-print("  plate_1_main                         x= 0.0000 y= 0.3000  +/- 0.015 jitter")
+print("  plate_1_main                         x= 0.0000 y= 0.2200  +/- 0.015 jitter")
 PY
 
 cat <<'EOF'

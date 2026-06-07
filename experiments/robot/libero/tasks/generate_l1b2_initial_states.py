@@ -25,7 +25,7 @@ Variant B  (--variant task1)   task_id = 1
 
 Top-down layout (task6 main variant, robot at bottom):
 
-          [plate]              y ≈ +0.30
+          [plate]              y ≈ +0.22
 
   [cookie]          [ramekin]  y ≈ +0.08   ← corridor posts
           [bowl_1]             y ≈ +0.045  ← graspable corridor entrance
@@ -197,7 +197,7 @@ VARIANTS = {
         # The bowl is ~11 cm from the cookie box center, preserving the
         # official task's "next to the cookie box" relation.
         "bowl_xyz":     np.array([-0.03,  0.045, TABLE_Z + 0.04]),
-        "plate_xyz":    np.array([ 0.00,  0.30, TABLE_Z + 0.01]),
+        "plate_xyz":    np.array([ 0.00,  0.22, TABLE_Z + 0.01]),
         "left_xyz":     np.array([-0.13,  0.08, TABLE_Z + 0.05]),   # cookie box
         "right_xyz":    np.array([ 0.13,  0.08, TABLE_Z + 0.04]),   # ramekin
     },
@@ -209,7 +209,7 @@ VARIANTS = {
         # Ramekin is left wall; bowl_2 is right wall.
         # bowl_1 starts next to the ramekin (task desc: "next to the ramekin" ✓)
         "bowl_xyz":     np.array([ 0.00, -0.05, TABLE_Z + 0.04]),
-        "plate_xyz":    np.array([ 0.00,  0.30, TABLE_Z + 0.01]),
+        "plate_xyz":    np.array([ 0.00,  0.22, TABLE_Z + 0.01]),
         "left_xyz":     np.array([-0.12,  0.10, TABLE_Z + 0.04]),   # ramekin
         "right_xyz":    np.array([ 0.12,  0.10, TABLE_Z + 0.04]),   # bowl_2
     },
@@ -236,18 +236,16 @@ def _find_free_joint_qadr(sim, body_name: str) -> int:
     return -1
 
 
-def _set_pose(sim, body_name: str, pos: np.ndarray, quat_wxyz: np.ndarray) -> None:
-    """Set free-joint pose (pos + wxyz quaternion) for a named body."""
+def _set_pose(sim, body_name: str, pos: np.ndarray, quat_wxyz=None) -> None:
+    """Set free-joint position, preserving the LIBERO default object orientation by default."""
     qadr = _find_free_joint_qadr(sim, body_name)
     if qadr < 0:
         print(f"  [WARN] Free joint for '{body_name}' not found — skipping.")
         return
     sim.data.qpos[qadr:qadr + 3] = pos
-    sim.data.qpos[qadr + 3:qadr + 7] = quat_wxyz
+    if quat_wxyz is not None:
+        sim.data.qpos[qadr + 3:qadr + 7] = quat_wxyz
     sim.forward()
-
-
-UPRIGHT_QUAT = np.array([1.0, 0.0, 0.0, 0.0])   # MuJoCo free-joint quaternion is wxyz
 
 
 def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
@@ -281,11 +279,11 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
         jp = rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
 
         _set_pose(env.sim, v["held_body"],
-                  v["bowl_xyz"]  + np.array([jb[0], jb[1], 0.0]), UPRIGHT_QUAT)
+                  v["bowl_xyz"]  + np.array([jb[0], jb[1], 0.0]))
         _set_pose(env.sim, "plate_1_main",
-                  v["plate_xyz"] + np.array([jp[0], jp[1], 0.0]), UPRIGHT_QUAT)
-        _set_pose(env.sim, v["left_wall"],  v["left_xyz"],  UPRIGHT_QUAT)
-        _set_pose(env.sim, v["right_wall"], v["right_xyz"], UPRIGHT_QUAT)
+                  v["plate_xyz"] + np.array([jp[0], jp[1], 0.0]))
+        _set_pose(env.sim, v["left_wall"],  v["left_xyz"])
+        _set_pose(env.sim, v["right_wall"], v["right_xyz"])
 
         for _ in range(20):
             env.sim.step()
