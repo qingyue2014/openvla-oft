@@ -25,10 +25,10 @@ Variant B  (--variant task1)   task_id = 1
 
 Top-down layout (task6 main variant, robot at bottom):
 
-          [plate]              y ≈ +0.22
+          [plate]              x ≈ +0.07, y ≈ +0.19
 
-  [cookie]          [ramekin]  y ≈ +0.08   ← corridor posts
-          [bowl_1]             y ≈ +0.045  ← graspable corridor entrance
+  [cookie]          [ramekin]  x ≈ +0.07   ← corridor posts
+          [bowl_1]             x ≈ -0.08   ← graspable corridor entrance
 
 The robot reaches from the south side into the entrance pocket to grasp bowl_1,
 then must move it north to the plate.  Pre-grasp reachability is intentionally
@@ -176,10 +176,9 @@ TABLE_Z = 0.825
 #   bowl_1 diameter    ≈ 0.120 m
 #
 # Variant A (cookies + bowl_1 + ramekin):
-#   cookie center to bowl center ≈ 0.11 m, satisfying "next to the cookie box"
-#   corridor is object-position-only; no synthetic obstacle is added.
-#   bowl_1 is slightly south of the corridor posts so the model can grasp it;
-#   carrying it straight north would sweep the held bowl into a corridor post.
+#   Agentview calibration: MuJoCo x is mostly vertical in the rendered image,
+#   while y is mostly horizontal.  Keep corridor posts at a similar x and
+#   separated in y, with bowl_1 lower in the image as the graspable entrance.
 #
 # Variant B (ramekin + bowl_2):
 #   left inner edge  = RAMEKIN_X + 0.040 = -0.12 + 0.040 = -0.080
@@ -193,14 +192,13 @@ VARIANTS = {
         "left_wall":    "cookies_1_main",
         "right_wall":   "glazed_rim_porcelain_ramekin_1_main",
         # Main L1-B-2 layout:
-        #   [cookie] [ramekin] form the corridor posts.
-        #   bowl_1 starts slightly south of the posts, in a graspable pocket.
-        # The bowl is ~11 cm from the cookie box center, preserving the
-        # official task's "next to the cookie box" relation.
-        "bowl_xyz":     np.array([-0.03,  0.045, TABLE_Z + 0.04]),
-        "plate_xyz":    np.array([ 0.00,  0.22, TABLE_Z + 0.01]),
-        "left_xyz":     np.array([-0.13,  0.08, TABLE_Z + 0.05]),   # cookie box
-        "right_xyz":    np.array([ 0.13,  0.08, TABLE_Z + 0.04]),   # ramekin
+        #   [cookie] [ramekin] form left/right posts in agentview.
+        #   bowl_1 starts lower than the posts, avoiding initial overlap.
+        #   plate stays close to LIBERO's default visible target region.
+        "bowl_xyz":     np.array([-0.08,  0.035, TABLE_Z + 0.04]),
+        "plate_xyz":    np.array([ 0.07,  0.19, TABLE_Z + 0.01]),
+        "left_xyz":     np.array([ 0.07, -0.075, TABLE_Z + 0.05]),   # cookie box
+        "right_xyz":    np.array([ 0.07,  0.120, TABLE_Z + 0.04]),   # ramekin
     },
     "task1": {
         "task_id": 1,

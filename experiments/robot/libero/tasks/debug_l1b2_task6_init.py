@@ -116,10 +116,10 @@ def main() -> None:
     print(f"  {default_png}")
     print(f"  {generated_png}")
     print("\nExpected generated xy positions:")
-    print("  cookies_1_main                       x=-0.1300 y= 0.0800")
-    print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1300 y= 0.0800")
-    print("  akita_black_bowl_1_main              x=-0.0300 y= 0.0450  +/- 0.005 jitter")
-    print("  plate_1_main                         x= 0.0000 y= 0.2200  +/- 0.015 jitter")
+    print("  cookies_1_main                       x= 0.0700 y=-0.0750")
+    print("  glazed_rim_porcelain_ramekin_1_main  x= 0.0700 y= 0.1200")
+    print("  akita_black_bowl_1_main              x=-0.0800 y= 0.0350  +/- 0.005 jitter")
+    print("  plate_1_main                         x= 0.0700 y= 0.1900  +/- 0.015 jitter")
 
 
 if __name__ == "__main__":
