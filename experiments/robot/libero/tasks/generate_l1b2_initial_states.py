@@ -198,7 +198,7 @@ VARIANTS = {
         "bowl_xyz":     np.array([-0.08,  0.035, TABLE_Z + 0.04]),
         "plate_xyz":    np.array([ 0.07,  0.19, TABLE_Z + 0.01]),
         "left_xyz":     np.array([ 0.07, -0.075, TABLE_Z + 0.05]),   # cookie box
-        "right_xyz":    np.array([ 0.07,  0.120, TABLE_Z + 0.04]),   # ramekin
+        "right_xyz":    np.array([ 0.12,  0.075, TABLE_Z + 0.04]),   # ramekin
     },
     "task1": {
         "task_id": 1,
