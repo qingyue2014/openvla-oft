@@ -69,7 +69,7 @@ env.close()
 
 print("\nExpected xy positions:")
 print("  cookies_1_main                       x= 0.0700 y=-0.0750")
-print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1200 y= 0.0750")
+print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1200 y= 0.0450")
 print("  akita_black_bowl_1_main              x=-0.0200 y= 0.0050  +/- 0.005 jitter")
 print("  plate_1_main                         x= 0.0700 y= 0.1900  +/- 0.015 jitter")
 PY
