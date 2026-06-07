@@ -151,3 +151,7 @@ data/
 # Rollout videos and wandb logs
 rollouts/
 wandb/
+
+# Local PhysCog debug artifacts
+experiments/robot/libero/tasks/l1b2_task6_debug/
+experiments/robot/libero/tasks/l1b2_*_initial_states.hdf5

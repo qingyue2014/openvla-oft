@@ -79,8 +79,7 @@ cat <<'EOF'
 For deeper initialization debugging, save default/custom initial-frame images:
 
 python experiments/robot/libero/tasks/debug_l1b2_task6_init.py \
-  --state_path experiments/robot/libero/tasks/l1b2_task6_initial_states.hdf5 \
-  --out_dir /tmp/l1b2_task6_debug
+  --state_path experiments/robot/libero/tasks/l1b2_task6_initial_states.hdf5
 
 To run the L1-B2 task6 eval after the layout check passes:
 

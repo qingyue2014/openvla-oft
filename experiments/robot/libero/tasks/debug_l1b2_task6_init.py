@@ -4,8 +4,7 @@ Debug L1-B2 task6 initial-state generation without loading a VLA model.
 Run on a GPU node from the OpenVLA-OFT repository root:
 
     python experiments/robot/libero/tasks/debug_l1b2_task6_init.py \
-        --state_path experiments/robot/libero/tasks/l1b2_task6_initial_states.hdf5 \
-        --out_dir /tmp/l1b2_task6_debug
+        --state_path experiments/robot/libero/tasks/l1b2_task6_initial_states.hdf5
 
 The script prints default vs generated qpos/body poses for the objects involved
 in L1-B2 task6 and saves agentview PNGs for visual inspection.
@@ -75,7 +74,7 @@ def _print_object_table(env, title: str) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Debug L1-B2 task6 generated initial states")
     parser.add_argument("--state_path", default="experiments/robot/libero/tasks/l1b2_task6_initial_states.hdf5")
-    parser.add_argument("--out_dir", default="/tmp/l1b2_task6_debug")
+    parser.add_argument("--out_dir", default="experiments/robot/libero/tasks/l1b2_task6_debug")
     parser.add_argument("--demo_idx", type=int, default=0)
     parser.add_argument("--resolution", type=int, default=512)
     args = parser.parse_args()
