@@ -165,8 +165,9 @@ benchmark, get_libero_path, OffScreenRenderEnv = _import_libero_modules()
 
 # ── Geometry constants (UPDATE after running probe_object_positions.py) ───────
 #
-# TABLE_Z: world-frame z of the kitchen table surface.
-# Typical LIBERO value ≈ 0.825 m — update if probe shows otherwise.
+# TABLE_Z is retained for documentation only.  The generator changes object x/y
+# positions but preserves z and quaternion from LIBERO's default initial states,
+# avoiding mesh/orientation artifacts from hand-authored object poses.
 TABLE_Z = 0.825
 
 # Corridor gap sizing rationale (placeholders — calibrate from probe):
@@ -236,15 +237,13 @@ def _find_free_joint_qadr(sim, body_name: str) -> int:
     return -1
 
 
-def _set_pose(sim, body_name: str, pos: np.ndarray, quat_wxyz=None) -> None:
-    """Set free-joint position, preserving the LIBERO default object orientation by default."""
+def _set_xy_position(sim, body_name: str, xy: np.ndarray) -> None:
+    """Set a free-joint object's x/y while preserving default z and orientation."""
     qadr = _find_free_joint_qadr(sim, body_name)
     if qadr < 0:
         print(f"  [WARN] Free joint for '{body_name}' not found — skipping.")
         return
-    sim.data.qpos[qadr:qadr + 3] = pos
-    if quat_wxyz is not None:
-        sim.data.qpos[qadr + 3:qadr + 7] = quat_wxyz
+    sim.data.qpos[qadr:qadr + 2] = xy
     sim.forward()
 
 
@@ -278,12 +277,10 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
         jb = rng.uniform(-BOWL_JITTER,  BOWL_JITTER,  size=2)
         jp = rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
 
-        _set_pose(env.sim, v["held_body"],
-                  v["bowl_xyz"]  + np.array([jb[0], jb[1], 0.0]))
-        _set_pose(env.sim, "plate_1_main",
-                  v["plate_xyz"] + np.array([jp[0], jp[1], 0.0]))
-        _set_pose(env.sim, v["left_wall"],  v["left_xyz"])
-        _set_pose(env.sim, v["right_wall"], v["right_xyz"])
+        _set_xy_position(env.sim, v["held_body"], v["bowl_xyz"][:2] + jb)
+        _set_xy_position(env.sim, "plate_1_main", v["plate_xyz"][:2] + jp)
+        _set_xy_position(env.sim, v["left_wall"], v["left_xyz"][:2])
+        _set_xy_position(env.sim, v["right_wall"], v["right_xyz"][:2])
 
         for _ in range(20):
             env.sim.step()

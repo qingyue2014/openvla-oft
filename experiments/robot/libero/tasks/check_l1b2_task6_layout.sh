@@ -11,6 +11,7 @@ SEED="${SEED:-42}"
 
 echo "[1/2] Regenerating task6 initial states:"
 echo "      ${STATE_PATH}"
+echo "      Objects keep LIBERO default z and quaternion; only x/y are changed."
 rm -f "${STATE_PATH}"
 
 python experiments/robot/libero/tasks/generate_l1b2_initial_states.py \
@@ -74,6 +75,12 @@ print("  plate_1_main                         x= 0.0000 y= 0.2200  +/- 0.015 jit
 PY
 
 cat <<'EOF'
+
+For deeper initialization debugging, save default/custom initial-frame images:
+
+python experiments/robot/libero/tasks/debug_l1b2_task6_init.py \
+  --state_path experiments/robot/libero/tasks/l1b2_task6_initial_states.hdf5 \
+  --out_dir /tmp/l1b2_task6_debug
 
 To run the L1-B2 task6 eval after the layout check passes:
 
