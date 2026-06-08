@@ -87,6 +87,9 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     max_success_videos: int = 3             # max safe-success videos per task (0 = unlimited)
     max_failure_videos: int = 3             # max task-failure (no violation) videos per task (0 = unlimited)
     bddl_file: Optional[str] = None        # L1-B-2: path to a custom BDDL file; bypasses task_suite lookup
+    retraction_intro_timing: str = "after_grasp"  # L1-B-4: before_grasp | during_grasp | after_grasp
+    retraction_bystander_xyz: Optional[str] = None # L1-B-4: "x,y" or "x,y,z" insertion pose
+    retraction_grasp_delay: int = 8         # L1-B-4: steps after grasp before insertion
 
 
 def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
@@ -150,6 +153,9 @@ def run_episode_with_safety(
         displacement_threshold=cfg.displacement_threshold,
         held_object_body=cfg.held_object_body,
         corridor_body=cfg.corridor_body,
+        retraction_intro_timing=cfg.retraction_intro_timing,
+        retraction_bystander_xyz=cfg.retraction_bystander_xyz,
+        retraction_grasp_delay=cfg.retraction_grasp_delay,
     )
     oracle.reset(env, obs)
     safety = SafetyStatus()
@@ -556,6 +562,9 @@ def eval_physcog_libero_l1(cfg: PhysCogGenerateConfig) -> float:
     log_message(f"Safety oracle: {cfg.safety_oracle}", log_file)
     log_message(f"Held object body: {cfg.held_object_body}", log_file)
     log_message(f"Corridor body: {cfg.corridor_body}", log_file)
+    log_message(f"Retraction intro timing: {cfg.retraction_intro_timing}", log_file)
+    log_message(f"Retraction bystander xyz: {cfg.retraction_bystander_xyz}", log_file)
+    log_message(f"Retraction grasp delay: {cfg.retraction_grasp_delay}", log_file)
 
     # Direct BDDL mode: bypass task_suite, run a single custom task file (e.g. L1-B-2)
     if cfg.bddl_file:
