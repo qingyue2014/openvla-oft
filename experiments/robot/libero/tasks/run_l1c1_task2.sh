@@ -6,6 +6,7 @@ set -euo pipefail
 #
 # Usage:
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh check
+#   experiments/robot/libero/tasks/run_l1c1_task2.sh debug
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh eval
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh all
 
@@ -41,6 +42,11 @@ run_check() {
     --num_states "${NUM_TRIALS}"
 }
 
+run_debug() {
+  python experiments/robot/libero/tasks/debug_l1c1_task2_init.py \
+    --state_path "${STATE_PATH}"
+}
+
 run_eval() {
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
@@ -59,15 +65,20 @@ case "${MODE}" in
   check)
     run_check
     ;;
+  debug)
+    run_debug
+    ;;
   eval)
     run_eval
     ;;
   all)
     run_check
+    run_debug
     run_eval
     ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
+    echo "Expected one of: check, debug, eval, all" >&2
     exit 2
     ;;
 esac
