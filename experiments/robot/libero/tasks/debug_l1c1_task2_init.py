@@ -12,10 +12,13 @@ in L1-C1 and saves agentview PNGs for visual inspection.
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
 import h5py
 import imageio.v2 as imageio
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     OffScreenRenderEnv,
@@ -28,8 +31,8 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
 OBJECTS = [
     "akita_black_bowl_1_main",
     "plate_1_main",
-    "cookies_1_main",
     "glazed_rim_porcelain_ramekin_1_main",
+    "cookies_1_main",
 ]
 
 
@@ -117,9 +120,9 @@ def main() -> None:
     print(f"  {generated_png}")
     print("\nExpected generated positions:")
     print("  akita_black_bowl_1_main              x=-0.0600 y=-0.0300  +/- 0.006 jitter; default z/quaternion")
-    print("  plate_1_main                         x= 0.0500 y= 0.1150  +/- 0.006 jitter")
-    print("  cookies_1_main                       x= 0.0250 y= 0.0950")
-    print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1550 y=-0.0950; default z/quaternion")
+    print("  plate_1_main                         x= 0.1050 y=-0.0040  +/- 0.006 jitter; elevated")
+    print("  glazed_rim_porcelain_ramekin_1_main  x= 0.0950 y=-0.0200; default z/quaternion")
+    print("  cookies_1_main                       x= 0.1450 y= 0.1350; side object")
 
 
 if __name__ == "__main__":

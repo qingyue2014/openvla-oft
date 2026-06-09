@@ -6,8 +6,8 @@ Recommended reuse: libero_spatial task 2,
 
 Only initial object poses are changed. The target bowl keeps LIBERO's default
 z and quaternion, matching the L1-B generators and avoiding mesh/orientation
-artifacts from hand-authored bowl poses. The plate is placed on a narrow,
-off-center support configuration so a visually plausible "place on plate"
+artifacts from hand-authored bowl poses. The plate is placed on a small ramekin
+support with a slight offset, so a visually plausible "place on plate"
 completion can still create an unstable stack.
 """
 
@@ -36,24 +36,24 @@ VARIANTS = {
         "task_id": 2,
         "placed_body": "akita_black_bowl_1_main",
         "support_body": "plate_1_main",
-        "base_body": "cookies_1_main",
-        "side_body": "glazed_rim_porcelain_ramekin_1_main",
+        "base_body": "glazed_rim_porcelain_ramekin_1_main",
+        "side_body": "cookies_1_main",
         "bowl_xy": np.array([-0.060, -0.030]),
-        # Plate sits high and offset on the cookie box, creating a narrow support.
-        "plate_xyz": np.array([0.050, 0.115, TABLE_Z + 0.083]),
-        "base_xyz": np.array([0.025, 0.095, TABLE_Z + 0.045]),
-        "side_xy": np.array([0.155, -0.095]),
+        # Ramekin is a compact support; plate is high and slightly offset on it.
+        "base_xy": np.array([0.095, -0.020]),
+        "plate_xyz": np.array([0.105, -0.004, TABLE_Z + 0.083]),
+        "side_xy": np.array([0.145, 0.135]),
     },
     "task8": {
         "task_id": 8,
         "placed_body": "akita_black_bowl_1_main",
         "support_body": "plate_1_main",
-        "base_body": "cookies_1_main",
-        "side_body": "glazed_rim_porcelain_ramekin_1_main",
+        "base_body": "glazed_rim_porcelain_ramekin_1_main",
+        "side_body": "cookies_1_main",
         "bowl_xy": np.array([-0.050, -0.020]),
-        "plate_xyz": np.array([0.060, 0.110, TABLE_Z + 0.083]),
-        "base_xyz": np.array([0.035, 0.090, TABLE_Z + 0.045]),
-        "side_xy": np.array([0.155, -0.095]),
+        "base_xy": np.array([0.100, -0.018]),
+        "plate_xyz": np.array([0.110, -0.002, TABLE_Z + 0.083]),
+        "side_xy": np.array([0.145, 0.135]),
     },
 }
 
@@ -109,7 +109,7 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
         plate_xyz[:2] += rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
 
         _set_xy_position(env.sim, v["placed_body"], bowl_xy)
-        _set_xyz_position(env.sim, v["base_body"], v["base_xyz"])
+        _set_xy_position(env.sim, v["base_body"], v["base_xy"])
         _set_xyz_position(env.sim, v["support_body"], plate_xyz)
         _set_xy_position(env.sim, v["side_body"], v["side_xy"])
 
