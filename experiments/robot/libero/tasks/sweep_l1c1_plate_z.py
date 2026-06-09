@@ -76,17 +76,19 @@ def sweep(variant_key: str, z_offsets, out_dir: str, resolution: int = 512):
         _set_xy_position(env.sim, v["side_body"], v["side_xy"])
         _set_xy_position(env.sim, v["extra_side_body"], v["extra_side_xy"])
 
-        # pre-settle render
-        obs = env.sim.render(height=resolution, width=resolution, camera_name="agentview")[::-1]
         tag = f"z{z_off:.3f}".replace(".", "p")
-        imageio.imwrite(out_dir / f"pre_settle_{tag}.png", obs)
 
         # settle
         for _ in range(SETTLE_STEPS):
             env.sim.step()
 
-        obs = env.sim.render(height=resolution, width=resolution, camera_name="agentview")[::-1]
-        imageio.imwrite(out_dir / f"post_settle_{tag}.png", obs)
+        # render from multiple cameras so tilt is visible
+        for cam in ("agentview", "frontview", "sideview"):
+            try:
+                obs = env.sim.render(height=resolution, width=resolution, camera_name=cam)[::-1]
+                imageio.imwrite(out_dir / f"post_{cam}_{tag}.png", obs)
+            except Exception:
+                pass
 
         contact = _contact_between_bodies(env, v["support_body"], v["base_body"])
         plate_z = _body_pos(env, v["support_body"])[2]
@@ -96,8 +98,10 @@ def sweep(variant_key: str, z_offsets, out_dir: str, resolution: int = 512):
 
     env.close()
     print(f"\nImages saved to {out_dir}/")
-    print("Naming: pre_settle_z<offset>.png / post_settle_z<offset>.png")
-    print("e.g. pre_settle_z0p055.png = TABLE_Z + 0.055")
+    print("Look at post_frontview_z*.png or post_sideview_z*.png:")
+    print("  - plate should be slightly tilted (right side higher)")
+    print("  - cookie box should be visible sticking out from under the plate right side")
+    print("  - no table penetration on the left side")
 
 
 def main():
