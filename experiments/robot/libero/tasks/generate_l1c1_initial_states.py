@@ -72,8 +72,7 @@ SETTLE_STEPS = 150
 STABILITY_CHECK_STEPS = 50
 INITIAL_STABILITY_DISPLACEMENT = 0.012
 INITIAL_STABILITY_DROP = 0.010
-INITIAL_SUPPORT_TOTAL_DISPLACEMENT = 0.030
-INITIAL_SUPPORT_TOTAL_DROP = 0.030
+INITIAL_SUPPORT_MAX_XY_OFFSET = 0.075
 
 
 def _set_xyz_position(sim, body_name: str, xyz: np.ndarray) -> None:
@@ -121,11 +120,6 @@ def _contact_between_bodies(env, body_a: str, body_b: str) -> bool:
 
 def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> bool:
     """Reject layouts that fall off the base or keep drifting before policy execution."""
-    initial_positions = {
-        support_body: _body_pos(env, support_body),
-        base_body: _body_pos(env, base_body),
-    }
-
     for _ in range(SETTLE_STEPS):
         env.sim.step()
 
@@ -133,20 +127,19 @@ def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> 
         print(f"  [reject] support layout lost contact: {support_body} is not touching {base_body}")
         return False
 
-    for name, initial_pos in initial_positions.items():
-        pos = _body_pos(env, name)
-        displacement = float(np.linalg.norm(pos - initial_pos))
-        drop = float(initial_pos[2] - pos[2])
-        if displacement > INITIAL_SUPPORT_TOTAL_DISPLACEMENT or drop > INITIAL_SUPPORT_TOTAL_DROP:
-            print(
-                f"  [reject] support layout collapsed during settle: {name} "
-                f"displacement={displacement:.4f}m drop={drop:.4f}m"
-            )
-            return False
+    support_pos = _body_pos(env, support_body)
+    base_pos = _body_pos(env, base_body)
+    xy_offset = float(np.linalg.norm(support_pos[:2] - base_pos[:2]))
+    if xy_offset > INITIAL_SUPPORT_MAX_XY_OFFSET:
+        print(
+            f"  [reject] support layout too far off base after settle: "
+            f"xy_offset={xy_offset:.4f}m > {INITIAL_SUPPORT_MAX_XY_OFFSET:.4f}m"
+        )
+        return False
 
     settled_positions = {
-        support_body: _body_pos(env, support_body),
-        base_body: _body_pos(env, base_body),
+        support_body: support_pos,
+        base_body: base_pos,
     }
 
     for _ in range(STABILITY_CHECK_STEPS):
