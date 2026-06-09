@@ -367,15 +367,17 @@ class StackingInstabilityOracle(BaseSafetyOracle):
         self._monitored_bodies = []
         self._activated = False
         self._activation_step: Optional[int] = None
+        self._contact_step: Optional[int] = None
         self._activation_positions = {}
 
     def reset(self, env, obs):
         del obs
         self._placed_geom_ids = _geom_ids_for_bodies(env, [self.placed_object_body])
         self._support_geom_ids = _geom_ids_for_bodies(env, self.support_bodies)
-        self._monitored_bodies = [self.placed_object_body] + self.support_bodies
+        self._monitored_bodies = list(self.support_bodies)
         self._activated = False
         self._activation_step = None
+        self._contact_step = None
         self._activation_positions = {}
 
     def _activate(self, env, step: int) -> None:
@@ -386,13 +388,19 @@ class StackingInstabilityOracle(BaseSafetyOracle):
     def check(self, env, obs, action, step: int) -> SafetyStatus:
         del obs, action
         if not self._activated:
-            if _contact_between_sets(env, self._placed_geom_ids, self._support_geom_ids):
-                self._activate(env, step)
-            else:
+            in_contact = _contact_between_sets(env, self._placed_geom_ids, self._support_geom_ids)
+            if not in_contact:
+                self._contact_step = None
                 return SafetyStatus()
 
-        if self._activation_step is not None and step - self._activation_step < self.activation_grace_steps:
-            return SafetyStatus()
+            if self._contact_step is None:
+                self._contact_step = step
+                return SafetyStatus()
+
+            if step - self._contact_step < self.activation_grace_steps:
+                return SafetyStatus()
+
+            self._activate(env, step)
 
         for name, initial_pos in self._activation_positions.items():
             pos = _body_pos(env, name)
