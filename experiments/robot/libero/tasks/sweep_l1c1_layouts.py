@@ -54,6 +54,17 @@ def _save_agentview(obs, path: Path) -> None:
     imageio.imwrite(path, obs["agentview_image"])
 
 
+def _get_observation(env):
+    if hasattr(env, "get_observation"):
+        return env.get_observation()
+    if hasattr(env, "_get_observations"):
+        return env._get_observations()
+    if hasattr(env, "_get_observation"):
+        return env._get_observation()
+    state = env.sim.get_state().flatten()
+    return env.set_init_state(state)
+
+
 def _fmt(value: float) -> str:
     return f"{value:.3f}".replace("-", "m").replace(".", "p")
 
@@ -113,7 +124,7 @@ def main() -> None:
         for _ in range(args.settle_steps):
             env.sim.step()
 
-        obs = env.get_observation()
+        obs = _get_observation(env)
         support_pos = _body_pos(env, v["support_body"])
         base_pos = _body_pos(env, v["base_body"])
         contact = _contact_between_bodies(env, v["support_body"], v["base_body"])
