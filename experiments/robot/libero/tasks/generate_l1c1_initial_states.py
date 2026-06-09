@@ -147,7 +147,10 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
         _set_xyz_position(env.sim, v["support_body"], plate_xyz)
         _set_xy_position(env.sim, v["side_body"], v["side_xy"])
 
-        monitor_bodies = [v["placed_body"], v["support_body"], v["base_body"]]
+        # Only the pre-existing support structure must be stable before policy
+        # execution. The target bowl may naturally settle on the table after
+        # reset, which is not a support-layout failure.
+        monitor_bodies = [v["support_body"], v["base_body"]]
         if not _settle_and_check_initial_stability(env, monitor_bodies):
             continue
 
