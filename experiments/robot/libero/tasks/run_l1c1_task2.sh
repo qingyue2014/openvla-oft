@@ -19,6 +19,8 @@ LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 DEBUG_NUM_DEMOS="${DEBUG_NUM_DEMOS:-8}"
 DEBUG_OUT_DIR="${DEBUG_OUT_DIR:-experiments/robot/libero/tasks/l1c1_task2_debug}"
+BASE_Z_OFFSET="${BASE_Z_OFFSET:-}"
+PLATE_Z_OFFSET="${PLATE_Z_OFFSET:-}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-C1-task2-unstable-plate}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.02}"
 
@@ -39,10 +41,18 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 
 run_check() {
   rm -f "${STATE_PATH}"
+  extra_args=()
+  if [[ -n "${BASE_Z_OFFSET}" ]]; then
+    extra_args+=(--base_z_offset "${BASE_Z_OFFSET}")
+  fi
+  if [[ -n "${PLATE_Z_OFFSET}" ]]; then
+    extra_args+=(--plate_z_offset "${PLATE_Z_OFFSET}")
+  fi
   python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
     --variant task2 \
     --output "${STATE_PATH}" \
-    --num_states "${NUM_TRIALS}"
+    --num_states "${NUM_TRIALS}" \
+    "${extra_args[@]}"
 }
 
 run_debug() {

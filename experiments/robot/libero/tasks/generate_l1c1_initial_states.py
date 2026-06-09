@@ -50,8 +50,9 @@ VARIANTS = {
         # within the support footprint (stable).  Placing toward the overhanging
         # left half moves the CoM past the support edge (unstable → collapses).
         # This creates the stable-zone / unstable-zone split that L1-C1 tests.
-        "base_xy": np.array([0.095, -0.020]),
-        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.115]),
+        "base_xyz": np.array([0.095, -0.020, TABLE_Z + 0.030]),
+        "base_quat": np.array([0.7071, 0.7071, 0.0, 0.0]),
+        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.065]),
         "side_xy": np.array([0.155, 0.125]),
         "extra_side_xy": np.array([0.145, -0.120]),
     },
@@ -63,8 +64,9 @@ VARIANTS = {
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
         "bowl_xy": np.array([-0.050, -0.020]),
-        "base_xy": np.array([0.100, -0.018]),
-        "plate_xyz": np.array([0.070, -0.018, TABLE_Z + 0.115]),
+        "base_xyz": np.array([0.100, -0.018, TABLE_Z + 0.030]),
+        "base_quat": np.array([0.7071, 0.7071, 0.0, 0.0]),
+        "plate_xyz": np.array([0.070, -0.018, TABLE_Z + 0.065]),
         "side_xy": np.array([0.145, 0.135]),
         "extra_side_xy": np.array([0.145, -0.120]),
     },
@@ -85,6 +87,16 @@ def _set_xyz_position(sim, body_name: str, xyz: np.ndarray) -> None:
         print(f"  [WARN] Free joint for '{body_name}' not found; skipping.")
         return
     sim.data.qpos[qadr:qadr + 3] = xyz
+    sim.forward()
+
+
+def _set_xyz_quat_position(sim, body_name: str, xyz: np.ndarray, quat: np.ndarray) -> None:
+    qadr = _find_free_joint_qadr(sim, body_name)
+    if qadr < 0:
+        print(f"  [WARN] Free joint for '{body_name}' not found; skipping.")
+        return
+    sim.data.qpos[qadr:qadr + 3] = xyz
+    sim.data.qpos[qadr + 3:qadr + 7] = quat / np.linalg.norm(quat)
     sim.forward()
 
 
@@ -166,7 +178,14 @@ def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> 
     return True
 
 
-def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
+def generate_states(
+    variant_key: str,
+    task_suite_name: str,
+    n: int,
+    seed: int,
+    base_z_offset: float = None,
+    plate_z_offset: float = None,
+):
     v = VARIANTS[variant_key]
     rng = np.random.default_rng(seed)
 
@@ -194,12 +213,17 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
         env.set_init_state(default_states[attempts % len(default_states)])
 
         bowl_xy = v["bowl_xy"].copy()
+        base_xyz = v["base_xyz"].copy()
         plate_xyz = v["plate_xyz"].copy()
         bowl_xy += rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
         plate_xyz[:2] += rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
+        if base_z_offset is not None:
+            base_xyz[2] = TABLE_Z + base_z_offset
+        if plate_z_offset is not None:
+            plate_xyz[2] = TABLE_Z + plate_z_offset
 
         _set_xy_position(env.sim, v["placed_body"], bowl_xy)
-        _set_xy_position(env.sim, v["base_body"], v["base_xy"])
+        _set_xyz_quat_position(env.sim, v["base_body"], base_xyz, v["base_quat"])
         _set_xyz_position(env.sim, v["support_body"], plate_xyz)
         _set_xy_position(env.sim, v["side_body"], v["side_xy"])
         _set_xy_position(env.sim, v["extra_side_body"], v["extra_side_xy"])
@@ -244,9 +268,18 @@ def main():
     parser.add_argument("--output", required=True)
     parser.add_argument("--num_states", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--base_z_offset", type=float, default=None)
+    parser.add_argument("--plate_z_offset", type=float, default=None)
     args = parser.parse_args()
 
-    states, task_desc = generate_states(args.variant, args.task_suite_name, args.num_states, args.seed)
+    states, task_desc = generate_states(
+        args.variant,
+        args.task_suite_name,
+        args.num_states,
+        args.seed,
+        base_z_offset=args.base_z_offset,
+        plate_z_offset=args.plate_z_offset,
+    )
     save_hdf5(states, task_desc, args.output)
 
 
