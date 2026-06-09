@@ -59,6 +59,10 @@ VARIANTS = {
 
 BOWL_JITTER = 0.006
 PLATE_JITTER = 0.006
+SETTLE_STEPS = 30
+STABILITY_CHECK_STEPS = 20
+INITIAL_STABILITY_DISPLACEMENT = 0.012
+INITIAL_STABILITY_DROP = 0.010
 
 
 def _set_xyz_position(sim, body_name: str, xyz: np.ndarray) -> None:
@@ -77,6 +81,33 @@ def _set_xy_position(sim, body_name: str, xy: np.ndarray) -> None:
         return
     sim.data.qpos[qadr:qadr + 2] = xy
     sim.forward()
+
+
+def _body_pos(env, body_name: str) -> np.ndarray:
+    return np.array(env.sim.data.body_xpos[env.sim.model.body_name2id(body_name)])
+
+
+def _settle_and_check_initial_stability(env, body_names: list) -> bool:
+    """Reject layouts that are already collapsing before the policy acts."""
+    for _ in range(SETTLE_STEPS):
+        env.sim.step()
+
+    settled_positions = {name: _body_pos(env, name) for name in body_names}
+
+    for _ in range(STABILITY_CHECK_STEPS):
+        env.sim.step()
+
+    for name, initial_pos in settled_positions.items():
+        pos = _body_pos(env, name)
+        displacement = float(np.linalg.norm(pos - initial_pos))
+        drop = float(initial_pos[2] - pos[2])
+        if displacement > INITIAL_STABILITY_DISPLACEMENT or drop > INITIAL_STABILITY_DROP:
+            print(
+                f"  [reject] unstable initial layout: {name} "
+                f"displacement={displacement:.4f}m drop={drop:.4f}m"
+            )
+            return False
+    return True
 
 
 def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
@@ -99,9 +130,12 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
     print(f"Generating {n} states (seed={seed})...\n")
 
     states = []
-    for i in range(n):
+    attempts = 0
+    max_attempts = max(n * 20, 50)
+    while len(states) < n and attempts < max_attempts:
+        attempts += 1
         env.reset()
-        env.set_init_state(default_states[i % len(default_states)])
+        env.set_init_state(default_states[attempts % len(default_states)])
 
         bowl_xy = v["bowl_xy"].copy()
         plate_xyz = v["plate_xyz"].copy()
@@ -113,12 +147,19 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
         _set_xyz_position(env.sim, v["support_body"], plate_xyz)
         _set_xy_position(env.sim, v["side_body"], v["side_xy"])
 
-        for _ in range(30):
-            env.sim.step()
+        monitor_bodies = [v["placed_body"], v["support_body"], v["base_body"]]
+        if not _settle_and_check_initial_stability(env, monitor_bodies):
+            continue
 
         states.append(env.sim.get_state().flatten())
-        if (i + 1) % 10 == 0:
-            print(f"  [{i + 1}/{n}] done")
+        if len(states) % 10 == 0:
+            print(f"  [{len(states)}/{n}] done")
+
+    if len(states) < n:
+        raise RuntimeError(
+            f"Only generated {len(states)} stable L1-C1 states after {attempts} attempts. "
+            "Relax the initial-stability thresholds or recalibrate the support layout."
+        )
 
     env.close()
     return states, task.language
