@@ -46,12 +46,14 @@ SETTLE_STEPS = 150
 
 
 def _world_aabb(env, body_name: str):
-    """Axis-aligned bounding box of all geoms for body_name in world frame."""
+    """AABB of collision geoms only (contype!=0) for body_name in world frame."""
     body_id = env.sim.model.body_name2id(body_name)
     mins = np.full(3, np.inf)
     maxs = np.full(3, -np.inf)
     for geom_id in range(env.sim.model.ngeom):
         if env.sim.model.geom_bodyid[geom_id] != body_id:
+            continue
+        if env.sim.model.geom_contype[geom_id] == 0:  # skip visual-only geoms
             continue
         pos = env.sim.data.geom_xpos[geom_id]
         mat = env.sim.data.geom_xmat[geom_id].reshape(3, 3)

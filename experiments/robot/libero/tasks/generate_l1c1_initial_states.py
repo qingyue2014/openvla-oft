@@ -53,8 +53,8 @@ VARIANTS = {
         # 40° tilt that the previous upright orientation produced.
         # Stable zone: bowl near plate centre keeps combined CoM over the support.
         # Unstable zone: bowl on overhanging left half tips the stack.
-        "base_xyz": np.array([0.120, -0.020, TABLE_Z + 0.030]),
-        "base_quat": np.array([0.7071, 0.0, 0.7071, 0.0]),
+        "base_xyz": np.array([0.120, -0.020, TABLE_Z + 0.020]),
+        "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
         "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.065]),
         "side_xy": np.array([0.155, 0.125]),
         "extra_side_xy": np.array([0.145, -0.120]),
@@ -67,8 +67,8 @@ VARIANTS = {
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
         "bowl_xy": np.array([-0.050, -0.020]),
-        "base_xyz": np.array([0.125, -0.018, TABLE_Z + 0.030]),
-        "base_quat": np.array([0.7071, 0.0, 0.7071, 0.0]),
+        "base_xyz": np.array([0.125, -0.018, TABLE_Z + 0.020]),
+        "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
         "plate_xyz": np.array([0.070, -0.018, TABLE_Z + 0.065]),
         "side_xy": np.array([0.145, 0.135]),
         "extra_side_xy": np.array([0.145, -0.120]),
