@@ -237,7 +237,7 @@ def load_component_state_dict(checkpoint_path: str) -> Dict[str, torch.Tensor]:
     Returns:
         Dict: The processed state dictionary for loading
     """
-    state_dict = torch.load(checkpoint_path, weights_only=True)
+    state_dict = torch.load(checkpoint_path, weights_only=False)
 
     # If the component was trained with DDP, elements in the state dict have prefix "module." which we must remove
     new_state_dict = {}
@@ -339,7 +339,7 @@ def _apply_film_to_vla(vla: torch.nn.Module, cfg: Any) -> torch.nn.Module:
 
     # Load vision backbone checkpoint
     checkpoint_path = find_checkpoint_file(cfg.pretrained_checkpoint, "vision_backbone")
-    state_dict = torch.load(checkpoint_path, weights_only=True)
+    state_dict = torch.load(checkpoint_path, weights_only=False)
     vla.model.vision_backbone.load_state_dict(state_dict)
 
     # Use the model component instead of wrapper and convert to bfloat16
