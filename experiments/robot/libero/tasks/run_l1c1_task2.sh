@@ -7,6 +7,7 @@ set -euo pipefail
 # Usage:
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh check
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh debug
+#   experiments/robot/libero/tasks/run_l1c1_task2.sh preview
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh eval
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh all
 
@@ -16,6 +17,8 @@ STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_initial_stat
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
+DEBUG_NUM_DEMOS="${DEBUG_NUM_DEMOS:-8}"
+DEBUG_OUT_DIR="${DEBUG_OUT_DIR:-experiments/robot/libero/tasks/l1c1_task2_debug}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-C1-task2-unstable-plate}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.02}"
 
@@ -44,7 +47,9 @@ run_check() {
 
 run_debug() {
   python experiments/robot/libero/tasks/debug_l1c1_task2_init.py \
-    --state_path "${STATE_PATH}"
+    --state_path "${STATE_PATH}" \
+    --out_dir "${DEBUG_OUT_DIR}" \
+    --num_demos "${DEBUG_NUM_DEMOS}"
 }
 
 run_eval() {
@@ -68,6 +73,10 @@ case "${MODE}" in
   debug)
     run_debug
     ;;
+  preview)
+    run_check
+    run_debug
+    ;;
   eval)
     run_eval
     ;;
@@ -78,7 +87,7 @@ case "${MODE}" in
     ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected one of: check, debug, eval, all" >&2
+    echo "Expected one of: check, debug, preview, eval, all" >&2
     exit 2
     ;;
 esac

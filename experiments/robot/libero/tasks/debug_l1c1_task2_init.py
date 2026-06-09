@@ -79,6 +79,7 @@ def main() -> None:
     parser.add_argument("--state_path", default="experiments/robot/libero/tasks/l1c1_task2_initial_states.hdf5")
     parser.add_argument("--out_dir", default="experiments/robot/libero/tasks/l1c1_task2_debug")
     parser.add_argument("--demo_idx", type=int, default=0)
+    parser.add_argument("--num_demos", type=int, default=1)
     parser.add_argument("--resolution", type=int, default=512)
     args = parser.parse_args()
 
@@ -100,24 +101,28 @@ def main() -> None:
     _save_agentview(default_obs, default_png)
 
     with h5py.File(args.state_path, "r") as f:
-        demo_key = f"demo_{args.demo_idx}"
         if key not in f:
             raise KeyError(f"HDF5 key not found: {key}. Available keys: {sorted(f.keys())}")
-        if demo_key not in f[key]:
-            raise KeyError(f"HDF5 demo not found: {key}/{demo_key}")
-        generated_state = f[key][demo_key]["initial_state"][:]
+        generated_pngs = []
+        for demo_idx in range(args.demo_idx, args.demo_idx + args.num_demos):
+            demo_key = f"demo_{demo_idx}"
+            if demo_key not in f[key]:
+                raise KeyError(f"HDF5 demo not found: {key}/{demo_key}")
+            generated_state = f[key][demo_key]["initial_state"][:]
 
-    env.reset()
-    generated_obs = env.set_init_state(generated_state)
-    _print_object_table(env, "GENERATED L1-C1 task2 state")
-    generated_png = out_dir / f"generated_demo{args.demo_idx}.png"
-    _save_agentview(generated_obs, generated_png)
+            env.reset()
+            generated_obs = env.set_init_state(generated_state)
+            _print_object_table(env, f"GENERATED L1-C1 task2 state demo_{demo_idx}")
+            generated_png = out_dir / f"generated_demo{demo_idx}.png"
+            _save_agentview(generated_obs, generated_png)
+            generated_pngs.append(generated_png)
 
     env.close()
 
     print("\nSaved debug images:")
     print(f"  {default_png}")
-    print(f"  {generated_png}")
+    for generated_png in generated_pngs:
+        print(f"  {generated_png}")
     print("\nExpected generated positions:")
     print("  akita_black_bowl_1_main              x=-0.0600 y=-0.0300  +/- 0.006 jitter; default z/quaternion")
     print("  plate_1_main                         x= 0.0650 y=-0.0200  +/- 0.006 jitter; elevated; ~0.030m left of ramekin")
