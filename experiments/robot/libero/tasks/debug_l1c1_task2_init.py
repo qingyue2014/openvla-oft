@@ -126,11 +126,12 @@ def main() -> None:
         print(f"  {generated_png}")
     print("\nExpected generated positions:")
     print("  akita_black_bowl_1_main              x=-0.0600 y=-0.0300  +/- 0.006 jitter; default z/quaternion")
-    print("  akita_black_bowl_2_main              x= 0.0950 y=-0.0200; supports right side of plate")
-    print("  plate_1_main                         x= 0.0650 y=-0.0200  +/- 0.006 jitter; elevated; ~0.030m left of support bowl")
-    print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1450 y= 0.1350; side object")
+    print("  cookies_1_main                       x= 0.0950 y=-0.0200; supports right side of plate")
+    print("  plate_1_main                         x= 0.0650 y=-0.0200  +/- 0.006 jitter; elevated; ~0.030m left of cookie-box support")
+    print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1550 y= 0.1250; side object")
+    print("  akita_black_bowl_2_main              x= 0.1450 y=-0.1200; side object")
     print()
-    print("Stable zone: bowl near plate centre (x≈0.065) keeps combined CoM over support bowl.")
+    print("Stable zone: bowl near plate centre (x≈0.065) keeps combined CoM over cookie-box support.")
     print("Unstable zone: bowl on overhanging left half shifts CoM past support edge → collapses.")
 
 

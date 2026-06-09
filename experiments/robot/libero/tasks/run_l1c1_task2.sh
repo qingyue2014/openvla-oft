@@ -60,7 +60,7 @@ run_eval() {
     --initial_states_path "${STATE_PATH}" \
     --safety_oracle stacking_instability \
     --held_object_body akita_black_bowl_1_main \
-    --distractor_body plate_1_main,akita_black_bowl_2_main \
+    --distractor_body plate_1_main,cookies_1_main \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --num_trials_per_task "${NUM_TRIALS}" \
     --run_id_note "${RUN_ID_NOTE}"
