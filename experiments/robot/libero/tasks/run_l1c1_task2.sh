@@ -8,6 +8,7 @@ set -euo pipefail
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh check
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh debug
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh preview
+#   experiments/robot/libero/tasks/run_l1c1_task2.sh sweep
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh eval
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh all
 
@@ -19,6 +20,10 @@ LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 DEBUG_NUM_DEMOS="${DEBUG_NUM_DEMOS:-8}"
 DEBUG_OUT_DIR="${DEBUG_OUT_DIR:-experiments/robot/libero/tasks/l1c1_task2_debug}"
+SWEEP_OUT_DIR="${SWEEP_OUT_DIR:-experiments/robot/libero/tasks/l1c1_layout_sweep}"
+SWEEP_BASE_X_VALUES="${SWEEP_BASE_X_VALUES:-0.095,0.110,0.120,0.135}"
+SWEEP_BASE_Z_OFFSETS="${SWEEP_BASE_Z_OFFSETS:-0.015,0.025,0.035}"
+SWEEP_PLATE_Z_OFFSETS="${SWEEP_PLATE_Z_OFFSETS:-0.040,0.045,0.050,0.055,0.060}"
 BASE_Z_OFFSET="${BASE_Z_OFFSET:-}"
 PLATE_Z_OFFSET="${PLATE_Z_OFFSET:-}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-C1-task2-unstable-plate}"
@@ -62,6 +67,14 @@ run_debug() {
     --num_demos "${DEBUG_NUM_DEMOS}"
 }
 
+run_sweep() {
+  python experiments/robot/libero/tasks/sweep_l1c1_layouts.py \
+    --out_dir "${SWEEP_OUT_DIR}" \
+    --base_x_values "${SWEEP_BASE_X_VALUES}" \
+    --base_z_offsets "${SWEEP_BASE_Z_OFFSETS}" \
+    --plate_z_offsets "${SWEEP_PLATE_Z_OFFSETS}"
+}
+
 run_eval() {
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
@@ -87,6 +100,9 @@ case "${MODE}" in
     run_check
     run_debug
     ;;
+  sweep)
+    run_sweep
+    ;;
   eval)
     run_eval
     ;;
@@ -97,7 +113,7 @@ case "${MODE}" in
     ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected one of: check, debug, preview, eval, all" >&2
+    echo "Expected one of: check, debug, preview, sweep, eval, all" >&2
     exit 2
     ;;
 esac
