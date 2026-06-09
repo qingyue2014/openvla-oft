@@ -4,8 +4,8 @@ Generate custom initial states for L1-C-1 stacking instability.
 Recommended reuse: libero_spatial task 2,
 "pick up the black bowl from table center and place it on the plate".
 
-The plate is placed on the cookie box with a deliberate ~0.030 m eccentricity:
-the box supports the plate's right side, leaving the left half overhanging.
+The cookie box lies flat under the plate's right side (~0.055 m eccentric in x):
+it props up the right portion ~19 mm, leaving the left half overhanging on the table.
 A bowl placed near the plate's geometric centre keeps the combined centre of
 mass within the support footprint (stable stack, task succeeds).  A bowl placed
 toward the overhanging side shifts the combined CoM past the support edge and
@@ -45,15 +45,16 @@ VARIANTS = {
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
         "bowl_xy": np.array([-0.060, -0.030]),
-        # The cookie box supports the right side of the plate (~0.045m eccentric in x).
-        # The plate rim collision geoms are at ~48mm radius; the cookie box (19mm wide
-        # in X after 90° X-rotation) must straddle the right rim to make contact.
-        # Placing the bowl at the plate's geometric centre keeps the combined CoM
-        # within the support footprint (stable).  Placing toward the overhanging
-        # left half moves the CoM past the support edge (unstable → collapses).
-        # This creates the stable-zone / unstable-zone split that L1-C1 tests.
-        "base_xyz": np.array([0.110, -0.020, TABLE_Z + 0.030]),
-        "base_quat": np.array([0.7071, 0.7071, 0.0, 0.0]),
+        # Cookie box lies flat (90° around Y): 83mm wide in X, 62mm deep in Y, 19mm tall.
+        # Centered at x=0.120 it spans x=[0.079, 0.161], supporting the plate's right
+        # portion (plate centre at x=0.065, right rim at x=0.113).  The plate CoM sits
+        # ~14mm left of the box left edge so the plate tilts ~11° (left rim on table,
+        # right portion on the cookie box) — avoids table penetration caused by the
+        # 40° tilt that the previous upright orientation produced.
+        # Stable zone: bowl near plate centre keeps combined CoM over the support.
+        # Unstable zone: bowl on overhanging left half tips the stack.
+        "base_xyz": np.array([0.120, -0.020, TABLE_Z + 0.0094]),
+        "base_quat": np.array([0.7071, 0.0, 0.7071, 0.0]),
         "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.065]),
         "side_xy": np.array([0.155, 0.125]),
         "extra_side_xy": np.array([0.145, -0.120]),
@@ -66,8 +67,8 @@ VARIANTS = {
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
         "bowl_xy": np.array([-0.050, -0.020]),
-        "base_xyz": np.array([0.115, -0.018, TABLE_Z + 0.030]),
-        "base_quat": np.array([0.7071, 0.7071, 0.0, 0.0]),
+        "base_xyz": np.array([0.125, -0.018, TABLE_Z + 0.0094]),
+        "base_quat": np.array([0.7071, 0.0, 0.7071, 0.0]),
         "plate_xyz": np.array([0.070, -0.018, TABLE_Z + 0.065]),
         "side_xy": np.array([0.145, 0.135]),
         "extra_side_xy": np.array([0.145, -0.120]),
