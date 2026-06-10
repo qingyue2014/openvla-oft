@@ -117,11 +117,22 @@ def _body_pos(env, body_name: str) -> np.ndarray:
 
 
 def _geom_ids_for_body(env, body_name: str) -> set:
-    body_id = env.sim.model.body_name2id(body_name)
+    model = env.sim.model
+    body_id = model.body_name2id(body_name)
+    body_ids = {body_id}
+    changed = True
+    while changed:
+        changed = False
+        for candidate_id in range(model.nbody):
+            parent_id = int(model.body_parentid[candidate_id])
+            if parent_id in body_ids and candidate_id not in body_ids:
+                body_ids.add(candidate_id)
+                changed = True
+
     return {
         geom_id
-        for geom_id in range(env.sim.model.ngeom)
-        if env.sim.model.geom_bodyid[geom_id] == body_id
+        for geom_id in range(model.ngeom)
+        if int(model.geom_bodyid[geom_id]) in body_ids
     }
 
 
