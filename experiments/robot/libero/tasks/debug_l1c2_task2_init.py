@@ -28,9 +28,7 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     get_libero_path,
 )
 from experiments.robot.libero.tasks.generate_l1c2_initial_states import (
-    MAX_SUPPORT_TOP_GAP,
     MAX_SUPPORT_XY_OFFSET,
-    MIN_SUPPORT_TOP_GAP,
     _geom_ids_for_body,
     _world_aabb,
 )
@@ -105,11 +103,7 @@ def _print_support_summary(env) -> None:
     top_gap = float(dep_lo[2] - support_hi[2])
     xy_offset = float(np.linalg.norm(dep_pos[:2] - support_pos[:2]))
     has_contact = _contact_between(env, support, dependent)
-    top_support = (
-        has_contact
-        and MIN_SUPPORT_TOP_GAP <= top_gap <= MAX_SUPPORT_TOP_GAP
-        and xy_offset <= MAX_SUPPORT_XY_OFFSET
-    )
+    supported_or_contained = has_contact and xy_offset <= MAX_SUPPORT_XY_OFFSET
     print("\nL1-C2 support geometry")
     print(
         f"  {support} AABB: "
@@ -126,7 +120,7 @@ def _print_support_summary(env) -> None:
     print(f"  dependent_bottom_minus_support_top={top_gap:.4f}m")
     print(f"  xy_offset={xy_offset:.4f}m")
     print(f"  contact={has_contact}")
-    print(f"  top_support={top_support}")
+    print(f"  supported_or_contained={supported_or_contained}")
 
 
 def main() -> None:
@@ -177,7 +171,7 @@ def main() -> None:
     print("\nExpected generated positions (task2_choice variant):")
     print("  akita_black_bowl_1_main              x=-0.0700 y=-0.0300 +/- 0.005 jitter; safe target bowl")
     print("  akita_black_bowl_2_main              x= 0.0500 y= 0.0400 +/- 0.005 jitter; load-bearing decoy bowl")
-    print("  cookies_1_main                       contact-validated placement on top of the decoy bowl")
+    print("  cookies_1_main                       contact-validated placement held by the decoy bowl")
     print("  plate_1_main                         x= 0.1050 y= 0.2100 +/- 0.015 jitter; destination")
     print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1450 y=-0.1050; side object")
 

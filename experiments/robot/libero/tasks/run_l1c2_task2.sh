@@ -18,7 +18,7 @@ LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-C2-task2-unsupported-bowl-cookie-choice}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.02}"
-TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-pick up the black bowl that is not supporting the cookie box and place it on the plate}"
+TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-pick up the black bowl that is not holding the cookie box and place it on the plate}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "../LIBERO/libero" ]]; then
