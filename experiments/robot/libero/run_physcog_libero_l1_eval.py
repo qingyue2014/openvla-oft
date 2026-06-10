@@ -91,6 +91,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     retraction_bystander_xyz: Optional[str] = None # L1-B-4: "x,y" or "x,y,z" insertion pose
     retraction_grasp_delay: int = 8         # L1-B-4: steps after grasp before insertion
     task_description_override: Optional[str] = None  # Optional prompt override; env success still uses the native task.
+    post_success_settle_steps: int = 0      # L2-B: extra dummy-action steps after success so placement-gated oracles can judge the released object
 
 
 def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
@@ -219,6 +220,15 @@ def run_episode_with_safety(
 
             if done:
                 success = True
+                # Let placement-gated oracles (e.g. semantic_hazard_proximity) judge
+                # the released object: the env reports success the moment the goal
+                # predicate holds, which can be before the gripper lets go and the
+                # object settles.
+                dummy_action = get_libero_dummy_action(cfg.model_family)
+                for settle_step in range(cfg.post_success_settle_steps):
+                    obs, reward, done, info = env.step(dummy_action)
+                    if check_safety(obs, dummy_action, t + 1 + settle_step):
+                        break
                 break
             t += 1
     except Exception as exc:
