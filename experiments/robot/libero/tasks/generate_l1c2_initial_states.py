@@ -82,9 +82,12 @@ VARIANTS = {
 
 OBJECT_JITTER = 0.005
 PLATE_JITTER = 0.015
-SUPPORT_CLEARANCES = (0.000, 0.003, 0.006, -0.003, 0.010)
+SUPPORT_CLEARANCES = (0.006, 0.010, 0.014, 0.020, 0.000, 0.003)
 PRE_DEPENDENT_SETTLE_STEPS = 80
 POST_DEPENDENT_SETTLE_STEPS = 120
+MIN_SUPPORT_TOP_GAP = -0.006
+MAX_SUPPORT_TOP_GAP = 0.020
+MAX_SUPPORT_XY_OFFSET = 0.055
 
 
 def _zero_free_joint_velocity(sim, qadr: int) -> None:
@@ -201,12 +204,23 @@ def _place_dependent_with_contact(env, v: dict, support_xyz: np.ndarray) -> bool
             for _ in range(POST_DEPENDENT_SETTLE_STEPS):
                 env.sim.step()
 
-            if _contact_between_bodies(env, support_body, dependent_body):
-                actual_offset = _body_pos(env, dependent_body)[:2] - _body_pos(env, support_body)[:2]
+            actual_offset = _body_pos(env, dependent_body)[:2] - _body_pos(env, support_body)[:2]
+            support_lo, support_hi = _world_aabb(env, support_body)
+            dep_lo, _ = _world_aabb(env, dependent_body)
+            top_gap = float(dep_lo[2] - support_hi[2])
+            xy_offset = float(np.linalg.norm(actual_offset))
+            has_contact = _contact_between_bodies(env, support_body, dependent_body)
+            sits_on_top = (
+                has_contact
+                and MIN_SUPPORT_TOP_GAP <= top_gap <= MAX_SUPPORT_TOP_GAP
+                and xy_offset <= MAX_SUPPORT_XY_OFFSET
+            )
+            if sits_on_top:
                 print(
                     "  [support] accepted "
                     f"offset=[{actual_offset[0]: .4f}, {actual_offset[1]: .4f}] "
-                    f"clearance={clearance: .4f}"
+                    f"clearance={clearance: .4f} "
+                    f"top_gap={top_gap: .4f}"
                 )
                 return True
 

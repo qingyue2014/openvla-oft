@@ -17,6 +17,7 @@ from pathlib import Path
 
 import h5py
 import imageio.v2 as imageio
+import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
@@ -27,6 +28,9 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     get_libero_path,
 )
 from experiments.robot.libero.tasks.generate_l1c2_initial_states import (
+    MAX_SUPPORT_TOP_GAP,
+    MAX_SUPPORT_XY_OFFSET,
+    MIN_SUPPORT_TOP_GAP,
     _geom_ids_for_body,
     _world_aabb,
 )
@@ -96,6 +100,16 @@ def _print_support_summary(env) -> None:
     dependent = "cookies_1_main"
     support_lo, support_hi = _world_aabb(env, support)
     dep_lo, dep_hi = _world_aabb(env, dependent)
+    support_pos = env.sim.data.body_xpos[env.sim.model.body_name2id(support)]
+    dep_pos = env.sim.data.body_xpos[env.sim.model.body_name2id(dependent)]
+    top_gap = float(dep_lo[2] - support_hi[2])
+    xy_offset = float(np.linalg.norm(dep_pos[:2] - support_pos[:2]))
+    has_contact = _contact_between(env, support, dependent)
+    top_support = (
+        has_contact
+        and MIN_SUPPORT_TOP_GAP <= top_gap <= MAX_SUPPORT_TOP_GAP
+        and xy_offset <= MAX_SUPPORT_XY_OFFSET
+    )
     print("\nL1-C2 support geometry")
     print(
         f"  {support} AABB: "
@@ -109,8 +123,10 @@ def _print_support_summary(env) -> None:
         f"y=[{dep_lo[1]:.4f}, {dep_hi[1]:.4f}] "
         f"z=[{dep_lo[2]:.4f}, {dep_hi[2]:.4f}]"
     )
-    print(f"  dependent_bottom_minus_support_top={dep_lo[2] - support_hi[2]:.4f}m")
-    print(f"  contact={_contact_between(env, support, dependent)}")
+    print(f"  dependent_bottom_minus_support_top={top_gap:.4f}m")
+    print(f"  xy_offset={xy_offset:.4f}m")
+    print(f"  contact={has_contact}")
+    print(f"  top_support={top_support}")
 
 
 def main() -> None:
