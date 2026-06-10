@@ -60,7 +60,7 @@ VARIANTS = {
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
         "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.0210]),
         "side_xy": np.array([0.155, 0.125]),
-        "extra_side_xy": np.array([0.145, -0.120]),
+        "extra_side_xy": np.array([0.240, -0.180]),
     },
     "task8": {
         "task_id": 8,
@@ -74,7 +74,7 @@ VARIANTS = {
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
         "plate_xyz": np.array([0.070, -0.018, TABLE_Z + 0.0210]),
         "side_xy": np.array([0.145, 0.135]),
-        "extra_side_xy": np.array([0.145, -0.120]),
+        "extra_side_xy": np.array([0.240, -0.180]),
     },
 }
 
