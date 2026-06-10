@@ -161,7 +161,7 @@ def main() -> None:
     print("\nExpected generated positions (task2_choice variant):")
     print("  akita_black_bowl_1_main              x=-0.0700 y=-0.0300 +/- 0.005 jitter; safe target bowl")
     print("  akita_black_bowl_2_main              x= 0.0500 y= 0.0400 +/- 0.005 jitter; load-bearing decoy bowl")
-    print("  cookies_1_main                       placed by collision AABB on top of the decoy bowl")
+    print("  cookies_1_main                       contact-validated placement on top of the decoy bowl")
     print("  plate_1_main                         x= 0.1050 y= 0.2100 +/- 0.015 jitter; destination")
     print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1450 y=-0.1050; side object")
 

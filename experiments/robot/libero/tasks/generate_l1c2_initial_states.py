@@ -44,7 +44,15 @@ VARIANTS = {
         "support_xyz": np.array([0.050, 0.040, TABLE_Z + 0.040]),
         # Cookie box is placed by collision AABB, so this xy is the intended
         # offset on the decoy bowl; z is computed from simulator geometry.
-        "dependent_xy_offset": np.array([0.030, 0.020]),
+        "dependent_xy_offsets": [
+            np.array([0.000, 0.000]),
+            np.array([0.025, 0.000]),
+            np.array([-0.025, 0.000]),
+            np.array([0.000, 0.025]),
+            np.array([0.000, -0.025]),
+            np.array([0.025, 0.020]),
+            np.array([-0.025, 0.020]),
+        ],
         "plate_xyz": np.array([0.105, 0.210, TABLE_Z + 0.012]),
         "side_xyz": np.array([0.145, -0.105, TABLE_Z + 0.040]),
     },
@@ -74,7 +82,9 @@ VARIANTS = {
 
 OBJECT_JITTER = 0.005
 PLATE_JITTER = 0.015
-SUPPORT_CLEARANCE = 0.003
+SUPPORT_CLEARANCES = (0.000, 0.003, 0.006, -0.003, 0.010)
+PRE_DEPENDENT_SETTLE_STEPS = 80
+POST_DEPENDENT_SETTLE_STEPS = 120
 
 
 def _zero_free_joint_velocity(sim, qadr: int) -> None:
@@ -160,6 +170,55 @@ def _set_body_on_support(env, body_name: str, support_body: str, xy: np.ndarray,
     env.sim.forward()
 
 
+def _contact_between_bodies(env, body_a: str, body_b: str) -> bool:
+    geoms_a = _geom_ids_for_body(env, body_a)
+    geoms_b = _geom_ids_for_body(env, body_b)
+    for i in range(env.sim.data.ncon):
+        contact = env.sim.data.contact[i]
+        if (contact.geom1 in geoms_a and contact.geom2 in geoms_b) or (
+            contact.geom2 in geoms_a and contact.geom1 in geoms_b
+        ):
+            return True
+    return False
+
+
+def _body_pos(env, body_name: str) -> np.ndarray:
+    return np.array(env.sim.data.body_xpos[env.sim.model.body_name2id(body_name)])
+
+
+def _place_dependent_with_contact(env, v: dict, support_xyz: np.ndarray) -> bool:
+    support_body = v["support_body"]
+    dependent_body = v["dependent_body"]
+    base_state = env.sim.get_state()
+
+    for offset in v["dependent_xy_offsets"]:
+        for clearance in SUPPORT_CLEARANCES:
+            env.sim.set_state(base_state)
+            env.sim.forward()
+            dependent_xy = _body_pos(env, support_body)[:2] + offset
+            _set_body_on_support(env, dependent_body, support_body, dependent_xy, clearance)
+
+            for _ in range(POST_DEPENDENT_SETTLE_STEPS):
+                env.sim.step()
+
+            if _contact_between_bodies(env, support_body, dependent_body):
+                actual_offset = _body_pos(env, dependent_body)[:2] - _body_pos(env, support_body)[:2]
+                print(
+                    "  [support] accepted "
+                    f"offset=[{actual_offset[0]: .4f}, {actual_offset[1]: .4f}] "
+                    f"clearance={clearance: .4f}"
+                )
+                return True
+
+    env.sim.set_state(base_state)
+    env.sim.forward()
+    print(
+        "  [reject] no candidate cookie placement produced contact with "
+        f"{support_body} near support_xy=[{support_xyz[0]:.4f}, {support_xyz[1]:.4f}]"
+    )
+    return False
+
+
 def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
     v = VARIANTS[variant_key]
     rng = np.random.default_rng(seed)
@@ -181,9 +240,12 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
     print(f"Generating {n} states (seed={seed})...\n")
 
     states = []
-    for i in range(n):
+    attempts = 0
+    max_attempts = max(n * 20, 50)
+    while len(states) < n and attempts < max_attempts:
+        attempts += 1
         env.reset()
-        env.set_init_state(default_states[i % len(default_states)])
+        env.set_init_state(default_states[attempts % len(default_states)])
 
         target_xyz = v.get("target_xyz", None)
         if target_xyz is not None:
@@ -200,28 +262,31 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
         if target_xyz is not None:
             _set_xyz_position(env.sim, v["target_body"], target_xyz)
         _set_xyz_position(env.sim, v["support_body"], support_xyz)
-        if "dependent_xy_offset" in v:
-            dependent_xy = support_xyz[:2] + v["dependent_xy_offset"]
-            _set_body_on_support(
-                env,
-                v["dependent_body"],
-                v["support_body"],
-                dependent_xy,
-                SUPPORT_CLEARANCE,
-            )
+        _set_xyz_position(env.sim, "plate_1_main", plate_xyz)
+        _set_xyz_position(env.sim, v["side_body"], v["side_xyz"])
+
+        for _ in range(PRE_DEPENDENT_SETTLE_STEPS):
+            env.sim.step()
+
+        if "dependent_xy_offsets" in v:
+            if not _place_dependent_with_contact(env, v, support_xyz):
+                continue
         else:
             dependent_xyz = v["dependent_xyz"].copy()
             dependent_xyz[:2] += jitter
             _set_xyz_position(env.sim, v["dependent_body"], dependent_xyz)
-        _set_xyz_position(env.sim, "plate_1_main", plate_xyz)
-        _set_xyz_position(env.sim, v["side_body"], v["side_xyz"])
-
-        for _ in range(80):
-            env.sim.step()
+            for _ in range(POST_DEPENDENT_SETTLE_STEPS):
+                env.sim.step()
 
         states.append(env.sim.get_state().flatten())
-        if (i + 1) % 10 == 0:
-            print(f"  [{i + 1}/{n}] done")
+        if len(states) % 10 == 0:
+            print(f"  [{len(states)}/{n}] done")
+
+    if len(states) < n:
+        raise RuntimeError(
+            f"Only generated {len(states)} L1-C2 states after {attempts} attempts. "
+            "Run debug/check with fewer trials and inspect contact candidates."
+        )
 
     env.close()
     return states, task.language
@@ -242,7 +307,7 @@ def save_hdf5(states, task_description: str, out_path: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Generate L1-C-2 support-removal initial states")
-    parser.add_argument("--variant", choices=list(VARIANTS.keys()), default="task2_ramekin")
+    parser.add_argument("--variant", choices=list(VARIANTS.keys()), default="task2_choice")
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--output", required=True)
     parser.add_argument("--num_states", type=int, default=50)
