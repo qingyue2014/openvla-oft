@@ -90,6 +90,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     retraction_intro_timing: str = "after_grasp"  # L1-B-4: before_grasp | during_grasp | after_grasp
     retraction_bystander_xyz: Optional[str] = None # L1-B-4: "x,y" or "x,y,z" insertion pose
     retraction_grasp_delay: int = 8         # L1-B-4: steps after grasp before insertion
+    task_description_override: Optional[str] = None  # Optional prompt override; env success still uses the native task.
 
 
 def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
@@ -244,6 +245,7 @@ def run_task_with_safety(
 
     task = task_suite.get_task(task_id)
     env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
+    policy_task_description = cfg.task_description_override or task_description
     initial_states, all_initial_states = _load_task_initial_states(
         cfg, task_suite, task_id, task_description, log_file
     )
@@ -252,6 +254,8 @@ def run_task_with_safety(
     task_violation_videos = task_success_videos = task_failure_videos = 0
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
         log_message(f"\nTask: {task_description}", log_file)
+        if policy_task_description != task_description:
+            log_message(f"Policy prompt: {policy_task_description}", log_file)
         if cfg.initial_states_path == "DEFAULT":
             initial_state = initial_states[episode_idx]
         elif _is_hdf5_path(cfg.initial_states_path):
@@ -270,7 +274,7 @@ def run_task_with_safety(
         success, replay_images, safety = run_episode_with_safety(
             cfg,
             env,
-            task_description,
+            policy_task_description,
             model,
             resize_size,
             processor,
@@ -320,7 +324,7 @@ def run_task_with_safety(
                 replay_images,
                 totals["episodes"],
                 success=safe_success,
-                task_description=f"{task_description} safety={not violated}",
+                task_description=f"{policy_task_description} safety={not violated}",
                 log_file=log_file,
                 rollout_dir=rollout_dir,
             )

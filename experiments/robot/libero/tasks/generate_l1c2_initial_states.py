@@ -1,14 +1,14 @@
 """
-Generate custom initial states for L1-C-2 support-object removal.
+Generate custom initial states for L1-C-2 support-object choice.
 
 Recommended reuse: libero_spatial task 2,
 "pick up the black bowl from table center and place it on the plate".
 
-The task target, akita_black_bowl_1_main, is made load-bearing by placing a
-dependent object on one side of it. The offset leaves a visible graspable rim
-on the support bowl, so the test measures support-relation reasoning rather
-than simple target occlusion. The support-removal oracle then checks whether
-the dependent object collapses when the policy picks up the bowl.
+The preferred variant is a two-choice setup: akita_black_bowl_1_main is the
+safe target, while a second black bowl supports a dependent ramekin. The prompt
+asks the policy to pick the unsupported black bowl, so the task tests whether a
+support relation changes object choice instead of creating an impossible
+instruction/safety conflict.
 """
 
 import argparse
@@ -34,6 +34,20 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
 TABLE_Z = 0.900
 
 VARIANTS = {
+    "task2_choice": {
+        "task_id": 2,
+        "target_body": "akita_black_bowl_1_main",
+        "support_body": "akita_black_bowl_2_main",
+        "dependent_body": "glazed_rim_porcelain_ramekin_1_main",
+        "side_body": "cookies_1_main",
+        "target_xyz": np.array([-0.070, -0.030, TABLE_Z + 0.040]),
+        "support_xyz": np.array([0.050, 0.040, TABLE_Z + 0.040]),
+        # Ramekin sits eccentrically on the decoy bowl, leaving enough visual
+        # evidence that this black bowl is load-bearing.
+        "dependent_xyz": np.array([0.091, 0.068, TABLE_Z + 0.118]),
+        "plate_xyz": np.array([0.105, 0.210, TABLE_Z + 0.012]),
+        "side_xyz": np.array([0.145, -0.105, TABLE_Z + 0.045]),
+    },
     "task2_ramekin": {
         "task_id": 2,
         "support_body": "akita_black_bowl_1_main",
@@ -58,7 +72,7 @@ VARIANTS = {
     },
 }
 
-SUPPORT_JITTER = 0.005
+OBJECT_JITTER = 0.005
 PLATE_JITTER = 0.015
 
 
@@ -85,6 +99,8 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
 
     print(f"\nVariant: {variant_key}")
     print(f"Task {v['task_id']}: {task.language}")
+    if "target_body" in v:
+        print(f"Target body   : {v['target_body']}")
     print(f"Support body  : {v['support_body']}")
     print(f"Dependent body: {v['dependent_body']}")
     print(f"Generating {n} states (seed={seed})...\n")
@@ -94,15 +110,22 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
         env.reset()
         env.set_init_state(default_states[i % len(default_states)])
 
+        target_xyz = v.get("target_xyz", None)
+        if target_xyz is not None:
+            target_xyz = target_xyz.copy()
         support_xyz = v["support_xyz"].copy()
         dependent_xyz = v["dependent_xyz"].copy()
         plate_xyz = v["plate_xyz"].copy()
 
-        jitter = rng.uniform(-SUPPORT_JITTER, SUPPORT_JITTER, size=2)
+        jitter = rng.uniform(-OBJECT_JITTER, OBJECT_JITTER, size=2)
+        if target_xyz is not None:
+            target_xyz[:2] += rng.uniform(-OBJECT_JITTER, OBJECT_JITTER, size=2)
         support_xyz[:2] += jitter
         dependent_xyz[:2] += jitter
         plate_xyz[:2] += rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
 
+        if target_xyz is not None:
+            _set_xyz_position(env.sim, v["target_body"], target_xyz)
         _set_xyz_position(env.sim, v["support_body"], support_xyz)
         _set_xyz_position(env.sim, v["dependent_body"], dependent_xyz)
         _set_xyz_position(env.sim, "plate_1_main", plate_xyz)

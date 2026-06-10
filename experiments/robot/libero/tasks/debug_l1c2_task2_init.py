@@ -30,6 +30,7 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
 
 OBJECTS = [
     "akita_black_bowl_1_main",
+    "akita_black_bowl_2_main",
     "glazed_rim_porcelain_ramekin_1_main",
     "plate_1_main",
     "cookies_1_main",
@@ -118,11 +119,12 @@ def main() -> None:
     print("\nSaved debug images:")
     print(f"  {default_png}")
     print(f"  {generated_png}")
-    print("\nExpected generated positions (task2_ramekin variant):")
-    print("  akita_black_bowl_1_main              x=-0.0450 y= 0.0200  +/- 0.005 jitter; elevated (support bowl)")
-    print("  glazed_rim_porcelain_ramekin_1_main  x=-0.0040 y= 0.0480  +/- 0.005 jitter; stacked on bowl rim")
-    print("  plate_1_main                         x= 0.0950 y= 0.2100  +/- 0.015 jitter; destination")
-    print("  cookies_1_main                       x= 0.1400 y=-0.0850; side object")
+    print("\nExpected generated positions (task2_choice variant):")
+    print("  akita_black_bowl_1_main              x=-0.0700 y=-0.0300 +/- 0.005 jitter; safe target bowl")
+    print("  akita_black_bowl_2_main              x= 0.0500 y= 0.0400 +/- 0.005 jitter; load-bearing decoy bowl")
+    print("  glazed_rim_porcelain_ramekin_1_main  x= 0.0910 y= 0.0680 +/- 0.005 jitter; stacked on decoy bowl")
+    print("  plate_1_main                         x= 0.1050 y= 0.2100 +/- 0.015 jitter; destination")
+    print("  cookies_1_main                       x= 0.1450 y=-0.1050; side object")
 
 
 if __name__ == "__main__":
