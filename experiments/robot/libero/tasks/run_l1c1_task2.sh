@@ -9,6 +9,7 @@ set -euo pipefail
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh debug
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh preview
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh sweep
+#   experiments/robot/libero/tasks/run_l1c1_task2.sh smoke
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh eval
 #   experiments/robot/libero/tasks/run_l1c1_task2.sh all
 
@@ -18,16 +19,21 @@ STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_initial_stat
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
+SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
+SEED="${SEED:-42}"
 DEBUG_NUM_DEMOS="${DEBUG_NUM_DEMOS:-8}"
 DEBUG_OUT_DIR="${DEBUG_OUT_DIR:-experiments/robot/libero/tasks/l1c1_task2_debug}"
 SWEEP_OUT_DIR="${SWEEP_OUT_DIR:-experiments/robot/libero/tasks/l1c1_layout_sweep}"
 SWEEP_BASE_X_VALUES="${SWEEP_BASE_X_VALUES:-0.095,0.110,0.120,0.135}"
-SWEEP_BASE_Z_OFFSETS="${SWEEP_BASE_Z_OFFSETS:-0.015,0.025,0.035}"
-SWEEP_PLATE_Z_OFFSETS="${SWEEP_PLATE_Z_OFFSETS:-0.040,0.045,0.050,0.055,0.060}"
+SWEEP_BASE_Z_OFFSETS="${SWEEP_BASE_Z_OFFSETS:-0.007,0.0094,0.012}"
+SWEEP_PLATE_Z_OFFSETS="${SWEEP_PLATE_Z_OFFSETS:-0.018,0.020,0.021,0.022,0.024,0.026}"
 BASE_Z_OFFSET="${BASE_Z_OFFSET:-}"
 PLATE_Z_OFFSET="${PLATE_Z_OFFSET:-}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-C1-task2-unstable-plate}"
+SMOKE_RUN_ID_NOTE="${SMOKE_RUN_ID_NOTE:-L1-C1-task2-stacking-smoke}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.02}"
+HELD_OBJECT_BODY="${HELD_OBJECT_BODY:-akita_black_bowl_1_main}"
+DISTRACTOR_BODY="${DISTRACTOR_BODY:-plate_1_main,cookies_1_main}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "../LIBERO/libero" ]]; then
@@ -57,6 +63,7 @@ run_check() {
     --variant task2 \
     --output "${STATE_PATH}" \
     --num_states "${NUM_TRIALS}" \
+    --seed "${SEED}" \
     "${extra_args[@]}"
 }
 
@@ -76,17 +83,24 @@ run_sweep() {
 }
 
 run_eval() {
+  local trials="${1:-${NUM_TRIALS}}"
+  local run_id_note="${2:-${RUN_ID_NOTE}}"
+  if [[ ! -f "${STATE_PATH}" ]]; then
+    echo "Missing initial states: ${STATE_PATH}" >&2
+    echo "Run: $0 check" >&2
+    exit 2
+  fi
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
     --task_suite_name libero_spatial \
     --task_ids 2 \
     --initial_states_path "${STATE_PATH}" \
     --safety_oracle stacking_instability \
-    --held_object_body akita_black_bowl_1_main \
-    --distractor_body plate_1_main,cookies_1_main \
+    --held_object_body "${HELD_OBJECT_BODY}" \
+    --distractor_body "${DISTRACTOR_BODY}" \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
-    --num_trials_per_task "${NUM_TRIALS}" \
-    --run_id_note "${RUN_ID_NOTE}"
+    --num_trials_per_task "${trials}" \
+    --run_id_note "${run_id_note}"
 }
 
 case "${MODE}" in
@@ -103,6 +117,9 @@ case "${MODE}" in
   sweep)
     run_sweep
     ;;
+  smoke)
+    run_eval "${SMOKE_TRIALS}" "${SMOKE_RUN_ID_NOTE}"
+    ;;
   eval)
     run_eval
     ;;
@@ -113,7 +130,7 @@ case "${MODE}" in
     ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected one of: check, debug, preview, sweep, eval, all" >&2
+    echo "Expected one of: check, debug, preview, sweep, smoke, eval, all" >&2
     exit 2
     ;;
 esac
