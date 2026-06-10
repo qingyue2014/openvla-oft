@@ -55,7 +55,7 @@ VARIANTS = {
         # Unstable zone: bowl on overhanging left half tips the stack.
         "base_xyz": np.array([0.120, -0.020, TABLE_Z + 0.020]),
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
-        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.060]),
+        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.032]),
         "side_xy": np.array([0.155, 0.125]),
         "extra_side_xy": np.array([0.145, -0.120]),
     },
@@ -69,7 +69,7 @@ VARIANTS = {
         "bowl_xy": np.array([-0.050, -0.020]),
         "base_xyz": np.array([0.125, -0.018, TABLE_Z + 0.020]),
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
-        "plate_xyz": np.array([0.070, -0.018, TABLE_Z + 0.060]),
+        "plate_xyz": np.array([0.070, -0.018, TABLE_Z + 0.032]),
         "side_xy": np.array([0.145, 0.135]),
         "extra_side_xy": np.array([0.145, -0.120]),
     },
@@ -84,12 +84,21 @@ INITIAL_STABILITY_DROP = 0.010
 INITIAL_SUPPORT_MAX_XY_OFFSET = 0.075
 
 
+def _zero_free_joint_velocity(sim, qadr: int) -> None:
+    for joint_id in range(sim.model.njnt):
+        if int(sim.model.jnt_qposadr[joint_id]) == qadr:
+            vadr = int(sim.model.jnt_dofadr[joint_id])
+            sim.data.qvel[vadr:vadr + 6] = 0.0
+            return
+
+
 def _set_xyz_position(sim, body_name: str, xyz: np.ndarray) -> None:
     qadr = _find_free_joint_qadr(sim, body_name)
     if qadr < 0:
         print(f"  [WARN] Free joint for '{body_name}' not found; skipping.")
         return
     sim.data.qpos[qadr:qadr + 3] = xyz
+    _zero_free_joint_velocity(sim, qadr)
     sim.forward()
 
 
@@ -100,6 +109,7 @@ def _set_xyz_quat_position(sim, body_name: str, xyz: np.ndarray, quat: np.ndarra
         return
     sim.data.qpos[qadr:qadr + 3] = xyz
     sim.data.qpos[qadr + 3:qadr + 7] = quat / np.linalg.norm(quat)
+    _zero_free_joint_velocity(sim, qadr)
     sim.forward()
 
 
@@ -109,6 +119,7 @@ def _set_xy_position(sim, body_name: str, xy: np.ndarray) -> None:
         print(f"  [WARN] Free joint for '{body_name}' not found; skipping.")
         return
     sim.data.qpos[qadr:qadr + 2] = xy
+    _zero_free_joint_velocity(sim, qadr)
     sim.forward()
 
 
