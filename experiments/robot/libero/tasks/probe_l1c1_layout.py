@@ -83,11 +83,14 @@ def _world_aabb(env, body_name: str):
 
 def _print_body_geometry(env, body_name: str, label: str) -> tuple[np.ndarray, np.ndarray]:
     pos = _body_pos(env, body_name)
+    qvel = _body_qvel(env, body_name)
     lo, hi, geom_ids = _world_aabb(env, body_name)
     all_geom_ids = sorted(_geom_ids_for_body(env, body_name))
     collision_names = [_geom_name(env, geom_id) for geom_id in geom_ids]
     print(f"  [{label}] {body_name}")
     print(f"    body center: {np.array2string(pos, precision=4, suppress_small=True)}")
+    if qvel is not None:
+        print(f"    qvel: {np.array2string(qvel, precision=4, suppress_small=True)}")
     print(f"    geoms: total={len(all_geom_ids)} collision={len(geom_ids)}")
     if geom_ids:
         print(
@@ -100,6 +103,39 @@ def _print_body_geometry(env, body_name: str, label: str) -> tuple[np.ndarray, n
     else:
         print("    AABB: unavailable, no collision geoms found")
     return lo, hi
+
+
+def _body_qvel(env, body_name: str) -> np.ndarray | None:
+    qadr = _find_free_joint_qadr(env.sim, body_name)
+    if qadr < 0:
+        return None
+    for joint_id in range(env.sim.model.njnt):
+        if int(env.sim.model.jnt_qposadr[joint_id]) == qadr:
+            vadr = int(env.sim.model.jnt_dofadr[joint_id])
+            return np.array(env.sim.data.qvel[vadr:vadr + 6])
+    return None
+
+
+def _print_named_geoms(env, pattern: str) -> None:
+    print(f"\n[GEOMS matching {pattern!r}]")
+    found = False
+    for geom_id in range(env.sim.model.ngeom):
+        name = _geom_name(env, geom_id)
+        if pattern not in name:
+            continue
+        found = True
+        pos = env.sim.data.geom_xpos[geom_id]
+        size = env.sim.model.geom_size[geom_id]
+        print(
+            f"  {geom_id:>3d} {name:<40s} "
+            f"type={int(env.sim.model.geom_type[geom_id])} "
+            f"pos={np.array2string(pos, precision=4, suppress_small=True)} "
+            f"size={np.array2string(size, precision=4, suppress_small=True)} "
+            f"contype={int(env.sim.model.geom_contype[geom_id])} "
+            f"conaffinity={int(env.sim.model.geom_conaffinity[geom_id])}"
+        )
+    if not found:
+        print("  none")
 
 
 def _interval_overlap(lo_a: float, hi_a: float, lo_b: float, hi_b: float) -> float:
@@ -124,6 +160,7 @@ def _print_contact_pairs(env, body_a: str, body_b: str) -> None:
     geoms_a = _geom_ids_for_body(env, body_a)
     geoms_b = _geom_ids_for_body(env, body_b)
     matching = []
+    involving = []
     all_pairs = []
     for i in range(env.sim.data.ncon):
         contact = env.sim.data.contact[i]
@@ -133,6 +170,8 @@ def _print_contact_pairs(env, body_a: str, body_b: str) -> None:
             contact.geom2 in geoms_a and contact.geom1 in geoms_b
         ):
             matching.append(pair)
+        if contact.geom1 in geoms_a or contact.geom2 in geoms_a or contact.geom1 in geoms_b or contact.geom2 in geoms_b:
+            involving.append(pair)
 
     print(f"\n[CONTACTS] total ncon={env.sim.data.ncon}")
     if matching:
@@ -141,6 +180,13 @@ def _print_contact_pairs(env, body_a: str, body_b: str) -> None:
             print(f"    {geom_a} <-> {geom_b}")
     else:
         print(f"  {body_a} <-> {body_b}: none")
+
+    if involving:
+        print(f"  contacts involving {body_a} or {body_b}:")
+        for geom_a, geom_b in involving[:24]:
+            print(f"    {geom_a} <-> {geom_b}")
+    else:
+        print(f"  contacts involving {body_a} or {body_b}: none")
 
     if all_pairs:
         print("  first contacts in scene:")
@@ -160,6 +206,15 @@ def probe(variant_key: str, out_png: str, resolution: int = 512):
     env.reset()
     env.set_init_state(default_states[0])
 
+    print(f"\n{'='*60}")
+    print(f"Variant: {variant_key}  |  TABLE_Z={TABLE_Z}")
+    print(f"{'='*60}")
+
+    print(f"\n[DEFAULT STATE BEFORE MANUAL PLACEMENT]")
+    _print_body_geometry(env, v["base_body"], "base")
+    _print_body_geometry(env, v["support_body"], "plate")
+    _print_named_geoms(env, "table")
+
     # --- place objects ---
     _set_xy_position(env.sim, v["placed_body"], v["bowl_xy"])
     _set_xyz_quat_position(env.sim, v["base_body"], v["base_xyz"], v["base_quat"])
@@ -172,9 +227,6 @@ def probe(variant_key: str, out_png: str, resolution: int = 512):
     pre_png = out_png.replace(".png", "_pre_settle.png")
     imageio.imwrite(pre_png, obs)
 
-    print(f"\n{'='*60}")
-    print(f"Variant: {variant_key}  |  TABLE_Z={TABLE_Z}")
-    print(f"{'='*60}")
     print(f"\n[PARAMS]")
     print(f"  base_xyz  = {v['base_xyz']}  (quat={v['base_quat']})")
     print(f"  plate_xyz = {v['plate_xyz']}")
