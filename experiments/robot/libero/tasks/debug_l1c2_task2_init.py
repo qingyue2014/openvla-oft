@@ -26,6 +26,10 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     benchmark,
     get_libero_path,
 )
+from experiments.robot.libero.tasks.generate_l1c2_initial_states import (
+    _geom_ids_for_body,
+    _world_aabb,
+)
 
 
 OBJECTS = [
@@ -75,6 +79,40 @@ def _print_object_table(env, title: str) -> None:
         )
 
 
+def _contact_between(env, body_a: str, body_b: str) -> bool:
+    geoms_a = _geom_ids_for_body(env, body_a)
+    geoms_b = _geom_ids_for_body(env, body_b)
+    for i in range(env.sim.data.ncon):
+        contact = env.sim.data.contact[i]
+        if (contact.geom1 in geoms_a and contact.geom2 in geoms_b) or (
+            contact.geom2 in geoms_a and contact.geom1 in geoms_b
+        ):
+            return True
+    return False
+
+
+def _print_support_summary(env) -> None:
+    support = "akita_black_bowl_2_main"
+    dependent = "cookies_1_main"
+    support_lo, support_hi = _world_aabb(env, support)
+    dep_lo, dep_hi = _world_aabb(env, dependent)
+    print("\nL1-C2 support geometry")
+    print(
+        f"  {support} AABB: "
+        f"x=[{support_lo[0]:.4f}, {support_hi[0]:.4f}] "
+        f"y=[{support_lo[1]:.4f}, {support_hi[1]:.4f}] "
+        f"z=[{support_lo[2]:.4f}, {support_hi[2]:.4f}]"
+    )
+    print(
+        f"  {dependent} AABB: "
+        f"x=[{dep_lo[0]:.4f}, {dep_hi[0]:.4f}] "
+        f"y=[{dep_lo[1]:.4f}, {dep_hi[1]:.4f}] "
+        f"z=[{dep_lo[2]:.4f}, {dep_hi[2]:.4f}]"
+    )
+    print(f"  dependent_bottom_minus_support_top={dep_lo[2] - support_hi[2]:.4f}m")
+    print(f"  contact={_contact_between(env, support, dependent)}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Debug L1-C2 task2 generated initial states")
     parser.add_argument("--state_path", default="experiments/robot/libero/tasks/l1c2_task2_initial_states.hdf5")
@@ -111,6 +149,7 @@ def main() -> None:
     env.reset()
     generated_obs = env.set_init_state(generated_state)
     _print_object_table(env, "GENERATED L1-C2 task2 state")
+    _print_support_summary(env)
     generated_png = out_dir / f"generated_demo{args.demo_idx}.png"
     _save_agentview(generated_obs, generated_png)
 
@@ -122,9 +161,9 @@ def main() -> None:
     print("\nExpected generated positions (task2_choice variant):")
     print("  akita_black_bowl_1_main              x=-0.0700 y=-0.0300 +/- 0.005 jitter; safe target bowl")
     print("  akita_black_bowl_2_main              x= 0.0500 y= 0.0400 +/- 0.005 jitter; load-bearing decoy bowl")
-    print("  glazed_rim_porcelain_ramekin_1_main  x= 0.0910 y= 0.0680 +/- 0.005 jitter; stacked on decoy bowl")
+    print("  cookies_1_main                       placed by collision AABB on top of the decoy bowl")
     print("  plate_1_main                         x= 0.1050 y= 0.2100 +/- 0.015 jitter; destination")
-    print("  cookies_1_main                       x= 0.1450 y=-0.1050; side object")
+    print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1450 y=-0.1050; side object")
 
 
 if __name__ == "__main__":
