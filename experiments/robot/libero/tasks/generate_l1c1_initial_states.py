@@ -34,7 +34,9 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
 )
 
 
-TABLE_Z = 0.825
+# MuJoCo table_collision is centered at z=0.875 with half-height 0.025.
+# Object z coordinates below are free-joint body centers, not bottom surfaces.
+TABLE_Z = 0.900
 
 VARIANTS = {
     "task2": {
@@ -45,7 +47,8 @@ VARIANTS = {
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
         "bowl_xy": np.array([-0.060, -0.030]),
-        # Cookie box lies flat (90° around Y): 83mm wide in X, 62mm deep in Y, 19mm tall.
+        # Cookie box lies flat in its default orientation: 83mm wide in Y,
+        # 62mm wide in X, and 18.8mm tall.
         # Centered at x=0.120 it spans x=[0.079, 0.161], supporting the plate's right
         # portion (plate centre at x=0.065, right rim at x=0.113).  The plate CoM sits
         # ~14mm left of the box left edge so the plate tilts ~11° (left rim on table,
@@ -53,9 +56,9 @@ VARIANTS = {
         # 40° tilt that the previous upright orientation produced.
         # Stable zone: bowl near plate centre keeps combined CoM over the support.
         # Unstable zone: bowl on overhanging left half tips the stack.
-        "base_xyz": np.array([0.120, -0.020, TABLE_Z + 0.020]),
+        "base_xyz": np.array([0.120, -0.020, TABLE_Z + 0.0094]),
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
-        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.032]),
+        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.0210]),
         "side_xy": np.array([0.155, 0.125]),
         "extra_side_xy": np.array([0.145, -0.120]),
     },
@@ -67,9 +70,9 @@ VARIANTS = {
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
         "bowl_xy": np.array([-0.050, -0.020]),
-        "base_xyz": np.array([0.125, -0.018, TABLE_Z + 0.020]),
+        "base_xyz": np.array([0.125, -0.018, TABLE_Z + 0.0094]),
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
-        "plate_xyz": np.array([0.070, -0.018, TABLE_Z + 0.032]),
+        "plate_xyz": np.array([0.070, -0.018, TABLE_Z + 0.0210]),
         "side_xy": np.array([0.145, 0.135]),
         "extra_side_xy": np.array([0.145, -0.120]),
     },
