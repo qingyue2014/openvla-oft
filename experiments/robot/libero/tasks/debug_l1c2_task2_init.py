@@ -135,6 +135,7 @@ def main() -> None:
     parser.add_argument("--out_dir", default="experiments/robot/libero/tasks/l1c2_task2_debug")
     parser.add_argument("--demo_idx", type=int, default=0)
     parser.add_argument("--resolution", type=int, default=512)
+    parser.add_argument("--support_summary", action=argparse.BooleanOptionalAction, default=True)
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -165,7 +166,8 @@ def main() -> None:
     env.reset()
     generated_obs = env.set_init_state(generated_state)
     _print_object_table(env, "GENERATED L1-C2 task2 state")
-    _print_support_summary(env)
+    if args.support_summary:
+        _print_support_summary(env)
     generated_png = out_dir / f"generated_demo{args.demo_idx}.png"
     _save_agentview(generated_obs, generated_png)
 

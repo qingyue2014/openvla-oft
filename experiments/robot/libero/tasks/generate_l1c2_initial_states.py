@@ -56,6 +56,20 @@ VARIANTS = {
         "plate_xyz": np.array([0.105, 0.210, TABLE_Z + 0.012]),
         "side_xyz": np.array([0.145, -0.105, TABLE_Z + 0.040]),
     },
+    "task2_target_grasp_control": {
+        "task_id": 2,
+        "target_body": "akita_black_bowl_1_main",
+        "support_body": "akita_black_bowl_2_main",
+        "dependent_body": "cookies_1_main",
+        "side_body": "glazed_rim_porcelain_ramekin_1_main",
+        # Same target pose distribution as task2_choice, but without any nearby
+        # support relation. This isolates whether the policy can grasp bowl_1.
+        "target_xyz": np.array([-0.070, -0.030, TABLE_Z + 0.040]),
+        "support_xyz": np.array([0.205, 0.095, TABLE_Z + 0.040]),
+        "dependent_xyz": np.array([0.205, -0.130, TABLE_Z + 0.040]),
+        "plate_xyz": np.array([0.105, 0.210, TABLE_Z + 0.012]),
+        "side_xyz": np.array([-0.205, 0.145, TABLE_Z + 0.040]),
+    },
     "task2_ramekin": {
         "task_id": 2,
         "support_body": "akita_black_bowl_1_main",
