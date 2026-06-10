@@ -40,8 +40,8 @@ VARIANTS = {
         "support_body": "akita_black_bowl_2_main",
         "dependent_body": "cookies_1_main",
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
-        "target_xyz": np.array([-0.070, -0.030, TABLE_Z + 0.040]),
-        "support_xyz": np.array([0.050, 0.040, TABLE_Z + 0.040]),
+        # Preserve the native LIBERO task2 layout for both bowls and the plate.
+        # The only physical perturbation is moving the cookie box onto bowl_2.
         # Cookie box is contact-placed in/against the decoy bowl.  This tests
         # choosing the bowl that is not already carrying another object.
         "dependent_xy_offsets": [
@@ -53,8 +53,6 @@ VARIANTS = {
             np.array([0.025, 0.020]),
             np.array([-0.025, 0.020]),
         ],
-        "plate_xyz": np.array([0.105, 0.210, TABLE_Z + 0.012]),
-        "side_xyz": np.array([0.145, -0.105, TABLE_Z + 0.040]),
     },
     "task2_target_grasp_control": {
         "task_id": 2,
@@ -240,9 +238,14 @@ def _place_dependent_with_contact(env, v: dict, support_xyz: np.ndarray) -> bool
 
     env.sim.set_state(base_state)
     env.sim.forward()
+    support_xy_text = (
+        f"[{support_xyz[0]:.4f}, {support_xyz[1]:.4f}]"
+        if support_xyz is not None
+        else "native-default"
+    )
     print(
         "  [reject] no candidate cookie placement produced contact with "
-        f"{support_body} near support_xy=[{support_xyz[0]:.4f}, {support_xyz[1]:.4f}]"
+        f"{support_body} near support_xy={support_xy_text}"
     )
     return False
 
@@ -278,20 +281,29 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int):
         target_xyz = v.get("target_xyz", None)
         if target_xyz is not None:
             target_xyz = target_xyz.copy()
-        support_xyz = v["support_xyz"].copy()
-        plate_xyz = v["plate_xyz"].copy()
+        support_xyz = v.get("support_xyz", None)
+        if support_xyz is not None:
+            support_xyz = support_xyz.copy()
+        plate_xyz = v.get("plate_xyz", None)
+        if plate_xyz is not None:
+            plate_xyz = plate_xyz.copy()
 
         jitter = rng.uniform(-OBJECT_JITTER, OBJECT_JITTER, size=2)
         if target_xyz is not None:
             target_xyz[:2] += rng.uniform(-OBJECT_JITTER, OBJECT_JITTER, size=2)
-        support_xyz[:2] += jitter
-        plate_xyz[:2] += rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
+        if support_xyz is not None:
+            support_xyz[:2] += jitter
+        if plate_xyz is not None:
+            plate_xyz[:2] += rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
 
         if target_xyz is not None:
             _set_xyz_position(env.sim, v["target_body"], target_xyz)
-        _set_xyz_position(env.sim, v["support_body"], support_xyz)
-        _set_xyz_position(env.sim, "plate_1_main", plate_xyz)
-        _set_xyz_position(env.sim, v["side_body"], v["side_xyz"])
+        if support_xyz is not None:
+            _set_xyz_position(env.sim, v["support_body"], support_xyz)
+        if plate_xyz is not None:
+            _set_xyz_position(env.sim, "plate_1_main", plate_xyz)
+        if "side_xyz" in v:
+            _set_xyz_position(env.sim, v["side_body"], v["side_xyz"])
 
         for _ in range(PRE_DEPENDENT_SETTLE_STEPS):
             env.sim.step()
