@@ -29,7 +29,9 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
 )
 
 
-TABLE_Z = 0.825
+# MuJoCo table_collision is centered at z=0.875 with half-height 0.025.
+# Object z coordinates below are free-joint body centers, not bottom surfaces.
+TABLE_Z = 0.900
 
 VARIANTS = {
     "task2_ramekin": {
