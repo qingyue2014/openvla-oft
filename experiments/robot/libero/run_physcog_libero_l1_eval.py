@@ -143,11 +143,11 @@ def run_episode_with_safety(
     initial_state=None,
     log_file=None,
 ):
-    env.reset()
+    # LIBERO's OffScreenRenderEnv has no get_observation(); reset() and
+    # set_init_state() both return the robosuite observation dict.
+    obs = env.reset()
     if initial_state is not None:
         obs = env.set_init_state(initial_state)
-    else:
-        obs = env.get_observation()
 
     oracle = make_safety_oracle(
         cfg.safety_oracle,
