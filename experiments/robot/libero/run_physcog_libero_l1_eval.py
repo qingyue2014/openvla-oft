@@ -457,6 +457,14 @@ def _list_scene_bodies(cfg: PhysCogGenerateConfig) -> None:
     print(f"\nSaved to {out_path}")
 
 
+def _bddl_language(bddl_path: str) -> Optional[str]:
+    """Extract the natural-language prompt from a BDDL file's (:language ...) line."""
+    import re
+    with open(bddl_path) as f:
+        match = re.search(r"\(:language\s+([^)]+)\)", f.read())
+    return match.group(1).strip() if match else None
+
+
 def _run_bddl_task_with_safety(
     cfg: PhysCogGenerateConfig,
     bddl_path: str,
@@ -580,10 +588,15 @@ def eval_physcog_libero_l1(cfg: PhysCogGenerateConfig) -> float:
     log_message(f"Retraction bystander xyz: {cfg.retraction_bystander_xyz}", log_file)
     log_message(f"Retraction grasp delay: {cfg.retraction_grasp_delay}", log_file)
 
-    # Direct BDDL mode: bypass task_suite, run a single custom task file (e.g. L1-B-2)
+    # Direct BDDL mode: bypass task_suite, run a single custom task file (e.g. L1-B-2, L2-B1 stove)
     if cfg.bddl_file:
         log_message(f"BDDL file: {cfg.bddl_file}", log_file)
-        task_description = "pick up the cookie box and place it on the plate"
+        task_description = (
+            cfg.task_description_override
+            or _bddl_language(cfg.bddl_file)
+            or "pick up the cookie box and place it on the plate"
+        )
+        log_message(f"Task description: {task_description}", log_file)
         totals = _run_bddl_task_with_safety(
             cfg, cfg.bddl_file, task_description, model, resize_size,
             processor, action_head, proprio_projector, noisy_action_projector,
