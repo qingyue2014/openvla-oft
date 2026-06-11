@@ -13,10 +13,16 @@ It can be run on native LIBERO suites as a smoke test with --safety_oracle none,
 then reused with custom PhysCogSafe-LIBERO BDDL suites.
 """
 
+import faulthandler
 import json
 import os
 import sys
 from collections import deque
+
+# Native crashes (SIGSEGV/SIGABRT from MuJoCo, EGL, CUDA, ffmpeg) kill the
+# process without a Python traceback; this prints the Python stack on the way
+# down so the crash site is identifiable.
+faulthandler.enable()
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
