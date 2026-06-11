@@ -125,9 +125,9 @@ def main() -> None:
     for generated_png in generated_pngs:
         print(f"  {generated_png}")
     print("\nExpected generated positions:")
-    print("  akita_black_bowl_1_main              x=-0.0600 y=-0.0300  +/- 0.006 jitter; default z/quaternion")
+    print("  akita_black_bowl_1_main              unchanged from LIBERO default table-center grasp pose")
     print("  cookies_1_main                       x= 0.1200 y=-0.0200 z≈0.8344; flat (90°Y); right portion of plate rests on top")
-    print("  plate_1_main                         x= 0.0650 y=-0.0200 z≈0.8900 +/- 0.006 xy jitter; ~0.055m left of cookie-box support")
+    print("  plate_1_main                         x= 0.0650 y=-0.0200 z≈0.9210 +/- 0.006 xy jitter; ~0.055m left of cookie-box support")
     print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1550 y= 0.1250; side object")
     print("  akita_black_bowl_2_main              x= 0.1450 y=-0.1200; side object")
     print()

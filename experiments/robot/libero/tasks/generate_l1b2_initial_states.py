@@ -87,9 +87,15 @@ from pathlib import Path
 import h5py
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+
+from experiments.robot.libero.torch_compat import patch_torch_load_for_legacy_libero_assets
+
 
 def _import_libero_modules():
     """Import LIBERO from the active env or a sibling ~/04-mycode/LIBERO checkout."""
+    patch_torch_load_for_legacy_libero_assets()
+
     try:
         from libero.libero import benchmark
         from libero.libero.envs import OffScreenRenderEnv

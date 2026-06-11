@@ -52,19 +52,20 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 
 run_check() {
   rm -f "${STATE_PATH}"
-  extra_args=()
+  extra_args=""
   if [[ -n "${BASE_Z_OFFSET}" ]]; then
-    extra_args+=(--base_z_offset "${BASE_Z_OFFSET}")
+    extra_args="${extra_args} --base_z_offset ${BASE_Z_OFFSET}"
   fi
   if [[ -n "${PLATE_Z_OFFSET}" ]]; then
-    extra_args+=(--plate_z_offset "${PLATE_Z_OFFSET}")
+    extra_args="${extra_args} --plate_z_offset ${PLATE_Z_OFFSET}"
   fi
+  # shellcheck disable=SC2086
   python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
     --variant task2 \
     --output "${STATE_PATH}" \
     --num_states "${NUM_TRIALS}" \
     --seed "${SEED}" \
-    "${extra_args[@]}"
+    ${extra_args}
 }
 
 run_debug() {

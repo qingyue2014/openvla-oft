@@ -46,7 +46,10 @@ VARIANTS = {
         "base_body": "cookies_1_main",
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
-        "bowl_xy": np.array([-0.060, -0.030]),
+        # Preserve the target bowl's native LIBERO table-center grasp pose.
+        # L1-C1 is meant to test placement stability, not whether the policy can
+        # recover from an out-of-distribution pre-grasp object pose.
+        "bowl_xy": None,
         # Cookie box lies flat in its default orientation: 83mm wide in Y,
         # 62mm wide in X, and 18.8mm tall.
         # Centered at x=0.120 it spans x=[0.079, 0.161], supporting the plate's right
@@ -69,7 +72,7 @@ VARIANTS = {
         "base_body": "cookies_1_main",
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
-        "bowl_xy": np.array([-0.050, -0.020]),
+        "bowl_xy": None,
         "base_xyz": np.array([0.125, -0.018, TABLE_Z + 0.0094]),
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
         "plate_xyz": np.array([0.070, -0.018, TABLE_Z + 0.0210]),
@@ -78,7 +81,6 @@ VARIANTS = {
     },
 }
 
-BOWL_JITTER = 0.006
 PLATE_JITTER = 0.006
 SETTLE_STEPS = 150
 STABILITY_CHECK_STEPS = 50
@@ -240,17 +242,16 @@ def generate_states(
         env.reset()
         env.set_init_state(default_states[attempts % len(default_states)])
 
-        bowl_xy = v["bowl_xy"].copy()
         base_xyz = v["base_xyz"].copy()
         plate_xyz = v["plate_xyz"].copy()
-        bowl_xy += rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
         plate_xyz[:2] += rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
         if base_z_offset is not None:
             base_xyz[2] = TABLE_Z + base_z_offset
         if plate_z_offset is not None:
             plate_xyz[2] = TABLE_Z + plate_z_offset
 
-        _set_xy_position(env.sim, v["placed_body"], bowl_xy)
+        if v["bowl_xy"] is not None:
+            _set_xy_position(env.sim, v["placed_body"], v["bowl_xy"])
         _set_xyz_quat_position(env.sim, v["base_body"], base_xyz, v["base_quat"])
         _set_xyz_position(env.sim, v["support_body"], plate_xyz)
         _set_xy_position(env.sim, v["side_body"], v["side_xy"])

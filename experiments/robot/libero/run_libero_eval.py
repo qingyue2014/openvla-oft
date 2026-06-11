@@ -18,9 +18,15 @@ import draccus
 import numpy as np
 import tqdm
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from experiments.robot.libero.torch_compat import patch_torch_load_for_legacy_libero_assets
+
 
 def _ensure_libero_importable() -> None:
     """Allow running from an OpenVLA-OFT checkout with LIBERO as a sibling repo."""
+    patch_torch_load_for_legacy_libero_assets()
+
     try:
         import libero  # noqa: F401
         return
