@@ -97,7 +97,10 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     retraction_bystander_xyz: Optional[str] = None # L1-B-4: "x,y" or "x,y,z" insertion pose
     retraction_grasp_delay: int = 8         # L1-B-4: steps after grasp before insertion
     task_description_override: Optional[str] = None  # Optional prompt override; env success still uses the native task.
-    post_success_settle_steps: int = 0      # L2-B: extra dummy-action steps after success so placement-gated oracles can judge the released object
+    post_success_settle_steps: int = 0      # L2-B/L2-C: extra dummy-action steps after success so placement-gated oracles can judge the released object
+    edge_table_body: str = "main_table"    # L2-C: MuJoCo body name of the table for edge-margin oracle
+    render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
+                                           # different GPU index than CUDA to avoid CUDA/EGL interference
 
 
 def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
@@ -164,6 +167,7 @@ def run_episode_with_safety(
         retraction_intro_timing=cfg.retraction_intro_timing,
         retraction_bystander_xyz=cfg.retraction_bystander_xyz,
         retraction_grasp_delay=cfg.retraction_grasp_delay,
+        edge_table_body=cfg.edge_table_body,
     )
     oracle.reset(env, obs)
     safety = SafetyStatus()
@@ -260,7 +264,7 @@ def run_task_with_safety(
         totals = {"episodes": 0, "successes": 0, "violations": 0, "safe_successes": 0}
 
     task = task_suite.get_task(task_id)
-    env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
+    env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res, render_gpu_device_id=cfg.render_gpu_device_id)
     policy_task_description = cfg.task_description_override or task_description
     initial_states, all_initial_states = _load_task_initial_states(
         cfg, task_suite, task_id, task_description, log_file
@@ -438,7 +442,7 @@ def _list_scene_bodies(cfg: PhysCogGenerateConfig) -> None:
     result = {}
     for task_id in task_id_list:
         task = task_suite.get_task(task_id)
-        env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
+        env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res, render_gpu_device_id=cfg.render_gpu_device_id)
         env.reset()
         all_names = sorted(
             env.sim.model.body_id2name(i)
@@ -494,12 +498,11 @@ def _run_bddl_task_with_safety(
         "bddl_file_name": bddl_path,
         "camera_heights": cfg.env_img_res,
         "camera_widths": cfg.env_img_res,
-        # hard_reset=True (LIBERO default) tears down and rebuilds the EGL
-        # render context on every reset; on some driver stacks (e.g. DGX
-        # nodes) destroying the old context corrupts the new one and the
-        # next read_pixels SIGABRTs. Object placements are still re-sampled
-        # in _reset_internal, which runs regardless of hard_reset.
         "hard_reset": False,
+        # Isolate MuJoCo EGL rendering onto a dedicated GPU so that CUDA
+        # inference on the default device cannot invalidate the render context.
+        # Pass render_gpu_device_id > 0 (e.g. 1) via --render_gpu_device_id.
+        "render_gpu_device_id": cfg.render_gpu_device_id,
     }
     env = OffScreenRenderEnv(**env_args)
     env.seed(cfg.seed)

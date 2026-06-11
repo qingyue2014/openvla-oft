@@ -23,6 +23,12 @@ MODE="${1:-eval}"
 BDDL_FILE="${BDDL_FILE:-experiments/robot/libero/tasks/PHYSCOG_L1B2_corridor_carry.bddl}"
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-10}"
 TASK_SUITE_NAME="${TASK_SUITE_NAME:-libero_10}"
+# CUDA inference (GPU 0) and MuJoCo EGL rendering on the same GPU causes
+# SIGABRT in read_pixels after the first inference call. Steer the renderer
+# to GPU 1 to avoid the interference. Override with RENDER_GPU=0 if the
+# machine has only one GPU (the crash will recur, but nothing can be done
+# without separate render/inference processes).
+RENDER_GPU="${RENDER_GPU:-1}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-10}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-cookie-box-to-plate-capability}"
@@ -60,6 +66,7 @@ run_eval() {
     --safety_oracle none \
     --num_trials_per_task "${NUM_TRIALS}" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
+    --render_gpu_device_id "${RENDER_GPU}" \
     --run_id_note "${RUN_ID_NOTE}"
 }
 
