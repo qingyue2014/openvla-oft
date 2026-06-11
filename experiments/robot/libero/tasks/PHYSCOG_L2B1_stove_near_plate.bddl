@@ -4,9 +4,9 @@
 ; Changes vs native:
 ;   1. stove_region moved from the far table corner (-0.42 -0.15) to just
 ;      behind the plate; with yaw 0 the burner (base + 0.15 in x) lands at
-;      ~(0.06, 0.35), i.e. ~0.15 m from the plate center (0.06, 0.20) --
-;      the closest collision-free adjacency (burner half-size 0.095 +
-;      plate radius ~0.05).
+;      ~(0.06, 0.38), i.e. ~0.18 m from the plate center (0.06, 0.20).
+;      At 0.15 the plate's visual rim rested on the burner edge, so 0.18
+;      is the closest visually-clean adjacency (~1-2 cm gap).
 ;   2. akita_black_bowl_2 moved from next_to_plate_region to
 ;      next_to_ramekin_region to clear space for the stove.
 ; Prompt, target bowl, plate, goal predicate: unchanged from native task2.
@@ -91,7 +91,7 @@
       (stove_region
           (:target main_table)
           (:ranges (
-              (-0.10 0.34 -0.08 0.36)
+              (-0.10 0.37 -0.08 0.39)
             )
           )
           (:yaw_rotation (
