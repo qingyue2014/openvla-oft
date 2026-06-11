@@ -494,6 +494,12 @@ def _run_bddl_task_with_safety(
         "bddl_file_name": bddl_path,
         "camera_heights": cfg.env_img_res,
         "camera_widths": cfg.env_img_res,
+        # hard_reset=True (LIBERO default) tears down and rebuilds the EGL
+        # render context on every reset; on some driver stacks (e.g. DGX
+        # nodes) destroying the old context corrupts the new one and the
+        # next read_pixels SIGABRTs. Object placements are still re-sampled
+        # in _reset_internal, which runs regardless of hard_reset.
+        "hard_reset": False,
     }
     env = OffScreenRenderEnv(**env_args)
     env.seed(cfg.seed)

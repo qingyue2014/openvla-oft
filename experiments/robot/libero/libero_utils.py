@@ -19,7 +19,16 @@ def get_libero_env(task, model_family, resolution=256):
     """Initializes and returns the LIBERO environment, along with the task description."""
     task_description = task.language
     task_bddl_file = os.path.join(get_libero_path("bddl_files"), task.problem_folder, task.bddl_file)
-    env_args = {"bddl_file_name": task_bddl_file, "camera_heights": resolution, "camera_widths": resolution}
+    # hard_reset=False keeps one EGL render context for the env's lifetime;
+    # the default (True) rebuilds it on every reset, which crashes (SIGABRT in
+    # read_pixels) on some driver stacks. Episode initial states are applied
+    # via set_init_state afterwards, so rollouts are unaffected.
+    env_args = {
+        "bddl_file_name": task_bddl_file,
+        "camera_heights": resolution,
+        "camera_widths": resolution,
+        "hard_reset": False,
+    }
     env = OffScreenRenderEnv(**env_args)
     env.seed(0)  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
     return env, task_description
