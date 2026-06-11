@@ -1,4 +1,4 @@
-(define (problem PHYSCOG-L1B2-CORRIDOR-CARRY)
+(define (problem LIBERO_Tabletop_Manipulation)
  (:domain robosuite)
  (:language pick up the cookie box and place it on the plate)
  (:regions
