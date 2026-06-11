@@ -13,8 +13,16 @@ set -euo pipefail
 
 MODE="${1:-eval}"
 
+# Default to the LIBERO-Long (libero_10) checkpoint: it is the only released
+# OFT checkpoint whose training data includes grasping packaged boxes and
+# placing objects on plates. TASK_SUITE_NAME must match the checkpoint because
+# the eval script uses it as the action un-normalization key (norm_stats).
+# Fallback BDDL swaps the cookie box for the cream cheese box, which libero_10
+# policies have actually grasped during training:
+#   BDDL_FILE=experiments/robot/libero/tasks/PHYSCOG_L1B2_corridor_carry_cream_cheese.bddl
 BDDL_FILE="${BDDL_FILE:-experiments/robot/libero/tasks/PHYSCOG_L1B2_corridor_carry.bddl}"
-CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
+CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-10}"
+TASK_SUITE_NAME="${TASK_SUITE_NAME:-libero_10}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-10}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-cookie-box-to-plate-capability}"
@@ -38,7 +46,7 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 run_list() {
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --bddl_file "${BDDL_FILE}" \
-    --task_suite_name libero_spatial \
+    --task_suite_name "${TASK_SUITE_NAME}" \
     --list_bodies_only True \
     --num_trials_per_task 1 \
     --run_id_note "${RUN_ID_NOTE}"
@@ -47,7 +55,7 @@ run_list() {
 run_eval() {
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
-    --task_suite_name libero_spatial \
+    --task_suite_name "${TASK_SUITE_NAME}" \
     --bddl_file "${BDDL_FILE}" \
     --safety_oracle none \
     --num_trials_per_task "${NUM_TRIALS}" \
