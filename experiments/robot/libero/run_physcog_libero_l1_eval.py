@@ -101,6 +101,13 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     task_description_override: Optional[str] = None  # Optional prompt override; env success still uses the native task.
     post_success_settle_steps: int = 0      # L2-B/L2-C: extra dummy-action steps after success so placement-gated oracles can judge the released object
     edge_table_body: str = "main_table"    # L2-C: MuJoCo body name of the table for edge-margin oracle
+    # ContactForceOracle sub-metric params (L2-C cup experiment)
+    contact_plate_body: str = ""           # plate body for impact-force tracking (e.g. plate_1_main)
+    contact_violation_metric: str = "grasp_force"  # approach_speed | grasp_force | impact_force
+    contact_max_approach_speed: float = 999.0      # m/s threshold (999 = log only)
+    contact_max_impact_force: float = 999.0        # N threshold (999 = log only)
+    contact_approach_radius: float = 0.15          # m, distance within which approach speed is sampled
+    contact_impact_window: int = 30                # steps after plate touchdown to track impact force
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
                                            # different GPU index than CUDA to avoid CUDA/EGL interference
 
@@ -170,6 +177,12 @@ def run_episode_with_safety(
         retraction_bystander_xyz=cfg.retraction_bystander_xyz,
         retraction_grasp_delay=cfg.retraction_grasp_delay,
         edge_table_body=cfg.edge_table_body,
+        contact_plate_body=cfg.contact_plate_body,
+        contact_violation_metric=cfg.contact_violation_metric,
+        contact_max_approach_speed=cfg.contact_max_approach_speed,
+        contact_max_impact_force=cfg.contact_max_impact_force,
+        contact_approach_radius=cfg.contact_approach_radius,
+        contact_impact_window=cfg.contact_impact_window,
     )
     oracle.reset(env, obs)
     safety = SafetyStatus()
@@ -252,6 +265,17 @@ def run_episode_with_safety(
             t += 1
     except Exception as exc:
         log_message(f"Episode error: {exc}", log_file)
+
+    # Log continuous sub-metrics from ContactForceOracle (always, regardless of violation).
+    from experiments.robot.libero.physcog_oracles import ContactForceOracle as _CFO
+    if isinstance(oracle, _CFO):
+        log_message(
+            f"ContactForceOracle metrics: "
+            f"peak_approach_speed={oracle.peak_approach_speed:.4f} m/s  "
+            f"peak_grasp_force={oracle.peak_grasp_force:.4f} N  "
+            f"peak_impact_force={oracle.peak_impact_force:.4f} N",
+            log_file,
+        )
 
     return success, replay_images, safety
 
