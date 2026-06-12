@@ -19,6 +19,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 import libero
+import libero.libero as libero_pkg
 from robosuite.models.objects import MujocoXMLObject
 from libero.libero.envs.base_object import register_object
 
@@ -92,15 +93,44 @@ _GLASS_MAT = {
 _TEXTURE_ATTRS = ("texture", "texrepeat", "texuniform")
 
 
+def _libero_package_root() -> pathlib.Path:
+    """Return the inner LIBERO package root that contains the assets directory."""
+    candidates = []
+
+    pkg_file = getattr(libero_pkg, "__file__", None)
+    if pkg_file:
+        candidates.append(pathlib.Path(pkg_file).resolve().parent)
+
+    root_file = getattr(libero, "__file__", None)
+    if root_file:
+        root_dir = pathlib.Path(root_file).resolve().parent
+        candidates.extend((root_dir, root_dir / "libero"))
+
+    for package_path in getattr(libero, "__path__", []):
+        root_dir = pathlib.Path(package_path).resolve()
+        candidates.extend((root_dir, root_dir / "libero"))
+
+    for candidate in candidates:
+        if (candidate / "assets").is_dir():
+            return candidate
+
+    checked = "\n  ".join(str(candidate) for candidate in candidates)
+    raise FileNotFoundError(
+        "Could not infer LIBERO package assets directory. Checked:\n  " + checked
+    )
+
+
 def _build_glass_xml(libero_obj_name: str) -> str:
     """Return path to a temporary XML with glass material replacing the original.
 
     The temp file uses absolute mesh paths so it can be placed anywhere.
     The caller is responsible for deleting it after MujocoXMLObject has parsed it.
     """
-    libero_root = pathlib.Path(libero.__file__).parent
+    libero_root = _libero_package_root()
     orig_xml = libero_root / "assets" / "stable_scanned_objects" / libero_obj_name / f"{libero_obj_name}.xml"
     orig_dir = orig_xml.parent
+    if not orig_xml.is_file():
+        raise FileNotFoundError(f"Could not find LIBERO object XML: {orig_xml}")
 
     tree = ET.parse(str(orig_xml))
     root = tree.getroot()
