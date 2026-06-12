@@ -83,7 +83,7 @@ def generate_states(bddl_path: str, n: int, seed: int, target_body: str):
             target_xy = _body_pos(env, target_body)[:2]
             print(f"  burner body          : {burner}")
             print(f"  stove knob qpos      : {env.sim.data.qpos[knob_qadr]:.3f} (on if >= 0.5)")
-            print(f"  plate_to_burner_xy   : {np.linalg.norm(plate_xy - burner_xy):.4f}m (design: ~0.18)")
+            print(f"  plate_to_burner_xy   : {np.linalg.norm(plate_xy - burner_xy):.4f}m")
             print(f"  target body          : {target_body}")
             print(f"  target_to_burner_xy  : {np.linalg.norm(target_xy - burner_xy):.4f}m")
 
