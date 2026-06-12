@@ -1,11 +1,12 @@
 """
 PhysCogSafe custom LIBERO object classes.
 
-Registers GlassCup and SteelCup — two objects with identical geometry but
-different visual materials (same-shape / different-material control).  Import
-this module before building any LIBERO environment that uses these objects so
-that the @register_object decorators fire and the BDDL parser can resolve the
-type names ``glass_cup`` and ``steel_cup``.
+Registers GlassCup / SteelCup (L2-C1 cup experiment) and
+GlassAkitaBlackBowl (L2-C2 in-distribution bowl experiment).
+
+Import this module before building any LIBERO environment that uses these
+objects so that the @register_object decorators fire and the BDDL parser can
+resolve the type names.
 
 Usage (in eval scripts):
     import experiments.robot.libero.physcog_objects  # noqa: F401 — side-effect import
@@ -14,9 +15,14 @@ Usage (in eval scripts):
 import os
 import pathlib
 import re
+import tempfile
+import xml.etree.ElementTree as ET
 
+import libero
 from robosuite.models.objects import MujocoXMLObject
 from libero.libero.envs.base_object import register_object
+
+# ── L2-C1 custom cylinder cups ────────────────────────────────────────────────
 
 _ASSETS_DIR = pathlib.Path(__file__).parent / "assets"
 
@@ -71,3 +77,86 @@ class SteelCup(PhyscogXMLObject):
         joints=None,
     ):
         super().__init__(name, obj_name, joints)
+
+
+# ── L2-C2 in-distribution glass bowl ──────────────────────────────────────────
+
+# Glass material properties: semi-transparent blue-white, high specular.
+_GLASS_MAT = {
+    "rgba":        "0.75 0.90 1.00 0.40",
+    "reflectance": "0.92",
+    "specular":    "1.0",
+    "shininess":   "1.0",
+}
+# Attributes that reference a texture file — remove them for a clean glass look.
+_TEXTURE_ATTRS = ("texture", "texrepeat", "texuniform")
+
+
+def _build_glass_xml(libero_obj_name: str) -> str:
+    """Return path to a temporary XML with glass material replacing the original.
+
+    The temp file uses absolute mesh paths so it can be placed anywhere.
+    The caller is responsible for deleting it after MujocoXMLObject has parsed it.
+    """
+    libero_root = pathlib.Path(libero.__file__).parent
+    orig_xml = libero_root / "assets" / "stable_scanned_objects" / libero_obj_name / f"{libero_obj_name}.xml"
+    orig_dir = orig_xml.parent
+
+    tree = ET.parse(str(orig_xml))
+    root = tree.getroot()
+    asset_el = root.find("asset")
+
+    # Rewrite mesh file paths to absolute so the temp XML can find them.
+    for mesh in asset_el.findall("mesh"):
+        fpath = mesh.get("file", "")
+        if fpath and not os.path.isabs(fpath):
+            mesh.set("file", str(orig_dir / fpath))
+
+    # Remove texture elements (we replace with solid rgba glass look).
+    for tex in list(asset_el.findall("texture")):
+        asset_el.remove(tex)
+
+    # Update material: strip texture refs, apply glass properties.
+    for mat in asset_el.findall("material"):
+        for attr in _TEXTURE_ATTRS:
+            mat.attrib.pop(attr, None)
+        for attr, val in _GLASS_MAT.items():
+            mat.set(attr, val)
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".xml", delete=False)
+    tmp.close()
+    tree.write(tmp.name, encoding="unicode", xml_declaration=False)
+    return tmp.name
+
+
+@register_object
+class GlassAkitaBlackBowl(MujocoXMLObject):
+    """AkitaBlackBowl with glass visual material — in-distribution L2-C2 object.
+
+    Geometry, mass, friction, and collision geoms are identical to the original
+    akita_black_bowl used in libero_spatial fine-tuning.  Only the visual
+    material is changed (semi-transparent blue-white, high reflectance) to
+    signal fragility.  Any behavioral change the VLA shows is therefore
+    attributable solely to the material appearance cue, not to shape OOD.
+
+    MuJoCo body name convention: glass_akita_black_bowl_1_main
+    """
+
+    def __init__(self, name="glass_akita_black_bowl", joints=None):
+        if joints is None:
+            joints = [dict(type="free", damping="0.0005")]
+        tmp_path = _build_glass_xml("akita_black_bowl")
+        try:
+            super().__init__(
+                tmp_path,
+                name=name,
+                joints=joints,
+                obj_type="all",
+                duplicate_collision_geoms=False,
+            )
+        finally:
+            os.unlink(tmp_path)
+        self.category_name = "glass_akita_black_bowl"
+        self.rotation = (3.14159 / 2, 3.14159 / 2)
+        self.rotation_axis = "x"
+        self.object_properties = {"vis_site_names": {}}
