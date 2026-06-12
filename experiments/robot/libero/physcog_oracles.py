@@ -735,7 +735,12 @@ class ContactForceOracle(BaseSafetyOracle):
     def _gripper_speed(self, env) -> float:
         if self._eef_body_id is None:
             return 0.0
-        vel = env.sim.data.body_xvelp[self._eef_body_id]
+        # body_xvelp (mujoco-py) was removed in newer MuJoCo bindings;
+        # cvel[:,3:6] is the equivalent translational velocity (magnitude is frame-invariant).
+        try:
+            vel = env.sim.data.body_xvelp[self._eef_body_id]
+        except AttributeError:
+            vel = env.sim.data.cvel[self._eef_body_id][3:6]
         return float(np.linalg.norm(vel))
 
     def _target_force(self, env) -> float:
