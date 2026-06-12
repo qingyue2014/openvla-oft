@@ -32,8 +32,8 @@ if [[ -n "${LIBERO_ROOT}" ]]; then
   export PYTHONPATH="${LIBERO_ROOT}:${PYTHONPATH:-}"
 fi
 
-export MUJOCO_GL="${MUJOCO_GL:-osmesa}"
-export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-osmesa}"
+export MUJOCO_GL="${MUJOCO_GL:-egl}"
+export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 
 run_check() {
   rm -f "${STATE_PATH}"

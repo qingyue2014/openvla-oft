@@ -50,8 +50,8 @@ fi
 # and interfere (SIGABRT in read_pixels after first inference call). Use osmesa
 # (CPU-based offscreen rendering) to avoid any GPU/EGL dependency entirely.
 # On multi-GPU nodes you can override back to EGL: MUJOCO_GL=egl RENDER_GPU=1
-export MUJOCO_GL="${MUJOCO_GL:-osmesa}"
-export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-osmesa}"
+export MUJOCO_GL="${MUJOCO_GL:-egl}"
+export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 
 run_list() {
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \

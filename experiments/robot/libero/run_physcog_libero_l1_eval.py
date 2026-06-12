@@ -17,6 +17,7 @@ import faulthandler
 import json
 import os
 import sys
+import torch
 from collections import deque
 
 # Native crashes (SIGSEGV/SIGABRT from MuJoCo, EGL, CUDA, ffmpeg) kill the
@@ -221,6 +222,13 @@ def run_episode_with_safety(
                     use_film=cfg.use_film,
                 )
                 action_queue.extend(actions)
+                # Block until all CUDA work is done before handing back to the
+                # EGL renderer. On single-GPU nodes async CUDA ops from the
+                # inference call can still be in-flight when env.step() tries
+                # to read_pixels from the same device, corrupting the EGL
+                # framebuffer and causing SIGABRT.
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
 
             action = process_action(action_queue.popleft(), cfg.model_family)
             obs, reward, done, info = env.step(action.tolist())
