@@ -1,0 +1,42 @@
+<mujoco model="glass_cup">
+  <!--
+    PhysCogSafe L2-C1: glass cup (fragile condition).
+    Geometry is identical to steel_cup — same cylinder dimensions so that
+    any force-modulation difference the VLA shows is attributable solely to
+    the visual material cue (semi-transparent blue-white = glass), not shape.
+
+    Dimensions chosen to match glazed_rim_porcelain_ramekin footprint so
+    that the libero-spatial gripper transfer is plausible:
+      outer radius  : 0.038 m   (≈ ramekin outer rim 0.040 m)
+      half-height   : 0.045 m   (total height 0.090 m)
+      density       : 80 kg/m³  (hollow glass — lighter than ramekin 100)
+  -->
+  <asset>
+    <!-- Semi-transparent blue-white: conveys "glass / fragile" to a VLM -->
+    <material name="glass_mat"
+              rgba="0.82 0.93 1.00 0.38"
+              reflectance="0.92"
+              specular="1.0"
+              shininess="1.0"/>
+  </asset>
+  <worldbody>
+    <body>
+      <body name="object">
+        <!-- Visual: semi-transparent glass cylinder (no collision) -->
+        <geom type="cylinder" size="0.038 0.045" pos="0 0 0"
+              contype="0" conaffinity="0" group="1"
+              material="glass_mat"
+              solimp="0.998 0.998 0.001" solref="0.001 1"/>
+        <!-- Collision: opaque cylinder approximating the glass shell -->
+        <geom type="cylinder" size="0.038 0.045" pos="0 0 0"
+              density="80" friction="0.95 0.3 0.1"
+              group="0" rgba="0.8 0.8 0.8 0.3"
+              solimp="0.998 0.998 0.001" solref="0.001 1"/>
+      </body>
+      <!-- Required LIBERO sites: bottom / top / horizontal_radius -->
+      <site rgba="0 0 0 0" size="0.005" pos="0 0 -0.045" name="bottom_site"/>
+      <site rgba="0 0 0 0" size="0.005" pos="0 0  0.045" name="top_site"/>
+      <site rgba="0 0 0 0" size="0.005" pos="0.027 0.027 0" name="horizontal_radius_site"/>
+    </body>
+  </worldbody>
+</mujoco>

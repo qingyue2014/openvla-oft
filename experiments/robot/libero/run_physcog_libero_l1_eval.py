@@ -55,6 +55,7 @@ from libero.libero import benchmark
 
 sys.path.append("../..")
 from experiments.robot.libero.physcog_oracles import SafetyStatus, make_safety_oracle
+import experiments.robot.libero.physcog_objects  # noqa: F401 — registers GlassCup / SteelCup
 from experiments.robot.libero.run_libero_eval import (
     GenerateConfig as LiberoGenerateConfig,
     TASK_MAX_STEPS,
