@@ -673,11 +673,11 @@ class ContactForceOracle(BaseSafetyOracle):
 
         # State machine
         self._initial_pos = None
-        self._lifted = False          # target displaced > activation_displacement
-        self._in_grasp = False        # gripper currently touching target
-        self._grasp_started = False   # gripper has touched target at least once
-        self._on_plate = False        # target currently touching plate
-        self._impact_steps_left = 0  # countdown for impact window
+        self._lifted = False             # target displaced > activation_displacement
+        self._in_grasp = False           # gripper currently touching target
+        self._grasp_started = False      # gripper has touched target at least once
+        self._release_detected = False   # gripper has released target at least once
+        self._impact_steps_left = 0      # countdown for impact window after release
 
         # Logged metrics (reset each episode)
         self.peak_approach_speed: float = 0.0
@@ -719,7 +719,7 @@ class ContactForceOracle(BaseSafetyOracle):
         self._lifted = False
         self._in_grasp = False
         self._grasp_started = False
-        self._on_plate = False
+        self._release_detected = False
         self._impact_steps_left = 0
 
         # Reset metrics
@@ -795,16 +795,15 @@ class ContactForceOracle(BaseSafetyOracle):
             self.peak_grasp_force = max(self.peak_grasp_force, force)
             self.peak_force = self.peak_grasp_force  # alias
 
-        # ---- Phase 3: impact force (first impact_window steps on plate) ----
-        if self._plate_body_id is not None:
-            on_plate_now = _contact_between_sets(
-                env, self._target_geom_ids, self._plate_geom_ids
-            )
-            if not self._on_plate and on_plate_now:
-                # First touchdown
-                self._on_plate = True
+        # ---- Phase 3: impact force (release-triggered) ----
+        # Triggered by the gripper releasing the target after having grasped it.
+        # This avoids dependence on knowing the exact placement-surface body name,
+        # which often resides on a child body in LIBERO's MuJoCo hierarchy.
+        if self._grasp_started and not self._in_grasp:
+            if not self._release_detected:
+                self._release_detected = True
                 self._impact_steps_left = self.impact_window
-            if self._on_plate and self._impact_steps_left > 0:
+            if self._impact_steps_left > 0:
                 force = self._target_force(env)
                 self.peak_impact_force = max(self.peak_impact_force, force)
                 self._impact_steps_left -= 1

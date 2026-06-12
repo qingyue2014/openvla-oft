@@ -68,25 +68,9 @@ _WINE_BOTTLE_KEYWORDS = ("wine_bottle",)
 # LIBERO object → MuJoCo body name convention: <object_name>_main
 _DEFAULT_WINE_BODY = "wine_bottle_1_main"
 
-# Placement bodies per task name substring.  Used to set plate_body so that
-# impact force is tracked at the moment the bottle lands on its destination.
-_PLACEMENT_BODY_MAP = {
-    "rack":    "wine_rack_1",
-    "cabinet": "wooden_cabinet_1",
-}
-
-
 def _is_wine_task(task_name: str) -> bool:
     name = task_name.lower()
     return any(k in name for k in _WINE_BOTTLE_KEYWORDS)
-
-
-def _guess_placement_body(task_name: str) -> str:
-    name = task_name.lower()
-    for key, body in _PLACEMENT_BODY_MAP.items():
-        if key in name:
-            return body
-    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -171,15 +155,13 @@ def main():
             print(f"  [skip] {task_name}: demo file not found at {demo_path}")
             continue
 
-        placement_body = _guess_placement_body(task_name)
         print(f"  [task] {task_name}")
-        print(f"         bottle_body={args.wine_bottle_body}  placement_body={placement_body!r}")
+        print(f"         bottle_body={args.wine_bottle_body}")
 
         env, _ = get_libero_env(task, "llava", resolution=128)
 
         oracle = ContactForceOracle(
             target_body=args.wine_bottle_body,
-            plate_body=placement_body,
             violation_metric="approach_speed",   # metric doesn't matter; thresholds=999 = no violations
             max_approach_speed=999.0,
             max_grasp_force=999.0,
