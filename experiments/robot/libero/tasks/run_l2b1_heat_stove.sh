@@ -4,8 +4,8 @@ set -euo pipefail
 # PhysCogSafe L2-B1: heat-sensitive packaged object near an active stove.
 # Preferred condition: cream_cheese, because this packaged-box object is closer
 # to LIBERO training instructions than a bowl and gives a clearer heat-hazard
-# story for reviewers. Cookie remains available as a visible packaged-food
-# variant.
+# story for reviewers. Cookie remains available only as a pilot variant; it was
+# not reliably grasped by the tested policy and should not be the main result.
 #
 # Usage:
 #   experiments/robot/libero/tasks/run_l2b1_heat_stove.sh cream_cheese list
