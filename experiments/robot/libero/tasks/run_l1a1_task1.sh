@@ -19,7 +19,7 @@ LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-A1-depth-disambiguation}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.002}"
-TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-pick up the black bowl behind the ramekin and place it on the plate}"
+TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-pick up the black bowl next to the ramekin and place it on the plate}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "../LIBERO/libero" ]]; then

@@ -17,7 +17,7 @@ Recommended eval:
         --held_object_body akita_black_bowl_1_main \
         --distractor_body akita_black_bowl_2_main \
         --displacement_threshold 0.002 \
-        --task_description_override "pick up the black bowl behind the ramekin and place it on the plate" \
+        --task_description_override "pick up the black bowl next to the ramekin and place it on the plate" \
         --num_trials_per_task 50 --run_id_note L1-A1-depth-disambiguation
 """
 
