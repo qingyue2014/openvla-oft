@@ -112,12 +112,14 @@ VARIANTS = {
         "side_body": "cookies_1_main",
         # Calibrated from the successful L1-B2 task6 cookie-ramekin layout:
         # MuJoCo x is mostly vertical/depth in agentview, while y is mostly
-        # horizontal. For L1-A1, keep the distractor, ramekin, and target near
-        # the same y/image column, with increasing x from foreground to rear:
-        #   foreground distractor -> ramekin -> target behind ramekin.
-        "target_xyz": np.array([0.160, 0.005, TABLE_Z + 0.04]),
-        "distractor_xyz": np.array([-0.095, 0.000, TABLE_Z + 0.04]),
-        "landmark_xyz": np.array([0.030, 0.005, TABLE_Z + 0.04]),
+        # horizontal. Keep the native prompt valid by placing the target bowl
+        # next to the ramekin at the same depth (similar x, separated in y).
+        # The protected distractor is aligned with the target in y but closer
+        # to the robot in x, creating a depth-ordering distractor without
+        # making the distractor the object "next to the ramekin".
+        "target_xyz": np.array([0.070, -0.080, TABLE_Z + 0.04]),
+        "distractor_xyz": np.array([-0.080, -0.080, TABLE_Z + 0.04]),
+        "landmark_xyz": np.array([0.070, 0.055, TABLE_Z + 0.04]),
         "plate_xyz": np.array([0.070, 0.190, TABLE_Z + 0.01]),
         "side_xyz": np.array([0.165, -0.125, TABLE_Z + 0.05]),
     },
@@ -126,8 +128,11 @@ VARIANTS = {
 OBJECT_JITTER = 0.003
 PLATE_JITTER = 0.012
 MIN_BOWL_RAMEKIN_CLEARANCE = 0.115
-MIN_BOWL_BOWL_CLEARANCE = 0.180
-MIN_DEPTH_GAP = 0.095
+MIN_BOWL_BOWL_CLEARANCE = 0.135
+MAX_TARGET_RAMEKIN_DISTANCE = 0.155
+MAX_TARGET_RAMEKIN_DEPTH_DELTA = 0.035
+MIN_DISTRACTOR_FRONT_GAP = 0.120
+MAX_TARGET_DISTRACTOR_Y_DELTA = 0.035
 
 
 def _find_free_joint_qadr(sim, body_name: str) -> int:
@@ -247,17 +252,21 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
         # 0.04m. Add margin so rendered boundaries do not pierce each other.
         if _min_body_distance(env, v["target_body"], v["distractor_body"]) < MIN_BOWL_BOWL_CLEARANCE:
             continue
-        if _min_body_distance(env, v["target_body"], v["landmark_body"]) < MIN_BOWL_RAMEKIN_CLEARANCE:
+        target_landmark_dist = _min_body_distance(env, v["target_body"], v["landmark_body"])
+        distractor_landmark_dist = _min_body_distance(env, v["distractor_body"], v["landmark_body"])
+        if target_landmark_dist < MIN_BOWL_RAMEKIN_CLEARANCE:
             continue
-        if _min_body_distance(env, v["distractor_body"], v["landmark_body"]) < MIN_BOWL_RAMEKIN_CLEARANCE:
+        if distractor_landmark_dist < MIN_BOWL_RAMEKIN_CLEARANCE:
             continue
-        if distractor_pos[0] >= landmark_pos[0] - MIN_DEPTH_GAP:
+        if target_landmark_dist > MAX_TARGET_RAMEKIN_DISTANCE:
             continue
-        if target_pos[0] <= landmark_pos[0] + MIN_DEPTH_GAP:
+        if abs(target_pos[0] - landmark_pos[0]) > MAX_TARGET_RAMEKIN_DEPTH_DELTA:
             continue
-        if abs(target_pos[1] - landmark_pos[1]) > 0.040:
+        if target_pos[0] - distractor_pos[0] < MIN_DISTRACTOR_FRONT_GAP:
             continue
-        if abs(distractor_pos[1] - landmark_pos[1]) > 0.040:
+        if abs(target_pos[1] - distractor_pos[1]) > MAX_TARGET_DISTRACTOR_Y_DELTA:
+            continue
+        if distractor_landmark_dist <= target_landmark_dist:
             continue
 
         states.append(env.sim.get_state().flatten())
