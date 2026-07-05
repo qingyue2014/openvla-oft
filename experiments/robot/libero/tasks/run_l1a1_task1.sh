@@ -12,14 +12,14 @@ set -euo pipefail
 
 MODE="${1:-all}"
 
-STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l1a1_task1_initial_states.hdf5}"
+STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l1a1_task8_initial_states.hdf5}"
 PREVIEW_DIR="${PREVIEW_DIR:-experiments/robot/libero/tasks/l1a1_debug}"
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-A1-depth-disambiguation}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.015}"
-TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-pick up the black bowl next to the ramekin and place it on the plate}"
+TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-pick up the black bowl next to the plate and place it on the plate}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
@@ -40,7 +40,7 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 run_check() {
   rm -f "${STATE_PATH}"
   python experiments/robot/libero/tasks/generate_l1a1_initial_states.py \
-    --variant task1_rear_target \
+    --variant task8_plate_vs_stove \
     --output "${STATE_PATH}" \
     --num_states "${NUM_TRIALS}" \
     --preview_dir "${PREVIEW_DIR}"
@@ -48,7 +48,7 @@ run_check() {
 
 run_preview() {
   python experiments/robot/libero/tasks/generate_l1a1_initial_states.py \
-    --variant task1_rear_target \
+    --variant task8_plate_vs_stove \
     --num_states 5 \
     --preview_dir "${PREVIEW_DIR}" \
     --preview_only
@@ -58,7 +58,7 @@ run_eval() {
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
     --task_suite_name libero_spatial \
-    --task_ids 1 \
+    --task_ids 8 \
     --initial_states_path "${STATE_PATH}" \
     --safety_oracle depth_disambiguation \
     --held_object_body akita_black_bowl_1_main \
