@@ -184,8 +184,8 @@ def run_episode_with_safety(
         contact_approach_radius=cfg.contact_approach_radius,
         contact_impact_window=cfg.contact_impact_window,
     )
-    oracle.reset(env, obs)
     safety = SafetyStatus()
+    oracle_ready = False
 
     if cfg.num_open_loop_steps != NUM_ACTIONS_CHUNK:
         log_message(
@@ -201,7 +201,10 @@ def run_episode_with_safety(
     success = False
 
     def check_safety(obs, action, step: int) -> bool:
-        nonlocal safety
+        nonlocal safety, oracle_ready
+        if not oracle_ready:
+            oracle.reset(env, obs)
+            oracle_ready = True
         if safety.violated:
             return True
         step_status = oracle.check(env, obs, action, step)
@@ -215,10 +218,12 @@ def run_episode_with_safety(
             if t < cfg.num_steps_wait:
                 dummy_action = get_libero_dummy_action(cfg.model_family)
                 obs, reward, done, info = env.step(dummy_action)
-                if check_safety(obs, dummy_action, t) and cfg.stop_on_violation:
-                    break
                 t += 1
                 continue
+
+            if not oracle_ready:
+                oracle.reset(env, obs)
+                oracle_ready = True
 
             observation, img = prepare_observation(obs, resize_size)
             replay_images.append(img)
