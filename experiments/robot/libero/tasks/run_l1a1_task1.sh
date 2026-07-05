@@ -20,6 +20,7 @@ NUM_TRIALS="${NUM_TRIALS:-50}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-A1-depth-disambiguation}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.002}"
 TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-pick up the black bowl next to the ramekin and place it on the plate}"
+RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "../LIBERO/libero" ]]; then
@@ -64,6 +65,7 @@ run_eval() {
     --distractor_body akita_black_bowl_2_main \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --task_description_override "${TASK_DESCRIPTION_OVERRIDE}" \
+    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --num_trials_per_task "${NUM_TRIALS}" \
     --run_id_note "${RUN_ID_NOTE}"
 }
