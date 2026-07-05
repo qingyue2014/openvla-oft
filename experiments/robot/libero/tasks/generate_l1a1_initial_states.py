@@ -98,41 +98,34 @@ def _resolve_get_libero_path(libero):
 
     return get_libero_path
 
-# Keep this consistent with the validated L1-B2 generator. It is retained for
-# documentation only: generation changes object x/y and preserves each object's
-# LIBERO default z and quaternion, avoiding hand-authored pose artifacts.
-TABLE_Z = 0.825
-
 VARIANTS = {
     "task1_rear_target": {
         "task_id": 1,
         "target_body": "akita_black_bowl_1_main",
         "distractor_body": "akita_black_bowl_2_main",
         "landmark_body": "glazed_rim_porcelain_ramekin_1_main",
+        "plate_body": "plate_1_main",
         "side_body": "cookies_1_main",
+        # Keep the native task geometry as much as possible: target bowl,
+        # ramekin, plate, cookies, and cabinet stay at LIBERO's default poses.
+        # Only the second black bowl is moved into a foreground distractor pose.
+        #
         # Calibrated from the successful L1-B2 task6 cookie-ramekin layout:
         # MuJoCo x is mostly vertical/depth in agentview, while y is mostly
-        # horizontal. Keep the native prompt valid by placing the target bowl
-        # next to the ramekin at the same depth (similar x, separated in y).
-        # The protected distractor is aligned with the target in y but closer
-        # to the robot in x, creating a depth-ordering distractor without
-        # making the distractor the object "next to the ramekin".
-        "target_xyz": np.array([0.070, -0.080, TABLE_Z + 0.04]),
-        "distractor_xyz": np.array([-0.080, -0.080, TABLE_Z + 0.04]),
-        "landmark_xyz": np.array([0.070, 0.055, TABLE_Z + 0.04]),
-        "plate_xyz": np.array([0.070, 0.190, TABLE_Z + 0.01]),
-        "side_xyz": np.array([0.165, -0.125, TABLE_Z + 0.05]),
+        # horizontal. The distractor is aligned with the native target in y but
+        # shifted toward the robot in x, creating a depth-ordering distractor
+        # without changing the native "black bowl next to ramekin" relation.
+        "distractor_front_offset": np.array([-0.150, 0.000]),
     },
 }
 
-OBJECT_JITTER = 0.003
-PLATE_JITTER = 0.012
 MIN_BOWL_RAMEKIN_CLEARANCE = 0.115
 MIN_BOWL_BOWL_CLEARANCE = 0.135
-MAX_TARGET_RAMEKIN_DISTANCE = 0.155
-MAX_TARGET_RAMEKIN_DEPTH_DELTA = 0.035
+MAX_TARGET_RAMEKIN_DISTANCE = 0.200
+MAX_TARGET_RAMEKIN_DEPTH_DELTA = 0.120
 MIN_DISTRACTOR_FRONT_GAP = 0.120
 MAX_TARGET_DISTRACTOR_Y_DELTA = 0.035
+MIN_DISTRACTOR_CONTEXT_CLEARANCE = 0.115
 
 
 def _find_free_joint_qadr(sim, body_name: str) -> int:
@@ -165,8 +158,8 @@ def _body_pos(env, body_name: str) -> np.ndarray:
     return np.array(env.sim.data.body_xpos[env.sim.model.body_name2id(body_name)])
 
 
-def _min_body_distance(env, body_a: str, body_b: str) -> float:
-    return float(np.linalg.norm(_body_pos(env, body_a)[:2] - _body_pos(env, body_b)[:2]))
+def _xy_distance(pos_a: np.ndarray, pos_b: np.ndarray) -> float:
+    return float(np.linalg.norm(pos_a[:2] - pos_b[:2]))
 
 
 def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> None:
@@ -188,31 +181,14 @@ def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> Non
         json.dump(positions, f, indent=2)
 
 
-def _apply_l1a1_layout(env, variant, rng):
-    jt = rng.uniform(-OBJECT_JITTER, OBJECT_JITTER, size=2)
-    jd = rng.uniform(-OBJECT_JITTER, OBJECT_JITTER, size=2)
-    jl = rng.uniform(-OBJECT_JITTER, OBJECT_JITTER, size=2)
-    jp = rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
-
-    target_xyz = variant["target_xyz"].copy()
-    distractor_xyz = variant["distractor_xyz"].copy()
-    landmark_xyz = variant["landmark_xyz"].copy()
-    plate_xyz = variant["plate_xyz"].copy()
-    target_xyz[:2] += jt
-    distractor_xyz[:2] += jd
-    landmark_xyz[:2] += jl
-    plate_xyz[:2] += jp
-
-    _set_xy_position(env.sim, variant["target_body"], target_xyz[:2])
-    _set_xy_position(env.sim, variant["distractor_body"], distractor_xyz[:2])
-    _set_xy_position(env.sim, variant["landmark_body"], landmark_xyz[:2])
-    _set_xy_position(env.sim, "plate_1_main", plate_xyz[:2])
-    _set_xy_position(env.sim, variant["side_body"], variant["side_xyz"][:2])
+def _apply_l1a1_layout(env, variant):
+    target_pos = _body_pos(env, variant["target_body"])
+    distractor_xy = target_pos[:2] + variant["distractor_front_offset"]
+    _set_xy_position(env.sim, variant["distractor_body"], distractor_xy)
 
 
 def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, preview_dir: str = None):
     v = VARIANTS[variant_key]
-    rng = np.random.default_rng(seed)
     benchmark, get_libero_path, OffScreenRenderEnv = _import_libero_modules()
 
     benchmark_dict = benchmark.get_benchmark_dict()
@@ -226,9 +202,9 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
 
     print(f"\nVariant: {variant_key}")
     print(f"Task {v['task_id']}: {task.language}")
-    print(f"Target body     : {v['target_body']}     @ {v['target_xyz'][:2]}")
-    print(f"Distractor body : {v['distractor_body']} @ {v['distractor_xyz'][:2]}")
-    print(f"Landmark body   : {v['landmark_body']}   @ {v['landmark_xyz'][:2]}")
+    print(f"Target body     : {v['target_body']}     (native pose)")
+    print(f"Distractor body : {v['distractor_body']} @ target_xy + {v['distractor_front_offset']}")
+    print(f"Landmark body   : {v['landmark_body']}   (native pose)")
     print(f"Generating {n} states (seed={seed})...\n")
 
     states = []
@@ -239,7 +215,7 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
         env.reset()
         env.set_init_state(default_states[attempts % len(default_states)])
 
-        _apply_l1a1_layout(env, v, rng)
+        _apply_l1a1_layout(env, v)
 
         for _ in range(20):
             env.sim.step()
@@ -247,16 +223,17 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
         target_pos = _body_pos(env, v["target_body"])
         distractor_pos = _body_pos(env, v["distractor_body"])
         landmark_pos = _body_pos(env, v["landmark_body"])
+        plate_pos = _body_pos(env, v["plate_body"])
+        side_pos = _body_pos(env, v["side_body"])
         # Keep this a depth-ambiguity task, not an initial overlap/contact task.
         # Approximate footprints: black bowl radius ≈ 0.06m, ramekin radius ≈
         # 0.04m. Add margin so rendered boundaries do not pierce each other.
-        if _min_body_distance(env, v["target_body"], v["distractor_body"]) < MIN_BOWL_BOWL_CLEARANCE:
+        target_distractor_dist = _xy_distance(target_pos, distractor_pos)
+        target_landmark_dist = _xy_distance(target_pos, landmark_pos)
+        distractor_landmark_dist = _xy_distance(distractor_pos, landmark_pos)
+        if target_distractor_dist < MIN_BOWL_BOWL_CLEARANCE:
             continue
-        target_landmark_dist = _min_body_distance(env, v["target_body"], v["landmark_body"])
-        distractor_landmark_dist = _min_body_distance(env, v["distractor_body"], v["landmark_body"])
         if target_landmark_dist < MIN_BOWL_RAMEKIN_CLEARANCE:
-            continue
-        if distractor_landmark_dist < MIN_BOWL_RAMEKIN_CLEARANCE:
             continue
         if target_landmark_dist > MAX_TARGET_RAMEKIN_DISTANCE:
             continue
@@ -266,7 +243,13 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
             continue
         if abs(target_pos[1] - distractor_pos[1]) > MAX_TARGET_DISTRACTOR_Y_DELTA:
             continue
-        if distractor_landmark_dist <= target_landmark_dist:
+        if distractor_landmark_dist < MIN_BOWL_RAMEKIN_CLEARANCE:
+            continue
+        if _xy_distance(distractor_pos, plate_pos) < MIN_DISTRACTOR_CONTEXT_CLEARANCE:
+            continue
+        if _xy_distance(distractor_pos, side_pos) < MIN_DISTRACTOR_CONTEXT_CLEARANCE:
+            continue
+        if distractor_landmark_dist <= target_landmark_dist + 0.030:
             continue
 
         states.append(env.sim.get_state().flatten())
