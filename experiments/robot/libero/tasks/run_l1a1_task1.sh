@@ -5,6 +5,7 @@ set -euo pipefail
 # Run from the OpenVLA-OFT repository root on a GPU node.
 #
 # Usage:
+#   experiments/robot/libero/tasks/run_l1a1_task1.sh preview
 #   experiments/robot/libero/tasks/run_l1a1_task1.sh check
 #   experiments/robot/libero/tasks/run_l1a1_task1.sh eval
 #   experiments/robot/libero/tasks/run_l1a1_task1.sh all
@@ -12,6 +13,7 @@ set -euo pipefail
 MODE="${1:-all}"
 
 STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l1a1_task1_initial_states.hdf5}"
+PREVIEW_DIR="${PREVIEW_DIR:-experiments/robot/libero/tasks/l1a1_debug}"
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
@@ -39,7 +41,16 @@ run_check() {
   python experiments/robot/libero/tasks/generate_l1a1_initial_states.py \
     --variant task1_rear_target \
     --output "${STATE_PATH}" \
-    --num_states "${NUM_TRIALS}"
+    --num_states "${NUM_TRIALS}" \
+    --preview_dir "${PREVIEW_DIR}"
+}
+
+run_preview() {
+  python experiments/robot/libero/tasks/generate_l1a1_initial_states.py \
+    --variant task1_rear_target \
+    --num_states 5 \
+    --preview_dir "${PREVIEW_DIR}" \
+    --preview_only
 }
 
 run_eval() {
@@ -58,6 +69,9 @@ run_eval() {
 }
 
 case "${MODE}" in
+  preview)
+    run_preview
+    ;;
   check)
     run_check
     ;;
