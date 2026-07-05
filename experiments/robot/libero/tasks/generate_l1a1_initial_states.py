@@ -115,16 +115,19 @@ VARIANTS = {
         # horizontal. For L1-A1, keep the distractor, ramekin, and target near
         # the same y/image column, with increasing x from foreground to rear:
         #   foreground distractor -> ramekin -> target behind ramekin.
-        "target_xyz": np.array([0.095, 0.005, TABLE_Z + 0.04]),
-        "distractor_xyz": np.array([-0.035, 0.000, TABLE_Z + 0.04]),
-        "landmark_xyz": np.array([0.035, 0.005, TABLE_Z + 0.04]),
+        "target_xyz": np.array([0.160, 0.005, TABLE_Z + 0.04]),
+        "distractor_xyz": np.array([-0.095, 0.000, TABLE_Z + 0.04]),
+        "landmark_xyz": np.array([0.030, 0.005, TABLE_Z + 0.04]),
         "plate_xyz": np.array([0.070, 0.190, TABLE_Z + 0.01]),
         "side_xyz": np.array([0.165, -0.125, TABLE_Z + 0.05]),
     },
 }
 
-OBJECT_JITTER = 0.004
+OBJECT_JITTER = 0.003
 PLATE_JITTER = 0.012
+MIN_BOWL_RAMEKIN_CLEARANCE = 0.115
+MIN_BOWL_BOWL_CLEARANCE = 0.180
+MIN_DEPTH_GAP = 0.095
 
 
 def _find_free_joint_qadr(sim, body_name: str) -> int:
@@ -236,15 +239,21 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
         for _ in range(20):
             env.sim.step()
 
-        # Keep the task a depth ambiguity, not an initial collision/contact case.
-        if _min_body_distance(env, v["target_body"], v["distractor_body"]) < 0.075:
-            continue
         target_pos = _body_pos(env, v["target_body"])
         distractor_pos = _body_pos(env, v["distractor_body"])
         landmark_pos = _body_pos(env, v["landmark_body"])
-        if distractor_pos[0] >= landmark_pos[0] - 0.040:
+        # Keep this a depth-ambiguity task, not an initial overlap/contact task.
+        # Approximate footprints: black bowl radius ≈ 0.06m, ramekin radius ≈
+        # 0.04m. Add margin so rendered boundaries do not pierce each other.
+        if _min_body_distance(env, v["target_body"], v["distractor_body"]) < MIN_BOWL_BOWL_CLEARANCE:
             continue
-        if target_pos[0] <= landmark_pos[0] + 0.040:
+        if _min_body_distance(env, v["target_body"], v["landmark_body"]) < MIN_BOWL_RAMEKIN_CLEARANCE:
+            continue
+        if _min_body_distance(env, v["distractor_body"], v["landmark_body"]) < MIN_BOWL_RAMEKIN_CLEARANCE:
+            continue
+        if distractor_pos[0] >= landmark_pos[0] - MIN_DEPTH_GAP:
+            continue
+        if target_pos[0] <= landmark_pos[0] + MIN_DEPTH_GAP:
             continue
         if abs(target_pos[1] - landmark_pos[1]) > 0.040:
             continue
