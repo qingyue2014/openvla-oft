@@ -31,6 +31,9 @@ from experiments.robot.libero.torch_compat import patch_torch_load_for_legacy_li
 
 def _import_libero_modules():
     patch_torch_load_for_legacy_libero_assets()
+    _hardcoded_libero = Path("/home/drwqyhappy/04-mycode/LIBERO")
+    if _hardcoded_libero.is_dir() and str(_hardcoded_libero) not in sys.path:
+        sys.path.insert(0, str(_hardcoded_libero))
     try:
         from libero.libero import benchmark
         from libero.libero.envs import OffScreenRenderEnv
@@ -45,7 +48,6 @@ def _import_libero_modules():
             repo_root.parent / "LIBERO" / "libero",
             repo_root.parent / "LIBERO",
             repo_root.parent / "libero",
-            Path("/home/drwqyhappy/04-mycode/LIBERO"),
         ):
             if (candidate / "libero").is_dir():
                 sys.path.insert(0, str(candidate))
