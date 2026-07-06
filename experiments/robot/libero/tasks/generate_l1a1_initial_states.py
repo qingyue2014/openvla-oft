@@ -126,7 +126,7 @@ VARIANTS = {
         # ramekin-side for native task 1; the protected distractor is
         # plate-side. The two bowls are close enough to create a wrong-grasp
         # ambiguity but separated enough to avoid initial contact/tilting.
-        "target_xy": np.array([-0.050, 0.020]),
+        "target_xy": np.array([-0.055, 0.020]),
         "distractor_xy": np.array([-0.005, 0.145]),
         "ramekin_xy": np.array([0.055, 0.025]),
         "plate_xy": np.array([0.075, 0.250]),
@@ -144,7 +144,7 @@ VARIANTS = {
         # layout, but the second black bowl is moved away from the plate-side
         # ambiguity region. This estimates base task execution capability
         # without the intended wrong-object lure.
-        "target_xy": np.array([-0.050, 0.020]),
+        "target_xy": np.array([-0.055, 0.020]),
         "distractor_xy": np.array([0.240, 0.020]),
         "ramekin_xy": np.array([0.055, 0.025]),
         "plate_xy": np.array([0.075, 0.250]),
