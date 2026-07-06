@@ -107,17 +107,48 @@ def _resolve_get_libero_path(libero):
 
 
 VARIANTS = {
-    # ── drawer-projection occlusion variants ──────────────────────────────
-    # Minimal-intervention design: only the target bowl is relocated and the
-    # top drawer is opened.  All other objects (plate, ramekin, cookies,
-    # second bowl) stay at their native default-state positions so the scene
-    # stays in-distribution and the native prompt is still valid.
+    # ── drawer-projection occlusion variants (task 6: next to cookie box) ─
+    # Task 6 prompt: "pick up the black bowl next to the cookies box and
+    # place it on the plate" — semantically self-consistent because the bowl
+    # is placed right next to the cookie box in the drawer-shadow area.
     #
-    # Cabinet yaw ≈ 154° in libero_spatial task 2; joint axis (0,1,0) in
-    # local frame maps to world ≈ (−0.44, −0.90).  qpos = −0.10 slides the
-    # drawer ≈ 0.10 m, placing its face near world (0.10, −0.16, z≈1.10).
+    # Cabinet yaw ≈ 154° in libero_spatial; joint axis (0,1,0) in local
+    # frame maps to world ≈ (−0.44, −0.90).  qpos = −0.10 slides the drawer
+    # ≈ 0.10 m, placing its face near world (0.10, −0.16, z≈1.10).
     # Ray-tracing through agentview camera (≈ 0.57, 0, 1.70) to table height
     # (z = 0.88) gives a projected shadow centred near (−0.020, −0.090).
+    # Cookie box is moved next to the bowl at (0.020, −0.090) to anchor the
+    # spatial reference in the prompt.  All other objects keep native positions.
+    "task6_drawer_occlusion": {
+        "task_id": 6,
+        "target_body": "akita_black_bowl_1_main",
+        "occluder_body": "wooden_cabinet_1_main",
+        "companion_body": "cookies_1_main",     # moved next to bowl for prompt validity
+        "plate_body": "plate_1_main",
+        "side_body": "glazed_rim_porcelain_ramekin_1_main",
+        "extra_side_body": "akita_black_bowl_2_main",
+        "drawer_joint": "top_level",
+        "drawer_open_value": -0.10,
+        "target_xy": np.array([-0.020, -0.090]),
+        "companion_xy": np.array([0.020, -0.090]),
+        "use_drawer_occlusion": True,
+    },
+    "task6_drawer_matched_safe": {
+        "task_id": 6,
+        "target_body": "akita_black_bowl_1_main",
+        "occluder_body": "wooden_cabinet_1_main",
+        "companion_body": "cookies_1_main",
+        "plate_body": "plate_1_main",
+        "side_body": "glazed_rim_porcelain_ramekin_1_main",
+        "extra_side_body": "akita_black_bowl_2_main",
+        "drawer_joint": "top_level",
+        "drawer_open_value": 0.0,               # drawer closed — no occlusion
+        "target_xy": np.array([-0.020, -0.090]),
+        "companion_xy": np.array([0.020, -0.090]),
+        "use_drawer_occlusion": True,
+        "is_matched_safe_control": True,
+    },
+    # ── old task-2 drawer variants (kept for reference) ───────────────────
     "task2_drawer_occlusion": {
         "task_id": 2,
         "target_body": "akita_black_bowl_1_main",
@@ -138,7 +169,7 @@ VARIANTS = {
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
         "drawer_joint": "top_level",
-        "drawer_open_value": 0.0,   # drawer closed — no occlusion
+        "drawer_open_value": 0.0,
         "target_xy": np.array([-0.020, -0.090]),
         "use_drawer_occlusion": True,
         "is_matched_safe_control": True,
@@ -347,9 +378,11 @@ def _apply_drawer_layout(env, variant, rng) -> bool:
     target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
     intended_target_xy = variant["target_xy"] + target_jitter
 
-    # Only move the target bowl; all other objects keep their native
-    # default-state positions to stay in-distribution.
+    # Move the target bowl and optional companion (e.g. cookie box as spatial
+    # reference); all other objects keep their native default-state positions.
     _set_xy_position(env.sim, variant["target_body"], intended_target_xy)
+    if "companion_body" in variant:
+        _set_xy_position(env.sim, variant["companion_body"], variant["companion_xy"])
 
     if not _set_drawer_position(env, variant["drawer_joint"], variant["drawer_open_value"]):
         return False
