@@ -5,9 +5,10 @@ Design principle: reuse native libero_spatial task 2 and only alter the static
 layout. The prompt remains:
     "pick up the black bowl from table center and place it on the plate"
 
-Default variant: a cookie box is contact-placed in/on the target black bowl so
-the bowl is partially occluded from agentview. The policy must still identify
-and grasp the bowl, not the cookie box, then place the bowl on the plate.
+Default variant: a cookie box is placed on the table in the target bowl's
+agentview foreground so the bowl is partially occluded. The policy must still
+identify and grasp the bowl, not the cookie box, then place the bowl on the
+plate.
 
 Matched safe control: same native prompt and same target bowl/plate layout, but
 the cookie box is moved away from the bowl. This estimates base task execution
@@ -118,13 +119,15 @@ VARIANTS = {
         "plate_xy": np.array([0.075, 0.250]),
         "side_xy": np.array([0.165, -0.125]),
         "extra_side_xy": np.array([0.240, -0.180]),
-        # Put the cookie box slightly off-centre so the bowl rim remains
-        # visible, while the grasp affordance is partially occluded.
+        # Put the cookie box in the bowl's agentview foreground. Direct
+        # cookie-on-bowl contact is unstable with LIBERO's collision meshes, so
+        # the occluder stays table-supported while visually covering part of
+        # the bowl rim and grasp affordance.
         "occluder_offsets": [
-            np.array([0.018, -0.012]),
-            np.array([0.014, 0.000]),
-            np.array([0.020, 0.010]),
-            np.array([0.000, -0.014]),
+            np.array([0.075, -0.035]),
+            np.array([0.070, -0.045]),
+            np.array([0.080, -0.025]),
+            np.array([0.065, -0.030]),
         ],
     },
     "task2_matched_safe_control": {
@@ -145,13 +148,13 @@ VARIANTS = {
 
 BOWL_JITTER = 0.004
 PLATE_JITTER = 0.010
-OCCLUDER_CLEARANCES = (0.006, 0.010, 0.014, 0.020, 0.003, 0.000)
-SETTLE_STEPS = 120
+SETTLE_STEPS = 60
 STABILITY_CHECK_STEPS = 40
 
 MIN_TARGET_PLATE_DISTANCE = 0.210
 MIN_SIDE_CLEARANCE = 0.105
-MAX_OCCLUDER_OFFSET = 0.055
+MIN_OCCLUDER_OFFSET = 0.055
+MAX_OCCLUDER_OFFSET = 0.110
 MAX_OCCLUDER_DRIFT = 0.018
 MAX_TARGET_DRIFT = 0.014
 
@@ -275,63 +278,44 @@ def _set_body_on_support(env, body_name: str, support_body: str, xy: np.ndarray,
     env.sim.forward()
 
 
-def _place_occluder_in_bowl(env, variant) -> bool:
+def _place_occluder_near_bowl(env, variant) -> bool:
     base_state = env.sim.get_state()
     target_xy = _body_pos(env, variant["target_body"])[:2]
 
     for offset in variant["occluder_offsets"]:
-        for clearance in OCCLUDER_CLEARANCES:
-            env.sim.set_state(base_state)
-            env.sim.forward()
-            _set_body_on_support(
-                env,
-                variant["occluder_body"],
-                variant["target_body"],
-                target_xy + offset,
-                clearance,
+        env.sim.set_state(base_state)
+        env.sim.forward()
+        _set_xy_position(env.sim, variant["occluder_body"], target_xy + offset)
+
+        initial_positions = {
+            variant["target_body"]: _body_pos(env, variant["target_body"]).copy(),
+            variant["occluder_body"]: _body_pos(env, variant["occluder_body"]).copy(),
+        }
+        for _ in range(SETTLE_STEPS + STABILITY_CHECK_STEPS):
+            env.sim.step()
+
+        target_pos = _body_pos(env, variant["target_body"])
+        occluder_pos = _body_pos(env, variant["occluder_body"])
+        offset_norm = _xy_distance(target_pos, occluder_pos)
+        target_drift = float(np.linalg.norm(target_pos - initial_positions[variant["target_body"]]))
+        occluder_drift = float(np.linalg.norm(occluder_pos - initial_positions[variant["occluder_body"]]))
+
+        if (
+            MIN_OCCLUDER_OFFSET <= offset_norm <= MAX_OCCLUDER_OFFSET
+            and target_drift <= MAX_TARGET_DRIFT
+            and occluder_drift <= MAX_OCCLUDER_DRIFT
+        ):
+            actual_offset = occluder_pos[:2] - target_pos[:2]
+            print(
+                "  [occluder] accepted table-supported cookie occluder "
+                f"offset=[{actual_offset[0]: .4f}, {actual_offset[1]: .4f}] "
+                f"distance={offset_norm: .4f}"
             )
-
-            initial_target = _body_pos(env, variant["target_body"])
-            for _ in range(SETTLE_STEPS):
-                env.sim.step()
-
-            target_pos = _body_pos(env, variant["target_body"])
-            occluder_pos = _body_pos(env, variant["occluder_body"])
-            offset_norm = _xy_distance(target_pos, occluder_pos)
-            target_drift = float(np.linalg.norm(target_pos - initial_target))
-            has_contact = _contact_between_bodies(env, variant["target_body"], variant["occluder_body"])
-
-            if has_contact and offset_norm <= MAX_OCCLUDER_OFFSET and target_drift <= MAX_TARGET_DRIFT:
-                initial_positions = {
-                    variant["target_body"]: target_pos.copy(),
-                    variant["occluder_body"]: occluder_pos.copy(),
-                }
-                for _ in range(STABILITY_CHECK_STEPS):
-                    env.sim.step()
-
-                if not _contact_between_bodies(env, variant["target_body"], variant["occluder_body"]):
-                    continue
-
-                stable = True
-                for name, initial_pos in initial_positions.items():
-                    pos = _body_pos(env, name)
-                    displacement = float(np.linalg.norm(pos - initial_pos))
-                    max_drift = MAX_TARGET_DRIFT if name == variant["target_body"] else MAX_OCCLUDER_DRIFT
-                    if displacement > max_drift:
-                        stable = False
-                        break
-                if stable:
-                    actual_offset = _body_pos(env, variant["occluder_body"])[:2] - _body_pos(env, variant["target_body"])[:2]
-                    print(
-                        "  [occluder] accepted cookie-in-bowl "
-                        f"offset=[{actual_offset[0]: .4f}, {actual_offset[1]: .4f}] "
-                        f"clearance={clearance: .4f}"
-                    )
-                    return True
+            return True
 
     env.sim.set_state(base_state)
     env.sim.forward()
-    print("  [reject] no stable cookie-in-bowl placement")
+    print("  [reject] no stable table-supported cookie occluder placement")
     return False
 
 
@@ -367,7 +351,7 @@ def _apply_l1a2_layout(env, variant, rng):
         _set_xy_position(env.sim, variant["occluder_body"], variant["occluder_xy"])
         return True
 
-    return _place_occluder_in_bowl(env, variant)
+    return _place_occluder_near_bowl(env, variant)
 
 
 def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, preview_dir: str = None):
@@ -422,10 +406,11 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
             if _xy_distance(target_pos, occluder_pos) < MIN_SIDE_CLEARANCE:
                 raise RuntimeError("L1-A2 safe-control overlap: occluder too close to target")
         else:
-            if not _contact_between_bodies(env, v["target_body"], v["occluder_body"]):
-                raise RuntimeError("L1-A2 role error: cookie box is not in contact with target bowl")
-            if _xy_distance(target_pos, occluder_pos) > MAX_OCCLUDER_OFFSET:
-                raise RuntimeError("L1-A2 role error: cookie box drifted away from target bowl")
+            occluder_offset = _xy_distance(target_pos, occluder_pos)
+            if not (MIN_OCCLUDER_OFFSET <= occluder_offset <= MAX_OCCLUDER_OFFSET):
+                raise RuntimeError(
+                    f"L1-A2 role error: cookie occluder offset={occluder_offset:.4f}"
+                )
 
         states.append(env.sim.get_state().flatten())
         if preview_dir is not None and len(states) <= 5:
