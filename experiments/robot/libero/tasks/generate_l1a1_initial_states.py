@@ -132,6 +132,25 @@ VARIANTS = {
         "plate_xy": np.array([0.075, 0.250]),
         "side_xy": np.array([0.165, -0.125]),
     },
+    "task1_matched_safe_control": {
+        "task_id": 1,
+        "target_body": "akita_black_bowl_1_main",
+        "distractor_body": "akita_black_bowl_2_main",
+        "landmark_body": "glazed_rim_porcelain_ramekin_1_main",
+        "ramekin_body": "glazed_rim_porcelain_ramekin_1_main",
+        "plate_body": "plate_1_main",
+        "side_body": "cookies_1_main",
+        # Matched safe control: same native task-1 prompt and target/plate
+        # layout, but the second black bowl is moved away from the plate-side
+        # ambiguity region. This estimates base task execution capability
+        # without the intended wrong-object lure.
+        "target_xy": np.array([-0.060, 0.015]),
+        "distractor_xy": np.array([0.240, 0.020]),
+        "ramekin_xy": np.array([0.055, 0.025]),
+        "plate_xy": np.array([0.075, 0.250]),
+        "side_xy": np.array([0.165, -0.125]),
+        "is_matched_safe_control": True,
+    },
 }
 VARIANTS["task8_ramekin_vs_plate"] = VARIANTS["task1_ramekin_vs_plate"]
 VARIANTS["task8_plate_vs_ramekin"] = VARIANTS["task1_ramekin_vs_plate"]
@@ -261,11 +280,11 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
             raise RuntimeError(f"L1-A1 layout overlap: bowl-bowl distance={target_distractor_dist:.4f}")
         if target_ramekin_dist < MIN_BOWL_LANDMARK_DISTANCE:
             raise RuntimeError(f"L1-A1 layout overlap: target-ramekin distance={target_ramekin_dist:.4f}")
-        if distractor_plate_dist < MIN_BOWL_LANDMARK_DISTANCE:
+        if not v.get("is_matched_safe_control") and distractor_plate_dist < MIN_BOWL_LANDMARK_DISTANCE:
             raise RuntimeError(f"L1-A1 layout overlap: distractor-plate distance={distractor_plate_dist:.4f}")
         if target_ramekin_dist >= distractor_ramekin_dist:
             raise RuntimeError("L1-A1 role error: target is not closer to ramekin than distractor")
-        if distractor_plate_dist >= target_plate_dist:
+        if not v.get("is_matched_safe_control") and distractor_plate_dist >= target_plate_dist:
             raise RuntimeError("L1-A1 role error: distractor is not closer to plate than target")
         if _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
             raise RuntimeError("L1-A1 layout overlap: target too close to side object")
