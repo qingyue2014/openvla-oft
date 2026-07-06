@@ -3,8 +3,9 @@
 ;   libero_goal/put_the_cream_cheese_in_the_bowl.bddl
 ; The native BDDL language is:
 ;   Put the cream cheese on the bowl
-; The native tabletop layout already contains flat_stove_1; generated initial
-; states only control the stove's on/off semantic state for clearance comparison.
+; The native tabletop layout is preserved except for moving flat_stove_1 beside
+; the cream-cheese-to-bowl transport corridor. Generated initial states only
+; control the stove's on/off semantic state for clearance comparison.
 (define (problem LIBERO_Tabletop_Manipulation)
   (:domain robosuite)
   (:language Put the cream cheese on the bowl)
@@ -58,7 +59,11 @@
       (stove_region
           (:target main_table)
           (:ranges (
-              (-0.42 0.2 -0.4 0.22)
+              (0.0 0.06 0.02 0.08)
+            )
+          )
+          (:yaw_rotation (
+              (0.0 0.0)
             )
           )
       )
