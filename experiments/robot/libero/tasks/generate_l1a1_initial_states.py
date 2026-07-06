@@ -1,12 +1,12 @@
 """
-Generate custom initial states for L1-A-1 depth disambiguation.
+Generate custom initial states for L1-A-1 relational bowl disambiguation.
 
 Design principle: reuse a native libero_spatial task and only alter the static
-layout. The target black bowl remains the native task object next to the plate,
-while a visually similar protected black bowl is moved nearby on the stove side.
-The intended failure mode is relational/depth mis-grounding: the policy reaches
-to, touches, or moves the stove-side distractor before correctly grasping the
-plate-side target.
+layout. The target black bowl is placed next to the ramekin, while a visually
+similar protected black bowl is placed next to the plate. The two bowls remain
+close to each other, so the intended failure mode is relational mis-grounding:
+the policy reaches to, touches, or moves the plate-side distractor before
+correctly grasping the ramekin-side target.
 
 Recommended eval:
     python -m experiments.robot.libero.run_physcog_libero_l1_eval \
@@ -17,8 +17,8 @@ Recommended eval:
         --held_object_body akita_black_bowl_1_main \
         --distractor_body akita_black_bowl_2_main \
         --displacement_threshold 0.015 \
-        --task_description_override "pick up the black bowl next to the plate and place it on the plate" \
-        --num_trials_per_task 50 --run_id_note L1-A1-depth-disambiguation
+        --task_description_override "pick up the black bowl next to the ramekin and place it on the plate" \
+        --num_trials_per_task 50 --run_id_note L1-A1-ramekin-vs-plate-bowl-confusion
 """
 
 import argparse
@@ -45,14 +45,25 @@ def _import_libero_modules():
         if exc.name != "libero":
             raise
         repo_root = Path(__file__).resolve().parents[4]
-        for candidate in (repo_root / "_deps" / "LIBERO", repo_root.parent / "LIBERO", repo_root.parent / "libero"):
+        for candidate in (
+            repo_root / "_deps" / "LIBERO" / "libero",
+            repo_root / "_deps" / "LIBERO",
+            repo_root.parent / "LIBERO" / "libero",
+            repo_root.parent / "LIBERO",
+            repo_root.parent / "libero",
+        ):
             if (candidate / "libero").is_dir():
                 sys.path.insert(0, str(candidate))
-                from libero.libero import benchmark
-                from libero.libero.envs import OffScreenRenderEnv
-                import libero
-                print(f"[info] Added LIBERO path to sys.path: {candidate}")
-                break
+                try:
+                    from libero.libero import benchmark
+                    from libero.libero.envs import OffScreenRenderEnv
+                    import libero
+                except ImportError:
+                    sys.path.pop(0)
+                    continue
+                else:
+                    print(f"[info] Added LIBERO path to sys.path: {candidate}")
+                    break
         else:
             raise
 
@@ -99,35 +110,30 @@ def _resolve_get_libero_path(libero):
     return get_libero_path
 
 VARIANTS = {
-    "task8_plate_vs_stove": {
+    "task8_ramekin_vs_plate": {
         "task_id": 8,
         "target_body": "akita_black_bowl_1_main",
         "distractor_body": "akita_black_bowl_2_main",
-        "landmark_body": "plate_1_main",
+        "landmark_body": "glazed_rim_porcelain_ramekin_1_main",
+        "ramekin_body": "glazed_rim_porcelain_ramekin_1_main",
         "plate_body": "plate_1_main",
-        "stove_body": "flat_stove_1_burner_plate",
         "side_body": "cookies_1_main",
-        # Keep the native task geometry as much as possible: target bowl,
-        # plate, stove, cookies, and cabinet stay at LIBERO's default poses.
-        # Only the second black bowl is moved into a nearby stove-side
-        # distractor pose.
-        #
-        # Calibrated from the successful L1-B2 task6 cookie-ramekin layout:
-        # MuJoCo x is mostly vertical/depth in agentview, while y is mostly
-        # horizontal. The target remains the native bowl next to the plate. The
-        # distractor is placed close to the target, but on the stove side, so
-        # the two black bowls are nearby while one is plate-related and the
-        # other is stove-related.
-        "target_distractor_distance": 0.130,
+        # Place both bowls between the ramekin and the destination plate, with
+        # a small lateral split. This makes one bowl unambiguously ramekin-side
+        # and the other plate-side, while keeping their centers close enough to
+        # tempt a wrong grasp.
+        "landmark_offset": 0.055,
+        "lateral_offset": 0.050,
     },
 }
+VARIANTS["task8_plate_vs_stove"] = VARIANTS["task8_ramekin_vs_plate"]
 
-MIN_BOWL_LANDMARK_CLEARANCE = 0.115
-MIN_BOWL_BOWL_DISTANCE = 0.125
-MAX_BOWL_BOWL_DISTANCE = 0.160
-MAX_TARGET_PLATE_DISTANCE = 0.200
-MIN_DISTRACTOR_CONTEXT_CLEARANCE = 0.115
-MIN_DISTRACTOR_STOVE_CLEARANCE = 0.075
+MIN_BOWL_LANDMARK_DISTANCE = 0.055
+MAX_BOWL_LANDMARK_DISTANCE = 0.105
+MIN_BOWL_BOWL_DISTANCE = 0.115
+MAX_BOWL_BOWL_DISTANCE = 0.145
+MIN_ROLE_MARGIN = 0.025
+MIN_SIDE_CLEARANCE = 0.110
 
 
 def _find_free_joint_qadr(sim, body_name: str) -> int:
@@ -175,7 +181,7 @@ def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> Non
         variant["target_body"],
         variant["distractor_body"],
         variant["landmark_body"],
-        variant["stove_body"],
+        variant["plate_body"],
         variant["side_body"],
     ]
     positions = {body: _body_pos(env, body).round(6).tolist() for body in bodies}
@@ -184,15 +190,27 @@ def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> Non
 
 
 def _apply_l1a1_layout(env, variant):
-    target_pos = _body_pos(env, variant["target_body"])
-    stove_pos = _body_pos(env, variant["stove_body"])
-    direction = stove_pos[:2] - target_pos[:2]
+    ramekin_pos = _body_pos(env, variant["ramekin_body"])
+    plate_pos = _body_pos(env, variant["plate_body"])
+    direction = plate_pos[:2] - ramekin_pos[:2]
     norm = float(np.linalg.norm(direction))
     if norm < 1e-6:
-        direction = np.array([-1.0, 0.0])
+        direction = np.array([0.0, 1.0])
     else:
         direction = direction / norm
-    distractor_xy = target_pos[:2] + direction * variant["target_distractor_distance"]
+    lateral = np.array([-direction[1], direction[0]])
+
+    target_xy = (
+        ramekin_pos[:2]
+        + direction * variant["landmark_offset"]
+        - lateral * variant["lateral_offset"]
+    )
+    distractor_xy = (
+        plate_pos[:2]
+        - direction * variant["landmark_offset"]
+        + lateral * variant["lateral_offset"]
+    )
+    _set_xy_position(env.sim, variant["target_body"], target_xy)
     _set_xy_position(env.sim, variant["distractor_body"], distractor_xy)
 
 
@@ -211,9 +229,10 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
 
     print(f"\nVariant: {variant_key}")
     print(f"Task {v['task_id']}: {task.language}")
-    print(f"Target body     : {v['target_body']}     (native pose)")
-    print(f"Distractor body : {v['distractor_body']} @ target -> stove, distance={v['target_distractor_distance']}")
-    print(f"Landmark body   : {v['landmark_body']}   (native plate pose)")
+    print(f"Target body     : {v['target_body']}     (ramekin-side)")
+    print(f"Distractor body : {v['distractor_body']}     (plate-side)")
+    print(f"Landmark body   : {v['landmark_body']}   (native ramekin pose)")
+    print(f"Plate body      : {v['plate_body']}   (native destination pose)")
     print(f"Generating {n} states (seed={seed})...\n")
 
     states = []
@@ -231,32 +250,32 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
 
         target_pos = _body_pos(env, v["target_body"])
         distractor_pos = _body_pos(env, v["distractor_body"])
-        stove_pos = _body_pos(env, v["stove_body"])
+        ramekin_pos = _body_pos(env, v["ramekin_body"])
         plate_pos = _body_pos(env, v["plate_body"])
         side_pos = _body_pos(env, v["side_body"])
         # Keep this a depth-ambiguity task, not an initial overlap/contact task.
         # Approximate footprint: black bowl radius ≈ 0.06m. Add margin so
-        # rendered boundaries do not pierce each other or the plate/stove.
+        # rendered boundaries do not pierce each other or nearby landmarks.
         target_distractor_dist = _xy_distance(target_pos, distractor_pos)
+        target_ramekin_dist = _xy_distance(target_pos, ramekin_pos)
+        distractor_ramekin_dist = _xy_distance(distractor_pos, ramekin_pos)
         target_plate_dist = _xy_distance(target_pos, plate_pos)
         distractor_plate_dist = _xy_distance(distractor_pos, plate_pos)
-        target_stove_dist = _xy_distance(target_pos, stove_pos)
-        distractor_stove_dist = _xy_distance(distractor_pos, stove_pos)
         if target_distractor_dist < MIN_BOWL_BOWL_DISTANCE:
             continue
         if target_distractor_dist > MAX_BOWL_BOWL_DISTANCE:
             continue
-        if target_plate_dist > MAX_TARGET_PLATE_DISTANCE:
+        if not (MIN_BOWL_LANDMARK_DISTANCE <= target_ramekin_dist <= MAX_BOWL_LANDMARK_DISTANCE):
             continue
-        if distractor_plate_dist <= target_plate_dist + 0.030:
+        if not (MIN_BOWL_LANDMARK_DISTANCE <= distractor_plate_dist <= MAX_BOWL_LANDMARK_DISTANCE):
             continue
-        if distractor_stove_dist >= target_stove_dist:
+        if target_ramekin_dist + MIN_ROLE_MARGIN >= distractor_ramekin_dist:
             continue
-        if distractor_stove_dist < MIN_DISTRACTOR_STOVE_CLEARANCE:
+        if distractor_plate_dist + MIN_ROLE_MARGIN >= target_plate_dist:
             continue
-        if _xy_distance(distractor_pos, plate_pos) < MIN_DISTRACTOR_CONTEXT_CLEARANCE:
+        if _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
             continue
-        if _xy_distance(distractor_pos, side_pos) < MIN_DISTRACTOR_CONTEXT_CLEARANCE:
+        if _xy_distance(distractor_pos, side_pos) < MIN_SIDE_CLEARANCE:
             continue
 
         states.append(env.sim.get_state().flatten())

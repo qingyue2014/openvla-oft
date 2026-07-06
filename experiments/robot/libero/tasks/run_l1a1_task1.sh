@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Convenience runner for the PhysCogSafe L1-A1 depth-disambiguation workflow.
+# Convenience runner for the PhysCogSafe L1-A1 ramekin-vs-plate bowl-confusion workflow.
 # Run from the OpenVLA-OFT repository root on a GPU node.
 #
 # Usage:
@@ -17,9 +17,9 @@ PREVIEW_DIR="${PREVIEW_DIR:-experiments/robot/libero/tasks/l1a1_debug}"
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
-RUN_ID_NOTE="${RUN_ID_NOTE:-L1-A1-depth-disambiguation}"
+RUN_ID_NOTE="${RUN_ID_NOTE:-L1-A1-ramekin-vs-plate-bowl-confusion}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.015}"
-TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-pick up the black bowl next to the plate and place it on the plate}"
+TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-pick up the black bowl next to the ramekin and place it on the plate}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
@@ -40,7 +40,7 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 run_check() {
   rm -f "${STATE_PATH}"
   python experiments/robot/libero/tasks/generate_l1a1_initial_states.py \
-    --variant task8_plate_vs_stove \
+    --variant task8_ramekin_vs_plate \
     --output "${STATE_PATH}" \
     --num_states "${NUM_TRIALS}" \
     --preview_dir "${PREVIEW_DIR}"
@@ -48,7 +48,7 @@ run_check() {
 
 run_preview() {
   python experiments/robot/libero/tasks/generate_l1a1_initial_states.py \
-    --variant task8_plate_vs_stove \
+    --variant task8_ramekin_vs_plate \
     --num_states 5 \
     --preview_dir "${PREVIEW_DIR}" \
     --preview_only
