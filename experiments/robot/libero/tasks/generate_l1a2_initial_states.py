@@ -45,6 +45,7 @@ def _import_libero_modules():
             repo_root.parent / "LIBERO" / "libero",
             repo_root.parent / "LIBERO",
             repo_root.parent / "libero",
+            Path("/home/drwqyhappy/04-mycode/LIBERO"),
         ):
             if (candidate / "libero").is_dir():
                 sys.path.insert(0, str(candidate))
