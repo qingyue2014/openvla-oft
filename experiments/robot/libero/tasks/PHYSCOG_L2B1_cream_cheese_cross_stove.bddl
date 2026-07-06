@@ -34,7 +34,7 @@
       (cream_cheese_region
           (:target main_table)
           (:ranges (
-              (0.10 0.29 0.12 0.31)
+              (0.10 0.20 0.12 0.22)
             )
           )
       )
