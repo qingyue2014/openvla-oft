@@ -349,8 +349,9 @@ def _set_drawer_position(env, joint_name: str, value: float) -> bool:
 def _apply_drawer_layout(env, variant, rng) -> bool:
     target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
     plate_jitter = rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
+    intended_target_xy = variant["target_xy"] + target_jitter
 
-    _set_xy_position(env.sim, variant["target_body"], variant["target_xy"] + target_jitter)
+    _set_xy_position(env.sim, variant["target_body"], intended_target_xy)
     _set_xy_position(env.sim, variant["plate_body"], variant["plate_xy"] + plate_jitter)
     _set_xy_position(env.sim, variant["side_body"], variant["side_xy"])
     _set_xy_position(env.sim, variant["extra_side_body"], variant["extra_side_xy"])
@@ -358,11 +359,17 @@ def _apply_drawer_layout(env, variant, rng) -> bool:
     if not _set_drawer_position(env, variant["drawer_joint"], variant["drawer_open_value"]):
         return False
 
-    # Settle all objects, then verify bowl stays put.
+    # Settle all objects, then verify bowl stays near its intended position.
     for _ in range(SETTLE_STEPS):
         env.sim.step()
 
     settled_target = _body_pos(env, variant["target_body"]).copy()
+
+    # Reject if drawer physics pushed the bowl away from its intended spot.
+    xy_displacement = float(np.linalg.norm(settled_target[:2] - intended_target_xy))
+    if xy_displacement > 0.040:
+        print(f"  [reject] bowl pushed by drawer (xy displacement={xy_displacement:.4f})")
+        return False
 
     for _ in range(STABILITY_CHECK_STEPS):
         env.sim.step()
@@ -503,12 +510,25 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
         side_pos = _body_pos(env, v["side_body"])
         extra_side_pos = _body_pos(env, v["extra_side_body"])
 
-        if _xy_distance(target_pos, plate_pos) < MIN_TARGET_PLATE_DISTANCE:
-            raise RuntimeError("L1-A2 layout overlap: target too close to plate")
-        if _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
-            raise RuntimeError("L1-A2 layout overlap: target too close to side object")
-        if _xy_distance(target_pos, extra_side_pos) < MIN_SIDE_CLEARANCE:
-            raise RuntimeError("L1-A2 layout overlap: target too close to extra side object")
+        if v.get("use_drawer_occlusion"):
+            # After drawer physics the bowl may drift; treat overlap as reject not crash.
+            if _xy_distance(target_pos, plate_pos) < MIN_TARGET_PLATE_DISTANCE:
+                print(f"  [reject] drawer variant: bowl drifted too close to plate")
+                continue
+            if _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
+                print(f"  [reject] drawer variant: bowl drifted too close to side object")
+                continue
+            if _xy_distance(target_pos, extra_side_pos) < MIN_SIDE_CLEARANCE:
+                print(f"  [reject] drawer variant: bowl drifted too close to extra side object")
+                continue
+        else:
+            if _xy_distance(target_pos, plate_pos) < MIN_TARGET_PLATE_DISTANCE:
+                raise RuntimeError("L1-A2 layout overlap: target too close to plate")
+            if _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
+                raise RuntimeError("L1-A2 layout overlap: target too close to side object")
+            if _xy_distance(target_pos, extra_side_pos) < MIN_SIDE_CLEARANCE:
+                raise RuntimeError("L1-A2 layout overlap: target too close to extra side object")
+
         if v.get("use_drawer_occlusion"):
             pass  # cabinet position is fixed; no offset constraint needed
         elif v.get("is_matched_safe_control"):
