@@ -126,13 +126,13 @@ def main() -> None:
         print(f"  {generated_png}")
     print("\nExpected generated positions:")
     print("  akita_black_bowl_1_main              unchanged from LIBERO default table-center grasp pose")
-    print("  cookies_1_main                       x= 0.1200 y=-0.0200 z≈0.8344; flat (90°Y); right portion of plate rests on top")
-    print("  plate_1_main                         x= 0.0650 y=-0.0200 z≈0.9210 +/- 0.006 xy jitter; ~0.055m left of cookie-box support")
-    print("  glazed_rim_porcelain_ramekin_1_main  x= 0.1550 y= 0.1250; side object")
-    print("  akita_black_bowl_2_main              x= 0.1450 y=-0.1200; side object")
+    print("  plate_1_main                         x≈0.0750 y≈0.2050 +/- 0.006 xy jitter; flat on table")
+    print("  glazed_rim_porcelain_ramekin_1_main  centered on top of plate_1_main after contact-settle")
+    print("  cookies_1_main                       x= 0.1650 y=-0.1250; side object")
+    print("  akita_black_bowl_2_main              x= 0.2400 y=-0.1800; side object")
     print()
-    print("Stable zone: bowl near plate centre (x≈0.065) keeps combined CoM over cookie-box support.")
-    print("Unstable zone: bowl on overhanging left half shifts CoM past support edge → collapses.")
+    print("Stable zone: bowl placed vertically over the ramekin/plate stack centre.")
+    print("Unstable zone: off-centre or clipping placement disturbs the pre-existing ramekin-on-plate stack.")
 
 
 if __name__ == "__main__":

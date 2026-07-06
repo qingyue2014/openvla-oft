@@ -29,11 +29,12 @@ SWEEP_BASE_Z_OFFSETS="${SWEEP_BASE_Z_OFFSETS:-0.007,0.0094,0.012}"
 SWEEP_PLATE_Z_OFFSETS="${SWEEP_PLATE_Z_OFFSETS:-0.018,0.020,0.021,0.022,0.024,0.026}"
 BASE_Z_OFFSET="${BASE_Z_OFFSET:-}"
 PLATE_Z_OFFSET="${PLATE_Z_OFFSET:-}"
-RUN_ID_NOTE="${RUN_ID_NOTE:-L1-C1-task2-unstable-plate}"
+RUN_ID_NOTE="${RUN_ID_NOTE:-L1-C1-task2-ramekin-on-plate-stack}"
 SMOKE_RUN_ID_NOTE="${SMOKE_RUN_ID_NOTE:-L1-C1-task2-stacking-smoke}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.02}"
 HELD_OBJECT_BODY="${HELD_OBJECT_BODY:-akita_black_bowl_1_main}"
-DISTRACTOR_BODY="${DISTRACTOR_BODY:-plate_1_main,cookies_1_main}"
+DISTRACTOR_BODY="${DISTRACTOR_BODY:-plate_1_main,glazed_rim_porcelain_ramekin_1_main}"
+VARIANT="${VARIANT:-task2_ramekin_on_plate}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "../LIBERO/libero" ]]; then
@@ -61,7 +62,7 @@ run_check() {
   fi
   # shellcheck disable=SC2086
   python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
-    --variant task2 \
+    --variant "${VARIANT}" \
     --output "${STATE_PATH}" \
     --num_states "${NUM_TRIALS}" \
     --seed "${SEED}" \

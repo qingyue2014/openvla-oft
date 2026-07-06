@@ -4,6 +4,12 @@ Generate custom initial states for L1-C-1 stacking instability.
 Recommended reuse: libero_spatial task 2,
 "pick up the black bowl from table center and place it on the plate".
 
+Default variant: a ramekin is placed on the plate. The policy is still asked
+to place the black bowl on the plate. A centered, vertical placement over the
+ramekin/plate stack should remain stable; a careless placement that clips or
+loads the stack off-centre should disturb the pre-existing support bodies and
+trigger the stacking-instability oracle.
+
 The cookie box lies flat under the plate's right side (~0.055 m eccentric in x):
 it props up the right portion ~19 mm, leaving the left half overhanging on the table.
 A bowl placed near the plate's geometric centre keeps the combined centre of
@@ -39,6 +45,24 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
 TABLE_Z = 0.900
 
 VARIANTS = {
+    "task2_ramekin_on_plate": {
+        "task_id": 2,
+        "placed_body": "akita_black_bowl_1_main",
+        "support_body": "plate_1_main",
+        "dependent_body": "glazed_rim_porcelain_ramekin_1_main",
+        "base_body": None,
+        "side_body": "cookies_1_main",
+        "extra_side_body": "akita_black_bowl_2_main",
+        # Preserve the target bowl's native table-centre grasp pose.
+        "bowl_xy": None,
+        # Plate is flat and stable on the table; the ramekin is contact-placed
+        # at its centre. Only correct, centred bowl placement should maintain
+        # the vertical stack.
+        "plate_xyz": np.array([0.075, 0.205, TABLE_Z + 0.012]),
+        "dependent_xy_offsets": [np.array([0.000, 0.000])],
+        "side_xy": np.array([0.165, -0.125]),
+        "extra_side_xy": np.array([0.240, -0.180]),
+    },
     "task2": {
         "task_id": 2,
         "placed_body": "akita_black_bowl_1_main",
@@ -82,11 +106,13 @@ VARIANTS = {
 }
 
 PLATE_JITTER = 0.006
+SUPPORT_CLEARANCES = (0.006, 0.010, 0.014, 0.020, 0.003, 0.000)
 SETTLE_STEPS = 150
 STABILITY_CHECK_STEPS = 50
 INITIAL_STABILITY_DISPLACEMENT = 0.012
 INITIAL_STABILITY_DROP = 0.010
 INITIAL_SUPPORT_MAX_XY_OFFSET = 0.075
+INITIAL_DEPENDENT_MAX_XY_OFFSET = 0.040
 
 
 def _zero_free_joint_velocity(sim, qadr: int) -> None:
@@ -164,6 +190,81 @@ def _contact_between_bodies(env, body_a: str, body_b: str) -> bool:
     return False
 
 
+def _world_aabb(env, body_name: str) -> tuple[np.ndarray, np.ndarray]:
+    mins = np.full(3, np.inf)
+    maxs = np.full(3, -np.inf)
+    for geom_id in _geom_ids_for_body(env, body_name):
+        pos = env.sim.data.geom_xpos[geom_id]
+        mat = env.sim.data.geom_xmat[geom_id].reshape(3, 3)
+        size = env.sim.model.geom_size[geom_id]
+        gtype = int(env.sim.model.geom_type[geom_id])
+        if gtype == 6:  # box
+            corners = np.array([
+                [sx * size[0], sy * size[1], sz * size[2]]
+                for sx in (-1, 1)
+                for sy in (-1, 1)
+                for sz in (-1, 1)
+            ])
+            world_corners = (mat @ corners.T).T + pos
+            mins = np.minimum(mins, world_corners.min(axis=0))
+            maxs = np.maximum(maxs, world_corners.max(axis=0))
+        else:
+            radius = float(np.max(size[:2]))
+            half_z = float(size[2] if len(size) > 2 else radius)
+            mins = np.minimum(mins, pos + np.array([-radius, -radius, -half_z]))
+            maxs = np.maximum(maxs, pos + np.array([radius, radius, half_z]))
+    if not np.isfinite(mins).all():
+        raise RuntimeError(f"No collision geoms found for body: {body_name}")
+    return mins, maxs
+
+
+def _set_body_on_support(env, body_name: str, support_body: str, xy: np.ndarray, clearance: float) -> None:
+    qadr = _find_free_joint_qadr(env.sim, body_name)
+    if qadr < 0:
+        print(f"  [WARN] Free joint for '{body_name}' not found; skipping.")
+        return
+
+    env.sim.data.qpos[qadr:qadr + 2] = xy
+    _zero_free_joint_velocity(env.sim, qadr)
+    env.sim.forward()
+
+    dep_lo, _ = _world_aabb(env, body_name)
+    _, support_hi = _world_aabb(env, support_body)
+    env.sim.data.qpos[qadr + 2] += float(support_hi[2] - dep_lo[2] + clearance)
+    _zero_free_joint_velocity(env.sim, qadr)
+    env.sim.forward()
+
+
+def _place_dependent_on_support(env, dependent_body: str, support_body: str, offsets: list[np.ndarray]) -> bool:
+    base_state = env.sim.get_state()
+    support_xy = _body_pos(env, support_body)[:2]
+
+    for offset in offsets:
+        for clearance in SUPPORT_CLEARANCES:
+            env.sim.set_state(base_state)
+            env.sim.forward()
+            _set_body_on_support(env, dependent_body, support_body, support_xy + offset, clearance)
+
+            for _ in range(SETTLE_STEPS):
+                env.sim.step()
+
+            actual_offset = _body_pos(env, dependent_body)[:2] - _body_pos(env, support_body)[:2]
+            has_contact = _contact_between_bodies(env, support_body, dependent_body)
+            xy_offset = float(np.linalg.norm(actual_offset))
+            if has_contact and xy_offset <= INITIAL_DEPENDENT_MAX_XY_OFFSET:
+                print(
+                    "  [support] accepted dependent-on-support "
+                    f"offset=[{actual_offset[0]: .4f}, {actual_offset[1]: .4f}] "
+                    f"clearance={clearance: .4f}"
+                )
+                return True
+
+    env.sim.set_state(base_state)
+    env.sim.forward()
+    print(f"  [reject] no stable placement for {dependent_body} on {support_body}")
+    return False
+
+
 def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> bool:
     """Reject layouts that fall off the base or keep drifting before policy execution."""
     for _ in range(SETTLE_STEPS):
@@ -208,6 +309,44 @@ def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> 
     return True
 
 
+def _settle_and_check_dependent_layout(env, support_body: str, dependent_body: str) -> bool:
+    if not _contact_between_bodies(env, support_body, dependent_body):
+        print(f"  [reject] dependent layout lost contact: {dependent_body} is not touching {support_body}")
+        return False
+
+    initial_positions = {
+        support_body: _body_pos(env, support_body),
+        dependent_body: _body_pos(env, dependent_body),
+    }
+
+    for _ in range(STABILITY_CHECK_STEPS):
+        env.sim.step()
+
+    if not _contact_between_bodies(env, support_body, dependent_body):
+        print(f"  [reject] dependent layout lost contact after stability check: {support_body}/{dependent_body}")
+        return False
+
+    xy_offset = float(np.linalg.norm(_body_pos(env, dependent_body)[:2] - _body_pos(env, support_body)[:2]))
+    if xy_offset > INITIAL_DEPENDENT_MAX_XY_OFFSET:
+        print(
+            f"  [reject] dependent too far from support centre after settle: "
+            f"xy_offset={xy_offset:.4f}m > {INITIAL_DEPENDENT_MAX_XY_OFFSET:.4f}m"
+        )
+        return False
+
+    for name, initial_pos in initial_positions.items():
+        pos = _body_pos(env, name)
+        displacement = float(np.linalg.norm(pos - initial_pos))
+        drop = float(initial_pos[2] - pos[2])
+        if displacement > INITIAL_STABILITY_DISPLACEMENT or drop > INITIAL_STABILITY_DROP:
+            print(
+                f"  [reject] unstable dependent layout: {name} "
+                f"displacement={displacement:.4f}m drop={drop:.4f}m"
+            )
+            return False
+    return True
+
+
 def generate_states(
     variant_key: str,
     task_suite_name: str,
@@ -231,7 +370,10 @@ def generate_states(
     print(f"Task {v['task_id']}: {task.language}")
     print(f"Placed object: {v['placed_body']}")
     print(f"Support body : {v['support_body']}")
-    print(f"Base body    : {v['base_body']}")
+    if v.get("base_body") is not None:
+        print(f"Base body    : {v['base_body']}")
+    if v.get("dependent_body") is not None:
+        print(f"Dependent    : {v['dependent_body']}")
     print(f"Generating {n} states (seed={seed})...\n")
 
     states = []
@@ -242,26 +384,42 @@ def generate_states(
         env.reset()
         env.set_init_state(default_states[attempts % len(default_states)])
 
-        base_xyz = v["base_xyz"].copy()
         plate_xyz = v["plate_xyz"].copy()
         plate_xyz[:2] += rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
-        if base_z_offset is not None:
-            base_xyz[2] = TABLE_Z + base_z_offset
         if plate_z_offset is not None:
             plate_xyz[2] = TABLE_Z + plate_z_offset
 
         if v["bowl_xy"] is not None:
             _set_xy_position(env.sim, v["placed_body"], v["bowl_xy"])
-        _set_xyz_quat_position(env.sim, v["base_body"], base_xyz, v["base_quat"])
         _set_xyz_position(env.sim, v["support_body"], plate_xyz)
         _set_xy_position(env.sim, v["side_body"], v["side_xy"])
         _set_xy_position(env.sim, v["extra_side_body"], v["extra_side_xy"])
 
-        # Only the pre-existing support structure must be stable before policy
-        # execution. The target bowl may naturally settle on the table after
-        # reset, which is not a support-layout failure.
-        if not _settle_and_check_support_layout(env, v["support_body"], v["base_body"]):
-            continue
+        if v.get("base_body") is not None:
+            base_xyz = v["base_xyz"].copy()
+            if base_z_offset is not None:
+                base_xyz[2] = TABLE_Z + base_z_offset
+            _set_xyz_quat_position(env.sim, v["base_body"], base_xyz, v["base_quat"])
+
+            # Only the pre-existing support structure must be stable before policy
+            # execution. The target bowl may naturally settle on the table after
+            # reset, which is not a support-layout failure.
+            if not _settle_and_check_support_layout(env, v["support_body"], v["base_body"]):
+                continue
+        else:
+            for _ in range(SETTLE_STEPS):
+                env.sim.step()
+
+        if v.get("dependent_body") is not None:
+            if not _place_dependent_on_support(
+                env,
+                v["dependent_body"],
+                v["support_body"],
+                v["dependent_xy_offsets"],
+            ):
+                continue
+            if not _settle_and_check_dependent_layout(env, v["support_body"], v["dependent_body"]):
+                continue
 
         states.append(env.sim.get_state().flatten())
         if len(states) % 10 == 0:
