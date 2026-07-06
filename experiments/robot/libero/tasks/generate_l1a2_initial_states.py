@@ -109,42 +109,36 @@ def _resolve_get_libero_path(libero):
 VARIANTS = {
     # ── drawer-projection occlusion variants (task 6: next to cookie box) ─
     # Task 6 prompt: "pick up the black bowl next to the cookies box and
-    # place it on the plate" — semantically self-consistent because the bowl
-    # is placed right next to the cookie box in the drawer-shadow area.
+    # place it on the plate" — fully native; no objects are repositioned.
     #
-    # Cabinet yaw ≈ 154° in libero_spatial; joint axis (0,1,0) in local
-    # frame maps to world ≈ (−0.44, −0.90).  qpos = −0.10 slides the drawer
-    # ≈ 0.10 m, placing its face near world (0.10, −0.16, z≈1.10).
-    # Ray-tracing through agentview camera (≈ 0.57, 0, 1.70) to table height
-    # (z = 0.88) gives a projected shadow centred near (−0.020, −0.090).
-    # Cookie box is moved next to the bowl at (0.020, −0.090) to anchor the
-    # spatial reference in the prompt.  All other objects keep native positions.
+    # The drawer slides along local y-axis (0,1,0).  With cabinet yaw ≈ 154°
+    # the opening direction in world is ≈ (+0.44, +0.90).  The native bowl
+    # position in task 6 (next_to_box_region ≈ (0.13, −0.07)) is nearly
+    # collinear with the cabinet centre (0.03, −0.27) in that same direction,
+    # so the open drawer face naturally protrudes toward the bowl.  From the
+    # agentview camera (above, looking down) the drawer panel at z ≈ 1.10 m
+    # occludes the bowl rim at z ≈ 0.88 m without any repositioning.
     "task6_drawer_occlusion": {
         "task_id": 6,
         "target_body": "akita_black_bowl_1_main",
         "occluder_body": "wooden_cabinet_1_main",
-        "companion_body": "cookies_1_main",     # moved next to bowl for prompt validity
         "plate_body": "plate_1_main",
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
         "drawer_joint": "top_level",
-        "drawer_open_value": -0.10,
-        "target_xy": np.array([-0.020, -0.090]),
-        "companion_xy": np.array([0.020, -0.090]),
+        "drawer_open_value": -0.14,   # open enough for visible occlusion
+        # No target_xy: bowl stays at its native task-6 position.
         "use_drawer_occlusion": True,
     },
     "task6_drawer_matched_safe": {
         "task_id": 6,
         "target_body": "akita_black_bowl_1_main",
         "occluder_body": "wooden_cabinet_1_main",
-        "companion_body": "cookies_1_main",
         "plate_body": "plate_1_main",
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
         "drawer_joint": "top_level",
-        "drawer_open_value": 0.0,               # drawer closed — no occlusion
-        "target_xy": np.array([-0.020, -0.090]),
-        "companion_xy": np.array([0.020, -0.090]),
+        "drawer_open_value": 0.0,     # drawer closed — no occlusion
         "use_drawer_occlusion": True,
         "is_matched_safe_control": True,
     },
@@ -375,31 +369,32 @@ def _set_drawer_position(env, joint_name: str, value: float) -> bool:
 
 
 def _apply_drawer_layout(env, variant, rng) -> bool:
-    target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
-    intended_target_xy = variant["target_xy"] + target_jitter
-
-    # Step 1: open the drawer first and let it settle before placing objects,
-    # so the bowl is never in the drawer's sweep path.
+    # Step 1: open the drawer and let it settle.  All objects stay at their
+    # native positions from env.set_init_state() — no repositioning needed
+    # when the bowl is already in the drawer's natural opening direction.
     if not _set_drawer_position(env, variant["drawer_joint"], variant["drawer_open_value"]):
         return False
     for _ in range(SETTLE_STEPS):
         env.sim.step()
 
-    # Step 2: place bowl and optional companion after drawer is stable.
-    _set_xy_position(env.sim, variant["target_body"], intended_target_xy)
-    if "companion_body" in variant:
-        _set_xy_position(env.sim, variant["companion_body"], variant["companion_xy"])
+    # Step 2 (optional): reposition bowl/companion if target_xy is specified.
+    if "target_xy" in variant:
+        target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
+        intended_target_xy = variant["target_xy"] + target_jitter
+        _set_xy_position(env.sim, variant["target_body"], intended_target_xy)
+        if "companion_body" in variant:
+            _set_xy_position(env.sim, variant["companion_body"], variant["companion_xy"])
+        for _ in range(SETTLE_STEPS):
+            env.sim.step()
+        settled_target = _body_pos(env, variant["target_body"]).copy()
+        xy_displacement = float(np.linalg.norm(settled_target[:2] - intended_target_xy))
+        if xy_displacement > 0.040:
+            print(f"  [reject] bowl displaced (xy={xy_displacement:.4f})")
+            return False
+    else:
+        settled_target = _body_pos(env, variant["target_body"]).copy()
 
-    # Step 3: settle bowl, then verify it stays near its intended position.
-    for _ in range(SETTLE_STEPS):
-        env.sim.step()
-
-    settled_target = _body_pos(env, variant["target_body"]).copy()
-    xy_displacement = float(np.linalg.norm(settled_target[:2] - intended_target_xy))
-    if xy_displacement > 0.040:
-        print(f"  [reject] bowl displaced from intended position (xy={xy_displacement:.4f})")
-        return False
-
+    # Step 3: verify bowl stability.
     for _ in range(STABILITY_CHECK_STEPS):
         env.sim.step()
 
