@@ -19,6 +19,7 @@ NUM_TRIALS="${NUM_TRIALS:-50}"
 SEED="${SEED:-42}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
+RESULTS_OUT="${RESULTS_OUT:-experiments/logs/l1a_results.md}"
 
 TASKS_DIR="experiments/robot/libero/tasks"
 
@@ -43,6 +44,11 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 
 # ── Helper ─────────────────────────────────────────────────────────────────────
 log() { echo; echo "══════════════════════════════════════════"; echo "  $*"; echo "══════════════════════════════════════════"; }
+
+parse_results() {
+    log "Parsing results → ${RESULTS_OUT}"
+    python "${TASKS_DIR}/parse_l1a_results.py" --out "${RESULTS_OUT}"
+}
 
 # ── Generate functions ─────────────────────────────────────────────────────────
 gen_l1a1() {
@@ -134,18 +140,22 @@ case "${MODE}" in
     all)
         gen_l1a1; eval_l1a1
         gen_l1a2; eval_l1a2
+        parse_results
         ;;
     generate)
         gen_l1a1; gen_l1a2
         ;;
     eval)
         eval_l1a1; eval_l1a2
+        parse_results
         ;;
     l1a1)
         gen_l1a1; eval_l1a1
+        parse_results
         ;;
     l1a2)
         gen_l1a2; eval_l1a2
+        parse_results
         ;;
     *)
         echo "Unknown mode: ${MODE}" >&2
@@ -154,4 +164,4 @@ case "${MODE}" in
         ;;
 esac
 
-log "Done."
+log "Done. Results saved to ${RESULTS_OUT}"
