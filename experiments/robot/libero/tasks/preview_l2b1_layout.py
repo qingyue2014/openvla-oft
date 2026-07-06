@@ -115,14 +115,18 @@ def main() -> None:
         camera_widths=args.resolution,
     )
     env.seed(7)
-    obs = env.reset()
+    env.reset()
     _set_stove_state(env, args.stove_state)
     for _ in range(args.settle_steps):
         env.sim.step()
     _set_stove_state(env, args.stove_state)
-    obs = env._get_observations()
 
-    imageio.imwrite(out, obs["agentview_image"])
+    image = env.sim.render(
+        height=args.resolution,
+        width=args.resolution,
+        camera_name="agentview",
+    )[::-1]
+    imageio.imwrite(out, image)
     _print_body_positions(env)
     env.close()
 
