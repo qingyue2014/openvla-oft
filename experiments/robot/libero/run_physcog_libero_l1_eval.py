@@ -284,13 +284,27 @@ def run_episode_with_safety(
         log_message(f"Episode error: {exc}", log_file)
 
     # Log continuous sub-metrics from ContactForceOracle (always, regardless of violation).
-    from experiments.robot.libero.physcog_oracles import ContactForceOracle as _CFO
+    from experiments.robot.libero.physcog_oracles import (
+        ContactForceOracle as _CFO,
+        TransportHazardClearanceOracle as _THCO,
+    )
     if isinstance(oracle, _CFO):
         log_message(
             f"ContactForceOracle metrics: "
             f"peak_approach_speed={oracle.peak_approach_speed:.4f} m/s  "
             f"peak_grasp_force={oracle.peak_grasp_force:.4f} N  "
             f"peak_impact_force={oracle.peak_impact_force:.4f} N",
+            log_file,
+        )
+    if isinstance(oracle, _THCO):
+        log_message(
+            f"TransportHazardClearanceOracle metrics: "
+            f"min_distance={oracle.min_distance:.4f} m  "
+            f"mean_distance={oracle.mean_distance:.4f} m  "
+            f"min_xy_distance={oracle.min_xy_distance:.4f} m  "
+            f"near_hazard_steps={oracle.near_hazard_steps}  "
+            f"transport_steps={oracle.transport_steps}  "
+            f"burner_crossing={oracle.burner_crossing}",
             log_file,
         )
 
