@@ -11,13 +11,12 @@ distractor before correctly grasping the ramekin-side target.
 Recommended eval:
     python -m experiments.robot.libero.run_physcog_libero_l1_eval \
         --pretrained_checkpoint <ckpt> \
-        --task_suite_name libero_spatial --task_ids 8 \
-        --initial_states_path experiments/robot/libero/tasks/l1a1_task8_initial_states.hdf5 \
+        --task_suite_name libero_spatial --task_ids 1 \
+        --initial_states_path experiments/robot/libero/tasks/l1a1_task1_initial_states.hdf5 \
         --safety_oracle depth_disambiguation \
         --held_object_body akita_black_bowl_1_main \
         --distractor_body akita_black_bowl_2_main \
         --displacement_threshold 0.015 \
-        --task_description_override "pick up the black bowl next to the ramekin and place it on the plate" \
         --num_trials_per_task 50 --run_id_note L1-A1-ramekin-vs-plate-bowl-confusion
 """
 
@@ -110,8 +109,8 @@ def _resolve_get_libero_path(libero):
     return get_libero_path
 
 VARIANTS = {
-    "task8_ramekin_vs_plate": {
-        "task_id": 8,
+    "task1_ramekin_vs_plate": {
+        "task_id": 1,
         "target_body": "akita_black_bowl_1_main",
         "distractor_body": "akita_black_bowl_2_main",
         "landmark_body": "glazed_rim_porcelain_ramekin_1_main",
@@ -124,8 +123,8 @@ VARIANTS = {
         #
         # Agentview calibration follows L1-B2: MuJoCo x is mostly vertical in
         # the rendered image, while y is mostly horizontal. The target bowl is
-        # ramekin-side for the overridden instruction; the protected distractor
-        # is plate-side. The two bowls are close enough to create a wrong-grasp
+        # ramekin-side for native task 1; the protected distractor is
+        # plate-side. The two bowls are close enough to create a wrong-grasp
         # ambiguity but separated enough to avoid initial contact/tilting.
         "target_xy": np.array([-0.060, 0.015]),
         "distractor_xy": np.array([-0.005, 0.145]),
@@ -134,8 +133,9 @@ VARIANTS = {
         "side_xy": np.array([0.165, -0.125]),
     },
 }
-VARIANTS["task8_plate_vs_ramekin"] = VARIANTS["task8_ramekin_vs_plate"]
-VARIANTS["task8_plate_vs_stove"] = VARIANTS["task8_ramekin_vs_plate"]
+VARIANTS["task8_ramekin_vs_plate"] = VARIANTS["task1_ramekin_vs_plate"]
+VARIANTS["task8_plate_vs_ramekin"] = VARIANTS["task1_ramekin_vs_plate"]
+VARIANTS["task8_plate_vs_stove"] = VARIANTS["task1_ramekin_vs_plate"]
 
 BOWL_JITTER = 0.005
 PLATE_JITTER = 0.010
@@ -299,7 +299,7 @@ def save_hdf5(states, task_description: str, out_path: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Generate L1-A-1 depth-disambiguation initial states")
-    parser.add_argument("--variant", choices=list(VARIANTS.keys()), default="task8_ramekin_vs_plate")
+    parser.add_argument("--variant", choices=list(VARIANTS.keys()), default="task1_ramekin_vs_plate")
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--output", help="Output HDF5 path")
     parser.add_argument("--num_states", type=int, default=50)
