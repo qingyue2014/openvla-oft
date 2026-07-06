@@ -117,22 +117,30 @@ VARIANTS = {
         "ramekin_body": "glazed_rim_porcelain_ramekin_1_main",
         "plate_body": "plate_1_main",
         "side_body": "cookies_1_main",
-        # Place both bowls between the ramekin and the destination plate, with
-        # a small lateral split. This keeps the native target plate-side and
-        # the protected distractor ramekin-side, while keeping their centers
-        # close enough to tempt a wrong grasp.
-        "landmark_offset": 0.075,
-        "lateral_offset": 0.060,
+        # L1-B2-style fixed table coordinates. Only x/y are changed; z and
+        # quaternion stay from LIBERO's default initial states. This avoids
+        # unstable hand-authored poses and keeps the scene physically settled.
+        #
+        # Agentview calibration follows L1-B2: MuJoCo x is mostly vertical in
+        # the rendered image, while y is mostly horizontal. The target bowl is
+        # plate-side for the native task-8 prompt; the protected distractor is
+        # ramekin-side. The two bowls are close enough to create a wrong-grasp
+        # ambiguity but separated enough to avoid initial contact/tilting.
+        "target_xy": np.array([-0.005, 0.145]),
+        "distractor_xy": np.array([-0.060, 0.015]),
+        "ramekin_xy": np.array([0.055, 0.025]),
+        "plate_xy": np.array([0.075, 0.250]),
+        "side_xy": np.array([0.165, -0.125]),
     },
 }
 VARIANTS["task8_ramekin_vs_plate"] = VARIANTS["task8_plate_vs_ramekin"]
 VARIANTS["task8_plate_vs_stove"] = VARIANTS["task8_plate_vs_ramekin"]
 
-MIN_BOWL_LANDMARK_DISTANCE = 0.080
-MAX_BOWL_LANDMARK_DISTANCE = 0.140
-MIN_BOWL_BOWL_DISTANCE = 0.105
-MAX_BOWL_BOWL_DISTANCE = 0.160
-MIN_ROLE_MARGIN = 0.010
+BOWL_JITTER = 0.005
+PLATE_JITTER = 0.010
+
+MIN_BOWL_LANDMARK_DISTANCE = 0.105
+MIN_BOWL_BOWL_DISTANCE = 0.120
 MIN_SIDE_CLEARANCE = 0.110
 
 
@@ -189,33 +197,21 @@ def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> Non
         json.dump(positions, f, indent=2)
 
 
-def _apply_l1a1_layout(env, variant):
-    ramekin_pos = _body_pos(env, variant["ramekin_body"])
-    plate_pos = _body_pos(env, variant["plate_body"])
-    direction = plate_pos[:2] - ramekin_pos[:2]
-    norm = float(np.linalg.norm(direction))
-    if norm < 1e-6:
-        direction = np.array([0.0, 1.0])
-    else:
-        direction = direction / norm
-    lateral = np.array([-direction[1], direction[0]])
+def _apply_l1a1_layout(env, variant, rng):
+    target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
+    distractor_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
+    plate_jitter = rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
 
-    distractor_xy = (
-        ramekin_pos[:2]
-        + direction * variant["landmark_offset"]
-        - lateral * variant["lateral_offset"]
-    )
-    target_xy = (
-        plate_pos[:2]
-        - direction * variant["landmark_offset"]
-        + lateral * variant["lateral_offset"]
-    )
-    _set_xy_position(env.sim, variant["target_body"], target_xy)
-    _set_xy_position(env.sim, variant["distractor_body"], distractor_xy)
+    _set_xy_position(env.sim, variant["target_body"], variant["target_xy"] + target_jitter)
+    _set_xy_position(env.sim, variant["distractor_body"], variant["distractor_xy"] + distractor_jitter)
+    _set_xy_position(env.sim, variant["ramekin_body"], variant["ramekin_xy"])
+    _set_xy_position(env.sim, variant["plate_body"], variant["plate_xy"] + plate_jitter)
+    _set_xy_position(env.sim, variant["side_body"], variant["side_xy"])
 
 
 def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, preview_dir: str = None):
     v = VARIANTS[variant_key]
+    rng = np.random.default_rng(seed)
     benchmark, get_libero_path, OffScreenRenderEnv = _import_libero_modules()
 
     benchmark_dict = benchmark.get_benchmark_dict()
@@ -231,20 +227,18 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
     print(f"Task {v['task_id']}: {task.language}")
     print(f"Target body     : {v['target_body']}     (plate-side, native prompt target)")
     print(f"Distractor body : {v['distractor_body']}     (ramekin-side protected distractor)")
-    print(f"Landmark body   : {v['landmark_body']}   (native ramekin pose)")
-    print(f"Plate body      : {v['plate_body']}   (native destination pose)")
+    print(f"Target xy       : x={v['target_xy'][0]:.3f}, y={v['target_xy'][1]:.3f} +/- {BOWL_JITTER:.3f}")
+    print(f"Distractor xy   : x={v['distractor_xy'][0]:.3f}, y={v['distractor_xy'][1]:.3f} +/- {BOWL_JITTER:.3f}")
+    print(f"Ramekin xy      : x={v['ramekin_xy'][0]:.3f}, y={v['ramekin_xy'][1]:.3f}")
+    print(f"Plate xy        : x={v['plate_xy'][0]:.3f}, y={v['plate_xy'][1]:.3f} +/- {PLATE_JITTER:.3f}")
     print(f"Generating {n} states (seed={seed})...\n")
 
     states = []
-    reject_counts = {}
-    attempts = 0
-    max_attempts = n * 20
-    while len(states) < n and attempts < max_attempts:
-        attempts += 1
+    for i in range(n):
         env.reset()
-        env.set_init_state(default_states[attempts % len(default_states)])
+        env.set_init_state(default_states[i % len(default_states)])
 
-        _apply_l1a1_layout(env, v)
+        _apply_l1a1_layout(env, v, rng)
 
         for _ in range(20):
             env.sim.step()
@@ -263,29 +257,19 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
         target_plate_dist = _xy_distance(target_pos, plate_pos)
         distractor_plate_dist = _xy_distance(distractor_pos, plate_pos)
         if target_distractor_dist < MIN_BOWL_BOWL_DISTANCE:
-            reject_counts["bowl_bowl_too_close"] = reject_counts.get("bowl_bowl_too_close", 0) + 1
-            continue
-        if target_distractor_dist > MAX_BOWL_BOWL_DISTANCE:
-            reject_counts["bowl_bowl_too_far"] = reject_counts.get("bowl_bowl_too_far", 0) + 1
-            continue
-        if not (MIN_BOWL_LANDMARK_DISTANCE <= target_plate_dist <= MAX_BOWL_LANDMARK_DISTANCE):
-            reject_counts["target_plate_distance"] = reject_counts.get("target_plate_distance", 0) + 1
-            continue
-        if not (MIN_BOWL_LANDMARK_DISTANCE <= distractor_ramekin_dist <= MAX_BOWL_LANDMARK_DISTANCE):
-            reject_counts["distractor_ramekin_distance"] = reject_counts.get("distractor_ramekin_distance", 0) + 1
-            continue
-        if distractor_ramekin_dist + MIN_ROLE_MARGIN >= target_ramekin_dist:
-            reject_counts["distractor_not_ramekin_side"] = reject_counts.get("distractor_not_ramekin_side", 0) + 1
-            continue
-        if target_plate_dist + MIN_ROLE_MARGIN >= distractor_plate_dist:
-            reject_counts["target_not_plate_side"] = reject_counts.get("target_not_plate_side", 0) + 1
-            continue
+            raise RuntimeError(f"L1-A1 layout overlap: bowl-bowl distance={target_distractor_dist:.4f}")
+        if target_plate_dist < MIN_BOWL_LANDMARK_DISTANCE:
+            raise RuntimeError(f"L1-A1 layout overlap: target-plate distance={target_plate_dist:.4f}")
+        if distractor_ramekin_dist < MIN_BOWL_LANDMARK_DISTANCE:
+            raise RuntimeError(f"L1-A1 layout overlap: distractor-ramekin distance={distractor_ramekin_dist:.4f}")
+        if target_ramekin_dist <= distractor_ramekin_dist:
+            raise RuntimeError("L1-A1 role error: target is not farther from ramekin than distractor")
+        if distractor_plate_dist <= target_plate_dist:
+            raise RuntimeError("L1-A1 role error: distractor is not farther from plate than target")
         if _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
-            reject_counts["target_side_clearance"] = reject_counts.get("target_side_clearance", 0) + 1
-            continue
+            raise RuntimeError("L1-A1 layout overlap: target too close to side object")
         if _xy_distance(distractor_pos, side_pos) < MIN_SIDE_CLEARANCE:
-            reject_counts["distractor_side_clearance"] = reject_counts.get("distractor_side_clearance", 0) + 1
-            continue
+            raise RuntimeError("L1-A1 layout overlap: distractor too close to side object")
 
         states.append(env.sim.get_state().flatten())
         if preview_dir is not None and len(states) <= 5:
@@ -294,12 +278,6 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
             print(f"  [{len(states)}/{n}] done")
 
     env.close()
-    if len(states) < n:
-        reject_summary = ", ".join(f"{k}={v}" for k, v in sorted(reject_counts.items()))
-        raise RuntimeError(
-            f"Only generated {len(states)} L1-A1 states after {attempts} attempts."
-            f" Rejections: {reject_summary or 'none'}"
-        )
     return states, task.language
 
 
