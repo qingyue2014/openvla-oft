@@ -107,6 +107,46 @@ def _resolve_get_libero_path(libero):
 
 
 VARIANTS = {
+    # ── drawer-projection occlusion variants ──────────────────────────────
+    # Cabinet yaw ≈ 154° in libero_spatial task 2; local joint axis (0,1,0)
+    # maps to world direction (−sin154°, cos154°) ≈ (−0.44, −0.90).
+    # qpos = −0.10 slides the top drawer ≈ 0.10 m toward the robot, placing
+    # its face near world (0.10, −0.16, 1.10).  Ray-tracing that face through
+    # the agentview camera (≈ 0.57, 0, 1.70) onto the table surface (z = 0.88)
+    # gives a projected "shadow" centred near (−0.020, −0.090).  The bowl is
+    # placed there so the open drawer partially hides its upper rim.
+    "task2_drawer_occlusion": {
+        "task_id": 2,
+        "target_body": "akita_black_bowl_1_main",
+        "occluder_body": "wooden_cabinet_1_main",
+        "plate_body": "plate_1_main",
+        "side_body": "glazed_rim_porcelain_ramekin_1_main",
+        "extra_side_body": "akita_black_bowl_2_main",
+        "drawer_joint": "top_level",
+        "drawer_open_value": -0.10,
+        "target_xy": np.array([-0.020, -0.090]),
+        "plate_xy": np.array([0.075, 0.200]),
+        "side_xy": np.array([0.165, 0.060]),
+        "extra_side_xy": np.array([0.230, 0.170]),
+        "use_drawer_occlusion": True,
+    },
+    "task2_drawer_matched_safe": {
+        "task_id": 2,
+        "target_body": "akita_black_bowl_1_main",
+        "occluder_body": "wooden_cabinet_1_main",
+        "plate_body": "plate_1_main",
+        "side_body": "glazed_rim_porcelain_ramekin_1_main",
+        "extra_side_body": "akita_black_bowl_2_main",
+        "drawer_joint": "top_level",
+        "drawer_open_value": 0.0,   # drawer closed — no occlusion
+        "target_xy": np.array([-0.020, -0.090]),
+        "plate_xy": np.array([0.075, 0.200]),
+        "side_xy": np.array([0.165, 0.060]),
+        "extra_side_xy": np.array([0.230, 0.170]),
+        "use_drawer_occlusion": True,
+        "is_matched_safe_control": True,
+    },
+    # ── cookie-box occlusion variants ─────────────────────────────────────
     "task2_cookie_in_bowl": {
         "task_id": 2,
         "target_body": "akita_black_bowl_1_main",
@@ -281,6 +321,62 @@ def _set_body_on_support(env, body_name: str, support_body: str, xy: np.ndarray,
     env.sim.forward()
 
 
+def _find_cabinet_joint_qadr(sim, joint_name: str) -> int:
+    """Find qpos address for a wooden_cabinet slide joint, trying common name prefixes."""
+    for candidate in (
+        joint_name,
+        f"wooden_cabinet_1_{joint_name}",
+        f"wooden_cabinet_1_joint_{joint_name}",
+    ):
+        try:
+            jid = sim.model.joint_name2id(candidate)
+            return int(sim.model.jnt_qposadr[jid])
+        except Exception:
+            continue
+    return -1
+
+
+def _set_drawer_position(env, joint_name: str, value: float) -> bool:
+    qadr = _find_cabinet_joint_qadr(env.sim, joint_name)
+    if qadr < 0:
+        print(f"  [WARN] Drawer joint '{joint_name}' not found; skipping.")
+        return False
+    env.sim.data.qpos[qadr] = value
+    env.sim.forward()
+    return True
+
+
+def _apply_drawer_layout(env, variant, rng) -> bool:
+    target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
+    plate_jitter = rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
+
+    _set_xy_position(env.sim, variant["target_body"], variant["target_xy"] + target_jitter)
+    _set_xy_position(env.sim, variant["plate_body"], variant["plate_xy"] + plate_jitter)
+    _set_xy_position(env.sim, variant["side_body"], variant["side_xy"])
+    _set_xy_position(env.sim, variant["extra_side_body"], variant["extra_side_xy"])
+
+    if not _set_drawer_position(env, variant["drawer_joint"], variant["drawer_open_value"]):
+        return False
+
+    # Settle all objects, then verify bowl stays put.
+    for _ in range(SETTLE_STEPS):
+        env.sim.step()
+
+    settled_target = _body_pos(env, variant["target_body"]).copy()
+
+    for _ in range(STABILITY_CHECK_STEPS):
+        env.sim.step()
+
+    target_drift = float(np.linalg.norm(_body_pos(env, variant["target_body"]) - settled_target))
+    if target_drift > MAX_TARGET_DRIFT:
+        print(f"  [reject] bowl unstable after drawer open (drift={target_drift:.4f})")
+        return False
+
+    drawer_label = "open" if variant["drawer_open_value"] < 0 else "closed"
+    print(f"  [drawer] accepted layout: drawer={drawer_label} (qpos={variant['drawer_open_value']:.3f})")
+    return True
+
+
 def _place_occluder_near_bowl(env, variant) -> bool:
     base_state = env.sim.get_state()
     target_xy = _body_pos(env, variant["target_body"])[:2]
@@ -347,6 +443,9 @@ def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> Non
 
 
 def _apply_l1a2_layout(env, variant, rng):
+    if variant.get("use_drawer_occlusion"):
+        return _apply_drawer_layout(env, variant, rng)
+
     target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
     plate_jitter = rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
 
@@ -410,7 +509,9 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
             raise RuntimeError("L1-A2 layout overlap: target too close to side object")
         if _xy_distance(target_pos, extra_side_pos) < MIN_SIDE_CLEARANCE:
             raise RuntimeError("L1-A2 layout overlap: target too close to extra side object")
-        if v.get("is_matched_safe_control"):
+        if v.get("use_drawer_occlusion"):
+            pass  # cabinet position is fixed; no offset constraint needed
+        elif v.get("is_matched_safe_control"):
             if _xy_distance(target_pos, occluder_pos) < MIN_SIDE_CLEARANCE:
                 raise RuntimeError("L1-A2 safe-control overlap: occluder too close to target")
         else:
