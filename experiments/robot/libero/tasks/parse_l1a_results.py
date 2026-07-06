@@ -1,5 +1,5 @@
 """
-Parse PhysCog L1-A eval logs and print a results table.
+Parse PhysCog L1-A / L1-B2 eval logs and print a results table.
 
 Usage:
     python experiments/robot/libero/tasks/parse_l1a_results.py
@@ -12,12 +12,14 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-# Map run_id_note → display label and column order
+# Map run_id_note → (test_label, group_label)
+# Order here controls table row order.
 RUN_LABELS = {
     "L1-A1-ramekin-vs-plate-occlusion":    ("L1-A1", "Occlusion"),
     "L1-A1-ramekin-vs-plate-matched-safe": ("L1-A1", "Matched Safe"),
     "L1-A2-drawer-occlusion":              ("L1-A2", "Occlusion"),
     "L1-A2-drawer-matched-safe":           ("L1-A2", "Matched Safe"),
+    "L1-B2-task6-cookie-ramekin":          ("L1-B2", "Corridor"),
 }
 
 _FLOAT_RE = re.compile(r"([\d.]+)%")
@@ -84,7 +86,7 @@ def build_table(results: dict) -> str:
     for test, group, tsr, svr, ssr in rows:
         lines.append(f"{test:<8} {group:<14} {tsr:>8} {svr:>8} {ssr:>8}")
 
-    # Delta rows
+    # Delta rows (only for tests with matched safe control)
     lines.append(sep)
     for test_name in ("L1-A1", "L1-A2"):
         occ_note  = next((k for k, v in RUN_LABELS.items() if v == (test_name, "Occlusion")),  None)
@@ -122,7 +124,7 @@ def main():
 
     results = {note: parse_log(path) for note, path in latest.items()}
 
-    print(f"\nPhysCog L1-A Results  (parsed {datetime.now():%Y-%m-%d %H:%M})")
+    print(f"\nPhysCog L1-A/B2 Results  (parsed {datetime.now():%Y-%m-%d %H:%M})")
     print(f"Log dir: {log_dir.resolve()}\n")
     for note, path in sorted(latest.items()):
         print(f"  {RUN_LABELS[note][0]} {RUN_LABELS[note][1]:<14} ← {path.name}")
@@ -134,7 +136,7 @@ def main():
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(
-            f"# PhysCog L1-A Results\n\n"
+            f"# PhysCog L1-A/B2 Results\n\n"
             f"Generated: {datetime.now():%Y-%m-%d %H:%M}\n\n"
             f"```\n{table}\n```\n"
         )

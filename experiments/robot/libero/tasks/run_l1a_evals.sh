@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run L1-A1 and L1-A2 PhysCog evals (generate initial states + eval).
+# Run L1-A1, L1-A2, L1-B2 PhysCog evals (generate initial states + eval).
 #
 # Usage (from repo root):
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh            # all
@@ -7,6 +7,7 @@
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh eval       # eval only (HDF5 must exist)
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1       # L1-A1 generate + eval
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2       # L1-A2 generate + eval
+#   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1b2       # L1-B2 generate + eval
 #
 # Override any variable via environment:
 #   CHECKPOINT=<path> NUM_TRIALS=10 bash run_l1a_evals.sh l1a1
@@ -31,6 +32,9 @@ L1A1_SAFE_HDF5="${TASKS_DIR}/l1a1_task1_matched_safe_initial_states.hdf5"
 L1A2_OCC_HDF5="${TASKS_DIR}/l1a2_task6_drawer_occlusion_initial_states.hdf5"
 L1A2_SAFE_HDF5="${TASKS_DIR}/l1a2_task6_drawer_matched_safe_initial_states.hdf5"
 
+# L1-B2 paths
+L1B2_HDF5="${TASKS_DIR}/l1b2_task6_initial_states.hdf5"
+
 # ── LIBERO path setup ──────────────────────────────────────────────────────────
 if [[ -z "${LIBERO_ROOT:-}" ]]; then
     if   [[ -d "../LIBERO/libero" ]];  then LIBERO_ROOT="$(cd ../LIBERO && pwd)"
@@ -44,6 +48,29 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 
 # ── Helper ─────────────────────────────────────────────────────────────────────
 log() { echo; echo "══════════════════════════════════════════"; echo "  $*"; echo "══════════════════════════════════════════"; }
+
+gen_l1b2() {
+    log "L1-B2 generate: task6 cookie+ramekin corridor"
+    python "${TASKS_DIR}/generate_l1b2_initial_states.py" \
+        --variant task6 \
+        --output "${L1B2_HDF5}" \
+        --num_states "${NUM_TRIALS}" --seed "${SEED}"
+}
+
+eval_l1b2() {
+    log "L1-B2 eval: task6 corridor carry  (oracle=held_object_corridor)"
+    python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+        --pretrained_checkpoint "${CHECKPOINT}" \
+        --task_suite_name libero_spatial --task_ids 6 \
+        --initial_states_path "${L1B2_HDF5}" \
+        --safety_oracle held_object_corridor \
+        --held_object_body akita_black_bowl_1_main \
+        --corridor_body "cookies_1_main,glazed_rim_porcelain_ramekin_1_main" \
+        --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+        --num_trials_per_task "${NUM_TRIALS}" \
+        --save_video_mode "${SAVE_VIDEO_MODE}" \
+        --run_id_note L1-B2-task6-cookie-ramekin
+}
 
 parse_results() {
     log "Parsing results → ${RESULTS_OUT}"
@@ -140,13 +167,14 @@ case "${MODE}" in
     all)
         gen_l1a1; eval_l1a1
         gen_l1a2; eval_l1a2
+        gen_l1b2; eval_l1b2
         parse_results
         ;;
     generate)
-        gen_l1a1; gen_l1a2
+        gen_l1a1; gen_l1a2; gen_l1b2
         ;;
     eval)
-        eval_l1a1; eval_l1a2
+        eval_l1a1; eval_l1a2; eval_l1b2
         parse_results
         ;;
     l1a1)
@@ -155,6 +183,10 @@ case "${MODE}" in
         ;;
     l1a2)
         gen_l1a2; eval_l1a2
+        parse_results
+        ;;
+    l1b2)
+        gen_l1b2; eval_l1b2
         parse_results
         ;;
     *)
