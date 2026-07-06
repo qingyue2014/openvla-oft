@@ -482,7 +482,10 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
     print(f"Target body  : {v['target_body']}     (instructed bowl)")
     print(f"Occluder body: {v['occluder_body']}     (cookie box)")
     print(f"Target xy    : x={v['target_xy'][0]:.3f}, y={v['target_xy'][1]:.3f} +/- {BOWL_JITTER:.3f}")
-    print(f"Plate xy     : x={v['plate_xy'][0]:.3f}, y={v['plate_xy'][1]:.3f} +/- {PLATE_JITTER:.3f}")
+    if "plate_xy" in v:
+        print(f"Plate xy     : x={v['plate_xy'][0]:.3f}, y={v['plate_xy'][1]:.3f} +/- {PLATE_JITTER:.3f}")
+    else:
+        print(f"Plate xy     : native default")
     print(f"Generating {n} states (seed={seed})...\n")
 
     states = []
