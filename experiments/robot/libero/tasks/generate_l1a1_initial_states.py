@@ -122,17 +122,17 @@ VARIANTS = {
         # a small lateral split. This makes one bowl unambiguously ramekin-side
         # and the other plate-side, while keeping their centers close enough to
         # tempt a wrong grasp.
-        "landmark_offset": 0.055,
-        "lateral_offset": 0.050,
+        "landmark_offset": 0.075,
+        "lateral_offset": 0.060,
     },
 }
 VARIANTS["task8_plate_vs_stove"] = VARIANTS["task8_ramekin_vs_plate"]
 
-MIN_BOWL_LANDMARK_DISTANCE = 0.055
-MAX_BOWL_LANDMARK_DISTANCE = 0.105
-MIN_BOWL_BOWL_DISTANCE = 0.115
-MAX_BOWL_BOWL_DISTANCE = 0.145
-MIN_ROLE_MARGIN = 0.025
+MIN_BOWL_LANDMARK_DISTANCE = 0.080
+MAX_BOWL_LANDMARK_DISTANCE = 0.140
+MIN_BOWL_BOWL_DISTANCE = 0.105
+MAX_BOWL_BOWL_DISTANCE = 0.160
+MIN_ROLE_MARGIN = 0.010
 MIN_SIDE_CLEARANCE = 0.110
 
 
@@ -236,6 +236,7 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
     print(f"Generating {n} states (seed={seed})...\n")
 
     states = []
+    reject_counts = {}
     attempts = 0
     max_attempts = n * 20
     while len(states) < n and attempts < max_attempts:
@@ -262,20 +263,28 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
         target_plate_dist = _xy_distance(target_pos, plate_pos)
         distractor_plate_dist = _xy_distance(distractor_pos, plate_pos)
         if target_distractor_dist < MIN_BOWL_BOWL_DISTANCE:
+            reject_counts["bowl_bowl_too_close"] = reject_counts.get("bowl_bowl_too_close", 0) + 1
             continue
         if target_distractor_dist > MAX_BOWL_BOWL_DISTANCE:
+            reject_counts["bowl_bowl_too_far"] = reject_counts.get("bowl_bowl_too_far", 0) + 1
             continue
         if not (MIN_BOWL_LANDMARK_DISTANCE <= target_ramekin_dist <= MAX_BOWL_LANDMARK_DISTANCE):
+            reject_counts["target_ramekin_distance"] = reject_counts.get("target_ramekin_distance", 0) + 1
             continue
         if not (MIN_BOWL_LANDMARK_DISTANCE <= distractor_plate_dist <= MAX_BOWL_LANDMARK_DISTANCE):
+            reject_counts["distractor_plate_distance"] = reject_counts.get("distractor_plate_distance", 0) + 1
             continue
         if target_ramekin_dist + MIN_ROLE_MARGIN >= distractor_ramekin_dist:
+            reject_counts["target_not_ramekin_side"] = reject_counts.get("target_not_ramekin_side", 0) + 1
             continue
         if distractor_plate_dist + MIN_ROLE_MARGIN >= target_plate_dist:
+            reject_counts["distractor_not_plate_side"] = reject_counts.get("distractor_not_plate_side", 0) + 1
             continue
         if _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
+            reject_counts["target_side_clearance"] = reject_counts.get("target_side_clearance", 0) + 1
             continue
         if _xy_distance(distractor_pos, side_pos) < MIN_SIDE_CLEARANCE:
+            reject_counts["distractor_side_clearance"] = reject_counts.get("distractor_side_clearance", 0) + 1
             continue
 
         states.append(env.sim.get_state().flatten())
@@ -286,7 +295,11 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
 
     env.close()
     if len(states) < n:
-        raise RuntimeError(f"Only generated {len(states)} L1-A1 states after {attempts} attempts.")
+        reject_summary = ", ".join(f"{k}={v}" for k, v in sorted(reject_counts.items()))
+        raise RuntimeError(
+            f"Only generated {len(states)} L1-A1 states after {attempts} attempts."
+            f" Rejections: {reject_summary or 'none'}"
+        )
     return states, task.language
 
 
