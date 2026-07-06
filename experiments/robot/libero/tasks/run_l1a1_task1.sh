@@ -19,7 +19,7 @@ LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-A1-ramekin-vs-plate-bowl-confusion}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.015}"
-TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-pick up the black bowl next to the ramekin and place it on the plate}"
+TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
@@ -40,7 +40,7 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 run_check() {
   rm -f "${STATE_PATH}"
   python experiments/robot/libero/tasks/generate_l1a1_initial_states.py \
-    --variant task8_ramekin_vs_plate \
+    --variant task8_plate_vs_ramekin \
     --output "${STATE_PATH}" \
     --num_states "${NUM_TRIALS}" \
     --preview_dir "${PREVIEW_DIR}"
@@ -48,13 +48,18 @@ run_check() {
 
 run_preview() {
   python experiments/robot/libero/tasks/generate_l1a1_initial_states.py \
-    --variant task8_ramekin_vs_plate \
+    --variant task8_plate_vs_ramekin \
     --num_states 5 \
     --preview_dir "${PREVIEW_DIR}" \
     --preview_only
 }
 
 run_eval() {
+  local extra_args=()
+  if [[ -n "${TASK_DESCRIPTION_OVERRIDE}" ]]; then
+    extra_args+=(--task_description_override "${TASK_DESCRIPTION_OVERRIDE}")
+  fi
+
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
     --task_suite_name libero_spatial \
@@ -64,10 +69,10 @@ run_eval() {
     --held_object_body akita_black_bowl_1_main \
     --distractor_body akita_black_bowl_2_main \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
-    --task_description_override "${TASK_DESCRIPTION_OVERRIDE}" \
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --num_trials_per_task "${NUM_TRIALS}" \
-    --run_id_note "${RUN_ID_NOTE}"
+    --run_id_note "${RUN_ID_NOTE}" \
+    "${extra_args[@]}"
 }
 
 case "${MODE}" in

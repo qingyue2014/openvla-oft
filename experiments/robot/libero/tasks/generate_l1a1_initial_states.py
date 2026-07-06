@@ -1,12 +1,12 @@
 """
-Generate custom initial states for L1-A-1 relational bowl disambiguation.
+Generate custom initial states for L1-A-1 native-prompt bowl disambiguation.
 
 Design principle: reuse a native libero_spatial task and only alter the static
-layout. The target black bowl is placed next to the ramekin, while a visually
-similar protected black bowl is placed next to the plate. The two bowls remain
-close to each other, so the intended failure mode is relational mis-grounding:
-the policy reaches to, touches, or moves the plate-side distractor before
-correctly grasping the ramekin-side target.
+layout. The native target black bowl is placed next to the plate, while a
+visually similar protected black bowl is placed next to the ramekin. The two
+bowls remain close to each other, so the intended failure mode is relational
+mis-grounding under the native prompt: the policy reaches to, touches, or moves
+the ramekin-side distractor before correctly grasping the plate-side target.
 
 Recommended eval:
     python -m experiments.robot.libero.run_physcog_libero_l1_eval \
@@ -17,7 +17,6 @@ Recommended eval:
         --held_object_body akita_black_bowl_1_main \
         --distractor_body akita_black_bowl_2_main \
         --displacement_threshold 0.015 \
-        --task_description_override "pick up the black bowl next to the ramekin and place it on the plate" \
         --num_trials_per_task 50 --run_id_note L1-A1-ramekin-vs-plate-bowl-confusion
 """
 
@@ -110,7 +109,7 @@ def _resolve_get_libero_path(libero):
     return get_libero_path
 
 VARIANTS = {
-    "task8_ramekin_vs_plate": {
+    "task8_plate_vs_ramekin": {
         "task_id": 8,
         "target_body": "akita_black_bowl_1_main",
         "distractor_body": "akita_black_bowl_2_main",
@@ -119,14 +118,15 @@ VARIANTS = {
         "plate_body": "plate_1_main",
         "side_body": "cookies_1_main",
         # Place both bowls between the ramekin and the destination plate, with
-        # a small lateral split. This makes one bowl unambiguously ramekin-side
-        # and the other plate-side, while keeping their centers close enough to
-        # tempt a wrong grasp.
+        # a small lateral split. This keeps the native target plate-side and
+        # the protected distractor ramekin-side, while keeping their centers
+        # close enough to tempt a wrong grasp.
         "landmark_offset": 0.075,
         "lateral_offset": 0.060,
     },
 }
-VARIANTS["task8_plate_vs_stove"] = VARIANTS["task8_ramekin_vs_plate"]
+VARIANTS["task8_ramekin_vs_plate"] = VARIANTS["task8_plate_vs_ramekin"]
+VARIANTS["task8_plate_vs_stove"] = VARIANTS["task8_plate_vs_ramekin"]
 
 MIN_BOWL_LANDMARK_DISTANCE = 0.080
 MAX_BOWL_LANDMARK_DISTANCE = 0.140
@@ -200,12 +200,12 @@ def _apply_l1a1_layout(env, variant):
         direction = direction / norm
     lateral = np.array([-direction[1], direction[0]])
 
-    target_xy = (
+    distractor_xy = (
         ramekin_pos[:2]
         + direction * variant["landmark_offset"]
         - lateral * variant["lateral_offset"]
     )
-    distractor_xy = (
+    target_xy = (
         plate_pos[:2]
         - direction * variant["landmark_offset"]
         + lateral * variant["lateral_offset"]
@@ -229,8 +229,8 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
 
     print(f"\nVariant: {variant_key}")
     print(f"Task {v['task_id']}: {task.language}")
-    print(f"Target body     : {v['target_body']}     (ramekin-side)")
-    print(f"Distractor body : {v['distractor_body']}     (plate-side)")
+    print(f"Target body     : {v['target_body']}     (plate-side, native prompt target)")
+    print(f"Distractor body : {v['distractor_body']}     (ramekin-side protected distractor)")
     print(f"Landmark body   : {v['landmark_body']}   (native ramekin pose)")
     print(f"Plate body      : {v['plate_body']}   (native destination pose)")
     print(f"Generating {n} states (seed={seed})...\n")
@@ -268,17 +268,17 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
         if target_distractor_dist > MAX_BOWL_BOWL_DISTANCE:
             reject_counts["bowl_bowl_too_far"] = reject_counts.get("bowl_bowl_too_far", 0) + 1
             continue
-        if not (MIN_BOWL_LANDMARK_DISTANCE <= target_ramekin_dist <= MAX_BOWL_LANDMARK_DISTANCE):
-            reject_counts["target_ramekin_distance"] = reject_counts.get("target_ramekin_distance", 0) + 1
+        if not (MIN_BOWL_LANDMARK_DISTANCE <= target_plate_dist <= MAX_BOWL_LANDMARK_DISTANCE):
+            reject_counts["target_plate_distance"] = reject_counts.get("target_plate_distance", 0) + 1
             continue
-        if not (MIN_BOWL_LANDMARK_DISTANCE <= distractor_plate_dist <= MAX_BOWL_LANDMARK_DISTANCE):
-            reject_counts["distractor_plate_distance"] = reject_counts.get("distractor_plate_distance", 0) + 1
+        if not (MIN_BOWL_LANDMARK_DISTANCE <= distractor_ramekin_dist <= MAX_BOWL_LANDMARK_DISTANCE):
+            reject_counts["distractor_ramekin_distance"] = reject_counts.get("distractor_ramekin_distance", 0) + 1
             continue
-        if target_ramekin_dist + MIN_ROLE_MARGIN >= distractor_ramekin_dist:
-            reject_counts["target_not_ramekin_side"] = reject_counts.get("target_not_ramekin_side", 0) + 1
+        if distractor_ramekin_dist + MIN_ROLE_MARGIN >= target_ramekin_dist:
+            reject_counts["distractor_not_ramekin_side"] = reject_counts.get("distractor_not_ramekin_side", 0) + 1
             continue
-        if distractor_plate_dist + MIN_ROLE_MARGIN >= target_plate_dist:
-            reject_counts["distractor_not_plate_side"] = reject_counts.get("distractor_not_plate_side", 0) + 1
+        if target_plate_dist + MIN_ROLE_MARGIN >= distractor_plate_dist:
+            reject_counts["target_not_plate_side"] = reject_counts.get("target_not_plate_side", 0) + 1
             continue
         if _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
             reject_counts["target_side_clearance"] = reject_counts.get("target_side_clearance", 0) + 1
