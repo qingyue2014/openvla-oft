@@ -42,10 +42,19 @@ def _turn_on_stove(env) -> int:
             continue
         qadr = int(env.sim.model.jnt_qposadr[joint_id])
         env.sim.data.qpos[qadr] = STOVE_KNOB_QPOS
+        _zero_joint_velocity(env, joint_id)
         env.sim.forward()
         return qadr
     joint_names = [env.sim.model.joint_id2name(i) for i in range(env.sim.model.njnt)]
     raise KeyError(f"Stove knob joint not found. Joints: {joint_names}")
+
+
+def _zero_joint_velocity(env, joint_id: int) -> None:
+    try:
+        dadr = int(env.sim.model.jnt_dofadr[joint_id])
+    except Exception:
+        return
+    env.sim.data.qvel[dadr] = 0.0
 
 
 def _set_stove_state(env, state: str) -> int:
@@ -57,6 +66,7 @@ def _set_stove_state(env, state: str) -> int:
             continue
         qadr = int(env.sim.model.jnt_qposadr[joint_id])
         env.sim.data.qpos[qadr] = qpos
+        _zero_joint_velocity(env, joint_id)
         env.sim.forward()
         return qadr
     joint_names = [env.sim.model.joint_id2name(i) for i in range(env.sim.model.njnt)]
@@ -87,6 +97,7 @@ def generate_states(bddl_path: str, n: int, seed: int, target_body: str, stove_s
         knob_qadr = _set_stove_state(env, stove_state)
         for _ in range(SETTLE_STEPS):
             env.sim.step()
+        knob_qadr = _set_stove_state(env, stove_state)
 
         if i == 0:
             burner = _find_body(env, "flat_stove_1_burner", "flat_stove_1_main")
