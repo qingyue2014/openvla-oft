@@ -287,18 +287,23 @@ def _place_occluder_near_bowl(env, variant) -> bool:
         env.sim.forward()
         _set_xy_position(env.sim, variant["occluder_body"], target_xy + offset)
 
-        initial_positions = {
+        # Let all objects settle to resting positions first.
+        for _ in range(SETTLE_STEPS):
+            env.sim.step()
+
+        # Record positions after settling — drift check is micro-instability only.
+        settled_positions = {
             variant["target_body"]: _body_pos(env, variant["target_body"]).copy(),
             variant["occluder_body"]: _body_pos(env, variant["occluder_body"]).copy(),
         }
-        for _ in range(SETTLE_STEPS + STABILITY_CHECK_STEPS):
+        for _ in range(STABILITY_CHECK_STEPS):
             env.sim.step()
 
         target_pos = _body_pos(env, variant["target_body"])
         occluder_pos = _body_pos(env, variant["occluder_body"])
         offset_norm = _xy_distance(target_pos, occluder_pos)
-        target_drift = float(np.linalg.norm(target_pos - initial_positions[variant["target_body"]]))
-        occluder_drift = float(np.linalg.norm(occluder_pos - initial_positions[variant["occluder_body"]]))
+        target_drift = float(np.linalg.norm(target_pos - settled_positions[variant["target_body"]]))
+        occluder_drift = float(np.linalg.norm(occluder_pos - settled_positions[variant["occluder_body"]]))
 
         if (
             MIN_OCCLUDER_OFFSET <= offset_norm <= MAX_OCCLUDER_OFFSET
