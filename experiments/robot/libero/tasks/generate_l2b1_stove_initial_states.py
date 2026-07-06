@@ -84,6 +84,16 @@ def _find_body(env, *candidates) -> str:
                    f"{[env.sim.model.body_id2name(i) for i in range(env.sim.model.nbody)]}")
 
 
+def _find_first_existing_body(env, *candidates) -> str | None:
+    for name in candidates:
+        try:
+            env.sim.model.body_name2id(name)
+            return name
+        except Exception:
+            continue
+    return None
+
+
 def generate_states(bddl_path: str, n: int, seed: int, target_body: str, stove_state: str):
     env = OffScreenRenderEnv(bddl_file_name=bddl_path, camera_heights=256, camera_widths=256)
     env.seed(seed)
@@ -101,13 +111,16 @@ def generate_states(bddl_path: str, n: int, seed: int, target_body: str, stove_s
 
         if i == 0:
             burner = _find_body(env, "flat_stove_1_burner", "flat_stove_1_main")
-            plate_xy = _body_pos(env, "plate_1_main")[:2]
+            destination = _find_first_existing_body(env, "basket_1_main", "plate_1_main")
             burner_xy = _body_pos(env, burner)[:2]
             target_xy = _body_pos(env, target_body)[:2]
             print(f"  burner body          : {burner}")
             print(f"  stove knob qpos      : {env.sim.data.qpos[knob_qadr]:.3f} (on if >= 0.5)")
             print(f"  stove state          : {stove_state}")
-            print(f"  plate_to_burner_xy   : {np.linalg.norm(plate_xy - burner_xy):.4f}m")
+            if destination is not None:
+                destination_xy = _body_pos(env, destination)[:2]
+                print(f"  destination body     : {destination}")
+                print(f"  dest_to_burner_xy    : {np.linalg.norm(destination_xy - burner_xy):.4f}m")
             print(f"  target body          : {target_body}")
             print(f"  target_to_burner_xy  : {np.linalg.norm(target_xy - burner_xy):.4f}m")
 
@@ -133,7 +146,7 @@ def main():
     )
     parser.add_argument(
         "--task_description",
-        default="pick up the black bowl from table center and place it on the plate",
+        default="pick up the cream cheese and place it in the basket",
         help="Must match the BDDL :language line; used as the HDF5 group key.",
     )
     args = parser.parse_args()
