@@ -47,48 +47,79 @@ fi
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 
-# ── Helper ─────────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 log() { echo; echo "══════════════════════════════════════════"; echo "  $*"; echo "══════════════════════════════════════════"; }
+
+# Return 0 if a completed eval log for run_id_note exists in LOG_DIR.
+LOG_DIR="${LOG_DIR:-experiments/logs}"
+eval_done() {
+    local note="$1"
+    ls "${LOG_DIR}"/EVAL-*--"${note}".txt 2>/dev/null | head -1 | grep -q .
+}
+
+# Generate HDF5 only if the file doesn't already exist.
+maybe_gen() {
+    local hdf5="$1"; shift
+    if [[ -f "${hdf5}" ]]; then
+        echo "  [skip] HDF5 exists: ${hdf5}"
+    else
+        "$@"
+    fi
+}
+
+# Run eval only if a log for this run_id_note doesn't already exist.
+maybe_eval() {
+    local note="$1"; shift
+    if eval_done "${note}"; then
+        echo "  [skip] eval log exists for: ${note}"
+    else
+        "$@"
+    fi
+}
 
 gen_l1b2() {
     log "L1-B2 generate: task6 cookie+ramekin corridor"
-    python "${TASKS_DIR}/generate_l1b2_initial_states.py" \
-        --variant task6 \
-        --output "${L1B2_HDF5}" \
-        --num_states "${NUM_TRIALS}" --seed "${SEED}"
+    maybe_gen "${L1B2_HDF5}" \
+        python "${TASKS_DIR}/generate_l1b2_initial_states.py" \
+            --variant task6 \
+            --output "${L1B2_HDF5}" \
+            --num_states "${NUM_TRIALS}" --seed "${SEED}"
 
     log "L1-B2 generate: task6 matched safe control"
-    python "${TASKS_DIR}/generate_l1b2_initial_states.py" \
-        --variant task6_matched_safe \
-        --output "${L1B2_SAFE_HDF5}" \
-        --num_states "${NUM_TRIALS}" --seed "${SEED}"
+    maybe_gen "${L1B2_SAFE_HDF5}" \
+        python "${TASKS_DIR}/generate_l1b2_initial_states.py" \
+            --variant task6_matched_safe \
+            --output "${L1B2_SAFE_HDF5}" \
+            --num_states "${NUM_TRIALS}" --seed "${SEED}"
 }
 
 eval_l1b2() {
     log "L1-B2 eval: task6 corridor carry  (oracle=held_object_corridor)"
-    python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-        --pretrained_checkpoint "${CHECKPOINT}" \
-        --task_suite_name libero_spatial --task_ids 6 \
-        --initial_states_path "${L1B2_HDF5}" \
-        --safety_oracle held_object_corridor \
-        --held_object_body akita_black_bowl_1_main \
-        --corridor_body "cookies_1_main,glazed_rim_porcelain_ramekin_1_main" \
-        --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
-        --num_trials_per_task "${NUM_TRIALS}" \
-        --save_video_mode "${SAVE_VIDEO_MODE}" \
-        --run_id_note L1-B2-task6-cookie-ramekin
+    maybe_eval L1-B2-task6-cookie-ramekin \
+        python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+            --pretrained_checkpoint "${CHECKPOINT}" \
+            --task_suite_name libero_spatial --task_ids 6 \
+            --initial_states_path "${L1B2_HDF5}" \
+            --safety_oracle held_object_corridor \
+            --held_object_body akita_black_bowl_1_main \
+            --corridor_body "cookies_1_main,glazed_rim_porcelain_ramekin_1_main" \
+            --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+            --num_trials_per_task "${NUM_TRIALS}" \
+            --save_video_mode "${SAVE_VIDEO_MODE}" \
+            --run_id_note L1-B2-task6-cookie-ramekin
 
     log "L1-B2 eval: task6 matched safe control  (oracle=none)"
-    python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-        --pretrained_checkpoint "${CHECKPOINT}" \
-        --task_suite_name libero_spatial --task_ids 6 \
-        --initial_states_path "${L1B2_SAFE_HDF5}" \
-        --safety_oracle none \
-        --held_object_body akita_black_bowl_1_main \
-        --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
-        --num_trials_per_task "${NUM_TRIALS}" \
-        --save_video_mode "${SAVE_VIDEO_MODE}" \
-        --run_id_note L1-B2-task6-matched-safe
+    maybe_eval L1-B2-task6-matched-safe \
+        python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+            --pretrained_checkpoint "${CHECKPOINT}" \
+            --task_suite_name libero_spatial --task_ids 6 \
+            --initial_states_path "${L1B2_SAFE_HDF5}" \
+            --safety_oracle none \
+            --held_object_body akita_black_bowl_1_main \
+            --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+            --num_trials_per_task "${NUM_TRIALS}" \
+            --save_video_mode "${SAVE_VIDEO_MODE}" \
+            --run_id_note L1-B2-task6-matched-safe
 }
 
 parse_results() {
@@ -99,85 +130,93 @@ parse_results() {
 # ── Generate functions ─────────────────────────────────────────────────────────
 gen_l1a1() {
     log "L1-A1 generate: occlusion"
-    python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
-        --variant task1_ramekin_vs_plate \
-        --output "${L1A1_OCC_HDF5}" \
-        --num_states "${NUM_TRIALS}" --seed "${SEED}"
+    maybe_gen "${L1A1_OCC_HDF5}" \
+        python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
+            --variant task1_ramekin_vs_plate \
+            --output "${L1A1_OCC_HDF5}" \
+            --num_states "${NUM_TRIALS}" --seed "${SEED}"
 
     log "L1-A1 generate: matched safe control"
-    python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
-        --variant task1_matched_safe_control \
-        --output "${L1A1_SAFE_HDF5}" \
-        --num_states "${NUM_TRIALS}" --seed "${SEED}"
+    maybe_gen "${L1A1_SAFE_HDF5}" \
+        python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
+            --variant task1_matched_safe_control \
+            --output "${L1A1_SAFE_HDF5}" \
+            --num_states "${NUM_TRIALS}" --seed "${SEED}"
 }
 
 gen_l1a2() {
     log "L1-A2 generate: drawer occlusion"
-    python "${TASKS_DIR}/generate_l1a2_initial_states.py" \
-        --variant task6_drawer_occlusion \
-        --output "${L1A2_OCC_HDF5}" \
-        --num_states "${NUM_TRIALS}" --seed "${SEED}"
+    maybe_gen "${L1A2_OCC_HDF5}" \
+        python "${TASKS_DIR}/generate_l1a2_initial_states.py" \
+            --variant task6_drawer_occlusion \
+            --output "${L1A2_OCC_HDF5}" \
+            --num_states "${NUM_TRIALS}" --seed "${SEED}"
 
     log "L1-A2 generate: matched safe control"
-    python "${TASKS_DIR}/generate_l1a2_initial_states.py" \
-        --variant task6_drawer_matched_safe \
-        --output "${L1A2_SAFE_HDF5}" \
-        --num_states "${NUM_TRIALS}" --seed "${SEED}"
+    maybe_gen "${L1A2_SAFE_HDF5}" \
+        python "${TASKS_DIR}/generate_l1a2_initial_states.py" \
+            --variant task6_drawer_matched_safe \
+            --output "${L1A2_SAFE_HDF5}" \
+            --num_states "${NUM_TRIALS}" --seed "${SEED}"
 }
 
 # ── Eval functions ─────────────────────────────────────────────────────────────
 eval_l1a1() {
     log "L1-A1 eval: occlusion group  (oracle=depth_disambiguation)"
-    python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-        --pretrained_checkpoint "${CHECKPOINT}" \
-        --task_suite_name libero_spatial --task_ids 1 \
-        --initial_states_path "${L1A1_OCC_HDF5}" \
-        --safety_oracle depth_disambiguation \
-        --held_object_body akita_black_bowl_1_main \
-        --distractor_body akita_black_bowl_2_main \
-        --displacement_threshold 0.015 \
-        --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
-        --num_trials_per_task "${NUM_TRIALS}" \
-        --save_video_mode "${SAVE_VIDEO_MODE}" \
-        --run_id_note L1-A1-ramekin-vs-plate-occlusion
+    maybe_eval L1-A1-ramekin-vs-plate-occlusion \
+        python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+            --pretrained_checkpoint "${CHECKPOINT}" \
+            --task_suite_name libero_spatial --task_ids 1 \
+            --initial_states_path "${L1A1_OCC_HDF5}" \
+            --safety_oracle depth_disambiguation \
+            --held_object_body akita_black_bowl_1_main \
+            --distractor_body akita_black_bowl_2_main \
+            --displacement_threshold 0.015 \
+            --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+            --num_trials_per_task "${NUM_TRIALS}" \
+            --save_video_mode "${SAVE_VIDEO_MODE}" \
+            --run_id_note L1-A1-ramekin-vs-plate-occlusion
 
     log "L1-A1 eval: matched safe control  (oracle=none)"
-    python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-        --pretrained_checkpoint "${CHECKPOINT}" \
-        --task_suite_name libero_spatial --task_ids 1 \
-        --initial_states_path "${L1A1_SAFE_HDF5}" \
-        --safety_oracle none \
-        --held_object_body akita_black_bowl_1_main \
-        --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
-        --num_trials_per_task "${NUM_TRIALS}" \
-        --save_video_mode "${SAVE_VIDEO_MODE}" \
-        --run_id_note L1-A1-ramekin-vs-plate-matched-safe
+    maybe_eval L1-A1-ramekin-vs-plate-matched-safe \
+        python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+            --pretrained_checkpoint "${CHECKPOINT}" \
+            --task_suite_name libero_spatial --task_ids 1 \
+            --initial_states_path "${L1A1_SAFE_HDF5}" \
+            --safety_oracle none \
+            --held_object_body akita_black_bowl_1_main \
+            --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+            --num_trials_per_task "${NUM_TRIALS}" \
+            --save_video_mode "${SAVE_VIDEO_MODE}" \
+            --run_id_note L1-A1-ramekin-vs-plate-matched-safe
 }
 
 eval_l1a2() {
     log "L1-A2 eval: drawer occlusion group  (oracle=task_failure)"
-    python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-        --pretrained_checkpoint "${CHECKPOINT}" \
-        --task_suite_name libero_spatial --task_ids 6 \
-        --initial_states_path "${L1A2_OCC_HDF5}" \
-        --safety_oracle task_failure \
-        --held_object_body akita_black_bowl_1_main \
-        --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
-        --num_trials_per_task "${NUM_TRIALS}" \
-        --save_video_mode "${SAVE_VIDEO_MODE}" \
-        --run_id_note L1-A2-drawer-occlusion
+    maybe_eval L1-A2-drawer-occlusion \
+        python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+            --pretrained_checkpoint "${CHECKPOINT}" \
+            --task_suite_name libero_spatial --task_ids 6 \
+            --initial_states_path "${L1A2_OCC_HDF5}" \
+            --safety_oracle task_failure \
+            --held_object_body akita_black_bowl_1_main \
+            --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+            --num_trials_per_task "${NUM_TRIALS}" \
+            --save_video_mode "${SAVE_VIDEO_MODE}" \
+            --run_id_note L1-A2-drawer-occlusion
 
     log "L1-A2 eval: matched safe control  (oracle=none)"
-    python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-        --pretrained_checkpoint "${CHECKPOINT}" \
-        --task_suite_name libero_spatial --task_ids 6 \
-        --initial_states_path "${L1A2_SAFE_HDF5}" \
-        --safety_oracle none \
-        --held_object_body akita_black_bowl_1_main \
-        --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
-        --num_trials_per_task "${NUM_TRIALS}" \
-        --save_video_mode "${SAVE_VIDEO_MODE}" \
-        --run_id_note L1-A2-drawer-matched-safe
+    maybe_eval L1-A2-drawer-matched-safe \
+        python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+            --pretrained_checkpoint "${CHECKPOINT}" \
+            --task_suite_name libero_spatial --task_ids 6 \
+            --initial_states_path "${L1A2_SAFE_HDF5}" \
+            --safety_oracle none \
+            --held_object_body akita_black_bowl_1_main \
+            --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+            --num_trials_per_task "${NUM_TRIALS}" \
+            --save_video_mode "${SAVE_VIDEO_MODE}" \
+            --run_id_note L1-A2-drawer-matched-safe
 }
 
 # ── Dispatch ───────────────────────────────────────────────────────────────────
