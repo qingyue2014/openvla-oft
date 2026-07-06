@@ -34,6 +34,7 @@ L1A2_SAFE_HDF5="${TASKS_DIR}/l1a2_task6_drawer_matched_safe_initial_states.hdf5"
 
 # L1-B2 paths
 L1B2_HDF5="${TASKS_DIR}/l1b2_task6_initial_states.hdf5"
+L1B2_SAFE_HDF5="${TASKS_DIR}/l1b2_task6_matched_safe_initial_states.hdf5"
 
 # ── LIBERO path setup ──────────────────────────────────────────────────────────
 if [[ -z "${LIBERO_ROOT:-}" ]]; then
@@ -55,6 +56,12 @@ gen_l1b2() {
         --variant task6 \
         --output "${L1B2_HDF5}" \
         --num_states "${NUM_TRIALS}" --seed "${SEED}"
+
+    log "L1-B2 generate: task6 matched safe control"
+    python "${TASKS_DIR}/generate_l1b2_initial_states.py" \
+        --variant task6_matched_safe \
+        --output "${L1B2_SAFE_HDF5}" \
+        --num_states "${NUM_TRIALS}" --seed "${SEED}"
 }
 
 eval_l1b2() {
@@ -70,6 +77,18 @@ eval_l1b2() {
         --num_trials_per_task "${NUM_TRIALS}" \
         --save_video_mode "${SAVE_VIDEO_MODE}" \
         --run_id_note L1-B2-task6-cookie-ramekin
+
+    log "L1-B2 eval: task6 matched safe control  (oracle=none)"
+    python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+        --pretrained_checkpoint "${CHECKPOINT}" \
+        --task_suite_name libero_spatial --task_ids 6 \
+        --initial_states_path "${L1B2_SAFE_HDF5}" \
+        --safety_oracle none \
+        --held_object_body akita_black_bowl_1_main \
+        --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+        --num_trials_per_task "${NUM_TRIALS}" \
+        --save_video_mode "${SAVE_VIDEO_MODE}" \
+        --run_id_note L1-B2-task6-matched-safe
 }
 
 parse_results() {

@@ -20,6 +20,7 @@ RUN_LABELS = {
     "L1-A2-drawer-occlusion":              ("L1-A2", "Occlusion"),
     "L1-A2-drawer-matched-safe":           ("L1-A2", "Matched Safe"),
     "L1-B2-task6-cookie-ramekin":          ("L1-B2", "Corridor"),
+    "L1-B2-task6-matched-safe":            ("L1-B2", "Matched Safe"),
 }
 
 _FLOAT_RE = re.compile(r"([\d.]+)%")
@@ -88,8 +89,8 @@ def build_table(results: dict) -> str:
 
     # Delta rows (only for tests with matched safe control)
     lines.append(sep)
-    for test_name in ("L1-A1", "L1-A2"):
-        occ_note  = next((k for k, v in RUN_LABELS.items() if v == (test_name, "Occlusion")),  None)
+    for test_name in ("L1-A1", "L1-A2", "L1-B2"):
+        occ_note  = next((k for k, v in RUN_LABELS.items() if v == (test_name, "Occlusion") or v == (test_name, "Corridor")), None)
         safe_note = next((k for k, v in RUN_LABELS.items() if v == (test_name, "Matched Safe")), None)
         if occ_note in results and safe_note in results:
             def _pct(s):

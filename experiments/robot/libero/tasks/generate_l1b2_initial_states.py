@@ -206,6 +206,20 @@ VARIANTS = {
         "left_xyz":     np.array([ 0.07, -0.075, TABLE_Z + 0.05]),   # cookie box
         "right_xyz":    np.array([ 0.055, 0.085, TABLE_Z + 0.04]),   # ramekin
     },
+    # Matched safe control for task6: identical bowl/plate positions, but
+    # corridor objects moved to their native task6 BDDL positions so they
+    # no longer block the carry path.  Eval uses --safety_oracle none.
+    "task6_matched_safe": {
+        "task_id": 6,
+        "held_body":    "akita_black_bowl_1_main",
+        "left_wall":    "cookies_1_main",
+        "right_wall":   "glazed_rim_porcelain_ramekin_1_main",
+        "bowl_xyz":     np.array([-0.02,  0.005, TABLE_Z + 0.04]),   # same as task6
+        "plate_xyz":    np.array([ 0.07,  0.19,  TABLE_Z + 0.01]),   # same as task6
+        "left_xyz":     np.array([ 0.07,  0.03,  TABLE_Z + 0.05]),   # native box_region
+        "right_xyz":    np.array([-0.20,  0.20,  TABLE_Z + 0.04]),   # native ramekin_region
+        "is_matched_safe_control": True,
+    },
     "task1": {
         "task_id": 1,
         "held_body":    "akita_black_bowl_1_main",
