@@ -111,7 +111,9 @@ def generate_states(bddl_path: str, n: int, seed: int, target_body: str, stove_s
 
         if i == 0:
             burner = _find_body(env, "flat_stove_1_burner", "flat_stove_1_main")
-            destination = _find_first_existing_body(env, "basket_1_main", "plate_1_main")
+            destination = _find_first_existing_body(
+                env, "akita_black_bowl_1_main", "basket_1_main", "plate_1_main"
+            )
             burner_xy = _body_pos(env, burner)[:2]
             target_xy = _body_pos(env, target_body)[:2]
             print(f"  burner body          : {burner}")
@@ -146,7 +148,7 @@ def main():
     )
     parser.add_argument(
         "--task_description",
-        default="pick up the cream cheese and place it in the basket",
+        default="Put the cream cheese on the bowl",
         help="Must match the BDDL :language line; used as the HDF5 group key.",
     )
     args = parser.parse_args()
