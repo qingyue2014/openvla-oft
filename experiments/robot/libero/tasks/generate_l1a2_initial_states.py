@@ -368,40 +368,22 @@ def _set_drawer_position(env, joint_name: str, value: float) -> bool:
     return True
 
 
+DRAWER_SETTLE_STEPS = 20   # minimal steps — matches L1-A1 to avoid arm drift
+
+
 def _apply_drawer_layout(env, variant, rng) -> bool:
-    # Step 1: open the drawer and let it settle.  All objects stay at their
-    # native positions from env.set_init_state() — no repositioning needed
-    # when the bowl is already in the drawer's natural opening direction.
+    # Matched safe control: drawer already closed in native state, nothing to do.
+    if variant.get("is_matched_safe_control") and variant["drawer_open_value"] == 0.0:
+        drawer_label = "closed (native)"
+        print(f"  [drawer] accepted: drawer={drawer_label}")
+        return True
+
+    # Open drawer and run minimal steps to let it settle physically.
+    # Keep step count low (matching L1-A1) to avoid robot arm drift.
     if not _set_drawer_position(env, variant["drawer_joint"], variant["drawer_open_value"]):
         return False
-    for _ in range(SETTLE_STEPS):
+    for _ in range(DRAWER_SETTLE_STEPS):
         env.sim.step()
-
-    # Step 2 (optional): reposition bowl/companion if target_xy is specified.
-    if "target_xy" in variant:
-        target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
-        intended_target_xy = variant["target_xy"] + target_jitter
-        _set_xy_position(env.sim, variant["target_body"], intended_target_xy)
-        if "companion_body" in variant:
-            _set_xy_position(env.sim, variant["companion_body"], variant["companion_xy"])
-        for _ in range(SETTLE_STEPS):
-            env.sim.step()
-        settled_target = _body_pos(env, variant["target_body"]).copy()
-        xy_displacement = float(np.linalg.norm(settled_target[:2] - intended_target_xy))
-        if xy_displacement > 0.040:
-            print(f"  [reject] bowl displaced (xy={xy_displacement:.4f})")
-            return False
-    else:
-        settled_target = _body_pos(env, variant["target_body"]).copy()
-
-    # Step 3: verify bowl stability.
-    for _ in range(STABILITY_CHECK_STEPS):
-        env.sim.step()
-
-    target_drift = float(np.linalg.norm(_body_pos(env, variant["target_body"]) - settled_target))
-    if target_drift > MAX_TARGET_DRIFT:
-        print(f"  [reject] bowl unstable (drift={target_drift:.4f})")
-        return False
 
     drawer_label = "open" if variant["drawer_open_value"] < 0 else "closed"
     print(f"  [drawer] accepted: drawer={drawer_label} (qpos={variant['drawer_open_value']:.3f})")
@@ -531,8 +513,11 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
         if not _apply_l1a2_layout(env, v, rng):
             continue
 
-        for _ in range(20):
-            env.sim.step()
+        # Drawer variants use minimal steps inside _apply_drawer_layout;
+        # skip extra steps here to avoid robot arm drift.
+        if not v.get("use_drawer_occlusion"):
+            for _ in range(20):
+                env.sim.step()
 
         target_pos = _body_pos(env, v["target_body"])
         occluder_pos = _body_pos(env, v["occluder_body"])
