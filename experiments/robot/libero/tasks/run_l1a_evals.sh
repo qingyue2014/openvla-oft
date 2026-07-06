@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run L1-A1, L1-A2, L1-B2 PhysCog evals (generate initial states + eval).
+# Run L1-A1, L1-A2, L1-B1 PhysCog evals (generate initial states + eval).
 #
 # Usage (from repo root):
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh            # all
@@ -7,7 +7,7 @@
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh eval       # eval only (HDF5 must exist)
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1       # L1-A1 generate + eval
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2       # L1-A2 generate + eval
-#   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1b2       # L1-B2 generate + eval
+#   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1b1       # L1-B1 eval (uses default states)
 #
 # Override any variable via environment:
 #   CHECKPOINT=<path> NUM_TRIALS=10 bash run_l1a_evals.sh l1a1
@@ -32,9 +32,7 @@ L1A1_SAFE_HDF5="${TASKS_DIR}/l1a1_task1_matched_safe_initial_states.hdf5"
 L1A2_OCC_HDF5="${TASKS_DIR}/l1a2_task6_drawer_occlusion_initial_states.hdf5"
 L1A2_SAFE_HDF5="${TASKS_DIR}/l1a2_task6_drawer_matched_safe_initial_states.hdf5"
 
-# L1-B2 paths
-L1B2_HDF5="${TASKS_DIR}/l1b2_task6_initial_states.hdf5"
-L1B2_SAFE_HDF5="${TASKS_DIR}/l1b2_task6_matched_safe_initial_states.hdf5"
+# L1-B1 uses native LIBERO default initial states — no HDF5 generation needed.
 
 # ── LIBERO path setup ──────────────────────────────────────────────────────────
 if [[ -z "${LIBERO_ROOT:-}" ]]; then
@@ -77,49 +75,31 @@ maybe_eval() {
     fi
 }
 
-gen_l1b2() {
-    log "L1-B2 generate: task6 cookie+ramekin corridor"
-    maybe_gen "${L1B2_HDF5}" \
-        python "${TASKS_DIR}/generate_l1b2_initial_states.py" \
-            --variant task6 \
-            --output "${L1B2_HDF5}" \
-            --num_states "${NUM_TRIALS}" --seed "${SEED}"
-
-    log "L1-B2 generate: task6 matched safe control"
-    maybe_gen "${L1B2_SAFE_HDF5}" \
-        python "${TASKS_DIR}/generate_l1b2_initial_states.py" \
-            --variant task6_matched_safe \
-            --output "${L1B2_SAFE_HDF5}" \
-            --num_states "${NUM_TRIALS}" --seed "${SEED}"
-}
-
-eval_l1b2() {
-    log "L1-B2 eval: task6 corridor carry  (oracle=held_object_corridor)"
-    maybe_eval L1-B2-task6-cookie-ramekin \
+eval_l1b1() {
+    log "L1-B1 eval: task6 cookie contact  (oracle=contact, default states)"
+    maybe_eval L1-B1-task6-cookies \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
             --task_suite_name libero_spatial --task_ids 6 \
-            --initial_states_path "${L1B2_HDF5}" \
-            --safety_oracle held_object_corridor \
+            --safety_oracle contact \
+            --distractor_body cookies_1_main \
             --held_object_body akita_black_bowl_1_main \
-            --corridor_body "cookies_1_main,glazed_rim_porcelain_ramekin_1_main" \
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
-            --run_id_note L1-B2-task6-cookie-ramekin
+            --run_id_note L1-B1-task6-cookies
 
-    log "L1-B2 eval: task6 matched safe control  (oracle=none)"
-    maybe_eval L1-B2-task6-matched-safe \
+    log "L1-B1 eval: task6 matched safe control  (oracle=none, default states)"
+    maybe_eval L1-B1-task6-matched-safe \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
             --task_suite_name libero_spatial --task_ids 6 \
-            --initial_states_path "${L1B2_SAFE_HDF5}" \
             --safety_oracle none \
             --held_object_body akita_black_bowl_1_main \
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
-            --run_id_note L1-B2-task6-matched-safe
+            --run_id_note L1-B1-task6-matched-safe
 }
 
 parse_results() {
@@ -225,14 +205,14 @@ case "${MODE}" in
     all)
         gen_l1a1; eval_l1a1
         gen_l1a2; eval_l1a2
-        gen_l1b2; eval_l1b2
+        eval_l1b1
         parse_results
         ;;
     generate)
-        gen_l1a1; gen_l1a2; gen_l1b2
+        gen_l1a1; gen_l1a2
         ;;
     eval)
-        eval_l1a1; eval_l1a2; eval_l1b2
+        eval_l1a1; eval_l1a2; eval_l1b1
         parse_results
         ;;
     l1a1)
@@ -243,8 +223,8 @@ case "${MODE}" in
         gen_l1a2; eval_l1a2
         parse_results
         ;;
-    l1b2)
-        gen_l1b2; eval_l1b2
+    l1b1)
+        eval_l1b1
         parse_results
         ;;
     *)
