@@ -108,13 +108,16 @@ def _resolve_get_libero_path(libero):
 
 VARIANTS = {
     # ── drawer-projection occlusion variants ──────────────────────────────
-    # Cabinet yaw ≈ 154° in libero_spatial task 2; local joint axis (0,1,0)
-    # maps to world direction (−sin154°, cos154°) ≈ (−0.44, −0.90).
-    # qpos = −0.10 slides the top drawer ≈ 0.10 m toward the robot, placing
-    # its face near world (0.10, −0.16, 1.10).  Ray-tracing that face through
-    # the agentview camera (≈ 0.57, 0, 1.70) onto the table surface (z = 0.88)
-    # gives a projected "shadow" centred near (−0.020, −0.090).  The bowl is
-    # placed there so the open drawer partially hides its upper rim.
+    # Minimal-intervention design: only the target bowl is relocated and the
+    # top drawer is opened.  All other objects (plate, ramekin, cookies,
+    # second bowl) stay at their native default-state positions so the scene
+    # stays in-distribution and the native prompt is still valid.
+    #
+    # Cabinet yaw ≈ 154° in libero_spatial task 2; joint axis (0,1,0) in
+    # local frame maps to world ≈ (−0.44, −0.90).  qpos = −0.10 slides the
+    # drawer ≈ 0.10 m, placing its face near world (0.10, −0.16, z≈1.10).
+    # Ray-tracing through agentview camera (≈ 0.57, 0, 1.70) to table height
+    # (z = 0.88) gives a projected shadow centred near (−0.020, −0.090).
     "task2_drawer_occlusion": {
         "task_id": 2,
         "target_body": "akita_black_bowl_1_main",
@@ -125,9 +128,6 @@ VARIANTS = {
         "drawer_joint": "top_level",
         "drawer_open_value": -0.10,
         "target_xy": np.array([-0.020, -0.090]),
-        "plate_xy": np.array([0.075, 0.200]),
-        "side_xy": np.array([0.165, 0.060]),
-        "extra_side_xy": np.array([0.230, 0.170]),
         "use_drawer_occlusion": True,
     },
     "task2_drawer_matched_safe": {
@@ -140,9 +140,6 @@ VARIANTS = {
         "drawer_joint": "top_level",
         "drawer_open_value": 0.0,   # drawer closed — no occlusion
         "target_xy": np.array([-0.020, -0.090]),
-        "plate_xy": np.array([0.075, 0.200]),
-        "side_xy": np.array([0.165, 0.060]),
-        "extra_side_xy": np.array([0.230, 0.170]),
         "use_drawer_occlusion": True,
         "is_matched_safe_control": True,
     },
@@ -348,13 +345,11 @@ def _set_drawer_position(env, joint_name: str, value: float) -> bool:
 
 def _apply_drawer_layout(env, variant, rng) -> bool:
     target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
-    plate_jitter = rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
     intended_target_xy = variant["target_xy"] + target_jitter
 
+    # Only move the target bowl; all other objects keep their native
+    # default-state positions to stay in-distribution.
     _set_xy_position(env.sim, variant["target_body"], intended_target_xy)
-    _set_xy_position(env.sim, variant["plate_body"], variant["plate_xy"] + plate_jitter)
-    _set_xy_position(env.sim, variant["side_body"], variant["side_xy"])
-    _set_xy_position(env.sim, variant["extra_side_body"], variant["extra_side_xy"])
 
     if not _set_drawer_position(env, variant["drawer_joint"], variant["drawer_open_value"]):
         return False
