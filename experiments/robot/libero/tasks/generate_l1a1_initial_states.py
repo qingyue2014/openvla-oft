@@ -1,12 +1,12 @@
 """
-Generate custom initial states for L1-A-1 native-prompt bowl disambiguation.
+Generate custom initial states for L1-A-1 ramekin-target bowl disambiguation.
 
 Design principle: reuse a native libero_spatial task and only alter the static
-layout. The native target black bowl is placed next to the plate, while a
-visually similar protected black bowl is placed next to the ramekin. The two
-bowls remain close to each other, so the intended failure mode is relational
-mis-grounding under the native prompt: the policy reaches to, touches, or moves
-the ramekin-side distractor before correctly grasping the plate-side target.
+layout. The instructed target black bowl is placed next to the ramekin, while a
+visually similar protected black bowl is placed next to the plate. The two bowls
+remain close to each other, so the intended failure mode is relational
+mis-grounding: the policy reaches to, touches, or moves the plate-side
+distractor before correctly grasping the ramekin-side target.
 
 Recommended eval:
     python -m experiments.robot.libero.run_physcog_libero_l1_eval \
@@ -17,6 +17,7 @@ Recommended eval:
         --held_object_body akita_black_bowl_1_main \
         --distractor_body akita_black_bowl_2_main \
         --displacement_threshold 0.015 \
+        --task_description_override "pick up the black bowl next to the ramekin and place it on the plate" \
         --num_trials_per_task 50 --run_id_note L1-A1-ramekin-vs-plate-bowl-confusion
 """
 
@@ -109,7 +110,7 @@ def _resolve_get_libero_path(libero):
     return get_libero_path
 
 VARIANTS = {
-    "task8_plate_vs_ramekin": {
+    "task8_ramekin_vs_plate": {
         "task_id": 8,
         "target_body": "akita_black_bowl_1_main",
         "distractor_body": "akita_black_bowl_2_main",
@@ -123,18 +124,18 @@ VARIANTS = {
         #
         # Agentview calibration follows L1-B2: MuJoCo x is mostly vertical in
         # the rendered image, while y is mostly horizontal. The target bowl is
-        # plate-side for the native task-8 prompt; the protected distractor is
-        # ramekin-side. The two bowls are close enough to create a wrong-grasp
+        # ramekin-side for the overridden instruction; the protected distractor
+        # is plate-side. The two bowls are close enough to create a wrong-grasp
         # ambiguity but separated enough to avoid initial contact/tilting.
-        "target_xy": np.array([-0.005, 0.145]),
-        "distractor_xy": np.array([-0.060, 0.015]),
+        "target_xy": np.array([-0.060, 0.015]),
+        "distractor_xy": np.array([-0.005, 0.145]),
         "ramekin_xy": np.array([0.055, 0.025]),
         "plate_xy": np.array([0.075, 0.250]),
         "side_xy": np.array([0.165, -0.125]),
     },
 }
-VARIANTS["task8_ramekin_vs_plate"] = VARIANTS["task8_plate_vs_ramekin"]
-VARIANTS["task8_plate_vs_stove"] = VARIANTS["task8_plate_vs_ramekin"]
+VARIANTS["task8_plate_vs_ramekin"] = VARIANTS["task8_ramekin_vs_plate"]
+VARIANTS["task8_plate_vs_stove"] = VARIANTS["task8_ramekin_vs_plate"]
 
 BOWL_JITTER = 0.005
 PLATE_JITTER = 0.010
@@ -225,8 +226,8 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
 
     print(f"\nVariant: {variant_key}")
     print(f"Task {v['task_id']}: {task.language}")
-    print(f"Target body     : {v['target_body']}     (plate-side, native prompt target)")
-    print(f"Distractor body : {v['distractor_body']}     (ramekin-side protected distractor)")
+    print(f"Target body     : {v['target_body']}     (ramekin-side instructed target)")
+    print(f"Distractor body : {v['distractor_body']}     (plate-side protected distractor)")
     print(f"Target xy       : x={v['target_xy'][0]:.3f}, y={v['target_xy'][1]:.3f} +/- {BOWL_JITTER:.3f}")
     print(f"Distractor xy   : x={v['distractor_xy'][0]:.3f}, y={v['distractor_xy'][1]:.3f} +/- {BOWL_JITTER:.3f}")
     print(f"Ramekin xy      : x={v['ramekin_xy'][0]:.3f}, y={v['ramekin_xy'][1]:.3f}")
@@ -258,14 +259,14 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
         distractor_plate_dist = _xy_distance(distractor_pos, plate_pos)
         if target_distractor_dist < MIN_BOWL_BOWL_DISTANCE:
             raise RuntimeError(f"L1-A1 layout overlap: bowl-bowl distance={target_distractor_dist:.4f}")
-        if target_plate_dist < MIN_BOWL_LANDMARK_DISTANCE:
-            raise RuntimeError(f"L1-A1 layout overlap: target-plate distance={target_plate_dist:.4f}")
-        if distractor_ramekin_dist < MIN_BOWL_LANDMARK_DISTANCE:
-            raise RuntimeError(f"L1-A1 layout overlap: distractor-ramekin distance={distractor_ramekin_dist:.4f}")
-        if target_ramekin_dist <= distractor_ramekin_dist:
-            raise RuntimeError("L1-A1 role error: target is not farther from ramekin than distractor")
-        if distractor_plate_dist <= target_plate_dist:
-            raise RuntimeError("L1-A1 role error: distractor is not farther from plate than target")
+        if target_ramekin_dist < MIN_BOWL_LANDMARK_DISTANCE:
+            raise RuntimeError(f"L1-A1 layout overlap: target-ramekin distance={target_ramekin_dist:.4f}")
+        if distractor_plate_dist < MIN_BOWL_LANDMARK_DISTANCE:
+            raise RuntimeError(f"L1-A1 layout overlap: distractor-plate distance={distractor_plate_dist:.4f}")
+        if target_ramekin_dist >= distractor_ramekin_dist:
+            raise RuntimeError("L1-A1 role error: target is not closer to ramekin than distractor")
+        if distractor_plate_dist >= target_plate_dist:
+            raise RuntimeError("L1-A1 role error: distractor is not closer to plate than target")
         if _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
             raise RuntimeError("L1-A1 layout overlap: target too close to side object")
         if _xy_distance(distractor_pos, side_pos) < MIN_SIDE_CLEARANCE:
@@ -298,7 +299,7 @@ def save_hdf5(states, task_description: str, out_path: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Generate L1-A-1 depth-disambiguation initial states")
-    parser.add_argument("--variant", choices=list(VARIANTS.keys()), default="task8_plate_vs_stove")
+    parser.add_argument("--variant", choices=list(VARIANTS.keys()), default="task8_ramekin_vs_plate")
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--output", help="Output HDF5 path")
     parser.add_argument("--num_states", type=int, default=50)
