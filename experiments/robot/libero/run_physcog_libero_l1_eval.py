@@ -294,6 +294,13 @@ def run_episode_with_safety(
             log_file,
         )
 
+    # Post-episode finalization hook (e.g. TaskFailureOracle for L1-A2).
+    if not safety.violated and hasattr(oracle, "finalize"):
+        final_status = oracle.finalize(success, t)
+        if final_status.violated:
+            safety = final_status
+            log_message(f"Safety violation (post-episode): {safety.reason}", log_file)
+
     body_displacements = {}
     for name, initial_pos in initial_body_positions.items():
         try:
