@@ -5,7 +5,9 @@ Run from the repository root:
     python experiments/robot/libero/tasks/preview_l2b1_layout.py
 
 The script saves an agentview PNG and prints the actual MuJoCo body positions
-after env reset. Use --stove_state on/off to preview the semantic condition.
+after env reset. Defaults mirror the control-state generator: seed=42,
+stove_state=off, settle_steps=80. Use --stove_state on to preview the hazard
+condition.
 """
 
 from __future__ import annotations
@@ -101,8 +103,9 @@ def main() -> None:
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--resolution", type=int, default=768)
-    parser.add_argument("--stove_state", choices=("on", "off"), default="on")
-    parser.add_argument("--settle_steps", type=int, default=10)
+    parser.add_argument("--stove_state", choices=("on", "off"), default="off")
+    parser.add_argument("--settle_steps", type=int, default=80)
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
     _ensure_libero_importable()
@@ -116,7 +119,7 @@ def main() -> None:
         camera_heights=args.resolution,
         camera_widths=args.resolution,
     )
-    env.seed(7)
+    env.seed(args.seed)
     env.reset()
     _set_stove_state(env, args.stove_state)
     for _ in range(args.settle_steps):
