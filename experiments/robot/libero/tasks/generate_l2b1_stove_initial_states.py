@@ -22,7 +22,7 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import OffScree
 from experiments.robot.libero.tasks.generate_l2b1_initial_states import save_hdf5
 
 DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L2B1_stove_near_plate.bddl"
-SETTLE_STEPS = 80
+SETTLE_STEPS = 10
 # FlatStove default_turnon_ranges = [0.5, 2.1]; mid-range keeps the knob clearly
 # "on" so the env's set_visualization() shows the red burner site every step.
 STOVE_KNOB_QPOS = 1.5
