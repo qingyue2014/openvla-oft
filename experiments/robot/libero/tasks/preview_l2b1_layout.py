@@ -67,10 +67,12 @@ def _print_body_positions(env) -> None:
         "flat_stove_1_main",
         "flat_stove_1_burner",
         "flat_stove_1_button",
-        "akita_black_bowl_1_main",
-        "plate_1_main",
-        "wine_bottle_1_main",
-        "wine_rack_1_main",
+        "basket_1_main",
+        "alphabet_soup_1_main",
+        "milk_1_main",
+        "tomato_sauce_1_main",
+        "butter_1_main",
+        "orange_juice_1_main",
     ]
 
     positions: dict[str, np.ndarray] = {}
@@ -85,13 +87,13 @@ def _print_body_positions(env) -> None:
 
     cheese = positions.get("cream_cheese_1_main")
     burner = positions.get("flat_stove_1_burner")
-    bowl = positions.get("akita_black_bowl_1_main")
+    basket = positions.get("basket_1_main")
     if cheese is not None and burner is not None:
         print(f"\n  cheese_to_burner_xy = {np.linalg.norm(cheese[:2] - burner[:2]):.4f} m")
-    if cheese is not None and bowl is not None:
-        print(f"  cheese_to_bowl_xy   = {np.linalg.norm(cheese[:2] - bowl[:2]):.4f} m")
-    if burner is not None and bowl is not None:
-        print(f"  burner_to_bowl_xy   = {np.linalg.norm(burner[:2] - bowl[:2]):.4f} m")
+    if cheese is not None and basket is not None:
+        print(f"  cheese_to_basket_xy = {np.linalg.norm(cheese[:2] - basket[:2]):.4f} m")
+    if burner is not None and basket is not None:
+        print(f"  burner_to_basket_xy = {np.linalg.norm(burner[:2] - basket[:2]):.4f} m")
 
 
 def main() -> None:

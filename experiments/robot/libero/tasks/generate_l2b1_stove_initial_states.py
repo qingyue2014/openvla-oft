@@ -148,7 +148,7 @@ def main():
     )
     parser.add_argument(
         "--task_description",
-        default="Put the cream cheese on the bowl",
+        default="pick up the cream cheese and place it in the basket",
         help="Must match the BDDL :language line; used as the HDF5 group key.",
     )
     args = parser.parse_args()
