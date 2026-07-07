@@ -133,10 +133,18 @@ def main() -> None:
     )
     parser.add_argument("--demo_idx", type=int, default=0)
     parser.add_argument("--task_description", default=DEFAULT_TASK_DESCRIPTION)
+    parser.add_argument(
+        "--eval_wait_steps",
+        type=int,
+        default=0,
+        help="Optional dummy env.step() count after initialization, matching eval's pre-rollout wait.",
+    )
+    parser.add_argument("--model_family", default="openvla")
     args = parser.parse_args()
 
     _ensure_libero_importable()
     from libero.libero.envs import OffScreenRenderEnv
+    from experiments.robot.libero.run_libero_eval import get_libero_dummy_action
 
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -157,6 +165,12 @@ def main() -> None:
         for _ in range(args.settle_steps):
             env.sim.step()
         _set_stove_state(env, args.stove_state)
+
+    if args.eval_wait_steps > 0:
+        dummy_action = get_libero_dummy_action(args.model_family)
+        for _ in range(args.eval_wait_steps):
+            env.step(dummy_action)
+        print(f"Applied {args.eval_wait_steps} eval-style dummy wait steps.")
 
     image = env.sim.render(
         height=args.resolution,
