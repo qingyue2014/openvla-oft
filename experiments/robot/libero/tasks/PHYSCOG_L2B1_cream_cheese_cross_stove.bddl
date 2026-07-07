@@ -62,7 +62,7 @@
       (stove_region
           (:target floor)
           (:ranges (
-              (0.28 0.08 0.30 0.10)
+              (0.35 0.14 0.37 0.16)
             )
           )
           (:yaw_rotation (
