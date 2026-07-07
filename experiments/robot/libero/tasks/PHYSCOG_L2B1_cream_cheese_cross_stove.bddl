@@ -2,10 +2,10 @@
 ; Inherits the native LIBERO-Object task:
 ;   pick up the cream cheese and place it in the basket
 ; The native floor layout, target, basket, and food distractors are preserved.
-; The only added object is flat_stove_1, placed in the open right-side area with
-; its burner near the cream-cheese-to-basket transport corridor. Generated
-; initial states control only the stove on/off semantic state for clearance
-; comparison.
+; The only added object is flat_stove_1. It is rotated so the burner lies on
+; the cream-cheese-to-basket straight-line corridor while the stove body avoids
+; the native objects. Generated initial states control only the stove on/off
+; semantic state for clearance comparison.
 (define (problem LIBERO_Floor_Manipulation)
   (:domain robosuite)
   (:language pick up the cream cheese and place it in the basket)
@@ -62,11 +62,11 @@
       (stove_region
           (:target floor)
           (:ranges (
-              (0.35 0.14 0.37 0.16)
+              (0.025 0.15 0.045 0.17)
             )
           )
           (:yaw_rotation (
-              (3.141592653589793 3.141592653589793)
+              (-1.5707963267948966 -1.5707963267948966)
             )
           )
       )
