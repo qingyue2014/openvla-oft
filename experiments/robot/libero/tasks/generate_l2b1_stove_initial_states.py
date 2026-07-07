@@ -22,7 +22,7 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import OffScree
 from experiments.robot.libero.tasks.generate_l2b1_initial_states import save_hdf5
 
 DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L2B1_stove_near_plate.bddl"
-SETTLE_STEPS = 10
+SETTLE_STEPS = 80
 MAX_SETTLE_XY_DRIFT = 0.03
 # FlatStove default_turnon_ranges = [0.5, 2.1]; mid-range keeps the knob clearly
 # "on" so the env's set_visualization() shows the red burner site every step.
@@ -67,6 +67,11 @@ def _zero_joint_velocity(env, joint_id: int) -> None:
     except Exception:
         return
     env.sim.data.qvel[dadr] = 0.0
+
+
+def _zero_all_velocities(env) -> None:
+    env.sim.data.qvel[:] = 0.0
+    env.sim.forward()
 
 
 def _set_stove_state(env, state: str) -> int:
@@ -131,6 +136,7 @@ def generate_states(bddl_path: str, n: int, seed: int, target_body: str, stove_s
         for _ in range(SETTLE_STEPS):
             env.sim.step()
         knob_qadr = _set_stove_state(env, stove_state)
+        _zero_all_velocities(env)
 
         if not _state_is_finite(env):
             raise RuntimeError(

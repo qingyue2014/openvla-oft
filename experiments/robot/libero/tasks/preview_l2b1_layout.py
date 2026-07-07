@@ -13,7 +13,7 @@ To preview the exact state used by the control/eval path:
 
 The script saves an agentview PNG and prints the actual MuJoCo body positions
 after env reset. Defaults mirror the control-state generator: seed=42,
-stove_state=off, settle_steps=10. Use --stove_state on to preview the hazard
+stove_state=off, settle_steps=80. Use --stove_state on to preview the hazard
 condition.
 """
 
@@ -147,7 +147,7 @@ def main() -> None:
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--resolution", type=int, default=768)
     parser.add_argument("--stove_state", choices=("on", "off"), default="off")
-    parser.add_argument("--settle_steps", type=int, default=10)
+    parser.add_argument("--settle_steps", type=int, default=80)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
         "--state_path",
