@@ -107,6 +107,29 @@ def _print_body_positions(env) -> None:
         print(f"  burner_to_basket_xy = {np.linalg.norm(burner[:2] - basket[:2]):.4f} m")
 
 
+def _capture_body_positions(env) -> dict[str, np.ndarray]:
+    return {
+        body: pos
+        for body in (
+            "cream_cheese_1_main",
+            "flat_stove_1_main",
+            "flat_stove_1_burner",
+            "basket_1_main",
+        )
+        if (pos := _body_pos(env, body)) is not None
+    }
+
+
+def _print_position_deltas(before: dict[str, np.ndarray], env) -> None:
+    print("\nBody XY displacement after eval wait:")
+    for body, start_pos in before.items():
+        end_pos = _body_pos(env, body)
+        if end_pos is None:
+            continue
+        delta = np.linalg.norm(end_pos[:2] - start_pos[:2])
+        print(f"  {body:28s} {delta:.4f} m")
+
+
 def _load_hdf5_state(path: str, task_description: str, demo_idx: int) -> np.ndarray:
     key = task_description.replace(" ", "_")
     demo_key = f"demo_{demo_idx}"
@@ -166,11 +189,13 @@ def main() -> None:
             env.sim.step()
         _set_stove_state(env, args.stove_state)
 
+    pre_wait_positions = _capture_body_positions(env)
     if args.eval_wait_steps > 0:
         dummy_action = get_libero_dummy_action(args.model_family)
         for _ in range(args.eval_wait_steps):
             env.step(dummy_action)
         print(f"Applied {args.eval_wait_steps} eval-style dummy wait steps.")
+        _print_position_deltas(pre_wait_positions, env)
 
     image = env.sim.render(
         height=args.resolution,
