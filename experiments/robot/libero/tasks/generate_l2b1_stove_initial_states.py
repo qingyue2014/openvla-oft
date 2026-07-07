@@ -23,6 +23,7 @@ from experiments.robot.libero.tasks.generate_l2b1_initial_states import save_hdf
 
 DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L2B1_stove_near_plate.bddl"
 SETTLE_STEPS = 10
+MAX_SETTLE_XY_DRIFT = 0.03
 # FlatStove default_turnon_ranges = [0.5, 2.1]; mid-range keeps the knob clearly
 # "on" so the env's set_visualization() shows the red burner site every step.
 STOVE_KNOB_QPOS = 1.5
@@ -31,6 +32,17 @@ STOVE_OFF_QPOS = 0.0
 
 def _body_pos(env, body_name: str) -> np.ndarray:
     return np.array(env.sim.data.body_xpos[env.sim.model.body_name2id(body_name)])
+
+
+def _print_body_xy(env, label: str, body_name: str | None) -> None:
+    if body_name is None:
+        return
+    pos = _body_pos(env, body_name)
+    print(f"  {label:20s}: {body_name:28s} x={pos[0]: .4f} y={pos[1]: .4f} z={pos[2]: .4f}")
+
+
+def _state_is_finite(env) -> bool:
+    return bool(np.isfinite(env.sim.data.qpos).all() and np.isfinite(env.sim.data.qvel).all())
 
 
 def _turn_on_stove(env) -> int:
@@ -104,10 +116,38 @@ def generate_states(bddl_path: str, n: int, seed: int, target_body: str, stove_s
     states = []
     for i in range(n):
         env.reset()
+        tracked_bodies = [
+            body
+            for body in (
+                target_body,
+                _find_first_existing_body(env, "basket_1_main", "akita_black_bowl_1_main", "plate_1_main"),
+                _find_first_existing_body(env, "flat_stove_1_main"),
+                _find_first_existing_body(env, "flat_stove_1_burner"),
+            )
+            if body is not None
+        ]
+        pre_settle_xy = {body: _body_pos(env, body)[:2].copy() for body in tracked_bodies}
         knob_qadr = _set_stove_state(env, stove_state)
         for _ in range(SETTLE_STEPS):
             env.sim.step()
         knob_qadr = _set_stove_state(env, stove_state)
+
+        if not _state_is_finite(env):
+            raise RuntimeError(
+                f"Simulation became non-finite while generating state {i}. "
+                "The BDDL layout is physically unstable; move the stove farther from objects."
+            )
+
+        drift = {
+            body: float(np.linalg.norm(_body_pos(env, body)[:2] - start_xy))
+            for body, start_xy in pre_settle_xy.items()
+        }
+        unstable = {body: value for body, value in drift.items() if value > MAX_SETTLE_XY_DRIFT}
+        if unstable:
+            raise RuntimeError(
+                f"Objects drifted during settle for state {i}: {unstable}. "
+                "The BDDL layout likely has a collision overlap."
+            )
 
         if i == 0:
             burner = _find_body(env, "flat_stove_1_burner", "flat_stove_1_main")
@@ -119,6 +159,11 @@ def generate_states(bddl_path: str, n: int, seed: int, target_body: str, stove_s
             print(f"  burner body          : {burner}")
             print(f"  stove knob qpos      : {env.sim.data.qpos[knob_qadr]:.3f} (on if >= 0.5)")
             print(f"  stove state          : {stove_state}")
+            print("  body positions:")
+            _print_body_xy(env, "target", target_body)
+            _print_body_xy(env, "destination", destination)
+            _print_body_xy(env, "stove main", _find_first_existing_body(env, "flat_stove_1_main"))
+            _print_body_xy(env, "burner", burner)
             if destination is not None:
                 destination_xy = _body_pos(env, destination)[:2]
                 print(f"  destination body     : {destination}")
