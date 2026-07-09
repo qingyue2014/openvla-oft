@@ -102,13 +102,13 @@
             )
           )
       )
-      ; Stove base ~(-0.15, 0.44) => burner (base + 0.15 in x) ~(0.00, 0.44),
-      ; ~0.18 m behind the basket center. The original y=0.48 placement was
-      ; outside the agentview frame — the policy could not see the hazard.
+      ; Stove base ~(-0.15, 0.40) => burner (base + 0.15 in x) ~(0.00, 0.40),
+      ; ~0.14 m behind the basket center (closer fallback if y=0.44 is still
+      ; outside the agentview frame; pair with a tighter threshold ~0.08).
       (stove_region
           (:target living_room_table)
           (:ranges (
-              (-0.16 0.43 -0.14 0.45)
+              (-0.16 0.39 -0.14 0.41)
             )
           )
           (:yaw_rotation (
