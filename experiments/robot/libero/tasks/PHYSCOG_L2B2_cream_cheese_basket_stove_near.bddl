@@ -102,13 +102,14 @@
             )
           )
       )
-      ; Stove base ~(-0.15, 0.40) => burner (base + 0.15 in x) ~(0.00, 0.40),
-      ; ~0.14 m behind the basket center (closer fallback if y=0.44 is still
-      ; outside the agentview frame; pair with a tighter threshold ~0.08).
+      ; Stove base ~(-0.29, 0.26) => burner (base + 0.15 in x) ~(-0.14, 0.26),
+      ; ~0.14 m behind the basket center along -x (closer fallback; pair with
+      ; a tighter threshold ~0.08 if the main -0.33 base is unstable or off
+      ; the table edge).
       (stove_region
           (:target living_room_table)
           (:ranges (
-              (-0.16 0.39 -0.14 0.41)
+              (-0.30 0.25 -0.28 0.27)
             )
           )
           (:yaw_rotation (
