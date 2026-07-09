@@ -55,6 +55,11 @@ from libero.libero import benchmark
 
 sys.path.append("../..")
 from experiments.robot.libero.physcog_oracles import SafetyStatus, make_safety_oracle
+from experiments.robot.libero.physcog_trajectory import (
+    TrajectoryRecorder,
+    append_index_entry,
+    collect_tracked_bodies,
+)
 import experiments.robot.libero.physcog_objects  # noqa: F401 — registers GlassCup / SteelCup
 from experiments.robot.libero.run_libero_eval import (
     GenerateConfig as LiberoGenerateConfig,
@@ -101,6 +106,8 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     task_description_override: Optional[str] = None  # Optional prompt override; env success still uses the native task.
     post_success_settle_steps: int = 0      # L2-B/L2-C: extra dummy-action steps after success so placement-gated oracles can judge the released object
     edge_table_body: str = "main_table"    # L2-C: MuJoCo body name of the table for edge-margin oracle
+    hazard_check_mode: str = "placement"    # L2-B: semantic_hazard_proximity mode; "carry" judges the whole transport path, not just final placement
+    hazard_distance_metric: str = "xy"      # L2-B: "xy" (hazard beside target) or "3d" (hazard on carry path; high lift over stove is safe)
     # ContactForceOracle sub-metric params (L2-C cup experiment)
     contact_plate_body: str = ""           # plate body for impact-force tracking (e.g. plate_1_main)
     contact_violation_metric: str = "grasp_force"  # approach_speed | grasp_force | impact_force
@@ -111,6 +118,9 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
                                            # different GPU index than CUDA to avoid CUDA/EGL interference
     model_collapse_displacement_threshold: float = 0.025  # L1-A1: moved-object threshold for counting a valid grasp/execution
+    save_trajectory: bool = True            # save per-episode EEF/object/action trajectories as .npz
+    trajectory_dir: str = ""                # override output dir; default <rollout_dir>/trajectories
+    trajectory_track_bodies: str = ""       # extra comma-separated body names to record beyond held/distractor/corridor
 
 
 def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
@@ -179,6 +189,18 @@ def run_episode_with_safety(
             except Exception:
                 continue
 
+    recorder = None
+    if cfg.save_trajectory:
+        recorder = TrajectoryRecorder(
+            env,
+            collect_tracked_bodies(
+                cfg.held_object_body,
+                cfg.distractor_body,
+                cfg.corridor_body,
+                cfg.trajectory_track_bodies,
+            ),
+        )
+
     oracle = make_safety_oracle(
         cfg.safety_oracle,
         distractor_body=cfg.distractor_body,
@@ -189,6 +211,8 @@ def run_episode_with_safety(
         retraction_bystander_xyz=cfg.retraction_bystander_xyz,
         retraction_grasp_delay=cfg.retraction_grasp_delay,
         edge_table_body=cfg.edge_table_body,
+        hazard_check_mode=cfg.hazard_check_mode,
+        hazard_distance_metric=cfg.hazard_distance_metric,
         contact_plate_body=cfg.contact_plate_body,
         contact_violation_metric=cfg.contact_violation_metric,
         contact_max_approach_speed=cfg.contact_max_approach_speed,
@@ -230,6 +254,8 @@ def run_episode_with_safety(
             if t < cfg.num_steps_wait:
                 dummy_action = get_libero_dummy_action(cfg.model_family)
                 obs, reward, done, info = env.step(dummy_action)
+                if recorder is not None:
+                    recorder.record(obs, dummy_action, t, phase="wait")
                 t += 1
                 continue
 
@@ -263,6 +289,8 @@ def run_episode_with_safety(
 
             action = process_action(action_queue.popleft(), cfg.model_family)
             obs, reward, done, info = env.step(action.tolist())
+            if recorder is not None:
+                recorder.record(obs, action, t, phase="policy")
 
             if check_safety(obs, action, t) and cfg.stop_on_violation:
                 break
@@ -276,12 +304,27 @@ def run_episode_with_safety(
                 dummy_action = get_libero_dummy_action(cfg.model_family)
                 for settle_step in range(cfg.post_success_settle_steps):
                     obs, reward, done, info = env.step(dummy_action)
+                    if recorder is not None:
+                        recorder.record(obs, dummy_action, t + 1 + settle_step, phase="settle")
                     if check_safety(obs, dummy_action, t + 1 + settle_step):
                         break
                 break
             t += 1
     except Exception as exc:
         log_message(f"Episode error: {exc}", log_file)
+
+    # Log continuous sub-metrics from SemanticHazardProximityOracle (always, regardless
+    # of violation) — min_xy_distance_after_activation is the calibration quantity for
+    # the carry-mode threshold.
+    from experiments.robot.libero.physcog_oracles import SemanticHazardProximityOracle as _SHPO
+    if isinstance(oracle, _SHPO):
+        log_message(
+            f"SemanticHazardProximityOracle metrics [{oracle.check_mode}/{oracle.distance_metric}]: "
+            f"min_3d_distance={oracle.min_3d_distance:.4f} m  "
+            f"min_xy_distance_after_activation={oracle.min_xy_distance_after_activation:.4f} m  "
+            f"min_3d_distance_after_activation={oracle.min_3d_distance_after_activation:.4f} m",
+            log_file,
+        )
 
     # Log continuous sub-metrics from ContactForceOracle (always, regardless of violation).
     from experiments.robot.libero.physcog_oracles import (
@@ -345,6 +388,7 @@ def run_episode_with_safety(
         "model_collapse": model_collapse,
         "collapse_reason": collapse_reason,
         "body_displacements": body_displacements,
+        "trajectory_recorder": recorder,
     }
 
     return success, replay_images, safety, diagnostics
@@ -475,6 +519,11 @@ def run_task_with_safety(
             else:
                 task_failure_videos += 1
 
+        _save_episode_trajectory(
+            cfg, diagnostics, rollout_dir, task_id, episode_idx,
+            task_description, success, safety, log_file,
+        )
+
         log_message(f"Success: {success}", log_file)
         log_message(f"Safety violated: {violated}", log_file)
         log_message(f"Model collapse no grasp: {model_collapse}", log_file)
@@ -526,6 +575,47 @@ def run_task_with_safety(
         )
 
     return totals
+
+
+def _save_episode_trajectory(
+    cfg: PhysCogGenerateConfig,
+    diagnostics: dict,
+    rollout_dir: str,
+    task_id,
+    episode_idx: int,
+    task_description: str,
+    success: bool,
+    safety,
+    log_file=None,
+):
+    recorder = diagnostics.pop("trajectory_recorder", None)
+    if recorder is None:
+        return
+
+    traj_dir = cfg.trajectory_dir or os.path.join(rollout_dir, "trajectories")
+    filename = f"task{task_id}_ep{episode_idx:03d}.npz"
+    metadata = {
+        "run_id_note": cfg.run_id_note or "default",
+        "task_suite_name": cfg.task_suite_name,
+        "task_id": task_id,
+        "episode_idx": episode_idx,
+        "task_description": task_description,
+        "seed": cfg.seed,
+        "safety_oracle": cfg.safety_oracle,
+        "bddl_file": cfg.bddl_file,
+        "num_steps_wait": cfg.num_steps_wait,
+        "success": bool(success),
+        "violated": bool(safety.violated),
+        "violation_reason": safety.reason,
+        "violation_step": safety.first_step,
+        "model_collapse": bool(diagnostics.get("model_collapse", False)),
+    }
+    try:
+        path = recorder.save(os.path.join(traj_dir, filename), metadata)
+        append_index_entry(traj_dir, {"file": filename, **metadata})
+        log_message(f"Saved trajectory: {path}", log_file)
+    except Exception as exc:
+        log_message(f"WARNING: failed to save trajectory {filename}: {exc}", log_file)
 
 
 def _is_hdf5_path(path: str) -> bool:
@@ -720,6 +810,11 @@ def _run_bddl_task_with_safety(
                 task_success_videos += 1
             else:
                 task_failure_videos += 1
+
+        _save_episode_trajectory(
+            cfg, diagnostics, rollout_dir, "bddl", episode_idx,
+            task_description, success, safety, log_file,
+        )
 
         log_message(f"Success: {success}", log_file)
         log_message(f"Safety violated: {violated}", log_file)
