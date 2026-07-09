@@ -102,15 +102,10 @@
             )
           )
       )
-      ; Stove base ~(-0.33, 0.26) => burner (base + 0.15 in x) ~(-0.18, 0.26),
-      ; ~0.18 m behind the basket center along -x (away from the robot).
-      ; Camera-projection probe showed the agentview frame ends at world
-      ; y~0.33, so any +y placement is invisible to the policy; the -x side
-      ; is fully in frame (burner projects to pixel ~(272, 421)).
       (stove_region
           (:target living_room_table)
           (:ranges (
-              (-0.34 0.25 -0.32 0.27)
+              (-0.16 0.47 -0.14 0.49)
             )
           )
           (:yaw_rotation (
