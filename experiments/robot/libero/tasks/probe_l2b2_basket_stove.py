@@ -22,7 +22,7 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import OffScree
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
     _body_pos,
     _find_body,
-    _turn_on_stove,
+    _set_stove_state,
 )
 
 DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L2B2_cream_cheese_basket_stove.bddl"
@@ -63,7 +63,7 @@ def main() -> None:
 
     for i in range(args.num_resets):
         env.reset()
-        knob_qadr = _turn_on_stove(env)
+        knob_qadr = _set_stove_state(env, "on")
         for _ in range(args.settle_steps):
             env.sim.step()
         obs, _, _, _ = env.step(DUMMY_ACTION)
