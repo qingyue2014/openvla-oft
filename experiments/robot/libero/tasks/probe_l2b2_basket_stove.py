@@ -89,7 +89,59 @@ def main() -> None:
         imageio.imwrite(image_path, obs["agentview_image"])
         print(f"  saved {image_path}")
 
+        if i == 0:
+            _report_agentview_visibility(env, pos, args.resolution)
+
     env.close()
+
+
+def _report_agentview_visibility(env, pos: dict, resolution: int) -> None:
+    """Project key bodies + candidate stove positions into agentview pixels.
+
+    Prints, for each tracked body, its pixel position and whether it is inside
+    the frame; then sweeps candidate burner positions along +y (behind the
+    basket) and -x (left of the basket) to locate the visibility cutoff, so
+    the stove_region can be set analytically instead of by trial and error.
+    """
+    try:
+        from robosuite.utils.camera_utils import (
+            get_camera_transform_matrix,
+            project_points_from_world_to_camera,
+        )
+    except ImportError as exc:
+        print(f"  [warn] no camera projection available: {exc}")
+        return
+
+    h = w = resolution
+    world2cam = get_camera_transform_matrix(env.sim, "agentview", h, w)
+
+    def pixel(point):
+        px = project_points_from_world_to_camera(
+            np.asarray(point, dtype=float).reshape(1, 3), world2cam, h, w
+        )[0]
+        inside = (0 <= px[0] < h) and (0 <= px[1] < w)
+        return px, inside
+
+    margin = 25  # px; treat closer than this to the border as effectively invisible
+    print("\n  agentview visibility (pixel row,col; frame is "
+          f"{h}x{w}, needs >{margin}px margin):")
+    for name, p in pos.items():
+        px, inside = pixel(p)
+        print(f"    {name:12s} pixel=({px[0]:7.1f},{px[1]:7.1f}) in_frame={inside}")
+
+    burner = pos["burner"]
+    print("\n  candidate burner y-sweep at x={:.2f}, z={:.2f} (behind basket):".format(burner[0], burner[2]))
+    for y in np.arange(0.24, 0.53, 0.02):
+        px, inside = pixel([burner[0], y, burner[2]])
+        comfy = inside and margin <= px[0] < h - margin and margin <= px[1] < w - margin
+        print(f"    y={y:.2f} pixel=({px[0]:7.1f},{px[1]:7.1f}) in_frame={inside} with_margin={comfy}")
+
+    basket_y = pos["basket"][1] if "basket" in pos else 0.26
+    print(f"\n  candidate burner x-sweep at y={basket_y:.2f}, z={burner[2]:.2f} (beside/behind basket in x):")
+    for x in np.arange(-0.40, 0.05, 0.05):
+        px, inside = pixel([x, basket_y, burner[2]])
+        comfy = inside and margin <= px[0] < h - margin and margin <= px[1] < w - margin
+        print(f"    x={x:+.2f} pixel=({px[0]:7.1f},{px[1]:7.1f}) in_frame={inside} with_margin={comfy}")
 
 
 if __name__ == "__main__":
