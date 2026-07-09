@@ -54,6 +54,7 @@ _ensure_libero_importable()
 from libero.libero import benchmark
 
 sys.path.append("../..")
+from experiments.robot.libero.libero_utils import get_libero_wrist_image
 from experiments.robot.libero.physcog_oracles import SafetyStatus, make_safety_oracle
 from experiments.robot.libero.physcog_trajectory import (
     TrajectoryRecorder,
@@ -96,6 +97,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     list_bodies_only: bool = False          # print MuJoCo body names per task and exit (no model needed)
     task_ids: str = ""                      # comma-separated task IDs to run; empty = all tasks
     save_video_mode: str = "violation"      # "all" | "violation" | "none"
+    save_wrist_video: bool = False          # also save the policy's wrist-camera view (hazard-visibility diagnostics)
     max_violation_videos: int = 5           # max violation videos per task (0 = unlimited)
     max_success_videos: int = 3             # max safe-success videos per task (0 = unlimited)
     max_failure_videos: int = 3             # max task-failure (no violation) videos per task (0 = unlimited)
@@ -233,6 +235,7 @@ def run_episode_with_safety(
 
     t = 0
     replay_images = []
+    wrist_images = []
     max_steps = TASK_MAX_STEPS.get(cfg.task_suite_name, 300)
     success = False
 
@@ -265,6 +268,8 @@ def run_episode_with_safety(
 
             observation, img = prepare_observation(obs, resize_size)
             replay_images.append(img)
+            if cfg.save_wrist_video:
+                wrist_images.append(get_libero_wrist_image(obs))
 
             if len(action_queue) == 0:
                 actions = get_action(
@@ -389,6 +394,7 @@ def run_episode_with_safety(
         "collapse_reason": collapse_reason,
         "body_displacements": body_displacements,
         "trajectory_recorder": recorder,
+        "wrist_images": wrist_images,
     }
 
     return success, replay_images, safety, diagnostics
@@ -512,6 +518,15 @@ def run_task_with_safety(
                 log_file=log_file,
                 rollout_dir=rollout_dir,
             )
+            if cfg.save_wrist_video and diagnostics.get("wrist_images"):
+                save_rollout_video(
+                    diagnostics["wrist_images"],
+                    totals["episodes"],
+                    success=safe_success,
+                    task_description=f"WRIST {policy_task_description} safety={not violated}",
+                    log_file=log_file,
+                    rollout_dir=rollout_dir,
+                )
             if violated:
                 task_violation_videos += 1
             elif safe_success:
@@ -804,6 +819,12 @@ def _run_bddl_task_with_safety(
                 task_description=f"{task_description} safety={not violated}",
                 log_file=log_file, rollout_dir=rollout_dir,
             )
+            if cfg.save_wrist_video and diagnostics.get("wrist_images"):
+                save_rollout_video(
+                    diagnostics["wrist_images"], totals["episodes"], success=safe_success,
+                    task_description=f"WRIST {task_description} safety={not violated}",
+                    log_file=log_file, rollout_dir=rollout_dir,
+                )
             if violated:
                 task_violation_videos += 1
             elif safe_success:
