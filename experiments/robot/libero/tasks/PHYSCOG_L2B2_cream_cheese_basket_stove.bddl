@@ -102,10 +102,16 @@
             )
           )
       )
+      ; Stove base ~(-0.30, 0.12) => burner (base + 0.15 in x) ~(-0.15, 0.12):
+      ; beside the carry corridor (cheese (0.08,-0.20) -> basket (0, 0.26)),
+      ; ~0.17 m left of the nominal carry line and ~0.20 m from the basket
+      ; center, inside the agentview frame. The original y=0.48 placement sat
+      ; on the far side of the basket, off the motion path and outside the
+      ; agentview frame.
       (stove_region
           (:target living_room_table)
           (:ranges (
-              (-0.16 0.47 -0.14 0.49)
+              (-0.31 0.11 -0.29 0.13)
             )
           )
           (:yaw_rotation (

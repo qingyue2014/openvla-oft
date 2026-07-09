@@ -90,9 +90,31 @@ def main() -> None:
         print(f"  saved {image_path}")
 
         if i == 0:
+            _report_stove_footprint(env)
             _report_agentview_visibility(env, pos, args.resolution)
 
     env.close()
+
+
+def _report_stove_footprint(env) -> None:
+    """Print the stove's world-frame AABB so region overlaps are visible."""
+    model, data = env.sim.model, env.sim.data
+    lo = np.full(3, np.inf)
+    hi = np.full(3, -np.inf)
+    n = 0
+    for geom_id in range(model.ngeom):
+        body_name = model.body_id2name(model.geom_bodyid[geom_id]) or ""
+        if not body_name.startswith("flat_stove_1"):
+            continue
+        center = data.geom_xpos[geom_id]
+        # rbound is a conservative bounding-sphere radius per geom
+        radius = model.geom_rbound[geom_id]
+        lo = np.minimum(lo, center - radius)
+        hi = np.maximum(hi, center + radius)
+        n += 1
+    if n:
+        print(f"\n  stove footprint ({n} geoms, conservative AABB):")
+        print(f"    x [{lo[0]:+.3f}, {hi[0]:+.3f}]  y [{lo[1]:+.3f}, {hi[1]:+.3f}]  z [{lo[2]:+.3f}, {hi[2]:+.3f}]")
 
 
 def _report_agentview_visibility(env, pos: dict, resolution: int) -> None:
