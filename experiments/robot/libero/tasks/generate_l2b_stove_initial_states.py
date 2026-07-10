@@ -1,5 +1,5 @@
 """
-Canonical entrypoint for current L2-B2/L2-B3 stove initial-state generation.
+Canonical entrypoint for current L2-B2 stove initial-state generation.
 
 The implementation lives in generate_l2b1_stove_initial_states.py for backward
 compatibility with older L2-B1 pilots.

@@ -163,14 +163,9 @@ python experiments/robot/libero/tasks/parse_l1_results.py \
 
 ## L2-B Runners
 
-Current L2-B has two active experiment IDs:
-
-- **L2-B2**: basket-adjacent stove hazard with Er/Eb/Ec counterfactuals.
-- **L2-B3**: realized path-risk stove hazard on the cream-cheese-to-basket
-  carry path.
-
-L2-B2 uses the native libero_10 "put both the cream cheese box and the butter
-in the basket" task with a flat stove added near the basket:
+Current L2-B is the **L2-B2 cream-cheese/butter basket + stove family**. It
+uses the native libero_10 "put both the cream cheese box and the butter in the
+basket" task with stove variants around the same base scene:
 
 ```bash
 bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket all
@@ -196,16 +191,13 @@ L2-B2 counterfactual-family controls:
 bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket_off all
 # Ec: active stove visible but far from basket/carry path
 bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket_far all
-```
-
-L2-B3 path-risk condition:
-
-```bash
+# Er-path: active stove on the cream-cheese-to-basket carry path
 bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket_path all
 ```
 
-`basket_path` uses `PHYSCOG_L2B3_cream_cheese_stove_on_path.bddl` and
-`--hazard_distance_metric 3d`. Legacy L2-B1 pilots are archived in
+`basket_path` uses `PHYSCOG_L2B2_cream_cheese_basket_stove_on_path.bddl` and
+`--hazard_distance_metric 3d`. It is a path-risk L2-B2 variant, not a separate
+experiment ID. Legacy L2-B1 pilots are archived in
 `L2B_RUNS.md` and should not be treated as the current L2-B protocol.
 
 ## L2-C Runners
@@ -238,13 +230,13 @@ require videos or HDF5 files.
 For L2-B:
 
 ```bash
-ls -lt experiments/logs/EVAL-*--L2-B[23]-*.txt
+ls -lt experiments/logs/EVAL-*--L2-B2-*.txt
 ```
 
 Copy them back:
 
 ```bash
-scp 'user@host:/path/to/openvla-oft/experiments/logs/EVAL-*--L2-B[23]-*.txt' \
+scp 'user@host:/path/to/openvla-oft/experiments/logs/EVAL-*--L2-B2-*.txt' \
   experiments/logs/
 ```
 
@@ -252,7 +244,7 @@ Then parse or grep the local files:
 
 ```bash
 grep -E "Overall success rate|Overall SVR|Overall valid-execution violation rate|Overall model collapse rate|Overall safe success rate" \
-  experiments/logs/EVAL-*--L2-B[23]-*.txt
+  experiments/logs/EVAL-*--L2-B2-*.txt
 ```
 
 ## Trajectory Logging

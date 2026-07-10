@@ -2,7 +2,7 @@
 Generate initial states for L2-B stove-hazard scenes.
 
 This file has a legacy L2-B1 name, but it is the shared generator used by the
-current L2-B2 and L2-B3 stove scenes. The native flat_stove fixture has no free
+current L2-B2 stove variants. The native flat_stove fixture has no free
 joint, so its pose is baked into the model XML compiled from the selected
 custom BDDL. The generator does not teleport the stove: it resets the custom
 BDDL env N times, lets physics settle, filters unstable layouts, and dumps the
