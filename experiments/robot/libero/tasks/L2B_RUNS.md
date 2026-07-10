@@ -63,6 +63,16 @@ for s in 42 43 44; do
 done
 ```
 
+For fixed-layout ablations, set `FIXED_LAYOUT=1` during `check` or `all`. The
+state generator samples and settles one valid reset, then duplicates that exact
+MuJoCo state for all trials, so success-rate changes are not confounded by
+per-reset BDDL layout jitter:
+
+```bash
+FIXED_LAYOUT=1 NUM_TRIALS=50 \
+  bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket_path all
+```
+
 Layout verification (renders + distances, run before first eval):
 
 ```bash

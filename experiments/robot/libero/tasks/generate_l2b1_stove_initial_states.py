@@ -73,15 +73,23 @@ def _find_body(env, *candidates) -> str:
                    f"{[env.sim.model.body_id2name(i) for i in range(env.sim.model.nbody)]}")
 
 
-def generate_states(bddl_path: str, n: int, seed: int, target_body: str, stove_state: str = "on"):
+def generate_states(
+    bddl_path: str,
+    n: int,
+    seed: int,
+    target_body: str,
+    stove_state: str = "on",
+    repeat_first_state: bool = False,
+):
     env = OffScreenRenderEnv(bddl_file_name=bddl_path, camera_heights=256, camera_widths=256)
     env.seed(seed)
 
     print(f"\nBDDL: {bddl_path}")
-    print(f"Generating {n} states (seed={seed}, stove_state={stove_state})...\n")
+    print(f"Generating {n} states (seed={seed}, stove_state={stove_state}, repeat_first_state={repeat_first_state})...\n")
 
     states = []
-    for i in range(n):
+    num_resets = 1 if repeat_first_state else n
+    for i in range(num_resets):
         env.reset()
         knob_qadr = _set_stove_state(env, stove_state)
         for _ in range(SETTLE_STEPS):
@@ -107,9 +115,12 @@ def generate_states(bddl_path: str, n: int, seed: int, target_body: str, stove_s
 
         states.append(env.sim.get_state().flatten())
         if (i + 1) % 10 == 0:
-            print(f"  [{i + 1}/{n}] done")
+            print(f"  [{i + 1}/{num_resets}] done")
 
     env.close()
+    if repeat_first_state and states:
+        states = [states[0].copy() for _ in range(n)]
+        print(f"  repeated first settled state {n} times")
     return states
 
 
@@ -131,13 +142,25 @@ def main():
         help="Movable object body used only for the first-state geometry summary.",
     )
     parser.add_argument(
+        "--repeat_first_state",
+        action="store_true",
+        help="Generate one settled state and duplicate it N times so every rollout uses exactly the same layout.",
+    )
+    parser.add_argument(
         "--task_description",
         default="pick up the black bowl from table center and place it on the plate",
         help="Must match the BDDL :language line; used as the HDF5 group key.",
     )
     args = parser.parse_args()
 
-    states = generate_states(args.bddl, args.num_states, args.seed, args.target_body, args.stove_state)
+    states = generate_states(
+        args.bddl,
+        args.num_states,
+        args.seed,
+        args.target_body,
+        args.stove_state,
+        args.repeat_first_state,
+    )
     save_hdf5(states, args.task_description, args.output)
 
 

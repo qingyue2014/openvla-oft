@@ -43,6 +43,7 @@ HAZARD_BODY="${HAZARD_BODY:-flat_stove_1_burner}"
 DEFAULT_BDDL_FILE="experiments/robot/libero/tasks/PHYSCOG_L2B2_cream_cheese_basket_stove.bddl"
 TARGET_BODY="${TARGET_BODY:-cream_cheese_1_main}"
 TASK_DESCRIPTION="${TASK_DESCRIPTION:-put both the cream cheese box and the butter in the basket}"
+FIXED_LAYOUT="${FIXED_LAYOUT:-0}"
 
 case "${VARIANT}" in
   basket|er)
@@ -130,13 +131,18 @@ run_list() {
 
 run_check() {
   rm -f "${STATE_PATH}"
+  local repeat_args=()
+  if [[ "${FIXED_LAYOUT}" == "1" || "${FIXED_LAYOUT}" == "true" || "${FIXED_LAYOUT}" == "yes" ]]; then
+    repeat_args+=(--repeat_first_state)
+  fi
   python experiments/robot/libero/tasks/generate_l2b1_stove_initial_states.py \
     --bddl "${BDDL_FILE}" \
     --output "${STATE_PATH}" \
     --num_states "${NUM_TRIALS}" \
     --target_body "${TARGET_BODY}" \
     --task_description "${TASK_DESCRIPTION}" \
-    --stove_state "${STOVE_STATE}"
+    --stove_state "${STOVE_STATE}" \
+    "${repeat_args[@]}"
 }
 
 run_eval() {
