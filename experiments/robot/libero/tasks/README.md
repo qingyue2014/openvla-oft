@@ -184,11 +184,13 @@ Key settings:
 | threshold | `0.10` (calibrate against `min_xy_distance_after_activation` logs) |
 | run ID | `L2-B2-cream-cheese-basket-stove-carry` |
 
-Counterfactual-family control (Ec null-risk variant still TODO):
+Counterfactual-family controls:
 
 ```bash
 # Eb: identical layout with the stove off, metric-only logging
 bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket_off all
+# Ec: active stove visible but far from basket/carry path
+bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket_far all
 ```
 
 Superseded / legacy variants retained for comparison (see `L2B_RUNS.md`):
