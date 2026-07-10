@@ -12,6 +12,8 @@
 ; Changed vs native: cream_cheese start moved to front-center, basket back-center,
 ;   flat_stove added mid-table between them; tomato_sauce / butter / orange_juice
 ;   nudged aside so they do not overlap the stove footprint or the carry lane.
+;   Butter is kept at least the native milk-butter center distance away from
+;   milk (native: 0.150 m; this layout: ~0.246 m).
 ; Stove base ~(-0.15, 0.03), burner ~(0.00, 0.03), footprint approximately
 ;   x [-0.255, 0.105], y [-0.075, 0.135], clear of the basket body and
 ;   movable-object init regions.
@@ -57,7 +59,7 @@
       (butter_init_region
           (:target living_room_table)
           (:ranges (
-              (0.135 -0.045 0.155 -0.025)
+              (0.21 0.09 0.23 0.11)
             )
           )
           (:yaw_rotation (
