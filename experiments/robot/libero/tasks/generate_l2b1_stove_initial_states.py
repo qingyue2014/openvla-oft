@@ -27,6 +27,8 @@ from experiments.robot.libero.tasks.generate_l2b1_initial_states import save_hdf
 
 DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L2B1_stove_near_plate.bddl"
 SETTLE_STEPS = 80
+MAX_SETTLE_XY_DRIFT = 0.03
+MIN_SETTLED_Z = 0.40
 # FlatStove default_turnon_ranges = [0.5, 2.1]; mid-range keeps the knob clearly
 # "on" so the env's set_visualization() shows the red burner site every step.
 STOVE_KNOB_QPOS = 1.5
@@ -73,6 +75,21 @@ def _find_body(env, *candidates) -> str:
                    f"{[env.sim.model.body_id2name(i) for i in range(env.sim.model.nbody)]}")
 
 
+def _state_is_finite(env) -> bool:
+    return bool(np.isfinite(env.sim.data.qpos).all() and np.isfinite(env.sim.data.qvel).all())
+
+
+def _existing_bodies(env, names):
+    result = []
+    for name in names:
+        try:
+            env.sim.model.body_name2id(name)
+        except Exception:
+            continue
+        result.append(name)
+    return result
+
+
 def generate_states(
     bddl_path: str,
     n: int,
@@ -89,13 +106,61 @@ def generate_states(
 
     states = []
     num_resets = 1 if repeat_first_state else n
-    for i in range(num_resets):
+    attempts = 0
+    max_attempts = max(10 * num_resets, num_resets)
+    tracked_bodies = _existing_bodies(
+        env,
+        (
+            "butter_1_main",
+            "cream_cheese_1_main",
+            "basket_1_main",
+            "milk_1_main",
+            "orange_juice_1_main",
+            "tomato_sauce_1_main",
+            "alphabet_soup_1_main",
+            "ketchup_1_main",
+        ),
+    )
+    while len(states) < num_resets:
+        attempts += 1
+        if attempts > max_attempts:
+            raise RuntimeError(
+                f"Could not generate {num_resets} stable layouts after {attempts - 1} attempts. "
+                "The BDDL scene is physically unstable; move the stove or reduce its collision footprint."
+            )
         env.reset()
+        pre_settle_xy = {
+            body: _body_pos(env, body)[:2].copy() for body in tracked_bodies
+        }
         knob_qadr = _set_stove_state(env, stove_state)
         for _ in range(SETTLE_STEPS):
             env.sim.step()
 
-        if i == 0:
+        if not _state_is_finite(env):
+            print(f"  [skip attempt {attempts}] non-finite simulation state")
+            continue
+
+        drift = {
+            body: float(np.linalg.norm(_body_pos(env, body)[:2] - start_xy))
+            for body, start_xy in pre_settle_xy.items()
+        }
+        invalid_drift = {
+            body: value for body, value in drift.items() if value > MAX_SETTLE_XY_DRIFT
+        }
+        invalid_z = {
+            body: float(_body_pos(env, body)[2])
+            for body in tracked_bodies
+            if _body_pos(env, body)[2] < MIN_SETTLED_Z
+        }
+        if invalid_drift or invalid_z:
+            print(
+                f"  [skip attempt {attempts}] unstable layout: "
+                f"drift={invalid_drift}, low_z={invalid_z}"
+            )
+            continue
+
+        state_index = len(states)
+        if state_index == 0:
             burner = _find_body(env, "flat_stove_1_burner", "flat_stove_1_main")
             burner_xy = _body_pos(env, burner)[:2]
             target_xy = _body_pos(env, target_body)[:2]
@@ -114,8 +179,8 @@ def generate_states(
             print(f"  target_to_burner_xy  : {np.linalg.norm(target_xy - burner_xy):.4f}m")
 
         states.append(env.sim.get_state().flatten())
-        if (i + 1) % 10 == 0:
-            print(f"  [{i + 1}/{num_resets}] done")
+        if (state_index + 1) % 10 == 0 or state_index + 1 == num_resets:
+            print(f"  [{state_index + 1}/{num_resets}] valid layouts (attempts={attempts})")
 
     env.close()
     if repeat_first_state and states:
