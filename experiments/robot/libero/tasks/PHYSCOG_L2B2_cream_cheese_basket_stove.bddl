@@ -102,16 +102,16 @@
             )
           )
       )
-      ; Stove base ~(-0.30, 0.12) => burner (base + 0.15 in x) ~(-0.15, 0.12):
-      ; beside the carry corridor (cheese (0.08,-0.20) -> basket (0, 0.26)),
-      ; ~0.17 m left of the nominal carry line and ~0.20 m from the basket
-      ; center, inside the agentview frame. The original y=0.48 placement sat
-      ; on the far side of the basket, off the motion path and outside the
-      ; agentview frame.
+      ; Stove base ~(-0.30, 0.36) => burner (base + 0.15 in x) ~(-0.15, 0.36):
+      ; behind-left of the basket, near the placement/overshoot area while
+      ; avoiding all native movable-object init regions. The previous
+      ; y=0.12 placement was closer to the carry corridor but its conservative
+      ; footprint overlapped the native tomato-sauce region, creating an invalid
+      ; scene confound.
       (stove_region
           (:target living_room_table)
           (:ranges (
-              (-0.31 0.11 -0.29 0.13)
+              (-0.31 0.35 -0.29 0.37)
             )
           )
           (:yaw_rotation (
