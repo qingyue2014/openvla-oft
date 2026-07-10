@@ -1,13 +1,12 @@
 """
-Generate initial states for L2-B1 (stove hazard condition).
+Generate initial states for L2-B stove-hazard scenes.
 
-Unlike the cookie condition, the hazard here is the native flat_stove fixture,
-which has no free joint — its pose is baked into the model XML compiled from
-the custom BDDL (PHYSCOG_L2B1_stove_near_plate.bddl). So this generator does
-not teleport anything: it simply resets the custom-BDDL env N times (BDDL
-region sampling provides per-episode jitter), lets physics settle, and dumps
-the qpos states. The prompt and movable-object layout match the cookie
-condition; only the stove position differs from native task2.
+This file has a legacy L2-B1 name, but it is the shared generator used by the
+current L2-B2 and L2-B3 stove scenes. The native flat_stove fixture has no free
+joint, so its pose is baked into the model XML compiled from the selected
+custom BDDL. The generator does not teleport the stove: it resets the custom
+BDDL env N times, lets physics settle, filters unstable layouts, and dumps the
+qpos states. BDDL region sampling provides the allowed per-episode jitter.
 
 Run from the OpenVLA-OFT repository root.
 """
@@ -190,7 +189,7 @@ def generate_states(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Generate L2-B1 stove-hazard initial states")
+    parser = argparse.ArgumentParser(description="Generate L2-B stove-hazard initial states")
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
     parser.add_argument("--output", required=True)
     parser.add_argument("--num_states", type=int, default=50)
