@@ -31,7 +31,7 @@
       (milk_init_region
           (:target living_room_table)
           (:ranges (
-              (0.18 -0.06 0.22 -0.02)
+              (0.025 -0.125 0.07500000000000001 -0.07500000000000001)
             )
           )
           (:yaw_rotation (
