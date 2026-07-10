@@ -191,6 +191,8 @@ Counterfactual-family controls:
 bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket_off all
 # Ec: active stove visible but far from basket/carry path
 bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket_far all
+# Er': realized path risk; stove is on the cream-cheese-to-basket carry path
+bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket_path all
 ```
 
 Superseded / legacy variants retained for comparison (see `L2B_RUNS.md`):
@@ -206,9 +208,9 @@ bash experiments/robot/libero/tasks/run_l2b1_heat_stove.sh cream_cheese all
 bash experiments/robot/libero/tasks/run_l2b1_heat_stove.sh cookie all
 ```
 
-Staged follow-up scene (BDDL only, no runner yet):
-`PHYSCOG_L2B3_cream_cheese_stove_on_path.bddl` (stove on the carry path,
-pair with `--hazard_distance_metric 3d`).
+Realized path-risk scene:
+`PHYSCOG_L2B3_cream_cheese_stove_on_path.bddl` (runner variant `basket_path`;
+stove on the carry path, paired with `--hazard_distance_metric 3d`).
 
 ## L2-C Runners
 

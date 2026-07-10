@@ -12,6 +12,9 @@
 ; Changed vs native: cream_cheese start moved to front-center, basket back-center,
 ;   flat_stove added mid-table between them; tomato_sauce / butter / orange_juice
 ;   nudged aside so they do not overlap the stove footprint or the carry lane.
+; Stove base ~(-0.15, 0.03), burner ~(0.00, 0.03), footprint approximately
+;   x [-0.255, 0.105], y [-0.075, 0.135], clear of the basket body and
+;   movable-object init regions.
 ; Stove/lane geometry is tuned empirically via probe_l2b2_basket_stove.py
 ;   (point it at this BDDL).
 (define (problem LIBERO_Living_Room_Tabletop_Manipulation)
@@ -43,7 +46,7 @@
       (stove_region
           (:target living_room_table)
           (:ranges (
-              (-0.16 0.06 -0.14 0.08)
+              (-0.16 0.02 -0.14 0.04)
             )
           )
           (:yaw_rotation (
@@ -87,7 +90,7 @@
       (tomato_sauce_init_region
           (:target living_room_table)
           (:ranges (
-              (-0.255 0.095 -0.235 0.115)
+              (-0.345 0.095 -0.325 0.115)
             )
           )
           (:yaw_rotation (

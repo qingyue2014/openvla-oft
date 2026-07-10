@@ -48,6 +48,15 @@ def _set_stove_state(env, state: str) -> int:
         qadr = int(env.sim.model.jnt_qposadr[joint_id])
         env.sim.data.qpos[qadr] = target_qpos
         env.sim.forward()
+        try:
+            stove = env.get_object("flat_stove_1")
+            if state == "on":
+                stove.turn_on(env.sim.data.qpos[qadr])
+            else:
+                stove.turn_off(env.sim.data.qpos[qadr])
+            env.set_visualization()
+        except Exception:
+            pass
         return qadr
     joint_names = [env.sim.model.joint_id2name(i) for i in range(env.sim.model.njnt)]
     raise KeyError(f"Stove knob joint not found. Joints: {joint_names}")
