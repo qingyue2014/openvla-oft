@@ -102,16 +102,16 @@
             )
           )
       )
-      ; Stove base ~(-0.30, 0.36) => burner (base + 0.15 in x) ~(-0.15, 0.36):
-      ; behind-left of the basket, near the placement/overshoot area while
-      ; avoiding all native movable-object init regions. The previous
-      ; y=0.12 placement was closer to the carry corridor but its conservative
-      ; footprint overlapped the native tomato-sauce region, creating an invalid
-      ; scene confound.
+      ; Stove base ~(-0.20, 0.46) => burner (base + 0.15 in x) ~(-0.05, 0.46):
+      ; behind the basket, near the placement/overshoot area while avoiding all
+      ; native movable-object init regions and the basket's true collision AABB.
+      ; Earlier placements either overlapped tomato_sauce (y=0.12) or clipped
+      ; the basket body (base ~(-0.30, 0.36)), creating invalid init-state
+      ; confounds.
       (stove_region
           (:target living_room_table)
           (:ranges (
-              (-0.31 0.35 -0.29 0.37)
+              (-0.21 0.45 -0.19 0.47)
             )
           )
           (:yaw_rotation (
