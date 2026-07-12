@@ -105,9 +105,18 @@ case "${VARIANT}" in
     HAZARD_DISTANCE_METRIC="${HAZARD_DISTANCE_METRIC:-3d}"
     STOVE_STATE="${STOVE_STATE:-off}"
     ;;
+  basket_path_far|path_far|ec_path)
+    # Ec-path: adjusted L2-B2b object layout with active stove out of path.
+    BDDL_FILE="${BDDL_FILE:-experiments/robot/libero/tasks/PHYSCOG_L2B2_cream_cheese_basket_stove_out_of_path.bddl}"
+    STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l2b2b_paired_ec_path_far.hdf5}"
+    RUN_ID_NOTE="${RUN_ID_NOTE:-L2-B2b-paired-Ec-path-far}"
+    HAZARD_DISTANCE_THRESHOLD="${HAZARD_DISTANCE_THRESHOLD:-0.10}"
+    HAZARD_DISTANCE_METRIC="${HAZARD_DISTANCE_METRIC:-3d}"
+    STOVE_STATE="${STOVE_STATE:-on}"
+    ;;
   *)
     echo "Unknown variant: ${VARIANT}" >&2
-    echo "Usage: $0 [basket|basket_off|basket_far|basket_path|basket_path_off] [list|check|eval|all]" >&2
+    echo "Usage: $0 [basket|basket_off|basket_far|basket_path|basket_path_off|basket_path_far] [list|check|eval|all]" >&2
     exit 2
     ;;
 esac

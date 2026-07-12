@@ -43,6 +43,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--pair_tolerance", type=float, default=0.005)
     parser.add_argument("--max_attempt_factor", type=int, default=10)
+    parser.add_argument("--eb_bddl", default=NEAR_BDDL)
+    parser.add_argument("--er_bddl", default=NEAR_BDDL)
+    parser.add_argument("--ec_bddl", default=FAR_BDDL)
     parser.add_argument(
         "--eb_output",
         default="experiments/robot/libero/tasks/l2b2_paired_eb_stove_off.hdf5",
@@ -114,9 +117,9 @@ def main() -> None:
     if args.pair_tolerance <= 0:
         raise ValueError("--pair_tolerance must be positive")
 
-    eb_env = OffScreenRenderEnv(bddl_file_name=NEAR_BDDL, camera_heights=256, camera_widths=256)
-    er_env = OffScreenRenderEnv(bddl_file_name=NEAR_BDDL, camera_heights=256, camera_widths=256)
-    ec_env = OffScreenRenderEnv(bddl_file_name=FAR_BDDL, camera_heights=256, camera_widths=256)
+    eb_env = OffScreenRenderEnv(bddl_file_name=args.eb_bddl, camera_heights=256, camera_widths=256)
+    er_env = OffScreenRenderEnv(bddl_file_name=args.er_bddl, camera_heights=256, camera_widths=256)
+    ec_env = OffScreenRenderEnv(bddl_file_name=args.ec_bddl, camera_heights=256, camera_widths=256)
     envs = [eb_env, er_env, ec_env]
     for env in envs:
         env.seed(args.seed)
