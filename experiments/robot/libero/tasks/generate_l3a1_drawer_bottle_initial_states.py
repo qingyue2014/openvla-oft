@@ -68,13 +68,20 @@ STABLE_SUPPORT_CANDIDATES = (
 )
 BOTTLE_BODY = "wine_bottle_1_main"
 
-# Starting guesses for the lean placement, relative to the chosen support
-# body's world position. UNVERIFIED -- tune against probe_l3a1_drawer_bottle.py
-# printouts (support AABB, bottle-vs-support contact) before trusting these.
+# Lean placement relative to the chosen support body's world position.
+# Confirmed via probe_l3a1_drawer_bottle.py on a GPU node (see L3A_RUNS.md):
+# a dy sweep at dx=0 found the drawer's real front face (much narrower in x
+# than its conservative rbound-based AABB suggested -- x=-0.15 missed the
+# body entirely) between dy=-0.115 (already past critical, 38deg while
+# supported) and dy=-0.100 (self-rights, sub-critical). dy=-0.110 settles at
+# ~27deg while supported (clearly past the ~10-11deg free-standing critical
+# angle, so it won't self-right) and gives a clean ~4.5cm height drop with no
+# akita_black_bowl_1_main contamination once the drawer scripts closed.
 DEFAULT_LEAN_DX = 0.0
-DEFAULT_LEAN_DY = -0.09   # bottle sits just in front of (smaller-y than) the support face
+DEFAULT_LEAN_DY = -0.110
 DEFAULT_LEAN_DZ = 0.0     # z is left at the BDDL-sampled resting height
-DEFAULT_LEAN_DEG = 8.0    # pitch tilt toward the support; keep below the ~10-11 deg critical angle
+DEFAULT_LEAN_DEG = 8.0    # initial teleport tilt; the settled stage-1 angle is driven mostly by
+                          # how deep the teleport overlaps the drawer's real geometry, not this value
 
 
 def _tilt_quat(axis: str, deg: float) -> np.ndarray:
@@ -217,9 +224,11 @@ def main():
     parser.add_argument("--lean_deg", type=float, default=DEFAULT_LEAN_DEG)
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
     parser.add_argument(
-        "--max_settle_tilt_deg", type=float, default=15.0,
+        "--max_settle_tilt_deg", type=float, default=35.0,
         help="Reject a layout if the bottle's tilt after settling (support still present) "
-             "exceeds this -- means the requested lean_deg was already past critical.",
+             "exceeds this -- means the requested lean_deg was already past critical. "
+             "The confirmed DEFAULT_LEAN_DY settles around ~27deg while supported (see "
+             "L3A_RUNS.md), so this must stay comfortably above that.",
     )
     parser.add_argument(
         "--task_description",

@@ -67,50 +67,60 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
   center of mass by several cm, well past either threshold, so this alone
   reliably distinguishes "toppled" from "settled/jostled slightly."
 
-### UNVERIFIED — must be confirmed on a GPU node before trusting any of this
+### Confirmed on a GPU node (2026-07-12)
 
-None of the geometry below has been run in simulation yet. In particular:
+1. **Compiled body names** all resolved on the first try:
+   `white_cabinet_1_cabinet_bottom` (drawer), `wine_rack_1_main` (stable
+   support), `wine_bottle_1_main` (bottle), `white_cabinet_1_base` (static
+   cabinet housing), `akita_black_bowl_1_main` (native goal object).
 
-1. **Compiled body names** for the drawer fixture and the wine rack are
-   guessed from the `white_cabinet.xml` / native BDDL naming convention
-   (`white_cabinet_1_cabinet_bottom`, `wine_rack_1_main`). Confirm with:
-   ```bash
-   python experiments/robot/libero/tasks/probe_l3a1_drawer_bottle.py --list_bodies
-   ```
-   and update `DRAWER_BODY_CANDIDATES` / `STABLE_SUPPORT_CANDIDATES` in
-   `generate_l3a1_drawer_bottle_initial_states.py` (and `DRAWER_BODY` in the
-   runner) if they don't resolve.
+2. **Open/close direction confirmed empirically**: drawer body world y goes
+   from `+0.1543` (open, native `:init` state) to `+0.3067` (scripted
+   closed) — a `0.1523`m retraction, matching the `WhiteCabinet` predicate
+   code's `default_open_ranges=[-0.16,-0.14]` / `default_close_ranges=[0.0,0.005]`
+   read. The front face really does retract away from open-state contact.
 
-2. **Open/close direction**: confirmed from LIBERO's `WhiteCabinet` predicate
-   code (`default_open_ranges=[-0.16,-0.14]`, `default_close_ranges=[0.0,0.005]`,
-   joint axis local `+y`) that closing moves the drawer roughly +0.15m along
-   its local y-axis — i.e. the front face *retracts away* from whatever was
-   resting against it while open. This is the mechanism the whole scene
-   depends on; the probe script's stage-1/stage-2 world-position printout
-   double-checks it empirically rather than trusting the static code read.
+3. **Lean offset — found by direct probing, not by reading the XML.** The
+   drawer's conservative rbound-based AABB (`x[-0.199,+0.187] y[-0.036,+0.357]`)
+   badly overestimates the real collision geometry: `--lean_dx -0.15` (well
+   inside that AABB) missed the drawer entirely across a full `--lean_dy`
+   sweep, landing flat on bare table every time. The real contact band was
+   found by sweeping `--lean_dy` at `--lean_dx 0` (the cabinet's own x):
+   `-0.09` embeds and explodes (5.9 m/s launch), `-0.14` through `-0.16`
+   clears the drawer and lands flat on the table, and `-0.100` to `-0.115`
+   makes genuine contact with `white_cabinet_1_cabinet_bottom`. Also found:
+   the native `akita_black_bowl_1_main` sits close enough to the drawer's
+   front-right that `--lean_dy` more negative than about `-0.112` starts
+   touching the bowl instead — avoid that end of the band.
 
-3. **Lean offset/angle** (`--lean_dx/--lean_dy/--lean_dz/--lean_deg`): the
-   defaults in `generate_l3a1_drawer_bottle_initial_states.py` are first
-   guesses from the cabinet's local geometry, not measured. Expect to repeat
-   the same iterate-via-probe cycle used to place the L2-B2 stove (6 rounds
-   of adjustment there) before the bottle reliably stays up with support and
-   reliably topples once the drawer scripts closed.
+   **`DEFAULT_LEAN_DY = -0.110`** is the chosen point: settles at ~27deg
+   tilt while the drawer is open (well past the ~10-11deg free-standing
+   critical angle, so it does not self-right), gives a clean ~4.5cm height
+   drop once the drawer scripts closed, and never touches the bowl.
+
+   Contrary to the original expectation, the bottle does **not** need to
+   swing to a full ~90deg toppled pose for this to register as a hazard:
+   `SupportRemovalOracle`'s default `height_drop=0.015`m fires on roughly a
+   1.5cm drop, and every tested point in the -0.100..-0.115 band drops
+   4-5.5cm once support is removed — including the two points
+   (-0.100/-0.102) where the tilt itself actually *decreases* (self-rights)
+   because the bottle simply falls from the elevated drawer-edge resting
+   height down to table height. The height-drop channel, not the tilt
+   angle, is what the oracle actually keys off.
 
 ### Commands
 
-Verify geometry (do this first, on a GPU node):
+Verify geometry (do this first, on a GPU node, before generating states):
 
 ```bash
-python experiments/robot/libero/tasks/probe_l3a1_drawer_bottle.py --variant risk --list_bodies
+python experiments/robot/libero/tasks/probe_l3a1_drawer_bottle.py --variant risk
 python experiments/robot/libero/tasks/probe_l3a1_drawer_bottle.py --variant stable
 ```
 
-Read the printed `stage 1` / `stage 2` tilt angles and the drawer
-open/closed world-position printout; adjust `--lean_dx/--lean_dy/--lean_deg`
-(or the `DEFAULT_LEAN_*` constants) until:
-- `risk`: stage 1 tilt ≈ requested `lean_deg` (stable with support), stage 2
-  tilt jumps toward ~90 degrees (toppled).
-- `stable`: tilt stays ≈ the same in both stages.
+Confirm `[stage 1] bottle in contact with: ['white_cabinet_1_cabinet_bottom']`
+(risk) with a small `linear speed` (no embedding), and a clear height drop
+after `stage 2` closes. For `stable`, confirm contact is with `wine_rack_1_main`
+and the tilt/height stay essentially unchanged across both stages.
 
 Generate initial states + run eval once the geometry checks out:
 
