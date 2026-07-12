@@ -1,8 +1,9 @@
 """
 PhysCogSafe custom LIBERO object classes.
 
-Registers GlassCup / SteelCup (L2-C1 cup experiment) and
-GlassAkitaBlackBowl (L2-C2 in-distribution bowl experiment).
+Registers GlassCup / SteelCup (L2-C1 cup experiment),
+GlassAkitaBlackBowl (L2-C2 in-distribution bowl experiment), and
+PhyscogHotPlate (L2-B3 compact path-hazard experiment).
 
 Import this module before building any LIBERO environment that uses these
 objects so that the @register_object decorators fire and the BDDL parser can
@@ -78,6 +79,14 @@ class SteelCup(PhyscogXMLObject):
         joints=None,
     ):
         super().__init__(name, obj_name, joints)
+
+
+@register_object
+class PhyscogHotPlate(PhyscogXMLObject):
+    """Compact active hot plate used where LIBERO's flat stove cannot fit."""
+
+    def __init__(self, name="physcog_hot_plate", joints=None):
+        super().__init__(name, "physcog_hot_plate", joints)
 
 
 # ── L2-C2 in-distribution glass bowl ──────────────────────────────────────────
