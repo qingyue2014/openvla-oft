@@ -89,6 +89,36 @@ def _existing_bodies(env, names):
     return result
 
 
+TABLE_XY_MARGIN = 0.03  # m; slack added on top of the table's conservative geom AABB
+
+
+def _table_xy_bounds(env):
+    """Conservative world-frame XY bounds of the table surface (plus margin).
+
+    Used to confirm every tracked object is still resting somewhere on the
+    table after settling, not just that it didn't drift/fall below MIN_SETTLED_Z
+    (an object can be flung sideways off the table edge without necessarily
+    dropping below that z threshold, e.g. if it lands on a chair or ledge).
+    """
+    model = env.sim.model
+    table_body_ids = {
+        i for i in range(model.nbody)
+        if "table" in (model.body_id2name(i) or "").lower()
+    }
+    if not table_body_ids:
+        raise RuntimeError("No body with 'table' in its name found; cannot bound the scene.")
+    lo = np.full(2, np.inf)
+    hi = np.full(2, -np.inf)
+    for geom_id in range(model.ngeom):
+        if model.geom_bodyid[geom_id] not in table_body_ids:
+            continue
+        center = env.sim.data.geom_xpos[geom_id][:2]
+        radius = model.geom_rbound[geom_id]
+        lo = np.minimum(lo, center - radius)
+        hi = np.maximum(hi, center + radius)
+    return lo - TABLE_XY_MARGIN, hi + TABLE_XY_MARGIN
+
+
 def generate_states(
     bddl_path: str,
     n: int,
@@ -99,6 +129,14 @@ def generate_states(
 ):
     env = OffScreenRenderEnv(bddl_file_name=bddl_path, camera_heights=256, camera_widths=256)
     env.seed(seed)
+
+    try:
+        env.sim.model.body_name2id(target_body)
+    except Exception as exc:
+        raise RuntimeError(
+            f"target_body '{target_body}' not found in the compiled model for {bddl_path}. "
+            "Check --target_body against the BDDL's object names."
+        ) from exc
 
     print(f"\nBDDL: {bddl_path}")
     print(f"Generating {n} states (seed={seed}, stove_state={stove_state}, repeat_first_state={repeat_first_state})...\n")
@@ -120,6 +158,9 @@ def generate_states(
             "ketchup_1_main",
         ),
     )
+    if target_body not in tracked_bodies:
+        tracked_bodies = tracked_bodies + [target_body]
+    table_bounds = None
     while len(states) < num_resets:
         attempts += 1
         if attempts > max_attempts:
@@ -151,10 +192,23 @@ def generate_states(
             for body in tracked_bodies
             if _body_pos(env, body)[2] < MIN_SETTLED_Z
         }
-        if invalid_drift or invalid_z:
+
+        if table_bounds is None:
+            table_bounds = _table_xy_bounds(env)
+            lo, hi = table_bounds
+            print(f"  table xy bounds (+{TABLE_XY_MARGIN}m margin): "
+                  f"x [{lo[0]:+.3f}, {hi[0]:+.3f}]  y [{lo[1]:+.3f}, {hi[1]:+.3f}]")
+        lo, hi = table_bounds
+        missing_or_offtable = {}
+        for body in tracked_bodies:
+            xy = _body_pos(env, body)[:2]
+            if not (lo[0] <= xy[0] <= hi[0] and lo[1] <= xy[1] <= hi[1]):
+                missing_or_offtable[body] = xy.tolist()
+
+        if invalid_drift or invalid_z or missing_or_offtable:
             print(
-                f"  [skip attempt {attempts}] unstable layout: "
-                f"drift={invalid_drift}, low_z={invalid_z}"
+                f"  [skip attempt {attempts}] unstable/incomplete layout: "
+                f"drift={invalid_drift}, low_z={invalid_z}, off_table={missing_or_offtable}"
             )
             continue
 
