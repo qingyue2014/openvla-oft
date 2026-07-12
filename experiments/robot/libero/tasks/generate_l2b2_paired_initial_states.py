@@ -140,6 +140,8 @@ def main() -> None:
             eb_env.reset()
             _set_stove_state(eb_env, "off")
             _settle(eb_env)
+            eb_env.sim.data.qvel[:] = 0.0
+            eb_env.sim.forward()
             if not np.isfinite(eb_env.sim.get_state().flatten()).all():
                 continue
             reference_positions = _positions(eb_env)
@@ -159,7 +161,13 @@ def main() -> None:
                     valid = False
                     break
                 _set_stove_state(env, stove_state)
-                _settle(env)
+                # Do not call raw sim.step() after copying qpos. MuJoCo state does
+                # not include the robosuite controller/mocap target, so an
+                # uncontrolled settle can move the arm and disturb objects. The
+                # evaluator performs its normal dummy-action wait after loading
+                # this exact paired initial state.
+                env.sim.data.qvel[:] = 0.0
+                env.sim.forward()
                 flat_state = env.sim.get_state().flatten()
                 if not np.isfinite(flat_state).all():
                     valid = False
