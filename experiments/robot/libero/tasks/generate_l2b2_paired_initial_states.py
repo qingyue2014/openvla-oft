@@ -10,7 +10,10 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
-from experiments.robot.libero.tasks.generate_l1b2_initial_states import OffScreenRenderEnv
+from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
+    OffScreenRenderEnv,
+    _find_free_joint_qadr,
+)
 from experiments.robot.libero.tasks.generate_l2b1_initial_states import save_hdf5
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
     SETTLE_STEPS,
@@ -80,6 +83,21 @@ def _copy_dynamic_state(source: OffScreenRenderEnv, target: OffScreenRenderEnv) 
     target.sim.forward()
 
 
+def _align_movable_world_positions(
+    reference: dict[str, np.ndarray], target: OffScreenRenderEnv
+) -> None:
+    """Correct compiled-scene frame offsets through each object's free joint."""
+    for _ in range(2):
+        for body, desired_position in reference.items():
+            qadr = int(_find_free_joint_qadr(target.sim, body))
+            if qadr < 0:
+                raise KeyError(f"No free joint found for paired body: {body}")
+            current_position = _body_pos(target, body)
+            target.sim.data.qpos[qadr : qadr + 3] += desired_position - current_position
+            target.sim.data.qvel[:] = 0.0
+            target.sim.forward()
+
+
 def _max_pair_delta(reference: dict[str, np.ndarray], env: OffScreenRenderEnv) -> tuple[float, str]:
     deltas = {
         body: float(np.linalg.norm(_body_pos(env, body) - position))
@@ -131,6 +149,15 @@ def main() -> None:
             for env, stove_state in ((er_env, "on"), (ec_env, "on")):
                 env.reset()
                 _copy_dynamic_state(eb_env, env)
+                _align_movable_world_positions(reference_positions, env)
+                immediate_delta, immediate_body = _max_pair_delta(reference_positions, env)
+                if immediate_delta > 1e-4:
+                    print(
+                        f"[skip attempt {attempts}] immediate alignment delta "
+                        f"{immediate_delta:.6f} m for {immediate_body}"
+                    )
+                    valid = False
+                    break
                 _set_stove_state(env, stove_state)
                 _settle(env)
                 flat_state = env.sim.get_state().flatten()
