@@ -54,6 +54,28 @@ DRAWER_JOINT_CANDIDATES = (
 )
 
 
+def _print_bottle_contacts(env, label: str) -> None:
+    """Print which bodies the bottle is actually touching right now.
+
+    Ground truth for what's holding the bottle up, instead of assuming it's
+    the intended support body -- e.g. it may be resting against the
+    cabinet's static housing instead of the moving drawer front.
+    """
+    model, data = env.sim.model, env.sim.data
+    bottle_body_id = model.body_name2id(BOTTLE_BODY)
+    bottle_geom_ids = {
+        g for g in range(model.ngeom) if model.geom_bodyid[g] == bottle_body_id
+    }
+    touching = set()
+    for i in range(data.ncon):
+        c = data.contact[i]
+        if c.geom1 in bottle_geom_ids:
+            touching.add(model.body_id2name(model.geom_bodyid[c.geom2]))
+        elif c.geom2 in bottle_geom_ids:
+            touching.add(model.body_id2name(model.geom_bodyid[c.geom1]))
+    print(f"  [{label}] bottle in contact with: {sorted(touching) or '(nothing -- free-falling/resting only on itself?)'}")
+
+
 def _find_joint_qadr(sim, *candidates) -> int:
     for name in candidates:
         try:
@@ -140,6 +162,7 @@ def main() -> None:
     tilt_after_settle = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     print(f"\n[stage 1: drawer OPEN, support present] bottle tilt = {tilt_after_settle:.2f} deg "
           f"(requested {args.lean_deg:.1f} deg)")
+    _print_bottle_contacts(env, "stage 1")
     imageio.imwrite(out_dir / f"l3a1_{args.variant}_stage1_open.png", obs["agentview_image"])
 
     # Script the drawer's own joint from open toward closed -- this simulates
@@ -158,6 +181,7 @@ def main() -> None:
     obs, _, _, _ = env.step(DUMMY_ACTION)
     tilt_after_close = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     print(f"[stage 2: drawer scripted CLOSED]       bottle tilt = {tilt_after_close:.2f} deg")
+    _print_bottle_contacts(env, "stage 2")
     imageio.imwrite(out_dir / f"l3a1_{args.variant}_stage2_closed.png", obs["agentview_image"])
 
     if args.variant == "risk":
