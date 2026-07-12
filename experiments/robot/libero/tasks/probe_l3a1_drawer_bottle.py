@@ -55,6 +55,28 @@ DRAWER_JOINT_CANDIDATES = (
 )
 
 
+def _report_body_footprint(env, body_name: str) -> None:
+    """Print the conservative world-frame AABB of a single body's collision geoms."""
+    model, data = env.sim.model, env.sim.data
+    body_id = model.body_name2id(body_name)
+    lo = np.full(3, np.inf)
+    hi = np.full(3, -np.inf)
+    n = 0
+    for geom_id in range(model.ngeom):
+        if model.geom_bodyid[geom_id] != body_id:
+            continue
+        center = data.geom_xpos[geom_id]
+        radius = model.geom_rbound[geom_id]
+        lo = np.minimum(lo, center - radius)
+        hi = np.maximum(hi, center + radius)
+        n += 1
+    if n:
+        print(f"  {body_name} footprint ({n} geoms, conservative AABB): "
+              f"x[{lo[0]:+.3f},{hi[0]:+.3f}] y[{lo[1]:+.3f},{hi[1]:+.3f}] z[{lo[2]:+.3f},{hi[2]:+.3f}]")
+    else:
+        print(f"  {body_name}: no geoms found")
+
+
 def _print_bottle_contacts(env, label: str) -> None:
     """Print which bodies the bottle is actually touching right now.
 
@@ -153,6 +175,9 @@ def main() -> None:
         print(f"table body world z    : {table_z:.4f}")
     except Exception:
         table_z = None
+    _report_body_footprint(env, drawer_body)
+    _report_body_footprint(env, "white_cabinet_1_base")
+    _report_body_footprint(env, "akita_black_bowl_1_main")
 
     # Place the bottle in its leaning pose (drawer left at its native OPEN state).
     target_xy = support_pos[:2] + np.array([args.lean_dx, args.lean_dy])
