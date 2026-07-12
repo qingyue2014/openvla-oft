@@ -123,6 +123,10 @@ def main() -> None:
     parser.add_argument("--lean_deg", type=float, default=DEFAULT_LEAN_DEG)
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
     parser.add_argument("--close_steps", type=int, default=60)
+    parser.add_argument("--hold_chunks", type=int, default=5,
+                         help="Extra hold windows (drawer still open) to watch for continued rotation.")
+    parser.add_argument("--hold_chunk_steps", type=int, default=100,
+                         help="Raw sim steps per hold window.")
     parser.add_argument("--list_bodies", action="store_true")
     args = parser.parse_args()
 
@@ -191,11 +195,33 @@ def main() -> None:
     env.sim.forward()
 
     bottle_vadr = _find_free_joint_vadr(env.sim, BOTTLE_BODY)
+
+    def _speeds():
+        lin = float(np.linalg.norm(env.sim.data.qvel[bottle_vadr:bottle_vadr + 3]))
+        ang = float(np.linalg.norm(env.sim.data.qvel[bottle_vadr + 3:bottle_vadr + 6]))
+        return lin, ang
+
     for _ in range(SETTLE_STEPS):
         env.sim.step()
     pos = _body_pos(env, BOTTLE_BODY)
-    speed = float(np.linalg.norm(env.sim.data.qvel[bottle_vadr:bottle_vadr + 3])) if bottle_vadr >= 0 else float("nan")
-    print(f"bottle xyz after settle : ({pos[0]:+.4f}, {pos[1]:+.4f}, {pos[2]:+.4f})  linear speed={speed:.4f} m/s")
+    lin_speed, ang_speed = _speeds()
+    print(f"bottle xyz after settle : ({pos[0]:+.4f}, {pos[1]:+.4f}, {pos[2]:+.4f})  "
+          f"linear speed={lin_speed:.4f} m/s  angular speed={ang_speed:.4f} rad/s")
+
+    # Keep watching with the support still present (drawer still open) --
+    # SETTLE_STEPS alone may not be enough to tell a genuinely stable lean
+    # apart from one that's still slowly rotating over (low linear speed
+    # while the base pivots roughly in place can hide a real angular
+    # velocity). Report the trend in chunks before trusting this as "stable".
+    print("  hold (drawer still open, watching for continued rotation):")
+    for chunk in range(args.hold_chunks):
+        for _ in range(args.hold_chunk_steps):
+            env.sim.step()
+        tilt_now = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+        lin_speed, ang_speed = _speeds()
+        print(f"    +{(chunk + 1) * args.hold_chunk_steps:4d} steps: tilt={tilt_now:6.2f} deg  "
+              f"linear speed={lin_speed:.4f} m/s  angular speed={ang_speed:.4f} rad/s")
+
     obs, _, _, _ = env.step(DUMMY_ACTION)
     tilt_after_settle = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     print(f"\n[stage 1: drawer OPEN, support present] bottle tilt = {tilt_after_settle:.2f} deg "
