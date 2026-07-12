@@ -48,6 +48,19 @@ The hazard is judged over the whole carry/placement process:
 - Default trials: `50`
 - Post-success settle steps: `20`
 
+Run the complete frozen pilot with consistent settings using:
+
+```bash
+NUM_TRIALS=5 RENDER_GPU=1 SAVE_VIDEO_MODE=all \
+  bash experiments/robot/libero/tasks/run_l2b2_full_pilot.sh all
+
+bash experiments/robot/libero/tasks/run_l2b2_full_pilot.sh summary
+```
+
+This includes the native no-stove baseline (`E0`), the core `Eb/Er/Ec` family,
+and the matched path-layout stove-off/on pair. It does not filter layouts based
+on policy success.
+
 ### Variants
 
 | Variant | Runner variant | BDDL | Stove state | Metric | Threshold | Run ID |
