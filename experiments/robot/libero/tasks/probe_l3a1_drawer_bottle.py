@@ -28,6 +28,7 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     OffScreenRenderEnv,
     _find_free_joint_qadr,
 )
+from experiments.robot.libero.physcog_oracles import _find_free_joint_vadr
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import _body_pos, _find_body
 from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states import (
     BOTTLE_BODY,
@@ -147,17 +148,29 @@ def main() -> None:
     env.sim.data.qpos[drawer_qadr] = saved_qpos
     env.sim.forward()
 
+    try:
+        table_z = float(_body_pos(env, "table")[2])
+        print(f"table body world z    : {table_z:.4f}")
+    except Exception:
+        table_z = None
+
     # Place the bottle in its leaning pose (drawer left at its native OPEN state).
     target_xy = support_pos[:2] + np.array([args.lean_dx, args.lean_dy])
-    bottle_z = _body_pos(env, BOTTLE_BODY)[2] + args.lean_dz
+    bottle_z_pre_teleport = _body_pos(env, BOTTLE_BODY)[2]
+    bottle_z = bottle_z_pre_teleport + args.lean_dz
+    print(f"bottle z before teleport: {bottle_z_pre_teleport:.4f}  -> target xyz=({target_xy[0]:+.4f},{target_xy[1]:+.4f},{bottle_z:.4f})")
     env.sim.data.qpos[bottle_qadr:bottle_qadr + 2] = target_xy
     env.sim.data.qpos[bottle_qadr + 2] = bottle_z
     env.sim.data.qpos[bottle_qadr + 3:bottle_qadr + 7] = _tilt_quat(args.lean_axis, args.lean_deg)
     env.sim.data.qvel[:] = 0
     env.sim.forward()
 
+    bottle_vadr = _find_free_joint_vadr(env.sim, BOTTLE_BODY)
     for _ in range(SETTLE_STEPS):
         env.sim.step()
+    pos = _body_pos(env, BOTTLE_BODY)
+    speed = float(np.linalg.norm(env.sim.data.qvel[bottle_vadr:bottle_vadr + 3])) if bottle_vadr >= 0 else float("nan")
+    print(f"bottle xyz after settle : ({pos[0]:+.4f}, {pos[1]:+.4f}, {pos[2]:+.4f})  linear speed={speed:.4f} m/s")
     obs, _, _, _ = env.step(DUMMY_ACTION)
     tilt_after_settle = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     print(f"\n[stage 1: drawer OPEN, support present] bottle tilt = {tilt_after_settle:.2f} deg "
@@ -178,8 +191,11 @@ def main() -> None:
         env.sim.step()
     for _ in range(SETTLE_STEPS):
         env.sim.step()
+    pos2 = _body_pos(env, BOTTLE_BODY)
+    speed2 = float(np.linalg.norm(env.sim.data.qvel[bottle_vadr:bottle_vadr + 3])) if bottle_vadr >= 0 else float("nan")
     obs, _, _, _ = env.step(DUMMY_ACTION)
     tilt_after_close = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+    print(f"bottle xyz after close  : ({pos2[0]:+.4f}, {pos2[1]:+.4f}, {pos2[2]:+.4f})  linear speed={speed2:.4f} m/s")
     print(f"[stage 2: drawer scripted CLOSED]       bottle tilt = {tilt_after_close:.2f} deg")
     _print_bottle_contacts(env, "stage 2")
     imageio.imwrite(out_dir / f"l3a1_{args.variant}_stage2_closed.png", obs["agentview_image"])
