@@ -15,8 +15,9 @@ from pathlib import Path
 # Map run_id_note → (test_label, group_label)
 # Order here controls table row order.
 RUN_LABELS = {
-    "L1-A1-ramekin-vs-plate-occlusion":    ("L1-A1", "Occlusion"),
-    "L1-A1-ramekin-vs-plate-matched-safe": ("L1-A1", "Matched Safe"),
+    "L1-A1-native-baseline":               ("L1-A1", "Eb Native"),
+    "L1-A1-ramekin-vs-plate-occlusion":    ("L1-A1", "Er Occlusion"),
+    "L1-A1-ramekin-vs-plate-matched-safe": ("L1-A1", "Ec Matched Safe"),
     "L1-A2-drawer-occlusion":              ("L1-A2", "Occlusion"),
     "L1-A2-drawer-matched-safe":           ("L1-A2", "Matched Safe"),
     "L1-B1-task6-cookies":                 ("L1-B1", "Contact"),
@@ -87,22 +88,31 @@ def build_table(results: dict) -> str:
     for test, group, tsr, svr, ssr in rows:
         lines.append(f"{test:<8} {group:<14} {tsr:>8} {svr:>8} {ssr:>8}")
 
-    # Delta rows (only for tests with matched safe control)
+    # Delta rows for counterfactual contrasts.
     lines.append(sep)
-    for test_name in ("L1-A1", "L1-A2", "L1-B1"):
-        occ_note  = next((k for k, v in RUN_LABELS.items() if v[0] == test_name and v[1] != "Matched Safe"), None)
-        safe_note = next((k for k, v in RUN_LABELS.items() if v == (test_name, "Matched Safe")), None)
-        if occ_note in results and safe_note in results:
-            def _pct(s):
-                m = re.search(r"([\d.]+)%", s)
-                return float(m.group(1)) if m else None
-            occ_sr  = _pct(results[occ_note]["task_success"])
-            safe_sr = _pct(results[safe_note]["task_success"])
-            if occ_sr is not None and safe_sr is not None:
-                delta = occ_sr - safe_sr
+    def _pct(s):
+        m = re.search(r"([\d.]+)%", s)
+        return float(m.group(1)) if m else None
+
+    contrasts = [
+        ("L1-A1", "Δ (Er-Eb)", "L1-A1-ramekin-vs-plate-occlusion", "L1-A1-native-baseline",
+         "risk-scene task success shift from native baseline"),
+        ("L1-A1", "Δ (Er-Ec)", "L1-A1-ramekin-vs-plate-occlusion", "L1-A1-ramekin-vs-plate-matched-safe",
+         "risk-specific shift after matched-safe control"),
+        ("L1-A2", "Δ (Occ-Safe)", "L1-A2-drawer-occlusion", "L1-A2-drawer-matched-safe",
+         "task success drop due to perturbation"),
+        ("L1-B1", "Δ (Risk-Safe)", "L1-B1-task6-cookies", "L1-B1-task6-matched-safe",
+         "task success drop due to perturbation"),
+    ]
+    for test_name, label, lhs_note, rhs_note, description in contrasts:
+        if lhs_note in results and rhs_note in results:
+            lhs_sr = _pct(results[lhs_note]["task_success"])
+            rhs_sr = _pct(results[rhs_note]["task_success"])
+            if lhs_sr is not None and rhs_sr is not None:
+                delta = lhs_sr - rhs_sr
                 lines.append(
-                    f"{test_name:<8} {'Δ (Occ-Safe)':<14} {delta:>+7.1f}%"
-                    "          (task success drop due to perturbation)"
+                    f"{test_name:<8} {label:<14} {delta:>+7.1f}%"
+                    f"          ({description})"
                 )
     return "\n".join(lines)
 

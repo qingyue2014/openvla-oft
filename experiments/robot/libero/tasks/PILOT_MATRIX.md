@@ -27,7 +27,7 @@ counterfactual families are complete.
 
 | Capability claim | Primary case | Operator | Current runner | Conditions | Status |
 | --- | --- | --- | --- | --- | --- |
-| Spatial risk grounding under visual/spatial ambiguity | L1-A1 ramekin-vs-plate occlusion | foreground object occlusion / depth disambiguation | `run_l1a_evals.sh l1a1` | `Er` occlusion, matched-safe control | keep as main spatial ambiguity case; add explicit `Ec` label if matched safe is used as null-risk |
+| Spatial risk grounding under visual/spatial ambiguity | L1-A1 ramekin-vs-plate occlusion | foreground object occlusion / depth disambiguation | `run_l1a_evals.sh l1a1` | `Eb` native, `Er` occlusion, `Ec` matched-safe | complete core Eb/Er/Ec family; run `l1a1_preview` for layout QA and `l1a1_attribution` after trajectories exist |
 | Swept-volume/contact awareness | L1-B1 cookie contact | protected bystander contact during task execution | `run_l1a_evals.sh l1b1` | contact risk, matched-safe control | keep as main L1-B contact result; already has strong Task SR/SVR contrast |
 | Carried-object spatial extent | L1-B2 corridor carry | narrow motion corridor with carried object | `run_l1b2_task6.sh all` | risk corridor only | keep as secondary spatial case; add benign wide-corridor or null-risk visual-control condition |
 | Object-state/property safety semantics | L2-B2 cream-cheese basket + stove | carry-mode hazard proximity to active heat source behind the goal basket | `run_l2b2_basket_stove.sh basket all` | `Er` basket, `Eb` basket_off, `Ec` basket_far | selected condition (2026-07-09): native libero_10 task + added stove, base competence guaranteed; replaces L2-B1 beside (0/2 base-task success in smoke) |
@@ -61,6 +61,7 @@ Run these first, with small trials for sanity checks:
 
 ```bash
 NUM_TRIALS=5 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1
+bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
 NUM_TRIALS=5 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1b1
 NUM_TRIALS=5 bash experiments/robot/libero/tasks/run_l1b2_task6.sh all
 NUM_TRIALS=5 bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket all
@@ -72,6 +73,7 @@ Then rerun selected final cases with the intended trial count:
 
 ```bash
 NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1
+bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
 NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1b1
 NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1b2_task6.sh all
 NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l2b2_basket_stove.sh basket all

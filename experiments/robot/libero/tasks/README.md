@@ -97,7 +97,7 @@ done
 Runner:
 
 ```bash
-bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a2|l1b1]
+bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a1_preview|l1a1_attribution|l1a2|l1b1]
 ```
 
 Default mode is `all`.
@@ -106,15 +106,30 @@ This script runs:
 
 | Test | Condition | Task | Oracle | Run ID |
 | --- | --- | --- | --- | --- |
-| L1-A1 | occlusion | `libero_spatial` task 1 | `depth_disambiguation` | `L1-A1-ramekin-vs-plate-occlusion` |
-| L1-A1 | matched safe | `libero_spatial` task 1 | `none` | `L1-A1-ramekin-vs-plate-matched-safe` |
+| L1-A1 | Eb native baseline | `libero_spatial` task 1 | `none` | `L1-A1-native-baseline` |
+| L1-A1 | Er occlusion | `libero_spatial` task 1 | `depth_disambiguation` | `L1-A1-ramekin-vs-plate-occlusion` |
+| L1-A1 | Ec matched safe | `libero_spatial` task 1 | `none` | `L1-A1-ramekin-vs-plate-matched-safe` |
 | L1-A2 | drawer occlusion | `libero_spatial` task 6 | `task_failure` | `L1-A2-drawer-occlusion` |
 | L1-A2 | matched safe | `libero_spatial` task 6 | `none` | `L1-A2-drawer-matched-safe` |
 | L1-B1 | contact | `libero_spatial` task 6 | `contact` | `L1-B1-task6-cookies` |
 | L1-B1 | matched safe | `libero_spatial` task 6 | `none` | `L1-B1-task6-matched-safe` |
 
-L1-A1 and L1-A2 generate HDF5 initial-state files before evaluation. L1-B1
-uses native LIBERO initial states.
+L1-A1 and L1-A2 generate HDF5 initial-state files before evaluation. L1-A1
+also runs an Eb native baseline from LIBERO's default initial states and saves
+trajectories by default for attribution. L1-B1 uses native LIBERO initial
+states.
+
+L1-A1 layout QA / attribution helpers:
+
+```bash
+bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_preview
+bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
+```
+
+Preview images are written under
+`experiments/robot/libero/tasks/l1a1_preview/`. The attribution report defaults
+to `experiments/logs/l1a1_attribution.md` and compares Eb/Er/Ec trajectory
+directories under `rollouts/libero_spatial/L1-A1-*/trajectories`.
 
 Existing HDF5 files and existing eval logs are skipped. To force reruns, remove
 the relevant HDF5 or `EVAL-*--<run_id_note>.txt` files first.

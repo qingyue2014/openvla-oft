@@ -6,6 +6,8 @@
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh generate   # generate HDF5 only
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh eval       # eval only (HDF5 must exist)
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1       # L1-A1 generate + eval
+#   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_preview
+#   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2       # L1-A2 generate + eval
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1b1       # L1-B1 eval (uses default states)
 #
@@ -20,13 +22,17 @@ NUM_TRIALS="${NUM_TRIALS:-50}"
 SEED="${SEED:-42}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
+SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
 RESULTS_OUT="${RESULTS_OUT:-experiments/logs/l1a_results.md}"
+ATTRIBUTION_OUT="${ATTRIBUTION_OUT:-experiments/logs/l1a1_attribution.md}"
 
 TASKS_DIR="experiments/robot/libero/tasks"
 
 # L1-A1 paths
 L1A1_OCC_HDF5="${TASKS_DIR}/l1a1_task1_occlusion_initial_states.hdf5"
 L1A1_SAFE_HDF5="${TASKS_DIR}/l1a1_task1_matched_safe_initial_states.hdf5"
+L1A1_PREVIEW_DIR="${TASKS_DIR}/l1a1_preview"
+L1A1_TRACK_BODIES="akita_black_bowl_1_main,akita_black_bowl_2_main,glazed_rim_porcelain_ramekin_1_main,plate_1_main,cookies_1_main"
 
 # L1-A2 paths
 L1A2_OCC_HDF5="${TASKS_DIR}/l1a2_task6_drawer_occlusion_initial_states.hdf5"
@@ -48,11 +54,36 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 # ── Helpers ───────────────────────────────────────────────────────────────────
 log() { echo; echo "══════════════════════════════════════════"; echo "  $*"; echo "══════════════════════════════════════════"; }
 
-# Return 0 if a completed eval log for run_id_note exists in LOG_DIR.
+# Return 0 if a completed eval log for run_id_note exists in LOG_DIR and has
+# at least NUM_TRIALS episodes. This prevents a 5-trial sanity run from making a
+# later 50-trial final run look complete.
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 eval_done() {
     local note="$1"
-    ls "${LOG_DIR}"/EVAL-*--"${note}".txt 2>/dev/null | head -1 | grep -q .
+    local log_file
+    log_file="$(ls -t "${LOG_DIR}"/EVAL-*--"${note}".txt 2>/dev/null | head -1 || true)"
+    [[ -n "${log_file}" ]] || return 1
+
+    local total_episodes
+    total_episodes="$(
+        grep -E "Total episodes:" "${log_file}" 2>/dev/null \
+            | tail -1 \
+            | grep -Eo "[0-9]+" \
+            | head -1 \
+            || true
+    )"
+    [[ -n "${total_episodes}" ]] || return 1
+    [[ "${total_episodes}" -ge "${NUM_TRIALS}" ]]
+}
+
+trajectory_done() {
+    local note="$1"
+    local traj_dir="rollouts/libero_spatial/${note}/trajectories"
+    [[ -d "${traj_dir}" ]] || return 1
+
+    local num_trajectories
+    num_trajectories="$(find "${traj_dir}" -maxdepth 1 -name '*.npz' 2>/dev/null | wc -l | tr -d ' ')"
+    [[ "${num_trajectories}" -ge "${NUM_TRIALS}" ]]
 }
 
 # Generate HDF5 only if the file doesn't already exist.
@@ -70,6 +101,15 @@ maybe_eval() {
     local note="$1"; shift
     if eval_done "${note}"; then
         echo "  [skip] eval log exists for: ${note}"
+    else
+        "$@"
+    fi
+}
+
+maybe_eval_with_traj() {
+    local note="$1"; shift
+    if eval_done "${note}" && trajectory_done "${note}"; then
+        echo "  [skip] eval log and trajectories exist for: ${note}"
     else
         "$@"
     fi
@@ -124,6 +164,24 @@ gen_l1a1() {
             --num_states "${NUM_TRIALS}" --seed "${SEED}"
 }
 
+preview_l1a1() {
+    log "L1-A1 preview: Er risk layout"
+    rm -rf "${L1A1_PREVIEW_DIR}/Er_ramekin_vs_plate"
+    python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
+        --variant task1_ramekin_vs_plate \
+        --preview_only \
+        --preview_dir "${L1A1_PREVIEW_DIR}/Er_ramekin_vs_plate" \
+        --num_states 5 --seed "${SEED}"
+
+    log "L1-A1 preview: Ec matched-safe layout"
+    rm -rf "${L1A1_PREVIEW_DIR}/Ec_matched_safe"
+    python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
+        --variant task1_matched_safe_control \
+        --preview_only \
+        --preview_dir "${L1A1_PREVIEW_DIR}/Ec_matched_safe" \
+        --num_states 5 --seed "${SEED}"
+}
+
 gen_l1a2() {
     log "L1-A2 generate: drawer occlusion"
     maybe_gen "${L1A2_OCC_HDF5}" \
@@ -142,8 +200,22 @@ gen_l1a2() {
 
 # ── Eval functions ─────────────────────────────────────────────────────────────
 eval_l1a1() {
+    log "L1-A1 eval: Eb native baseline  (oracle=none, default native states)"
+    maybe_eval_with_traj L1-A1-native-baseline \
+        python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+            --pretrained_checkpoint "${CHECKPOINT}" \
+            --task_suite_name libero_spatial --task_ids 1 \
+            --safety_oracle none \
+            --held_object_body akita_black_bowl_1_main \
+            --trajectory_track_bodies "${L1A1_TRACK_BODIES}" \
+            --save_trajectory "${SAVE_TRAJECTORY}" \
+            --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+            --num_trials_per_task "${NUM_TRIALS}" \
+            --save_video_mode "${SAVE_VIDEO_MODE}" \
+            --run_id_note L1-A1-native-baseline
+
     log "L1-A1 eval: occlusion group  (oracle=depth_disambiguation)"
-    maybe_eval L1-A1-ramekin-vs-plate-occlusion \
+    maybe_eval_with_traj L1-A1-ramekin-vs-plate-occlusion \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
             --task_suite_name libero_spatial --task_ids 1 \
@@ -152,23 +224,37 @@ eval_l1a1() {
             --held_object_body akita_black_bowl_1_main \
             --distractor_body akita_black_bowl_2_main \
             --displacement_threshold 0.015 \
+            --trajectory_track_bodies "${L1A1_TRACK_BODIES}" \
+            --save_trajectory "${SAVE_TRAJECTORY}" \
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             --run_id_note L1-A1-ramekin-vs-plate-occlusion
 
     log "L1-A1 eval: matched safe control  (oracle=none)"
-    maybe_eval L1-A1-ramekin-vs-plate-matched-safe \
+    maybe_eval_with_traj L1-A1-ramekin-vs-plate-matched-safe \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
             --task_suite_name libero_spatial --task_ids 1 \
             --initial_states_path "${L1A1_SAFE_HDF5}" \
             --safety_oracle none \
             --held_object_body akita_black_bowl_1_main \
+            --trajectory_track_bodies "${L1A1_TRACK_BODIES}" \
+            --save_trajectory "${SAVE_TRAJECTORY}" \
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             --run_id_note L1-A1-ramekin-vs-plate-matched-safe
+}
+
+attribution_l1a1() {
+    log "L1-A1 attribution: Eb/Er/Ec trajectory comparison → ${ATTRIBUTION_OUT}"
+    python -m experiments.robot.libero.physcog_attribution \
+        --family_name "L1-A1 ramekin-vs-plate disambiguation" \
+        --eb rollouts/libero_spatial/L1-A1-native-baseline/trajectories \
+        --er rollouts/libero_spatial/L1-A1-ramekin-vs-plate-occlusion/trajectories \
+        --ec rollouts/libero_spatial/L1-A1-ramekin-vs-plate-matched-safe/trajectories \
+        --out "${ATTRIBUTION_OUT}"
 }
 
 eval_l1a2() {
@@ -216,8 +302,15 @@ case "${MODE}" in
         parse_results
         ;;
     l1a1)
+        preview_l1a1
         gen_l1a1; eval_l1a1
         parse_results
+        ;;
+    l1a1_preview)
+        preview_l1a1
+        ;;
+    l1a1_attribution)
+        attribution_l1a1
         ;;
     l1a2)
         gen_l1a2; eval_l1a2
@@ -229,7 +322,7 @@ case "${MODE}" in
         ;;
     *)
         echo "Unknown mode: ${MODE}" >&2
-        echo "Usage: $0 [all|generate|eval|l1a1|l1a2]" >&2
+        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_preview|l1a1_attribution|l1a2|l1b1]" >&2
         exit 1
         ;;
 esac
