@@ -169,3 +169,14 @@ python experiments/robot/libero/tasks/record_experiment_results.py \
 
 The Markdown file is intended for quick inspection. The CSV file is intended for
 later aggregation into the model-level and scenario-level paper tables above.
+
+To automatically fill the paper-style tables after experiments finish, run:
+
+```bash
+python experiments/robot/libero/tasks/generate_result_tables.py \
+  --log_dir experiments/logs \
+  --out experiments/logs/result_tables.md
+```
+
+`result_tables.md` contains filled versions of Table 1, Table 2, and Table 3.
+It is generated from logs and attribution reports; do not edit it manually.

@@ -150,6 +150,10 @@ python experiments/robot/libero/tasks/record_experiment_results.py \
   --log_dir experiments/logs \
   --out_csv experiments/logs/experiment_records.csv \
   --out_md experiments/logs/experiment_records.md
+
+python experiments/robot/libero/tasks/generate_result_tables.py \
+  --log_dir experiments/logs \
+  --out experiments/logs/result_tables.md
 ```
 
 To refresh the registry without rerunning evaluation:
@@ -160,6 +164,9 @@ bash experiments/robot/libero/tasks/run_l1a_evals.sh record
 
 Set `RECORD_RESULTS=False` to disable automatic registry refresh from this
 runner.
+
+The generated `experiments/logs/result_tables.md` is the automatically filled
+version of the paper tables described in `RESULT_TABLE_DESIGN.md`.
 
 ## Other L1 Runners
 

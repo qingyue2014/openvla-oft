@@ -29,6 +29,8 @@ ATTRIBUTION_OUT="${ATTRIBUTION_OUT:-experiments/logs/l1a1_attribution.md}"
 RECORD_RESULTS="${RECORD_RESULTS:-True}"
 RECORDS_CSV="${RECORDS_CSV:-experiments/logs/experiment_records.csv}"
 RECORDS_MD="${RECORDS_MD:-experiments/logs/experiment_records.md}"
+RESULT_TABLES_MD="${RESULT_TABLES_MD:-experiments/logs/result_tables.md}"
+MODEL_NAME="${MODEL_NAME:-}"
 
 TASKS_DIR="experiments/robot/libero/tasks"
 
@@ -161,6 +163,11 @@ record_results() {
         --log_dir "${LOG_DIR}" \
         --out_csv "${RECORDS_CSV}" \
         --out_md "${RECORDS_MD}"
+    local table_args=(--log_dir "${LOG_DIR}" --out "${RESULT_TABLES_MD}")
+    if [[ -n "${MODEL_NAME}" ]]; then
+        table_args+=(--default_model "${MODEL_NAME}")
+    fi
+    python "${TASKS_DIR}/generate_result_tables.py" "${table_args[@]}"
 }
 
 # ── Generate functions ─────────────────────────────────────────────────────────

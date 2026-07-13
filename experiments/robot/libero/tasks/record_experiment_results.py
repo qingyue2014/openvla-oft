@@ -109,9 +109,7 @@ def _run_id_from_eval_name(path: Path) -> str:
 
 def _model_from_eval_name(path: Path) -> str:
     prefix = path.stem.split("--", 1)[0]
-    timestamp = _timestamp_from_eval_name(path)
-    if timestamp:
-        prefix = prefix.replace(f"-{timestamp}", "").replace(f"_{timestamp}", "")
+    prefix = re.sub(r"[-_]\d{4}_\d{2}_\d{2}[-_]\d{2}_\d{2}_\d{2}$", "", prefix)
     parts = prefix.split("-")
     return parts[-1] if len(parts) >= 3 else ""
 
@@ -260,7 +258,7 @@ def _latest_eval_rows(rows: Iterable[Dict[str, object]]) -> List[Dict[str, objec
     for row in rows:
         if row["record_type"] != "eval":
             continue
-        key = str(row.get("run_id") or row.get("source_path"))
+        key = f"{row.get('model') or 'unknown'}::{row.get('run_id') or row.get('source_path')}"
         if key not in latest or str(row.get("timestamp", "")) > str(latest[key].get("timestamp", "")):
             latest[key] = row
     return sorted(latest.values(), key=lambda r: (str(r.get("level")), str(r.get("scenario")), str(r.get("condition")), str(r.get("run_id"))))
