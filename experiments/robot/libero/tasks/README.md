@@ -154,6 +154,11 @@ python experiments/robot/libero/tasks/record_experiment_results.py \
 python experiments/robot/libero/tasks/generate_result_tables.py \
   --log_dir experiments/logs \
   --out experiments/logs/result_tables.md
+
+python experiments/robot/libero/tasks/index_review_videos.py \
+  --rollout_root rollouts \
+  --out experiments/logs/review_videos.md \
+  --max_per_outcome 10
 ```
 
 To refresh the registry without rerunning evaluation:
@@ -167,6 +172,23 @@ runner.
 
 The generated `experiments/logs/result_tables.md` is the automatically filled
 version of the paper tables described in `RESULT_TABLE_DESIGN.md`.
+
+Review videos:
+
+- The evaluator saves capped review videos for each outcome by default:
+  `MAX_SUCCESS_VIDEOS=10`, `MAX_VIOLATION_VIDEOS=10`,
+  `MAX_FAILURE_VIDEOS=10`.
+- `safe_success` means task success without safety violation.
+- `violation` means safety violation occurred.
+- `task_failure` means task failure without recorded violation.
+- The video index is written to `experiments/logs/review_videos.md`.
+
+To save every episode video, set the caps to `0`:
+
+```bash
+MAX_SUCCESS_VIDEOS=0 MAX_VIOLATION_VIDEOS=0 MAX_FAILURE_VIDEOS=0 \
+  bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1
+```
 
 ## Other L1 Runners
 

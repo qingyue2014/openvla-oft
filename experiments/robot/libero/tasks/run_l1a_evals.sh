@@ -30,7 +30,18 @@ RECORD_RESULTS="${RECORD_RESULTS:-True}"
 RECORDS_CSV="${RECORDS_CSV:-experiments/logs/experiment_records.csv}"
 RECORDS_MD="${RECORDS_MD:-experiments/logs/experiment_records.md}"
 RESULT_TABLES_MD="${RESULT_TABLES_MD:-experiments/logs/result_tables.md}"
+REVIEW_VIDEOS_MD="${REVIEW_VIDEOS_MD:-experiments/logs/review_videos.md}"
+MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"
+MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"
+MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"
+REVIEW_VIDEO_INDEX_LIMIT="${REVIEW_VIDEO_INDEX_LIMIT:-10}"
 MODEL_NAME="${MODEL_NAME:-}"
+
+VIDEO_ARGS=(
+    --max_violation_videos "${MAX_VIOLATION_VIDEOS}"
+    --max_success_videos "${MAX_SUCCESS_VIDEOS}"
+    --max_failure_videos "${MAX_FAILURE_VIDEOS}"
+)
 
 TASKS_DIR="experiments/robot/libero/tasks"
 
@@ -133,6 +144,7 @@ eval_l1b1() {
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
+            "${VIDEO_ARGS[@]}" \
             --run_id_note L1-B1-task6-cookies
 
     log "L1-B1 eval: task6 matched safe control  (oracle=none, default states)"
@@ -145,6 +157,7 @@ eval_l1b1() {
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
+            "${VIDEO_ARGS[@]}" \
             --run_id_note L1-B1-task6-matched-safe
 }
 
@@ -168,6 +181,10 @@ record_results() {
         table_args+=(--default_model "${MODEL_NAME}")
     fi
     python "${TASKS_DIR}/generate_result_tables.py" "${table_args[@]}"
+    python "${TASKS_DIR}/index_review_videos.py" \
+        --rollout_root rollouts \
+        --out "${REVIEW_VIDEOS_MD}" \
+        --max_per_outcome "${REVIEW_VIDEO_INDEX_LIMIT}"
 }
 
 # ── Generate functions ─────────────────────────────────────────────────────────
@@ -235,6 +252,7 @@ eval_l1a1() {
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
+            "${VIDEO_ARGS[@]}" \
             --run_id_note L1-A1-native-baseline
 
     log "L1-A1 eval: occlusion group  (oracle=depth_disambiguation)"
@@ -252,6 +270,7 @@ eval_l1a1() {
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
+            "${VIDEO_ARGS[@]}" \
             --run_id_note L1-A1-ramekin-vs-plate-occlusion
 
     log "L1-A1 eval: matched safe control  (oracle=none)"
@@ -267,6 +286,7 @@ eval_l1a1() {
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
+            "${VIDEO_ARGS[@]}" \
             --run_id_note L1-A1-ramekin-vs-plate-matched-safe
 }
 
@@ -294,6 +314,7 @@ eval_l1a2() {
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
+            "${VIDEO_ARGS[@]}" \
             --run_id_note L1-A2-drawer-occlusion
 
     log "L1-A2 eval: matched safe control  (oracle=none)"
@@ -307,6 +328,7 @@ eval_l1a2() {
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
+            "${VIDEO_ARGS[@]}" \
             --run_id_note L1-A2-drawer-matched-safe
 }
 

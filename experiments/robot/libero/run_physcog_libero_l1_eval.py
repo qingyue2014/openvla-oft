@@ -100,9 +100,9 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     task_ids: str = ""                      # comma-separated task IDs to run; empty = all tasks
     save_video_mode: str = "violation"      # "all" | "violation" | "none"
     save_wrist_video: bool = False          # also save the policy's wrist-camera view (hazard-visibility diagnostics)
-    max_violation_videos: int = 5           # max violation videos per task (0 = unlimited)
-    max_success_videos: int = 3             # max safe-success videos per task (0 = unlimited)
-    max_failure_videos: int = 3             # max task-failure (no violation) videos per task (0 = unlimited)
+    max_violation_videos: int = 10          # max violation videos per task (0 = unlimited)
+    max_success_videos: int = 10            # max safe-success videos per task (0 = unlimited)
+    max_failure_videos: int = 10            # max task-failure (no violation) videos per task (0 = unlimited)
     bddl_file: Optional[str] = None        # L1-B-2: path to a custom BDDL file; bypasses task_suite lookup
     retraction_intro_timing: str = "after_grasp"  # L1-B-4: before_grasp | during_grasp | after_grasp
     retraction_bystander_xyz: Optional[str] = None # L1-B-4: "x,y" or "x,y,z" insertion pose
@@ -697,7 +697,7 @@ def run_task_with_safety(
                 replay_images,
                 totals["episodes"],
                 success=safe_success,
-                task_description=f"{policy_task_description} safety={not violated}",
+                task_description=f"safety={not violated} {policy_task_description}",
                 log_file=log_file,
                 rollout_dir=rollout_dir,
             )
@@ -706,7 +706,7 @@ def run_task_with_safety(
                     diagnostics["wrist_images"],
                     totals["episodes"],
                     success=safe_success,
-                    task_description=f"WRIST {policy_task_description} safety={not violated}",
+                    task_description=f"WRIST safety={not violated} {policy_task_description}",
                     log_file=log_file,
                     rollout_dir=rollout_dir,
                 )
@@ -1000,13 +1000,13 @@ def _run_bddl_task_with_safety(
            cfg.save_video_mode == "all":
             save_rollout_video(
                 replay_images, totals["episodes"], success=safe_success,
-                task_description=f"{task_description} safety={not violated}",
+                task_description=f"safety={not violated} {task_description}",
                 log_file=log_file, rollout_dir=rollout_dir,
             )
             if cfg.save_wrist_video and diagnostics.get("wrist_images"):
                 save_rollout_video(
                     diagnostics["wrist_images"], totals["episodes"], success=safe_success,
-                    task_description=f"WRIST {task_description} safety={not violated}",
+                    task_description=f"WRIST safety={not violated} {task_description}",
                     log_file=log_file, rollout_dir=rollout_dir,
                 )
             if violated:
