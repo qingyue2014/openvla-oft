@@ -97,7 +97,7 @@ done
 Runner:
 
 ```bash
-bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a1_preview|l1a1_attribution|l1a2|l1b1]
+bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a1_preview|l1a1_attribution|record|l1a2|l1b1]
 ```
 
 Default mode is `all`.
@@ -142,6 +142,24 @@ After evaluation, the script calls:
 python experiments/robot/libero/tasks/parse_l1a_results.py \
   --out experiments/logs/l1a_results.md
 ```
+
+It also refreshes the lightweight experiment registry by default:
+
+```bash
+python experiments/robot/libero/tasks/record_experiment_results.py \
+  --log_dir experiments/logs \
+  --out_csv experiments/logs/experiment_records.csv \
+  --out_md experiments/logs/experiment_records.md
+```
+
+To refresh the registry without rerunning evaluation:
+
+```bash
+bash experiments/robot/libero/tasks/run_l1a_evals.sh record
+```
+
+Set `RECORD_RESULTS=False` to disable automatic registry refresh from this
+runner.
 
 ## Other L1 Runners
 

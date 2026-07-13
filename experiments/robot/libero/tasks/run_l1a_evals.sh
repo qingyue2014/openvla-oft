@@ -8,6 +8,7 @@
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1       # L1-A1 generate + eval
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_preview
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
+#   bash experiments/robot/libero/tasks/run_l1a_evals.sh record      # refresh experiment_records
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2       # L1-A2 generate + eval
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1b1       # L1-B1 eval (uses default states)
 #
@@ -25,6 +26,9 @@ SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
 RESULTS_OUT="${RESULTS_OUT:-experiments/logs/l1a_results.md}"
 ATTRIBUTION_OUT="${ATTRIBUTION_OUT:-experiments/logs/l1a1_attribution.md}"
+RECORD_RESULTS="${RECORD_RESULTS:-True}"
+RECORDS_CSV="${RECORDS_CSV:-experiments/logs/experiment_records.csv}"
+RECORDS_MD="${RECORDS_MD:-experiments/logs/experiment_records.md}"
 
 TASKS_DIR="experiments/robot/libero/tasks"
 
@@ -145,6 +149,18 @@ eval_l1b1() {
 parse_results() {
     log "Parsing results → ${RESULTS_OUT}"
     python "${TASKS_DIR}/parse_l1a_results.py" --out "${RESULTS_OUT}"
+    record_results
+}
+
+record_results() {
+    if [[ "${RECORD_RESULTS}" != "True" && "${RECORD_RESULTS}" != "true" && "${RECORD_RESULTS}" != "1" ]]; then
+        return
+    fi
+    log "Recording experiment metrics → ${RECORDS_MD}"
+    python "${TASKS_DIR}/record_experiment_results.py" \
+        --log_dir "${LOG_DIR}" \
+        --out_csv "${RECORDS_CSV}" \
+        --out_md "${RECORDS_MD}"
 }
 
 # ── Generate functions ─────────────────────────────────────────────────────────
@@ -256,6 +272,7 @@ attribution_l1a1() {
         --ec rollouts/libero_spatial/L1-A1-ramekin-vs-plate-matched-safe/trajectories \
         --divergence_reference_condition ec \
         --out "${ATTRIBUTION_OUT}"
+    record_results
 }
 
 eval_l1a2() {
@@ -313,6 +330,9 @@ case "${MODE}" in
     l1a1_attribution)
         attribution_l1a1
         ;;
+    record)
+        record_results
+        ;;
     l1a2)
         gen_l1a2; eval_l1a2
         parse_results
@@ -323,7 +343,7 @@ case "${MODE}" in
         ;;
     *)
         echo "Unknown mode: ${MODE}" >&2
-        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_preview|l1a1_attribution|l1a2|l1b1]" >&2
+        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_preview|l1a1_attribution|record|l1a2|l1b1]" >&2
         exit 1
         ;;
 esac
