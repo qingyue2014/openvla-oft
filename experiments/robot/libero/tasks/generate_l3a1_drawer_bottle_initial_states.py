@@ -42,6 +42,7 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     OffScreenRenderEnv,
     _find_free_joint_qadr,
 )
+from experiments.robot.libero.physcog_oracles import _find_free_joint_vadr
 from experiments.robot.libero.tasks.generate_l2b1_initial_states import save_hdf5
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
     _body_pos,
@@ -51,8 +52,12 @@ from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
 )
 
 DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.bddl"
-SETTLE_STEPS = 80
-MAX_SETTLE_XY_DRIFT = 0.03
+# The leaning bottle needs ~300 sim steps to fully settle against the drawer
+# (probe showed angular speed still ~2 rad/s at step 80, converging to ~0 only
+# by ~step 300). Settle long enough that the SAVED state is genuinely at rest,
+# otherwise eval loads a still-toppling bottle. See L3A_RUNS.md.
+SETTLE_STEPS = 400
+MAX_SETTLE_XY_DRIFT = 0.10  # a genuine lean swings the top well past 3cm; only reject gross launches
 MIN_SETTLED_Z = 0.30  # kitchen_table sits lower than living_room_table; loosen vs L2-B2's 0.40
 
 # Candidate compiled MuJoCo body names -- confirm the real one with
@@ -69,19 +74,21 @@ STABLE_SUPPORT_CANDIDATES = (
 BOTTLE_BODY = "wine_bottle_1_main"
 
 # Lean placement relative to the chosen support body's world position.
-# Confirmed via probe_l3a1_drawer_bottle.py on a GPU node (see L3A_RUNS.md):
-# a dy sweep at dx=0 found the drawer's real front face (much narrower in x
-# than its conservative rbound-based AABB suggested -- x=-0.15 missed the
-# body entirely) between dy=-0.115 (already past critical, 38deg while
-# supported) and dy=-0.100 (self-rights, sub-critical). dy=-0.110 settles at
-# ~27deg while supported (clearly past the ~10-11deg free-standing critical
-# angle, so it won't self-right) and gives a clean ~4.5cm height drop with no
-# akita_black_bowl_1_main contamination once the drawer scripts closed.
+# Confirmed via probe_l3a1_drawer_bottle.py on a GPU node (see L3A_RUNS.md).
+# Key correction from the first attempt: the tilt must lean the bottle INTO the
+# drawer (top toward +y), which is a NEGATIVE lean_deg about the x-axis. The
+# original +8deg leaned it AWAY from the drawer, so it toppled on its own with
+# the drawer providing no support. A 2D dy/deg sweep found a genuine
+# stable-lean-against-the-drawer window; dy=-0.180, deg=-20 settles at ~34deg
+# resting against white_cabinet_1_cabinet_bottom (angular speed -> 0), touches
+# only drawer+table (no akita_black_bowl contamination), and topples further to
+# ~63deg once the drawer scripts closed. dy=-0.175 is off the front edge (falls
+# on its own); dy=-0.185 also works but starts at a steep ~54deg lean.
 DEFAULT_LEAN_DX = 0.0
-DEFAULT_LEAN_DY = -0.110
-DEFAULT_LEAN_DZ = 0.0     # z is left at the BDDL-sampled resting height
-DEFAULT_LEAN_DEG = 8.0    # initial teleport tilt; the settled stage-1 angle is driven mostly by
-                          # how deep the teleport overlaps the drawer's real geometry, not this value
+DEFAULT_LEAN_DY = -0.180
+DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
+DEFAULT_LEAN_DEG = -20.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
+                           # against the front face; positive would lean it away and it topples
 
 
 def _tilt_quat(axis: str, deg: float) -> np.ndarray:
@@ -117,6 +124,7 @@ def generate_states(
     lean_deg: float,
     lean_axis: str,
     max_settle_tilt_deg: float,
+    max_settle_ang_speed: float,
 ):
     env = OffScreenRenderEnv(bddl_file_name=bddl_path, camera_heights=256, camera_widths=256)
     env.seed(seed)
@@ -137,6 +145,7 @@ def generate_states(
     bottle_qadr = _find_free_joint_qadr(env.sim, BOTTLE_BODY)
     if bottle_qadr < 0:
         raise RuntimeError(f"No free joint found for '{BOTTLE_BODY}'.")
+    bottle_vadr = _find_free_joint_vadr(env.sim, BOTTLE_BODY)
 
     states = []
     attempts = 0
@@ -174,6 +183,10 @@ def generate_states(
         drift = float(np.linalg.norm(_body_pos(env, BOTTLE_BODY)[:2] - pre_settle_xy))
         settled_z = float(_body_pos(env, BOTTLE_BODY)[2])
         tilt_deg = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+        ang_speed = (
+            float(np.linalg.norm(env.sim.data.qvel[bottle_vadr + 3:bottle_vadr + 6]))
+            if bottle_vadr >= 0 else 0.0
+        )
 
         if table_bounds is None:
             table_bounds = _table_xy_bounds(env)
@@ -193,6 +206,14 @@ def generate_states(
                 f"  [skip attempt {attempts}] bottle already tipped during settle: "
                 f"tilt={tilt_deg:.1f}deg > {max_settle_tilt_deg}deg (support did not hold -- "
                 "reduce --lean_deg or fix the lean offset)"
+            )
+            continue
+
+        if ang_speed > max_settle_ang_speed:
+            print(
+                f"  [skip attempt {attempts}] bottle still rotating at save time: "
+                f"angular speed={ang_speed:.3f} rad/s > {max_settle_ang_speed} (not settled -- "
+                "increase SETTLE_STEPS or the lean is unstable at this pose)"
             )
             continue
 
@@ -224,11 +245,17 @@ def main():
     parser.add_argument("--lean_deg", type=float, default=DEFAULT_LEAN_DEG)
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
     parser.add_argument(
-        "--max_settle_tilt_deg", type=float, default=35.0,
-        help="Reject a layout if the bottle's tilt after settling (support still present) "
-             "exceeds this -- means the requested lean_deg was already past critical. "
-             "The confirmed DEFAULT_LEAN_DY settles around ~27deg while supported (see "
-             "L3A_RUNS.md), so this must stay comfortably above that.",
+        "--max_settle_tilt_deg", type=float, default=50.0,
+        help="Reject a layout if the bottle's tilt after settling (drawer still open) "
+             "exceeds this -- means it toppled on its own instead of leaning. The confirmed "
+             "DEFAULT_LEAN_DY/DEG settles at ~34deg while supported (see L3A_RUNS.md), so this "
+             "stays above that but well below a full ~90deg topple.",
+    )
+    parser.add_argument(
+        "--max_settle_ang_speed", type=float, default=0.2,
+        help="Reject a layout if the bottle is still rotating faster than this (rad/s) at save "
+             "time -- means it had not finished settling. Requires SETTLE_STEPS long enough to "
+             "reach rest (~400 for this lean).",
     )
     parser.add_argument(
         "--task_description",
@@ -248,6 +275,7 @@ def main():
         args.lean_deg,
         args.lean_axis,
         args.max_settle_tilt_deg,
+        args.max_settle_ang_speed,
     )
     save_hdf5(states, args.task_description, args.output)
 

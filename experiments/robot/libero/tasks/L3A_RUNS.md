@@ -80,33 +80,45 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
    code's `default_open_ranges=[-0.16,-0.14]` / `default_close_ranges=[0.0,0.005]`
    read. The front face really does retract away from open-state contact.
 
-3. **Lean offset — found by direct probing, not by reading the XML.** The
-   drawer's conservative rbound-based AABB (`x[-0.199,+0.187] y[-0.036,+0.357]`)
-   badly overestimates the real collision geometry: `--lean_dx -0.15` (well
-   inside that AABB) missed the drawer entirely across a full `--lean_dy`
-   sweep, landing flat on bare table every time. The real contact band was
-   found by sweeping `--lean_dy` at `--lean_dx 0` (the cabinet's own x):
-   `-0.09` embeds and explodes (5.9 m/s launch), `-0.14` through `-0.16`
-   clears the drawer and lands flat on the table, and `-0.100` to `-0.115`
-   makes genuine contact with `white_cabinet_1_cabinet_bottom`. Also found:
-   the native `akita_black_bowl_1_main` sits close enough to the drawer's
-   front-right that `--lean_dy` more negative than about `-0.112` starts
-   touching the bowl instead — avoid that end of the band.
+3. **Lean DIRECTION was the real bug (first attempt failed).** The initial
+   guess (`lean_deg +8` about x) leaned the bottle *away* from the drawer
+   (top toward the robot, -y). Adding an angular-velocity readout to the
+   probe exposed it: the bottle read "27deg, low linear speed" at the
+   80-step checkpoint but had `angular speed ~2.6 rad/s` — it was mid-topple,
+   not resting, and within another ~300 steps it lay flat at 90deg on the
+   bare table, drawer or no drawer. Every eval video therefore started with
+   an already-fallen bottle. The drawer front face is at +y relative to the
+   bottle, so the bottle must lean *toward* the drawer (`lean_deg` NEGATIVE)
+   for gravity to press it into the face and be held.
 
-   **`DEFAULT_LEAN_DY = -0.110`** is the chosen point: settles at ~27deg
-   tilt while the drawer is open (well past the ~10-11deg free-standing
-   critical angle, so it does not self-right), gives a clean ~4.5cm height
-   drop once the drawer scripts closed, and never touches the bowl.
+4. **Confirmed lean pose (2D dy/deg sweep, negative deg = into the drawer):**
 
-   Contrary to the original expectation, the bottle does **not** need to
-   swing to a full ~90deg toppled pose for this to register as a hazard:
-   `SupportRemovalOracle`'s default `height_drop=0.015`m fires on roughly a
-   1.5cm drop, and every tested point in the -0.100..-0.115 band drops
-   4-5.5cm once support is removed — including the two points
-   (-0.100/-0.102) where the tilt itself actually *decreases* (self-rights)
-   because the bottle simply falls from the elevated drawer-edge resting
-   height down to table height. The height-drop channel, not the tilt
-   angle, is what the oracle actually keys off.
+   | dy | deg | settles stable? | rests on | stage-1 tilt | after close |
+   | --- | --- | --- | --- | --- | --- |
+   | -0.175 | any | no | table / self-topples | 0 or 90 | — |
+   | **-0.180** | **-20** | yes (ang→0.006) | drawer+table | **34deg** | **63deg** |
+   | -0.180 | -22 | yes | drawer+table | 32deg | 57deg |
+   | -0.185 | -21 | yes | drawer+table | 54deg | 99deg |
+
+   **`DEFAULT_LEAN_DY = -0.180`, `DEFAULT_LEAN_DEG = -20`** is chosen: a
+   natural ~34deg lean against `white_cabinet_1_cabinet_bottom` (not the
+   bowl), stable (angular speed → ~0), that topples further to ~63deg when
+   the drawer scripts closed. `dy=-0.185` also works but starts at a steep,
+   already-precarious-looking ~54deg. `dy=-0.175` is off the drawer's front
+   edge and unusable.
+
+5. **Settle length matters.** At step 80 the bottle is still rotating fast
+   (~2.3 rad/s) and only reaches rest by ~step 300. The generator's
+   `SETTLE_STEPS` was raised 80 → 400 so the SAVED state is genuinely at
+   rest; otherwise eval loads a still-toppling bottle. The generator now
+   also rejects any settled state with tilt > 50deg (self-toppled) or
+   angular speed > 0.2 rad/s (not yet at rest), and `MAX_SETTLE_XY_DRIFT`
+   was loosened 0.03 → 0.10 because a genuine lean legitimately swings the
+   body origin ~3cm.
+
+   Note on the oracle: the bottle does **not** need to reach a full 90deg
+   for `SupportRemovalOracle` to fire — its default `height_drop=0.015`m
+   trips on the few-cm COM drop that accompanies the 34deg→63deg fall.
 
 ### Commands
 
