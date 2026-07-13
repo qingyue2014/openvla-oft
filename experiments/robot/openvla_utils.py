@@ -53,6 +53,48 @@ def model_is_on_hf_hub(model_path: str) -> bool:
         return False
 
 
+def configure_checkpoint_compat(cfg: Any) -> None:
+    """Auto-configure inference for non-MooJin OpenVLA/OFT Hub layouts.
+
+    MooJin OFT checkpoints store continuous action and proprio heads as
+    standalone ``*.pt`` files.  Some compatible releases (notably RLinf)
+    instead publish a discrete-action OpenVLA model and an optional PEFT
+    adapter under ``lora_adapter/``.  Detect the repository layout before
+    model/component construction so users do not need checkpoint-specific
+    flags.
+    """
+    setattr(cfg, "_checkpoint_adapter_subfolder", "")
+    if not model_is_on_hf_hub(cfg.pretrained_checkpoint):
+        return
+
+    try:
+        files = HfApi().list_repo_files(cfg.pretrained_checkpoint)
+    except Exception as exc:
+        print(f"WARNING: could not inspect checkpoint layout: {exc}")
+        return
+
+    has_external_action_head = any("action_head" in path and path.endswith(".pt") for path in files)
+    has_external_proprio = any("proprio_projector" in path and path.endswith(".pt") for path in files)
+    adapter_subfolder = "lora_adapter" if "lora_adapter/adapter_config.json" in files else ""
+    is_rlinf_openvlaoft = str(cfg.pretrained_checkpoint).lower().startswith("rlinf/rlinf-openvlaoft-")
+
+    if is_rlinf_openvlaoft and not has_external_action_head:
+        cfg.use_l1_regression = False
+        cfg.use_diffusion = False
+        cfg.use_proprio = False
+        cfg.num_images_in_input = 1
+        cfg.num_open_loop_steps = 1
+        setattr(cfg, "_checkpoint_adapter_subfolder", adapter_subfolder)
+        print(
+            "[checkpoint compat] Detected RLinf discrete-action OpenVLA-OFT layout: "
+            f"adapter={adapter_subfolder or 'merged'}, use_l1_regression=False, "
+            "use_proprio=False, num_images_in_input=1, num_open_loop_steps=1"
+        )
+    elif is_rlinf_openvlaoft and (not has_external_proprio):
+        cfg.use_proprio = False
+        print("[checkpoint compat] No standalone proprio projector found; disabling proprio input")
+
+
 def update_auto_map(pretrained_checkpoint: str) -> None:
     """
     Update the AutoMap configuration in the checkpoint config.json file.
@@ -288,6 +330,25 @@ def get_vla(cfg: Any) -> torch.nn.Module:
         low_cpu_mem_usage=True,
         trust_remote_code=True,
     )
+
+    adapter_subfolder = getattr(cfg, "_checkpoint_adapter_subfolder", "")
+    if adapter_subfolder:
+        from peft import PeftModel
+
+        print(
+            f"[checkpoint compat] Loading PEFT adapter "
+            f"{cfg.pretrained_checkpoint}/{adapter_subfolder}"
+        )
+        vla = PeftModel.from_pretrained(
+            vla,
+            cfg.pretrained_checkpoint,
+            subfolder=adapter_subfolder,
+            is_trainable=False,
+        )
+        # Merge for the normal OpenVLA predict_action path and to avoid an
+        # extra adapter dispatch at every simulation step.
+        vla = vla.merge_and_unload()
+        print("[checkpoint compat] PEFT adapter merged into the VLA backbone")
 
     # If using FiLM, wrap the vision backbone to allow for infusion of language inputs
     if cfg.use_film:
@@ -794,7 +855,12 @@ def get_vla_action(
                 use_film=use_film,
             )
 
-    # Return action chunk as list of actions
+    # Continuous OFT heads return an action chunk (T, 7), whereas the
+    # discrete OpenVLA / RLinf-compatible path returns one action (7,).
+    # Normalize both layouts to a list of 7-D actions for the rollout queue.
+    action = np.asarray(action)
+    if action.ndim == 1:
+        return [action]
     return [action[i] for i in range(len(action))]
 
 

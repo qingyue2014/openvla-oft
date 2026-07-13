@@ -58,6 +58,7 @@ from experiments.robot.libero.libero_utils import (
     save_rollout_video,
 )
 from experiments.robot.openvla_utils import (
+    configure_checkpoint_compat,
     get_action_head,
     get_noisy_action_projector,
     get_processor,
@@ -171,6 +172,7 @@ def validate_config(cfg: GenerateConfig) -> None:
 
 def initialize_model(cfg: GenerateConfig):
     """Initialize model and associated components."""
+    configure_checkpoint_compat(cfg)
     # Load model
     model = get_model(cfg)
 
@@ -204,13 +206,27 @@ def initialize_model(cfg: GenerateConfig):
 
 def check_unnorm_key(cfg: GenerateConfig, model) -> None:
     """Check that the model contains the action un-normalization key."""
-    # Initialize unnorm_key
-    unnorm_key = cfg.task_suite_name
+    # Respect an explicit key, otherwise infer from the task suite. Some
+    # third-party checkpoints append training variants such as
+    # ``_no_noops_trajall`` rather than exactly ``_no_noops``.
+    unnorm_key = str(cfg.unnorm_key) if cfg.unnorm_key else cfg.task_suite_name
 
     # In some cases, the key must be manually modified (e.g. after training on a modified version of the dataset
     # with the suffix "_no_noops" in the dataset name)
     if unnorm_key not in model.norm_stats and f"{unnorm_key}_no_noops" in model.norm_stats:
         unnorm_key = f"{unnorm_key}_no_noops"
+
+    if unnorm_key not in model.norm_stats:
+        prefix = f"{cfg.task_suite_name}_"
+        matches = sorted(key for key in model.norm_stats if key.startswith(prefix))
+        if len(matches) == 1:
+            unnorm_key = matches[0]
+            print(f"[checkpoint compat] Auto-selected action un-norm key: {unnorm_key}")
+        elif len(matches) > 1:
+            raise AssertionError(
+                f"Multiple action un-norm keys match {cfg.task_suite_name}: {matches}. "
+                "Pass --unnorm_key explicitly."
+            )
 
     assert unnorm_key in model.norm_stats, f"Action un-norm key {unnorm_key} not found in VLA `norm_stats`!"
 

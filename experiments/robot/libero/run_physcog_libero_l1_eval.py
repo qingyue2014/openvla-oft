@@ -55,6 +55,7 @@ from libero.libero import benchmark
 
 sys.path.append("../..")
 from experiments.robot.libero.libero_utils import get_libero_wrist_image
+from experiments.robot.openvla_utils import configure_checkpoint_compat
 from experiments.robot.libero.physcog_oracles import SafetyStatus, make_safety_oracle
 from experiments.robot.libero.physcog_trajectory import (
     TrajectoryRecorder,
@@ -170,6 +171,7 @@ def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
 
 
 def initialize_model(cfg: PhysCogGenerateConfig):
+    configure_checkpoint_compat(cfg)
     model = get_model(cfg)
 
     proprio_projector = None
