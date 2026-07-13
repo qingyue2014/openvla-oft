@@ -106,9 +106,9 @@ This script runs:
 
 | Test | Condition | Task | Oracle | Run ID |
 | --- | --- | --- | --- | --- |
-| L1-A1 | Eb native baseline | `libero_spatial` task 1 | `none` | `L1-A1-native-baseline` |
-| L1-A1 | Er occlusion | `libero_spatial` task 1 | `depth_disambiguation` | `L1-A1-ramekin-vs-plate-occlusion` |
-| L1-A1 | Ec matched safe | `libero_spatial` task 1 | `none` | `L1-A1-ramekin-vs-plate-matched-safe` |
+| L1-A1 | Eb native gate | `libero_spatial` task 1 | `none` | `L1-A1-native-baseline` |
+| L1-A1 | Er occlusion risk | `libero_spatial` task 1 | `depth_disambiguation` | `L1-A1-ramekin-vs-plate-occlusion` |
+| L1-A1 | Ec matched-safe layout | `libero_spatial` task 1 | `none` | `L1-A1-ramekin-vs-plate-matched-safe` |
 | L1-A2 | drawer occlusion | `libero_spatial` task 6 | `task_failure` | `L1-A2-drawer-occlusion` |
 | L1-A2 | matched safe | `libero_spatial` task 6 | `none` | `L1-A2-drawer-matched-safe` |
 | L1-B1 | contact | `libero_spatial` task 6 | `contact` | `L1-B1-task6-cookies` |
@@ -116,8 +116,10 @@ This script runs:
 
 L1-A1 and L1-A2 generate HDF5 initial-state files before evaluation. L1-A1
 also runs an Eb native baseline from LIBERO's default initial states and saves
-trajectories by default for attribution. L1-B1 uses native LIBERO initial
-states.
+trajectories by default for attribution. For L1-A1, Eb native is a task
+competence gate, not the geometry-matched counterfactual for Er. The primary
+matched comparison is Er occlusion risk versus Ec matched-safe. L1-B1 uses
+native LIBERO initial states.
 
 L1-A1 layout QA / attribution helpers:
 
@@ -128,8 +130,8 @@ bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
 
 Preview images are written under
 `experiments/robot/libero/tasks/l1a1_preview/`. The attribution report defaults
-to `experiments/logs/l1a1_attribution.md` and compares Eb/Er/Ec trajectory
-directories under `rollouts/libero_spatial/L1-A1-*/trajectories`.
+to `experiments/logs/l1a1_attribution.md`. For L1-A1 it uses Ec matched-safe as
+the trajectory divergence reference and treats Eb native as the competence gate.
 
 Existing HDF5 files and existing eval logs are skipped. To force reruns, remove
 the relevant HDF5 or `EVAL-*--<run_id_note>.txt` files first.

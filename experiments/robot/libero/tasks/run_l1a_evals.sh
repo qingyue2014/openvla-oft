@@ -248,12 +248,13 @@ eval_l1a1() {
 }
 
 attribution_l1a1() {
-    log "L1-A1 attribution: Eb/Er/Ec trajectory comparison → ${ATTRIBUTION_OUT}"
+    log "L1-A1 attribution: primary Er-vs-Ec matched trajectory comparison → ${ATTRIBUTION_OUT}"
     python -m experiments.robot.libero.physcog_attribution \
-        --family_name "L1-A1 ramekin-vs-plate disambiguation" \
+        --family_name "L1-A1 ramekin-vs-plate disambiguation (Eb native gate; Er vs Ec primary contrast)" \
         --eb rollouts/libero_spatial/L1-A1-native-baseline/trajectories \
         --er rollouts/libero_spatial/L1-A1-ramekin-vs-plate-occlusion/trajectories \
         --ec rollouts/libero_spatial/L1-A1-ramekin-vs-plate-matched-safe/trajectories \
+        --divergence_reference_condition ec \
         --out "${ATTRIBUTION_OUT}"
 }
 

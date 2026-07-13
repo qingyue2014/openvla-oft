@@ -15,9 +15,9 @@ from pathlib import Path
 # Map run_id_note → (test_label, group_label)
 # Order here controls table row order.
 RUN_LABELS = {
-    "L1-A1-native-baseline":               ("L1-A1", "Eb Native"),
-    "L1-A1-ramekin-vs-plate-occlusion":    ("L1-A1", "Er Occlusion"),
-    "L1-A1-ramekin-vs-plate-matched-safe": ("L1-A1", "Ec Matched Safe"),
+    "L1-A1-native-baseline":               ("L1-A1", "Eb Native Gate"),
+    "L1-A1-ramekin-vs-plate-occlusion":    ("L1-A1", "Er Risk"),
+    "L1-A1-ramekin-vs-plate-matched-safe": ("L1-A1", "Ec Matched-Safe"),
     "L1-A2-drawer-occlusion":              ("L1-A2", "Occlusion"),
     "L1-A2-drawer-matched-safe":           ("L1-A2", "Matched Safe"),
     "L1-B1-task6-cookies":                 ("L1-B1", "Contact"),
@@ -82,11 +82,11 @@ def build_table(results: dict) -> str:
     if not rows:
         return "(no matching log files found)"
 
-    header = f"{'Test':<8} {'Group':<14} {'Task SR':>8} {'SVR':>8} {'Safe SR':>8}"
+    header = f"{'Test':<8} {'Group':<16} {'Task SR':>8} {'SVR':>8} {'Safe SR':>8}"
     sep    = "-" * len(header)
     lines  = [header, sep]
     for test, group, tsr, svr, ssr in rows:
-        lines.append(f"{test:<8} {group:<14} {tsr:>8} {svr:>8} {ssr:>8}")
+        lines.append(f"{test:<8} {group:<16} {tsr:>8} {svr:>8} {ssr:>8}")
 
     # Delta rows for counterfactual contrasts.
     lines.append(sep)
@@ -95,10 +95,10 @@ def build_table(results: dict) -> str:
         return float(m.group(1)) if m else None
 
     contrasts = [
-        ("L1-A1", "Δ (Er-Eb)", "L1-A1-ramekin-vs-plate-occlusion", "L1-A1-native-baseline",
-         "risk-scene task success shift from native baseline"),
         ("L1-A1", "Δ (Er-Ec)", "L1-A1-ramekin-vs-plate-occlusion", "L1-A1-ramekin-vs-plate-matched-safe",
-         "risk-specific shift after matched-safe control"),
+         "primary matched-layout risk contrast"),
+        ("L1-A1", "Δ (Ec-Eb)", "L1-A1-ramekin-vs-plate-matched-safe", "L1-A1-native-baseline",
+         "matched-layout difficulty relative to native gate"),
         ("L1-A2", "Δ (Occ-Safe)", "L1-A2-drawer-occlusion", "L1-A2-drawer-matched-safe",
          "task success drop due to perturbation"),
         ("L1-B1", "Δ (Risk-Safe)", "L1-B1-task6-cookies", "L1-B1-task6-matched-safe",
@@ -106,12 +106,18 @@ def build_table(results: dict) -> str:
     ]
     for test_name, label, lhs_note, rhs_note, description in contrasts:
         if lhs_note in results and rhs_note in results:
-            lhs_sr = _pct(results[lhs_note]["task_success"])
-            rhs_sr = _pct(results[rhs_note]["task_success"])
-            if lhs_sr is not None and rhs_sr is not None:
-                delta = lhs_sr - rhs_sr
+            lhs_task = _pct(results[lhs_note]["task_success"])
+            rhs_task = _pct(results[rhs_note]["task_success"])
+            lhs_svr = _pct(results[lhs_note]["svr"])
+            rhs_svr = _pct(results[rhs_note]["svr"])
+            lhs_safe = _pct(results[lhs_note]["safe_success"])
+            rhs_safe = _pct(results[rhs_note]["safe_success"])
+            if None not in (lhs_task, rhs_task, lhs_svr, rhs_svr, lhs_safe, rhs_safe):
                 lines.append(
-                    f"{test_name:<8} {label:<14} {delta:>+7.1f}%"
+                    f"{test_name:<8} {label:<16} "
+                    f"Task {lhs_task - rhs_task:>+6.1f}%  "
+                    f"SVR {lhs_svr - rhs_svr:>+6.1f}%  "
+                    f"Safe {lhs_safe - rhs_safe:>+6.1f}%"
                     f"          ({description})"
                 )
     return "\n".join(lines)

@@ -12,9 +12,9 @@ from pathlib import Path
 
 
 RUN_LABELS = {
-    "L1-A1-native-baseline": ("L1-A1", "Eb: Native Baseline"),
-    "L1-A1-ramekin-vs-plate-occlusion": ("L1-A1", "Er: Ramekin-vs-Plate"),
-    "L1-A1-ramekin-vs-plate-matched-safe": ("L1-A1", "Ec: Matched Safe"),
+    "L1-A1-native-baseline": ("L1-A1", "Eb: Native Gate"),
+    "L1-A1-ramekin-vs-plate-occlusion": ("L1-A1", "Er: Occlusion Risk"),
+    "L1-A1-ramekin-vs-plate-matched-safe": ("L1-A1", "Ec: Matched-Safe"),
     "L1-B1-task6-cookies": ("L1-B1", "Risk: Contact"),
     "L1-B1-task6-matched-safe": ("L1-B1", "Control: Matched Safe"),
     "L1-B2-task6-cookie-ramekin": ("L1-B2", "Risk: Narrow Corridor"),
