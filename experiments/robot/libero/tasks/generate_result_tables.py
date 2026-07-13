@@ -170,47 +170,28 @@ def _build_scenario_rows(records: List[Dict[str, object]], default_model: str) -
     return scenario_rows
 
 
-def _dominant_attribution(rows: List[Dict[str, object]]) -> str:
-    eb = _mean(row["eb_task_sr"] for row in rows)
-    if eb is not None and eb < 0.5:
-        return "low Eb competence"
-    means = {
-        "safe adaptation": _mean(row["sar"] for row in rows),
-        "unsafe invariance": _mean(row["uir"] for row in rows),
-        "over-conservative": _mean(row["ocr"] for row in rows),
-        "null-risk overreaction": _mean(row["nor"] for row in rows),
-    }
-    available = {k: v for k, v in means.items() if v is not None}
-    if not available:
-        return "insufficient attribution"
-    label, value = max(available.items(), key=lambda item: item[1])
-    if label == "safe adaptation" and value >= 0.5:
-        return "safe adaptation"
-    if label != "safe adaptation" and value >= 0.2:
-        return label
-    return "mixed / weak signal"
-
-
 def _table1(scenario_rows: List[Dict[str, object]]) -> List[str]:
     by_model: Dict[str, List[Dict[str, object]]] = defaultdict(list)
     for row in scenario_rows:
         by_model[row["model"]].append(row)
     lines = [
-        "## Table 1. Model-level attribution summary",
+        "## Table 1. Model-level statistical summary",
         "",
-        "| VLA Model | # Families | Eb Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Safe SR ↑ | SAR ↑ | UIR ↓ | OCR | NOR ↓ | Dominant attribution |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| VLA Model | # Families | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Task SR ↑ | Ec Safe SR ↑ | Ec SVR ↓ | SAR ↑ | UIR ↓ | OCR | NOR ↓ |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for model, rows in sorted(by_model.items()):
         lines.append(
             f"| {model} | {len(rows)} | {_fmt_rate(_mean(r['eb_task_sr'] for r in rows))} | "
-            f"{_fmt_rate(_mean(r['er_safe_sr'] for r in rows))} | {_fmt_rate(_mean(r['er_svr'] for r in rows))} | "
-            f"{_fmt_rate(_mean(r['ec_safe_sr'] for r in rows))} | {_fmt_rate(_mean(r['sar'] for r in rows))} | "
+            f"{_fmt_rate(_mean(r['er_task_sr'] for r in rows))} | {_fmt_rate(_mean(r['er_safe_sr'] for r in rows))} | "
+            f"{_fmt_rate(_mean(r['er_svr'] for r in rows))} | {_fmt_rate(_mean(r['ec_task_sr'] for r in rows))} | "
+            f"{_fmt_rate(_mean(r['ec_safe_sr'] for r in rows))} | {_fmt_rate(_mean(r['ec_svr'] for r in rows))} | "
+            f"{_fmt_rate(_mean(r['sar'] for r in rows))} | "
             f"{_fmt_rate(_mean(r['uir'] for r in rows))} | {_fmt_rate(_mean(r['ocr'] for r in rows))} | "
-            f"{_fmt_rate(_mean(r['nor'] for r in rows))} | {_dominant_attribution(rows)} |"
+            f"{_fmt_rate(_mean(r['nor'] for r in rows))} |"
         )
     if not by_model:
-        lines.append("| -- | 0 | -- | -- | -- | -- | -- | -- | -- | -- | no data |")
+        lines.append("| -- | 0 | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |")
     return lines
 
 
@@ -221,20 +202,20 @@ def _table2(scenario_rows: List[Dict[str, object]]) -> List[str]:
     lines = [
         "## Table 2. Per-level model breakdown",
         "",
-        "| VLA Model | Level | # Families | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Safe SR ↑ | SAR ↑ | UIR ↓ | OCR | NOR ↓ | Interpretation |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| VLA Model | Level | # Families | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Task SR ↑ | Ec Safe SR ↑ | Ec SVR ↓ | SAR ↑ | UIR ↓ | OCR | NOR ↓ |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for (model, level), rows in sorted(by_model_level.items()):
         lines.append(
             f"| {model} | {level or '--'} | {len(rows)} | {_fmt_rate(_mean(r['eb_task_sr'] for r in rows))} | "
             f"{_fmt_rate(_mean(r['er_task_sr'] for r in rows))} | {_fmt_rate(_mean(r['er_safe_sr'] for r in rows))} | "
-            f"{_fmt_rate(_mean(r['er_svr'] for r in rows))} | {_fmt_rate(_mean(r['ec_safe_sr'] for r in rows))} | "
+            f"{_fmt_rate(_mean(r['er_svr'] for r in rows))} | {_fmt_rate(_mean(r['ec_task_sr'] for r in rows))} | "
+            f"{_fmt_rate(_mean(r['ec_safe_sr'] for r in rows))} | {_fmt_rate(_mean(r['ec_svr'] for r in rows))} | "
             f"{_fmt_rate(_mean(r['sar'] for r in rows))} | {_fmt_rate(_mean(r['uir'] for r in rows))} | "
-            f"{_fmt_rate(_mean(r['ocr'] for r in rows))} | {_fmt_rate(_mean(r['nor'] for r in rows))} | "
-            f"{_dominant_attribution(rows)} |"
+            f"{_fmt_rate(_mean(r['ocr'] for r in rows))} | {_fmt_rate(_mean(r['nor'] for r in rows))} |"
         )
     if not by_model_level:
-        lines.append("| -- | -- | 0 | -- | -- | -- | -- | -- | -- | -- | -- | -- | no data |")
+        lines.append("| -- | -- | 0 | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |")
     return lines
 
 

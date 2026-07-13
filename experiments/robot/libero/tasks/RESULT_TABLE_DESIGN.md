@@ -38,17 +38,17 @@ paper number. This prevents a level with more episodes or more repeated trials
 from dominating the model-level result. Weighted averages can be reported in
 appendix as a robustness check.
 
-## Table 1: Model-level attribution summary
+## Table 1: Model-level statistical summary
 
 This should be the first main result table when comparing multiple VLA models.
 Each row is one model. Metrics are aggregated across all evaluated scenario
 families.
 
-| VLA Model | # Families | Eb Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Safe SR ↑ | SAR ↑ | UIR ↓ | OCR | NOR ↓ | Dominant attribution |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| OpenVLA-OFT |  |  |  |  |  |  |  |  |  |  |
-| pi_0.5 |  |  |  |  |  |  |  |  |  |  |
-| GRPO baseline |  |  |  |  |  |  |  |  |  |  |
+| VLA Model | # Families | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Task SR ↑ | Ec Safe SR ↑ | Ec SVR ↓ | SAR ↑ | UIR ↓ | OCR | NOR ↓ |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| OpenVLA-OFT |  |  |  |  |  |  |  |  |  |  |  |  |
+| pi_0.5 |  |  |  |  |  |  |  |  |  |  |  |  |
+| GRPO baseline |  |  |  |  |  |  |  |  |  |  |  |  |
 
 Column notes:
 
@@ -57,33 +57,26 @@ Column notes:
   because the model may not have basic task competence.
 - `Er Safe SR` and `Er SVR`: primary safety-performance columns.
 - `Ec Safe SR` and `NOR`: control for layout-complexity confounds.
-- `Dominant attribution`: short text label based on the largest or most
-  scientifically important failure mode, e.g. `unsafe invariance`,
-  `over-conservative`, `null-risk overreaction`, `low Eb competence`,
-  `safe adaptation`.
 
-Do not include pass/fail or certification labels in this table.
+Do not include pass/fail, certification labels, or model-level attribution
+conclusions in this table. At this stage the table is a statistical summary;
+physical-cognitive attribution should be written after enough L1/L2/L3 families
+are available.
 
 ## Table 2: Per-level model breakdown
 
-This table explains whether a model's behavior differs across L1, L2, and L3.
-Each model has one row per level.
+This table reports whether the measured rates differ across L1, L2, and L3.
+Each model has one row per level. Do not use this table alone to assign final
+physical-cognitive attribution.
 
-| VLA Model | Level | # Families | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Safe SR ↑ | SAR ↑ | UIR ↓ | OCR | NOR ↓ | Interpretation |
-| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| OpenVLA-OFT | L1 |  |  |  |  |  |  |  |  |  |  |  |
-| OpenVLA-OFT | L2 |  |  |  |  |  |  |  |  |  |  |  |
-| OpenVLA-OFT | L3 |  |  |  |  |  |  |  |  |  |  |  |
-| pi_0.5 | L1 |  |  |  |  |  |  |  |  |  |  |  |
-| pi_0.5 | L2 |  |  |  |  |  |  |  |  |  |  |  |
-| pi_0.5 | L3 |  |  |  |  |  |  |  |  |  |  |  |
-
-Use this table to support claims such as:
-
-- a model handles L1 spatial-risk cases but fails L3 action-consequence cases;
-- a model has high task competence but high UIR in L2 semantic-hazard cases;
-- a model shows high NOR, meaning its behavior is sensitive to layout changes
-  even when the matched control removes the target risk.
+| VLA Model | Level | # Families | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Task SR ↑ | Ec Safe SR ↑ | Ec SVR ↓ | SAR ↑ | UIR ↓ | OCR | NOR ↓ |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| OpenVLA-OFT | L1 |  |  |  |  |  |  |  |  |  |  |  |  |
+| OpenVLA-OFT | L2 |  |  |  |  |  |  |  |  |  |  |  |  |
+| OpenVLA-OFT | L3 |  |  |  |  |  |  |  |  |  |  |  |  |
+| pi_0.5 | L1 |  |  |  |  |  |  |  |  |  |  |  |  |
+| pi_0.5 | L2 |  |  |  |  |  |  |  |  |  |  |  |  |
+| pi_0.5 | L3 |  |  |  |  |  |  |  |  |  |  |  |  |
 
 ## Table 3: Scenario-level result matrix
 
