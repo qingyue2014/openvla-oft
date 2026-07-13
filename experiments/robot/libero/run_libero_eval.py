@@ -129,6 +129,9 @@ class GenerateConfig:
     lora_rank: int = 32                              # Rank of LoRA weight matrix (MAKE SURE THIS MATCHES TRAINING!)
 
     unnorm_key: Union[str, Path] = ""                # Action un-normalization key
+    do_sample: bool = False                          # Whether to sample action tokens during OpenVLA decoding
+    temperature: float = 1.0                         # Sampling temperature passed to predict_action when supported
+    top_p: float = 1.0                               # Nucleus sampling parameter passed to predict_action when supported
 
     load_in_8bit: bool = False                       # (For OpenVLA only) Load with 8-bit quantization
     load_in_4bit: bool = False                       # (For OpenVLA only) Load with 4-bit quantization

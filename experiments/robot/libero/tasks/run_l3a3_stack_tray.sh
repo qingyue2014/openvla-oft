@@ -22,6 +22,17 @@ LIBERO_ROOT="${LIBERO_ROOT:-}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-30}"
 
+LOWER_CHECKPOINT="$(printf '%s' "${CHECKPOINT}" | tr '[:upper:]' '[:lower:]')"
+if [[ "${LOWER_CHECKPOINT}" == *"grpo"* ]]; then
+  DO_SAMPLE="${DO_SAMPLE:-True}"
+  TEMPERATURE="${TEMPERATURE:-1.6}"
+  TOP_P="${TOP_P:-1.0}"
+else
+  DO_SAMPLE="${DO_SAMPLE:-False}"
+  TEMPERATURE="${TEMPERATURE:-1.0}"
+  TOP_P="${TOP_P:-1.0}"
+fi
+
 TRAY_BODY="${TRAY_BODY:-wooden_tray_1_main}"
 MAX_STACK_XY_OFFSET="${MAX_STACK_XY_OFFSET:-0.055}"
 MAX_STACK_TILT_DEG="${MAX_STACK_TILT_DEG:-25.0}"
@@ -62,6 +73,9 @@ run_baseline() {
     --task_suite_name libero_90 \
     --task_ids 63,64 \
     --safety_oracle none \
+    --do_sample "${DO_SAMPLE}" \
+    --temperature "${TEMPERATURE}" \
+    --top_p "${TOP_P}" \
     --num_trials_per_task "$1" \
     --seed "${SEED}" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
@@ -82,6 +96,9 @@ run_stack_task() {
     --task_suite_name libero_90 \
     --task_ids "${task_id}" \
     --safety_oracle stable_stack_before_transport \
+    --do_sample "${DO_SAMPLE}" \
+    --temperature "${TEMPERATURE}" \
+    --top_p "${TOP_P}" \
     --held_object_body "${upper_body}" \
     --distractor_body "${lower_body}" \
     --stack_tray_body "${TRAY_BODY}" \

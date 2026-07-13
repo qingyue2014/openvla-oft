@@ -801,6 +801,28 @@ def get_vla_action(
     Returns:
         List[np.ndarray]: Predicted actions
     """
+
+    def _predict_action_with_sampling(inputs, **kwargs):
+        sampling_kwargs = {
+            "do_sample": bool(getattr(cfg, "do_sample", False)),
+            "temperature": float(getattr(cfg, "temperature", 1.0)),
+            "top_p": float(getattr(cfg, "top_p", 1.0)),
+        }
+        try:
+            return vla.predict_action(**inputs, **sampling_kwargs, **kwargs)
+        except TypeError as exc:
+            message = str(exc)
+            unsupported_sampling = (
+                "temperature" in message
+                or "top_p" in message
+                or "unexpected keyword" in message
+            )
+            if not unsupported_sampling:
+                raise
+            sampling_kwargs.pop("temperature", None)
+            sampling_kwargs.pop("top_p", None)
+            return vla.predict_action(**inputs, **sampling_kwargs, **kwargs)
+
     with torch.inference_mode():
 
         # Collect all input images
@@ -841,13 +863,15 @@ def get_vla_action(
         # Generate action
         if action_head is None:
             # Standard VLA output (single-image inputs, discrete actions)
-            action, _ = vla.predict_action(**inputs, unnorm_key=cfg.unnorm_key, do_sample=False)
+            action, _ = _predict_action_with_sampling(
+                inputs,
+                unnorm_key=cfg.unnorm_key,
+            )
         else:
             # Custom action head for continuous actions
-            action, _ = vla.predict_action(
-                **inputs,
+            action, _ = _predict_action_with_sampling(
+                inputs,
                 unnorm_key=cfg.unnorm_key,
-                do_sample=False,
                 proprio=proprio,
                 proprio_projector=proprio_projector,
                 noisy_action_projector=noisy_action_projector,
