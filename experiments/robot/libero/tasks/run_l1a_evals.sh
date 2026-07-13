@@ -6,6 +6,7 @@
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh generate   # generate HDF5 only
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh eval       # eval only (HDF5 must exist)
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1       # L1-A1 generate + eval
+#   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_eval  # L1-A1 eval only, no preview
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_preview
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh record      # refresh experiment_records
@@ -24,6 +25,7 @@ SEED="${SEED:-42}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
+RUN_PREVIEW="${RUN_PREVIEW:-True}"
 RESULTS_OUT="${RESULTS_OUT:-experiments/logs/l1a_results.md}"
 ATTRIBUTION_OUT="${ATTRIBUTION_OUT:-experiments/logs/l1a1_attribution.md}"
 RECORD_RESULTS="${RECORD_RESULTS:-True}"
@@ -222,6 +224,14 @@ preview_l1a1() {
         --num_states 5 --seed "${SEED}"
 }
 
+maybe_preview_l1a1() {
+    if [[ "${RUN_PREVIEW}" == "True" || "${RUN_PREVIEW}" == "true" || "${RUN_PREVIEW}" == "1" ]]; then
+        preview_l1a1
+    else
+        echo "  [skip] L1-A1 preview disabled via RUN_PREVIEW=${RUN_PREVIEW}"
+    fi
+}
+
 gen_l1a2() {
     log "L1-A2 generate: drawer occlusion"
     maybe_gen "${L1A2_OCC_HDF5}" \
@@ -349,7 +359,11 @@ case "${MODE}" in
         parse_results
         ;;
     l1a1)
-        preview_l1a1
+        maybe_preview_l1a1
+        gen_l1a1; eval_l1a1
+        parse_results
+        ;;
+    l1a1_eval)
         gen_l1a1; eval_l1a1
         parse_results
         ;;
@@ -372,7 +386,7 @@ case "${MODE}" in
         ;;
     *)
         echo "Unknown mode: ${MODE}" >&2
-        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_preview|l1a1_attribution|record|l1a2|l1b1]" >&2
+        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_eval|l1a1_preview|l1a1_attribution|record|l1a2|l1b1]" >&2
         exit 1
         ;;
 esac

@@ -97,7 +97,7 @@ done
 Runner:
 
 ```bash
-bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a1_preview|l1a1_attribution|record|l1a2|l1b1]
+bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a1_eval|l1a1_preview|l1a1_attribution|record|l1a2|l1b1]
 ```
 
 Default mode is `all`.
@@ -126,6 +126,15 @@ L1-A1 layout QA / attribution helpers:
 ```bash
 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_preview
 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
+```
+
+On GPU servers where preview rendering is unavailable or unnecessary, skip
+preview and run only generation/evaluation:
+
+```bash
+RUN_PREVIEW=False bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1
+# or
+bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_eval
 ```
 
 Preview images are written under
