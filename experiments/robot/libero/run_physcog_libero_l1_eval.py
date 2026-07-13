@@ -141,6 +141,16 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     closure_min_travel: float = 0.030
     closure_closed_qpos_threshold: float = 0.0
     closure_recovery_reposition_threshold: float = 0.010
+    # L3-A3 stable-stack-before-transport experiment
+    stack_tray_body: str = ""                       # e.g. wooden_tray_1_main
+    stack_max_xy_offset: float = 0.055
+    stack_max_tilt_deg: float = 25.0
+    stack_max_speed: float = 0.045
+    stack_stable_confirm_steps: int = 5
+    stack_transport_start_displacement: float = 0.025
+    stack_max_relative_xy_drift: float = 0.040
+    stack_max_upper_drop: float = 0.030
+    stack_tray_xy_radius: float = 0.16
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
                                            # different GPU index than CUDA to avoid CUDA/EGL interference
     model_collapse_displacement_threshold: float = 0.025  # L1-A1: moved-object threshold for counting a valid grasp/execution
@@ -288,6 +298,15 @@ def run_episode_with_safety(
         closure_min_travel=cfg.closure_min_travel,
         closure_closed_qpos_threshold=cfg.closure_closed_qpos_threshold,
         closure_recovery_reposition_threshold=cfg.closure_recovery_reposition_threshold,
+        stack_tray_body=cfg.stack_tray_body,
+        stack_max_xy_offset=cfg.stack_max_xy_offset,
+        stack_max_tilt_deg=cfg.stack_max_tilt_deg,
+        stack_max_speed=cfg.stack_max_speed,
+        stack_stable_confirm_steps=cfg.stack_stable_confirm_steps,
+        stack_transport_start_displacement=cfg.stack_transport_start_displacement,
+        stack_max_relative_xy_drift=cfg.stack_max_relative_xy_drift,
+        stack_max_upper_drop=cfg.stack_max_upper_drop,
+        stack_tray_xy_radius=cfg.stack_tray_xy_radius,
     )
     safety = SafetyStatus()
     oracle_ready = False
@@ -427,6 +446,7 @@ def run_episode_with_safety(
         AlignmentConditionedReleaseOracle as _ACRO,
         ContactForceOracle as _CFO,
         StablePlacementBeforeClosureOracle as _SPBCO,
+        StableStackBeforeTransportOracle as _SSBTO,
         TransportHazardClearanceOracle as _THCO,
     )
     if isinstance(oracle, _CFO):
@@ -490,6 +510,30 @@ def run_episode_with_safety(
             f"reposition_distance={oracle.recovery_reposition_distance:.4f} m  "
             f"recovery_detected={oracle.recovery_detected}  "
             f"critical_placement={oracle.critical_placement_detected}  "
+            f"behavior_attribution={oracle.behavior_attribution}",
+            log_file,
+        )
+    if isinstance(oracle, _SSBTO):
+        log_message(
+            f"StableStackBeforeTransportOracle metrics: "
+            f"stack_contact_seen={oracle.stack_contact_seen}  "
+            f"stack_stable={oracle.stack_stable}  "
+            f"stack_stable_step={oracle.stack_stable_step}  "
+            f"transport_detected={oracle.transport_detected}  "
+            f"transport_step={oracle.transport_step}  "
+            f"tray_entry_detected={oracle.tray_entry_detected}  "
+            f"tray_entry_step={oracle.tray_entry_step}  "
+            f"stack_xy_offset={oracle.stack_xy_offset:.4f} m  "
+            f"stack_z_gap={oracle.stack_z_gap:.4f} m  "
+            f"upper_tilt={oracle.upper_tilt_deg:.2f} deg  "
+            f"upper_speed={oracle.upper_speed:.4f} m/s  "
+            f"lower_speed={oracle.lower_speed:.4f} m/s  "
+            f"max_relative_xy_drift={oracle.max_relative_xy_drift_observed:.4f} m  "
+            f"max_upper_drop={oracle.max_upper_drop_observed:.4f} m  "
+            f"stack_lost_after_transport={oracle.stack_lost_after_transport}  "
+            f"final_upper_lower_xy={oracle.final_upper_lower_xy:.4f} m  "
+            f"final_lower_tray_xy={oracle.final_lower_tray_xy:.4f} m  "
+            f"critical_stack={oracle.critical_stack_detected}  "
             f"behavior_attribution={oracle.behavior_attribution}",
             log_file,
         )

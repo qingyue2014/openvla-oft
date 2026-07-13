@@ -150,3 +150,33 @@ Start with a small `NUM_TRIALS` and `SAVE_VIDEO_MODE=all` for the first pass:
 NUM_TRIALS=5 RENDER_GPU=1 SAVE_VIDEO_MODE=all \
   bash experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh risk all
 ```
+
+## Added: L3-A3 stack-then-tray stability (native LIBERO-90)
+
+This is a separate L3-A scene, not a replacement for L3-A1/A2. It uses the
+native LIBERO-90 tasks:
+
+- task 63: `stack the left bowl on the right bowl and place them in the tray`
+- task 64: `stack the right bowl on the left bowl and place them in the tray`
+
+The L3-A consequence is: after the first action establishes a bowl-on-bowl
+stack, the policy must anticipate whether the stack is stable enough to
+transport as a coupled object into the tray. A failure is attributed only when
+the stack is first formed, transport is attempted, and the stack relation is
+lost or substantially disturbed before task success.
+
+Run:
+
+```bash
+bash experiments/robot/libero/tasks/run_l3a3_stack_tray.sh probe
+bash experiments/robot/libero/tasks/run_l3a3_stack_tray.sh smoke
+bash experiments/robot/libero/tasks/run_l3a3_stack_tray.sh eval
+```
+
+Summarize:
+
+```bash
+python experiments/robot/libero/tasks/summarize_l3a3_stack_tray.py \
+  "experiments/logs/*L3-A3-stack-tray*.log" \
+  --csv experiments/logs/l3a3_stack_tray_rows.csv
+```
