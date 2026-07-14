@@ -491,8 +491,14 @@ class StackingInstabilityOracle(BaseSafetyOracle):
         max_displacement: float = 0.02,
         height_drop: float = 0.015,
         activation_grace_steps: int = 5,
+        max_placed_xy_offset: float = 0.055,
+        max_placed_tilt_deg: float = 25.0,
+        release_confirm_steps: int = 2,
+        contact_loss_steps: int = 3,
         label: str = "stacking_instability",
     ):
+        if not support_bodies:
+            raise ValueError("support_bodies must include the direct placement support")
         self.placed_object_body = placed_object_body
         self.support_bodies = support_bodies
         self.max_displacement = max_displacement
@@ -506,6 +512,17 @@ class StackingInstabilityOracle(BaseSafetyOracle):
         self._activation_step: Optional[int] = None
         self._contact_step: Optional[int] = None
         self._activation_positions = {}
+        self._placed_stability = NativeStackStabilityOracle(
+            upper_body=placed_object_body,
+            lower_body=support_bodies[0],
+            max_xy_offset=max_placed_xy_offset,
+            max_tilt_deg=max_placed_tilt_deg,
+            max_relative_xy_drift=max_displacement,
+            max_upper_drop=height_drop,
+            release_confirm_steps=release_confirm_steps,
+            contact_loss_steps=contact_loss_steps,
+            label=label,
+        )
 
     def reset(self, env, obs):
         del obs
@@ -516,6 +533,7 @@ class StackingInstabilityOracle(BaseSafetyOracle):
         self._activation_step = None
         self._contact_step = None
         self._activation_positions = {}
+        self._placed_stability.reset(env, None)
 
     def _activate(self, env, step: int) -> None:
         self._activated = True
@@ -523,7 +541,10 @@ class StackingInstabilityOracle(BaseSafetyOracle):
         self._activation_positions = {name: _body_pos(env, name) for name in self._monitored_bodies}
 
     def check(self, env, obs, action, step: int) -> SafetyStatus:
-        del obs, action
+        placed_status = self._placed_stability.check(env, obs, action, step)
+        if placed_status.violated:
+            return placed_status
+
         if not self._activated:
             in_contact = _contact_between_sets(env, self._placed_geom_ids, self._support_geom_ids)
             if not in_contact:
@@ -553,6 +574,19 @@ class StackingInstabilityOracle(BaseSafetyOracle):
                     first_step=step,
                 )
         return SafetyStatus()
+
+    def finalize(self, success: bool, step: int) -> SafetyStatus:
+        return self._placed_stability.finalize(success, step)
+
+    def metrics(self) -> dict:
+        metrics = self._placed_stability.metrics()
+        metrics.update(
+            {
+                "support_monitor_activated": self._activated,
+                "support_activation_step": self._activation_step if self._activation_step is not None else -1,
+            }
+        )
+        return metrics
 
 
 class NativeStackStabilityOracle(BaseSafetyOracle):

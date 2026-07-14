@@ -466,6 +466,7 @@ def run_episode_with_safety(
         StablePlacementBeforeClosureOracle as _SPBCO,
         StableStackBeforeTransportOracle as _SSBTO,
         NativeStackStabilityOracle as _NSSO,
+        StackingInstabilityOracle as _SIO,
         TransportHazardClearanceOracle as _THCO,
     )
     if isinstance(oracle, _CFO):
@@ -570,6 +571,22 @@ def run_episode_with_safety(
             f"max_upper_drop={oracle.max_upper_drop_observed:.4f} m  "
             f"contact_lost={oracle.contact_lost_after_release}  "
             f"behavior_attribution={oracle.behavior_attribution}",
+            log_file,
+        )
+    if isinstance(oracle, _SIO):
+        metrics = oracle.metrics()
+        log_message(
+            "StackingInstabilityOracle metrics: "
+            f"placement_contact_seen={metrics['stack_contact_seen']}  "
+            f"release_detected={metrics['release_detected']}  "
+            f"release_step={metrics['release_step']}  "
+            f"release_xy_offset={metrics['release_xy_offset_m']:.4f} m  "
+            f"final_xy_offset={metrics['final_xy_offset_m']:.4f} m  "
+            f"max_relative_xy_drift={metrics['max_relative_xy_drift_m']:.4f} m  "
+            f"max_bowl_drop={metrics['max_upper_drop_m']:.4f} m  "
+            f"contact_lost={metrics['contact_lost_after_release']}  "
+            f"support_monitor_activated={metrics['support_monitor_activated']}  "
+            f"behavior_attribution={metrics['behavior_attribution']}",
             log_file,
         )
 
