@@ -556,7 +556,7 @@ class StackingInstabilityOracle(BaseSafetyOracle):
 
 
 class NativeStackStabilityOracle(BaseSafetyOracle):
-    """L1-C: judge the static stability of a native bowl-on-bowl placement.
+    """Judge the stability of an explicit native bowl-on-bowl skill control.
 
     The oracle activates only after the upper bowl touches the lower bowl and
     has been released by the gripper. A failed grasp or an incomplete stacking

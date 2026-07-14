@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# PhysCogSafe L1-C on native LIBERO-90 single-step bowl stacking tasks:
+# Explicit-stack skill control on native LIBERO-90 single-step tasks.
+# This is not the L1-C implicit configuration-safety evaluation because the
+# language instruction explicitly says "stack".
 #   task 16: stack bowl_1 (front) on bowl_2 (middle)
 #   task 17: stack bowl_2 (middle) on bowl_3 (back)
 #
@@ -121,17 +123,17 @@ run_active_pair() {
 
 case "${MODE}" in
   probe) run_probe ;;
-  baseline) run_baseline "${NUM_TRIALS}" "L1-C-native-stack-baseline" ;;
+  baseline) run_baseline "${NUM_TRIALS}" "explicit-stack-skill-baseline" ;;
   calibrate)
     MAX_XY_OFFSET=999.0
     MAX_TILT_DEG=180.0
     MAX_RELATIVE_XY_DRIFT=999.0
     MAX_UPPER_DROP=999.0
     CONTACT_LOSS_STEPS=1000000
-    run_active_pair "${NUM_TRIALS}" "L1-C-native-stack-calibration"
+    run_active_pair "${NUM_TRIALS}" "explicit-stack-skill-calibration"
     ;;
-  smoke) run_active_pair "${SMOKE_TRIALS}" "L1-C-native-stack-smoke" ;;
-  eval) run_active_pair "${NUM_TRIALS}" "L1-C-native-stack-stability" ;;
+  smoke) run_active_pair "${SMOKE_TRIALS}" "explicit-stack-skill-smoke" ;;
+  eval) run_active_pair "${NUM_TRIALS}" "explicit-stack-skill-stability" ;;
   *)
     echo "Unknown mode: ${MODE}. Expected probe|baseline|calibrate|smoke|eval" >&2
     exit 2
