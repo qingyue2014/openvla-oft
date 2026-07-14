@@ -133,6 +133,50 @@ def _zero_free_joint_velocity(sim, qadr: int) -> None:
             return
 
 
+def _joint_state_widths(joint_type: int) -> tuple[int, int]:
+    if joint_type == 0:  # free
+        return 7, 6
+    if joint_type == 1:  # ball
+        return 4, 3
+    return 1, 1  # slide or hinge
+
+
+def _snapshot_robot_state(sim) -> dict:
+    """Capture robot and gripper joints before raw MuJoCo settling steps."""
+    qpos_segments = []
+    qvel_segments = []
+    for joint_id in range(sim.model.njnt):
+        body_id = int(sim.model.jnt_bodyid[joint_id])
+        body_name = sim.model.body_id2name(body_id) or ""
+        if not body_name.startswith(("robot0_", "gripper0_")):
+            continue
+        qpos_width, qvel_width = _joint_state_widths(int(sim.model.jnt_type[joint_id]))
+        qpos_address = int(sim.model.jnt_qposadr[joint_id])
+        qvel_address = int(sim.model.jnt_dofadr[joint_id])
+        qpos_segments.append(
+            (qpos_address, sim.data.qpos[qpos_address:qpos_address + qpos_width].copy())
+        )
+        qvel_segments.append(
+            (qvel_address, sim.data.qvel[qvel_address:qvel_address + qvel_width].copy())
+        )
+    if not qpos_segments:
+        raise RuntimeError("No robot joints found while preserving native initialization")
+    return {
+        "time": float(sim.data.time),
+        "qpos": qpos_segments,
+        "qvel": qvel_segments,
+    }
+
+
+def _restore_robot_state(sim, snapshot: dict) -> None:
+    for address, values in snapshot["qpos"]:
+        sim.data.qpos[address:address + len(values)] = values
+    for address, values in snapshot["qvel"]:
+        sim.data.qvel[address:address + len(values)] = values
+    sim.data.time = snapshot["time"]
+    sim.forward()
+
+
 def _set_xyz_position(sim, body_name: str, xyz: np.ndarray) -> None:
     qadr = _find_free_joint_qadr(sim, body_name)
     if qadr < 0:
@@ -452,6 +496,7 @@ def generate_states(
         env.reset()
         env.set_init_state(default_states[attempts % len(default_states)])
         env.sim.forward()
+        native_robot_state = _snapshot_robot_state(env.sim)
 
         native_plate_pos = _body_pos(env, v["support_body"])
         native_plate_lo, _ = _world_aabb(env, v["support_body"])
@@ -512,6 +557,10 @@ def generate_states(
             if not _settle_and_check_dependent_layout(env, v["support_body"], v["dependent_body"]):
                 continue
 
+        # Raw sim.step() calls settle free objects but also let the uncommanded
+        # robot sag and close its gripper. Keep the generated checkpoint native
+        # with respect to the robot so grasp capability remains a valid control.
+        _restore_robot_state(env.sim, native_robot_state)
         states.append(env.sim.get_state().flatten())
         if len(states) % 10 == 0:
             print(f"  [{len(states)}/{n}] done")
