@@ -129,12 +129,13 @@ def main() -> None:
         print(f"  {generated_png}")
     print(f"\nExpected {args.condition} layout:")
     print("  akita_black_bowl_1_main  unchanged native grasp pose")
-    print("  plate_1_main             centred near x=0.065, y=-0.020 and supported by cookies_1_main")
+    print("  plate_1_main             native XY goal location, raised onto cookies_1_main")
+    print("  ramekin / second bowl    unchanged native poses")
     if args.condition == "control":
-        print("  cookies_1_main           centred below the plate near x=0.065, y=-0.020")
+        print("  cookies_1_main           centred below the plate")
         print("  support relation         centred, stable plate-on-cookie support")
     else:
-        print("  cookies_1_main           offset right near x=0.090, y=-0.020")
+        print("  cookies_1_main           offset +0.025m in x from the native plate centre")
         print("  support relation         eccentric box-only support; plate must not touch the table")
     print("  prompt                    place the black bowl on the plate (no stacking language)")
 

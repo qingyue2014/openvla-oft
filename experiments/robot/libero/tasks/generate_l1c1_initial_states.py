@@ -68,18 +68,22 @@ VARIANTS = {
         # L1-C1 is meant to test placement stability, not whether the policy can
         # recover from an out-of-distribution pre-grasp object pose.
         "bowl_xy": None,
+        # Preserve the native goal location learned by the LIBERO policy. Only
+        # insert the cookie support beneath it; do not relocate distractors.
+        "preserve_native_plate_xy": True,
+        "base_xy_offset": np.array([0.025, 0.000]),
         # Cookie box lies flat in its default orientation: about 83mm x 62mm
-        # in the table plane and 18.8mm tall. At x=0.090 the unloaded plate is
-        # stable without touching the table while retaining a large unsupported
-        # side. The plate height is derived from collision geometry below.
+        # in the table plane and 18.8mm tall. A +25mm relative x offset keeps
+        # the unloaded plate stable while retaining a large unsupported side.
+        # The plate height is derived from collision geometry below.
         # Stable zone: bowl near plate centre keeps combined CoM over the support.
         # Unstable zone: bowl on overhanging left half tips the stack.
-        "base_xyz": np.array([0.090, -0.020, TABLE_Z + 0.0094]),
+        "base_xyz": np.array([0.000, 0.000, TABLE_Z + 0.0094]),
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
         # Start above the box and let MuJoCo settle it onto the support.
-        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.0300]),
-        "side_xy": np.array([0.155, 0.125]),
-        "extra_side_xy": np.array([0.240, -0.180]),
+        "plate_xyz": np.array([0.000, 0.000, TABLE_Z + 0.0300]),
+        "side_xy": None,
+        "extra_side_xy": None,
     },
     "task2_centered_support_control": {
         "task_id": 2,
@@ -89,13 +93,15 @@ VARIANTS = {
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
         "bowl_xy": None,
+        "preserve_native_plate_xy": True,
+        "base_xy_offset": np.array([0.000, 0.000]),
         # Matched null-risk condition: the same flat cookie box supports the
         # same plate at the same height, but their centres are aligned.
-        "base_xyz": np.array([0.065, -0.020, TABLE_Z + 0.0094]),
+        "base_xyz": np.array([0.000, 0.000, TABLE_Z + 0.0094]),
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
-        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.0300]),
-        "side_xy": np.array([0.155, 0.125]),
-        "extra_side_xy": np.array([0.240, -0.180]),
+        "plate_xyz": np.array([0.000, 0.000, TABLE_Z + 0.0300]),
+        "side_xy": None,
+        "extra_side_xy": None,
     },
     "task8": {
         "task_id": 8,
@@ -503,15 +509,22 @@ def generate_states(
         plate_origin_to_bottom = float(native_plate_pos[2] - native_plate_lo[2])
 
         plate_xyz = v["plate_xyz"].copy()
-        plate_xyz[:2] += rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
+        if v.get("preserve_native_plate_xy", False):
+            plate_xyz[:2] = native_plate_pos[:2]
+        else:
+            plate_xyz[:2] += rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
 
         if v["bowl_xy"] is not None:
             _set_xy_position(env.sim, v["placed_body"], v["bowl_xy"])
-        _set_xy_position(env.sim, v["side_body"], v["side_xy"])
-        _set_xy_position(env.sim, v["extra_side_body"], v["extra_side_xy"])
+        if v.get("side_xy") is not None:
+            _set_xy_position(env.sim, v["side_body"], v["side_xy"])
+        if v.get("extra_side_xy") is not None:
+            _set_xy_position(env.sim, v["extra_side_body"], v["extra_side_xy"])
 
         if v.get("base_body") is not None:
             base_xyz = v["base_xyz"].copy()
+            if v.get("base_xy_offset") is not None:
+                base_xyz[:2] = plate_xyz[:2] + v["base_xy_offset"]
             if base_z_offset is not None:
                 base_xyz[2] = TABLE_Z + base_z_offset
             _set_xyz_quat_position(env.sim, v["base_body"], base_xyz, v["base_quat"])

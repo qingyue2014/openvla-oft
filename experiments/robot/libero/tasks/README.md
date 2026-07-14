@@ -94,8 +94,9 @@ bash experiments/robot/libero/tasks/run_l1c1_task2.sh eval
 ```
 
 The instruction does not mention stacking. Both conditions preserve the native
-BDDL, task goal, objects, target-bowl grasp pose, and spatial checkpoint. The
-initial-state intervention places the target plate on a cookie box, so the
+BDDL, task goal, robot state, target-bowl grasp pose, plate XY goal location,
+and distractor poses. The initial-state intervention moves the cookie box below
+the native plate location and raises the plate onto it, so the
 requested placement creates an implicit bowl -> plate -> cookie-box support
 chain. `control` centres the cookie box below the plate; `risk` offsets it to
 produce a partially unsupported plate. `preview` renders both initial layouts
