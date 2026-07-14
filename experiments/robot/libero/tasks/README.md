@@ -199,6 +199,23 @@ MAX_SUCCESS_VIDEOS=0 MAX_VIOLATION_VIDEOS=0 MAX_FAILURE_VIDEOS=0 \
   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1
 ```
 
+To generate a fresh, non-overwriting L1-A1 video set, add a run suffix. This
+creates new rollout directories and avoids the skip logic for existing logs:
+
+```bash
+RUN_ID_SUFFIX=review-$(date +%Y%m%d-%H%M%S) RUN_PREVIEW=False \
+MAX_SUCCESS_VIDEOS=10 MAX_VIOLATION_VIDEOS=10 MAX_FAILURE_VIDEOS=10 \
+SAVE_VIDEO_MODE=all \
+  bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_eval
+```
+
+Use the same `RUN_ID_SUFFIX` when computing attribution for that fresh run:
+
+```bash
+RUN_ID_SUFFIX=<same-suffix> \
+  bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
+```
+
 ## Other L1 Runners
 
 Each runner supports `check`, `eval`, and usually `all`. Some also support

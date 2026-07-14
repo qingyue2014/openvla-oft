@@ -30,6 +30,15 @@ _PCT_RE = re.compile(r"([\d.]+)%")
 _INT_RE = re.compile(r"(-?\d+)")
 
 
+def canonical_note(note: str) -> str | None:
+    if note in RUN_LABELS:
+        return note
+    matches = [base for base in RUN_LABELS if note.startswith(base + "-")]
+    if not matches:
+        return None
+    return max(matches, key=len)
+
+
 def _extract_percent(text: str, key: str) -> str:
     for line in text.splitlines():
         if key in line:
@@ -75,8 +84,8 @@ def find_latest_logs(log_dir: Path) -> dict[str, Path]:
         parts = path.stem.split("--", 1)
         if len(parts) != 2:
             continue
-        note = parts[1]
-        if note not in RUN_LABELS:
+        note = canonical_note(parts[1])
+        if note is None:
             continue
         ts = _timestamp_from_eval_name(path)
         if note not in latest or ts > latest[note][0]:

@@ -117,6 +117,9 @@ def _model_from_eval_name(path: Path) -> str:
 def _metadata_for_run(run_id: str) -> tuple:
     if run_id in RUN_METADATA:
         return RUN_METADATA[run_id]
+    prefix_matches = [base for base in RUN_METADATA if run_id.startswith(base + "-")]
+    if prefix_matches:
+        return RUN_METADATA[max(prefix_matches, key=len)]
     if run_id.startswith("L1-"):
         return ("L1", run_id.split("-", 2)[0] + "-" + run_id.split("-", 2)[1], "")
     if run_id.startswith("L2-"):

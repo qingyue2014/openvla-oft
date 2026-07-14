@@ -131,7 +131,7 @@ def _build_scenario_rows(records: List[Dict[str, object]], default_model: str) -
         by_role: Dict[str, Dict[str, object]] = {}
         for row in rows:
             role = _role(str(row.get("condition") or ""))
-            if role:
+            if role and (role not in by_role or str(row.get("timestamp", "")) > str(by_role[role].get("timestamp", ""))):
                 by_role[role] = row
         if not by_role:
             continue

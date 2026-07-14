@@ -15,6 +15,7 @@
 #
 # Override any variable via environment:
 #   CHECKPOINT=<path> NUM_TRIALS=10 bash run_l1a_evals.sh l1a1
+#   RUN_ID_SUFFIX=review-$(date +%Y%m%d-%H%M%S) bash run_l1a_evals.sh l1a1_eval
 
 set -euo pipefail
 
@@ -38,6 +39,8 @@ MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"
 MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"
 REVIEW_VIDEO_INDEX_LIMIT="${REVIEW_VIDEO_INDEX_LIMIT:-10}"
 MODEL_NAME="${MODEL_NAME:-}"
+RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
+L1A1_RUN_SUFFIX="${L1A1_RUN_SUFFIX:-${RUN_ID_SUFFIX}}"
 
 VIDEO_ARGS=(
     --max_violation_videos "${MAX_VIOLATION_VIDEOS}"
@@ -72,6 +75,16 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 log() { echo; echo "══════════════════════════════════════════"; echo "  $*"; echo "══════════════════════════════════════════"; }
+
+with_suffix() {
+    local base="$1"
+    local suffix="$2"
+    if [[ -n "${suffix}" ]]; then
+        echo "${base}-${suffix}"
+    else
+        echo "${base}"
+    fi
+}
 
 # Return 0 if a completed eval log for run_id_note exists in LOG_DIR and has
 # at least NUM_TRIALS episodes. This prevents a 5-trial sanity run from making a
@@ -250,8 +263,13 @@ gen_l1a2() {
 
 # ── Eval functions ─────────────────────────────────────────────────────────────
 eval_l1a1() {
+    local eb_run_id occ_run_id safe_run_id
+    eb_run_id="$(with_suffix L1-A1-native-baseline "${L1A1_RUN_SUFFIX}")"
+    occ_run_id="$(with_suffix L1-A1-ramekin-vs-plate-occlusion "${L1A1_RUN_SUFFIX}")"
+    safe_run_id="$(with_suffix L1-A1-ramekin-vs-plate-matched-safe "${L1A1_RUN_SUFFIX}")"
+
     log "L1-A1 eval: Eb native baseline  (oracle=none, default native states)"
-    maybe_eval_with_traj L1-A1-native-baseline \
+    maybe_eval_with_traj "${eb_run_id}" \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
             --task_suite_name libero_spatial --task_ids 1 \
@@ -263,10 +281,10 @@ eval_l1a1() {
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             "${VIDEO_ARGS[@]}" \
-            --run_id_note L1-A1-native-baseline
+            --run_id_note "${eb_run_id}"
 
     log "L1-A1 eval: occlusion group  (oracle=depth_disambiguation)"
-    maybe_eval_with_traj L1-A1-ramekin-vs-plate-occlusion \
+    maybe_eval_with_traj "${occ_run_id}" \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
             --task_suite_name libero_spatial --task_ids 1 \
@@ -281,10 +299,10 @@ eval_l1a1() {
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             "${VIDEO_ARGS[@]}" \
-            --run_id_note L1-A1-ramekin-vs-plate-occlusion
+            --run_id_note "${occ_run_id}"
 
     log "L1-A1 eval: matched safe control  (oracle=none)"
-    maybe_eval_with_traj L1-A1-ramekin-vs-plate-matched-safe \
+    maybe_eval_with_traj "${safe_run_id}" \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
             --task_suite_name libero_spatial --task_ids 1 \
@@ -297,16 +315,21 @@ eval_l1a1() {
             --num_trials_per_task "${NUM_TRIALS}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             "${VIDEO_ARGS[@]}" \
-            --run_id_note L1-A1-ramekin-vs-plate-matched-safe
+            --run_id_note "${safe_run_id}"
 }
 
 attribution_l1a1() {
+    local eb_run_id occ_run_id safe_run_id
+    eb_run_id="$(with_suffix L1-A1-native-baseline "${L1A1_RUN_SUFFIX}")"
+    occ_run_id="$(with_suffix L1-A1-ramekin-vs-plate-occlusion "${L1A1_RUN_SUFFIX}")"
+    safe_run_id="$(with_suffix L1-A1-ramekin-vs-plate-matched-safe "${L1A1_RUN_SUFFIX}")"
+
     log "L1-A1 attribution: primary Er-vs-Ec matched trajectory comparison → ${ATTRIBUTION_OUT}"
     python -m experiments.robot.libero.physcog_attribution \
         --family_name "L1-A1 ramekin-vs-plate disambiguation (Eb native gate; Er vs Ec primary contrast)" \
-        --eb rollouts/libero_spatial/L1-A1-native-baseline/trajectories \
-        --er rollouts/libero_spatial/L1-A1-ramekin-vs-plate-occlusion/trajectories \
-        --ec rollouts/libero_spatial/L1-A1-ramekin-vs-plate-matched-safe/trajectories \
+        --eb "rollouts/libero_spatial/${eb_run_id}/trajectories" \
+        --er "rollouts/libero_spatial/${occ_run_id}/trajectories" \
+        --ec "rollouts/libero_spatial/${safe_run_id}/trajectories" \
         --divergence_reference_condition ec \
         --out "${ATTRIBUTION_OUT}"
     record_results
