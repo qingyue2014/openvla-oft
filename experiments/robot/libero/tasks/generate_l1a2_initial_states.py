@@ -127,22 +127,11 @@ VARIANTS = {
         "extra_side_xy": np.array([0.240, -0.180]),
         "use_upright_cookie_occlusion": True,
         "landmark_near_target": True,
+        # The [.707,0,.707,0] orientation settles WITHOUT touching the bowl and
+        # slides to a clean foreground offset (~0.07), so it is tried first.
+        # The [.707,.707,0,0] orientation ends up in contact with the bowl at
+        # these offsets, so it is kept only as a last-resort fallback.
         "occluder_pose_candidates": [
-            {
-                "offset": np.array([0.040, -0.005]),
-                "z": 0.955,
-                "quat": np.array([0.70710678, 0.70710678, 0.0, 0.0]),
-            },
-            {
-                "offset": np.array([0.045, -0.005]),
-                "z": 0.955,
-                "quat": np.array([0.70710678, 0.70710678, 0.0, 0.0]),
-            },
-            {
-                "offset": np.array([0.040, -0.015]),
-                "z": 0.955,
-                "quat": np.array([0.70710678, 0.70710678, 0.0, 0.0]),
-            },
             {
                 "offset": np.array([0.050, -0.005]),
                 "z": 0.970,
@@ -152,6 +141,26 @@ VARIANTS = {
                 "offset": np.array([0.055, -0.005]),
                 "z": 0.970,
                 "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
+            },
+            {
+                "offset": np.array([0.052, -0.010]),
+                "z": 0.970,
+                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
+            },
+            {
+                "offset": np.array([0.058, -0.005]),
+                "z": 0.970,
+                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
+            },
+            {
+                "offset": np.array([0.048, -0.008]),
+                "z": 0.970,
+                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
+            },
+            {
+                "offset": np.array([0.045, -0.005]),
+                "z": 0.955,
+                "quat": np.array([0.70710678, 0.70710678, 0.0, 0.0]),
             },
         ],
     },
@@ -554,8 +563,12 @@ def _place_occluder_near_bowl(env, variant) -> bool:
     return False
 
 
-UPRIGHT_SETTLE_STEPS = 12
-UPRIGHT_STABILITY_CHECK_STEPS = 24
+# Let the dropped upright cookie AND the rest of the scene reach rest before
+# recording the "settled" snapshot; the stability window then measures only
+# residual drift.  Non-contact candidates previously failed the drift check
+# purely because 12 steps was too short for the scene to come to rest.
+UPRIGHT_SETTLE_STEPS = 45
+UPRIGHT_STABILITY_CHECK_STEPS = 20
 MIN_UPRIGHT_COOKIE_Z = 0.925
 
 
