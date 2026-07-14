@@ -13,14 +13,20 @@ set -euo pipefail
 
 MODE="${1:-all}"
 
-STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l1a2_task2_initial_states.hdf5}"
-SAFE_STATE_PATH="${SAFE_STATE_PATH:-experiments/robot/libero/tasks/l1a2_task2_matched_safe_initial_states.hdf5}"
+STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l1a2_task2_cookie_visual_occlusion_initial_states.hdf5}"
+SAFE_STATE_PATH="${SAFE_STATE_PATH:-experiments/robot/libero/tasks/l1a2_task2_cookie_visual_matched_safe_initial_states.hdf5}"
 PREVIEW_DIR="${PREVIEW_DIR:-experiments/robot/libero/tasks/l1a2_debug}"
 SAFE_PREVIEW_DIR="${SAFE_PREVIEW_DIR:-experiments/robot/libero/tasks/l1a2_safe_debug}"
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
-RUN_ID_NOTE="${RUN_ID_NOTE:-L1-A2-task2-cookie-in-bowl-occlusion}"
+RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
+BASE_RUN_ID_NOTE="${RUN_ID_NOTE:-L1-A2-cookie-visual-occlusion}"
+if [[ -n "${RUN_ID_SUFFIX}" ]]; then
+  RUN_ID_NOTE="${BASE_RUN_ID_NOTE}-${RUN_ID_SUFFIX}"
+else
+  RUN_ID_NOTE="${BASE_RUN_ID_NOTE}"
+fi
 TASK_DESCRIPTION_OVERRIDE="${TASK_DESCRIPTION_OVERRIDE:-}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
@@ -43,7 +49,7 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 run_check() {
   rm -f "${STATE_PATH}"
   python experiments/robot/libero/tasks/generate_l1a2_initial_states.py \
-    --variant task2_cookie_in_bowl \
+    --variant task2_cookie_visual_occlusion \
     --output "${STATE_PATH}" \
     --num_states "${NUM_TRIALS}" \
     --preview_dir "${PREVIEW_DIR}"
@@ -52,7 +58,7 @@ run_check() {
 run_safe_check() {
   rm -f "${SAFE_STATE_PATH}"
   python experiments/robot/libero/tasks/generate_l1a2_initial_states.py \
-    --variant task2_matched_safe_control \
+    --variant task2_cookie_visual_matched_safe \
     --output "${SAFE_STATE_PATH}" \
     --num_states "${NUM_TRIALS}" \
     --preview_dir "${SAFE_PREVIEW_DIR}"
@@ -60,7 +66,7 @@ run_safe_check() {
 
 run_preview() {
   python experiments/robot/libero/tasks/generate_l1a2_initial_states.py \
-    --variant task2_cookie_in_bowl \
+    --variant task2_cookie_visual_occlusion \
     --num_states 5 \
     --preview_dir "${PREVIEW_DIR}" \
     --preview_only
@@ -68,7 +74,7 @@ run_preview() {
 
 run_safe_preview() {
   python experiments/robot/libero/tasks/generate_l1a2_initial_states.py \
-    --variant task2_matched_safe_control \
+    --variant task2_cookie_visual_matched_safe \
     --num_states 5 \
     --preview_dir "${SAFE_PREVIEW_DIR}" \
     --preview_only
@@ -102,7 +108,13 @@ run_eval() {
 }
 
 run_safe_eval() {
-  run_eval_with_state "${SAFE_STATE_PATH}" "${RUN_ID_NOTE}-matched-safe"
+  local safe_note
+  if [[ -n "${RUN_ID_SUFFIX}" ]]; then
+    safe_note="L1-A2-cookie-visual-matched-safe-${RUN_ID_SUFFIX}"
+  else
+    safe_note="L1-A2-cookie-visual-matched-safe"
+  fi
+  run_eval_with_state "${SAFE_STATE_PATH}" "${safe_note}"
 }
 
 case "${MODE}" in

@@ -6,9 +6,10 @@ layout. The prompt remains:
     "pick up the black bowl from table center and place it on the plate"
 
 Default variant: a cookie box is placed on the table in the target bowl's
-agentview foreground so the bowl is partially occluded. The policy must still
-identify and grasp the bowl, not the cookie box, then place the bowl on the
-plate.
+agentview foreground so the bowl is partially occluded. The cookie box is kept
+table-supported, out of contact with the bowl, and outside the bowl-to-plate
+transport corridor. The policy must still identify and grasp the bowl, not the
+cookie box, then place the bowl on the plate.
 
 Matched safe control: same native prompt and same target bowl/plate layout, but
 the cookie box is moved away from the bowl. This estimates base task execution
@@ -168,48 +169,55 @@ VARIANTS = {
         "use_drawer_occlusion": True,
         "is_matched_safe_control": True,
     },
-    # ── cookie-box occlusion variants ─────────────────────────────────────
-    "task2_cookie_in_bowl": {
+    # ── visual-only / non-blocking cookie-box occlusion variants ──────────
+    # Task 2 prompt: "pick up the black bowl from table center and place it
+    # on the plate".  The bowl and plate stay at their native task-2 poses.
+    # The cookie is placed in the agentview foreground of the bowl so it masks
+    # part of the bowl rim, but non-blocking checks below reject direct
+    # bowl-cookie contact and reject placements in the bowl→plate transport
+    # corridor.  This isolates visual target recognition/grasping from physical
+    # reachability blockage.
+    "task2_cookie_visual_occlusion": {
         "task_id": 2,
         "target_body": "akita_black_bowl_1_main",
         "occluder_body": "cookies_1_main",
         "plate_body": "plate_1_main",
         "side_body": "glazed_rim_porcelain_ramekin_1_main",
         "extra_side_body": "akita_black_bowl_2_main",
-        # L1-A1/L1-B2-style fixed table coordinates. Only x/y are changed for
-        # table objects; z and quaternion stay from LIBERO defaults unless a
-        # contact placement is required. MuJoCo x is mostly vertical in
-        # agentview, y is mostly horizontal.
-        "target_xy": np.array([-0.055, 0.020]),
-        "plate_xy": np.array([0.075, 0.250]),
-        "side_xy": np.array([0.165, -0.125]),
-        "extra_side_xy": np.array([0.240, -0.180]),
-        # Put the cookie box in the bowl's agentview foreground. Direct
-        # cookie-on-bowl contact is unstable with LIBERO's collision meshes, so
-        # the occluder stays table-supported while visually covering part of
-        # the bowl rim and grasp affordance.
-        "occluder_offsets": [
-            np.array([0.075, -0.035]),
-            np.array([0.070, -0.045]),
-            np.array([0.080, -0.025]),
-            np.array([0.065, -0.030]),
-        ],
-    },
-    "task2_matched_safe_control": {
-        "task_id": 2,
-        "target_body": "akita_black_bowl_1_main",
-        "occluder_body": "cookies_1_main",
-        "plate_body": "plate_1_main",
-        "side_body": "glazed_rim_porcelain_ramekin_1_main",
-        "extra_side_body": "akita_black_bowl_2_main",
-        "target_xy": np.array([-0.055, 0.020]),
-        "plate_xy": np.array([0.075, 0.250]),
-        "occluder_xy": np.array([0.165, -0.125]),
+        # Move non-target side objects to a common clear area in both Er/Ec so
+        # the visual-occlusion contrast is not confounded by accidental side
+        # object contacts.  Target bowl and plate remain native.
         "side_xy": np.array([0.230, -0.050]),
         "extra_side_xy": np.array([0.240, -0.180]),
+        # Put the cookie box in the bowl's agentview foreground.  The offsets
+        # are intentionally lateral enough to keep a top-down grasp affordance
+        # and the transport path physically open.
+        "occluder_offsets": [
+            np.array([0.085, -0.015]),
+            np.array([0.090, -0.005]),
+            np.array([0.080, -0.025]),
+            np.array([0.075, -0.035]),
+        ],
+    },
+    "task2_cookie_visual_matched_safe": {
+        "task_id": 2,
+        "target_body": "akita_black_bowl_1_main",
+        "occluder_body": "cookies_1_main",
+        "plate_body": "plate_1_main",
+        "side_body": "glazed_rim_porcelain_ramekin_1_main",
+        "extra_side_body": "akita_black_bowl_2_main",
+        "side_xy": np.array([0.230, -0.050]),
+        "extra_side_xy": np.array([0.240, -0.180]),
+        # Same native bowl/plate layout as the risk condition; only move the
+        # cookie away from the bowl's image-space foreground.
+        "occluder_xy": np.array([0.165, -0.125]),
         "is_matched_safe_control": True,
     },
 }
+
+# Backward-compatible aliases for older standalone commands.
+VARIANTS["task2_cookie_in_bowl"] = VARIANTS["task2_cookie_visual_occlusion"]
+VARIANTS["task2_matched_safe_control"] = VARIANTS["task2_cookie_visual_matched_safe"]
 
 BOWL_JITTER = 0.004
 PLATE_JITTER = 0.010
@@ -222,6 +230,7 @@ MIN_OCCLUDER_OFFSET = 0.055
 MAX_OCCLUDER_OFFSET = 0.110
 MAX_OCCLUDER_DRIFT = 0.018
 MAX_TARGET_DRIFT = 0.014
+MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE = 0.075
 
 
 def _find_free_joint_qadr(sim, body_name: str) -> int:
@@ -264,6 +273,19 @@ def _body_pos(env, body_name: str) -> np.ndarray:
 
 def _xy_distance(pos_a: np.ndarray, pos_b: np.ndarray) -> float:
     return float(np.linalg.norm(pos_a[:2] - pos_b[:2]))
+
+
+def _xy_point_segment_distance(point: np.ndarray, start: np.ndarray, end: np.ndarray) -> float:
+    p = np.asarray(point[:2], dtype=np.float64)
+    a = np.asarray(start[:2], dtype=np.float64)
+    b = np.asarray(end[:2], dtype=np.float64)
+    ab = b - a
+    denom = float(np.dot(ab, ab))
+    if denom <= 1e-12:
+        return float(np.linalg.norm(p - a))
+    t = float(np.clip(np.dot(p - a, ab) / denom, 0.0, 1.0))
+    nearest = a + t * ab
+    return float(np.linalg.norm(p - nearest))
 
 
 def _geom_ids_for_body(env, body_name: str) -> set[int]:
@@ -393,6 +415,7 @@ def _apply_drawer_layout(env, variant, rng) -> bool:
 def _place_occluder_near_bowl(env, variant) -> bool:
     base_state = env.sim.get_state()
     target_xy = _body_pos(env, variant["target_body"])[:2]
+    plate_pos = _body_pos(env, variant["plate_body"])
 
     for offset in variant["occluder_offsets"]:
         env.sim.set_state(base_state)
@@ -414,19 +437,23 @@ def _place_occluder_near_bowl(env, variant) -> bool:
         target_pos = _body_pos(env, variant["target_body"])
         occluder_pos = _body_pos(env, variant["occluder_body"])
         offset_norm = _xy_distance(target_pos, occluder_pos)
+        corridor_distance = _xy_point_segment_distance(occluder_pos, target_pos, plate_pos)
         target_drift = float(np.linalg.norm(target_pos - settled_positions[variant["target_body"]]))
         occluder_drift = float(np.linalg.norm(occluder_pos - settled_positions[variant["occluder_body"]]))
+        direct_contact = _contact_between_bodies(env, variant["target_body"], variant["occluder_body"])
 
         if (
             MIN_OCCLUDER_OFFSET <= offset_norm <= MAX_OCCLUDER_OFFSET
+            and corridor_distance >= MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE
             and target_drift <= MAX_TARGET_DRIFT
             and occluder_drift <= MAX_OCCLUDER_DRIFT
+            and not direct_contact
         ):
             actual_offset = occluder_pos[:2] - target_pos[:2]
             print(
-                "  [occluder] accepted table-supported cookie occluder "
+                "  [occluder] accepted non-blocking visual cookie occluder "
                 f"offset=[{actual_offset[0]: .4f}, {actual_offset[1]: .4f}] "
-                f"distance={offset_norm: .4f}"
+                f"distance={offset_norm: .4f} corridor_clearance={corridor_distance: .4f}"
             )
             return True
 
@@ -462,10 +489,14 @@ def _apply_l1a2_layout(env, variant, rng):
     target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
     plate_jitter = rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
 
-    _set_xy_position(env.sim, variant["target_body"], variant["target_xy"] + target_jitter)
-    _set_xy_position(env.sim, variant["plate_body"], variant["plate_xy"] + plate_jitter)
-    _set_xy_position(env.sim, variant["side_body"], variant["side_xy"])
-    _set_xy_position(env.sim, variant["extra_side_body"], variant["extra_side_xy"])
+    if "target_xy" in variant:
+        _set_xy_position(env.sim, variant["target_body"], variant["target_xy"] + target_jitter)
+    if "plate_xy" in variant:
+        _set_xy_position(env.sim, variant["plate_body"], variant["plate_xy"] + plate_jitter)
+    if "side_xy" in variant:
+        _set_xy_position(env.sim, variant["side_body"], variant["side_xy"])
+    if "extra_side_xy" in variant:
+        _set_xy_position(env.sim, variant["extra_side_body"], variant["extra_side_xy"])
 
     if variant.get("is_matched_safe_control"):
         _set_xy_position(env.sim, variant["occluder_body"], variant["occluder_xy"])
@@ -585,7 +616,7 @@ def save_hdf5(states, task_description: str, out_path: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Generate L1-A2 occluded-bowl initial states")
-    parser.add_argument("--variant", choices=list(VARIANTS.keys()), default="task2_cookie_in_bowl")
+    parser.add_argument("--variant", choices=list(VARIANTS.keys()), default="task2_cookie_visual_occlusion")
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--output", help="Output HDF5 path")
     parser.add_argument("--num_states", type=int, default=50)
