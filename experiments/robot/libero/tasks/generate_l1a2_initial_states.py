@@ -564,7 +564,7 @@ def _place_upright_cookie_occluder(env, variant) -> bool:
     target_xy = _body_pos(env, variant["target_body"])[:2]
     plate_pos = _body_pos(env, variant["plate_body"])
 
-    for candidate in variant["occluder_pose_candidates"]:
+    for cand_idx, candidate in enumerate(variant["occluder_pose_candidates"]):
         env.sim.set_state(base_state)
         env.sim.forward()
         xy = target_xy + candidate["offset"]
@@ -592,6 +592,25 @@ def _place_upright_cookie_occluder(env, variant) -> bool:
         target_drift = float(np.linalg.norm(target_pos - settled_target))
         cookie_drift = float(np.linalg.norm(occluder_pos - settled_cookie))
         direct_contact = _contact_between_bodies(env, variant["target_body"], variant["occluder_body"])
+
+        # Per-candidate diagnostics so failed placements are tunable.
+        fails = []
+        if not (MIN_OCCLUDER_OFFSET <= offset_norm <= MAX_OCCLUDER_OFFSET):
+            fails.append(f"offset={offset_norm:.4f} not in [{MIN_OCCLUDER_OFFSET},{MAX_OCCLUDER_OFFSET}]")
+        if target_drift > MAX_TARGET_DRIFT:
+            fails.append(f"target_drift={target_drift:.4f} > {MAX_TARGET_DRIFT}")
+        if cookie_drift > MAX_OCCLUDER_DRIFT:
+            fails.append(f"cookie_drift={cookie_drift:.4f} > {MAX_OCCLUDER_DRIFT}")
+        if occluder_pos[2] < MIN_UPRIGHT_COOKIE_Z:
+            fails.append(f"z={occluder_pos[2]:.4f} < {MIN_UPRIGHT_COOKIE_Z}")
+        if direct_contact:
+            fails.append("direct_contact=True")
+        print(
+            f"    [cand {cand_idx}] offset={offset_norm:.4f} z={occluder_pos[2]:.4f} "
+            f"target_drift={target_drift:.4f} cookie_drift={cookie_drift:.4f} "
+            f"contact={direct_contact} corridor={corridor_distance:.4f} "
+            + ("OK" if not fails else "REJECT: " + "; ".join(fails))
+        )
 
         if (
             MIN_OCCLUDER_OFFSET <= offset_norm <= MAX_OCCLUDER_OFFSET
