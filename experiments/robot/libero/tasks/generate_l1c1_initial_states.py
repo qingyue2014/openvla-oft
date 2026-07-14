@@ -68,18 +68,16 @@ VARIANTS = {
         # L1-C1 is meant to test placement stability, not whether the policy can
         # recover from an out-of-distribution pre-grasp object pose.
         "bowl_xy": None,
-        # Cookie box lies flat in its default orientation: 83mm wide in Y,
-        # 62mm wide in X, and 18.8mm tall.
-        # Centered at x=0.120 it spans x=[0.079, 0.161], supporting the plate's right
-        # portion (plate centre at x=0.065, right rim at x=0.113).  The plate CoM sits
-        # ~14mm left of the box left edge so the plate tilts ~11° (left rim on table,
-        # right portion on the cookie box) — avoids table penetration caused by the
-        # 40° tilt that the previous upright orientation produced.
+        # Cookie box lies flat in its default orientation: about 83mm x 62mm
+        # in the table plane and 18.8mm tall. At x=0.100 its left support edge
+        # remains just beyond the plate centre, so the unloaded plate is stable
+        # without touching the table while retaining a large unsupported side.
         # Stable zone: bowl near plate centre keeps combined CoM over the support.
         # Unstable zone: bowl on overhanging left half tips the stack.
-        "base_xyz": np.array([0.120, -0.020, TABLE_Z + 0.0094]),
+        "base_xyz": np.array([0.100, -0.020, TABLE_Z + 0.0094]),
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
-        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.0210]),
+        # Start above the box and let MuJoCo settle it onto the support.
+        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.0300]),
         "side_xy": np.array([0.155, 0.125]),
         "extra_side_xy": np.array([0.240, -0.180]),
     },
@@ -95,7 +93,7 @@ VARIANTS = {
         # same plate at the same height, but their centres are aligned.
         "base_xyz": np.array([0.065, -0.020, TABLE_Z + 0.0094]),
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
-        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.0210]),
+        "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.0300]),
         "side_xy": np.array([0.155, 0.125]),
         "extra_side_xy": np.array([0.240, -0.180]),
     },
@@ -200,6 +198,25 @@ def _contact_between_bodies(env, body_a: str, body_b: str) -> bool:
     return False
 
 
+def _body_contacts_table(env, body_name: str) -> bool:
+    """Return whether an object's collision geoms directly touch a table geom."""
+    body_geoms = _geom_ids_for_body(env, body_name)
+    for i in range(env.sim.data.ncon):
+        contact = env.sim.data.contact[i]
+        if contact.geom1 in body_geoms:
+            other_geom = contact.geom2
+        elif contact.geom2 in body_geoms:
+            other_geom = contact.geom1
+        else:
+            continue
+        geom_name = env.sim.model.geom_id2name(other_geom) or ""
+        other_body_id = env.sim.model.geom_bodyid[other_geom]
+        other_body_name = env.sim.model.body_id2name(other_body_id) or ""
+        if "table" in geom_name.lower() or "table" in other_body_name.lower():
+            return True
+    return False
+
+
 def _world_aabb(env, body_name: str) -> tuple[np.ndarray, np.ndarray]:
     mins = np.full(3, np.inf)
     maxs = np.full(3, -np.inf)
@@ -284,6 +301,10 @@ def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> 
         print(f"  [reject] support layout lost contact: {support_body} is not touching {base_body}")
         return False
 
+    if _body_contacts_table(env, support_body):
+        print(f"  [reject] support layout bridges to table: {support_body} directly touches a table geom")
+        return False
+
     support_pos = _body_pos(env, support_body)
     base_pos = _body_pos(env, base_body)
     xy_offset = float(np.linalg.norm(support_pos[:2] - base_pos[:2]))
@@ -304,6 +325,10 @@ def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> 
 
     if not _contact_between_bodies(env, support_body, base_body):
         print(f"  [reject] support layout lost contact after stability check: {support_body}/{base_body}")
+        return False
+
+    if _body_contacts_table(env, support_body):
+        print(f"  [reject] support layout reached table during stability check: {support_body}")
         return False
 
     for name, initial_pos in settled_positions.items():
