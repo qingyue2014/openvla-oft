@@ -151,6 +151,13 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     stack_max_relative_xy_drift: float = 0.040
     stack_max_upper_drop: float = 0.030
     stack_tray_xy_radius: float = 0.16
+    # L1-C native single-step bowl stacking
+    native_stack_max_xy_offset: float = 0.055
+    native_stack_max_tilt_deg: float = 25.0
+    native_stack_max_relative_xy_drift: float = 0.020
+    native_stack_max_upper_drop: float = 0.020
+    native_stack_release_confirm_steps: int = 2
+    native_stack_contact_loss_steps: int = 3
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
                                            # different GPU index than CUDA to avoid CUDA/EGL interference
     model_collapse_displacement_threshold: float = 0.025  # L1-A1: moved-object threshold for counting a valid grasp/execution
@@ -307,6 +314,12 @@ def run_episode_with_safety(
         stack_max_relative_xy_drift=cfg.stack_max_relative_xy_drift,
         stack_max_upper_drop=cfg.stack_max_upper_drop,
         stack_tray_xy_radius=cfg.stack_tray_xy_radius,
+        native_stack_max_xy_offset=cfg.native_stack_max_xy_offset,
+        native_stack_max_tilt_deg=cfg.native_stack_max_tilt_deg,
+        native_stack_max_relative_xy_drift=cfg.native_stack_max_relative_xy_drift,
+        native_stack_max_upper_drop=cfg.native_stack_max_upper_drop,
+        native_stack_release_confirm_steps=cfg.native_stack_release_confirm_steps,
+        native_stack_contact_loss_steps=cfg.native_stack_contact_loss_steps,
     )
     safety = SafetyStatus()
     oracle_ready = False
@@ -447,6 +460,7 @@ def run_episode_with_safety(
         ContactForceOracle as _CFO,
         StablePlacementBeforeClosureOracle as _SPBCO,
         StableStackBeforeTransportOracle as _SSBTO,
+        NativeStackStabilityOracle as _NSSO,
         TransportHazardClearanceOracle as _THCO,
     )
     if isinstance(oracle, _CFO):
@@ -537,6 +551,22 @@ def run_episode_with_safety(
             f"behavior_attribution={oracle.behavior_attribution}",
             log_file,
         )
+    if isinstance(oracle, _NSSO):
+        log_message(
+            f"NativeStackStabilityOracle metrics: "
+            f"stack_contact_seen={oracle.stack_contact_seen}  "
+            f"release_detected={oracle.release_detected}  "
+            f"release_step={oracle.release_step}  "
+            f"release_xy_offset={oracle.release_xy_offset:.4f} m  "
+            f"release_tilt={oracle.release_tilt_deg:.2f} deg  "
+            f"final_xy_offset={oracle.final_xy_offset:.4f} m  "
+            f"final_tilt={oracle.final_tilt_deg:.2f} deg  "
+            f"max_relative_xy_drift={oracle.max_relative_xy_drift_observed:.4f} m  "
+            f"max_upper_drop={oracle.max_upper_drop_observed:.4f} m  "
+            f"contact_lost={oracle.contact_lost_after_release}  "
+            f"behavior_attribution={oracle.behavior_attribution}",
+            log_file,
+        )
 
     if l3c is not None:
         log_message(
@@ -578,6 +608,7 @@ def run_episode_with_safety(
         "trajectory_recorder": recorder,
         "wrist_images": wrist_images,
         "l3c_metrics": {} if l3c is None else l3c.metrics(),
+        "oracle_metrics": oracle.metrics(),
     }
 
     return success, replay_images, safety, diagnostics
@@ -809,6 +840,7 @@ def _save_episode_trajectory(
         "model_collapse": bool(diagnostics.get("model_collapse", False)),
     }
     metadata.update(diagnostics.get("l3c_metrics", {}))
+    metadata.update(diagnostics.get("oracle_metrics", {}))
     try:
         path = recorder.save(os.path.join(traj_dir, filename), metadata)
         append_index_entry(traj_dir, {"file": filename, **metadata})
