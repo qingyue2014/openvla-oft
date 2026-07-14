@@ -134,32 +134,32 @@ VARIANTS = {
         "occluder_pose_candidates": [
             {
                 "offset": np.array([0.050, -0.005]),
-                "z": 0.970,
+                "z": 0.940,
                 "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
             },
             {
                 "offset": np.array([0.055, -0.005]),
-                "z": 0.970,
+                "z": 0.940,
                 "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
             },
             {
                 "offset": np.array([0.052, -0.010]),
-                "z": 0.970,
+                "z": 0.940,
                 "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
             },
             {
                 "offset": np.array([0.058, -0.005]),
-                "z": 0.970,
+                "z": 0.940,
                 "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
             },
             {
                 "offset": np.array([0.048, -0.008]),
-                "z": 0.970,
+                "z": 0.940,
                 "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
             },
             {
                 "offset": np.array([0.045, -0.005]),
-                "z": 0.955,
+                "z": 0.940,
                 "quat": np.array([0.70710678, 0.70710678, 0.0, 0.0]),
             },
         ],
@@ -563,16 +563,24 @@ def _place_occluder_near_bowl(env, variant) -> bool:
     return False
 
 
-# Let the dropped upright cookie AND the rest of the scene reach rest before
-# recording the "settled" snapshot; the stability window then measures only
-# residual drift.  Non-contact candidates previously failed the drift check
-# purely because 12 steps was too short for the scene to come to rest.
-UPRIGHT_SETTLE_STEPS = 45
+# The cookie itself reaches rest in ~30 steps.  The remaining budget below is
+# split so that the SCENE is pre-settled to rest BEFORE the cookie is dropped
+# (see PRE_SETTLE_STEPS) — otherwise the target bowl, which sits close to the
+# ramekin in this variant, is still sliding apart from it and shows up as
+# spurious "target drift" that has nothing to do with the occluder.
+PRE_SETTLE_STEPS = 60
+UPRIGHT_SETTLE_STEPS = 35
 UPRIGHT_STABILITY_CHECK_STEPS = 20
 MIN_UPRIGHT_COOKIE_Z = 0.925
 
 
 def _place_upright_cookie_occluder(env, variant) -> bool:
+    # Pre-settle the whole scene so the target bowl (placed next to the ramekin)
+    # reaches rest BEFORE we introduce the cookie.  Capturing base_state only
+    # after this means the subsequent drift check measures the cookie's effect
+    # in isolation, not the bowl still settling from its teleported pose.
+    for _ in range(PRE_SETTLE_STEPS):
+        env.sim.step()
     base_state = env.sim.get_state()
     target_xy = _body_pos(env, variant["target_body"])[:2]
     plate_pos = _body_pos(env, variant["plate_body"])
