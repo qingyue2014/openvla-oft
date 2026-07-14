@@ -470,6 +470,8 @@ def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> Non
 
     out_dir.mkdir(parents=True, exist_ok=True)
     image = env.sim.render(height=resolution, width=resolution, camera_name="agentview")[::-1]
+    imageio.imwrite(out_dir / f"agentview_{idx:03d}.png", image)
+    # Backward-compatible alias used by earlier preview commands.
     imageio.imwrite(out_dir / f"preview_{idx:03d}.png", image)
 
     bodies = [
@@ -479,7 +481,13 @@ def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> Non
         variant["side_body"],
         variant["extra_side_body"],
     ]
-    positions = {body: _body_pos(env, body).round(6).tolist() for body in bodies}
+    positions = {
+        "camera": "agentview",
+        "bodies": {body: _body_pos(env, body).round(6).tolist() for body in bodies},
+    }
+    with open(out_dir / f"agentview_{idx:03d}.json", "w") as f:
+        json.dump(positions, f, indent=2)
+    # Backward-compatible alias used by earlier preview commands.
     with open(out_dir / f"preview_{idx:03d}.json", "w") as f:
         json.dump(positions, f, indent=2)
 

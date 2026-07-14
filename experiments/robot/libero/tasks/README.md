@@ -97,7 +97,7 @@ done
 Runner:
 
 ```bash
-bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a1_eval|l1a1_preview|l1a1_attribution|record|l1a2|l1b1]
+bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a1_eval|l1a1_preview|l1a1_attribution|record|l1a2|l1a2_preview|l1b1]
 ```
 
 Default mode is `all`.
@@ -124,6 +124,19 @@ LIBERO's default initial states and saves trajectories by default for
 attribution. For L1-A1, Eb native is a task competence gate, not the
 geometry-matched counterfactual for Er. The primary matched comparison is Er
 occlusion risk versus Ec matched-safe. L1-B1 uses native LIBERO initial states.
+
+L1-A2 layout QA:
+
+```bash
+bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_preview
+```
+
+This writes explicit agentview previews under:
+
+```text
+experiments/robot/libero/tasks/l1a2_preview/Er_cookie_visual_occlusion/agentview_*.png
+experiments/robot/libero/tasks/l1a2_preview/Ec_cookie_visual_matched_safe/agentview_*.png
+```
 
 L1-A1 layout QA / attribution helpers:
 

@@ -11,6 +11,7 @@
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh record      # refresh experiment_records
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2       # L1-A2 generate + eval
+#   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_preview
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1b1       # L1-B1 eval (uses default states)
 #
 # Override any variable via environment:
@@ -60,6 +61,7 @@ L1A1_TRACK_BODIES="akita_black_bowl_1_main,akita_black_bowl_2_main,glazed_rim_po
 # L1-A2 paths
 L1A2_OCC_HDF5="${TASKS_DIR}/l1a2_task2_cookie_visual_occlusion_initial_states.hdf5"
 L1A2_SAFE_HDF5="${TASKS_DIR}/l1a2_task2_cookie_visual_matched_safe_initial_states.hdf5"
+L1A2_PREVIEW_DIR="${TASKS_DIR}/l1a2_preview"
 
 # L1-B1 uses native LIBERO default initial states — no HDF5 generation needed.
 
@@ -262,6 +264,24 @@ gen_l1a2() {
             --num_states "${NUM_TRIALS}" --seed "${SEED}"
 }
 
+preview_l1a2() {
+    log "L1-A2 preview: Er non-blocking cookie visual occlusion (agentview)"
+    rm -rf "${L1A2_PREVIEW_DIR}/Er_cookie_visual_occlusion"
+    python "${TASKS_DIR}/generate_l1a2_initial_states.py" \
+        --variant task2_cookie_visual_occlusion \
+        --preview_only \
+        --preview_dir "${L1A2_PREVIEW_DIR}/Er_cookie_visual_occlusion" \
+        --num_states 5 --seed "${SEED}"
+
+    log "L1-A2 preview: Ec matched-safe visual control (agentview)"
+    rm -rf "${L1A2_PREVIEW_DIR}/Ec_cookie_visual_matched_safe"
+    python "${TASKS_DIR}/generate_l1a2_initial_states.py" \
+        --variant task2_cookie_visual_matched_safe \
+        --preview_only \
+        --preview_dir "${L1A2_PREVIEW_DIR}/Ec_cookie_visual_matched_safe" \
+        --num_states 5 --seed "${SEED}"
+}
+
 # ── Eval functions ─────────────────────────────────────────────────────────────
 eval_l1a1() {
     local eb_run_id occ_run_id safe_run_id
@@ -408,13 +428,16 @@ case "${MODE}" in
         gen_l1a2; eval_l1a2
         parse_results
         ;;
+    l1a2_preview)
+        preview_l1a2
+        ;;
     l1b1)
         eval_l1b1
         parse_results
         ;;
     *)
         echo "Unknown mode: ${MODE}" >&2
-        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_eval|l1a1_preview|l1a1_attribution|record|l1a2|l1b1]" >&2
+        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_eval|l1a1_preview|l1a1_attribution|record|l1a2|l1a2_preview|l1b1]" >&2
         exit 1
         ;;
 esac
