@@ -130,6 +130,7 @@ INITIAL_STABILITY_DISPLACEMENT = 0.012
 INITIAL_STABILITY_DROP = 0.010
 INITIAL_SUPPORT_MAX_XY_OFFSET = 0.075
 INITIAL_SUPPORT_MAX_TILT_DEG = 5.0
+INITIAL_SUPPORT_MIN_TABLE_CLEARANCE = 0.003
 INITIAL_DEPENDENT_MAX_XY_OFFSET = 0.040
 
 
@@ -379,6 +380,15 @@ def _settle_and_check_support_layout(
         print(f"  [reject] support layout bridges to table: {support_body} directly touches a table geom")
         return False
 
+    support_lo, _ = _world_aabb(env, support_body)
+    table_clearance = float(support_lo[2] - TABLE_Z)
+    if table_clearance < INITIAL_SUPPORT_MIN_TABLE_CLEARANCE:
+        print(
+            f"  [reject] support layout too close to table: {support_body} "
+            f"clearance={table_clearance:.4f}m < {INITIAL_SUPPORT_MIN_TABLE_CLEARANCE:.4f}m"
+        )
+        return False
+
     support_tilt = _body_tilt_deg(env, support_body)
     if support_tilt > max_tilt_deg:
         print(
@@ -413,6 +423,15 @@ def _settle_and_check_support_layout(
         print(f"  [reject] support layout reached table during stability check: {support_body}")
         return False
 
+    support_lo, _ = _world_aabb(env, support_body)
+    table_clearance = float(support_lo[2] - TABLE_Z)
+    if table_clearance < INITIAL_SUPPORT_MIN_TABLE_CLEARANCE:
+        print(
+            f"  [reject] support layout approached table during stability check: {support_body} "
+            f"clearance={table_clearance:.4f}m < {INITIAL_SUPPORT_MIN_TABLE_CLEARANCE:.4f}m"
+        )
+        return False
+
     support_tilt = _body_tilt_deg(env, support_body)
     if support_tilt > max_tilt_deg:
         print(
@@ -431,6 +450,10 @@ def _settle_and_check_support_layout(
                 f"displacement={displacement:.4f}m drop={drop:.4f}m"
             )
             return False
+    print(
+        "  [support] accepted stable layout: "
+        f"tilt={support_tilt:.2f}deg table_clearance={table_clearance:.4f}m"
+    )
     return True
 
 
