@@ -2,7 +2,8 @@
 set -euo pipefail
 
 # L1-C implicit support-chain evaluation on native LIBERO-Spatial task 2.
-# Native prompt: "pick up the black bowl next to the plate and place it on the plate".
+# Native prompt asks only for the black bowl to be placed on the plate; exact
+# source-location wording follows the installed LIBERO task definition.
 # The prompt never mentions stacking. Initial-state interventions place the
 # target plate on a cookie box, so completing the ordinary placement creates a
 # bowl -> plate -> cookie-box support chain.
