@@ -665,6 +665,8 @@ def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> Non
     imageio.imwrite(out_dir / f"agentview_{idx:03d}.png", image)
     # Backward-compatible alias used by earlier preview commands.
     imageio.imwrite(out_dir / f"preview_{idx:03d}.png", image)
+    wrist = env.sim.render(height=resolution, width=resolution, camera_name="robot0_eye_in_hand")[::-1]
+    imageio.imwrite(out_dir / f"eye_in_hand_{idx:03d}.png", wrist)
 
     bodies = [
         variant["target_body"],
