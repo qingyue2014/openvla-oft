@@ -193,10 +193,12 @@ VARIANTS = {
         # are intentionally lateral enough to keep a top-down grasp affordance
         # and the transport path physically open.
         "occluder_offsets": [
+            np.array([0.065, -0.005]),
+            np.array([0.070, -0.005]),
+            np.array([0.065, -0.015]),
+            np.array([0.070, -0.015]),
             np.array([0.085, -0.015]),
             np.array([0.090, -0.005]),
-            np.array([0.080, -0.025]),
-            np.array([0.075, -0.035]),
         ],
     },
     "task2_cookie_visual_matched_safe": {
@@ -230,7 +232,7 @@ MIN_OCCLUDER_OFFSET = 0.055
 MAX_OCCLUDER_OFFSET = 0.110
 MAX_OCCLUDER_DRIFT = 0.018
 MAX_TARGET_DRIFT = 0.014
-MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE = 0.075
+MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE = 0.055
 
 
 def _find_free_joint_qadr(sim, body_name: str) -> int:
