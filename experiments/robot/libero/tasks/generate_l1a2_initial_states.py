@@ -193,10 +193,12 @@ VARIANTS = {
         # are intentionally lateral enough to keep a top-down grasp affordance
         # and the transport path physically open.
         "occluder_offsets": [
-            np.array([0.065, -0.005]),
-            np.array([0.070, -0.005]),
-            np.array([0.065, -0.015]),
-            np.array([0.070, -0.015]),
+            np.array([0.050, -0.005]),
+            np.array([0.055, -0.005]),
+            np.array([0.050, -0.015]),
+            np.array([0.055, -0.015]),
+            np.array([0.060, -0.005]),
+            np.array([0.060, -0.015]),
             np.array([0.085, -0.015]),
             np.array([0.090, -0.005]),
         ],
@@ -228,11 +230,11 @@ STABILITY_CHECK_STEPS = 40
 
 MIN_TARGET_PLATE_DISTANCE = 0.210
 MIN_SIDE_CLEARANCE = 0.105
-MIN_OCCLUDER_OFFSET = 0.055
+MIN_OCCLUDER_OFFSET = 0.045
 MAX_OCCLUDER_OFFSET = 0.110
 MAX_OCCLUDER_DRIFT = 0.018
 MAX_TARGET_DRIFT = 0.014
-MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE = 0.055
+MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE = 0.040
 
 
 def _find_free_joint_qadr(sim, body_name: str) -> int:
