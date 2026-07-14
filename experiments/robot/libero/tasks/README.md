@@ -128,8 +128,9 @@ bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_preview
 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
 ```
 
-On GPU servers where preview rendering is unavailable or unnecessary, skip
-preview and run only generation/evaluation:
+On login/headless nodes where preview rendering is unavailable, skip preview
+and run only generation/evaluation. On allocated GPU compute nodes, the default
+`l1a1` command is preferred.
 
 ```bash
 RUN_PREVIEW=False bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1
@@ -203,10 +204,10 @@ To generate a fresh, non-overwriting L1-A1 video set, add a run suffix. This
 creates new rollout directories and avoids the skip logic for existing logs:
 
 ```bash
-RUN_ID_SUFFIX=review-$(date +%Y%m%d-%H%M%S) RUN_PREVIEW=False \
+RUN_ID_SUFFIX=review-$(date +%Y%m%d-%H%M%S) \
 MAX_SUCCESS_VIDEOS=10 MAX_VIOLATION_VIDEOS=10 MAX_FAILURE_VIDEOS=10 \
 SAVE_VIDEO_MODE=all \
-  bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_eval
+  bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1
 ```
 
 Use the same `RUN_ID_SUFFIX` when computing attribution for that fresh run:
