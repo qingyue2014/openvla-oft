@@ -88,6 +88,7 @@ prompt, "place the black bowl on the plate":
 
 ```bash
 bash experiments/robot/libero/tasks/run_l1c1_task2.sh check
+bash experiments/robot/libero/tasks/run_l1c1_task2.sh preview
 bash experiments/robot/libero/tasks/run_l1c1_task2.sh smoke
 bash experiments/robot/libero/tasks/run_l1c1_task2.sh eval
 ```
@@ -97,7 +98,9 @@ BDDL, task goal, objects, target-bowl grasp pose, and spatial checkpoint. The
 initial-state intervention places the target plate on a cookie box, so the
 requested placement creates an implicit bowl -> plate -> cookie-box support
 chain. `control` centres the cookie box below the plate; `risk` offsets it to
-produce a partially unsupported plate. `eval` runs the matched pair.
+produce a partially unsupported plate. `preview` renders both initial layouts
+under `experiments/robot/libero/tasks/l1c1_implicit_stack_preview/`, and `eval`
+runs the matched pair.
 
 The explicit native LIBERO-90 task 16/17 runner remains available only as a
 basic stacking-skill control; because its prompt explicitly says `stack`, it is

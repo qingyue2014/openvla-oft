@@ -24,6 +24,8 @@ SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 SEED="${SEED:-42}"
 DEBUG_NUM_DEMOS="${DEBUG_NUM_DEMOS:-8}"
 DEBUG_OUT_DIR="${DEBUG_OUT_DIR:-experiments/robot/libero/tasks/l1c1_implicit_stack_debug}"
+PREVIEW_NUM_STATES="${PREVIEW_NUM_STATES:-8}"
+PREVIEW_DIR="${PREVIEW_DIR:-experiments/robot/libero/tasks/l1c1_implicit_stack_preview}"
 SWEEP_OUT_DIR="${SWEEP_OUT_DIR:-experiments/robot/libero/tasks/l1c1_layout_sweep}"
 SWEEP_BASE_X_VALUES="${SWEEP_BASE_X_VALUES:-0.065,0.095,0.110,0.120,0.135}"
 SWEEP_BASE_Z_OFFSETS="${SWEEP_BASE_Z_OFFSETS:-0.007,0.0094,0.012}"
@@ -53,13 +55,14 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 generate_condition() {
   local variant="$1"
   local output="$2"
+  local num_states="${3:-${NUM_TRIALS}}"
   local extra_args=()
   [[ -n "${BASE_Z_OFFSET}" ]] && extra_args+=(--base_z_offset "${BASE_Z_OFFSET}")
   [[ -n "${PLATE_Z_OFFSET}" ]] && extra_args+=(--plate_z_offset "${PLATE_Z_OFFSET}")
   python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
     --variant "${variant}" \
     --output "${output}" \
-    --num_states "${NUM_TRIALS}" \
+    --num_states "${num_states}" \
     --seed "${SEED}" \
     "${extra_args[@]}"
 }
@@ -78,12 +81,32 @@ require_states() {
   fi
 }
 
-run_debug() {
-  require_states "${RISK_STATE_PATH}"
+run_debug_condition() {
+  local condition="$1"
+  local state_path="$2"
+  local out_dir="$3"
+  local num_demos="${4:-${DEBUG_NUM_DEMOS}}"
+  require_states "${state_path}"
   python experiments/robot/libero/tasks/debug_l1c1_task2_init.py \
-    --state_path "${RISK_STATE_PATH}" \
-    --out_dir "${DEBUG_OUT_DIR}" \
-    --num_demos "${DEBUG_NUM_DEMOS}"
+    --state_path "${state_path}" \
+    --out_dir "${out_dir}" \
+    --num_demos "${num_demos}" \
+    --condition "${condition}"
+}
+
+run_debug() {
+  run_debug_condition control "${CONTROL_STATE_PATH}" "${DEBUG_OUT_DIR}/control"
+  run_debug_condition risk "${RISK_STATE_PATH}" "${DEBUG_OUT_DIR}/risk"
+}
+
+run_preview() {
+  local control_preview_states="${PREVIEW_DIR}/control_states.hdf5"
+  local risk_preview_states="${PREVIEW_DIR}/risk_states.hdf5"
+  generate_condition task2_centered_support_control "${control_preview_states}" "${PREVIEW_NUM_STATES}"
+  generate_condition task2 "${risk_preview_states}" "${PREVIEW_NUM_STATES}"
+  run_debug_condition control "${control_preview_states}" "${PREVIEW_DIR}/control" "${PREVIEW_NUM_STATES}"
+  run_debug_condition risk "${risk_preview_states}" "${PREVIEW_DIR}/risk" "${PREVIEW_NUM_STATES}"
+  echo "Preview complete: ${PREVIEW_DIR}/control and ${PREVIEW_DIR}/risk"
 }
 
 run_sweep() {
@@ -136,7 +159,7 @@ run_pair() {
 case "${MODE}" in
   check) run_check ;;
   debug) run_debug ;;
-  preview) run_check; run_debug ;;
+  preview) run_preview ;;
   sweep) run_sweep ;;
   baseline) run_native_baseline "${NUM_TRIALS}" ;;
   control) run_condition "${CONTROL_STATE_PATH}" "${NUM_TRIALS}" "L1-C-implicit-stack-control" ;;

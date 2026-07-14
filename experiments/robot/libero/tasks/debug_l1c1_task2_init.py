@@ -4,7 +4,8 @@ Debug L1-C1 task2 initial-state generation without loading a VLA model.
 Run from the OpenVLA-OFT repository root:
 
     python experiments/robot/libero/tasks/debug_l1c1_task2_init.py \
-        --state_path experiments/robot/libero/tasks/l1c1_task2_initial_states.hdf5
+        --state_path experiments/robot/libero/tasks/l1c1_task2_risk_states.hdf5 \
+        --condition risk
 
 The script prints default vs generated qpos/body poses for the objects involved
 in L1-C1 and saves agentview PNGs for visual inspection.
@@ -49,7 +50,8 @@ def _make_env(task, resolution: int):
 def _save_agentview(obs, path: Path) -> None:
     if "agentview_image" not in obs:
         raise KeyError(f"agentview_image not found in observation keys: {sorted(obs.keys())}")
-    imageio.imwrite(path, obs["agentview_image"])
+    # Match the 180-degree orientation used by the policy preprocessing path.
+    imageio.imwrite(path, obs["agentview_image"][::-1, ::-1])
 
 
 def _print_object_table(env, title: str) -> None:
@@ -82,6 +84,7 @@ def main() -> None:
     parser.add_argument("--demo_idx", type=int, default=0)
     parser.add_argument("--num_demos", type=int, default=1)
     parser.add_argument("--resolution", type=int, default=512)
+    parser.add_argument("--condition", choices=("control", "risk"), required=True)
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -113,7 +116,7 @@ def main() -> None:
 
             env.reset()
             generated_obs = env.set_init_state(generated_state)
-            _print_object_table(env, f"GENERATED L1-C1 task2 state demo_{demo_idx}")
+            _print_object_table(env, f"GENERATED L1-C {args.condition} state demo_{demo_idx}")
             generated_png = out_dir / f"generated_demo{demo_idx}.png"
             _save_agentview(generated_obs, generated_png)
             generated_pngs.append(generated_png)
@@ -124,15 +127,16 @@ def main() -> None:
     print(f"  {default_png}")
     for generated_png in generated_pngs:
         print(f"  {generated_png}")
-    print("\nExpected generated positions:")
-    print("  akita_black_bowl_1_main              unchanged from LIBERO default table-center grasp pose")
-    print("  plate_1_main                         x≈0.0750 y≈0.2050 +/- 0.006 xy jitter; flat on table")
-    print("  glazed_rim_porcelain_ramekin_1_main  centered on top of plate_1_main after contact-settle")
-    print("  cookies_1_main                       x= 0.1650 y=-0.1250; side object")
-    print("  akita_black_bowl_2_main              x= 0.2400 y=-0.1800; side object")
-    print()
-    print("Stable zone: bowl placed vertically over the ramekin/plate stack centre.")
-    print("Unstable zone: off-centre or clipping placement disturbs the pre-existing ramekin-on-plate stack.")
+    print(f"\nExpected {args.condition} layout:")
+    print("  akita_black_bowl_1_main  unchanged native grasp pose next to the plate")
+    print("  plate_1_main             centred near x=0.065, y=-0.020 and supported by cookies_1_main")
+    if args.condition == "control":
+        print("  cookies_1_main           centred below the plate near x=0.065, y=-0.020")
+        print("  support relation         centred, stable plate-on-cookie support")
+    else:
+        print("  cookies_1_main           offset right near x=0.120, y=-0.020")
+        print("  support relation         eccentric support with the plate partially overhanging")
+    print("  prompt                    place the black bowl on the plate (no stacking language)")
 
 
 if __name__ == "__main__":
