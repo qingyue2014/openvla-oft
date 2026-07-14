@@ -12,7 +12,7 @@ set -euo pipefail
 #   control  cookie box centred under the plate (matched stable support)
 #   risk     cookie box offset under the plate (partially unsupported plate)
 #
-# Modes: check | debug | preview | sweep | baseline | control | risk | smoke | eval | all
+# Modes: check | debug | preview | sweep | baseline | control | risk | smoke | eval | all | record
 
 MODE="${1:-eval}"
 
@@ -38,6 +38,11 @@ HELD_OBJECT_BODY="${HELD_OBJECT_BODY:-akita_black_bowl_1_main}"
 SUPPORT_BODIES="${SUPPORT_BODIES:-plate_1_main,cookies_1_main}"
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-50}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
+LOG_DIR="${LOG_DIR:-experiments/logs}"
+RECORDS_CSV="${RECORDS_CSV:-${LOG_DIR}/experiment_records.csv}"
+RECORDS_MD="${RECORDS_MD:-${LOG_DIR}/experiment_records.md}"
+RESULT_TABLES_MD="${RESULT_TABLES_MD:-${LOG_DIR}/result_tables.md}"
+REVIEW_VIDEOS_MD="${REVIEW_VIDEOS_MD:-${LOG_DIR}/review_videos.md}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "_deps/LIBERO/libero" ]]; then
@@ -157,6 +162,20 @@ run_pair() {
   run_condition "${RISK_STATE_PATH}" "${trials}" "L1-C-implicit-stack-risk-${suffix}"
 }
 
+record_results() {
+  python experiments/robot/libero/tasks/record_experiment_results.py \
+    --log_dir "${LOG_DIR}" \
+    --out_csv "${RECORDS_CSV}" \
+    --out_md "${RECORDS_MD}"
+  python experiments/robot/libero/tasks/generate_result_tables.py \
+    --log_dir "${LOG_DIR}" \
+    --out "${RESULT_TABLES_MD}"
+  python experiments/robot/libero/tasks/index_review_videos.py \
+    --rollout_root rollouts \
+    --out "${REVIEW_VIDEOS_MD}" \
+    --max_per_outcome 10
+}
+
 case "${MODE}" in
   check) run_check ;;
   debug) run_debug ;;
@@ -166,11 +185,12 @@ case "${MODE}" in
   control) run_condition "${CONTROL_STATE_PATH}" "${NUM_TRIALS}" "L1-C-implicit-stack-control" ;;
   risk) run_condition "${RISK_STATE_PATH}" "${NUM_TRIALS}" "L1-C-implicit-stack-risk" ;;
   smoke) run_pair "${SMOKE_TRIALS}" smoke ;;
-  eval) run_pair "${NUM_TRIALS}" eval ;;
-  all) run_check; run_debug; run_pair "${NUM_TRIALS}" eval ;;
+  eval) run_pair "${NUM_TRIALS}" eval; record_results ;;
+  all) run_check; run_debug; run_pair "${NUM_TRIALS}" eval; record_results ;;
+  record) record_results ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected check|debug|preview|sweep|baseline|control|risk|smoke|eval|all" >&2
+    echo "Expected check|debug|preview|sweep|baseline|control|risk|smoke|eval|all|record" >&2
     exit 2
     ;;
 esac

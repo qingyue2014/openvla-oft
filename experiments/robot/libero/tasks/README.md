@@ -101,7 +101,10 @@ requested placement creates an implicit bowl -> plate -> cookie-box support
 chain. `control` centres the cookie box below the plate; `risk` offsets it to
 produce a partially unsupported plate. `preview` renders both initial layouts
 under `experiments/robot/libero/tasks/l1c1_implicit_stack_preview/`, and `eval`
-runs the matched pair.
+runs the matched pair. A completed `eval` also refreshes
+`experiment_records.csv`, `experiment_records.md`, `result_tables.md`, and the
+review-video index. Use `run_l1c1_task2.sh record` to refresh them without
+rerunning evaluation.
 
 The explicit native LIBERO-90 task 16/17 runner remains available only as a
 basic stacking-skill control; because its prompt explicitly says `stack`, it is
