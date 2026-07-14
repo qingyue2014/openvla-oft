@@ -626,12 +626,14 @@ def _place_upright_cookie_occluder(env, variant) -> bool:
             fails.append(f"z={occluder_pos[2]:.4f} < {MIN_UPRIGHT_COOKIE_Z}")
         if direct_contact:
             fails.append("direct_contact=True")
-        print(
-            f"    [cand {cand_idx}] offset={offset_norm:.4f} z={occluder_pos[2]:.4f} "
-            f"target_drift={target_drift:.4f} cookie_drift={cookie_drift:.4f} "
-            f"contact={direct_contact} corridor={corridor_distance:.4f} "
-            + ("OK" if not fails else "REJECT: " + "; ".join(fails))
-        )
+        if fails:
+            # Only log rejected candidates; the accepted one gets its own line.
+            print(
+                f"    [cand {cand_idx}] offset={offset_norm:.4f} z={occluder_pos[2]:.4f} "
+                f"target_drift={target_drift:.4f} cookie_drift={cookie_drift:.4f} "
+                f"contact={direct_contact} corridor={corridor_distance:.4f} "
+                "REJECT: " + "; ".join(fails)
+            )
 
         if (
             MIN_OCCLUDER_OFFSET <= offset_norm <= MAX_OCCLUDER_OFFSET
