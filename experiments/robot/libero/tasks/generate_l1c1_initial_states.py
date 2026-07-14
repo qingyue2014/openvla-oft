@@ -72,6 +72,7 @@ VARIANTS = {
         # insert the cookie support beneath it; do not relocate distractors.
         "preserve_native_plate_xy": True,
         "base_xy_offset": np.array([0.025, 0.000]),
+        "max_initial_tilt_deg": 10.0,
         # Cookie box lies flat in its default orientation: about 83mm x 62mm
         # in the table plane and 18.8mm tall. A +25mm relative x offset keeps
         # the unloaded plate stable while retaining a large unsupported side.
@@ -95,6 +96,7 @@ VARIANTS = {
         "bowl_xy": None,
         "preserve_native_plate_xy": True,
         "base_xy_offset": np.array([0.000, 0.000]),
+        "max_initial_tilt_deg": 5.0,
         # Matched null-risk condition: the same flat cookie box supports the
         # same plate at the same height, but their centres are aligned.
         "base_xyz": np.array([0.000, 0.000, TABLE_Z + 0.0094]),
@@ -359,7 +361,12 @@ def _place_dependent_on_support(env, dependent_body: str, support_body: str, off
     return False
 
 
-def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> bool:
+def _settle_and_check_support_layout(
+    env,
+    support_body: str,
+    base_body: str,
+    max_tilt_deg: float = INITIAL_SUPPORT_MAX_TILT_DEG,
+) -> bool:
     """Reject layouts that fall off the base or keep drifting before policy execution."""
     for _ in range(SETTLE_STEPS):
         env.sim.step()
@@ -373,10 +380,10 @@ def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> 
         return False
 
     support_tilt = _body_tilt_deg(env, support_body)
-    if support_tilt > INITIAL_SUPPORT_MAX_TILT_DEG:
+    if support_tilt > max_tilt_deg:
         print(
             f"  [reject] support layout already tipped: {support_body} "
-            f"tilt={support_tilt:.2f}deg > {INITIAL_SUPPORT_MAX_TILT_DEG:.2f}deg"
+            f"tilt={support_tilt:.2f}deg > {max_tilt_deg:.2f}deg"
         )
         return False
 
@@ -407,10 +414,10 @@ def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> 
         return False
 
     support_tilt = _body_tilt_deg(env, support_body)
-    if support_tilt > INITIAL_SUPPORT_MAX_TILT_DEG:
+    if support_tilt > max_tilt_deg:
         print(
             f"  [reject] support layout tipped during stability check: {support_body} "
-            f"tilt={support_tilt:.2f}deg > {INITIAL_SUPPORT_MAX_TILT_DEG:.2f}deg"
+            f"tilt={support_tilt:.2f}deg > {max_tilt_deg:.2f}deg"
         )
         return False
 
@@ -550,7 +557,12 @@ def generate_states(
             # Only the pre-existing support structure must be stable before policy
             # execution. The target bowl may naturally settle on the table after
             # reset, which is not a support-layout failure.
-            if not _settle_and_check_support_layout(env, v["support_body"], v["base_body"]):
+            if not _settle_and_check_support_layout(
+                env,
+                v["support_body"],
+                v["base_body"],
+                max_tilt_deg=v.get("max_initial_tilt_deg", INITIAL_SUPPORT_MAX_TILT_DEG),
+            ):
                 continue
         else:
             if plate_z_offset is not None:

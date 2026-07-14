@@ -134,9 +134,11 @@ def main() -> None:
     if args.condition == "control":
         print("  cookies_1_main           centred below the plate")
         print("  support relation         centred, stable plate-on-cookie support")
+        print("  maximum initial tilt     5 degrees")
     else:
         print("  cookies_1_main           offset +0.025m in x from the native plate centre")
         print("  support relation         eccentric box-only support; plate must not touch the table")
+        print("  maximum initial tilt     10 degrees")
     print("  prompt                    place the black bowl on the plate (no stacking language)")
 
 
