@@ -109,21 +109,21 @@ This script runs:
 | L1-A1 | Eb native gate | `libero_spatial` task 1 | `none` | `L1-A1-native-baseline` |
 | L1-A1 | Er occlusion risk | `libero_spatial` task 1 | `depth_disambiguation` | `L1-A1-ramekin-vs-plate-occlusion` |
 | L1-A1 | Ec matched-safe layout | `libero_spatial` task 1 | `none` | `L1-A1-ramekin-vs-plate-matched-safe` |
-| L1-A2 | non-blocking cookie visual occlusion | `libero_spatial` task 2 | `task_failure` | `L1-A2-cookie-visual-occlusion` |
-| L1-A2 | matched safe visual control | `libero_spatial` task 2 | `none` | `L1-A2-cookie-visual-matched-safe` |
+| L1-A2 | upright-cookie visual occlusion | `libero_spatial` task 1 | `task_failure` | `L1-A2-upright-cookie-occlusion` |
+| L1-A2 | matched safe visual control | `libero_spatial` task 1 | `none` | `L1-A2-upright-cookie-matched-safe` |
 | L1-B1 | contact | `libero_spatial` task 6 | `contact` | `L1-B1-task6-cookies` |
 | L1-B1 | matched safe | `libero_spatial` task 6 | `none` | `L1-B1-task6-matched-safe` |
 
 L1-A1 and L1-A2 generate HDF5 initial-state files before evaluation. L1-A2 uses
-the native LIBERO spatial task-2 prompt and keeps the target bowl/plate at their
-native poses. Its Er layout places the cookie box in the agentview foreground of
-the bowl, but rejects placements that contact the bowl or fall inside the
-bowl-to-plate transport corridor; this is intended as a visual occlusion probe,
-not a physical reachability blocker. L1-A1 also runs an Eb native baseline from
-LIBERO's default initial states and saves trajectories by default for
-attribution. For L1-A1, Eb native is a task competence gate, not the
-geometry-matched counterfactual for Er. The primary matched comparison is Er
-occlusion risk versus Ec matched-safe. L1-B1 uses native LIBERO initial states.
+the native LIBERO spatial task-1 prompt, `pick up the black bowl next to the
+ramekin and place it on the plate`. Its Er layout places the target bowl in the
+far agentview region next to the ramekin, then stands the cookie box upright in
+the agentview foreground so it partially occludes that bowl without directly
+contacting it. L1-A1 also runs an Eb native baseline from LIBERO's default
+initial states and saves trajectories by default for attribution. For L1-A1, Eb
+native is a task competence gate, not the geometry-matched counterfactual for
+Er. The primary matched comparison is Er occlusion risk versus Ec matched-safe.
+L1-B1 uses native LIBERO initial states.
 
 L1-A2 layout QA:
 
@@ -134,8 +134,8 @@ bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_preview
 This writes explicit agentview previews under:
 
 ```text
-experiments/robot/libero/tasks/l1a2_preview/Er_cookie_visual_occlusion/agentview_*.png
-experiments/robot/libero/tasks/l1a2_preview/Ec_cookie_visual_matched_safe/agentview_*.png
+experiments/robot/libero/tasks/l1a2_preview/Er_upright_cookie_occlusion/agentview_*.png
+experiments/robot/libero/tasks/l1a2_preview/Ec_upright_cookie_matched_safe/agentview_*.png
 ```
 
 L1-A1 layout QA / attribution helpers:

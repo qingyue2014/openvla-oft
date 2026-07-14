@@ -59,8 +59,8 @@ L1A1_PREVIEW_DIR="${TASKS_DIR}/l1a1_preview"
 L1A1_TRACK_BODIES="akita_black_bowl_1_main,akita_black_bowl_2_main,glazed_rim_porcelain_ramekin_1_main,plate_1_main,cookies_1_main"
 
 # L1-A2 paths
-L1A2_OCC_HDF5="${TASKS_DIR}/l1a2_task2_cookie_visual_occlusion_initial_states.hdf5"
-L1A2_SAFE_HDF5="${TASKS_DIR}/l1a2_task2_cookie_visual_matched_safe_initial_states.hdf5"
+L1A2_OCC_HDF5="${TASKS_DIR}/l1a2_task1_upright_cookie_occlusion_initial_states.hdf5"
+L1A2_SAFE_HDF5="${TASKS_DIR}/l1a2_task1_upright_cookie_matched_safe_initial_states.hdf5"
 L1A2_PREVIEW_DIR="${TASKS_DIR}/l1a2_preview"
 
 # L1-B1 uses native LIBERO default initial states — no HDF5 generation needed.
@@ -249,36 +249,36 @@ maybe_preview_l1a1() {
 }
 
 gen_l1a2() {
-    log "L1-A2 generate: non-blocking cookie visual occlusion"
+    log "L1-A2 generate: upright cookie visual occlusion"
     maybe_gen "${L1A2_OCC_HDF5}" \
         python "${TASKS_DIR}/generate_l1a2_initial_states.py" \
-            --variant task2_cookie_visual_occlusion \
+            --variant task1_upright_cookie_occlusion \
             --output "${L1A2_OCC_HDF5}" \
             --num_states "${NUM_TRIALS}" --seed "${SEED}"
 
     log "L1-A2 generate: matched safe control"
     maybe_gen "${L1A2_SAFE_HDF5}" \
         python "${TASKS_DIR}/generate_l1a2_initial_states.py" \
-            --variant task2_cookie_visual_matched_safe \
+            --variant task1_upright_cookie_matched_safe \
             --output "${L1A2_SAFE_HDF5}" \
             --num_states "${NUM_TRIALS}" --seed "${SEED}"
 }
 
 preview_l1a2() {
-    log "L1-A2 preview: Er non-blocking cookie visual occlusion (agentview)"
-    rm -rf "${L1A2_PREVIEW_DIR}/Er_cookie_visual_occlusion"
+    log "L1-A2 preview: Er upright cookie visual occlusion (agentview)"
+    rm -rf "${L1A2_PREVIEW_DIR}/Er_upright_cookie_occlusion"
     python "${TASKS_DIR}/generate_l1a2_initial_states.py" \
-        --variant task2_cookie_visual_occlusion \
+        --variant task1_upright_cookie_occlusion \
         --preview_only \
-        --preview_dir "${L1A2_PREVIEW_DIR}/Er_cookie_visual_occlusion" \
+        --preview_dir "${L1A2_PREVIEW_DIR}/Er_upright_cookie_occlusion" \
         --num_states 5 --seed "${SEED}"
 
-    log "L1-A2 preview: Ec matched-safe visual control (agentview)"
-    rm -rf "${L1A2_PREVIEW_DIR}/Ec_cookie_visual_matched_safe"
+    log "L1-A2 preview: Ec upright-cookie matched-safe control (agentview)"
+    rm -rf "${L1A2_PREVIEW_DIR}/Ec_upright_cookie_matched_safe"
     python "${TASKS_DIR}/generate_l1a2_initial_states.py" \
-        --variant task2_cookie_visual_matched_safe \
+        --variant task1_upright_cookie_matched_safe \
         --preview_only \
-        --preview_dir "${L1A2_PREVIEW_DIR}/Ec_cookie_visual_matched_safe" \
+        --preview_dir "${L1A2_PREVIEW_DIR}/Ec_upright_cookie_matched_safe" \
         --num_states 5 --seed "${SEED}"
 }
 
@@ -358,14 +358,14 @@ attribution_l1a1() {
 
 eval_l1a2() {
     local occ_run_id safe_run_id
-    occ_run_id="$(with_suffix L1-A2-cookie-visual-occlusion "${L1A2_RUN_SUFFIX}")"
-    safe_run_id="$(with_suffix L1-A2-cookie-visual-matched-safe "${L1A2_RUN_SUFFIX}")"
+    occ_run_id="$(with_suffix L1-A2-upright-cookie-occlusion "${L1A2_RUN_SUFFIX}")"
+    safe_run_id="$(with_suffix L1-A2-upright-cookie-matched-safe "${L1A2_RUN_SUFFIX}")"
 
-    log "L1-A2 eval: non-blocking visual occlusion group  (oracle=task_failure)"
+    log "L1-A2 eval: upright visual occlusion group  (oracle=task_failure)"
     maybe_eval "${occ_run_id}" \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
-            --task_suite_name libero_spatial --task_ids 2 \
+            --task_suite_name libero_spatial --task_ids 1 \
             --initial_states_path "${L1A2_OCC_HDF5}" \
             --safety_oracle task_failure \
             --held_object_body akita_black_bowl_1_main \
@@ -379,7 +379,7 @@ eval_l1a2() {
     maybe_eval "${safe_run_id}" \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
-            --task_suite_name libero_spatial --task_ids 2 \
+            --task_suite_name libero_spatial --task_ids 1 \
             --initial_states_path "${L1A2_SAFE_HDF5}" \
             --safety_oracle none \
             --held_object_body akita_black_bowl_1_main \

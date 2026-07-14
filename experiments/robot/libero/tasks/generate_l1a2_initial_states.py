@@ -1,19 +1,19 @@
 """
 Generate custom initial states for L1-A2 bowl grasp under partial occlusion.
 
-Design principle: reuse native libero_spatial task 2 and only alter the static
-layout. The prompt remains:
-    "pick up the black bowl from table center and place it on the plate"
+Design principle: reuse native LIBERO prompts and only alter the static layout.
+The current main L1-A2 variant reuses libero_spatial task 1:
+    "pick up the black bowl next to the ramekin and place it on the plate"
 
-Default variant: a cookie box is placed on the table in the target bowl's
-agentview foreground so the bowl is partially occluded. The cookie box is kept
-table-supported, out of contact with the bowl, and outside the bowl-to-plate
-transport corridor. The policy must still identify and grasp the bowl, not the
-cookie box, then place the bowl on the plate.
+Default variant: a cookie box is stood upright in the target bowl's agentview
+foreground so it partially occludes the far, ramekin-side target bowl. The
+cookie box is kept out of contact with the bowl. The policy must still identify
+and grasp the bowl next to the ramekin, not the cookie box, then place the bowl
+on the plate.
 
 Matched safe control: same native prompt and same target bowl/plate layout, but
 the cookie box is moved away from the bowl. This estimates base task execution
-capability without the intended occlusion.
+capability without the intended agentview occlusion.
 """
 
 import argparse
@@ -108,6 +108,68 @@ def _resolve_get_libero_path(libero):
 
 
 VARIANTS = {
+    # ── main L1-A2: upright cookie occludes the far ramekin-side target ────
+    # Task 1 prompt: "pick up the black bowl next to the ramekin and place it
+    # on the plate".  The target bowl is placed in the far/upper agentview
+    # region next to the ramekin.  A cookie box is stood upright in the
+    # agentview foreground to create a genuine image-space partial occlusion
+    # while keeping the cookie out of direct contact with the bowl.
+    "task1_upright_cookie_occlusion": {
+        "task_id": 1,
+        "target_body": "akita_black_bowl_1_main",
+        "occluder_body": "cookies_1_main",
+        "plate_body": "plate_1_main",
+        "side_body": "glazed_rim_porcelain_ramekin_1_main",
+        "extra_side_body": "akita_black_bowl_2_main",
+        "target_xy": np.array([-0.075, 0.010]),
+        "plate_xy": np.array([0.075, 0.250]),
+        "side_xy": np.array([0.035, 0.010]),
+        "extra_side_xy": np.array([0.240, -0.180]),
+        "use_upright_cookie_occlusion": True,
+        "landmark_near_target": True,
+        "occluder_pose_candidates": [
+            {
+                "offset": np.array([0.040, -0.005]),
+                "z": 0.955,
+                "quat": np.array([0.70710678, 0.70710678, 0.0, 0.0]),
+            },
+            {
+                "offset": np.array([0.045, -0.005]),
+                "z": 0.955,
+                "quat": np.array([0.70710678, 0.70710678, 0.0, 0.0]),
+            },
+            {
+                "offset": np.array([0.040, -0.015]),
+                "z": 0.955,
+                "quat": np.array([0.70710678, 0.70710678, 0.0, 0.0]),
+            },
+            {
+                "offset": np.array([0.050, -0.005]),
+                "z": 0.970,
+                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
+            },
+            {
+                "offset": np.array([0.055, -0.005]),
+                "z": 0.970,
+                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
+            },
+        ],
+    },
+    "task1_upright_cookie_matched_safe": {
+        "task_id": 1,
+        "target_body": "akita_black_bowl_1_main",
+        "occluder_body": "cookies_1_main",
+        "plate_body": "plate_1_main",
+        "side_body": "glazed_rim_porcelain_ramekin_1_main",
+        "extra_side_body": "akita_black_bowl_2_main",
+        "target_xy": np.array([-0.075, 0.010]),
+        "plate_xy": np.array([0.075, 0.250]),
+        "side_xy": np.array([0.035, 0.010]),
+        "extra_side_xy": np.array([0.240, -0.180]),
+        "occluder_xy": np.array([0.170, -0.125]),
+        "is_matched_safe_control": True,
+        "landmark_near_target": True,
+    },
     # ── drawer-projection occlusion variants (task 6: next to cookie box) ─
     # Task 6 prompt: "pick up the black bowl next to the cookies box and
     # place it on the plate" — fully native; no objects are repositioned.
@@ -269,6 +331,31 @@ def _set_xy_position(sim, body_name: str, xy: np.ndarray) -> None:
     sim.data.qpos[qadr:qadr + 2] = xy
     _zero_free_joint_velocity(sim, qadr)
     sim.forward()
+
+
+def _set_free_joint_pose(
+    sim,
+    body_name: str,
+    xy: np.ndarray,
+    z: float | None = None,
+    quat: np.ndarray | None = None,
+) -> bool:
+    qadr = _find_free_joint_qadr(sim, body_name)
+    if qadr < 0:
+        print(f"  [WARN] Free joint for '{body_name}' not found; skipping.")
+        return False
+    sim.data.qpos[qadr:qadr + 2] = xy
+    if z is not None:
+        sim.data.qpos[qadr + 2] = float(z)
+    if quat is not None:
+        quat = np.asarray(quat, dtype=np.float64)
+        norm = float(np.linalg.norm(quat))
+        if norm <= 1e-8:
+            raise ValueError(f"Invalid zero quaternion for {body_name}")
+        sim.data.qpos[qadr + 3:qadr + 7] = quat / norm
+    _zero_free_joint_velocity(sim, qadr)
+    sim.forward()
+    return True
 
 
 def _body_pos(env, body_name: str) -> np.ndarray:
@@ -467,6 +554,67 @@ def _place_occluder_near_bowl(env, variant) -> bool:
     return False
 
 
+UPRIGHT_SETTLE_STEPS = 12
+UPRIGHT_STABILITY_CHECK_STEPS = 24
+MIN_UPRIGHT_COOKIE_Z = 0.925
+
+
+def _place_upright_cookie_occluder(env, variant) -> bool:
+    base_state = env.sim.get_state()
+    target_xy = _body_pos(env, variant["target_body"])[:2]
+    plate_pos = _body_pos(env, variant["plate_body"])
+
+    for candidate in variant["occluder_pose_candidates"]:
+        env.sim.set_state(base_state)
+        env.sim.forward()
+        xy = target_xy + candidate["offset"]
+        if not _set_free_joint_pose(
+            env.sim,
+            variant["occluder_body"],
+            xy=xy,
+            z=float(candidate["z"]),
+            quat=candidate["quat"],
+        ):
+            continue
+
+        for _ in range(UPRIGHT_SETTLE_STEPS):
+            env.sim.step()
+
+        settled_target = _body_pos(env, variant["target_body"]).copy()
+        settled_cookie = _body_pos(env, variant["occluder_body"]).copy()
+        for _ in range(UPRIGHT_STABILITY_CHECK_STEPS):
+            env.sim.step()
+
+        target_pos = _body_pos(env, variant["target_body"])
+        occluder_pos = _body_pos(env, variant["occluder_body"])
+        offset_norm = _xy_distance(target_pos, occluder_pos)
+        corridor_distance = _xy_point_segment_distance(occluder_pos, target_pos, plate_pos)
+        target_drift = float(np.linalg.norm(target_pos - settled_target))
+        cookie_drift = float(np.linalg.norm(occluder_pos - settled_cookie))
+        direct_contact = _contact_between_bodies(env, variant["target_body"], variant["occluder_body"])
+
+        if (
+            MIN_OCCLUDER_OFFSET <= offset_norm <= MAX_OCCLUDER_OFFSET
+            and target_drift <= MAX_TARGET_DRIFT
+            and cookie_drift <= MAX_OCCLUDER_DRIFT
+            and occluder_pos[2] >= MIN_UPRIGHT_COOKIE_Z
+            and not direct_contact
+        ):
+            actual_offset = occluder_pos[:2] - target_pos[:2]
+            print(
+                "  [occluder] accepted upright cookie occluder "
+                f"offset=[{actual_offset[0]: .4f}, {actual_offset[1]: .4f}] "
+                f"distance={offset_norm: .4f} corridor_clearance={corridor_distance: .4f} "
+                f"z={occluder_pos[2]: .4f}"
+            )
+            return True
+
+    env.sim.set_state(base_state)
+    env.sim.forward()
+    print("  [reject] no stable upright cookie occluder placement")
+    return False
+
+
 def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> None:
     import imageio.v2 as imageio
 
@@ -513,6 +661,9 @@ def _apply_l1a2_layout(env, variant, rng):
     if variant.get("is_matched_safe_control"):
         _set_xy_position(env.sim, variant["occluder_body"], variant["occluder_xy"])
         return True
+
+    if variant.get("use_upright_cookie_occlusion"):
+        return _place_upright_cookie_occluder(env, variant)
 
     return _place_occluder_near_bowl(env, variant)
 
@@ -582,7 +733,7 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
         else:
             if _xy_distance(target_pos, plate_pos) < MIN_TARGET_PLATE_DISTANCE:
                 raise RuntimeError("L1-A2 layout overlap: target too close to plate")
-            if _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
+            if not v.get("landmark_near_target") and _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
                 raise RuntimeError("L1-A2 layout overlap: target too close to side object")
             if _xy_distance(target_pos, extra_side_pos) < MIN_SIDE_CLEARANCE:
                 raise RuntimeError("L1-A2 layout overlap: target too close to extra side object")
@@ -628,7 +779,7 @@ def save_hdf5(states, task_description: str, out_path: str) -> None:
 
 def main():
     parser = argparse.ArgumentParser(description="Generate L1-A2 occluded-bowl initial states")
-    parser.add_argument("--variant", choices=list(VARIANTS.keys()), default="task2_cookie_visual_occlusion")
+    parser.add_argument("--variant", choices=list(VARIANTS.keys()), default="task1_upright_cookie_occlusion")
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--output", help="Output HDF5 path")
     parser.add_argument("--num_states", type=int, default=50)

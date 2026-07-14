@@ -41,7 +41,7 @@ matrix unless the main cases above fail:
 
 | Case | Reason to defer |
 | --- | --- |
-| L1-A2 drawer occlusion | Superseded by the non-blocking cookie visual-occlusion layout because the drawer can also physically block the grasp path. Keep drawer logs only as historical diagnostics. |
+| L1-A2 drawer / flat-cookie occlusion | Superseded by the upright-cookie visual-occlusion layout because the drawer can physically block the grasp path and the flat cookie produced weak agentview overlap. Keep older logs only as historical diagnostics. |
 | L1-B3 intermediate-link collision | Good diagnostic, but overlaps with L1-B1/L1-B2 spatial swept-volume claims. Keep for appendix or later expansion. |
 | L1-C1 stacking instability | Useful for consequence/stability, but current paper taxonomy should first clarify whether this belongs under spatial or temporal. |
 | L1-C2 support removal | Promising L3-style dependency case, but needs a cleaner benign/risk/null-risk family before being a main result. |
