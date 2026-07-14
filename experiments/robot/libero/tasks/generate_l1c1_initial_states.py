@@ -69,12 +69,12 @@ VARIANTS = {
         # recover from an out-of-distribution pre-grasp object pose.
         "bowl_xy": None,
         # Cookie box lies flat in its default orientation: about 83mm x 62mm
-        # in the table plane and 18.8mm tall. At x=0.095 the unloaded plate is
+        # in the table plane and 18.8mm tall. At x=0.090 the unloaded plate is
         # stable without touching the table while retaining a large unsupported
         # side. The plate height is derived from collision geometry below.
         # Stable zone: bowl near plate centre keeps combined CoM over the support.
         # Unstable zone: bowl on overhanging left half tips the stack.
-        "base_xyz": np.array([0.095, -0.020, TABLE_Z + 0.0094]),
+        "base_xyz": np.array([0.090, -0.020, TABLE_Z + 0.0094]),
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
         # Start above the box and let MuJoCo settle it onto the support.
         "plate_xyz": np.array([0.065, -0.020, TABLE_Z + 0.0300]),
@@ -121,6 +121,7 @@ STABILITY_CHECK_STEPS = 50
 INITIAL_STABILITY_DISPLACEMENT = 0.012
 INITIAL_STABILITY_DROP = 0.010
 INITIAL_SUPPORT_MAX_XY_OFFSET = 0.075
+INITIAL_SUPPORT_MAX_TILT_DEG = 5.0
 INITIAL_DEPENDENT_MAX_XY_OFFSET = 0.040
 
 
@@ -165,6 +166,14 @@ def _set_xy_position(sim, body_name: str, xy: np.ndarray) -> None:
 
 def _body_pos(env, body_name: str) -> np.ndarray:
     return np.array(env.sim.data.body_xpos[env.sim.model.body_name2id(body_name)])
+
+
+def _body_tilt_deg(env, body_name: str) -> float:
+    """Angle between the body's local z axis and the world vertical."""
+    body_id = env.sim.model.body_name2id(body_name)
+    rotation = env.sim.data.body_xmat[body_id].reshape(3, 3)
+    cosine = float(np.clip(rotation[2, 2], -1.0, 1.0))
+    return float(np.degrees(np.arccos(cosine)))
 
 
 def _geom_ids_for_body(env, body_name: str) -> set:
@@ -313,6 +322,14 @@ def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> 
         print(f"  [reject] support layout bridges to table: {support_body} directly touches a table geom")
         return False
 
+    support_tilt = _body_tilt_deg(env, support_body)
+    if support_tilt > INITIAL_SUPPORT_MAX_TILT_DEG:
+        print(
+            f"  [reject] support layout already tipped: {support_body} "
+            f"tilt={support_tilt:.2f}deg > {INITIAL_SUPPORT_MAX_TILT_DEG:.2f}deg"
+        )
+        return False
+
     support_pos = _body_pos(env, support_body)
     base_pos = _body_pos(env, base_body)
     xy_offset = float(np.linalg.norm(support_pos[:2] - base_pos[:2]))
@@ -337,6 +354,14 @@ def _settle_and_check_support_layout(env, support_body: str, base_body: str) -> 
 
     if _body_contacts_table(env, support_body):
         print(f"  [reject] support layout reached table during stability check: {support_body}")
+        return False
+
+    support_tilt = _body_tilt_deg(env, support_body)
+    if support_tilt > INITIAL_SUPPORT_MAX_TILT_DEG:
+        print(
+            f"  [reject] support layout tipped during stability check: {support_body} "
+            f"tilt={support_tilt:.2f}deg > {INITIAL_SUPPORT_MAX_TILT_DEG:.2f}deg"
+        )
         return False
 
     for name, initial_pos in settled_positions.items():

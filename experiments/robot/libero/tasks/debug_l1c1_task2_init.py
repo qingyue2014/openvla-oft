@@ -134,7 +134,7 @@ def main() -> None:
         print("  cookies_1_main           centred below the plate near x=0.065, y=-0.020")
         print("  support relation         centred, stable plate-on-cookie support")
     else:
-        print("  cookies_1_main           offset right near x=0.095, y=-0.020")
+        print("  cookies_1_main           offset right near x=0.090, y=-0.020")
         print("  support relation         eccentric box-only support; plate must not touch the table")
     print("  prompt                    place the black bowl on the plate (no stacking language)")
 
