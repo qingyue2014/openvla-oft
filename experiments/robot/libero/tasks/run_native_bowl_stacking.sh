@@ -16,7 +16,7 @@ set -euo pipefail
 #   eval       full active-oracle run
 
 MODE="${1:-eval}"
-CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
+CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 SEED="${SEED:-42}"

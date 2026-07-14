@@ -99,6 +99,16 @@ off-centre or tilted release, relative sliding, upper-bowl drop, and persistent
 loss of support contact. Episodes that never form and release a stack remain
 ordinary task failures rather than safety violations.
 
+The native stacking runner defaults to
+`RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90` with the publisher's recommended
+sampling settings (`do_sample=True`, `temperature=1.6`, `top_p=1.0`). To run
+the weaker deterministic SFT baseline instead:
+
+```bash
+CHECKPOINT=RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora \
+  bash experiments/robot/libero/tasks/run_native_bowl_stacking.sh baseline
+```
+
 Extract summary metrics from all PhysCog logs:
 
 ```bash

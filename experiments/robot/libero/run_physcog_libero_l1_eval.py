@@ -337,6 +337,8 @@ def run_episode_with_safety(
     wrist_images = []
     max_steps = TASK_MAX_STEPS.get(cfg.task_suite_name, 300)
     success = False
+    raw_gripper_commands = []
+    env_gripper_commands = []
 
     def check_safety(obs, action, step: int) -> bool:
         nonlocal safety, oracle_ready
@@ -400,7 +402,10 @@ def run_episode_with_safety(
                 if torch.cuda.is_available():
                     torch.cuda.synchronize()
 
-            action = process_action(action_queue.popleft(), cfg.model_family)
+            raw_action = action_queue.popleft()
+            raw_gripper_commands.append(float(raw_action[-1]))
+            action = process_action(raw_action, cfg.model_family)
+            env_gripper_commands.append(float(action[-1]))
             obs, reward, done, info = env.step(action.tolist())
             if recorder is not None:
                 recorder.record(obs, action, t, phase="policy")
@@ -601,6 +606,31 @@ def run_episode_with_safety(
                 f">= {cfg.model_collapse_displacement_threshold:.4f}m"
             )
 
+    gripper_metrics = {}
+    if env_gripper_commands:
+        close_steps = sum(command > 0 for command in env_gripper_commands)
+        open_steps = sum(command < 0 for command in env_gripper_commands)
+        switches = sum(
+            (previous > 0) != (current > 0)
+            for previous, current in zip(env_gripper_commands, env_gripper_commands[1:])
+        )
+        gripper_metrics = {
+            "raw_gripper_min": min(raw_gripper_commands),
+            "raw_gripper_max": max(raw_gripper_commands),
+            "env_gripper_close_fraction": close_steps / len(env_gripper_commands),
+            "env_gripper_open_fraction": open_steps / len(env_gripper_commands),
+            "env_gripper_switches": switches,
+        }
+        log_message(
+            "Gripper command metrics: "
+            f"raw_range=[{gripper_metrics['raw_gripper_min']:.4f}, "
+            f"{gripper_metrics['raw_gripper_max']:.4f}]  "
+            f"close_fraction={gripper_metrics['env_gripper_close_fraction']:.3f}  "
+            f"open_fraction={gripper_metrics['env_gripper_open_fraction']:.3f}  "
+            f"switches={switches}",
+            log_file,
+        )
+
     diagnostics = {
         "model_collapse": model_collapse,
         "collapse_reason": collapse_reason,
@@ -609,6 +639,7 @@ def run_episode_with_safety(
         "wrist_images": wrist_images,
         "l3c_metrics": {} if l3c is None else l3c.metrics(),
         "oracle_metrics": oracle.metrics(),
+        "gripper_metrics": gripper_metrics,
     }
 
     return success, replay_images, safety, diagnostics
@@ -841,6 +872,7 @@ def _save_episode_trajectory(
     }
     metadata.update(diagnostics.get("l3c_metrics", {}))
     metadata.update(diagnostics.get("oracle_metrics", {}))
+    metadata.update(diagnostics.get("gripper_metrics", {}))
     try:
         path = recorder.save(os.path.join(traj_dir, filename), metadata)
         append_index_entry(traj_dir, {"file": filename, **metadata})
