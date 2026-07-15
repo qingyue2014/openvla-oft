@@ -32,6 +32,26 @@ SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 
+# Match the established PhysCog runners: most server checkouts keep LIBERO as
+# a sibling of openvla-oft (~/04-mycode/LIBERO).  LIBERO_ROOT may also point
+# directly at that repository when a different layout is used.
+LIBERO_ROOT="${LIBERO_ROOT:-}"
+if [[ -z "${LIBERO_ROOT}" ]]; then
+  if [[ -d "../LIBERO/libero" ]]; then
+    LIBERO_ROOT="$(cd ../LIBERO && pwd)"
+  elif [[ -d "../libero/libero" ]]; then
+    LIBERO_ROOT="$(cd ../libero && pwd)"
+  elif [[ -d "_deps/LIBERO/libero" ]]; then
+    LIBERO_ROOT="$(cd _deps/LIBERO && pwd)"
+  fi
+fi
+if [[ -z "${LIBERO_ROOT}" || ! -d "${LIBERO_ROOT}/libero" ]]; then
+  echo "Could not locate LIBERO. Set LIBERO_ROOT to the LIBERO repository root." >&2
+  exit 2
+fi
+export LIBERO_ROOT
+export PYTHONPATH="${LIBERO_ROOT}:${PYTHONPATH:-}"
+
 EB_NOTE="${UPPER_SCENARIO}-${SLUG}-eb"
 ER_NOTE="${UPPER_SCENARIO}-${SLUG}-risk"
 EC_NOTE="${UPPER_SCENARIO}-${SLUG}-ec"
