@@ -187,7 +187,7 @@ def _seat_grasp(env, obs, oracle, recorder, target, close_sign, step, args):
     return obs, step, None
 
 
-def _run_episode(env, state, args, episode_idx):
+def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), attempt_idx=0):
     from experiments.robot.libero.physcog_oracles import ImplicitBowlStackOracle
     from experiments.robot.libero.tasks.generate_l1c1_initial_states import _world_aabb
 
@@ -213,6 +213,9 @@ def _run_episode(env, state, args, episode_idx):
     above_source[2] += args.approach_height
     grasp_eef = source.copy()
     grasp_eef[2] += args.grasp_height
+    grasp_xy_offset = np.asarray(grasp_xy_offset, dtype=float)
+    above_source[:2] += grasp_xy_offset
+    grasp_eef[:2] += grasp_xy_offset
 
     stages = (
         ("approach_source", above_source, open_sign, args.position_tolerance, False),
@@ -253,7 +256,9 @@ def _run_episode(env, state, args, episode_idx):
             args,
             "lift_grasped_bowl",
         )
-    if failure is None and _body_pos(env, UPPER)[2] - source[2] < args.min_grasp_lift:
+    grasp_lift_m = float(_body_pos(env, UPPER)[2] - source[2])
+    grasp_verified = bool(failure is None and grasp_lift_m >= args.min_grasp_lift)
+    if failure is None and not grasp_verified:
         failure = MotionFailure(reason="grasp_failed", stage="verify_grasp")
 
     # Convert the desired upper-bowl body pose into an EEF waypoint using the
@@ -331,6 +336,10 @@ def _run_episode(env, state, args, episode_idx):
         {
             "condition": "safe_reference",
             "episode_idx": episode_idx,
+            "attempt_idx": attempt_idx,
+            "grasp_xy_offset_m": grasp_xy_offset.tolist(),
+            "grasp_verified": grasp_verified,
+            "grasp_lift_m": grasp_lift_m,
             "success": safe_success,
             "violated": violated,
             "violation_reason": reason,
@@ -347,6 +356,11 @@ def _run_episode(env, state, args, episode_idx):
     )
     return {
         "episode": episode_idx,
+        "attempt": attempt_idx,
+        "grasp_offset_x_m": float(grasp_xy_offset[0]),
+        "grasp_offset_y_m": float(grasp_xy_offset[1]),
+        "grasp_verified": int(grasp_verified),
+        "grasp_lift_m": grasp_lift_m,
         "safe_success": int(safe_success),
         "violated": int(violated),
         "reason": reason,
@@ -371,6 +385,7 @@ def _run_episode(env, state, args, episode_idx):
 def run(args):
     from experiments.robot.libero.tasks.calibrate_l1c1_risk_layout import _load_states
     from experiments.robot.libero.tasks.generate_l1b2_initial_states import benchmark, get_libero_path
+    from experiments.robot.libero.tasks.generate_l1c1_initial_states import _world_aabb
     from libero.libero.envs.env_wrapper import ControlEnv
 
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
@@ -385,15 +400,68 @@ def run(args):
         hard_reset=False,
     )
     rows = []
+    selected_grasp_offset = None
     try:
         for idx, state in enumerate(states):
-            row = _run_episode(env, state, args, idx)
+            env.reset()
+            env.set_init_state(state)
+            bowl_lo, bowl_hi = _world_aabb(env, UPPER)
+            # Guard against mesh geom_size conventions that report a coarse
+            # bounding radius rather than the visible bowl footprint.
+            half_xy = np.clip((bowl_hi[:2] - bowl_lo[:2]) / 2.0, 0.020, 0.060)
+            fractions = [
+                float(value.strip())
+                for value in args.grasp_offset_fractions.split(",")
+                if value.strip()
+            ]
+            candidates = [np.zeros(2)]
+            for fraction in fractions:
+                candidates.extend(
+                    [
+                        np.array([fraction * half_xy[0], 0.0]),
+                        np.array([-fraction * half_xy[0], 0.0]),
+                        np.array([0.0, fraction * half_xy[1]]),
+                        np.array([0.0, -fraction * half_xy[1]]),
+                    ]
+                )
+            if selected_grasp_offset is not None:
+                candidates = [selected_grasp_offset] + [
+                    offset
+                    for offset in candidates
+                    if not np.allclose(offset, selected_grasp_offset)
+                ]
+
+            row = None
+            for attempt_idx, offset in enumerate(candidates):
+                candidate_row = _run_episode(
+                    env, state, args, idx, grasp_xy_offset=offset, attempt_idx=attempt_idx
+                )
+                print(
+                    f"  grasp_attempt={attempt_idx:02d} "
+                    f"offset=({offset[0]:+.4f},{offset[1]:+.4f})m "
+                    f"verified={candidate_row['grasp_verified']} "
+                    f"lift={candidate_row['grasp_lift_m']:.4f}m "
+                    f"stage={candidate_row['failure_stage'] or '-'}"
+                )
+                row = candidate_row
+                if candidate_row["grasp_verified"]:
+                    selected_grasp_offset = offset.copy()
+                    break
+                if candidate_row["failure_stage"] not in {
+                    "descend_to_grasp",
+                    "verify_grasp",
+                    "lift_grasped_bowl",
+                }:
+                    break
             rows.append(row)
             print(
                 f"state={idx:02d} safe={row['safe_success']} violated={row['violated']} "
                 f"release_xy={row['release_xy_offset_m']:.4f} "
                 f"stage={row['failure_stage'] or '-'} "
                 f"close_sign={row['gripper_close_sign']:+.0f} "
+                f"grasp_offset=({row['grasp_offset_x_m']:+.4f},"
+                f"{row['grasp_offset_y_m']:+.4f})m "
+                f"grasp_lift={row['grasp_lift_m']:.4f}m "
                 f"aperture(-1/+1)={row['gripper_aperture_after_minus']:.4f}/"
                 f"{row['gripper_aperture_after_plus']:.4f} "
                 f"best_error={row['failure_best_error_m']:.4f}m "
@@ -457,6 +525,11 @@ def main():
     parser.add_argument("--gripper_probe_steps", type=int, default=8)
     parser.add_argument("--approach_height", type=float, default=0.12)
     parser.add_argument("--grasp_height", type=float, default=0.015)
+    parser.add_argument(
+        "--grasp_offset_fractions",
+        default="0.60,0.80",
+        help="Bowl half-extent fractions searched along world +/-x and +/-y for rim grasps",
+    )
     parser.add_argument("--grasp_seat_steps", type=int, default=15)
     parser.add_argument("--grasp_seat_max_command", type=float, default=0.08)
     parser.add_argument("--lift_height", type=float, default=0.12)
