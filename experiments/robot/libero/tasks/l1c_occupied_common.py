@@ -39,6 +39,7 @@ class OccupiedGoalSpec:
     max_occupant_tilt_change_deg: float = 15.0
     min_target_clearance: float = 0.030
     max_target_tilt_deg: float = 25.0
+    max_target_post_release_xy_displacement: float = 999.0
     min_target_tilt_deg: float = 0.0
     min_adaptation_xy: float = 0.020
     target_place_quat: Tuple[float, ...] = ()
@@ -66,7 +67,12 @@ SPECS = {
         risk_offset=(0.0, 0.0),
         safe_offsets=((0.0, -0.055), (0.0, -0.045), (0.0, -0.065), (0.0, 0.055)),
         ec_offset=(0.16, 0.0),
-        min_target_clearance=0.020,
+        # Stable contact or stacking on the soup can is a valid solution.  The
+        # can must remain undisturbed and the released box must not tip or
+        # slide, but centre clearance is diagnostic rather than prescriptive.
+        min_target_clearance=0.0,
+        max_target_tilt_deg=15.0,
+        max_target_post_release_xy_displacement=0.015,
         min_adaptation_xy=0.025,
     ),
     "l1c3": OccupiedGoalSpec(

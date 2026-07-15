@@ -236,6 +236,7 @@ def preview(args):
 def _placement_result(
     env, spec, occupant_pos0, occupant_tilt0,
     target_tilt0, max_displacement=None, max_tilt_change=None,
+    max_target_xy_displacement=None,
 ):
     occupant_pos = body_pos(env, spec.occupant_body)
     target_pos = body_pos(env, spec.target_body)
@@ -258,6 +259,8 @@ def _placement_result(
         and clearance >= spec.min_target_clearance
         and target_tilt_metric >= spec.min_target_tilt_deg
         and target_tilt_metric <= spec.max_target_tilt_deg
+        and (max_target_xy_displacement or 0.0)
+        <= spec.max_target_post_release_xy_displacement
     )
     return {
         "safe_success": int(safe),
@@ -267,6 +270,7 @@ def _placement_result(
         "target_occupant_clearance_m": clearance,
         "target_tilt_deg": target_tilt,
         "target_tilt_metric_deg": target_tilt_metric,
+        "target_post_release_max_xy_displacement_m": max_target_xy_displacement or 0.0,
     }
 
 
@@ -285,8 +289,10 @@ def calibrate(args):
                 occupant_tilt0 = body_tilt_deg(env, spec.occupant_body)
                 target_tilt0 = body_tilt_deg(env, spec.target_body)
                 place_at_anchor(env, spec, spec.target_body, offset, args.drop_clearance)
+                target_xy0 = body_pos(env, spec.target_body)[:2].copy()
                 max_displacement = 0.0
                 max_tilt_change = 0.0
+                max_target_xy_displacement = 0.0
                 for _ in range(args.settle_steps):
                     env.sim.step()
                     max_displacement = max(
@@ -297,10 +303,15 @@ def calibrate(args):
                         max_tilt_change,
                         abs(body_tilt_deg(env, spec.occupant_body) - occupant_tilt0),
                     )
+                    max_target_xy_displacement = max(
+                        max_target_xy_displacement,
+                        float(np.linalg.norm(body_pos(env, spec.target_body)[:2] - target_xy0)),
+                    )
                 env.sim.forward()
                 result = _placement_result(
                     env, spec, occupant_pos0, occupant_tilt0,
                     target_tilt0, max_displacement, max_tilt_change,
+                    max_target_xy_displacement,
                 )
                 row = {
                     "episode": episode_idx,
@@ -311,7 +322,9 @@ def calibrate(args):
                 rows.append(row)
                 print(
                     f"state={episode_idx:02d} offset=({offset[0]:+.3f},{offset[1]:+.3f}) "
-                    f"safe={row['safe_success']} clearance={row['target_occupant_clearance_m']:.4f}m"
+                    f"safe={row['safe_success']} clearance={row['target_occupant_clearance_m']:.4f}m "
+                    f"target_xy_drift={row['target_post_release_max_xy_displacement_m']:.4f}m "
+                    f"target_tilt={row['target_tilt_metric_deg']:.1f}deg"
                 )
     finally:
         env.close()
@@ -450,6 +463,7 @@ def _safe_reference_attempt(
         spec.min_target_clearance,
         spec.min_target_tilt_deg,
         spec.max_target_tilt_deg,
+        spec.max_target_post_release_xy_displacement,
     )
     oracle.reset(env, obs)
     recorder = TrajectoryRecorder(env, [spec.target_body, spec.occupant_body, spec.anchor_body])
@@ -543,6 +557,9 @@ def _safe_reference_attempt(
         "aperture_plus": aperture_plus,
         "grasp_aperture": grasp_aperture,
         "lift_delta_m": lift_delta,
+        "target_post_release_max_xy_displacement_m": metrics[
+            "target_post_release_max_xy_displacement_m"
+        ],
         "reason": reason,
     }
 
@@ -604,8 +621,8 @@ def safe_reference(args):
         f"- Required rate: {args.min_safe_rate:.3f}",
         "- Scope: executable OSC action sequence in Er, not teleport-only physics.",
         "",
-        "| Episode | Safe success | Contact | Release | Offset x | Offset y | Grasp dx | Grasp dy | Close sign | Grasp aperture | Lift delta | Reason |",
-        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| Episode | Safe success | Contact | Release | Offset x | Offset y | Grasp dx | Grasp dy | Close sign | Grasp aperture | Lift delta | Post-release XY drift | Reason |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
@@ -613,7 +630,9 @@ def safe_reference(args):
             f"{row['offset_x_m']:+.3f} | {row['offset_y_m']:+.3f} | "
             f"{row['grasp_offset_x_m']:+.3f} | {row['grasp_offset_y_m']:+.3f} | "
             f"{row['close_sign']:+.0f} | {row['grasp_aperture']:.4f} | "
-            f"{row['lift_delta_m']:.4f} | {row['reason'] or '--'} |"
+            f"{row['lift_delta_m']:.4f} | "
+            f"{row['target_post_release_max_xy_displacement_m']:.4f} | "
+            f"{row['reason'] or '--'} |"
         )
     _write_report(args.out_report, lines)
     print(f"\nVerdict: {verdict}\nCSV: {args.out_csv}\nReport: {args.out_report}")
@@ -647,6 +666,7 @@ def replay(args):
                 spec.min_target_clearance,
                 spec.min_target_tilt_deg,
                 spec.max_target_tilt_deg,
+                spec.max_target_post_release_xy_displacement,
             )
             oracle.reset(env, None)
             violated = False

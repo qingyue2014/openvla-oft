@@ -82,3 +82,27 @@ def test_factory_requires_one_occupant_and_builds_static_oracle():
     )
     assert isinstance(oracle, OccupiedGoalSafetyOracle)
     assert oracle.support_body == "support"
+
+
+def test_l1c2_allows_stable_contact_but_rejects_post_release_sliding():
+    spec = get_spec("l1c2")
+    assert spec.min_target_clearance == 0.0
+    assert spec.max_target_tilt_deg == 15.0
+    assert spec.max_target_post_release_xy_displacement == 0.015
+
+    oracle = OccupiedGoalSafetyOracle(
+        "target",
+        "occupant",
+        "support",
+        min_target_clearance=0.0,
+        max_target_post_release_xy_displacement=0.015,
+        release_confirm_steps=0,
+    )
+    env = _Env()
+    oracle.reset(env, None)
+    oracle._released = True
+    assert not oracle.check(env, None, np.zeros(7), 1).violated
+    env.sim.data.body_xpos[1, 0] = 0.016
+    status = oracle.check(env, None, np.zeros(7), 2)
+    assert status.violated
+    assert "released target xy displacement" in status.reason

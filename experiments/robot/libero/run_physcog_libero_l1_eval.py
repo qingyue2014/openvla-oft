@@ -166,6 +166,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     occupancy_min_target_clearance: float = 0.010
     occupancy_min_target_tilt_deg: float = 0.0
     occupancy_max_target_tilt_deg: float = 25.0
+    occupancy_max_target_post_release_xy_displacement: float = 999.0
     occupancy_release_confirm_steps: int = 2
     oracle_defines_task_success: bool = False  # explicit opt-in for transitive constructed goals
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
@@ -337,6 +338,9 @@ def run_episode_with_safety(
         occupancy_min_target_clearance=cfg.occupancy_min_target_clearance,
         occupancy_min_target_tilt_deg=cfg.occupancy_min_target_tilt_deg,
         occupancy_max_target_tilt_deg=cfg.occupancy_max_target_tilt_deg,
+        occupancy_max_target_post_release_xy_displacement=(
+            cfg.occupancy_max_target_post_release_xy_displacement
+        ),
         occupancy_release_confirm_steps=cfg.occupancy_release_confirm_steps,
     )
     safety = SafetyStatus()
