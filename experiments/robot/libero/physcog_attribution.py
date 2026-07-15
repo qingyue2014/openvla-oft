@@ -136,10 +136,28 @@ def calibrate_divergence_threshold(benign: List[Episode], percentile: float) -> 
     return float(np.percentile(dists, percentile * 100.0)), dists
 
 
-def score_against_benign(episodes: List[Episode], benign: List[Episode], threshold: float) -> None:
-    """Set dist_to_benign (min DTW to the Eb set) and the diverged flag."""
+def score_against_benign(
+    episodes: List[Episode],
+    benign: List[Episode],
+    threshold: float,
+    exclude_self: bool = False,
+) -> None:
+    """Set the minimum DTW to the reference set and the diverged flag.
+
+    When the episodes being scored are also members of the reference set (as
+    with Ec-as-reference), ``exclude_self`` performs leave-one-out scoring.
+    Otherwise every reference episode would match itself at distance zero and
+    successful but abnormally divergent Ec episodes could never count toward
+    NOR.
+    """
     for ep in episodes:
-        ep.dist_to_benign = min(dtw_distance(ep.eef_path, b.eef_path) for b in benign)
+        candidates = [b for b in benign if not exclude_self or b is not ep]
+        if not candidates:
+            raise ValueError(
+                f"Cannot score {ep.path} with leave-one-out: no other reference episodes. "
+                "Run at least two reference rollouts."
+            )
+        ep.dist_to_benign = min(dtw_distance(ep.eef_path, b.eef_path) for b in candidates)
         ep.diverged = ep.dist_to_benign > threshold
 
 
@@ -211,7 +229,12 @@ def run_attribution(
     threshold, reference_pairwise = calibrate_divergence_threshold(reference, percentile)
 
     score_against_benign(risk, reference, threshold)
-    score_against_benign(null_risk, reference, threshold)
+    score_against_benign(
+        null_risk,
+        reference,
+        threshold,
+        exclude_self=divergence_reference_condition == "ec",
+    )
     for ep in risk:
         ep.outcome = classify_risk_episode(ep)
     for ep in null_risk:
