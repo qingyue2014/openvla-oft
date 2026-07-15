@@ -17,6 +17,7 @@ import argparse
 import csv
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -32,11 +33,26 @@ LOWER = "akita_black_bowl_2_main"
 PLATE = "plate_1_main"
 
 
-def _position_action(current, target, gripper, position_scale=0.04):
+@dataclass
+class MotionFailure:
+    reason: str
+    stage: str
+    initial_error_m: float = float("nan")
+    best_error_m: float = float("nan")
+    final_error_m: float = float("nan")
+    final_eef_xyz: tuple = ()
+    target_eef_xyz: tuple = ()
+
+
+def _position_action(
+    current, target, gripper, position_scale=0.08, max_position_command=1.0
+):
     """Return a clipped OSC delta-position action; zero rotation holds pose."""
     error = np.asarray(target, dtype=float) - np.asarray(current, dtype=float)
     action = np.zeros(7, dtype=float)
-    action[:3] = np.clip(error / position_scale, -1.0, 1.0)
+    action[:3] = np.clip(
+        error / position_scale, -max_position_command, max_position_command
+    )
     action[-1] = float(gripper)
     return action
 
@@ -55,16 +71,38 @@ def _advance(env, obs, oracle, recorder, action, step):
     return obs, oracle.check(env, obs, action, step)
 
 
-def _move_to(env, obs, oracle, recorder, target, gripper, step, args):
+def _move_to(
+    env, obs, oracle, recorder, target, gripper, step, args, stage, tolerance=None
+):
+    tolerance = args.position_tolerance if tolerance is None else tolerance
+    initial_error = float(np.linalg.norm(_eef_pos(obs) - target))
+    best_error = initial_error
     for _ in range(args.max_waypoint_steps):
-        if np.linalg.norm(_eef_pos(obs) - target) <= args.position_tolerance:
+        error = float(np.linalg.norm(_eef_pos(obs) - target))
+        best_error = min(best_error, error)
+        if error <= tolerance:
             return obs, step, None
-        action = _position_action(_eef_pos(obs), target, gripper, args.position_scale)
+        action = _position_action(
+            _eef_pos(obs),
+            target,
+            gripper,
+            args.position_scale,
+            args.max_position_command,
+        )
         obs, status = _advance(env, obs, oracle, recorder, action, step)
         step += 1
         if status.violated:
             return obs, step, status
-    return obs, step, "waypoint_timeout"
+    final_eef = _eef_pos(obs).copy()
+    return obs, step, MotionFailure(
+        reason="waypoint_timeout",
+        stage=stage,
+        initial_error_m=initial_error,
+        best_error_m=best_error,
+        final_error_m=float(np.linalg.norm(final_eef - target)),
+        final_eef_xyz=tuple(float(value) for value in final_eef),
+        target_eef_xyz=tuple(float(value) for value in target),
+    )
 
 
 def _hold(env, obs, oracle, recorder, gripper, count, step):
@@ -98,10 +136,15 @@ def _run_episode(env, state, args, episode_idx):
     grasp_eef = source.copy()
     grasp_eef[2] += args.grasp_height
 
-    stages = ((above_source, -1.0), (grasp_eef, -1.0))
-    for target, grip in stages:
+    stages = (
+        ("approach_source", above_source, -1.0, args.position_tolerance),
+        ("descend_to_grasp", grasp_eef, -1.0, args.precise_position_tolerance),
+    )
+    for stage, target, grip, tolerance in stages:
         if failure is None:
-            obs, step, failure = _move_to(env, obs, oracle, recorder, target, grip, step, args)
+            obs, step, failure = _move_to(
+                env, obs, oracle, recorder, target, grip, step, args, stage, tolerance
+            )
     if failure is None:
         obs, step, failure = _hold(
             env, obs, oracle, recorder, 1.0, args.grasp_close_steps, step
@@ -112,10 +155,18 @@ def _run_episode(env, state, args, episode_idx):
     lifted_upper[2] += args.lift_height
     if failure is None:
         obs, step, failure = _move_to(
-            env, obs, oracle, recorder, lifted_upper + grasped_offset, 1.0, step, args
+            env,
+            obs,
+            oracle,
+            recorder,
+            lifted_upper + grasped_offset,
+            1.0,
+            step,
+            args,
+            "lift_grasped_bowl",
         )
     if failure is None and _body_pos(env, UPPER)[2] - source[2] < args.min_grasp_lift:
-        failure = "grasp_failed"
+        failure = MotionFailure(reason="grasp_failed", stage="verify_grasp")
 
     # Convert the desired upper-bowl body pose into an EEF waypoint using the
     # measured rigid grasp offset, avoiding hard-coded asset dimensions.
@@ -128,11 +179,28 @@ def _run_episode(env, state, args, episode_idx):
     preplace_upper[2] += args.preplace_height
     if failure is None:
         obs, step, failure = _move_to(
-            env, obs, oracle, recorder, preplace_upper + grasped_offset, 1.0, step, args
+            env,
+            obs,
+            oracle,
+            recorder,
+            preplace_upper + grasped_offset,
+            1.0,
+            step,
+            args,
+            "move_above_lower_bowl",
         )
     if failure is None:
         obs, step, failure = _move_to(
-            env, obs, oracle, recorder, desired_upper + grasped_offset, 1.0, step, args
+            env,
+            obs,
+            oracle,
+            recorder,
+            desired_upper + grasped_offset,
+            1.0,
+            step,
+            args,
+            "descend_to_stack",
+            args.stack_position_tolerance,
         )
     if failure is None:
         obs, step, failure = _hold(env, obs, oracle, recorder, 1.0, args.contact_hold_steps, step)
@@ -142,7 +210,15 @@ def _run_episode(env, state, args, episode_idx):
         retreat = _eef_pos(obs).copy()
         retreat[2] += args.retreat_height
         obs, step, failure = _move_to(
-            env, obs, oracle, recorder, retreat, -1.0, step, args
+            env,
+            obs,
+            oracle,
+            recorder,
+            retreat,
+            -1.0,
+            step,
+            args,
+            "retreat_after_release",
         )
     if failure is None:
         obs, step, failure = _hold(env, obs, oracle, recorder, -1.0, args.settle_steps, step)
@@ -150,8 +226,10 @@ def _run_episode(env, state, args, episode_idx):
     metrics = oracle.metrics()
     violated = bool(getattr(failure, "violated", False))
     reason = getattr(failure, "reason", "") if failure is not None else ""
-    if isinstance(failure, str):
-        reason = failure
+    failure_stage = getattr(failure, "stage", "") if failure is not None else ""
+    failure_initial_error = getattr(failure, "initial_error_m", float("nan"))
+    failure_best_error = getattr(failure, "best_error_m", float("nan"))
+    failure_final_error = getattr(failure, "final_error_m", float("nan"))
     safe_success = bool(oracle.task_success() and not violated)
     out_path = Path(args.trajectory_dir) / f"task{args.task_id}_ep{episode_idx:03d}.npz"
     recorder.save(
@@ -162,6 +240,10 @@ def _run_episode(env, state, args, episode_idx):
             "success": safe_success,
             "violated": violated,
             "violation_reason": reason,
+            "failure_stage": failure_stage,
+            "failure_initial_error_m": failure_initial_error,
+            "failure_best_error_m": failure_best_error,
+            "failure_final_error_m": failure_final_error,
             **metrics,
         },
     )
@@ -170,6 +252,10 @@ def _run_episode(env, state, args, episode_idx):
         "safe_success": int(safe_success),
         "violated": int(violated),
         "reason": reason,
+        "failure_stage": failure_stage,
+        "failure_initial_error_m": failure_initial_error,
+        "failure_best_error_m": failure_best_error,
+        "failure_final_error_m": failure_final_error,
         "steps": step,
         "stack_contact_seen": int(metrics["stack_contact_seen"]),
         "release_detected": int(metrics["release_detected"]),
@@ -203,7 +289,11 @@ def run(args):
             rows.append(row)
             print(
                 f"state={idx:02d} safe={row['safe_success']} violated={row['violated']} "
-                f"release_xy={row['release_xy_offset_m']:.4f} reason={row['reason'] or '-'}"
+                f"release_xy={row['release_xy_offset_m']:.4f} "
+                f"stage={row['failure_stage'] or '-'} "
+                f"best_error={row['failure_best_error_m']:.4f}m "
+                f"final_error={row['failure_final_error_m']:.4f}m "
+                f"reason={row['reason'] or '-'}"
             )
     finally:
         env.close()
@@ -229,13 +319,15 @@ def run(args):
         f"- Required rate: {args.min_safe_reference_rate:.3f}",
         "- Scope: executable OSC action sequence in Er, not teleport-only physics.",
         "",
-        "| Episode | Safe success | Violated | Contact | Release | Reason |",
-        "| ---: | ---: | ---: | ---: | ---: | --- |",
+        "| Episode | Safe success | Violated | Contact | Release | Failure stage | Best error (m) | Final error (m) | Reason |",
+        "| ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
             f"| {row['episode']} | {row['safe_success']} | {row['violated']} | "
-            f"{row['stack_contact_seen']} | {row['release_detected']} | {row['reason'] or '--'} |"
+            f"{row['stack_contact_seen']} | {row['release_detected']} | "
+            f"{row['failure_stage'] or '--'} | {row['failure_best_error_m']:.4f} | "
+            f"{row['failure_final_error_m']:.4f} | {row['reason'] or '--'} |"
         )
     out_report = Path(args.out_report)
     out_report.parent.mkdir(parents=True, exist_ok=True)
@@ -250,9 +342,12 @@ def main():
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--task_id", type=int, default=2)
     parser.add_argument("--num_states", type=int, default=8)
-    parser.add_argument("--position_scale", type=float, default=0.04)
-    parser.add_argument("--position_tolerance", type=float, default=0.008)
-    parser.add_argument("--max_waypoint_steps", type=int, default=60)
+    parser.add_argument("--position_scale", type=float, default=0.08)
+    parser.add_argument("--max_position_command", type=float, default=0.25)
+    parser.add_argument("--position_tolerance", type=float, default=0.010)
+    parser.add_argument("--precise_position_tolerance", type=float, default=0.006)
+    parser.add_argument("--stack_position_tolerance", type=float, default=0.004)
+    parser.add_argument("--max_waypoint_steps", type=int, default=100)
     parser.add_argument("--wait_steps", type=int, default=10)
     parser.add_argument("--approach_height", type=float, default=0.12)
     parser.add_argument("--grasp_height", type=float, default=0.015)
