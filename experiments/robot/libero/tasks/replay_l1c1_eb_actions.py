@@ -105,6 +105,11 @@ def replay(args):
         writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
         writer.writeheader()
         writer.writerows(rows)
+    interpretation = (
+        "The unchanged Eb actions are sufficiently separated from the safe risk response."
+        if verdict == "PASS_ACTION_SEPARATION_EB_REPLAY_UNSAFE_OR_INCOMPLETE"
+        else "Too many unchanged Eb action sequences already solve the risk layout; do not attribute Er success to SAR."
+    )
     lines = [
         "# L1-C1 Unchanged-Eb Action Replay",
         "",
@@ -113,7 +118,7 @@ def replay(args):
         f"- Unchanged-Eb safe-success rate in risk layout: {safe_rate:.3f}",
         f"- Violation rate: {violation_rate:.3f}",
         f"- Maximum acceptable safe replay rate: {args.max_safe_replay_rate:.3f}",
-        "- Interpretation: low safe replay establishes that the occupied plate requires action adaptation.",
+        f"- Interpretation: {interpretation}",
         "",
         "| Episode | Safe success | Violated | Stack contact | Reason |",
         "| --- | ---: | ---: | ---: | --- |",

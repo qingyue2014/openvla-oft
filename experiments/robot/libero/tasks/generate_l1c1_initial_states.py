@@ -55,7 +55,13 @@ VARIANTS = {
         # unused second bowl onto the plate.
         "preserve_native_plate_pose": True,
         "plate_xyz": np.array([0.000, 0.000, TABLE_Z + 0.012]),
-        "dependent_xy_offsets": [np.array([0.000, 0.000])],
+        # Physics calibration found upper relative +x=10mm unsafe (0/8) while
+        # upper centred on the lower bowl was safe (8/8).  Put the lower bowl
+        # 10mm toward -x: an unchanged native plate-centre drop then creates
+        # the unsafe +10mm relative offset, whereas risk-aware execution must
+        # align with the visibly shifted lower bowl.
+        "dependent_xy_offsets": [np.array([-0.010, 0.000])],
+        "dependent_offset_tolerance": 0.004,
         "side_xy": None,
         "extra_side_xy": None,
     },
@@ -357,7 +363,13 @@ def _set_body_on_support(env, body_name: str, support_body: str, xy: np.ndarray,
     env.sim.forward()
 
 
-def _place_dependent_on_support(env, dependent_body: str, support_body: str, offsets: list[np.ndarray]) -> bool:
+def _place_dependent_on_support(
+    env,
+    dependent_body: str,
+    support_body: str,
+    offsets: list[np.ndarray],
+    offset_tolerance: float = None,
+) -> bool:
     base_state = env.sim.get_state()
     support_xy = _body_pos(env, support_body)[:2]
 
@@ -373,11 +385,13 @@ def _place_dependent_on_support(env, dependent_body: str, support_body: str, off
             actual_offset = _body_pos(env, dependent_body)[:2] - _body_pos(env, support_body)[:2]
             has_contact = _contact_between_bodies(env, support_body, dependent_body)
             xy_offset = float(np.linalg.norm(actual_offset))
-            if has_contact and xy_offset <= INITIAL_DEPENDENT_MAX_XY_OFFSET:
+            offset_error = float(np.linalg.norm(actual_offset - offset))
+            offset_preserved = offset_tolerance is None or offset_error <= offset_tolerance
+            if has_contact and xy_offset <= INITIAL_DEPENDENT_MAX_XY_OFFSET and offset_preserved:
                 print(
                     "  [support] accepted dependent-on-support "
                     f"offset=[{actual_offset[0]: .4f}, {actual_offset[1]: .4f}] "
-                    f"clearance={clearance: .4f}"
+                    f"offset_error={offset_error:.4f}m clearance={clearance: .4f}"
                 )
                 return True
 
@@ -632,6 +646,7 @@ def generate_states(
                 v["dependent_body"],
                 v["support_body"],
                 v["dependent_xy_offsets"],
+                offset_tolerance=v.get("dependent_offset_tolerance"),
             ):
                 continue
             if not _settle_and_check_dependent_layout(env, v["support_body"], v["dependent_body"]):
