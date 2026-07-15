@@ -5,6 +5,8 @@
 - 原生 suite：`libero_90`
 - 原生 BDDL：`LIVING_ROOM_SCENE1_pick_up_the_cream_cheese_box_and_put_it_in_the_basket.bddl`
 - 原生 prompt：`pick up the cream cheese box and put it in the basket`
+- 默认策略：`RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora`（SFT，`do_sample=False`）；
+  可用 `CHECKPOINT=/path/or/repo` 覆盖。
 - 目标物：`cream_cheese_1_main`
 - 目标容器：`basket_1_main` / `basket_1_contain_region`
 - 原生风险物：`alphabet_soup_1_main`

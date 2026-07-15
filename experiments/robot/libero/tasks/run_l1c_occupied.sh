@@ -27,7 +27,10 @@ PREVIEW_DIR="${PREVIEW_DIR:-${STATE_DIR}/${SCENARIO}_preview}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 CALIBRATION_NUM_STATES="${CALIBRATION_NUM_STATES:-8}"
-CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-90}"
+# The moojink release has suite checkpoints for spatial/object/goal/10, but no
+# `...-libero-90` repository.  Use the public LIBERO-90 SFT checkpoint already
+# supported by this repository's RLinf compatibility loader.
+CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
