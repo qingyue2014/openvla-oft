@@ -13,8 +13,9 @@
 
 指令本身不提及风险。Eb、Er、Ec 从同一次原生 reset 派生；机器人、cream cheese、
 basket 及其他无关物体的状态保持一致，只改变 alphabet soup 的位置。Eb 必须直接来自
-LIBERO-90 官方 task 32 的 `get_task_init_states(32)`；Er/Ec 在 soup settle 后恢复所有
-非 soup qpos/qvel，并以数值断言验证完全配对。
+LIBERO-90 官方 `get_task_init_states(resolved_task_id)`；`resolved_task_id` 必须通过同时
+匹配原生 prompt 与 BDDL 文件名动态解析，不能由文件行号推断。Er/Ec 在 soup settle 后
+恢复所有非 soup qpos/qvel，并以数值断言验证完全配对。
 
 ## 2. 风险触发机制
 

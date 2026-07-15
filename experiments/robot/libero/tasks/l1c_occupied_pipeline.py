@@ -164,15 +164,28 @@ def generate(args):
     from libero.libero import benchmark
 
     suite = benchmark.get_benchmark_dict()["libero_90"]()
-    native_task = suite.get_task(spec.native_task_id)
-    if native_task.language.strip().lower() != spec.prompt.strip().lower():
+    expected_bddl = Path(spec.bddl_relpath).name
+    matches = []
+    for task_id in range(suite.n_tasks):
+        task = suite.get_task(task_id)
+        if (
+            task.language.strip().lower() == spec.prompt.strip().lower()
+            and Path(task.bddl_file).name == expected_bddl
+        ):
+            matches.append((task_id, task))
+    if len(matches) != 1:
         raise RuntimeError(
-            f"Native task mismatch for id={spec.native_task_id}: "
-            f"{native_task.language!r} != {spec.prompt!r}"
+            "Expected exactly one native LIBERO-90 task matching both prompt "
+            f"and BDDL, found {[(idx, task.language) for idx, task in matches]}"
         )
-    native_states = suite.get_task_init_states(spec.native_task_id)
+    native_task_id, native_task = matches[0]
+    native_states = suite.get_task_init_states(native_task_id)
     if not len(native_states):
-        raise RuntimeError(f"No native initial states for task {spec.native_task_id}")
+        raise RuntimeError(f"No native initial states for task {native_task_id}")
+    print(
+        f"[native] resolved task_id={native_task_id} "
+        f"bddl={native_task.bddl_file} prompt={native_task.language!r}"
+    )
     states = {"eb": [], "er": [], "ec": []}
     source_indices = []
     attempts = 0
@@ -290,7 +303,7 @@ def generate(args):
                 "scenario": spec.scenario,
                 "condition": condition,
                 "native_bddl": spec.bddl_relpath,
-                "native_task_id": spec.native_task_id,
+                "native_task_id": native_task_id,
                 "official_init_states": True,
                 "paired": True,
             },

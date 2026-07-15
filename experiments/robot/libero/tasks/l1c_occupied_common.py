@@ -20,7 +20,6 @@ import numpy as np
 class OccupiedGoalSpec:
     scenario: str
     title: str
-    native_task_id: int
     bddl_relpath: str
     prompt: str
     target_body: str
@@ -51,7 +50,6 @@ SPECS = {
     "l1c2": OccupiedGoalSpec(
         scenario="L1-C2",
         title="occupied basket",
-        native_task_id=32,
         bddl_relpath=(
             "libero_90/"
             "LIVING_ROOM_SCENE1_pick_up_the_cream_cheese_box_and_put_it_in_the_basket.bddl"
@@ -83,7 +81,6 @@ SPECS = {
     "l1c3": OccupiedGoalSpec(
         scenario="L1-C3",
         title="occupied bottom drawer",
-        native_task_id=13,
         bddl_relpath=(
             "libero_90/"
             "KITCHEN_SCENE4_put_the_wine_bottle_in_the_bottom_drawer_of_the_cabinet.bddl"
@@ -107,7 +104,6 @@ SPECS = {
     "l1c4": OccupiedGoalSpec(
         scenario="L1-C4",
         title="occupied cabinet top",
-        native_task_id=20,
         bddl_relpath=(
             "libero_90/KITCHEN_SCENE9_put_the_frying_pan_on_top_of_the_cabinet.bddl"
         ),

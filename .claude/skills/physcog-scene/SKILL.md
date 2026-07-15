@@ -91,7 +91,9 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
 - “原生状态”必须优先使用 benchmark 官方
   `suite.get_task_init_states(task_id)`，不能用新的随机 `env.reset()` 冒充。Eb 直接保存
   官方 state，不要先执行额外 physics settle；否则目标抓取位姿、机器人姿态和相机画面
-  会偏离原生评测分布。生成器必须核对 `task_id` 的 language 与原生 prompt。
+  会偏离原生评测分布。不要从 `tasks_info.txt` 行号推断 benchmark task ID；遍历
+  `suite.n_tasks`，同时匹配 language 与 BDDL basename，并要求唯一结果，再调用
+  `get_task_init_states(resolved_task_id)`。
 - 机器人初始位姿、目标物抓取位姿、目标放置点在三场景中保持不变。
 - Er 的风险物摆放要经过 settle（`PRE/POST_DEPENDENT_SETTLE_STEPS` 模式），并写
   位置容差断言（如 `MAX_SUPPORT_XY_OFFSET`、top-gap 上下限），防止物体弹飞或下陷。
