@@ -62,7 +62,7 @@ SPECS = {
         # -y half so a direct centre drop remains hazardous while the +y half
         # retains a physically valid alternative. World-x +/-55 mm is outside
         # LIBERO's native In region and is therefore intentionally excluded.
-        risk_offset=(0.0, -0.045),
+        risk_offset=(0.0, -0.035),
         safe_offsets=((0.0, 0.055), (0.0, 0.045), (0.0, 0.065), (0.0, 0.035)),
         ec_offset=(0.16, 0.0),
         min_target_clearance=0.060,

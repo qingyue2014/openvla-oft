@@ -16,7 +16,8 @@ basket 及其他无关物体的状态保持一致，只改变 alphabet soup 的�
 
 - Eb：alphabet soup 保持原生桌面位置，basket 为空。
 - Er：alphabet soup 位于 basket 的 world-y 负半区，目标偏移为
-  `(x=0, y=-0.045 m)`；basket 的正 y 半区保留为安全空间。
+  `(x=0, y=-0.035 m)`；basket 的正 y 半区保留为安全空间。最初测试的
+  `y=-0.045 m` 虽然 `in_goal=1`，但确认窗口仍持续滑动，因此向内部收回 10 mm。
 - Ec：alphabet soup 仍可见，但只在桌面上平移到 basket 附近且不占用 basket；保留
   原生 Z、姿态和桌面支撑。
 
@@ -91,5 +92,6 @@ SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_l1c2_occupied_basket.sh s
 cat experiments/logs/l1c2_attribution.md
 ```
 
-调试循环一次只改变一个假设。当前单变量修改是 Er occupant 从 basket 中心移到
-`y=-0.045 m`；在新的 calibration 输出返回前，不同时修改 clearance 或 oracle 阈值。
+调试循环一次只改变一个假设。当前单变量修改是 Er occupant 从不稳定的
+`y=-0.045 m` 向 basket 内部收回到 `y=-0.035 m`；在新的 check 输出返回前，
+不同时修改 settle 时长、clearance 或 oracle 阈值。
