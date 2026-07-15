@@ -57,6 +57,8 @@ CALIBRATION_STATE_PATH="${CALIBRATION_STATE_PATH:-experiments/robot/libero/tasks
 BOWL_STACK_STATE_PATH="${BOWL_STACK_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5}"
 BOWL_STACK_CALIBRATION_CSV="${BOWL_STACK_CALIBRATION_CSV:-${LOG_DIR}/l1c1_bowl_stack_calibration.csv}"
 BOWL_STACK_CALIBRATION_REPORT="${BOWL_STACK_CALIBRATION_REPORT:-${LOG_DIR}/l1c1_bowl_stack_calibration.md}"
+BOWL_STACK_EB_NOTE="${BOWL_STACK_EB_NOTE:-L1-C1-hidden-bowl-stack-eb-smoke}"
+BOWL_STACK_ER_NOTE="${BOWL_STACK_ER_NOTE:-L1-C1-hidden-bowl-stack-risk-smoke}"
 LOWER_BOWL_BODY="${LOWER_BOWL_BODY:-akita_black_bowl_2_main}"
 PLATE_BODY="${PLATE_BODY:-plate_1_main}"
 
@@ -214,6 +216,33 @@ run_bowl_stack_risk() {
     --run_id_note "${note}"
 }
 
+run_bowl_stack_baseline() {
+  local trials="$1"
+  local note="$2"
+  python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+    --pretrained_checkpoint "${CHECKPOINT}" \
+    --task_suite_name libero_spatial \
+    --task_ids 2 \
+    --initial_states_path DEFAULT \
+    --safety_oracle none \
+    --held_object_body "${HELD_OBJECT_BODY}" \
+    --distractor_body "${LOWER_BOWL_BODY}" \
+    --trajectory_track_bodies "${PLATE_BODY}" \
+    --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
+    --num_trials_per_task "${trials}" \
+    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    --run_id_note "${note}"
+}
+
+run_bowl_stack_analysis() {
+  python experiments/robot/libero/tasks/replay_l1c1_eb_actions.py \
+    --eb "rollouts/libero_spatial/${BOWL_STACK_EB_NOTE}/trajectories" \
+    --risk_states "${BOWL_STACK_STATE_PATH}"
+  python experiments/robot/libero/tasks/analyze_l1c1_bowl_stack.py \
+    --eb "rollouts/libero_spatial/${BOWL_STACK_EB_NOTE}/trajectories" \
+    --er "rollouts/libero_spatial/${BOWL_STACK_ER_NOTE}/trajectories"
+}
+
 run_native_baseline() {
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
@@ -280,9 +309,10 @@ case "${MODE}" in
   bowl_stack_calibrate) run_bowl_stack_calibration ;;
   bowl_stack_risk) run_bowl_stack_risk "${NUM_TRIALS}" "L1-C1-hidden-bowl-stack-risk" ;;
   bowl_stack_smoke)
-    run_native_baseline "${SMOKE_TRIALS}"
-    run_bowl_stack_risk "${SMOKE_TRIALS}" "L1-C1-hidden-bowl-stack-risk-smoke"
+    run_bowl_stack_baseline "${SMOKE_TRIALS}" "${BOWL_STACK_EB_NOTE}"
+    run_bowl_stack_risk "${SMOKE_TRIALS}" "${BOWL_STACK_ER_NOTE}"
     ;;
+  bowl_stack_analyze) run_bowl_stack_analysis ;;
   bowl_stack_eval)
     run_native_baseline "${NUM_TRIALS}"
     run_bowl_stack_risk "${NUM_TRIALS}" "L1-C1-hidden-bowl-stack-risk-eval"
@@ -297,7 +327,7 @@ case "${MODE}" in
   record) record_results ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_calibrate|bowl_stack_risk|bowl_stack_smoke|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
+    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_calibrate|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
     exit 2
     ;;
 esac
