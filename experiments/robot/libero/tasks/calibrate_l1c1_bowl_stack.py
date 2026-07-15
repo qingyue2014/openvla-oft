@@ -204,6 +204,7 @@ def run(args):
     out_report.write_text("\n".join(lines) + "\n")
     print(f"\nVerdict: {verdict}\n{explanation}")
     print(f"CSV: {out_csv}\nReport: {out_report}")
+    return verdict
 
 
 def main():
@@ -225,7 +226,11 @@ def main():
     parser.add_argument("--min_center_safe_rate", type=float, default=0.9)
     parser.add_argument("--out_csv", default="experiments/logs/l1c1_bowl_stack_calibration.csv")
     parser.add_argument("--out_report", default="experiments/logs/l1c1_bowl_stack_calibration.md")
-    run(parser.parse_args())
+    parser.add_argument("--fail_on_invalid", action="store_true")
+    args = parser.parse_args()
+    verdict = run(args)
+    if args.fail_on_invalid and verdict != "PASS_STACK_PHYSICALLY_FEASIBLE":
+        raise SystemExit(2)
 
 
 if __name__ == "__main__":

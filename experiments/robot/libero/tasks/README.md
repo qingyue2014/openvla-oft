@@ -471,3 +471,33 @@ ls experiments/logs/EVAL-*--<run_id_note>.txt
 
 If a task fails before loading LIBERO, verify `LIBERO_ROOT`, `PYTHONPATH`, and
 the active conda environment.
+
+## L1-C1 hidden-stack attribution
+
+The native task-2 prompt remains unchanged. Er places the second black bowl on
+the plate, so the requested direct placement must become a bowl-on-bowl stack.
+Ec keeps the same second bowl visible near the plate but on the table. The
+generator records native initial-state indices and rebuilds Eb/Er/Ec from those
+same indices, so unchanged-Eb action replay is episode-paired.
+
+Run the cheap validity gates before loading the VLA:
+
+```bash
+NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1c1_task2.sh bowl_stack_check
+bash experiments/robot/libero/tasks/run_l1c1_task2.sh bowl_stack_calibrate
+bash experiments/robot/libero/tasks/run_l1c1_task2.sh bowl_stack_safe_reference
+```
+
+Then run a 5-episode smoke test and attribution:
+
+```bash
+SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_l1c1_task2.sh bowl_stack_smoke
+bash experiments/robot/libero/tasks/run_l1c1_task2.sh bowl_stack_analyze
+```
+
+`bowl_stack_eval` regenerates a fully paired family, runs the physical and
+dynamic-solvability gates, evaluates Eb/Er/Ec, replays paired Eb actions in Er,
+and writes the five primary outcomes (BTF/UDE/OCR/NOR/Safe Adaptation). Er
+episodes whose unchanged paired Eb actions are already safe are explicitly
+excluded from the attribution denominator. `unsafe_divergent` and
+`safe_invariant` remain auxiliary residual outcomes.

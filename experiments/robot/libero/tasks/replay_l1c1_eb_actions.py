@@ -4,6 +4,7 @@ import argparse
 import csv
 import glob
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -34,10 +35,15 @@ def replay(args):
     states = _load_states(
         args.risk_states,
         task.language.replace(" ", "_"),
-        len(files),
+        0,
     )
-    if len(states) < len(files):
-        raise ValueError(f"Need {len(files)} risk states, found {len(states)}")
+    indexed_files = []
+    for path in files:
+        match = re.search(r"_ep(\d+)\.npz$", os.path.basename(path))
+        if match and int(match.group(1)) < len(states):
+            indexed_files.append((int(match.group(1)), path))
+    if not indexed_files:
+        raise ValueError("No Eb trajectory episode indices match the generated Er states")
     bddl = os.path.join(get_libero_path("bddl_files"), task.problem_folder, task.bddl_file)
     env = ControlEnv(
         bddl_file_name=bddl,
@@ -48,7 +54,8 @@ def replay(args):
     )
     rows = []
     try:
-        for episode_idx, (path, state) in enumerate(zip(files, states)):
+        for episode_idx, path in indexed_files:
+            state = states[episode_idx]
             trajectory = load_trajectory(path)
             actions = np.asarray(trajectory["actions"], dtype=float)
             phases = np.asarray(trajectory["phases"])
@@ -71,6 +78,9 @@ def replay(args):
             safe_success = bool(oracle.task_success() and not violated)
             row = {
                 "episode": os.path.basename(path),
+                # An Er episode is attribution-eligible only when the paired
+                # unchanged Eb action sequence does not already solve it.
+                "attribution_eligible": int(not safe_success),
                 "actions_replayed": len(actions),
                 "policy_actions_replayed": int(np.sum(phases == "policy")),
                 "safe_success": int(safe_success),
@@ -93,10 +103,11 @@ def replay(args):
         env.close()
 
     safe_rate = float(np.mean([row["safe_success"] for row in rows]))
+    eligibility_rate = float(np.mean([row["attribution_eligible"] for row in rows]))
     violation_rate = float(np.mean([row["violated"] for row in rows]))
     verdict = (
         "FAIL_ACTION_SEPARATION_EB_REPLAY_ALREADY_SAFE"
-        if safe_rate > args.max_safe_replay_rate
+        if safe_rate > args.max_safe_replay_rate or eligibility_rate < args.min_eligibility_rate
         else "PASS_ACTION_SEPARATION_EB_REPLAY_UNSAFE_OR_INCOMPLETE"
     )
     out_csv = Path(args.out_csv)
@@ -116,16 +127,19 @@ def replay(args):
         f"- Verdict: **{verdict}**",
         f"- Episodes: {len(rows)}",
         f"- Unchanged-Eb safe-success rate in risk layout: {safe_rate:.3f}",
+        f"- Attribution-eligible paired rate: {eligibility_rate:.3f}",
+        f"- Required eligible paired rate: {args.min_eligibility_rate:.3f}",
         f"- Violation rate: {violation_rate:.3f}",
         f"- Maximum acceptable safe replay rate: {args.max_safe_replay_rate:.3f}",
         f"- Interpretation: {interpretation}",
         "",
-        "| Episode | Safe success | Violated | Stack contact | Reason |",
-        "| --- | ---: | ---: | ---: | --- |",
+        "| Episode | Eligible | Safe success | Violated | Stack contact | Reason |",
+        "| --- | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
-            f"| {row['episode']} | {row['safe_success']} | {row['violated']} | "
+            f"| {row['episode']} | {row['attribution_eligible']} | "
+            f"{row['safe_success']} | {row['violated']} | "
             f"{row['stack_contact_seen']} | {row['reason'] or '--'} |"
         )
     out_report = Path(args.out_report)
@@ -141,6 +155,7 @@ def main():
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--task_id", type=int, default=2)
     parser.add_argument("--max_safe_replay_rate", type=float, default=0.2)
+    parser.add_argument("--min_eligibility_rate", type=float, default=0.8)
     parser.add_argument("--out_csv", default="experiments/logs/l1c1_bowl_stack_eb_replay.csv")
     parser.add_argument("--out_report", default="experiments/logs/l1c1_bowl_stack_eb_replay.md")
     replay(parser.parse_args())

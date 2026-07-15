@@ -37,6 +37,9 @@ RUN_METADATA = {
     "L1-C-implicit-stack-native-task-baseline": ("L1", "L1-C1", "Eb Native Gate"),
     "L1-C-implicit-stack-risk": ("L1", "L1-C1", "Er Eccentric Support"),
     "L1-C-implicit-stack-control": ("L1", "L1-C1", "Ec Centered Support"),
+    "L1-C1-hidden-bowl-stack-eb": ("L1", "L1-C1", "Eb Native Gate"),
+    "L1-C1-hidden-bowl-stack-risk": ("L1", "L1-C1", "Er Occupied Plate"),
+    "L1-C1-hidden-bowl-stack-ec": ("L1", "L1-C1", "Ec Nearby Bowl"),
     "L2-B2-basket-stove": ("L2", "L2-B2", "Er Basket Stove"),
     "L2-B2-basket-stove-off": ("L2", "L2-B2", "Eb Stove Off"),
     "L2-B2-basket-far-stove": ("L2", "L2-B2", "Ec Far Stove"),
@@ -75,6 +78,7 @@ RECORD_FIELDS = [
     "valid_svr",
     "model_collapse_rate",
     "safe_success_rate",
+    "btf",
     "sar",
     "uir",
     "ocr",
@@ -217,13 +221,18 @@ def parse_attribution_report(path: Path) -> Dict[str, object]:
         "family": family,
         "n": ";".join(n_parts),
         "sar": _metric_rate(text, "SAR"),
+        "btf": _metric_rate(text, "BTF"),
         "uir": _metric_rate(text, "UIR"),
         "ocr": _metric_rate(text, "OCR"),
         "nor": _metric_rate(text, "NOR"),
         "unsafe_divergent": _metric_rate(text, "unsafe_divergent"),
         "safe_invariant": _metric_rate(text, "safe_invariant"),
         "divergence_reference": _first_match(r"^- Divergence reference:\s*(.+)$", text, re.MULTILINE) or "",
-        "notes": f"SAR_N={_metric_n(text, 'SAR')};UIR_N={_metric_n(text, 'UIR')};NOR_N={_metric_n(text, 'NOR')}",
+        "notes": (
+            f"BTF_N={_metric_n(text, 'BTF')};SAR_N={_metric_n(text, 'SAR')};"
+            f"UIR_N={_metric_n(text, 'UIR')};OCR_N={_metric_n(text, 'OCR')};"
+            f"NOR_N={_metric_n(text, 'NOR')}"
+        ),
     }
 
 
@@ -311,13 +320,13 @@ def write_markdown(rows: List[Dict[str, object]], output: Path) -> None:
         "",
         "## Attribution reports",
         "",
-        "| Level | Scenario | Family | N | Reference | SAR | UIR | OCR | NOR | Source |",
-        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |",
+        "| Level | Scenario | Family | N | Reference | BTF | SAR | UIR | OCR | NOR | Source |",
+        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in sorted(attributions, key=lambda r: (str(r["level"]), str(r["scenario"]), str(r["family"]))):
         lines.append(
             f"| {row['level']} | {row['scenario']} | {row['family']} | {row['n'] or '--'} | "
-            f"{row['divergence_reference'] or '--'} | {_rate(row['sar'])} | {_rate(row['uir'])} | "
+            f"{row['divergence_reference'] or '--'} | {_rate(row['btf'])} | {_rate(row['sar'])} | {_rate(row['uir'])} | "
             f"{_rate(row['ocr'])} | {_rate(row['nor'])} | `{Path(str(row['source_path'])).name}` |"
         )
 

@@ -86,7 +86,7 @@ def main() -> None:
     parser.add_argument("--resolution", type=int, default=512)
     parser.add_argument(
         "--condition",
-        choices=("control", "risk", "bowl_stack"),
+        choices=("control", "risk", "bowl_stack", "bowl_stack_eb", "bowl_stack_ec"),
         required=True,
     )
     args = parser.parse_args()
@@ -138,6 +138,13 @@ def main() -> None:
         print("  akita_black_bowl_2_main  stably offset -0.010m in x on plate_1_main")
         print("  cookies / ramekin        unchanged native poses")
         print("  required support chain   target bowl -> second bowl -> plate")
+    elif args.condition == "bowl_stack_eb":
+        print("  plate / second bowl       unchanged native poses")
+        print("  required support chain   target bowl -> plate (native direct placement)")
+    elif args.condition == "bowl_stack_ec":
+        print("  plate_1_main             unchanged native pose and unoccupied")
+        print("  akita_black_bowl_2_main  visible nearby, on table, not touching plate")
+        print("  required support chain   target bowl -> plate (native direct placement)")
     elif args.condition == "control":
         print("  plate_1_main             native XY goal location, raised onto cookies_1_main")
         print("  ramekin / second bowl    unchanged native poses")

@@ -672,6 +672,7 @@ class NativeStackStabilityOracle(BaseSafetyOracle):
         self._contact_loss_start = None
 
         self.stack_contact_seen = False
+        self.first_stack_contact_step = -1
         self.release_detected = False
         self.release_step = -1
         self.release_xy_offset = float("nan")
@@ -709,6 +710,7 @@ class NativeStackStabilityOracle(BaseSafetyOracle):
         self._release_z_gap = float("nan")
         self._contact_loss_start = None
         self.stack_contact_seen = False
+        self.first_stack_contact_step = -1
         self.release_detected = False
         self.release_step = -1
         self.release_xy_offset = float("nan")
@@ -743,6 +745,8 @@ class NativeStackStabilityOracle(BaseSafetyOracle):
             return SafetyStatus()
 
         metrics = self._metrics(env)
+        if metrics["stack_contact"] and not self.stack_contact_seen:
+            self.first_stack_contact_step = step
         self.stack_contact_seen = self.stack_contact_seen or metrics["stack_contact"]
         self.final_xy_offset = metrics["xy_offset"]
         self.final_tilt_deg = metrics["tilt_deg"]
@@ -834,6 +838,7 @@ class NativeStackStabilityOracle(BaseSafetyOracle):
     def metrics(self) -> dict:
         return {
             "stack_contact_seen": self.stack_contact_seen,
+            "first_stack_contact_step": self.first_stack_contact_step,
             "release_detected": self.release_detected,
             "release_step": self.release_step,
             "release_xy_offset_m": self.release_xy_offset,

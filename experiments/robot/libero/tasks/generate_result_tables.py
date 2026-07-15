@@ -162,6 +162,7 @@ def _build_scenario_rows(records: List[Dict[str, object]], default_model: str) -
             "ec_safe_sr": ec.get("safe_success_rate", ""),
             "ec_svr": ec.get("svr", ""),
             "sar": attr.get("sar", ""),
+            "btf": attr.get("btf", ""),
             "uir": attr.get("uir", ""),
             "ocr": attr.get("ocr", ""),
             "nor": attr.get("nor", ""),
@@ -177,8 +178,8 @@ def _table1(scenario_rows: List[Dict[str, object]]) -> List[str]:
     lines = [
         "## Table 1. Model-level statistical summary",
         "",
-        "| VLA Model | # Families | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Task SR ↑ | Ec Safe SR ↑ | Ec SVR ↓ | SAR ↑ | UIR ↓ | OCR | NOR ↓ |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| VLA Model | # Families | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Task SR ↑ | Ec Safe SR ↑ | Ec SVR ↓ | BTF ↓ | SAR ↑ | UIR ↓ | OCR | NOR ↓ |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for model, rows in sorted(by_model.items()):
         lines.append(
@@ -186,12 +187,12 @@ def _table1(scenario_rows: List[Dict[str, object]]) -> List[str]:
             f"{_fmt_rate(_mean(r['er_task_sr'] for r in rows))} | {_fmt_rate(_mean(r['er_safe_sr'] for r in rows))} | "
             f"{_fmt_rate(_mean(r['er_svr'] for r in rows))} | {_fmt_rate(_mean(r['ec_task_sr'] for r in rows))} | "
             f"{_fmt_rate(_mean(r['ec_safe_sr'] for r in rows))} | {_fmt_rate(_mean(r['ec_svr'] for r in rows))} | "
-            f"{_fmt_rate(_mean(r['sar'] for r in rows))} | "
+            f"{_fmt_rate(_mean(r['btf'] for r in rows))} | {_fmt_rate(_mean(r['sar'] for r in rows))} | "
             f"{_fmt_rate(_mean(r['uir'] for r in rows))} | {_fmt_rate(_mean(r['ocr'] for r in rows))} | "
             f"{_fmt_rate(_mean(r['nor'] for r in rows))} |"
         )
     if not by_model:
-        lines.append("| -- | 0 | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |")
+        lines.append("| -- | 0 | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |")
     return lines
 
 
@@ -202,8 +203,8 @@ def _table2(scenario_rows: List[Dict[str, object]]) -> List[str]:
     lines = [
         "## Table 2. Per-level model breakdown",
         "",
-        "| VLA Model | Level | # Families | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Task SR ↑ | Ec Safe SR ↑ | Ec SVR ↓ | SAR ↑ | UIR ↓ | OCR | NOR ↓ |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| VLA Model | Level | # Families | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Task SR ↑ | Ec Safe SR ↑ | Ec SVR ↓ | BTF ↓ | SAR ↑ | UIR ↓ | OCR | NOR ↓ |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for (model, level), rows in sorted(by_model_level.items()):
         lines.append(
@@ -211,11 +212,11 @@ def _table2(scenario_rows: List[Dict[str, object]]) -> List[str]:
             f"{_fmt_rate(_mean(r['er_task_sr'] for r in rows))} | {_fmt_rate(_mean(r['er_safe_sr'] for r in rows))} | "
             f"{_fmt_rate(_mean(r['er_svr'] for r in rows))} | {_fmt_rate(_mean(r['ec_task_sr'] for r in rows))} | "
             f"{_fmt_rate(_mean(r['ec_safe_sr'] for r in rows))} | {_fmt_rate(_mean(r['ec_svr'] for r in rows))} | "
-            f"{_fmt_rate(_mean(r['sar'] for r in rows))} | {_fmt_rate(_mean(r['uir'] for r in rows))} | "
+            f"{_fmt_rate(_mean(r['btf'] for r in rows))} | {_fmt_rate(_mean(r['sar'] for r in rows))} | {_fmt_rate(_mean(r['uir'] for r in rows))} | "
             f"{_fmt_rate(_mean(r['ocr'] for r in rows))} | {_fmt_rate(_mean(r['nor'] for r in rows))} |"
         )
     if not by_model_level:
-        lines.append("| -- | -- | 0 | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |")
+        lines.append("| -- | -- | 0 | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- |")
     return lines
 
 
@@ -223,8 +224,8 @@ def _table3(scenario_rows: List[Dict[str, object]]) -> List[str]:
     lines = [
         "## Table 3. Scenario-level result matrix",
         "",
-        "| Level | Scenario | VLA Model | N Eb | N Er | N Ec | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Task SR ↑ | Ec Safe SR ↑ | Ec SVR ↓ | SAR ↑ | UIR ↓ | OCR | NOR ↓ | Notes |",
-        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| Level | Scenario | VLA Model | N Eb | N Er | N Ec | Eb Task SR ↑ | Er Task SR ↑ | Er Safe SR ↑ | Er SVR ↓ | Ec Task SR ↑ | Ec Safe SR ↑ | Ec SVR ↓ | BTF ↓ | SAR ↑ | UIR ↓ | OCR | NOR ↓ | Notes |",
+        "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in sorted(scenario_rows, key=lambda r: (r["level"], r["scenario"], r["model"])):
         lines.append(
@@ -232,11 +233,11 @@ def _table3(scenario_rows: List[Dict[str, object]]) -> List[str]:
             f"{_fmt_count(row['n_er'])} | {_fmt_count(row['n_ec'])} | {_fmt_rate(row['eb_task_sr'])} | "
             f"{_fmt_rate(row['er_task_sr'])} | {_fmt_rate(row['er_safe_sr'])} | {_fmt_rate(row['er_svr'])} | "
             f"{_fmt_rate(row['ec_task_sr'])} | {_fmt_rate(row['ec_safe_sr'])} | {_fmt_rate(row['ec_svr'])} | "
-            f"{_fmt_rate(row['sar'])} | {_fmt_rate(row['uir'])} | {_fmt_rate(row['ocr'])} | {_fmt_rate(row['nor'])} | "
+            f"{_fmt_rate(row['btf'])} | {_fmt_rate(row['sar'])} | {_fmt_rate(row['uir'])} | {_fmt_rate(row['ocr'])} | {_fmt_rate(row['nor'])} | "
             f"{row['notes']} |"
         )
     if not scenario_rows:
-        lines.append("| -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | no data |")
+        lines.append("| -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | -- | no data |")
     return lines
 
 

@@ -2,7 +2,11 @@ import json
 
 import numpy as np
 
-from experiments.robot.libero.tasks.analyze_l1c1_bowl_stack import TARGET, _episode_features
+from experiments.robot.libero.tasks.analyze_l1c1_bowl_stack import (
+    TARGET,
+    _episode_features,
+    _placement_adaptation,
+)
 
 
 def test_episode_features_extracts_final_and_release_heights(tmp_path):
@@ -24,3 +28,24 @@ def test_episode_features_extracts_final_and_release_heights(tmp_path):
     assert row["release_eef_z_m"] == 1.0
     assert row["release_target_z_m"] == 1.01
     assert row["target_final_z_m"] == np.median([0.91, 0.96, 1.01, 1.01])
+
+
+def test_task_specific_adaptation_requires_release():
+    eb = [{"final_target_plate_z_m": 0.01, "final_target_plate_xy_m": 0.002}]
+    er = [
+        {
+            "episode": "released.npz",
+            "final_target_plate_z_m": 0.05,
+            "final_target_plate_xy_m": 0.012,
+            "release_detected": 1,
+        },
+        {
+            "episode": "blocked.npz",
+            "final_target_plate_z_m": 0.05,
+            "final_target_plate_xy_m": 0.012,
+            "release_detected": 0,
+        },
+    ]
+    overrides, _, _ = _placement_adaptation(eb, er, 0.03, 0.008)
+    assert overrides["released.npz"]
+    assert not overrides["blocked.npz"]
