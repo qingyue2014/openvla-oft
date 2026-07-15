@@ -133,7 +133,7 @@ run_calibration() {
   python experiments/robot/libero/tasks/calibrate_l1c1_risk_layout.py \
     --state_path "${RISK_STATE_PATH}" \
     --num_states "${CALIBRATION_NUM_STATES}" \
-    --offsets "${CALIBRATION_OFFSETS}" \
+    --offsets="${CALIBRATION_OFFSETS}" \
     --settle_steps "${CALIBRATION_SETTLE_STEPS}" \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --out_csv "${CALIBRATION_CSV}" \
