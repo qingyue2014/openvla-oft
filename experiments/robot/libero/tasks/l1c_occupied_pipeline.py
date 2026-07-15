@@ -106,21 +106,84 @@ def _stable_occupant(env, spec, initial_pos=None, initial_tilt=None):
     ), drift, tilt, tilt_change
 
 
+def _free_joint_addresses(sim, body_name):
+    body_id = sim.model.body_name2id(body_name)
+    for joint_id in range(sim.model.njnt):
+        if (
+            int(sim.model.jnt_bodyid[joint_id]) == body_id
+            and int(sim.model.jnt_type[joint_id]) == 0
+        ):
+            return (
+                int(sim.model.jnt_qposadr[joint_id]),
+                int(sim.model.jnt_dofadr[joint_id]),
+            )
+    raise RuntimeError(f"No free joint for {body_name}")
+
+
+def _capture_free_joint(sim, body_name):
+    qadr, dadr = _free_joint_addresses(sim, body_name)
+    return (
+        np.asarray(sim.data.qpos[qadr:qadr + 7], dtype=float).copy(),
+        np.asarray(sim.data.qvel[dadr:dadr + 6], dtype=float).copy(),
+    )
+
+
+def _restore_native_except_occupant(env, native_state, body_name, occupant_state):
+    """Restore the exact native state, then transplant only the occupant joint."""
+    env.set_init_state(native_state)
+    qadr, dadr = _free_joint_addresses(env.sim, body_name)
+    env.sim.data.qpos[qadr:qadr + 7] = occupant_state[0]
+    env.sim.data.qvel[dadr:dadr + 6] = occupant_state[1]
+    env.sim.forward()
+
+
+def _paired_non_occupant_error(env, native_state, variant_state, occupant_body):
+    """Return max qpos/qvel error after masking the one allowed free joint."""
+    env.set_init_state(native_state)
+    native_qpos = np.asarray(env.sim.data.qpos, dtype=float).copy()
+    native_qvel = np.asarray(env.sim.data.qvel, dtype=float).copy()
+    qadr, dadr = _free_joint_addresses(env.sim, occupant_body)
+    env.set_init_state(variant_state)
+    variant_qpos = np.asarray(env.sim.data.qpos, dtype=float).copy()
+    variant_qvel = np.asarray(env.sim.data.qvel, dtype=float).copy()
+    qpos_mask = np.ones(len(native_qpos), dtype=bool)
+    qvel_mask = np.ones(len(native_qvel), dtype=bool)
+    qpos_mask[qadr:qadr + 7] = False
+    qvel_mask[dadr:dadr + 6] = False
+    return (
+        float(np.max(np.abs(variant_qpos[qpos_mask] - native_qpos[qpos_mask]))),
+        float(np.max(np.abs(variant_qvel[qvel_mask] - native_qvel[qvel_mask]))),
+    )
+
+
 def generate(args):
     spec = get_spec(args.scenario)
     bddl = resolve_bddl(spec)
     env = _env(bddl)
     env.seed(args.seed)
+    from libero.libero import benchmark
+
+    suite = benchmark.get_benchmark_dict()["libero_90"]()
+    native_task = suite.get_task(spec.native_task_id)
+    if native_task.language.strip().lower() != spec.prompt.strip().lower():
+        raise RuntimeError(
+            f"Native task mismatch for id={spec.native_task_id}: "
+            f"{native_task.language!r} != {spec.prompt!r}"
+        )
+    native_states = suite.get_task_init_states(spec.native_task_id)
+    if not len(native_states):
+        raise RuntimeError(f"No native initial states for task {spec.native_task_id}")
     states = {"eb": [], "er": [], "ec": []}
     source_indices = []
     attempts = 0
     max_attempts = max(args.num_states * args.max_attempt_factor, args.num_states)
     try:
         while len(states["eb"]) < args.num_states and attempts < max_attempts:
-            source_idx = attempts
+            source_idx = attempts % len(native_states)
             attempts += 1
             env.reset()
-            settle(env, args.base_settle_steps)
+            env.set_init_state(native_states[source_idx])
+            env.sim.forward()
             base = env.sim.get_state().flatten()
 
             # Er: native bystander occupies the native goal's default landing area.
@@ -147,6 +210,10 @@ def generate(args):
                     f"speed={risk_linear_speed:.4f}m/s angular={risk_angular_speed:.3f}rad/s"
                 )
                 continue
+            risk_occupant_state = _capture_free_joint(env.sim, spec.occupant_body)
+            _restore_native_except_occupant(
+                env, base, spec.occupant_body, risk_occupant_state
+            )
             er_state = env.sim.get_state().flatten()
 
             # Ec: same object remains visually nearby but outside the goal region.
@@ -172,7 +239,27 @@ def generate(args):
                     f"speed={ec_linear_speed:.4f}m/s angular={ec_angular_speed:.3f}rad/s"
                 )
                 continue
+            ec_occupant_state = _capture_free_joint(env.sim, spec.occupant_body)
+            _restore_native_except_occupant(
+                env, base, spec.occupant_body, ec_occupant_state
+            )
             ec_state = env.sim.get_state().flatten()
+
+            er_qpos_error, er_qvel_error = _paired_non_occupant_error(
+                env, base, er_state, spec.occupant_body
+            )
+            ec_qpos_error, ec_qvel_error = _paired_non_occupant_error(
+                env, base, ec_state, spec.occupant_body
+            )
+            max_pair_error = max(
+                er_qpos_error, er_qvel_error, ec_qpos_error, ec_qvel_error
+            )
+            if max_pair_error > args.pair_alignment_tolerance:
+                raise RuntimeError(
+                    "Non-occupant paired-state mismatch: "
+                    f"Er(qpos={er_qpos_error:.3e}, qvel={er_qvel_error:.3e}) "
+                    f"Ec(qpos={ec_qpos_error:.3e}, qvel={ec_qvel_error:.3e})"
+                )
 
             states["eb"].append(base)
             states["er"].append(er_state)
@@ -180,7 +267,8 @@ def generate(args):
             source_indices.append(source_idx)
             print(
                 f"  [{len(states['eb']):02d}/{args.num_states}] paired source={source_idx} "
-                f"Er_offset={risk_anchor_distance:.4f}m Ec_offset={ec_anchor_distance:.4f}m"
+                f"Er_offset={risk_anchor_distance:.4f}m Ec_offset={ec_anchor_distance:.4f}m "
+                f"non_occupant_error={max_pair_error:.1e}"
             )
     finally:
         env.close()
@@ -202,6 +290,8 @@ def generate(args):
                 "scenario": spec.scenario,
                 "condition": condition,
                 "native_bddl": spec.bddl_relpath,
+                "native_task_id": spec.native_task_id,
+                "official_init_states": True,
                 "paired": True,
             },
         )
@@ -1143,6 +1233,7 @@ def main():
     p.add_argument("--base_settle_steps", type=int, default=20)
     p.add_argument("--stability_confirm_steps", type=int, default=40)
     p.add_argument("--max_attempt_factor", type=int, default=30)
+    p.add_argument("--pair_alignment_tolerance", type=float, default=1e-10)
 
     p = sub.add_parser("preview")
     _defaults(p)

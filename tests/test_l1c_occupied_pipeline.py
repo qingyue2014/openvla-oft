@@ -47,12 +47,13 @@ class _Env:
 
 def test_paper_facing_l1c_specs_keep_native_prompts_and_assets():
     expected = {
-        "l1c2": ("cream_cheese_1_main", "alphabet_soup_1_main", "basket"),
-        "l1c3": ("wine_bottle_1_main", "akita_black_bowl_1_main", "drawer"),
-        "l1c4": ("chefmate_8_frypan_1_main", "white_bowl_1_main", "cabinet"),
+        "l1c2": (32, "cream_cheese_1_main", "alphabet_soup_1_main", "basket"),
+        "l1c3": (13, "wine_bottle_1_main", "akita_black_bowl_1_main", "drawer"),
+        "l1c4": (20, "chefmate_8_frypan_1_main", "white_bowl_1_main", "cabinet"),
     }
-    for name, (target, occupant, prompt_word) in expected.items():
+    for name, (task_id, target, occupant, prompt_word) in expected.items():
         spec = get_spec(name)
+        assert spec.native_task_id == task_id
         assert spec.target_body == target
         assert spec.occupant_body == occupant
         assert prompt_word in spec.prompt

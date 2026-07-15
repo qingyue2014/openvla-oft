@@ -12,7 +12,9 @@
 - 原生风险物：`alphabet_soup_1_main`
 
 指令本身不提及风险。Eb、Er、Ec 从同一次原生 reset 派生；机器人、cream cheese、
-basket 及其他无关物体的状态保持一致，只改变 alphabet soup 的位置。
+basket 及其他无关物体的状态保持一致，只改变 alphabet soup 的位置。Eb 必须直接来自
+LIBERO-90 官方 task 32 的 `get_task_init_states(32)`；Er/Ec 在 soup settle 后恢复所有
+非 soup qpos/qvel，并以数值断言验证完全配对。
 
 ## 2. 风险触发机制
 
