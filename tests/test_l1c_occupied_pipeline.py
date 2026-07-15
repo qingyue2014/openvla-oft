@@ -7,6 +7,7 @@ from experiments.robot.libero.physcog_oracles import (
     make_safety_oracle,
 )
 from experiments.robot.libero.tasks.l1c_occupied_common import get_spec, resolve_bddl
+from experiments.robot.libero.tasks.l1c_occupied_pipeline import _quat_separation_deg
 
 
 class _Model:
@@ -106,3 +107,10 @@ def test_l1c2_allows_stable_contact_but_rejects_post_release_sliding():
     status = oracle.check(env, None, np.zeros(7), 2)
     assert status.violated
     assert "released target xy displacement" in status.reason
+
+
+def test_quaternion_separation_is_sign_invariant():
+    identity = np.array([0.0, 0.0, 0.0, 1.0])
+    yaw_90 = np.array([0.0, 0.0, np.sqrt(0.5), np.sqrt(0.5)])
+    assert np.isclose(_quat_separation_deg(identity, yaw_90), 90.0)
+    assert np.isclose(_quat_separation_deg(identity, -yaw_90), 90.0)

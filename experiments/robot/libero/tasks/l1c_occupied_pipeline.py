@@ -368,6 +368,14 @@ def _eef(obs):
     return np.asarray(obs["robot0_eef_pos"], dtype=float)
 
 
+def _quat_separation_deg(quat_a, quat_b):
+    quat_a = np.asarray(quat_a, dtype=float)
+    quat_b = np.asarray(quat_b, dtype=float)
+    quat_a /= max(np.linalg.norm(quat_a), 1e-12)
+    quat_b /= max(np.linalg.norm(quat_b), 1e-12)
+    return float(np.degrees(2.0 * np.arccos(np.clip(abs(np.dot(quat_a, quat_b)), 0.0, 1.0))))
+
+
 def _advance(env, obs, oracle, recorder, action, step):
     obs, _, _, _ = env.step(np.asarray(action).tolist())
     recorder.record(obs, action, step)
@@ -426,6 +434,32 @@ def _seat_grasp(env, obs, oracle, recorder, target, grip, count, step, args):
     return obs, step, status
 
 
+def _rotate_grasp_yaw(env, obs, oracle, recorder, grip, sign, step, args):
+    """Rotate the open gripper roughly 90 degrees about its tool/world z axis."""
+    if not sign:
+        return obs, step, None, 0.0
+    initial_quat = np.asarray(obs.get("robot0_eef_quat", []), dtype=float)
+    if initial_quat.size != 4:
+        return obs, step, "missing_eef_quaternion", float("nan")
+    achieved = 0.0
+    status = None
+    for _ in range(args.grasp_yaw_max_steps):
+        achieved = _quat_separation_deg(initial_quat, obs["robot0_eef_quat"])
+        if achieved >= args.grasp_yaw_target_deg:
+            break
+        action = np.zeros(7, dtype=float)
+        action[5] = float(sign * args.grasp_yaw_command)
+        action[-1] = grip
+        obs, status = _advance(env, obs, oracle, recorder, action, step)
+        step += 1
+        if status.violated:
+            return obs, step, status, achieved
+    achieved = _quat_separation_deg(initial_quat, obs["robot0_eef_quat"])
+    if achieved < args.grasp_yaw_min_deg:
+        return obs, step, "grasp_yaw_failed", achieved
+    return obs, step, status, achieved
+
+
 def _rotate_horizontal(env, obs, oracle, recorder, grip, count, step, sign=1.0):
     status = None
     for _ in range(count):
@@ -451,7 +485,7 @@ def _contact_between(env, body_a, body_b):
 
 def _safe_reference_attempt(
     env, state, spec, offset, grasp_offset, args, episode_idx, attempt_idx,
-    rotate_sign=1.0,
+    rotate_sign=1.0, grasp_yaw_sign=0.0,
 ):
     obs = env.reset()
     obs = env.set_init_state(state)
@@ -479,6 +513,13 @@ def _safe_reference_attempt(
     close = -1.0 if aperture_minus < aperture_plus else 1.0
     opened = -close
     obs, step, status = _hold(env, obs, oracle, recorder, opened, args.gripper_probe_steps, step)
+    obs, step, yaw_status, grasp_yaw_deg = _rotate_grasp_yaw(
+        env, obs, oracle, recorder, opened, grasp_yaw_sign, step, args
+    )
+    if yaw_status is not None and (
+        isinstance(yaw_status, str) or yaw_status.violated
+    ):
+        failure = yaw_status
 
     source = body_pos(env, spec.target_body)
     lo, hi = world_aabb(env, spec.target_body)
@@ -563,6 +604,8 @@ def _safe_reference_attempt(
         "grasp_offset_x_m": grasp_offset[0],
         "grasp_offset_y_m": grasp_offset[1],
         "rotate_sign": rotate_sign if spec.horizontal_target else 0.0,
+        "grasp_yaw_sign": grasp_yaw_sign,
+        "grasp_yaw_deg": grasp_yaw_deg,
         "close_sign": close,
         "aperture_minus": aperture_minus,
         "aperture_plus": aperture_plus,
@@ -582,6 +625,7 @@ def safe_reference(args):
     env = _env(resolve_bddl(spec), control=True)
     rows = []
     grasp_offsets = ((0.0, 0.0), (0.025, 0.0), (-0.025, 0.0), (0.0, 0.025), (0.0, -0.025))
+    grasp_yaw_signs = (0.0, 1.0, -1.0) if args.scenario == "l1c2" else (0.0,)
     rotate_signs = (args.rotate_sign, -args.rotate_sign) if spec.horizontal_target else (0.0,)
     try:
         for episode_idx, state in enumerate(states):
@@ -589,22 +633,26 @@ def safe_reference(args):
             attempt = 0
             for offset in spec.safe_offsets:
                 for grasp_offset in grasp_offsets:
-                    for rotate_sign in rotate_signs:
-                        row = _safe_reference_attempt(
-                            env, state, spec, offset, grasp_offset, args,
-                            episode_idx, attempt, rotate_sign,
-                        )
-                        attempt += 1
-                        if (
-                            best is None
-                            or row["safe_success"] > best["safe_success"]
-                            or (
-                                row["safe_success"] == best["safe_success"]
-                                and row["lift_delta_m"] > best["lift_delta_m"]
+                    for grasp_yaw_sign in grasp_yaw_signs:
+                        for rotate_sign in rotate_signs:
+                            row = _safe_reference_attempt(
+                                env, state, spec, offset, grasp_offset, args,
+                                episode_idx, attempt, rotate_sign,
+                                grasp_yaw_sign,
                             )
-                        ):
-                            best = row
-                        if row["safe_success"]:
+                            attempt += 1
+                            if (
+                                best is None
+                                or row["safe_success"] > best["safe_success"]
+                                or (
+                                    row["safe_success"] == best["safe_success"]
+                                    and row["lift_delta_m"] > best["lift_delta_m"]
+                                )
+                            ):
+                                best = row
+                            if row["safe_success"]:
+                                break
+                        if best["safe_success"]:
                             break
                     if best["safe_success"]:
                         break
@@ -616,6 +664,7 @@ def safe_reference(args):
                 f"offset=({best['offset_x_m']:+.3f},{best['offset_y_m']:+.3f}) "
                 f"close_sign={best['close_sign']:+.0f} "
                 f"aperture(-/+)=({best['aperture_minus']:.4f}/{best['aperture_plus']:.4f}) "
+                f"grasp_yaw={best['grasp_yaw_deg']:.1f}deg "
                 f"grasp_error={best['grasp_best_error_m']:.4f}m "
                 f"lift={best['lift_delta_m']:.4f}m "
                 f"reason={best['reason'] or '-'}"
@@ -634,15 +683,16 @@ def safe_reference(args):
         f"- Required rate: {args.min_safe_rate:.3f}",
         "- Scope: executable OSC action sequence in Er, not teleport-only physics.",
         "",
-        "| Episode | Safe success | Contact | Release | Offset x | Offset y | Grasp dx | Grasp dy | Close sign | Grasp aperture | Grasp error | Lift delta | Post-release XY drift | Reason |",
-        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| Episode | Safe success | Contact | Release | Offset x | Offset y | Grasp dx | Grasp dy | Grasp yaw | Close sign | Grasp aperture | Grasp error | Lift delta | Post-release XY drift | Reason |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
             f"| {row['episode']} | {row['safe_success']} | {row['contact']} | {row['release']} | "
             f"{row['offset_x_m']:+.3f} | {row['offset_y_m']:+.3f} | "
             f"{row['grasp_offset_x_m']:+.3f} | {row['grasp_offset_y_m']:+.3f} | "
-            f"{row['close_sign']:+.0f} | {row['grasp_aperture']:.4f} | "
+            f"{row['grasp_yaw_deg']:.1f} | {row['close_sign']:+.0f} | "
+            f"{row['grasp_aperture']:.4f} | "
             f"{row['grasp_best_error_m']:.4f} | {row['lift_delta_m']:.4f} | "
             f"{row['target_post_release_max_xy_displacement_m']:.4f} | "
             f"{row['reason'] or '--'} |"
@@ -911,6 +961,10 @@ def main():
     p.add_argument("--max_position_command", type=float, default=1.0)
     p.add_argument("--position_tolerance", type=float, default=0.018)
     p.add_argument("--grasp_position_tolerance", type=float, default=0.006)
+    p.add_argument("--grasp_yaw_command", type=float, default=0.5)
+    p.add_argument("--grasp_yaw_target_deg", type=float, default=85.0)
+    p.add_argument("--grasp_yaw_min_deg", type=float, default=75.0)
+    p.add_argument("--grasp_yaw_max_steps", type=int, default=24)
     p.add_argument("--max_waypoint_steps", type=int, default=100)
     p.add_argument("--gripper_probe_steps", type=int, default=10)
     p.add_argument("--grasp_steps", type=int, default=18)
