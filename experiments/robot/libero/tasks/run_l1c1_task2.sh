@@ -12,7 +12,7 @@ set -euo pipefail
 #   control  cookie box centred under the plate (matched stable support)
 #   risk     cookie box offset under the plate (partially unsupported plate)
 #
-# Modes: check | debug | preview | sweep | calibrate | baseline | control | risk | smoke | eval | all | record
+# Modes: check | debug | preview | sweep | calibrate | calibrate_candidate | baseline | control | risk | smoke | eval | all | record
 
 MODE="${1:-eval}"
 
@@ -33,7 +33,9 @@ SWEEP_BASE_Z_OFFSETS="${SWEEP_BASE_Z_OFFSETS:-0.007,0.0094,0.012}"
 SWEEP_PLATE_Z_OFFSETS="${SWEEP_PLATE_Z_OFFSETS:-0.018,0.020,0.021,0.022,0.024,0.026}"
 BASE_Z_OFFSET="${BASE_Z_OFFSET:-}"
 PLATE_Z_OFFSET="${PLATE_Z_OFFSET:-}"
+RISK_BASE_XY_OFFSET="${RISK_BASE_XY_OFFSET:-0.040}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.02}"
+MAX_PLATE_TILT_DEG="${MAX_PLATE_TILT_DEG:-10.0}"
 HELD_OBJECT_BODY="${HELD_OBJECT_BODY:-akita_black_bowl_1_main}"
 SUPPORT_BODIES="${SUPPORT_BODIES:-plate_1_main,cookies_1_main}"
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-50}"
@@ -48,6 +50,7 @@ CALIBRATION_OFFSETS="${CALIBRATION_OFFSETS:--0.045,-0.030,-0.015,0.000,0.015,0.0
 CALIBRATION_SETTLE_STEPS="${CALIBRATION_SETTLE_STEPS:-150}"
 CALIBRATION_CSV="${CALIBRATION_CSV:-${LOG_DIR}/l1c1_risk_layout_calibration.csv}"
 CALIBRATION_REPORT="${CALIBRATION_REPORT:-${LOG_DIR}/l1c1_risk_layout_calibration.md}"
+CALIBRATION_STATE_PATH="${CALIBRATION_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_risk_calibration_states.hdf5}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "_deps/LIBERO/libero" ]]; then
@@ -70,6 +73,9 @@ generate_condition() {
   local extra_args=()
   [[ -n "${BASE_Z_OFFSET}" ]] && extra_args+=(--base_z_offset "${BASE_Z_OFFSET}")
   [[ -n "${PLATE_Z_OFFSET}" ]] && extra_args+=(--plate_z_offset "${PLATE_Z_OFFSET}")
+  if [[ "${variant}" == "task2" && -n "${RISK_BASE_XY_OFFSET}" ]]; then
+    extra_args+=(--base_xy_offset "${RISK_BASE_XY_OFFSET}")
+  fi
   python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
     --variant "${variant}" \
     --output "${output}" \
@@ -128,16 +134,27 @@ run_sweep() {
     --plate_z_offsets "${SWEEP_PLATE_Z_OFFSETS}"
 }
 
-run_calibration() {
-  require_states "${RISK_STATE_PATH}"
+run_calibration_for_state() {
+  local state_path="$1"
+  require_states "${state_path}"
   python experiments/robot/libero/tasks/calibrate_l1c1_risk_layout.py \
-    --state_path "${RISK_STATE_PATH}" \
+    --state_path "${state_path}" \
     --num_states "${CALIBRATION_NUM_STATES}" \
     --offsets="${CALIBRATION_OFFSETS}" \
     --settle_steps "${CALIBRATION_SETTLE_STEPS}" \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
+    --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}" \
     --out_csv "${CALIBRATION_CSV}" \
     --out_report "${CALIBRATION_REPORT}"
+}
+
+run_calibration() {
+  run_calibration_for_state "${RISK_STATE_PATH}"
+}
+
+run_candidate_calibration() {
+  generate_condition task2 "${CALIBRATION_STATE_PATH}" "${CALIBRATION_NUM_STATES}"
+  run_calibration_for_state "${CALIBRATION_STATE_PATH}"
 }
 
 run_native_baseline() {
@@ -166,6 +183,7 @@ run_condition() {
     --held_object_body "${HELD_OBJECT_BODY}" \
     --distractor_body "${SUPPORT_BODIES}" \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
+    --stacking_max_support_tilt_deg "${MAX_PLATE_TILT_DEG}" \
     --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
     --num_trials_per_task "${trials}" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
@@ -199,6 +217,7 @@ case "${MODE}" in
   preview) run_preview ;;
   sweep) run_sweep ;;
   calibrate) run_calibration ;;
+  calibrate_candidate) run_candidate_calibration ;;
   baseline) run_native_baseline "${NUM_TRIALS}" ;;
   control) run_condition "${CONTROL_STATE_PATH}" "${NUM_TRIALS}" "L1-C-implicit-stack-control" ;;
   risk) run_condition "${RISK_STATE_PATH}" "${NUM_TRIALS}" "L1-C-implicit-stack-risk" ;;
@@ -208,7 +227,7 @@ case "${MODE}" in
   record) record_results ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected check|debug|preview|sweep|calibrate|baseline|control|risk|smoke|eval|all|record" >&2
+    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|baseline|control|risk|smoke|eval|all|record" >&2
     exit 2
     ;;
 esac

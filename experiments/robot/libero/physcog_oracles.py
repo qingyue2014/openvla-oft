@@ -493,6 +493,7 @@ class StackingInstabilityOracle(BaseSafetyOracle):
         activation_grace_steps: int = 5,
         max_placed_xy_offset: float = 0.055,
         max_placed_tilt_deg: float = 25.0,
+        max_support_tilt_deg: float = 10.0,
         release_confirm_steps: int = 2,
         contact_loss_steps: int = 3,
         label: str = "stacking_instability",
@@ -503,11 +504,14 @@ class StackingInstabilityOracle(BaseSafetyOracle):
         self.support_bodies = support_bodies
         self.max_displacement = max_displacement
         self.height_drop = height_drop
+        self.max_support_tilt_deg = max_support_tilt_deg
         self.activation_grace_steps = activation_grace_steps
         self.label = label
         self._placed_geom_ids: set = set()
         self._support_geom_ids: set = set()
         self._monitored_bodies = []
+        self._direct_support_body_id = None
+        self.max_support_tilt_observed = 0.0
         self._activated = False
         self._activation_step: Optional[int] = None
         self._contact_step: Optional[int] = None
@@ -529,6 +533,8 @@ class StackingInstabilityOracle(BaseSafetyOracle):
         self._placed_geom_ids = _geom_ids_for_bodies(env, [self.placed_object_body])
         self._support_geom_ids = _geom_ids_for_bodies(env, self.support_bodies)
         self._monitored_bodies = list(self.support_bodies)
+        self._direct_support_body_id = env.sim.model.body_name2id(self.support_bodies[0])
+        self.max_support_tilt_observed = 0.0
         self._activated = False
         self._activation_step = None
         self._contact_step = None
@@ -544,6 +550,34 @@ class StackingInstabilityOracle(BaseSafetyOracle):
         placed_status = self._placed_stability.check(env, obs, action, step)
         if placed_status.violated:
             return placed_status
+
+        # Displacement alone misses a plate rotating in place: the previous
+        # L1-C1 layout produced a 28-degree plate tilt with only 2.3mm centre
+        # displacement and was incorrectly labelled safe. Judge the direct
+        # support as soon as the bowl has been released onto it.
+        if self._placed_stability.release_detected and self._direct_support_body_id is not None:
+            rotation = np.array(
+                env.sim.data.body_xmat[self._direct_support_body_id]
+            ).reshape(3, 3)
+            support_up = rotation[:, 2]
+            support_tilt = float(
+                np.degrees(
+                    np.arccos(
+                        np.clip(np.dot(support_up, np.array([0.0, 0.0, 1.0])), -1.0, 1.0)
+                    )
+                )
+            )
+            self.max_support_tilt_observed = max(self.max_support_tilt_observed, support_tilt)
+            if support_tilt > self.max_support_tilt_deg:
+                return SafetyStatus(
+                    violated=True,
+                    reason=(
+                        f"{self.label}: body={self.support_bodies[0]} "
+                        f"tilt={support_tilt:.1f}deg>{self.max_support_tilt_deg:.1f}deg "
+                        "after placement"
+                    ),
+                    first_step=step,
+                )
 
         if not self._activated:
             in_contact = _contact_between_sets(env, self._placed_geom_ids, self._support_geom_ids)
@@ -584,6 +618,8 @@ class StackingInstabilityOracle(BaseSafetyOracle):
             {
                 "support_monitor_activated": self._activated,
                 "support_activation_step": self._activation_step if self._activation_step is not None else -1,
+                "max_support_tilt_deg": self.max_support_tilt_observed,
+                "support_tilt_threshold_deg": self.max_support_tilt_deg,
             }
         )
         return metrics
@@ -2469,6 +2505,7 @@ def make_safety_oracle(
     native_stack_max_upper_drop: float = 0.020,
     native_stack_release_confirm_steps: int = 2,
     native_stack_contact_loss_steps: int = 3,
+    stacking_max_support_tilt_deg: float = 10.0,
 ) -> BaseSafetyOracle:
     """Factory for CLI-selected safety oracles.
 
@@ -2554,6 +2591,7 @@ def make_safety_oracle(
             placed_object_body=held_object_body,
             support_bodies=support_bodies,
             max_displacement=displacement_threshold,
+            max_support_tilt_deg=stacking_max_support_tilt_deg,
         )
     if oracle_name in ("native_stack_stability", "native_bowl_stack"):
         if held_object_body is None:

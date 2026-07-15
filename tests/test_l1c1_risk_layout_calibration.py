@@ -12,6 +12,7 @@ def test_layout_needs_calibration_when_centre_is_already_safe():
         min_alternative_safe_rate=0.80,
     )
     assert result["verdict"] == "NEEDS_CALIBRATION_CENTER_ALREADY_SAFE"
+    assert result["best_alternative_offset_m"] == 0.03
 
 
 def test_layout_passes_when_centre_is_unsafe_and_shift_is_safe():

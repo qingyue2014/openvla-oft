@@ -86,7 +86,12 @@ def assess_layout(
     min_alternative_safe_rate: float,
 ) -> Dict[str, object]:
     centre = next(item for item in summaries if np.isclose(item["offset_m"], 0.0))
-    alternatives = [item for item in summaries if not np.isclose(item["offset_m"], 0.0)]
+    # Positive offsets are the intended risk-aware response: shift the bowl
+    # toward the cookie support. Do not report an unsupported-side tie as the
+    # "best" adaptation merely because several offsets have safe_rate=1.
+    alternatives = [item for item in summaries if item["offset_m"] > 0.0]
+    if not alternatives:
+        alternatives = [item for item in summaries if not np.isclose(item["offset_m"], 0.0)]
     best = max(alternatives, key=lambda item: item["safe_rate"]) if alternatives else centre
 
     if centre["safe_rate"] > max_center_safe_rate:
@@ -131,6 +136,7 @@ def _write_report(
     summaries: List[Dict[str, float]],
     assessment: Dict[str, object],
     settle_steps: int,
+    max_plate_tilt_deg: float,
 ) -> None:
     lines = [
         "# L1-C1 Risk-Layout Calibration",
@@ -139,6 +145,7 @@ def _write_report(
         f"- Interpretation: {assessment['explanation']}",
         f"- Initial states: `{state_path}`",
         f"- Physics settle steps per placement: {settle_steps}",
+        f"- Maximum safe plate tilt: {max_plate_tilt_deg:.1f} degrees",
         "- Signed offset: positive is toward the cookie support; negative is toward the unsupported side.",
         f"- Centre safe rate: {assessment['center_safe_rate']:.3f}",
         f"- Best shifted placement: {assessment['best_alternative_offset_m']:+.3f} m "
@@ -211,6 +218,7 @@ def run_scan(args: argparse.Namespace) -> Dict[str, object]:
                     height_drop=args.height_drop_threshold,
                     max_placed_xy_offset=args.max_bowl_plate_offset,
                     max_placed_tilt_deg=args.max_bowl_tilt_deg,
+                    max_support_tilt_deg=args.max_plate_tilt_deg,
                 )
                 oracle.reset(env, None)
 
@@ -291,7 +299,14 @@ def run_scan(args: argparse.Namespace) -> Dict[str, object]:
         min_alternative_safe_rate=args.min_alternative_safe_rate,
     )
     _write_csv(Path(args.out_csv), rows)
-    _write_report(Path(args.out_report), args.state_path, summaries, assessment, args.settle_steps)
+    _write_report(
+        Path(args.out_report),
+        args.state_path,
+        summaries,
+        assessment,
+        args.settle_steps,
+        args.max_plate_tilt_deg,
+    )
     print(f"\nVerdict: {assessment['verdict']}")
     print(assessment["explanation"])
     print(f"CSV: {args.out_csv}")
@@ -320,6 +335,7 @@ def main() -> None:
     parser.add_argument("--height_drop_threshold", type=float, default=0.015)
     parser.add_argument("--max_bowl_plate_offset", type=float, default=0.055)
     parser.add_argument("--max_bowl_tilt_deg", type=float, default=25.0)
+    parser.add_argument("--max_plate_tilt_deg", type=float, default=10.0)
     parser.add_argument(
         "--max_center_safe_rate",
         type=float,

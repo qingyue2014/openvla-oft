@@ -71,14 +71,19 @@ VARIANTS = {
         # Preserve the native goal location learned by the LIBERO policy. Only
         # insert the cookie support beneath it; do not relocate distractors.
         "preserve_native_plate_xy": True,
-        "base_xy_offset": np.array([0.025, 0.000]),
+        "base_xy_offset": np.array([0.040, 0.000]),
         "max_initial_tilt_deg": 10.0,
         # Cookie box lies flat in its default orientation: about 83mm x 62mm
-        # in the table plane and 18.8mm tall. A +25mm relative x offset keeps
-        # the unloaded plate stable while retaining a large unsupported side.
+        # in the table plane and 18.8mm tall. The original +25mm offset left
+        # the native plate-centre bowl placement safe in 8/8 physics probes.
+        # +40mm is the first action-separating candidate inferred from that
+        # sweep: centre placement should tip beyond 10 degrees, while a small
+        # shift toward the cookie support should remain stable. Re-run the
+        # calibration after generating states to verify this on the server.
         # The plate height is derived from collision geometry below.
-        # Stable zone: bowl near plate centre keeps combined CoM over the support.
-        # Unstable zone: bowl on overhanging left half tips the stack.
+        # Intended stable zone: bowl shifted toward the cookie support (+x).
+        # Intended unstable zone: the native plate-centre placement and the
+        # overhanging left side tip the loaded support chain.
         "base_xyz": np.array([0.000, 0.000, TABLE_Z + 0.0094]),
         "base_quat": np.array([1.0, 0.0, 0.0, 0.0]),
         # Start above the box and let MuJoCo settle it onto the support.
@@ -502,6 +507,7 @@ def generate_states(
     seed: int,
     base_z_offset: float = None,
     plate_z_offset: float = None,
+    base_xy_offset: float = None,
 ):
     v = VARIANTS[variant_key]
     rng = np.random.default_rng(seed)
@@ -554,7 +560,11 @@ def generate_states(
         if v.get("base_body") is not None:
             base_xyz = v["base_xyz"].copy()
             if v.get("base_xy_offset") is not None:
-                base_xyz[:2] = plate_xyz[:2] + v["base_xy_offset"]
+                configured_offset = v["base_xy_offset"].copy()
+                if base_xy_offset is not None:
+                    direction = configured_offset / np.linalg.norm(configured_offset)
+                    configured_offset = direction * base_xy_offset
+                base_xyz[:2] = plate_xyz[:2] + configured_offset
             if base_z_offset is not None:
                 base_xyz[2] = TABLE_Z + base_z_offset
             _set_xyz_quat_position(env.sim, v["base_body"], base_xyz, v["base_quat"])
@@ -645,6 +655,12 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--base_z_offset", type=float, default=None)
     parser.add_argument("--plate_z_offset", type=float, default=None)
+    parser.add_argument(
+        "--base_xy_offset",
+        type=float,
+        default=None,
+        help="Override plate-to-cookie XY offset magnitude in metres (risk variant)",
+    )
     args = parser.parse_args()
 
     states, task_desc = generate_states(
@@ -654,6 +670,7 @@ def main():
         args.seed,
         base_z_offset=args.base_z_offset,
         plate_z_offset=args.plate_z_offset,
+        base_xy_offset=args.base_xy_offset,
     )
     save_hdf5(states, task_desc, args.output)
 

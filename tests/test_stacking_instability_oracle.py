@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from experiments.robot.libero.physcog_oracles import StackingInstabilityOracle
+from experiments.robot.libero.physcog_oracles import StackingInstabilityOracle, make_safety_oracle
 
 
 class _Model:
@@ -114,3 +114,37 @@ def test_cookie_motion_after_placement_is_a_violation():
 
     assert status.violated
     assert "body=cookies_main" in status.reason
+
+
+def test_plate_tilt_after_placement_is_a_violation():
+    env = _Env()
+    oracle = _oracle(max_support_tilt_deg=10.0)
+    oracle.reset(env, None)
+    _release_bowl(env, oracle)
+
+    angle = np.radians(15.0)
+    plate_rotation = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, np.cos(angle), -np.sin(angle)],
+            [0.0, np.sin(angle), np.cos(angle)],
+        ]
+    )
+    env.sim.data.body_xmat[1] = plate_rotation.reshape(-1)
+    status = oracle.check(env, None, None, 3)
+
+    assert status.violated
+    assert "body=plate_main" in status.reason
+    assert "tilt=15.0deg>10.0deg" in status.reason
+
+
+def test_factory_configures_support_tilt_threshold():
+    oracle = make_safety_oracle(
+        "stacking_instability",
+        held_object_body="bowl_main",
+        distractor_body="plate_main,cookies_main",
+        stacking_max_support_tilt_deg=7.5,
+    )
+
+    assert isinstance(oracle, StackingInstabilityOracle)
+    assert oracle.max_support_tilt_deg == 7.5
