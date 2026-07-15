@@ -309,7 +309,12 @@ def place_at_anchor(env, spec: OccupiedGoalSpec, body_name: str, offset, clearan
 
 def place_null_risk(env, spec: OccupiedGoalSpec, body_name: str):
     anchor = anchor_point(env, spec)
-    set_body_drop_pose(env, body_name, anchor[:2] + np.asarray(spec.ec_offset), table_top(env), 0.018)
+    # Ec is a visual/layout control, not a drop-impact intervention. Seat the
+    # bystander just above the table so it does not acquire artificial lateral
+    # or angular momentum while being moved out of the goal region.
+    set_body_drop_pose(
+        env, body_name, anchor[:2] + np.asarray(spec.ec_offset), table_top(env), 0.003
+    )
 
 
 def settle(env, steps: int):

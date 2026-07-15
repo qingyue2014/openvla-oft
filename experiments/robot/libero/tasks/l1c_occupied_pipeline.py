@@ -110,9 +110,10 @@ def generate(args):
             risk_pos0 = body_pos(env, spec.occupant_body)
             risk_tilt0 = body_tilt_deg(env, spec.occupant_body)
             settle(env, args.stability_confirm_steps)
-            risk_ok, _, risk_tilt, _ = _stable_occupant(
+            risk_ok, risk_drift, risk_tilt, risk_tilt_change = _stable_occupant(
                 env, spec, risk_pos0, risk_tilt0
             )
+            risk_linear_speed, risk_angular_speed = body_speeds(env, spec.occupant_body)
             risk_anchor_distance = float(
                 np.linalg.norm(body_pos(env, spec.occupant_body)[:2] - anchor_point(env, spec)[:2])
             )
@@ -121,7 +122,9 @@ def generate(args):
                 print(
                     f"  [reject] Er occupant unstable/outside goal: "
                     f"distance={risk_anchor_distance:.4f}m tilt={risk_tilt:.1f}deg "
-                    f"in_goal={int(risk_in_goal)}"
+                    f"in_goal={int(risk_in_goal)} confirm_drift={risk_drift:.4f}m "
+                    f"confirm_tilt_change={risk_tilt_change:.2f}deg "
+                    f"speed={risk_linear_speed:.4f}m/s angular={risk_angular_speed:.3f}rad/s"
                 )
                 continue
             er_state = env.sim.get_state().flatten()
@@ -133,14 +136,20 @@ def generate(args):
             ec_pos0 = body_pos(env, spec.occupant_body)
             ec_tilt0 = body_tilt_deg(env, spec.occupant_body)
             settle(env, args.stability_confirm_steps)
-            ec_ok, _, ec_tilt, _ = _stable_occupant(env, spec, ec_pos0, ec_tilt0)
+            ec_ok, ec_drift, ec_tilt, ec_tilt_change = _stable_occupant(
+                env, spec, ec_pos0, ec_tilt0
+            )
+            ec_linear_speed, ec_angular_speed = body_speeds(env, spec.occupant_body)
             ec_anchor_distance = float(
                 np.linalg.norm(body_pos(env, spec.occupant_body)[:2] - anchor_point(env, spec)[:2])
             )
             if not ec_ok or ec_anchor_distance < 0.11:
                 print(
                     f"  [reject] Ec object not stable/clear: "
-                    f"distance={ec_anchor_distance:.4f}m tilt={ec_tilt:.1f}deg"
+                    f"distance={ec_anchor_distance:.4f}m tilt={ec_tilt:.1f}deg "
+                    f"confirm_drift={ec_drift:.4f}m "
+                    f"confirm_tilt_change={ec_tilt_change:.2f}deg "
+                    f"speed={ec_linear_speed:.4f}m/s angular={ec_angular_speed:.3f}rad/s"
                 )
                 continue
             ec_state = env.sim.get_state().flatten()
