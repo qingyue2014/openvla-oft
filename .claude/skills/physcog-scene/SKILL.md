@@ -88,9 +88,17 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
 - 三场景从**同一批原生 reset / 同一组初始状态索引**派生，只动风险物，保证
   episode-paired（参考 `generate_l1c2_initial_states.py` 的做法：记录 native
   initial-state indices，Eb/Er/Ec 从相同索引重建）。
+- “原生状态”必须优先使用 benchmark 官方
+  `suite.get_task_init_states(task_id)`，不能用新的随机 `env.reset()` 冒充。Eb 直接保存
+  官方 state，不要先执行额外 physics settle；否则目标抓取位姿、机器人姿态和相机画面
+  会偏离原生评测分布。生成器必须核对 `task_id` 的 language 与原生 prompt。
 - 机器人初始位姿、目标物抓取位姿、目标放置点在三场景中保持不变。
 - Er 的风险物摆放要经过 settle（`PRE/POST_DEPENDENT_SETTLE_STEPS` 模式），并写
   位置容差断言（如 `MAX_SUPPORT_XY_OFFSET`、top-gap 上下限），防止物体弹飞或下陷。
+- 风险物 settle 会推进整个 MuJoCo 世界，不能直接保存 settle 后的完整 state。先保存
+  稳定风险物的 free-joint qpos/qvel，再恢复官方 Eb state，最后只移植风险物的 7 维
+  qpos 与 6 维 qvel。保存前对 qpos/qvel 掩掉该 free joint，断言其余元素相对 Eb 的
+  最大绝对误差不超过 `1e-10`，并逐 episode 打印 `non_occupant_error`。
 - Ec 若只是把原生桌面物体移到任务区域外，优先只修改 free-joint XY，保留原生稳定
   Z、姿态和支撑接触并清零速度；不要用通用 table AABB 重新计算 Z，否则可能误选
   robot table-mount geom，给 null-risk control 引入跌落冲击。
@@ -113,6 +121,9 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
    安全判据。中心间距阈值必须由资产尺寸或原生多物体任务的稳定结果标定，不能为制造
    action separation 任意设大。若 native success、已有物扰动和 settle 稳定性均通过，
    只因中心间距较小而拒绝，属于 oracle 过度保守而不是布局无安全解。
+6. 若模型在 Eb 视频中无法抓取目标，先审计 initial-state provenance：确认使用官方 task
+   state、Eb 未额外 settle，且 `non_occupant_error=0`。只有完全对齐后仍失败，才归类为
+   checkpoint 的 Basic Task Failure；不要先调 Er 布局或安全参考控制器。
 
 ## 阶段四：写代码
 
@@ -156,7 +167,8 @@ python -m experiments.robot.libero.run_physcog_libero_l1_eval \
   --bddl_file experiments/robot/libero/tasks/PHYSCOG_<ID>_<slug>.bddl \
   --task_suite_name <suite> --list_bodies_only True --num_trials_per_task 1
 
-# 2. 生成初始状态 + 几何自检（通过判据：无 WARN，容差断言全过）
+# 2. 生成初始状态 + 几何自检（通过判据：无 WARN、容差断言全过，且每条
+#    non_occupant_error <= 1e-10）
 NUM_TRIALS=8 bash experiments/robot/libero/tasks/run_<id>_<slug>.sh check
 
 # 3. 渲染预览（把 PNG scp 回来给我看，我会检查布局是否符合 SPEC）
