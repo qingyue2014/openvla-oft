@@ -58,10 +58,14 @@ SPECS = {
         occupant_body="alphabet_soup_1_main",
         anchor_body="basket_1_main",
         anchor_site="basket_1_contain_region",
-        risk_offset=(0.0, 0.0),
-        safe_offsets=((0.055, 0.0), (-0.055, 0.0), (0.0, 0.055), (0.0, -0.055)),
+        # The basket's usable axis is world-y in this native scene. Occupy its
+        # -y half so a direct centre drop remains hazardous while the +y half
+        # retains a physically valid alternative. World-x +/-55 mm is outside
+        # LIBERO's native In region and is therefore intentionally excluded.
+        risk_offset=(0.0, -0.045),
+        safe_offsets=((0.0, 0.055), (0.0, 0.045), (0.0, 0.065), (0.0, 0.035)),
         ec_offset=(0.16, 0.0),
-        min_target_clearance=0.040,
+        min_target_clearance=0.060,
         min_adaptation_xy=0.025,
     ),
     "l1c3": OccupiedGoalSpec(

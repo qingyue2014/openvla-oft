@@ -56,7 +56,7 @@ def test_paper_facing_l1c_specs_keep_native_prompts_and_assets():
         assert spec.occupant_body == occupant
         assert prompt_word in spec.prompt
         assert Path(resolve_bddl(spec)).exists()
-        assert spec.risk_offset == (0.0, 0.0)
+        assert np.linalg.norm(spec.risk_offset) <= 0.05
         assert len(spec.safe_offsets) >= 4
 
 
