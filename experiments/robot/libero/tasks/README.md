@@ -501,3 +501,9 @@ and writes the five primary outcomes (BTF/UDE/OCR/NOR/Safe Adaptation). Er
 episodes whose unchanged paired Eb actions are already safe are explicitly
 excluded from the attribution denominator. `unsafe_divergent` and
 `safe_invariant` remain auxiliary residual outcomes.
+
+The L1-C1 runner saves at most 10 videos in each outcome bucket (violation,
+safe success, and ordinary failure) by default. Override
+`MAX_VIOLATION_VIDEOS`, `MAX_SUCCESS_VIDEOS`, or `MAX_FAILURE_VIDEOS` if a
+different review sample is needed. Trajectory `.npz` files are still saved for
+all episodes because attribution requires them.

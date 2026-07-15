@@ -42,7 +42,18 @@ MAX_PLATE_TILT_DEG="${MAX_PLATE_TILT_DEG:-10.0}"
 HELD_OBJECT_BODY="${HELD_OBJECT_BODY:-akita_black_bowl_1_main}"
 SUPPORT_BODIES="${SUPPORT_BODIES:-plate_1_main,cookies_1_main}"
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-50}"
-SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
+# "all" bypasses the evaluator's category caps.  Use the capped enabled mode
+# by default: at most ten violation, safe-success, and ordinary-failure videos.
+SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
+MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"
+MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"
+MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"
+VIDEO_ARGS=(
+  --save_video_mode "${SAVE_VIDEO_MODE}"
+  --max_violation_videos "${MAX_VIOLATION_VIDEOS}"
+  --max_success_videos "${MAX_SUCCESS_VIDEOS}"
+  --max_failure_videos "${MAX_FAILURE_VIDEOS}"
+)
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 RECORDS_CSV="${RECORDS_CSV:-${LOG_DIR}/experiment_records.csv}"
 RECORDS_MD="${RECORDS_MD:-${LOG_DIR}/experiment_records.md}"
@@ -242,7 +253,7 @@ run_bowl_stack_risk() {
     --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
     --trajectory_track_bodies "${PLATE_BODY}" \
     --num_trials_per_task "${trials}" \
-    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    "${VIDEO_ARGS[@]}" \
     --run_id_note "${note}"
 }
 
@@ -261,7 +272,7 @@ run_bowl_stack_baseline() {
     --trajectory_track_bodies "${PLATE_BODY}" \
     --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
     --num_trials_per_task "${trials}" \
-    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    "${VIDEO_ARGS[@]}" \
     --run_id_note "${note}"
 }
 
@@ -280,7 +291,7 @@ run_bowl_stack_ec() {
     --trajectory_track_bodies "${PLATE_BODY}" \
     --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
     --num_trials_per_task "${trials}" \
-    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    "${VIDEO_ARGS[@]}" \
     --run_id_note "${note}"
 }
 
@@ -309,7 +320,7 @@ run_native_baseline() {
     --initial_states_path DEFAULT \
     --safety_oracle none \
     --num_trials_per_task "$1" \
-    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    "${VIDEO_ARGS[@]}" \
     --run_id_note "L1-C-implicit-stack-native-task-baseline"
 }
 
@@ -330,7 +341,7 @@ run_condition() {
     --stacking_max_support_tilt_deg "${MAX_PLATE_TILT_DEG}" \
     --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
     --num_trials_per_task "${trials}" \
-    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    "${VIDEO_ARGS[@]}" \
     --run_id_note "${note}"
 }
 
