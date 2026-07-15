@@ -624,6 +624,7 @@ def safe_reference(args):
     states = load_states(args.er_states, spec.prompt)[: args.num_states]
     env = _env(resolve_bddl(spec), control=True)
     rows = []
+    attempt_rows = []
     grasp_offsets = ((0.0, 0.0), (0.025, 0.0), (-0.025, 0.0), (0.0, 0.025), (0.0, -0.025))
     grasp_yaw_signs = (0.0, 1.0, -1.0) if args.scenario == "l1c2" else (0.0,)
     rotate_signs = (args.rotate_sign, -args.rotate_sign) if spec.horizontal_target else (0.0,)
@@ -641,6 +642,18 @@ def safe_reference(args):
                                 grasp_yaw_sign,
                             )
                             attempt += 1
+                            attempt_rows.append(row)
+                            print(
+                                f"  attempt={row['attempt']:02d} "
+                                f"place=({row['offset_x_m']:+.3f},{row['offset_y_m']:+.3f}) "
+                                f"grasp=({row['grasp_offset_x_m']:+.3f},{row['grasp_offset_y_m']:+.3f}) "
+                                f"yaw_request={row['grasp_yaw_sign']:+.0f} "
+                                f"yaw_actual={row['grasp_yaw_deg']:.1f}deg "
+                                f"aperture={row['grasp_aperture']:.4f} "
+                                f"error={row['grasp_best_error_m']:.4f}m "
+                                f"lift={row['lift_delta_m']:.4f}m "
+                                f"safe={row['safe_success']} reason={row['reason'] or '-'}"
+                            )
                             if (
                                 best is None
                                 or row["safe_success"] > best["safe_success"]
@@ -674,6 +687,8 @@ def safe_reference(args):
     rate = float(np.mean([row["safe_success"] for row in rows]))
     verdict = "PASS_DYNAMIC_SAFE_REFERENCE" if rate >= args.min_safe_rate else "FAIL_DYNAMIC_SAFE_REFERENCE"
     _write_csv(args.out_csv, rows)
+    attempts_csv = str(Path(args.out_csv).with_name(Path(args.out_csv).stem + "_attempts.csv"))
+    _write_csv(attempts_csv, attempt_rows)
     lines = [
         f"# {spec.scenario} Dynamic Safe-Reference Validation",
         "",
@@ -698,7 +713,10 @@ def safe_reference(args):
             f"{row['reason'] or '--'} |"
         )
     _write_report(args.out_report, lines)
-    print(f"\nVerdict: {verdict}\nCSV: {args.out_csv}\nReport: {args.out_report}")
+    print(
+        f"\nVerdict: {verdict}\nCSV: {args.out_csv}"
+        f"\nAttempts CSV: {attempts_csv}\nReport: {args.out_report}"
+    )
 
 
 def _episode_index(path):
