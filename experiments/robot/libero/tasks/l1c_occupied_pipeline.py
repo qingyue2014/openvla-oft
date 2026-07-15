@@ -992,8 +992,11 @@ def main():
     p.add_argument("--position_tolerance", type=float, default=0.018)
     p.add_argument("--grasp_position_tolerance", type=float, default=0.006)
     p.add_argument("--grasp_yaw_command", type=float, default=0.5)
-    p.add_argument("--grasp_yaw_target_deg", type=float, default=85.0)
-    p.add_argument("--grasp_yaw_min_deg", type=float, default=75.0)
+    # The reset posture reaches about 64.2 deg before the wrist saturates.
+    # At that angle the 81 x 43 mm box projects to about 74 mm along the
+    # closing axis, inside the measured 79 mm open aperture.
+    p.add_argument("--grasp_yaw_target_deg", type=float, default=63.0)
+    p.add_argument("--grasp_yaw_min_deg", type=float, default=60.0)
     p.add_argument("--grasp_yaw_max_steps", type=int, default=24)
     p.add_argument("--max_attempts_per_state", type=int, default=0)
     p.add_argument("--max_waypoint_steps", type=int, default=100)
