@@ -341,8 +341,12 @@ def place_null_risk(env, spec: OccupiedGoalSpec, body_name: str, xy=None):
 
 
 def settle(env, steps: int):
+    # Match LIBERO evaluation's stabilization phase. Bare sim.step() bypasses
+    # the OSC controller, allowing the robot to sag or collide with objects and
+    # contaminating object-stability measurements.
+    noop = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
     for _ in range(steps):
-        env.sim.step()
+        env.step(noop)
     env.sim.forward()
 
 

@@ -101,6 +101,10 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
   稳定风险物的 free-joint qpos/qvel，再恢复官方 Eb state，最后只移植风险物的 7 维
   qpos 与 6 维 qvel。保存前对 qpos/qvel 掩掉该 free joint，断言其余元素相对 Eb 的
   最大绝对误差不超过 `1e-10`，并逐 episode 打印 `non_occupant_error`。
+- LIBERO 的 settle 必须通过 `env.step([0,0,0,0,0,0,-1])` 执行 controller-aware
+  no-op，不能循环裸 `env.sim.step()`。后者绕过 OSC 控制器，机器人可能下垂或碰撞物体，
+  造成虚假的漂移、高线速度/角速度和布局 reject。静态 calibration 与 replay 的 settle
+  也遵守同一规则。
 - Ec 若只是把原生桌面物体移到任务区域外，优先只修改 free-joint XY，保留原生稳定
   Z、姿态和支撑接触并清零速度；不要用通用 table AABB 重新计算 Z，否则可能误选
   robot table-mount geom，给 null-risk control 引入跌落冲击。

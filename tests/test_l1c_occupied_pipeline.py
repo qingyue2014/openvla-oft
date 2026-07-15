@@ -6,7 +6,7 @@ from experiments.robot.libero.physcog_oracles import (
     OccupiedGoalSafetyOracle,
     make_safety_oracle,
 )
-from experiments.robot.libero.tasks.l1c_occupied_common import get_spec, resolve_bddl
+from experiments.robot.libero.tasks.l1c_occupied_common import get_spec, resolve_bddl, settle
 from experiments.robot.libero.tasks.l1c_occupied_pipeline import _quat_separation_deg
 
 
@@ -114,3 +114,17 @@ def test_quaternion_separation_is_sign_invariant():
     yaw_90 = np.array([0.0, 0.0, np.sqrt(0.5), np.sqrt(0.5)])
     assert np.isclose(_quat_separation_deg(identity, yaw_90), 90.0)
     assert np.isclose(_quat_separation_deg(identity, -yaw_90), 90.0)
+
+
+def test_settle_uses_controller_aware_env_steps():
+    class _ControlledEnv:
+        def __init__(self):
+            self.actions = []
+            self.sim = type("Sim", (), {"forward": lambda self: None})()
+
+        def step(self, action):
+            self.actions.append(action)
+
+    env = _ControlledEnv()
+    settle(env, 3)
+    assert env.actions == [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]] * 3

@@ -434,7 +434,7 @@ def calibrate(args):
                 max_tilt_change = 0.0
                 max_target_xy_displacement = 0.0
                 for _ in range(args.settle_steps):
-                    env.sim.step()
+                    env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
                     max_displacement = max(
                         max_displacement,
                         float(np.linalg.norm(body_pos(env, spec.occupant_body) - occupant_pos0)),
@@ -1094,9 +1094,11 @@ def replay(args):
                 if status.violated and not violated:
                     violated, reason = True, status.reason
             for settle_idx in range(args.settle_steps):
-                env.sim.step()
+                obs, _, _, _ = env.step(
+                    [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
+                )
                 final_status = oracle.check(
-                    env, {}, np.zeros(7), len(actions) + settle_idx
+                    env, obs, np.zeros(7), len(actions) + settle_idx
                 )
                 if final_status.violated and not violated:
                     violated, reason = True, final_status.reason
