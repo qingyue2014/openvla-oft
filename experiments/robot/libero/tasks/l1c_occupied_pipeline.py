@@ -376,13 +376,14 @@ def _advance(env, obs, oracle, recorder, action, step):
 
 def _move(
     env, obs, oracle, recorder, target, grip, step, args,
-    stop_on_contact=False, stop_on_support=False,
+    stop_on_contact=False, stop_on_support=False, tolerance=None,
 ):
+    tolerance = args.position_tolerance if tolerance is None else tolerance
     best = float("inf")
     for _ in range(args.max_waypoint_steps):
         error = float(np.linalg.norm(_eef(obs) - target))
         best = min(best, error)
-        if error <= args.position_tolerance:
+        if error <= tolerance:
             return obs, step, None, best
         if stop_on_contact and oracle._gripper_target_contact(env.sim):
             return obs, step, None, best
@@ -483,9 +484,19 @@ def _safe_reference_attempt(
     lo, hi = world_aabb(env, spec.target_body)
     approach = source + np.array([grasp_offset[0], grasp_offset[1], args.approach_height])
     grasp = source + np.array([grasp_offset[0], grasp_offset[1], max(0.0, hi[2] - source[2] - args.grasp_depth)])
-    for target, grip, stop in ((approach, opened, False), (grasp, opened, True)):
+    grasp_best_error = float("nan")
+    stages = (
+        (approach, opened, False, args.position_tolerance),
+        (grasp, opened, True, args.grasp_position_tolerance),
+    )
+    for target, grip, stop, tolerance in stages:
         if failure is None:
-            obs, step, failure, _ = _move(env, obs, oracle, recorder, target, grip, step, args, stop)
+            obs, step, failure, best_error = _move(
+                env, obs, oracle, recorder, target, grip, step, args,
+                stop_on_contact=stop, tolerance=tolerance,
+            )
+            if stop:
+                grasp_best_error = best_error
     if failure is None:
         obs, step, status = _seat_grasp(
             env, obs, oracle, recorder, grasp, close,
@@ -556,6 +567,7 @@ def _safe_reference_attempt(
         "aperture_minus": aperture_minus,
         "aperture_plus": aperture_plus,
         "grasp_aperture": grasp_aperture,
+        "grasp_best_error_m": grasp_best_error,
         "lift_delta_m": lift_delta,
         "target_post_release_max_xy_displacement_m": metrics[
             "target_post_release_max_xy_displacement_m"
@@ -604,6 +616,7 @@ def safe_reference(args):
                 f"offset=({best['offset_x_m']:+.3f},{best['offset_y_m']:+.3f}) "
                 f"close_sign={best['close_sign']:+.0f} "
                 f"aperture(-/+)=({best['aperture_minus']:.4f}/{best['aperture_plus']:.4f}) "
+                f"grasp_error={best['grasp_best_error_m']:.4f}m "
                 f"lift={best['lift_delta_m']:.4f}m "
                 f"reason={best['reason'] or '-'}"
             )
@@ -621,8 +634,8 @@ def safe_reference(args):
         f"- Required rate: {args.min_safe_rate:.3f}",
         "- Scope: executable OSC action sequence in Er, not teleport-only physics.",
         "",
-        "| Episode | Safe success | Contact | Release | Offset x | Offset y | Grasp dx | Grasp dy | Close sign | Grasp aperture | Lift delta | Post-release XY drift | Reason |",
-        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| Episode | Safe success | Contact | Release | Offset x | Offset y | Grasp dx | Grasp dy | Close sign | Grasp aperture | Grasp error | Lift delta | Post-release XY drift | Reason |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
@@ -630,7 +643,7 @@ def safe_reference(args):
             f"{row['offset_x_m']:+.3f} | {row['offset_y_m']:+.3f} | "
             f"{row['grasp_offset_x_m']:+.3f} | {row['grasp_offset_y_m']:+.3f} | "
             f"{row['close_sign']:+.0f} | {row['grasp_aperture']:.4f} | "
-            f"{row['lift_delta_m']:.4f} | "
+            f"{row['grasp_best_error_m']:.4f} | {row['lift_delta_m']:.4f} | "
             f"{row['target_post_release_max_xy_displacement_m']:.4f} | "
             f"{row['reason'] or '--'} |"
         )
@@ -897,6 +910,7 @@ def main():
     p.add_argument("--position_scale", type=float, default=0.08)
     p.add_argument("--max_position_command", type=float, default=1.0)
     p.add_argument("--position_tolerance", type=float, default=0.018)
+    p.add_argument("--grasp_position_tolerance", type=float, default=0.006)
     p.add_argument("--max_waypoint_steps", type=int, default=100)
     p.add_argument("--gripper_probe_steps", type=int, default=10)
     p.add_argument("--grasp_steps", type=int, default=18)
