@@ -397,6 +397,21 @@ def _hold(env, obs, oracle, recorder, grip, count, step):
     return obs, step, status
 
 
+def _seat_grasp(env, obs, oracle, recorder, target, grip, count, step, args):
+    """Close while gently continuing toward the collision-limited grasp pose."""
+    status = None
+    for _ in range(count):
+        action = _position_action(
+            _eef(obs), target, grip, args.position_scale,
+            args.grasp_seat_max_command,
+        )
+        obs, status = _advance(env, obs, oracle, recorder, action, step)
+        step += 1
+        if status.violated:
+            break
+    return obs, step, status
+
+
 def _rotate_horizontal(env, obs, oracle, recorder, grip, count, step, sign=1.0):
     status = None
     for _ in range(count):
@@ -458,7 +473,14 @@ def _safe_reference_attempt(
         if failure is None:
             obs, step, failure, _ = _move(env, obs, oracle, recorder, target, grip, step, args, stop)
     if failure is None:
-        obs, step, status = _hold(env, obs, oracle, recorder, close, args.grasp_steps, step)
+        obs, step, status = _seat_grasp(
+            env, obs, oracle, recorder, grasp, close,
+            args.grasp_seat_steps, step, args,
+        )
+        if status is None or not status.violated:
+            obs, step, status = _hold(
+                env, obs, oracle, recorder, close, args.grasp_steps, step
+            )
         failure = status if status is not None and status.violated else None
     initial_target_z = body_pos(env, spec.target_body)[2]
     lift_eef = _eef(obs) + np.array([0.0, 0.0, args.lift_height])
@@ -466,6 +488,10 @@ def _safe_reference_attempt(
         obs, step, failure, _ = _move(env, obs, oracle, recorder, lift_eef, close, step, args)
     if failure is None and body_pos(env, spec.target_body)[2] - initial_target_z < args.min_lift:
         failure = "grasp_failed"
+    lift_delta = float(body_pos(env, spec.target_body)[2] - initial_target_z)
+    grasp_aperture = float(
+        np.sum(np.abs(obs.get("robot0_gripper_qpos", [np.nan, np.nan])))
+    )
     if failure is None and spec.horizontal_target:
         obs, step, status = _rotate_horizontal(
             env, obs, oracle, recorder, close, args.rotate_steps, step,
@@ -512,6 +538,11 @@ def _safe_reference_attempt(
         "grasp_offset_x_m": grasp_offset[0],
         "grasp_offset_y_m": grasp_offset[1],
         "rotate_sign": rotate_sign if spec.horizontal_target else 0.0,
+        "close_sign": close,
+        "aperture_minus": aperture_minus,
+        "aperture_plus": aperture_plus,
+        "grasp_aperture": grasp_aperture,
+        "lift_delta_m": lift_delta,
         "reason": reason,
     }
 
@@ -535,7 +566,15 @@ def safe_reference(args):
                             episode_idx, attempt, rotate_sign,
                         )
                         attempt += 1
-                        best = row
+                        if (
+                            best is None
+                            or row["safe_success"] > best["safe_success"]
+                            or (
+                                row["safe_success"] == best["safe_success"]
+                                and row["lift_delta_m"] > best["lift_delta_m"]
+                            )
+                        ):
+                            best = row
                         if row["safe_success"]:
                             break
                     if best["safe_success"]:
@@ -546,6 +585,9 @@ def safe_reference(args):
             print(
                 f"state={episode_idx:02d} safe={best['safe_success']} "
                 f"offset=({best['offset_x_m']:+.3f},{best['offset_y_m']:+.3f}) "
+                f"close_sign={best['close_sign']:+.0f} "
+                f"aperture(-/+)=({best['aperture_minus']:.4f}/{best['aperture_plus']:.4f}) "
+                f"lift={best['lift_delta_m']:.4f}m "
                 f"reason={best['reason'] or '-'}"
             )
     finally:
@@ -562,13 +604,16 @@ def safe_reference(args):
         f"- Required rate: {args.min_safe_rate:.3f}",
         "- Scope: executable OSC action sequence in Er, not teleport-only physics.",
         "",
-        "| Episode | Safe success | Contact | Release | Offset x | Offset y | Reason |",
-        "| ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| Episode | Safe success | Contact | Release | Offset x | Offset y | Grasp dx | Grasp dy | Close sign | Grasp aperture | Lift delta | Reason |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
             f"| {row['episode']} | {row['safe_success']} | {row['contact']} | {row['release']} | "
-            f"{row['offset_x_m']:+.3f} | {row['offset_y_m']:+.3f} | {row['reason'] or '--'} |"
+            f"{row['offset_x_m']:+.3f} | {row['offset_y_m']:+.3f} | "
+            f"{row['grasp_offset_x_m']:+.3f} | {row['grasp_offset_y_m']:+.3f} | "
+            f"{row['close_sign']:+.0f} | {row['grasp_aperture']:.4f} | "
+            f"{row['lift_delta_m']:.4f} | {row['reason'] or '--'} |"
         )
     _write_report(args.out_report, lines)
     print(f"\nVerdict: {verdict}\nCSV: {args.out_csv}\nReport: {args.out_report}")
@@ -835,6 +880,8 @@ def main():
     p.add_argument("--max_waypoint_steps", type=int, default=100)
     p.add_argument("--gripper_probe_steps", type=int, default=10)
     p.add_argument("--grasp_steps", type=int, default=18)
+    p.add_argument("--grasp_seat_steps", type=int, default=14)
+    p.add_argument("--grasp_seat_max_command", type=float, default=0.35)
     p.add_argument("--release_steps", type=int, default=15)
     p.add_argument("--settle_steps", type=int, default=80)
     p.add_argument("--rotate_steps", type=int, default=16)
