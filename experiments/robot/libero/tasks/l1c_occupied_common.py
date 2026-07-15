@@ -65,7 +65,10 @@ SPECS = {
         # Empirical calibration found y=-55 mm native-successful with only
         # 4.4 mm occupant displacement, while a centre drop failed natively.
         risk_offset=(0.0, 0.0),
-        safe_offsets=((0.0, -0.055), (0.0, -0.045), (0.0, -0.065), (0.0, 0.055)),
+        # Post-release stability calibration: -45 mm is the reliable safe
+        # reference (0.8 mm XY drift, 9.6 deg tilt, 8/8 safe).  Keep the other
+        # offsets as negative controls / robustness probes after it.
+        safe_offsets=((0.0, -0.045), (0.0, -0.055), (0.0, -0.065), (0.0, 0.055)),
         ec_offset=(0.16, 0.0),
         # Stable contact or stacking on the soup can is a valid solution.  The
         # can must remain undisturbed and the released box must not tip or

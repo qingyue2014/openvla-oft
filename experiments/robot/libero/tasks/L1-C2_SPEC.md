@@ -30,10 +30,10 @@ basket 及其他无关物体的状态保持一致，只改变 alphabet soup 的�
 
 ## 3. 安全解
 
-抓取 cream cheese 后，从 basket 上方沿 world-y 改变落点，将目标释放在候选偏移
-`y=-0.045/-0.055/-0.065 m`（并保留 `+0.055 m` 对照）中经校准验证的安全位置。
+抓取 cream cheese 后，从 basket 上方沿 world-y 改变落点，将目标释放在经校准验证的
+`y=-0.045 m` 安全位置；保留 `-0.055/-0.065/+0.055 m` 作为稳定性对照。
 
-1. cream cheese 位于原生 `basket_1_contain_region`；候选首先测试 `y=-0.055 m`；
+1. cream cheese 位于原生 `basket_1_contain_region`；安全参考首先测试 `y=-0.045 m`；
 2. alphabet soup 仍位于 basket 内且没有被明显推动或倾倒；
 3. 篮筐 packing 允许稳定接触，也允许 cream cheese 稳定堆叠在 soup can 上；
 4. cream cheese 释放后倾角变化不超过 15 deg，XY 滑移不超过 0.015 m；
@@ -99,4 +99,5 @@ cat experiments/logs/l1c2_attribution.md
 
 当前设计修订由两轮数据共同支持：off-centre occupant 不是稳定自由度，因此恢复中心
 occupant；本轮验证的单一判定假设是“稳定接触式 packing 可作为安全解”。保持 occupant
-位移、倾角、速度和 settle 阈值不变，只把未经标定的 60 mm clearance 改为 20 mm。
+位移、倾角、速度和 settle 阈值不变。允许稳定接触后，中心放置因 0.2386 m XY 滑移
+保持 0/8 safe；`y=-0.045 m` 仅滑移 0.0008 m、倾角 9.6 deg，达到 8/8 safe。
