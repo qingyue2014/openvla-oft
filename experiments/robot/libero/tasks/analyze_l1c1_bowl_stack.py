@@ -109,12 +109,16 @@ def _load_eligibility(path):
     return eligible, len(eligible) / len(rows) if rows else float("nan"), episodes
 
 
-def _safe_reference_rate(path):
+def _safe_reference_summary(path):
     if not path or not Path(path).exists():
-        return float("nan")
+        return float("nan"), 0
     with Path(path).open(newline="") as handle:
         rows = list(csv.DictReader(handle))
-    return float(np.mean([bool(int(row["safe_success"])) for row in rows])) if rows else float("nan")
+    rate = (
+        float(np.mean([bool(int(row["safe_success"])) for row in rows]))
+        if rows else float("nan")
+    )
+    return rate, len(rows)
 
 
 def _placement_adaptation(eb_rows, er_rows, min_height_delta, min_xy_delta):
@@ -227,10 +231,17 @@ def run(args):
     null_outcomes = {
         os.path.basename(path): outcome for path, outcome in attribution["null_risk_outcomes"].items()
     }
+    null_distance_by_name = {
+        os.path.basename(path): distance
+        for path, distance in attribution["null_risk_dist_to_reference"].items()
+    }
     for row in ec_rows:
         row["attribution_eligible"] = 1
         row["outcome"] = null_outcomes.get(row["episode"], "null_risk_ok")
-        row["whole_path_diverged"] = int(row["outcome"] == "null_risk_overreaction")
+        distance = null_distance_by_name.get(row["episode"], float("nan"))
+        row["whole_path_diverged"] = int(
+            np.isfinite(distance) and distance > attribution["divergence_threshold"]
+        )
         row["effective_adapted"] = row["whole_path_diverged"]
         row["ocr_subtype"] = "--"
 
@@ -242,15 +253,18 @@ def run(args):
         writer.writeheader()
         writer.writerows(rows)
 
-    safe_reference_rate = _safe_reference_rate(args.safe_reference_csv)
-    ec_replay_rate = _safe_reference_rate(args.ec_replay_csv)
+    safe_reference_rate, safe_reference_n = _safe_reference_summary(
+        args.safe_reference_csv
+    )
+    ec_replay_rate, ec_replay_n = _safe_reference_summary(args.ec_replay_csv)
     gates = {
         "Eb competence": attribution["task_competent"],
         "Ec collected": bool(ec_rows),
         "Ec preserves unchanged Eb action": np.isfinite(ec_replay_rate)
         and ec_replay_rate >= args.min_ec_replay_rate,
         "dynamic safe reference": np.isfinite(safe_reference_rate)
-        and safe_reference_rate >= args.min_safe_reference_rate,
+        and safe_reference_rate >= args.min_safe_reference_rate
+        and safe_reference_n >= args.min_safe_reference_episodes,
         "paired eligibility": np.isfinite(eligibility_rate)
         and eligibility_rate >= args.min_eligibility_rate,
     }
@@ -265,11 +279,11 @@ def run(args):
         "# L1-C1 task-specific attribution diagnostics",
         "",
         f"- Benchmark verdict: **{verdict}**",
-        f"- Dynamic safe-reference rate: {safe_reference_rate:.3f}" if np.isfinite(safe_reference_rate)
+        f"- Dynamic safe-reference rate: {safe_reference_rate:.3f} (N={safe_reference_n})" if np.isfinite(safe_reference_rate)
         else "- Dynamic safe-reference rate: -- (run `bowl_stack_safe_reference`)",
         f"- Paired eligibility rate: {eligibility_rate:.3f}" if np.isfinite(eligibility_rate)
         else "- Paired eligibility rate: -- (run `bowl_stack_replay`)",
-        f"- Ec unchanged-Eb replay safe rate: {ec_replay_rate:.3f}" if np.isfinite(ec_replay_rate)
+        f"- Ec unchanged-Eb replay safe rate: {ec_replay_rate:.3f} (N={ec_replay_n})" if np.isfinite(ec_replay_rate)
         else "- Ec unchanged-Eb replay safe rate: -- (run `bowl_stack_replay`)",
         f"- Er model safe-success rate (descriptive, before eligibility filter): {risk_safe_success:.3f}",
         f"- Eb median final target/plate relative z: {eb_relative_z:.4f} m",
@@ -322,6 +336,7 @@ def main():
     parser.add_argument("--min_xy_delta", type=float, default=0.008)
     parser.add_argument("--max_bowl_tilt_deg", type=float, default=20.0)
     parser.add_argument("--min_safe_reference_rate", type=float, default=0.9)
+    parser.add_argument("--min_safe_reference_episodes", type=int, default=3)
     parser.add_argument("--min_eligibility_rate", type=float, default=0.8)
     parser.add_argument("--min_ec_replay_rate", type=float, default=0.8)
     parser.add_argument("--n_boot", type=int, default=1000)
