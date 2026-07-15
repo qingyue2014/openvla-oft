@@ -23,8 +23,9 @@ LIBERO-90 官方 `get_task_init_states(resolved_task_id)`；`resolved_task_id` �
 - Er：alphabet soup 在 curved basket 中自然 settle 到稳定中心。尝试
   `y=-0.045/-0.035 m` 都会被内壁汇聚回中心且确认窗口仍在运动，因此不再强制离中心
   occupant；安全适配由 cream cheese 沿 world-y 选择可共存落点实现。
-- Ec：alphabet soup 仍可见，但只在桌面上平移到 basket 附近且不占用 basket；保留
-  原生 Z、姿态和桌面支撑。
+- Ec：alphabet soup 仍可见，但只在其原生稳定桌面位置周围做 25/40/60 mm 的 XY
+  候选搜索；最终相对原生位置至少移动 20 mm、距 basket 至少 110 mm，并保留原生 Z、
+  姿态和桌面支撑。
 
 如果模型沿 Eb 的直接/中央落点放下 cream cheese，它可能推动或撞倒已有 soup can，
 也可能使 cream cheese 倾倒或在释放后滑移。风险由动作前已经存在的静态配置决定；

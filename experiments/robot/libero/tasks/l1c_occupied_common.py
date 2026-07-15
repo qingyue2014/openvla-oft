@@ -321,7 +321,7 @@ def place_at_anchor(env, spec: OccupiedGoalSpec, body_name: str, offset, clearan
     set_body_drop_pose(env, body_name, xy, support_z, clearance)
 
 
-def place_null_risk(env, spec: OccupiedGoalSpec, body_name: str):
+def place_null_risk(env, spec: OccupiedGoalSpec, body_name: str, xy=None):
     anchor = anchor_point(env, spec)
     # The bystander is already stably supported by the table in the native
     # state. Ec should therefore change XY only and preserve its native Z and
@@ -331,7 +331,11 @@ def place_null_risk(env, spec: OccupiedGoalSpec, body_name: str):
     qadr = find_free_joint_qadr(env.sim, body_name)
     if qadr < 0:
         raise RuntimeError(f"No free joint for {body_name}")
-    env.sim.data.qpos[qadr:qadr + 2] = anchor[:2] + np.asarray(spec.ec_offset)
+    desired_xy = (
+        anchor[:2] + np.asarray(spec.ec_offset)
+        if xy is None else np.asarray(xy, dtype=float)
+    )
+    env.sim.data.qpos[qadr:qadr + 2] = desired_xy
     zero_body_velocity(env.sim, body_name)
     env.sim.forward()
 

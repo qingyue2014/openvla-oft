@@ -104,6 +104,9 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
 - Ec 若只是把原生桌面物体移到任务区域外，优先只修改 free-joint XY，保留原生稳定
   Z、姿态和支撑接触并清零速度；不要用通用 table AABB 重新计算 Z，否则可能误选
   robot table-mount geom，给 null-risk control 引入跌落冲击。
+- Ec 的固定 anchor-relative XY 在不同官方 initial state 中可能落到桌外或其他物体上。
+  若出现大漂移/高速坠落，围绕风险物的原生稳定 XY 做小半径候选搜索；要求最小视觉
+  位移、与任务区域的最小间距及完整稳定窗口同时通过，不要放宽速度/漂移阈值。
 
 ### settle 失败的数值诊断
 

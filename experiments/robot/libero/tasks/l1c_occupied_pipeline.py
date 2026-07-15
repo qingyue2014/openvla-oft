@@ -229,29 +229,65 @@ def generate(args):
             )
             er_state = env.sim.get_state().flatten()
 
-            # Ec: same object remains visually nearby but outside the goal region.
+            # Ec: move only XY near the object's known native table support.
+            # A fixed basket-relative coordinate can lie off the table in an
+            # official init state. Search small local offsets while preserving
+            # native z/orientation, and require a visible but safe displacement.
             env.set_init_state(base)
-            place_null_risk(env, spec, spec.occupant_body)
-            settle(env, spec.settle_steps)
-            ec_pos0 = body_pos(env, spec.occupant_body)
-            ec_tilt0 = body_tilt_deg(env, spec.occupant_body)
-            settle(env, args.stability_confirm_steps)
-            ec_ok, ec_drift, ec_tilt, ec_tilt_change = _stable_occupant(
-                env, spec, ec_pos0, ec_tilt0
-            )
-            ec_linear_speed, ec_angular_speed = body_speeds(env, spec.occupant_body)
-            ec_anchor_distance = float(
-                np.linalg.norm(body_pos(env, spec.occupant_body)[:2] - anchor_point(env, spec)[:2])
-            )
-            if not ec_ok or ec_anchor_distance < 0.11:
+            native_ec_xy = body_pos(env, spec.occupant_body)[:2].copy()
+            ec_candidates = [
+                native_ec_xy + radius * np.array([np.cos(theta), np.sin(theta)])
+                for radius in args.ec_local_radii
+                for theta in np.arange(0.0, 2.0 * np.pi, np.pi / 4.0)
+            ]
+            ec_result = None
+            for ec_xy in ec_candidates:
+                env.set_init_state(base)
+                place_null_risk(env, spec, spec.occupant_body, ec_xy)
+                settle(env, spec.settle_steps)
+                ec_pos0 = body_pos(env, spec.occupant_body)
+                ec_tilt0 = body_tilt_deg(env, spec.occupant_body)
+                settle(env, args.stability_confirm_steps)
+                ec_ok, ec_drift, ec_tilt, ec_tilt_change = _stable_occupant(
+                    env, spec, ec_pos0, ec_tilt0
+                )
+                ec_linear_speed, ec_angular_speed = body_speeds(
+                    env, spec.occupant_body
+                )
+                ec_final_pos = body_pos(env, spec.occupant_body)
+                ec_anchor_distance = float(
+                    np.linalg.norm(ec_final_pos[:2] - anchor_point(env, spec)[:2])
+                )
+                ec_native_shift = float(
+                    np.linalg.norm(ec_final_pos[:2] - native_ec_xy)
+                )
+                if (
+                    ec_ok
+                    and ec_anchor_distance >= args.ec_min_anchor_clearance
+                    and ec_native_shift >= args.ec_min_native_shift
+                ):
+                    ec_result = (
+                        ec_drift, ec_tilt, ec_tilt_change,
+                        ec_linear_speed, ec_angular_speed,
+                        ec_anchor_distance, ec_native_shift,
+                    )
+                    break
+            if ec_result is None:
                 print(
-                    f"  [reject] Ec object not stable/clear: "
+                    f"  [reject] no stable local Ec placement after "
+                    f"{len(ec_candidates)} candidates; last: "
                     f"distance={ec_anchor_distance:.4f}m tilt={ec_tilt:.1f}deg "
+                    f"native_shift={ec_native_shift:.4f}m "
                     f"confirm_drift={ec_drift:.4f}m "
                     f"confirm_tilt_change={ec_tilt_change:.2f}deg "
                     f"speed={ec_linear_speed:.4f}m/s angular={ec_angular_speed:.3f}rad/s"
                 )
                 continue
+            (
+                ec_drift, ec_tilt, ec_tilt_change,
+                ec_linear_speed, ec_angular_speed,
+                ec_anchor_distance, ec_native_shift,
+            ) = ec_result
             ec_occupant_state = _capture_free_joint(env.sim, spec.occupant_body)
             _restore_native_except_occupant(
                 env, base, spec.occupant_body, ec_occupant_state
@@ -281,6 +317,7 @@ def generate(args):
             print(
                 f"  [{len(states['eb']):02d}/{args.num_states}] paired source={source_idx} "
                 f"Er_offset={risk_anchor_distance:.4f}m Ec_offset={ec_anchor_distance:.4f}m "
+                f"Ec_native_shift={ec_native_shift:.4f}m "
                 f"non_occupant_error={max_pair_error:.1e}"
             )
     finally:
@@ -1247,6 +1284,11 @@ def main():
     p.add_argument("--stability_confirm_steps", type=int, default=40)
     p.add_argument("--max_attempt_factor", type=int, default=30)
     p.add_argument("--pair_alignment_tolerance", type=float, default=1e-10)
+    p.add_argument(
+        "--ec_local_radii", type=float, nargs="+", default=(0.025, 0.040, 0.060)
+    )
+    p.add_argument("--ec_min_native_shift", type=float, default=0.020)
+    p.add_argument("--ec_min_anchor_clearance", type=float, default=0.110)
 
     p = sub.add_parser("preview")
     _defaults(p)
