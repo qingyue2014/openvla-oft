@@ -50,7 +50,6 @@ def _parse_offsets(value: str):
 
 
 def run(args):
-    from experiments.robot.libero.physcog_oracles import ImplicitBowlStackOracle
     from experiments.robot.libero.tasks.calibrate_l1c1_risk_layout import _load_states
     from experiments.robot.libero.tasks.generate_l1b2_initial_states import benchmark, get_libero_path
     from experiments.robot.libero.tasks.generate_l1c1_initial_states import (
@@ -84,18 +83,6 @@ def run(args):
                 env.reset()
                 env.set_init_state(state)
                 lower_xy = _body_pos(env, LOWER_BODY)[:2]
-                oracle = ImplicitBowlStackOracle(
-                    UPPER_BODY,
-                    LOWER_BODY,
-                    PLATE_BODY,
-                    max_xy_offset=args.max_upper_lower_offset,
-                    max_lower_plate_xy_offset=args.max_lower_plate_offset,
-                    max_tilt_deg=args.max_bowl_tilt_deg,
-                    max_plate_tilt_deg=args.max_plate_tilt_deg,
-                    release_confirm_steps=1,
-                    success_confirm_steps=args.success_confirm_steps,
-                )
-                oracle.reset(env, None)
                 _set_body_on_support(
                     env,
                     UPPER_BODY,
@@ -103,35 +90,84 @@ def run(args):
                     lower_xy + np.array([offset, 0.0]),
                     args.drop_clearance,
                 )
-                violated = False
-                reason = ""
-                for step in range(args.settle_steps):
+                # A teleported, ungrasped bowl is still in its impact/settling
+                # phase at first contact.  Do not run the online release oracle
+                # here: normal nesting motion would be mislabelled as a
+                # post-release drop.  First settle, then judge a separate
+                # stationary window.
+                for _ in range(args.settle_steps):
                     env.sim.step()
-                    if not violated:
-                        status = oracle.check(env, None, None, step)
-                        violated = status.violated
-                        reason = status.reason if status.violated else ""
-                metrics = oracle.metrics()
-                safe = bool(not violated and oracle.task_success())
+
+                window_start = {
+                    name: _body_pos(env, name).copy()
+                    for name in (UPPER_BODY, LOWER_BODY, PLATE_BODY)
+                }
+                for _ in range(args.stability_check_steps):
+                    env.sim.step()
+                window_end = {
+                    name: _body_pos(env, name).copy()
+                    for name in (UPPER_BODY, LOWER_BODY, PLATE_BODY)
+                }
+
+                upper_lower_contact = _contact_between_bodies(env, UPPER_BODY, LOWER_BODY)
+                lower_plate_contact = _contact_between_bodies(env, LOWER_BODY, PLATE_BODY)
+                upper_lower_xy = float(
+                    np.linalg.norm(window_end[UPPER_BODY][:2] - window_end[LOWER_BODY][:2])
+                )
+                lower_plate_xy = float(
+                    np.linalg.norm(window_end[LOWER_BODY][:2] - window_end[PLATE_BODY][:2])
+                )
+                upper_tilt = _body_tilt_deg(env, UPPER_BODY)
+                lower_tilt = _body_tilt_deg(env, LOWER_BODY)
+                plate_tilt = _body_tilt_deg(env, PLATE_BODY)
+                displacements = {
+                    name: float(np.linalg.norm(window_end[name] - window_start[name]))
+                    for name in window_start
+                }
+                drops = {
+                    name: max(0.0, float(window_start[name][2] - window_end[name][2]))
+                    for name in window_start
+                }
+                failures = []
+                if not upper_lower_contact:
+                    failures.append("upper/lower contact lost")
+                if not lower_plate_contact:
+                    failures.append("lower/plate contact lost")
+                if upper_lower_xy > args.max_upper_lower_offset:
+                    failures.append("upper/lower offset too large")
+                if lower_plate_xy > args.max_lower_plate_offset:
+                    failures.append("lower/plate offset too large")
+                if max(upper_tilt, lower_tilt) > args.max_bowl_tilt_deg:
+                    failures.append("bowl tilt too large")
+                if plate_tilt > args.max_plate_tilt_deg:
+                    failures.append("plate tilt too large")
+                if max(displacements.values()) > args.max_stability_displacement:
+                    failures.append("continued displacement")
+                if max(drops.values()) > args.max_stability_drop:
+                    failures.append("continued drop")
+                safe = not failures
+                reason = "; ".join(failures)
                 row = {
                     "state_index": state_index,
                     "offset_m": offset,
                     "safe": int(safe),
-                    "violated": int(violated),
+                    "violated": int(not safe),
                     "reason": reason,
-                    "upper_lower_contact": int(_contact_between_bodies(env, UPPER_BODY, LOWER_BODY)),
-                    "lower_plate_contact": int(_contact_between_bodies(env, LOWER_BODY, PLATE_BODY)),
-                    "upper_lower_xy_offset_m": metrics["final_xy_offset_m"],
-                    "lower_plate_xy_offset_m": metrics["lower_plate_xy_offset_m"],
-                    "upper_tilt_deg": _body_tilt_deg(env, UPPER_BODY),
-                    "lower_tilt_deg": _body_tilt_deg(env, LOWER_BODY),
-                    "plate_tilt_deg": _body_tilt_deg(env, PLATE_BODY),
+                    "upper_lower_contact": int(upper_lower_contact),
+                    "lower_plate_contact": int(lower_plate_contact),
+                    "upper_lower_xy_offset_m": upper_lower_xy,
+                    "lower_plate_xy_offset_m": lower_plate_xy,
+                    "upper_tilt_deg": upper_tilt,
+                    "lower_tilt_deg": lower_tilt,
+                    "plate_tilt_deg": plate_tilt,
+                    "max_stability_displacement_m": max(displacements.values()),
+                    "max_stability_drop_m": max(drops.values()),
                 }
                 rows.append(row)
                 print(
                     f"state={state_index:02d} offset={offset:+.3f} safe={int(safe)} "
                     f"upper_xy={row['upper_lower_xy_offset_m']:.4f}m "
-                    f"upper_tilt={row['upper_tilt_deg']:.1f}deg"
+                    f"upper_tilt={row['upper_tilt_deg']:.1f}deg reason={reason or '-'}"
                 )
     finally:
         env.close()
@@ -178,12 +214,14 @@ def main():
     parser.add_argument("--num_states", type=int, default=8)
     parser.add_argument("--offsets", default="-0.010,0.000,0.010")
     parser.add_argument("--settle_steps", type=int, default=150)
-    parser.add_argument("--success_confirm_steps", type=int, default=10)
+    parser.add_argument("--stability_check_steps", type=int, default=50)
     parser.add_argument("--drop_clearance", type=float, default=0.006)
     parser.add_argument("--max_upper_lower_offset", type=float, default=0.035)
     parser.add_argument("--max_lower_plate_offset", type=float, default=0.025)
     parser.add_argument("--max_bowl_tilt_deg", type=float, default=20.0)
     parser.add_argument("--max_plate_tilt_deg", type=float, default=10.0)
+    parser.add_argument("--max_stability_displacement", type=float, default=0.005)
+    parser.add_argument("--max_stability_drop", type=float, default=0.005)
     parser.add_argument("--min_center_safe_rate", type=float, default=0.9)
     parser.add_argument("--out_csv", default="experiments/logs/l1c1_bowl_stack_calibration.csv")
     parser.add_argument("--out_report", default="experiments/logs/l1c1_bowl_stack_calibration.md")
