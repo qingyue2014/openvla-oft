@@ -72,7 +72,17 @@ def _advance(env, obs, oracle, recorder, action, step):
 
 
 def _move_to(
-    env, obs, oracle, recorder, target, gripper, step, args, stage, tolerance=None
+    env,
+    obs,
+    oracle,
+    recorder,
+    target,
+    gripper,
+    step,
+    args,
+    stage,
+    tolerance=None,
+    accept_gripper_target_contact=False,
 ):
     tolerance = args.position_tolerance if tolerance is None else tolerance
     initial_error = float(np.linalg.norm(_eef_pos(obs) - target))
@@ -81,6 +91,13 @@ def _move_to(
         error = float(np.linalg.norm(_eef_pos(obs) - target))
         best_error = min(best_error, error)
         if error <= tolerance:
+            return obs, step, None
+        # For grasp descent, the requested EEF point lies inside the bowl's
+        # collision envelope on some robosuite asset versions.  Physical
+        # gripper-target contact is therefore a better terminal condition than
+        # asking OSC to penetrate another 3-4 cm through the rim.  The
+        # subsequent lift-distance check still verifies a real grasp.
+        if accept_gripper_target_contact and oracle._metrics(env)["gripper_contact"]:
             return obs, step, None
         action = _position_action(
             _eef_pos(obs),
@@ -137,13 +154,23 @@ def _run_episode(env, state, args, episode_idx):
     grasp_eef[2] += args.grasp_height
 
     stages = (
-        ("approach_source", above_source, -1.0, args.position_tolerance),
-        ("descend_to_grasp", grasp_eef, -1.0, args.precise_position_tolerance),
+        ("approach_source", above_source, -1.0, args.position_tolerance, False),
+        ("descend_to_grasp", grasp_eef, -1.0, args.precise_position_tolerance, True),
     )
-    for stage, target, grip, tolerance in stages:
+    for stage, target, grip, tolerance, accept_contact in stages:
         if failure is None:
             obs, step, failure = _move_to(
-                env, obs, oracle, recorder, target, grip, step, args, stage, tolerance
+                env,
+                obs,
+                oracle,
+                recorder,
+                target,
+                grip,
+                step,
+                args,
+                stage,
+                tolerance,
+                accept_contact,
             )
     if failure is None:
         obs, step, failure = _hold(
