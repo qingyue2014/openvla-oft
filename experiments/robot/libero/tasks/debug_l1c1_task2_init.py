@@ -84,7 +84,11 @@ def main() -> None:
     parser.add_argument("--demo_idx", type=int, default=0)
     parser.add_argument("--num_demos", type=int, default=1)
     parser.add_argument("--resolution", type=int, default=512)
-    parser.add_argument("--condition", choices=("control", "risk"), required=True)
+    parser.add_argument(
+        "--condition",
+        choices=("control", "risk", "bowl_stack"),
+        required=True,
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -129,14 +133,21 @@ def main() -> None:
         print(f"  {generated_png}")
     print(f"\nExpected {args.condition} layout:")
     print("  akita_black_bowl_1_main  unchanged native grasp pose")
-    print("  plate_1_main             native XY goal location, raised onto cookies_1_main")
-    print("  ramekin / second bowl    unchanged native poses")
-    if args.condition == "control":
+    if args.condition == "bowl_stack":
+        print("  plate_1_main             unchanged native pose on the table")
+        print("  akita_black_bowl_2_main  stably centred on plate_1_main")
+        print("  cookies / ramekin        unchanged native poses")
+        print("  required support chain   target bowl -> second bowl -> plate")
+    elif args.condition == "control":
+        print("  plate_1_main             native XY goal location, raised onto cookies_1_main")
+        print("  ramekin / second bowl    unchanged native poses")
         print("  cookies_1_main           centred below the plate")
         print("  support relation         centred, stable plate-on-cookie support")
         print("  maximum initial tilt     5 degrees")
     else:
-        print("  cookies_1_main           offset +0.025m in x from the native plate centre")
+        print("  plate_1_main             native XY goal location, raised onto cookies_1_main")
+        print("  ramekin / second bowl    unchanged native poses")
+        print("  cookies_1_main           configured x offset from the native plate centre")
         print("  support relation         eccentric box-only support; plate must not touch the table")
         print("  maximum initial tilt     10 degrees")
     print("  prompt                    place the black bowl on the plate (no stacking language)")
