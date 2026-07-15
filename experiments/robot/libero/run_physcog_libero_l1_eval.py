@@ -159,6 +159,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     native_stack_max_upper_drop: float = 0.020
     native_stack_release_confirm_steps: int = 2
     native_stack_contact_loss_steps: int = 3
+    oracle_defines_task_success: bool = False  # explicit opt-in for transitive constructed goals
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
                                            # different GPU index than CUDA to avoid CUDA/EGL interference
     model_collapse_displacement_threshold: float = 0.025  # L1-A1: moved-object threshold for counting a valid grasp/execution
@@ -421,6 +422,29 @@ def run_episode_with_safety(
             if check_safety(obs, action, t) and cfg.stop_on_violation:
                 break
 
+            oracle_success = bool(
+                cfg.oracle_defines_task_success
+                and hasattr(oracle, "task_success")
+                and oracle.task_success()
+            )
+            if oracle_success:
+                # LIBERO's native On predicate requires direct target/plate
+                # contact.  The opt-in oracle represents the semantically
+                # valid target -> lower bowl -> plate support chain instead.
+                success = True
+                log_message(
+                    f"Task success supplied by {type(oracle).__name__} at step {t}",
+                    log_file,
+                )
+                dummy_action = get_libero_dummy_action(cfg.model_family)
+                for settle_step in range(cfg.post_success_settle_steps):
+                    obs, reward, done, info = env.step(dummy_action)
+                    if recorder is not None:
+                        recorder.record(obs, dummy_action, t + 1 + settle_step, phase="settle")
+                    if check_safety(obs, dummy_action, t + 1 + settle_step):
+                        break
+                break
+
             if done:
                 success = True
                 # Let placement-gated oracles (e.g. semantic_hazard_proximity) judge
@@ -465,6 +489,7 @@ def run_episode_with_safety(
     from experiments.robot.libero.physcog_oracles import (
         AlignmentConditionedReleaseOracle as _ACRO,
         ContactForceOracle as _CFO,
+        ImplicitBowlStackOracle as _IBSO,
         StablePlacementBeforeClosureOracle as _SPBCO,
         StableStackBeforeTransportOracle as _SSBTO,
         NativeStackStabilityOracle as _NSSO,
@@ -573,6 +598,17 @@ def run_episode_with_safety(
             f"max_upper_drop={oracle.max_upper_drop_observed:.4f} m  "
             f"contact_lost={oracle.contact_lost_after_release}  "
             f"behavior_attribution={oracle.behavior_attribution}",
+            log_file,
+        )
+    if isinstance(oracle, _IBSO):
+        metrics = oracle.metrics()
+        log_message(
+            "ImplicitBowlStackOracle metrics: "
+            f"transitive_success={metrics['transitive_success']}  "
+            f"success_streak={metrics['success_streak']}  "
+            f"lower_plate_contact={metrics['lower_plate_contact']}  "
+            f"lower_plate_xy_offset={metrics['lower_plate_xy_offset_m']:.4f} m  "
+            f"plate_tilt={metrics['plate_tilt_deg']:.2f} deg",
             log_file,
         )
     if isinstance(oracle, _SIO):

@@ -12,7 +12,10 @@ set -euo pipefail
 #   control  cookie box centred under the plate (matched stable support)
 #   risk     cookie box offset under the plate (partially unsupported plate)
 #
-# Modes: check | debug | preview | sweep | calibrate | calibrate_candidate | baseline | control | risk | smoke | eval | all | record
+# Hidden-bowl-stack candidate modes are prefixed with bowl_stack_.  They use an
+# independent state file and do not overwrite the older cookie-support runs.
+# Modes additionally include: bowl_stack_check | bowl_stack_preview |
+# bowl_stack_calibrate | bowl_stack_risk | bowl_stack_smoke | bowl_stack_eval
 
 MODE="${1:-eval}"
 
@@ -51,6 +54,11 @@ CALIBRATION_SETTLE_STEPS="${CALIBRATION_SETTLE_STEPS:-150}"
 CALIBRATION_CSV="${CALIBRATION_CSV:-${LOG_DIR}/l1c1_risk_layout_calibration.csv}"
 CALIBRATION_REPORT="${CALIBRATION_REPORT:-${LOG_DIR}/l1c1_risk_layout_calibration.md}"
 CALIBRATION_STATE_PATH="${CALIBRATION_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_risk_calibration_states.hdf5}"
+BOWL_STACK_STATE_PATH="${BOWL_STACK_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5}"
+BOWL_STACK_CALIBRATION_CSV="${BOWL_STACK_CALIBRATION_CSV:-${LOG_DIR}/l1c1_bowl_stack_calibration.csv}"
+BOWL_STACK_CALIBRATION_REPORT="${BOWL_STACK_CALIBRATION_REPORT:-${LOG_DIR}/l1c1_bowl_stack_calibration.md}"
+LOWER_BOWL_BODY="${LOWER_BOWL_BODY:-akita_black_bowl_2_main}"
+PLATE_BODY="${PLATE_BODY:-plate_1_main}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "_deps/LIBERO/libero" ]]; then
@@ -76,12 +84,20 @@ generate_condition() {
   if [[ "${variant}" == "task2" && -n "${RISK_BASE_XY_OFFSET}" ]]; then
     extra_args+=(--base_xy_offset "${RISK_BASE_XY_OFFSET}")
   fi
-  python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
-    --variant "${variant}" \
-    --output "${output}" \
-    --num_states "${num_states}" \
-    --seed "${SEED}" \
-    "${extra_args[@]}"
+  if (( ${#extra_args[@]} > 0 )); then
+    python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
+      --variant "${variant}" \
+      --output "${output}" \
+      --num_states "${num_states}" \
+      --seed "${SEED}" \
+      "${extra_args[@]}"
+  else
+    python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
+      --variant "${variant}" \
+      --output "${output}" \
+      --num_states "${num_states}" \
+      --seed "${SEED}"
+  fi
 }
 
 run_check() {
@@ -157,6 +173,47 @@ run_candidate_calibration() {
   run_calibration_for_state "${CALIBRATION_STATE_PATH}"
 }
 
+generate_bowl_stack_candidate() {
+  generate_condition task2_bowl_on_plate_risk "${BOWL_STACK_STATE_PATH}" "${1:-${NUM_TRIALS}}"
+}
+
+run_bowl_stack_preview() {
+  generate_bowl_stack_candidate "${PREVIEW_NUM_STATES}"
+  run_debug_condition bowl_stack "${BOWL_STACK_STATE_PATH}" "${PREVIEW_DIR}/bowl_stack" "${PREVIEW_NUM_STATES}"
+}
+
+run_bowl_stack_calibration() {
+  require_states "${BOWL_STACK_STATE_PATH}"
+  python experiments/robot/libero/tasks/calibrate_l1c1_bowl_stack.py \
+    --state_path "${BOWL_STACK_STATE_PATH}" \
+    --num_states "${CALIBRATION_NUM_STATES}" \
+    --settle_steps "${CALIBRATION_SETTLE_STEPS}" \
+    --out_csv "${BOWL_STACK_CALIBRATION_CSV}" \
+    --out_report "${BOWL_STACK_CALIBRATION_REPORT}"
+}
+
+run_bowl_stack_risk() {
+  local trials="$1"
+  local note="$2"
+  require_states "${BOWL_STACK_STATE_PATH}"
+  python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+    --pretrained_checkpoint "${CHECKPOINT}" \
+    --task_suite_name libero_spatial \
+    --task_ids 2 \
+    --initial_states_path "${BOWL_STACK_STATE_PATH}" \
+    --safety_oracle implicit_bowl_stack \
+    --held_object_body "${HELD_OBJECT_BODY}" \
+    --distractor_body "${LOWER_BOWL_BODY}" \
+    --contact_plate_body "${PLATE_BODY}" \
+    --stacking_max_support_tilt_deg "${MAX_PLATE_TILT_DEG}" \
+    --oracle_defines_task_success True \
+    --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
+    --trajectory_track_bodies "${PLATE_BODY}" \
+    --num_trials_per_task "${trials}" \
+    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    --run_id_note "${note}"
+}
+
 run_native_baseline() {
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
@@ -218,6 +275,19 @@ case "${MODE}" in
   sweep) run_sweep ;;
   calibrate) run_calibration ;;
   calibrate_candidate) run_candidate_calibration ;;
+  bowl_stack_check) generate_bowl_stack_candidate ;;
+  bowl_stack_preview) run_bowl_stack_preview ;;
+  bowl_stack_calibrate) run_bowl_stack_calibration ;;
+  bowl_stack_risk) run_bowl_stack_risk "${NUM_TRIALS}" "L1-C1-hidden-bowl-stack-risk" ;;
+  bowl_stack_smoke)
+    run_native_baseline "${SMOKE_TRIALS}"
+    run_bowl_stack_risk "${SMOKE_TRIALS}" "L1-C1-hidden-bowl-stack-risk-smoke"
+    ;;
+  bowl_stack_eval)
+    run_native_baseline "${NUM_TRIALS}"
+    run_bowl_stack_risk "${NUM_TRIALS}" "L1-C1-hidden-bowl-stack-risk-eval"
+    record_results
+    ;;
   baseline) run_native_baseline "${NUM_TRIALS}" ;;
   control) run_condition "${CONTROL_STATE_PATH}" "${NUM_TRIALS}" "L1-C-implicit-stack-control" ;;
   risk) run_condition "${RISK_STATE_PATH}" "${NUM_TRIALS}" "L1-C-implicit-stack-risk" ;;
@@ -227,7 +297,7 @@ case "${MODE}" in
   record) record_results ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|baseline|control|risk|smoke|eval|all|record" >&2
+    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_calibrate|bowl_stack_risk|bowl_stack_smoke|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
     exit 2
     ;;
 esac
