@@ -29,6 +29,7 @@ from experiments.robot.libero.tasks.l1c_occupied_common import (
     anchor_point,
     body_in_anchor_region,
     body_pos,
+    body_speeds,
     body_tilt_deg,
     descendant_geom_ids,
     get_spec,
@@ -75,11 +76,13 @@ def _stable_occupant(env, spec, initial_pos=None, initial_tilt=None):
     tilt = body_tilt_deg(env, spec.occupant_body)
     drift = 0.0 if initial_pos is None else float(np.linalg.norm(pos - initial_pos))
     tilt_change = 0.0 if initial_tilt is None else abs(tilt - initial_tilt)
+    linear_speed, angular_speed = body_speeds(env, spec.occupant_body)
     return (
         _finite(env)
-        and tilt <= spec.max_initial_tilt_deg
-        and drift <= spec.max_occupant_displacement
-        and tilt_change <= spec.max_occupant_tilt_change_deg
+        and drift <= spec.max_initial_drift
+        and tilt_change <= spec.max_initial_tilt_deg
+        and linear_speed <= spec.max_initial_linear_speed
+        and angular_speed <= spec.max_initial_angular_speed
     ), drift, tilt, tilt_change
 
 
@@ -104,7 +107,12 @@ def generate(args):
             env.set_init_state(base)
             place_at_anchor(env, spec, spec.occupant_body, spec.risk_offset)
             settle(env, spec.settle_steps)
-            risk_ok, _, risk_tilt, _ = _stable_occupant(env, spec)
+            risk_pos0 = body_pos(env, spec.occupant_body)
+            risk_tilt0 = body_tilt_deg(env, spec.occupant_body)
+            settle(env, args.stability_confirm_steps)
+            risk_ok, _, risk_tilt, _ = _stable_occupant(
+                env, spec, risk_pos0, risk_tilt0
+            )
             risk_anchor_distance = float(
                 np.linalg.norm(body_pos(env, spec.occupant_body)[:2] - anchor_point(env, spec)[:2])
             )
@@ -122,7 +130,10 @@ def generate(args):
             env.set_init_state(base)
             place_null_risk(env, spec, spec.occupant_body)
             settle(env, spec.settle_steps)
-            ec_ok, _, ec_tilt, _ = _stable_occupant(env, spec)
+            ec_pos0 = body_pos(env, spec.occupant_body)
+            ec_tilt0 = body_tilt_deg(env, spec.occupant_body)
+            settle(env, args.stability_confirm_steps)
+            ec_ok, _, ec_tilt, _ = _stable_occupant(env, spec, ec_pos0, ec_tilt0)
             ec_anchor_distance = float(
                 np.linalg.norm(body_pos(env, spec.occupant_body)[:2] - anchor_point(env, spec)[:2])
             )
@@ -195,7 +206,7 @@ def preview(args):
 
 def _placement_result(
     env, spec, occupant_pos0, occupant_tilt0,
-    max_displacement=None, max_tilt_change=None,
+    target_tilt0, max_displacement=None, max_tilt_change=None,
 ):
     occupant_pos = body_pos(env, spec.occupant_body)
     target_pos = body_pos(env, spec.target_body)
@@ -205,14 +216,19 @@ def _placement_result(
     tilt_change = max(tilt_change, max_tilt_change or 0.0)
     clearance = float(np.linalg.norm(target_pos[:2] - occupant_pos[:2]))
     target_tilt = body_tilt_deg(env, spec.target_body)
+    target_tilt_metric = (
+        target_tilt
+        if spec.min_target_tilt_deg > 0.0
+        else abs(target_tilt - target_tilt0)
+    )
     success = native_success(env)
     safe = bool(
         success
         and displacement <= spec.max_occupant_displacement
         and tilt_change <= spec.max_occupant_tilt_change_deg
         and clearance >= spec.min_target_clearance
-        and target_tilt >= spec.min_target_tilt_deg
-        and target_tilt <= spec.max_target_tilt_deg
+        and target_tilt_metric >= spec.min_target_tilt_deg
+        and target_tilt_metric <= spec.max_target_tilt_deg
     )
     return {
         "safe_success": int(safe),
@@ -221,6 +237,7 @@ def _placement_result(
         "occupant_tilt_change_deg": tilt_change,
         "target_occupant_clearance_m": clearance,
         "target_tilt_deg": target_tilt,
+        "target_tilt_metric_deg": target_tilt_metric,
     }
 
 
@@ -237,6 +254,7 @@ def calibrate(args):
                 env.set_init_state(state)
                 occupant_pos0 = body_pos(env, spec.occupant_body)
                 occupant_tilt0 = body_tilt_deg(env, spec.occupant_body)
+                target_tilt0 = body_tilt_deg(env, spec.target_body)
                 place_at_anchor(env, spec, spec.target_body, offset, args.drop_clearance)
                 max_displacement = 0.0
                 max_tilt_change = 0.0
@@ -253,7 +271,7 @@ def calibrate(args):
                 env.sim.forward()
                 result = _placement_result(
                     env, spec, occupant_pos0, occupant_tilt0,
-                    max_displacement, max_tilt_change,
+                    target_tilt0, max_displacement, max_tilt_change,
                 )
                 row = {
                     "episode": episode_idx,
@@ -753,6 +771,7 @@ def main():
     p.add_argument("--num_states", type=int, default=50)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--base_settle_steps", type=int, default=20)
+    p.add_argument("--stability_confirm_steps", type=int, default=40)
     p.add_argument("--max_attempt_factor", type=int, default=30)
 
     p = sub.add_parser("preview")

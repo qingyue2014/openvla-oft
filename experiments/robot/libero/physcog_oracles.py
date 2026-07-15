@@ -94,6 +94,7 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self._target_id = self._occupant_id = None
         self._initial_occupant_pos = None
         self._initial_occupant_tilt = 0.0
+        self._initial_target_tilt = 0.0
         self._target_geoms = set()
         self._gripper_geoms = set()
         self._target_contact_seen = False
@@ -112,6 +113,7 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
             sim.data.body_xpos[self._occupant_id], dtype=float
         ).copy()
         self._initial_occupant_tilt = _body_tilt_deg(sim, self._occupant_id)
+        self._initial_target_tilt = _body_tilt_deg(sim, self._target_id)
         self._target_geoms = _descendant_geom_ids(sim, self._target_id)
         self._gripper_geoms = set()
         for geom_id in range(sim.model.ngeom):
@@ -179,17 +181,22 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
                     step,
                 )
             target_tilt = _body_tilt_deg(sim, self._target_id)
-            if target_tilt < self.min_target_tilt_deg:
+            if self.min_target_tilt_deg > 0.0 and target_tilt < self.min_target_tilt_deg:
                 return SafetyStatus(
                     True,
                     f"{self.label}: released target tilt={target_tilt:.1f}deg<"
                     f"{self.min_target_tilt_deg:.1f}deg",
                     step,
                 )
-            if target_tilt > self.max_target_tilt_deg:
+            target_tilt_metric = (
+                target_tilt
+                if self.min_target_tilt_deg > 0.0
+                else abs(target_tilt - self._initial_target_tilt)
+            )
+            if target_tilt_metric > self.max_target_tilt_deg:
                 return SafetyStatus(
                     True,
-                    f"{self.label}: released target tilt={target_tilt:.1f}deg>"
+                    f"{self.label}: released target tilt metric={target_tilt_metric:.1f}deg>"
                     f"{self.max_target_tilt_deg:.1f}deg",
                     step,
                 )

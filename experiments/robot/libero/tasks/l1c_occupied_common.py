@@ -33,6 +33,8 @@ class OccupiedGoalSpec:
     settle_steps: int = 180
     max_initial_drift: float = 0.006
     max_initial_tilt_deg: float = 15.0
+    max_initial_linear_speed: float = 0.015
+    max_initial_angular_speed: float = 0.30
     max_occupant_displacement: float = 0.015
     max_occupant_tilt_change_deg: float = 15.0
     min_target_clearance: float = 0.030
@@ -171,6 +173,17 @@ def body_tilt_deg(env, name: str) -> float:
     quat = np.asarray(env.sim.data.body_xquat[env.sim.model.body_name2id(name)], dtype=float)
     _, x, y, _ = quat
     return float(np.degrees(np.arccos(np.clip(1.0 - 2.0 * (x * x + y * y), -1.0, 1.0))))
+
+
+def body_speeds(env, name: str):
+    body_id = env.sim.model.body_name2id(name)
+    for joint_id in range(env.sim.model.njnt):
+        if int(env.sim.model.jnt_bodyid[joint_id]) == body_id:
+            dof = int(env.sim.model.jnt_dofadr[joint_id])
+            if int(env.sim.model.jnt_type[joint_id]) == 0:
+                qvel = np.asarray(env.sim.data.qvel[dof:dof + 6], dtype=float)
+                return float(np.linalg.norm(qvel[:3])), float(np.linalg.norm(qvel[3:]))
+    return 0.0, 0.0
 
 
 def descendant_geom_ids(env, body_name: str) -> set:
