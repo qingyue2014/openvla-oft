@@ -65,6 +65,11 @@ def _eef_pos(obs):
     return np.asarray(obs["robot0_eef_pos"], dtype=float)
 
 
+def _gripper_aperture(obs):
+    qpos = np.asarray(obs.get("robot0_gripper_qpos", [np.nan, np.nan]), dtype=float)
+    return float(np.sum(np.abs(qpos)))
+
+
 def _advance(env, obs, oracle, recorder, action, step):
     obs, _, _, _ = env.step(np.asarray(action, dtype=float).tolist())
     recorder.record(obs, action, step, phase="policy")
@@ -133,6 +138,55 @@ def _hold(env, obs, oracle, recorder, gripper, count, step):
     return obs, step, None
 
 
+def _calibrate_gripper_sign(env, obs, oracle, recorder, step, args):
+    """Infer the close sign from measured finger aperture, then leave it open."""
+    obs, step, failure = _hold(
+        env, obs, oracle, recorder, -1.0, args.gripper_probe_steps, step
+    )
+    aperture_minus = _gripper_aperture(obs)
+    if failure is not None:
+        return obs, step, 1.0, -1.0, aperture_minus, float("nan"), failure
+    obs, step, failure = _hold(
+        env, obs, oracle, recorder, 1.0, args.gripper_probe_steps, step
+    )
+    aperture_plus = _gripper_aperture(obs)
+    if np.isfinite(aperture_minus) and np.isfinite(aperture_plus):
+        close_sign = -1.0 if aperture_minus < aperture_plus else 1.0
+    else:
+        close_sign = 1.0
+    open_sign = -close_sign
+    if failure is None:
+        obs, step, failure = _hold(
+            env, obs, oracle, recorder, open_sign, args.gripper_probe_steps, step
+        )
+    return (
+        obs,
+        step,
+        close_sign,
+        open_sign,
+        aperture_minus,
+        aperture_plus,
+        failure,
+    )
+
+
+def _seat_grasp(env, obs, oracle, recorder, target, close_sign, step, args):
+    """Close while gently continuing toward the collision-limited grasp pose."""
+    for _ in range(args.grasp_seat_steps):
+        action = _position_action(
+            _eef_pos(obs),
+            target,
+            close_sign,
+            args.position_scale,
+            args.grasp_seat_max_command,
+        )
+        obs, status = _advance(env, obs, oracle, recorder, action, step)
+        step += 1
+        if status.violated:
+            return obs, step, status
+    return obs, step, None
+
+
 def _run_episode(env, state, args, episode_idx):
     from experiments.robot.libero.physcog_oracles import ImplicitBowlStackOracle
     from experiments.robot.libero.tasks.generate_l1c1_initial_states import _world_aabb
@@ -145,8 +199,15 @@ def _run_episode(env, state, args, episode_idx):
     step = 0
     failure = None
 
-    # Let robosuite synchronize its controller target while keeping the hand open.
-    obs, step, failure = _hold(env, obs, oracle, recorder, -1.0, args.wait_steps, step)
+    # Probe both commands away from objects so the script remains correct
+    # across robosuite gripper-sign conventions.
+    obs, step, close_sign, open_sign, aperture_minus, aperture_plus, failure = (
+        _calibrate_gripper_sign(env, obs, oracle, recorder, step, args)
+    )
+    if failure is None:
+        obs, step, failure = _hold(
+            env, obs, oracle, recorder, open_sign, args.wait_steps, step
+        )
     source = _body_pos(env, UPPER)
     above_source = source.copy()
     above_source[2] += args.approach_height
@@ -154,8 +215,8 @@ def _run_episode(env, state, args, episode_idx):
     grasp_eef[2] += args.grasp_height
 
     stages = (
-        ("approach_source", above_source, -1.0, args.position_tolerance, False),
-        ("descend_to_grasp", grasp_eef, -1.0, args.precise_position_tolerance, True),
+        ("approach_source", above_source, open_sign, args.position_tolerance, False),
+        ("descend_to_grasp", grasp_eef, open_sign, args.precise_position_tolerance, True),
     )
     for stage, target, grip, tolerance, accept_contact in stages:
         if failure is None:
@@ -173,8 +234,8 @@ def _run_episode(env, state, args, episode_idx):
                 accept_contact,
             )
     if failure is None:
-        obs, step, failure = _hold(
-            env, obs, oracle, recorder, 1.0, args.grasp_close_steps, step
+        obs, step, failure = _seat_grasp(
+            env, obs, oracle, recorder, grasp_eef, close_sign, step, args
         )
 
     grasped_offset = _eef_pos(obs) - _body_pos(env, UPPER)
@@ -187,7 +248,7 @@ def _run_episode(env, state, args, episode_idx):
             oracle,
             recorder,
             lifted_upper + grasped_offset,
-            1.0,
+            close_sign,
             step,
             args,
             "lift_grasped_bowl",
@@ -211,7 +272,7 @@ def _run_episode(env, state, args, episode_idx):
             oracle,
             recorder,
             preplace_upper + grasped_offset,
-            1.0,
+            close_sign,
             step,
             args,
             "move_above_lower_bowl",
@@ -223,16 +284,20 @@ def _run_episode(env, state, args, episode_idx):
             oracle,
             recorder,
             desired_upper + grasped_offset,
-            1.0,
+            close_sign,
             step,
             args,
             "descend_to_stack",
             args.stack_position_tolerance,
         )
     if failure is None:
-        obs, step, failure = _hold(env, obs, oracle, recorder, 1.0, args.contact_hold_steps, step)
+        obs, step, failure = _hold(
+            env, obs, oracle, recorder, close_sign, args.contact_hold_steps, step
+        )
     if failure is None:
-        obs, step, failure = _hold(env, obs, oracle, recorder, -1.0, args.release_steps, step)
+        obs, step, failure = _hold(
+            env, obs, oracle, recorder, open_sign, args.release_steps, step
+        )
     if failure is None:
         retreat = _eef_pos(obs).copy()
         retreat[2] += args.retreat_height
@@ -242,13 +307,15 @@ def _run_episode(env, state, args, episode_idx):
             oracle,
             recorder,
             retreat,
-            -1.0,
+            open_sign,
             step,
             args,
             "retreat_after_release",
         )
     if failure is None:
-        obs, step, failure = _hold(env, obs, oracle, recorder, -1.0, args.settle_steps, step)
+        obs, step, failure = _hold(
+            env, obs, oracle, recorder, open_sign, args.settle_steps, step
+        )
 
     metrics = oracle.metrics()
     violated = bool(getattr(failure, "violated", False))
@@ -271,6 +338,10 @@ def _run_episode(env, state, args, episode_idx):
             "failure_initial_error_m": failure_initial_error,
             "failure_best_error_m": failure_best_error,
             "failure_final_error_m": failure_final_error,
+            "gripper_close_sign": close_sign,
+            "gripper_open_sign": open_sign,
+            "gripper_aperture_after_minus": aperture_minus,
+            "gripper_aperture_after_plus": aperture_plus,
             **metrics,
         },
     )
@@ -283,6 +354,10 @@ def _run_episode(env, state, args, episode_idx):
         "failure_initial_error_m": failure_initial_error,
         "failure_best_error_m": failure_best_error,
         "failure_final_error_m": failure_final_error,
+        "gripper_close_sign": close_sign,
+        "gripper_open_sign": open_sign,
+        "gripper_aperture_after_minus": aperture_minus,
+        "gripper_aperture_after_plus": aperture_plus,
         "steps": step,
         "stack_contact_seen": int(metrics["stack_contact_seen"]),
         "release_detected": int(metrics["release_detected"]),
@@ -318,6 +393,9 @@ def run(args):
                 f"state={idx:02d} safe={row['safe_success']} violated={row['violated']} "
                 f"release_xy={row['release_xy_offset_m']:.4f} "
                 f"stage={row['failure_stage'] or '-'} "
+                f"close_sign={row['gripper_close_sign']:+.0f} "
+                f"aperture(-1/+1)={row['gripper_aperture_after_minus']:.4f}/"
+                f"{row['gripper_aperture_after_plus']:.4f} "
                 f"best_error={row['failure_best_error_m']:.4f}m "
                 f"final_error={row['failure_final_error_m']:.4f}m "
                 f"reason={row['reason'] or '-'}"
@@ -376,9 +454,11 @@ def main():
     parser.add_argument("--stack_position_tolerance", type=float, default=0.004)
     parser.add_argument("--max_waypoint_steps", type=int, default=100)
     parser.add_argument("--wait_steps", type=int, default=10)
+    parser.add_argument("--gripper_probe_steps", type=int, default=8)
     parser.add_argument("--approach_height", type=float, default=0.12)
     parser.add_argument("--grasp_height", type=float, default=0.015)
-    parser.add_argument("--grasp_close_steps", type=int, default=15)
+    parser.add_argument("--grasp_seat_steps", type=int, default=15)
+    parser.add_argument("--grasp_seat_max_command", type=float, default=0.08)
     parser.add_argument("--lift_height", type=float, default=0.12)
     parser.add_argument("--min_grasp_lift", type=float, default=0.03)
     parser.add_argument("--preplace_height", type=float, default=0.08)
