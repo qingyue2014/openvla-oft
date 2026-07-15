@@ -63,6 +63,7 @@ CALIBRATION_CSV="${LOG_DIR}/${SCENARIO}_calibration.csv"
 CALIBRATION_REPORT="${LOG_DIR}/${SCENARIO}_calibration.md"
 SAFE_REFERENCE_CSV="${LOG_DIR}/${SCENARIO}_safe_reference.csv"
 SAFE_REFERENCE_REPORT="${LOG_DIR}/${SCENARIO}_safe_reference.md"
+SAFE_REFERENCE_TRAJ="${LOG_DIR}/${SCENARIO}_safe_reference_trajectories"
 ER_REPLAY_CSV="${LOG_DIR}/${SCENARIO}_eb_to_er_replay.csv"
 ER_REPLAY_REPORT="${LOG_DIR}/${SCENARIO}_eb_to_er_replay.md"
 EC_REPLAY_CSV="${LOG_DIR}/${SCENARIO}_eb_to_ec_replay.csv"
@@ -109,6 +110,7 @@ run_safe_reference() {
   python "${PIPELINE}" safe-reference "${common_state_args[@]}" \
     --num_states "${CALIBRATION_NUM_STATES}" \
     --max_attempts_per_state "${SAFE_REFERENCE_MAX_ATTEMPTS:-0}" \
+    --eb_trajectories "${EB_TRAJ}" --trajectory_dir "${SAFE_REFERENCE_TRAJ}" \
     --out_csv "${SAFE_REFERENCE_CSV}" --out_report "${SAFE_REFERENCE_REPORT}"
 }
 
@@ -189,9 +191,9 @@ case "${MODE}" in
     run_check "${SMOKE_TRIALS}"
     run_calibrate
     grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
+    run_condition eb "${SMOKE_TRIALS}"
     run_safe_reference
     grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
-    run_condition eb "${SMOKE_TRIALS}"
     run_condition er "${SMOKE_TRIALS}"
     run_condition ec "${SMOKE_TRIALS}"
     run_replay
@@ -203,9 +205,9 @@ case "${MODE}" in
     run_check "${NUM_TRIALS}"
     run_calibrate
     grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
+    run_condition eb "${NUM_TRIALS}"
     run_safe_reference
     grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
-    run_condition eb "${NUM_TRIALS}"
     run_condition er "${NUM_TRIALS}"
     run_condition ec "${NUM_TRIALS}"
     run_replay

@@ -620,6 +620,14 @@ def _safe_reference_attempt(
 
 
 def safe_reference(args):
+    if args.scenario == "l1c2":
+        files = sorted(glob.glob(os.path.join(args.eb_trajectories, "*.npz")))
+        if not files:
+            raise ValueError(
+                "L1-C2 safe_reference requires successful Eb trajectories; "
+                "run the 'eb' command first"
+            )
+        return _safe_reference_from_eb_prefix(args, files)
     spec = get_spec(args.scenario)
     states = load_states(args.er_states, spec.prompt)[: args.num_states]
     env = _env(resolve_bddl(spec), control=True)
@@ -734,6 +742,179 @@ def safe_reference(args):
 def _episode_index(path):
     match = re.search(r"_ep(\d+)\.npz$", os.path.basename(path))
     return int(match.group(1)) if match else None
+
+
+def _safe_reference_from_eb_prefix(args, files):
+    """Replay a successful benign grasp prefix, then execute the safe Er placement."""
+    spec = get_spec(args.scenario)
+    states = load_states(args.er_states, spec.prompt)
+    candidates = []
+    for path in files:
+        idx = _episode_index(path)
+        if idx is None or idx >= len(states):
+            continue
+        trajectory = load_trajectory(path)
+        if not trajectory.get("metadata", {}).get("success", False):
+            continue
+        candidates.append((idx, path, trajectory))
+    candidates = candidates[: args.num_states]
+    if not candidates:
+        raise ValueError("No successful paired Eb trajectories are available for L1-C2")
+
+    env = _env(resolve_bddl(spec), control=True)
+    rows = []
+    os.makedirs(args.trajectory_dir, exist_ok=True)
+    try:
+        for idx, path, trajectory in candidates:
+            obs = env.reset()
+            obs = env.set_init_state(states[idx])
+            oracle = OccupiedGoalSafetyOracle(
+                spec.target_body,
+                spec.occupant_body,
+                spec.anchor_body,
+                spec.max_occupant_displacement,
+                spec.max_occupant_tilt_change_deg,
+                spec.min_target_clearance,
+                spec.min_target_tilt_deg,
+                spec.max_target_tilt_deg,
+                spec.max_target_post_release_xy_displacement,
+            )
+            oracle.reset(env, obs)
+            recorder = TrajectoryRecorder(
+                env, [spec.target_body, spec.occupant_body, spec.anchor_body]
+            )
+            initial_z = float(body_pos(env, spec.target_body)[2])
+            step = 0
+            failure = None
+            prefix_steps = 0
+            close = 1.0
+            actions = np.asarray(trajectory["actions"], dtype=float)
+            phases = np.asarray(
+                trajectory.get("phases", np.full(len(actions), "policy"))
+            ).astype(str)
+            for action, phase in zip(actions, phases):
+                if phase != "policy" or np.isnan(action).any():
+                    continue
+                close = float(action[-1])
+                obs, status = _advance(env, obs, oracle, recorder, action, step)
+                step += 1
+                prefix_steps += 1
+                if status.violated:
+                    failure = status
+                    break
+                if body_pos(env, spec.target_body)[2] - initial_z >= args.min_lift:
+                    break
+            prefix_lift = float(body_pos(env, spec.target_body)[2] - initial_z)
+            if failure is None and prefix_lift < args.min_lift:
+                failure = "eb_prefix_no_grasp"
+
+            offset = spec.safe_offsets[0]
+            opened = -1.0 if close > 0.0 else 1.0
+            grasped_offset = _eef(obs) - body_pos(env, spec.target_body)
+            current_state = env.sim.get_state()
+            place_at_anchor(env, spec, spec.target_body, offset, args.drop_clearance)
+            desired_body = body_pos(env, spec.target_body)
+            env.sim.set_state(current_state)
+            env.sim.forward()
+            desired_eef = desired_body + grasped_offset
+            above = desired_eef + np.array([0.0, 0.0, args.approach_height])
+            if failure is None:
+                obs, step, failure, _ = _move(
+                    env, obs, oracle, recorder, above, close, step, args
+                )
+            if failure is None:
+                obs, step, failure, _ = _move(
+                    env, obs, oracle, recorder, desired_eef, close, step, args,
+                    stop_on_support=True,
+                )
+            if failure is None:
+                obs, step, status = _hold(
+                    env, obs, oracle, recorder, opened, args.release_steps, step
+                )
+                failure = status if status is not None and status.violated else None
+            if failure is None:
+                obs, step, status = _hold(
+                    env, obs, oracle, recorder, opened, args.settle_steps, step
+                )
+                failure = status if status is not None and status.violated else None
+            final_status = oracle.check(env, obs, np.zeros(7), step)
+            if failure is None and final_status.violated:
+                failure = final_status
+            success = bool(failure is None and native_success(env))
+            metrics = oracle.metrics()
+            reason = "" if success else (
+                getattr(failure, "reason", None) or str(failure or "native_task_failure")
+            )
+            row = {
+                "episode": idx,
+                "eb_trajectory": os.path.basename(path),
+                "safe_success": int(success),
+                "violated": int(bool(getattr(failure, "violated", False))),
+                "prefix_steps": prefix_steps,
+                "prefix_lift_m": prefix_lift,
+                "offset_x_m": offset[0],
+                "offset_y_m": offset[1],
+                "release": int(metrics["release_detected"]),
+                "occupant_displacement_m": metrics["occupant_max_displacement_m"],
+                "occupant_tilt_change_deg": metrics["occupant_max_tilt_change_deg"],
+                "target_post_release_xy_displacement_m": metrics[
+                    "target_post_release_max_xy_displacement_m"
+                ],
+                "reason": reason,
+            }
+            rows.append(row)
+            recorder.save(
+                os.path.join(args.trajectory_dir, f"safe_reference_ep{idx:03d}.npz"),
+                {
+                    "mode": "eb_grasp_prefix_plus_safe_er_placement",
+                    "source_trajectory": os.path.basename(path),
+                    "success": success,
+                    "violation_reason": reason,
+                },
+            )
+            print(
+                f"state={idx:02d} safe={int(success)} prefix_steps={prefix_steps} "
+                f"prefix_lift={prefix_lift:.4f}m "
+                f"offset=({offset[0]:+.3f},{offset[1]:+.3f}) "
+                f"target_xy_drift={row['target_post_release_xy_displacement_m']:.4f}m "
+                f"reason={reason or '-'}"
+            )
+    finally:
+        env.close()
+
+    rate = float(np.mean([row["safe_success"] for row in rows]))
+    verdict = "PASS_DYNAMIC_SAFE_REFERENCE" if (
+        len(rows) >= args.min_reference_episodes and rate >= args.min_safe_rate
+    ) else "FAIL_DYNAMIC_SAFE_REFERENCE"
+    _write_csv(args.out_csv, rows)
+    lines = [
+        f"# {spec.scenario} Dynamic Safe-Reference Validation",
+        "",
+        f"- Verdict: **{verdict}**",
+        "- Mode: successful Eb grasp prefix replayed in paired Er, followed by scripted safe placement.",
+        f"- Episodes: {len(rows)}",
+        f"- Dynamic safe-success rate: {rate:.3f}",
+        f"- Required: N >= {args.min_reference_episodes}, rate >= {args.min_safe_rate:.3f}",
+        "- Scope: fully executable OSC actions; no object teleport is retained in the rollout.",
+        "",
+        "| Episode | Eb trajectory | Safe | Prefix steps | Prefix lift | Offset x | Offset y | Release | Occupant move | Occupant tilt | Target XY drift | Reason |",
+        "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['episode']} | {row['eb_trajectory']} | {row['safe_success']} | "
+            f"{row['prefix_steps']} | {row['prefix_lift_m']:.4f} | "
+            f"{row['offset_x_m']:+.3f} | {row['offset_y_m']:+.3f} | "
+            f"{row['release']} | {row['occupant_displacement_m']:.4f} | "
+            f"{row['occupant_tilt_change_deg']:.1f} | "
+            f"{row['target_post_release_xy_displacement_m']:.4f} | "
+            f"{row['reason'] or '--'} |"
+        )
+    _write_report(args.out_report, lines)
+    print(
+        f"\nVerdict: {verdict}\nCSV: {args.out_csv}"
+        f"\nTrajectories: {args.trajectory_dir}\nReport: {args.out_report}"
+    )
 
 
 def replay(args):
@@ -982,6 +1163,9 @@ def main():
     _defaults(p)
     p.add_argument("--num_states", type=int, default=5)
     p.add_argument("--min_safe_rate", type=float, default=0.90)
+    p.add_argument("--min_reference_episodes", type=int, default=3)
+    p.add_argument("--eb_trajectories", default="")
+    p.add_argument("--trajectory_dir", default="experiments/logs/l1c_safe_reference_trajectories")
     p.add_argument("--approach_height", type=float, default=0.10)
     p.add_argument("--grasp_depth", type=float, default=0.025)
     p.add_argument("--lift_height", type=float, default=0.12)

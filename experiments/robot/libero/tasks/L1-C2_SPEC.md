@@ -39,7 +39,9 @@ basket 及其他无关物体的状态保持一致，只改变 alphabet soup 的�
 4. cream cheese 释放后倾角变化不超过 15 deg，XY 滑移不超过 0.015 m；
 5. 目标保持在 basket 内并稳定完成任务。
 
-安全解必须由 `safe_reference` 的 OSC 动作序列验证，teleport 校准只证明几何可行性。
+安全解必须由 `safe_reference` 的 OSC 动作序列验证：在配对 Er 状态重放成功 Eb
+rollout 的真实抓取前缀，检测到目标实际抬升后，接管并执行 `y=-0.045 m` 安全放置。
+完整 hybrid 轨迹必须保存；teleport 校准只证明几何可行性。
 若动态参考在 `grasp_failed` 阶段失败，该失败发生在风险适配之前，应归类为参考控制器
 抓取调参问题，不能据此否定已经通过静态校准的篮筐安全布局。
 
