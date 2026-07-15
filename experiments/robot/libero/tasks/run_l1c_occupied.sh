@@ -4,7 +4,7 @@ set -euo pipefail
 SCENARIO="${1:-}"
 MODE="${2:-}"
 if [[ ! "${SCENARIO}" =~ ^l1c[234]$ ]] || [[ -z "${MODE}" ]]; then
-  echo "Usage: $0 l1c2|l1c3|l1c4 check|preview|calibrate|safe_reference|eb|er|ec|replay|smoke|analyze|eval" >&2
+  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|preview|calibrate|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
   exit 2
 fi
 
@@ -90,6 +90,10 @@ run_check() {
     --source_indices "${SOURCE_INDICES}" --num_states "${n}"
 }
 
+run_bodies() {
+  python "${PIPELINE}" list-bodies --scenario "${SCENARIO}"
+}
+
 run_preview() {
   python "${PIPELINE}" preview "${common_state_args[@]}" \
     --out_dir "${PREVIEW_DIR}" --num_states "${PREVIEW_NUM_STATES:-3}"
@@ -166,7 +170,13 @@ run_analyze() {
   python experiments/robot/libero/tasks/generate_result_tables.py --records "${LOG_DIR}/experiment_records.csv"
 }
 
+run_record() {
+  python experiments/robot/libero/tasks/record_experiment_results.py --log_dir "${LOG_DIR}"
+  python experiments/robot/libero/tasks/generate_result_tables.py --records "${LOG_DIR}/experiment_records.csv"
+}
+
 case "${MODE}" in
+  bodies) run_bodies ;;
   check) run_check ;;
   preview) run_preview ;;
   calibrate) run_calibrate ;;
@@ -186,6 +196,7 @@ case "${MODE}" in
     run_analyze
     ;;
   analyze) run_analyze ;;
+  record) run_record ;;
   eval)
     run_check "${NUM_TRIALS}"
     run_calibrate

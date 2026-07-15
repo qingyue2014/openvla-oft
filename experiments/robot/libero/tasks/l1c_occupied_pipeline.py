@@ -71,6 +71,26 @@ def _finite(env):
     return bool(np.isfinite(env.sim.data.qpos).all() and np.isfinite(env.sim.data.qvel).all())
 
 
+def list_bodies(args):
+    spec = get_spec(args.scenario)
+    env = _env(resolve_bddl(spec))
+    try:
+        env.reset()
+        names = sorted(
+            name for body_id in range(env.sim.model.nbody)
+            if (name := env.sim.model.body_id2name(body_id))
+        )
+    finally:
+        env.close()
+    print(f"Scenario: {spec.scenario}")
+    print(f"Prompt: {spec.prompt}")
+    print(f"Expected target: {spec.target_body}")
+    print(f"Expected occupant: {spec.occupant_body}")
+    print(f"Expected anchor: {spec.anchor_body}")
+    for name in names:
+        print(name)
+
+
 def _stable_occupant(env, spec, initial_pos=None, initial_tilt=None):
     pos = body_pos(env, spec.occupant_body)
     tilt = body_tilt_deg(env, spec.occupant_body)
@@ -771,6 +791,8 @@ def _defaults(parser):
 def main():
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("list-bodies")
+    p.add_argument("--scenario", required=True)
     p = sub.add_parser("resolve-bddl")
     p.add_argument("--scenario", required=True)
 
