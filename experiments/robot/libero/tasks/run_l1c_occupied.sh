@@ -108,6 +108,7 @@ run_calibrate() {
 run_safe_reference() {
   python "${PIPELINE}" safe-reference "${common_state_args[@]}" \
     --num_states "${CALIBRATION_NUM_STATES}" \
+    --max_attempts_per_state "${SAFE_REFERENCE_MAX_ATTEMPTS:-0}" \
     --out_csv "${SAFE_REFERENCE_CSV}" --out_report "${SAFE_REFERENCE_REPORT}"
 }
 

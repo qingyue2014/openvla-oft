@@ -663,13 +663,25 @@ def safe_reference(args):
                                 )
                             ):
                                 best = row
-                            if row["safe_success"]:
+                            if row["safe_success"] or (
+                                args.max_attempts_per_state > 0
+                                and attempt >= args.max_attempts_per_state
+                            ):
                                 break
-                        if best["safe_success"]:
+                        if best["safe_success"] or (
+                            args.max_attempts_per_state > 0
+                            and attempt >= args.max_attempts_per_state
+                        ):
                             break
-                    if best["safe_success"]:
+                    if best["safe_success"] or (
+                        args.max_attempts_per_state > 0
+                        and attempt >= args.max_attempts_per_state
+                    ):
                         break
-                if best["safe_success"]:
+                if best["safe_success"] or (
+                    args.max_attempts_per_state > 0
+                    and attempt >= args.max_attempts_per_state
+                ):
                     break
             rows.append(best)
             print(
@@ -983,6 +995,7 @@ def main():
     p.add_argument("--grasp_yaw_target_deg", type=float, default=85.0)
     p.add_argument("--grasp_yaw_min_deg", type=float, default=75.0)
     p.add_argument("--grasp_yaw_max_steps", type=int, default=24)
+    p.add_argument("--max_attempts_per_state", type=int, default=0)
     p.add_argument("--max_waypoint_steps", type=int, default=100)
     p.add_argument("--gripper_probe_steps", type=int, default=10)
     p.add_argument("--grasp_steps", type=int, default=18)
