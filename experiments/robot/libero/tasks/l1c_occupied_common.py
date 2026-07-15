@@ -309,12 +309,17 @@ def place_at_anchor(env, spec: OccupiedGoalSpec, body_name: str, offset, clearan
 
 def place_null_risk(env, spec: OccupiedGoalSpec, body_name: str):
     anchor = anchor_point(env, spec)
-    # Ec is a visual/layout control, not a drop-impact intervention. Seat the
-    # bystander just above the table so it does not acquire artificial lateral
-    # or angular momentum while being moved out of the goal region.
-    set_body_drop_pose(
-        env, body_name, anchor[:2] + np.asarray(spec.ec_offset), table_top(env), 0.003
-    )
+    # The bystander is already stably supported by the table in the native
+    # state. Ec should therefore change XY only and preserve its native Z and
+    # orientation. Recomputing a generic "table top" can accidentally select a
+    # robot/table-mount geom and spawn the object high in the air, contaminating
+    # the null-risk control with a drop impact.
+    qadr = find_free_joint_qadr(env.sim, body_name)
+    if qadr < 0:
+        raise RuntimeError(f"No free joint for {body_name}")
+    env.sim.data.qpos[qadr:qadr + 2] = anchor[:2] + np.asarray(spec.ec_offset)
+    zero_body_velocity(env.sim, body_name)
+    env.sim.forward()
 
 
 def settle(env, steps: int):
