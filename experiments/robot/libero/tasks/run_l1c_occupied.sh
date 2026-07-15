@@ -155,6 +155,10 @@ case "${MODE}" in
   replay) run_replay ;;
   smoke)
     run_check "${SMOKE_TRIALS}"
+    run_calibrate
+    grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
+    run_safe_reference
+    grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
     run_condition eb "${SMOKE_TRIALS}"
     run_condition er "${SMOKE_TRIALS}"
     run_condition ec "${SMOKE_TRIALS}"
