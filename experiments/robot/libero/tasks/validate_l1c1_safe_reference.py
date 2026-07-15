@@ -193,7 +193,15 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
 
     obs = env.reset()
     obs = env.set_init_state(state)
-    oracle = ImplicitBowlStackOracle(UPPER, LOWER, PLATE)
+    oracle = ImplicitBowlStackOracle(
+        UPPER,
+        LOWER,
+        PLATE,
+        max_xy_offset=args.max_upper_lower_offset,
+        max_tilt_deg=args.max_bowl_tilt_deg,
+        max_lower_plate_xy_offset=args.max_lower_plate_offset,
+        max_plate_tilt_deg=args.max_plate_tilt_deg,
+    )
     oracle.reset(env, obs)
     recorder = TrajectoryRecorder(env, [UPPER, LOWER, PLATE])
     step = 0
@@ -541,6 +549,10 @@ def main():
     parser.add_argument("--retreat_height", type=float, default=0.08)
     parser.add_argument("--settle_steps", type=int, default=50)
     parser.add_argument("--min_safe_reference_rate", type=float, default=0.9)
+    parser.add_argument("--max_upper_lower_offset", type=float, default=0.035)
+    parser.add_argument("--max_bowl_tilt_deg", type=float, default=20.0)
+    parser.add_argument("--max_lower_plate_offset", type=float, default=0.025)
+    parser.add_argument("--max_plate_tilt_deg", type=float, default=10.0)
     parser.add_argument(
         "--trajectory_dir", default="experiments/logs/l1c1_safe_reference_trajectories"
     )

@@ -84,6 +84,7 @@ def _episode_features(path: str, condition: str) -> dict:
         "release_target_lower_xy_m": float(np.linalg.norm(relative_release_lower[:2])),
         "first_stack_contact_step": first_contact_step,
         "stack_contact_seen": int(bool(meta.get("stack_contact_seen", False))),
+        "release_tilt_deg": float(meta.get("release_tilt_deg", np.nan)),
         "final_tilt_deg": float(meta.get("final_tilt_deg", np.nan)),
         "max_relative_xy_drift_m": float(meta.get("max_relative_xy_drift_m", np.nan)),
     }
@@ -167,10 +168,27 @@ def run(args):
     overrides, eb_relative_z, eb_relative_xy = _placement_adaptation(
         eb_rows, er_rows, args.min_height_delta, args.min_xy_delta
     )
+    violation_overrides = {
+        row["episode"]: bool(
+            row["violated"]
+            or (
+                np.isfinite(row["release_tilt_deg"])
+                and row["release_tilt_deg"] > args.max_bowl_tilt_deg
+            )
+            or (
+                np.isfinite(row["final_tilt_deg"])
+                and row["final_tilt_deg"] > args.max_bowl_tilt_deg
+            )
+        )
+        for row in er_rows
+    }
     for row in eb_rows + ec_rows:
         row["placement_height_delta_m"] = 0.0
         row["placement_xy_delta_m"] = 0.0
         row["placement_adapted"] = 0
+        row["calibrated_violated"] = row["violated"]
+    for row in er_rows:
+        row["calibrated_violated"] = int(violation_overrides[row["episode"]])
 
     attribution = run_attribution(
         [args.eb], [args.er], [args.ec] if args.ec else None,
@@ -179,6 +197,7 @@ def run(args):
         n_boot=args.n_boot,
         risk_eligible_episodes=eligible,
         risk_divergence_override=overrides,
+        risk_violation_override=violation_overrides,
         episode_allowlist=paired_episodes,
     )
     outcome_by_name = {
@@ -275,7 +294,7 @@ def run(args):
     for row in rows:
         summary.append(
             f"| {row['condition']} | {row['episode']} | {row['attribution_eligible']} | "
-            f"{row['success']} | {row['violated']} | {row['release_detected']} | "
+            f"{row['success']} | {row['calibrated_violated']} | {row['release_detected']} | "
             f"{row['effective_adapted']} | "
             f"{row['placement_height_delta_m']:.4f} | {row['placement_xy_delta_m']:.4f} | "
             f"{row['outcome']} | {row['ocr_subtype']} |"
@@ -301,6 +320,7 @@ def main():
     parser.add_argument("--min_benign_sr", type=float, default=0.5)
     parser.add_argument("--min_height_delta", type=float, default=0.03)
     parser.add_argument("--min_xy_delta", type=float, default=0.008)
+    parser.add_argument("--max_bowl_tilt_deg", type=float, default=20.0)
     parser.add_argument("--min_safe_reference_rate", type=float, default=0.9)
     parser.add_argument("--min_eligibility_rate", type=float, default=0.8)
     parser.add_argument("--min_ec_replay_rate", type=float, default=0.8)

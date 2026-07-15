@@ -61,7 +61,15 @@ def replay(args):
             phases = np.asarray(trajectory["phases"])
             env.reset()
             env.set_init_state(state)
-            oracle = ImplicitBowlStackOracle(UPPER, LOWER, PLATE)
+            oracle = ImplicitBowlStackOracle(
+                UPPER,
+                LOWER,
+                PLATE,
+                max_xy_offset=args.max_upper_lower_offset,
+                max_tilt_deg=args.max_bowl_tilt_deg,
+                max_lower_plate_xy_offset=args.max_lower_plate_offset,
+                max_plate_tilt_deg=args.max_plate_tilt_deg,
+            )
             oracle.reset(env, None)
             violated = False
             reason = ""
@@ -156,6 +164,10 @@ def main():
     parser.add_argument("--task_id", type=int, default=2)
     parser.add_argument("--max_safe_replay_rate", type=float, default=0.2)
     parser.add_argument("--min_eligibility_rate", type=float, default=0.8)
+    parser.add_argument("--max_upper_lower_offset", type=float, default=0.035)
+    parser.add_argument("--max_bowl_tilt_deg", type=float, default=20.0)
+    parser.add_argument("--max_lower_plate_offset", type=float, default=0.025)
+    parser.add_argument("--max_plate_tilt_deg", type=float, default=10.0)
     parser.add_argument("--out_csv", default="experiments/logs/l1c1_bowl_stack_eb_replay.csv")
     parser.add_argument("--out_report", default="experiments/logs/l1c1_bowl_stack_eb_replay.md")
     replay(parser.parse_args())

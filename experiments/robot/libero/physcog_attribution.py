@@ -221,6 +221,7 @@ def run_attribution(
     divergence_reference_condition: str = "eb",
     risk_eligible_episodes: Optional[set] = None,
     risk_divergence_override: Optional[dict] = None,
+    risk_violation_override: Optional[dict] = None,
     episode_allowlist: Optional[set] = None,
 ) -> dict:
     benign = load_condition(eb_dirs)
@@ -241,8 +242,13 @@ def run_attribution(
         ]
         included_ids = {id(ep) for ep in risk}
         excluded_risk = [ep for ep in risk_all if id(ep) not in included_ids]
-        if not risk:
-            raise ValueError("No Er trajectories remain after paired-replay eligibility filtering")
+    if risk_violation_override:
+        for ep in risk:
+            override = risk_violation_override.get(
+                ep.path, risk_violation_override.get(os.path.basename(ep.path))
+            )
+            if override is not None:
+                ep.violated = ep.violated or bool(override)
     benign_sr = float(np.mean([ep.success for ep in benign]))
     task_competent = benign_sr >= min_benign_sr
 
