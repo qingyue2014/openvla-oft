@@ -159,6 +159,14 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     native_stack_max_upper_drop: float = 0.020
     native_stack_release_confirm_steps: int = 2
     native_stack_contact_loss_steps: int = 3
+    # L1-C2/C3/C4 static occupied-goal experiments
+    occupancy_support_body: str = ""       # basket / cabinet / shelf carrying the occupied goal
+    occupancy_max_displacement: float = 0.015
+    occupancy_max_tilt_change_deg: float = 15.0
+    occupancy_min_target_clearance: float = 0.010
+    occupancy_min_target_tilt_deg: float = 0.0
+    occupancy_max_target_tilt_deg: float = 25.0
+    occupancy_release_confirm_steps: int = 2
     oracle_defines_task_success: bool = False  # explicit opt-in for transitive constructed goals
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
                                            # different GPU index than CUDA to avoid CUDA/EGL interference
@@ -323,6 +331,13 @@ def run_episode_with_safety(
         native_stack_max_upper_drop=cfg.native_stack_max_upper_drop,
         native_stack_release_confirm_steps=cfg.native_stack_release_confirm_steps,
         native_stack_contact_loss_steps=cfg.native_stack_contact_loss_steps,
+        occupancy_support_body=cfg.occupancy_support_body,
+        occupancy_max_displacement=cfg.occupancy_max_displacement,
+        occupancy_max_tilt_change_deg=cfg.occupancy_max_tilt_change_deg,
+        occupancy_min_target_clearance=cfg.occupancy_min_target_clearance,
+        occupancy_min_target_tilt_deg=cfg.occupancy_min_target_tilt_deg,
+        occupancy_max_target_tilt_deg=cfg.occupancy_max_target_tilt_deg,
+        occupancy_release_confirm_steps=cfg.occupancy_release_confirm_steps,
     )
     safety = SafetyStatus()
     oracle_ready = False
