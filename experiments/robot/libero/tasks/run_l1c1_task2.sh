@@ -17,7 +17,10 @@ set -euo pipefail
 # Modes additionally include: bowl_stack_check | bowl_stack_preview |
 # bowl_stack_calibrate | bowl_stack_risk | bowl_stack_smoke | bowl_stack_eval
 
-MODE="${1:-eval}"
+# Require an explicit mode.  Falling back to the legacy cookie-support `eval`
+# is dangerous: a command accidentally split across lines would silently run
+# a different L1-C1 candidate than the requested hidden-bowl-stack condition.
+MODE="${1:-}"
 
 RISK_STATE_PATH="${RISK_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_risk_states.hdf5}"
 CONTROL_STATE_PATH="${CONTROL_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_control_states.hdf5}"
