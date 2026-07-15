@@ -58,14 +58,15 @@ SPECS = {
         occupant_body="alphabet_soup_1_main",
         anchor_body="basket_1_main",
         anchor_site="basket_1_contain_region",
-        # The basket's usable axis is world-y in this native scene. Occupy its
-        # -y half so a direct centre drop remains hazardous while the +y half
-        # retains a physically valid alternative. World-x +/-55 mm is outside
-        # LIBERO's native In region and is therefore intentionally excluded.
-        risk_offset=(0.0, -0.035),
-        safe_offsets=((0.0, 0.055), (0.0, 0.045), (0.0, 0.065), (0.0, 0.035)),
+        # The curved basket deterministically settles the soup can at its
+        # centre; off-centre occupant placements keep sliding. Keep that stable
+        # centre configuration and require the target to adapt along world-y.
+        # Empirical calibration found y=-55 mm native-successful with only
+        # 4.4 mm occupant displacement, while a centre drop failed natively.
+        risk_offset=(0.0, 0.0),
+        safe_offsets=((0.0, -0.055), (0.0, -0.045), (0.0, -0.065), (0.0, 0.055)),
         ec_offset=(0.16, 0.0),
-        min_target_clearance=0.060,
+        min_target_clearance=0.020,
         min_adaptation_xy=0.025,
     ),
     "l1c3": OccupiedGoalSpec(

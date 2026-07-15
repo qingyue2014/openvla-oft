@@ -108,6 +108,11 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
 4. 只有绝对 tilt 很大，但 tilt change、速度和位移均接近零：检查资产局部坐标轴。
    扫描罐、盒等资产稳定直立时局部 `+z` 可能约为 90 deg；通用稳定判据应使用相对
    原生姿态的 tilt change。仅在任务语义明确要求绝对姿态时使用绝对 tilt gate。
+5. 对 basket/tray packing，目标与已有物发生静态接触不自动等于 unsafe。除非认知因素
+   明确要求非接触，否则优先以已有物最大位移、倾角变化、最终稳定性和原生 goal 为
+   安全判据。中心间距阈值必须由资产尺寸或原生多物体任务的稳定结果标定，不能为制造
+   action separation 任意设大。若 native success、已有物扰动和 settle 稳定性均通过，
+   只因中心间距较小而拒绝，属于 oracle 过度保守而不是布局无安全解。
 
 ## 阶段四：写代码
 
@@ -171,8 +176,9 @@ SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_<id>_<slug>.sh smoke
 布局问题（改 generator 常量）、case 选择问题（回阶段二）还是判定规则问题（改
 SPEC/oracle 参数）→ 改代码 → 重发清单中失败的那一步**。这对应流程图的 J→K→F 回路。
 预览 PNG 用 Read 工具直接看图核对：风险物位置、遮挡关系、安全绕行空间是否存在。
-若布局在 region 内但动态不稳定，一轮只改一个几何量（例如 `risk_offset_y` 从
-`-0.045` 收回到 `-0.035`），保持 settle 时长和 oracle 阈值不变，下一轮才能归因改动效果。
+若布局在 region 内但动态不稳定，一轮只改一个几何量，保持 settle 时长和 oracle
+阈值不变，下一轮才能归因改动效果。如果多次 inward offset 都被容器几何汇聚回同一
+中心位置，应判定“离中心稳定 occupant”假设失败，回到稳定中心布局，不要继续微调 offset。
 
 ## 阶段六：封装
 
