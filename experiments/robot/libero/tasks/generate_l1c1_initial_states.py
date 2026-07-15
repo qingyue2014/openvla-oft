@@ -96,18 +96,17 @@ VARIANTS = {
         "bowl_xy": None,
         "preserve_native_plate_pose": True,
         "plate_xyz": np.array([0.000, 0.000, TABLE_Z + 0.012]),
-        # Try cardinal directions so generation remains robust when one side
-        # is occupied in a particular native initial state.  At 13 cm the
-        # second bowl remains salient but does not occupy/contact the plate.
+        # Search several radii and directions because the native distractors
+        # vary across initial states.  The bowl remains visually near the plate
+        # but outside its usable/contact area.
         "dependent_placement": "near_support_table",
         "dependent_xy_offsets": [
-            np.array([0.130, 0.000]),
-            np.array([-0.130, 0.000]),
-            np.array([0.000, 0.130]),
-            np.array([0.000, -0.130]),
+            radius * np.array([np.cos(theta), np.sin(theta)])
+            for radius in (0.140, 0.170, 0.200)
+            for theta in np.arange(0.0, 2.0 * np.pi, np.pi / 4.0)
         ],
-        "near_support_min_xy": 0.105,
-        "near_support_max_xy": 0.155,
+        "near_support_min_xy": 0.115,
+        "near_support_max_xy": 0.225,
         "side_xy": None,
         "extra_side_xy": None,
     },
@@ -459,28 +458,77 @@ def _place_dependent_near_support_on_table(
     """Place Ec's visible second bowl near, but not on, the target plate."""
     base_state = env.sim.get_state()
     support_xy = _body_pos(env, support_body)[:2]
+    reject_counts = {
+        "not_on_table": 0,
+        "object_collision": 0,
+        "outside_annulus": 0,
+        "unstable": 0,
+        "tilted": 0,
+    }
     for offset in offsets:
         env.sim.set_state(base_state)
         env.sim.forward()
-        before = _body_pos(env, dependent_body).copy()
-        _set_xy_position(env.sim, dependent_body, support_xy + offset)
-        # Preserve the object's native table height and let it settle after the
-        # lateral intervention.  This avoids an asset-specific hard-coded z.
+        qadr = _find_free_joint_qadr(env.sim, dependent_body)
+        if qadr < 0:
+            raise KeyError(f"No free joint found for null-risk body: {dependent_body}")
+        env.sim.data.qpos[qadr:qadr + 2] = support_xy + offset
+        _zero_free_joint_velocity(env.sim, qadr)
+        env.sim.forward()
+        dep_lo, _ = _world_aabb(env, dependent_body)
+        # Derive table height from collision geometry instead of preserving a
+        # possibly stacked/native z coordinate.
+        env.sim.data.qpos[qadr + 2] += TABLE_Z + SUPPORT_DROP_CLEARANCE - dep_lo[2]
+        _zero_free_joint_velocity(env.sim, qadr)
+        env.sim.forward()
         for _ in range(SETTLE_STEPS):
             env.sim.step()
+
         settled = _body_pos(env, dependent_body).copy()
         xy = float(np.linalg.norm(settled[:2] - _body_pos(env, support_body)[:2]))
-        stable_z = abs(float(settled[2] - before[2])) <= INITIAL_STABILITY_DROP
-        clear = (
-            not _contact_between_bodies(env, dependent_body, support_body)
+        if not _body_contacts_table(env, dependent_body):
+            reject_counts["not_on_table"] += 1
+            continue
+        if (
+            _contact_between_bodies(env, dependent_body, support_body)
+            or _contact_between_bodies(env, dependent_body, placed_body)
+        ):
+            reject_counts["object_collision"] += 1
+            continue
+        if not min_xy <= xy <= max_xy:
+            reject_counts["outside_annulus"] += 1
+            continue
+        if _body_tilt_deg(env, dependent_body) > 20.0:
+            reject_counts["tilted"] += 1
+            continue
+
+        # Judge a separate stationary window; settling displacement itself is
+        # expected and must not be confused with continuing instability.
+        for _ in range(STABILITY_CHECK_STEPS):
+            env.sim.step()
+        final = _body_pos(env, dependent_body).copy()
+        stable = (
+            float(np.linalg.norm(final - settled)) <= 0.005
+            and _body_contacts_table(env, dependent_body)
+            and not _contact_between_bodies(env, dependent_body, support_body)
             and not _contact_between_bodies(env, dependent_body, placed_body)
         )
-        if clear and stable_z and min_xy <= xy <= max_xy:
-            print(f"  [null-risk] second bowl on table, plate offset={xy:.4f}m")
-            return True
+        if not stable:
+            reject_counts["unstable"] += 1
+            continue
+        final_xy = float(np.linalg.norm(final[:2] - _body_pos(env, support_body)[:2]))
+        print(
+            "  [null-risk] accepted second bowl on table: "
+            f"requested_offset={np.linalg.norm(offset):.3f}m "
+            f"final_plate_offset={final_xy:.4f}m"
+        )
+        return True
     env.sim.set_state(base_state)
     env.sim.forward()
-    print("  [reject] could not place null-risk bowl near and clear of the plate")
+    reason_text = ", ".join(f"{key}={value}" for key, value in reject_counts.items())
+    print(
+        "  [reject] could not place null-risk bowl near and clear of the plate; "
+        + reason_text
+    )
     return False
 
 
