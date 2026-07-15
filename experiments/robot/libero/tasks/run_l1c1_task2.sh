@@ -12,7 +12,7 @@ set -euo pipefail
 #   control  cookie box centred under the plate (matched stable support)
 #   risk     cookie box offset under the plate (partially unsupported plate)
 #
-# Modes: check | debug | preview | sweep | baseline | control | risk | smoke | eval | all | record
+# Modes: check | debug | preview | sweep | calibrate | baseline | control | risk | smoke | eval | all | record
 
 MODE="${1:-eval}"
 
@@ -43,6 +43,11 @@ RECORDS_CSV="${RECORDS_CSV:-${LOG_DIR}/experiment_records.csv}"
 RECORDS_MD="${RECORDS_MD:-${LOG_DIR}/experiment_records.md}"
 RESULT_TABLES_MD="${RESULT_TABLES_MD:-${LOG_DIR}/result_tables.md}"
 REVIEW_VIDEOS_MD="${REVIEW_VIDEOS_MD:-${LOG_DIR}/review_videos.md}"
+CALIBRATION_NUM_STATES="${CALIBRATION_NUM_STATES:-8}"
+CALIBRATION_OFFSETS="${CALIBRATION_OFFSETS:--0.045,-0.030,-0.015,0.000,0.015,0.030,0.045}"
+CALIBRATION_SETTLE_STEPS="${CALIBRATION_SETTLE_STEPS:-150}"
+CALIBRATION_CSV="${CALIBRATION_CSV:-${LOG_DIR}/l1c1_risk_layout_calibration.csv}"
+CALIBRATION_REPORT="${CALIBRATION_REPORT:-${LOG_DIR}/l1c1_risk_layout_calibration.md}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "_deps/LIBERO/libero" ]]; then
@@ -123,6 +128,18 @@ run_sweep() {
     --plate_z_offsets "${SWEEP_PLATE_Z_OFFSETS}"
 }
 
+run_calibration() {
+  require_states "${RISK_STATE_PATH}"
+  python experiments/robot/libero/tasks/calibrate_l1c1_risk_layout.py \
+    --state_path "${RISK_STATE_PATH}" \
+    --num_states "${CALIBRATION_NUM_STATES}" \
+    --offsets "${CALIBRATION_OFFSETS}" \
+    --settle_steps "${CALIBRATION_SETTLE_STEPS}" \
+    --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
+    --out_csv "${CALIBRATION_CSV}" \
+    --out_report "${CALIBRATION_REPORT}"
+}
+
 run_native_baseline() {
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
@@ -181,6 +198,7 @@ case "${MODE}" in
   debug) run_debug ;;
   preview) run_preview ;;
   sweep) run_sweep ;;
+  calibrate) run_calibration ;;
   baseline) run_native_baseline "${NUM_TRIALS}" ;;
   control) run_condition "${CONTROL_STATE_PATH}" "${NUM_TRIALS}" "L1-C-implicit-stack-control" ;;
   risk) run_condition "${RISK_STATE_PATH}" "${NUM_TRIALS}" "L1-C-implicit-stack-risk" ;;
@@ -190,7 +208,7 @@ case "${MODE}" in
   record) record_results ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected check|debug|preview|sweep|baseline|control|risk|smoke|eval|all|record" >&2
+    echo "Expected check|debug|preview|sweep|calibrate|baseline|control|risk|smoke|eval|all|record" >&2
     exit 2
     ;;
 esac
