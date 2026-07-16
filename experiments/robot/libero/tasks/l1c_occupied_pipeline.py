@@ -397,9 +397,11 @@ def preview(args):
                     policy_start_image = env.sim.render(
                         256, 256, camera_name="agentview"
                     )
-                policy_start_image = _policy_camera_crop(
-                    np.asarray(policy_start_image)
+                policy_start_image = np.asarray(policy_start_image)
+                Image.fromarray(policy_start_image[::-1].copy()).save(
+                    out / f"{condition}_{idx:02d}_t{args.policy_start_step}.png"
                 )
+                policy_start_image = _policy_camera_crop(policy_start_image)
                 Image.fromarray(policy_start_image).save(
                     out / f"{condition}_{idx:02d}_policy_t{args.policy_start_step}.png"
                 )
@@ -410,11 +412,49 @@ def preview(args):
                 start_policy_mask = _policy_camera_crop(
                     start_mask.astype(np.uint8), resize=False
                 ).astype(bool)
+                anchor_geom_ids = descendant_geom_ids(env, spec.anchor_body)
+                start_anchor_mask = np.isin(
+                    start_seg_ids, tuple(anchor_geom_ids)
+                )
+                start_anchor_policy_mask = _policy_camera_crop(
+                    start_anchor_mask.astype(np.uint8), resize=False
+                ).astype(bool)
                 Image.fromarray(
                     start_policy_mask.astype(np.uint8) * 255
                 ).save(
                     out
                     / f"{condition}_{idx:02d}_occupant_mask_t{args.policy_start_step}.png"
+                )
+                Image.fromarray(
+                    start_anchor_policy_mask.astype(np.uint8) * 255
+                ).save(
+                    out
+                    / f"{condition}_{idx:02d}_anchor_mask_t{args.policy_start_step}.png"
+                )
+                occupant_t0_pos = body_pos(env, spec.occupant_body)
+                # Recover t0 pose from the supplied state; the environment is
+                # currently at policy-start after the ten no-op steps.
+                occupant_t10_pos = occupant_t0_pos.copy()
+                occupant_t10_tilt = body_tilt_deg(env, spec.occupant_body)
+                anchor_t10_pos = body_pos(env, spec.anchor_body)
+                env.set_init_state(state)
+                occupant_t0_pos = body_pos(env, spec.occupant_body)
+                occupant_t0_tilt = body_tilt_deg(env, spec.occupant_body)
+                anchor_t0_pos = body_pos(env, spec.anchor_body)
+                occupant_t10_displacement = float(
+                    np.linalg.norm(occupant_t10_pos - occupant_t0_pos)
+                )
+                occupant_t10_tilt_change = abs(
+                    occupant_t10_tilt - occupant_t0_tilt
+                )
+                anchor_t10_displacement = float(
+                    np.linalg.norm(anchor_t10_pos - anchor_t0_pos)
+                )
+                # Recreate policy-start once more only for the region predicate.
+                for _ in range(args.policy_start_step):
+                    env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+                occupant_t10_in_goal = body_in_anchor_region(
+                    env, spec, spec.occupant_body
                 )
                 print(
                     f"condition={condition} state={idx:02d} "
@@ -423,6 +463,16 @@ def preview(args):
                     f"visible_pixels_t0_policy_crop={int(policy_mask.sum())} "
                     f"visible_pixels_t{args.policy_start_step}_policy_start="
                     f"{int(start_policy_mask.sum())} "
+                    f"anchor_pixels_t{args.policy_start_step}_policy_start="
+                    f"{int(start_anchor_policy_mask.sum())} "
+                    f"occupant_in_goal_t{args.policy_start_step}="
+                    f"{int(occupant_t10_in_goal)} "
+                    f"occupant_displacement_t{args.policy_start_step}="
+                    f"{occupant_t10_displacement:.4f}m "
+                    f"occupant_tilt_change_t{args.policy_start_step}="
+                    f"{occupant_t10_tilt_change:.2f}deg "
+                    f"anchor_displacement_t{args.policy_start_step}="
+                    f"{anchor_t10_displacement:.4f}m "
                     f"collision_extent_xyz_m=({collision_extent[0]:.4f},"
                     f"{collision_extent[1]:.4f},{collision_extent[2]:.4f})"
                 )
@@ -489,11 +539,72 @@ def screen_occupants(args):
                 )
             )
             extent = _collision_aabb_extent(env, body_name)
+            paired_occupant_pos = body_pos(env, body_name)
+            paired_occupant_tilt = body_tilt_deg(env, body_name)
+            paired_anchor_pos = body_pos(env, candidate_spec.anchor_body)
+            anchor_visible_t0 = _visible_pixels_in_policy_crop(
+                env, candidate_spec.anchor_body
+            )
             visibility = [_visible_pixels_in_policy_crop(env, body_name)]
-            for _ in range(args.timeline_steps):
+            policy_start_metrics = None
+            if args.policy_start_step == 0:
+                policy_start_metrics = (
+                    paired_in_goal, 0.0, 0.0, 0.0, anchor_visible_t0
+                )
+            for step in range(1, args.timeline_steps + 1):
                 env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
                 visibility.append(_visible_pixels_in_policy_crop(env, body_name))
+                if step == args.policy_start_step:
+                    policy_start_metrics = (
+                        body_in_anchor_region(env, candidate_spec, body_name),
+                        float(
+                            np.linalg.norm(
+                                body_pos(env, body_name) - paired_occupant_pos
+                            )
+                        ),
+                        abs(
+                            body_tilt_deg(env, body_name)
+                            - paired_occupant_tilt
+                        ),
+                        float(
+                            np.linalg.norm(
+                                body_pos(env, candidate_spec.anchor_body)
+                                - paired_anchor_pos
+                            )
+                        ),
+                        _visible_pixels_in_policy_crop(
+                            env, candidate_spec.anchor_body
+                        ),
+                    )
             policy_start_step = min(args.policy_start_step, args.timeline_steps)
+            if policy_start_metrics is None:
+                raise RuntimeError(
+                    "policy_start_step must not exceed timeline_steps"
+                )
+            (
+                policy_start_in_goal,
+                policy_start_displacement,
+                policy_start_tilt_change,
+                policy_start_anchor_displacement,
+                anchor_visible_policy_start,
+            ) = policy_start_metrics
+            policy_start_dynamics_ok = (
+                policy_start_in_goal
+                and policy_start_displacement <= candidate_spec.max_initial_drift
+                and policy_start_tilt_change <= candidate_spec.max_initial_tilt_deg
+                and policy_start_anchor_displacement <= args.max_anchor_displacement
+            )
+            policy_start_semantics_visible = (
+                visibility[policy_start_step] >= args.recognizable_pixels
+                and anchor_visible_policy_start >= args.recognizable_pixels
+            )
+            candidate_valid = (
+                stable
+                and settled_in_goal
+                and paired_in_goal
+                and policy_start_dynamics_ok
+                and policy_start_semantics_visible
+            )
             first_visible = next(
                 (step for step, pixels in enumerate(visibility) if pixels > 0),
                 -1,
@@ -514,12 +625,20 @@ def screen_occupants(args):
                 if step <= args.timeline_steps
             )
             print(
-                f"candidate={body_name} valid={int(stable and settled_in_goal and paired_in_goal)} "
+                f"candidate={body_name} valid={int(candidate_valid)} "
                 f"stable={int(stable)} settled_in_goal={int(settled_in_goal)} "
                 f"paired_in_goal={int(paired_in_goal)} "
                 f"visible_settled={visible_settled} "
                 f"visible_t0={visibility[0]} "
                 f"visible_t{policy_start_step}_policy_start={visibility[policy_start_step]} "
+                f"anchor_visible_t0={anchor_visible_t0} "
+                f"anchor_visible_t{policy_start_step}_policy_start={anchor_visible_policy_start} "
+                f"policy_start_dynamics_ok={int(policy_start_dynamics_ok)} "
+                f"policy_start_semantics_visible={int(policy_start_semantics_visible)} "
+                f"in_goal_t{policy_start_step}={int(policy_start_in_goal)} "
+                f"displacement_t{policy_start_step}={policy_start_displacement:.4f}m "
+                f"tilt_change_t{policy_start_step}={policy_start_tilt_change:.2f}deg "
+                f"anchor_displacement_t{policy_start_step}={policy_start_anchor_displacement:.4f}m "
                 f"visible_noop_max={max(visibility)} first_visible_step={first_visible} "
                 f"first_ge_{args.recognizable_pixels}px_step={first_recognizable} "
                 f"visibility_noop_timeline={timeline} "
@@ -1548,6 +1667,7 @@ def main():
     p.add_argument("--policy_start_step", type=int, default=10)
     p.add_argument("--timeline_steps", type=int, default=30)
     p.add_argument("--recognizable_pixels", type=int, default=100)
+    p.add_argument("--max_anchor_displacement", type=float, default=0.010)
 
     p = sub.add_parser("calibrate")
     _defaults(p)

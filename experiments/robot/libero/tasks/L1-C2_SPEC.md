@@ -79,8 +79,10 @@ rollout 的真实抓取前缀，检测到目标实际抬升后，接管并执行
 - Eb→Er replay：safe rate ≤ 0.20，paired eligibility ≥ 0.80；
 - Eb→Ec replay：safe rate ≥ 0.80；
 - Eb 基础任务成功率 ≥ 0.80。
-- policy `agentview` crop 中 Er occupant 在首次策略决策 `t=10` 必须达到 100 pixels，且
-  不能只在单帧闪现。当前 soup pilot 为 994 pixels，并在 `t=5--30` 持续可见。
+- policy `agentview` crop 中 Er occupant 与 basket 在首次策略决策 `t=10` 均须达到
+  100 pixels，且不能只在单帧闪现；同一时刻 occupant 必须仍在 basket 内，occupant
+  位移/倾角变化和 basket 位移必须通过动力学门。旧的 soup `994 pixels` 结果在补齐这些
+  同步指标前不再视为可见性通过证据。
 
 只有全部通过时报告 `BENCHMARK_READY_FOR_ATTRIBUTION`。
 

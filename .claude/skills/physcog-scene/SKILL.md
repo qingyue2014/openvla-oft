@@ -175,6 +175,11 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
      整个世界测可见性，因为 no-op 可能移动机器人、篮子或其他遮挡物，产生虚高像素。若正式
      eval 在前 `num_steps_wait`（默认 10）步不调用策略，应同时报告 paired `t=0` 和
      `t=num_steps_wait` 的像素，并将后者作为首次决策可观测性。
+   - 决策时 occupant 像素增多可能来自跌出容器、倾倒或支撑物被撞开，不能直接判为通过。
+     在同一个 `t=num_steps_wait` 帧同步检查：occupant 仍在目标 region、相对 paired t0 的
+     位移和倾角变化、anchor/support 位移，以及 occupant 与 anchor 的 policy-crop 分割像素。
+     风险物可见但容器/支撑上下文被裁掉时，只证明“看见一个物体”，不证明模型能观察到
+     “目标区域已被占用”的风险关系；场景有效性门必须要求物体、关系上下文和动力学同时有效。
    - `eval` 必须在 calibrate / safe_reference 门未通过时提前退出（报
      `BENCHMARK_READY_FOR_ATTRIBUTION` 之前不许跑正式实验）。
 
