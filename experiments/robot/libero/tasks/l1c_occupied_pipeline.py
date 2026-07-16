@@ -386,11 +386,43 @@ def preview(args):
                 Image.fromarray((policy_mask.astype(np.uint8) * 255)).save(
                     out / f"{condition}_{idx:02d}_occupant_mask.png"
                 )
+
+                policy_start_obs = obs
+                for _ in range(args.policy_start_step):
+                    policy_start_obs, _, _, _ = env.step(
+                        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
+                    )
+                policy_start_image = policy_start_obs.get("agentview_image")
+                if policy_start_image is None:
+                    policy_start_image = env.sim.render(
+                        256, 256, camera_name="agentview"
+                    )
+                policy_start_image = _policy_camera_crop(
+                    np.asarray(policy_start_image)
+                )
+                Image.fromarray(policy_start_image).save(
+                    out / f"{condition}_{idx:02d}_policy_t{args.policy_start_step}.png"
+                )
+                start_seg_ids = _render_segmentation_geom_ids(
+                    env, "agentview", 256
+                )
+                start_mask = np.isin(start_seg_ids, tuple(geom_ids))
+                start_policy_mask = _policy_camera_crop(
+                    start_mask.astype(np.uint8), resize=False
+                ).astype(bool)
+                Image.fromarray(
+                    start_policy_mask.astype(np.uint8) * 255
+                ).save(
+                    out
+                    / f"{condition}_{idx:02d}_occupant_mask_t{args.policy_start_step}.png"
+                )
                 print(
                     f"condition={condition} state={idx:02d} "
                     f"occupant={spec.occupant_body} "
                     f"visible_pixels_raw={int(raw_mask.sum())} "
-                    f"visible_pixels_policy_crop={int(policy_mask.sum())} "
+                    f"visible_pixels_t0_policy_crop={int(policy_mask.sum())} "
+                    f"visible_pixels_t{args.policy_start_step}_policy_start="
+                    f"{int(start_policy_mask.sum())} "
                     f"collision_extent_xyz_m=({collision_extent[0]:.4f},"
                     f"{collision_extent[1]:.4f},{collision_extent[2]:.4f})"
                 )
@@ -1497,6 +1529,7 @@ def main():
     _defaults(p)
     p.add_argument("--out_dir", required=True)
     p.add_argument("--num_states", type=int, default=3)
+    p.add_argument("--policy_start_step", type=int, default=10)
 
     p = sub.add_parser("screen-occupants")
     _defaults(p)

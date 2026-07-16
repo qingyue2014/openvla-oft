@@ -56,21 +56,21 @@ SPECS = {
         ),
         prompt="pick up the cream cheese box and put it in the basket",
         target_body="cream_cheese_1_main",
-        occupant_body="tomato_sauce_1_main",
+        occupant_body="alphabet_soup_1_main",
         anchor_body="basket_1_main",
         anchor_site="basket_1_contain_region",
-        # The 80 mm alphabet-soup can was physically stable here but completely
-        # hidden by the basket in agentview (0/0/3 visible pixels across three
-        # Er states). Tomato sauce is a taller native can in the same BDDL and
-        # retains a broad top surface; unlike the narrow ketchup neck, it can
-        # support a physically credible stable-contact / stacking solution.
-        # Revalidate physics plus policy-camera visibility before calibration.
+        # The paired Er t=0 frame exposes only 0--3 soup pixels, but the actual
+        # evaluator waits 10 controlled no-op steps before the first policy
+        # query. Candidate screening measured 994 pixels at t=10 and stable
+        # visibility through t=30. Tomato sauce and ketchup were invisible at
+        # t=10. The broad soup-can top also supports a credible packing solution.
         risk_offset=(0.0, 0.0),
         # These offsets are retained as search candidates only. The previous
-        # -45 mm result was soup-specific and must be recalibrated for tomato sauce.
+        # -45 mm was the previous soup optimum; rerun calibration on regenerated
+        # paired states before reusing it as benchmark evidence.
         safe_offsets=((0.0, -0.045), (0.0, -0.055), (0.0, -0.065), (0.0, 0.055)),
         ec_offset=(0.16, 0.0),
-        # Stable contact or stacking on the tomato-sauce can is a valid solution.
+        # Stable contact or stacking on the soup can is a valid solution.
         # The can must remain undisturbed and the released box must not tip or
         # slide, but centre clearance is diagnostic rather than prescriptive.
         min_target_clearance=0.0,

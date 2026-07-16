@@ -51,7 +51,7 @@ class _Env:
 
 def test_paper_facing_l1c_specs_keep_native_prompts_and_assets():
     expected = {
-        "l1c2": ("cream_cheese_1_main", "tomato_sauce_1_main", "basket"),
+        "l1c2": ("cream_cheese_1_main", "alphabet_soup_1_main", "basket"),
         "l1c3": ("wine_bottle_1_main", "akita_black_bowl_1_main", "drawer"),
         "l1c4": ("chefmate_8_frypan_1_main", "white_bowl_1_main", "cabinet"),
     }
