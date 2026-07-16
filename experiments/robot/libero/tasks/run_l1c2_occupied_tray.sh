@@ -1,4 +1,3 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Backward-compatible alias. L1-C2 now uses the native occupied-tray task.
 exec bash experiments/robot/libero/tasks/run_l1c_occupied.sh l1c2 "${1:-}"

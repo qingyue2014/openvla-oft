@@ -9,7 +9,7 @@ if [[ ! "${SCENARIO}" =~ ^l1c[234]$ ]] || [[ -z "${MODE}" ]]; then
 fi
 
 case "${SCENARIO}" in
-  l1c2) SLUG="occupied-basket" ;;
+  l1c2) SLUG="occupied-tray" ;;
   l1c3) SLUG="occupied-drawer" ;;
   l1c4) SLUG="occupied-cabinet-top" ;;
 esac
