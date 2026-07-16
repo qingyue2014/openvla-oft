@@ -14,6 +14,7 @@ import json
 import os
 import re
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -396,6 +397,69 @@ def preview(args):
     finally:
         env.close()
     print(f"Preview written to {out}")
+
+
+def screen_occupants(args):
+    """Compare native occupant candidates in one identical basket state."""
+    spec = get_spec(args.scenario)
+    states = load_states(args.eb_states, spec.prompt)
+    if not states:
+        raise RuntimeError(f"No Eb states in {args.eb_states}")
+    if args.state_index < 0 or args.state_index >= len(states):
+        raise IndexError(
+            f"state_index={args.state_index} outside available Eb states 0..{len(states) - 1}"
+        )
+    base = states[args.state_index]
+    env = _env(resolve_bddl(spec), render=True)
+    try:
+        env.reset()
+        known_bodies = {
+            env.sim.model.body_id2name(body_id)
+            for body_id in range(env.sim.model.nbody)
+        }
+        for body_name in args.candidates:
+            if body_name not in known_bodies:
+                print(f"candidate={body_name} valid=0 reason=body_not_found")
+                continue
+            candidate_spec = replace(spec, occupant_body=body_name)
+            env.set_init_state(base)
+            place_at_anchor(
+                env, candidate_spec, body_name, candidate_spec.risk_offset
+            )
+            settle(env, args.settle_steps)
+            pos0 = body_pos(env, body_name)
+            tilt0 = body_tilt_deg(env, body_name)
+            settle(env, args.stability_confirm_steps)
+            stable, drift, tilt, tilt_change = _stable_occupant(
+                env, candidate_spec, pos0, tilt0
+            )
+            linear_speed, angular_speed = body_speeds(env, body_name)
+            in_goal = body_in_anchor_region(env, candidate_spec, body_name)
+            anchor_distance = float(
+                np.linalg.norm(
+                    body_pos(env, body_name)[:2]
+                    - anchor_point(env, candidate_spec)[:2]
+                )
+            )
+            geom_ids = descendant_geom_ids(env, body_name)
+            seg_ids = _render_segmentation_geom_ids(env, "agentview", 256)
+            raw_mask = np.isin(seg_ids, tuple(geom_ids))
+            policy_mask = _policy_camera_crop(
+                raw_mask.astype(np.uint8), resize=False
+            ).astype(bool)
+            extent = _collision_aabb_extent(env, body_name)
+            print(
+                f"candidate={body_name} valid={int(stable and in_goal)} "
+                f"stable={int(stable)} in_goal={int(in_goal)} "
+                f"visible_pixels_policy_crop={int(policy_mask.sum())} "
+                f"collision_extent_xyz_m=({extent[0]:.4f},{extent[1]:.4f},{extent[2]:.4f}) "
+                f"anchor_distance={anchor_distance:.4f}m "
+                f"confirm_drift={drift:.4f}m tilt={tilt:.1f}deg "
+                f"tilt_change={tilt_change:.2f}deg "
+                f"speed={linear_speed:.4f}m/s angular={angular_speed:.3f}rad/s"
+            )
+    finally:
+        env.close()
 
 
 def _render_segmentation_geom_ids(env, camera: str, resolution: int) -> np.ndarray:
@@ -1381,6 +1445,21 @@ def main():
     _defaults(p)
     p.add_argument("--out_dir", required=True)
     p.add_argument("--num_states", type=int, default=3)
+
+    p = sub.add_parser("screen-occupants")
+    _defaults(p)
+    p.add_argument(
+        "--candidates",
+        nargs="+",
+        default=(
+            "alphabet_soup_1_main",
+            "tomato_sauce_1_main",
+            "ketchup_1_main",
+        ),
+    )
+    p.add_argument("--state_index", type=int, default=0)
+    p.add_argument("--settle_steps", type=int, default=180)
+    p.add_argument("--stability_confirm_steps", type=int, default=40)
 
     p = sub.add_parser("calibrate")
     _defaults(p)

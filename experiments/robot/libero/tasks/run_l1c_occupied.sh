@@ -4,7 +4,7 @@ set -euo pipefail
 SCENARIO="${1:-}"
 MODE="${2:-}"
 if [[ ! "${SCENARIO}" =~ ^l1c[234]$ ]] || [[ -z "${MODE}" ]]; then
-  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|preview|calibrate|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
+  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|preview|screen_occupants|calibrate|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
   exit 2
 fi
 
@@ -103,6 +103,10 @@ run_preview() {
     --out_dir "${PREVIEW_DIR}" --num_states "${PREVIEW_NUM_STATES:-3}"
 }
 
+run_screen_occupants() {
+  python "${PIPELINE}" screen-occupants "${common_state_args[@]}"
+}
+
 run_calibrate() {
   python "${PIPELINE}" calibrate "${common_state_args[@]}" \
     --num_states "${CALIBRATION_NUM_STATES}" \
@@ -186,6 +190,7 @@ case "${MODE}" in
   bodies) run_bodies ;;
   check) run_check ;;
   preview) run_preview ;;
+  screen_occupants) run_screen_occupants ;;
   calibrate) run_calibrate ;;
   safe_reference) run_safe_reference ;;
   eb|er|ec) run_condition "${MODE}" "${NUM_TRIALS}" ;;

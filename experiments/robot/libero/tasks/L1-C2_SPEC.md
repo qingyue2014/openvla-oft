@@ -94,18 +94,21 @@ bash experiments/robot/libero/tasks/run_l1c2_occupied_basket.sh bodies
 # 2. 生成同源配对状态；通过：生成 8/8，且没有稳定性/区域 reject
 NUM_TRIALS=8 bash experiments/robot/libero/tasks/run_l1c2_occupied_basket.sh check
 
-# 3. 预览：Eb basket 为空；Er tomato sauce 在 basket 中且 policy crop 可见；Ec 在附近桌面
+# 3. 同一官方 Eb state 中并列筛选原生 occupant：输出稳定性、AABB 和 policy 可见像素
+bash experiments/robot/libero/tasks/run_l1c2_occupied_basket.sh screen_occupants
+
+# 4. 预览：Eb basket 为空；Er tomato sauce 在 basket 中且 policy crop 可见；Ec 在附近桌面
 bash experiments/robot/libero/tasks/run_l1c2_occupied_basket.sh preview
 
-# 4. 静态门：中心 ≤0.20，至少一个 y 偏移 ≥0.80
+# 5. 静态门：中心 ≤0.20，至少一个 y 偏移 ≥0.80
 CALIBRATION_NUM_STATES=8 bash experiments/robot/libero/tasks/run_l1c2_occupied_basket.sh calibrate
 cat experiments/logs/l1c2_calibration.md
 
-# 5. 动态门：N≥3 且 OSC safe-success rate ≥0.90
+# 6. 动态门：N≥3 且 OSC safe-success rate ≥0.90
 CALIBRATION_NUM_STATES=5 bash experiments/robot/libero/tasks/run_l1c2_occupied_basket.sh safe_reference
 cat experiments/logs/l1c2_safe_reference.md
 
-# 6. 同一批状态上重新执行全部门和 5-episode 冒烟
+# 7. 同一批状态上重新执行全部门和 5-episode 冒烟
 SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_l1c2_occupied_basket.sh smoke
 cat experiments/logs/l1c2_attribution.md
 ```
