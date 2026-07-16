@@ -9,9 +9,10 @@ from experiments.robot.libero.physcog_oracles import (
 from experiments.robot.libero.tasks.l1c_occupied_common import get_spec, resolve_bddl, settle
 from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _collision_aabb_extent,
+    _matrix_to_wxyz,
     _policy_camera_crop,
     _quat_separation_deg,
-    _settle_occupant_in_pinned_native_world,
+    _wxyz_to_matrix,
 )
 
 
@@ -158,47 +159,7 @@ def test_settle_uses_controller_aware_env_steps():
     assert env.actions == [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]] * 3
 
 
-def test_pinned_settle_restores_everything_except_occupant_free_joint():
-    class _PinnedModel:
-        njnt = 1
-        jnt_bodyid = np.array([1])
-        jnt_type = np.array([0])
-        jnt_qposadr = np.array([7])
-        jnt_dofadr = np.array([6])
-
-        @staticmethod
-        def body_name2id(name):
-            assert name == "occupant"
-            return 1
-
-    class _PinnedData:
-        qpos = np.zeros(14, dtype=float)
-        qvel = np.zeros(12, dtype=float)
-
-    class _PinnedSim:
-        model = _PinnedModel()
-        data = _PinnedData()
-
-        @staticmethod
-        def forward():
-            pass
-
-    class _PinnedEnv:
-        sim = _PinnedSim()
-
-        def step(self, action):
-            self.sim.data.qpos += 1.0
-            self.sim.data.qvel += 1.0
-
-        def set_init_state(self, state):
-            qpos, qvel = state
-            self.sim.data.qpos[:] = qpos
-            self.sim.data.qvel[:] = qvel
-
-    env = _PinnedEnv()
-    native = (np.zeros(14, dtype=float), np.zeros(12, dtype=float))
-    _settle_occupant_in_pinned_native_world(env, native, "occupant", 3)
-    assert np.all(env.sim.data.qpos[:7] == 0.0)
-    assert np.all(env.sim.data.qvel[:6] == 0.0)
-    assert np.all(env.sim.data.qpos[7:14] == 3.0)
-    assert np.all(env.sim.data.qvel[6:12] == 3.0)
+def test_mujoco_quaternion_matrix_round_trip():
+    quat = np.array([0.5, -0.5, 0.5, 0.5])
+    recovered = _matrix_to_wxyz(_wxyz_to_matrix(quat))
+    assert np.allclose(recovered, quat) or np.allclose(recovered, -quat)

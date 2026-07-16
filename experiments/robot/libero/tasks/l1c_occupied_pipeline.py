@@ -138,23 +138,119 @@ def _restore_native_except_occupant(env, native_state, body_name, occupant_state
     env.sim.forward()
 
 
-def _settle_occupant_in_pinned_native_world(
-    env, native_state, body_name, steps
-):
-    """Advance occupant physics while keeping every paired variable native.
+def _wxyz_to_matrix(quat):
+    quat = np.asarray(quat, dtype=float)
+    quat = quat / max(float(np.linalg.norm(quat)), 1e-12)
+    w, x, y, z = quat
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ])
 
-    Container assets such as the basket can have free joints. If the basket is
-    allowed to drift during setup and only the occupant's final world pose is
-    transplanted into the official state, the restored pair can interpenetrate
-    and explode on the evaluator's first no-op step. After every controlled
-    step, retain the occupant free joint and restore all other qpos/qvel.
-    """
-    for _ in range(max(0, int(steps))):
-        env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
-        occupant_state = _capture_free_joint(env.sim, body_name)
-        _restore_native_except_occupant(
-            env, native_state, body_name, occupant_state
-        )
+
+def _matrix_to_wxyz(matrix):
+    """Convert a proper rotation matrix to a normalized MuJoCo quaternion."""
+    m = np.asarray(matrix, dtype=float)
+    trace = float(np.trace(m))
+    if trace > 0.0:
+        s = np.sqrt(trace + 1.0) * 2.0
+        quat = np.array([
+            0.25 * s,
+            (m[2, 1] - m[1, 2]) / s,
+            (m[0, 2] - m[2, 0]) / s,
+            (m[1, 0] - m[0, 1]) / s,
+        ])
+    else:
+        axis = int(np.argmax(np.diag(m)))
+        if axis == 0:
+            s = np.sqrt(max(1.0 + m[0, 0] - m[1, 1] - m[2, 2], 0.0)) * 2.0
+            quat = np.array([
+                (m[2, 1] - m[1, 2]) / max(s, 1e-12),
+                0.25 * s,
+                (m[0, 1] + m[1, 0]) / max(s, 1e-12),
+                (m[0, 2] + m[2, 0]) / max(s, 1e-12),
+            ])
+        elif axis == 1:
+            s = np.sqrt(max(1.0 + m[1, 1] - m[0, 0] - m[2, 2], 0.0)) * 2.0
+            quat = np.array([
+                (m[0, 2] - m[2, 0]) / max(s, 1e-12),
+                (m[0, 1] + m[1, 0]) / max(s, 1e-12),
+                0.25 * s,
+                (m[1, 2] + m[2, 1]) / max(s, 1e-12),
+            ])
+        else:
+            s = np.sqrt(max(1.0 + m[2, 2] - m[0, 0] - m[1, 1], 0.0)) * 2.0
+            quat = np.array([
+                (m[1, 0] - m[0, 1]) / max(s, 1e-12),
+                (m[0, 2] + m[2, 0]) / max(s, 1e-12),
+                (m[1, 2] + m[2, 1]) / max(s, 1e-12),
+                0.25 * s,
+            ])
+    quat /= max(float(np.linalg.norm(quat)), 1e-12)
+    return quat if quat[0] >= 0.0 else -quat
+
+
+def _restore_native_with_anchor_relative_occupant(
+    env, native_state, occupant_body, anchor_body
+):
+    """Map the settled occupant/anchor transform onto the native anchor pose."""
+    anchor_id = env.sim.model.body_name2id(anchor_body)
+    settled_anchor_pos = np.asarray(
+        env.sim.data.body_xpos[anchor_id], dtype=float
+    ).copy()
+    settled_anchor_mat = np.asarray(
+        env.sim.data.body_xmat[anchor_id], dtype=float
+    ).reshape(3, 3).copy()
+    occupant_qpos, _ = _capture_free_joint(env.sim, occupant_body)
+
+    env.set_init_state(native_state)
+    native_anchor_pos = np.asarray(
+        env.sim.data.body_xpos[anchor_id], dtype=float
+    ).copy()
+    native_anchor_mat = np.asarray(
+        env.sim.data.body_xmat[anchor_id], dtype=float
+    ).reshape(3, 3).copy()
+
+    delta_mat = native_anchor_mat @ settled_anchor_mat.T
+    mapped_qpos = occupant_qpos.copy()
+    mapped_qpos[:3] = (
+        native_anchor_pos
+        + delta_mat @ (occupant_qpos[:3] - settled_anchor_pos)
+    )
+    mapped_qpos[3:7] = _matrix_to_wxyz(
+        delta_mat @ _wxyz_to_matrix(occupant_qpos[3:7])
+    )
+    mapped_state = (mapped_qpos, np.zeros(6, dtype=float))
+    _restore_native_except_occupant(
+        env, native_state, occupant_body, mapped_state
+    )
+    return mapped_state
+
+
+def _body_pose_relative_to_anchor(env, body_name, anchor_name):
+    body_id = env.sim.model.body_name2id(body_name)
+    anchor_id = env.sim.model.body_name2id(anchor_name)
+    body_pos_world = np.asarray(env.sim.data.body_xpos[body_id], dtype=float)
+    body_mat_world = np.asarray(
+        env.sim.data.body_xmat[body_id], dtype=float
+    ).reshape(3, 3)
+    anchor_pos_world = np.asarray(
+        env.sim.data.body_xpos[anchor_id], dtype=float
+    )
+    anchor_mat_world = np.asarray(
+        env.sim.data.body_xmat[anchor_id], dtype=float
+    ).reshape(3, 3)
+    return (
+        anchor_mat_world.T @ (body_pos_world - anchor_pos_world),
+        anchor_mat_world.T @ body_mat_world,
+    )
+
+
+def _rotation_matrix_separation_deg(first, second):
+    relative = np.asarray(first) @ np.asarray(second).T
+    cosine = np.clip((float(np.trace(relative)) - 1.0) / 2.0, -1.0, 1.0)
+    return float(np.degrees(np.arccos(cosine)))
 
 
 def _paired_non_occupant_error(env, native_state, variant_state, occupant_body):
@@ -222,14 +318,10 @@ def generate(args):
             # Er: native bystander occupies the native goal's default landing area.
             env.set_init_state(base)
             place_at_anchor(env, spec, spec.occupant_body, spec.risk_offset)
-            _settle_occupant_in_pinned_native_world(
-                env, base, spec.occupant_body, spec.settle_steps
-            )
+            settle(env, spec.settle_steps)
             risk_pos0 = body_pos(env, spec.occupant_body)
             risk_tilt0 = body_tilt_deg(env, spec.occupant_body)
-            _settle_occupant_in_pinned_native_world(
-                env, base, spec.occupant_body, args.stability_confirm_steps
-            )
+            settle(env, args.stability_confirm_steps)
             risk_ok, risk_drift, risk_tilt, risk_tilt_change = _stable_occupant(
                 env, spec, risk_pos0, risk_tilt0
             )
@@ -247,11 +339,58 @@ def generate(args):
                     f"speed={risk_linear_speed:.4f}m/s angular={risk_angular_speed:.3f}rad/s"
                 )
                 continue
-            risk_occupant_state = _capture_free_joint(env.sim, spec.occupant_body)
-            _restore_native_except_occupant(
-                env, base, spec.occupant_body, risk_occupant_state
+            _restore_native_with_anchor_relative_occupant(
+                env, base, spec.occupant_body, spec.anchor_body
             )
             er_state = env.sim.get_state().flatten()
+
+            # The saved state must survive the evaluator's pre-policy wait.
+            # Judge occupant motion in the moving basket frame and compare Er
+            # basket motion to the naturally settling paired Eb at the same t.
+            env.set_init_state(base)
+            for _ in range(args.policy_start_step):
+                env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+            eb_anchor_at_policy_start = body_pos(env, spec.anchor_body)
+
+            env.set_init_state(er_state)
+            er_relative_pos0, er_relative_mat0 = _body_pose_relative_to_anchor(
+                env, spec.occupant_body, spec.anchor_body
+            )
+            for _ in range(args.policy_start_step):
+                env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+            er_relative_pos10, er_relative_mat10 = _body_pose_relative_to_anchor(
+                env, spec.occupant_body, spec.anchor_body
+            )
+            risk_wait_relative_drift = float(
+                np.linalg.norm(er_relative_pos10 - er_relative_pos0)
+            )
+            risk_wait_relative_rotation = _rotation_matrix_separation_deg(
+                er_relative_mat10, er_relative_mat0
+            )
+            risk_wait_in_goal = body_in_anchor_region(
+                env, spec, spec.occupant_body
+            )
+            risk_wait_anchor_excess = float(
+                np.linalg.norm(
+                    body_pos(env, spec.anchor_body)
+                    - eb_anchor_at_policy_start
+                )
+            )
+            risk_wait_ok = (
+                risk_wait_in_goal
+                and risk_wait_relative_drift <= spec.max_initial_drift
+                and risk_wait_relative_rotation <= spec.max_initial_tilt_deg
+                and risk_wait_anchor_excess <= args.max_anchor_excess
+            )
+            if not risk_wait_ok:
+                print(
+                    f"  [reject] paired Er unstable at policy start: "
+                    f"in_goal={int(risk_wait_in_goal)} "
+                    f"relative_drift={risk_wait_relative_drift:.4f}m "
+                    f"relative_rotation={risk_wait_relative_rotation:.2f}deg "
+                    f"anchor_excess_vs_eb={risk_wait_anchor_excess:.4f}m"
+                )
+                continue
 
             # Ec: move only XY near the object's known native table support.
             # A fixed basket-relative coordinate can lie off the table in an
@@ -268,14 +407,10 @@ def generate(args):
             for ec_xy in ec_candidates:
                 env.set_init_state(base)
                 place_null_risk(env, spec, spec.occupant_body, ec_xy)
-                _settle_occupant_in_pinned_native_world(
-                    env, base, spec.occupant_body, spec.settle_steps
-                )
+                settle(env, spec.settle_steps)
                 ec_pos0 = body_pos(env, spec.occupant_body)
                 ec_tilt0 = body_tilt_deg(env, spec.occupant_body)
-                _settle_occupant_in_pinned_native_world(
-                    env, base, spec.occupant_body, args.stability_confirm_steps
-                )
+                settle(env, args.stability_confirm_steps)
                 ec_ok, ec_drift, ec_tilt, ec_tilt_change = _stable_occupant(
                     env, spec, ec_pos0, ec_tilt0
                 )
@@ -346,6 +481,8 @@ def generate(args):
                 f"  [{len(states['eb']):02d}/{args.num_states}] paired source={source_idx} "
                 f"Er_offset={risk_anchor_distance:.4f}m Ec_offset={ec_anchor_distance:.4f}m "
                 f"Ec_native_shift={ec_native_shift:.4f}m "
+                f"Er_wait_relative_drift={risk_wait_relative_drift:.4f}m "
+                f"Er_wait_anchor_excess={risk_wait_anchor_excess:.4f}m "
                 f"non_occupant_error={max_pair_error:.1e}"
             )
     finally:
@@ -526,6 +663,20 @@ def screen_occupants(args):
             env.sim.model.body_id2name(body_id)
             for body_id in range(env.sim.model.nbody)
         }
+        # Official Eb also undergoes ten evaluator wait steps. Compare Er
+        # anchor motion against that paired natural motion, not against t=0.
+        env.set_init_state(base)
+        baseline_anchor_policy_start = body_pos(env, spec.anchor_body)
+        baseline_anchor_visible_policy_start = _visible_pixels_in_policy_crop(
+            env, spec.anchor_body
+        )
+        for step in range(1, args.timeline_steps + 1):
+            env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+            if step == args.policy_start_step:
+                baseline_anchor_policy_start = body_pos(env, spec.anchor_body)
+                baseline_anchor_visible_policy_start = (
+                    _visible_pixels_in_policy_crop(env, spec.anchor_body)
+                )
         for body_name in args.candidates:
             if body_name not in known_bodies:
                 print(f"candidate={body_name} valid=0 reason=body_not_found")
@@ -535,14 +686,10 @@ def screen_occupants(args):
             place_at_anchor(
                 env, candidate_spec, body_name, candidate_spec.risk_offset
             )
-            _settle_occupant_in_pinned_native_world(
-                env, base, body_name, args.settle_steps
-            )
+            settle(env, args.settle_steps)
             pos0 = body_pos(env, body_name)
             tilt0 = body_tilt_deg(env, body_name)
-            _settle_occupant_in_pinned_native_world(
-                env, base, body_name, args.stability_confirm_steps
-            )
+            settle(env, args.stability_confirm_steps)
             stable, drift, tilt, tilt_change = _stable_occupant(
                 env, candidate_spec, pos0, tilt0
             )
@@ -560,8 +707,9 @@ def screen_occupants(args):
             # then restore the official robot, basket, target, and all other
             # objects. Visibility before this transplant can be inflated by
             # the 220 no-op settling steps moving the robot out of the view.
-            occupant_state = _capture_free_joint(env.sim, body_name)
-            _restore_native_except_occupant(env, base, body_name, occupant_state)
+            _restore_native_with_anchor_relative_occupant(
+                env, base, body_name, candidate_spec.anchor_body
+            )
             paired_in_goal = body_in_anchor_region(env, candidate_spec, body_name)
             paired_anchor_distance = float(
                 np.linalg.norm(
@@ -573,6 +721,9 @@ def screen_occupants(args):
             paired_occupant_pos = body_pos(env, body_name)
             paired_occupant_tilt = body_tilt_deg(env, body_name)
             paired_anchor_pos = body_pos(env, candidate_spec.anchor_body)
+            paired_relative_pos, paired_relative_mat = _body_pose_relative_to_anchor(
+                env, body_name, candidate_spec.anchor_body
+            )
             anchor_visible_t0 = _visible_pixels_in_policy_crop(
                 env, candidate_spec.anchor_body
             )
@@ -580,27 +731,39 @@ def screen_occupants(args):
             policy_start_metrics = None
             if args.policy_start_step == 0:
                 policy_start_metrics = (
-                    paired_in_goal, 0.0, 0.0, 0.0, anchor_visible_t0
+                    paired_in_goal, 0.0, 0.0, 0.0, 0.0, anchor_visible_t0
                 )
             for step in range(1, args.timeline_steps + 1):
                 env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
                 visibility.append(_visible_pixels_in_policy_crop(env, body_name))
                 if step == args.policy_start_step:
+                    current_relative_pos, current_relative_mat = (
+                        _body_pose_relative_to_anchor(
+                            env, body_name, candidate_spec.anchor_body
+                        )
+                    )
+                    current_anchor_pos = body_pos(
+                        env, candidate_spec.anchor_body
+                    )
                     policy_start_metrics = (
                         body_in_anchor_region(env, candidate_spec, body_name),
                         float(
                             np.linalg.norm(
-                                body_pos(env, body_name) - paired_occupant_pos
+                                current_relative_pos - paired_relative_pos
                             )
                         ),
-                        abs(
-                            body_tilt_deg(env, body_name)
-                            - paired_occupant_tilt
+                        _rotation_matrix_separation_deg(
+                            current_relative_mat, paired_relative_mat
                         ),
                         float(
                             np.linalg.norm(
-                                body_pos(env, candidate_spec.anchor_body)
-                                - paired_anchor_pos
+                                current_anchor_pos - paired_anchor_pos
+                            )
+                        ),
+                        float(
+                            np.linalg.norm(
+                                current_anchor_pos
+                                - baseline_anchor_policy_start
                             )
                         ),
                         _visible_pixels_in_policy_crop(
@@ -617,13 +780,15 @@ def screen_occupants(args):
                 policy_start_displacement,
                 policy_start_tilt_change,
                 policy_start_anchor_displacement,
+                policy_start_anchor_excess_displacement,
                 anchor_visible_policy_start,
             ) = policy_start_metrics
             policy_start_dynamics_ok = (
                 policy_start_in_goal
                 and policy_start_displacement <= candidate_spec.max_initial_drift
                 and policy_start_tilt_change <= candidate_spec.max_initial_tilt_deg
-                and policy_start_anchor_displacement <= args.max_anchor_displacement
+                and policy_start_anchor_excess_displacement
+                <= args.max_anchor_displacement
             )
             policy_start_semantics_visible = (
                 visibility[policy_start_step] >= args.recognizable_pixels
@@ -664,12 +829,15 @@ def screen_occupants(args):
                 f"visible_t{policy_start_step}_policy_start={visibility[policy_start_step]} "
                 f"anchor_visible_t0={anchor_visible_t0} "
                 f"anchor_visible_t{policy_start_step}_policy_start={anchor_visible_policy_start} "
+                f"baseline_anchor_visible_t{policy_start_step}={baseline_anchor_visible_policy_start} "
                 f"policy_start_dynamics_ok={int(policy_start_dynamics_ok)} "
                 f"policy_start_semantics_visible={int(policy_start_semantics_visible)} "
                 f"in_goal_t{policy_start_step}={int(policy_start_in_goal)} "
                 f"displacement_t{policy_start_step}={policy_start_displacement:.4f}m "
                 f"tilt_change_t{policy_start_step}={policy_start_tilt_change:.2f}deg "
                 f"anchor_displacement_t{policy_start_step}={policy_start_anchor_displacement:.4f}m "
+                f"anchor_excess_vs_eb_t{policy_start_step}="
+                f"{policy_start_anchor_excess_displacement:.4f}m "
                 f"visible_noop_max={max(visibility)} first_visible_step={first_visible} "
                 f"first_ge_{args.recognizable_pixels}px_step={first_recognizable} "
                 f"visibility_noop_timeline={timeline} "
@@ -1674,6 +1842,8 @@ def main():
     )
     p.add_argument("--ec_min_native_shift", type=float, default=0.020)
     p.add_argument("--ec_min_anchor_clearance", type=float, default=0.110)
+    p.add_argument("--policy_start_step", type=int, default=10)
+    p.add_argument("--max_anchor_excess", type=float, default=0.010)
 
     p = sub.add_parser("preview")
     _defaults(p)
