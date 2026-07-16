@@ -170,6 +170,11 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
      必须在策略作出关键放置决定之前可见。容器内资产看不见时还要排除横躺：报告 group-0
      collision AABB 的 world XYZ extent，并与同物体的原生稳定 Eb extent 对照；不要仅凭
      HOPE 资产可能错轴的绝对 body tilt 判断“竖直”。
+   - occupant 候选的可见性必须在最终 paired state 上测量：先用 settle 得到 occupant free
+     joint，再恢复官方 state 并只移植该 joint，之后才渲染。不能用长时间 settle 后未恢复的
+     整个世界测可见性，因为 no-op 可能移动机器人、篮子或其他遮挡物，产生虚高像素。若正式
+     eval 在前 `num_steps_wait`（默认 10）步不调用策略，应同时报告 paired `t=0` 和
+     `t=num_steps_wait` 的像素，并将后者作为首次决策可观测性。
    - `eval` 必须在 calibrate / safe_reference 门未通过时提前退出（报
      `BENCHMARK_READY_FOR_ATTRIBUTION` 之前不许跑正式实验）。
 

@@ -94,7 +94,8 @@ bash experiments/robot/libero/tasks/run_l1c2_occupied_basket.sh bodies
 # 2. 生成同源配对状态；通过：生成 8/8，且没有稳定性/区域 reject
 NUM_TRIALS=8 bash experiments/robot/libero/tasks/run_l1c2_occupied_basket.sh check
 
-# 3. 同一官方 Eb state 中并列筛选原生 occupant：输出稳定性、AABB 和 policy 可见像素
+# 3. 同一官方 Eb state 中并列筛选原生 occupant：输出稳定性、AABB，以及 paired t=0、
+#    t=10 首次策略决策和反事实 no-op 时间线的 policy 可见像素
 bash experiments/robot/libero/tasks/run_l1c2_occupied_basket.sh screen_occupants
 
 # 4. 预览：Eb basket 为空；Er tomato sauce 在 basket 中且 policy crop 可见；Ec 在附近桌面

@@ -434,26 +434,66 @@ def screen_occupants(args):
                 env, candidate_spec, pos0, tilt0
             )
             linear_speed, angular_speed = body_speeds(env, body_name)
-            in_goal = body_in_anchor_region(env, candidate_spec, body_name)
-            anchor_distance = float(
+            settled_in_goal = body_in_anchor_region(env, candidate_spec, body_name)
+            settled_anchor_distance = float(
                 np.linalg.norm(
                     body_pos(env, body_name)[:2]
                     - anchor_point(env, candidate_spec)[:2]
                 )
             )
-            geom_ids = descendant_geom_ids(env, body_name)
-            seg_ids = _render_segmentation_geom_ids(env, "agentview", 256)
-            raw_mask = np.isin(seg_ids, tuple(geom_ids))
-            policy_mask = _policy_camera_crop(
-                raw_mask.astype(np.uint8), resize=False
-            ).astype(bool)
+            visible_settled = _visible_pixels_in_policy_crop(env, body_name)
+
+            # Match generate(): retain only the settled candidate free joint,
+            # then restore the official robot, basket, target, and all other
+            # objects. Visibility before this transplant can be inflated by
+            # the 220 no-op settling steps moving the robot out of the view.
+            occupant_state = _capture_free_joint(env.sim, body_name)
+            _restore_native_except_occupant(env, base, body_name, occupant_state)
+            paired_in_goal = body_in_anchor_region(env, candidate_spec, body_name)
+            paired_anchor_distance = float(
+                np.linalg.norm(
+                    body_pos(env, body_name)[:2]
+                    - anchor_point(env, candidate_spec)[:2]
+                )
+            )
             extent = _collision_aabb_extent(env, body_name)
+            visibility = [_visible_pixels_in_policy_crop(env, body_name)]
+            for _ in range(args.timeline_steps):
+                env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+                visibility.append(_visible_pixels_in_policy_crop(env, body_name))
+            policy_start_step = min(args.policy_start_step, args.timeline_steps)
+            first_visible = next(
+                (step for step, pixels in enumerate(visibility) if pixels > 0),
+                -1,
+            )
+            first_recognizable = next(
+                (
+                    step for step, pixels in enumerate(visibility)
+                    if pixels >= args.recognizable_pixels
+                ),
+                -1,
+            )
+            checkpoints = sorted({
+                0, 1, 5, policy_start_step, 20, args.timeline_steps
+            })
+            timeline = ",".join(
+                f"{step}:{visibility[step]}"
+                for step in checkpoints
+                if step <= args.timeline_steps
+            )
             print(
-                f"candidate={body_name} valid={int(stable and in_goal)} "
-                f"stable={int(stable)} in_goal={int(in_goal)} "
-                f"visible_pixels_policy_crop={int(policy_mask.sum())} "
+                f"candidate={body_name} valid={int(stable and settled_in_goal and paired_in_goal)} "
+                f"stable={int(stable)} settled_in_goal={int(settled_in_goal)} "
+                f"paired_in_goal={int(paired_in_goal)} "
+                f"visible_settled={visible_settled} "
+                f"visible_t0={visibility[0]} "
+                f"visible_t{policy_start_step}_policy_start={visibility[policy_start_step]} "
+                f"visible_noop_max={max(visibility)} first_visible_step={first_visible} "
+                f"first_ge_{args.recognizable_pixels}px_step={first_recognizable} "
+                f"visibility_noop_timeline={timeline} "
                 f"collision_extent_xyz_m=({extent[0]:.4f},{extent[1]:.4f},{extent[2]:.4f}) "
-                f"anchor_distance={anchor_distance:.4f}m "
+                f"settled_anchor_distance={settled_anchor_distance:.4f}m "
+                f"paired_anchor_distance={paired_anchor_distance:.4f}m "
                 f"confirm_drift={drift:.4f}m tilt={tilt:.1f}deg "
                 f"tilt_change={tilt_change:.2f}deg "
                 f"speed={linear_speed:.4f}m/s angular={angular_speed:.3f}rad/s"
@@ -477,6 +517,18 @@ def _render_segmentation_geom_ids(env, camera: str, resolution: int) -> np.ndarr
         # robosuite returns (H, W, 2): object type followed by object id.
         return seg[..., -1]
     return seg
+
+
+def _visible_pixels_in_policy_crop(
+    env, body_name: str, camera: str = "agentview", resolution: int = 256
+) -> int:
+    geom_ids = descendant_geom_ids(env, body_name)
+    seg_ids = _render_segmentation_geom_ids(env, camera, resolution)
+    raw_mask = np.isin(seg_ids, tuple(geom_ids))
+    policy_mask = _policy_camera_crop(
+        raw_mask.astype(np.uint8), resize=False
+    ).astype(bool)
+    return int(policy_mask.sum())
 
 
 def _collision_aabb_extent(env, body_name: str) -> np.ndarray:
@@ -1460,6 +1512,9 @@ def main():
     p.add_argument("--state_index", type=int, default=0)
     p.add_argument("--settle_steps", type=int, default=180)
     p.add_argument("--stability_confirm_steps", type=int, default=40)
+    p.add_argument("--policy_start_step", type=int, default=10)
+    p.add_argument("--timeline_steps", type=int, default=30)
+    p.add_argument("--recognizable_pixels", type=int, default=100)
 
     p = sub.add_parser("calibrate")
     _defaults(p)
