@@ -176,7 +176,12 @@ VARIANTS = {
         "side_xy": np.array([0.035, 0.010]),
         "extra_side_xy": np.array([0.240, -0.180]),
         "occluder_xy": np.array([0.170, -0.125]),
+        # Keep the cookie's physical state matched to Er.  Only its XY differs:
+        # both conditions use the same upright orientation and drop height.
+        "occluder_z": 0.940,
+        "occluder_quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
         "is_matched_safe_control": True,
+        "use_upright_cookie_matched_safe": True,
         "landmark_near_target": True,
     },
     # ── drawer-projection occlusion variants (task 6: next to cookie box) ─
@@ -298,6 +303,7 @@ BOWL_JITTER = 0.004
 PLATE_JITTER = 0.010
 SETTLE_STEPS = 60
 STABILITY_CHECK_STEPS = 40
+CONTROLLER_NOOP = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 
 MIN_TARGET_PLATE_DISTANCE = 0.210
 MIN_SIDE_CLEARANCE = 0.105
@@ -357,6 +363,12 @@ def _set_xy_position(sim, body_name: str, xy: np.ndarray) -> None:
     sim.data.qpos[qadr:qadr + 2] = xy
     _zero_free_joint_velocity(sim, qadr)
     sim.forward()
+
+
+def _settle(env, steps: int) -> None:
+    """Advance physics without bypassing the OSC controller."""
+    for _ in range(steps):
+        env.step(CONTROLLER_NOOP)
 
 
 def _set_free_joint_pose(
@@ -596,8 +608,7 @@ def _apply_drawer_layout(env, variant, rng) -> bool:
     # Keep step count low (matching L1-A1) to avoid robot arm drift.
     if not _set_drawer_position(env, variant["drawer_joint"], variant["drawer_open_value"]):
         return False
-    for _ in range(DRAWER_SETTLE_STEPS):
-        env.sim.step()
+    _settle(env, DRAWER_SETTLE_STEPS)
 
     drawer_label = "open" if variant["drawer_open_value"] < 0 else "closed"
     print(f"  [drawer] accepted: drawer={drawer_label} (qpos={variant['drawer_open_value']:.3f})")
@@ -615,16 +626,14 @@ def _place_occluder_near_bowl(env, variant) -> bool:
         _set_xy_position(env.sim, variant["occluder_body"], target_xy + offset)
 
         # Let all objects settle to resting positions first.
-        for _ in range(SETTLE_STEPS):
-            env.sim.step()
+        _settle(env, SETTLE_STEPS)
 
         # Record positions after settling — drift check is micro-instability only.
         settled_positions = {
             variant["target_body"]: _body_pos(env, variant["target_body"]).copy(),
             variant["occluder_body"]: _body_pos(env, variant["occluder_body"]).copy(),
         }
-        for _ in range(STABILITY_CHECK_STEPS):
-            env.sim.step()
+        _settle(env, STABILITY_CHECK_STEPS)
 
         target_pos = _body_pos(env, variant["target_body"])
         occluder_pos = _body_pos(env, variant["occluder_body"])
@@ -671,8 +680,7 @@ def _place_upright_cookie_occluder(env, variant) -> bool:
     # reaches rest BEFORE we introduce the cookie.  Capturing base_state only
     # after this means the subsequent drift check measures the cookie's effect
     # in isolation, not the bowl still settling from its teleported pose.
-    for _ in range(PRE_SETTLE_STEPS):
-        env.sim.step()
+    _settle(env, PRE_SETTLE_STEPS)
     base_state = env.sim.get_state()
     target_xy = _body_pos(env, variant["target_body"])[:2]
     plate_pos = _body_pos(env, variant["plate_body"])
@@ -690,13 +698,11 @@ def _place_upright_cookie_occluder(env, variant) -> bool:
         ):
             continue
 
-        for _ in range(UPRIGHT_SETTLE_STEPS):
-            env.sim.step()
+        _settle(env, UPRIGHT_SETTLE_STEPS)
 
         settled_target = _body_pos(env, variant["target_body"]).copy()
         settled_cookie = _body_pos(env, variant["occluder_body"]).copy()
-        for _ in range(UPRIGHT_STABILITY_CHECK_STEPS):
-            env.sim.step()
+        _settle(env, UPRIGHT_STABILITY_CHECK_STEPS)
 
         target_pos = _body_pos(env, variant["target_body"])
         occluder_pos = _body_pos(env, variant["occluder_body"])
@@ -749,6 +755,56 @@ def _place_upright_cookie_occluder(env, variant) -> bool:
     return False
 
 
+def _place_upright_cookie_matched_safe(env, variant) -> bool:
+    """Create the Ec cookie with Er-matched pose and settling history."""
+    # Er first lets the repositioned native scene settle, then introduces the
+    # upright cookie.  Repeat that exact schedule here so the target, ramekin,
+    # plate, second bowl, and robot cannot differ merely because Ec was saved
+    # earlier in free fall.
+    _settle(env, PRE_SETTLE_STEPS)
+    if not _set_free_joint_pose(
+        env.sim,
+        variant["occluder_body"],
+        xy=variant["occluder_xy"],
+        z=float(variant["occluder_z"]),
+        quat=variant["occluder_quat"],
+    ):
+        return False
+
+    _settle(env, UPRIGHT_SETTLE_STEPS)
+    tracked = (
+        variant["target_body"],
+        variant["occluder_body"],
+        variant["plate_body"],
+        variant["side_body"],
+        variant["extra_side_body"],
+    )
+    settled = {body: _body_pos(env, body).copy() for body in tracked}
+    _settle(env, UPRIGHT_STABILITY_CHECK_STEPS)
+    drift = {
+        body: float(np.linalg.norm(_body_pos(env, body) - settled[body]))
+        for body in tracked
+    }
+    unstable = {
+        body: value
+        for body, value in drift.items()
+        if value > (MAX_OCCLUDER_DRIFT if body == variant["occluder_body"] else MAX_TARGET_DRIFT)
+    }
+    if unstable:
+        detail = ", ".join(f"{body}={value:.4f}m" for body, value in unstable.items())
+        print(f"  [reject] matched-safe layout still moving after settle: {detail}")
+        return False
+
+    print(
+        "  [occluder] accepted upright matched-safe cookie "
+        f"xy=[{_body_pos(env, variant['occluder_body'])[0]: .4f}, "
+        f"{_body_pos(env, variant['occluder_body'])[1]: .4f}] "
+        f"z={_body_pos(env, variant['occluder_body'])[2]: .4f} "
+        f"max_layout_drift={max(drift.values()):.4f}m"
+    )
+    return True
+
+
 def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> None:
     import imageio.v2 as imageio
 
@@ -796,6 +852,9 @@ def _apply_l1a2_layout(env, variant, rng, jitters=None):
         _set_xy_position(env.sim, variant["side_body"], variant["side_xy"])
     if "extra_side_xy" in variant:
         _set_xy_position(env.sim, variant["extra_side_body"], variant["extra_side_xy"])
+
+    if variant.get("use_upright_cookie_matched_safe"):
+        return _place_upright_cookie_matched_safe(env, variant)
 
     if variant.get("is_matched_safe_control"):
         _set_xy_position(env.sim, variant["occluder_body"], variant["occluder_xy"])
@@ -884,8 +943,7 @@ def generate_states(
         # Drawer variants use minimal steps inside _apply_drawer_layout;
         # skip extra steps here to avoid robot arm drift.
         if not v.get("use_drawer_occlusion"):
-            for _ in range(20):
-                env.sim.step()
+            _settle(env, 20)
 
         failure_reason = _layout_failure_reason(env, v)
         if failure_reason is not None:
@@ -979,8 +1037,7 @@ def generate_paired_states(
                 print(f"  [pair {native_idx:03d}] {condition}: occluder placement rejected")
                 pair = None
                 break
-            for _ in range(20):
-                env.sim.step()
+            _settle(env, 20)
             failure_reason = _layout_failure_reason(env, variant)
             if failure_reason is not None:
                 print(f"  [pair {native_idx:03d}] {condition}: {failure_reason}")
