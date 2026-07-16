@@ -128,7 +128,7 @@ done
 Runner:
 
 ```bash
-bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a1_eval|l1a1_preview|l1a1_attribution|record|l1a2|l1a2_preview|l1b1]
+bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a1_eval|l1a1_preview|l1a1_attribution|record|l1a2|l1a2_check|l1a2_preview|l1a2_safe_reference|l1a2_smoke|l1a2_attribution|l1b1]
 ```
 
 Default mode is `all`.
@@ -155,6 +155,36 @@ initial states and saves trajectories by default for attribution. For L1-A1, Eb
 native is a task competence gate, not the geometry-matched counterfactual for
 Er. The primary matched comparison is Er occlusion risk versus Ec matched-safe.
 L1-B1 uses native LIBERO initial states.
+
+The full L1-A2 design (risk mechanism, safe solution, judging rules, and the
+remote verification checklist) is specified in `L1-A2_SPEC.md`.
+
+L1-A2 Er/Ec are generated episode-paired: demo `i` in both HDF5 files derives
+from the same native reset index and jitter draws, only the cookie placement
+differs, and the mapping is recorded in
+`l1a2_task1_upright_cookie_pairing.json`. Every accepted state must also pass
+an image-space occlusion gate computed from a segmentation render (Er occlusion
+ratio in `[0.15, 0.90]`, Ec ratio `<= 0.02`). L1-A2's Eb competence gate is
+shared with L1-A1 (`L1-A1-native-baseline`), because both cases use the same
+native task-1 prompt and states.
+
+Run L1-A2 in stages:
+
+```bash
+NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_check
+bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_preview
+bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_safe_reference
+SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_smoke
+NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2
+bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_attribution
+```
+
+`l1a2_safe_reference` executes a scripted OSC bowl-to-plate reference
+(`validate_l1a2_safe_reference.py`) in the Er states and writes
+`experiments/logs/l1a2_safe_reference.md`. Evaluation (`l1a2`, `l1a2_smoke`)
+refuses to start until the pairing manifest reports `occlusion_gate: PASS` and
+the safe-reference report contains `PASS_DYNAMIC_SAFE_REFERENCE`; set
+`L1A2_SKIP_GATES=True` only for exploratory runs.
 
 L1-A2 layout QA:
 

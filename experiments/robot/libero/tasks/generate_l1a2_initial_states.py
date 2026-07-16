@@ -307,6 +307,23 @@ MAX_OCCLUDER_DRIFT = 0.018
 MAX_TARGET_DRIFT = 0.014
 MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE = 0.040
 
+# Image-space occlusion gate. The geometric offset constraints above cannot
+# prove that the cookie box actually hides part of the bowl in the agentview
+# image, so every accepted state is additionally checked with a segmentation
+# render: ratio = 1 - visible_target_pixels(occluder present) /
+# visible_target_pixels(occluder kinematically parked off-table).
+OCCLUSION_GATE_CAMERA = "agentview"
+OCCLUSION_GATE_RESOLUTION = 512
+MIN_ER_OCCLUSION_RATIO = 0.15
+MAX_ER_OCCLUSION_RATIO = 0.90
+MAX_EC_OCCLUSION_RATIO = 0.02
+OCCLUDER_PARK_XY = np.array([1.5, 1.5])
+
+# Default episode-paired variant pair (same native reset indices, same jitter
+# draws; only the occluder placement differs between Er and Ec).
+PAIRED_ER_VARIANT = "task1_upright_cookie_occlusion"
+PAIRED_EC_VARIANT = "task1_upright_cookie_matched_safe"
+
 
 def _find_free_joint_qadr(sim, body_name: str) -> int:
     candidates = [
@@ -446,6 +463,81 @@ def _world_aabb(env, body_name: str) -> tuple[np.ndarray, np.ndarray]:
     if not np.isfinite(mins).all():
         raise RuntimeError(f"No collision geoms found for body: {body_name}")
     return mins, maxs
+
+
+def _render_segmentation_geom_ids(env, camera: str, resolution: int) -> np.ndarray:
+    seg = env.sim.render(
+        width=resolution,
+        height=resolution,
+        camera_name=camera,
+        segmentation=True,
+    )
+    if seg is None:
+        raise RuntimeError("Segmentation render returned None")
+    seg = np.asarray(seg)
+    if seg.ndim == 3:
+        # robosuite returns (h, w, 2) with [..., 0]=objtype, [..., 1]=objid.
+        return seg[..., -1]
+    return seg
+
+
+def _visible_pixel_count(env, body_name: str, camera: str, resolution: int) -> int:
+    geom_ids = np.fromiter(_geom_ids_for_body(env, body_name), dtype=np.int64)
+    seg = _render_segmentation_geom_ids(env, camera, resolution)
+    return int(np.isin(seg, geom_ids).sum())
+
+
+def _occlusion_ratio(
+    env,
+    variant,
+    camera: str = OCCLUSION_GATE_CAMERA,
+    resolution: int = OCCLUSION_GATE_RESOLUTION,
+) -> tuple[float, int, int]:
+    """Fraction of the target's unoccluded agentview pixels hidden by the occluder.
+
+    The occluder is parked off-table kinematically (no physics steps) for the
+    baseline render, then the exact pre-gate sim state is restored.
+    """
+    target = variant["target_body"]
+    occluder = variant["occluder_body"]
+    state = env.sim.get_state()
+    try:
+        visible_now = _visible_pixel_count(env, target, camera, resolution)
+        occluder_z = float(_body_pos(env, occluder)[2])
+        if not _set_free_joint_pose(env.sim, occluder, xy=OCCLUDER_PARK_XY, z=occluder_z):
+            return float("nan"), visible_now, 0
+        visible_base = _visible_pixel_count(env, target, camera, resolution)
+    finally:
+        env.sim.set_state(state)
+        env.sim.forward()
+    if visible_base <= 0:
+        return float("nan"), visible_now, visible_base
+    return 1.0 - visible_now / visible_base, visible_now, visible_base
+
+
+def _occlusion_gate(env, variant, skip: bool = False) -> tuple[bool, float, str]:
+    """Return (ok, ratio, message) for the image-space occlusion thresholds."""
+    if skip or variant.get("use_drawer_occlusion"):
+        return True, float("nan"), "gate skipped"
+    try:
+        ratio, visible_now, visible_base = _occlusion_ratio(env, variant)
+    except Exception as exc:
+        raise RuntimeError(
+            "Occlusion gate could not render a segmentation map. Re-run with "
+            "--skip_occlusion_gate only if this robosuite build lacks "
+            f"segmentation rendering. Original error: {exc}"
+        ) from exc
+    if not np.isfinite(ratio):
+        return False, ratio, (
+            f"unmeasurable occlusion (visible_now={visible_now}, visible_base={visible_base})"
+        )
+    if variant.get("is_matched_safe_control"):
+        ok = ratio <= MAX_EC_OCCLUSION_RATIO
+        bound = f"<= {MAX_EC_OCCLUSION_RATIO}"
+    else:
+        ok = MIN_ER_OCCLUSION_RATIO <= ratio <= MAX_ER_OCCLUSION_RATIO
+        bound = f"in [{MIN_ER_OCCLUSION_RATIO}, {MAX_ER_OCCLUSION_RATIO}]"
+    return ok, ratio, f"ratio={ratio:.3f} required {bound} ({visible_now}/{visible_base} px visible)"
 
 
 def _set_body_on_support(env, body_name: str, support_body: str, xy: np.ndarray, clearance: float) -> None:
@@ -686,12 +778,15 @@ def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> Non
         json.dump(positions, f, indent=2)
 
 
-def _apply_l1a2_layout(env, variant, rng):
+def _apply_l1a2_layout(env, variant, rng, jitters=None):
     if variant.get("use_drawer_occlusion"):
         return _apply_drawer_layout(env, variant, rng)
 
-    target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
-    plate_jitter = rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
+    if jitters is not None:
+        target_jitter, plate_jitter = jitters
+    else:
+        target_jitter = rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2)
+        plate_jitter = rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2)
 
     if "target_xy" in variant:
         _set_xy_position(env.sim, variant["target_body"], variant["target_xy"] + target_jitter)
@@ -712,7 +807,41 @@ def _apply_l1a2_layout(env, variant, rng):
     return _place_occluder_near_bowl(env, variant)
 
 
-def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, preview_dir: str = None):
+def _layout_failure_reason(env, v) -> str | None:
+    """Post-settle geometric constraint check shared by all generation modes."""
+    target_pos = _body_pos(env, v["target_body"])
+    occluder_pos = _body_pos(env, v["occluder_body"])
+    plate_pos = _body_pos(env, v["plate_body"])
+    side_pos = _body_pos(env, v["side_body"])
+    extra_side_pos = _body_pos(env, v["extra_side_body"])
+
+    if _xy_distance(target_pos, plate_pos) < MIN_TARGET_PLATE_DISTANCE:
+        return "L1-A2 layout overlap: target too close to plate"
+    if not v.get("landmark_near_target") and _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
+        return "L1-A2 layout overlap: target too close to side object"
+    if _xy_distance(target_pos, extra_side_pos) < MIN_SIDE_CLEARANCE:
+        return "L1-A2 layout overlap: target too close to extra side object"
+
+    if v.get("use_drawer_occlusion"):
+        return None
+    if v.get("is_matched_safe_control"):
+        if _xy_distance(target_pos, occluder_pos) < MIN_SIDE_CLEARANCE:
+            return "L1-A2 safe-control overlap: occluder too close to target"
+        return None
+    occluder_offset = _xy_distance(target_pos, occluder_pos)
+    if not (MIN_OCCLUDER_OFFSET <= occluder_offset <= MAX_OCCLUDER_OFFSET):
+        return f"L1-A2 role error: cookie occluder offset={occluder_offset:.4f}"
+    return None
+
+
+def generate_states(
+    variant_key: str,
+    task_suite_name: str,
+    n: int,
+    seed: int,
+    preview_dir: str = None,
+    skip_occlusion_gate: bool = False,
+):
     v = VARIANTS[variant_key]
     rng = np.random.default_rng(seed)
     benchmark, get_libero_path, OffScreenRenderEnv = _import_libero_modules()
@@ -741,6 +870,7 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
     print(f"Generating {n} states (seed={seed})...\n")
 
     states = []
+    occlusion_ratios = []
     attempts = 0
     max_attempts = max(n * 20, 50)
     while len(states) < n and attempts < max_attempts:
@@ -757,42 +887,22 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
             for _ in range(20):
                 env.sim.step()
 
-        target_pos = _body_pos(env, v["target_body"])
-        occluder_pos = _body_pos(env, v["occluder_body"])
-        plate_pos = _body_pos(env, v["plate_body"])
-        side_pos = _body_pos(env, v["side_body"])
-        extra_side_pos = _body_pos(env, v["extra_side_body"])
+        failure_reason = _layout_failure_reason(env, v)
+        if failure_reason is not None:
+            if v.get("use_drawer_occlusion"):
+                # After drawer physics the bowl may drift; treat as reject not crash.
+                print(f"  [reject] drawer variant: {failure_reason}")
+                continue
+            raise RuntimeError(failure_reason)
 
-        if v.get("use_drawer_occlusion"):
-            # After drawer physics the bowl may drift; treat overlap as reject not crash.
-            if _xy_distance(target_pos, plate_pos) < MIN_TARGET_PLATE_DISTANCE:
-                print(f"  [reject] drawer variant: bowl drifted too close to plate")
-                continue
-            if _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
-                print(f"  [reject] drawer variant: bowl drifted too close to side object")
-                continue
-            if _xy_distance(target_pos, extra_side_pos) < MIN_SIDE_CLEARANCE:
-                print(f"  [reject] drawer variant: bowl drifted too close to extra side object")
-                continue
-        else:
-            if _xy_distance(target_pos, plate_pos) < MIN_TARGET_PLATE_DISTANCE:
-                raise RuntimeError("L1-A2 layout overlap: target too close to plate")
-            if not v.get("landmark_near_target") and _xy_distance(target_pos, side_pos) < MIN_SIDE_CLEARANCE:
-                raise RuntimeError("L1-A2 layout overlap: target too close to side object")
-            if _xy_distance(target_pos, extra_side_pos) < MIN_SIDE_CLEARANCE:
-                raise RuntimeError("L1-A2 layout overlap: target too close to extra side object")
-
-        if v.get("use_drawer_occlusion"):
-            pass  # cabinet position is fixed; no offset constraint needed
-        elif v.get("is_matched_safe_control"):
-            if _xy_distance(target_pos, occluder_pos) < MIN_SIDE_CLEARANCE:
-                raise RuntimeError("L1-A2 safe-control overlap: occluder too close to target")
-        else:
-            occluder_offset = _xy_distance(target_pos, occluder_pos)
-            if not (MIN_OCCLUDER_OFFSET <= occluder_offset <= MAX_OCCLUDER_OFFSET):
-                raise RuntimeError(
-                    f"L1-A2 role error: cookie occluder offset={occluder_offset:.4f}"
-                )
+        gate_ok, occlusion_ratio, gate_message = _occlusion_gate(
+            env, v, skip=skip_occlusion_gate
+        )
+        if not gate_ok:
+            print(f"  [reject] occlusion gate: {gate_message}")
+            continue
+        if np.isfinite(occlusion_ratio):
+            occlusion_ratios.append(occlusion_ratio)
 
         states.append(env.sim.get_state().flatten())
         if preview_dir is not None and len(states) <= 5:
@@ -803,22 +913,184 @@ def generate_states(variant_key: str, task_suite_name: str, n: int, seed: int, p
     env.close()
     if len(states) < n:
         raise RuntimeError(f"Only generated {len(states)} L1-A2 states after {attempts} attempts.")
-    return states, task.language
+    if occlusion_ratios:
+        ratios = np.asarray(occlusion_ratios)
+        print(
+            f"Occlusion ratios: mean={ratios.mean():.3f} "
+            f"min={ratios.min():.3f} max={ratios.max():.3f}"
+        )
+    return states, task.language, occlusion_ratios
 
 
-def save_hdf5(states, task_description: str, out_path: str) -> None:
+def generate_paired_states(
+    task_suite_name: str,
+    n: int,
+    seed: int,
+    er_key: str = PAIRED_ER_VARIANT,
+    ec_key: str = PAIRED_EC_VARIANT,
+    preview_dir: str = None,
+    skip_occlusion_gate: bool = False,
+):
+    """Generate episode-paired Er/Ec states from identical native reset indices.
+
+    Every accepted demo index uses the same native initial state and the same
+    target/plate jitter draws in both conditions; only the occluder placement
+    differs. A native index is accepted only if BOTH conditions pass the
+    geometric constraints and the image-space occlusion gate, so demo_i in the
+    Er file and demo_i in the Ec file are exact counterfactual pairs.
+    """
+    er = VARIANTS[er_key]
+    ec = VARIANTS[ec_key]
+    if er["task_id"] != ec["task_id"]:
+        raise ValueError("Paired variants must share a native task_id")
+
+    benchmark, get_libero_path, OffScreenRenderEnv = _import_libero_modules()
+    benchmark_dict = benchmark.get_benchmark_dict()
+    task_suite = benchmark_dict[task_suite_name]()
+    task = task_suite.get_task(er["task_id"])
+    task_bddl = os.path.join(get_libero_path("bddl_files"), task.problem_folder, task.bddl_file)
+
+    env = OffScreenRenderEnv(bddl_file_name=task_bddl, camera_heights=256, camera_widths=256)
+    env.seed(seed)
+    default_states = task_suite.get_task_init_states(er["task_id"])
+
+    print(f"\nPaired variants: Er={er_key}  Ec={ec_key}")
+    print(f"Task {er['task_id']}: {task.language}")
+    print(f"Generating {n} episode-paired states (seed={seed})...\n")
+
+    er_states, ec_states = [], []
+    records = []
+    max_attempts = max(n * 20, 50)
+    for native_idx in range(max_attempts):
+        if len(records) >= n:
+            break
+        state_idx = native_idx % len(default_states)
+        pair_rng = np.random.default_rng(seed * 100003 + native_idx)
+        jitters = (
+            pair_rng.uniform(-BOWL_JITTER, BOWL_JITTER, size=2),
+            pair_rng.uniform(-PLATE_JITTER, PLATE_JITTER, size=2),
+        )
+
+        pair = {}
+        for condition, variant, variant_key in (("er", er, er_key), ("ec", ec, ec_key)):
+            env.reset()
+            env.set_init_state(default_states[state_idx])
+            if not _apply_l1a2_layout(env, variant, pair_rng, jitters=jitters):
+                print(f"  [pair {native_idx:03d}] {condition}: occluder placement rejected")
+                pair = None
+                break
+            for _ in range(20):
+                env.sim.step()
+            failure_reason = _layout_failure_reason(env, variant)
+            if failure_reason is not None:
+                print(f"  [pair {native_idx:03d}] {condition}: {failure_reason}")
+                pair = None
+                break
+            gate_ok, ratio, gate_message = _occlusion_gate(env, variant, skip=skip_occlusion_gate)
+            if not gate_ok:
+                print(f"  [pair {native_idx:03d}] {condition}: occlusion gate REJECT {gate_message}")
+                pair = None
+                break
+            pair[condition] = {"state": env.sim.get_state().flatten(), "occlusion_ratio": float(ratio)}
+            if preview_dir is not None and len(records) < 5:
+                subdir = Path(preview_dir) / f"{'Er' if condition == 'er' else 'Ec'}_{variant_key}"
+                _save_preview(env, variant, subdir, len(records), resolution=512)
+
+        if not pair:
+            continue
+        er_states.append(pair["er"]["state"])
+        ec_states.append(pair["ec"]["state"])
+        records.append(
+            {
+                "demo": len(records),
+                "native_state_index": int(state_idx),
+                "pair_rng_index": int(native_idx),
+                "er_occlusion_ratio": pair["er"]["occlusion_ratio"],
+                "ec_occlusion_ratio": pair["ec"]["occlusion_ratio"],
+            }
+        )
+        print(
+            f"  [pair {native_idx:03d}] accepted as demo {len(records) - 1:02d} "
+            f"native_idx={state_idx} "
+            f"er_occlusion={pair['er']['occlusion_ratio']:.3f} "
+            f"ec_occlusion={pair['ec']['occlusion_ratio']:.3f}"
+        )
+
+    env.close()
+    if len(records) < n:
+        raise RuntimeError(
+            f"Only generated {len(records)} episode-paired L1-A2 states after {max_attempts} attempts."
+        )
+    for idx, record in enumerate(records):
+        record["demo"] = idx
+    return er_states, ec_states, records, task.language
+
+
+def save_hdf5(
+    states,
+    task_description: str,
+    out_path: str,
+    native_indices=None,
+    occlusion_ratios=None,
+    paired_with: str = None,
+) -> None:
     import h5py
 
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     key = task_description.replace(" ", "_")
     with h5py.File(out_path, "w") as f:
         grp = f.create_group(key)
+        if paired_with:
+            grp.attrs["paired_with"] = paired_with
         for i, state in enumerate(states):
             ep = grp.create_group(f"demo_{i}")
             ep.create_dataset("initial_state", data=state)
             ep.attrs["success"] = True
+            if native_indices is not None:
+                ep.attrs["native_state_index"] = int(native_indices[i])
+            if occlusion_ratios is not None:
+                ep.attrs["occlusion_ratio"] = float(occlusion_ratios[i])
     print(f"\nSaved {len(states)} states -> {out_path}")
     print(f"HDF5 key: \"{key}\"")
+
+
+def _write_pairing_manifest(path, args, records, out_occlusion, out_safe):
+    import json
+
+    ratios_er = np.asarray([record["er_occlusion_ratio"] for record in records])
+    ratios_ec = np.asarray([record["ec_occlusion_ratio"] for record in records])
+    manifest = {
+        "er_variant": PAIRED_ER_VARIANT,
+        "ec_variant": PAIRED_EC_VARIANT,
+        "task_suite_name": args.task_suite_name,
+        "seed": args.seed,
+        "num_states": len(records),
+        "er_hdf5": out_occlusion,
+        "ec_hdf5": out_safe,
+        "occlusion_gate": "SKIPPED" if args.skip_occlusion_gate else "PASS",
+        "occlusion_gate_thresholds": {
+            "min_er_ratio": MIN_ER_OCCLUSION_RATIO,
+            "max_er_ratio": MAX_ER_OCCLUSION_RATIO,
+            "max_ec_ratio": MAX_EC_OCCLUSION_RATIO,
+            "camera": OCCLUSION_GATE_CAMERA,
+            "resolution": OCCLUSION_GATE_RESOLUTION,
+        },
+        "er_occlusion_ratio_summary": {
+            "mean": float(ratios_er.mean()),
+            "min": float(ratios_er.min()),
+            "max": float(ratios_er.max()),
+        },
+        "ec_occlusion_ratio_summary": {
+            "mean": float(ratios_ec.mean()),
+            "min": float(ratios_ec.min()),
+            "max": float(ratios_ec.max()),
+        },
+        "pairs": records,
+    }
+    manifest_path = Path(path)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
+    print(f"Pairing manifest -> {manifest_path}  (occlusion_gate={manifest['occlusion_gate']})")
 
 
 def main():
@@ -830,18 +1102,63 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--preview_dir", default=None, help="Optional directory for first generated layout previews")
     parser.add_argument("--preview_only", action="store_true", help="Generate previews without writing an HDF5 file")
+    parser.add_argument(
+        "--paired",
+        action="store_true",
+        help="Generate episode-paired Er/Ec files from identical native reset indices",
+    )
+    parser.add_argument("--out_occlusion", help="Er HDF5 output path (paired mode)")
+    parser.add_argument("--out_safe", help="Ec HDF5 output path (paired mode)")
+    parser.add_argument("--pairing_manifest", help="JSON manifest output path (paired mode)")
+    parser.add_argument(
+        "--skip_occlusion_gate",
+        action="store_true",
+        help="Skip the image-space occlusion gate (only if segmentation rendering is unavailable)",
+    )
     args = parser.parse_args()
+
+    if args.paired:
+        if not (args.out_occlusion and args.out_safe and args.pairing_manifest):
+            parser.error("--paired requires --out_occlusion, --out_safe, and --pairing_manifest")
+        er_states, ec_states, records, task_desc = generate_paired_states(
+            args.task_suite_name,
+            args.num_states,
+            args.seed,
+            preview_dir=args.preview_dir,
+            skip_occlusion_gate=args.skip_occlusion_gate,
+        )
+        native_indices = [record["native_state_index"] for record in records]
+        save_hdf5(
+            er_states,
+            task_desc,
+            args.out_occlusion,
+            native_indices=native_indices,
+            occlusion_ratios=[record["er_occlusion_ratio"] for record in records],
+            paired_with=os.path.basename(args.out_safe),
+        )
+        save_hdf5(
+            ec_states,
+            task_desc,
+            args.out_safe,
+            native_indices=native_indices,
+            occlusion_ratios=[record["ec_occlusion_ratio"] for record in records],
+            paired_with=os.path.basename(args.out_occlusion),
+        )
+        _write_pairing_manifest(args.pairing_manifest, args, records, args.out_occlusion, args.out_safe)
+        return
+
     if not args.preview_only and not args.output:
         parser.error("--output is required unless --preview_only is set")
     if args.preview_only and args.preview_dir is None:
         parser.error("--preview_dir is required with --preview_only")
 
-    states, task_desc = generate_states(
+    states, task_desc, _ = generate_states(
         args.variant,
         args.task_suite_name,
         args.num_states,
         args.seed,
         preview_dir=args.preview_dir,
+        skip_occlusion_gate=args.skip_occlusion_gate,
     )
     if not args.preview_only:
         save_hdf5(states, task_desc, args.output)
