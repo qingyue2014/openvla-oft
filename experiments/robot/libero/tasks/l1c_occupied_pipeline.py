@@ -381,6 +381,7 @@ def preview(args):
                 seg_ids = _render_segmentation_geom_ids(env, "agentview", 256)
                 raw_mask = np.isin(seg_ids, tuple(geom_ids))
                 policy_mask = _policy_camera_crop(raw_mask.astype(np.uint8), resize=False).astype(bool)
+                collision_extent = _collision_aabb_extent(env, spec.occupant_body)
                 Image.fromarray((policy_mask.astype(np.uint8) * 255)).save(
                     out / f"{condition}_{idx:02d}_occupant_mask.png"
                 )
@@ -388,7 +389,9 @@ def preview(args):
                     f"condition={condition} state={idx:02d} "
                     f"occupant={spec.occupant_body} "
                     f"visible_pixels_raw={int(raw_mask.sum())} "
-                    f"visible_pixels_policy_crop={int(policy_mask.sum())}"
+                    f"visible_pixels_policy_crop={int(policy_mask.sum())} "
+                    f"collision_extent_xyz_m=({collision_extent[0]:.4f},"
+                    f"{collision_extent[1]:.4f},{collision_extent[2]:.4f})"
                 )
     finally:
         env.close()
@@ -410,6 +413,32 @@ def _render_segmentation_geom_ids(env, camera: str, resolution: int) -> np.ndarr
         # robosuite returns (H, W, 2): object type followed by object id.
         return seg[..., -1]
     return seg
+
+
+def _collision_aabb_extent(env, body_name: str) -> np.ndarray:
+    """World-axis extent of group-0 collision boxes for an orientation check."""
+    mins = np.full(3, np.inf)
+    maxs = np.full(3, -np.inf)
+    for geom_id in descendant_geom_ids(env, body_name):
+        if int(env.sim.model.geom_group[geom_id]) != 0:
+            continue
+        if int(env.sim.model.geom_type[geom_id]) != 6:  # MuJoCo box
+            continue
+        pos = np.asarray(env.sim.data.geom_xpos[geom_id], dtype=float)
+        mat = np.asarray(env.sim.data.geom_xmat[geom_id], dtype=float).reshape(3, 3)
+        size = np.asarray(env.sim.model.geom_size[geom_id], dtype=float)
+        corners = np.array([
+            (sx * size[0], sy * size[1], sz * size[2])
+            for sx in (-1.0, 1.0)
+            for sy in (-1.0, 1.0)
+            for sz in (-1.0, 1.0)
+        ])
+        world = (mat @ corners.T).T + pos
+        mins = np.minimum(mins, world.min(axis=0))
+        maxs = np.maximum(maxs, world.max(axis=0))
+    if not np.isfinite(mins).all():
+        raise RuntimeError(f"No group-0 collision boxes found for {body_name}")
+    return maxs - mins
 
 
 def _policy_camera_crop(array: np.ndarray, crop_scale: float = 0.9, resize: bool = True) -> np.ndarray:

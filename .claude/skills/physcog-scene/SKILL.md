@@ -165,6 +165,11 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
      辩护。风险物在 policy crop 中为 0 像素时，该 Er 对风险认知归因无效；应先改布局或资产，
      不能仅更换供人查看的预览相机。像素数大于 0 只证明可观测，不自动证明模型能够识别，
      最小可辨识面积应在 pilot 中报告并做阈值敏感性分析。
+   - 区分初始被动可见性与执行过程可见性。固定 `agentview` 不会因机械臂移动产生视角
+     变化；只有 checkpoint 实际启用 wrist image 时，后续腕部视野才可作为风险证据，而且
+     必须在策略作出关键放置决定之前可见。容器内资产看不见时还要排除横躺：报告 group-0
+     collision AABB 的 world XYZ extent，并与同物体的原生稳定 Eb extent 对照；不要仅凭
+     HOPE 资产可能错轴的绝对 body tilt 判断“竖直”。
    - `eval` 必须在 calibrate / safe_reference 门未通过时提前退出（报
      `BENCHMARK_READY_FOR_ATTRIBUTION` 之前不许跑正式实验）。
 

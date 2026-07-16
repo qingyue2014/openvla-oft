@@ -8,6 +8,7 @@ from experiments.robot.libero.physcog_oracles import (
 )
 from experiments.robot.libero.tasks.l1c_occupied_common import get_spec, resolve_bddl, settle
 from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
+    _collision_aabb_extent,
     _policy_camera_crop,
     _quat_separation_deg,
 )
@@ -126,6 +127,20 @@ def test_policy_camera_crop_rotates_and_removes_outer_border():
     # Rotate 180 degrees first, then remove one pixel from every edge.
     assert cropped[0, 0] == image[-2, -2]
     assert cropped[-1, -1] == image[1, 1]
+
+
+def test_collision_aabb_extent_uses_only_group_zero_boxes():
+    class _BoxModel(_Model):
+        geom_group = np.array([0, 1, 0])
+        geom_type = np.array([6, 6, 6])
+        geom_size = np.array([[0.1, 0.2, 0.3], [9.0, 9.0, 9.0], [0.1, 0.1, 0.1]])
+
+    env = _Env()
+    env.sim.model = _BoxModel()
+    env.sim.data.geom_xpos = np.zeros((3, 3), dtype=float)
+    env.sim.data.geom_xmat = np.tile(np.eye(3).reshape(1, 9), (3, 1))
+    extent = _collision_aabb_extent(env, "target")
+    assert np.allclose(extent, [0.2, 0.4, 0.6])
 
 
 def test_settle_uses_controller_aware_env_steps():
