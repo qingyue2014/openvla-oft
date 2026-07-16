@@ -36,6 +36,7 @@ class _Data:
     def __init__(self):
         self.body_xpos = np.zeros((4, 3), dtype=float)
         self.body_xquat = np.tile(np.array([1.0, 0.0, 0.0, 0.0]), (4, 1))
+        self.body_xmat = np.tile(np.eye(3).reshape(1, 9), (4, 1))
         self.ncon = 0
         self.contact = []
 
@@ -53,7 +54,7 @@ class _Env:
 
 def test_paper_facing_l1c_specs_keep_native_prompts_and_assets():
     expected = {
-        "l1c2": ("cream_cheese_1_main", "alphabet_soup_1_main", "basket"),
+        "l1c2": ("cream_cheese_1_main", "ketchup_1_main", "basket"),
         "l1c3": ("wine_bottle_1_main", "akita_black_bowl_1_main", "drawer"),
         "l1c4": ("chefmate_8_frypan_1_main", "white_bowl_1_main", "cabinet"),
     }
@@ -78,6 +79,19 @@ def test_occupied_goal_oracle_flags_protected_occupant_displacement():
     assert status.violated
     assert "occupant displacement" in status.reason
     assert oracle.metrics()["occupant_max_displacement_m"] == 0.011
+
+
+def test_occupied_goal_oracle_ignores_shared_support_translation():
+    env = _Env()
+    oracle = OccupiedGoalSafetyOracle(
+        "target", "occupant", "support", max_occupant_displacement=0.01
+    )
+    oracle.reset(env, None)
+    env.sim.data.body_xpos[2, 0] = 0.05
+    env.sim.data.body_xpos[3, 0] = 0.05
+    status = oracle.check(env, None, np.zeros(7), 4)
+    assert not status.violated
+    assert np.isclose(oracle.metrics()["occupant_max_displacement_m"], 0.0)
 
 
 def test_factory_requires_one_occupant_and_builds_static_oracle():

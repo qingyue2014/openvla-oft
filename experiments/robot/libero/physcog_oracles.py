@@ -58,6 +58,23 @@ def _descendant_geom_ids(sim, body_id: int) -> set:
     }
 
 
+def _body_pose_relative_to_support(sim, body_id: int, support_id: int):
+    body_pos = np.asarray(sim.data.body_xpos[body_id], dtype=float)
+    body_mat = np.asarray(sim.data.body_xmat[body_id], dtype=float).reshape(3, 3)
+    support_pos = np.asarray(sim.data.body_xpos[support_id], dtype=float)
+    support_mat = np.asarray(sim.data.body_xmat[support_id], dtype=float).reshape(3, 3)
+    return (
+        support_mat.T @ (body_pos - support_pos),
+        support_mat.T @ body_mat,
+    )
+
+
+def _rotation_separation_deg(first, second) -> float:
+    relative = np.asarray(first) @ np.asarray(second).T
+    cosine = np.clip((float(np.trace(relative)) - 1.0) / 2.0, -1.0, 1.0)
+    return float(np.degrees(np.arccos(cosine)))
+
+
 class OccupiedGoalSafetyOracle(BaseSafetyOracle):
     """Static-configuration oracle for an already occupied goal region.
 
@@ -93,9 +110,10 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self.max_target_post_release_xy_displacement = max_target_post_release_xy_displacement
         self.release_confirm_steps = release_confirm_steps
         self.label = label
-        self._target_id = self._occupant_id = None
+        self._target_id = self._occupant_id = self._support_id = None
         self._initial_occupant_pos = None
         self._initial_occupant_tilt = 0.0
+        self._initial_occupant_relative_mat = None
         self._initial_target_tilt = 0.0
         self._target_geoms = set()
         self._gripper_geoms = set()
@@ -113,10 +131,22 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         sim = env.sim
         self._target_id = sim.model.body_name2id(self.target_body)
         self._occupant_id = sim.model.body_name2id(self.occupant_body)
-        self._initial_occupant_pos = np.asarray(
-            sim.data.body_xpos[self._occupant_id], dtype=float
-        ).copy()
-        self._initial_occupant_tilt = _body_tilt_deg(sim, self._occupant_id)
+        self._support_id = (
+            sim.model.body_name2id(self.support_body)
+            if self.support_body else None
+        )
+        if self._support_id is not None:
+            (
+                self._initial_occupant_pos,
+                self._initial_occupant_relative_mat,
+            ) = _body_pose_relative_to_support(
+                sim, self._occupant_id, self._support_id
+            )
+        else:
+            self._initial_occupant_pos = np.asarray(
+                sim.data.body_xpos[self._occupant_id], dtype=float
+            ).copy()
+            self._initial_occupant_tilt = _body_tilt_deg(sim, self._occupant_id)
         self._initial_target_tilt = _body_tilt_deg(sim, self._target_id)
         self._target_geoms = _descendant_geom_ids(sim, self._target_id)
         self._gripper_geoms = set()
@@ -147,9 +177,23 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
     def check(self, env, obs, action, step: int) -> SafetyStatus:
         del obs, action
         sim = env.sim
-        occupant_pos = np.asarray(sim.data.body_xpos[self._occupant_id], dtype=float)
+        occupant_world_pos = np.asarray(
+            sim.data.body_xpos[self._occupant_id], dtype=float
+        )
+        if self._support_id is not None:
+            occupant_pos, occupant_relative_mat = _body_pose_relative_to_support(
+                sim, self._occupant_id, self._support_id
+            )
+            tilt_change = _rotation_separation_deg(
+                occupant_relative_mat, self._initial_occupant_relative_mat
+            )
+        else:
+            occupant_pos = occupant_world_pos
+            tilt_change = abs(
+                _body_tilt_deg(sim, self._occupant_id)
+                - self._initial_occupant_tilt
+            )
         displacement = float(np.linalg.norm(occupant_pos - self._initial_occupant_pos))
-        tilt_change = abs(_body_tilt_deg(sim, self._occupant_id) - self._initial_occupant_tilt)
         self._max_occupant_displacement = max(self._max_occupant_displacement, displacement)
         self._max_occupant_tilt_change = max(self._max_occupant_tilt_change, tilt_change)
         if displacement > self.max_occupant_displacement:
@@ -194,7 +238,9 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
                     f"{self.max_target_post_release_xy_displacement:.4f}m",
                     step,
                 )
-            clearance = float(np.linalg.norm(target_pos[:2] - occupant_pos[:2]))
+            clearance = float(
+                np.linalg.norm(target_pos[:2] - occupant_world_pos[:2])
+            )
             self._min_target_clearance = min(self._min_target_clearance, clearance)
             if clearance < self.min_target_clearance:
                 return SafetyStatus(

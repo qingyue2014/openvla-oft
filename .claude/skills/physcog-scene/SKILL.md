@@ -108,7 +108,12 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
   后计算 occupant 相对 settled anchor 的刚体变换，再将该相对变换映射到官方 anchor 位姿，
   只移植映射后的 occupant free joint。最终用正式 `num_steps_wait` 动力学验证 occupant 相对
   anchor 的位移/旋转、region membership，并将 Er anchor 的 t10 位姿与配对 Eb t10 比较；
-  不要把官方场景本身的自然 settling 当作 Er 额外扰动。
+     不要把官方场景本身的自然 settling 当作 Er 额外扰动。
+- 对可移动 support 上的 protected occupant，正式 safety oracle 与 teleport calibration 都必须
+  在 support frame 中计算 occupant 位移和旋转。若所有 offset 的 world displacement 几乎
+  完全相同，并等于配对 Eb support 的自然位移，这是坐标系错误而不是所有动作都 unsafe。
+  修正相对指标后若 direct placement 本身稳定成功，则该 occupant 不形成 action separation；
+  不得靠 world-frame 假违规保留场景，应更换几何上要求侧向安全放置的原生 occupant。
 - LIBERO 的 settle 必须通过 `env.step([0,0,0,0,0,0,-1])` 执行 controller-aware
   no-op，不能循环裸 `env.sim.step()`。后者绕过 OSC 控制器，机器人可能下垂或碰撞物体，
   造成虚假的漂移、高线速度/角速度和布局 reject。静态 calibration 与 replay 的 settle

@@ -925,16 +925,13 @@ def _policy_camera_crop(array: np.ndarray, crop_scale: float = 0.9, resize: bool
 
 
 def _placement_result(
-    env, spec, occupant_pos0, occupant_tilt0,
-    target_tilt0, max_displacement=None, max_tilt_change=None,
+    env, spec, target_tilt0, max_displacement=None, max_tilt_change=None,
     max_target_xy_displacement=None,
 ):
     occupant_pos = body_pos(env, spec.occupant_body)
     target_pos = body_pos(env, spec.target_body)
-    displacement = float(np.linalg.norm(occupant_pos - occupant_pos0))
-    tilt_change = abs(body_tilt_deg(env, spec.occupant_body) - occupant_tilt0)
-    displacement = max(displacement, max_displacement or 0.0)
-    tilt_change = max(tilt_change, max_tilt_change or 0.0)
+    displacement = max_displacement or 0.0
+    tilt_change = max_tilt_change or 0.0
     clearance = float(np.linalg.norm(target_pos[:2] - occupant_pos[:2]))
     target_tilt = body_tilt_deg(env, spec.target_body)
     target_tilt_metric = (
@@ -976,8 +973,11 @@ def calibrate(args):
             for offset in offsets:
                 env.reset()
                 env.set_init_state(state)
-                occupant_pos0 = body_pos(env, spec.occupant_body)
-                occupant_tilt0 = body_tilt_deg(env, spec.occupant_body)
+                occupant_relative_pos0, occupant_relative_mat0 = (
+                    _body_pose_relative_to_anchor(
+                        env, spec.occupant_body, spec.anchor_body
+                    )
+                )
                 target_tilt0 = body_tilt_deg(env, spec.target_body)
                 place_at_anchor(env, spec, spec.target_body, offset, args.drop_clearance)
                 target_xy0 = body_pos(env, spec.target_body)[:2].copy()
@@ -986,13 +986,24 @@ def calibrate(args):
                 max_target_xy_displacement = 0.0
                 for _ in range(args.settle_steps):
                     env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+                    occupant_relative_pos, occupant_relative_mat = (
+                        _body_pose_relative_to_anchor(
+                            env, spec.occupant_body, spec.anchor_body
+                        )
+                    )
                     max_displacement = max(
                         max_displacement,
-                        float(np.linalg.norm(body_pos(env, spec.occupant_body) - occupant_pos0)),
+                        float(
+                            np.linalg.norm(
+                                occupant_relative_pos - occupant_relative_pos0
+                            )
+                        ),
                     )
                     max_tilt_change = max(
                         max_tilt_change,
-                        abs(body_tilt_deg(env, spec.occupant_body) - occupant_tilt0),
+                        _rotation_matrix_separation_deg(
+                            occupant_relative_mat, occupant_relative_mat0
+                        ),
                     )
                     max_target_xy_displacement = max(
                         max_target_xy_displacement,
@@ -1000,8 +1011,7 @@ def calibrate(args):
                     )
                 env.sim.forward()
                 result = _placement_result(
-                    env, spec, occupant_pos0, occupant_tilt0,
-                    target_tilt0, max_displacement, max_tilt_change,
+                    env, spec, target_tilt0, max_displacement, max_tilt_change,
                     max_target_xy_displacement,
                 )
                 row = {
@@ -1037,6 +1047,7 @@ def calibrate(args):
         f"- Direct/centre safe rate: {center_rate:.3f}",
         f"- Best alternative offset: ({best_offset[0]:+.3f}, {best_offset[1]:+.3f}) m",
         f"- Best alternative safe rate: {best_rate:.3f}",
+        "- Occupant displacement/rotation are measured relative to the moving support.",
         "- Scope: teleport placement establishes geometry only; dynamic OSC validation is a separate gate.",
         "",
         "| Offset x | Offset y | N | Safe rate |",
