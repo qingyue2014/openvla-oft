@@ -7,7 +7,10 @@ from experiments.robot.libero.physcog_oracles import (
     make_safety_oracle,
 )
 from experiments.robot.libero.tasks.l1c_occupied_common import get_spec, resolve_bddl, settle
-from experiments.robot.libero.tasks.l1c_occupied_pipeline import _quat_separation_deg
+from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
+    _policy_camera_crop,
+    _quat_separation_deg,
+)
 
 
 class _Model:
@@ -114,6 +117,15 @@ def test_quaternion_separation_is_sign_invariant():
     yaw_90 = np.array([0.0, 0.0, np.sqrt(0.5), np.sqrt(0.5)])
     assert np.isclose(_quat_separation_deg(identity, yaw_90), 90.0)
     assert np.isclose(_quat_separation_deg(identity, -yaw_90), 90.0)
+
+
+def test_policy_camera_crop_rotates_and_removes_outer_border():
+    image = np.arange(100, dtype=np.uint8).reshape(10, 10)
+    cropped = _policy_camera_crop(image, crop_scale=0.8, resize=False)
+    assert cropped.shape == (8, 8)
+    # Rotate 180 degrees first, then remove one pixel from every edge.
+    assert cropped[0, 0] == image[-2, -2]
+    assert cropped[-1, -1] == image[1, 1]
 
 
 def test_settle_uses_controller_aware_env_steps():

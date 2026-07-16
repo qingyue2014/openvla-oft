@@ -367,10 +367,66 @@ def preview(args):
                 image = obs.get("agentview_image")
                 if image is None:
                     image = env.sim.render(256, 256, camera_name="agentview")
-                Image.fromarray(np.asarray(image)[::-1]).save(out / f"{condition}_{idx:02d}.png")
+                image = np.asarray(image)
+                # Keep the historical human-readable preview, but also save
+                # the actual primary-camera transform used by OpenVLA.  The
+                # policy rotates agentview by 180 degrees and then applies a
+                # 0.9 centre crop (see libero_utils.get_libero_image and
+                # openvla_utils.center_crop_image).
+                Image.fromarray(image[::-1].copy()).save(out / f"{condition}_{idx:02d}.png")
+                policy_image = _policy_camera_crop(image)
+                Image.fromarray(policy_image).save(out / f"{condition}_{idx:02d}_policy.png")
+
+                geom_ids = descendant_geom_ids(env, spec.occupant_body)
+                seg_ids = _render_segmentation_geom_ids(env, "agentview", 256)
+                raw_mask = np.isin(seg_ids, tuple(geom_ids))
+                policy_mask = _policy_camera_crop(raw_mask.astype(np.uint8), resize=False).astype(bool)
+                Image.fromarray((policy_mask.astype(np.uint8) * 255)).save(
+                    out / f"{condition}_{idx:02d}_occupant_mask.png"
+                )
+                print(
+                    f"condition={condition} state={idx:02d} "
+                    f"occupant={spec.occupant_body} "
+                    f"visible_pixels_raw={int(raw_mask.sum())} "
+                    f"visible_pixels_policy_crop={int(policy_mask.sum())}"
+                )
     finally:
         env.close()
     print(f"Preview written to {out}")
+
+
+def _render_segmentation_geom_ids(env, camera: str, resolution: int) -> np.ndarray:
+    """Render MuJoCo instance segmentation and return the object-id plane."""
+    seg = env.sim.render(
+        width=resolution,
+        height=resolution,
+        camera_name=camera,
+        segmentation=True,
+    )
+    if seg is None:
+        raise RuntimeError("Segmentation render returned None")
+    seg = np.asarray(seg)
+    if seg.ndim == 3:
+        # robosuite returns (H, W, 2): object type followed by object id.
+        return seg[..., -1]
+    return seg
+
+
+def _policy_camera_crop(array: np.ndarray, crop_scale: float = 0.9, resize: bool = True) -> np.ndarray:
+    """Apply the spatial transform used for OpenVLA's primary image input."""
+    from PIL import Image
+
+    array = np.asarray(array)[::-1, ::-1].copy()
+    height, width = array.shape[:2]
+    crop_h = max(1, int(round(height * crop_scale)))
+    crop_w = max(1, int(round(width * crop_scale)))
+    top = (height - crop_h) // 2
+    left = (width - crop_w) // 2
+    cropped = array[top:top + crop_h, left:left + crop_w]
+    if not resize:
+        return cropped
+    # OPENVLA_IMAGE_SIZE is 224. LANCZOS matches the policy's RGB resize.
+    return np.asarray(Image.fromarray(cropped).resize((224, 224), resample=Image.Resampling.LANCZOS))
 
 
 def _placement_result(

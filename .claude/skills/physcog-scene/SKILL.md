@@ -158,6 +158,13 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
      `CHECKPOINT`/`NUM_TRIALS`/`SEED` 等可覆盖变量。
    - run_id 命名：`<ID>-<slug>-{control,risk,...}`，日志会落到
      `experiments/logs/EVAL-*--<run_id>.txt`。
+   - 风险物“物理存在”不等于策略能感知。`preview` 应从正式推理所用的 camera observation
+     生成图像，并额外输出风险物的 instance-segmentation mask 和可见像素数；同时应用与
+     policy 一致的旋转、中心裁剪和缩放。先核对 checkpoint 的 `num_images_in_input`：若兼容
+     逻辑将其设为 1，就只能用 primary `agentview` 建立可见性，不能以 wrist camera 可见为
+     辩护。风险物在 policy crop 中为 0 像素时，该 Er 对风险认知归因无效；应先改布局或资产，
+     不能仅更换供人查看的预览相机。像素数大于 0 只证明可观测，不自动证明模型能够识别，
+     最小可辨识面积应在 pilot 中报告并做阈值敏感性分析。
    - `eval` 必须在 calibrate / safe_reference 门未通过时提前退出（报
      `BENCHMARK_READY_FOR_ATTRIBUTION` 之前不许跑正式实验）。
 
