@@ -16,6 +16,8 @@ basket 及其他无关物体的状态保持一致，只改变 alphabet soup 的�
 LIBERO-90 官方 `get_task_init_states(resolved_task_id)`；`resolved_task_id` 必须通过同时
 匹配原生 prompt 与 BDDL 文件名动态解析，不能由文件行号推断。Er/Ec 在 soup settle 后
 恢复所有非 soup qpos/qvel，并以数值断言验证完全配对。
+由于 basket 有自由度，setup settle 的每一个 controlled step 后都固定恢复官方非 soup
+状态，只保留 soup free joint，避免先让 basket 漂移、再恢复 basket 时造成接触穿透。
 
 ## 2. 风险触发机制
 

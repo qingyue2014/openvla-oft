@@ -101,6 +101,12 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
   稳定风险物的 free-joint qpos/qvel，再恢复官方 Eb state，最后只移植风险物的 7 维
   qpos 与 6 维 qvel。保存前对 qpos/qvel 掩掉该 free joint，断言其余元素相对 Eb 的
   最大绝对误差不超过 `1e-10`，并逐 episode 打印 `non_occupant_error`。
+- 若 anchor/support 本身有 free joint（basket、tray 等），允许它在 setup settle 中漂移、
+  最后再恢复官方 anchor 而只移植 occupant 的世界位姿，可能制造接触穿透：保存瞬间的
+  `non_occupant_error=0` 仍会在 evaluator 首个 physics step 爆开。此时每个 controlled
+  settle step 后都应保留 occupant free joint、恢复官方 state 的全部其他 qpos/qvel，再继续
+  下一步，即在 pinned native world 中求 occupant 稳定位姿；最终仍须解除 pin，并用正式的
+  `num_steps_wait` 动力学验证 occupant/anchor 位移、姿态和 region membership。
 - LIBERO 的 settle 必须通过 `env.step([0,0,0,0,0,0,-1])` 执行 controller-aware
   no-op，不能循环裸 `env.sim.step()`。后者绕过 OSC 控制器，机器人可能下垂或碰撞物体，
   造成虚假的漂移、高线速度/角速度和布局 reject。静态 calibration 与 replay 的 settle

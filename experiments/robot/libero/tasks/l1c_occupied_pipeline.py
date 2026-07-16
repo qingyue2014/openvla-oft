@@ -138,6 +138,25 @@ def _restore_native_except_occupant(env, native_state, body_name, occupant_state
     env.sim.forward()
 
 
+def _settle_occupant_in_pinned_native_world(
+    env, native_state, body_name, steps
+):
+    """Advance occupant physics while keeping every paired variable native.
+
+    Container assets such as the basket can have free joints. If the basket is
+    allowed to drift during setup and only the occupant's final world pose is
+    transplanted into the official state, the restored pair can interpenetrate
+    and explode on the evaluator's first no-op step. After every controlled
+    step, retain the occupant free joint and restore all other qpos/qvel.
+    """
+    for _ in range(max(0, int(steps))):
+        env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+        occupant_state = _capture_free_joint(env.sim, body_name)
+        _restore_native_except_occupant(
+            env, native_state, body_name, occupant_state
+        )
+
+
 def _paired_non_occupant_error(env, native_state, variant_state, occupant_body):
     """Return max qpos/qvel error after masking the one allowed free joint."""
     env.set_init_state(native_state)
@@ -203,10 +222,14 @@ def generate(args):
             # Er: native bystander occupies the native goal's default landing area.
             env.set_init_state(base)
             place_at_anchor(env, spec, spec.occupant_body, spec.risk_offset)
-            settle(env, spec.settle_steps)
+            _settle_occupant_in_pinned_native_world(
+                env, base, spec.occupant_body, spec.settle_steps
+            )
             risk_pos0 = body_pos(env, spec.occupant_body)
             risk_tilt0 = body_tilt_deg(env, spec.occupant_body)
-            settle(env, args.stability_confirm_steps)
+            _settle_occupant_in_pinned_native_world(
+                env, base, spec.occupant_body, args.stability_confirm_steps
+            )
             risk_ok, risk_drift, risk_tilt, risk_tilt_change = _stable_occupant(
                 env, spec, risk_pos0, risk_tilt0
             )
@@ -245,10 +268,14 @@ def generate(args):
             for ec_xy in ec_candidates:
                 env.set_init_state(base)
                 place_null_risk(env, spec, spec.occupant_body, ec_xy)
-                settle(env, spec.settle_steps)
+                _settle_occupant_in_pinned_native_world(
+                    env, base, spec.occupant_body, spec.settle_steps
+                )
                 ec_pos0 = body_pos(env, spec.occupant_body)
                 ec_tilt0 = body_tilt_deg(env, spec.occupant_body)
-                settle(env, args.stability_confirm_steps)
+                _settle_occupant_in_pinned_native_world(
+                    env, base, spec.occupant_body, args.stability_confirm_steps
+                )
                 ec_ok, ec_drift, ec_tilt, ec_tilt_change = _stable_occupant(
                     env, spec, ec_pos0, ec_tilt0
                 )
@@ -508,10 +535,14 @@ def screen_occupants(args):
             place_at_anchor(
                 env, candidate_spec, body_name, candidate_spec.risk_offset
             )
-            settle(env, args.settle_steps)
+            _settle_occupant_in_pinned_native_world(
+                env, base, body_name, args.settle_steps
+            )
             pos0 = body_pos(env, body_name)
             tilt0 = body_tilt_deg(env, body_name)
-            settle(env, args.stability_confirm_steps)
+            _settle_occupant_in_pinned_native_world(
+                env, base, body_name, args.stability_confirm_steps
+            )
             stable, drift, tilt, tilt_change = _stable_occupant(
                 env, candidate_spec, pos0, tilt0
             )
