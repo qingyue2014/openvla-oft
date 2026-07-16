@@ -58,6 +58,9 @@ ID 体系：`L<层级>-<类别><序号>`，如 `L1-C2`、`L2-B2`、`L3-A1`。文
 
 原则（从现有 case 总结，务必遵守）：
 
+- 按以下优先级设计场景：**原生任务 + 原生 prompt + 原生 goal + 原生资产 + 官方初始布局**，
+  只移动一个原生 bystander 来激活风险；新增资产、自定义 BDDL 或修改任务语义只能作为
+  找不到合格原生 case 后的最后手段，并在 SPEC 中说明原因。
 - **优先复用原生任务与原生 prompt**，prompt 不提风险 —— 这是整个基准的设计核心。
 - 用关键词检索原生任务（需要仿真环境；本机不可用时，直接读
   `/Users/qingyuewang/_deps/LIBERO/libero/libero/bddl_files/<suite>/` 下的 bddl 文件名，
@@ -195,6 +198,12 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
      “目标区域已被占用”的风险关系；场景有效性门必须要求物体、关系上下文和动力学同时有效。
    - `eval` 必须在 calibrate / safe_reference 门未通过时提前退出（报
      `BENCHMARK_READY_FOR_ATTRIBUTION` 之前不许跑正式实验）。
+   - 若模型和任务均已成功加载，却在首个 episode 的
+     `robosuite ... read_pixels` 中发生原生 `Fatal Python error: Aborted`，先判为
+     CUDA/EGL 渲染设备冲突，不要改场景、轨迹或动作 chunk。多 GPU 服务器应把模型留在
+     默认 CUDA GPU，并用 `RENDER_GPU_DEVICE_ID=1 EGL_DEVICE_ID=1`（选择实际空闲卡）把
+     MuJoCo EGL 固定到另一张 GPU；单 GPU 环境再考虑 `MUJOCO_GL=osmesa` 的 CPU 渲染回退。
+     TensorFlow factory 重复注册和 action-chunk mismatch 警告本身不是该 SIGABRT 的证据。
 
 写完后本机能做的静态检查都要做：`bash -n` 检查 runner 语法；用本机 python
 `py_compile` 检查生成脚本语法（不 import libero，只查语法可用

@@ -76,6 +76,12 @@ ATTRIBUTION_REPORT="${LOG_DIR}/${SCENARIO}_attribution.md"
 
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
+if [[ "${RENDER_GPU_DEVICE_ID}" != "-1" ]]; then
+  # robosuite versions differ in which EGL selector they honor. Keep both in
+  # sync with the explicit render_gpu_device_id passed to OffScreenRenderEnv.
+  export EGL_DEVICE_ID="${EGL_DEVICE_ID:-${RENDER_GPU_DEVICE_ID}}"
+  export MUJOCO_EGL_DEVICE_ID="${MUJOCO_EGL_DEVICE_ID:-${RENDER_GPU_DEVICE_ID}}"
+fi
 
 common_state_args=(
   --scenario "${SCENARIO}"
@@ -114,6 +120,9 @@ run_calibrate() {
 }
 
 run_safe_reference() {
+  # Do not leave a stale report that can be mistaken for the current scene if
+  # the prerequisite Eb-trajectory check exits before writing new results.
+  rm -f "${SAFE_REFERENCE_CSV}" "${SAFE_REFERENCE_REPORT}"
   python "${PIPELINE}" safe-reference "${common_state_args[@]}" \
     --num_states "${CALIBRATION_NUM_STATES}" \
     --max_attempts_per_state "${SAFE_REFERENCE_MAX_ATTEMPTS:-0}" \
