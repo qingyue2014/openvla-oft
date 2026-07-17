@@ -111,7 +111,7 @@ DRAWER_CLOSED_QPOS = 0.0025
 # stable), i.e. furthest from that boundary, so it reproduces far more reliably
 # at the cost of a steeper starting lean (~54deg). The scripted-close
 # verification below is the actual guarantee; this just raises the yield.
-DEFAULT_LEAN_DX = 0.0
+DEFAULT_LEAN_DX = -0.04
 DEFAULT_LEAN_DY = -0.185
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -21.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it

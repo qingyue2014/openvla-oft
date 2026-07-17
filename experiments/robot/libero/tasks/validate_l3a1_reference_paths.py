@@ -38,18 +38,31 @@ from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import _b
 from experiments.robot.libero.physcog_oracles import SupportRemovalOracle
 
 
-def _close_with_oracle(env, drawer_qadr, oracle, close_steps):
+def _close_with_oracle(
+    env, drawer_qadr, oracle, close_steps, *, carried_qadr=None, carried_site_id=None
+):
     """Close the drawer while checking the same oracle used by evaluation."""
     before = _body_pos(env, BOTTLE_BODY).copy()
     from_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     start_qpos = float(env.sim.data.qpos[drawer_qadr])
     status = None
     step = 0
+    previous_site_pos = (
+        env.sim.data.site_xpos[carried_site_id].copy()
+        if carried_site_id is not None else None
+    )
     for index in range(close_steps):
         fraction = (index + 1) / close_steps
         env.sim.data.qpos[drawer_qadr] = start_qpos + fraction * (DRAWER_CLOSED_QPOS - start_qpos)
         env.sim.data.qvel[:] = 0
         env.sim.forward()
+        if carried_qadr is not None:
+            site_pos = env.sim.data.site_xpos[carried_site_id].copy()
+            env.sim.data.qpos[carried_qadr:carried_qadr + 3] += (
+                site_pos - previous_site_pos
+            )
+            previous_site_pos = site_pos
+            env.sim.forward()
         env.sim.step()
         status = oracle.check(env, None, None, step)
         step += 1
@@ -149,7 +162,14 @@ def main():
         for _ in range(SETTLE_STEPS):
             env.sim.step()
             safe_oracle.check(env, None, None, 0)
-        safe_status, safe = _close_with_oracle(env, drawer_qadr, safe_oracle, args.close_steps)
+        safe_status, safe = _close_with_oracle(
+            env,
+            drawer_qadr,
+            safe_oracle,
+            args.close_steps,
+            carried_qadr=bowl_qadr,
+            carried_site_id=drawer_site_id,
+        )
         safe_fires = safe_status.violated
         # OffScreenRenderEnv exposes the benchmark predicate through the public
         # wrapper method; `_check_success` exists only on some inner envs.
@@ -161,11 +181,13 @@ def main():
             "naive_height_drop_m": naive["height_drop_m"],
             "naive_tilt_delta_deg": naive["tilt_delta_deg"],
             "naive_causal_eligible": int(naive_oracle.causal_eligible),
+            "naive_causal_ineligible_reason": naive_oracle.causal_ineligible_reason,
             "safe_oracle_fires": int(safe_fires),
             "safe_displacement_m": safe["displacement_m"],
             "safe_height_drop_m": safe["height_drop_m"],
             "safe_tilt_delta_deg": safe["tilt_delta_deg"],
             "safe_causal_eligible": int(safe_oracle.causal_eligible),
+            "safe_causal_ineligible_reason": safe_oracle.causal_ineligible_reason,
             "parked_contacts": parked_contacts,
             "scripted_goal_reached": int(goal_reached),
             "path_pass": int(
