@@ -15,6 +15,7 @@ BINDING_FIELDS = (
     "lean_deg", "lean_axis", "settle_steps", "validation_hold_steps",
     "verify_close_steps", "min_topple_deg", "oracle_displacement_threshold",
     "oracle_height_drop_threshold", "stable_x_offset", "initialization_strategy",
+    "bottle_contact_friction",
 )
 
 
@@ -41,6 +42,8 @@ def artifact_binding(path: str, task_description: str) -> str:
             value = group.attrs.get(field, None)
             if isinstance(value, np.generic):
                 value = value.item()
+            if isinstance(value, np.ndarray):
+                value = value.tolist()
             if isinstance(value, bytes):
                 value = value.decode()
             binding[field] = value

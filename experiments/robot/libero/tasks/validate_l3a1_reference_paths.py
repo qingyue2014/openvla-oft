@@ -37,7 +37,10 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
     _lean_tilt_angle_deg,
     _tilt_quat,
 )
-from experiments.robot.libero.tasks.l3a1_replay import clear_mujoco_replay_transients
+from experiments.robot.libero.tasks.l3a1_replay import (
+    clear_mujoco_replay_transients,
+    configure_l3a1_contact_model,
+)
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import _body_pos, _find_body
 from experiments.robot.libero.physcog_oracles import SupportRemovalOracle
 
@@ -148,6 +151,7 @@ def main():
 
     env = OffScreenRenderEnv(bddl_file_name=args.bddl, camera_heights=256, camera_widths=256)
     env.seed(args.seed)
+    configure_l3a1_contact_model(env, BOTTLE_BODY)
     env.reset()
     drawer_qadr = _find_joint_qadr(env.sim, *DRAWER_JOINT_CANDIDATES)
     if drawer_qadr < 0:

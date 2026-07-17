@@ -51,7 +51,11 @@ from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
     _state_is_finite,
     _table_xy_bounds,
 )
-from experiments.robot.libero.tasks.l3a1_replay import clear_mujoco_replay_transients
+from experiments.robot.libero.tasks.l3a1_replay import (
+    L3A1_BOTTLE_FRICTION,
+    clear_mujoco_replay_transients,
+    configure_l3a1_contact_model,
+)
 
 DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.bddl"
 # The leaning bottle needs ~300 sim steps to fully settle against the drawer
@@ -301,6 +305,7 @@ def generate_states(
     # upright, self-supporting safe precondition.
     support_candidates = DRAWER_BODY_CANDIDATES
     support_body = _find_body(env, *support_candidates)
+    configure_l3a1_contact_model(env, BOTTLE_BODY)
 
     print(f"\nBDDL: {bddl_path}")
     print(f"Variant: {variant}  (support body: {support_body})")
@@ -883,6 +888,7 @@ def main():
             if args.paired_er_states
             else "sample_then_reuse_support_relative_equilibrium"
         )
+        group.attrs["bottle_contact_friction"] = L3A1_BOTTLE_FRICTION
         group.attrs["source_task_key"] = key if args.paired_er_states else ""
         for index, record in enumerate(validation_records):
             episode = group[f"demo_{index}"]

@@ -216,6 +216,7 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     evaluator = (REPO_ROOT / "experiments/robot/libero/run_physcog_libero_l1_eval.py").read_text()
     assert 'cfg.safety_oracle in ("support_object_removal", "support_removal")' in evaluator
     assert "clear_mujoco_replay_transients(env)" in evaluator
+    assert "configure_l3a1_contact_model(env)" in evaluator
 
 
 def test_artifact_binding_covers_bytes_count_and_geometry(tmp_path):
