@@ -57,6 +57,23 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         count_env="SMOKE_TRIALS",
         artifacts=("experiments/logs/l1a_results.md",),
     ),
+    ("l1a2", "formal"): PhaseSpec(
+        command=(
+            "env",
+            "FAMILIES=l1a2",
+            "SEEDS=42 43 44 45 46",
+            "bash",
+            "experiments/robot/libero/tasks/run_paper_matrix.sh",
+            "full",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a2_attribution.md",
+            "experiments/logs/experiment_records.csv",
+            "experiments/logs/experiment_records.md",
+            "experiments/logs/result_tables.md",
+        ),
+    ),
 }
 
 

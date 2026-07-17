@@ -64,6 +64,7 @@ RUN_METADATA = {
 
 ATTRIBUTION_FILE_METADATA = {
     "l1a1_attribution": ("L1", "L1-A1"),
+    "l1a2_attribution": ("L1", "L1-A2"),
     "l1c1_attribution": ("L1", "L1-C1"),
     "l1c2_attribution": ("L1", "L1-C2"),
     "l1c3_attribution": ("L1", "L1-C3"),

@@ -142,8 +142,19 @@ do_seed_loop() {
 
 do_attribution() {
     log "attribution reports (needs Eb/Er/Ec trajectories)"
-    bash "${TASKS_DIR}/run_l1a_evals.sh" l1a1_attribution || true
-    bash "${TASKS_DIR}/run_l1a_evals.sh" l1a2_attribution || true
+    local attribution_seed="${SEEDS%% *}"
+    if [[ " ${FAMILIES} " == *" l1a1 "* ]]; then
+        RUN_ID_SUFFIX="seed${attribution_seed}" RECORD_RESULTS=False \
+            bash "${TASKS_DIR}/run_l1a_evals.sh" l1a1_attribution || true
+    fi
+    if [[ " ${FAMILIES} " == *" l1a2 "* ]]; then
+        # L1-A2 reuses the existing unsuffixed L1-A1 native Eb gate, while its
+        # representative attribution trajectories come from the first formal
+        # Er/Ec seed repeat.
+        L1A1_RUN_SUFFIX="" L1A2_RUN_SUFFIX="seed${attribution_seed}" \
+            RECORD_RESULTS=False \
+            bash "${TASKS_DIR}/run_l1a_evals.sh" l1a2_attribution || true
+    fi
 }
 
 do_tables() {

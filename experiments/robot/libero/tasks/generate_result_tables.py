@@ -206,6 +206,23 @@ def _build_scenario_rows(
     pool_since: str = "",
 ) -> List[Dict[str, object]]:
     eval_rows = _aggregate_eval_rows(records, pool_mode=pool_mode, pool_since=pool_since)
+    # L1-A2 intentionally shares the unchanged native task-1 competence gate
+    # with L1-A1. Duplicate that aggregate only for table assembly so L1-A2's
+    # Eb column is populated without rerunning or relabeling the native data.
+    shared_l1a2_eb = []
+    for row in eval_rows:
+        if str(row.get("run_id") or "") == "L1-A1-native-baseline":
+            copied = dict(row)
+            copied.update(
+                {
+                    "scenario": "L1-A2",
+                    "family": "L1-A2",
+                    "condition": "Eb Shared Native Gate",
+                    "notes": "Shared unchanged native task-1 gate from L1-A1",
+                }
+            )
+            shared_l1a2_eb.append(copied)
+    eval_rows.extend(shared_l1a2_eb)
     attribution_rows = _latest_attribution_rows(records, eval_rows, default_model)
     attr_by_model_scenario = {
         (str(row.get("model") or "unknown"), str(row.get("scenario") or "")): row

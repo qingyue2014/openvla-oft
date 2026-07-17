@@ -45,6 +45,13 @@ def test_l1c1_attribution_report_metadata_is_registered() -> None:
     ) == ("L1", "L1-C1")
 
 
+def test_l1a2_attribution_report_metadata_is_registered() -> None:
+    assert _metadata_for_attribution(
+        Path("experiments/logs/l1a2_attribution.md"),
+        "L1-A2 upright-cookie visual occlusion",
+    ) == ("L1", "L1-A2")
+
+
 def test_five_primary_metrics_include_btf_in_result_registration(tmp_path) -> None:
     report = tmp_path / "l1c1_attribution.md"
     report.write_text(
