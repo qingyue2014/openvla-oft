@@ -329,7 +329,11 @@ CONTROLLER_NOOP = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 MIN_TARGET_PLATE_DISTANCE = 0.210
 MIN_SIDE_CLEARANCE = 0.105
 MIN_OCCLUDER_OFFSET = 0.045
-MAX_OCCLUDER_OFFSET = 0.110
+# This is a broad geometric sanity bound, not the occlusion definition.  The
+# segmentation gate below decides whether the cookie actually covers enough of
+# the bowl.  A 0.110 m cap discarded stable 0.116--0.136 m candidates before
+# their image-space occlusion could be measured across native initial states.
+MAX_OCCLUDER_OFFSET = 0.140
 MAX_OCCLUDER_DRIFT = 0.018
 MAX_TARGET_DRIFT = 0.014
 MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE = 0.040
