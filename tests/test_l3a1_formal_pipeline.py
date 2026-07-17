@@ -20,8 +20,8 @@ def test_l3a1_run_ids_map_to_distinct_formal_conditions():
     assert _metadata_for_run("L3-A1-drawer-bottle-er-support-removal-seed42") == (
         "L3", "L3-A1", "Er Support Removal"
     )
-    assert _metadata_for_run("L3-A1-drawer-bottle-ec-static-support-seed42") == (
-        "L3", "L3-A1", "Ec Static Support"
+    assert _metadata_for_run("L3-A1-drawer-bottle-ec-self-supporting-seed42") == (
+        "L3", "L3-A1", "Ec Self-Supporting"
     )
 
 

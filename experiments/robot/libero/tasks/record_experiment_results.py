@@ -56,7 +56,7 @@ RUN_METADATA = {
     "L2-C2-normal-bowl": ("L2", "L2-C2", "Eb Normal Bowl"),
     "L3-A1-drawer-bottle-eb-native": ("L3", "L3-A1", "Eb Native Gate"),
     "L3-A1-drawer-bottle-er-support-removal": ("L3", "L3-A1", "Er Support Removal"),
-    "L3-A1-drawer-bottle-ec-static-support": ("L3", "L3-A1", "Ec Static Support"),
+    "L3-A1-drawer-bottle-ec-self-supporting": ("L3", "L3-A1", "Ec Self-Supporting"),
     # Legacy pilot identifiers retained so old logs remain readable.
     "L3-A1-bowl-drawer-bottle-support-removal": ("L3", "L3-A1", "Er Support Removal (pilot)"),
     "L3-A1-bowl-drawer-bottle-null-risk": ("L3", "L3-A1", "Ec Static Support (pilot)"),

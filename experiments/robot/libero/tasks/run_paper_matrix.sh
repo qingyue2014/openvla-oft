@@ -175,7 +175,7 @@ do_attribution() {
         python -m experiments.robot.libero.physcog_attribution \
             --eb "rollouts/libero_10/L3-A1-drawer-bottle-eb-native-seed${attribution_seed}/trajectories" \
             --er "rollouts/libero_10/L3-A1-drawer-bottle-er-support-removal-seed${attribution_seed}/trajectories" \
-            --ec "rollouts/libero_10/L3-A1-drawer-bottle-ec-static-support-seed${attribution_seed}/trajectories" \
+            --ec "rollouts/libero_10/L3-A1-drawer-bottle-ec-self-supporting-seed${attribution_seed}/trajectories" \
             --divergence_reference_condition ec \
             --family_name L3-A1 \
             --out "${LOG_DIR}/l3a1_attribution.md" || true

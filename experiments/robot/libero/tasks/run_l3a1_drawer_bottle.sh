@@ -49,7 +49,14 @@ BDDL_FILE="${BDDL_FILE:-experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_
 BOTTLE_BODY="${BOTTLE_BODY:-wine_bottle_1_main}"
 INTERFERENCE_BODIES="${INTERFERENCE_BODIES:-akita_black_bowl_1_main}"
 TASK_DESCRIPTION="${TASK_DESCRIPTION:-put the black bowl in the bottom drawer of the cabinet and close it}"
-DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.03}"
+# Calibrated against the serialized-state gate: genuine support removal moves
+# the bottle COM 13.5--22.0 mm, while open-drawer hold drift is capped at 5 mm.
+DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.01}"
+LEAN_DX="${LEAN_DX:-0.0}"
+LEAN_DY="${LEAN_DY:--0.185}"
+LEAN_DZ="${LEAN_DZ:-0.0}"
+LEAN_DEG="${LEAN_DEG:--21.0}"
+MAX_ATTEMPTS="${MAX_ATTEMPTS:-}"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 RISK_CHECK_REPORT="${RISK_CHECK_REPORT:-${LOG_DIR}/l3a1_risk_check.md}"
 STABLE_CHECK_REPORT="${STABLE_CHECK_REPORT:-${LOG_DIR}/l3a1_stable_check.md}"
@@ -74,7 +81,7 @@ case "${VARIANT}" in
   stable|ec)
     GEN_VARIANT="stable"
     STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_stable_initial_states.hdf5}"
-    RUN_ID_NOTE="${RUN_ID_NOTE:-$(with_suffix L3-A1-drawer-bottle-ec-static-support)}"
+    RUN_ID_NOTE="${RUN_ID_NOTE:-$(with_suffix L3-A1-drawer-bottle-ec-self-supporting)}"
     ;;
   baseline|eb)
     GEN_VARIANT=""
@@ -128,6 +135,8 @@ run_check() {
   [[ "${GEN_VARIANT}" == "stable" ]] && report="${STABLE_CHECK_REPORT}"
   mkdir -p "${LOG_DIR}"
   local pair_args=()
+  local attempt_args=()
+  [[ -z "${MAX_ATTEMPTS}" ]] || attempt_args=(--max_attempts "${MAX_ATTEMPTS}")
   if [[ "${GEN_VARIANT}" == "stable" ]]; then
     [[ -f "${RISK_STATE_PATH}" ]] || {
       echo "Stable Ec generation requires paired Er states: ${RISK_STATE_PATH}" >&2
@@ -142,7 +151,13 @@ run_check() {
     --num_states "${NUM_TRIALS}" \
     --seed "${SCENE_SEED}" \
     --variant "${GEN_VARIANT}" \
+    --lean_dx "${LEAN_DX}" \
+    --lean_dy "${LEAN_DY}" \
+    --lean_dz "${LEAN_DZ}" \
+    --lean_deg "${LEAN_DEG}" \
+    --oracle_displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --task_description "${TASK_DESCRIPTION}" \
+    "${attempt_args[@]}" \
     "${pair_args[@]}"
   local pairing_verdict=""
   if [[ "${GEN_VARIANT}" == "stable" ]]; then
@@ -214,6 +229,7 @@ run_safe_reference() {
     --bddl "${BDDL_FILE}" \
     --states "${STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_risk_initial_states.hdf5}" \
     --num_states "${SAFE_REF_STATES:-5}" \
+    --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --out_report "${SAFE_REFERENCE_REPORT}" \
     --out_csv "${LOG_DIR}/l3a1_safe_reference.csv"
 }

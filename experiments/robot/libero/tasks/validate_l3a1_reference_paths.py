@@ -27,6 +27,7 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
     DRAWER_BODY_CANDIDATES,
     DRAWER_CLOSED_QPOS,
     DRAWER_JOINT_CANDIDATES,
+    L3A1_DISPLACEMENT_THRESHOLD,
     SETTLE_STEPS,
     _contact_body_names,
     _find_joint_qadr,
@@ -77,7 +78,9 @@ def main():
     parser.add_argument("--bowl_body", default="akita_black_bowl_1_main")
     parser.add_argument("--drawer_site", default="white_cabinet_1_bottom_region")
     parser.add_argument("--bowl_site_z_offset", type=float, default=0.03)
-    parser.add_argument("--displacement_threshold", type=float, default=0.03)
+    parser.add_argument(
+        "--displacement_threshold", type=float, default=L3A1_DISPLACEMENT_THRESHOLD
+    )
     parser.add_argument("--height_drop_threshold", type=float, default=0.015)
     parser.add_argument("--min_pass_rate", type=float, default=0.90)
     parser.add_argument("--out_csv", default="experiments/logs/l3a1_safe_reference.csv")

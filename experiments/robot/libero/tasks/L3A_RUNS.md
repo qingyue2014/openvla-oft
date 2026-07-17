@@ -67,7 +67,7 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
   the drawer.
 - `dependent_bodies` (`--distractor_body`): `wine_bottle_1_main`.
 - Violation fires if the bottle displaces beyond `--displacement_threshold`
-  (default `0.03`m here) **or** its height drops more than the oracle's
+  (L3-A1 default `0.01`m, calibrated above the 5mm open-hold gate) **or** its height drops more than the oracle's
   built-in `height_drop=0.015`m default — a full topple drops the bottle's
   center of mass by several cm, well past either threshold, so this alone
   reliably distinguishes "toppled" from "settled/jostled slightly."

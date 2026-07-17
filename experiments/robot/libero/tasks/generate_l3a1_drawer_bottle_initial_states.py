@@ -71,6 +71,12 @@ STABLE_SUPPORT_CANDIDATES = (
     "wine_rack_1",
 )
 BOTTLE_BODY = "wine_bottle_1_main"
+# SuperPod calibration (2026-07-17): genuine drawer-removal responses pivot the
+# tall bottle around its base, producing 13.5--22.0 mm COM displacement while
+# the open-drawer hold drift stays below 5 mm.  The old 30 mm threshold rejected
+# every genuine response.  Ten millimetres preserves a 2x margin over the hold
+# gate while detecting the intended rotation.
+L3A1_DISPLACEMENT_THRESHOLD = 0.010
 
 # Bottom-drawer slide joint, used to script the drawer closed when verifying
 # that a candidate layout actually topples the bottle (the definitive test that
@@ -207,6 +213,7 @@ def generate_states(
     oracle_displacement_threshold: float,
     oracle_height_drop_threshold: float,
     required_reset_attempts: set[int] | None = None,
+    max_attempts_override: int | None = None,
 ):
     env = OffScreenRenderEnv(bddl_file_name=bddl_path, camera_heights=256, camera_widths=256)
     env.seed(seed)
@@ -243,7 +250,13 @@ def generate_states(
     attempts = 0
     # Yield can be low (~1/5 of resets caught the drawer at the tuned pose), and
     # the scripted-close verification rejects the rest, so allow many attempts.
-    max_attempts = max(required_reset_attempts) if required_reset_attempts else max(40 * n, n)
+    max_attempts = (
+        max(required_reset_attempts)
+        if required_reset_attempts
+        else (max_attempts_override if max_attempts_override is not None else max(40 * n, n))
+    )
+    if max_attempts < n:
+        raise ValueError(f"max_attempts ({max_attempts}) must be >= num_states ({n})")
     table_bounds = None
 
     while len(states) < n:
@@ -452,8 +465,17 @@ def main():
     parser.add_argument("--min_topple_deg", type=float, default=10.0)
     parser.add_argument("--verify_close_steps", type=int, default=60)
     parser.add_argument("--validation_hold_steps", type=int, default=200)
-    parser.add_argument("--oracle_displacement_threshold", type=float, default=0.03)
+    parser.add_argument(
+        "--oracle_displacement_threshold",
+        type=float,
+        default=L3A1_DISPLACEMENT_THRESHOLD,
+    )
     parser.add_argument("--oracle_height_drop_threshold", type=float, default=0.015)
+    parser.add_argument(
+        "--max_attempts", type=int,
+        help="Override the rejection-sampling budget for controlled calibration runs. "
+             "This does not alter any geometry or causal acceptance gate.",
+    )
     parser.add_argument(
         "--pair_attempts_from",
         help="For Ec, use exactly the reset-attempt IDs recorded in an Er HDF5 artifact. "
@@ -500,6 +522,7 @@ def main():
         args.oracle_displacement_threshold,
         args.oracle_height_drop_threshold,
         required_reset_attempts,
+        args.max_attempts,
     )
     save_hdf5(states, args.task_description, args.output)
     # Keep the generated artifact self-describing. Evaluation ignores these
@@ -521,6 +544,7 @@ def main():
         group.attrs["min_topple_deg"] = args.min_topple_deg
         group.attrs["oracle_displacement_threshold"] = args.oracle_displacement_threshold
         group.attrs["oracle_height_drop_threshold"] = args.oracle_height_drop_threshold
+        group.attrs["max_attempts"] = args.max_attempts if args.max_attempts is not None else -1
         group.attrs["paired_attempts_from"] = args.pair_attempts_from or ""
         for index, record in enumerate(validation_records):
             episode = group[f"demo_{index}"]
