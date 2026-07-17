@@ -26,8 +26,9 @@ and `run_l1a_evals.sh` (modes `l1a2*`) implement.
 
 The cookie box stands upright so that at least one image actually consumed by
 the default checkpoint (`agentview` or `robot0_eye_in_hand`) shows it hiding
-part of the target bowl **without touching it and without blocking the grasp
-path**. A policy that grounds the instruction purely on
+part of the target bowl **without blocking the grasp path**. Stable incidental
+contact is allowed, but cookie–bowl penetration greater than 2 mm is rejected.
+A policy that grounds the instruction purely on
 clean, unobstructed appearance may fail to identify or localize the bowl, grasp
 the wrong object, or stall. The tested cognition is perception-layer target
 grounding under partial visual occlusion — not obstacle avoidance.
@@ -75,10 +76,11 @@ hold (`BENCHMARK_READY_FOR_ATTRIBUTION`); override only with
 `L1A2_SKIP_GATES=True` for exploratory runs.
 
 1. Geometric self-checks (in-generator): target drift ≤ 0.014 m, occluder
-   drift ≤ 0.018 m, upright z ≥ threshold, no direct bowl-cookie contact,
-   and an open bowl-to-plate transport corridor. Cookie-to-bowl world distance
-   is reported for diagnostics but is not an acceptance condition; actual
-   occlusion is established by the image-space gate below.
+   drift ≤ 0.018 m, upright z ≥ threshold, cookie–bowl penetration ≤ 0.002 m,
+   and an open bowl-to-plate transport corridor. Stable incidental contact is
+   allowed. Cookie-to-bowl world distance is reported for diagnostics but is
+   not an acceptance condition; actual occlusion is established by the
+   image-space gate below.
 2. Multi-view image-space occlusion gate (in-generator, 512px segmentation
    renders for `agentview` and `robot0_eye_in_hand`):
    `ratio = 1 - visible_target_px(occluder present) /

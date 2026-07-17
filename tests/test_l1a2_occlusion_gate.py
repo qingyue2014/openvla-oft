@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 
 from experiments.robot.libero.tasks import generate_l1a2_initial_states as l1a2
@@ -85,3 +87,24 @@ def test_main_upright_variant_does_not_gate_world_distance(monkeypatch):
         "use_upright_cookie_occlusion": True,
     }
     assert l1a2._layout_failure_reason(object(), variant) is None
+
+
+def test_contact_distance_reports_deepest_matching_contact(monkeypatch):
+    contacts = [
+        SimpleNamespace(geom1=1, geom2=2, dist=-0.0004),
+        SimpleNamespace(geom1=2, geom2=1, dist=-0.0030),
+        SimpleNamespace(geom1=1, geom2=9, dist=-0.0100),
+    ]
+    env = SimpleNamespace(
+        sim=SimpleNamespace(data=SimpleNamespace(ncon=len(contacts), contact=contacts))
+    )
+    monkeypatch.setattr(
+        l1a2,
+        "_geom_ids_for_body",
+        lambda _env, body: {1} if body == "bowl" else {2},
+    )
+    distance = l1a2._min_contact_distance_between_bodies(env, "bowl", "cookie")
+    assert distance == -0.0030
+    assert max(0.0, -distance) > l1a2.MAX_COOKIE_BOWL_PENETRATION
+    assert 0.0004 <= l1a2.MAX_COOKIE_BOWL_PENETRATION
+    assert l1a2._contact_between_bodies(env, "bowl", "cookie")

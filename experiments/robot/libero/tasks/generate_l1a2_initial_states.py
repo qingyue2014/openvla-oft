@@ -336,8 +336,11 @@ MAX_OCCLUDER_OFFSET = 0.140
 MAX_OCCLUDER_DRIFT = 0.018
 MAX_TARGET_DRIFT = 0.014
 MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE = 0.040
+# MuJoCo soft contacts may have a small negative distance at rest. Allow
+# incidental touching while rejecting clearly interpenetrating geometry.
+MAX_COOKIE_BOWL_PENETRATION = 0.002
 
-# Image-space occlusion gate. The geometric offset constraints above cannot
+# Image-space occlusion gate. The geometric checks above cannot
 # prove that the cookie box actually hides part of the bowl in the agentview
 # image, so every accepted state is additionally checked with a segmentation
 # render: ratio = 1 - visible_target_pixels(occluder present) /
@@ -464,15 +467,21 @@ def _geom_ids_for_body(env, body_name: str) -> set[int]:
 
 
 def _contact_between_bodies(env, body_a: str, body_b: str) -> bool:
+    return np.isfinite(_min_contact_distance_between_bodies(env, body_a, body_b))
+
+
+def _min_contact_distance_between_bodies(env, body_a: str, body_b: str) -> float:
+    """Return the most negative matching contact distance, or +inf if none."""
     geoms_a = _geom_ids_for_body(env, body_a)
     geoms_b = _geom_ids_for_body(env, body_b)
+    min_distance = float("inf")
     for i in range(env.sim.data.ncon):
         contact = env.sim.data.contact[i]
         if (contact.geom1 in geoms_a and contact.geom2 in geoms_b) or (
             contact.geom2 in geoms_a and contact.geom1 in geoms_b
         ):
-            return True
-    return False
+            min_distance = min(min_distance, float(contact.dist))
+    return min_distance
 
 
 def _world_aabb(env, body_name: str) -> tuple[np.ndarray, np.ndarray]:
@@ -697,7 +706,9 @@ def _place_occluder_near_bowl(env, variant) -> bool:
         corridor_distance = _xy_point_segment_distance(occluder_pos, target_pos, plate_pos)
         target_drift = float(np.linalg.norm(target_pos - settled_positions[variant["target_body"]]))
         occluder_drift = float(np.linalg.norm(occluder_pos - settled_positions[variant["occluder_body"]]))
-        direct_contact = _contact_between_bodies(env, variant["target_body"], variant["occluder_body"])
+        direct_contact = _contact_between_bodies(
+            env, variant["target_body"], variant["occluder_body"]
+        )
 
         if (
             MIN_OCCLUDER_OFFSET <= offset_norm <= MAX_OCCLUDER_OFFSET
@@ -768,7 +779,13 @@ def _place_upright_cookie_occluder(
         corridor_distance = _xy_point_segment_distance(occluder_pos, target_pos, plate_pos)
         target_drift = float(np.linalg.norm(target_pos - settled_target))
         cookie_drift = float(np.linalg.norm(occluder_pos - settled_cookie))
-        direct_contact = _contact_between_bodies(env, variant["target_body"], variant["occluder_body"])
+        min_contact_distance = _min_contact_distance_between_bodies(
+            env, variant["target_body"], variant["occluder_body"]
+        )
+        direct_contact = np.isfinite(min_contact_distance)
+        contact_penetration = (
+            max(0.0, -min_contact_distance) if direct_contact else 0.0
+        )
 
         # Per-candidate diagnostics so failed placements are tunable.
         fails = []
@@ -783,14 +800,18 @@ def _place_upright_cookie_occluder(
             )
         if occluder_pos[2] < MIN_UPRIGHT_COOKIE_Z:
             fails.append(f"z={occluder_pos[2]:.4f} < {MIN_UPRIGHT_COOKIE_Z}")
-        if direct_contact:
-            fails.append("direct_contact=True")
+        if contact_penetration > MAX_COOKIE_BOWL_PENETRATION:
+            fails.append(
+                f"penetration={contact_penetration:.4f} > "
+                f"{MAX_COOKIE_BOWL_PENETRATION}"
+            )
         if fails:
             # Only log rejected candidates; the accepted one gets its own line.
             print(
                 f"    [cand {cand_idx}] offset={offset_norm:.4f} z={occluder_pos[2]:.4f} "
                 f"target_drift={target_drift:.4f} cookie_drift={cookie_drift:.4f} "
-                f"contact={direct_contact} corridor={corridor_distance:.4f} "
+                f"contact={direct_contact} penetration={contact_penetration:.4f} "
+                f"corridor={corridor_distance:.4f} "
                 "REJECT: " + "; ".join(fails)
             )
 
@@ -799,7 +820,7 @@ def _place_upright_cookie_occluder(
             and cookie_drift <= MAX_OCCLUDER_DRIFT
             and corridor_distance >= MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE
             and occluder_pos[2] >= MIN_UPRIGHT_COOKIE_Z
-            and not direct_contact
+            and contact_penetration <= MAX_COOKIE_BOWL_PENETRATION
         )
         if physics_ok and not skip_occlusion_gate:
             gate_ok, ratio, gate_message = _occlusion_gate(env, variant)
@@ -819,7 +840,8 @@ def _place_upright_cookie_occluder(
                 "  [occluder] accepted upright cookie occluder "
                 f"offset=[{actual_offset[0]: .4f}, {actual_offset[1]: .4f}] "
                 f"distance={offset_norm: .4f} corridor_clearance={corridor_distance: .4f} "
-                f"z={occluder_pos[2]: .4f} occlusion_ratio={ratio_text}"
+                f"z={occluder_pos[2]: .4f} contact={direct_contact} "
+                f"penetration={contact_penetration: .4f} occlusion_ratio={ratio_text}"
             )
             return True
 
