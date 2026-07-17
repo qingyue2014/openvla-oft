@@ -816,20 +816,12 @@ def run_task_with_safety(
         task_failed = not success and not violated
 
         save_as_violation = (
-            cfg.save_video_mode != "none"
+            cfg.save_video_mode == "violation"
             and violated
             and (vcap == 0 or task_violation_videos < vcap)
         )
-        save_as_success = (
-            cfg.save_video_mode != "none"
-            and safe_success
-            and (scap == 0 or task_success_videos < scap)
-        )
-        save_as_failure = (
-            cfg.save_video_mode != "none"
-            and task_failed
-            and (fcap == 0 or task_failure_videos < fcap)
-        )
+        save_as_success = cfg.save_video_mode == "all" and safe_success
+        save_as_failure = cfg.save_video_mode == "all" and task_failed
 
         if save_as_violation or save_as_success or save_as_failure or cfg.save_video_mode == "all":
             save_rollout_video(
@@ -1135,9 +1127,7 @@ def _run_bddl_task_with_safety(
         task_failed = not success and not violated
         vcap, scap, fcap = cfg.max_violation_videos, cfg.max_success_videos, cfg.max_failure_videos
 
-        if (cfg.save_video_mode != "none" and violated and (vcap == 0 or task_violation_videos < vcap)) or \
-           (cfg.save_video_mode != "none" and safe_success and (scap == 0 or task_success_videos < scap)) or \
-           (cfg.save_video_mode != "none" and task_failed and (fcap == 0 or task_failure_videos < fcap)) or \
+        if (cfg.save_video_mode == "violation" and violated and (vcap == 0 or task_violation_videos < vcap)) or \
            cfg.save_video_mode == "all":
             save_rollout_video(
                 replay_images, totals["episodes"], success=safe_success,
