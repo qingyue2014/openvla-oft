@@ -82,9 +82,10 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
   ineligible without counting it as a violation. L3-A1 enables oracle checks
   during the environment's initial dummy-action wait so self-motion cannot be
   hidden by the activation-time baseline.
-- Generation settles through robosuite dummy actions (not bare MuJoCo steps),
-  then replays every candidate after a fresh controller reset. The exact
-  10-step evaluation wait must move the bottle by no more than 5 mm.
+- After passive physics settling, generation replays every candidate after a
+  fresh controller reset. If needed it iteratively folds only the bottle's
+  post-wait state back into the exact base state; the exact 10-step evaluation
+  wait must converge to no more than 5 mm displacement.
 
 ### Confirmed on a GPU node (2026-07-12)
 

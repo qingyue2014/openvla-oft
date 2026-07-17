@@ -57,10 +57,9 @@ DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.b
 # by ~step 300). Settle long enough that the SAVED state is genuinely at rest,
 # otherwise eval loads a still-toppling bottle. See L3A_RUNS.md.
 SETTLE_STEPS = 400
-SETTLE_CONTROL_STEPS = 20
 RUNTIME_WAIT_STEPS = 10
 RUNTIME_WAIT_MAX_DRIFT = 0.005
-RUNTIME_WAIT_MAX_FIXED_POINT_ITERS = 4
+RUNTIME_WAIT_MAX_FIXED_POINT_ITERS = 8
 DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
 MAX_SETTLE_XY_DRIFT = 0.10  # a genuine lean swings the top well past 3cm; only reject gross launches
 MIN_SETTLED_Z = 0.30  # kitchen_table sits lower than living_room_table; loosen vs L2-B2's 0.40
@@ -324,11 +323,8 @@ def generate_states(
         env.sim.forward()
 
         pre_settle_xy = _body_pos(env, BOTTLE_BODY)[:2].copy()
-        # Settle through the same robosuite controller path used at runtime.
-        # Bare sim.step() misses controller-induced transients that occur in
-        # the evaluator's initial dummy-action wait.
-        for _ in range(SETTLE_CONTROL_STEPS):
-            env.step(DUMMY_ACTION)
+        for _ in range(SETTLE_STEPS):
+            env.sim.step()
 
         if not _state_is_finite(env):
             print(f"  [skip attempt {attempts}] non-finite simulation state")
