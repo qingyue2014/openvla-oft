@@ -711,6 +711,9 @@ UPRIGHT_STABILITY_CHECK_STEPS = 120
 MIN_UPRIGHT_COOKIE_Z = 0.925
 MAX_LAYOUT_XY_ERROR = 0.025
 MAX_COOKIE_INDUCED_SCENE_DISPLACEMENT = 0.025
+UPRIGHT_PRESETTLE_COOKIE_XY = np.array([0.170, -0.125])
+UPRIGHT_PRESETTLE_COOKIE_Z = 0.940
+UPRIGHT_COOKIE_QUAT = np.array([0.70710678, 0.0, 0.70710678, 0.0])
 
 
 def _layout_xy_displacements(env, requested_xy):
@@ -740,6 +743,18 @@ def _place_upright_cookie_occluder(
             variant["extra_side_body"],
         )
     }
+    # Native task states randomize the cookie. Leaving it there during the
+    # scene pre-settle can collide with the repositioned ramekin / bowl before
+    # candidate search even starts. Er and Ec therefore begin from the same
+    # known-safe parked cookie pose and identical settling history.
+    if not _set_free_joint_pose(
+        env.sim,
+        variant["occluder_body"],
+        xy=UPRIGHT_PRESETTLE_COOKIE_XY,
+        z=UPRIGHT_PRESETTLE_COOKIE_Z,
+        quat=UPRIGHT_COOKIE_QUAT,
+    ):
+        return False
     _settle(env, PRE_SETTLE_STEPS)
     _, displaced = _layout_xy_displacements(env, requested_xy)
     if displaced:
@@ -890,11 +905,22 @@ def _place_upright_cookie_occluder(
 
 def _place_upright_cookie_matched_safe(env, variant) -> bool:
     """Create the Ec cookie with Er-matched pose and settling history."""
-    # Er first lets the repositioned native scene settle, then introduces the
-    # upright cookie.  Repeat that exact schedule here so the target, ramekin,
-    # plate, second bowl, and robot cannot differ merely because Ec was saved
-    # earlier in free fall.
+    # Er and Ec both park the randomized native cookie before pre-settling the
+    # repositioned scene, then re-apply their condition-specific cookie pose.
+    # This prevents a native cookie placement from perturbing only one member
+    # of the pair before the actual counterfactual intervention.
+    if not _set_free_joint_pose(
+        env.sim,
+        variant["occluder_body"],
+        xy=variant["occluder_xy"],
+        z=float(variant["occluder_z"]),
+        quat=variant["occluder_quat"],
+    ):
+        return False
+
     _settle(env, PRE_SETTLE_STEPS)
+    # Re-apply the exact pose so Ec mirrors Er's post-pre-settle candidate drop
+    # and subsequent 35 + 120 step stability schedule.
     if not _set_free_joint_pose(
         env.sim,
         variant["occluder_body"],
