@@ -125,11 +125,21 @@ def _move_to(
     stage,
     tolerance=None,
     accept_gripper_target_contact=False,
+    max_steps=None,
+    max_position_command=None,
+    retained_body=None,
+    retained_offset=None,
 ):
     tolerance = args.position_tolerance if tolerance is None else tolerance
+    max_steps = args.max_waypoint_steps if max_steps is None else max_steps
+    max_position_command = (
+        args.max_position_command
+        if max_position_command is None
+        else max_position_command
+    )
     initial_error = float(np.linalg.norm(_eef_pos(obs) - target))
     best_error = initial_error
-    for _ in range(args.max_waypoint_steps):
+    for _ in range(max_steps):
         error = float(np.linalg.norm(_eef_pos(obs) - target))
         best_error = min(best_error, error)
         if error <= tolerance:
@@ -141,12 +151,25 @@ def _move_to(
             target,
             gripper,
             args.position_scale,
-            args.max_position_command,
+            max_position_command,
         )
         obs, status = _advance(env, obs, oracle, recorder, action, step)
         step += 1
         if status.violated:
             return obs, step, status
+        if retained_body is not None:
+            current_offset = _eef_pos(obs) - _body_pos(env, retained_body)
+            offset_drift = float(np.linalg.norm(current_offset - retained_offset))
+            if offset_drift > args.max_grasp_offset_drift:
+                return obs, step, MotionFailure(
+                    reason="grasp_slipped",
+                    stage=stage,
+                    initial_error_m=initial_error,
+                    best_error_m=best_error,
+                    final_error_m=float(np.linalg.norm(_eef_pos(obs) - target)),
+                    final_eef_xyz=tuple(float(value) for value in _eef_pos(obs)),
+                    target_eef_xyz=tuple(float(value) for value in target),
+                )
     final_eef = _eef_pos(obs).copy()
     return obs, step, MotionFailure(
         reason="waypoint_timeout",
@@ -339,18 +362,40 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
     desired_bowl[2] = float(plate_hi[2] + bowl_origin_to_bottom + args.release_clearance)
     preplace_bowl = desired_bowl.copy()
     preplace_bowl[2] += args.preplace_height
-    if failure is None:
-        obs, step, failure = _move_to(
-            env,
-            obs,
-            oracle,
-            recorder,
-            preplace_bowl + grasped_offset,
-            close_sign,
-            step,
-            args,
-            "move_above_plate",
-        )
+
+    # Carry in three conservative segments. A direct diagonal move can sweep a
+    # weak rim grasp through the upright cookie and also commands all Cartesian
+    # axes at saturation. First gain vertical clearance, then translate in XY,
+    # and only then descend to the plate pre-place pose. During all three
+    # segments, reject the attempt as soon as the measured bowl/EEF transform
+    # stops being rigid so another grasp candidate can be tried.
+    transit_source_bowl = _body_pos(env, TARGET).copy()
+    transit_z = max(transit_source_bowl[2], preplace_bowl[2]) + args.transport_clearance
+    transit_source_bowl[2] = transit_z
+    transit_plate_bowl = preplace_bowl.copy()
+    transit_plate_bowl[2] = transit_z
+    transport_stages = (
+        ("raise_for_transport", transit_source_bowl),
+        ("translate_above_plate", transit_plate_bowl),
+        ("move_above_plate", preplace_bowl),
+    )
+    for stage, bowl_waypoint in transport_stages:
+        if failure is None:
+            obs, step, failure = _move_to(
+                env,
+                obs,
+                oracle,
+                recorder,
+                bowl_waypoint + grasped_offset,
+                close_sign,
+                step,
+                args,
+                stage,
+                max_steps=args.transport_max_waypoint_steps,
+                max_position_command=args.transport_max_position_command,
+                retained_body=TARGET,
+                retained_offset=grasped_offset,
+            )
     if failure is None:
         obs, step, failure = _move_to(
             env,
@@ -411,7 +456,9 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
     safe_success = bool(
         placement["task_success"] and failure is None and occluder_stable
     )
-    out_path = Path(args.trajectory_dir) / f"task{args.task_id}_ep{episode_idx:03d}.npz"
+    out_path = Path(args.trajectory_dir) / (
+        f"task{args.task_id}_ep{episode_idx:03d}_attempt{attempt_idx:02d}.npz"
+    )
     recorder.save(
         str(out_path),
         {
@@ -603,6 +650,10 @@ def main():
     parser.add_argument("--precise_position_tolerance", type=float, default=0.006)
     parser.add_argument("--place_position_tolerance", type=float, default=0.006)
     parser.add_argument("--max_waypoint_steps", type=int, default=100)
+    parser.add_argument("--transport_max_waypoint_steps", type=int, default=220)
+    parser.add_argument("--transport_max_position_command", type=float, default=0.15)
+    parser.add_argument("--transport_clearance", type=float, default=0.040)
+    parser.add_argument("--max_grasp_offset_drift", type=float, default=0.025)
     parser.add_argument("--wait_steps", type=int, default=10)
     parser.add_argument("--gripper_probe_steps", type=int, default=8)
     parser.add_argument("--approach_height", type=float, default=0.12)

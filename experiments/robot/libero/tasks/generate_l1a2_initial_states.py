@@ -336,8 +336,8 @@ MAX_OCCLUDER_OFFSET = 0.140
 MAX_OCCLUDER_DRIFT = 0.018
 MAX_TARGET_DRIFT = 0.014
 MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE = 0.040
-# MuJoCo soft contacts may have a small negative distance at rest. Allow
-# incidental touching while rejecting clearly interpenetrating geometry.
+# Retained as a penetration diagnostic. The selected upright Er benchmark is
+# stricter and rejects every direct target-cookie contact, including soft ones.
 MAX_COOKIE_BOWL_PENETRATION = 0.002
 
 # Image-space occlusion gate. The geometric checks above cannot
@@ -738,8 +738,21 @@ def _place_occluder_near_bowl(env, variant) -> bool:
 # spurious "target drift" that has nothing to do with the occluder.
 PRE_SETTLE_STEPS = 60
 UPRIGHT_SETTLE_STEPS = 35
-UPRIGHT_STABILITY_CHECK_STEPS = 20
+UPRIGHT_STABILITY_CHECK_STEPS = 120
 MIN_UPRIGHT_COOKIE_Z = 0.925
+MAX_LAYOUT_XY_ERROR = 0.025
+MAX_COOKIE_INDUCED_SCENE_DISPLACEMENT = 0.025
+
+
+def _layout_xy_displacements(env, requested_xy):
+    """Return objects that no longer occupy their requested layout region."""
+    errors = {
+        body: float(np.linalg.norm(_body_pos(env, body)[:2] - xy))
+        for body, xy in requested_xy.items()
+    }
+    return errors, {
+        body: error for body, error in errors.items() if error > MAX_LAYOUT_XY_ERROR
+    }
 
 
 def _place_upright_cookie_occluder(
@@ -749,7 +762,24 @@ def _place_upright_cookie_occluder(
     # reaches rest BEFORE we introduce the cookie.  Capturing base_state only
     # after this means the subsequent drift check measures the cookie's effect
     # in isolation, not the bowl still settling from its teleported pose.
+    requested_xy = {
+        body: _body_pos(env, body)[:2].copy()
+        for body in (
+            variant["target_body"],
+            variant["plate_body"],
+            variant["side_body"],
+            variant["extra_side_body"],
+        )
+    }
     _settle(env, PRE_SETTLE_STEPS)
+    _, displaced = _layout_xy_displacements(env, requested_xy)
+    if displaced:
+        detail = ", ".join(f"{body}={error:.4f}m" for body, error in displaced.items())
+        print(f"  [reject] pre-cookie layout displaced from requested XY: {detail}")
+        return False
+    pre_cookie_positions = {
+        body: _body_pos(env, body).copy() for body in requested_xy
+    }
     base_state = env.sim.get_state()
     target_xy = _body_pos(env, variant["target_body"])[:2]
     plate_pos = _body_pos(env, variant["plate_body"])
@@ -769,16 +799,26 @@ def _place_upright_cookie_occluder(
 
         _settle(env, UPRIGHT_SETTLE_STEPS)
 
-        settled_target = _body_pos(env, variant["target_body"]).copy()
-        settled_cookie = _body_pos(env, variant["occluder_body"]).copy()
+        tracked = (
+            variant["target_body"],
+            variant["occluder_body"],
+            variant["plate_body"],
+            variant["side_body"],
+            variant["extra_side_body"],
+        )
+        settled = {body: _body_pos(env, body).copy() for body in tracked}
         _settle(env, UPRIGHT_STABILITY_CHECK_STEPS)
 
         target_pos = _body_pos(env, variant["target_body"])
         occluder_pos = _body_pos(env, variant["occluder_body"])
         offset_norm = _xy_distance(target_pos, occluder_pos)
         corridor_distance = _xy_point_segment_distance(occluder_pos, target_pos, plate_pos)
-        target_drift = float(np.linalg.norm(target_pos - settled_target))
-        cookie_drift = float(np.linalg.norm(occluder_pos - settled_cookie))
+        drift = {
+            body: float(np.linalg.norm(_body_pos(env, body) - settled[body]))
+            for body in tracked
+        }
+        target_drift = drift[variant["target_body"]]
+        cookie_drift = drift[variant["occluder_body"]]
         min_contact_distance = _min_contact_distance_between_bodies(
             env, variant["target_body"], variant["occluder_body"]
         )
@@ -805,6 +845,31 @@ def _place_upright_cookie_occluder(
                 f"penetration={contact_penetration:.4f} > "
                 f"{MAX_COOKIE_BOWL_PENETRATION}"
             )
+        if direct_contact:
+            fails.append("target-cookie direct contact")
+        unstable_scene = {
+            body: value
+            for body, value in drift.items()
+            if value
+            > (MAX_OCCLUDER_DRIFT if body == variant["occluder_body"] else MAX_TARGET_DRIFT)
+        }
+        for body, value in unstable_scene.items():
+            if body not in {variant["target_body"], variant["occluder_body"]}:
+                fails.append(f"{body}_drift={value:.4f}m")
+        _, displaced_scene = _layout_xy_displacements(env, requested_xy)
+        for body, error in displaced_scene.items():
+            fails.append(f"{body}_layout_xy_error={error:.4f}m")
+        cookie_induced_displacement = {
+            body: float(np.linalg.norm(_body_pos(env, body) - start))
+            for body, start in pre_cookie_positions.items()
+        }
+        cookie_displaced_scene = {
+            body: error
+            for body, error in cookie_induced_displacement.items()
+            if error > MAX_COOKIE_INDUCED_SCENE_DISPLACEMENT
+        }
+        for body, error in cookie_displaced_scene.items():
+            fails.append(f"{body}_cookie_induced_displacement={error:.4f}m")
         if fails:
             # Only log rejected candidates; the accepted one gets its own line.
             print(
@@ -820,7 +885,10 @@ def _place_upright_cookie_occluder(
             and cookie_drift <= MAX_OCCLUDER_DRIFT
             and corridor_distance >= MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE
             and occluder_pos[2] >= MIN_UPRIGHT_COOKIE_Z
-            and contact_penetration <= MAX_COOKIE_BOWL_PENETRATION
+            and not direct_contact
+            and not unstable_scene
+            and not displaced_scene
+            and not cookie_displaced_scene
         )
         if physics_ok and not skip_occlusion_gate:
             gate_ok, ratio, gate_message = _occlusion_gate(env, variant)

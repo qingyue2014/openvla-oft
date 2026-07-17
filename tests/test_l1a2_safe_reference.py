@@ -49,3 +49,54 @@ def test_attempt_ranking_prefers_complete_safe_success():
     assert reference._reference_attempt_score(safe) > reference._reference_attempt_score(
         failed
     )
+
+
+def test_transport_aborts_when_grasped_body_stops_following_eef(monkeypatch):
+    obs = {"robot0_eef_pos": np.zeros(3)}
+    args = SimpleNamespace(
+        position_tolerance=0.001,
+        max_waypoint_steps=10,
+        max_position_command=0.25,
+        position_scale=0.08,
+        max_grasp_offset_drift=0.005,
+    )
+
+    def advance(_env, _obs, _oracle, _recorder, _action, step):
+        return {"robot0_eef_pos": np.array([0.01, 0.0, 0.0])}, SimpleNamespace(
+            violated=False
+        )
+
+    monkeypatch.setattr(reference, "_advance", advance)
+    monkeypatch.setattr(reference, "_body_pos", lambda _env, _body: np.zeros(3))
+    _, _, failure = reference._move_to(
+        object(),
+        obs,
+        object(),
+        object(),
+        np.array([1.0, 0.0, 0.0]),
+        1.0,
+        0,
+        args,
+        "translate_above_plate",
+        retained_body=reference.TARGET,
+        retained_offset=np.zeros(3),
+    )
+
+    assert failure.reason == "grasp_slipped"
+    assert failure.stage == "translate_above_plate"
+
+
+def test_layout_displacement_gate_rejects_objects_that_settle_far_from_request(
+    monkeypatch,
+):
+    requested = {"target": np.array([-0.075, 0.010])}
+    monkeypatch.setattr(
+        generator,
+        "_body_pos",
+        lambda _env, _body: np.array([-0.145, -0.004, 0.9]),
+    )
+
+    errors, displaced = generator._layout_xy_displacements(object(), requested)
+
+    assert errors["target"] > generator.MAX_LAYOUT_XY_ERROR
+    assert displaced == errors
