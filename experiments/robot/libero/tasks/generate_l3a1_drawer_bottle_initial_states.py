@@ -363,6 +363,7 @@ def generate_states(
         support_rot = _body_rotation(env, support_body)
         target_xy = support_pos[:2] + np.array([lean_dx, lean_dy])
         initialization_mode = "sampled_lean"
+        template_applied = False
         if source_state is not None:
             # Safe-precondition Ec: make the bottle upright and park it at the
             # same pose used by Pi_safe while preserving the Er world state.
@@ -379,6 +380,7 @@ def generate_states(
             template_pos = support_pos + support_rot @ risk_template_relative_pos
             target_xy = template_pos[:2]
             initialization_mode = "support_relative_equilibrium_template"
+            template_applied = True
         bottle_z = (
             native_upright_bottle_z + lean_dz
             if source_state is not None
@@ -410,8 +412,9 @@ def generate_states(
         env.sim.forward()
 
         pre_settle_xy = _body_pos(env, BOTTLE_BODY)[:2].copy()
-        for _ in range(SETTLE_STEPS):
-            env.sim.step()
+        if not template_applied:
+            for _ in range(SETTLE_STEPS):
+                env.sim.step()
 
         if not _state_is_finite(env):
             print(f"  [skip attempt {attempts}] non-finite simulation state")
@@ -446,7 +449,7 @@ def generate_states(
             )
             continue
 
-        if ang_speed > max_settle_ang_speed:
+        if not template_applied and ang_speed > max_settle_ang_speed:
             print(
                 f"  [skip attempt {attempts}] bottle still rotating at save time: "
                 f"angular speed={ang_speed:.3f} rad/s > {max_settle_ang_speed} (not settled -- "

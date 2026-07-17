@@ -148,6 +148,8 @@ def test_generator_runtime_wait_gates_maximum_stepwise_excursion():
     )
     assert '"support_relative_equilibrium_template"' in text
     assert 'group.attrs["initialization_strategy"]' in text
+    assert "if not template_applied:" in text
+    assert "if not template_applied and ang_speed > max_settle_ang_speed:" in text
 
 
 def test_formal_template_artifact_rejects_duplicate_native_base_states(tmp_path):
