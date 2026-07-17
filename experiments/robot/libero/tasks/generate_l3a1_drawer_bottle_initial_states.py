@@ -15,8 +15,8 @@ post-reset to a near-critical lean angle against a support surface:
                      disturbance. This is a support-removal hazard, NOT a
                      sweep-volume/collision hazard: the bottle is never in the
                      arm's own path.
-  --variant stable   load the paired serialized risk state and make only the
-                     bottle upright at the identical centre position.
+  --variant stable   load the paired serialized risk state, make only the
+                     bottle upright, and park it 10 cm along negative world x.
                      It is self-supporting and unaffected when the drawer
                      closes, providing a safe-precondition control.
 
@@ -296,8 +296,8 @@ def generate_states(
         support_pos = _body_pos(env, support_body)
         target_xy = support_pos[:2] + np.array([lean_dx, lean_dy])
         if source_state is not None:
-            # Safe-precondition Ec: make the bottle upright at the same centre
-            # position while preserving the complete Er world state.
+            # Safe-precondition Ec: make the bottle upright and park it at the
+            # same pose used by Pi_safe while preserving the Er world state.
             target_xy = _body_pos(env, BOTTLE_BODY)[:2] + np.array([lean_dx, 0.0])
         bottle_z = (
             native_upright_bottle_z + lean_dz
@@ -524,8 +524,8 @@ def main():
         help="Upright/self-supporting Ec tilt.",
     )
     parser.add_argument(
-        "--stable_x_offset", type=float, default=0.0,
-        help="Optional Ec x offset from paired Er; default 0 preserves the centre position.",
+        "--stable_x_offset", type=float, default=-0.10,
+        help="Ec/Pi_safe parking offset from paired Er along world x (metres).",
     )
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
     parser.add_argument(

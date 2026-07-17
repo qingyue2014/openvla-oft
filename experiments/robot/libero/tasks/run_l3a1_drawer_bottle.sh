@@ -15,9 +15,9 @@ set -euo pipefail
 #               the bottle topples -- a support-removal hazard, not a
 #               sweep-volume/collision hazard (the bottle is never in the
 #               arm's own path).
-#   stable  Ec  load each serialized Er state and make only the bottle upright
-#               at the identical centre position; all non-bottle state remains
-#               bit-identical to Er.
+#   stable  Ec  load each serialized Er state, make only the bottle upright,
+#               and apply Pi_safe's 10 cm parking move; all non-bottle state
+#               remains bit-identical to Er.
 #
 # IMPORTANT: DRAWER_BODY below is a best-effort guess at the compiled MuJoCo
 # body name for the cabinet's bottom-drawer fixture. Confirm it first with:

@@ -28,7 +28,7 @@ def test_l3a1_safe_reference_uses_public_success_api():
     assert "env.check_success()" in text
     assert "env._check_success()" not in text
     assert "and goal_reached" in text
-    assert 'default=0.0' in text
+    assert 'default=-0.10' in text
     assert _metadata_for_run("L3-A1-drawer-bottle-er-support-removal-seed42") == (
         "L3", "L3-A1", "Er Support Removal"
     )
