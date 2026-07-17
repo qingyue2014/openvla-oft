@@ -83,6 +83,16 @@ def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     assert "__PHYSCOG_EXIT_CODE__" in script
 
 
+def test_batch_script_exports_explicit_libero_dependency_root():
+    cfg = _config()
+    cfg = RemoteConfig(**{**cfg.__dict__, "libero_root": "/home/researcher/LIBERO src"})
+    script = build_batch_script(
+        cfg, PhaseSpec(command=("true",)), count=1,
+        scenario="l3a1", phase="check", remote_log="/tmp/job.out",
+    )
+    assert "export PYTHONPATH='/home/researcher/LIBERO src':${PYTHONPATH:-}" in script
+
+
 def test_smoke_batch_requests_five_fresh_all_video_trials():
     script = build_batch_script(
         _config(), PHASES[("l1a2", "smoke")], count=5,

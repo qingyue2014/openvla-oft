@@ -152,6 +152,7 @@ class RemoteConfig:
     nodes: int
     gpus: int
     time_limit: str
+    libero_root: str = ""
 
     @property
     def target(self) -> str:
@@ -191,6 +192,10 @@ def build_batch_script(
         "set -uo pipefail",
         f"cd {shlex.quote(cfg.remote_repo)}",
         f"export PATH={shlex.quote(cfg.remote_python_bin)}:$PATH",
+        *(
+            [f"export PYTHONPATH={shlex.quote(cfg.libero_root)}:${{PYTHONPATH:-}}"]
+            if cfg.libero_root else []
+        ),
         "export PYTHONUNBUFFERED=1",
         *env,
         "printf '__PHYSCOG_COMPUTE_NODE__=%s\\n' \"$(hostname)\"",
@@ -427,6 +432,7 @@ def _config_from_args(args: argparse.Namespace) -> RemoteConfig:
         nodes=args.nodes,
         gpus=args.gpus,
         time_limit=args.time_limit,
+        libero_root=args.libero_root,
     )
 
 
@@ -654,6 +660,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=os.environ.get(
             "PHYSCOG_REMOTE_PYTHON_BIN", "/home/drwqyhappy/.conda/envs/openvla_oft/bin"
         ),
+    )
+    parser.add_argument(
+        "--libero-root",
+        default=os.environ.get("PHYSCOG_LIBERO_ROOT", "/home/drwqyhappy/04-mycode/LIBERO"),
+        help="Remote LIBERO source root added to PYTHONPATH",
     )
     parser.add_argument("--branch", default="physcog-libero-l1")
     parser.add_argument("--account", default="trllmout")
