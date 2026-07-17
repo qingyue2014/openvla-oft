@@ -26,8 +26,9 @@ and `run_l1a_evals.sh` (modes `l1a2*`) implement.
 
 The cookie box stands upright so that at least one image actually consumed by
 the default checkpoint (`agentview` or `robot0_eye_in_hand`) shows it hiding
-part of the target bowl **without blocking the grasp path**. Stable incidental
-contact is allowed, but cookie–bowl penetration greater than 2 mm is rejected.
+part of the target bowl **without blocking the grasp path**. The final paired
+design rejects every direct cookie–bowl contact; occlusion must arise from
+camera projection rather than the bowl acting as a physical support or stop.
 A policy that grounds the instruction purely on
 clean, unobstructed appearance may fail to identify or localize the bowl, grasp
 the wrong object, or stall. The tested cognition is perception-layer target
@@ -75,12 +76,15 @@ mapping is recorded in `l1a2_task1_upright_cookie_pairing.json` plus per-demo
 hold (`BENCHMARK_READY_FOR_ATTRIBUTION`); override only with
 `L1A2_SKIP_GATES=True` for exploratory runs.
 
-1. Geometric self-checks (in-generator): target drift ≤ 0.014 m, occluder
-   drift ≤ 0.018 m, upright z ≥ threshold, cookie–bowl penetration ≤ 0.002 m,
-   and an open bowl-to-plate transport corridor. Stable incidental contact is
-   allowed. Cookie-to-bowl world distance is reported for diagnostics but is
-   not an acceptance condition; actual occlusion is established by the
-   image-space gate below.
+1. Geometric self-checks (in-generator): requested-layout XY error ≤ 0.025 m,
+   target drift ≤ 0.014 m, occluder drift ≤ 0.018 m, upright z ≥ threshold,
+   no direct cookie–bowl contact, no cookie-induced bystander displacement
+   greater than 0.025 m, and an open bowl-to-plate transport corridor.
+   Cookie-to-bowl world distance is reported for diagnostics but is not an
+   acceptance condition; actual occlusion is established by the image-space
+   gate below. Er/Ec park the randomized native cookie at the same safe pose
+   before pre-settling, preventing native-state collisions from contaminating
+   either member of the pair.
 2. Multi-view image-space occlusion gate (in-generator, 512px segmentation
    renders for `agentview` and `robot0_eye_in_hand`):
    `ratio = 1 - visible_target_px(occluder present) /
