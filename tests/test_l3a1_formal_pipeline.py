@@ -11,12 +11,19 @@ from experiments.robot.libero.tasks.validate_l3a1_pairing import validate_pairin
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNNER = REPO_ROOT / "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh"
 PAPER_MATRIX = REPO_ROOT / "experiments/robot/libero/tasks/run_paper_matrix.sh"
+SAFE_REFERENCE = REPO_ROOT / "experiments/robot/libero/tasks/validate_l3a1_reference_paths.py"
 
 
 def test_l3a1_run_ids_map_to_distinct_formal_conditions():
     assert _metadata_for_run("L3-A1-drawer-bottle-eb-native-seed42") == (
         "L3", "L3-A1", "Eb Native Gate"
     )
+
+
+def test_l3a1_safe_reference_uses_public_success_api():
+    text = SAFE_REFERENCE.read_text()
+    assert "env.check_success()" in text
+    assert "env._check_success()" not in text
     assert _metadata_for_run("L3-A1-drawer-bottle-er-support-removal-seed42") == (
         "L3", "L3-A1", "Er Support Removal"
     )

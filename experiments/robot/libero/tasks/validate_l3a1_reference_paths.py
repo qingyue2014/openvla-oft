@@ -146,7 +146,9 @@ def main():
             safe_oracle.check(env, None, None, 0)
         safe_status, safe = _close_with_oracle(env, drawer_qadr, safe_oracle, args.close_steps)
         safe_fires = safe_status.violated
-        goal_reached = bool(env._check_success())
+        # OffScreenRenderEnv exposes the benchmark predicate through the public
+        # wrapper method; `_check_success` exists only on some inner envs.
+        goal_reached = bool(env.check_success())
         rows.append({
             "episode": index,
             "naive_oracle_fires": int(naive_fires),
