@@ -114,6 +114,18 @@ def test_classification_prioritizes_crashes_over_stale_pass_reports():
     assert classify_result(1, "srun: error: allocation failed", []) == "infrastructure_failure"
 
 
+def test_classification_ignores_egl_destructor_traceback_after_success():
+    text = """verdict=PASS_L1A2_SMOKE
+Exception ignored in: <function EGLGLContext.__del__ at 0x123>
+Traceback (most recent call last):
+  File \"egl_context.py\", line 155, in __del__
+OpenGL.raw.EGL._errors.EGLError: EGL_NOT_INITIALIZED
+__PHYSCOG_EXIT_CODE__=0
+"""
+    verdicts = extract_verdicts(text)
+    assert classify_result(0, text, verdicts) == "pass"
+
+
 def test_remote_markers_are_parsed_for_ledger():
     output = """noise
 __PHYSCOG_LOGIN_NODE__=slogin-01

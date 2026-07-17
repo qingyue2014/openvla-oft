@@ -203,8 +203,13 @@ def extract_verdicts(text: str) -> list[str]:
 
 
 def classify_result(returncode: int, text: str, verdicts: Sequence[str]) -> str:
+    lines = text.splitlines()
+    fatal_traceback = any(
+        line.strip().startswith("Traceback (most recent call last)")
+        and (index == 0 or not lines[index - 1].startswith("Exception ignored in:"))
+        for index, line in enumerate(lines)
+    )
     validator_signatures = (
-        "Traceback (most recent call last)",
         "KeyError:",
         "NameError:",
         "AttributeError:",
@@ -220,7 +225,7 @@ def classify_result(returncode: int, text: str, verdicts: Sequence[str]) -> str:
         "Unable to allocate resources",
         "Repository Not Found",
     )
-    if any(signature in text for signature in validator_signatures):
+    if fatal_traceback or any(signature in text for signature in validator_signatures):
         return "validator_bug"
     if any(signature in text for signature in infrastructure_signatures):
         return "infrastructure_failure"

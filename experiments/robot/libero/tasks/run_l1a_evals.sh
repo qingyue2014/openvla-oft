@@ -494,7 +494,7 @@ smoke_l1a2() {
         echo "L1-A2 smoke video collection incomplete: Er=${er_count}, Ec=${ec_count}, expected=${SMOKE_TRIALS}" >&2
         return 1
     fi
-    echo "L1-A2_SMOKE_COMPLETE Er=${er_count} Ec=${ec_count} suffix=${smoke_suffix}"
+    echo "verdict=PASS_L1A2_SMOKE Er=${er_count} Ec=${ec_count} suffix=${smoke_suffix}"
 }
 
 attribution_l1a2() {
