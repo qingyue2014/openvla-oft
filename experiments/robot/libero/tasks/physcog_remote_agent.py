@@ -91,43 +91,49 @@ def shell_join(argv: Iterable[str]) -> str:
     return " ".join(shlex.quote(str(arg)) for arg in argv)
 
 
-def build_compute_command(
-    cfg: RemoteConfig, spec: PhaseSpec, count: int
+def build_batch_script(
+    cfg: RemoteConfig,
+    spec: PhaseSpec,
+    count: int,
+    scenario: str,
+    phase: str,
+    remote_log: str,
 ) -> str:
     env = []
     if spec.count_env:
         env.append(f"export {spec.count_env}={shlex.quote(str(count))}")
-    steps = [
+    cleanup = [shell_join(("rm", "-rf", artifact)) for artifact in spec.artifacts]
+    job_name = f"pc-{scenario}-{phase}"[:64]
+    lines = [
+        "#!/bin/bash",
+        f"#SBATCH --job-name={job_name}",
+        f"#SBATCH --nodes={cfg.nodes}",
+        f"#SBATCH --gpus={cfg.gpus}",
+        f"#SBATCH --partition={cfg.partition}",
+        f"#SBATCH --account={cfg.account}",
+        f"#SBATCH --time={cfg.time_limit}",
+        f"#SBATCH --output={remote_log}",
+        f"#SBATCH --error={remote_log}",
+        "set -uo pipefail",
+        "source /etc/profile.d/modules.sh",
+        "module avail",
+        'module load slurm "nvhpc-hpcx-cuda12/23.11"',
         f"cd {shlex.quote(cfg.remote_repo)}",
         f"export PATH={shlex.quote(cfg.remote_python_bin)}:$PATH",
         *env,
         "printf '__PHYSCOG_COMPUTE_NODE__=%s\\n' \"$(hostname)\"",
+        "printf '__PHYSCOG_COMMIT__=%s\\n' \"$(git rev-parse HEAD)\"",
+        *cleanup,
+        "set +e",
         shell_join(spec.command),
+        "physcog_rc=$?",
+        "printf '__PHYSCOG_EXIT_CODE__=%s\\n' \"${physcog_rc}\"",
+        "exit \"${physcog_rc}\"",
     ]
-    payload = " && ".join(steps)
-    return shell_join(
-        (
-            "srun",
-            "--account",
-            cfg.account,
-            "--partition",
-            cfg.partition,
-            "--nodes",
-            str(cfg.nodes),
-            "--gpus",
-            str(cfg.gpus),
-            "--time",
-            cfg.time_limit,
-            "bash",
-            "-lc",
-            payload,
-        )
-    )
+    return "\n".join(lines) + "\n"
 
 
-def build_remote_script(
-    cfg: RemoteConfig, spec: PhaseSpec, count: int, sync: bool = True
-) -> str:
+def build_sync_script(cfg: RemoteConfig, remote_job_dir: str, sync: bool = True) -> str:
     lines = ["set -euo pipefail", f"cd {shlex.quote(cfg.remote_repo)}"]
     if sync:
         lines.extend(
@@ -139,9 +145,9 @@ def build_remote_script(
         )
     lines.extend(
         (
+            shell_join(("mkdir", "-p", remote_job_dir)),
             "printf '__PHYSCOG_LOGIN_NODE__=%s\\n' \"$(hostname)\"",
             "printf '__PHYSCOG_COMMIT__=%s\\n' \"$(git rev-parse HEAD)\"",
-            build_compute_command(cfg, spec, count),
         )
     )
     return "\n".join(lines)
@@ -258,6 +264,37 @@ def _fetch_artifact(cfg: RemoteConfig, remote_path: str, output_root: Path) -> b
     return subprocess.run(argv, check=False).returncode == 0
 
 
+def _transfer_file(cfg: RemoteConfig, source: Path, remote_path: str) -> bool:
+    argv = [
+        "scp",
+        "-q",
+        "-o",
+        f"ControlPath={cfg.control_socket}",
+        str(source),
+        f"{cfg.target}:{remote_path}",
+    ]
+    return subprocess.run(argv, check=False).returncode == 0
+
+
+def _fetch_remote_file(cfg: RemoteConfig, remote_path: str, destination: Path) -> bool:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    argv = [
+        "scp",
+        "-q",
+        "-o",
+        f"ControlPath={cfg.control_socket}",
+        f"{cfg.target}:{remote_path}",
+        str(destination),
+    ]
+    return subprocess.run(argv, check=False).returncode == 0
+
+
+def _remote_capture(cfg: RemoteConfig, script: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ssh_argv(cfg, script), capture_output=True, text=True, check=False
+    )
+
+
 def _artifact_texts(root: Path, artifacts: Sequence[str]) -> str:
     texts: list[str] = []
     for artifact in artifacts:
@@ -281,6 +318,13 @@ def _config_from_args(args: argparse.Namespace) -> RemoteConfig:
         gpus=args.gpus,
         time_limit=args.time_limit,
     )
+
+
+def _config_from_ledger(ledger: Mapping[str, object]) -> RemoteConfig:
+    values = ledger["remote_config"]
+    if not isinstance(values, dict):
+        raise ValueError("run.json remote_config must be an object")
+    return RemoteConfig(**values)
 
 
 def command_probe(args: argparse.Namespace) -> int:
@@ -312,16 +356,125 @@ def command_run(args: argparse.Namespace) -> int:
         raise SystemExit(f"Unregistered phase {key[0]}:{key[1]}; choose one of: {choices}")
     spec = PHASES[key]
     cfg = _config_from_args(args)
-    remote_script = build_remote_script(cfg, spec, args.count, sync=not args.no_sync)
-    argv = ssh_argv(cfg, remote_script)
+    run_dir = _run_dir(Path(args.state_root), *key)
+    tag = run_dir.name
+    remote_job_dir = f"{cfg.remote_repo.rstrip('/')}/.physcog-agent/jobs"
+    remote_job_script = f"{remote_job_dir}/{tag}.sh"
+    remote_log = f"{remote_job_dir}/{tag}.out"
+    batch_script = build_batch_script(
+        cfg, spec, args.count, key[0], key[1], remote_log
+    )
+    sync_script = build_sync_script(cfg, remote_job_dir, sync=not args.no_sync)
+    submit_script = "\n".join(
+        (
+            "set -euo pipefail",
+            "source /etc/profile.d/modules.sh",
+            "module load slurm",
+            f"cd {shlex.quote(cfg.remote_repo)}",
+            shell_join(("sbatch", "--parsable", remote_job_script)),
+        )
+    )
     if args.dry_run:
-        print(shell_join(argv))
+        print("# remote sync")
+        print(sync_script)
+        print("# uploaded batch script")
+        print(batch_script, end="")
+        print("# remote submit")
+        print(submit_script)
         return 0
 
-    run_dir = _run_dir(Path(args.state_root), *key)
     print(f"[physcog-agent] run ledger: {run_dir}")
-    returncode, output = _stream_command(argv, run_dir / "remote.log")
+    (run_dir / "job.sh").write_text(batch_script, encoding="utf-8")
+    sync_result = _remote_capture(cfg, sync_script)
+    sync_output = sync_result.stdout + sync_result.stderr
+    print(sync_output, end="")
+    if sync_result.returncode != 0:
+        (run_dir / "submit.log").write_text(sync_output, encoding="utf-8")
+        return sync_result.returncode
+    if not _transfer_file(cfg, run_dir / "job.sh", remote_job_script):
+        print("[physcog-agent] failed to upload batch script", file=sys.stderr)
+        return 1
+    submit_result = _remote_capture(cfg, submit_script)
+    submit_output = submit_result.stdout + submit_result.stderr
+    (run_dir / "submit.log").write_text(
+        sync_output + submit_output, encoding="utf-8"
+    )
+    print(submit_output, end="")
+    job_match = re.search(r"(?m)^(\d+)(?:;[^\n]*)?$", submit_output.strip())
+    if submit_result.returncode != 0 or job_match is None:
+        print("[physcog-agent] sbatch submission failed", file=sys.stderr)
+        return submit_result.returncode or 1
+    job_id = job_match.group(1)
+    ledger = {
+        "schema_version": 2,
+        "created_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "scenario": key[0],
+        "phase": key[1],
+        "count": args.count,
+        "classification": "submitted",
+        "verdicts": [],
+        "returncode": None,
+        "job_id": job_id,
+        "remote_job_script": remote_job_script,
+        "remote_log": remote_log,
+        "local_commit": _local_commit(),
+        "remote_markers": parse_markers(sync_output),
+        "fetched_artifacts": [],
+        "missing_artifacts": [],
+        "remote_config": {**asdict(cfg), "control_socket": cfg.control_socket},
+        "registered_command": list(spec.command),
+        "count_env": spec.count_env,
+    }
+    (run_dir / "run.json").write_text(
+        json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(f"[physcog-agent] classification=submitted job_id={job_id}")
+    print(f"[physcog-agent] check with: {sys.executable} {__file__} status --run-dir {run_dir}")
+    return 0
 
+
+def command_status(args: argparse.Namespace) -> int:
+    run_dir = Path(args.run_dir)
+    ledger_path = run_dir / "run.json"
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    cfg = _config_from_ledger(ledger)
+    key = (str(ledger["scenario"]), str(ledger["phase"]))
+    spec = PHASES[key]
+    remote_log = str(ledger["remote_log"])
+    local_log = run_dir / "remote.log"
+    have_log = _fetch_remote_file(cfg, remote_log, local_log)
+    output = (
+        local_log.read_text(encoding="utf-8", errors="replace") if have_log else ""
+    )
+    markers = parse_markers(output)
+    if "exit_code" not in markers:
+        query = " && ".join(
+            (
+                "source /etc/profile.d/modules.sh",
+                "module load slurm",
+                shell_join(("squeue", "-h", "-j", str(ledger["job_id"]), "-o", "%T")),
+            )
+        )
+        result = _remote_capture(cfg, query)
+        state = result.stdout.strip() or "AWAITING_OUTPUT"
+        classification = {
+            "PENDING": "queued",
+            "CONFIGURING": "queued",
+            "RUNNING": "running",
+            "COMPLETING": "running",
+        }.get(state, "awaiting_output")
+        ledger["classification"] = classification
+        ledger["scheduler_state"] = state
+        ledger_path.write_text(
+            json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        print(
+            f"[physcog-agent] job_id={ledger['job_id']} classification={classification} "
+            f"scheduler_state={state}"
+        )
+        return 0
+
+    returncode = int(markers["exit_code"])
     fetched: list[str] = []
     missing: list[str] = []
     for artifact in spec.artifacts:
@@ -332,28 +485,22 @@ def command_run(args: argparse.Namespace) -> int:
     evidence = output + "\n" + _artifact_texts(run_dir / "artifacts", fetched)
     verdicts = extract_verdicts(evidence)
     classification = classify_result(returncode, evidence, verdicts)
-    ledger = {
-        "schema_version": 1,
-        "created_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "scenario": key[0],
-        "phase": key[1],
-        "count": args.count,
-        "classification": classification,
-        "verdicts": verdicts,
-        "returncode": returncode,
-        "local_commit": _local_commit(),
-        "remote_markers": parse_markers(output),
-        "fetched_artifacts": fetched,
-        "missing_artifacts": missing,
-        "remote_config": {**asdict(cfg), "control_socket": cfg.control_socket},
-        "registered_command": list(spec.command),
-        "count_env": spec.count_env,
-    }
-    (run_dir / "run.json").write_text(
+    ledger.update(
+        {
+            "classification": classification,
+            "verdicts": verdicts,
+            "returncode": returncode,
+            "remote_markers": {**ledger.get("remote_markers", {}), **markers},
+            "fetched_artifacts": fetched,
+            "missing_artifacts": missing,
+            "completed_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        }
+    )
+    ledger_path.write_text(
         json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"
     )
     print(
-        f"[physcog-agent] classification={classification} "
+        f"[physcog-agent] job_id={ledger['job_id']} classification={classification} "
         f"verdicts={','.join(verdicts) or '--'} artifacts={len(fetched)}/{len(spec.artifacts)}"
     )
     if classification in {"pass", "completed"}:
@@ -388,7 +535,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--partition", default="normal")
     parser.add_argument("--nodes", type=int, default=1)
     parser.add_argument("--gpus", type=int, default=2)
-    parser.add_argument("--time-limit", default="02:00:00")
+    parser.add_argument("--time-limit", default="00:30:00")
     parser.add_argument("--dry-run", action="store_true")
     subparsers = parser.add_subparsers(dest="subcommand", required=True)
 
@@ -403,6 +550,12 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--no-sync", action="store_true", help="Do not fast-forward the remote checkout")
     run.add_argument("--state-root", default=".physcog-agent/runs")
     run.set_defaults(func=command_run)
+
+    status = subparsers.add_parser(
+        "status", help="Refresh one submitted job and download fresh evidence when complete"
+    )
+    status.add_argument("--run-dir", required=True)
+    status.set_defaults(func=command_status)
     return parser
 
 

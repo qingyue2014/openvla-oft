@@ -45,6 +45,19 @@ all scene-validity gates in that skill remain mandatory.
      --scenario l1a2 --phase safe_reference --count 8
    ```
 
+   `run` writes a complete `#SBATCH` script and returns after submission; jobs
+   may remain queued. Refresh the exact ledger it prints until a terminal
+   classification appears:
+
+   ```bash
+   python experiments/robot/libero/tasks/physcog_remote_agent.py status \
+     --run-dir .physcog-agent/runs/<run-id>
+   ```
+
+   Never parse artifacts while the ledger is `submitted`, `queued`, `running`,
+   or `awaiting_output`. Only the job-specific `__PHYSCOG_EXIT_CODE__` marker
+   makes artifacts from that run eligible evidence.
+
 4. Classify the result before editing:
    - `infrastructure_failure`: SSH, Slurm, environment, rendering, or model
      loading failed; fix execution, not scene thresholds.
