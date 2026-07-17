@@ -59,7 +59,12 @@ DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.b
 # by ~step 300). Settle long enough that the SAVED state is genuinely at rest,
 # otherwise eval loads a still-toppling bottle. See L3A_RUNS.md.
 SETTLE_STEPS = 400
-RUNTIME_WAIT_STEPS = 10
+# A near-critical support contact must be shown to the policy before any
+# controller-generated action changes it.  L3-A1 Er/Ec therefore use zero
+# pre-policy dummy actions; physical stability is instead enforced by the
+# 200-step passive open hold and by the preactivation oracle throughout policy
+# execution.  Eb retains LIBERO's native ten-step warm-up.
+RUNTIME_WAIT_STEPS = 0
 RUNTIME_WAIT_MAX_DRIFT = 0.005
 RUNTIME_WAIT_MAX_FIXED_POINT_ITERS = 8
 DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]

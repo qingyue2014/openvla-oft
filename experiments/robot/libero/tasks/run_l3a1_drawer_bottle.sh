@@ -46,6 +46,7 @@ SMOKE_EVAL_SEED="${SMOKE_EVAL_SEED:-42}"
 RENDER_GPU="${RENDER_GPU:-1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"
+L3A1_WAIT_STEPS="${L3A1_WAIT_STEPS:-0}"
 DRAWER_BODY="${DRAWER_BODY:-white_cabinet_1_cabinet_bottom}"
 BDDL_FILE="${BDDL_FILE:-experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.bddl}"
 BOTTLE_BODY="${BOTTLE_BODY:-wine_bottle_1_main}"
@@ -291,6 +292,7 @@ run_eval() {
     --distractor_body "${BOTTLE_BODY}" \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
+    --num_steps_wait "${L3A1_WAIT_STEPS}" \
     --num_trials_per_task "${NUM_TRIALS}" \
     --seed "${EVAL_SEED}" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \

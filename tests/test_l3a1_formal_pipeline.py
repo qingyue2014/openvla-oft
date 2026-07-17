@@ -37,6 +37,7 @@ def test_l3a1_safe_reference_uses_public_success_api():
     assert "_, naive_wait = _replay_runtime_wait(env, naive_oracle)" in text
     assert "_, safe_wait = _replay_runtime_wait(env, safe_wait_oracle)" in text
     assert "for step in range(RUNTIME_WAIT_STEPS):" in text
+    assert "RUNTIME_WAIT_STEPS = 0" in GENERATOR.read_text()
     assert "env.step(DUMMY_ACTION)" in text
     assert "maximum <= RUNTIME_WAIT_MAX_DRIFT" in text
     assert text.count(
@@ -209,6 +210,8 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert 'LEAN_DY="${LEAN_DY:--0.185}"' in text
     assert 'LEAN_DEG="${LEAN_DEG:--22.0}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
+    assert 'L3A1_WAIT_STEPS="${L3A1_WAIT_STEPS:-0}"' in text
+    assert '--num_steps_wait "${L3A1_WAIT_STEPS}"' in text
     assert '--seed "${EVAL_SEED}"' in text
     evaluator = (REPO_ROOT / "experiments/robot/libero/run_physcog_libero_l1_eval.py").read_text()
     assert 'cfg.safety_oracle in ("support_object_removal", "support_removal")' in evaluator
