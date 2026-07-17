@@ -105,6 +105,8 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["reset_attempt"] = attempt
             demo.attrs["initial_eef_drift_m"] = 0.0
             demo.attrs["runtime_wait_displacement_m"] = 0.0
+            demo.attrs["policy_entry_displacement_m"] = 0.0
+            demo.attrs["policy_entry_direct_contacts"] = ""
             demo.attrs["bottle_qpos_flat_start"] = 3
             demo.attrs["bottle_qvel_flat_start"] = 20
             if source is not None:
@@ -153,6 +155,31 @@ def test_generator_runtime_wait_gates_maximum_stepwise_excursion():
     assert 'group.attrs["initialization_strategy"]' in text
     assert "if not template_applied:" in text
     assert "if not template_applied and ang_speed > max_settle_ang_speed:" in text
+
+
+def test_generator_and_artifact_gate_policy_entry_transition():
+    text = GENERATOR.read_text()
+    assert "POLICY_ENTRY_PROBE_STEPS = 1" in text
+    assert "policy_entry_displacement > RUNTIME_WAIT_MAX_DRIFT" in text
+    assert '"policy_entry_displacement_m": policy_entry_displacement' in text
+    assert '"policy_entry_direct_contacts"' in text
+
+
+def test_base_preservation_rejects_unsafe_policy_entry(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        demo = handle["task/demo_0"]
+        demo.attrs["policy_entry_displacement_m"] = 0.006
+    with pytest.raises(ValueError, match="policy entry drift"):
+        validate_base_preservation(str(artifact), "task")
+
+    with h5py.File(artifact, "a") as handle:
+        demo = handle["task/demo_0"]
+        demo.attrs["policy_entry_displacement_m"] = 0.0
+        demo.attrs["policy_entry_direct_contacts"] = "gripper0_eef"
+    with pytest.raises(ValueError, match="policy entry has direct contact"):
+        validate_base_preservation(str(artifact), "task")
 
 
 def test_formal_template_artifact_rejects_duplicate_native_base_states(tmp_path):
@@ -206,7 +233,7 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
     assert "--support_preactivation_max_dependent_drift 0.005" in text
     assert "--support_check_during_wait True" in text
-    assert 'LEAN_DX="${LEAN_DX:--0.06}"' in text
+    assert 'LEAN_DX="${LEAN_DX:--0.08}"' in text
     assert 'LEAN_DY="${LEAN_DY:--0.185}"' in text
     assert 'LEAN_DEG="${LEAN_DEG:--22.0}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text

@@ -69,6 +69,7 @@ SETTLE_STEPS = 400
 # 200-step passive open hold and by the preactivation oracle throughout policy
 # execution.  Eb retains LIBERO's native ten-step warm-up.
 RUNTIME_WAIT_STEPS = 0
+POLICY_ENTRY_PROBE_STEPS = 1
 RUNTIME_WAIT_MAX_DRIFT = 0.005
 RUNTIME_WAIT_MAX_FIXED_POINT_ITERS = 8
 DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
@@ -113,18 +114,16 @@ DRAWER_CLOSED_QPOS = 0.0025
 # Key correction from the first attempt: the tilt must lean the bottle INTO the
 # drawer (top toward +y), which is a NEGATIVE lean_deg about the x-axis. The
 # original +8deg leaned it AWAY from the drawer, so it toppled on its own with
-# the drawer providing no support. A 2D dy/deg sweep found a genuine
-# SuperPod strict sweep selected the only candidate that passed all generation
-# gates within 100 attempts: dx=-0.060, dy=-0.185, deg=-22 (attempt 9).
-# resting against white_cabinet_1_cabinet_bottom (angular speed -> 0), touches
-# only drawer+table (no akita_black_bowl contamination), and topples further to
-# ~63deg once the drawer scripts closed. dy=-0.175 is off the front edge (falls
-# on its own); dy=-0.185 also works but starts at a steep ~54deg lean.
+# the drawer providing no support. The first SuperPod strict sweep selected
+# dx=-0.060, dy=-0.185, deg=-22: it rested against
+# white_cabinet_1_cabinet_bottom (angular speed -> 0), touched only
+# drawer+table (no akita_black_bowl contamination), and toppled further after
+# scripted drawer closure. dy=-0.175 is off the front edge and falls unaided.
 #
-# Fresh-controller replay showed that the older, steeper dy=-0.185/deg=-21
-# point can drift during the evaluator's wait. Use the shallower validated
-# point and let the full runtime-wait, hold, contact, and close gates decide.
-DEFAULT_LEAN_DX = -0.06
+# Strict smoke video/contact review then showed that dx=-0.060 leaves the
+# bottle inside the gripper/bowl corridor. Shift it to dx=-0.080 and let the
+# policy-entry, hold, contact, and close gates validate every serialized state.
+DEFAULT_LEAN_DX = -0.08
 DEFAULT_LEAN_DY = -0.185
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -22.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
@@ -478,8 +477,9 @@ def generate_states(
         qvel_flat = 1 + env.sim.model.nq + bottle_vadr
         candidate_state[qpos_flat:qpos_flat + 7] = settled_state[qpos_flat:qpos_flat + 7]
         candidate_state[qvel_flat:qvel_flat + 6] = settled_state[qvel_flat:qvel_flat + 6]
-        env.sim.set_state_from_flattened(candidate_state)
-        env.sim.forward()
+        env.reset()
+        env.set_init_state(candidate_state)
+        clear_mujoco_replay_transients(env)
         initial_eef_drift = float(
             np.linalg.norm(_body_pos(env, "gripper0_eef") - reference_eef)
         )
@@ -540,6 +540,39 @@ def generate_states(
             continue
         env.sim.set_state_from_flattened(candidate_state)
         env.sim.forward()
+
+        # Although L3-A1 intentionally has no pre-policy warm-up actions, a
+        # serialized contact must survive entering robosuite's controller
+        # loop.  Probe one neutral step, reject launch/penetration states, then
+        # restore the exact candidate before all remaining gates.
+        env.reset()
+        env.set_init_state(candidate_state)
+        clear_mujoco_replay_transients(env)
+        entry_start = _body_pos(env, BOTTLE_BODY).copy()
+        for _ in range(POLICY_ENTRY_PROBE_STEPS):
+            env.step(DUMMY_ACTION)
+        policy_entry_displacement = float(
+            np.linalg.norm(_body_pos(env, BOTTLE_BODY) - entry_start)
+        )
+        policy_entry_contacts = _contact_body_names(env, BOTTLE_BODY)
+        entry_direct_contacts = {
+            name for name in policy_entry_contacts
+            if name == "akita_black_bowl_1_main"
+            or name.startswith(("robot0_", "gripper0_"))
+        }
+        if (
+            policy_entry_displacement > RUNTIME_WAIT_MAX_DRIFT
+            or entry_direct_contacts
+        ):
+            print(
+                f"  [skip attempt {attempts}] policy-entry probe failed: "
+                f"displacement={policy_entry_displacement:.4f}m, "
+                f"direct_contacts={sorted(entry_direct_contacts)}"
+            )
+            continue
+        env.reset()
+        env.set_init_state(candidate_state)
+        clear_mujoco_replay_transients(env)
 
         # Recompute instantaneous bottle quantities from the exact candidate
         # that will be serialized before running its hold/contact/close gates.
@@ -720,6 +753,11 @@ def generate_states(
                 "runtime_wait_endpoint_displacement_m": runtime_wait_endpoint_displacement,
                 "runtime_wait_tilt_delta_deg": runtime_wait_tilt_delta,
                 "runtime_wait_fixed_point_iters": runtime_wait_fixed_point_iters,
+                "policy_entry_displacement_m": policy_entry_displacement,
+                "policy_entry_contacts": ",".join(sorted(policy_entry_contacts)),
+                "policy_entry_direct_contacts": ",".join(
+                    sorted(entry_direct_contacts)
+                ),
                 "settled_tilt_deg": tilt_deg,
                 "hold_displacement_m": hold_displacement,
                 "hold_tilt_delta_deg": hold_tilt_delta,

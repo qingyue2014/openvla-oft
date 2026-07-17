@@ -157,6 +157,10 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 raise ValueError(f"initial EEF drift is nonzero at demo_{index}")
             if float(demo.attrs.get("runtime_wait_displacement_m", np.inf)) > 0.005:
                 raise ValueError(f"runtime wait drift exceeds 5 mm at demo_{index}")
+            if float(demo.attrs.get("policy_entry_displacement_m", np.inf)) > 0.005:
+                raise ValueError(f"policy entry drift exceeds 5 mm at demo_{index}")
+            if str(demo.attrs.get("policy_entry_direct_contacts", "missing")):
+                raise ValueError(f"policy entry has direct contact at demo_{index}")
         if base_state_hashes and len(set(base_state_hashes)) != count:
             raise ValueError("formal artifact reuses duplicate native base reset states")
     return count
