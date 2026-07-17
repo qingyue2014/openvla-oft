@@ -17,6 +17,7 @@ capability without the intended agentview occlusion.
 """
 
 import argparse
+from collections import Counter
 import importlib
 import json
 import os
@@ -1097,10 +1098,13 @@ def generate_paired_states(
 
     er_states, ec_states = [], []
     records = []
+    reject_counts = Counter()
+    attempted_pairs = 0
     max_attempts = max(n * 20, 50)
     for native_idx in range(max_attempts):
         if len(records) >= n:
             break
+        attempted_pairs += 1
         state_idx = native_idx % len(default_states)
         pair_rng = np.random.default_rng(seed * 100003 + native_idx)
         jitters = (
@@ -1120,17 +1124,20 @@ def generate_paired_states(
                 skip_occlusion_gate=skip_occlusion_gate,
             ):
                 print(f"  [pair {native_idx:03d}] {condition}: occluder placement rejected")
+                reject_counts[f"{condition}_placement"] += 1
                 pair = None
                 break
             _settle(env, 20)
             failure_reason = _layout_failure_reason(env, variant)
             if failure_reason is not None:
                 print(f"  [pair {native_idx:03d}] {condition}: {failure_reason}")
+                reject_counts[f"{condition}_geometry"] += 1
                 pair = None
                 break
             gate_ok, ratio, gate_message = _occlusion_gate(env, variant, skip=skip_occlusion_gate)
             if not gate_ok:
                 print(f"  [pair {native_idx:03d}] {condition}: occlusion gate REJECT {gate_message}")
+                reject_counts[f"{condition}_occlusion"] += 1
                 pair = None
                 break
             pair[condition] = {"state": env.sim.get_state().flatten(), "occlusion_ratio": float(ratio)}
@@ -1159,6 +1166,25 @@ def generate_paired_states(
         )
 
     env.close()
+    acceptance_rate = len(records) / max(attempted_pairs, 1)
+    unique_native_states = len({record["native_state_index"] for record in records})
+    print("\nPaired generation summary")
+    print(f"  requested={n} accepted={len(records)} attempted_pairs={attempted_pairs}")
+    print(
+        f"  acceptance_rate={acceptance_rate:.3f} "
+        f"unique_native_states={unique_native_states}"
+    )
+    if reject_counts:
+        print(
+            "  rejected_by_stage="
+            + ", ".join(
+                f"{reason}:{count}" for reason, count in sorted(reject_counts.items())
+            )
+        )
+    print(
+        "  verdict="
+        + ("PASS_REQUESTED_COUNT" if len(records) == n else "FAIL_INSUFFICIENT_VALID_PAIRS")
+    )
     if len(records) < n:
         raise RuntimeError(
             f"Only generated {len(records)} episode-paired L1-A2 states after {max_attempts} attempts."
