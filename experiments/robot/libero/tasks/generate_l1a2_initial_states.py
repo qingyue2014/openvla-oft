@@ -128,10 +128,10 @@ VARIANTS = {
         "extra_side_xy": np.array([0.240, -0.180]),
         "use_upright_cookie_occlusion": True,
         "landmark_near_target": True,
-        # Place the upright cookie along the agentview foreground ray, but far
-        # enough from the bowl that it never uses the bowl as a collision stop.
-        # The old 4.5--5.8 cm offsets overlapped the assets: the cookie pushed
-        # the bowl / ramekin aside and only became contact-free afterwards.
+        # Place the cookie near the agentview foreground ray while shifting it
+        # toward -y to clear both the target and the ramekin. A pure +x sweep
+        # has no feasible interval: short offsets hit the bowl, 0.12--0.13 m
+        # offsets hit the ramekin, and larger offsets have zero image overlap.
         "occluder_pose_candidates": [
             {
                 "offset": np.array([dx, dy]),
@@ -139,18 +139,18 @@ VARIANTS = {
                 "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
             }
             for dx, dy in (
-                (0.120, 0.000),
-                (0.130, 0.000),
-                (0.140, 0.000),
-                (0.150, 0.000),
-                (0.160, 0.000),
-                (0.130, -0.010),
-                (0.140, -0.010),
-                (0.150, -0.010),
-                (0.130, 0.010),
-                (0.140, 0.010),
-                (0.150, 0.010),
-                (0.180, 0.000),
+                (0.050, -0.050),
+                (0.060, -0.050),
+                (0.070, -0.050),
+                (0.080, -0.050),
+                (0.050, -0.065),
+                (0.060, -0.065),
+                (0.070, -0.065),
+                (0.080, -0.065),
+                (0.090, -0.050),
+                (0.100, -0.050),
+                (0.070, -0.080),
+                (0.090, -0.080),
             )
         ],
     },
