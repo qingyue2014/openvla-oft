@@ -120,6 +120,7 @@ def build_batch_script(
         "set -uo pipefail",
         f"cd {shlex.quote(cfg.remote_repo)}",
         f"export PATH={shlex.quote(cfg.remote_python_bin)}:$PATH",
+        "export PYTHONUNBUFFERED=1",
         *env,
         "printf '__PHYSCOG_COMPUTE_NODE__=%s\\n' \"$(hostname)\"",
         "printf '__PHYSCOG_COMMIT__=%s\\n' \"$(git rev-parse HEAD)\"",

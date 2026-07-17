@@ -1077,7 +1077,11 @@ def generate_states(
     states = []
     occlusion_ratios = []
     attempts = 0
-    max_attempts = max(n * 20, 50)
+    # Candidate geometry is shared across tiny per-episode jitters. If it
+    # cannot produce a valid pair within this bounded sample, scanning hundreds
+    # of near-identical native states only burns the Slurm allocation and hides
+    # the candidate-level rejection diagnostics until timeout.
+    max_attempts = max(n * 8, 16)
     while len(states) < n and attempts < max_attempts:
         attempts += 1
         env.reset()

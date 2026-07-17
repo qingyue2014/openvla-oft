@@ -54,6 +54,7 @@ def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     assert 'module load slurm "nvhpc-hpcx-cuda12/23.11"' in script
     assert script.index("source /etc/profile.d/modules.sh") < script.index("set -uo pipefail")
     assert "export N=8" in script
+    assert "export PYTHONUNBUFFERED=1" in script
     assert "'/home/researcher/repo with space'" in script
     assert "'path with space/runner.sh'" in script
     assert "__PHYSCOG_COMPUTE_NODE__" in script
