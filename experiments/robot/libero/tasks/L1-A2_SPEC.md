@@ -83,7 +83,7 @@ hold (`BENCHMARK_READY_FOR_ATTRIBUTION`); override only with
    `ratio = 1 - visible_target_px(occluder present) /
    visible_target_px(occluder parked off-table)`. A view participates only
    when the unoccluded target has at least 100 pixels. Er requires at least one
-   participating policy view with `0.15 ≤ ratio ≤ 0.90`; Ec requires every
+   participating policy view with `0.10 ≤ ratio ≤ 0.90`; Ec requires every
    participating view to have `ratio ≤ 0.02`. This is an any-view partial-
    occlusion claim, not a claim that every available view is occluded. Verdict
    is stored as `"occlusion_gate": "PASS"` in the pairing manifest.

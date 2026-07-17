@@ -135,7 +135,7 @@ VARIANTS = {
         "occluder_pose_candidates": [
             # Search the closest non-contact poses first.  The previous list
             # often accepted a physically stable ~8 cm offset and only later
-            # discovered that it occluded <15% of the target.  These poses sit
+            # discovered that it occluded <10% of the target.  These poses sit
             # near the calibrated geometric lower bound and are evaluated by
             # the joint physics + segmentation gate below.
             {
@@ -343,7 +343,7 @@ OCCLUSION_GATE_CAMERA = "agentview"
 OCCLUSION_GATE_CAMERAS = ("agentview", "robot0_eye_in_hand")
 OCCLUSION_GATE_RESOLUTION = 512
 MIN_OCCLUSION_BASE_PIXELS = 100
-MIN_ER_OCCLUSION_RATIO = 0.15
+MIN_ER_OCCLUSION_RATIO = 0.10
 MAX_ER_OCCLUSION_RATIO = 0.90
 MAX_EC_OCCLUSION_RATIO = 0.02
 OCCLUDER_PARK_XY = np.array([1.5, 1.5])

@@ -22,6 +22,19 @@ def test_er_accepts_partial_occlusion_in_any_policy_view(monkeypatch):
     assert "robot0_eye_in_hand=0.200" in message
 
 
+def test_er_uses_ten_percent_lower_bound(monkeypatch):
+    _patch_measurements(
+        monkeypatch,
+        {
+            "agentview": (0.10, 900, 1000),
+            "robot0_eye_in_hand": (0.099, 901, 1000),
+        },
+    )
+    ok, ratio, _ = l1a2._occlusion_gate(object(), {})
+    assert ok
+    assert ratio == 0.10
+
+
 def test_ec_requires_all_visible_policy_views_to_be_clear(monkeypatch):
     _patch_measurements(
         monkeypatch,
