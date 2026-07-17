@@ -1,6 +1,8 @@
 """Validate exact serialized-state pairing for L3-A1 Er/Ec artifacts."""
 
 import argparse
+import hashlib
+import json
 from pathlib import Path
 
 import h5py
@@ -8,6 +10,87 @@ import numpy as np
 
 
 PAIRING_METHOD = "serialized_er_state_bottle_transform"
+BINDING_FIELDS = (
+    "l3a1_variant", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
+    "lean_deg", "lean_axis", "settle_steps", "validation_hold_steps",
+    "verify_close_steps", "min_topple_deg", "oracle_displacement_threshold",
+    "oracle_height_drop_threshold", "stable_x_offset",
+)
+
+
+def _sha256(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def artifact_binding(path: str, task_description: str) -> str:
+    """Return deterministic JSON binding an artifact's bytes and formal metadata."""
+    key = task_description.replace(" ", "_")
+    artifact_sha256 = _sha256(path)
+    with h5py.File(path, "r") as handle:
+        group = handle[key]
+        binding = {
+            "artifact_sha256": artifact_sha256,
+            "count": len(group),
+            "task_key": key,
+        }
+        for field in BINDING_FIELDS:
+            value = group.attrs.get(field, None)
+            if isinstance(value, np.generic):
+                value = value.item()
+            if isinstance(value, bytes):
+                value = value.decode()
+            binding[field] = value
+    return json.dumps(binding, sort_keys=True, separators=(",", ":"))
+
+
+def validate_expected_config(
+    path: str,
+    task_description: str,
+    *,
+    variant: str | None = None,
+    seed: int | None = None,
+    bddl: str | None = None,
+    displacement_threshold: float | None = None,
+    lean_dx: float | None = None,
+    lean_dy: float | None = None,
+    lean_deg: float | None = None,
+    minimum_count: int | None = None,
+) -> None:
+    key = task_description.replace(" ", "_")
+    with h5py.File(path, "r") as handle:
+        group = handle[key]
+        attrs = group.attrs
+        if minimum_count is not None and len(group) < minimum_count:
+            raise ValueError(
+                f"artifact count {len(group)} is below required {minimum_count}"
+            )
+        expected = {
+            "l3a1_variant": variant,
+            "seed": seed,
+            "bddl": bddl,
+            "oracle_displacement_threshold": displacement_threshold,
+            "lean_dx": lean_dx,
+            "lean_dy": lean_dy,
+            "lean_deg": lean_deg,
+        }
+        for field, wanted in expected.items():
+            if wanted is None:
+                continue
+            actual = attrs.get(field, None)
+            if isinstance(wanted, float):
+                matches = actual is not None and np.isclose(
+                    float(actual), wanted, rtol=0.0, atol=1e-12
+                )
+            else:
+                matches = str(actual) == str(wanted)
+            if not matches:
+                raise ValueError(
+                    f"artifact config mismatch for {field}: actual={actual!r}, expected={wanted!r}"
+                )
 
 
 def validate_base_preservation(path: str, task_description: str) -> int:
@@ -116,7 +199,32 @@ def main() -> None:
     parser.add_argument("--er", required=True)
     parser.add_argument("--ec")
     parser.add_argument("--task_description", required=True)
+    parser.add_argument("--print_binding", action="store_true")
+    parser.add_argument("--expected_variant")
+    parser.add_argument("--expected_seed", type=int)
+    parser.add_argument("--expected_bddl")
+    parser.add_argument("--expected_displacement_threshold", type=float)
+    parser.add_argument("--expected_lean_dx", type=float)
+    parser.add_argument("--expected_lean_dy", type=float)
+    parser.add_argument("--expected_lean_deg", type=float)
+    parser.add_argument("--minimum_count", type=int)
     args = parser.parse_args()
+    validate_expected_config(
+        args.er,
+        args.task_description,
+        variant=args.expected_variant,
+        seed=args.expected_seed,
+        bddl=args.expected_bddl,
+        displacement_threshold=args.expected_displacement_threshold,
+        lean_dx=args.expected_lean_dx,
+        lean_dy=args.expected_lean_dy,
+        lean_deg=args.expected_lean_deg,
+        minimum_count=args.minimum_count,
+    )
+    if args.print_binding:
+        validate_base_preservation(args.er, args.task_description)
+        print(artifact_binding(args.er, args.task_description))
+        return
     if not args.ec:
         count = validate_base_preservation(args.er, args.task_description)
         print(f"PASS_L3A1_BASE_STATE_PRESERVED count={count}")

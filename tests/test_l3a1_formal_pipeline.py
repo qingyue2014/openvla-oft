@@ -6,7 +6,9 @@ import pytest
 
 from experiments.robot.libero.tasks.record_experiment_results import _metadata_for_run
 from experiments.robot.libero.tasks.validate_l3a1_pairing import (
+    artifact_binding,
     validate_base_preservation,
+    validate_expected_config,
     validate_pairing,
 )
 
@@ -31,6 +33,16 @@ def test_l3a1_safe_reference_uses_public_success_api():
     assert "and goal_reached" in text
     assert 'default=-0.10' in text
     assert "carried_qadr=bowl_qadr" in text
+    assert "_, naive_wait = _replay_runtime_wait(env, naive_oracle)" in text
+    assert "_, safe_wait = _replay_runtime_wait(env, safe_wait_oracle)" in text
+    assert "for step in range(RUNTIME_WAIT_STEPS):" in text
+    assert "env.step(DUMMY_ACTION)" in text
+    assert "maximum <= RUNTIME_WAIT_MAX_DRIFT" in text
+    assert text.count(
+        "preactivation_max_dependent_drift=RUNTIME_WAIT_MAX_DRIFT"
+    ) >= 3
+    assert 'and naive_wait["passes_5mm_gate"]' in text
+    assert 'and safe_wait["passes_5mm_gate"]' in text
     assert _metadata_for_run("L3-A1-drawer-bottle-er-support-removal-seed42") == (
         "L3", "L3-A1", "Er Support Removal"
     )
@@ -65,6 +77,21 @@ def test_paper_matrix_registers_l3a1_prepare_and_formal_paths():
 def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=False):
     with h5py.File(path, "w") as handle:
         group = handle.create_group("task")
+        group.attrs["l3a1_variant"] = "stable" if source is not None else "risk"
+        group.attrs["seed"] = 42
+        group.attrs["bddl"] = "scene.bddl"
+        group.attrs["lean_dx"] = -0.04
+        group.attrs["lean_dy"] = -0.18
+        group.attrs["lean_dz"] = 0.0
+        group.attrs["lean_deg"] = -20.0
+        group.attrs["lean_axis"] = "x"
+        group.attrs["settle_steps"] = 400
+        group.attrs["validation_hold_steps"] = 200
+        group.attrs["verify_close_steps"] = 60
+        group.attrs["min_topple_deg"] = 10.0
+        group.attrs["oracle_displacement_threshold"] = 0.01
+        group.attrs["oracle_height_drop_threshold"] = 0.015
+        group.attrs["stable_x_offset"] = -0.10 if source is not None else 0.0
         if source is not None:
             group.attrs["pairing_method"] = "serialized_er_state_bottle_transform"
             group.attrs["paired_er_states"] = str(source)
@@ -107,6 +134,19 @@ def test_stable_generator_is_explicitly_paired_to_er_artifact():
     assert '"runtime_wait_displacement_m"' in GENERATOR.read_text()
 
 
+def test_generator_runtime_wait_gates_maximum_stepwise_excursion():
+    text = GENERATOR.read_text()
+    assert "for _ in range(RUNTIME_WAIT_STEPS):" in text
+    assert "runtime_wait_max_displacement = max(" in text
+    assert "if runtime_wait_max_displacement <= RUNTIME_WAIT_MAX_DRIFT:" in text
+    assert '"runtime_wait_displacement_m": runtime_wait_max_displacement' in text
+    assert '"runtime_wait_max_displacement_m": runtime_wait_max_displacement' in text
+    assert (
+        '"runtime_wait_endpoint_displacement_m": runtime_wait_endpoint_displacement'
+        in text
+    )
+
+
 def test_pairing_gate_rejects_wrong_source_metadata(tmp_path):
     er, other, ec = tmp_path / "er.hdf5", tmp_path / "other.hdf5", tmp_path / "ec.hdf5"
     _states(er, [2])
@@ -140,7 +180,47 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
     assert "--support_preactivation_max_dependent_drift 0.005" in text
     assert "--support_check_during_wait True" in text
-    assert 'LEAN_DX="${LEAN_DX:--0.04}"' in text
-    assert 'LEAN_DY="${LEAN_DY:--0.180}"' in text
-    assert 'LEAN_DEG="${LEAN_DEG:--20.0}"' in text
+    assert 'LEAN_DX="${LEAN_DX:--0.06}"' in text
+    assert 'LEAN_DY="${LEAN_DY:--0.185}"' in text
+    assert 'LEAN_DEG="${LEAN_DEG:--22.0}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
+
+
+def test_artifact_binding_covers_bytes_count_and_geometry(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2, 5])
+    before = artifact_binding(str(artifact), "task")
+    assert '"count":2' in before
+    assert '"lean_dx":-0.04' in before
+    with h5py.File(artifact, "a") as handle:
+        handle["task/demo_0/initial_state"][0] = 999
+    after = artifact_binding(str(artifact), "task")
+    assert before != after
+
+
+def test_artifact_config_rejects_stale_geometry_or_threshold(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2])
+    validate_expected_config(
+        str(artifact), "task", variant="risk", seed=42, bddl="scene.bddl",
+        displacement_threshold=0.01, lean_dx=-0.04, lean_dy=-0.18, lean_deg=-20.0,
+    )
+    with pytest.raises(ValueError, match="lean_dx"):
+        validate_expected_config(str(artifact), "task", lean_dx=-0.06)
+    with pytest.raises(ValueError, match="oracle_displacement_threshold"):
+        validate_expected_config(str(artifact), "task", displacement_threshold=0.03)
+    with pytest.raises(ValueError, match="below required"):
+        validate_expected_config(str(artifact), "task", minimum_count=2)
+
+
+def test_runner_revalidates_current_artifacts_and_report_bindings():
+    text = RUNNER.read_text()
+    assert "artifact_binding()" in text
+    assert "require_bound_report" in text
+    assert 'require_bound_report "${STABLE_CHECK_REPORT}" "Paired Er binding"' in text
+    assert 'require_bound_report "${SAFE_REFERENCE_REPORT}" "Er artifact binding"' in text
+    assert '--er "${RISK_STATE_PATH}" --ec "${STABLE_STATE_PATH}"' in text
+    assert "validate_l3a1_smoke_evidence.py" in text
+    assert "require_smoke_gate" in text
+    assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Er artifact binding"' in text
+    assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Ec artifact binding"' in text

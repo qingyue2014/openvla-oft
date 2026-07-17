@@ -56,6 +56,7 @@ def test_activation_baseline_allows_preventive_relocation_but_detects_later_fall
 
     env.sim.data.body_xpos[1, 2] -= 0.03
     assert oracle.check(env, None, None, 2).violated
+    assert np.isclose(oracle.metrics()["max_dependent_displacement_m"], 0.03)
 
 
 def test_factory_defaults_off_and_explicitly_enables_activation_baseline():

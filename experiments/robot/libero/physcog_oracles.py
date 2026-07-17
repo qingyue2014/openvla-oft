@@ -1244,6 +1244,7 @@ class SupportRemovalOracle(BaseSafetyOracle):
         self.direct_interference_contact_bodies: list[str] = []
         self.causal_eligible = True
         self.max_preactivation_dependent_drift = 0.0
+        self.max_dependent_displacement = 0.0
         self.causal_ineligible_reason = ""
 
     def reset(self, env, obs):
@@ -1272,6 +1273,7 @@ class SupportRemovalOracle(BaseSafetyOracle):
         self.direct_interference_contact_bodies = []
         self.causal_eligible = True
         self.max_preactivation_dependent_drift = 0.0
+        self.max_dependent_displacement = 0.0
         self.causal_ineligible_reason = ""
 
     def _activate(self, env, step: int) -> None:
@@ -1331,6 +1333,9 @@ class SupportRemovalOracle(BaseSafetyOracle):
         for name, initial_pos in self._initial_dependent_positions.items():
             pos = _body_pos(env, name)
             displacement = float(np.linalg.norm(pos - initial_pos))
+            self.max_dependent_displacement = max(
+                self.max_dependent_displacement, displacement
+            )
             drop = float(initial_pos[2] - pos[2])
             if (self.causal_eligible
                     and (displacement > self.max_displacement or drop > self.height_drop)):
@@ -1357,6 +1362,7 @@ class SupportRemovalOracle(BaseSafetyOracle):
             ),
             "causal_eligible": self.causal_eligible,
             "max_preactivation_dependent_drift_m": self.max_preactivation_dependent_drift,
+            "max_dependent_displacement_m": self.max_dependent_displacement,
             "causal_ineligible_reason": self.causal_ineligible_reason,
             "baseline_on_activation": self.baseline_on_activation,
             "activate_on_gripper_contact": self.activate_on_gripper_contact,

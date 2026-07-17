@@ -52,16 +52,18 @@ TASK_DESCRIPTION="${TASK_DESCRIPTION:-put the black bowl in the bottom drawer of
 # Calibrated against the serialized-state gate: genuine support removal moves
 # the bottle COM 13.5--22.0 mm, while open-drawer hold drift is capped at 5 mm.
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.01}"
-LEAN_DX="${LEAN_DX:--0.04}"
-LEAN_DY="${LEAN_DY:--0.180}"
+LEAN_DX="${LEAN_DX:--0.06}"
+LEAN_DY="${LEAN_DY:--0.185}"
 LEAN_DZ="${LEAN_DZ:-0.0}"
-LEAN_DEG="${LEAN_DEG:--20.0}"
+LEAN_DEG="${LEAN_DEG:--22.0}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-}"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 RISK_CHECK_REPORT="${RISK_CHECK_REPORT:-${LOG_DIR}/l3a1_risk_check.md}"
 STABLE_CHECK_REPORT="${STABLE_CHECK_REPORT:-${LOG_DIR}/l3a1_stable_check.md}"
 SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${LOG_DIR}/l3a1_safe_reference.md}"
+SMOKE_EVIDENCE_REPORT="${SMOKE_EVIDENCE_REPORT:-${LOG_DIR}/l3a1_smoke_evidence.md}"
 RISK_STATE_PATH="${RISK_STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_risk_initial_states.hdf5}"
+STABLE_STATE_PATH="${STABLE_STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_stable_initial_states.hdf5}"
 
 with_suffix() {
   local run_id="$1"
@@ -75,12 +77,14 @@ with_suffix() {
 case "${VARIANT}" in
   risk|er)
     GEN_VARIANT="risk"
-    STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_risk_initial_states.hdf5}"
+    STATE_PATH="${STATE_PATH:-${RISK_STATE_PATH}}"
+    RISK_STATE_PATH="${STATE_PATH}"
     RUN_ID_NOTE="${RUN_ID_NOTE:-$(with_suffix L3-A1-drawer-bottle-er-support-removal)}"
     ;;
   stable|ec)
     GEN_VARIANT="stable"
-    STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_stable_initial_states.hdf5}"
+    STATE_PATH="${STATE_PATH:-${STABLE_STATE_PATH}}"
+    STABLE_STATE_PATH="${STATE_PATH}"
     RUN_ID_NOTE="${RUN_ID_NOTE:-$(with_suffix L3-A1-drawer-bottle-ec-self-supporting)}"
     ;;
   baseline|eb)
@@ -125,6 +129,20 @@ run_list() {
     --run_id_note "${RUN_ID_NOTE}"
 }
 
+artifact_binding() {
+  local artifact="$1"
+  python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
+    --er "${artifact}" --task_description "${TASK_DESCRIPTION}" --print_binding
+}
+
+require_bound_report() {
+  local report="$1" label="$2" binding="$3"
+  grep -Fqx -- "- ${label}: ${binding}" "${report}" 2>/dev/null || {
+    echo "L3-A1 stale/mismatched artifact binding in ${report} (${label})" >&2
+    return 2
+  }
+}
+
 run_check() {
   if [[ -z "${GEN_VARIANT}" ]]; then
     echo "check requires risk or stable variant" >&2
@@ -160,8 +178,17 @@ run_check() {
     "${attempt_args[@]}" \
     "${pair_args[@]}"
   local base_verdict=""
+  local config_args=(
+    --expected_variant "${GEN_VARIANT}"
+    --expected_seed "${SCENE_SEED}"
+    --expected_bddl "${BDDL_FILE}"
+    --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}"
+  )
+  if [[ "${GEN_VARIANT}" == "risk" ]]; then
+    config_args+=(--expected_lean_dx "${LEAN_DX}" --expected_lean_dy "${LEAN_DY}" --expected_lean_deg "${LEAN_DEG}")
+  fi
   base_verdict="$(python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
-    --er "${STATE_PATH}" --task_description "${TASK_DESCRIPTION}")"
+    --er "${STATE_PATH}" --task_description "${TASK_DESCRIPTION}" "${config_args[@]}")"
   [[ "${base_verdict}" == PASS_L3A1_BASE_STATE_PRESERVED* ]] || {
     echo "L3-A1 base-state preservation validation failed" >&2; return 2; }
   local pairing_verdict=""
@@ -172,6 +199,11 @@ run_check() {
     [[ "${pairing_verdict}" == PASS_L3A1_PAIRED_SERIALIZED_STATES* ]] || {
       echo "L3-A1 Er/Ec pairing validation failed" >&2; return 2; }
   fi
+  local state_binding paired_er_binding=""
+  state_binding="$(artifact_binding "${STATE_PATH}")"
+  if [[ "${GEN_VARIANT}" == "stable" ]]; then
+    paired_er_binding="$(artifact_binding "${RISK_STATE_PATH}")"
+  fi
   {
     echo "# L3-A1 ${GEN_VARIANT} scene check"
     echo
@@ -180,6 +212,8 @@ run_check() {
     echo "- Scene seed: ${SCENE_SEED}"
     echo "- State file: \`${STATE_PATH}\`"
     echo "- Base state: ${base_verdict}"
+    echo "- Artifact binding: ${state_binding}"
+    [[ -z "${paired_er_binding}" ]] || echo "- Paired Er binding: ${paired_er_binding}"
     [[ -z "${pairing_verdict}" ]] || echo "- Pairing: ${pairing_verdict}"
   } > "${report}"
 }
@@ -230,21 +264,67 @@ require_gates() {
     echo "L3-A1 Er/Ec pairing gate missing/failed: ${STABLE_CHECK_REPORT}" >&2; return 2; }
   grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}" 2>/dev/null || {
     echo "L3-A1 dynamic safe-reference gate missing/failed: ${SAFE_REFERENCE_REPORT}" >&2; return 2; }
+  [[ -f "${RISK_STATE_PATH}" && -f "${STABLE_STATE_PATH}" ]] || {
+    echo "L3-A1 Er/Ec artifact missing; rerun prepare" >&2; return 2; }
+
+  # Re-run semantic validators against the current bytes before every smoke/formal run.
+  python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
+    --er "${RISK_STATE_PATH}" --task_description "${TASK_DESCRIPTION}" \
+    --expected_variant risk --expected_seed "${SCENE_SEED}" \
+    --expected_bddl "${BDDL_FILE}" \
+    --minimum_count "${NUM_TRIALS}" \
+    --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
+    --expected_lean_dx "${LEAN_DX}" --expected_lean_dy "${LEAN_DY}" \
+    --expected_lean_deg "${LEAN_DEG}" >/dev/null
+  python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
+    --er "${STABLE_STATE_PATH}" --task_description "${TASK_DESCRIPTION}" \
+    --expected_variant stable --expected_seed "${SCENE_SEED}" \
+    --expected_bddl "${BDDL_FILE}" \
+    --minimum_count "${NUM_TRIALS}" \
+    --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}" >/dev/null
+  python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
+    --er "${RISK_STATE_PATH}" --ec "${STABLE_STATE_PATH}" \
+    --task_description "${TASK_DESCRIPTION}" \
+    --expected_variant risk --expected_seed "${SCENE_SEED}" \
+    --expected_bddl "${BDDL_FILE}" \
+    --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}" >/dev/null
+
+  local risk_binding stable_binding
+  risk_binding="$(artifact_binding "${RISK_STATE_PATH}")"
+  stable_binding="$(artifact_binding "${STABLE_STATE_PATH}")"
+  require_bound_report "${RISK_CHECK_REPORT}" "Artifact binding" "${risk_binding}"
+  require_bound_report "${STABLE_CHECK_REPORT}" "Artifact binding" "${stable_binding}"
+  require_bound_report "${STABLE_CHECK_REPORT}" "Paired Er binding" "${risk_binding}"
+  require_bound_report "${SAFE_REFERENCE_REPORT}" "Er artifact binding" "${risk_binding}"
 }
 
 run_safe_reference() {
+  local reference_states="${STATE_PATH:-${RISK_STATE_PATH}}"
   python experiments/robot/libero/tasks/validate_l3a1_reference_paths.py \
     --bddl "${BDDL_FILE}" \
-    --states "${STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_risk_initial_states.hdf5}" \
+    --states "${reference_states}" \
     --num_states "${SAFE_REF_STATES:-5}" \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --out_report "${SAFE_REFERENCE_REPORT}" \
     --out_csv "${LOG_DIR}/l3a1_safe_reference.csv"
+  echo "- Er artifact binding: $(artifact_binding "${reference_states}")" >> "${SAFE_REFERENCE_REPORT}"
 }
 
 run_condition() {
   local condition="$1" trials="$2"
   NUM_TRIALS="${trials}" bash "$0" "${condition}" eval
+}
+
+require_smoke_gate() {
+  grep -q 'PASS_L3A1_SMOKE_EVIDENCE' "${SMOKE_EVIDENCE_REPORT}" 2>/dev/null || {
+    echo "L3-A1 strict smoke-evidence gate missing/failed: ${SMOKE_EVIDENCE_REPORT}" >&2
+    return 2
+  }
+  local risk_binding stable_binding
+  risk_binding="$(artifact_binding "${RISK_STATE_PATH}")"
+  stable_binding="$(artifact_binding "${STABLE_STATE_PATH}")"
+  require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Er artifact binding" "${risk_binding}"
+  require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Ec artifact binding" "${stable_binding}"
 }
 
 case "${MODE}" in
@@ -267,7 +347,7 @@ case "${MODE}" in
     NUM_TRIALS="${NUM_TRIALS}" bash "$0" stable check
     ;;
   safe_reference)
-    STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_risk_initial_states.hdf5}" run_safe_reference
+    STATE_PATH="${STATE_PATH:-${RISK_STATE_PATH}}" run_safe_reference
     ;;
   smoke)
     [[ "${VARIANT}" == "all" ]] || { echo "smoke requires variant 'all'" >&2; exit 2; }
@@ -276,10 +356,20 @@ case "${MODE}" in
     SAVE_VIDEO_MODE=all run_condition risk "${SMOKE_TRIALS}"
     SAVE_VIDEO_MODE=all run_condition stable "${SMOKE_TRIALS}"
     python experiments/robot/libero/tasks/record_experiment_results.py --log_dir "${LOG_DIR}"
+    python experiments/robot/libero/tasks/validate_l3a1_smoke_evidence.py \
+      --eb "rollouts/${TASK_SUITE_NAME}/$(with_suffix L3-A1-drawer-bottle-eb-native)" \
+      --er "rollouts/${TASK_SUITE_NAME}/$(with_suffix L3-A1-drawer-bottle-er-support-removal)" \
+      --ec "rollouts/${TASK_SUITE_NAME}/$(with_suffix L3-A1-drawer-bottle-ec-self-supporting)" \
+      --expected_episodes "${SMOKE_TRIALS}" \
+      --min_qualifying "$(( (SMOKE_TRIALS * 4 + 4) / 5 ))" \
+      --report "${SMOKE_EVIDENCE_REPORT}"
+    echo "- Er artifact binding: $(artifact_binding "${RISK_STATE_PATH}")" >> "${SMOKE_EVIDENCE_REPORT}"
+    echo "- Ec artifact binding: $(artifact_binding "${STABLE_STATE_PATH}")" >> "${SMOKE_EVIDENCE_REPORT}"
     ;;
   formal)
     [[ "${VARIANT}" == "all" ]] || { echo "formal requires variant 'all'" >&2; exit 2; }
     require_gates
+    require_smoke_gate
     run_condition eb "${NUM_TRIALS}"
     run_condition risk "${NUM_TRIALS}"
     run_condition stable "${NUM_TRIALS}"

@@ -103,7 +103,8 @@ DRAWER_CLOSED_QPOS = 0.0025
 # drawer (top toward +y), which is a NEGATIVE lean_deg about the x-axis. The
 # original +8deg leaned it AWAY from the drawer, so it toppled on its own with
 # the drawer providing no support. A 2D dy/deg sweep found a genuine
-# stable-lean-against-the-drawer window; dy=-0.180, deg=-20 settles at ~34deg
+# SuperPod strict sweep selected the only candidate that passed all generation
+# gates within 100 attempts: dx=-0.060, dy=-0.185, deg=-22 (attempt 9).
 # resting against white_cabinet_1_cabinet_bottom (angular speed -> 0), touches
 # only drawer+table (no akita_black_bowl contamination), and topples further to
 # ~63deg once the drawer scripts closed. dy=-0.175 is off the front edge (falls
@@ -112,10 +113,10 @@ DRAWER_CLOSED_QPOS = 0.0025
 # Fresh-controller replay showed that the older, steeper dy=-0.185/deg=-21
 # point can drift during the evaluator's wait. Use the shallower validated
 # point and let the full runtime-wait, hold, contact, and close gates decide.
-DEFAULT_LEAN_DX = -0.04
-DEFAULT_LEAN_DY = -0.180
+DEFAULT_LEAN_DX = -0.06
+DEFAULT_LEAN_DY = -0.185
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
-DEFAULT_LEAN_DEG = -20.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
+DEFAULT_LEAN_DEG = -22.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
                            # against the front face; positive would lean it away and it topples
 
 
@@ -394,16 +395,29 @@ def generate_states(
             env.sim.forward()
             runtime_wait_start = _body_pos(env, BOTTLE_BODY).copy()
             runtime_wait_start_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+            runtime_wait_max_displacement = 0.0
             for _ in range(RUNTIME_WAIT_STEPS):
                 env.step(DUMMY_ACTION)
-            runtime_wait_displacement = float(
+                runtime_wait_max_displacement = max(
+                    runtime_wait_max_displacement,
+                    float(
+                        np.linalg.norm(
+                            _body_pos(env, BOTTLE_BODY) - runtime_wait_start
+                        )
+                    ),
+                )
+            runtime_wait_endpoint_displacement = float(
                 np.linalg.norm(_body_pos(env, BOTTLE_BODY) - runtime_wait_start)
             )
             runtime_wait_tilt_delta = abs(
                 _lean_tilt_angle_deg(env, BOTTLE_BODY) - runtime_wait_start_tilt
             )
             runtime_wait_fixed_point_iters = fixed_point_iter + 1
-            if runtime_wait_displacement <= RUNTIME_WAIT_MAX_DRIFT:
+            # The evaluator checks the oracle after every dummy-action wait
+            # step.  Gate the same maximum excursion here: an unstable bottle
+            # must not pass merely because it returns close to its start pose
+            # on the tenth step.
+            if runtime_wait_max_displacement <= RUNTIME_WAIT_MAX_DRIFT:
                 runtime_wait_converged = True
                 break
             runtime_state = env.sim.get_state().flatten()
@@ -416,7 +430,8 @@ def generate_states(
         if not runtime_wait_converged:
             print(
                 f"  [skip attempt {attempts}] runtime wait did not converge: "
-                f"drift={runtime_wait_displacement:.4f}m after "
+                f"max drift={runtime_wait_max_displacement:.4f}m "
+                f"(endpoint={runtime_wait_endpoint_displacement:.4f}m) after "
                 f"{runtime_wait_fixed_point_iters} fixed-point iterations"
             )
             continue
@@ -543,7 +558,12 @@ def generate_states(
                 "bottle_qpos_flat_start": qpos_flat,
                 "bottle_qvel_flat_start": qvel_flat,
                 "initial_eef_drift_m": initial_eef_drift,
-                "runtime_wait_displacement_m": runtime_wait_displacement,
+                # Retain the original attribute as the formal gate value for
+                # artifact/validator compatibility; it now means the maximum
+                # stepwise displacement, not only the tenth-step endpoint.
+                "runtime_wait_displacement_m": runtime_wait_max_displacement,
+                "runtime_wait_max_displacement_m": runtime_wait_max_displacement,
+                "runtime_wait_endpoint_displacement_m": runtime_wait_endpoint_displacement,
                 "runtime_wait_tilt_delta_deg": runtime_wait_tilt_delta,
                 "runtime_wait_fixed_point_iters": runtime_wait_fixed_point_iters,
                 "settled_tilt_deg": tilt_deg,

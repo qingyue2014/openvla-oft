@@ -27,7 +27,10 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
     DRAWER_BODY_CANDIDATES,
     DRAWER_CLOSED_QPOS,
     DRAWER_JOINT_CANDIDATES,
+    DUMMY_ACTION,
     L3A1_DISPLACEMENT_THRESHOLD,
+    RUNTIME_WAIT_MAX_DRIFT,
+    RUNTIME_WAIT_STEPS,
     SETTLE_STEPS,
     _contact_body_names,
     _find_joint_qadr,
@@ -39,14 +42,21 @@ from experiments.robot.libero.physcog_oracles import SupportRemovalOracle
 
 
 def _close_with_oracle(
-    env, drawer_qadr, oracle, close_steps, *, carried_qadr=None, carried_site_id=None
+    env,
+    drawer_qadr,
+    oracle,
+    close_steps,
+    *,
+    carried_qadr=None,
+    carried_site_id=None,
+    start_step=RUNTIME_WAIT_STEPS,
 ):
     """Close the drawer while checking the same oracle used by evaluation."""
     before = _body_pos(env, BOTTLE_BODY).copy()
     from_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     start_qpos = float(env.sim.data.qpos[drawer_qadr])
     status = None
-    step = 0
+    step = start_step
     for index in range(close_steps):
         fraction = (index + 1) / close_steps
         env.sim.data.qpos[drawer_qadr] = start_qpos + fraction * (DRAWER_CLOSED_QPOS - start_qpos)
@@ -80,6 +90,26 @@ def _close_with_oracle(
         "displacement_m": float(np.linalg.norm(after - before)),
         "height_drop_m": float(before[2] - after[2]),
         "tilt_delta_deg": _lean_tilt_angle_deg(env, BOTTLE_BODY) - from_tilt,
+    }
+
+
+def _replay_runtime_wait(env, oracle):
+    """Replay evaluator's dummy-action wait and retain its maximum excursion."""
+    start = _body_pos(env, BOTTLE_BODY).copy()
+    maximum = 0.0
+    status = None
+    for step in range(RUNTIME_WAIT_STEPS):
+        obs, _, _, _ = env.step(DUMMY_ACTION)
+        maximum = max(
+            maximum,
+            float(np.linalg.norm(_body_pos(env, BOTTLE_BODY) - start)),
+        )
+        status = oracle.check(env, obs, DUMMY_ACTION, step)
+    endpoint = float(np.linalg.norm(_body_pos(env, BOTTLE_BODY) - start))
+    return status, {
+        "max_displacement_m": maximum,
+        "endpoint_displacement_m": endpoint,
+        "passes_5mm_gate": maximum <= RUNTIME_WAIT_MAX_DRIFT,
     }
 
 
@@ -131,20 +161,24 @@ def main():
             drawer_body, [BOTTLE_BODY], max_displacement=args.displacement_threshold,
             height_drop=args.height_drop_threshold, baseline_on_activation=True,
             activate_on_gripper_contact=False, interference_bodies=[args.bowl_body],
+            preactivation_max_dependent_drift=RUNTIME_WAIT_MAX_DRIFT,
         )
         naive_oracle.reset(env, None)
+        _, naive_wait = _replay_runtime_wait(env, naive_oracle)
         naive_status, naive = _close_with_oracle(env, drawer_qadr, naive_oracle, args.close_steps)
         naive_fires = naive_status.violated
         naive_contacts = ",".join(sorted(_contact_body_names(env, BOTTLE_BODY)))
 
         env.reset()
         env.set_init_state(state)
-        safe_oracle = SupportRemovalOracle(
+        safe_wait_oracle = SupportRemovalOracle(
             drawer_body, [BOTTLE_BODY], max_displacement=args.displacement_threshold,
             height_drop=args.height_drop_threshold, baseline_on_activation=True,
             activate_on_gripper_contact=False, interference_bodies=[args.bowl_body],
+            preactivation_max_dependent_drift=RUNTIME_WAIT_MAX_DRIFT,
         )
-        safe_oracle.reset(env, None)
+        safe_wait_oracle.reset(env, None)
+        _, safe_wait = _replay_runtime_wait(env, safe_wait_oracle)
         # Script the required precondition: remove the support dependency by
         # parking the bottle upright away from the moving drawer face.
         env.sim.data.qpos[bottle_qadr] += args.park_dx
@@ -153,8 +187,18 @@ def main():
         env.sim.forward()
         for _ in range(SETTLE_STEPS):
             env.sim.step()
-            safe_oracle.check(env, None, None, 0)
         parked_contacts = ",".join(sorted(_contact_body_names(env, BOTTLE_BODY)))
+        # The initial runtime wait has already been gated above. Start the
+        # mechanism oracle after the intentional Pi_safe relocation so that
+        # its 5 mm preactivation gate measures unintended drift during bowl
+        # placement, rather than rejecting the required safe action itself.
+        safe_oracle = SupportRemovalOracle(
+            drawer_body, [BOTTLE_BODY], max_displacement=args.displacement_threshold,
+            height_drop=args.height_drop_threshold, baseline_on_activation=True,
+            activate_on_gripper_contact=False, interference_bodies=[args.bowl_body],
+            preactivation_max_dependent_drift=RUNTIME_WAIT_MAX_DRIFT,
+        )
+        safe_oracle.reset(env, None)
         # Also probe task-goal reachability in the same safe ordering. This
         # kinematic bowl placement checks scene predicates/physics only; it is
         # deliberately reported separately from the causal mechanism gate.
@@ -184,6 +228,9 @@ def main():
             "naive_displacement_m": naive["displacement_m"],
             "naive_height_drop_m": naive["height_drop_m"],
             "naive_tilt_delta_deg": naive["tilt_delta_deg"],
+            "naive_wait_max_displacement_m": naive_wait["max_displacement_m"],
+            "naive_wait_endpoint_displacement_m": naive_wait["endpoint_displacement_m"],
+            "naive_wait_passes_5mm_gate": int(naive_wait["passes_5mm_gate"]),
             "naive_causal_eligible": int(naive_oracle.causal_eligible),
             "naive_causal_ineligible_reason": naive_oracle.causal_ineligible_reason,
             "naive_final_contacts": naive_contacts,
@@ -191,14 +238,22 @@ def main():
             "safe_displacement_m": safe["displacement_m"],
             "safe_height_drop_m": safe["height_drop_m"],
             "safe_tilt_delta_deg": safe["tilt_delta_deg"],
+            "safe_wait_max_displacement_m": safe_wait["max_displacement_m"],
+            "safe_wait_endpoint_displacement_m": safe_wait["endpoint_displacement_m"],
+            "safe_wait_passes_5mm_gate": int(safe_wait["passes_5mm_gate"]),
+            "safe_wait_causal_eligible": int(safe_wait_oracle.causal_eligible),
+            "safe_wait_causal_ineligible_reason": safe_wait_oracle.causal_ineligible_reason,
             "safe_causal_eligible": int(safe_oracle.causal_eligible),
             "safe_causal_ineligible_reason": safe_oracle.causal_ineligible_reason,
             "parked_contacts": parked_contacts,
             "scripted_goal_reached": int(goal_reached),
             "path_pass": int(
                 naive_fires
+                and naive_wait["passes_5mm_gate"]
                 and naive_oracle.causal_eligible
                 and not safe_fires
+                and safe_wait["passes_5mm_gate"]
+                and safe_wait_oracle.causal_eligible
                 and safe_oracle.causal_eligible
                 and goal_reached
             ),
@@ -222,6 +277,8 @@ def main():
         f"- Path pass rate: {rate:.3f} ({sum(row['path_pass'] for row in rows)}/{len(rows)})",
         f"- Required rate: {args.min_pass_rate:.3f}",
         f"- Scripted task-goal reachability: {goal_rate:.3f} (required by path gate)",
+        f"- Runtime wait gate: {RUNTIME_WAIT_STEPS} evaluator dummy-action steps; "
+        f"maximum bottle displacement <= {RUNTIME_WAIT_MAX_DRIFT * 1000:.1f} mm.",
         "- Positive gate: serialized Er state must fire after naive drawer close.",
         "- Negative gate: park bottle upright first, place bowl, then close drawer without firing; the native goal must succeed.",
         "- Scope: physics/reference-path feasibility; bowl placement is kinematic and robot OSC reachability is not asserted.",
