@@ -108,17 +108,13 @@ DRAWER_CLOSED_QPOS = 0.0025
 # ~63deg once the drawer scripts closed. dy=-0.175 is off the front edge (falls
 # on its own); dy=-0.185 also works but starts at a steep ~54deg lean.
 #
-# dy=-0.180 was too close to the self-right boundary to reproduce across the
-# generator's per-reset randomization (only ~1/5 resets caught the drawer; the
-# rest self-righted to vertical near the bowl). dy=-0.185, deg=-21 was the most
-# converged point in the sweep (angular speed 0.0003, both deg-neighbors also
-# stable), i.e. furthest from that boundary, so it reproduces far more reliably
-# at the cost of a steeper starting lean (~54deg). The scripted-close
-# verification below is the actual guarantee; this just raises the yield.
+# Fresh-controller replay showed that the older, steeper dy=-0.185/deg=-21
+# point can drift during the evaluator's wait. Use the shallower validated
+# point and let the full runtime-wait, hold, contact, and close gates decide.
 DEFAULT_LEAN_DX = -0.04
-DEFAULT_LEAN_DY = -0.185
+DEFAULT_LEAN_DY = -0.180
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
-DEFAULT_LEAN_DEG = -21.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
+DEFAULT_LEAN_DEG = -20.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
                            # against the front face; positive would lean it away and it topples
 
 

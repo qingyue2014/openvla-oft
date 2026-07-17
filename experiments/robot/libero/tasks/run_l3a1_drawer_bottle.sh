@@ -53,9 +53,9 @@ TASK_DESCRIPTION="${TASK_DESCRIPTION:-put the black bowl in the bottom drawer of
 # the bottle COM 13.5--22.0 mm, while open-drawer hold drift is capped at 5 mm.
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.01}"
 LEAN_DX="${LEAN_DX:--0.04}"
-LEAN_DY="${LEAN_DY:--0.185}"
+LEAN_DY="${LEAN_DY:--0.180}"
 LEAN_DZ="${LEAN_DZ:-0.0}"
-LEAN_DEG="${LEAN_DEG:--21.0}"
+LEAN_DEG="${LEAN_DEG:--20.0}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-}"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 RISK_CHECK_REPORT="${RISK_CHECK_REPORT:-${LOG_DIR}/l3a1_risk_check.md}"

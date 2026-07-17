@@ -120,10 +120,10 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
    | -0.180 | -22 | yes | drawer+table | 32deg | 57deg |
    | -0.185 | -21 | yes | drawer+table | 54deg | 99deg |
 
-The current candidate is **`DEFAULT_LEAN_DX = -0.04`,
-`DEFAULT_LEAN_DY = -0.185`, `DEFAULT_LEAN_DEG = -21`** because the earlier
-`-0.180/-20` point reproduced
-poorly across resets. This candidate is not formal until the generator's
+The current controller-replay candidate is **`DEFAULT_LEAN_DX = -0.04`,
+`DEFAULT_LEAN_DY = -0.180`, `DEFAULT_LEAN_DEG = -20`**. The older steeper
+`-0.185/-21` point reproduced under bare physics but drifted during the
+evaluator's dummy-action wait. This candidate is not formal until the generator's
 per-state contact, open-hold, and close-response gates pass on the GPU node.
 
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
