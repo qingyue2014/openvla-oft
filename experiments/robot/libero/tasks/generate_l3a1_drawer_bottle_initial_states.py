@@ -60,6 +60,7 @@ SETTLE_STEPS = 400
 SETTLE_CONTROL_STEPS = 20
 RUNTIME_WAIT_STEPS = 10
 RUNTIME_WAIT_MAX_DRIFT = 0.005
+RUNTIME_WAIT_MAX_FIXED_POINT_ITERS = 4
 DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
 MAX_SETTLE_XY_DRIFT = 0.10  # a genuine lean swings the top well past 3cm; only reject gross launches
 MIN_SETTLED_Z = 0.30  # kitchen_table sits lower than living_room_table; loosen vs L2-B2's 0.40
@@ -392,23 +393,38 @@ def generate_states(
 
         # Replay from a fresh controller reset exactly as evaluation does,
         # then require the serialized bottle to survive the full runtime wait.
-        env.reset()
-        env.sim.set_state_from_flattened(candidate_state)
-        env.sim.forward()
-        runtime_wait_start = _body_pos(env, BOTTLE_BODY).copy()
-        runtime_wait_start_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
-        for _ in range(RUNTIME_WAIT_STEPS):
-            env.step(DUMMY_ACTION)
-        runtime_wait_displacement = float(
-            np.linalg.norm(_body_pos(env, BOTTLE_BODY) - runtime_wait_start)
-        )
-        runtime_wait_tilt_delta = abs(
-            _lean_tilt_angle_deg(env, BOTTLE_BODY) - runtime_wait_start_tilt
-        )
-        if runtime_wait_displacement > RUNTIME_WAIT_MAX_DRIFT:
+        runtime_wait_converged = False
+        runtime_wait_fixed_point_iters = 0
+        for fixed_point_iter in range(RUNTIME_WAIT_MAX_FIXED_POINT_ITERS):
+            env.reset()
+            env.sim.set_state_from_flattened(candidate_state)
+            env.sim.forward()
+            runtime_wait_start = _body_pos(env, BOTTLE_BODY).copy()
+            runtime_wait_start_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+            for _ in range(RUNTIME_WAIT_STEPS):
+                env.step(DUMMY_ACTION)
+            runtime_wait_displacement = float(
+                np.linalg.norm(_body_pos(env, BOTTLE_BODY) - runtime_wait_start)
+            )
+            runtime_wait_tilt_delta = abs(
+                _lean_tilt_angle_deg(env, BOTTLE_BODY) - runtime_wait_start_tilt
+            )
+            runtime_wait_fixed_point_iters = fixed_point_iter + 1
+            if runtime_wait_displacement <= RUNTIME_WAIT_MAX_DRIFT:
+                runtime_wait_converged = True
+                break
+            runtime_state = env.sim.get_state().flatten()
+            candidate_state[qpos_flat:qpos_flat + 7] = (
+                runtime_state[qpos_flat:qpos_flat + 7]
+            )
+            candidate_state[qvel_flat:qvel_flat + 6] = (
+                runtime_state[qvel_flat:qvel_flat + 6]
+            )
+        if not runtime_wait_converged:
             print(
-                f"  [skip attempt {attempts}] runtime wait drift="
-                f"{runtime_wait_displacement:.4f}m > {RUNTIME_WAIT_MAX_DRIFT:.4f}m"
+                f"  [skip attempt {attempts}] runtime wait did not converge: "
+                f"drift={runtime_wait_displacement:.4f}m after "
+                f"{runtime_wait_fixed_point_iters} fixed-point iterations"
             )
             continue
         env.sim.set_state_from_flattened(candidate_state)
@@ -535,6 +551,7 @@ def generate_states(
                 "initial_eef_drift_m": initial_eef_drift,
                 "runtime_wait_displacement_m": runtime_wait_displacement,
                 "runtime_wait_tilt_delta_deg": runtime_wait_tilt_delta,
+                "runtime_wait_fixed_point_iters": runtime_wait_fixed_point_iters,
                 "settled_tilt_deg": tilt_deg,
                 "hold_displacement_m": hold_displacement,
                 "hold_tilt_delta_deg": hold_tilt_delta,
