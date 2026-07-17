@@ -128,61 +128,30 @@ VARIANTS = {
         "extra_side_xy": np.array([0.240, -0.180]),
         "use_upright_cookie_occlusion": True,
         "landmark_near_target": True,
-        # The [.707,0,.707,0] orientation settles WITHOUT touching the bowl and
-        # slides to a clean foreground offset (~0.07), so it is tried first.
-        # The [.707,.707,0,0] orientation ends up in contact with the bowl at
-        # these offsets, so it is kept only as a last-resort fallback.
+        # Place the upright cookie along the agentview foreground ray, but far
+        # enough from the bowl that it never uses the bowl as a collision stop.
+        # The old 4.5--5.8 cm offsets overlapped the assets: the cookie pushed
+        # the bowl / ramekin aside and only became contact-free afterwards.
         "occluder_pose_candidates": [
-            # Search the closest non-contact poses first.  The previous list
-            # often accepted a physically stable ~8 cm offset and only later
-            # discovered that it occluded <10% of the target.  These poses sit
-            # near the calibrated geometric lower bound and are evaluated by
-            # the joint physics + segmentation gate below.
             {
-                "offset": np.array([0.046, -0.004]),
+                "offset": np.array([dx, dy]),
                 "z": 0.940,
                 "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
-            },
-            {
-                "offset": np.array([0.048, -0.002]),
-                "z": 0.940,
-                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
-            },
-            {
-                "offset": np.array([0.048, -0.010]),
-                "z": 0.940,
-                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
-            },
-            {
-                "offset": np.array([0.050, -0.005]),
-                "z": 0.940,
-                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
-            },
-            {
-                "offset": np.array([0.055, -0.005]),
-                "z": 0.940,
-                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
-            },
-            {
-                "offset": np.array([0.052, -0.010]),
-                "z": 0.940,
-                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
-            },
-            {
-                "offset": np.array([0.058, -0.005]),
-                "z": 0.940,
-                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
-            },
-            {
-                "offset": np.array([0.048, -0.008]),
-                "z": 0.940,
-                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
-            },
-            {
-                "offset": np.array([0.045, -0.005]),
-                "z": 0.940,
-                "quat": np.array([0.70710678, 0.70710678, 0.0, 0.0]),
-            },
+            }
+            for dx, dy in (
+                (0.120, 0.000),
+                (0.130, 0.000),
+                (0.140, 0.000),
+                (0.150, 0.000),
+                (0.160, 0.000),
+                (0.130, -0.010),
+                (0.140, -0.010),
+                (0.150, -0.010),
+                (0.130, 0.010),
+                (0.140, 0.010),
+                (0.150, 0.010),
+                (0.180, 0.000),
+            )
         ],
     },
     "task1_upright_cookie_matched_safe": {
@@ -1082,7 +1051,12 @@ def generate_states(
     task = task_suite.get_task(v["task_id"])
     task_bddl = os.path.join(get_libero_path("bddl_files"), task.problem_folder, task.bddl_file)
 
-    env = OffScreenRenderEnv(bddl_file_name=task_bddl, camera_heights=256, camera_widths=256)
+    env = OffScreenRenderEnv(
+        bddl_file_name=task_bddl,
+        camera_heights=256,
+        camera_widths=256,
+        ignore_done=True,
+    )
     env.seed(seed)
     default_states = task_suite.get_task_init_states(v["task_id"])
 
@@ -1182,7 +1156,12 @@ def generate_paired_states(
     task = task_suite.get_task(er["task_id"])
     task_bddl = os.path.join(get_libero_path("bddl_files"), task.problem_folder, task.bddl_file)
 
-    env = OffScreenRenderEnv(bddl_file_name=task_bddl, camera_heights=256, camera_widths=256)
+    env = OffScreenRenderEnv(
+        bddl_file_name=task_bddl,
+        camera_heights=256,
+        camera_widths=256,
+        ignore_done=True,
+    )
     env.seed(seed)
     default_states = task_suite.get_task_init_states(er["task_id"])
 
