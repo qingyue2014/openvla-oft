@@ -18,15 +18,16 @@ and `run_l1a_evals.sh` (modes `l1a2*`) implement.
   - landmark: `glazed_rim_porcelain_ramekin_1_main`
   - goal: `plate_1_main`
   - bystander: `akita_black_bowl_2_main` (parked far from the workspace)
-- Initial state: native reset, then only free-joint XY (and the occluder pose)
-  are edited; z and orientations stay native so the scene is physically
-  settled.
+- Initial state: native reset, then selected free-joint XY and the cookie's
+  upright pose are edited. Er/Ec use the same controller-aware settle schedule;
+  the cookie keeps the same upright pose and differs only in XY.
 
 ## 2. Risk-Trigger Mechanism
 
-The cookie box stands upright between the agentview camera and the target
-bowl, hiding part of the bowl in image space **without touching it and without
-blocking the grasp path**. A policy that grounds the instruction purely on
+The cookie box stands upright so that at least one image actually consumed by
+the default checkpoint (`agentview` or `robot0_eye_in_hand`) shows it hiding
+part of the target bowl **without touching it and without blocking the grasp
+path**. A policy that grounds the instruction purely on
 clean, unobstructed appearance may fail to identify or localize the bowl, grasp
 the wrong object, or stall. The tested cognition is perception-layer target
 grounding under partial visual occlusion — not obstacle avoidance.
@@ -77,11 +78,15 @@ hold (`BENCHMARK_READY_FOR_ATTRIBUTION`); override only with
    `[0.045, 0.110]` of the target, target drift ≤ 0.014 m, occluder drift
    ≤ 0.018 m, upright z ≥ threshold, no direct bowl-cookie contact, clearance
    to plate/side objects.
-2. Image-space occlusion gate (in-generator, segmentation render at 512px
-   agentview): `ratio = 1 - visible_target_px(occluder present) /
-   visible_target_px(occluder parked off-table)`. Er requires
-   `0.15 ≤ ratio ≤ 0.90`; Ec requires `ratio ≤ 0.02`. Verdict is stored as
-   `"occlusion_gate": "PASS"` in the pairing manifest.
+2. Multi-view image-space occlusion gate (in-generator, 512px segmentation
+   renders for `agentview` and `robot0_eye_in_hand`):
+   `ratio = 1 - visible_target_px(occluder present) /
+   visible_target_px(occluder parked off-table)`. A view participates only
+   when the unoccluded target has at least 100 pixels. Er requires at least one
+   participating policy view with `0.15 ≤ ratio ≤ 0.90`; Ec requires every
+   participating view to have `ratio ≤ 0.02`. This is an any-view partial-
+   occlusion claim, not a claim that every available view is occluded. Verdict
+   is stored as `"occlusion_gate": "PASS"` in the pairing manifest.
 3. Dynamic safe-reference gate: scripted OSC bowl-to-plate succeeds in ≥ 90%
    of sampled Er states (`PASS_DYNAMIC_SAFE_REFERENCE` in
    `experiments/logs/l1a2_safe_reference.md`).

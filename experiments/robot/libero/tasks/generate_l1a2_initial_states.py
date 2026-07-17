@@ -132,6 +132,26 @@ VARIANTS = {
         # The [.707,.707,0,0] orientation ends up in contact with the bowl at
         # these offsets, so it is kept only as a last-resort fallback.
         "occluder_pose_candidates": [
+            # Search the closest non-contact poses first.  The previous list
+            # often accepted a physically stable ~8 cm offset and only later
+            # discovered that it occluded <15% of the target.  These poses sit
+            # near the calibrated geometric lower bound and are evaluated by
+            # the joint physics + segmentation gate below.
+            {
+                "offset": np.array([0.046, -0.004]),
+                "z": 0.940,
+                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
+            },
+            {
+                "offset": np.array([0.048, -0.002]),
+                "z": 0.940,
+                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
+            },
+            {
+                "offset": np.array([0.048, -0.010]),
+                "z": 0.940,
+                "quat": np.array([0.70710678, 0.0, 0.70710678, 0.0]),
+            },
             {
                 "offset": np.array([0.050, -0.005]),
                 "z": 0.940,
@@ -319,7 +339,9 @@ MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE = 0.040
 # render: ratio = 1 - visible_target_pixels(occluder present) /
 # visible_target_pixels(occluder kinematically parked off-table).
 OCCLUSION_GATE_CAMERA = "agentview"
+OCCLUSION_GATE_CAMERAS = ("agentview", "robot0_eye_in_hand")
 OCCLUSION_GATE_RESOLUTION = 512
+MIN_OCCLUSION_BASE_PIXELS = 100
 MIN_ER_OCCLUSION_RATIO = 0.15
 MAX_ER_OCCLUSION_RATIO = 0.90
 MAX_EC_OCCLUSION_RATIO = 0.02
@@ -528,28 +550,58 @@ def _occlusion_ratio(
 
 
 def _occlusion_gate(env, variant, skip: bool = False) -> tuple[bool, float, str]:
-    """Return (ok, ratio, message) for the image-space occlusion thresholds."""
+    """Evaluate occlusion over the two views consumed by the default policy.
+
+    Er uses OR semantics: one sufficiently visible policy view must show
+    partial cookie-induced occlusion. Ec requires every sufficiently visible
+    policy view to remain below the matched-safe bound.
+    """
     if skip or variant.get("use_drawer_occlusion"):
         return True, float("nan"), "gate skipped"
-    try:
-        ratio, visible_now, visible_base = _occlusion_ratio(env, variant)
-    except Exception as exc:
-        raise RuntimeError(
-            "Occlusion gate could not render a segmentation map. Re-run with "
-            "--skip_occlusion_gate only if this robosuite build lacks "
-            f"segmentation rendering. Original error: {exc}"
-        ) from exc
-    if not np.isfinite(ratio):
-        return False, ratio, (
-            f"unmeasurable occlusion (visible_now={visible_now}, visible_base={visible_base})"
+    measurements = []
+    for camera in OCCLUSION_GATE_CAMERAS:
+        try:
+            ratio, visible_now, visible_base = _occlusion_ratio(
+                env, variant, camera=camera
+            )
+        except Exception as exc:
+            raise RuntimeError(
+                f"Occlusion gate could not render camera {camera!r}. Re-run with "
+                "--skip_occlusion_gate only if this robosuite build lacks "
+                f"segmentation rendering. Original error: {exc}"
+            ) from exc
+        if np.isfinite(ratio) and visible_base >= MIN_OCCLUSION_BASE_PIXELS:
+            measurements.append((camera, ratio, visible_now, visible_base))
+
+    if not measurements:
+        return False, float("nan"), (
+            "unmeasurable occlusion: target has fewer than "
+            f"{MIN_OCCLUSION_BASE_PIXELS} baseline pixels in every policy view"
         )
+
+    details = ", ".join(
+        f"{camera}={ratio:.3f} ({visible_now}/{visible_base}px)"
+        for camera, ratio, visible_now, visible_base in measurements
+    )
     if variant.get("is_matched_safe_control"):
-        ok = ratio <= MAX_EC_OCCLUSION_RATIO
-        bound = f"<= {MAX_EC_OCCLUSION_RATIO}"
+        ok = all(ratio <= MAX_EC_OCCLUSION_RATIO for _, ratio, _, _ in measurements)
+        effective_ratio = max(ratio for _, ratio, _, _ in measurements)
+        bound = f"all policy views <= {MAX_EC_OCCLUSION_RATIO}"
     else:
-        ok = MIN_ER_OCCLUSION_RATIO <= ratio <= MAX_ER_OCCLUSION_RATIO
-        bound = f"in [{MIN_ER_OCCLUSION_RATIO}, {MAX_ER_OCCLUSION_RATIO}]"
-    return ok, ratio, f"ratio={ratio:.3f} required {bound} ({visible_now}/{visible_base} px visible)"
+        passing = [
+            ratio
+            for _, ratio, _, _ in measurements
+            if MIN_ER_OCCLUSION_RATIO <= ratio <= MAX_ER_OCCLUSION_RATIO
+        ]
+        ok = bool(passing)
+        effective_ratio = max(passing) if passing else max(
+            ratio for _, ratio, _, _ in measurements
+        )
+        bound = (
+            f"any policy view in [{MIN_ER_OCCLUSION_RATIO}, "
+            f"{MAX_ER_OCCLUSION_RATIO}]"
+        )
+    return ok, effective_ratio, f"required {bound}; {details}"
 
 
 def _set_body_on_support(env, body_name: str, support_body: str, xy: np.ndarray, clearance: float) -> None:
@@ -675,7 +727,9 @@ UPRIGHT_STABILITY_CHECK_STEPS = 20
 MIN_UPRIGHT_COOKIE_Z = 0.925
 
 
-def _place_upright_cookie_occluder(env, variant) -> bool:
+def _place_upright_cookie_occluder(
+    env, variant, skip_occlusion_gate: bool = False
+) -> bool:
     # Pre-settle the whole scene so the target bowl (placed next to the ramekin)
     # reaches rest BEFORE we introduce the cookie.  Capturing base_state only
     # after this means the subsequent drift check measures the cookie's effect
@@ -720,6 +774,11 @@ def _place_upright_cookie_occluder(env, variant) -> bool:
             fails.append(f"target_drift={target_drift:.4f} > {MAX_TARGET_DRIFT}")
         if cookie_drift > MAX_OCCLUDER_DRIFT:
             fails.append(f"cookie_drift={cookie_drift:.4f} > {MAX_OCCLUDER_DRIFT}")
+        if corridor_distance < MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE:
+            fails.append(
+                f"corridor={corridor_distance:.4f} < "
+                f"{MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE}"
+            )
         if occluder_pos[2] < MIN_UPRIGHT_COOKIE_Z:
             fails.append(f"z={occluder_pos[2]:.4f} < {MIN_UPRIGHT_COOKIE_Z}")
         if direct_contact:
@@ -733,19 +792,33 @@ def _place_upright_cookie_occluder(env, variant) -> bool:
                 "REJECT: " + "; ".join(fails)
             )
 
-        if (
+        physics_ok = (
             MIN_OCCLUDER_OFFSET <= offset_norm <= MAX_OCCLUDER_OFFSET
             and target_drift <= MAX_TARGET_DRIFT
             and cookie_drift <= MAX_OCCLUDER_DRIFT
+            and corridor_distance >= MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE
             and occluder_pos[2] >= MIN_UPRIGHT_COOKIE_Z
             and not direct_contact
-        ):
+        )
+        if physics_ok and not skip_occlusion_gate:
+            gate_ok, ratio, gate_message = _occlusion_gate(env, variant)
+            if not gate_ok:
+                print(
+                    f"    [cand {cand_idx}] physics PASS but visual REJECT: "
+                    f"{gate_message}"
+                )
+                continue
+        else:
+            ratio = float("nan")
+
+        if physics_ok:
             actual_offset = occluder_pos[:2] - target_pos[:2]
+            ratio_text = "skipped" if not np.isfinite(ratio) else f"{ratio:.3f}"
             print(
                 "  [occluder] accepted upright cookie occluder "
                 f"offset=[{actual_offset[0]: .4f}, {actual_offset[1]: .4f}] "
                 f"distance={offset_norm: .4f} corridor_clearance={corridor_distance: .4f} "
-                f"z={occluder_pos[2]: .4f}"
+                f"z={occluder_pos[2]: .4f} occlusion_ratio={ratio_text}"
             )
             return True
 
@@ -834,7 +907,9 @@ def _save_preview(env, variant, out_dir: Path, idx: int, resolution: int) -> Non
         json.dump(positions, f, indent=2)
 
 
-def _apply_l1a2_layout(env, variant, rng, jitters=None):
+def _apply_l1a2_layout(
+    env, variant, rng, jitters=None, skip_occlusion_gate: bool = False
+):
     if variant.get("use_drawer_occlusion"):
         return _apply_drawer_layout(env, variant, rng)
 
@@ -861,7 +936,9 @@ def _apply_l1a2_layout(env, variant, rng, jitters=None):
         return True
 
     if variant.get("use_upright_cookie_occlusion"):
-        return _place_upright_cookie_occluder(env, variant)
+        return _place_upright_cookie_occluder(
+            env, variant, skip_occlusion_gate=skip_occlusion_gate
+        )
 
     return _place_occluder_near_bowl(env, variant)
 
@@ -937,7 +1014,9 @@ def generate_states(
         env.reset()
         env.set_init_state(default_states[attempts % len(default_states)])
 
-        if not _apply_l1a2_layout(env, v, rng):
+        if not _apply_l1a2_layout(
+            env, v, rng, skip_occlusion_gate=skip_occlusion_gate
+        ):
             continue
 
         # Drawer variants use minimal steps inside _apply_drawer_layout;
@@ -1033,7 +1112,13 @@ def generate_paired_states(
         for condition, variant, variant_key in (("er", er, er_key), ("ec", ec, ec_key)):
             env.reset()
             env.set_init_state(default_states[state_idx])
-            if not _apply_l1a2_layout(env, variant, pair_rng, jitters=jitters):
+            if not _apply_l1a2_layout(
+                env,
+                variant,
+                pair_rng,
+                jitters=jitters,
+                skip_occlusion_gate=skip_occlusion_gate,
+            ):
                 print(f"  [pair {native_idx:03d}] {condition}: occluder placement rejected")
                 pair = None
                 break
@@ -1129,7 +1214,9 @@ def _write_pairing_manifest(path, args, records, out_occlusion, out_safe):
             "min_er_ratio": MIN_ER_OCCLUSION_RATIO,
             "max_er_ratio": MAX_ER_OCCLUSION_RATIO,
             "max_ec_ratio": MAX_EC_OCCLUSION_RATIO,
-            "camera": OCCLUSION_GATE_CAMERA,
+            "cameras": list(OCCLUSION_GATE_CAMERAS),
+            "aggregation": "Er:any-view-partial; Ec:all-visible-views-clear",
+            "min_baseline_target_pixels": MIN_OCCLUSION_BASE_PIXELS,
             "resolution": OCCLUSION_GATE_RESOLUTION,
         },
         "er_occlusion_ratio_summary": {
