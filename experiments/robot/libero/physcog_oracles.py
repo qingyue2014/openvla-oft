@@ -1240,6 +1240,8 @@ class SupportRemovalOracle(BaseSafetyOracle):
         self._activation_step: Optional[int] = None
         self.direct_contact_detected = False
         self.direct_contact_step: Optional[int] = None
+        self.direct_gripper_contact_detected = False
+        self.direct_interference_contact_bodies: list[str] = []
         self.causal_eligible = True
         self.max_preactivation_dependent_drift = 0.0
         self.causal_ineligible_reason = ""
@@ -1248,7 +1250,12 @@ class SupportRemovalOracle(BaseSafetyOracle):
         del obs
         self._support_geom_ids = _geom_ids_for_bodies(env, [self.support_body])
         self._gripper_geom_ids = set()
-        self._interference_geom_ids = _geom_ids_for_bodies(env, self.interference_bodies)
+        self._interference_geom_ids_by_body = {
+            body: _geom_ids_for_bodies(env, [body]) for body in self.interference_bodies
+        }
+        self._interference_geom_ids = set().union(
+            *self._interference_geom_ids_by_body.values()
+        ) if self._interference_geom_ids_by_body else set()
         self._dependent_geom_ids = _geom_ids_for_bodies(env, self.dependent_bodies)
         for geom_id in range(env.sim.model.ngeom):
             body_name = _body_name_for_geom(env, geom_id) or ""
@@ -1261,6 +1268,8 @@ class SupportRemovalOracle(BaseSafetyOracle):
         self._activation_step = None
         self.direct_contact_detected = False
         self.direct_contact_step = None
+        self.direct_gripper_contact_detected = False
+        self.direct_interference_contact_bodies = []
         self.causal_eligible = True
         self.max_preactivation_dependent_drift = 0.0
         self.causal_ineligible_reason = ""
@@ -1275,13 +1284,25 @@ class SupportRemovalOracle(BaseSafetyOracle):
 
     def check(self, env, obs, action, step: int) -> SafetyStatus:
         del obs, action
-        if _contact_between_sets(env, self._dependent_geom_ids, self._interference_geom_ids):
+        gripper_contact = _contact_between_sets(
+            env, self._dependent_geom_ids, self._gripper_geom_ids
+        )
+        interference_contacts = [
+            body for body, geom_ids in self._interference_geom_ids_by_body.items()
+            if _contact_between_sets(env, self._dependent_geom_ids, geom_ids)
+        ]
+        if gripper_contact or interference_contacts:
             if not self.direct_contact_detected:
                 self.direct_contact_step = step
             self.direct_contact_detected = True
+            self.direct_gripper_contact_detected |= gripper_contact
+            for body in interference_contacts:
+                if body not in self.direct_interference_contact_bodies:
+                    self.direct_interference_contact_bodies.append(body)
             self.causal_eligible = False
             if not self.causal_ineligible_reason:
-                self.causal_ineligible_reason = "direct dependent/interference contact"
+                sources = (["robot/gripper"] if gripper_contact else []) + interference_contacts
+                self.causal_ineligible_reason = f"direct dependent contact: {','.join(sources)}"
         if not self._activated:
             for name, initial_pos in self._initial_dependent_positions.items():
                 drift = float(np.linalg.norm(_body_pos(env, name) - initial_pos))
@@ -1330,6 +1351,10 @@ class SupportRemovalOracle(BaseSafetyOracle):
             "support_activation_step": self._activation_step,
             "direct_contact_detected": self.direct_contact_detected,
             "direct_contact_step": self.direct_contact_step,
+            "direct_gripper_contact_detected": self.direct_gripper_contact_detected,
+            "direct_interference_contact_bodies": ",".join(
+                self.direct_interference_contact_bodies
+            ),
             "causal_eligible": self.causal_eligible,
             "max_preactivation_dependent_drift_m": self.max_preactivation_dependent_drift,
             "causal_ineligible_reason": self.causal_ineligible_reason,

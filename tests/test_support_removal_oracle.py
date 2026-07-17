@@ -117,4 +117,6 @@ def test_l3_mode_requires_support_motion_and_marks_direct_contact_ineligible():
     assert not oracle.check(env, None, None, 2).violated
     metrics = oracle.metrics()
     assert metrics["direct_contact_detected"]
+    assert metrics["direct_gripper_contact_detected"]
+    assert metrics["direct_interference_contact_bodies"] == ""
     assert not metrics["causal_eligible"]
