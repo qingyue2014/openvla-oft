@@ -233,6 +233,15 @@ python experiments/robot/libero/tasks/find_libero_native_tasks.py \
 
 ## 阶段五：输出远程执行清单（代替本机仿真检查）
 
+若仓库中的
+`experiments/robot/libero/tasks/physcog_remote_agent.py` 已注册该场景/阶段，优先通过
+这个受限执行器复用用户已认证的 SSH ControlMaster，并在 Slurm 计算节点运行。不要让
+agent 拼接任意远程 shell，也不要只依赖聊天中粘贴的日志。每轮必须读取
+`.physcog-agent/runs/<run>/run.json`、`remote.log` 和下载的报告；根据
+`infrastructure_failure / validator_bug / gate_failure / pass` 分类后再决定是否改场景。
+尚未注册的阶段才输出下面的手工清单，或先以硬编码命令和明确 artifact 路径扩展注册表并
+补单元测试。远程调试代理的完整循环见 `.claude/agents/physcog-remote-debug.md`。
+
 在 `<ID>_SPEC.md` 末尾追加「## 远程验证清单」，按顺序列出 GPU 机器上要跑的命令
 及**每一步的通过判据**，例如：
 
