@@ -16,7 +16,7 @@ import re
 import shlex
 import subprocess
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
@@ -225,6 +225,39 @@ def build_sync_script(cfg: RemoteConfig, remote_job_dir: str, sync: bool = True)
     return "\n".join(lines)
 
 
+def build_isolated_sync_script(
+    base_cfg: RemoteConfig,
+    execution_repo: str,
+    remote_job_dir: str,
+    commit: str,
+) -> str:
+    """Prepare an immutable per-commit worktree without touching a dirty checkout."""
+    if re.fullmatch(r"[0-9a-f]{7,40}", commit) is None:
+        raise ValueError(f"invalid git commit for isolated worktree: {commit!r}")
+    worktree_parent = str(Path(execution_repo).parent)
+    lines = [
+        "set -euo pipefail",
+        f"cd {shlex.quote(base_cfg.remote_repo)}",
+        shell_join(("git", "fetch", "origin", base_cfg.branch)),
+        shell_join(("mkdir", "-p", worktree_parent)),
+        (
+            f"if [ ! -e {shlex.quote(execution_repo + '/.git')} ]; then "
+            f"git worktree add --detach {shlex.quote(execution_repo)} {shlex.quote(commit)}; fi"
+        ),
+        (
+            f"test \"$(git -C {shlex.quote(execution_repo)} rev-parse HEAD)\" = "
+            f"{shlex.quote(commit)}"
+        ),
+        shell_join(("mkdir", "-p", remote_job_dir)),
+        "printf '__PHYSCOG_LOGIN_NODE__=%s\\n' \"$(hostname)\"",
+        (
+            "printf '__PHYSCOG_COMMIT__=%s\\n' "
+            f"\"$(git -C {shlex.quote(execution_repo)} rev-parse HEAD)\""
+        ),
+    ]
+    return "\n".join(lines)
+
+
 def ssh_argv(cfg: RemoteConfig, remote_script: str) -> list[str]:
     return [
         "ssh",
@@ -405,7 +438,18 @@ def _config_from_ledger(ledger: Mapping[str, object]) -> RemoteConfig:
 
 
 def command_probe(args: argparse.Namespace) -> int:
-    cfg = _config_from_args(args)
+    base_cfg = _config_from_args(args)
+    cfg = base_cfg
+    local_commit = _local_commit()
+    if args.isolated_worktree:
+        if args.no_sync:
+            raise SystemExit("--isolated-worktree cannot be combined with --no-sync")
+        if local_commit is None:
+            raise SystemExit("--isolated-worktree requires a local git commit")
+        execution_repo = (
+            f"{base_cfg.remote_repo.rstrip('/')}/.physcog-agent/worktrees/{local_commit}"
+        )
+        cfg = replace(base_cfg, remote_repo=execution_repo)
     remote = " && ".join(
         (
             "printf '__PHYSCOG_LOGIN_NODE__=%s\\n' \"$(hostname)\"",
@@ -441,7 +485,11 @@ def command_run(args: argparse.Namespace) -> int:
     batch_script = build_batch_script(
         cfg, spec, args.count, key[0], key[1], remote_log
     )
-    sync_script = build_sync_script(cfg, remote_job_dir, sync=not args.no_sync)
+    sync_script = (
+        build_isolated_sync_script(base_cfg, cfg.remote_repo, remote_job_dir, local_commit)
+        if args.isolated_worktree
+        else build_sync_script(cfg, remote_job_dir, sync=not args.no_sync)
+    )
     submit_script = "\n".join(
         (
             "source /etc/profile.d/modules.sh",
@@ -494,7 +542,7 @@ def command_run(args: argparse.Namespace) -> int:
         "job_id": job_id,
         "remote_job_script": remote_job_script,
         "remote_log": remote_log,
-        "local_commit": _local_commit(),
+        "local_commit": local_commit,
         "remote_markers": parse_markers(sync_output),
         "fetched_artifacts": [],
         "missing_artifacts": [],
@@ -625,6 +673,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--phase", required=True)
     run.add_argument("--count", type=int, default=8)
     run.add_argument("--no-sync", action="store_true", help="Do not fast-forward the remote checkout")
+    run.add_argument(
+        "--isolated-worktree",
+        action="store_true",
+        help="Run from a per-commit remote worktree, preserving a dirty shared checkout",
+    )
     run.add_argument("--state-root", default=".physcog-agent/runs")
     run.set_defaults(func=command_run)
 

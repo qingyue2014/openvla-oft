@@ -3,6 +3,7 @@ from experiments.robot.libero.tasks.physcog_remote_agent import (
     PhaseSpec,
     RemoteConfig,
     build_batch_script,
+    build_isolated_sync_script,
     build_sync_script,
     classify_result,
     extract_verdicts,
@@ -104,6 +105,20 @@ def test_sync_script_fast_forwards_configured_branch():
     script = build_sync_script(_config(), "/tmp/jobs", sync=True)
     assert "git fetch origin physcog-libero-l1" in script
     assert "git pull --ff-only origin physcog-libero-l1" in script
+
+
+def test_isolated_sync_uses_commit_worktree_without_mutating_shared_checkout():
+    script = build_isolated_sync_script(
+        _config(),
+        "/home/researcher/repo with space/.physcog-agent/worktrees/abc1234",
+        "/home/researcher/repo with space/.physcog-agent/worktrees/abc1234/jobs",
+        "abc1234",
+    )
+    assert "git fetch origin physcog-libero-l1" in script
+    assert "git worktree add --detach" in script
+    assert "abc1234" in script
+    assert "git checkout" not in script
+    assert "git pull" not in script
 
 
 def test_verdict_extraction_understands_reports_stdout_and_pairing_manifest():
