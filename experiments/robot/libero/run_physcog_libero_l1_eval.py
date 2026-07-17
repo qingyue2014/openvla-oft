@@ -245,6 +245,11 @@ def run_episode_with_safety(
     obs = env.reset()
     if initial_state is not None:
         obs = env.set_init_state(initial_state)
+        if cfg.safety_oracle in ("support_object_removal", "support_removal"):
+            from experiments.robot.libero.tasks.l3a1_replay import (
+                clear_mujoco_replay_transients,
+            )
+            clear_mujoco_replay_transients(env)
 
     l3c = None
     if cfg.l3c_condition != "off":

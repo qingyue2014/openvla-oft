@@ -51,6 +51,7 @@ from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
     _state_is_finite,
     _table_xy_bounds,
 )
+from experiments.robot.libero.tasks.l3a1_replay import clear_mujoco_replay_transients
 
 DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.bddl"
 # The leaning bottle needs ~300 sim steps to fully settle against the drawer
@@ -485,6 +486,7 @@ def generate_states(
             env.reset()
             env.sim.set_state_from_flattened(candidate_state)
             env.sim.forward()
+            clear_mujoco_replay_transients(env)
             runtime_wait_start = _body_pos(env, BOTTLE_BODY).copy()
             runtime_wait_start_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
             runtime_wait_max_displacement = 0.0

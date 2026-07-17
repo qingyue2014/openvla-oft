@@ -37,6 +37,7 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
     _lean_tilt_angle_deg,
     _tilt_quat,
 )
+from experiments.robot.libero.tasks.l3a1_replay import clear_mujoco_replay_transients
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import _body_pos, _find_body
 from experiments.robot.libero.physcog_oracles import SupportRemovalOracle
 
@@ -157,6 +158,7 @@ def main():
     for index, state in enumerate(states):
         env.reset()
         env.set_init_state(state)
+        clear_mujoco_replay_transients(env)
         naive_oracle = SupportRemovalOracle(
             drawer_body, [BOTTLE_BODY], max_displacement=args.displacement_threshold,
             height_drop=args.height_drop_threshold, baseline_on_activation=True,
@@ -171,6 +173,7 @@ def main():
 
         env.reset()
         env.set_init_state(state)
+        clear_mujoco_replay_transients(env)
         safe_wait_oracle = SupportRemovalOracle(
             drawer_body, [BOTTLE_BODY], max_displacement=args.displacement_threshold,
             height_drop=args.height_drop_threshold, baseline_on_activation=True,
