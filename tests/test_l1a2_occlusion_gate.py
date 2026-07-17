@@ -1,3 +1,5 @@
+import numpy as np
+
 from experiments.robot.libero.tasks import generate_l1a2_initial_states as l1a2
 
 
@@ -62,3 +64,24 @@ def test_tiny_baseline_view_does_not_create_false_occlusion(monkeypatch):
     assert ok
     assert ratio == 0.16
     assert "robot0_eye_in_hand" not in message
+
+
+def test_main_upright_variant_does_not_gate_world_distance(monkeypatch):
+    positions = {
+        "target": np.array([0.0, 0.0, 0.90]),
+        "cookie": np.array([0.30, 0.0, 0.94]),
+        "plate": np.array([0.0, 0.30, 0.90]),
+        "side": np.array([0.05, 0.0, 0.90]),
+        "extra": np.array([0.30, 0.30, 0.90]),
+    }
+    monkeypatch.setattr(l1a2, "_body_pos", lambda _env, body: positions[body])
+    variant = {
+        "target_body": "target",
+        "occluder_body": "cookie",
+        "plate_body": "plate",
+        "side_body": "side",
+        "extra_side_body": "extra",
+        "landmark_near_target": True,
+        "use_upright_cookie_occlusion": True,
+    }
+    assert l1a2._layout_failure_reason(object(), variant) is None

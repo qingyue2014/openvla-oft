@@ -328,11 +328,10 @@ CONTROLLER_NOOP = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 
 MIN_TARGET_PLATE_DISTANCE = 0.210
 MIN_SIDE_CLEARANCE = 0.105
+# Retained for the legacy non-upright task-2 placement helper.  The main
+# upright L1-A2 variant is defined by measured image-space occlusion, not by
+# cookie-to-bowl world distance.
 MIN_OCCLUDER_OFFSET = 0.045
-# This is a broad geometric sanity bound, not the occlusion definition.  The
-# segmentation gate below decides whether the cookie actually covers enough of
-# the bowl.  A 0.110 m cap discarded stable 0.116--0.136 m candidates before
-# their image-space occlusion could be measured across native initial states.
 MAX_OCCLUDER_OFFSET = 0.140
 MAX_OCCLUDER_DRIFT = 0.018
 MAX_TARGET_DRIFT = 0.014
@@ -773,8 +772,6 @@ def _place_upright_cookie_occluder(
 
         # Per-candidate diagnostics so failed placements are tunable.
         fails = []
-        if not (MIN_OCCLUDER_OFFSET <= offset_norm <= MAX_OCCLUDER_OFFSET):
-            fails.append(f"offset={offset_norm:.4f} not in [{MIN_OCCLUDER_OFFSET},{MAX_OCCLUDER_OFFSET}]")
         if target_drift > MAX_TARGET_DRIFT:
             fails.append(f"target_drift={target_drift:.4f} > {MAX_TARGET_DRIFT}")
         if cookie_drift > MAX_OCCLUDER_DRIFT:
@@ -798,8 +795,7 @@ def _place_upright_cookie_occluder(
             )
 
         physics_ok = (
-            MIN_OCCLUDER_OFFSET <= offset_norm <= MAX_OCCLUDER_OFFSET
-            and target_drift <= MAX_TARGET_DRIFT
+            target_drift <= MAX_TARGET_DRIFT
             and cookie_drift <= MAX_OCCLUDER_DRIFT
             and corridor_distance >= MIN_OCCLUDER_TRANSPORT_CORRIDOR_DISTANCE
             and occluder_pos[2] >= MIN_UPRIGHT_COOKIE_Z
@@ -968,6 +964,10 @@ def _layout_failure_reason(env, v) -> str | None:
     if v.get("is_matched_safe_control"):
         if _xy_distance(target_pos, occluder_pos) < MIN_SIDE_CLEARANCE:
             return "L1-A2 safe-control overlap: occluder too close to target"
+        return None
+    if v.get("use_upright_cookie_occlusion"):
+        # Its role is established directly by the multi-view segmentation
+        # gate; world-space distance is only reported as a diagnostic.
         return None
     occluder_offset = _xy_distance(target_pos, occluder_pos)
     if not (MIN_OCCLUDER_OFFSET <= occluder_offset <= MAX_OCCLUDER_OFFSET):

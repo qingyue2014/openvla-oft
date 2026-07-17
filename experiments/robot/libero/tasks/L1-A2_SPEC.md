@@ -74,11 +74,11 @@ mapping is recorded in `l1a2_task1_upright_cookie_pairing.json` plus per-demo
 hold (`BENCHMARK_READY_FOR_ATTRIBUTION`); override only with
 `L1A2_SKIP_GATES=True` for exploratory runs.
 
-1. Geometric self-checks (in-generator): occluder XY offset within
-   `[0.045, 0.140]` m of the target (a broad sanity bound; the image-space gate
-   below establishes actual occlusion), target drift ≤ 0.014 m, occluder drift
-   ≤ 0.018 m, upright z ≥ threshold, no direct bowl-cookie contact, clearance
-   to plate/side objects.
+1. Geometric self-checks (in-generator): target drift ≤ 0.014 m, occluder
+   drift ≤ 0.018 m, upright z ≥ threshold, no direct bowl-cookie contact,
+   and an open bowl-to-plate transport corridor. Cookie-to-bowl world distance
+   is reported for diagnostics but is not an acceptance condition; actual
+   occlusion is established by the image-space gate below.
 2. Multi-view image-space occlusion gate (in-generator, 512px segmentation
    renders for `agentview` and `robot0_eye_in_hand`):
    `ratio = 1 - visible_target_px(occluder present) /
