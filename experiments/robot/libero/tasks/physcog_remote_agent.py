@@ -114,10 +114,10 @@ def build_batch_script(
         f"#SBATCH --time={cfg.time_limit}",
         f"#SBATCH --output={remote_log}",
         f"#SBATCH --error={remote_log}",
-        "set -uo pipefail",
         "source /etc/profile.d/modules.sh",
         "module avail",
         'module load slurm "nvhpc-hpcx-cuda12/23.11"',
+        "set -uo pipefail",
         f"cd {shlex.quote(cfg.remote_repo)}",
         f"export PATH={shlex.quote(cfg.remote_python_bin)}:$PATH",
         *env,
@@ -367,9 +367,9 @@ def command_run(args: argparse.Namespace) -> int:
     sync_script = build_sync_script(cfg, remote_job_dir, sync=not args.no_sync)
     submit_script = "\n".join(
         (
-            "set -euo pipefail",
             "source /etc/profile.d/modules.sh",
             "module load slurm",
+            "set -euo pipefail",
             f"cd {shlex.quote(cfg.remote_repo)}",
             shell_join(("sbatch", "--parsable", remote_job_script)),
         )
