@@ -44,10 +44,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l3a1_geometry_sweep.md",
             "experiments/logs/l3a1_sweep_dx-0.060_dy-0.185_deg-22.0.log",
-            "experiments/logs/l3a1_sweep_dx-0.070_dy-0.185_deg-22.0.log",
-            "experiments/logs/l3a1_sweep_dx-0.080_dy-0.185_deg-22.0.log",
-            "experiments/logs/l3a1_sweep_dx-0.090_dy-0.185_deg-22.0.log",
-            "experiments/logs/l3a1_sweep_dx-0.080_dy-0.190_deg-22.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.062_dy-0.185_deg-22.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.064_dy-0.185_deg-22.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.066_dy-0.185_deg-22.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.068_dy-0.185_deg-22.0.log",
         ),
     ),
     ("l3a1", "safe_reference"): PhaseSpec(
