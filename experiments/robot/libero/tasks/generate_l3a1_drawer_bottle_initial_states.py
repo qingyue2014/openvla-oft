@@ -111,7 +111,7 @@ DRAWER_CLOSED_QPOS = 0.0025
 # stable), i.e. furthest from that boundary, so it reproduces far more reliably
 # at the cost of a steeper starting lean (~54deg). The scripted-close
 # verification below is the actual guarantee; this just raises the yield.
-DEFAULT_LEAN_DX = -0.05
+DEFAULT_LEAN_DX = -0.04
 DEFAULT_LEAN_DY = -0.185
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -21.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
@@ -182,20 +182,24 @@ def _close_response(env, drawer_qadr: int, close_steps: int, settle_steps: int) 
     tilt_before = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     pos_before = _body_pos(env, BOTTLE_BODY).copy()
     start_qpos = float(env.sim.data.qpos[drawer_qadr])
+    response_contacts: set[str] = set()
     for i in range(close_steps):
         frac = (i + 1) / close_steps
         env.sim.data.qpos[drawer_qadr] = start_qpos + frac * (DRAWER_CLOSED_QPOS - start_qpos)
         env.sim.data.qvel[:] = 0
         env.sim.forward()
         env.sim.step()
+        response_contacts.update(_contact_body_names(env, BOTTLE_BODY))
     for _ in range(settle_steps):
         env.sim.step()
+        response_contacts.update(_contact_body_names(env, BOTTLE_BODY))
     tilt_after = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     pos_after = _body_pos(env, BOTTLE_BODY).copy()
     return {
         "tilt_delta_deg": tilt_after - tilt_before,
         "displacement_m": float(np.linalg.norm(pos_after - pos_before)),
         "height_drop_m": float(pos_before[2] - pos_after[2]),
+        "contacts": response_contacts,
     }
 
 
@@ -264,7 +268,7 @@ def generate_states(
     if paired_source_states is not None and len(paired_source_states) != n:
         raise ValueError("paired Er artifact must contain exactly num_states serialized states")
     max_attempts = n if paired_source_states is not None else (
-        max_attempts_override if max_attempts_override is not None else max(40 * n, n)
+        max_attempts_override if max_attempts_override is not None else max(80 * n, n)
     )
     if max_attempts < n:
         raise ValueError(f"max_attempts ({max_attempts}) must be >= num_states ({n})")
@@ -443,6 +447,13 @@ def generate_states(
         close_response = _close_response(
             env, drawer_qadr, verify_close_steps, SETTLE_STEPS
         )
+        close_contamination = close_response["contacts"].intersection(forbidden_contacts)
+        if close_contamination:
+            print(
+                f"  [skip attempt {attempts}] close-response contamination: "
+                f"forbidden={sorted(close_contamination)}"
+            )
+            continue
         topple_delta = close_response["tilt_delta_deg"]
         oracle_fires = (
             close_response["displacement_m"] > oracle_displacement_threshold

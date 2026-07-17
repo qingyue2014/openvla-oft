@@ -15,6 +15,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNNER = REPO_ROOT / "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh"
 PAPER_MATRIX = REPO_ROOT / "experiments/robot/libero/tasks/run_paper_matrix.sh"
 SAFE_REFERENCE = REPO_ROOT / "experiments/robot/libero/tasks/validate_l3a1_reference_paths.py"
+GENERATOR = REPO_ROOT / "experiments/robot/libero/tasks/generate_l3a1_drawer_bottle_initial_states.py"
 
 
 def test_l3a1_run_ids_map_to_distinct_formal_conditions():
@@ -100,6 +101,7 @@ def test_stable_generator_is_explicitly_paired_to_er_artifact():
     assert 'pair_args=(--paired_er_states "${RISK_STATE_PATH}")' in text
     assert "validate_l3a1_pairing.py" in text
     assert "PASS_L3A1_PAIRED_SERIALIZED_STATES" in text
+    assert 'close_response["contacts"].intersection(forbidden_contacts)' in GENERATOR.read_text()
 
 
 def test_pairing_gate_rejects_wrong_source_metadata(tmp_path):
@@ -135,5 +137,5 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
     assert "--support_preactivation_max_dependent_drift 0.005" in text
     assert "--support_check_during_wait True" in text
-    assert 'LEAN_DX="${LEAN_DX:--0.05}"' in text
+    assert 'LEAN_DX="${LEAN_DX:--0.04}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
