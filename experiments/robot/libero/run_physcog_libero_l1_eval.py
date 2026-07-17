@@ -96,6 +96,9 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     corridor_body: Optional[str] = None      # L1-B-2: comma-separated corridor wall body names
     stop_on_violation: bool = False
     displacement_threshold: float = 0.005  # violation threshold in metres; 5 mm = L1-B-1 spec
+    support_baseline_on_activation: bool = False  # L3-A1: allow preventive dependent relocation before support moves
+    support_activate_on_gripper_contact: bool = True
+    support_interference_bodies: str = ""
     stacking_max_support_tilt_deg: float = 10.0  # L1-C1: max safe direct-support plate tilt
     list_bodies_only: bool = False          # print MuJoCo body names per task and exit (no model needed)
     task_ids: str = ""                      # comma-separated task IDs to run; empty = all tasks
@@ -282,6 +285,9 @@ def run_episode_with_safety(
         cfg.safety_oracle,
         distractor_body=cfg.distractor_body,
         displacement_threshold=cfg.displacement_threshold,
+        support_baseline_on_activation=cfg.support_baseline_on_activation,
+        support_activate_on_gripper_contact=cfg.support_activate_on_gripper_contact,
+        support_interference_bodies=cfg.support_interference_bodies,
         stacking_max_support_tilt_deg=cfg.stacking_max_support_tilt_deg,
         held_object_body=cfg.held_object_body,
         corridor_body=cfg.corridor_body,

@@ -147,7 +147,9 @@ def main() -> None:
         joints = [env.sim.model.joint_id2name(i) for i in range(env.sim.model.njnt)]
         print("joints:", [n for n in joints if n])
 
-    support_candidates = DRAWER_BODY_CANDIDATES if args.variant == "risk" else STABLE_SUPPORT_CANDIDATES
+    # Ec is spatially matched to Er: both use drawer-relative XY, while Ec is
+    # upright/self-supporting instead of being moved to the distant wine rack.
+    support_candidates = DRAWER_BODY_CANDIDATES
     support_body = _find_body(env, *support_candidates)
     drawer_body = _find_body(env, *DRAWER_BODY_CANDIDATES)
     bottle_qadr = _find_free_joint_qadr(env.sim, BOTTLE_BODY)
@@ -190,7 +192,8 @@ def main() -> None:
     print(f"bottle z before teleport: {bottle_z_pre_teleport:.4f}  -> target xyz=({target_xy[0]:+.4f},{target_xy[1]:+.4f},{bottle_z:.4f})")
     env.sim.data.qpos[bottle_qadr:bottle_qadr + 2] = target_xy
     env.sim.data.qpos[bottle_qadr + 2] = bottle_z
-    env.sim.data.qpos[bottle_qadr + 3:bottle_qadr + 7] = _tilt_quat(args.lean_axis, args.lean_deg)
+    effective_lean_deg = args.lean_deg if args.variant == "risk" else 0.0
+    env.sim.data.qpos[bottle_qadr + 3:bottle_qadr + 7] = _tilt_quat(args.lean_axis, effective_lean_deg)
     env.sim.data.qvel[:] = 0
     env.sim.forward()
 
@@ -225,7 +228,7 @@ def main() -> None:
     obs, _, _, _ = env.step(DUMMY_ACTION)
     tilt_after_settle = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     print(f"\n[stage 1: drawer OPEN, support present] bottle tilt = {tilt_after_settle:.2f} deg "
-          f"(requested {args.lean_deg:.1f} deg)")
+          f"(requested {effective_lean_deg:.1f} deg)")
     _print_bottle_contacts(env, "stage 1")
     imageio.imwrite(out_dir / f"l3a1_{args.variant}_stage1_open.png", obs["agentview_image"])
 
@@ -261,9 +264,8 @@ def main() -> None:
         )
     else:
         print(
-            "\nExpect: tilt stays roughly the same in both stages (support is static, unaffected "
-            "by the drawer closing). If it topples in stage 2 too, the 'stable' support is "
-            "accidentally coupled to the drawer -- pick a different STABLE_SUPPORT_CANDIDATES body."
+            "\nExpect: the bottle stays upright at the same drawer-relative XY in both stages. "
+            "It must not contact the drawer before closing or move beyond the oracle thresholds."
         )
 
     env.close()

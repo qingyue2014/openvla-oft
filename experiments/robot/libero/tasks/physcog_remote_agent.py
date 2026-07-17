@@ -29,6 +29,42 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l3a1", "check"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a1_risk_check.md",
+            "experiments/logs/l3a1_stable_check.md",
+            "experiments/robot/libero/tasks/l3a1_drawer_bottle_risk_initial_states.hdf5",
+            "experiments/robot/libero/tasks/l3a1_drawer_bottle_stable_initial_states.hdf5",
+        ),
+    ),
+    ("l3a1", "safe_reference"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "risk", "safe_reference"),
+        count_env="SAFE_REF_STATES",
+        artifacts=(
+            "experiments/logs/l3a1_safe_reference.md",
+            "experiments/logs/l3a1_safe_reference.csv",
+        ),
+    ),
+    ("l3a1", "smoke"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "smoke"),
+        count_env="SMOKE_TRIALS",
+        artifacts=("experiments/logs/experiment_records.csv",),
+    ),
+    ("l3a1", "formal"): PhaseSpec(
+        command=(
+            "env", "FAMILIES=l3a1", "SEEDS=42", "SAVE_VIDEO_MODE=none", "bash",
+            "experiments/robot/libero/tasks/run_paper_matrix.sh", "full",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a1_attribution.md",
+            "experiments/logs/experiment_records.csv",
+            "experiments/logs/experiment_records.md",
+            "experiments/logs/result_tables.md",
+        ),
+    ),
     ("l1a2", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l1a_evals.sh", "l1a2_check"),
         count_env="NUM_TRIALS",

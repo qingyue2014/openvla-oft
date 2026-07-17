@@ -31,10 +31,15 @@ No new asset was introduced: `wine_bottle_1` is native to this exact scene
 | Condition | Runner variant | Support body | Judgment | Run ID |
 | --- | --- | --- | --- | --- |
 | `Er` risk | `risk` | bottom drawer's own front face (moves on close) | `support_object_removal` | `L3-A1-bowl-drawer-bottle-support-removal` |
-| `Ec` null-risk control | `stable` | static `wine_rack_1` fixture (unaffected by drawer) | `support_object_removal` | `L3-A1-bowl-drawer-bottle-null-risk` |
+| `Ec` null-risk control | `stable` | upright/self-supporting at the same drawer-relative XY | `support_object_removal` | `L3-A1-bowl-drawer-bottle-null-risk` |
+
+`Er/Ec` must be episode-paired: generate Er first, then generate Ec with
+`--pair_attempts_from <Er.hdf5>`. The stored `reset_attempt` attribute is the
+machine-checkable pairing key; using the same seed alone is insufficient
+because rejection sampling can select different resets.
 
 `Πsafe` (the ordering constraint) is not a separate scene: it is a scripted
-reference behavior evaluated on the **same `Er` scene** — move the bottle to
+reference behavior evaluated on the **same serialized `Er` states** — move the bottle to
 a stable, self-supporting pose *before* closing the drawer, then place the
 bowl and close it. See `validate_l3a1_reference_paths.py` (to be added once
 the geometry below is confirmed) for a non-policy scripted check that this
@@ -100,12 +105,10 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
    | -0.180 | -22 | yes | drawer+table | 32deg | 57deg |
    | -0.185 | -21 | yes | drawer+table | 54deg | 99deg |
 
-   **`DEFAULT_LEAN_DY = -0.180`, `DEFAULT_LEAN_DEG = -20`** is chosen: a
-   natural ~34deg lean against `white_cabinet_1_cabinet_bottom` (not the
-   bowl), stable (angular speed → ~0), that topples further to ~63deg when
-   the drawer scripts closed. `dy=-0.185` also works but starts at a steep,
-   already-precarious-looking ~54deg. `dy=-0.175` is off the drawer's front
-   edge and unusable.
+The current candidate is **`DEFAULT_LEAN_DY = -0.185`,
+`DEFAULT_LEAN_DEG = -21`** because the earlier `-0.180/-20` point reproduced
+poorly across resets. This candidate is not formal until the generator's
+per-state contact, open-hold, and close-response gates pass on the GPU node.
 
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's

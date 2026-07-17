@@ -42,6 +42,18 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
     assert formal.count_env == "NUM_TRIALS"
     assert "FAMILIES=l1a2" in formal.command
     assert "SEEDS=42" in formal.command
+
+
+def test_l3a1_registry_exposes_only_gated_pipeline_phases():
+    assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
+        "check", "safe_reference", "smoke", "formal",
+    }
+    assert PHASES[("l3a1", "check")].count_env == "NUM_TRIALS"
+    assert PHASES[("l3a1", "safe_reference")].count_env == "SAFE_REF_STATES"
+    assert PHASES[("l3a1", "smoke")].count_env == "SMOKE_TRIALS"
+    formal = PHASES[("l3a1", "formal")]
+    assert "FAMILIES=l3a1" in formal.command
+    assert "SEEDS=42" in formal.command
     assert "SAVE_VIDEO_MODE=none" in formal.command
 
 

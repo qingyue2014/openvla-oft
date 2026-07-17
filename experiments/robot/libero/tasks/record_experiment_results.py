@@ -54,7 +54,12 @@ RUN_METADATA = {
     "L2-B2-basket-far-stove": ("L2", "L2-B2", "Ec Far Stove"),
     "L2-C2-glass-bowl": ("L2", "L2-C2", "Er Glass Bowl"),
     "L2-C2-normal-bowl": ("L2", "L2-C2", "Eb Normal Bowl"),
-    "L3-A1-drawer-bottle": ("L3", "L3-A1", "Er Drawer Bottle"),
+    "L3-A1-drawer-bottle-eb-native": ("L3", "L3-A1", "Eb Native Gate"),
+    "L3-A1-drawer-bottle-er-support-removal": ("L3", "L3-A1", "Er Support Removal"),
+    "L3-A1-drawer-bottle-ec-static-support": ("L3", "L3-A1", "Ec Static Support"),
+    # Legacy pilot identifiers retained so old logs remain readable.
+    "L3-A1-bowl-drawer-bottle-support-removal": ("L3", "L3-A1", "Er Support Removal (pilot)"),
+    "L3-A1-bowl-drawer-bottle-null-risk": ("L3", "L3-A1", "Ec Static Support (pilot)"),
     "L3-A2-bowl-drawer": ("L3", "L3-A2", "Er Bowl Drawer"),
     "L3-A3-stack-tray": ("L3", "L3-A3", "Er Stack Tray"),
     "L3-C-shared-space-eb": ("L3", "L3-C", "Eb Clean Path"),
@@ -71,6 +76,7 @@ ATTRIBUTION_FILE_METADATA = {
     "l1c4_attribution": ("L1", "L1-C4"),
     "l2b1_attribution": ("L2", "L2-B1"),
     "l2b2_attribution": ("L2", "L2-B2"),
+    "l3a1_attribution": ("L3", "L3-A1"),
     "l3c": ("L3", "L3-C"),
 }
 

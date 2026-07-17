@@ -43,7 +43,7 @@ NUM_TRIALS="${NUM_TRIALS:-50}"
 L2C2_TRIALS="${L2C2_TRIALS:-20}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 SCENE_SEED="${SCENE_SEED:-42}"
-FAMILIES="${FAMILIES:-l1a1 l1a2 l1b1 l1b2 l1b4 l2b2 l2c2}"
+FAMILIES="${FAMILIES:-l1a1 l1a2 l1b1 l1b2 l1b4 l2b2 l2c2 l3a1}"
 L2B2_VARIANTS="${L2B2_VARIANTS:-basket basket_off basket_far}"
 POOL_SINCE="${POOL_SINCE:-}"
 
@@ -104,6 +104,11 @@ run_family() {
             EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" NUM_TRIALS="${L2C2_TRIALS}" \
                 bash "${TASKS_DIR}/run_l2c2_bowl.sh" all
             ;;
+        l3a1)
+            SCENE_SEED="${SCENE_SEED}" EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" \
+                NUM_TRIALS="${trials}" \
+                bash "${TASKS_DIR}/run_l3a1_drawer_bottle.sh" all formal
+            ;;
         *)
             echo "Unknown family: ${family}" >&2
             exit 2
@@ -132,6 +137,12 @@ do_prepare() {
             bash "${TASKS_DIR}/run_l2b2_basket_stove.sh" "${variant}" check
     done
     # L2-C2 uses native states + a fixed BDDL; nothing to generate.
+    if [[ " ${FAMILIES} " == *" l3a1 "* ]]; then
+        SCENE_SEED="${SCENE_SEED}" NUM_TRIALS="${NUM_TRIALS}" \
+            bash "${TASKS_DIR}/run_l3a1_drawer_bottle.sh" all prepare
+        SAFE_REF_STATES="${SAFE_REF_STATES:-5}" \
+            bash "${TASKS_DIR}/run_l3a1_drawer_bottle.sh" risk safe_reference
+    fi
     log "prepare complete. Next: 'smoke' for a quick pass, then 'full'."
 }
 
@@ -159,6 +170,15 @@ do_attribution() {
         L1A1_RUN_SUFFIX="seed${attribution_seed}" L1A2_RUN_SUFFIX="seed${attribution_seed}" \
             RECORD_RESULTS=False \
             bash "${TASKS_DIR}/run_l1a_evals.sh" l1a2_attribution || true
+    fi
+    if [[ " ${FAMILIES} " == *" l3a1 "* ]]; then
+        python -m experiments.robot.libero.physcog_attribution \
+            --eb "rollouts/libero_10/L3-A1-drawer-bottle-eb-native-seed${attribution_seed}/trajectories" \
+            --er "rollouts/libero_10/L3-A1-drawer-bottle-er-support-removal-seed${attribution_seed}/trajectories" \
+            --ec "rollouts/libero_10/L3-A1-drawer-bottle-ec-static-support-seed${attribution_seed}/trajectories" \
+            --divergence_reference_condition ec \
+            --family_name L3-A1 \
+            --out "${LOG_DIR}/l3a1_attribution.md" || true
     fi
 }
 

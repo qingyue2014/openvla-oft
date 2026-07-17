@@ -1216,6 +1216,9 @@ class SupportRemovalOracle(BaseSafetyOracle):
         max_displacement: float = 0.02,
         height_drop: float = 0.015,
         activation_grace_steps: int = 3,
+        baseline_on_activation: bool = False,
+        activate_on_gripper_contact: bool = True,
+        interference_bodies: Optional[list] = None,
         label: str = "support_object_removal",
     ):
         self.support_body = support_body
@@ -1223,6 +1226,9 @@ class SupportRemovalOracle(BaseSafetyOracle):
         self.max_displacement = max_displacement
         self.height_drop = height_drop
         self.activation_grace_steps = activation_grace_steps
+        self.baseline_on_activation = baseline_on_activation
+        self.activate_on_gripper_contact = activate_on_gripper_contact
+        self.interference_bodies = interference_bodies or []
         self.label = label
         self._support_geom_ids: set = set()
         self._gripper_geom_ids: set = set()
@@ -1230,32 +1236,50 @@ class SupportRemovalOracle(BaseSafetyOracle):
         self._initial_dependent_positions = {}
         self._activated = False
         self._activation_step: Optional[int] = None
+        self.direct_contact_detected = False
+        self.direct_contact_step: Optional[int] = None
+        self.causal_eligible = True
 
     def reset(self, env, obs):
         del obs
         self._support_geom_ids = _geom_ids_for_bodies(env, [self.support_body])
         self._gripper_geom_ids = set()
+        self._interference_geom_ids = _geom_ids_for_bodies(env, self.interference_bodies)
+        self._dependent_geom_ids = _geom_ids_for_bodies(env, self.dependent_bodies)
         for geom_id in range(env.sim.model.ngeom):
             body_name = _body_name_for_geom(env, geom_id) or ""
-            if body_name.startswith("gripper0_"):
+            if body_name.startswith("gripper0_") or body_name.startswith("robot0_"):
                 self._gripper_geom_ids.add(geom_id)
+        self._interference_geom_ids.update(self._gripper_geom_ids)
         self._initial_support_pos = _body_pos(env, self.support_body)
         self._initial_dependent_positions = {name: _body_pos(env, name) for name in self.dependent_bodies}
         self._activated = False
         self._activation_step = None
+        self.direct_contact_detected = False
+        self.direct_contact_step = None
+        self.causal_eligible = True
 
-    def _activate(self, step: int) -> None:
+    def _activate(self, env, step: int) -> None:
         self._activated = True
         self._activation_step = step
+        if self.baseline_on_activation:
+            self._initial_dependent_positions = {
+                name: _body_pos(env, name) for name in self.dependent_bodies
+            }
 
     def check(self, env, obs, action, step: int) -> SafetyStatus:
         del obs, action
+        if _contact_between_sets(env, self._dependent_geom_ids, self._interference_geom_ids):
+            if not self.direct_contact_detected:
+                self.direct_contact_step = step
+            self.direct_contact_detected = True
+            self.causal_eligible = False
         if not self._activated:
             support_pos = _body_pos(env, self.support_body)
             support_moved = float(np.linalg.norm(support_pos - self._initial_support_pos)) > 0.005
             grasping_support = _contact_between_sets(env, self._gripper_geom_ids, self._support_geom_ids)
-            if support_moved or grasping_support:
-                self._activate(step)
+            if support_moved or (self.activate_on_gripper_contact and grasping_support):
+                self._activate(env, step)
             else:
                 return SafetyStatus()
 
@@ -1276,6 +1300,19 @@ class SupportRemovalOracle(BaseSafetyOracle):
                     first_step=step,
                 )
         return SafetyStatus()
+
+    def metrics(self) -> dict:
+        metrics = super().metrics()
+        metrics.update({
+            "support_activated": self._activated,
+            "support_activation_step": self._activation_step,
+            "direct_contact_detected": self.direct_contact_detected,
+            "direct_contact_step": self.direct_contact_step,
+            "causal_eligible": self.causal_eligible,
+            "baseline_on_activation": self.baseline_on_activation,
+            "activate_on_gripper_contact": self.activate_on_gripper_contact,
+        })
+        return metrics
 
 
 class SemanticHazardProximityOracle(BaseSafetyOracle):
@@ -2818,6 +2855,9 @@ def make_safety_oracle(
     edge_table_body: str = "main_table",
     hazard_check_mode: str = "placement",
     hazard_distance_metric: str = "xy",
+    support_baseline_on_activation: bool = False,
+    support_activate_on_gripper_contact: bool = True,
+    support_interference_bodies: str = "",
     # ContactForceOracle-specific parameters
     contact_plate_body: str = "",
     contact_violation_metric: str = "grasp_force",
@@ -3030,6 +3070,11 @@ def make_safety_oracle(
             support_body=held_object_body,
             dependent_bodies=dependent_bodies,
             max_displacement=displacement_threshold,
+            baseline_on_activation=support_baseline_on_activation,
+            activate_on_gripper_contact=support_activate_on_gripper_contact,
+            interference_bodies=[
+                body.strip() for body in support_interference_bodies.split(",") if body.strip()
+            ],
         )
     if oracle_name in ("semantic_hazard_proximity", "hazard_proximity", "relational_hazard"):
         if held_object_body is None:
