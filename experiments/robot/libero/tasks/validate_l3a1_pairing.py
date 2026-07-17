@@ -14,7 +14,7 @@ BINDING_FIELDS = (
     "l3a1_variant", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
     "lean_deg", "lean_axis", "settle_steps", "validation_hold_steps",
     "verify_close_steps", "min_topple_deg", "oracle_displacement_threshold",
-    "oracle_height_drop_threshold", "stable_x_offset",
+    "oracle_height_drop_threshold", "stable_x_offset", "initialization_strategy",
 )
 
 
@@ -98,12 +98,49 @@ def validate_base_preservation(path: str, task_description: str) -> int:
     with h5py.File(path, "r") as handle:
         group = handle[key]
         count = len(group)
+        base_state_hashes = []
+        variant = str(group.attrs.get("l3a1_variant", ""))
+        template_sha = None
+        template_source_attempt = None
         for index in range(len(group)):
             demo = group[f"demo_{index}"]
             state = demo["initial_state"][:]
             if "base_reset_state" not in demo:
                 raise ValueError(f"missing base_reset_state at demo_{index}")
             base = demo["base_reset_state"][:]
+            if "initialization_mode" in demo.attrs:
+                base_sha = hashlib.sha256(base.tobytes()).hexdigest()
+                base_state_hashes.append(base_sha)
+                if str(demo.attrs.get("base_state_sha256", "")) != base_sha:
+                    raise ValueError(f"base_state_sha256 mismatch at demo_{index}")
+                mode = str(demo.attrs["initialization_mode"])
+                if variant == "risk":
+                    expected_mode = (
+                        "sampled_lean" if index == 0
+                        else "support_relative_equilibrium_template"
+                    )
+                    if mode != expected_mode:
+                        raise ValueError(
+                            f"risk initialization_mode mismatch at demo_{index}: {mode!r}"
+                        )
+                    demo_template_sha = str(demo.attrs.get("template_sha256", ""))
+                    demo_template_source = int(
+                        demo.attrs.get("template_source_attempt", -1)
+                    )
+                    if index == 0:
+                        template_sha = demo_template_sha
+                        template_source_attempt = int(demo.attrs["reset_attempt"])
+                        if not template_sha or demo_template_source != template_source_attempt:
+                            raise ValueError("invalid risk template source metadata at demo_0")
+                    elif (
+                        demo_template_sha != template_sha
+                        or demo_template_source != template_source_attempt
+                    ):
+                        raise ValueError(f"risk template reference mismatch at demo_{index}")
+                elif variant == "stable" and mode != "paired_safe_transform":
+                    raise ValueError(
+                        f"stable initialization_mode mismatch at demo_{index}: {mode!r}"
+                    )
             qpos_start = int(demo.attrs.get("bottle_qpos_flat_start", -1))
             qvel_start = int(demo.attrs.get("bottle_qvel_flat_start", -1))
             if qpos_start < 0 or qvel_start < 0 or state.shape != base.shape:
@@ -117,6 +154,8 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 raise ValueError(f"initial EEF drift is nonzero at demo_{index}")
             if float(demo.attrs.get("runtime_wait_displacement_m", np.inf)) > 0.005:
                 raise ValueError(f"runtime wait drift exceeds 5 mm at demo_{index}")
+        if base_state_hashes and len(set(base_state_hashes)) != count:
+            raise ValueError("formal artifact reuses duplicate native base reset states")
     return count
 
 

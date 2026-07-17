@@ -30,6 +30,7 @@ Run from the OpenVLA-OFT repository root.
 """
 
 import argparse
+import hashlib
 import sys
 from pathlib import Path
 
@@ -128,6 +129,60 @@ def _tilt_quat(axis: str, deg: float) -> np.ndarray:
     if axis == "y":
         return np.array([np.cos(theta), 0.0, np.sin(theta), 0.0])
     raise ValueError(f"axis must be 'x' or 'y', got {axis!r}")
+
+
+def _wxyz_to_matrix(quat: np.ndarray) -> np.ndarray:
+    quat = np.asarray(quat, dtype=float)
+    quat /= max(float(np.linalg.norm(quat)), 1e-12)
+    w, x, y, z = quat
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ])
+
+
+def _matrix_to_wxyz(matrix: np.ndarray) -> np.ndarray:
+    matrix = np.asarray(matrix, dtype=float)
+    trace = float(np.trace(matrix))
+    if trace > 0:
+        scale = np.sqrt(trace + 1.0) * 2
+        quat = np.array([
+            0.25 * scale,
+            (matrix[2, 1] - matrix[1, 2]) / scale,
+            (matrix[0, 2] - matrix[2, 0]) / scale,
+            (matrix[1, 0] - matrix[0, 1]) / scale,
+        ])
+    else:
+        axis = int(np.argmax(np.diag(matrix)))
+        if axis == 0:
+            scale = np.sqrt(1 + matrix[0, 0] - matrix[1, 1] - matrix[2, 2]) * 2
+            quat = np.array([
+                (matrix[2, 1] - matrix[1, 2]) / scale, 0.25 * scale,
+                (matrix[0, 1] + matrix[1, 0]) / scale,
+                (matrix[0, 2] + matrix[2, 0]) / scale,
+            ])
+        elif axis == 1:
+            scale = np.sqrt(1 + matrix[1, 1] - matrix[0, 0] - matrix[2, 2]) * 2
+            quat = np.array([
+                (matrix[0, 2] - matrix[2, 0]) / scale,
+                (matrix[0, 1] + matrix[1, 0]) / scale, 0.25 * scale,
+                (matrix[1, 2] + matrix[2, 1]) / scale,
+            ])
+        else:
+            scale = np.sqrt(1 + matrix[2, 2] - matrix[0, 0] - matrix[1, 1]) * 2
+            quat = np.array([
+                (matrix[1, 0] - matrix[0, 1]) / scale,
+                (matrix[0, 2] + matrix[2, 0]) / scale,
+                (matrix[1, 2] + matrix[2, 1]) / scale, 0.25 * scale,
+            ])
+    quat /= max(float(np.linalg.norm(quat)), 1e-12)
+    return quat if quat[0] >= 0 else -quat
+
+
+def _body_rotation(env, body_name: str) -> np.ndarray:
+    body_id = env.sim.model.body_name2id(body_name)
+    return np.asarray(env.sim.data.body_xmat[body_id], dtype=float).reshape(3, 3).copy()
 
 
 def _lean_tilt_angle_deg(env, body_name: str) -> float:
@@ -275,6 +330,11 @@ def generate_states(
     if max_attempts < n:
         raise ValueError(f"max_attempts ({max_attempts}) must be >= num_states ({n})")
     table_bounds = None
+    risk_template_relative_pos = None
+    risk_template_relative_rot = None
+    risk_template_local_qvel = None
+    risk_template_sha256 = ""
+    risk_template_source_attempt = -1
 
     while len(states) < n:
         attempts += 1
@@ -300,22 +360,51 @@ def generate_states(
         reference_eef = _body_pos(env, "gripper0_eef").copy()
 
         support_pos = _body_pos(env, support_body)
+        support_rot = _body_rotation(env, support_body)
         target_xy = support_pos[:2] + np.array([lean_dx, lean_dy])
+        initialization_mode = "sampled_lean"
         if source_state is not None:
             # Safe-precondition Ec: make the bottle upright and park it at the
             # same pose used by Pi_safe while preserving the Er world state.
             target_xy = _body_pos(env, BOTTLE_BODY)[:2] + np.array([lean_dx, 0.0])
+            initialization_mode = "paired_safe_transform"
+        elif risk_template_relative_pos is not None:
+            # The requested near-critical tilt has a narrow basin of
+            # attraction: most resets fall onto the table before finding the
+            # drawer-contact equilibrium.  Once one state has passed every
+            # formal gate, transplant that *settled* pose relative to the
+            # current drawer into later, otherwise independent native resets.
+            # Every transplanted state still re-runs settle, runtime wait,
+            # open-hold, contact, contamination, and scripted-close gates.
+            template_pos = support_pos + support_rot @ risk_template_relative_pos
+            target_xy = template_pos[:2]
+            initialization_mode = "support_relative_equilibrium_template"
         bottle_z = (
             native_upright_bottle_z + lean_dz
             if source_state is not None
-            else _body_pos(env, BOTTLE_BODY)[2] + lean_dz
+            else (
+                template_pos[2]
+                if risk_template_relative_pos is not None
+                else _body_pos(env, BOTTLE_BODY)[2] + lean_dz
+            )
         )
 
         env.sim.data.qpos[bottle_qadr:bottle_qadr + 2] = target_xy
         env.sim.data.qpos[bottle_qadr + 2] = bottle_z
-        env.sim.data.qpos[bottle_qadr + 3:bottle_qadr + 7] = _tilt_quat(lean_axis, lean_deg)
+        env.sim.data.qpos[bottle_qadr + 3:bottle_qadr + 7] = (
+            _matrix_to_wxyz(support_rot @ risk_template_relative_rot)
+            if risk_template_relative_pos is not None and source_state is None
+            else _tilt_quat(lean_axis, lean_deg)
+        )
         if source_state is None:
             env.sim.data.qvel[:] = 0
+            if risk_template_relative_pos is not None and bottle_vadr >= 0:
+                env.sim.data.qvel[bottle_vadr:bottle_vadr + 3] = (
+                    support_rot @ risk_template_local_qvel[:3]
+                )
+                env.sim.data.qvel[bottle_vadr + 3:bottle_vadr + 6] = (
+                    support_rot @ risk_template_local_qvel[3:]
+                )
         elif bottle_vadr >= 0:
             env.sim.data.qvel[bottle_vadr:bottle_vadr + 6] = 0
         env.sim.forward()
@@ -532,7 +621,45 @@ def generate_states(
             )
             continue
 
+        # Describe the final, pre-close serialized equilibrium in the support
+        # frame.  This is both the immutable reuse template and auditable proof
+        # that later demos came from fresh bases plus the same local mechanism.
+        env.sim.set_state_from_flattened(candidate_state)
+        env.sim.forward()
+        candidate_support_pos = _body_pos(env, support_body)
+        candidate_support_rot = _body_rotation(env, support_body)
+        candidate_relative_pos = candidate_support_rot.T @ (
+            candidate_state[qpos_flat:qpos_flat + 3] - candidate_support_pos
+        )
+        candidate_relative_rot = candidate_support_rot.T @ _wxyz_to_matrix(
+            candidate_state[qpos_flat + 3:qpos_flat + 7]
+        )
+        candidate_relative_quat = _matrix_to_wxyz(candidate_relative_rot)
+        candidate_local_qvel = np.concatenate((
+            candidate_support_rot.T @ candidate_state[qvel_flat:qvel_flat + 3],
+            candidate_support_rot.T @ candidate_state[qvel_flat + 3:qvel_flat + 6],
+        ))
+        candidate_template_bytes = np.concatenate((
+            candidate_relative_pos, candidate_relative_quat, candidate_local_qvel
+        )).astype("<f8", copy=False).tobytes()
+        candidate_template_sha256 = hashlib.sha256(candidate_template_bytes).hexdigest()
+        if risk_template_relative_pos is None:
+            template_position_error = 0.0
+            template_angle_error = 0.0
+        else:
+            template_position_error = float(np.linalg.norm(
+                candidate_relative_pos - risk_template_relative_pos
+            ))
+            relative_delta = risk_template_relative_rot.T @ candidate_relative_rot
+            template_angle_error = float(np.degrees(np.arccos(np.clip(
+                (np.trace(relative_delta) - 1.0) / 2.0, -1.0, 1.0
+            ))))
+
         state_index = len(states)
+        saved_base_state = (
+            np.asarray(paired_base_states[state_index]).copy()
+            if paired_base_states is not None else reset_base_state
+        )
         if state_index == 0:
             print(f"  support body        : {support_body}  @ xy=({support_pos[0]:+.4f},{support_pos[1]:+.4f})")
             print(f"  bottle target xy     : ({target_xy[0]:+.4f},{target_xy[1]:+.4f})")
@@ -544,10 +671,7 @@ def generate_states(
             print(f"  table xy bounds      : x[{lo[0]:+.3f},{hi[0]:+.3f}] y[{lo[1]:+.3f},{hi[1]:+.3f}]")
 
         states.append(candidate_state)
-        base_states.append(
-            np.asarray(paired_base_states[state_index]).copy()
-            if paired_base_states is not None else reset_base_state
-        )
+        base_states.append(saved_base_state)
         validation_records.append(
             {
                 "reset_attempt": (
@@ -555,6 +679,22 @@ def generate_states(
                     if paired_source_attempts is not None else attempts
                 ),
                 "source_demo_index": state_index if source_state is not None else -1,
+                "initialization_mode": initialization_mode,
+                "base_state_sha256": hashlib.sha256(
+                    np.asarray(saved_base_state).tobytes()
+                ).hexdigest(),
+                "template_source_attempt": (
+                    (attempts if risk_template_relative_pos is None else risk_template_source_attempt)
+                    if variant == "risk" else -1
+                ),
+                "template_sha256": (
+                    (
+                        candidate_template_sha256 if risk_template_relative_pos is None
+                        else risk_template_sha256
+                    ) if variant == "risk" else ""
+                ),
+                "template_position_error_m": template_position_error,
+                "template_angle_error_deg": template_angle_error,
                 "bottle_qpos_flat_start": qpos_flat,
                 "bottle_qvel_flat_start": qvel_flat,
                 "initial_eef_drift_m": initial_eef_drift,
@@ -576,6 +716,16 @@ def generate_states(
                 "contacts": ",".join(sorted(contacts)),
             }
         )
+        if variant == "risk" and risk_template_relative_pos is None:
+            # Capture the exact serialized equilibrium, not the requested
+            # pre-settle pose.  Position is support-relative so cabinet reset
+            # translation remains diverse; quaternion/velocity describe the
+            # locally validated contact equilibrium.
+            risk_template_relative_pos = candidate_relative_pos.copy()
+            risk_template_relative_rot = candidate_relative_rot.copy()
+            risk_template_local_qvel = candidate_local_qvel.copy()
+            risk_template_sha256 = candidate_template_sha256
+            risk_template_source_attempt = attempts
         if (state_index + 1) % 10 == 0 or state_index + 1 == n:
             print(f"  [{state_index + 1}/{n}] valid layouts (attempts={attempts})")
 
@@ -718,6 +868,11 @@ def main():
         group.attrs["paired_er_states"] = args.paired_er_states or ""
         group.attrs["pairing_method"] = (
             "serialized_er_state_bottle_transform" if args.paired_er_states else ""
+        )
+        group.attrs["initialization_strategy"] = (
+            "paired_er_state_bottle_transform"
+            if args.paired_er_states
+            else "sample_then_reuse_support_relative_equilibrium"
         )
         group.attrs["source_task_key"] = key if args.paired_er_states else ""
         for index, record in enumerate(validation_records):

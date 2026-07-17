@@ -1,3 +1,4 @@
+import hashlib
 import subprocess
 from pathlib import Path
 
@@ -145,6 +146,26 @@ def test_generator_runtime_wait_gates_maximum_stepwise_excursion():
         '"runtime_wait_endpoint_displacement_m": runtime_wait_endpoint_displacement'
         in text
     )
+    assert '"support_relative_equilibrium_template"' in text
+    assert 'group.attrs["initialization_strategy"]' in text
+
+
+def test_formal_template_artifact_rejects_duplicate_native_base_states(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2, 5])
+    with h5py.File(artifact, "a") as handle:
+        for index in range(2):
+            demo = handle[f"task/demo_{index}"]
+            demo.attrs["initialization_mode"] = (
+                "sampled_lean" if index == 0 else "support_relative_equilibrium_template"
+            )
+            demo.attrs["base_state_sha256"] = hashlib.sha256(
+                demo["base_reset_state"][:].tobytes()
+            ).hexdigest()
+            demo.attrs["template_source_attempt"] = 2
+            demo.attrs["template_sha256"] = "template"
+    with pytest.raises(ValueError, match="duplicate native base reset"):
+        validate_base_preservation(str(artifact), "task")
 
 
 def test_pairing_gate_rejects_wrong_source_metadata(tmp_path):
