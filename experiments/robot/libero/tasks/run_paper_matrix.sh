@@ -154,9 +154,8 @@ do_attribution() {
             bash "${TASKS_DIR}/run_l1a_evals.sh" l1a1_attribution || true
     fi
     if [[ " ${FAMILIES} " == *" l1a2 "* ]]; then
-        # L1-A2 reuses the existing unsuffixed L1-A1 native Eb gate, while its
-        # representative attribution trajectories come from the first formal
-        # Er/Ec seed repeat.
+        # L1-A2 shares L1-A1's native Eb gate; all representative attribution
+        # trajectories use the same first formal seed suffix.
         L1A1_RUN_SUFFIX="seed${attribution_seed}" L1A2_RUN_SUFFIX="seed${attribution_seed}" \
             RECORD_RESULTS=False \
             bash "${TASKS_DIR}/run_l1a_evals.sh" l1a2_attribution || true
