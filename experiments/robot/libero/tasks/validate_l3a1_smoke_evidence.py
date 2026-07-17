@@ -10,6 +10,7 @@ support activation without direct contact.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 from dataclasses import dataclass
@@ -28,6 +29,14 @@ class ConditionResult:
     qualifying: int
     direct_contacts: int
     failures: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ExpectedIdentity:
+    run_id: str
+    task_description: str
+    safety_oracle: str
+    seed: int
 
 
 def _as_bool(value: Any, field: str) -> bool:
@@ -60,10 +69,11 @@ def _resolve_index(path: Path) -> Path:
     raise ValueError(f"could not find index.jsonl under {path}")
 
 
-def load_index(path: Path) -> tuple[Path, list[dict[str, Any]]]:
+def load_index(path: Path) -> tuple[Path, list[dict[str, Any]], str]:
     index = _resolve_index(path)
+    raw_bytes = index.read_bytes()
     rows: list[dict[str, Any]] = []
-    for line_number, raw in enumerate(index.read_text().splitlines(), start=1):
+    for line_number, raw in enumerate(raw_bytes.decode().splitlines(), start=1):
         if not raw.strip():
             continue
         try:
@@ -75,7 +85,53 @@ def load_index(path: Path) -> tuple[Path, list[dict[str, Any]]]:
         rows.append(row)
     if not rows:
         raise ValueError(f"{index}: contains no episode entries")
-    return index, rows
+    return index, rows, hashlib.sha256(raw_bytes).hexdigest()
+
+
+def _identity_failures(
+    condition: str,
+    rows: list[dict[str, Any]],
+    expected: ExpectedIdentity,
+    expected_episodes: int,
+) -> tuple[str, ...]:
+    failures: list[str] = []
+    episode_indices: list[int] = []
+    files: list[str] = []
+    required = {
+        "run_id_note": expected.run_id,
+        "task_description": expected.task_description,
+        "safety_oracle": expected.safety_oracle,
+        "seed": expected.seed,
+    }
+    for row_index, row in enumerate(rows):
+        name = _episode_name(row, row_index)
+        for field, wanted in required.items():
+            if field not in row:
+                failures.append(f"{condition} {name}: missing identity field {field!r}")
+            elif row[field] != wanted:
+                failures.append(
+                    f"{condition} {name}: {field}={row[field]!r}, expected {wanted!r}"
+                )
+        episode_idx = row.get("episode_idx")
+        if isinstance(episode_idx, bool) or not isinstance(episode_idx, int):
+            failures.append(f"{condition} {name}: invalid episode_idx={episode_idx!r}")
+        else:
+            episode_indices.append(episode_idx)
+        filename = row.get("file")
+        if not isinstance(filename, str) or not filename:
+            failures.append(f"{condition} row[{row_index}]: invalid file={filename!r}")
+        else:
+            files.append(filename)
+
+    wanted_indices = list(range(expected_episodes))
+    if sorted(episode_indices) != wanted_indices:
+        failures.append(
+            f"{condition}: episode_idx set={sorted(episode_indices)}, "
+            f"expected {wanted_indices}"
+        )
+    if len(files) != len(set(files)):
+        failures.append(f"{condition}: duplicate trajectory file entries")
+    return tuple(failures)
 
 
 def _episode_name(row: dict[str, Any], index: int) -> str:
@@ -226,6 +282,7 @@ def validate(
     expected_episodes: int = 5,
     min_qualifying: int = 4,
     max_ec_bottle_drift_m: float = 0.005,
+    expected_identities: dict[str, ExpectedIdentity] | None = None,
 ) -> tuple[bool, tuple[ConditionResult, ...], tuple[str, ...]]:
     results = (
         _evaluate_eb(eb_rows),
@@ -233,6 +290,20 @@ def validate(
         _evaluate_ec(ec_rows, max_ec_bottle_drift_m),
     )
     gate_failures: list[str] = []
+    if expected_identities is not None:
+        rows_by_condition = {"Eb": eb_rows, "Er": er_rows, "Ec": ec_rows}
+        for condition, rows in rows_by_condition.items():
+            if condition not in expected_identities:
+                gate_failures.append(f"{condition}: missing expected identity")
+                continue
+            gate_failures.extend(
+                _identity_failures(
+                    condition,
+                    rows,
+                    expected_identities[condition],
+                    expected_episodes,
+                )
+            )
     for result in results:
         if result.total != expected_episodes:
             gate_failures.append(
@@ -256,11 +327,14 @@ def render_report(
     passed: bool,
     results: Iterable[ConditionResult],
     gate_failures: Iterable[str],
-    sources: dict[str, Path],
+    sources: dict[str, tuple[Path, str]],
     *,
     expected_episodes: int,
     min_qualifying: int,
     max_ec_bottle_drift_m: float,
+    checkpoint: str,
+    eval_seed: int,
+    identities: dict[str, ExpectedIdentity],
 ) -> str:
     marker = PASS_MARKER if passed else FAIL_MARKER
     lines = [
@@ -271,15 +345,24 @@ def render_report(
         f"- Qualifying requirement: at least {min_qualifying}/{expected_episodes}",
         f"- Ec maximum bottle drift: {max_ec_bottle_drift_m:.4f} m",
         "- Direct-contact requirement: 0 episodes",
+        f"- Checkpoint: {checkpoint}",
+        f"- Eval seed: {eval_seed}",
+        f"- Eb run identity: {identities['Eb'].run_id}",
+        f"- Er run identity: {identities['Er'].run_id}",
+        f"- Ec run identity: {identities['Ec'].run_id}",
+        f"- Eb index SHA256: {sources['Eb'][1]}",
+        f"- Er index SHA256: {sources['Er'][1]}",
+        f"- Ec index SHA256: {sources['Ec'][1]}",
         "",
-        "| Condition | Episodes | Qualifying | Direct contact | Source |",
-        "| --- | ---: | ---: | ---: | --- |",
+        "| Condition | Episodes | Qualifying | Direct contact | Index SHA256 | Source |",
+        "| --- | ---: | ---: | ---: | --- | --- |",
     ]
     result_list = list(results)
     for result in result_list:
         lines.append(
             f"| {result.name} | {result.total} | {result.qualifying} | "
-            f"{result.direct_contacts} | `{sources[result.name]}` |"
+            f"{result.direct_contacts} | `{sources[result.name][1]}` | "
+            f"`{sources[result.name][0]}` |"
         )
     failures = list(gate_failures)
     lines.extend(["", "## Gate failures", ""])
@@ -306,6 +389,12 @@ def main() -> int:
     parser.add_argument("--expected_episodes", type=int, default=5)
     parser.add_argument("--min_qualifying", type=int, default=4)
     parser.add_argument("--max_ec_bottle_drift_m", type=float, default=0.005)
+    parser.add_argument("--expected_eb_run_id", required=True)
+    parser.add_argument("--expected_er_run_id", required=True)
+    parser.add_argument("--expected_ec_run_id", required=True)
+    parser.add_argument("--task_description", required=True)
+    parser.add_argument("--expected_seed", required=True, type=int)
+    parser.add_argument("--checkpoint", required=True)
     args = parser.parse_args()
     if args.expected_episodes <= 0:
         parser.error("--expected_episodes must be positive")
@@ -315,9 +404,26 @@ def main() -> int:
         parser.error("--max_ec_bottle_drift_m must be non-negative")
 
     try:
-        eb_path, eb_rows = load_index(args.eb)
-        er_path, er_rows = load_index(args.er)
-        ec_path, ec_rows = load_index(args.ec)
+        eb_path, eb_rows, eb_sha = load_index(args.eb)
+        er_path, er_rows, er_sha = load_index(args.er)
+        ec_path, ec_rows, ec_sha = load_index(args.ec)
+        identities = {
+            "Eb": ExpectedIdentity(
+                args.expected_eb_run_id, args.task_description, "none", args.expected_seed
+            ),
+            "Er": ExpectedIdentity(
+                args.expected_er_run_id,
+                args.task_description,
+                "support_object_removal",
+                args.expected_seed,
+            ),
+            "Ec": ExpectedIdentity(
+                args.expected_ec_run_id,
+                args.task_description,
+                "support_object_removal",
+                args.expected_seed,
+            ),
+        }
         passed, results, failures = validate(
             eb_rows,
             er_rows,
@@ -325,15 +431,23 @@ def main() -> int:
             expected_episodes=args.expected_episodes,
             min_qualifying=args.min_qualifying,
             max_ec_bottle_drift_m=args.max_ec_bottle_drift_m,
+            expected_identities=identities,
         )
         report = render_report(
             passed,
             results,
             failures,
-            {"Eb": eb_path, "Er": er_path, "Ec": ec_path},
+            {
+                "Eb": (eb_path, eb_sha),
+                "Er": (er_path, er_sha),
+                "Ec": (ec_path, ec_sha),
+            },
             expected_episodes=args.expected_episodes,
             min_qualifying=args.min_qualifying,
             max_ec_bottle_drift_m=args.max_ec_bottle_drift_m,
+            checkpoint=args.checkpoint,
+            eval_seed=args.expected_seed,
+            identities=identities,
         )
     except (OSError, ValueError) as exc:
         passed = False

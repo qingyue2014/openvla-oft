@@ -224,3 +224,12 @@ def test_runner_revalidates_current_artifacts_and_report_bindings():
     assert "require_smoke_gate" in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Er artifact binding"' in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Ec artifact binding"' in text
+    assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Checkpoint"' in text
+    assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Eval seed"' in text
+    assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Eb index SHA256"' in text
+    assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Er index SHA256"' in text
+    assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Ec index SHA256"' in text
+    assert '--expected_eb_run_id "$(with_suffix L3-A1-drawer-bottle-eb-native)"' in text
+    assert '--expected_seed "${EVAL_SEED}"' in text
+    assert '--checkpoint "${CHECKPOINT}"' in text
+    assert text.count("clean_condition_rollouts") >= 3

@@ -41,6 +41,8 @@ SCENE_SEED="${SCENE_SEED:-${SEED:-42}}"
 EVAL_SEED="${EVAL_SEED:-${SEED:-42}}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
+SMOKE_RUN_ID_SUFFIX="${SMOKE_RUN_ID_SUFFIX:-}"
+SMOKE_EVAL_SEED="${SMOKE_EVAL_SEED:-42}"
 RENDER_GPU="${RENDER_GPU:-1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"
@@ -72,6 +74,47 @@ with_suffix() {
   else
     printf '%s' "${run_id}"
   fi
+}
+
+with_explicit_suffix() {
+  local run_id="$1" suffix="$2"
+  if [[ -n "${suffix}" ]]; then
+    printf '%s-%s' "${run_id}" "${suffix}"
+  else
+    printf '%s' "${run_id}"
+  fi
+}
+
+condition_rollout_dir() {
+  printf 'rollouts/%s/%s' "${TASK_SUITE_NAME}" "$(with_suffix "$1")"
+}
+
+smoke_rollout_dir() {
+  printf 'rollouts/%s/%s' "${TASK_SUITE_NAME}" \
+    "$(with_explicit_suffix "$1" "${SMOKE_RUN_ID_SUFFIX}")"
+}
+
+index_sha256() {
+  local index_path="$1"
+  python - "${index_path}" <<'PY'
+import hashlib
+import sys
+
+with open(sys.argv[1], "rb") as handle:
+    print(hashlib.sha256(handle.read()).hexdigest())
+PY
+}
+
+clean_condition_rollouts() {
+  [[ "${TASK_SUITE_NAME}" =~ ^[A-Za-z0-9._-]+$ ]] || {
+    echo "Unsafe TASK_SUITE_NAME path component: ${TASK_SUITE_NAME}" >&2; return 2; }
+  [[ "${RUN_ID_SUFFIX}" =~ ^[A-Za-z0-9._-]*$ ]] || {
+    echo "Unsafe RUN_ID_SUFFIX path component: ${RUN_ID_SUFFIX}" >&2; return 2; }
+  local eb_dir er_dir ec_dir
+  eb_dir="$(condition_rollout_dir L3-A1-drawer-bottle-eb-native)"
+  er_dir="$(condition_rollout_dir L3-A1-drawer-bottle-er-support-removal)"
+  ec_dir="$(condition_rollout_dir L3-A1-drawer-bottle-ec-self-supporting)"
+  rm -rf -- "${eb_dir}" "${er_dir}" "${ec_dir}"
 }
 
 case "${VARIANT}" in
@@ -316,6 +359,8 @@ run_condition() {
 }
 
 require_smoke_gate() {
+  [[ "${SMOKE_RUN_ID_SUFFIX}" =~ ^[A-Za-z0-9._-]*$ ]] || {
+    echo "Unsafe SMOKE_RUN_ID_SUFFIX path component: ${SMOKE_RUN_ID_SUFFIX}" >&2; return 2; }
   grep -q 'PASS_L3A1_SMOKE_EVIDENCE' "${SMOKE_EVIDENCE_REPORT}" 2>/dev/null || {
     echo "L3-A1 strict smoke-evidence gate missing/failed: ${SMOKE_EVIDENCE_REPORT}" >&2
     return 2
@@ -325,6 +370,21 @@ require_smoke_gate() {
   stable_binding="$(artifact_binding "${STABLE_STATE_PATH}")"
   require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Er artifact binding" "${risk_binding}"
   require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Ec artifact binding" "${stable_binding}"
+  require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Checkpoint" "${CHECKPOINT}"
+  require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Eval seed" "${SMOKE_EVAL_SEED}"
+  require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Eb run identity" \
+    "$(with_explicit_suffix L3-A1-drawer-bottle-eb-native "${SMOKE_RUN_ID_SUFFIX}")"
+  require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Er run identity" \
+    "$(with_explicit_suffix L3-A1-drawer-bottle-er-support-removal "${SMOKE_RUN_ID_SUFFIX}")"
+  require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Ec run identity" \
+    "$(with_explicit_suffix L3-A1-drawer-bottle-ec-self-supporting "${SMOKE_RUN_ID_SUFFIX}")"
+  local eb_index er_index ec_index
+  eb_index="$(smoke_rollout_dir L3-A1-drawer-bottle-eb-native)/trajectories/index.jsonl"
+  er_index="$(smoke_rollout_dir L3-A1-drawer-bottle-er-support-removal)/trajectories/index.jsonl"
+  ec_index="$(smoke_rollout_dir L3-A1-drawer-bottle-ec-self-supporting)/trajectories/index.jsonl"
+  require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Eb index SHA256" "$(index_sha256 "${eb_index}")"
+  require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Er index SHA256" "$(index_sha256 "${er_index}")"
+  require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Ec index SHA256" "$(index_sha256 "${ec_index}")"
 }
 
 case "${MODE}" in
@@ -352,6 +412,7 @@ case "${MODE}" in
   smoke)
     [[ "${VARIANT}" == "all" ]] || { echo "smoke requires variant 'all'" >&2; exit 2; }
     require_gates
+    clean_condition_rollouts
     SAVE_VIDEO_MODE=all run_condition eb "${SMOKE_TRIALS}"
     SAVE_VIDEO_MODE=all run_condition risk "${SMOKE_TRIALS}"
     SAVE_VIDEO_MODE=all run_condition stable "${SMOKE_TRIALS}"
@@ -362,6 +423,12 @@ case "${MODE}" in
       --ec "rollouts/${TASK_SUITE_NAME}/$(with_suffix L3-A1-drawer-bottle-ec-self-supporting)" \
       --expected_episodes "${SMOKE_TRIALS}" \
       --min_qualifying "$(( (SMOKE_TRIALS * 4 + 4) / 5 ))" \
+      --expected_eb_run_id "$(with_suffix L3-A1-drawer-bottle-eb-native)" \
+      --expected_er_run_id "$(with_suffix L3-A1-drawer-bottle-er-support-removal)" \
+      --expected_ec_run_id "$(with_suffix L3-A1-drawer-bottle-ec-self-supporting)" \
+      --task_description "${TASK_DESCRIPTION}" \
+      --expected_seed "${EVAL_SEED}" \
+      --checkpoint "${CHECKPOINT}" \
       --report "${SMOKE_EVIDENCE_REPORT}"
     echo "- Er artifact binding: $(artifact_binding "${RISK_STATE_PATH}")" >> "${SMOKE_EVIDENCE_REPORT}"
     echo "- Ec artifact binding: $(artifact_binding "${STABLE_STATE_PATH}")" >> "${SMOKE_EVIDENCE_REPORT}"
@@ -370,6 +437,7 @@ case "${MODE}" in
     [[ "${VARIANT}" == "all" ]] || { echo "formal requires variant 'all'" >&2; exit 2; }
     require_gates
     require_smoke_gate
+    clean_condition_rollouts
     run_condition eb "${NUM_TRIALS}"
     run_condition risk "${NUM_TRIALS}"
     run_condition stable "${NUM_TRIALS}"
