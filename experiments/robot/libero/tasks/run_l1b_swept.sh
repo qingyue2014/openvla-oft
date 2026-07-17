@@ -1,0 +1,215 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Paired L1-B swept-volume runner.
+#
+# Usage:
+#   bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b1_arm generate
+#   bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b2_gripper smoke
+#   bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b3_held_object eval
+#   bash experiments/robot/libero/tasks/run_l1b_swept.sh all smoke
+
+FAMILY="${1:-all}"
+MODE="${2:-all}"
+
+TASKS_DIR="experiments/robot/libero/tasks"
+CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
+NUM_TRIALS="${NUM_TRIALS:-50}"
+SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
+SCENE_SEED="${SCENE_SEED:-42}"
+EVAL_SEED="${EVAL_SEED:-42}"
+RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
+SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
+SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
+RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
+LIBERO_ROOT="${LIBERO_ROOT:-}"
+
+if [[ -z "${LIBERO_ROOT}" ]]; then
+  if [[ -d "../LIBERO/libero" ]]; then
+    LIBERO_ROOT="$(cd ../LIBERO && pwd)"
+  elif [[ -d "../libero/libero" ]]; then
+    LIBERO_ROOT="$(cd ../libero && pwd)"
+  fi
+fi
+if [[ -n "${LIBERO_ROOT}" ]]; then
+  export PYTHONPATH="${LIBERO_ROOT}:${PYTHONPATH:-}"
+fi
+export MUJOCO_GL="${MUJOCO_GL:-egl}"
+export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
+
+families() {
+  if [[ "${FAMILY}" == "all" ]]; then
+    printf '%s\n' l1b1_arm l1b2_gripper l1b3_held_object
+  else
+    case "${FAMILY}" in
+      l1b1_arm|l1b2_gripper|l1b3_held_object) printf '%s\n' "${FAMILY}" ;;
+      *) echo "Unknown family: ${FAMILY}" >&2; exit 2 ;;
+    esac
+  fi
+}
+
+component_for() {
+  case "$1" in
+    l1b1_arm) printf '%s\n' arm ;;
+    l1b2_gripper) printf '%s\n' gripper ;;
+    l1b3_held_object) printf '%s\n' held_object ;;
+  esac
+}
+
+oracle_for() {
+  case "$1" in
+    l1b1_arm) printf '%s\n' arm_sweep ;;
+    l1b2_gripper) printf '%s\n' gripper_sweep ;;
+    l1b3_held_object) printf '%s\n' held_object_sweep ;;
+  esac
+}
+
+obstacle_for() {
+  case "$1" in
+    l1b1_arm) printf '%s\n' l1_b_sweep_post_1_main ;;
+    l1b2_gripper|l1b3_held_object) printf '%s\n' glazed_rim_porcelain_ramekin_1_main ;;
+  esac
+}
+
+bddl_for() {
+  case "$1" in
+    l1b1_arm) printf '%s\n' "${TASKS_DIR}/l1b1_arm_sweep.bddl" ;;
+    *) printf '%s\n' "" ;;
+  esac
+}
+
+note_for() {
+  local family="$1" condition="$2" base
+  case "${family}" in
+    l1b1_arm) base="L1-B1-task6-arm-sweep" ;;
+    l1b2_gripper) base="L1-B2-task6-gripper-sweep" ;;
+    l1b3_held_object) base="L1-B3-task6-held-object-sweep" ;;
+  esac
+  base="${base}-${condition}"
+  if [[ -n "${RUN_ID_SUFFIX}" ]]; then
+    base="${base}-${RUN_ID_SUFFIX}"
+  fi
+  printf '%s\n' "${base}"
+}
+
+generate_family() {
+  local family="$1" count="$2"
+  python "${TASKS_DIR}/generate_l1b_swept_initial_states.py" \
+    --family "${family}" \
+    --num_states "${count}" \
+    --seed "${SCENE_SEED}"
+}
+
+check_family() {
+  local family="$1"
+  python "${TASKS_DIR}/validate_l1b_swept_states.py" \
+    --family "${family}" \
+    --preview_dir "${TASKS_DIR}/l1b_swept_preview/${family}" \
+    --out_report "experiments/logs/${family}_scene_check.md"
+}
+
+safe_reference_family() {
+  local family="$1" count="${SAFE_REF_STATES:-5}"
+  local extra_args=()
+  if [[ "${family}" == "l1b1_arm" ]]; then
+    # The arm-post construct needs a genuinely elevated alternate route;
+    # the ordinary 10 cm carry height is deliberately inside the post span.
+    extra_args+=(--approach_height 0.15 --lift_height 0.16)
+    extra_args+=(--transport_clearance 0.12 --preplace_height 0.10)
+    extra_args+=(--pregrasp_detour_y -0.15)
+    extra_args+=(--transport_via_x 0.10)
+    extra_args+=(--transport_max_waypoint_steps 400)
+    extra_args+=(--position_tolerance 0.020)
+  fi
+  python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
+    --family "${family}" \
+    --state_path "${TASKS_DIR}/${family}_er_states.hdf5" \
+    --num_states "${count}" \
+    --trajectory_dir "experiments/logs/${family}_safe_reference_trajectories" \
+    --out_csv "experiments/logs/${family}_safe_reference.csv" \
+    --out_report "experiments/logs/${family}_safe_reference.md" \
+    --fail_on_invalid \
+    "${extra_args[@]}"
+}
+
+eval_condition() {
+  local family="$1" condition="$2" count="$3"
+  local oracle state_path note trajectory_dir obstacle bddl
+  oracle="$(oracle_for "${family}")"
+  state_path="${TASKS_DIR}/${family}_${condition}_states.hdf5"
+  note="$(note_for "${family}" "${condition}")"
+  trajectory_dir="rollouts/libero_spatial/${note}/trajectories"
+  obstacle="$(obstacle_for "${family}")"
+  bddl="$(bddl_for "${family}")"
+  if [[ "${condition}" == "eb" ]]; then
+    oracle="none"
+  fi
+  local extra_args=()
+  if [[ -n "${bddl}" ]]; then
+    extra_args+=(--bddl_file "${bddl}")
+  fi
+  python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+    --pretrained_checkpoint "${CHECKPOINT}" \
+    --task_suite_name libero_spatial \
+    --task_ids 6 \
+    --initial_states_path "${state_path}" \
+    --safety_oracle "${oracle}" \
+    --held_object_body akita_black_bowl_1_main \
+    --distractor_body "${obstacle}" \
+    --num_trials_per_task "${count}" \
+    --seed "${EVAL_SEED}" \
+    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    --save_trajectory "${SAVE_TRAJECTORY}" \
+    --trajectory_track_bodies "akita_black_bowl_1_main,plate_1_main,cookies_1_main,glazed_rim_porcelain_ramekin_1_main,robot0_link0,robot0_link1,robot0_link2,robot0_link3,robot0_link4,robot0_link5,robot0_link6,robot0_link7" \
+    --trajectory_dir "${trajectory_dir}" \
+    --run_id_note "${note}" \
+    "${extra_args[@]}"
+}
+
+run_family() {
+  local family="$1" count="${NUM_TRIALS}"
+  case "${MODE}" in
+    generate) generate_family "${family}" "${NUM_TRIALS}" ;;
+    check) check_family "${family}" ;;
+    safe_reference) safe_reference_family "${family}" ;;
+    prepare)
+      generate_family "${family}" "${NUM_TRIALS}"
+      check_family "${family}"
+      safe_reference_family "${family}"
+      ;;
+    eb|er|ec) eval_condition "${family}" "${MODE}" "${NUM_TRIALS}" ;;
+    smoke)
+      count="${SMOKE_TRIALS}"
+      generate_family "${family}" "${count}"
+      check_family "${family}"
+      safe_reference_family "${family}"
+      eval_condition "${family}" eb "${count}"
+      eval_condition "${family}" er "${count}"
+      eval_condition "${family}" ec "${count}"
+      ;;
+    eval)
+      eval_condition "${family}" eb "${NUM_TRIALS}"
+      eval_condition "${family}" er "${NUM_TRIALS}"
+      eval_condition "${family}" ec "${NUM_TRIALS}"
+      ;;
+    all)
+      generate_family "${family}" "${NUM_TRIALS}"
+      check_family "${family}"
+      safe_reference_family "${family}"
+      eval_condition "${family}" eb "${NUM_TRIALS}"
+      eval_condition "${family}" er "${NUM_TRIALS}"
+      eval_condition "${family}" ec "${NUM_TRIALS}"
+      ;;
+    *)
+      echo "Unknown mode: ${MODE}" >&2
+      echo "Expected generate|check|safe_reference|prepare|eb|er|ec|smoke|eval|all" >&2
+      exit 2
+      ;;
+  esac
+}
+
+while IFS= read -r selected_family; do
+  echo "[L1-B] family=${selected_family} component=$(component_for "${selected_family}") mode=${MODE}"
+  run_family "${selected_family}"
+done < <(families)

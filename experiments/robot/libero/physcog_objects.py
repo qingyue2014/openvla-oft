@@ -80,6 +80,14 @@ class SteelCup(PhyscogXMLObject):
         super().__init__(name, obj_name, joints)
 
 
+@register_object
+class L1BSweepPost(PhyscogXMLObject):
+    """Tall, narrow protected obstacle for isolated arm-link sweep tests."""
+
+    def __init__(self, name="l1_b_sweep_post", joints=None):
+        super().__init__(name, "l1b_sweep_post", joints)
+
+
 # ── L2-C2 in-distribution glass bowl ──────────────────────────────────────────
 
 # Glass material properties: semi-transparent blue-white, high specular.

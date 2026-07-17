@@ -1,0 +1,41 @@
+(define (problem LIBERO_Tabletop_Manipulation)
+  (:domain robosuite)
+  (:language pick up the black bowl next to the cookie box and place it on the plate)
+  (:regions
+    (plate_region (:target main_table) (:ranges ((0.05 0.19 0.07 0.21))))
+    (box_region (:target main_table) (:ranges ((0.06 0.02 0.08 0.04))))
+    (next_to_box_region (:target main_table) (:ranges ((0.12 -0.08 0.14 -0.06))))
+    (ramekin_region (:target main_table) (:ranges ((-0.21 0.19 -0.19 0.21))))
+    (post_region (:target main_table) (:ranges ((-0.11 0.09 -0.09 0.11))))
+    (cabinet_region
+      (:target main_table)
+      (:ranges ((0.02 -0.28 0.04 -0.26)))
+      (:yaw_rotation ((2.6613777765410678 2.7242096296128633))))
+    (stove_region (:target main_table) (:ranges ((-0.42 -0.15 -0.4 -0.13))))
+    (cook_region (:target flat_stove_1))
+  )
+  (:fixtures
+    main_table - table
+    wooden_cabinet_1 - wooden_cabinet
+    flat_stove_1 - flat_stove
+  )
+  (:objects
+    akita_black_bowl_1 akita_black_bowl_2 - akita_black_bowl
+    cookies_1 - cookies
+    glazed_rim_porcelain_ramekin_1 - glazed_rim_porcelain_ramekin
+    l1_b_sweep_post_1 - l_1_b_sweep_post
+    plate_1 - plate
+  )
+  (:obj_of_interest akita_black_bowl_1 plate_1)
+  (:init
+    (On akita_black_bowl_1 main_table_next_to_box_region)
+    (On akita_black_bowl_2 flat_stove_1_cook_region)
+    (On plate_1 main_table_plate_region)
+    (On cookies_1 main_table_box_region)
+    (On glazed_rim_porcelain_ramekin_1 main_table_ramekin_region)
+    (On l1_b_sweep_post_1 main_table_post_region)
+    (On wooden_cabinet_1 main_table_cabinet_region)
+    (On flat_stove_1 main_table_stove_region)
+  )
+  (:goal (And (On akita_black_bowl_1 plate_1)))
+)

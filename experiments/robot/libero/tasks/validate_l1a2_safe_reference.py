@@ -309,9 +309,19 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
     above_source[:2] += grasp_xy_offset
     grasp_eef[:2] += grasp_xy_offset
 
-    stages = (
-        ("approach_source", above_source, open_sign, args.position_tolerance, False),
-        ("descend_to_grasp", grasp_eef, open_sign, args.precise_position_tolerance, True),
+    stages = []
+    detour_y = getattr(args, "pregrasp_detour_y", None)
+    if detour_y is not None:
+        detour = _eef_pos(obs).copy()
+        detour[1] = detour_y
+        stages.append(
+            ("pregrasp_lateral_detour", detour, open_sign, args.position_tolerance, False)
+        )
+    stages.extend(
+        [
+            ("approach_source", above_source, open_sign, args.position_tolerance, False),
+            ("descend_to_grasp", grasp_eef, open_sign, args.precise_position_tolerance, True),
+        ]
     )
     for stage, target, grip, tolerance, accept_contact in stages:
         if failure is None:
@@ -374,10 +384,18 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
     transit_source_bowl[2] = transit_z
     transit_plate_bowl = preplace_bowl.copy()
     transit_plate_bowl[2] = transit_z
-    transport_stages = (
-        ("raise_for_transport", transit_source_bowl),
-        ("translate_above_plate", transit_plate_bowl),
-        ("move_above_plate", preplace_bowl),
+    transport_stages = [("raise_for_transport", transit_source_bowl)]
+    transport_via_x = getattr(args, "transport_via_x", None)
+    if transport_via_x is not None:
+        via_source = transit_source_bowl.copy()
+        via_source[0] = transport_via_x
+        via_plate = transit_plate_bowl.copy()
+        via_plate[0] = transport_via_x
+        transport_stages.extend(
+            [("transport_detour_out", via_source), ("transport_detour_across", via_plate)]
+        )
+    transport_stages.extend(
+        [("translate_above_plate", transit_plate_bowl), ("move_above_plate", preplace_bowl)]
     )
     for stage, bowl_waypoint in transport_stages:
         if failure is None:
@@ -519,7 +537,10 @@ def run(args):
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
     states = _load_states(args.state_path, task.language.replace(" ", "_"), args.num_states)
-    bddl = os.path.join(get_libero_path("bddl_files"), task.problem_folder, task.bddl_file)
+    bddl_override = getattr(args, "bddl_file", "")
+    bddl = bddl_override or os.path.join(
+        get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
+    )
     env = ControlEnv(
         bddl_file_name=bddl,
         use_camera_obs=False,
@@ -657,6 +678,8 @@ def main():
     parser.add_argument("--wait_steps", type=int, default=10)
     parser.add_argument("--gripper_probe_steps", type=int, default=8)
     parser.add_argument("--approach_height", type=float, default=0.12)
+    parser.add_argument("--pregrasp_detour_y", type=float, default=None)
+    parser.add_argument("--transport_via_x", type=float, default=None)
     parser.add_argument("--grasp_height", type=float, default=0.015)
     parser.add_argument(
         "--grasp_offset_fractions",

@@ -297,6 +297,20 @@ RUN_ID_SUFFIX=<same-suffix> \
 
 ## Other L1 Runners
 
+The revised L1-B swept-volume matrix keeps native `libero_spatial` task 6 and
+isolates arm/link, wrist/gripper, and held-object contacts in paired Eb/Er/Ec
+states:
+
+```bash
+bash experiments/robot/libero/tasks/run_l1b_swept.sh all prepare
+SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_l1b_swept.sh all smoke
+NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1b_swept.sh all eval
+```
+
+See `L1-B_SPEC.md` for the construct definition and mandatory static/dynamic
+gates. The older B1/B2/B3/B4 runners below are retained for historical result
+reproduction; they are not the primary revised L1-B evidence.
+
 Each runner supports `check`, `eval`, and usually `all`. Some also support
 `debug`, `preview`, `sweep`, or `smoke`.
 
