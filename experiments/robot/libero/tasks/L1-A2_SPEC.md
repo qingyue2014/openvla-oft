@@ -90,8 +90,9 @@ hold (`BENCHMARK_READY_FOR_ATTRIBUTION`); override only with
    participating view to have `ratio ≤ 0.02`. This is an any-view partial-
    occlusion claim, not a claim that every available view is occluded. Verdict
    is stored as `"occlusion_gate": "PASS"` in the pairing manifest.
-3. Dynamic safe-reference gate: scripted OSC bowl-to-plate succeeds in ≥ 90%
-   of sampled Er states (`PASS_DYNAMIC_SAFE_REFERENCE` in
+3. Dynamic safe-reference gate: the native LIBERO bowl-on-plate goal succeeds
+   under scripted OSC in ≥ 90% of sampled Er states while cookie displacement
+   remains ≤ 0.020 m (`PASS_DYNAMIC_SAFE_REFERENCE` in
    `experiments/logs/l1a2_safe_reference.md`).
 
 ## Remote Verification Checklist

@@ -228,11 +228,32 @@ def _bowl_on_plate(env, args) -> dict:
     bowl_lo, _ = _world_aabb(env, TARGET)
     xy_offset = float(np.linalg.norm(bowl_pos[:2] - plate_pos[:2]))
     bottom_gap = float(bowl_lo[2] - plate_hi[2])
-    on_plate = bool(
-        xy_offset <= args.max_place_xy_offset
-        and -0.010 <= bottom_gap <= args.max_place_height_gap
+    # The native BDDL predicate is authoritative.  AABB bottom-vs-top gaps are
+    # not portable across the concave bowl / rimmed plate collision assets and
+    # produced a repeatable false -0.10 m gap even when the native On predicate
+    # was satisfied. Keep the geometry values only as diagnostics.
+    native_success = bool(env.check_success())
+    return {
+        "task_success": native_success,
+        "native_task_success": native_success,
+        "place_xy_offset_m": xy_offset,
+        "place_bottom_gap_m": bottom_gap,
+        "place_xy_sanity_ok": bool(xy_offset <= args.max_place_xy_offset),
+    }
+
+
+def _reference_attempt_score(row: dict) -> tuple:
+    """Rank failed attempts so the report retains the most informative one."""
+    place_xy = float(row.get("place_xy_offset_m", float("inf")))
+    if not np.isfinite(place_xy):
+        place_xy = float("inf")
+    return (
+        int(row.get("safe_success", 0)),
+        int(row.get("native_task_success", 0)),
+        int(row.get("occluder_stable", 0)),
+        int(row.get("grasp_verified", 0)),
+        -place_xy,
     )
-    return {"task_success": on_plate, "place_xy_offset_m": xy_offset, "place_bottom_gap_m": bottom_gap}
 
 
 def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), attempt_idx=0):
@@ -372,12 +393,24 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
 
     placement = _bowl_on_plate(env, args)
     occluder_displacement_m = float(np.linalg.norm(_body_pos(env, OCCLUDER) - occluder_start))
+    occluder_stable = bool(
+        occluder_displacement_m <= args.max_occluder_displacement
+    )
     reason = getattr(failure, "reason", "") if failure is not None else ""
     failure_stage = getattr(failure, "stage", "") if failure is not None else ""
     failure_initial_error = getattr(failure, "initial_error_m", float("nan"))
     failure_best_error = getattr(failure, "best_error_m", float("nan"))
     failure_final_error = getattr(failure, "final_error_m", float("nan"))
-    safe_success = bool(placement["task_success"] and failure is None)
+    if failure is None and not placement["task_success"]:
+        reason = "native_goal_not_satisfied"
+    if failure is None and placement["task_success"] and not occluder_stable:
+        reason = (
+            f"occluder_displacement={occluder_displacement_m:.4f}m>"
+            f"{args.max_occluder_displacement:.4f}m"
+        )
+    safe_success = bool(
+        placement["task_success"] and failure is None and occluder_stable
+    )
     out_path = Path(args.trajectory_dir) / f"task{args.task_id}_ep{episode_idx:03d}.npz"
     recorder.save(
         str(out_path),
@@ -389,7 +422,7 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
             "grasp_verified": grasp_verified,
             "grasp_lift_m": grasp_lift_m,
             "success": safe_success,
-            "violated": False,
+            "violated": not occluder_stable,
             "violation_reason": reason,
             "failure_stage": failure_stage,
             "failure_initial_error_m": failure_initial_error,
@@ -400,6 +433,7 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
             "gripper_aperture_after_minus": aperture_minus,
             "gripper_aperture_after_plus": aperture_plus,
             "occluder_displacement_m": occluder_displacement_m,
+            "occluder_stable": occluder_stable,
             **placement,
         },
     )
@@ -414,6 +448,7 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
         "place_xy_offset_m": placement["place_xy_offset_m"],
         "place_bottom_gap_m": placement["place_bottom_gap_m"],
         "occluder_displacement_m": occluder_displacement_m,
+        "occluder_stable": int(occluder_stable),
         "reason": reason,
         "failure_stage": failure_stage,
         "failure_initial_error_m": failure_initial_error,
@@ -488,15 +523,12 @@ def run(args):
                     f"lift={candidate_row['grasp_lift_m']:.4f}m "
                     f"stage={candidate_row['failure_stage'] or '-'}"
                 )
-                row = candidate_row
-                if candidate_row["grasp_verified"]:
+                if row is None or _reference_attempt_score(
+                    candidate_row
+                ) > _reference_attempt_score(row):
+                    row = candidate_row
+                if candidate_row["safe_success"]:
                     selected_grasp_offset = offset.copy()
-                    break
-                if candidate_row["failure_stage"] not in {
-                    "descend_to_grasp",
-                    "verify_grasp",
-                    "lift_grasped_bowl",
-                }:
                     break
             rows.append(row)
             print(
@@ -504,6 +536,7 @@ def run(args):
                 f"place_xy={row['place_xy_offset_m']:.4f} "
                 f"place_gap={row['place_bottom_gap_m']:.4f} "
                 f"occluder_moved={row['occluder_displacement_m']:.4f}m "
+                f"occluder_stable={row['occluder_stable']} "
                 f"stage={row['failure_stage'] or '-'} "
                 f"close_sign={row['gripper_close_sign']:+.0f} "
                 f"grasp_offset=({row['grasp_offset_x_m']:+.4f},"
@@ -533,18 +566,20 @@ def run(args):
         f"- Episodes: {len(rows)}",
         f"- Dynamic safe-success rate: {safe_rate:.3f}",
         f"- Required rate: {args.min_safe_reference_rate:.3f}",
+        f"- Maximum allowed occluder displacement: {args.max_occluder_displacement:.3f} m",
         "- Scope: executable OSC bowl-to-plate sequence in Er occlusion states,",
         "  not teleport-only physics. Proves the occluder does not physically",
         "  block the instructed grasp/place, so Er policy failures are",
         "  attributable to perception.",
         "",
-        "| Episode | Safe success | Place XY (m) | Place gap (m) | Occluder moved (m) | Failure stage | Best error (m) | Final error (m) | Reason |",
-        "| ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- |",
+        "| Episode | Safe success | Native goal | Place XY (m) | AABB gap (diagnostic, m) | Occluder moved (m) | Occluder stable | Failure stage | Best error (m) | Final error (m) | Reason |",
+        "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
-            f"| {row['episode']} | {row['safe_success']} | {row['place_xy_offset_m']:.4f} | "
-            f"{row['place_bottom_gap_m']:.4f} | {row['occluder_displacement_m']:.4f} | "
+            f"| {row['episode']} | {row['safe_success']} | {row['native_task_success']} | "
+            f"{row['place_xy_offset_m']:.4f} | {row['place_bottom_gap_m']:.4f} | "
+            f"{row['occluder_displacement_m']:.4f} | {row['occluder_stable']} | "
             f"{row['failure_stage'] or '--'} | {row['failure_best_error_m']:.4f} | "
             f"{row['failure_final_error_m']:.4f} | {row['reason'] or '--'} |"
         )
@@ -589,6 +624,7 @@ def main():
     parser.add_argument("--min_safe_reference_rate", type=float, default=0.9)
     parser.add_argument("--max_place_xy_offset", type=float, default=0.060)
     parser.add_argument("--max_place_height_gap", type=float, default=0.030)
+    parser.add_argument("--max_occluder_displacement", type=float, default=0.020)
     parser.add_argument(
         "--trajectory_dir", default="experiments/logs/l1a2_safe_reference_trajectories"
     )
