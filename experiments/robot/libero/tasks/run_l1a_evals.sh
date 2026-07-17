@@ -74,6 +74,7 @@ L1A2_PAIRING_JSON="${TASKS_DIR}/l1a2_task1_upright_cookie_pairing.json"
 L1A2_PREVIEW_DIR="${TASKS_DIR}/l1a2_preview"
 L1A2_SAFE_REF_REPORT="${L1A2_SAFE_REF_REPORT:-experiments/logs/l1a2_safe_reference.md}"
 L1A2_ATTRIBUTION_OUT="${L1A2_ATTRIBUTION_OUT:-experiments/logs/l1a2_attribution.md}"
+L1A2_SMOKE_VIDEO_DIR="${L1A2_SMOKE_VIDEO_DIR:-experiments/logs/l1a2_smoke_videos}"
 L1A2_TRACK_BODIES="akita_black_bowl_1_main,cookies_1_main,plate_1_main,glazed_rim_porcelain_ramekin_1_main,akita_black_bowl_2_main"
 L1A2_SKIP_GATES="${L1A2_SKIP_GATES:-False}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
@@ -468,10 +469,32 @@ eval_l1a2() {
 }
 
 smoke_l1a2() {
-    log "L1-A2 smoke: ${SMOKE_TRIALS} trials per condition (run IDs suffixed 'smoke')"
+    local job_token smoke_suffix occ_run_id safe_run_id er_count ec_count
+    job_token="${SLURM_JOB_ID:-manual-$(date -u +%Y%m%dT%H%M%SZ)}"
+    smoke_suffix="$(with_suffix smoke "${L1A2_RUN_SUFFIX:-${job_token}}")"
+    occ_run_id="$(with_suffix L1-A2-upright-cookie-occlusion "${smoke_suffix}")"
+    safe_run_id="$(with_suffix L1-A2-upright-cookie-matched-safe "${smoke_suffix}")"
+
+    log "L1-A2 smoke: ${SMOKE_TRIALS} fresh trials per condition (suffix '${smoke_suffix}')"
     NUM_TRIALS="${SMOKE_TRIALS}" \
-    L1A2_RUN_SUFFIX="$(with_suffix smoke "${L1A2_RUN_SUFFIX}")" \
+    L1A2_RUN_SUFFIX="${smoke_suffix}" \
         eval_l1a2
+
+    rm -rf "${L1A2_SMOKE_VIDEO_DIR}"
+    mkdir -p "${L1A2_SMOKE_VIDEO_DIR}/Er" "${L1A2_SMOKE_VIDEO_DIR}/Ec"
+    find "rollouts/libero_spatial/${occ_run_id}" -maxdepth 1 -type f -name '*.mp4' \
+        -exec cp {} "${L1A2_SMOKE_VIDEO_DIR}/Er/" \;
+    find "rollouts/libero_spatial/${safe_run_id}" -maxdepth 1 -type f -name '*.mp4' \
+        -exec cp {} "${L1A2_SMOKE_VIDEO_DIR}/Ec/" \;
+    find "${L1A2_SMOKE_VIDEO_DIR}" -type f -name '*.mp4' | sort \
+        > "${L1A2_SMOKE_VIDEO_DIR}/manifest.txt"
+    er_count="$(find "${L1A2_SMOKE_VIDEO_DIR}/Er" -type f -name '*.mp4' | wc -l | tr -d ' ')"
+    ec_count="$(find "${L1A2_SMOKE_VIDEO_DIR}/Ec" -type f -name '*.mp4' | wc -l | tr -d ' ')"
+    if [[ "${er_count}" -lt "${SMOKE_TRIALS}" || "${ec_count}" -lt "${SMOKE_TRIALS}" ]]; then
+        echo "L1-A2 smoke video collection incomplete: Er=${er_count}, Ec=${ec_count}, expected=${SMOKE_TRIALS}" >&2
+        return 1
+    fi
+    echo "L1-A2_SMOKE_COMPLETE Er=${er_count} Ec=${ec_count} suffix=${smoke_suffix}"
 }
 
 attribution_l1a2() {
@@ -542,6 +565,7 @@ case "${MODE}" in
         ;;
     l1a2_smoke)
         gen_l1a2; smoke_l1a2
+        parse_results
         ;;
     l1a2_attribution)
         attribution_l1a2

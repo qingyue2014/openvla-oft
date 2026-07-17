@@ -36,6 +36,8 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
     }
     assert PHASES[("l1a2", "safe_reference")].count_env == "SAFE_REF_STATES"
     assert "SAVE_VIDEO_MODE=all" in PHASES[("l1a2", "smoke")].command
+    assert PHASES[("l1a2", "smoke")].count_env == "SMOKE_TRIALS"
+    assert "experiments/logs/l1a2_smoke_videos" in PHASES[("l1a2", "smoke")].artifacts
     formal = PHASES[("l1a2", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "FAMILIES=l1a2" in formal.command
@@ -65,6 +67,16 @@ def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     assert "'path with space/runner.sh'" in script
     assert "__PHYSCOG_COMPUTE_NODE__" in script
     assert "__PHYSCOG_EXIT_CODE__" in script
+
+
+def test_smoke_batch_requests_five_fresh_all_video_trials():
+    script = build_batch_script(
+        _config(), PHASES[("l1a2", "smoke")], count=5,
+        scenario="l1a2", phase="smoke", remote_log="/tmp/smoke.out"
+    )
+    assert "export SMOKE_TRIALS=5" in script
+    assert "SAVE_VIDEO_MODE=all" in script
+    assert "rm -rf experiments/logs/l1a2_smoke_videos" in script
 
 
 def test_no_sync_omits_remote_checkout_mutation():

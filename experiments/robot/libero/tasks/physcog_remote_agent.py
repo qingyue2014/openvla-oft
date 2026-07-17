@@ -64,6 +64,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l1a_results.md",
             "experiments/logs/review_videos.md",
+            "experiments/logs/l1a2_smoke_videos",
         ),
     ),
     ("l1a2", "formal"): PhaseSpec(
