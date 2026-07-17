@@ -73,6 +73,7 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo = group.create_group(f"demo_{index}")
             demo.attrs["reset_attempt"] = attempt
             demo.attrs["initial_eef_drift_m"] = 0.0
+            demo.attrs["runtime_wait_displacement_m"] = 0.0
             demo.attrs["bottle_qpos_flat_start"] = 3
             demo.attrs["bottle_qvel_flat_start"] = 20
             if source is not None:
@@ -102,6 +103,8 @@ def test_stable_generator_is_explicitly_paired_to_er_artifact():
     assert "validate_l3a1_pairing.py" in text
     assert "PASS_L3A1_PAIRED_SERIALIZED_STATES" in text
     assert 'close_response["contacts"].intersection(forbidden_contacts)' in GENERATOR.read_text()
+    assert "env.step(DUMMY_ACTION)" in GENERATOR.read_text()
+    assert '"runtime_wait_displacement_m"' in GENERATOR.read_text()
 
 
 def test_pairing_gate_rejects_wrong_source_metadata(tmp_path):

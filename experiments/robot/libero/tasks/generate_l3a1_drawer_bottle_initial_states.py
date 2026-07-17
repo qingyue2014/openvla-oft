@@ -57,6 +57,10 @@ DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.b
 # by ~step 300). Settle long enough that the SAVED state is genuinely at rest,
 # otherwise eval loads a still-toppling bottle. See L3A_RUNS.md.
 SETTLE_STEPS = 400
+SETTLE_CONTROL_STEPS = 20
+RUNTIME_WAIT_STEPS = 10
+RUNTIME_WAIT_MAX_DRIFT = 0.005
+DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
 MAX_SETTLE_XY_DRIFT = 0.10  # a genuine lean swings the top well past 3cm; only reject gross launches
 MIN_SETTLED_Z = 0.30  # kitchen_table sits lower than living_room_table; loosen vs L2-B2's 0.40
 
@@ -319,8 +323,11 @@ def generate_states(
         env.sim.forward()
 
         pre_settle_xy = _body_pos(env, BOTTLE_BODY)[:2].copy()
-        for _ in range(SETTLE_STEPS):
-            env.sim.step()
+        # Settle through the same robosuite controller path used at runtime.
+        # Bare sim.step() misses controller-induced transients that occur in
+        # the evaluator's initial dummy-action wait.
+        for _ in range(SETTLE_CONTROL_STEPS):
+            env.step(DUMMY_ACTION)
 
         if not _state_is_finite(env):
             print(f"  [skip attempt {attempts}] non-finite simulation state")
@@ -382,6 +389,30 @@ def generate_states(
             raise RuntimeError(
                 f"candidate changed non-bottle robot state: EEF drift={initial_eef_drift:.3e}m"
             )
+
+        # Replay from a fresh controller reset exactly as evaluation does,
+        # then require the serialized bottle to survive the full runtime wait.
+        env.reset()
+        env.sim.set_state_from_flattened(candidate_state)
+        env.sim.forward()
+        runtime_wait_start = _body_pos(env, BOTTLE_BODY).copy()
+        runtime_wait_start_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+        for _ in range(RUNTIME_WAIT_STEPS):
+            env.step(DUMMY_ACTION)
+        runtime_wait_displacement = float(
+            np.linalg.norm(_body_pos(env, BOTTLE_BODY) - runtime_wait_start)
+        )
+        runtime_wait_tilt_delta = abs(
+            _lean_tilt_angle_deg(env, BOTTLE_BODY) - runtime_wait_start_tilt
+        )
+        if runtime_wait_displacement > RUNTIME_WAIT_MAX_DRIFT:
+            print(
+                f"  [skip attempt {attempts}] runtime wait drift="
+                f"{runtime_wait_displacement:.4f}m > {RUNTIME_WAIT_MAX_DRIFT:.4f}m"
+            )
+            continue
+        env.sim.set_state_from_flattened(candidate_state)
+        env.sim.forward()
 
         # Recompute instantaneous bottle quantities from the exact candidate
         # that will be serialized before running its hold/contact/close gates.
@@ -502,6 +533,8 @@ def generate_states(
                 "bottle_qpos_flat_start": qpos_flat,
                 "bottle_qvel_flat_start": qvel_flat,
                 "initial_eef_drift_m": initial_eef_drift,
+                "runtime_wait_displacement_m": runtime_wait_displacement,
+                "runtime_wait_tilt_delta_deg": runtime_wait_tilt_delta,
                 "settled_tilt_deg": tilt_deg,
                 "hold_displacement_m": hold_displacement,
                 "hold_tilt_delta_deg": hold_tilt_delta,

@@ -32,6 +32,8 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 raise ValueError(f"non-bottle state differs from base reset at demo_{index}")
             if float(demo.attrs.get("initial_eef_drift_m", np.inf)) > 1e-10:
                 raise ValueError(f"initial EEF drift is nonzero at demo_{index}")
+            if float(demo.attrs.get("runtime_wait_displacement_m", np.inf)) > 0.005:
+                raise ValueError(f"runtime wait drift exceeds 5 mm at demo_{index}")
     return count
 
 
