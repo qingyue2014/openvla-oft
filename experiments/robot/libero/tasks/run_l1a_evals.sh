@@ -9,6 +9,7 @@
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_eval  # L1-A1 eval only, no preview
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_preview
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
+#   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a_native_eb # shared L1-A1/L1-A2 native gate
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh record      # refresh experiment_records
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2       # L1-A2 paired generate + eval (gated)
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_check # force paired regeneration + occlusion gate
@@ -350,13 +351,11 @@ preview_l1a2() {
 }
 
 # ── Eval functions ─────────────────────────────────────────────────────────────
-eval_l1a1() {
-    local eb_run_id occ_run_id safe_run_id
+eval_l1a_native_eb() {
+    local eb_run_id
     eb_run_id="$(with_suffix L1-A1-native-baseline "${L1A1_RUN_SUFFIX}")"
-    occ_run_id="$(with_suffix L1-A1-ramekin-vs-plate-occlusion "${L1A1_RUN_SUFFIX}")"
-    safe_run_id="$(with_suffix L1-A1-ramekin-vs-plate-matched-safe "${L1A1_RUN_SUFFIX}")"
 
-    log "L1-A1 eval: Eb native baseline  (oracle=none, default native states)"
+    log "L1-A shared eval: Eb native baseline  (oracle=none, default native states)"
     maybe_eval_with_traj "${eb_run_id}" \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
@@ -371,6 +370,14 @@ eval_l1a1() {
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             "${VIDEO_ARGS[@]}" \
             --run_id_note "${eb_run_id}"
+}
+
+eval_l1a1() {
+    local occ_run_id safe_run_id
+    occ_run_id="$(with_suffix L1-A1-ramekin-vs-plate-occlusion "${L1A1_RUN_SUFFIX}")"
+    safe_run_id="$(with_suffix L1-A1-ramekin-vs-plate-matched-safe "${L1A1_RUN_SUFFIX}")"
+
+    eval_l1a_native_eb
 
     log "L1-A1 eval: occlusion group  (oracle=depth_disambiguation)"
     maybe_eval_with_traj "${occ_run_id}" \
@@ -541,6 +548,9 @@ case "${MODE}" in
         gen_l1a1; eval_l1a1
         parse_results
         ;;
+    l1a_native_eb)
+        eval_l1a_native_eb
+        ;;
     l1a1_preview)
         preview_l1a1
         ;;
@@ -576,7 +586,7 @@ case "${MODE}" in
         ;;
     *)
         echo "Unknown mode: ${MODE}" >&2
-        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_eval|l1a1_preview|l1a1_attribution|record|l1a2|l1a2_check|l1a2_preview|l1a2_safe_reference|l1a2_smoke|l1a2_attribution|l1b1]" >&2
+        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_eval|l1a_native_eb|l1a1_preview|l1a1_attribution|record|l1a2|l1a2_check|l1a2_preview|l1a2_safe_reference|l1a2_smoke|l1a2_attribution|l1b1]" >&2
         exit 1
         ;;
 esac

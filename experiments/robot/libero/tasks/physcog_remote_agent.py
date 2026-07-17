@@ -71,7 +71,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "env",
             "FAMILIES=l1a2",
-            "SEEDS=42 43 44 45 46",
+            "SEEDS=42",
             "bash",
             "experiments/robot/libero/tasks/run_paper_matrix.sh",
             "full",

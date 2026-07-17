@@ -17,9 +17,10 @@
 #   bash experiments/robot/libero/tasks/run_paper_matrix.sh tables       # records + result tables
 #
 # Overridable environment:
-#   SEEDS="42 .. 46"      policy/env seeds; default 5 repeats x NUM_TRIALS=50
-#                         episodes = 250 episodes per condition (Wilson CI
-#                         half-width ~±6pp). To match LIBERO-Gen's 50 repeats:
+#   SEEDS="42"            policy/env seeds; default first-pass protocol is one
+#                         seed x NUM_TRIALS=50 per condition. Add seeds after CI
+#                         review for selected scenarios. To run five repeats:
+#                         SEEDS="42 43 44 45 46". To match LIBERO-Gen's 50 repeats:
 #                         SEEDS="$(seq -s' ' 42 91)" (~10x compute, CI ~±2pp).
 #   NUM_TRIALS=50         episodes per condition per seed (L2-C2 uses L2C2_TRIALS=20)
 #   SCENE_SEED=42         fixed initial-state generation seed; do not vary per repeat
@@ -37,7 +38,7 @@ set -euo pipefail
 
 MODE="${1:-full}"
 
-SEEDS="${SEEDS:-42 43 44 45 46}"
+SEEDS="${SEEDS:-42}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 L2C2_TRIALS="${L2C2_TRIALS:-20}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
@@ -64,6 +65,11 @@ run_family() {
                 bash "${TASKS_DIR}/run_l1a_evals.sh" l1a1_eval
             ;;
         l1a2)
+            # L1-A2 shares task-1's native Eb competence gate with L1-A1. Run
+            # it at the same formal seed/trial count instead of reusing pilot10.
+            SEED="${SCENE_SEED}" EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" \
+                NUM_TRIALS="${trials}" RUN_PREVIEW=False RECORD_RESULTS=False \
+                bash "${TASKS_DIR}/run_l1a_evals.sh" l1a_native_eb
             SEED="${SCENE_SEED}" EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" \
                 NUM_TRIALS="${trials}" RUN_PREVIEW=False RECORD_RESULTS=False \
                 bash "${TASKS_DIR}/run_l1a_evals.sh" l1a2
@@ -151,7 +157,7 @@ do_attribution() {
         # L1-A2 reuses the existing unsuffixed L1-A1 native Eb gate, while its
         # representative attribution trajectories come from the first formal
         # Er/Ec seed repeat.
-        L1A1_RUN_SUFFIX="" L1A2_RUN_SUFFIX="seed${attribution_seed}" \
+        L1A1_RUN_SUFFIX="seed${attribution_seed}" L1A2_RUN_SUFFIX="seed${attribution_seed}" \
             RECORD_RESULTS=False \
             bash "${TASKS_DIR}/run_l1a_evals.sh" l1a2_attribution || true
     fi

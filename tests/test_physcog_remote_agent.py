@@ -41,7 +41,7 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
     formal = PHASES[("l1a2", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "FAMILIES=l1a2" in formal.command
-    assert "SEEDS=42 43 44 45 46" in formal.command
+    assert "SEEDS=42" in formal.command
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
