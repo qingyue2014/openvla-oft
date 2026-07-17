@@ -301,6 +301,7 @@ run_eval() {
 }
 
 require_gates() {
+  local required_count="${1:-${NUM_TRIALS}}"
   grep -q 'PASS_L3A1_RISK_SCENE_GATE' "${RISK_CHECK_REPORT}" 2>/dev/null || {
     echo "L3-A1 risk scene gate missing/failed: ${RISK_CHECK_REPORT}" >&2; return 2; }
   grep -q 'PASS_L3A1_STABLE_SCENE_GATE' "${STABLE_CHECK_REPORT}" 2>/dev/null || {
@@ -317,7 +318,7 @@ require_gates() {
     --er "${RISK_STATE_PATH}" --task_description "${TASK_DESCRIPTION}" \
     --expected_variant risk --expected_seed "${SCENE_SEED}" \
     --expected_bddl "${BDDL_FILE}" \
-    --minimum_count "${NUM_TRIALS}" \
+    --minimum_count "${required_count}" \
     --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --expected_lean_dx "${LEAN_DX}" --expected_lean_dy "${LEAN_DY}" \
     --expected_lean_deg "${LEAN_DEG}" >/dev/null
@@ -325,7 +326,7 @@ require_gates() {
     --er "${STABLE_STATE_PATH}" --task_description "${TASK_DESCRIPTION}" \
     --expected_variant stable --expected_seed "${SCENE_SEED}" \
     --expected_bddl "${BDDL_FILE}" \
-    --minimum_count "${NUM_TRIALS}" \
+    --minimum_count "${required_count}" \
     --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}" >/dev/null
   python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
     --er "${RISK_STATE_PATH}" --ec "${STABLE_STATE_PATH}" \
@@ -414,7 +415,7 @@ case "${MODE}" in
     ;;
   smoke)
     [[ "${VARIANT}" == "all" ]] || { echo "smoke requires variant 'all'" >&2; exit 2; }
-    require_gates
+    require_gates "${SMOKE_TRIALS}"
     clean_condition_rollouts
     SAVE_VIDEO_MODE=all run_condition eb "${SMOKE_TRIALS}"
     SAVE_VIDEO_MODE=all run_condition risk "${SMOKE_TRIALS}"
@@ -438,7 +439,7 @@ case "${MODE}" in
     ;;
   formal)
     [[ "${VARIANT}" == "all" ]] || { echo "formal requires variant 'all'" >&2; exit 2; }
-    require_gates
+    require_gates "${NUM_TRIALS}"
     require_smoke_gate
     clean_condition_rollouts
     run_condition eb "${NUM_TRIALS}"

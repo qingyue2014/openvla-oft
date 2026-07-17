@@ -256,6 +256,9 @@ def test_runner_revalidates_current_artifacts_and_report_bindings():
     assert "require_smoke_gate" in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Er artifact binding"' in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Ec artifact binding"' in text
+    assert 'require_gates "${SMOKE_TRIALS}"' in text
+    assert 'require_gates "${NUM_TRIALS}"' in text
+    assert '--minimum_count "${required_count}"' in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Checkpoint"' in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Eval seed"' in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Eb index SHA256"' in text
