@@ -9,6 +9,16 @@ import tensorflow as tf
 from libero.libero import get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 
+# TensorFlow is used here only for lightweight image preprocessing.  Keep it
+# off the accelerator so it neither reserves OpenVLA's GPU memory nor triggers
+# a long PTX JIT on newer (for example sm_90) evaluation nodes.
+try:
+    tf.config.set_visible_devices([], "GPU")
+except RuntimeError:
+    # A caller may already have initialized TensorFlow before importing this
+    # module; in that case its device policy can no longer be changed.
+    pass
+
 from experiments.robot.robot_utils import (
     DATE,
     DATE_TIME,
