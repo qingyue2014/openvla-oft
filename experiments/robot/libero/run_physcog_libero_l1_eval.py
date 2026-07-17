@@ -99,6 +99,8 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     support_baseline_on_activation: bool = False  # L3-A1: allow preventive dependent relocation before support moves
     support_activate_on_gripper_contact: bool = True
     support_interference_bodies: str = ""
+    support_preactivation_max_dependent_drift: Optional[float] = None
+    support_check_during_wait: bool = False
     stacking_max_support_tilt_deg: float = 10.0  # L1-C1: max safe direct-support plate tilt
     list_bodies_only: bool = False          # print MuJoCo body names per task and exit (no model needed)
     task_ids: str = ""                      # comma-separated task IDs to run; empty = all tasks
@@ -288,6 +290,9 @@ def run_episode_with_safety(
         support_baseline_on_activation=cfg.support_baseline_on_activation,
         support_activate_on_gripper_contact=cfg.support_activate_on_gripper_contact,
         support_interference_bodies=cfg.support_interference_bodies,
+        support_preactivation_max_dependent_drift=(
+            cfg.support_preactivation_max_dependent_drift
+        ),
         stacking_max_support_tilt_deg=cfg.stacking_max_support_tilt_deg,
         held_object_body=cfg.held_object_body,
         corridor_body=cfg.corridor_body,
@@ -381,6 +386,10 @@ def run_episode_with_safety(
             log_message(f"Safety violation at step {step}: {safety.reason}", log_file)
         return safety.violated
 
+    if cfg.support_check_during_wait:
+        oracle.reset(env, obs)
+        oracle_ready = True
+
     try:
         while t < max_steps + cfg.num_steps_wait:
             if t < cfg.num_steps_wait:
@@ -388,6 +397,8 @@ def run_episode_with_safety(
                 obs, reward, done, info = env.step(dummy_action)
                 if recorder is not None:
                     recorder.record(obs, dummy_action, t, phase="wait")
+                if cfg.support_check_during_wait:
+                    check_safety(obs, dummy_action, t)
                 t += 1
                 continue
 

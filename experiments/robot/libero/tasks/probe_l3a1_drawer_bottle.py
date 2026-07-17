@@ -121,7 +121,7 @@ def main() -> None:
     parser.add_argument("--lean_dy", type=float, default=DEFAULT_LEAN_DY)
     parser.add_argument("--lean_dz", type=float, default=DEFAULT_LEAN_DZ)
     parser.add_argument("--lean_deg", type=float, default=DEFAULT_LEAN_DEG)
-    parser.add_argument("--stable_x_offset", type=float, default=-0.10)
+    parser.add_argument("--stable_x_offset", type=float, default=0.0)
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
     parser.add_argument("--close_steps", type=int, default=60)
     parser.add_argument("--hold_chunks", type=int, default=5,
@@ -148,8 +148,8 @@ def main() -> None:
         joints = [env.sim.model.joint_id2name(i) for i in range(env.sim.model.njnt)]
         print("joints:", [n for n in joints if n])
 
-    # Ec is the nearby safe-precondition control: upright and parked 10 cm
-    # laterally from the Er pose instead of depending on drawer support.
+    # Ec is the position-matched safe-precondition control: upright at the Er
+    # centre position instead of depending on drawer support.
     support_candidates = DRAWER_BODY_CANDIDATES
     support_body = _find_body(env, *support_candidates)
     drawer_body = _find_body(env, *DRAWER_BODY_CANDIDATES)
@@ -267,7 +267,7 @@ def main() -> None:
         )
     else:
         print(
-            "\nExpect: the laterally parked bottle stays upright in both stages. "
+            "\nExpect: the position-matched upright bottle stays upright in both stages. "
             "It must not contact the drawer before closing or move beyond the oracle thresholds."
         )
 

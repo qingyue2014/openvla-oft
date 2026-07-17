@@ -15,9 +15,9 @@ set -euo pipefail
 #               the bottle topples -- a support-removal hazard, not a
 #               sweep-volume/collision hazard (the bottle is never in the
 #               arm's own path).
-#   stable  Ec  load each serialized Er state, make only the bottle upright,
-#               and park it 10 cm along negative world x; all non-bottle state
-#               remains bit-identical to Er.
+#   stable  Ec  load each serialized Er state and make only the bottle upright
+#               at the identical centre position; all non-bottle state remains
+#               bit-identical to Er.
 #
 # IMPORTANT: DRAWER_BODY below is a best-effort guess at the compiled MuJoCo
 # body name for the cabinet's bottom-drawer fixture. Confirm it first with:
@@ -159,6 +159,11 @@ run_check() {
     --task_description "${TASK_DESCRIPTION}" \
     "${attempt_args[@]}" \
     "${pair_args[@]}"
+  local base_verdict=""
+  base_verdict="$(python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
+    --er "${STATE_PATH}" --task_description "${TASK_DESCRIPTION}")"
+  [[ "${base_verdict}" == PASS_L3A1_BASE_STATE_PRESERVED* ]] || {
+    echo "L3-A1 base-state preservation validation failed" >&2; return 2; }
   local pairing_verdict=""
   if [[ "${GEN_VARIANT}" == "stable" ]]; then
     pairing_verdict="$(python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
@@ -174,6 +179,7 @@ run_check() {
     echo "- States: ${NUM_TRIALS}"
     echo "- Scene seed: ${SCENE_SEED}"
     echo "- State file: \`${STATE_PATH}\`"
+    echo "- Base state: ${base_verdict}"
     [[ -z "${pairing_verdict}" ]] || echo "- Pairing: ${pairing_verdict}"
   } > "${report}"
 }
@@ -202,6 +208,8 @@ run_eval() {
     --support_baseline_on_activation True \
     --support_activate_on_gripper_contact False \
     --support_interference_bodies "${INTERFERENCE_BODIES}" \
+    --support_preactivation_max_dependent_drift 0.005 \
+    --support_check_during_wait True \
     --held_object_body "${DRAWER_BODY}" \
     --distractor_body "${BOTTLE_BODY}" \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \

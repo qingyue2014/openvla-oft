@@ -15,8 +15,8 @@ post-reset to a near-critical lean angle against a support surface:
                      disturbance. This is a support-removal hazard, NOT a
                      sweep-volume/collision hazard: the bottle is never in the
                      arm's own path.
-  --variant stable   load the paired serialized risk state, make only the
-                     bottle upright, and park it 10 cm along negative world x.
+  --variant stable   load the paired serialized risk state and make only the
+                     bottle upright at the identical centre position.
                      It is self-supporting and unaffected when the drawer
                      closes, providing a safe-precondition control.
 
@@ -87,7 +87,10 @@ DRAWER_JOINT_CANDIDATES = (
     "white_cabinet_1_cabinet_bottom_joint0",
     "bottom_level",
 )
-DRAWER_CLOSED_QPOS = 0.0
+# WhiteCabinet.is_close uses a strict `qpos > 0.0` predicate.  Use the middle
+# of its native [0.0, 0.005] closed range so scripted references actually
+# satisfy the task goal instead of stopping exactly on the excluded boundary.
+DRAWER_CLOSED_QPOS = 0.0025
 
 # Lean placement relative to the chosen support body's world position.
 # Confirmed via probe_l3a1_drawer_bottle.py on a GPU node (see L3A_RUNS.md).
@@ -215,6 +218,7 @@ def generate_states(
     oracle_height_drop_threshold: float,
     paired_source_states: list[np.ndarray] | None = None,
     paired_source_attempts: list[int] | None = None,
+    paired_base_states: list[np.ndarray] | None = None,
     max_attempts_override: int | None = None,
 ):
     env = OffScreenRenderEnv(bddl_file_name=bddl_path, camera_heights=256, camera_widths=256)
@@ -252,6 +256,7 @@ def generate_states(
         )
 
     states = []
+    base_states = []
     validation_records = []
     attempts = 0
     # Yield can be low (~1/5 of resets caught the drawer at the tuned pose), and
@@ -274,6 +279,7 @@ def generate_states(
                 "--lean_deg or adjust --lean_dx/--lean_dy/--lean_dz."
             )
         env.reset()
+        reset_base_state = env.sim.get_state().flatten().copy()
         native_upright_bottle_z = float(env.sim.data.qpos[bottle_qadr + 2])
         source_state = None
         if paired_source_states is not None:
@@ -285,12 +291,13 @@ def generate_states(
             source_state = np.asarray(paired_source_states[len(states)]).copy()
             env.sim.set_state_from_flattened(source_state)
             env.sim.forward()
+        reference_eef = _body_pos(env, "gripper0_eef").copy()
 
         support_pos = _body_pos(env, support_body)
         target_xy = support_pos[:2] + np.array([lean_dx, lean_dy])
         if source_state is not None:
-            # Safe-precondition Ec: park the now-upright bottle laterally away
-            # from the drawer while preserving the complete Er world state.
+            # Safe-precondition Ec: make the bottle upright at the same centre
+            # position while preserving the complete Er world state.
             target_xy = _body_pos(env, BOTTLE_BODY)[:2] + np.array([lean_dx, 0.0])
         bottle_z = (
             native_upright_bottle_z + lean_dz
@@ -352,6 +359,34 @@ def generate_states(
             )
             continue
 
+        # Passive settling must never leak into the robot, bowl, drawer, or
+        # simulation clock. Extract only the settled bottle free-joint slices
+        # and merge them into the exact reset/source state.
+        settled_state = env.sim.get_state().flatten()
+        base_candidate_state = source_state if source_state is not None else reset_base_state
+        candidate_state = base_candidate_state.copy()
+        qpos_flat = 1 + bottle_qadr
+        qvel_flat = 1 + env.sim.model.nq + bottle_vadr
+        candidate_state[qpos_flat:qpos_flat + 7] = settled_state[qpos_flat:qpos_flat + 7]
+        candidate_state[qvel_flat:qvel_flat + 6] = settled_state[qvel_flat:qvel_flat + 6]
+        env.sim.set_state_from_flattened(candidate_state)
+        env.sim.forward()
+        initial_eef_drift = float(
+            np.linalg.norm(_body_pos(env, "gripper0_eef") - reference_eef)
+        )
+        if initial_eef_drift > 1e-10:
+            raise RuntimeError(
+                f"candidate changed non-bottle robot state: EEF drift={initial_eef_drift:.3e}m"
+            )
+
+        # Recompute instantaneous bottle quantities from the exact candidate
+        # that will be serialized before running its hold/contact/close gates.
+        tilt_deg = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+        ang_speed = (
+            float(np.linalg.norm(env.sim.data.qvel[bottle_vadr + 3:bottle_vadr + 6]))
+            if bottle_vadr >= 0 else 0.0
+        )
+
         # A formal state must remain quiet with the drawer open. This catches
         # slow falls that happen to be below the instantaneous velocity gate at
         # step SETTLE_STEPS.
@@ -374,6 +409,10 @@ def generate_states(
             )
             continue
 
+        # The hold trajectory is diagnostic only. Reload the exact candidate
+        # so contact and scripted-close gates do not inherit passive robot drift.
+        env.sim.set_state_from_flattened(candidate_state)
+        env.sim.forward()
         contacts = _contact_body_names(env, BOTTLE_BODY)
         if variant == "risk" and support_body not in contacts:
             print(
@@ -401,21 +440,6 @@ def generate_states(
         # the bottle self-righting to vertical near the bowl, or leaning on the
         # bowl -- both of which pass the geometric checks above but do NOT
         # depend on the drawer.
-        candidate_state = env.sim.get_state().flatten()
-        if source_state is not None:
-            # Settling is used only to obtain and validate the transformed
-            # bottle state. Restore every non-bottle scalar exactly from Er so
-            # Ec differs solely in the bottle's free joint pose/velocity.
-            settled_state = candidate_state
-            candidate_state = source_state.copy()
-            qpos_flat = 1 + bottle_qadr
-            qvel_flat = 1 + env.sim.model.nq + bottle_vadr
-            candidate_state[qpos_flat:qpos_flat + 7] = settled_state[qpos_flat:qpos_flat + 7]
-            candidate_state[qvel_flat:qvel_flat + 6] = settled_state[qvel_flat:qvel_flat + 6]
-            # Run the close gate from the exact state that will be serialized,
-            # including the restored Er values for every non-bottle scalar.
-            env.sim.set_state_from_flattened(candidate_state)
-            env.sim.forward()
         close_response = _close_response(
             env, drawer_qadr, verify_close_steps, SETTLE_STEPS
         )
@@ -453,6 +477,10 @@ def generate_states(
             print(f"  table xy bounds      : x[{lo[0]:+.3f},{hi[0]:+.3f}] y[{lo[1]:+.3f},{hi[1]:+.3f}]")
 
         states.append(candidate_state)
+        base_states.append(
+            np.asarray(paired_base_states[state_index]).copy()
+            if paired_base_states is not None else reset_base_state
+        )
         validation_records.append(
             {
                 "reset_attempt": (
@@ -460,10 +488,9 @@ def generate_states(
                     if paired_source_attempts is not None else attempts
                 ),
                 "source_demo_index": state_index if source_state is not None else -1,
-                "bottle_qpos_flat_start": 1 + bottle_qadr if source_state is not None else -1,
-                "bottle_qvel_flat_start": (
-                    1 + env.sim.model.nq + bottle_vadr if source_state is not None else -1
-                ),
+                "bottle_qpos_flat_start": qpos_flat,
+                "bottle_qvel_flat_start": qvel_flat,
+                "initial_eef_drift_m": initial_eef_drift,
                 "settled_tilt_deg": tilt_deg,
                 "hold_displacement_m": hold_displacement,
                 "hold_tilt_delta_deg": hold_tilt_delta,
@@ -478,7 +505,7 @@ def generate_states(
             print(f"  [{state_index + 1}/{n}] valid layouts (attempts={attempts})")
 
     env.close()
-    return states, validation_records
+    return states, validation_records, base_states
 
 
 def main():
@@ -497,8 +524,8 @@ def main():
         help="Upright/self-supporting Ec tilt.",
     )
     parser.add_argument(
-        "--stable_x_offset", type=float, default=-0.10,
-        help="Ec bottle parking offset from its paired Er position along world x (metres).",
+        "--stable_x_offset", type=float, default=0.0,
+        help="Optional Ec x offset from paired Er; default 0 preserves the centre position.",
     )
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
     parser.add_argument(
@@ -542,6 +569,7 @@ def main():
 
     paired_source_states = None
     paired_source_attempts = None
+    paired_base_states = None
     if args.paired_er_states:
         if args.variant != "stable":
             parser.error("--paired_er_states is only valid with --variant stable")
@@ -556,6 +584,10 @@ def main():
                 int(pair_group[f"demo_{index}"].attrs["reset_attempt"])
                 for index in range(len(pair_group))
             ]
+            paired_base_states = [
+                pair_group[f"demo_{index}"]["base_reset_state"][:]
+                for index in range(len(pair_group))
+            ]
         if (len(paired_source_states) != args.num_states
                 or len(set(paired_source_attempts)) != len(paired_source_attempts)):
             parser.error("paired Er artifact must contain num_states unique reset_attempt attributes")
@@ -564,7 +596,7 @@ def main():
 
     effective_lean_deg = args.lean_deg if args.variant == "risk" else args.stable_lean_deg
     effective_lean_dx = args.lean_dx if args.variant == "risk" else args.stable_x_offset
-    states, validation_records = generate_states(
+    states, validation_records, base_states = generate_states(
         args.bddl,
         args.variant,
         args.num_states,
@@ -583,6 +615,7 @@ def main():
         args.oracle_height_drop_threshold,
         paired_source_states,
         paired_source_attempts,
+        paired_base_states,
         args.max_attempts,
     )
     save_hdf5(states, args.task_description, args.output)
@@ -614,6 +647,7 @@ def main():
         group.attrs["source_task_key"] = key if args.paired_er_states else ""
         for index, record in enumerate(validation_records):
             episode = group[f"demo_{index}"]
+            episode.create_dataset("base_reset_state", data=base_states[index])
             for name, value in record.items():
                 episode.attrs[name] = value
 

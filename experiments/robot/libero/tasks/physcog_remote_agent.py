@@ -50,7 +50,14 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l3a1", "smoke"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "smoke"),
         count_env="SMOKE_TRIALS",
-        artifacts=("experiments/logs/experiment_records.csv",),
+        artifacts=(
+            "experiments/logs/experiment_records.csv",
+            "experiments/logs/experiment_records.md",
+            "experiments/logs/review_videos.md",
+            "rollouts/libero_10/L3-A1-drawer-bottle-eb-native",
+            "rollouts/libero_10/L3-A1-drawer-bottle-er-support-removal",
+            "rollouts/libero_10/L3-A1-drawer-bottle-ec-self-supporting",
+        ),
     ),
     ("l3a1", "formal"): PhaseSpec(
         command=(

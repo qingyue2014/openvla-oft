@@ -10,7 +10,34 @@ import numpy as np
 PAIRING_METHOD = "serialized_er_state_bottle_transform"
 
 
+def validate_base_preservation(path: str, task_description: str) -> int:
+    key = task_description.replace(" ", "_")
+    with h5py.File(path, "r") as handle:
+        group = handle[key]
+        count = len(group)
+        for index in range(len(group)):
+            demo = group[f"demo_{index}"]
+            state = demo["initial_state"][:]
+            if "base_reset_state" not in demo:
+                raise ValueError(f"missing base_reset_state at demo_{index}")
+            base = demo["base_reset_state"][:]
+            qpos_start = int(demo.attrs.get("bottle_qpos_flat_start", -1))
+            qvel_start = int(demo.attrs.get("bottle_qvel_flat_start", -1))
+            if qpos_start < 0 or qvel_start < 0 or state.shape != base.shape:
+                raise ValueError(f"invalid bottle/base metadata at demo_{index}")
+            allowed = np.zeros(state.size, dtype=bool)
+            allowed[qpos_start:qpos_start + 7] = True
+            allowed[qvel_start:qvel_start + 6] = True
+            if not np.array_equal(state[~allowed], base[~allowed]):
+                raise ValueError(f"non-bottle state differs from base reset at demo_{index}")
+            if float(demo.attrs.get("initial_eef_drift_m", np.inf)) > 1e-10:
+                raise ValueError(f"initial EEF drift is nonzero at demo_{index}")
+    return count
+
+
 def validate_pairing(er_path: str, ec_path: str, task_description: str) -> list[int]:
+    validate_base_preservation(er_path, task_description)
+    validate_base_preservation(ec_path, task_description)
     key = task_description.replace(" ", "_")
     with h5py.File(er_path, "r") as er_handle, h5py.File(ec_path, "r") as ec_handle:
         er_group, ec_group = er_handle[key], ec_handle[key]
@@ -48,6 +75,24 @@ def validate_pairing(er_path: str, ec_path: str, task_description: str) -> list[
                 raise ValueError(f"missing bottle flat-index metadata at demo_{index}")
             allowed[qpos_start:qpos_start + 7] = True
             allowed[qvel_start:qvel_start + 6] = True
+            for condition, demo, state in (
+                ("Er", er_demo, er_state), ("Ec", ec_demo, ec_state)
+            ):
+                if "base_reset_state" not in demo:
+                    raise ValueError(f"{condition} missing base_reset_state at demo_{index}")
+                base_state = demo["base_reset_state"][:]
+                if base_state.shape != state.shape or not np.array_equal(
+                    base_state[~allowed], state[~allowed]
+                ):
+                    raise ValueError(
+                        f"{condition} non-bottle state differs from base reset at demo_{index}"
+                    )
+                if float(demo.attrs.get("initial_eef_drift_m", np.inf)) > 1e-10:
+                    raise ValueError(f"{condition} initial EEF drift is nonzero at demo_{index}")
+            if not np.array_equal(
+                er_demo["base_reset_state"][:], ec_demo["base_reset_state"][:]
+            ):
+                raise ValueError(f"Er/Ec base_reset_state mismatch at demo_{index}")
             if not np.array_equal(er_state[~allowed], ec_state[~allowed]):
                 changed = np.flatnonzero((er_state != ec_state) & ~allowed)
                 raise ValueError(
@@ -67,9 +112,13 @@ def validate_pairing(er_path: str, ec_path: str, task_description: str) -> list[
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--er", required=True)
-    parser.add_argument("--ec", required=True)
+    parser.add_argument("--ec")
     parser.add_argument("--task_description", required=True)
     args = parser.parse_args()
+    if not args.ec:
+        count = validate_base_preservation(args.er, args.task_description)
+        print(f"PASS_L3A1_BASE_STATE_PRESERVED count={count}")
+        return
     attempts = validate_pairing(args.er, args.ec, args.task_description)
     print(
         f"PASS_L3A1_PAIRED_SERIALIZED_STATES count={len(attempts)} "

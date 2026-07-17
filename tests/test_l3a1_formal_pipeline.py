@@ -5,7 +5,10 @@ import h5py
 import pytest
 
 from experiments.robot.libero.tasks.record_experiment_results import _metadata_for_run
-from experiments.robot.libero.tasks.validate_l3a1_pairing import validate_pairing
+from experiments.robot.libero.tasks.validate_l3a1_pairing import (
+    validate_base_preservation,
+    validate_pairing,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +27,8 @@ def test_l3a1_safe_reference_uses_public_success_api():
     text = SAFE_REFERENCE.read_text()
     assert "env.check_success()" in text
     assert "env._check_success()" not in text
+    assert "and goal_reached" in text
+    assert 'default=0.0' in text
     assert _metadata_for_run("L3-A1-drawer-bottle-er-support-removal-seed42") == (
         "L3", "L3-A1", "Er Support Removal"
     )
@@ -65,15 +70,18 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
         for index, attempt in enumerate(attempts):
             demo = group.create_group(f"demo_{index}")
             demo.attrs["reset_attempt"] = attempt
+            demo.attrs["initial_eef_drift_m"] = 0.0
+            demo.attrs["bottle_qpos_flat_start"] = 3
+            demo.attrs["bottle_qvel_flat_start"] = 20
+            if source is not None:
+                demo.attrs["source_demo_index"] = index
             state = list(range(30))
             if mutate_bottle:
                 state[3] += 100
-                demo.attrs["source_demo_index"] = index
-                demo.attrs["bottle_qpos_flat_start"] = 3
-                demo.attrs["bottle_qvel_flat_start"] = 20
             if mutate_other:
                 state[15] += 100
             demo.create_dataset("initial_state", data=state)
+            demo.create_dataset("base_reset_state", data=list(range(30)))
 
 
 def test_pairing_gate_compares_serialized_non_bottle_state(tmp_path):
@@ -82,7 +90,7 @@ def test_pairing_gate_compares_serialized_non_bottle_state(tmp_path):
     _states(ec, [2, 5, 9], source=er, mutate_bottle=True)
     assert validate_pairing(str(er), str(ec), "task") == [2, 5, 9]
     _states(ec, [2, 5, 9], source=er, mutate_bottle=True, mutate_other=True)
-    with pytest.raises(ValueError, match="non-bottle state mismatch"):
+    with pytest.raises(ValueError, match="non-bottle state"):
         validate_pairing(str(er), str(ec), "task")
 
 
@@ -102,9 +110,28 @@ def test_pairing_gate_rejects_wrong_source_metadata(tmp_path):
         validate_pairing(str(er), str(ec), "task")
 
 
+def test_pairing_gate_requires_zero_initial_eef_drift(tmp_path):
+    er, ec = tmp_path / "er.hdf5", tmp_path / "ec.hdf5"
+    _states(er, [2])
+    _states(ec, [2], source=er, mutate_bottle=True)
+    with h5py.File(er, "a") as handle:
+        handle["task/demo_0"].attrs["initial_eef_drift_m"] = 0.01
+    with pytest.raises(ValueError, match="initial EEF drift"):
+        validate_pairing(str(er), str(ec), "task")
+
+
+def test_er_base_preservation_gate_rejects_non_bottle_drift(tmp_path):
+    er = tmp_path / "er.hdf5"
+    _states(er, [2], mutate_bottle=True, mutate_other=True)
+    with pytest.raises(ValueError, match="non-bottle state"):
+        validate_base_preservation(str(er), "task")
+
+
 def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     text = RUNNER.read_text()
     assert "--support_baseline_on_activation True" in text
     assert "--support_activate_on_gripper_contact False" in text
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
+    assert "--support_preactivation_max_dependent_drift 0.005" in text
+    assert "--support_check_during_wait True" in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text

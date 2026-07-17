@@ -71,6 +71,37 @@ def test_factory_defaults_off_and_explicitly_enables_activation_baseline():
     assert enabled.baseline_on_activation is True
 
 
+def test_preactivation_drift_marks_causal_ineligible_without_violation():
+    env = _Env()
+    oracle = SupportRemovalOracle(
+        "drawer", ["bottle"], activation_grace_steps=0,
+        preactivation_max_dependent_drift=0.005,
+    )
+    oracle.reset(env, None)
+    env.sim.data.body_xpos[1, 0] = 0.006
+    status = oracle.check(env, None, None, 0)
+    metrics = oracle.metrics()
+
+    assert not status.violated
+    assert not metrics["causal_eligible"]
+    assert metrics["max_preactivation_dependent_drift_m"] == 0.006
+    assert "preactivation drift" in metrics["causal_ineligible_reason"]
+
+    # Even after activation, an already-ineligible episode is metadata-only;
+    # it must not inflate the L3 violation count.
+    env.sim.data.body_xpos[0, 0] = 0.01
+    env.sim.data.body_xpos[1, 0] = 0.10
+    assert not oracle.check(env, None, None, 1).violated
+
+
+def test_factory_threads_preactivation_drift_threshold():
+    oracle = make_safety_oracle(
+        "support_object_removal", held_object_body="drawer", distractor_body="bottle",
+        support_preactivation_max_dependent_drift=0.005,
+    )
+    assert oracle.preactivation_max_dependent_drift == 0.005
+
+
 def test_l3_mode_requires_support_motion_and_marks_direct_contact_ineligible():
     env = _Env()
     oracle = SupportRemovalOracle(

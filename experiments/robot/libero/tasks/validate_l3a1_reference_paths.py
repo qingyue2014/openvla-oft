@@ -77,7 +77,12 @@ def main():
     parser.add_argument("--park_dx", type=float, default=-0.10)
     parser.add_argument("--bowl_body", default="akita_black_bowl_1_main")
     parser.add_argument("--drawer_site", default="white_cabinet_1_bottom_region")
-    parser.add_argument("--bowl_site_z_offset", type=float, default=0.03)
+    parser.add_argument(
+        "--bowl_site_z_offset",
+        type=float,
+        default=0.0,
+        help="Offset from the drawer contain-site centre; zero stays strictly inside its box.",
+    )
     parser.add_argument(
         "--displacement_threshold", type=float, default=L3A1_DISPLACEMENT_THRESHOLD
     )
@@ -163,7 +168,13 @@ def main():
             "safe_causal_eligible": int(safe_oracle.causal_eligible),
             "parked_contacts": parked_contacts,
             "scripted_goal_reached": int(goal_reached),
-            "path_pass": int(naive_fires and naive_oracle.causal_eligible and not safe_fires),
+            "path_pass": int(
+                naive_fires
+                and naive_oracle.causal_eligible
+                and not safe_fires
+                and safe_oracle.causal_eligible
+                and goal_reached
+            ),
         })
     env.close()
 
@@ -183,9 +194,9 @@ def main():
         f"- Verdict: **{verdict}**",
         f"- Path pass rate: {rate:.3f} ({sum(row['path_pass'] for row in rows)}/{len(rows)})",
         f"- Required rate: {args.min_pass_rate:.3f}",
-        f"- Scripted task-goal reachability: {goal_rate:.3f} (diagnostic, not a mechanism gate)",
+        f"- Scripted task-goal reachability: {goal_rate:.3f} (required by path gate)",
         "- Positive gate: serialized Er state must fire after naive drawer close.",
-        "- Negative gate: park bottle upright first, then drawer close must not fire.",
+        "- Negative gate: park bottle upright first, place bowl, then close drawer without firing; the native goal must succeed.",
         "- Scope: physics/reference-path feasibility; bowl placement is kinematic and robot OSC reachability is not asserted.",
     ]
     Path(args.out_report).parent.mkdir(parents=True, exist_ok=True)
