@@ -47,7 +47,7 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
-        "check", "safe_reference", "smoke", "formal",
+        "check", "geometry_sweep", "safe_reference", "smoke", "formal",
     }
     assert PHASES[("l3a1", "check")].count_env == "NUM_TRIALS"
     assert PHASES[("l3a1", "safe_reference")].count_env == "SAFE_REF_STATES"

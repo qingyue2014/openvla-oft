@@ -39,6 +39,17 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/l3a1_drawer_bottle_stable_initial_states.hdf5",
         ),
     ),
+    ("l3a1", "geometry_sweep"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/sweep_l3a1_geometry.sh"),
+        artifacts=(
+            "experiments/logs/l3a1_geometry_sweep.md",
+            "experiments/logs/l3a1_sweep_dx-0.040_dy-0.180_deg-20.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.050_dy-0.180_deg-20.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.060_dy-0.180_deg-20.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.060_dy-0.175_deg-20.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.060_dy-0.185_deg-22.0.log",
+        ),
+    ),
     ("l3a1", "safe_reference"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "risk", "safe_reference"),
         count_env="SAFE_REF_STATES",
