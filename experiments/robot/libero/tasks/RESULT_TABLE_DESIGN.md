@@ -38,6 +38,44 @@ paper number. This prevents a level with more episodes or more repeated trials
 from dominating the model-level result. Weighted averages can be reported in
 appendix as a robustness check.
 
+## Statistical reporting protocol (CI analysis)
+
+This protocol follows the repeated-run confidence-interval scheme used by
+LIBERO-Gen (ICML 2026, Appendix B.1/B.2), with two upgrades suited to our
+episode-paired design: Wilson intervals instead of Wald, and a paired McNemar
+test for the primary Er-vs-Ec contrast. All helpers live in
+`physcog_stats.py`; `generate_result_tables.py` emits the results as Table 5.
+
+| Component | Method | Notes |
+| --- | --- | --- |
+| Per-condition rate CI | Wilson 95% score interval over pooled episodes | Valid at 0%/100%, unlike mean ± Wald. |
+| Repeated-run CI | mean ± t-based 95% half-width across runs | The LIBERO-Gen scheme; requires ≥ 2 seed-repeat runs of the identical config. |
+| Primary contrast | Δ Safe SR = Ec − Er with Newcombe 95% interval | This is the headline risk-specificity number per family. |
+| Significance test | exact McNemar when Er/Ec episodes are index-paired; unpaired two-proportion z otherwise | Pairing requires equal episode counts from the paired initial-state design. |
+| Degenerate cases | report `no test (degenerate)` | No discordant pairs, or no outcome variation in either condition (e.g. both 0%). Never fabricate a p-value. |
+
+Reporting rules:
+
+- Main-paper Tables 1-3 stay point estimates; Table 5 (or an appendix table)
+  carries the intervals and tests, mirroring LIBERO-Gen's layout.
+- Final paper runs should repeat each condition with >= 3 seeds (LIBERO-Gen
+  uses 50 runs). Use the formal orchestrator:
+  `bash experiments/robot/libero/tasks/run_paper_matrix.sh prepare` once
+  (fixed scene seed, gates), then `... run_paper_matrix.sh full` (default
+  `SEEDS="42..46"`, i.e. 5 repeats x 50 episodes = 250 episodes per
+  condition; override SEEDS to trade compute for tighter CIs). It tags runs
+  `<run_id>-seed<N>`; the table generator
+  pools seed-suffixed runs automatically and lets them supersede legacy
+  unsuffixed runs. Only the policy/env seed (`EVAL_SEED`) varies across
+  repeats — initial states are generated once so paired Er/Ec episodes stay
+  identical. For pooling unsuffixed legacy runs explicitly, use
+  `--pool_mode all --pool_since YYYY_MM_DD`; the default `latest` keeps only
+  the newest run per run_id so stale design-iteration logs are never silently
+  pooled.
+- Episode pairing across pooled runs assumes each run enumerates the same
+  paired initial-state file in the same order; if a family breaks this
+  assumption, its p-value falls back to the unpaired z-test automatically.
+
 ## Table 1: Model-level statistical summary
 
 This should be the first main result table when comparing multiple VLA models.
@@ -171,5 +209,9 @@ python experiments/robot/libero/tasks/generate_result_tables.py \
   --out experiments/logs/result_tables.md
 ```
 
-`result_tables.md` contains filled versions of Table 1, Table 2, and Table 3.
-It is generated from logs and attribution reports; do not edit it manually.
+`result_tables.md` contains filled versions of Table 1, Table 2, Table 3, and
+Table 5 (statistical reliability: Wilson CIs, run-level CIs, Δ Safe SR with
+Newcombe interval, and McNemar/z significance tests). It is generated from
+logs and attribution reports; do not edit it manually. Use
+`--pool_mode all --pool_since YYYY_MM_DD` when seed-repeat batches should be
+pooled.

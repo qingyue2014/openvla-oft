@@ -85,6 +85,12 @@ RECORD_FIELDS = [
     "condition",
     "family",
     "n",
+    "successes",
+    "violations",
+    "safe_successes",
+    "episode_success_seq",
+    "episode_violation_seq",
+    "episode_safe_seq",
     "task_success_rate",
     "svr",
     "valid_svr",
@@ -155,6 +161,17 @@ def _metadata_for_run(run_id: str) -> tuple:
     return ("", "", "")
 
 
+def _episode_seq(text: str, key: str) -> str:
+    """Compact per-episode binary sequence for lines like 'Success: True'."""
+    values = re.findall(rf"^{re.escape(key)}\s*:\s*(True|False)\s*$", text, re.MULTILINE)
+    return "".join("1" if v == "True" else "0" for v in values)
+
+
+def _last_totals_count(text: str, key: str) -> Optional[int]:
+    matches = re.findall(rf"^Totals:.*\b{re.escape(key)}=(\d+)", text, re.MULTILINE)
+    return int(matches[-1]) if matches else None
+
+
 def parse_eval_log(path: Path) -> Dict[str, object]:
     text = _read(path)
     run_id = _run_id_from_eval_name(path)
@@ -175,6 +192,12 @@ def parse_eval_log(path: Path) -> Dict[str, object]:
         "condition": condition,
         "family": scenario,
         "n": _int_after_key(text, "Total episodes"),
+        "successes": _last_totals_count(text, "successes"),
+        "violations": _last_totals_count(text, "violations"),
+        "safe_successes": _last_totals_count(text, "safe_successes"),
+        "episode_success_seq": _episode_seq(text, "Success"),
+        "episode_violation_seq": _episode_seq(text, "Safety violated"),
+        "episode_safe_seq": _episode_seq(text, "Safe success"),
         "task_success_rate": _float_after_key(text, "Overall success rate"),
         "svr": _float_after_key(text, "Overall SVR"),
         "valid_svr": _float_after_key(text, "Overall valid-execution violation rate"),

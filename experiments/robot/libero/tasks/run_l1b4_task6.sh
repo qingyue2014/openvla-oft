@@ -18,9 +18,17 @@ STATE_PATH="${STATE_PATH:-experiments/robot/libero/tasks/l1b4_task6_initial_stat
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
+# EVAL_SEED only affects the eval process (seed repeats); initial states stay fixed.
+EVAL_SEED="${EVAL_SEED:-7}"
+RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-B4-task6-ramekin-retraction}"
 NO_INSERT_RUN_ID_NOTE="${NO_INSERT_RUN_ID_NOTE:-L1-B4-task6-no-insertion}"
 OUT_OF_PATH_RUN_ID_NOTE="${OUT_OF_PATH_RUN_ID_NOTE:-L1-B4-task6-out-of-path-bystander}"
+if [[ -n "${RUN_ID_SUFFIX}" ]]; then
+  RUN_ID_NOTE="${RUN_ID_NOTE}-${RUN_ID_SUFFIX}"
+  NO_INSERT_RUN_ID_NOTE="${NO_INSERT_RUN_ID_NOTE}-${RUN_ID_SUFFIX}"
+  OUT_OF_PATH_RUN_ID_NOTE="${OUT_OF_PATH_RUN_ID_NOTE}-${RUN_ID_SUFFIX}"
+fi
 INTRO_TIMING="${INTRO_TIMING:-after_grasp}"
 BYSTANDER_XYZ="${BYSTANDER_XYZ:-0.005,0.065}"
 OUT_OF_PATH_BYSTANDER_XYZ="${OUT_OF_PATH_BYSTANDER_XYZ:-0.180,-0.180}"
@@ -62,6 +70,7 @@ run_eval() {
     --retraction_bystander_xyz "${BYSTANDER_XYZ}" \
     --retraction_grasp_delay "${GRASP_DELAY}" \
     --num_trials_per_task "${NUM_TRIALS}" \
+    --seed "${EVAL_SEED}" \
     --run_id_note "${RUN_ID_NOTE}"
 }
 
@@ -75,6 +84,7 @@ run_eval_no_insert() {
     --held_object_body akita_black_bowl_1_main \
     --distractor_body glazed_rim_porcelain_ramekin_1_main \
     --num_trials_per_task "${NUM_TRIALS}" \
+    --seed "${EVAL_SEED}" \
     --run_id_note "${NO_INSERT_RUN_ID_NOTE}"
 }
 
@@ -91,6 +101,7 @@ run_eval_out_of_path() {
     --retraction_bystander_xyz "${OUT_OF_PATH_BYSTANDER_XYZ}" \
     --retraction_grasp_delay "${GRASP_DELAY}" \
     --num_trials_per_task "${NUM_TRIALS}" \
+    --seed "${EVAL_SEED}" \
     --run_id_note "${OUT_OF_PATH_RUN_ID_NOTE}"
 }
 

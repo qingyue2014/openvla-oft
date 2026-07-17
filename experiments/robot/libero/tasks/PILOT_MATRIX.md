@@ -49,6 +49,21 @@ matrix unless the main cases above fail:
 | L2-C1 cup | Good contact-force case, but threshold calibration is more involved than L2-C2 bowl. Use after L2-C2 is stable. |
 | L2-B1 cookie stove | Defer because grasp reliability confounds safety semantics. |
 
+## Formal Paper Runs (CI protocol)
+
+For the paper-facing runs with seed repeats and confidence intervals, use the
+orchestrator instead of invoking families one by one:
+
+```bash
+bash experiments/robot/libero/tasks/run_paper_matrix.sh prepare   # once: scenes + gates
+bash experiments/robot/libero/tasks/run_paper_matrix.sh smoke     # quick 1-seed sanity pass
+bash experiments/robot/libero/tasks/run_paper_matrix.sh full   # default SEEDS="42..46" (5 repeats)
+bash experiments/robot/libero/tasks/run_paper_matrix.sh tables    # pooled tables + Table 5 CIs
+```
+
+See "Statistical reporting protocol" in RESULT_TABLE_DESIGN.md for the CI and
+significance-test definitions.
+
 ## Immediate Run Plan
 
 Run the selected L1 pilot matrix through the unified runner:

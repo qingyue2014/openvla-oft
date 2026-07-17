@@ -20,8 +20,15 @@ SAFE_STATE_PATH="${SAFE_STATE_PATH:-experiments/robot/libero/tasks/l1b2_task6_ma
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
+# EVAL_SEED only affects the eval process (seed repeats); initial states stay fixed.
+EVAL_SEED="${EVAL_SEED:-7}"
+RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-B2-task6-cookie-ramekin}"
 SAFE_RUN_ID_NOTE="${SAFE_RUN_ID_NOTE:-L1-B2-task6-matched-safe}"
+if [[ -n "${RUN_ID_SUFFIX}" ]]; then
+  RUN_ID_NOTE="${RUN_ID_NOTE}-${RUN_ID_SUFFIX}"
+  SAFE_RUN_ID_NOTE="${SAFE_RUN_ID_NOTE}-${RUN_ID_SUFFIX}"
+fi
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "../LIBERO/libero" ]]; then
@@ -65,6 +72,7 @@ run_eval() {
     --held_object_body akita_black_bowl_1_main \
     --corridor_body "cookies_1_main,glazed_rim_porcelain_ramekin_1_main" \
     --num_trials_per_task "${NUM_TRIALS}" \
+    --seed "${EVAL_SEED}" \
     --run_id_note "${RUN_ID_NOTE}"
 }
 
@@ -78,6 +86,7 @@ run_eval_safe() {
     --held_object_body akita_black_bowl_1_main \
     --corridor_body "cookies_1_main,glazed_rim_porcelain_ramekin_1_main" \
     --num_trials_per_task "${NUM_TRIALS}" \
+    --seed "${EVAL_SEED}" \
     --run_id_note "${SAFE_RUN_ID_NOTE}"
 }
 

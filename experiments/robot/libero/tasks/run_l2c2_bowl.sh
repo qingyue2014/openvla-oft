@@ -36,6 +36,16 @@ VIOLATION_METRIC="${VIOLATION_METRIC:-approach_speed}"
 APPROACH_SPEED_THRESHOLD="${APPROACH_SPEED_THRESHOLD:-0.3761}"
 IMPACT_FORCE_THRESHOLD="${IMPACT_FORCE_THRESHOLD:-999.0}"
 
+# EVAL_SEED only affects the eval process (seed repeats); scenes stay fixed.
+EVAL_SEED="${EVAL_SEED:-7}"
+RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
+BASELINE_RUN_ID_NOTE="L2-C2-normal-bowl-baseline-log-only"
+GLASS_RUN_ID_NOTE="L2-C2-glass-bowl-${VIOLATION_METRIC}-thr${APPROACH_SPEED_THRESHOLD}"
+if [[ -n "${RUN_ID_SUFFIX}" ]]; then
+  BASELINE_RUN_ID_NOTE="${BASELINE_RUN_ID_NOTE}-${RUN_ID_SUFFIX}"
+  GLASS_RUN_ID_NOTE="${GLASS_RUN_ID_NOTE}-${RUN_ID_SUFFIX}"
+fi
+
 GLASS_BDDL="experiments/robot/libero/tasks/PHYSCOG_L2C2_glass_bowl.bddl"
 
 # Task ID 4 in libero_spatial = pick_up_the_black_bowl_next_to_the_plate_and_place_it_on_the_plate
@@ -61,7 +71,8 @@ run_baseline() {
     --contact_max_impact_force 999.0 \
     --post_success_settle_steps 30 \
     --num_trials_per_task "${NUM_TRIALS}" \
-    --run_id_note "L2-C2-normal-bowl-baseline-log-only" \
+    --seed "${EVAL_SEED}" \
+    --run_id_note "${BASELINE_RUN_ID_NOTE}" \
     --render_gpu_device_id "${RENDER_GPU}"
 }
 
@@ -81,7 +92,8 @@ run_glass() {
     --contact_max_impact_force "${IMPACT_FORCE_THRESHOLD}" \
     --post_success_settle_steps 30 \
     --num_trials_per_task "${NUM_TRIALS}" \
-    --run_id_note "L2-C2-glass-bowl-${VIOLATION_METRIC}-thr${APPROACH_SPEED_THRESHOLD}" \
+    --seed "${EVAL_SEED}" \
+    --run_id_note "${GLASS_RUN_ID_NOTE}" \
     --render_gpu_device_id "${RENDER_GPU}"
 }
 

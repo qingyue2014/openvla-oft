@@ -28,6 +28,10 @@ set -euo pipefail
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SEED="${SEED:-42}"
+# EVAL_SEED controls only the policy/env seed of the eval process (seed-repeat
+# runs). SEED keeps controlling initial-state generation so the paired scenes
+# stay identical across repeats. Default 7 matches the eval's own default.
+EVAL_SEED="${EVAL_SEED:-7}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
@@ -47,6 +51,7 @@ MODEL_NAME="${MODEL_NAME:-}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 L1A1_RUN_SUFFIX="${L1A1_RUN_SUFFIX:-${RUN_ID_SUFFIX}}"
 L1A2_RUN_SUFFIX="${L1A2_RUN_SUFFIX:-${RUN_ID_SUFFIX}}"
+L1B1_RUN_SUFFIX="${L1B1_RUN_SUFFIX:-${RUN_ID_SUFFIX}}"
 
 VIDEO_ARGS=(
     --max_violation_videos "${MAX_VIOLATION_VIDEOS}"
@@ -162,8 +167,12 @@ maybe_eval_with_traj() {
 }
 
 eval_l1b1() {
+    local risk_run_id safe_run_id
+    risk_run_id="$(with_suffix L1-B1-task6-cookies "${L1B1_RUN_SUFFIX}")"
+    safe_run_id="$(with_suffix L1-B1-task6-matched-safe "${L1B1_RUN_SUFFIX}")"
+
     log "L1-B1 eval: task6 cookie contact  (oracle=contact, default states)"
-    maybe_eval L1-B1-task6-cookies \
+    maybe_eval "${risk_run_id}" \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
             --task_suite_name libero_spatial --task_ids 6 \
@@ -172,12 +181,13 @@ eval_l1b1() {
             --held_object_body akita_black_bowl_1_main \
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
+            --seed "${EVAL_SEED}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             "${VIDEO_ARGS[@]}" \
-            --run_id_note L1-B1-task6-cookies
+            --run_id_note "${risk_run_id}"
 
     log "L1-B1 eval: task6 matched safe control  (oracle=none, default states)"
-    maybe_eval L1-B1-task6-matched-safe \
+    maybe_eval "${safe_run_id}" \
         python -m experiments.robot.libero.run_physcog_libero_l1_eval \
             --pretrained_checkpoint "${CHECKPOINT}" \
             --task_suite_name libero_spatial --task_ids 6 \
@@ -185,9 +195,10 @@ eval_l1b1() {
             --held_object_body akita_black_bowl_1_main \
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
+            --seed "${EVAL_SEED}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             "${VIDEO_ARGS[@]}" \
-            --run_id_note L1-B1-task6-matched-safe
+            --run_id_note "${safe_run_id}"
 }
 
 parse_results() {
@@ -355,6 +366,7 @@ eval_l1a1() {
             --save_trajectory "${SAVE_TRAJECTORY}" \
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
+            --seed "${EVAL_SEED}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             "${VIDEO_ARGS[@]}" \
             --run_id_note "${eb_run_id}"
@@ -373,6 +385,7 @@ eval_l1a1() {
             --save_trajectory "${SAVE_TRAJECTORY}" \
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
+            --seed "${EVAL_SEED}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             "${VIDEO_ARGS[@]}" \
             --run_id_note "${occ_run_id}"
@@ -389,6 +402,7 @@ eval_l1a1() {
             --save_trajectory "${SAVE_TRAJECTORY}" \
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
+            --seed "${EVAL_SEED}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             "${VIDEO_ARGS[@]}" \
             --run_id_note "${safe_run_id}"
@@ -430,6 +444,7 @@ eval_l1a2() {
             --save_trajectory "${SAVE_TRAJECTORY}" \
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
+            --seed "${EVAL_SEED}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             "${VIDEO_ARGS[@]}" \
             --run_id_note "${occ_run_id}"
@@ -446,6 +461,7 @@ eval_l1a2() {
             --save_trajectory "${SAVE_TRAJECTORY}" \
             --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
             --num_trials_per_task "${NUM_TRIALS}" \
+            --seed "${EVAL_SEED}" \
             --save_video_mode "${SAVE_VIDEO_MODE}" \
             "${VIDEO_ARGS[@]}" \
             --run_id_note "${safe_run_id}"

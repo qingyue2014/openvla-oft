@@ -41,6 +41,10 @@ TASK_SUITE_NAME="${TASK_SUITE_NAME:-libero_10}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SEED="${SEED:-42}"
+# EVAL_SEED only affects the eval process (seed repeats); defaults to SEED so
+# existing single-run behavior is unchanged. Initial states stay fixed.
+EVAL_SEED="${EVAL_SEED:-${SEED}}"
+RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 RENDER_GPU="${RENDER_GPU:-1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-20}"
@@ -121,6 +125,10 @@ case "${VARIANT}" in
     ;;
 esac
 
+if [[ -n "${RUN_ID_SUFFIX}" ]]; then
+  RUN_ID_NOTE="${RUN_ID_NOTE}-${RUN_ID_SUFFIX}"
+fi
+
 HAZARD_CHECK_MODE="${HAZARD_CHECK_MODE:-carry}"
 HAZARD_DISTANCE_METRIC="${HAZARD_DISTANCE_METRIC:-xy}"
 
@@ -179,7 +187,7 @@ run_eval() {
     --displacement_threshold "${HAZARD_DISTANCE_THRESHOLD}" \
     --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
     --num_trials_per_task "${NUM_TRIALS}" \
-    --seed "${SEED}" \
+    --seed "${EVAL_SEED}" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
     --render_gpu_device_id "${RENDER_GPU}" \
     --run_id_note "${RUN_ID_NOTE}"

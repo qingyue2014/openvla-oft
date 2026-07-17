@@ -1,0 +1,188 @@
+#!/usr/bin/env bash
+# Formal paper-configuration runner for the PhysCogSafe pilot matrix.
+#
+# Implements the statistical reporting protocol in RESULT_TABLE_DESIGN.md:
+# initial states are generated ONCE with a fixed scene seed (paired Er/Ec
+# episodes stay identical across repeats), then every selected family is
+# evaluated once per policy seed in SEEDS. Runs are tagged
+# `<run_id>-seed<N>`, which record_experiment_results.py maps to the same
+# scenario and generate_result_tables.py pools automatically (Wilson CIs,
+# run-level mean ± CI, Δ Safe SR with McNemar/z tests in Table 5).
+#
+# Usage (from the repository root, on a GPU node):
+#   bash experiments/robot/libero/tasks/run_paper_matrix.sh prepare      # one-time scene generation + gates
+#   bash experiments/robot/libero/tasks/run_paper_matrix.sh smoke        # quick 1-seed pass with SMOKE_TRIALS
+#   bash experiments/robot/libero/tasks/run_paper_matrix.sh full         # SEEDS x NUM_TRIALS formal runs
+#   bash experiments/robot/libero/tasks/run_paper_matrix.sh attribution  # SAR/UIR/OCR/NOR reports
+#   bash experiments/robot/libero/tasks/run_paper_matrix.sh tables       # records + result tables
+#
+# Overridable environment:
+#   SEEDS="42 .. 46"      policy/env seeds; default 5 repeats x NUM_TRIALS=50
+#                         episodes = 250 episodes per condition (Wilson CI
+#                         half-width ~±6pp). To match LIBERO-Gen's 50 repeats:
+#                         SEEDS="$(seq -s' ' 42 91)" (~10x compute, CI ~±2pp).
+#   NUM_TRIALS=50         episodes per condition per seed (L2-C2 uses L2C2_TRIALS=20)
+#   SCENE_SEED=42         fixed initial-state generation seed; do not vary per repeat
+#   FAMILIES="l1a1 l1a2 l1b1 l1b2 l1b4 l2b2 l2c2"   subset selection
+#   CHECKPOINT=...        forwarded to the per-family runners
+#
+# Notes:
+#   - `full` is resumable: L1-A families skip a (run_id, seed) whose completed
+#     log already exists; rerunning other families overwrites with a newer
+#     timestamp and the table generator keeps the latest run per seed.
+#   - L1-A2 evaluation is gated (pairing + occlusion gates from L1-A2_SPEC.md);
+#     `prepare` runs the gate checks once so `full` does not regenerate scenes.
+
+set -euo pipefail
+
+MODE="${1:-full}"
+
+SEEDS="${SEEDS:-42 43 44 45 46}"
+NUM_TRIALS="${NUM_TRIALS:-50}"
+L2C2_TRIALS="${L2C2_TRIALS:-20}"
+SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
+SCENE_SEED="${SCENE_SEED:-42}"
+FAMILIES="${FAMILIES:-l1a1 l1a2 l1b1 l1b2 l1b4 l2b2 l2c2}"
+L2B2_VARIANTS="${L2B2_VARIANTS:-basket basket_off basket_far}"
+POOL_SINCE="${POOL_SINCE:-}"
+
+TASKS_DIR="experiments/robot/libero/tasks"
+LOG_DIR="${LOG_DIR:-experiments/logs}"
+
+log() { echo; echo "════════════════════════════════════════════════"; echo "  [paper-matrix] $*"; echo "════════════════════════════════════════════════"; }
+
+# ── Per-family runners ─────────────────────────────────────────────────────────
+# Each function runs one family for one policy seed. Scene generation always
+# uses SCENE_SEED; only EVAL_SEED varies across repeats.
+
+run_family() {
+    local family="$1" seed="$2" trials="$3" suffix="$4"
+    case "${family}" in
+        l1a1)
+            SEED="${SCENE_SEED}" EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" \
+                NUM_TRIALS="${trials}" RUN_PREVIEW=False RECORD_RESULTS=False \
+                bash "${TASKS_DIR}/run_l1a_evals.sh" l1a1_eval
+            ;;
+        l1a2)
+            SEED="${SCENE_SEED}" EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" \
+                NUM_TRIALS="${trials}" RUN_PREVIEW=False RECORD_RESULTS=False \
+                bash "${TASKS_DIR}/run_l1a_evals.sh" l1a2
+            ;;
+        l1b1)
+            SEED="${SCENE_SEED}" EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" \
+                NUM_TRIALS="${trials}" RECORD_RESULTS=False \
+                bash "${TASKS_DIR}/run_l1a_evals.sh" l1b1
+            ;;
+        l1b2)
+            EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" NUM_TRIALS="${trials}" \
+                bash "${TASKS_DIR}/run_l1b2_task6.sh" eval
+            EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" NUM_TRIALS="${trials}" \
+                bash "${TASKS_DIR}/run_l1b2_task6.sh" eval_safe
+            ;;
+        l1b4)
+            local l1b4_mode
+            for l1b4_mode in eval eval_no_insert eval_out_of_path; do
+                EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" NUM_TRIALS="${trials}" \
+                    bash "${TASKS_DIR}/run_l1b4_task6.sh" "${l1b4_mode}"
+            done
+            ;;
+        l2b2)
+            local variant
+            for variant in ${L2B2_VARIANTS}; do
+                SEED="${SCENE_SEED}" EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" \
+                    NUM_TRIALS="${trials}" \
+                    bash "${TASKS_DIR}/run_l2b2_basket_stove.sh" "${variant}" eval
+            done
+            ;;
+        l2c2)
+            EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" NUM_TRIALS="${L2C2_TRIALS}" \
+                bash "${TASKS_DIR}/run_l2c2_bowl.sh" all
+            ;;
+        *)
+            echo "Unknown family: ${family}" >&2
+            exit 2
+            ;;
+    esac
+}
+
+# ── Modes ──────────────────────────────────────────────────────────────────────
+
+do_prepare() {
+    log "prepare: one-time scene generation with SCENE_SEED=${SCENE_SEED}, NUM_TRIALS=${NUM_TRIALS}"
+    # L1-A1 + L1-A2 paired states and gates.
+    SEED="${SCENE_SEED}" NUM_TRIALS="${NUM_TRIALS}" \
+        bash "${TASKS_DIR}/run_l1a_evals.sh" generate
+    SEED="${SCENE_SEED}" NUM_TRIALS="${NUM_TRIALS}" \
+        bash "${TASKS_DIR}/run_l1a_evals.sh" l1a2_check
+    # L1-B2 risk layout check + matched-safe state generation.
+    NUM_TRIALS="${NUM_TRIALS}" bash "${TASKS_DIR}/run_l1b2_task6.sh" check
+    NUM_TRIALS="${NUM_TRIALS}" bash "${TASKS_DIR}/run_l1b2_task6.sh" check_safe
+    # L1-B4 retraction states.
+    NUM_TRIALS="${NUM_TRIALS}" bash "${TASKS_DIR}/run_l1b4_task6.sh" check
+    # L2-B2 per-variant states.
+    local variant
+    for variant in ${L2B2_VARIANTS}; do
+        SEED="${SCENE_SEED}" NUM_TRIALS="${NUM_TRIALS}" \
+            bash "${TASKS_DIR}/run_l2b2_basket_stove.sh" "${variant}" check
+    done
+    # L2-C2 uses native states + a fixed BDDL; nothing to generate.
+    log "prepare complete. Next: 'smoke' for a quick pass, then 'full'."
+}
+
+do_seed_loop() {
+    local trials="$1" suffix_prefix="$2" seeds="$3"
+    local seed family
+    for seed in ${seeds}; do
+        for family in ${FAMILIES}; do
+            log "family=${family} seed=${seed} trials=${trials}"
+            run_family "${family}" "${seed}" "${trials}" "${suffix_prefix}${seed}"
+        done
+    done
+}
+
+do_attribution() {
+    log "attribution reports (needs Eb/Er/Ec trajectories)"
+    bash "${TASKS_DIR}/run_l1a_evals.sh" l1a1_attribution || true
+    bash "${TASKS_DIR}/run_l1a_evals.sh" l1a2_attribution || true
+}
+
+do_tables() {
+    log "recording metrics and generating result tables"
+    python "${TASKS_DIR}/record_experiment_results.py" --log_dir "${LOG_DIR}"
+    local table_args=(--log_dir "${LOG_DIR}")
+    if [[ -n "${POOL_SINCE}" ]]; then
+        table_args+=(--pool_mode all --pool_since "${POOL_SINCE}")
+    fi
+    python "${TASKS_DIR}/generate_result_tables.py" "${table_args[@]}"
+    echo
+    echo "Seed-suffixed runs (-seedN) pool automatically; legacy unsuffixed runs"
+    echo "are superseded once at least one seed run exists for a condition."
+    echo "Tables: ${LOG_DIR}/result_tables.md (Table 5 = CI + Er-vs-Ec tests)"
+}
+
+case "${MODE}" in
+    prepare)
+        do_prepare
+        ;;
+    smoke)
+        first_seed="${SEEDS%% *}"
+        do_seed_loop "${SMOKE_TRIALS}" "smoke-seed" "${first_seed}"
+        do_tables
+        ;;
+    full)
+        do_seed_loop "${NUM_TRIALS}" "seed" "${SEEDS}"
+        do_attribution
+        do_tables
+        ;;
+    attribution)
+        do_attribution
+        ;;
+    tables)
+        do_tables
+        ;;
+    *)
+        echo "Unknown mode: ${MODE}" >&2
+        echo "Expected one of: prepare, smoke, full, attribution, tables" >&2
+        exit 2
+        ;;
+esac
