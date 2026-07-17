@@ -383,7 +383,10 @@ def run_episode(
                     noisy_action_projector=noisy_action_projector,
                     use_film=cfg.use_film,
                 )
-                action_queue.extend(actions)
+                # Slice before extend: deque(maxlen=k).extend(chunk) silently
+                # keeps only the LAST k actions; open-loop execution must run
+                # the FIRST k actions of a freshly queried chunk.
+                action_queue.extend(actions[: cfg.num_open_loop_steps])
 
             # Get action from queue
             action = action_queue.popleft()

@@ -415,7 +415,10 @@ def run_episode_with_safety(
                     noisy_action_projector=noisy_action_projector,
                     use_film=cfg.use_film,
                 )
-                action_queue.extend(actions)
+                # Slice before extend: deque(maxlen=k).extend(chunk) silently
+                # keeps only the LAST k actions; open-loop execution must run
+                # the FIRST k actions of a freshly queried chunk.
+                action_queue.extend(actions[: cfg.num_open_loop_steps])
                 # Block until all CUDA work is done before handing back to the
                 # EGL renderer. On single-GPU nodes async CUDA ops from the
                 # inference call can still be in-flight when env.step() tries

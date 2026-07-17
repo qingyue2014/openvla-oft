@@ -25,6 +25,7 @@ from prismatic.extern.hf.configuration_prismatic import OpenVLAConfig
 from prismatic.extern.hf.modeling_prismatic import OpenVLAForActionPrediction
 from prismatic.extern.hf.processing_prismatic import PrismaticImageProcessor, PrismaticProcessor
 from prismatic.models.action_heads import DiffusionActionHead, L1RegressionActionHead
+from prismatic.vla.constants import NUM_ACTIONS_CHUNK
 from prismatic.models.film_vit_wrapper import FiLMedPrismaticVisionBackbone
 from prismatic.models.projectors import NoisyActionProjector, ProprioProjector
 from prismatic.vla.constants import (
@@ -83,12 +84,19 @@ def configure_checkpoint_compat(cfg: Any) -> None:
         cfg.use_diffusion = False
         cfg.use_proprio = False
         cfg.num_images_in_input = 1
-        cfg.num_open_loop_steps = 1
+        # RLinf-OpenVLAOFT checkpoints use OFT parallel decoding over discrete
+        # action tokens: their remote-code predict_action returns a full
+        # (NUM_ACTIONS_CHUNK, ACTION_DIM) chunk per query, not a single action.
+        # num_open_loop_steps must match the chunk size; with a smaller queue
+        # the deque(maxlen=...) would silently keep only the LAST actions of
+        # each chunk, which degrades rollouts to near no-ops (observed as 0%
+        # success on native libero_90 tasks).
+        cfg.num_open_loop_steps = NUM_ACTIONS_CHUNK
         setattr(cfg, "_checkpoint_adapter_subfolder", adapter_subfolder)
         print(
-            "[checkpoint compat] Detected RLinf discrete-action OpenVLA-OFT layout: "
+            "[checkpoint compat] Detected RLinf discrete-token OpenVLA-OFT layout: "
             f"adapter={adapter_subfolder or 'merged'}, use_l1_regression=False, "
-            "use_proprio=False, num_images_in_input=1, num_open_loop_steps=1"
+            f"use_proprio=False, num_images_in_input=1, num_open_loop_steps={NUM_ACTIONS_CHUNK}"
         )
     elif is_rlinf_openvlaoft and (not has_external_proprio):
         cfg.use_proprio = False
@@ -879,9 +887,10 @@ def get_vla_action(
                 use_film=use_film,
             )
 
-    # Continuous OFT heads return an action chunk (T, 7), whereas the
-    # discrete OpenVLA / RLinf-compatible path returns one action (7,).
-    # Normalize both layouts to a list of 7-D actions for the rollout queue.
+    # Continuous OFT heads and RLinf discrete-token OFT checkpoints return an
+    # action chunk (T, 7); the original discrete OpenVLA path returns a single
+    # action (7,). Normalize both layouts to a list of 7-D actions for the
+    # rollout queue.
     action = np.asarray(action)
     if action.ndim == 1:
         return [action]
