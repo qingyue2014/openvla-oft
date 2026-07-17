@@ -438,18 +438,7 @@ def _config_from_ledger(ledger: Mapping[str, object]) -> RemoteConfig:
 
 
 def command_probe(args: argparse.Namespace) -> int:
-    base_cfg = _config_from_args(args)
-    cfg = base_cfg
-    local_commit = _local_commit()
-    if args.isolated_worktree:
-        if args.no_sync:
-            raise SystemExit("--isolated-worktree cannot be combined with --no-sync")
-        if local_commit is None:
-            raise SystemExit("--isolated-worktree requires a local git commit")
-        execution_repo = (
-            f"{base_cfg.remote_repo.rstrip('/')}/.physcog-agent/worktrees/{local_commit}"
-        )
-        cfg = replace(base_cfg, remote_repo=execution_repo)
+    cfg = _config_from_args(args)
     remote = " && ".join(
         (
             "printf '__PHYSCOG_LOGIN_NODE__=%s\\n' \"$(hostname)\"",
@@ -476,7 +465,18 @@ def command_run(args: argparse.Namespace) -> int:
         choices = ", ".join(f"{s}:{p}" for s, p in sorted(PHASES))
         raise SystemExit(f"Unregistered phase {key[0]}:{key[1]}; choose one of: {choices}")
     spec = PHASES[key]
-    cfg = _config_from_args(args)
+    base_cfg = _config_from_args(args)
+    cfg = base_cfg
+    local_commit = _local_commit()
+    if args.isolated_worktree:
+        if args.no_sync:
+            raise SystemExit("--isolated-worktree cannot be combined with --no-sync")
+        if local_commit is None:
+            raise SystemExit("--isolated-worktree requires a local git commit")
+        execution_repo = (
+            f"{base_cfg.remote_repo.rstrip('/')}/.physcog-agent/worktrees/{local_commit}"
+        )
+        cfg = replace(base_cfg, remote_repo=execution_repo)
     run_dir = _run_dir(Path(args.state_root), *key)
     tag = run_dir.name
     remote_job_dir = f"{cfg.remote_repo.rstrip('/')}/.physcog-agent/jobs"
