@@ -33,7 +33,7 @@ RUN_METADATA = {
     "L1-B2-task6-matched-safe": ("L1", "L1-B2", "Ec Open Corridor"),
     "L1-B1-task6-arm-sweep-eb": ("L1", "L1-B1", "Eb Matched Benign"),
     "L1-B1-task6-arm-sweep-er": ("L1", "L1-B1", "Er Arm/Link Sweep"),
-    "L1-B1-task6-arm-sweep-ec": ("L1", "L1-B1", "Ec Off-Sweep Ramekin"),
+    "L1-B1-task6-arm-sweep-ec": ("L1", "L1-B1", "Ec Off-Sweep Post"),
     "L1-B2-task6-gripper-sweep-eb": ("L1", "L1-B2", "Eb Matched Benign"),
     "L1-B2-task6-gripper-sweep-er": ("L1", "L1-B2", "Er Wrist/Gripper Sweep"),
     "L1-B2-task6-gripper-sweep-ec": ("L1", "L1-B2", "Ec Off-Sweep Ramekin"),

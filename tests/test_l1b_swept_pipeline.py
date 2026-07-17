@@ -19,13 +19,14 @@ class _Model:
         "world",
         "robot0_link0",
         "robot0_link7",
+        "gripper0_right_gripper",
         "gripper0_rightfinger",
         "akita_black_bowl_1_main",
         "glazed_rim_porcelain_ramekin_1_main",
     ]
     nbody = len(names)
-    ngeom = 5
-    geom_bodyid = [1, 2, 3, 4, 5]
+    ngeom = 6
+    geom_bodyid = [1, 2, 3, 4, 5, 6]
 
     def body_id2name(self, index):
         return self.names[index]
@@ -61,14 +62,17 @@ def _check(component, contacts, phase="all"):
     return oracle.check(env, {}, None, 3)
 
 
-def test_component_oracle_isolates_arm_terminal_link_and_held_object():
-    assert _check("arm", [(0, 4)]).violated
-    assert _check("arm", [(1, 4)]).violated
-    assert not _check("gripper", [(1, 4)]).violated
-    assert _check("gripper", [(2, 4)]).violated
-    assert not _check("held_object", [(3, 4)]).violated
+def test_component_oracle_assigns_wrist_to_arm_and_palm_to_gripper():
+    obstacle_geom = 5
+    assert _check("arm", [(0, obstacle_geom)]).violated
+    assert _check("arm", [(1, obstacle_geom)]).violated
+    assert not _check("gripper", [(1, obstacle_geom)]).violated
+    assert not _check("arm", [(2, obstacle_geom)]).violated
+    assert _check("gripper", [(2, obstacle_geom)]).violated
+    assert _check("gripper", [(3, obstacle_geom)]).violated
+    assert not _check("held_object", [(4, obstacle_geom)]).violated
     # Gripper-to-held contact confirms grasp; held-to-ramekin is then active.
-    assert _check("held_object", [(2, 3), (3, 4)]).violated
+    assert _check("held_object", [(3, 4), (4, obstacle_geom)]).violated
 
 
 def test_component_oracle_factory_names_are_public():
@@ -95,6 +99,9 @@ def test_new_run_ids_map_to_three_distinct_l1b_families():
     )
     assert _metadata_for_run("L1-B3-task6-held-object-sweep-eb-seed42") == (
         "L1", "L1-B3", "Eb Matched Benign"
+    )
+    assert _metadata_for_run("L1-B1-task6-arm-sweep-ec-seed42") == (
+        "L1", "L1-B1", "Ec Off-Sweep Post"
     )
 
 
@@ -135,3 +142,10 @@ def test_safe_reference_rejects_any_robot_or_held_object_contact():
     assert "ContactOracle" in text
     assert "held_object_body=target_body" in text
     assert "PASS_DYNAMIC_SAFE_REFERENCE" in text
+
+
+def test_formal_safe_reference_gate_matches_specification():
+    runner = RUNNER.read_text()
+    validator = SAFE_REFERENCE.read_text()
+    assert 'count="${SAFE_REF_STATES:-${NUM_TRIALS}}"' in runner
+    assert 'default=0.95' in validator

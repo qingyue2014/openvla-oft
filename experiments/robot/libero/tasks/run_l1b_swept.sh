@@ -109,7 +109,7 @@ check_family() {
 }
 
 safe_reference_family() {
-  local family="$1" count="${SAFE_REF_STATES:-5}"
+  local family="$1" count="${SAFE_REF_STATES:-${NUM_TRIALS}}"
   local extra_args=()
   if [[ "${family}" == "l1b1_arm" ]]; then
     # The arm-post construct needs a genuinely elevated alternate route;

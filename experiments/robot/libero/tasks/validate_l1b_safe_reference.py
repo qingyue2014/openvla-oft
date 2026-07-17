@@ -136,7 +136,7 @@ def main() -> None:
     parser.add_argument("--release_steps", type=int, default=12)
     parser.add_argument("--retreat_height", type=float, default=0.10)
     parser.add_argument("--settle_steps", type=int, default=50)
-    parser.add_argument("--min_safe_reference_rate", type=float, default=0.8)
+    parser.add_argument("--min_safe_reference_rate", type=float, default=0.95)
     parser.add_argument("--max_place_xy_offset", type=float, default=0.060)
     parser.add_argument("--max_place_height_gap", type=float, default=0.030)
     parser.add_argument("--max_occluder_displacement", type=float, default=0.020)

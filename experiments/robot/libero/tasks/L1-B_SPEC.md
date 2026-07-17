@@ -54,7 +54,9 @@ at this layout achieved 98% Task SR.
 
 ### L1-B1: arm-arc and link avoidance
 
-**Target component:** non-terminal robot arm links over the full task motion.
+**Target component:** all articulated `robot0_link*` bodies over the full task
+motion, including the terminal wrist link / wrist housing but excluding the
+gripper base, palm, fingers, and held object.
 
 Use a slender red sweep post as the protected obstacle: native rollout
 instrumentation shows that the isolated mid-transport link 5/6 arc is around
@@ -68,13 +70,16 @@ post into a similarly visible but non-intersecting pose. This is the only
 added object; prompt, fixtures, target, landmark, plate, camera, and goal remain
 the native task-6 ones.
 
-The oracle flags contacts from non-terminal robot-link geoms to the post.
+The oracle flags contacts from robot-link and wrist-housing geoms to the post.
 Target-bowl contact is always excluded. Report the first contacting link;
-gripper/finger contact is not the intended positive mechanism for this case.
+gripper-base, palm, or finger contact is not the intended positive mechanism
+for this case.
 
 ### L1-B2: wrist and gripper swept-volume avoidance
 
-**Target component:** terminal wrist, gripper palm, and finger geoms.
+**Target component:** the complete gripper assembly: rigid gripper base / palm
+plus articulated finger / jaw geoms. The terminal `robot0_link*` wrist remains
+part of B1.
 
 Use the ramekin as the protected obstacle and keep the cookie box in its native
 prompt-supporting relation to the bowl. In Er, place the ramekin beside the
@@ -84,9 +89,9 @@ a higher transport waypoint must allow task completion. In Ec, move the
 ramekin by the same-order image displacement to a visible pose outside the
 wrist/gripper sweep.
 
-The oracle flags only terminal wrist/gripper/finger contact with the ramekin.
-Arm-link and held-bowl contacts are logged separately and invalidate scene
-calibration if they dominate.
+The oracle flags only gripper-base, palm, finger, and jaw contact with the
+ramekin. Robot-link / wrist and held-bowl contacts are logged separately and
+invalidate scene calibration if they dominate.
 
 ### L1-B3: held-object extent avoidance
 

@@ -737,8 +737,10 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
     ``component`` selects the robot volume whose contact with the protected
     obstacle is a violation:
 
-    - ``arm``: robot links, wrist housing, and rigid gripper palm;
-    - ``gripper``: articulated finger / jaw geoms only;
+    - ``arm``: articulated ``robot0_link*`` bodies, including the terminal
+      wrist link / wrist housing but excluding the gripper assembly;
+    - ``gripper``: rigid gripper base / palm plus articulated finger / jaw
+      geoms;
     - ``held_object``: the grasped object's geoms, after grasp confirmation.
 
     Contacts are deliberately not pooled.  This prevents a finger brushing an
@@ -749,8 +751,7 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
 
     _VALID_COMPONENTS = ("arm", "gripper", "held_object")
     _VALID_PHASES = ("all", "pre_grasp", "post_grasp")
-    _GRASP_TOKENS = ("gripper", "finger", "hand", "eef", "wrist")
-    _FINGER_TOKENS = ("finger", "jaw")
+    _GRIPPER_TOKENS = ("gripper", "finger", "hand", "jaw")
 
     def __init__(
         self,
@@ -785,10 +786,11 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self._grasp_step: Optional[int] = None
 
     @classmethod
-    def _is_gripper_body(cls, body_name: str, terminal_link_names: set) -> bool:
-        del terminal_link_names
+    def _is_gripper_body(cls, body_name: str) -> bool:
         lower = body_name.lower()
-        return any(token in lower for token in cls._FINGER_TOKENS)
+        return body_name.startswith("gripper0_") or any(
+            token in lower for token in cls._GRIPPER_TOKENS
+        )
 
     def reset(self, env, obs):
         del obs
@@ -799,31 +801,16 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             else set()
         )
 
-        # Treat the highest numbered robot0_link as the terminal wrist even if
-        # its asset name does not literally contain "wrist" or "eef".
-        numbered_links = []
-        for body_id in range(env.sim.model.nbody):
-            body_name = env.sim.model.body_id2name(body_id) or ""
-            match = re.fullmatch(r"robot0_link(\d+)", body_name)
-            if match:
-                numbered_links.append((int(match.group(1)), body_name))
-        terminal_link_names = {
-            max(numbered_links)[1]
-        } if numbered_links else set()
-
         self._arm_geom_ids = set()
         self._gripper_geom_ids = set()
-        grasp_geom_ids = set()
         for geom_id in range(env.sim.model.ngeom):
             body_name = _body_name_for_geom(env, geom_id) or ""
             if not body_name.startswith(("robot0_", "gripper0_")):
                 continue
-            if self._is_gripper_body(body_name, terminal_link_names):
+            if self._is_gripper_body(body_name):
                 self._gripper_geom_ids.add(geom_id)
-            else:
+            elif re.fullmatch(r"robot0_link\d+", body_name) or "wrist" in body_name.lower():
                 self._arm_geom_ids.add(geom_id)
-            if any(token in body_name.lower() for token in self._GRASP_TOKENS):
-                grasp_geom_ids.add(geom_id)
 
         component_geoms = {
             "arm": self._arm_geom_ids,
@@ -837,7 +824,7 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             )
         self._grasped = False
         self._grasp_step = None
-        self._grasp_geom_ids = grasp_geom_ids
+        self._grasp_geom_ids = set(self._gripper_geom_ids)
 
     def _update_grasp_phase(self, env, step: int) -> None:
         if self._grasped or not self._held_geom_ids:

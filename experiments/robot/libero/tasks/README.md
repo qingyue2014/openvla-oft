@@ -298,8 +298,9 @@ RUN_ID_SUFFIX=<same-suffix> \
 ## Other L1 Runners
 
 The revised L1-B swept-volume matrix keeps native `libero_spatial` task 6 and
-isolates arm/link, wrist/gripper, and held-object contacts in paired Eb/Er/Ec
-states:
+isolates arm-link/wrist, gripper-palm/finger, and held-object contacts in paired
+Eb/Er/Ec states. In particular, the terminal `robot0_link*` wrist belongs to
+B1, while `gripper0_*` palm/base/finger bodies belong to B2:
 
 ```bash
 bash experiments/robot/libero/tasks/run_l1b_swept.sh all prepare
