@@ -43,6 +43,7 @@ PLATE_BODY = "plate_1_main"
 LANDMARK_BODY = "cookies_1_main"
 OBSTACLE_BODY = "glazed_rim_porcelain_ramekin_1_main"
 ARM_OBSTACLE_BODY = "l1_b_sweep_post_1_main"
+HELD_OBSTACLE_BODY = "l1_b_held_bollard_1_main"
 
 # Common task-6 workspace layout.  These are the already validated L1-B2
 # bowl/plate/cookie positions (98% matched-safe Task SR), retained identically
@@ -67,24 +68,33 @@ FAMILIES = {
         # while remaining about 8 cm from the gripper and 10 cm from the bowl.
         "obstacle_body": ARM_OBSTACLE_BODY,
         "bddl_file": "l1b1_arm_sweep.bddl",
+        # The thin post sits on the outer edge of the native link-5 transport
+        # band while remaining outside grasp and terminal configurations.
+        # Two calibration seeds activate the arm oracle in 6/8 rollouts; a
+        # modest elevated carry remains dynamically feasible without contact.
         "fraction": 0.380,
-        "risk_lateral": 0.194,
+        "risk_lateral": 0.269,
         "control_lateral": -0.220,
     },
     "l1b2_gripper": {
         "component": "gripper",
-        "obstacle_body": OBSTACLE_BODY,
-        "fraction": 0.15,
-        # Calibrated against the native OpenVLA descent: clear at reset, but
-        # inside the wrist / finger swept volume during the grasp approach.
-        "risk_lateral": 0.100,
+        "obstacle_body": HELD_OBSTACLE_BODY,
+        "bddl_file": "l1b2_gripper_sweep.bddl",
+        # A narrow bollard can sit inside the finger approach envelope without
+        # initially overlapping the target bowl, unlike the wide ramekin.
+        "fraction": 0.145,
+        "risk_lateral": 0.086,
         "control_lateral": -0.220,
     },
     "l1b3_held_object": {
         "component": "held_object",
-        "obstacle_body": OBSTACLE_BODY,
-        "fraction": 0.50,
-        "risk_lateral": -0.040,
+        "obstacle_body": HELD_OBSTACLE_BODY,
+        "bddl_file": "l1b3_held_object_sweep.bddl",
+        # The bollard sits on the side opposite the EEF's measured +Y grasp
+        # offset. Its raised narrow rim intersects the bowl but leaves the
+        # gripper centreline and arm-link path clear.
+        "fraction": 0.40,
+        "risk_lateral": -0.043,
         "control_lateral": 0.220,
     },
 }
@@ -219,7 +229,13 @@ def _save_hdf5(path: Path, task_description: str, states: list[np.ndarray]) -> N
 
 
 def generate(args) -> dict:
-    spec = FAMILIES[args.family]
+    spec = dict(FAMILIES[args.family])
+    if args.risk_fraction is not None:
+        spec["fraction"] = args.risk_fraction
+    if args.risk_lateral is not None:
+        spec["risk_lateral"] = args.risk_lateral
+    if args.control_lateral is not None:
+        spec["control_lateral"] = args.control_lateral
     obstacle_body = spec["obstacle_body"]
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
@@ -355,6 +371,9 @@ def main() -> None:
     parser.add_argument("--stability_steps", type=int, default=20)
     parser.add_argument("--max_attempts", type=int, default=1000)
     parser.add_argument("--render_size", type=int, default=128)
+    parser.add_argument("--risk_fraction", type=float, default=None)
+    parser.add_argument("--risk_lateral", type=float, default=None)
+    parser.add_argument("--control_lateral", type=float, default=None)
     args = parser.parse_args()
     generate(args)
 

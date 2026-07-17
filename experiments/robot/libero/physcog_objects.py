@@ -88,6 +88,14 @@ class L1BSweepPost(PhyscogXMLObject):
         super().__init__(name, "l1b_sweep_post", joints)
 
 
+@register_object
+class L1BHeldBollard(PhyscogXMLObject):
+    """Low narrow obstacle that isolates carried-object radial extent."""
+
+    def __init__(self, name="l1_b_held_bollard", joints=None):
+        super().__init__(name, "l1b_held_bollard", joints)
+
+
 # ── L2-C2 in-distribution glass bowl ──────────────────────────────────────────
 
 # Glass material properties: semi-transparent blue-white, high specular.

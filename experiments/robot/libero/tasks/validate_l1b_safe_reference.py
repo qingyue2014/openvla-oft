@@ -70,7 +70,7 @@ def _write_l1b_report(args, verdict: str) -> None:
         f"- Collision-free task completions: `{safe}`",
         f"- Dynamic safe-success rate: `{rate:.3f}`",
         f"- Required rate: `{args.min_safe_reference_rate:.3f}`",
-        "- Safety gate: no arm, wrist/gripper, or held-bowl contact with the ramekin.",
+        "- Safety gate: no arm, wrist/gripper, or held-bowl contact with the protected obstacle.",
         "- Motion interface: the same 7-D OSC delta-position/gripper action interface",
         "  used by policy evaluation.",
         "- Safe strategy: vertical clearance followed by segmented XY transport and",
@@ -122,6 +122,7 @@ def main() -> None:
     parser.add_argument("--wait_steps", type=int, default=10)
     parser.add_argument("--gripper_probe_steps", type=int, default=8)
     parser.add_argument("--approach_height", type=float, default=0.10)
+    parser.add_argument("--pregrasp_detour_x", type=float, default=None)
     parser.add_argument("--pregrasp_detour_y", type=float, default=None)
     parser.add_argument("--transport_via_x", type=float, default=None)
     parser.add_argument("--grasp_height", type=float, default=0.015)
@@ -131,6 +132,8 @@ def main() -> None:
     parser.add_argument("--lift_height", type=float, default=0.16)
     parser.add_argument("--min_grasp_lift", type=float, default=0.03)
     parser.add_argument("--preplace_height", type=float, default=0.10)
+    parser.add_argument("--place_offset_x", type=float, default=0.0)
+    parser.add_argument("--place_offset_y", type=float, default=0.0)
     parser.add_argument("--release_clearance", type=float, default=0.002)
     parser.add_argument("--contact_hold_steps", type=int, default=5)
     parser.add_argument("--release_steps", type=int, default=12)

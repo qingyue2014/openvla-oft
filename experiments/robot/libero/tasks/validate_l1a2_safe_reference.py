@@ -310,10 +310,14 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
     grasp_eef[:2] += grasp_xy_offset
 
     stages = []
+    detour_x = getattr(args, "pregrasp_detour_x", None)
     detour_y = getattr(args, "pregrasp_detour_y", None)
-    if detour_y is not None:
+    if detour_x is not None or detour_y is not None:
         detour = _eef_pos(obs).copy()
-        detour[1] = detour_y
+        if detour_x is not None:
+            detour[0] = detour_x
+        if detour_y is not None:
+            detour[1] = detour_y
         stages.append(
             ("pregrasp_lateral_detour", detour, open_sign, args.position_tolerance, False)
         )
@@ -369,6 +373,8 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
     bowl_origin_to_bottom = float(_body_pos(env, TARGET)[2] - bowl_lo[2])
     _, plate_hi = _world_aabb(env, PLATE)
     desired_bowl = _body_pos(env, PLATE).copy()
+    desired_bowl[0] += getattr(args, "place_offset_x", 0.0)
+    desired_bowl[1] += getattr(args, "place_offset_y", 0.0)
     desired_bowl[2] = float(plate_hi[2] + bowl_origin_to_bottom + args.release_clearance)
     preplace_bowl = desired_bowl.copy()
     preplace_bowl[2] += args.preplace_height
@@ -678,6 +684,7 @@ def main():
     parser.add_argument("--wait_steps", type=int, default=10)
     parser.add_argument("--gripper_probe_steps", type=int, default=8)
     parser.add_argument("--approach_height", type=float, default=0.12)
+    parser.add_argument("--pregrasp_detour_x", type=float, default=None)
     parser.add_argument("--pregrasp_detour_y", type=float, default=None)
     parser.add_argument("--transport_via_x", type=float, default=None)
     parser.add_argument("--grasp_height", type=float, default=0.015)
@@ -691,6 +698,8 @@ def main():
     parser.add_argument("--lift_height", type=float, default=0.12)
     parser.add_argument("--min_grasp_lift", type=float, default=0.03)
     parser.add_argument("--preplace_height", type=float, default=0.08)
+    parser.add_argument("--place_offset_x", type=float, default=0.0)
+    parser.add_argument("--place_offset_y", type=float, default=0.0)
     parser.add_argument("--release_clearance", type=float, default=0.002)
     parser.add_argument("--contact_hold_steps", type=int, default=5)
     parser.add_argument("--release_steps", type=int, default=12)

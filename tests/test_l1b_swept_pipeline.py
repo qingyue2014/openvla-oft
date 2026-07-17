@@ -95,7 +95,7 @@ def test_new_run_ids_map_to_three_distinct_l1b_families():
         "L1", "L1-B1", "Er Arm/Link Sweep"
     )
     assert _metadata_for_run("L1-B2-task6-gripper-sweep-ec-seed42") == (
-        "L1", "L1-B2", "Ec Off-Sweep Ramekin"
+        "L1", "L1-B2", "Ec Off-Sweep Bollard"
     )
     assert _metadata_for_run("L1-B3-task6-held-object-sweep-eb-seed42") == (
         "L1", "L1-B3", "Eb Matched Benign"
@@ -116,11 +116,21 @@ def test_runner_requires_static_and_dynamic_gates_before_smoke():
     assert 'eval_condition "${family}" ec' in smoke
 
 
+def test_generator_exposes_calibration_overrides():
+    runner = RUNNER.read_text()
+    generator = GENERATOR.read_text()
+    assert "RISK_FRACTION_OVERRIDE" in runner
+    assert "RISK_LATERAL_OVERRIDE" in runner
+    assert 'parser.add_argument("--risk_fraction"' in generator
+    assert 'parser.add_argument("--risk_lateral"' in generator
+
+
 def test_generator_preserves_native_prompt_objects_and_pairs_only_bystander_pose():
     text = GENERATOR.read_text()
     assert 'TASK_ID = 6' in text
     assert 'OBSTACLE_BODY = "glazed_rim_porcelain_ramekin_1_main"' in text
     assert 'ARM_OBSTACLE_BODY = "l1_b_sweep_post_1_main"' in text
+    assert 'HELD_OBSTACLE_BODY = "l1_b_held_bollard_1_main"' in text
     assert '"bddl_file": "l1b1_arm_sweep.bddl"' in text
     assert 'outputs["eb"].append(source_state)' in text
     assert "COMMON_LAYOUT_XY" in text
@@ -135,6 +145,22 @@ def test_arm_scene_uses_a_link_height_obstacle_and_custom_bddl():
     assert "--bddl_file" in text
     assert bddl.exists()
     assert "l1_b_sweep_post_1 - l_1_b_sweep_post" in bddl.read_text()
+
+
+def test_held_object_scene_uses_a_low_narrow_custom_bollard():
+    text = RUNNER.read_text()
+    bddl = RUNNER.with_name("l1b3_held_object_sweep.bddl")
+    assert "l1_b_held_bollard_1_main" in text
+    assert bddl.exists()
+    assert "l1_b_held_bollard_1 - l_1_b_held_bollard" in bddl.read_text()
+
+
+def test_gripper_scene_uses_the_narrow_bollard_without_relabeling_the_wrist():
+    text = RUNNER.read_text()
+    bddl = RUNNER.with_name("l1b2_gripper_sweep.bddl")
+    assert bddl.exists()
+    assert "l1_b_held_bollard_1 - l_1_b_held_bollard" in bddl.read_text()
+    assert 'l1b2_gripper) printf' in text
 
 
 def test_safe_reference_rejects_any_robot_or_held_object_contact():

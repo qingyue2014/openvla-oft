@@ -67,13 +67,15 @@ oracle_for() {
 obstacle_for() {
   case "$1" in
     l1b1_arm) printf '%s\n' l1_b_sweep_post_1_main ;;
-    l1b2_gripper|l1b3_held_object) printf '%s\n' glazed_rim_porcelain_ramekin_1_main ;;
+    l1b2_gripper|l1b3_held_object) printf '%s\n' l1_b_held_bollard_1_main ;;
   esac
 }
 
 bddl_for() {
   case "$1" in
     l1b1_arm) printf '%s\n' "${TASKS_DIR}/l1b1_arm_sweep.bddl" ;;
+    l1b2_gripper) printf '%s\n' "${TASKS_DIR}/l1b2_gripper_sweep.bddl" ;;
+    l1b3_held_object) printf '%s\n' "${TASKS_DIR}/l1b3_held_object_sweep.bddl" ;;
     *) printf '%s\n' "" ;;
   esac
 }
@@ -94,10 +96,21 @@ note_for() {
 
 generate_family() {
   local family="$1" count="$2"
+  local extra_args=()
+  if [[ -n "${RISK_FRACTION_OVERRIDE:-}" ]]; then
+    extra_args+=(--risk_fraction "${RISK_FRACTION_OVERRIDE}")
+  fi
+  if [[ -n "${RISK_LATERAL_OVERRIDE:-}" ]]; then
+    extra_args+=(--risk_lateral "${RISK_LATERAL_OVERRIDE}")
+  fi
+  if [[ -n "${CONTROL_LATERAL_OVERRIDE:-}" ]]; then
+    extra_args+=(--control_lateral "${CONTROL_LATERAL_OVERRIDE}")
+  fi
   python "${TASKS_DIR}/generate_l1b_swept_initial_states.py" \
     --family "${family}" \
     --num_states "${count}" \
-    --seed "${SCENE_SEED}"
+    --seed "${SCENE_SEED}" \
+    "${extra_args[@]}"
 }
 
 check_family() {
@@ -115,11 +128,15 @@ safe_reference_family() {
     # The arm-post construct needs a genuinely elevated alternate route;
     # the ordinary 10 cm carry height is deliberately inside the post span.
     extra_args+=(--approach_height 0.15 --lift_height 0.16)
-    extra_args+=(--transport_clearance 0.12 --preplace_height 0.10)
+    extra_args+=(--transport_clearance 0.10 --preplace_height 0.10)
     extra_args+=(--pregrasp_detour_y -0.15)
-    extra_args+=(--transport_via_x 0.10)
     extra_args+=(--transport_max_waypoint_steps 400)
     extra_args+=(--position_tolerance 0.020)
+  elif [[ "${family}" == "l1b2_gripper" ]]; then
+    # Enter the grasp corridor from the side opposite the risk bollard.  The
+    # native VLA still takes its learned diagonal approach, while this route
+    # establishes that the same grasp remains feasible without gripper sweep.
+    extra_args+=(--pregrasp_detour_x 0.10)
   fi
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
     --family "${family}" \
@@ -161,7 +178,7 @@ eval_condition() {
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
     --save_trajectory "${SAVE_TRAJECTORY}" \
-    --trajectory_track_bodies "akita_black_bowl_1_main,plate_1_main,cookies_1_main,glazed_rim_porcelain_ramekin_1_main,robot0_link0,robot0_link1,robot0_link2,robot0_link3,robot0_link4,robot0_link5,robot0_link6,robot0_link7" \
+    --trajectory_track_bodies "akita_black_bowl_1_main,plate_1_main,cookies_1_main,${obstacle},robot0_link0,robot0_link1,robot0_link2,robot0_link3,robot0_link4,robot0_link5,robot0_link6,robot0_link7" \
     --trajectory_dir "${trajectory_dir}" \
     --run_id_note "${note}" \
     "${extra_args[@]}"
