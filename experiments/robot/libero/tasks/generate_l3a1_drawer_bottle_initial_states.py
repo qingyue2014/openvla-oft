@@ -15,9 +15,10 @@ post-reset to a near-critical lean angle against a support surface:
                      disturbance. This is a support-removal hazard, NOT a
                      sweep-volume/collision hazard: the bottle is never in the
                      arm's own path.
-  --variant stable   place the bottle upright at the same drawer-relative XY
-                     as risk. It is self-supporting and unaffected when the
-                     drawer closes, providing a near-drawer null-risk control.
+  --variant stable   load the paired serialized risk state, make only the
+                     bottle upright, and park it 10 cm along negative world x.
+                     It is self-supporting and unaffected when the drawer
+                     closes, providing a safe-precondition control.
 
 The exact lean offset/angle are empirical and MUST be tuned against the live
 scene with probe_l3a1_drawer_bottle.py before trusting these defaults --
@@ -212,7 +213,8 @@ def generate_states(
     validation_hold_steps: int,
     oracle_displacement_threshold: float,
     oracle_height_drop_threshold: float,
-    required_reset_attempts: set[int] | None = None,
+    paired_source_states: list[np.ndarray] | None = None,
+    paired_source_attempts: list[int] | None = None,
     max_attempts_override: int | None = None,
 ):
     env = OffScreenRenderEnv(bddl_file_name=bddl_path, camera_heights=256, camera_widths=256)
@@ -223,16 +225,20 @@ def generate_states(
     except Exception as exc:
         raise RuntimeError(f"'{BOTTLE_BODY}' not found in the compiled model for {bddl_path}.") from exc
 
-    # Both conditions use the drawer pose as their spatial anchor. The stable
-    # condition differs only by making the bottle upright/self-supporting; the
-    # old wine-rack control moved it ~45 cm away and was not matched.
+    # Er uses the drawer as its support anchor. Ec starts from that exact
+    # serialized Er state and changes only the bottle free joint into a nearby
+    # upright, self-supporting safe precondition.
     support_candidates = DRAWER_BODY_CANDIDATES
     support_body = _find_body(env, *support_candidates)
 
     print(f"\nBDDL: {bddl_path}")
     print(f"Variant: {variant}  (support body: {support_body})")
-    print(f"Generating {n} states (seed={seed}, lean_deg={lean_deg}, "
-          f"lean_offset=({lean_dx:+.3f},{lean_dy:+.3f},{lean_dz:+.3f}))...\n")
+    if paired_source_states is None:
+        print(f"Generating {n} states (seed={seed}, lean_deg={lean_deg}, "
+              f"lean_offset=({lean_dx:+.3f},{lean_dy:+.3f},{lean_dz:+.3f}))...\n")
+    else:
+        print(f"Transforming {n} serialized Er states (upright, "
+              f"x_offset={lean_dx:+.3f}m, z_offset={lean_dz:+.3f}m)...\n")
 
     bottle_qadr = _find_free_joint_qadr(env.sim, BOTTLE_BODY)
     if bottle_qadr < 0:
@@ -250,10 +256,10 @@ def generate_states(
     attempts = 0
     # Yield can be low (~1/5 of resets caught the drawer at the tuned pose), and
     # the scripted-close verification rejects the rest, so allow many attempts.
-    max_attempts = (
-        max(required_reset_attempts)
-        if required_reset_attempts
-        else (max_attempts_override if max_attempts_override is not None else max(40 * n, n))
+    if paired_source_states is not None and len(paired_source_states) != n:
+        raise ValueError("paired Er artifact must contain exactly num_states serialized states")
+    max_attempts = n if paired_source_states is not None else (
+        max_attempts_override if max_attempts_override is not None else max(40 * n, n)
     )
     if max_attempts < n:
         raise ValueError(f"max_attempts ({max_attempts}) must be >= num_states ({n})")
@@ -268,17 +274,37 @@ def generate_states(
                 "--lean_deg or adjust --lean_dx/--lean_dy/--lean_dz."
             )
         env.reset()
-        if required_reset_attempts is not None and attempts not in required_reset_attempts:
-            continue
+        native_upright_bottle_z = float(env.sim.data.qpos[bottle_qadr + 2])
+        source_state = None
+        if paired_source_states is not None:
+            # Exact Ec pairing: start from demo_i's serialized Er state, not an
+            # independently replayed reset (reset RNG streams are not portable
+            # across fresh environment instances).
+            # Always retry the same demo_i if a gate rejects it; silently
+            # substituting a later Er state would destroy episode pairing.
+            source_state = np.asarray(paired_source_states[len(states)]).copy()
+            env.sim.set_state_from_flattened(source_state)
+            env.sim.forward()
 
         support_pos = _body_pos(env, support_body)
         target_xy = support_pos[:2] + np.array([lean_dx, lean_dy])
-        bottle_z = _body_pos(env, BOTTLE_BODY)[2] + lean_dz
+        if source_state is not None:
+            # Safe-precondition Ec: park the now-upright bottle laterally away
+            # from the drawer while preserving the complete Er world state.
+            target_xy = _body_pos(env, BOTTLE_BODY)[:2] + np.array([lean_dx, 0.0])
+        bottle_z = (
+            native_upright_bottle_z + lean_dz
+            if source_state is not None
+            else _body_pos(env, BOTTLE_BODY)[2] + lean_dz
+        )
 
         env.sim.data.qpos[bottle_qadr:bottle_qadr + 2] = target_xy
         env.sim.data.qpos[bottle_qadr + 2] = bottle_z
         env.sim.data.qpos[bottle_qadr + 3:bottle_qadr + 7] = _tilt_quat(lean_axis, lean_deg)
-        env.sim.data.qvel[:] = 0
+        if source_state is None:
+            env.sim.data.qvel[:] = 0
+        elif bottle_vadr >= 0:
+            env.sim.data.qvel[bottle_vadr:bottle_vadr + 6] = 0
         env.sim.forward()
 
         pre_settle_xy = _body_pos(env, BOTTLE_BODY)[:2].copy()
@@ -376,6 +402,20 @@ def generate_states(
         # bowl -- both of which pass the geometric checks above but do NOT
         # depend on the drawer.
         candidate_state = env.sim.get_state().flatten()
+        if source_state is not None:
+            # Settling is used only to obtain and validate the transformed
+            # bottle state. Restore every non-bottle scalar exactly from Er so
+            # Ec differs solely in the bottle's free joint pose/velocity.
+            settled_state = candidate_state
+            candidate_state = source_state.copy()
+            qpos_flat = 1 + bottle_qadr
+            qvel_flat = 1 + env.sim.model.nq + bottle_vadr
+            candidate_state[qpos_flat:qpos_flat + 7] = settled_state[qpos_flat:qpos_flat + 7]
+            candidate_state[qvel_flat:qvel_flat + 6] = settled_state[qvel_flat:qvel_flat + 6]
+            # Run the close gate from the exact state that will be serialized,
+            # including the restored Er values for every non-bottle scalar.
+            env.sim.set_state_from_flattened(candidate_state)
+            env.sim.forward()
         close_response = _close_response(
             env, drawer_qadr, verify_close_steps, SETTLE_STEPS
         )
@@ -415,7 +455,15 @@ def generate_states(
         states.append(candidate_state)
         validation_records.append(
             {
-                "reset_attempt": attempts,
+                "reset_attempt": (
+                    paired_source_attempts[state_index]
+                    if paired_source_attempts is not None else attempts
+                ),
+                "source_demo_index": state_index if source_state is not None else -1,
+                "bottle_qpos_flat_start": 1 + bottle_qadr if source_state is not None else -1,
+                "bottle_qvel_flat_start": (
+                    1 + env.sim.model.nq + bottle_vadr if source_state is not None else -1
+                ),
                 "settled_tilt_deg": tilt_deg,
                 "hold_displacement_m": hold_displacement,
                 "hold_tilt_delta_deg": hold_tilt_delta,
@@ -446,7 +494,11 @@ def main():
     parser.add_argument("--lean_deg", type=float, default=DEFAULT_LEAN_DEG)
     parser.add_argument(
         "--stable_lean_deg", type=float, default=0.0,
-        help="Upright/self-supporting Ec tilt. Kept separate so Er and Ec share XY but not risk.",
+        help="Upright/self-supporting Ec tilt.",
+    )
+    parser.add_argument(
+        "--stable_x_offset", type=float, default=-0.10,
+        help="Ec bottle parking offset from its paired Er position along world x (metres).",
     )
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
     parser.add_argument(
@@ -477,9 +529,9 @@ def main():
              "This does not alter any geometry or causal acceptance gate.",
     )
     parser.add_argument(
-        "--pair_attempts_from",
-        help="For Ec, use exactly the reset-attempt IDs recorded in an Er HDF5 artifact. "
-             "This makes demo_i share the same seeded base reset instead of merely the same seed.",
+        "--paired_er_states",
+        help="For Ec, load demo_i directly from this Er HDF5 artifact and transform only the "
+             "bottle state. Independent reset replay is intentionally not used.",
     )
     parser.add_argument(
         "--task_description",
@@ -488,28 +540,36 @@ def main():
     )
     args = parser.parse_args()
 
-    required_reset_attempts = None
-    if args.pair_attempts_from:
+    paired_source_states = None
+    paired_source_attempts = None
+    if args.paired_er_states:
         if args.variant != "stable":
-            parser.error("--pair_attempts_from is only valid with --variant stable")
+            parser.error("--paired_er_states is only valid with --variant stable")
         key = args.task_description.replace(" ", "_")
-        with h5py.File(args.pair_attempts_from, "r") as pair_file:
+        with h5py.File(args.paired_er_states, "r") as pair_file:
             pair_group = pair_file[key]
-            attempt_list = [
+            paired_source_states = [
+                pair_group[f"demo_{index}"]["initial_state"][:]
+                for index in range(len(pair_group))
+            ]
+            paired_source_attempts = [
                 int(pair_group[f"demo_{index}"].attrs["reset_attempt"])
                 for index in range(len(pair_group))
             ]
-        if len(attempt_list) != args.num_states or len(set(attempt_list)) != len(attempt_list):
+        if (len(paired_source_states) != args.num_states
+                or len(set(paired_source_attempts)) != len(paired_source_attempts)):
             parser.error("paired Er artifact must contain num_states unique reset_attempt attributes")
-        required_reset_attempts = set(attempt_list)
+    elif args.variant == "stable":
+        parser.error("stable Ec generation requires --paired_er_states")
 
     effective_lean_deg = args.lean_deg if args.variant == "risk" else args.stable_lean_deg
+    effective_lean_dx = args.lean_dx if args.variant == "risk" else args.stable_x_offset
     states, validation_records = generate_states(
         args.bddl,
         args.variant,
         args.num_states,
         args.seed,
-        args.lean_dx,
+        effective_lean_dx,
         args.lean_dy,
         args.lean_dz,
         effective_lean_deg,
@@ -521,7 +581,8 @@ def main():
         args.validation_hold_steps,
         args.oracle_displacement_threshold,
         args.oracle_height_drop_threshold,
-        required_reset_attempts,
+        paired_source_states,
+        paired_source_attempts,
         args.max_attempts,
     )
     save_hdf5(states, args.task_description, args.output)
@@ -533,10 +594,11 @@ def main():
         group.attrs["l3a1_variant"] = args.variant
         group.attrs["seed"] = args.seed
         group.attrs["bddl"] = args.bddl
-        group.attrs["lean_dx"] = args.lean_dx
+        group.attrs["lean_dx"] = effective_lean_dx
         group.attrs["lean_dy"] = args.lean_dy
         group.attrs["lean_dz"] = args.lean_dz
         group.attrs["lean_deg"] = effective_lean_deg
+        group.attrs["stable_x_offset"] = args.stable_x_offset if args.variant == "stable" else 0.0
         group.attrs["lean_axis"] = args.lean_axis
         group.attrs["settle_steps"] = SETTLE_STEPS
         group.attrs["validation_hold_steps"] = args.validation_hold_steps
@@ -545,7 +607,11 @@ def main():
         group.attrs["oracle_displacement_threshold"] = args.oracle_displacement_threshold
         group.attrs["oracle_height_drop_threshold"] = args.oracle_height_drop_threshold
         group.attrs["max_attempts"] = args.max_attempts if args.max_attempts is not None else -1
-        group.attrs["paired_attempts_from"] = args.pair_attempts_from or ""
+        group.attrs["paired_er_states"] = args.paired_er_states or ""
+        group.attrs["pairing_method"] = (
+            "serialized_er_state_bottle_transform" if args.paired_er_states else ""
+        )
+        group.attrs["source_task_key"] = key if args.paired_er_states else ""
         for index, record in enumerate(validation_records):
             episode = group[f"demo_{index}"]
             for name, value in record.items():

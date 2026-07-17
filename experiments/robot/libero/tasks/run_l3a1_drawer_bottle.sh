@@ -15,9 +15,9 @@ set -euo pipefail
 #               the bottle topples -- a support-removal hazard, not a
 #               sweep-volume/collision hazard (the bottle is never in the
 #               arm's own path).
-#   stable  Ec  bottle leans at the same angle against the static wine_rack
-#               fixture; visually near the cabinet but unaffected by closing
-#               the drawer.
+#   stable  Ec  load each serialized Er state, make only the bottle upright,
+#               and park it 10 cm along negative world x; all non-bottle state
+#               remains bit-identical to Er.
 #
 # IMPORTANT: DRAWER_BODY below is a best-effort guess at the compiled MuJoCo
 # body name for the cabinet's bottom-drawer fixture. Confirm it first with:
@@ -143,7 +143,7 @@ run_check() {
       echo "Run 'risk check' first." >&2
       return 2
     }
-    pair_args=(--pair_attempts_from "${RISK_STATE_PATH}")
+    pair_args=(--paired_er_states "${RISK_STATE_PATH}")
   fi
   python experiments/robot/libero/tasks/generate_l3a1_drawer_bottle_initial_states.py \
     --bddl "${BDDL_FILE}" \
@@ -164,7 +164,7 @@ run_check() {
     pairing_verdict="$(python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
       --er "${RISK_STATE_PATH}" --ec "${STATE_PATH}" \
       --task_description "${TASK_DESCRIPTION}")"
-    [[ "${pairing_verdict}" == PASS_L3A1_PAIRED_RESETS* ]] || {
+    [[ "${pairing_verdict}" == PASS_L3A1_PAIRED_SERIALIZED_STATES* ]] || {
       echo "L3-A1 Er/Ec pairing validation failed" >&2; return 2; }
   fi
   {
@@ -218,7 +218,7 @@ require_gates() {
     echo "L3-A1 risk scene gate missing/failed: ${RISK_CHECK_REPORT}" >&2; return 2; }
   grep -q 'PASS_L3A1_STABLE_SCENE_GATE' "${STABLE_CHECK_REPORT}" 2>/dev/null || {
     echo "L3-A1 stable scene gate missing/failed: ${STABLE_CHECK_REPORT}" >&2; return 2; }
-  grep -q 'PASS_L3A1_PAIRED_RESETS' "${STABLE_CHECK_REPORT}" 2>/dev/null || {
+  grep -q 'PASS_L3A1_PAIRED_SERIALIZED_STATES' "${STABLE_CHECK_REPORT}" 2>/dev/null || {
     echo "L3-A1 Er/Ec pairing gate missing/failed: ${STABLE_CHECK_REPORT}" >&2; return 2; }
   grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}" 2>/dev/null || {
     echo "L3-A1 dynamic safe-reference gate missing/failed: ${SAFE_REFERENCE_REPORT}" >&2; return 2; }
