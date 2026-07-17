@@ -35,6 +35,7 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
         "smoke",
     }
     assert PHASES[("l1a2", "safe_reference")].count_env == "SAFE_REF_STATES"
+    assert "SAVE_VIDEO_MODE=all" in PHASES[("l1a2", "smoke")].command
     formal = PHASES[("l1a2", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "FAMILIES=l1a2" in formal.command
