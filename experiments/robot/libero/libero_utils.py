@@ -6,8 +6,6 @@ import os
 import imageio
 import numpy as np
 import tensorflow as tf
-from libero.libero import get_libero_path
-from libero.libero.envs import OffScreenRenderEnv
 
 # TensorFlow is used here only for lightweight image preprocessing.  Keep it
 # off the accelerator so it neither reserves OpenVLA's GPU memory nor triggers
@@ -18,6 +16,9 @@ except RuntimeError:
     # A caller may already have initialized TensorFlow before importing this
     # module; in that case its device policy can no longer be changed.
     pass
+
+from libero.libero import get_libero_path
+from libero.libero.envs import OffScreenRenderEnv
 
 from experiments.robot.robot_utils import (
     DATE,
