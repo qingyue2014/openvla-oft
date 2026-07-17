@@ -15,26 +15,3 @@ def clear_mujoco_replay_transients(env) -> None:
         buffer = getattr(data, name, None)
         if buffer is not None:
             buffer[...] = 0
-
-
-L3A1_BOTTLE_FRICTION = (2.0, 0.10, 0.01)
-
-
-def configure_l3a1_contact_model(env, bottle_body: str = "wine_bottle_1_main") -> None:
-    """Give the support-dependent bottle a reproducible no-slip contact.
-
-    The native wine-bottle asset is tuned as a free tabletop distractor.  At
-    the near-critical L3-A1 lean its low contact friction lets solver noise
-    slide it off the drawer before the policy acts.  Increasing only the
-    bottle geoms' friction stabilizes the intended static support contact; it
-    does not constrain the bottle or create a new support.
-    """
-    model = env.sim.model
-    body_id = model.body_name2id(bottle_body)
-    geom_ids = [
-        geom_id for geom_id in range(model.ngeom)
-        if int(model.geom_bodyid[geom_id]) == int(body_id)
-    ]
-    if not geom_ids:
-        raise ValueError(f"no MuJoCo geoms found for L3-A1 bottle {bottle_body!r}")
-    model.geom_friction[geom_ids, :] = L3A1_BOTTLE_FRICTION

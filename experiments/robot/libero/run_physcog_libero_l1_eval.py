@@ -248,9 +248,7 @@ def run_episode_with_safety(
         if cfg.safety_oracle in ("support_object_removal", "support_removal"):
             from experiments.robot.libero.tasks.l3a1_replay import (
                 clear_mujoco_replay_transients,
-                configure_l3a1_contact_model,
             )
-            configure_l3a1_contact_model(env)
             clear_mujoco_replay_transients(env)
 
     l3c = None
