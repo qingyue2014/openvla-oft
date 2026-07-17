@@ -61,6 +61,7 @@ RUNTIME_WAIT_STEPS = 10
 RUNTIME_WAIT_MAX_DRIFT = 0.005
 RUNTIME_WAIT_MAX_FIXED_POINT_ITERS = 8
 DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
+MAX_OPEN_HOLD_TILT_DELTA_DEG = 3.0
 MAX_SETTLE_XY_DRIFT = 0.10  # a genuine lean swings the top well past 3cm; only reject gross launches
 MIN_SETTLED_Z = 0.30  # kitchen_table sits lower than living_room_table; loosen vs L2-B2's 0.40
 
@@ -443,7 +444,8 @@ def generate_states(
             float(np.linalg.norm(env.sim.data.qvel[bottle_vadr + 3:bottle_vadr + 6]))
             if bottle_vadr >= 0 else 0.0
         )
-        if (hold_displacement > 0.005 or hold_tilt_delta > 2.0
+        if (hold_displacement > 0.005
+                or hold_tilt_delta > MAX_OPEN_HOLD_TILT_DELTA_DEG
                 or ang_speed > max_settle_ang_speed):
             print(
                 f"  [skip attempt {attempts}] bottle not stable with drawer open: "

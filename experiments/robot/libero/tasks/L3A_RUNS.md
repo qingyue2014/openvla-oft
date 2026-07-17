@@ -86,6 +86,8 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
   fresh controller reset. If needed it iteratively folds only the bottle's
   post-wait state back into the exact base state; the exact 10-step evaluation
   wait must converge to no more than 5 mm displacement.
+- The auxiliary open-hold tilt gate is 3° over 200 bare physics steps; the
+  formal displacement gate remains 5 mm and angular speed remains 0.02 rad/s.
 
 ### Confirmed on a GPU node (2026-07-12)
 
