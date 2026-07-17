@@ -445,8 +445,9 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
         "grasp_verified": int(grasp_verified),
         "grasp_lift_m": grasp_lift_m,
         "safe_success": int(safe_success),
-        "place_xy_offset_m": placement["place_xy_offset_m"],
-        "place_bottom_gap_m": placement["place_bottom_gap_m"],
+        # Keep the row schema synchronized with trajectory metadata and future
+        # placement diagnostics instead of copying selected keys by hand.
+        **placement,
         "occluder_displacement_m": occluder_displacement_m,
         "occluder_stable": int(occluder_stable),
         "reason": reason,
