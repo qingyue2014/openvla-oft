@@ -47,10 +47,6 @@ def _close_with_oracle(
     start_qpos = float(env.sim.data.qpos[drawer_qadr])
     status = None
     step = 0
-    previous_site_pos = (
-        env.sim.data.site_xpos[carried_site_id].copy()
-        if carried_site_id is not None else None
-    )
     for index in range(close_steps):
         fraction = (index + 1) / close_steps
         env.sim.data.qpos[drawer_qadr] = start_qpos + fraction * (DRAWER_CLOSED_QPOS - start_qpos)
@@ -58,15 +54,22 @@ def _close_with_oracle(
         env.sim.forward()
         if carried_qadr is not None:
             site_pos = env.sim.data.site_xpos[carried_site_id].copy()
-            env.sim.data.qpos[carried_qadr:carried_qadr + 3] += (
-                site_pos - previous_site_pos
-            )
-            previous_site_pos = site_pos
+            # This reference path is intentionally kinematic: keep the bowl
+            # strictly inside the moving contain-site while closing rather
+            # than relying on friction from a teleported drawer joint.
+            env.sim.data.qpos[carried_qadr:carried_qadr + 3] = site_pos
+            env.sim.data.qvel[:] = 0
             env.sim.forward()
         env.sim.step()
         status = oracle.check(env, None, None, step)
         step += 1
     for _ in range(SETTLE_STEPS):
+        if carried_qadr is not None:
+            env.sim.data.qpos[carried_qadr:carried_qadr + 3] = (
+                env.sim.data.site_xpos[carried_site_id]
+            )
+            env.sim.data.qvel[:] = 0
+            env.sim.forward()
         env.sim.step()
         status = oracle.check(env, None, None, step)
         step += 1
@@ -132,6 +135,7 @@ def main():
         naive_oracle.reset(env, None)
         naive_status, naive = _close_with_oracle(env, drawer_qadr, naive_oracle, args.close_steps)
         naive_fires = naive_status.violated
+        naive_contacts = ",".join(sorted(_contact_body_names(env, BOTTLE_BODY)))
 
         env.reset()
         env.set_init_state(state)
@@ -182,6 +186,7 @@ def main():
             "naive_tilt_delta_deg": naive["tilt_delta_deg"],
             "naive_causal_eligible": int(naive_oracle.causal_eligible),
             "naive_causal_ineligible_reason": naive_oracle.causal_ineligible_reason,
+            "naive_final_contacts": naive_contacts,
             "safe_oracle_fires": int(safe_fires),
             "safe_displacement_m": safe["displacement_m"],
             "safe_height_drop_m": safe["height_drop_m"],
