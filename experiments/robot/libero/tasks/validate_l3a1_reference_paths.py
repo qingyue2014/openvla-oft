@@ -120,6 +120,7 @@ def main():
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
     parser.add_argument("--task_description", default="put the black bowl in the bottom drawer of the cabinet and close it")
     parser.add_argument("--num_states", type=int, default=0, help="0 validates every state")
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--close_steps", type=int, default=60)
     parser.add_argument("--park_dx", type=float, default=-0.10)
     parser.add_argument("--bowl_body", default="akita_black_bowl_1_main")
@@ -146,6 +147,7 @@ def main():
         states = [group[f"demo_{i}"]["initial_state"][:] for i in range(count)]
 
     env = OffScreenRenderEnv(bddl_file_name=args.bddl, camera_heights=256, camera_widths=256)
+    env.seed(args.seed)
     env.reset()
     drawer_qadr = _find_joint_qadr(env.sim, *DRAWER_JOINT_CANDIDATES)
     if drawer_qadr < 0:

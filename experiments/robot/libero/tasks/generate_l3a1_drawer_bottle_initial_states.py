@@ -484,8 +484,7 @@ def generate_states(
         runtime_wait_fixed_point_iters = 0
         for fixed_point_iter in range(RUNTIME_WAIT_MAX_FIXED_POINT_ITERS):
             env.reset()
-            env.sim.set_state_from_flattened(candidate_state)
-            env.sim.forward()
+            env.set_init_state(candidate_state)
             clear_mujoco_replay_transients(env)
             runtime_wait_start = _body_pos(env, BOTTLE_BODY).copy()
             runtime_wait_start_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)

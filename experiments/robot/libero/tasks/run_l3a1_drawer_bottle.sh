@@ -347,6 +347,7 @@ run_safe_reference() {
     --bddl "${BDDL_FILE}" \
     --states "${reference_states}" \
     --num_states "${SAFE_REF_STATES:-5}" \
+    --seed "${EVAL_SEED}" \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --out_report "${SAFE_REFERENCE_REPORT}" \
     --out_csv "${LOG_DIR}/l3a1_safe_reference.csv"

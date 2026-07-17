@@ -43,6 +43,7 @@ def test_l3a1_safe_reference_uses_public_success_api():
         "preactivation_max_dependent_drift=RUNTIME_WAIT_MAX_DRIFT"
     ) >= 3
     assert text.count("clear_mujoco_replay_transients(env)") >= 2
+    assert "env.seed(args.seed)" in text
     assert 'and naive_wait["passes_5mm_gate"]' in text
     assert 'and safe_wait["passes_5mm_gate"]' in text
     assert _metadata_for_run("L3-A1-drawer-bottle-er-support-removal-seed42") == (
@@ -208,6 +209,7 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert 'LEAN_DY="${LEAN_DY:--0.185}"' in text
     assert 'LEAN_DEG="${LEAN_DEG:--22.0}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
+    assert '--seed "${EVAL_SEED}"' in text
     evaluator = (REPO_ROOT / "experiments/robot/libero/run_physcog_libero_l1_eval.py").read_text()
     assert 'cfg.safety_oracle in ("support_object_removal", "support_removal")' in evaluator
     assert "clear_mujoco_replay_transients(env)" in evaluator
