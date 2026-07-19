@@ -27,8 +27,7 @@ from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
     benchmark,
     get_libero_path,
     _body_pos,
-    _contact_between,
-    _contact_with_robot,
+    _forbidden_contact_names,
 )
 
 
@@ -93,7 +92,51 @@ def _visible_pixel_count(env, body_name: str, camera: str, resolution: int) -> i
     )
     if segmentation.ndim == 3:
         segmentation = segmentation[..., -1]
+    segmentation = _center_policy_crop(segmentation)
     return int(np.isin(segmentation, tuple(_geom_ids_for_body(env, body_name))).sum())
+
+
+def _center_policy_crop(image: np.ndarray, crop_area: float = 0.9) -> np.ndarray:
+    """Match OpenVLA's configured 0.9-area center crop before model input."""
+    height, width = image.shape[:2]
+    scale = float(np.sqrt(crop_area))
+    crop_height = max(1, int(round(height * scale)))
+    crop_width = max(1, int(round(width * scale)))
+    top = (height - crop_height) // 2
+    left = (width - crop_width) // 2
+    return image[top:top + crop_height, left:left + crop_width]
+
+
+def _fresh_observation(env) -> dict:
+    for owner in (env, getattr(env, "env", None)):
+        if owner is None:
+            continue
+        for method_name in ("get_observation", "_get_observations", "_get_observation"):
+            method = getattr(owner, method_name, None)
+            if method is not None:
+                return method()
+    return {}
+
+
+def _policy_camera_image(env, camera: str, resolution: int) -> np.ndarray:
+    """Reproduce policy orientation/crop after final settle, never stale obs."""
+    obs = _fresh_observation(env)
+    key = f"{camera}_image"
+    image = obs.get(key)
+    if image is None:
+        image = env.sim.render(
+            width=resolution,
+            height=resolution,
+            camera_name=camera,
+        )[::-1]
+    # libero_utils.get_libero_image rotates the observation by 180 degrees.
+    image = np.asarray(image)[::-1, ::-1]
+    cropped = _center_policy_crop(image)
+    return np.asarray(
+        Image.fromarray(cropped.astype(np.uint8)).resize(
+            (resolution, resolution), Image.Resampling.LANCZOS
+        )
+    )
 
 
 def validate(args) -> bool:
@@ -112,16 +155,37 @@ def validate(args) -> bool:
     pairing = json.loads(pairing_path.read_text())
     counts = {condition: len(value) for condition, value in states.items()}
     count_ok = len(set(counts.values())) == 1 and counts["eb"] == pairing["num_states"]
+    source_indices = [
+        pair.get("source_state_index") for pair in pairing.get("pairs", [])
+    ]
+    unique_native_sources_ok = bool(
+        not spec.get("preserve_native_layout")
+        or (
+            len(source_indices) == counts["eb"]
+            and len(set(source_indices)) == len(source_indices)
+            and pairing.get("unique_source_state_indices") == len(source_indices)
+        )
+    )
 
     preview_dir = Path(args.preview_dir)
     preview_dir.mkdir(parents=True, exist_ok=True)
     env, task = _make_env(args, spec)
-    rows = []
-    max_pair_drift = {TARGET_BODY: 0.0, PLATE_BODY: 0.0, LANDMARK_BODY: 0.0}
+    model_body_names = [
+        env.sim.model.body_id2name(body_id) or ""
+        for body_id in range(env.sim.model.nbody)
+    ]
+    invariant_bodies = [
+        body
+        for body in (TARGET_BODY, PLATE_BODY, LANDMARK_BODY)
+        if body != obstacle_body
+    ]
+    max_pair_drift = {body: 0.0 for body in invariant_bodies}
     initial_contacts = 0
+    initial_contact_pairs = []
     oracle_reset_ok = True
     obstacle_positions = {condition: [] for condition in states}
     visible_pixels = {condition: [] for condition in ("er", "ec")}
+    prompt_relation_distances = {condition: [] for condition in states}
     try:
         oracle = make_safety_oracle(
             _oracle_name(spec["component"]),
@@ -133,19 +197,43 @@ def validate(args) -> bool:
             for condition in ("eb", "er", "ec"):
                 obs = env.reset()
                 obs = env.set_init_state(states[condition][episode_idx])
-                for _ in range(args.settle_steps):
+                contact_first_seen = {}
+                if condition != "eb":
+                    for body in _forbidden_contact_names(env, obstacle_body):
+                        contact_first_seen.setdefault(body, "restore")
+                for settle_step in range(args.settle_steps):
                     env.sim.step()
+                    if condition != "eb":
+                        for body in _forbidden_contact_names(env, obstacle_body):
+                            contact_first_seen.setdefault(
+                                body, f"settle_step_{settle_step + 1}"
+                            )
+                obs = _fresh_observation(env)
+                tracked_bodies = set(invariant_bodies) | {obstacle_body}
+                relation_body = spec.get("prompt_relation_body")
+                if relation_body:
+                    tracked_bodies.add(relation_body)
                 paired_poses[condition] = {
                     name: _body_pos(env, name)
-                    for name in (TARGET_BODY, PLATE_BODY, LANDMARK_BODY, obstacle_body)
+                    for name in tracked_bodies
                 }
                 obstacle_positions[condition].append(paired_poses[condition][obstacle_body])
-                if condition != "eb":
-                    initial_contacts += sum(
-                        int(_contact_between(env, obstacle_body, body))
-                        for body in (TARGET_BODY, PLATE_BODY, LANDMARK_BODY)
+                if relation_body:
+                    prompt_relation_distances[condition].append(
+                        float(
+                            np.linalg.norm(
+                                paired_poses[condition][obstacle_body][:2]
+                                - paired_poses[condition][relation_body][:2]
+                            )
+                        )
                     )
-                    initial_contacts += int(_contact_with_robot(env, obstacle_body))
+                if condition != "eb":
+                    for body, first_seen in contact_first_seen.items():
+                        initial_contacts += 1
+                        initial_contact_pairs.append(
+                            f"ep{episode_idx:03d}/{condition}: "
+                            f"{obstacle_body} <-> {body} ({first_seen})"
+                        )
                     try:
                         oracle.reset(env, obs)
                     except Exception:
@@ -157,7 +245,9 @@ def validate(args) -> bool:
                         )
                     )
                 if episode_idx < args.num_previews:
-                    image = np.asarray(obs["agentview_image"])[::-1]
+                    image = _policy_camera_image(
+                        env, args.policy_camera, args.render_size
+                    )
                     Image.fromarray(image.astype(np.uint8)).save(
                         preview_dir / f"ep{episode_idx:03d}_{condition}.png"
                     )
@@ -166,11 +256,14 @@ def validate(args) -> bool:
                 for condition in ("er", "ec"):
                     drift = float(np.linalg.norm(paired_poses[condition][body] - eb))
                     max_pair_drift[body] = max(max_pair_drift[body], drift)
-            rows.append(episode_idx)
     finally:
         env.close()
 
     pairing_ok = all(value <= args.max_pair_drift for value in max_pair_drift.values())
+    only_obstacle_pose_ok = all(
+        pair.get("only_obstacle_pose_changed", False)
+        for pair in pairing.get("pairs", [])
+    )
     contact_ok = initial_contacts == 0
     prompt_ok = (
         "black bowl" in task.language.lower()
@@ -181,13 +274,35 @@ def validate(args) -> bool:
         pixels and min(pixels) >= args.min_obstacle_pixels
         for pixels in visible_pixels.values()
     )
+    native_asset_gate = bool(
+        not spec.get("native_assets_only")
+        or (
+            spec.get("bddl_file") is None
+            and not any(
+                body_name.startswith("l1_b_")
+                for body_name in model_body_names
+            )
+        )
+    )
+    relation_limit = spec.get("prompt_relation_max_distance")
+    prompt_relation_ok = bool(
+        relation_limit is None
+        or all(
+            distances and max(distances) <= relation_limit
+            for distances in prompt_relation_distances.values()
+        )
+    )
     passed = bool(
         count_ok
+        and unique_native_sources_ok
         and pairing_ok
         and contact_ok
         and prompt_ok
         and oracle_reset_ok
         and visibility_ok
+        and native_asset_gate
+        and only_obstacle_pose_ok
+        and prompt_relation_ok
     )
     report = [
         f"# {args.family} static scene check",
@@ -198,16 +313,31 @@ def validate(args) -> bool:
         f"- Component: `{spec['component']}`",
         f"- Counts: `{counts}`",
         f"- Pair count/pairing metadata consistent: `{count_ok}`",
+        f"- Unique native source reset gate: `{unique_native_sources_ok}`",
         f"- Prompt preservation gate: `{prompt_ok}`",
+        f"- Native task asset-set gate: `{native_asset_gate}`",
+        f"- Only protected obstacle pose changed: `{only_obstacle_pose_ok}`",
+        f"- Prompt landmark relation gate: `{prompt_relation_ok}`",
+        *(
+            f"- {condition} prompt-relation distance (min/max): "
+            f"`{min(distances):.4f}/{max(distances):.4f} m`"
+            for condition, distances in prompt_relation_distances.items()
+            if distances
+        ),
         f"- Forbidden initial obstacle contacts: `{initial_contacts}`",
+        *(
+            f"  - `{pair}`"
+            for pair in initial_contact_pairs
+        ),
         f"- Component oracle reset gate: `{oracle_reset_ok}`",
         f"- Policy-camera obstacle visibility gate: `{visibility_ok}`",
         f"- Er obstacle pixels (min/max): `{min(visible_pixels['er'])}/{max(visible_pixels['er'])}`",
         f"- Ec obstacle pixels (min/max): `{min(visible_pixels['ec'])}/{max(visible_pixels['ec'])}`",
         f"- Required obstacle pixels: `>= {args.min_obstacle_pixels}` in `{args.policy_camera}`",
-        f"- Max paired target drift: `{max_pair_drift[TARGET_BODY]:.6f} m`",
-        f"- Max paired plate drift: `{max_pair_drift[PLATE_BODY]:.6f} m`",
-        f"- Max paired cookie drift: `{max_pair_drift[LANDMARK_BODY]:.6f} m`",
+        *(
+            f"- Max paired {body} drift: `{drift:.6f} m`"
+            for body, drift in max_pair_drift.items()
+        ),
         f"- Required paired drift: `<= {args.max_pair_drift:.6f} m`",
         f"- Preview directory: `{preview_dir}`",
         "",

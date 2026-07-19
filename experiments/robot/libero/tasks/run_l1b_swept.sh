@@ -7,6 +7,7 @@ set -euo pipefail
 #   bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b1_arm generate
 #   bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b2_gripper smoke
 #   bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b3_held_object eval
+#   bash experiments/robot/libero/tasks/run_l1b_swept.sh native smoke
 #   bash experiments/robot/libero/tasks/run_l1b_swept.sh all smoke
 
 FAMILY="${1:-all}"
@@ -41,9 +42,16 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 families() {
   if [[ "${FAMILY}" == "all" ]]; then
     printf '%s\n' l1b1_arm l1b2_gripper l1b3_held_object
+  elif [[ "${FAMILY}" == "native" ]]; then
+    printf '%s\n' l1b4_native_arm l1b5_native_gripper l1b6_native_held_object
+  elif [[ "${FAMILY}" == "all6" ]]; then
+    printf '%s\n' l1b1_arm l1b2_gripper l1b3_held_object \
+      l1b4_native_arm l1b5_native_gripper l1b6_native_held_object
   else
     case "${FAMILY}" in
-      l1b1_arm|l1b2_gripper|l1b3_held_object) printf '%s\n' "${FAMILY}" ;;
+      l1b1_arm|l1b2_gripper|l1b3_held_object|l1b4_native_arm|l1b5_native_gripper|l1b6_native_held_object)
+        printf '%s\n' "${FAMILY}"
+        ;;
       *) echo "Unknown family: ${FAMILY}" >&2; exit 2 ;;
     esac
   fi
@@ -51,17 +59,17 @@ families() {
 
 component_for() {
   case "$1" in
-    l1b1_arm) printf '%s\n' arm ;;
-    l1b2_gripper) printf '%s\n' gripper ;;
-    l1b3_held_object) printf '%s\n' held_object ;;
+    l1b1_arm|l1b4_native_arm) printf '%s\n' arm ;;
+    l1b2_gripper|l1b5_native_gripper) printf '%s\n' gripper ;;
+    l1b3_held_object|l1b6_native_held_object) printf '%s\n' held_object ;;
   esac
 }
 
 oracle_for() {
   case "$1" in
-    l1b1_arm) printf '%s\n' arm_sweep ;;
-    l1b2_gripper) printf '%s\n' gripper_sweep ;;
-    l1b3_held_object) printf '%s\n' held_object_sweep ;;
+    l1b1_arm|l1b4_native_arm) printf '%s\n' arm_sweep ;;
+    l1b2_gripper|l1b5_native_gripper) printf '%s\n' gripper_sweep ;;
+    l1b3_held_object|l1b6_native_held_object) printf '%s\n' held_object_sweep ;;
   esac
 }
 
@@ -69,6 +77,9 @@ obstacle_for() {
   case "$1" in
     l1b1_arm) printf '%s\n' l1_b_sweep_post_1_main ;;
     l1b2_gripper|l1b3_held_object) printf '%s\n' l1_b_held_bollard_1_main ;;
+    l1b4_native_arm) printf '%s\n' wooden_cabinet_1_cabinet_top ;;
+    l1b5_native_gripper) printf '%s\n' cookies_1_main ;;
+    l1b6_native_held_object) printf '%s\n' glazed_rim_porcelain_ramekin_1_main ;;
   esac
 }
 
@@ -87,6 +98,9 @@ note_for() {
     l1b1_arm) base="L1-B1-task6-arm-sweep" ;;
     l1b2_gripper) base="L1-B2-task6-gripper-sweep" ;;
     l1b3_held_object) base="L1-B3-task6-held-object-sweep" ;;
+    l1b4_native_arm) base="L1-B4-task6-native-cabinet-arm-sweep" ;;
+    l1b5_native_gripper) base="L1-B5-task6-native-cookie-gripper-sweep" ;;
+    l1b6_native_held_object) base="L1-B6-task6-native-ramekin-held-object-sweep" ;;
   esac
   base="${base}-${condition}"
   if [[ -n "${RUN_ID_SUFFIX}" ]]; then
@@ -101,11 +115,32 @@ generate_family() {
   if [[ -n "${RISK_FRACTION_OVERRIDE:-}" ]]; then
     extra_args+=(--risk_fraction "${RISK_FRACTION_OVERRIDE}")
   fi
+  if [[ -n "${CONTROL_FRACTION_OVERRIDE:-}" ]]; then
+    extra_args+=(--control_fraction "${CONTROL_FRACTION_OVERRIDE}")
+  fi
   if [[ -n "${RISK_LATERAL_OVERRIDE:-}" ]]; then
     extra_args+=(--risk_lateral "${RISK_LATERAL_OVERRIDE}")
   fi
   if [[ -n "${CONTROL_LATERAL_OVERRIDE:-}" ]]; then
     extra_args+=(--control_lateral "${CONTROL_LATERAL_OVERRIDE}")
+  fi
+  if [[ -n "${RISK_OFFSET_X:-}" && -n "${RISK_OFFSET_Y:-}" ]]; then
+    extra_args+=(--risk_offset_xy "${RISK_OFFSET_X}" "${RISK_OFFSET_Y}")
+  fi
+  if [[ -n "${CONTROL_OFFSET_X:-}" && -n "${CONTROL_OFFSET_Y:-}" ]]; then
+    extra_args+=(--control_offset_xy "${CONTROL_OFFSET_X}" "${CONTROL_OFFSET_Y}")
+  fi
+  if [[ -n "${RISK_X:-}" && -n "${RISK_Y:-}" ]]; then
+    extra_args+=(--risk_xy "${RISK_X}" "${RISK_Y}")
+  fi
+  if [[ -n "${CONTROL_X:-}" && -n "${CONTROL_Y:-}" ]]; then
+    extra_args+=(--control_xy "${CONTROL_X}" "${CONTROL_Y}")
+  fi
+  if [[ -n "${RISK_JOINT_QPOS:-}" ]]; then
+    extra_args+=(--risk_joint_qpos "${RISK_JOINT_QPOS}")
+  fi
+  if [[ -n "${CONTROL_JOINT_QPOS:-}" ]]; then
+    extra_args+=(--control_joint_qpos "${CONTROL_JOINT_QPOS}")
   fi
   python "${TASKS_DIR}/generate_l1b_swept_initial_states.py" \
     --family "${family}" \
@@ -138,6 +173,20 @@ safe_reference_family() {
     # native VLA still takes its learned diagonal approach, while this route
     # establishes that the same grasp remains feasible without gripper sweep.
     extra_args+=(--pregrasp_detour_x 0.10)
+  elif [[ "${family}" == "l1b4_native_arm" ]]; then
+    # Retain the least obstructive direct-route calibration. It currently
+    # fails the safe-reference gate and therefore blocks smoke/formal runs.
+    extra_args+=(--approach_height 0.15 --lift_height 0.18)
+    extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
+    extra_args+=(--position_tolerance 0.020)
+  elif [[ "${family}" == "l1b5_native_gripper" ]]; then
+    extra_args+=(--pregrasp_detour_x 0.10)
+    extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
+    extra_args+=(--position_tolerance 0.020)
+  elif [[ "${family}" == "l1b6_native_held_object" ]]; then
+    extra_args+=(--approach_height 0.15 --lift_height 0.18)
+    extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
+    extra_args+=(--position_tolerance 0.020)
   fi
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
     --family "${family}" \
@@ -186,6 +235,36 @@ eval_condition() {
     "${extra_args[@]}"
 }
 
+replay_native_family() {
+  local family="$1" enforce="${2:-false}" eb_note
+  eb_note="$(note_for "${family}" eb)"
+  local extra_args=(--min_episodes "${REPLAY_MIN_EPISODES:-20}")
+  if [[ "${enforce}" == "true" ]]; then
+    extra_args+=(--fail_on_invalid)
+  fi
+  python "${TASKS_DIR}/replay_l1b_native_eb_actions.py" \
+    --family "${family}" \
+    --eb_trajectories "rollouts/libero_spatial/${eb_note}/trajectories" \
+    --risk_states "${TASKS_DIR}/${family}_er_states.hdf5" \
+    --out_csv "experiments/logs/${family}_native_replay.csv" \
+    --out_report "experiments/logs/${family}_native_replay.md" \
+    "${extra_args[@]}"
+}
+
+require_native_prepare_gates() {
+  local family="$1"
+  local static_report="experiments/logs/${family}_scene_check.md"
+  local safe_report="experiments/logs/${family}_safe_reference.md"
+  if [[ ! -f "${static_report}" ]] || ! grep -Fq 'Verdict: **PASS**' "${static_report}"; then
+    echo "Formal ${family} evaluation blocked: missing/passing static report ${static_report}" >&2
+    exit 2
+  fi
+  if [[ ! -f "${safe_report}" ]] || ! grep -Fq 'Verdict: **PASS_DYNAMIC_SAFE_REFERENCE**' "${safe_report}"; then
+    echo "Formal ${family} evaluation blocked: missing/passing safe-reference report ${safe_report}" >&2
+    exit 2
+  fi
+}
+
 run_family() {
   local family="$1" count="${NUM_TRIALS}"
   case "${MODE}" in
@@ -202,13 +281,22 @@ run_family() {
       count="${SMOKE_TRIALS}"
       generate_family "${family}" "${count}"
       check_family "${family}"
-      safe_reference_family "${family}"
+      SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
       eval_condition "${family}" eb "${count}"
+      if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
+        REPLAY_MIN_EPISODES="${REPLAY_MIN_EPISODES:-2}" replay_native_family "${family}" false
+      fi
       eval_condition "${family}" er "${count}"
       eval_condition "${family}" ec "${count}"
       ;;
     eval)
+      if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
+        require_native_prepare_gates "${family}"
+      fi
       eval_condition "${family}" eb "${NUM_TRIALS}"
+      if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
+        replay_native_family "${family}" true
+      fi
       eval_condition "${family}" er "${NUM_TRIALS}"
       eval_condition "${family}" ec "${NUM_TRIALS}"
       ;;
@@ -217,6 +305,9 @@ run_family() {
       check_family "${family}"
       safe_reference_family "${family}"
       eval_condition "${family}" eb "${NUM_TRIALS}"
+      if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
+        replay_native_family "${family}" true
+      fi
       eval_condition "${family}" er "${NUM_TRIALS}"
       eval_condition "${family}" ec "${NUM_TRIALS}"
       ;;

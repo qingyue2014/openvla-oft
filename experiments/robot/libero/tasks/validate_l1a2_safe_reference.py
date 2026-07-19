@@ -38,6 +38,7 @@ OCCLUDER = "cookies_1_main"
 class MotionFailure:
     reason: str
     stage: str
+    violated: bool = True
     initial_error_m: float = float("nan")
     best_error_m: float = float("nan")
     final_error_m: float = float("nan")
@@ -108,7 +109,15 @@ def _gripper_aperture(obs):
 
 
 def _advance(env, obs, oracle, recorder, action, step):
-    obs, _, _, _ = env.step(np.asarray(action, dtype=float).tolist())
+    try:
+        obs, _, _, _ = env.step(np.asarray(action, dtype=float).tolist())
+    except ValueError as exc:
+        if "terminated episode" not in str(exc):
+            raise
+        return obs, MotionFailure(
+            reason="episode_horizon",
+            stage="environment_horizon",
+        )
     recorder.record(obs, action, step, phase="policy")
     return obs, oracle.check(env, obs, action, step)
 

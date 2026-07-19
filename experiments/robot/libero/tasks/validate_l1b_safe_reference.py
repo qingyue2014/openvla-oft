@@ -43,6 +43,14 @@ class _AllComponentCollisionOracle:
 
     def reset(self, env, obs):
         self._delegate.reset(env, obs)
+        # ContactOracle intentionally resolves direct-body geoms.  Native
+        # articulated fixtures (B4 cabinet) place the risk geoms on child
+        # bodies, so the safe-reference gate must protect the full subtree.
+        for body_name in self._delegate.body_names:
+            body_id = env.sim.model.body_name2id(body_name)
+            self._delegate._protected_geom_ids.update(
+                physcog_oracles._descendant_geom_ids(env.sim, body_id)
+            )
 
     def check(self, env, obs, action, step):
         return self._delegate.check(env, obs, action, step)
@@ -88,7 +96,7 @@ def run(args) -> str:
     from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import FAMILIES
 
     spec = FAMILIES[args.family]
-    OBSTACLE = spec["obstacle_body"]
+    OBSTACLE = spec.get("safety_obstacle_body", spec["obstacle_body"])
     if spec.get("bddl_file") and not args.bddl_file:
         args.bddl_file = str(Path(__file__).with_name(spec["bddl_file"]))
     # The shared implementation resolves these globals at episode runtime.

@@ -13,7 +13,10 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNNER = REPO_ROOT / "experiments/robot/libero/tasks/run_l1b_swept.sh"
 GENERATOR = REPO_ROOT / "experiments/robot/libero/tasks/generate_l1b_swept_initial_states.py"
 SAFE_REFERENCE = REPO_ROOT / "experiments/robot/libero/tasks/validate_l1b_safe_reference.py"
+SHARED_SAFE_REFERENCE = REPO_ROOT / "experiments/robot/libero/tasks/validate_l1a2_safe_reference.py"
 STATIC_VALIDATOR = REPO_ROOT / "experiments/robot/libero/tasks/validate_l1b_swept_states.py"
+NATIVE_REPLAY = REPO_ROOT / "experiments/robot/libero/tasks/replay_l1b_native_eb_actions.py"
+NATIVE_REPLAY_SEARCH = REPO_ROOT / "experiments/robot/libero/tasks/search_l1b_native_replay_positions.py"
 ASSETS = REPO_ROOT / "experiments/robot/libero/assets"
 
 
@@ -108,6 +111,18 @@ def test_new_run_ids_map_to_three_distinct_l1b_families():
     )
 
 
+def test_native_alternative_run_ids_map_to_b4_b5_b6():
+    assert _metadata_for_run(
+        "L1-B4-task6-native-cabinet-arm-sweep-er-seed42"
+    ) == ("L1", "L1-B4", "Er Native Cabinet Arm Sweep")
+    assert _metadata_for_run(
+        "L1-B5-task6-native-cookie-gripper-sweep-ec-seed42"
+    ) == ("L1", "L1-B5", "Ec Native Cookie Control")
+    assert _metadata_for_run(
+        "L1-B6-task6-native-ramekin-held-object-sweep-eb-seed42"
+    ) == ("L1", "L1-B6", "Eb Native Layout")
+
+
 def test_runner_requires_static_and_dynamic_gates_before_smoke():
     text = RUNNER.read_text()
     smoke = text.split("smoke)", 1)[1].split(";;", 1)[0]
@@ -146,7 +161,82 @@ def test_generator_preserves_native_prompt_objects_and_pairs_only_bystander_pose
     assert 'outputs["eb"].append(source_state)' in text
     assert "COMMON_LAYOUT_XY" in text
     assert 'env.set_init_state(source_state)' in text
-    assert '_set_body_xy(env.sim, obstacle_body, obstacle_xy)' in text
+    assert "_apply_condition_placement" in text
+    assert "_set_body_xy(env.sim, obstacle_body, placement)" in text
+
+
+def test_b4_b5_b6_use_native_task6_bddl_and_exact_asset_set():
+    generator = GENERATOR.read_text()
+    runner = RUNNER.read_text()
+    for family, obstacle in (
+        ("l1b4_native_arm", "wooden_cabinet_1_cabinet_top"),
+        ("l1b5_native_gripper", "cookies_1_main"),
+        ("l1b6_native_held_object", "glazed_rim_porcelain_ramekin_1_main"),
+    ):
+        block = generator.split(f'"{family}":', 1)[1].split("},", 1)[0]
+        assert '"bddl_file": None' in block
+        assert '"native_assets_only": True' in block
+        assert '"preserve_native_layout": True' in block
+        assert obstacle in block or obstacle in generator
+        assert family in runner
+    assert 'elif [[ "${FAMILY}" == "native" ]]' in runner
+    assert "l1b4_native_arm l1b5_native_gripper l1b6_native_held_object" in runner
+
+
+def test_native_pairing_gate_allows_only_one_asset_pose_to_change():
+    generator = GENERATOR.read_text()
+    validator = STATIC_VALIDATOR.read_text()
+    assert "_allowed_obstacle_state_indices" in generator
+    assert '"only_obstacle_pose_changed"' in generator
+    assert "only_obstacle_pose_ok" in validator
+    assert "Native task asset-set gate" in validator
+    assert "unique_native_sources" in generator
+    assert "Unique native source reset gate" in validator
+
+
+def test_native_cabinet_safe_reference_protects_descendant_geoms():
+    text = SAFE_REFERENCE.read_text()
+    assert "_descendant_geom_ids" in text
+    assert "_protected_geom_ids.update" in text
+
+
+def test_safe_reference_records_environment_horizon_instead_of_crashing_batch():
+    text = SHARED_SAFE_REFERENCE.read_text()
+    assert 'reason="episode_horizon"' in text
+    assert '"terminated episode"' in text
+
+
+def test_native_replay_measures_all_three_components_before_formal_er():
+    replay = NATIVE_REPLAY.read_text()
+    runner = RUNNER.read_text()
+    assert 'COMPONENTS = ("arm", "gripper", "held_object")' in replay
+    assert "successful_eb_only" in replay
+    assert "min_activation_rate" in replay
+    assert "max_unintended_rate" in replay
+    formal = runner.split("eval)", 1)[1].split(";;", 1)[0]
+    assert 'require_native_prepare_gates "${family}"' in formal
+    assert formal.index('eval_condition "${family}" eb') < formal.index(
+        'replay_native_family "${family}" true'
+    ) < formal.index('eval_condition "${family}" er')
+    all_mode = runner.split("all)", 1)[1].split(";;", 1)[0]
+    assert all_mode.index('eval_condition "${family}" eb') < all_mode.index(
+        'replay_native_family "${family}" true'
+    ) < all_mode.index('eval_condition "${family}" er')
+
+
+def test_native_replay_grid_reuses_eb_actions_and_rejects_invalid_poses():
+    text = NATIVE_REPLAY_SEARCH.read_text()
+    assert "_settle_and_validate" in text
+    assert 'COMPONENTS = ("arm", "gripper", "held_object")' in text
+    assert "physically_valid_episodes" in text
+
+
+def test_policy_previews_are_rendered_after_final_settle():
+    text = STATIC_VALIDATOR.read_text()
+    settle = text.index("for settle_step in range(args.settle_steps)")
+    preview = text.index("image = _policy_camera_image")
+    assert settle < preview
+    assert "env.sim.render" in text
 
 
 def test_arm_scene_uses_a_link_height_obstacle_and_custom_bddl():

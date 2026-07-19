@@ -33,6 +33,10 @@ and identical across conditions.
 
 ## Revised paired scene family
 
+The retained B1/B2/B3 below use calibrated custom obstacles.  A parallel
+same-task/same-prompt/same-native-assets B4/B5/B6 comparison is specified in
+`L1-B_NATIVE_ALTERNATIVES.md`; it does not replace these families.
+
 Every family uses three episode-paired conditions:
 
 - **Eb (matched benign):** the common task-6 workspace layout with the ramekin
