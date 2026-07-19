@@ -135,7 +135,7 @@ def main() -> None:
     print("  akita_black_bowl_1_main  unchanged native grasp pose")
     if args.condition == "bowl_stack":
         print("  plate_1_main             unchanged native pose on the table")
-        print("  akita_black_bowl_2_main  stably offset -0.010m in x on plate_1_main")
+        print("  akita_black_bowl_2_main  stably offset 0.0125m at world-XY 135deg on plate_1_main")
         print("  cookies / ramekin        unchanged native poses")
         print("  required support chain   target bowl -> second bowl -> plate")
     elif args.condition == "bowl_stack_eb":

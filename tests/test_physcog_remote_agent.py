@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from experiments.robot.libero.tasks.physcog_remote_agent import (
     PHASES,
     PhaseSpec,
@@ -58,12 +60,21 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert "SAVE_VIDEO_MODE=none" in formal.command
 
 
-def test_l1c1_registry_exposes_only_paired_recalibration():
+def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     assert set(phase for scenario, phase in PHASES if scenario == "l1c1") == {
+        "init", "preview", "validate_layout", "formal",
         "recalibrate", "recalibrate15", "direction_sweep",
         "angle0", "angle45", "angle90", "angle135",
         "angle225", "angle270", "angle315",
     }
+    assert PHASES[("l1c1", "init")].count_env == "NUM_TRIALS"
+    assert "RISK_DEPENDENT_XY_ANGLE_DEG=135" in PHASES[("l1c1", "init")].command
+    assert PHASES[("l1c1", "preview")].count_env == "PREVIEW_NUM_STATES"
+    assert "bowl_stack_validate" in PHASES[("l1c1", "validate_layout")].command
+    formal = PHASES[("l1c1", "formal")]
+    assert formal.count_env == "NUM_TRIALS"
+    assert "RENDER_GPU_DEVICE_ID=1" in formal.command
+    assert "bowl_stack_eval" in formal.command
     phase = PHASES[("l1c1", "recalibrate")]
     assert phase.count_env == "NUM_TRIALS"
     assert "RISK_DEPENDENT_XY_OFFSET=0.0125" in phase.command
@@ -78,6 +89,17 @@ def test_l1c1_registry_exposes_only_paired_recalibration():
     assert "RISK_DEPENDENT_XY_ANGLE_DEG=90" in PHASES[
         ("l1c1", "angle90")
     ].command
+
+
+def test_l1c1_preview_and_formal_reuse_the_generated_state_bundle():
+    runner = Path("experiments/robot/libero/tasks/run_l1c1_task2.sh").read_text()
+    preview_body = runner.split("run_bowl_stack_preview() {", 1)[1].split("\n}", 1)[0]
+    formal_body = runner.split("  bowl_stack_eval)\n", 1)[1].split("\n    ;;", 1)[0]
+    assert "generate_bowl_stack_candidate" not in preview_body
+    assert "require_states" in preview_body
+    assert "generate_bowl_stack_candidate" not in formal_body
+    assert "run_bowl_stack_validation" in formal_body
+    assert "prepare_bowl_stack_formal_outputs" in formal_body
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():

@@ -51,6 +51,7 @@ POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-50}"
 # "all" bypasses the evaluator's category caps.  Use the capped enabled mode
 # by default: at most ten violation, safe-success, and ordinary-failure videos.
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
+RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:-1}"
 MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"
 MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"
 MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"
@@ -107,6 +108,10 @@ fi
 
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
+if [[ "${RENDER_GPU_DEVICE_ID}" != "-1" ]]; then
+  export EGL_DEVICE_ID="${EGL_DEVICE_ID:-${RENDER_GPU_DEVICE_ID}}"
+  export MUJOCO_EGL_DEVICE_ID="${MUJOCO_EGL_DEVICE_ID:-${RENDER_GPU_DEVICE_ID}}"
+fi
 
 generate_condition() {
   local variant="$1"
@@ -209,13 +214,25 @@ run_candidate_calibration() {
 
 generate_bowl_stack_candidate() {
   local trials="${1:-${NUM_TRIALS}}"
+  local -a source_args=()
+  if [[ -n "${PHYSCOG_SHARED_REPO:-}" ]]; then
+    [[ -f "${BOWL_STACK_SOURCE_INDICES}" ]] || {
+      echo "Missing shared paired source indices: ${BOWL_STACK_SOURCE_INDICES}" >&2
+      exit 2
+    }
+    source_args=(--source_indices "${BOWL_STACK_SOURCE_INDICES}")
+  elif [[ -f "${BOWL_STACK_SOURCE_INDICES}" ]]; then
+    source_args=(--source_indices "${BOWL_STACK_SOURCE_INDICES}")
+  else
+    source_args=(--source_indices_out "${BOWL_STACK_SOURCE_INDICES}")
+  fi
   python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
     --variant task2_bowl_on_plate_risk \
     --output "${BOWL_STACK_STATE_PATH}" \
     --num_states "${trials}" --seed "${SEED}" \
     --dependent_xy_offset "${RISK_DEPENDENT_XY_OFFSET}" \
     --dependent_xy_angle_deg "${RISK_DEPENDENT_XY_ANGLE_DEG}" \
-    --source_indices_out "${BOWL_STACK_SOURCE_INDICES}"
+    "${source_args[@]}"
   python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
     --variant task2_bowl_stack_benign \
     --output "${BOWL_STACK_EB_STATE_PATH}" \
@@ -226,6 +243,7 @@ generate_bowl_stack_candidate() {
     --output "${BOWL_STACK_EC_STATE_PATH}" \
     --num_states "${trials}" --seed "${SEED}" \
     --source_indices "${BOWL_STACK_SOURCE_INDICES}"
+  echo "PASS_L1C1_PAIRED_INITIAL_STATES_GENERATED count=${trials}"
 }
 
 regenerate_bowl_stack_risk_candidate() {
@@ -289,10 +307,19 @@ run_bowl_stack_direction_sweep() {
 }
 
 run_bowl_stack_preview() {
-  generate_bowl_stack_candidate "${PREVIEW_NUM_STATES}"
+  require_states "${BOWL_STACK_EB_STATE_PATH}"
+  require_states "${BOWL_STACK_STATE_PATH}"
+  require_states "${BOWL_STACK_EC_STATE_PATH}"
   run_debug_condition bowl_stack_eb "${BOWL_STACK_EB_STATE_PATH}" "${PREVIEW_DIR}/bowl_stack_eb" "${PREVIEW_NUM_STATES}"
   run_debug_condition bowl_stack "${BOWL_STACK_STATE_PATH}" "${PREVIEW_DIR}/bowl_stack" "${PREVIEW_NUM_STATES}"
   run_debug_condition bowl_stack_ec "${BOWL_STACK_EC_STATE_PATH}" "${PREVIEW_DIR}/bowl_stack_ec" "${PREVIEW_NUM_STATES}"
+  echo "PASS_EXACT_SERIALIZED_LAYOUT_PREVIEW count=${PREVIEW_NUM_STATES}"
+}
+
+require_bowl_stack_bundle() {
+  require_states "${BOWL_STACK_EB_STATE_PATH}"
+  require_states "${BOWL_STACK_STATE_PATH}"
+  require_states "${BOWL_STACK_EC_STATE_PATH}"
 }
 
 run_bowl_stack_safe_reference() {
@@ -332,6 +359,7 @@ run_bowl_stack_risk() {
     --task_suite_name libero_spatial \
     --task_ids 2 \
     --initial_states_path "${BOWL_STACK_STATE_PATH}" \
+    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --safety_oracle implicit_bowl_stack \
     --held_object_body "${HELD_OBJECT_BODY}" \
     --distractor_body "${LOWER_BOWL_BODY}" \
@@ -357,6 +385,7 @@ run_bowl_stack_baseline() {
     --task_suite_name libero_spatial \
     --task_ids 2 \
     --initial_states_path "${BOWL_STACK_EB_STATE_PATH}" \
+    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --safety_oracle none \
     --held_object_body "${HELD_OBJECT_BODY}" \
     --distractor_body "${LOWER_BOWL_BODY}" \
@@ -376,6 +405,7 @@ run_bowl_stack_ec() {
     --task_suite_name libero_spatial \
     --task_ids 2 \
     --initial_states_path "${BOWL_STACK_EC_STATE_PATH}" \
+    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --safety_oracle none \
     --held_object_body "${HELD_OBJECT_BODY}" \
     --distractor_body "${LOWER_BOWL_BODY}" \
@@ -405,12 +435,31 @@ run_bowl_stack_er_replay() {
     --fail_on_invalid
 }
 
-run_bowl_stack_analysis() {
-  run_bowl_stack_replay
+write_bowl_stack_analysis() {
   python experiments/robot/libero/tasks/analyze_l1c1_bowl_stack.py \
-    --eb "${BOWL_STACK_EB_TRAJECTORY_DIR}" \
+    --eb "rollouts/libero_spatial/${BOWL_STACK_EB_NOTE}/trajectories" \
     --er "rollouts/libero_spatial/${BOWL_STACK_ER_NOTE}/trajectories" \
     --ec "rollouts/libero_spatial/${BOWL_STACK_EC_NOTE}/trajectories"
+}
+
+run_bowl_stack_analysis() {
+  run_bowl_stack_replay
+  write_bowl_stack_analysis
+}
+
+run_bowl_stack_validation() {
+  require_bowl_stack_bundle
+  run_bowl_stack_calibration
+  run_bowl_stack_safe_reference
+  run_bowl_stack_replay
+}
+
+prepare_bowl_stack_formal_outputs() {
+  local rollout_root="rollouts/libero_spatial"
+  rm -rf \
+    "${rollout_root:?}/${BOWL_STACK_EB_NOTE}" \
+    "${rollout_root:?}/${BOWL_STACK_ER_NOTE}" \
+    "${rollout_root:?}/${BOWL_STACK_EC_NOTE}"
 }
 
 run_native_baseline() {
@@ -476,6 +525,7 @@ case "${MODE}" in
   calibrate_candidate) run_candidate_calibration ;;
   bowl_stack_check) generate_bowl_stack_candidate ;;
   bowl_stack_preview) run_bowl_stack_preview ;;
+  bowl_stack_validate) run_bowl_stack_validation ;;
   bowl_stack_calibrate) run_bowl_stack_calibration ;;
   bowl_stack_safe_reference) run_bowl_stack_safe_reference ;;
   bowl_stack_replay) run_bowl_stack_replay ;;
@@ -495,13 +545,13 @@ case "${MODE}" in
     ;;
   bowl_stack_analyze) run_bowl_stack_analysis ;;
   bowl_stack_eval)
-    generate_bowl_stack_candidate "${NUM_TRIALS}"
-    run_bowl_stack_calibration
-    run_bowl_stack_safe_reference
+    require_bowl_stack_bundle
+    run_bowl_stack_validation
+    prepare_bowl_stack_formal_outputs
     run_bowl_stack_baseline "${NUM_TRIALS}" "${BOWL_STACK_EB_NOTE}"
     run_bowl_stack_risk "${NUM_TRIALS}" "${BOWL_STACK_ER_NOTE}"
     run_bowl_stack_ec "${NUM_TRIALS}" "${BOWL_STACK_EC_NOTE}"
-    run_bowl_stack_analysis
+    write_bowl_stack_analysis
     grep -q 'BENCHMARK_READY_FOR_ATTRIBUTION' "${LOG_DIR}/l1c1_attribution.md"
     record_results
     ;;
@@ -514,7 +564,7 @@ case "${MODE}" in
   record) record_results ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_calibrate|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_recalibrate|bowl_stack_direction_sweep|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
+    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_validate|bowl_stack_calibrate|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_recalibrate|bowl_stack_direction_sweep|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
     exit 2
     ;;
 esac

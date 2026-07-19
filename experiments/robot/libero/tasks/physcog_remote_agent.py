@@ -29,6 +29,63 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l1c1", "init"): PhaseSpec(
+        command=(
+            "env",
+            "RISK_DEPENDENT_XY_OFFSET=0.0125",
+            "RISK_DEPENDENT_XY_ANGLE_DEG=135",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c1_task2.sh",
+            "bowl_stack_check",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5",
+            "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_ec_states.hdf5",
+        ),
+    ),
+    ("l1c1", "preview"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c1_task2.sh",
+            "bowl_stack_preview",
+        ),
+        count_env="PREVIEW_NUM_STATES",
+        artifacts=(
+            "experiments/robot/libero/tasks/l1c1_implicit_stack_preview",
+        ),
+    ),
+    ("l1c1", "validate_layout"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c1_task2.sh",
+            "bowl_stack_validate",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1c1_bowl_stack_calibration.md",
+            "experiments/logs/l1c1_bowl_stack_calibration.csv",
+            "experiments/logs/l1c1_safe_reference.md",
+            "experiments/logs/l1c1_safe_reference.csv",
+            "experiments/logs/l1c1_bowl_stack_eb_replay.md",
+            "experiments/logs/l1c1_bowl_stack_eb_replay.csv",
+            "experiments/logs/l1c1_bowl_stack_ec_replay.md",
+            "experiments/logs/l1c1_bowl_stack_ec_replay.csv",
+        ),
+    ),
+    ("l1c1", "formal"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=violation",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c1_task2.sh",
+            "bowl_stack_eval",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=("experiments/logs",),
+    ),
     ("l1c1", "recalibrate"): PhaseSpec(
         command=(
             "env",
