@@ -8,6 +8,7 @@ from experiments.robot.libero.tasks.physcog_remote_agent import (
     build_isolated_sync_script,
     build_sync_script,
     classify_result,
+    extract_registered_review_videos,
     extract_verdicts,
     parse_markers,
 )
@@ -230,3 +231,16 @@ __PHYSCOG_EXIT_CODE__=0
         "commit": "abc123",
         "exit_code": "0",
     }
+
+
+def test_review_video_fetching_is_limited_to_registered_formal_prefix():
+    text = """
+    `rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/episode=1.mp4`
+    `rollouts/libero_spatial/other/video.mp4`
+    `rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/../secret.mp4`
+    `rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/episode=1.mp4`
+    """
+    assert extract_registered_review_videos(text, "l1c1", "formal") == [
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/episode=1.mp4"
+    ]
+    assert extract_registered_review_videos(text, "l1c1", "preview") == []

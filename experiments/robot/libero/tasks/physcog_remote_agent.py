@@ -17,7 +17,7 @@ import shlex
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping, Sequence
 
 
@@ -269,6 +269,12 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/experiment_records.md",
             "experiments/logs/result_tables.md",
         ),
+    ),
+}
+
+REVIEW_VIDEO_PREFIXES: Mapping[tuple[str, str], tuple[str, ...]] = {
+    ("l1c1", "formal"): (
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/",
     ),
 }
 
@@ -566,6 +572,23 @@ def _artifact_texts(root: Path, artifacts: Sequence[str]) -> str:
     return "\n".join(texts)
 
 
+def extract_registered_review_videos(
+    text: str, scenario: str, phase: str
+) -> list[str]:
+    prefixes = REVIEW_VIDEO_PREFIXES.get((scenario, phase), ())
+    paths: list[str] = []
+    for match in re.finditer(r"`([^`]+\.mp4)`", text):
+        candidate = match.group(1)
+        parsed = PurePosixPath(candidate)
+        if parsed.is_absolute() or ".." in parsed.parts:
+            continue
+        if not any(candidate.startswith(prefix) for prefix in prefixes):
+            continue
+        if candidate not in paths:
+            paths.append(candidate)
+    return paths
+
+
 def _config_from_args(args: argparse.Namespace) -> RemoteConfig:
     return RemoteConfig(
         host=args.host,
@@ -789,6 +812,47 @@ def command_status(args: argparse.Namespace) -> int:
     return returncode or 1
 
 
+def command_fetch_videos(args: argparse.Namespace) -> int:
+    run_dir = Path(args.run_dir)
+    ledger_path = run_dir / "run.json"
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    classification = str(ledger.get("classification", ""))
+    if classification in {"submitted", "queued", "running", "awaiting_output"}:
+        raise SystemExit(f"Run is not terminal: classification={classification}")
+    scenario = str(ledger["scenario"])
+    phase = str(ledger["phase"])
+    if (scenario, phase) not in REVIEW_VIDEO_PREFIXES:
+        raise SystemExit(f"Review-video fetching is not registered for {scenario}:{phase}")
+    review_index = (
+        run_dir / "artifacts" / "experiments" / "logs" / "review_videos.md"
+    )
+    if not review_index.is_file():
+        raise SystemExit(f"Missing downloaded review index: {review_index}")
+    paths = extract_registered_review_videos(
+        review_index.read_text(encoding="utf-8"), scenario, phase
+    )
+    if not paths:
+        raise SystemExit("No registered review videos found in the review index")
+    cfg = _config_from_ledger(ledger)
+    fetched: list[str] = []
+    missing: list[str] = []
+    for path in paths:
+        if _fetch_artifact(cfg, path, run_dir / "artifacts"):
+            fetched.append(path)
+        else:
+            missing.append(path)
+    ledger["fetched_review_videos"] = fetched
+    ledger["missing_review_videos"] = missing
+    ledger_path.write_text(
+        json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    print(
+        f"[physcog-agent] review videos fetched={len(fetched)}/{len(paths)} "
+        f"missing={len(missing)}"
+    )
+    return 0 if not missing else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=os.environ.get("PHYSCOG_HOST", "superpod.ust.hk"))
@@ -845,6 +909,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     status.add_argument("--run-dir", required=True)
     status.set_defaults(func=command_status)
+
+    fetch_videos = subparsers.add_parser(
+        "fetch-videos",
+        help="Download allowlisted MP4s from a terminal run's review index",
+    )
+    fetch_videos.add_argument("--run-dir", required=True)
+    fetch_videos.set_defaults(func=command_fetch_videos)
     return parser
 
 
