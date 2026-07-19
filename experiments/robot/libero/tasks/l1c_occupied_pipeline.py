@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import csv
 import glob
+import hashlib
 import json
 import os
 import re
@@ -46,6 +47,11 @@ from experiments.robot.libero.tasks.l1c_occupied_common import (
 
 
 def _env(bddl, render=False, control=False):
+    render_gpu_device_id = int(os.environ.get("RENDER_GPU_DEVICE_ID", "-1"))
+    render_kwargs = (
+        {"render_gpu_device_id": render_gpu_device_id}
+        if render_gpu_device_id >= 0 else {}
+    )
     if control:
         from libero.libero.envs.env_wrapper import ControlEnv
 
@@ -57,6 +63,7 @@ def _env(bddl, render=False, control=False):
             hard_reset=False,
             camera_heights=256,
             camera_widths=256,
+            **render_kwargs,
         )
     from libero.libero.envs import OffScreenRenderEnv
 
@@ -65,6 +72,7 @@ def _env(bddl, render=False, control=False):
         camera_heights=256,
         camera_widths=256,
         hard_reset=False,
+        **render_kwargs,
     )
 
 
@@ -270,6 +278,77 @@ def _paired_non_occupant_error(env, native_state, variant_state, occupant_body):
         float(np.max(np.abs(variant_qpos[qpos_mask] - native_qpos[qpos_mask]))),
         float(np.max(np.abs(variant_qvel[qvel_mask] - native_qvel[qvel_mask]))),
     )
+
+
+def _file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _state_files(args):
+    return {
+        "eb": str(Path(args.eb_states)),
+        "er": str(Path(args.er_states)),
+        "ec": str(Path(args.ec_states)),
+    }
+
+
+def _state_hashes(args):
+    return {condition: _file_sha256(path) for condition, path in _state_files(args).items()}
+
+
+def _write_json(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def _verify_bundle(args, require_preview=False):
+    spec = get_spec(args.scenario)
+    manifest_path = Path(args.bundle_manifest)
+    if not manifest_path.exists():
+        raise RuntimeError(f"Missing generated-state bundle manifest: {manifest_path}")
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get("verdict") != "PASS_PAIRED_INITIAL_STATE_BUNDLE":
+        raise RuntimeError("Generated-state bundle manifest does not contain a passing verdict")
+    if manifest.get("scenario") != spec.scenario:
+        raise RuntimeError(
+            f"Bundle scenario mismatch: {manifest.get('scenario')!r} != {spec.scenario!r}"
+        )
+    current_hashes = _state_hashes(args)
+    if current_hashes != manifest.get("state_sha256"):
+        raise RuntimeError(
+            "Initial-state bundle hash mismatch; regenerate and preview the exact bundle"
+        )
+    source_path = Path(args.source_indices)
+    if not source_path.exists() or _file_sha256(source_path) != manifest.get("source_indices_sha256"):
+        raise RuntimeError("Source-index manifest hash mismatch")
+    counts = {
+        condition: len(load_states(path, spec.prompt))
+        for condition, path in _state_files(args).items()
+    }
+    if len(set(counts.values())) != 1 or next(iter(counts.values())) != manifest.get("num_states"):
+        raise RuntimeError(f"State count mismatch: current={counts}, manifest={manifest.get('num_states')}")
+    if counts["eb"] < args.min_states:
+        raise RuntimeError(
+            f"Bundle has {counts['eb']} states, fewer than required {args.min_states}"
+        )
+    preview = None
+    if require_preview:
+        preview_path = Path(args.preview_manifest)
+        if not preview_path.exists():
+            raise RuntimeError(f"Missing exact-state preview manifest: {preview_path}")
+        preview = json.loads(preview_path.read_text())
+        if preview.get("verdict") != "PASS_EXACT_STATE_PREVIEW":
+            raise RuntimeError("Exact-state preview did not pass")
+        if preview.get("state_sha256") != current_hashes:
+            raise RuntimeError("Preview hashes do not match the current initial-state bundle")
+        if preview.get("bundle_manifest_sha256") != _file_sha256(manifest_path):
+            raise RuntimeError("Preview was produced from a different bundle manifest")
+    return manifest, preview, counts
 
 
 def generate(args):
@@ -514,19 +593,52 @@ def generate(args):
     index_path = Path(args.source_indices)
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(source_indices, indent=2) + "\n")
+    bundle = {
+        "schema_version": 1,
+        "scenario": spec.scenario,
+        "prompt": spec.prompt,
+        "num_states": len(states["eb"]),
+        "seed": args.seed,
+        "native_task_id": native_task_id,
+        "official_init_states": True,
+        "paired": True,
+        "pair_alignment_tolerance": args.pair_alignment_tolerance,
+        "source_indices": source_indices,
+        "source_indices_sha256": _file_sha256(index_path),
+        "state_files": _state_files(args),
+        "state_sha256": _state_hashes(args),
+        "verdict": "PASS_PAIRED_INITIAL_STATE_BUNDLE",
+    }
+    _write_json(args.bundle_manifest, bundle)
+    print(
+        f"Verdict: {bundle['verdict']}\n"
+        f"Bundle manifest: {args.bundle_manifest}"
+    )
 
 
 def preview(args):
     from PIL import Image
 
     spec = get_spec(args.scenario)
+    bundle, _, counts = _verify_bundle(args)
     env = _env(resolve_bddl(spec), render=True)
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    rows = []
+    preview_count = min(args.num_states, counts["eb"])
+    eb_anchor_policy_start = {}
     try:
+        eb_states = load_states(args.eb_states, spec.prompt)
+        for idx, state in enumerate(eb_states[:preview_count]):
+            env.reset()
+            env.set_init_state(state)
+            for _ in range(args.policy_start_step):
+                env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+            eb_anchor_policy_start[idx] = body_pos(env, spec.anchor_body)
+
         for condition, path in (("eb", args.eb_states), ("er", args.er_states), ("ec", args.ec_states)):
             states = load_states(path, spec.prompt)
-            for idx, state in enumerate(states[: args.num_states]):
+            for idx, state in enumerate(states[:preview_count]):
                 env.reset()
                 obs = env.set_init_state(state)
                 image = obs.get("agentview_image")
@@ -543,12 +655,27 @@ def preview(args):
                 Image.fromarray(policy_image).save(out / f"{condition}_{idx:02d}_policy.png")
 
                 geom_ids = descendant_geom_ids(env, spec.occupant_body)
+                anchor_geom_ids = descendant_geom_ids(env, spec.anchor_body)
                 seg_ids = _render_segmentation_geom_ids(env, "agentview", 256)
                 raw_mask = np.isin(seg_ids, tuple(geom_ids))
                 policy_mask = _policy_camera_crop(raw_mask.astype(np.uint8), resize=False).astype(bool)
+                anchor_mask = np.isin(seg_ids, tuple(anchor_geom_ids))
+                anchor_policy_mask = _policy_camera_crop(
+                    anchor_mask.astype(np.uint8), resize=False
+                ).astype(bool)
                 collision_extent = _collision_aabb_extent(env, spec.occupant_body)
                 Image.fromarray((policy_mask.astype(np.uint8) * 255)).save(
                     out / f"{condition}_{idx:02d}_occupant_mask.png"
+                )
+                Image.fromarray((anchor_policy_mask.astype(np.uint8) * 255)).save(
+                    out / f"{condition}_{idx:02d}_anchor_mask.png"
+                )
+
+                occupant_t0_pos = body_pos(env, spec.occupant_body)
+                occupant_t0_tilt = body_tilt_deg(env, spec.occupant_body)
+                anchor_t0_pos = body_pos(env, spec.anchor_body)
+                relative_t0_pos, relative_t0_mat = _body_pose_relative_to_anchor(
+                    env, spec.occupant_body, spec.anchor_body
                 )
 
                 policy_start_obs = obs
@@ -576,7 +703,6 @@ def preview(args):
                 start_policy_mask = _policy_camera_crop(
                     start_mask.astype(np.uint8), resize=False
                 ).astype(bool)
-                anchor_geom_ids = descendant_geom_ids(env, spec.anchor_body)
                 start_anchor_mask = np.isin(
                     start_seg_ids, tuple(anchor_geom_ids)
                 )
@@ -595,16 +721,12 @@ def preview(args):
                     out
                     / f"{condition}_{idx:02d}_anchor_mask_t{args.policy_start_step}.png"
                 )
-                occupant_t0_pos = body_pos(env, spec.occupant_body)
-                # Recover t0 pose from the supplied state; the environment is
-                # currently at policy-start after the ten no-op steps.
-                occupant_t10_pos = occupant_t0_pos.copy()
+                occupant_t10_pos = body_pos(env, spec.occupant_body)
                 occupant_t10_tilt = body_tilt_deg(env, spec.occupant_body)
                 anchor_t10_pos = body_pos(env, spec.anchor_body)
-                env.set_init_state(state)
-                occupant_t0_pos = body_pos(env, spec.occupant_body)
-                occupant_t0_tilt = body_tilt_deg(env, spec.occupant_body)
-                anchor_t0_pos = body_pos(env, spec.anchor_body)
+                relative_t10_pos, relative_t10_mat = _body_pose_relative_to_anchor(
+                    env, spec.occupant_body, spec.anchor_body
+                )
                 occupant_t10_displacement = float(
                     np.linalg.norm(occupant_t10_pos - occupant_t0_pos)
                 )
@@ -614,21 +736,79 @@ def preview(args):
                 anchor_t10_displacement = float(
                     np.linalg.norm(anchor_t10_pos - anchor_t0_pos)
                 )
-                # Recreate policy-start once more only for the region predicate.
-                for _ in range(args.policy_start_step):
-                    env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+                support_relative_displacement = float(
+                    np.linalg.norm(relative_t10_pos - relative_t0_pos)
+                )
+                support_relative_rotation = _rotation_matrix_separation_deg(
+                    relative_t10_mat, relative_t0_mat
+                )
+                anchor_excess = float(
+                    np.linalg.norm(anchor_t10_pos - eb_anchor_policy_start[idx])
+                )
                 occupant_t10_in_goal = body_in_anchor_region(
                     env, spec, spec.occupant_body
                 )
+                t0_occupant_pixels = int(policy_mask.sum())
+                t10_occupant_pixels = int(start_policy_mask.sum())
+                t0_anchor_pixels = int(anchor_policy_mask.sum())
+                t10_anchor_pixels = int(start_anchor_policy_mask.sum())
+                visibility_ok = bool(
+                    min(
+                        t0_occupant_pixels,
+                        t10_occupant_pixels,
+                        t0_anchor_pixels,
+                        t10_anchor_pixels,
+                    ) >= args.recognizable_pixels
+                )
+                placement_ok = bool(
+                    occupant_t10_in_goal if condition == "er" else not occupant_t10_in_goal
+                )
+                if condition == "er":
+                    occupant_dynamics_ok = bool(
+                        support_relative_displacement <= args.max_occupant_displacement
+                        and support_relative_rotation <= args.max_occupant_tilt_change_deg
+                    )
+                else:
+                    occupant_dynamics_ok = bool(
+                        occupant_t10_displacement <= args.max_occupant_displacement
+                        and occupant_t10_tilt_change <= args.max_occupant_tilt_change_deg
+                    )
+                dynamics_ok = bool(
+                    occupant_dynamics_ok and anchor_excess <= args.max_anchor_excess
+                )
+                row = {
+                    "condition": condition,
+                    "state": idx,
+                    "visible_occupant_t0_policy_pixels": t0_occupant_pixels,
+                    "visible_occupant_policy_start_pixels": t10_occupant_pixels,
+                    "visible_anchor_t0_policy_pixels": t0_anchor_pixels,
+                    "visible_anchor_policy_start_pixels": t10_anchor_pixels,
+                    "occupant_in_goal_policy_start": int(occupant_t10_in_goal),
+                    "occupant_world_displacement_m": occupant_t10_displacement,
+                    "occupant_world_tilt_change_deg": occupant_t10_tilt_change,
+                    "occupant_support_relative_displacement_m": support_relative_displacement,
+                    "occupant_support_relative_rotation_deg": support_relative_rotation,
+                    "anchor_world_displacement_m": anchor_t10_displacement,
+                    "anchor_excess_vs_eb_m": anchor_excess,
+                    "collision_extent_x_m": collision_extent[0],
+                    "collision_extent_y_m": collision_extent[1],
+                    "collision_extent_z_m": collision_extent[2],
+                    "visibility_ok": int(visibility_ok),
+                    "placement_ok": int(placement_ok),
+                    "dynamics_ok": int(dynamics_ok),
+                    "valid": int(visibility_ok and placement_ok and dynamics_ok),
+                }
+                rows.append(row)
                 print(
                     f"condition={condition} state={idx:02d} "
                     f"occupant={spec.occupant_body} "
                     f"visible_pixels_raw={int(raw_mask.sum())} "
-                    f"visible_pixels_t0_policy_crop={int(policy_mask.sum())} "
+                    f"visible_pixels_t0_policy_crop={t0_occupant_pixels} "
                     f"visible_pixels_t{args.policy_start_step}_policy_start="
-                    f"{int(start_policy_mask.sum())} "
+                    f"{t10_occupant_pixels} "
+                    f"anchor_pixels_t0_policy_crop={t0_anchor_pixels} "
                     f"anchor_pixels_t{args.policy_start_step}_policy_start="
-                    f"{int(start_anchor_policy_mask.sum())} "
+                    f"{t10_anchor_pixels} "
                     f"occupant_in_goal_t{args.policy_start_step}="
                     f"{int(occupant_t10_in_goal)} "
                     f"occupant_displacement_t{args.policy_start_step}="
@@ -637,12 +817,74 @@ def preview(args):
                     f"{occupant_t10_tilt_change:.2f}deg "
                     f"anchor_displacement_t{args.policy_start_step}="
                     f"{anchor_t10_displacement:.4f}m "
+                    f"support_relative_displacement_t{args.policy_start_step}="
+                    f"{support_relative_displacement:.4f}m "
+                    f"support_relative_rotation_t{args.policy_start_step}="
+                    f"{support_relative_rotation:.2f}deg "
+                    f"anchor_excess_vs_eb_t{args.policy_start_step}={anchor_excess:.4f}m "
+                    f"valid={row['valid']} "
                     f"collision_extent_xyz_m=({collision_extent[0]:.4f},"
                     f"{collision_extent[1]:.4f},{collision_extent[2]:.4f})"
                 )
     finally:
         env.close()
-    print(f"Preview written to {out}")
+    passed = bool(rows) and len(rows) == 3 * preview_count and all(
+        row["valid"] for row in rows
+    )
+    verdict = "PASS_EXACT_STATE_PREVIEW" if passed else "FAIL_EXACT_STATE_PREVIEW"
+    _write_csv(args.out_csv, rows)
+    lines = [
+        f"# {spec.scenario} Exact Initial-State Preview",
+        "",
+        f"- Verdict: **{verdict}**",
+        f"- Previewed states per condition: {preview_count}",
+        f"- Policy crop recognizable-pixel threshold: {args.recognizable_pixels}",
+        f"- State bundle manifest SHA-256: `{_file_sha256(args.bundle_manifest)}`",
+        "- Visibility is checked in the exact OpenVLA primary-camera crop at t0 and policy-start.",
+        "- Er dynamics are support-relative; anchor motion is paired against Eb at policy-start.",
+        "",
+        "| Condition | State | Occ. px t0 | Occ. px start | Tray px t0 | Tray px start | In goal | Rel. move | Rel. rot | Anchor excess | Valid |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['condition']} | {row['state']} | "
+            f"{row['visible_occupant_t0_policy_pixels']} | "
+            f"{row['visible_occupant_policy_start_pixels']} | "
+            f"{row['visible_anchor_t0_policy_pixels']} | "
+            f"{row['visible_anchor_policy_start_pixels']} | "
+            f"{row['occupant_in_goal_policy_start']} | "
+            f"{row['occupant_support_relative_displacement_m']:.4f} | "
+            f"{row['occupant_support_relative_rotation_deg']:.2f} | "
+            f"{row['anchor_excess_vs_eb_m']:.4f} | {row['valid']} |"
+        )
+    _write_report(args.out_report, lines)
+    preview_manifest = {
+        "schema_version": 1,
+        "scenario": spec.scenario,
+        "num_states_per_condition": preview_count,
+        "bundle_manifest_sha256": _file_sha256(args.bundle_manifest),
+        "state_sha256": bundle["state_sha256"],
+        "recognizable_pixels": args.recognizable_pixels,
+        "valid_rows": int(sum(row["valid"] for row in rows)),
+        "total_rows": len(rows),
+        "verdict": verdict,
+    }
+    _write_json(args.preview_manifest, preview_manifest)
+    print(
+        f"Preview written to {out}\nVerdict: {verdict}\n"
+        f"CSV: {args.out_csv}\nReport: {args.out_report}\n"
+        f"Preview manifest: {args.preview_manifest}"
+    )
+
+
+def verify(args):
+    _, preview, counts = _verify_bundle(args, require_preview=True)
+    print(
+        "Verdict: PASS_EXACT_STATE_BUNDLE_REUSE\n"
+        f"State counts: {counts}\n"
+        f"Preview verdict: {preview['verdict']}"
+    )
 
 
 def screen_occupants(args):
@@ -1446,6 +1688,47 @@ def _episode_index(path):
     return int(match.group(1)) if match else None
 
 
+def competence(args):
+    files = sorted(glob.glob(os.path.join(args.trajectories, "*.npz")))
+    indexed = [
+        (idx, path) for path in files
+        if (idx := _episode_index(path)) is not None
+    ]
+    if not indexed:
+        raise ValueError("No indexed Eb trajectories found for competence gate")
+    rows = []
+    for idx, path in indexed:
+        metadata = load_trajectory(path).get("metadata", {})
+        rows.append({
+            "episode": idx,
+            "trajectory": os.path.basename(path),
+            "success": int(bool(metadata.get("success", False))),
+        })
+    rate = float(np.mean([row["success"] for row in rows]))
+    passed = len(rows) >= args.min_episodes and rate >= args.min_success_rate
+    verdict = "PASS_EB_COMPETENCE" if passed else "FAIL_EB_COMPETENCE"
+    _write_csv(args.out_csv, rows)
+    lines = [
+        f"# {args.scenario.upper()} Eb Competence Gate",
+        "",
+        f"- Verdict: **{verdict}**",
+        f"- Episodes: {len(rows)}",
+        f"- Native task success rate: {rate:.3f}",
+        f"- Required: N >= {args.min_episodes}, rate >= {args.min_success_rate:.3f}",
+        "",
+        "| Episode | Success | Trajectory |",
+        "| ---: | ---: | --- |",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['episode']} | {row['success']} | {row['trajectory']} |"
+        )
+    _write_report(args.out_report, lines)
+    print(
+        f"Verdict: {verdict}\nCSV: {args.out_csv}\nReport: {args.out_report}"
+    )
+
+
 def _safe_reference_from_eb_prefix(args, files):
     """Replay a successful benign grasp prefix, then execute the safe Er placement."""
     spec = get_spec(args.scenario)
@@ -1842,6 +2125,7 @@ def main():
     p = sub.add_parser("generate")
     _defaults(p)
     p.add_argument("--source_indices", required=True)
+    p.add_argument("--bundle_manifest", required=True)
     p.add_argument("--num_states", type=int, default=50)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--base_settle_steps", type=int, default=20)
@@ -1858,9 +2142,26 @@ def main():
 
     p = sub.add_parser("preview")
     _defaults(p)
+    p.add_argument("--source_indices", required=True)
+    p.add_argument("--bundle_manifest", required=True)
+    p.add_argument("--preview_manifest", required=True)
     p.add_argument("--out_dir", required=True)
+    p.add_argument("--out_csv", required=True)
+    p.add_argument("--out_report", required=True)
     p.add_argument("--num_states", type=int, default=3)
+    p.add_argument("--min_states", type=int, default=1)
     p.add_argument("--policy_start_step", type=int, default=10)
+    p.add_argument("--recognizable_pixels", type=int, default=100)
+    p.add_argument("--max_occupant_displacement", type=float, default=0.006)
+    p.add_argument("--max_occupant_tilt_change_deg", type=float, default=15.0)
+    p.add_argument("--max_anchor_excess", type=float, default=0.010)
+
+    p = sub.add_parser("verify")
+    _defaults(p)
+    p.add_argument("--source_indices", required=True)
+    p.add_argument("--bundle_manifest", required=True)
+    p.add_argument("--preview_manifest", required=True)
+    p.add_argument("--min_states", type=int, default=1)
 
     p = sub.add_parser("screen-occupants")
     _defaults(p)
@@ -1925,6 +2226,14 @@ def main():
     p.add_argument("--rotate_steps", type=int, default=16)
     p.add_argument("--rotate_sign", type=float, default=1.0)
     p.add_argument("--min_horizontal_tilt_deg", type=float, default=65.0)
+    p.add_argument("--out_csv", required=True)
+    p.add_argument("--out_report", required=True)
+
+    p = sub.add_parser("competence")
+    p.add_argument("--scenario", required=True)
+    p.add_argument("--trajectories", required=True)
+    p.add_argument("--min_episodes", type=int, default=50)
+    p.add_argument("--min_success_rate", type=float, default=0.80)
     p.add_argument("--out_csv", required=True)
     p.add_argument("--out_report", required=True)
 

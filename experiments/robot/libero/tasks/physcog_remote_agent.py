@@ -29,6 +29,70 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l1c2", "init"): PhaseSpec(
+        command=(
+            "env", "RENDER_GPU_DEVICE_ID=1", "bash",
+            "experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh", "check",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l1c2_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1c2_er_states.hdf5",
+            "experiments/robot/libero/tasks/l1c2_ec_states.hdf5",
+            "experiments/robot/libero/tasks/l1c2_source_indices.json",
+            "experiments/robot/libero/tasks/l1c2_state_bundle.json",
+        ),
+    ),
+    ("l1c2", "preview"): PhaseSpec(
+        command=(
+            "env", "RENDER_GPU_DEVICE_ID=1", "bash",
+            "experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh", "preview",
+        ),
+        count_env="PREVIEW_NUM_STATES",
+        artifacts=(
+            "experiments/robot/libero/tasks/l1c2_preview",
+            "experiments/logs/l1c2_exact_state_preview.csv",
+            "experiments/logs/l1c2_exact_state_preview.md",
+        ),
+    ),
+    ("l1c2", "validate_layout"): PhaseSpec(
+        command=(
+            "env", "RENDER_GPU_DEVICE_ID=1", "bash",
+            "experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh", "validate_layout",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1c2_calibration.csv",
+            "experiments/logs/l1c2_calibration.md",
+        ),
+    ),
+    ("l1c2", "formal"): PhaseSpec(
+        command=(
+            "env", "RENDER_GPU_DEVICE_ID=1", "SAVE_VIDEO_MODE=violation", "bash",
+            "experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh", "eval",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1c2_calibration.csv",
+            "experiments/logs/l1c2_calibration.md",
+            "experiments/logs/l1c2_eb_competence.csv",
+            "experiments/logs/l1c2_eb_competence.md",
+            "experiments/logs/l1c2_safe_reference.csv",
+            "experiments/logs/l1c2_safe_reference.md",
+            "experiments/logs/l1c2_eb_to_er_replay.csv",
+            "experiments/logs/l1c2_eb_to_er_replay.md",
+            "experiments/logs/l1c2_eb_to_ec_replay.csv",
+            "experiments/logs/l1c2_eb_to_ec_replay.md",
+            "experiments/logs/l1c2_attribution.csv",
+            "experiments/logs/l1c2_attribution.md",
+            "experiments/logs/experiment_records.csv",
+            "experiments/logs/experiment_records.md",
+            "experiments/logs/result_tables.md",
+            "rollouts/libero_90/L1-C2-occupied-tray-eb",
+            "rollouts/libero_90/L1-C2-occupied-tray-risk",
+            "rollouts/libero_90/L1-C2-occupied-tray-ec",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",

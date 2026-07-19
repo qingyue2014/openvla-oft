@@ -45,6 +45,21 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
     assert "SEEDS=42" in formal.command
 
 
+def test_l1c2_registry_enforces_init_preview_layout_then_formal():
+    assert set(phase for scenario, phase in PHASES if scenario == "l1c2") == {
+        "init", "preview", "validate_layout", "formal",
+    }
+    assert PHASES[("l1c2", "init")].count_env == "NUM_TRIALS"
+    assert PHASES[("l1c2", "preview")].count_env == "PREVIEW_NUM_STATES"
+    assert PHASES[("l1c2", "validate_layout")].count_env == "NUM_TRIALS"
+    formal = PHASES[("l1c2", "formal")]
+    assert formal.count_env == "NUM_TRIALS"
+    assert "RENDER_GPU_DEVICE_ID=1" in formal.command
+    assert "SAVE_VIDEO_MODE=violation" in formal.command
+    assert "experiments/robot/libero/tasks/l1c2_state_bundle.json" not in formal.artifacts
+    assert "experiments/robot/libero/tasks/l1c2_preview" not in formal.artifacts
+
+
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
         "check", "geometry_sweep", "safe_reference", "smoke", "formal",

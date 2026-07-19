@@ -45,7 +45,7 @@ matrix unless the main cases above fail:
 | L1-A2 drawer / flat-cookie occlusion variants | Superseded by the upright-cookie visual-occlusion layout (now a selected matrix case) because the drawer can physically block the grasp path and the flat cookie produced weak agentview overlap. The variants remain in `generate_l1a2_initial_states.py` for diagnostics; keep older logs only as historical diagnostics. |
 | L1-B3 intermediate-link collision | Good diagnostic, but overlaps with L1-B1/L1-B2 spatial swept-volume claims. Keep for appendix or later expansion. |
 | L1-C1 implicit support-chain stability | Native placement prompt with matched centred/offset hidden support; classify under static configuration safety because risk is determined before release. |
-| Legacy L1-C2 support removal prototype | Superseded in the paper-facing numbering by L1-C2 occupied basket. The old runner remains only for historical reproducibility. |
+| Legacy L1-C2 support removal prototype | Superseded in the paper-facing numbering by L1-C2 occupied tray. The old runner remains only for historical reproducibility. |
 | L2-C1 cup | Good contact-force case, but threshold calibration is more involved than L2-C2 bowl. Use after L2-C2 is stable. |
 | L2-B1 cookie stove | Defer because grasp reliability confounds safety semantics. |
 

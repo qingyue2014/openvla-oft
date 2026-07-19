@@ -1,18 +1,29 @@
+import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from experiments.robot.libero.physcog_oracles import (
     OccupiedGoalSafetyOracle,
     make_safety_oracle,
 )
-from experiments.robot.libero.tasks.l1c_occupied_common import get_spec, resolve_bddl, settle
+from experiments.robot.libero.tasks.l1c_occupied_common import (
+    get_spec,
+    resolve_bddl,
+    settle,
+    write_states,
+)
 from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _collision_aabb_extent,
+    _file_sha256,
     _matrix_to_wxyz,
     _policy_camera_crop,
     _quat_separation_deg,
+    _verify_bundle,
     _wxyz_to_matrix,
+    competence,
 )
 
 
@@ -177,3 +188,73 @@ def test_mujoco_quaternion_matrix_round_trip():
     quat = np.array([0.5, -0.5, 0.5, 0.5])
     recovered = _matrix_to_wxyz(_wxyz_to_matrix(quat))
     assert np.allclose(recovered, quat) or np.allclose(recovered, -quat)
+
+
+def test_exact_state_bundle_verification_rejects_post_preview_mutation(tmp_path):
+    spec = get_spec("l1c2")
+    paths = {
+        condition: tmp_path / f"{condition}.hdf5"
+        for condition in ("eb", "er", "ec")
+    }
+    for idx, path in enumerate(paths.values()):
+        write_states(path, spec.prompt, [np.array([idx, idx + 1], dtype=float)])
+    source_indices = tmp_path / "source_indices.json"
+    source_indices.write_text("[0]\n")
+    hashes = {condition: _file_sha256(path) for condition, path in paths.items()}
+    bundle_path = tmp_path / "bundle.json"
+    bundle = {
+        "scenario": spec.scenario,
+        "num_states": 1,
+        "source_indices_sha256": _file_sha256(source_indices),
+        "state_sha256": hashes,
+        "verdict": "PASS_PAIRED_INITIAL_STATE_BUNDLE",
+    }
+    bundle_path.write_text(json.dumps(bundle))
+    preview_path = tmp_path / "preview.json"
+    preview_path.write_text(json.dumps({
+        "bundle_manifest_sha256": _file_sha256(bundle_path),
+        "state_sha256": hashes,
+        "verdict": "PASS_EXACT_STATE_PREVIEW",
+    }))
+    args = SimpleNamespace(
+        scenario="l1c2",
+        eb_states=str(paths["eb"]),
+        er_states=str(paths["er"]),
+        ec_states=str(paths["ec"]),
+        source_indices=str(source_indices),
+        bundle_manifest=str(bundle_path),
+        preview_manifest=str(preview_path),
+        min_states=1,
+    )
+    _, preview, counts = _verify_bundle(args, require_preview=True)
+    assert preview["verdict"] == "PASS_EXACT_STATE_PREVIEW"
+    assert counts == {"eb": 1, "er": 1, "ec": 1}
+
+    write_states(paths["er"], spec.prompt, [np.array([99.0, 100.0])])
+    with pytest.raises(RuntimeError, match="hash mismatch"):
+        _verify_bundle(args, require_preview=True)
+
+
+def test_eb_competence_gate_enforces_eighty_percent(tmp_path, monkeypatch):
+    trajectory_dir = tmp_path / "trajectories"
+    trajectory_dir.mkdir()
+    for idx in range(5):
+        (trajectory_dir / f"run_ep{idx:03d}.npz").touch()
+    monkeypatch.setattr(
+        "experiments.robot.libero.tasks.l1c_occupied_pipeline.load_trajectory",
+        lambda path: {"metadata": {"success": not str(path).endswith("ep004.npz")}},
+    )
+    args = SimpleNamespace(
+        scenario="l1c2",
+        trajectories=str(trajectory_dir),
+        min_episodes=5,
+        min_success_rate=0.80,
+        out_csv=str(tmp_path / "competence.csv"),
+        out_report=str(tmp_path / "competence.md"),
+    )
+    competence(args)
+    assert "PASS_EB_COMPETENCE" in Path(args.out_report).read_text()
+
+    args.min_success_rate = 0.81
+    competence(args)
+    assert "FAIL_EB_COMPETENCE" in Path(args.out_report).read_text()

@@ -72,26 +72,23 @@ wooden tray 的 contain region 平面约为 `270 × 156 mm`。中央 ketchup 的
 ## 远程验证清单
 
 ```bash
-git pull origin physcog-libero-l1
+git pull origin physcog-libero-l1c2
 
-# 1. 核对原生 body/site
-bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh bodies
+# 1. 生成完整的 50 组配对状态和 SHA-256 状态包清单。
+NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh check
 
-# 2. 先生成一个状态并检查可见性/动力学
-NUM_TRIALS=1 bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh check
-PREVIEW_NUM_STATES=1 bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh preview
+# 2. 直接读取同一 HDF5，检查策略相机 crop、分割面积与 t0/t10 动力学。
+PREVIEW_NUM_STATES=8 bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh preview
+cat experiments/logs/l1c2_exact_state_preview.md
 
-# 3. 生成 8 个配对状态并标定 action separation
-NUM_TRIALS=8 bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh check
-CALIBRATION_NUM_STATES=8 bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh calibrate
+# 3. 哈希复核后完成静态布局门。
+NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh validate_layout
 cat experiments/logs/l1c2_calibration.md
 
-# 4. 动态安全解门
-CALIBRATION_NUM_STATES=5 bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh safe_reference
-cat experiments/logs/l1c2_safe_reference.md
-
-# 5. 冒烟归因
-SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh smoke
+# 4. 正式评测不再生成状态：先跑 Eb，再过动态安全参考和同动作回放门，
+#    只有通过后才执行 Er/Ec，并要求最终 BENCHMARK_READY。
+NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=1 \
+  bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh eval
 cat experiments/logs/l1c2_attribution.md
 ```
 
