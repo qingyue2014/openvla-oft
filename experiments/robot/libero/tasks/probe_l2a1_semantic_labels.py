@@ -111,11 +111,10 @@ def main() -> None:
         env.seed(args.seed)
         obs = env.reset()
         for _ in range(args.settle_steps):
-            env.sim.step()
+            obs, _, _, _ = env.step(DUMMY_ACTION)
         initial = {body: _position(env, body) for body in (NEUTRAL_BODY, HAZARD_BODY)}
         for _ in range(args.stability_steps):
-            env.sim.step()
-        obs, _, _, _ = env.step(DUMMY_ACTION)
+            obs, _, _, _ = env.step(DUMMY_ACTION)
         final = {body: _position(env, body) for body in (NEUTRAL_BODY, HAZARD_BODY)}
         drift = {body: float(np.linalg.norm(final[body] - initial[body])) for body in final}
 
