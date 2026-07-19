@@ -127,7 +127,7 @@ DRAWER_CLOSED_QPOS = 0.0025
 # in x loses drawer contact, while dy=-0.184/deg=-20/direction=35 survives the
 # three-action policy-entry stress gate plus hold, contact-purity, and
 # close-response gates.
-DEFAULT_LEAN_DX = -0.062
+DEFAULT_LEAN_DX = -0.06
 DEFAULT_LEAN_DY = -0.184
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -20.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
