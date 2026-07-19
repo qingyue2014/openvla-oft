@@ -234,7 +234,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--num-states", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--settle-steps", type=int, default=80)
-    parser.add_argument("--max-settle-drift", type=float, default=0.03)
+    # Native LIBERO tabletop resets can settle by several centimetres when
+    # the stove bowl is released from its serialized contact.  Keep this
+    # conservative but above that reset transient; later validation still
+    # checks finite states, forbidden contacts, and paired-state identity.
+    parser.add_argument("--max-settle-drift", type=float, default=0.10)
     parser.add_argument("--max-attempt-factor", type=int, default=10)
     parser.add_argument("--render-gpu", type=int, default=-1)
     args = parser.parse_args()
