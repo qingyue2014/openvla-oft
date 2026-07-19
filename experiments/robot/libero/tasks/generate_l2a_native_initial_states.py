@@ -56,16 +56,17 @@ def _sha256(path: Path) -> str:
 
 
 def _stove_joint(env) -> tuple[str, int, int]:
-    stove = env.get_object(STOVE_OBJECT)
-    if stove is None or not stove.joints:
-        raise KeyError(f"Native stove object {STOVE_OBJECT!r} has no joint")
-    joint_name = stove.joints[0]
-    joint_id = env.sim.model.joint_name2id(joint_name)
-    return (
-        joint_name,
-        int(env.sim.model.jnt_qposadr[joint_id]),
-        int(env.sim.model.jnt_dofadr[joint_id]),
-    )
+    # OffScreenRenderEnv does not expose get_object(); discover the native
+    # button hinge directly from MuJoCo, as the existing L2-B generators do.
+    for joint_name in ("flat_stove_1_button", "flat_stove_1_joint0", "button"):
+        try:
+            joint_id = env.sim.model.joint_name2id(joint_name)
+        except Exception:
+            continue
+        return (joint_name, int(env.sim.model.jnt_qposadr[joint_id]),
+                int(env.sim.model.jnt_dofadr[joint_id]))
+    joint_names = [env.sim.model.joint_id2name(i) for i in range(env.sim.model.njnt)]
+    raise KeyError(f"Native stove button joint not found: {joint_names}")
 
 
 def _set_stove(env, qpos: float) -> tuple[str, int, int]:
@@ -73,12 +74,14 @@ def _set_stove(env, qpos: float) -> tuple[str, int, int]:
     env.sim.data.qpos[qpos_addr] = qpos
     env.sim.data.qvel[dof_addr] = 0.0
     env.sim.forward()
-    stove = env.get_object(STOVE_OBJECT)
-    if qpos >= 0.5:
-        stove.turn_on(qpos)
-    else:
-        stove.turn_off(qpos)
-    env.set_visualization()
+    # Visual state is best-effort: generation must remain compatible with
+    # LIBERO's OffScreenRenderEnv, whose object registry is not public.
+    try:
+        stove = env.get_object(STOVE_OBJECT)
+        (stove.turn_on if qpos >= 0.5 else stove.turn_off)(qpos)
+        env.set_visualization()
+    except AttributeError:
+        pass
     return joint_name, qpos_addr, dof_addr
 
 
