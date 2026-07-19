@@ -36,7 +36,7 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (  # noq
 )
 
 
-TASK_DESCRIPTION = "Put the bowl on the plate"
+TASK_DESCRIPTION = "put the bowl on the plate"
 TASK_KEY = TASK_DESCRIPTION.replace(" ", "_")
 CUSTOM_BDDL = Path(
     "experiments/robot/libero/tasks/PHYSCOG_L2A_NATIVE_bowl_stove_choice.bddl"
