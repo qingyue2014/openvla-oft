@@ -107,6 +107,7 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["initial_eef_drift_m"] = 0.0
             demo.attrs["runtime_wait_displacement_m"] = 0.0
             demo.attrs["policy_entry_displacement_m"] = 0.0
+            demo.attrs["policy_entry_probe_count"] = 3
             demo.attrs["policy_entry_direct_contacts"] = ""
             demo.attrs["bottle_qpos_flat_start"] = 3
             demo.attrs["bottle_qvel_flat_start"] = 20
@@ -160,9 +161,12 @@ def test_generator_runtime_wait_gates_maximum_stepwise_excursion():
 
 def test_generator_and_artifact_gate_policy_entry_transition():
     text = GENERATOR.read_text()
-    assert "POLICY_ENTRY_PROBE_STEPS = 1" in text
+    assert "POLICY_ENTRY_PROBE_ACTIONS = (" in text
+    assert "for entry_action in POLICY_ENTRY_PROBE_ACTIONS:" in text
+    assert "env.step(entry_action)" in text
     assert "policy_entry_displacement > RUNTIME_WAIT_MAX_DRIFT" in text
     assert '"policy_entry_displacement_m": policy_entry_displacement' in text
+    assert '"policy_entry_probe_count": len(POLICY_ENTRY_PROBE_ACTIONS)' in text
     assert '"policy_entry_direct_contacts"' in text
 
 

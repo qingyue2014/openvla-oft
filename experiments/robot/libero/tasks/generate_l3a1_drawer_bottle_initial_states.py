@@ -67,7 +67,11 @@ SETTLE_STEPS = 400
 # 200-step passive open hold and by the preactivation oracle throughout policy
 # execution.  Eb retains LIBERO's native ten-step warm-up.
 RUNTIME_WAIT_STEPS = 0
-POLICY_ENTRY_PROBE_STEPS = 1
+POLICY_ENTRY_PROBE_ACTIONS = (
+    [0.02, 0.00, 0.02, 0.0, 0.0, 0.0, -1.0],
+    [0.04, 0.00, 0.03, 0.0, 0.0, 0.0, -1.0],
+    [0.06, 0.00, 0.04, 0.0, 0.0, 0.0, -1.0],
+)
 RUNTIME_WAIT_MAX_DRIFT = 0.005
 RUNTIME_WAIT_MAX_FIXED_POINT_ITERS = 8
 DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
@@ -573,21 +577,26 @@ def generate_states(
         # serialized contact must survive entering robosuite's controller
         # loop.  Probe one neutral step, reject launch/penetration states, then
         # restore the exact candidate before all remaining gates.
-        env.reset()
-        env.set_init_state(candidate_state)
-        clear_mujoco_replay_transients(env)
-        entry_start = _body_pos(env, BOTTLE_BODY).copy()
-        for _ in range(POLICY_ENTRY_PROBE_STEPS):
-            env.step(DUMMY_ACTION)
-        policy_entry_displacement = float(
-            np.linalg.norm(_body_pos(env, BOTTLE_BODY) - entry_start)
-        )
-        policy_entry_contacts = _contact_body_names(env, BOTTLE_BODY)
-        entry_direct_contacts = {
-            name for name in policy_entry_contacts
-            if name == "akita_black_bowl_1_main"
-            or name.startswith(("robot0_", "gripper0_"))
-        }
+        policy_entry_displacement = 0.0
+        policy_entry_contacts = set()
+        entry_direct_contacts = set()
+        for entry_action in POLICY_ENTRY_PROBE_ACTIONS:
+            env.reset()
+            env.set_init_state(candidate_state)
+            clear_mujoco_replay_transients(env)
+            entry_start = _body_pos(env, BOTTLE_BODY).copy()
+            env.step(entry_action)
+            policy_entry_displacement = max(
+                policy_entry_displacement,
+                float(np.linalg.norm(_body_pos(env, BOTTLE_BODY) - entry_start)),
+            )
+            action_contacts = _contact_body_names(env, BOTTLE_BODY)
+            policy_entry_contacts.update(action_contacts)
+            entry_direct_contacts.update(
+                name for name in action_contacts
+                if name == "akita_black_bowl_1_main"
+                or name.startswith(("robot0_", "gripper0_"))
+            )
         if (
             policy_entry_displacement > RUNTIME_WAIT_MAX_DRIFT
             or entry_direct_contacts
@@ -782,6 +791,7 @@ def generate_states(
                 "runtime_wait_tilt_delta_deg": runtime_wait_tilt_delta,
                 "runtime_wait_fixed_point_iters": runtime_wait_fixed_point_iters,
                 "policy_entry_displacement_m": policy_entry_displacement,
+                "policy_entry_probe_count": len(POLICY_ENTRY_PROBE_ACTIONS),
                 "policy_entry_contacts": ",".join(sorted(policy_entry_contacts)),
                 "policy_entry_direct_contacts": ",".join(
                     sorted(entry_direct_contacts)
@@ -945,6 +955,9 @@ def main():
         group.attrs["stable_x_offset"] = args.stable_x_offset if args.variant == "stable" else 0.0
         group.attrs["lean_axis"] = args.lean_axis
         group.attrs["lean_direction_deg"] = args.lean_direction_deg
+        group.attrs["policy_entry_probe_actions"] = np.asarray(
+            POLICY_ENTRY_PROBE_ACTIONS, dtype=np.float64
+        )
         group.attrs["settle_steps"] = SETTLE_STEPS
         group.attrs["validation_hold_steps"] = args.validation_hold_steps
         group.attrs["verify_close_steps"] = args.verify_close_steps

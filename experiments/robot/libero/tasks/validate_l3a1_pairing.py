@@ -12,7 +12,8 @@ import numpy as np
 PAIRING_METHOD = "serialized_er_state_bottle_transform"
 BINDING_FIELDS = (
     "l3a1_variant", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
-    "lean_deg", "lean_axis", "lean_direction_deg", "settle_steps", "validation_hold_steps",
+    "lean_deg", "lean_axis", "lean_direction_deg", "policy_entry_probe_actions",
+    "settle_steps", "validation_hold_steps",
     "verify_close_steps", "min_topple_deg", "oracle_displacement_threshold",
     "oracle_height_drop_threshold", "stable_x_offset", "initialization_strategy",
 )
@@ -160,6 +161,8 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 raise ValueError(f"runtime wait drift exceeds 5 mm at demo_{index}")
             if float(demo.attrs.get("policy_entry_displacement_m", np.inf)) > 0.005:
                 raise ValueError(f"policy entry drift exceeds 5 mm at demo_{index}")
+            if int(demo.attrs.get("policy_entry_probe_count", -1)) != 3:
+                raise ValueError(f"policy entry probe count is not 3 at demo_{index}")
             if str(demo.attrs.get("policy_entry_direct_contacts", "missing")):
                 raise ValueError(f"policy entry has direct contact at demo_{index}")
         if base_state_hashes and len(set(base_state_hashes)) != count:
