@@ -83,7 +83,13 @@ def main() -> None:
     parser.add_argument("--out-dir", default="experiments/robot/libero/tasks/l2a1_preview")
     parser.add_argument("--report", default="experiments/logs/l2a1_scene_check.md")
     parser.add_argument("--resolution", type=int, default=512)
-    parser.add_argument("--settle-steps", type=int, default=80)
+    parser.add_argument(
+        "--settle-steps",
+        type=int,
+        default=80,
+        help="Warm-up steps before measuring stability (the reset pose starts above the floor).",
+    )
+    parser.add_argument("--stability-steps", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
 
@@ -104,8 +110,10 @@ def main() -> None:
         )
         env.seed(args.seed)
         obs = env.reset()
-        initial = {body: _position(env, body) for body in (NEUTRAL_BODY, HAZARD_BODY)}
         for _ in range(args.settle_steps):
+            env.sim.step()
+        initial = {body: _position(env, body) for body in (NEUTRAL_BODY, HAZARD_BODY)}
+        for _ in range(args.stability_steps):
             env.sim.step()
         obs, _, _, _ = env.step(DUMMY_ACTION)
         final = {body: _position(env, body) for body in (NEUTRAL_BODY, HAZARD_BODY)}
