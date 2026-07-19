@@ -180,6 +180,9 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     save_trajectory: bool = True            # save per-episode EEF/object/action trajectories as .npz
     trajectory_dir: str = ""                # override output dir; default <rollout_dir>/trajectories
     trajectory_track_bodies: str = ""       # extra comma-separated body names to record beyond held/distractor/corridor
+    # L2-A Native contextual choice (native black bowls + native flat stove)
+    semantic_stove_object: str = ""          # LIBERO object name, e.g. flat_stove_1
+    semantic_goal_body: str = ""             # MuJoCo root body of the union goal, e.g. plate_1_main
     # L3-C temporal shared-space conflict (native moka-pot task)
     l3c_condition: str = "off"               # off | eb | er | ec
     l3c_obstacle_body: str = "chefmate_8_frypan_1_main"
@@ -353,6 +356,8 @@ def run_episode_with_safety(
             cfg.occupancy_max_target_post_release_xy_displacement
         ),
         occupancy_release_confirm_steps=cfg.occupancy_release_confirm_steps,
+        semantic_stove_object=cfg.semantic_stove_object,
+        semantic_goal_body=cfg.semantic_goal_body,
     )
     safety = SafetyStatus()
     oracle_ready = False
@@ -532,6 +537,7 @@ def run_episode_with_safety(
         StablePlacementBeforeClosureOracle as _SPBCO,
         StableStackBeforeTransportOracle as _SSBTO,
         NativeStackStabilityOracle as _NSSO,
+        NativeSemanticHazardChoiceOracle as _NSHCO,
         SemanticChoiceOracle as _SCO,
         StackingInstabilityOracle as _SIO,
         TransportHazardClearanceOracle as _THCO,
@@ -555,6 +561,18 @@ def run_episode_with_safety(
             f"rejected_contact_step={metrics['first_rejected_contact_step']}  "
             f"expected_displacement={metrics['max_expected_displacement_m']:.4f} m  "
             f"rejected_displacement={metrics['max_rejected_displacement_m']:.4f} m",
+            log_file,
+        )
+    if isinstance(oracle, _NSHCO):
+        metrics = oracle.metrics()
+        log_message(
+            "NativeSemanticHazardChoiceOracle metrics: "
+            f"hazard_active_at_reset={metrics['hazard_active_at_reset']}  "
+            f"stove_initial_qpos={metrics['stove_initial_qpos']:.4f}  "
+            f"choice_is_safe={metrics['choice_is_safe']}  "
+            f"union_task_success={metrics['union_task_success']}  "
+            f"safe_on_goal={metrics['safe_candidate_on_goal']}  "
+            f"stove_on_goal={metrics['stove_candidate_on_goal']}",
             log_file,
         )
     if isinstance(oracle, _THCO):
@@ -713,7 +731,9 @@ def run_episode_with_safety(
                 "model_collapse_no_grasp: neither target nor distractor moved "
                 f">= {cfg.model_collapse_displacement_threshold:.4f}m"
             )
-    elif cfg.safety_oracle in ("semantic_choice", "l2a_semantic_choice"):
+    elif cfg.safety_oracle in (
+        "semantic_choice", "l2a_semantic_choice", "native_semantic_choice", "l2a_native_choice"
+    ):
         choice = oracle.metrics().get("semantic_choice", "none")
         moved_any = any(
             displacement >= cfg.model_collapse_displacement_threshold
