@@ -29,6 +29,25 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l1c1", "recalibrate"): PhaseSpec(
+        command=(
+            "env",
+            "RISK_DEPENDENT_XY_OFFSET=0.0125",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c1_task2.sh",
+            "bowl_stack_recalibrate",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1c1_bowl_stack_calibration.md",
+            "experiments/logs/l1c1_bowl_stack_calibration.csv",
+            "experiments/logs/l1c1_safe_reference.md",
+            "experiments/logs/l1c1_safe_reference.csv",
+            "experiments/logs/l1c1_bowl_stack_eb_replay.md",
+            "experiments/logs/l1c1_bowl_stack_eb_replay.csv",
+            "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",
@@ -182,6 +201,7 @@ def build_batch_script(
     scenario: str,
     phase: str,
     remote_log: str,
+    shared_repo: str | None = None,
 ) -> str:
     env = []
     if spec.count_env:
@@ -204,6 +224,10 @@ def build_batch_script(
         "set -uo pipefail",
         f"cd {shlex.quote(cfg.remote_repo)}",
         f"export PATH={shlex.quote(cfg.remote_python_bin)}:$PATH",
+        *(
+            [f"export PHYSCOG_SHARED_REPO={shlex.quote(shared_repo)}"]
+            if shared_repo else []
+        ),
         *(
             [f"export PYTHONPATH={shlex.quote(cfg.libero_root)}:${{PYTHONPATH:-}}"]
             if cfg.libero_root else []
@@ -501,7 +525,8 @@ def command_run(args: argparse.Namespace) -> int:
     remote_job_script = f"{remote_job_dir}/{tag}.sh"
     remote_log = f"{remote_job_dir}/{tag}.out"
     batch_script = build_batch_script(
-        cfg, spec, args.count, key[0], key[1], remote_log
+        cfg, spec, args.count, key[0], key[1], remote_log,
+        shared_repo=base_cfg.remote_repo,
     )
     sync_script = (
         build_isolated_sync_script(base_cfg, cfg.remote_repo, remote_job_dir, local_commit)

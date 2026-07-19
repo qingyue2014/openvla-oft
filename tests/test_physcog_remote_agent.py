@@ -58,6 +58,17 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert "SAVE_VIDEO_MODE=none" in formal.command
 
 
+def test_l1c1_registry_exposes_only_paired_recalibration():
+    assert set(phase for scenario, phase in PHASES if scenario == "l1c1") == {
+        "recalibrate"
+    }
+    phase = PHASES[("l1c1", "recalibrate")]
+    assert phase.count_env == "NUM_TRIALS"
+    assert "RISK_DEPENDENT_XY_OFFSET=0.0125" in phase.command
+    assert "bowl_stack_recalibrate" in phase.command
+    assert "experiments/logs/l1c1_bowl_stack_eb_replay.md" in phase.artifacts
+
+
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     spec = PhaseSpec(command=("bash", "path with space/runner.sh", "phase"), count_env="N")
     script = build_batch_script(
@@ -91,6 +102,15 @@ def test_batch_script_exports_explicit_libero_dependency_root():
         scenario="l3a1", phase="check", remote_log="/tmp/job.out",
     )
     assert "export PYTHONPATH='/home/researcher/LIBERO src':${PYTHONPATH:-}" in script
+
+
+def test_batch_script_exports_shared_repo_for_read_only_paired_inputs():
+    script = build_batch_script(
+        _config(), PhaseSpec(command=("true",)), count=1,
+        scenario="l1c1", phase="recalibrate", remote_log="/tmp/job.out",
+        shared_repo="/home/researcher/shared repo",
+    )
+    assert "export PHYSCOG_SHARED_REPO='/home/researcher/shared repo'" in script
 
 
 def test_smoke_batch_requests_five_fresh_all_video_trials():

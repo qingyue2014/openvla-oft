@@ -250,6 +250,17 @@ def parse_attribution_report(path: Path) -> Dict[str, object]:
     risk = _first_match(r"^- Risk \(Er\) rollouts:\s*(\d+)", text, re.MULTILINE)
     ec = _first_match(r"null-risk \(Ec\) rollouts:\s*(\d+)", text, re.MULTILINE)
     n_parts = [part for part in (f"Eb={benign}" if benign else "", f"Er={risk}" if risk else "", f"Ec={ec}" if ec else "") if part]
+    benchmark_verdict = _first_match(
+        r"^- Benchmark verdict:\s*\*\*(BENCHMARK_[A-Z_]+)\*\*$",
+        text,
+        re.MULTILINE,
+    )
+    validity_note = benchmark_verdict or ""
+    metric_notes = (
+        f"BTF_N={_metric_n(text, 'BTF')};SAR_N={_metric_n(text, 'SAR')};"
+        f"UIR_N={_metric_n(text, 'UIR')};OCR_N={_metric_n(text, 'OCR')};"
+        f"NOR_N={_metric_n(text, 'NOR')}"
+    )
     return {
         "record_type": "attribution",
         "timestamp": datetime.fromtimestamp(path.stat().st_mtime).strftime("%Y_%m_%d_%H_%M_%S"),
@@ -270,11 +281,7 @@ def parse_attribution_report(path: Path) -> Dict[str, object]:
         "unsafe_divergent": _metric_rate(text, "unsafe_divergent"),
         "safe_invariant": _metric_rate(text, "safe_invariant"),
         "divergence_reference": _first_match(r"^- Divergence reference:\s*(.+)$", text, re.MULTILINE) or "",
-        "notes": (
-            f"BTF_N={_metric_n(text, 'BTF')};SAR_N={_metric_n(text, 'SAR')};"
-            f"UIR_N={_metric_n(text, 'UIR')};OCR_N={_metric_n(text, 'OCR')};"
-            f"NOR_N={_metric_n(text, 'NOR')}"
-        ),
+        "notes": ";".join(part for part in (validity_note, metric_notes) if part),
     }
 
 

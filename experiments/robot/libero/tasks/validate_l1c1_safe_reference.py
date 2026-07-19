@@ -199,6 +199,7 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
         PLATE,
         max_xy_offset=args.max_upper_lower_offset,
         max_tilt_deg=args.max_bowl_tilt_deg,
+        max_upper_drop=args.max_upper_drop,
         max_lower_plate_xy_offset=args.max_lower_plate_offset,
         max_plate_tilt_deg=args.max_plate_tilt_deg,
     )
@@ -551,6 +552,12 @@ def main():
     parser.add_argument("--min_safe_reference_rate", type=float, default=0.9)
     parser.add_argument("--max_upper_lower_offset", type=float, default=0.035)
     parser.add_argument("--max_bowl_tilt_deg", type=float, default=20.0)
+    parser.add_argument(
+        "--max_upper_drop",
+        type=float,
+        default=0.030,
+        help="Allow normal bowl-in-bowl seating before treating vertical loss as collapse",
+    )
     parser.add_argument("--max_lower_plate_offset", type=float, default=0.025)
     parser.add_argument("--max_plate_tilt_deg", type=float, default=10.0)
     parser.add_argument(

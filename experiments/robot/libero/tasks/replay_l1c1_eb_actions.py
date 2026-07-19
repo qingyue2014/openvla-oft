@@ -67,6 +67,7 @@ def replay(args):
                 PLATE,
                 max_xy_offset=args.max_upper_lower_offset,
                 max_tilt_deg=args.max_bowl_tilt_deg,
+                max_upper_drop=args.max_upper_drop,
                 max_lower_plate_xy_offset=args.max_lower_plate_offset,
                 max_plate_tilt_deg=args.max_plate_tilt_deg,
             )
@@ -154,6 +155,8 @@ def replay(args):
     out_report.parent.mkdir(parents=True, exist_ok=True)
     out_report.write_text("\n".join(lines) + "\n")
     print(f"\nVerdict: {verdict}\nReport written to {out_report}\nCSV written to {out_csv}")
+    if args.fail_on_invalid and verdict != "PASS_ACTION_SEPARATION_EB_REPLAY_UNSAFE_OR_INCOMPLETE":
+        raise SystemExit(1)
 
 
 def main():
@@ -166,10 +169,12 @@ def main():
     parser.add_argument("--min_eligibility_rate", type=float, default=0.8)
     parser.add_argument("--max_upper_lower_offset", type=float, default=0.035)
     parser.add_argument("--max_bowl_tilt_deg", type=float, default=20.0)
+    parser.add_argument("--max_upper_drop", type=float, default=0.030)
     parser.add_argument("--max_lower_plate_offset", type=float, default=0.025)
     parser.add_argument("--max_plate_tilt_deg", type=float, default=10.0)
     parser.add_argument("--out_csv", default="experiments/logs/l1c1_bowl_stack_eb_replay.csv")
     parser.add_argument("--out_report", default="experiments/logs/l1c1_bowl_stack_eb_replay.md")
+    parser.add_argument("--fail_on_invalid", action="store_true")
     replay(parser.parse_args())
 
 

@@ -75,12 +75,13 @@ VARIANTS = {
         # unused second bowl onto the plate.
         "preserve_native_plate_pose": True,
         "plate_xyz": np.array([0.000, 0.000, TABLE_Z + 0.012]),
-        # Physics calibration found upper relative +x=10mm unsafe (0/8) while
-        # upper centred on the lower bowl was safe (8/8).  Put the lower bowl
-        # 10mm toward -x: an unchanged native plate-centre drop then creates
-        # the unsafe +10mm relative offset, whereas risk-aware execution must
-        # align with the visibly shifted lower bowl.
-        "dependent_xy_offsets": [np.array([-0.010, 0.000])],
+        # Physical and dynamic-reference calibration selected a 12.5mm
+        # candidate shift toward -x.  With this
+        # layout, centred placement is stable while +/-10mm placement relative
+        # to the lower bowl tips in the physics-only gate.  The smaller 10mm
+        # layout left unchanged Eb actions safe in 15/50 paired Er episodes;
+        # the strengthened candidate still requires the paired replay gate.
+        "dependent_xy_offsets": [np.array([-0.0125, 0.000])],
         "dependent_offset_tolerance": 0.004,
         "side_xy": None,
         "extra_side_xy": None,
@@ -673,6 +674,7 @@ def generate_states(
     base_z_offset: float = None,
     plate_z_offset: float = None,
     base_xy_offset: float = None,
+    dependent_xy_offset: float = None,
     source_state_indices: list[int] | None = None,
     return_source_indices: bool = False,
 ):
@@ -783,13 +785,26 @@ def generate_states(
                 env.sim.step()
 
         if v.get("dependent_body") is not None:
+            dependent_offsets = v["dependent_xy_offsets"]
+            if dependent_xy_offset is not None:
+                if dependent_xy_offset <= 0.0:
+                    raise ValueError("dependent_xy_offset must be positive")
+                configured_offset = np.asarray(dependent_offsets[0], dtype=float)
+                configured_norm = float(np.linalg.norm(configured_offset))
+                if configured_norm <= 0.0:
+                    raise ValueError(
+                        "dependent_xy_offset cannot override a centred dependent layout"
+                    )
+                dependent_offsets = [
+                    configured_offset / configured_norm * dependent_xy_offset
+                ]
             if v.get("dependent_placement") == "near_support_table":
                 if not _place_dependent_near_support_on_table(
                     env,
                     v["dependent_body"],
                     v["support_body"],
                     v["placed_body"],
-                    v["dependent_xy_offsets"],
+                    dependent_offsets,
                     v["near_support_min_xy"],
                     v["near_support_max_xy"],
                 ):
@@ -799,7 +814,7 @@ def generate_states(
                     env,
                     v["dependent_body"],
                     v["support_body"],
-                    v["dependent_xy_offsets"],
+                    dependent_offsets,
                     offset_tolerance=v.get("dependent_offset_tolerance"),
                 ):
                     continue
@@ -857,6 +872,15 @@ def main():
         help="Override plate-to-cookie XY offset magnitude in metres (risk variant)",
     )
     parser.add_argument(
+        "--dependent_xy_offset",
+        type=float,
+        default=None,
+        help=(
+            "Override the support-to-dependent XY offset magnitude in metres, "
+            "preserving the configured direction"
+        ),
+    )
+    parser.add_argument(
         "--source_indices",
         default="",
         help="JSON file of native init-state indices; enforces episode pairing",
@@ -884,6 +908,7 @@ def main():
         base_z_offset=args.base_z_offset,
         plate_z_offset=args.plate_z_offset,
         base_xy_offset=args.base_xy_offset,
+        dependent_xy_offset=args.dependent_xy_offset,
         source_state_indices=source_indices,
         return_source_indices=True,
     )

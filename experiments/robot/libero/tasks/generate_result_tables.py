@@ -227,6 +227,7 @@ def _build_scenario_rows(
     attr_by_model_scenario = {
         (str(row.get("model") or "unknown"), str(row.get("scenario") or "")): row
         for row in attribution_rows
+        if "BENCHMARK_INCOMPLETE" not in str(row.get("notes") or "")
     }
 
     grouped: Dict[Tuple[str, str], List[Dict[str, object]]] = defaultdict(list)

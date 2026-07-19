@@ -73,3 +73,17 @@ def test_five_primary_metrics_include_btf_in_result_registration(tmp_path) -> No
     assert row["uir"] == 0.25
     assert row["ocr"] == 0.5
     assert row["nor"] == 0.1
+
+
+def test_incomplete_benchmark_verdict_is_preserved_in_record_notes(tmp_path) -> None:
+    report = tmp_path / "l1c1_attribution.md"
+    report.write_text(
+        "# PhysCogSafe Attribution Report: L1-C1 hidden bowl stack\n"
+        "- Benign (Eb) rollouts: 50, success rate 1.000\n"
+        "- Risk (Er) rollouts: 35; null-risk (Ec) rollouts: 50\n"
+        "- Benchmark verdict: **BENCHMARK_INCOMPLETE**\n"
+    )
+
+    row = parse_attribution_report(report)
+
+    assert "BENCHMARK_INCOMPLETE" in row["notes"]

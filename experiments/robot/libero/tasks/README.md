@@ -518,6 +518,19 @@ bash experiments/robot/libero/tasks/run_l1c1_task2.sh bowl_stack_calibrate
 bash experiments/robot/libero/tasks/run_l1c1_task2.sh bowl_stack_safe_reference
 ```
 
+The calibrated risk layout uses a 12.5 mm lower-bowl offset and allows up to
+30 mm of normal bowl-in-bowl seating after release. To test a candidate offset
+against already-recorded paired Eb actions without rerunning the model, preserve
+the source-index JSON and run:
+
+```bash
+RISK_DEPENDENT_XY_OFFSET=0.0125 NUM_TRIALS=50 \
+  bash experiments/robot/libero/tasks/run_l1c1_task2.sh bowl_stack_recalibrate
+```
+
+This command must pass the physical gate, dynamic safe-reference gate, and the
+80% unchanged-Eb action-separation gate.
+
 Then run a 5-episode smoke test and attribution:
 
 ```bash

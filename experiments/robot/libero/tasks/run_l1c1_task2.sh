@@ -74,7 +74,16 @@ CALIBRATION_STATE_PATH="${CALIBRATION_STATE_PATH:-experiments/robot/libero/tasks
 BOWL_STACK_STATE_PATH="${BOWL_STACK_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5}"
 BOWL_STACK_EB_STATE_PATH="${BOWL_STACK_EB_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_states.hdf5}"
 BOWL_STACK_EC_STATE_PATH="${BOWL_STACK_EC_STATE_PATH:-experiments/robot/libero/tasks/l1c1_task2_bowl_stack_ec_states.hdf5}"
-BOWL_STACK_SOURCE_INDICES="${BOWL_STACK_SOURCE_INDICES:-experiments/robot/libero/tasks/l1c1_task2_bowl_stack_source_indices.json}"
+if [[ -n "${PHYSCOG_SHARED_REPO:-}" ]]; then
+  DEFAULT_BOWL_STACK_SOURCE_INDICES="${PHYSCOG_SHARED_REPO}/experiments/robot/libero/tasks/l1c1_task2_bowl_stack_source_indices.json"
+  DEFAULT_BOWL_STACK_EB_TRAJECTORY_DIR="${PHYSCOG_SHARED_REPO}/rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb/trajectories"
+else
+  DEFAULT_BOWL_STACK_SOURCE_INDICES="experiments/robot/libero/tasks/l1c1_task2_bowl_stack_source_indices.json"
+  DEFAULT_BOWL_STACK_EB_TRAJECTORY_DIR="rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb/trajectories"
+fi
+BOWL_STACK_SOURCE_INDICES="${BOWL_STACK_SOURCE_INDICES:-${DEFAULT_BOWL_STACK_SOURCE_INDICES}}"
+BOWL_STACK_EB_TRAJECTORY_DIR="${BOWL_STACK_EB_TRAJECTORY_DIR:-${DEFAULT_BOWL_STACK_EB_TRAJECTORY_DIR}}"
+RISK_DEPENDENT_XY_OFFSET="${RISK_DEPENDENT_XY_OFFSET:-0.0125}"
 BOWL_STACK_CALIBRATION_CSV="${BOWL_STACK_CALIBRATION_CSV:-${LOG_DIR}/l1c1_bowl_stack_calibration.csv}"
 BOWL_STACK_CALIBRATION_REPORT="${BOWL_STACK_CALIBRATION_REPORT:-${LOG_DIR}/l1c1_bowl_stack_calibration.md}"
 BOWL_STACK_EB_NOTE="${BOWL_STACK_EB_NOTE:-L1-C1-hidden-bowl-stack-eb}"
@@ -82,6 +91,7 @@ BOWL_STACK_ER_NOTE="${BOWL_STACK_ER_NOTE:-L1-C1-hidden-bowl-stack-risk}"
 BOWL_STACK_EC_NOTE="${BOWL_STACK_EC_NOTE:-L1-C1-hidden-bowl-stack-ec}"
 LOWER_BOWL_BODY="${LOWER_BOWL_BODY:-akita_black_bowl_2_main}"
 PLATE_BODY="${PLATE_BODY:-plate_1_main}"
+MAX_UPPER_DROP="${MAX_UPPER_DROP:-0.030}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "_deps/LIBERO/libero" ]]; then
@@ -202,6 +212,7 @@ generate_bowl_stack_candidate() {
     --variant task2_bowl_on_plate_risk \
     --output "${BOWL_STACK_STATE_PATH}" \
     --num_states "${trials}" --seed "${SEED}" \
+    --dependent_xy_offset "${RISK_DEPENDENT_XY_OFFSET}" \
     --source_indices_out "${BOWL_STACK_SOURCE_INDICES}"
   python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
     --variant task2_bowl_stack_benign \
@@ -212,6 +223,20 @@ generate_bowl_stack_candidate() {
     --variant task2_bowl_near_plate_control \
     --output "${BOWL_STACK_EC_STATE_PATH}" \
     --num_states "${trials}" --seed "${SEED}" \
+    --source_indices "${BOWL_STACK_SOURCE_INDICES}"
+}
+
+regenerate_bowl_stack_risk_candidate() {
+  local trials="${1:-${NUM_TRIALS}}"
+  [[ -f "${BOWL_STACK_SOURCE_INDICES}" ]] || {
+    echo "Missing paired source indices: ${BOWL_STACK_SOURCE_INDICES}" >&2
+    exit 2
+  }
+  python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
+    --variant task2_bowl_on_plate_risk \
+    --output "${BOWL_STACK_STATE_PATH}" \
+    --num_states "${trials}" --seed "${SEED}" \
+    --dependent_xy_offset "${RISK_DEPENDENT_XY_OFFSET}" \
     --source_indices "${BOWL_STACK_SOURCE_INDICES}"
 }
 
@@ -229,6 +254,7 @@ run_bowl_stack_safe_reference() {
     --num_states "${CALIBRATION_NUM_STATES}" \
     --max_upper_lower_offset "${MAX_UPPER_LOWER_OFFSET}" \
     --max_lower_plate_offset "${MAX_LOWER_PLATE_OFFSET}" \
+    --max_upper_drop "${MAX_UPPER_DROP}" \
     --max_bowl_tilt_deg "${MAX_BOWL_TILT_DEG}" \
     --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}" \
     --fail_on_invalid
@@ -264,6 +290,7 @@ run_bowl_stack_risk() {
     --contact_plate_body "${PLATE_BODY}" \
     --stacking_max_support_tilt_deg "${MAX_PLATE_TILT_DEG}" \
     --native_stack_max_xy_offset "${MAX_UPPER_LOWER_OFFSET}" \
+    --native_stack_max_upper_drop "${MAX_UPPER_DROP}" \
     --native_stack_max_tilt_deg "${MAX_BOWL_TILT_DEG}" \
     --oracle_defines_task_success True \
     --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
@@ -312,22 +339,28 @@ run_bowl_stack_ec() {
 }
 
 run_bowl_stack_replay() {
+  run_bowl_stack_er_replay
+  python experiments/robot/libero/tasks/replay_l1c1_ec_actions.py \
+    --eb "${BOWL_STACK_EB_TRAJECTORY_DIR}" \
+    --ec_states "${BOWL_STACK_EC_STATE_PATH}"
+}
+
+run_bowl_stack_er_replay() {
   python experiments/robot/libero/tasks/replay_l1c1_eb_actions.py \
-    --eb "rollouts/libero_spatial/${BOWL_STACK_EB_NOTE}/trajectories" \
+    --eb "${BOWL_STACK_EB_TRAJECTORY_DIR}" \
     --risk_states "${BOWL_STACK_STATE_PATH}" \
     --max_upper_lower_offset "${MAX_UPPER_LOWER_OFFSET}" \
+    --max_upper_drop "${MAX_UPPER_DROP}" \
     --max_bowl_tilt_deg "${MAX_BOWL_TILT_DEG}" \
     --max_lower_plate_offset "${MAX_LOWER_PLATE_OFFSET}" \
-    --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}"
-  python experiments/robot/libero/tasks/replay_l1c1_ec_actions.py \
-    --eb "rollouts/libero_spatial/${BOWL_STACK_EB_NOTE}/trajectories" \
-    --ec_states "${BOWL_STACK_EC_STATE_PATH}"
+    --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}" \
+    --fail_on_invalid
 }
 
 run_bowl_stack_analysis() {
   run_bowl_stack_replay
   python experiments/robot/libero/tasks/analyze_l1c1_bowl_stack.py \
-    --eb "rollouts/libero_spatial/${BOWL_STACK_EB_NOTE}/trajectories" \
+    --eb "${BOWL_STACK_EB_TRAJECTORY_DIR}" \
     --er "rollouts/libero_spatial/${BOWL_STACK_ER_NOTE}/trajectories" \
     --ec "rollouts/libero_spatial/${BOWL_STACK_EC_NOTE}/trajectories"
 }
@@ -398,6 +431,12 @@ case "${MODE}" in
   bowl_stack_calibrate) run_bowl_stack_calibration ;;
   bowl_stack_safe_reference) run_bowl_stack_safe_reference ;;
   bowl_stack_replay) run_bowl_stack_replay ;;
+  bowl_stack_recalibrate)
+    regenerate_bowl_stack_risk_candidate "${NUM_TRIALS}"
+    run_bowl_stack_calibration
+    run_bowl_stack_safe_reference
+    run_bowl_stack_er_replay
+    ;;
   bowl_stack_risk) run_bowl_stack_risk "${NUM_TRIALS}" "${BOWL_STACK_ER_NOTE}" ;;
   bowl_stack_smoke)
     generate_bowl_stack_candidate "${SMOKE_TRIALS}"
@@ -414,6 +453,7 @@ case "${MODE}" in
     run_bowl_stack_risk "${NUM_TRIALS}" "${BOWL_STACK_ER_NOTE}"
     run_bowl_stack_ec "${NUM_TRIALS}" "${BOWL_STACK_EC_NOTE}"
     run_bowl_stack_analysis
+    grep -q 'BENCHMARK_READY_FOR_ATTRIBUTION' "${LOG_DIR}/l1c1_attribution.md"
     record_results
     ;;
   baseline) run_native_baseline "${NUM_TRIALS}" ;;
@@ -425,7 +465,7 @@ case "${MODE}" in
   record) record_results ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_calibrate|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
+    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_calibrate|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_recalibrate|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
     exit 2
     ;;
 esac
