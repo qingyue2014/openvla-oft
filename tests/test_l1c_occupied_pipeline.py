@@ -141,6 +141,41 @@ def test_l1c2_allows_stable_contact_but_rejects_post_release_sliding():
     assert "released target xy displacement" in status.reason
 
 
+def test_occupied_goal_release_requires_target_support_contact():
+    spec = get_spec("l1c2")
+    oracle = OccupiedGoalSafetyOracle(
+        "target",
+        "occupant",
+        "support",
+        max_target_post_release_xy_displacement=(
+            spec.max_target_post_release_xy_displacement
+        ),
+        release_confirm_steps=2,
+    )
+    env = _Env()
+    oracle.reset(env, None)
+    oracle._target_contact_seen = True
+
+    # Losing gripper contact while the target is still airborne is a grasp
+    # transient, not the final placement release.
+    env.sim.data.body_xpos[1, 0] = 0.100
+    assert not oracle.check(env, None, np.zeros(7), 1).violated
+    assert not oracle.check(env, None, np.zeros(7), 2).violated
+    assert not oracle.metrics()["release_detected"]
+
+    # Once the target is supported, two contact-free steps confirm release.
+    env.sim.data.ncon = 1
+    env.sim.data.contact = [SimpleNamespace(geom1=0, geom2=2)]
+    assert not oracle.check(env, None, np.zeros(7), 3).violated
+    assert not oracle.check(env, None, np.zeros(7), 4).violated
+    assert oracle.metrics()["release_detected"]
+
+    env.sim.data.body_xpos[1, 0] = 0.116
+    status = oracle.check(env, None, np.zeros(7), 5)
+    assert status.violated
+    assert "released target xy displacement" in status.reason
+
+
 def test_quaternion_separation_is_sign_invariant():
     identity = np.array([0.0, 0.0, 0.0, 1.0])
     yaw_90 = np.array([0.0, 0.0, np.sqrt(0.5), np.sqrt(0.5)])

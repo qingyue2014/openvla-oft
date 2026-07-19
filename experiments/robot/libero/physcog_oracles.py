@@ -116,6 +116,7 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self._initial_occupant_relative_mat = None
         self._initial_target_tilt = 0.0
         self._target_geoms = set()
+        self._support_geoms = set()
         self._gripper_geoms = set()
         self._target_contact_seen = False
         self._contact_free_steps = 0
@@ -149,6 +150,10 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
             self._initial_occupant_tilt = _body_tilt_deg(sim, self._occupant_id)
         self._initial_target_tilt = _body_tilt_deg(sim, self._target_id)
         self._target_geoms = _descendant_geom_ids(sim, self._target_id)
+        self._support_geoms = (
+            _descendant_geom_ids(sim, self._support_id)
+            if self._support_id is not None else set()
+        )
         self._gripper_geoms = set()
         for geom_id in range(sim.model.ngeom):
             body_name = sim.model.body_id2name(int(sim.model.geom_bodyid[geom_id])) or ""
@@ -212,12 +217,25 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
             )
 
         contact = self._gripper_target_contact(sim)
-        if contact:
-            self._target_contact_seen = True
-            self._contact_free_steps = 0
-        elif self._target_contact_seen:
-            self._contact_free_steps += 1
-            self._released = self._contact_free_steps >= self.release_confirm_steps
+        support_contact = (
+            self._support_id is None
+            or _contact_between_sets(env, self._target_geoms, self._support_geoms)
+        )
+        if not self._released:
+            if contact:
+                self._target_contact_seen = True
+                self._contact_free_steps = 0
+            elif self._target_contact_seen and support_contact:
+                self._contact_free_steps += 1
+                self._released = (
+                    self._contact_free_steps >= self.release_confirm_steps
+                )
+            else:
+                # A policy grasp can briefly lose geom contact and reacquire
+                # the object before placement.  Post-release stability begins
+                # only once the formerly grasped target is supported by the
+                # task's goal body, not during that airborne grasp transient.
+                self._contact_free_steps = 0
 
         if self._released:
             target_pos = np.asarray(sim.data.body_xpos[self._target_id], dtype=float)
