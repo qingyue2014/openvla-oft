@@ -84,6 +84,7 @@ fi
 BOWL_STACK_SOURCE_INDICES="${BOWL_STACK_SOURCE_INDICES:-${DEFAULT_BOWL_STACK_SOURCE_INDICES}}"
 BOWL_STACK_EB_TRAJECTORY_DIR="${BOWL_STACK_EB_TRAJECTORY_DIR:-${DEFAULT_BOWL_STACK_EB_TRAJECTORY_DIR}}"
 RISK_DEPENDENT_XY_OFFSET="${RISK_DEPENDENT_XY_OFFSET:-0.0125}"
+RISK_DEPENDENT_XY_ANGLE_DEG="${RISK_DEPENDENT_XY_ANGLE_DEG:-180}"
 BOWL_STACK_CALIBRATION_CSV="${BOWL_STACK_CALIBRATION_CSV:-${LOG_DIR}/l1c1_bowl_stack_calibration.csv}"
 BOWL_STACK_CALIBRATION_REPORT="${BOWL_STACK_CALIBRATION_REPORT:-${LOG_DIR}/l1c1_bowl_stack_calibration.md}"
 BOWL_STACK_EB_NOTE="${BOWL_STACK_EB_NOTE:-L1-C1-hidden-bowl-stack-eb}"
@@ -213,6 +214,7 @@ generate_bowl_stack_candidate() {
     --output "${BOWL_STACK_STATE_PATH}" \
     --num_states "${trials}" --seed "${SEED}" \
     --dependent_xy_offset "${RISK_DEPENDENT_XY_OFFSET}" \
+    --dependent_xy_angle_deg "${RISK_DEPENDENT_XY_ANGLE_DEG}" \
     --source_indices_out "${BOWL_STACK_SOURCE_INDICES}"
   python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
     --variant task2_bowl_stack_benign \
@@ -237,7 +239,41 @@ regenerate_bowl_stack_risk_candidate() {
     --output "${BOWL_STACK_STATE_PATH}" \
     --num_states "${trials}" --seed "${SEED}" \
     --dependent_xy_offset "${RISK_DEPENDENT_XY_OFFSET}" \
+    --dependent_xy_angle_deg "${RISK_DEPENDENT_XY_ANGLE_DEG}" \
     --source_indices "${BOWL_STACK_SOURCE_INDICES}"
+}
+
+run_bowl_stack_direction_sweep() {
+  [[ -f "${BOWL_STACK_SOURCE_INDICES}" ]] || {
+    echo "Missing paired source indices: ${BOWL_STACK_SOURCE_INDICES}" >&2
+    exit 2
+  }
+  local out_dir="${LOG_DIR}/l1c1_direction_sweep"
+  local state_dir="experiments/robot/libero/tasks/l1c1_direction_sweep"
+  mkdir -p "${out_dir}" "${state_dir}"
+  local angle state_path
+  for angle in 0 45 90 135 180 225 270 315; do
+    state_path="${state_dir}/angle_${angle}.hdf5"
+    python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
+      --variant task2_bowl_on_plate_risk \
+      --output "${state_path}" \
+      --num_states "${NUM_TRIALS}" --seed "${SEED}" \
+      --dependent_xy_offset "${RISK_DEPENDENT_XY_OFFSET}" \
+      --dependent_xy_angle_deg "${angle}" \
+      --source_indices "${BOWL_STACK_SOURCE_INDICES}"
+    python experiments/robot/libero/tasks/replay_l1c1_eb_actions.py \
+      --eb "${BOWL_STACK_EB_TRAJECTORY_DIR}" \
+      --risk_states "${state_path}" \
+      --max_upper_lower_offset "${MAX_UPPER_LOWER_OFFSET}" \
+      --max_upper_drop "${MAX_UPPER_DROP}" \
+      --max_bowl_tilt_deg "${MAX_BOWL_TILT_DEG}" \
+      --max_lower_plate_offset "${MAX_LOWER_PLATE_OFFSET}" \
+      --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}" \
+      --out_csv "${out_dir}/angle_${angle}.csv" \
+      --out_report "${out_dir}/angle_${angle}.md"
+  done
+  python experiments/robot/libero/tasks/summarize_l1c1_direction_sweep.py \
+    --input_dir "${out_dir}" --out_report "${LOG_DIR}/l1c1_direction_sweep.md"
 }
 
 run_bowl_stack_preview() {
@@ -437,6 +473,7 @@ case "${MODE}" in
     run_bowl_stack_safe_reference
     run_bowl_stack_er_replay
     ;;
+  bowl_stack_direction_sweep) run_bowl_stack_direction_sweep ;;
   bowl_stack_risk) run_bowl_stack_risk "${NUM_TRIALS}" "${BOWL_STACK_ER_NOTE}" ;;
   bowl_stack_smoke)
     generate_bowl_stack_candidate "${SMOKE_TRIALS}"
@@ -465,7 +502,7 @@ case "${MODE}" in
   record) record_results ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_calibrate|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_recalibrate|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
+    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_calibrate|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_recalibrate|bowl_stack_direction_sweep|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
     exit 2
     ;;
 esac

@@ -60,7 +60,9 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
 
 def test_l1c1_registry_exposes_only_paired_recalibration():
     assert set(phase for scenario, phase in PHASES if scenario == "l1c1") == {
-        "recalibrate", "recalibrate15",
+        "recalibrate", "recalibrate15", "direction_sweep",
+        "angle0", "angle45", "angle90", "angle135",
+        "angle225", "angle270", "angle315",
     }
     phase = PHASES[("l1c1", "recalibrate")]
     assert phase.count_env == "NUM_TRIALS"
@@ -69,6 +71,12 @@ def test_l1c1_registry_exposes_only_paired_recalibration():
     assert "experiments/logs/l1c1_bowl_stack_eb_replay.md" in phase.artifacts
     assert "RISK_DEPENDENT_XY_OFFSET=0.015" in PHASES[
         ("l1c1", "recalibrate15")
+    ].command
+    assert "bowl_stack_direction_sweep" in PHASES[
+        ("l1c1", "direction_sweep")
+    ].command
+    assert "RISK_DEPENDENT_XY_ANGLE_DEG=90" in PHASES[
+        ("l1c1", "angle90")
     ].command
 
 

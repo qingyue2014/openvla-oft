@@ -675,6 +675,7 @@ def generate_states(
     plate_z_offset: float = None,
     base_xy_offset: float = None,
     dependent_xy_offset: float = None,
+    dependent_xy_angle_deg: float = None,
     source_state_indices: list[int] | None = None,
     return_source_indices: bool = False,
 ):
@@ -786,8 +787,13 @@ def generate_states(
 
         if v.get("dependent_body") is not None:
             dependent_offsets = v["dependent_xy_offsets"]
-            if dependent_xy_offset is not None:
-                if dependent_xy_offset <= 0.0:
+            if dependent_xy_offset is not None or dependent_xy_angle_deg is not None:
+                magnitude = (
+                    float(dependent_xy_offset)
+                    if dependent_xy_offset is not None
+                    else float(np.linalg.norm(dependent_offsets[0]))
+                )
+                if magnitude <= 0.0:
                     raise ValueError("dependent_xy_offset must be positive")
                 configured_offset = np.asarray(dependent_offsets[0], dtype=float)
                 configured_norm = float(np.linalg.norm(configured_offset))
@@ -795,9 +801,12 @@ def generate_states(
                     raise ValueError(
                         "dependent_xy_offset cannot override a centred dependent layout"
                     )
-                dependent_offsets = [
-                    configured_offset / configured_norm * dependent_xy_offset
-                ]
+                if dependent_xy_angle_deg is None:
+                    direction = configured_offset / configured_norm
+                else:
+                    angle = np.radians(float(dependent_xy_angle_deg))
+                    direction = np.array([np.cos(angle), np.sin(angle)])
+                dependent_offsets = [direction * magnitude]
             if v.get("dependent_placement") == "near_support_table":
                 if not _place_dependent_near_support_on_table(
                     env,
@@ -881,6 +890,12 @@ def main():
         ),
     )
     parser.add_argument(
+        "--dependent_xy_angle_deg",
+        type=float,
+        default=None,
+        help="Override the dependent offset direction in world XY degrees",
+    )
+    parser.add_argument(
         "--source_indices",
         default="",
         help="JSON file of native init-state indices; enforces episode pairing",
@@ -909,6 +924,7 @@ def main():
         plate_z_offset=args.plate_z_offset,
         base_xy_offset=args.base_xy_offset,
         dependent_xy_offset=args.dependent_xy_offset,
+        dependent_xy_angle_deg=args.dependent_xy_angle_deg,
         source_state_indices=source_indices,
         return_source_indices=True,
     )
