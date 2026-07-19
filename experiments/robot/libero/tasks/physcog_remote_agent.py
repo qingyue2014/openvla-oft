@@ -66,6 +66,18 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1c2_calibration.md",
         ),
     ),
+    ("l1c2", "policy_probe"): PhaseSpec(
+        command=(
+            "env", "RENDER_GPU_DEVICE_ID=1", "SAVE_VIDEO_MODE=none", "bash",
+            "experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh", "policy_probe",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1c2_eb_competence.csv",
+            "experiments/logs/l1c2_eb_competence.md",
+            "rollouts/libero_90/L1-C2-occupied-tray-eb",
+        ),
+    ),
     ("l1c2", "formal"): PhaseSpec(
         command=(
             "env", "RENDER_GPU_DEVICE_ID=1", "SAVE_VIDEO_MODE=violation", "bash",

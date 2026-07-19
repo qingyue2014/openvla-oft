@@ -4,7 +4,7 @@ set -euo pipefail
 SCENARIO="${1:-}"
 MODE="${2:-}"
 if [[ ! "${SCENARIO}" =~ ^l1c[234]$ ]] || [[ -z "${MODE}" ]]; then
-  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|preview|verify|validate_layout|screen_occupants|calibrate|competence|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
+  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|preview|verify|validate_layout|screen_occupants|calibrate|competence|policy_probe|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
   exit 2
 fi
 
@@ -29,10 +29,23 @@ PREVIEW_MANIFEST="${PREVIEW_MANIFEST:-${PREVIEW_DIR}/manifest.json}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 CALIBRATION_NUM_STATES="${CALIBRATION_NUM_STATES:-8}"
-# The moojink release has suite checkpoints for spatial/object/goal/10, but no
-# `...-libero-90` repository.  Use the public LIBERO-90 SFT checkpoint already
-# supported by this repository's RLinf compatibility loader.
-CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
+if [[ "${SCENARIO}" == "l1c2" ]]; then
+  # The deterministic LIBERO-90 SFT policy reached only 7/50 on this native
+  # task. Use RLinf's paper-facing GRPO checkpoint with its published sampling
+  # settings; keep the seed identical across Eb/Er/Ec for paired attribution.
+  DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90"
+  DEFAULT_DO_SAMPLE="true"
+  DEFAULT_TEMPERATURE="1.6"
+else
+  DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora"
+  DEFAULT_DO_SAMPLE="false"
+  DEFAULT_TEMPERATURE="1.0"
+fi
+CHECKPOINT="${CHECKPOINT:-${DEFAULT_CHECKPOINT}}"
+DO_SAMPLE="${DO_SAMPLE:-${DEFAULT_DO_SAMPLE}}"
+TEMPERATURE="${TEMPERATURE:-${DEFAULT_TEMPERATURE}}"
+TOP_P="${TOP_P:-1.0}"
+MODEL_SEED="${MODEL_SEED:-7}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
@@ -171,6 +184,10 @@ run_condition() {
   bddl="$(resolve_bddl)"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
+    --do_sample "${DO_SAMPLE}" \
+    --temperature "${TEMPERATURE}" \
+    --top_p "${TOP_P}" \
+    --seed "${MODEL_SEED}" \
     --task_suite_name libero_90 \
     --bddl_file "${bddl}" \
     --initial_states_path "${state_path}" \
@@ -234,6 +251,12 @@ case "${MODE}" in
   screen_occupants) run_screen_occupants ;;
   calibrate) run_calibrate ;;
   competence) run_competence ;;
+  policy_probe)
+    run_verify "${NUM_TRIALS}"
+    run_condition eb "${NUM_TRIALS}"
+    run_competence "${NUM_TRIALS}"
+    grep -q 'PASS_EB_COMPETENCE' "${EB_COMPETENCE_REPORT}"
+    ;;
   safe_reference) run_safe_reference ;;
   eb|er|ec) run_condition "${MODE}" "${NUM_TRIALS}" ;;
   replay) run_replay ;;

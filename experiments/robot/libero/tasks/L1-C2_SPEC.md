@@ -5,7 +5,8 @@
 - 原生 suite：`libero_90`
 - 原生 BDDL：`LIVING_ROOM_SCENE3_pick_up_the_cream_cheese_and_put_it_in_the_tray.bddl`
 - 原生 prompt：`pick up the cream cheese and put it in the tray`
-- 默认策略：`RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora`（SFT，`do_sample=False`）
+- 默认策略：`RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90`（`do_sample=True`,
+  `temperature=1.6`, `top_p=1.0`, seed 7；Eb/Er/Ec 使用相同随机种子）
 - 目标物：`cream_cheese_1_main`
 - 目标容器：`wooden_tray_1_main` / `wooden_tray_1_contain_region`
 - 原生风险物：`ketchup_1_main`
@@ -69,6 +70,12 @@ wooden tray 的 contain region 平面约为 `270 × 156 mm`。中央 ketchup 的
 - 首次策略决策时 ketchup 与 tray 均达到可辨识面积，且动力学门通过。
 
 只有全部通过时报告 `BENCHMARK_READY_FOR_ATTRIBUTION`。
+
+策略选择也受 80% 能力门约束。确定性 SFT checkpoint
+`RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora` 在本场景的 50 个 Eb 回合仅成功
+7 次（0.14），因此不得用于风险归因，也不得降低门槛迁就。默认切换到同系列官方
+GRPO LIBERO-90 checkpoint，并沿用其公开采样配置；正式运行前仍须先过独立 Eb
+能力探针。
 
 ## 远程验证清单
 
