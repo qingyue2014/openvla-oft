@@ -21,6 +21,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _matrix_to_wxyz,
     _policy_camera_crop,
     _quat_separation_deg,
+    _search_reference_offsets,
     _verify_bundle,
     _wxyz_to_matrix,
     competence,
@@ -258,3 +259,26 @@ def test_eb_competence_gate_enforces_eighty_percent(tmp_path, monkeypatch):
     args.min_success_rate = 0.81
     competence(args)
     assert "FAIL_EB_COMPETENCE" in Path(args.out_report).read_text()
+
+
+def test_safe_reference_search_resets_and_tries_later_calibrated_offsets():
+    offsets = ((0.075, 0.0), (-0.075, 0.0), (0.0, 0.050), (0.0, -0.050))
+    calls = []
+
+    def attempt(offset, attempt_idx):
+        calls.append((offset, attempt_idx))
+        success = attempt_idx == 1
+        return ({
+            "safe_success": int(success),
+            "native_success": int(success),
+            "violated": int(not success),
+            "target_post_release_xy_displacement_m": 0.017 if not success else 0.004,
+            "prefix_lift_m": 0.04,
+        }, f"recorder-{attempt_idx}")
+
+    selected, payload, attempts = _search_reference_offsets(offsets, attempt)
+
+    assert calls == [(offsets[0], 0), (offsets[1], 1)]
+    assert len(attempts) == 2
+    assert selected["safe_success"] == 1
+    assert payload == "recorder-1"

@@ -86,6 +86,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         count_env="CALIBRATION_NUM_STATES",
         artifacts=(
             "experiments/logs/l1c2_safe_reference.csv",
+            "experiments/logs/l1c2_safe_reference_attempts.csv",
             "experiments/logs/l1c2_safe_reference.md",
             "experiments/logs/l1c2_safe_reference_trajectories",
         ),
@@ -114,6 +115,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1c2_eb_competence.csv",
             "experiments/logs/l1c2_eb_competence.md",
             "experiments/logs/l1c2_safe_reference.csv",
+            "experiments/logs/l1c2_safe_reference_attempts.csv",
             "experiments/logs/l1c2_safe_reference.md",
             "experiments/logs/l1c2_eb_to_er_replay.csv",
             "experiments/logs/l1c2_eb_to_er_replay.md",

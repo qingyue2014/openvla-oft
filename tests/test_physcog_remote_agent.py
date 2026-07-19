@@ -55,6 +55,10 @@ def test_l1c2_registry_enforces_init_preview_layout_then_formal():
     assert PHASES[("l1c2", "validate_layout")].count_env == "NUM_TRIALS"
     assert PHASES[("l1c2", "policy_probe")].count_env == "NUM_TRIALS"
     assert PHASES[("l1c2", "safe_reference")].count_env == "CALIBRATION_NUM_STATES"
+    assert (
+        "experiments/logs/l1c2_safe_reference_attempts.csv"
+        in PHASES[("l1c2", "safe_reference")].artifacts
+    )
     formal = PHASES[("l1c2", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command

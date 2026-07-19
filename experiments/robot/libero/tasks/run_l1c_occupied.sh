@@ -80,6 +80,7 @@ EC_TRAJ="rollouts/libero_90/${EC_NOTE}/trajectories"
 CALIBRATION_CSV="${LOG_DIR}/${SCENARIO}_calibration.csv"
 CALIBRATION_REPORT="${LOG_DIR}/${SCENARIO}_calibration.md"
 SAFE_REFERENCE_CSV="${LOG_DIR}/${SCENARIO}_safe_reference.csv"
+SAFE_REFERENCE_ATTEMPTS_CSV="${LOG_DIR}/${SCENARIO}_safe_reference_attempts.csv"
 SAFE_REFERENCE_REPORT="${LOG_DIR}/${SCENARIO}_safe_reference.md"
 SAFE_REFERENCE_TRAJ="${LOG_DIR}/${SCENARIO}_safe_reference_trajectories"
 EB_COMPETENCE_CSV="${LOG_DIR}/${SCENARIO}_eb_competence.csv"
@@ -153,7 +154,8 @@ run_calibrate() {
 run_safe_reference() {
   # Do not leave a stale report that can be mistaken for the current scene if
   # the prerequisite Eb-trajectory check exits before writing new results.
-  rm -f "${SAFE_REFERENCE_CSV}" "${SAFE_REFERENCE_REPORT}"
+  rm -f "${SAFE_REFERENCE_CSV}" "${SAFE_REFERENCE_ATTEMPTS_CSV}" \
+    "${SAFE_REFERENCE_REPORT}"
   mkdir -p "${SAFE_REFERENCE_TRAJ}"
   find "${SAFE_REFERENCE_TRAJ}" -maxdepth 1 -type f -name '*.npz' -delete
   python "${PIPELINE}" safe-reference "${common_state_args[@]}" \
