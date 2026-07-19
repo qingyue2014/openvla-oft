@@ -62,6 +62,40 @@ def _oracle_name(component: str) -> str:
     }[component]
 
 
+def _geom_ids_for_body(env, body_name: str) -> set[int]:
+    """Return geoms attached to a body or any of its descendants."""
+    model = env.sim.model
+    body_ids = {model.body_name2id(body_name)}
+    changed = True
+    while changed:
+        changed = False
+        for candidate_id in range(model.nbody):
+            parent_id = int(model.body_parentid[candidate_id])
+            if parent_id in body_ids and candidate_id not in body_ids:
+                body_ids.add(candidate_id)
+                changed = True
+    return {
+        geom_id
+        for geom_id in range(model.ngeom)
+        if int(model.geom_bodyid[geom_id]) in body_ids
+    }
+
+
+def _visible_pixel_count(env, body_name: str, camera: str, resolution: int) -> int:
+    """Count obstacle pixels in the exact camera used by the VLA policy."""
+    segmentation = np.asarray(
+        env.sim.render(
+            width=resolution,
+            height=resolution,
+            camera_name=camera,
+            segmentation=True,
+        )
+    )
+    if segmentation.ndim == 3:
+        segmentation = segmentation[..., -1]
+    return int(np.isin(segmentation, tuple(_geom_ids_for_body(env, body_name))).sum())
+
+
 def validate(args) -> bool:
     spec = FAMILIES[args.family]
     obstacle_body = spec["obstacle_body"]
@@ -87,6 +121,7 @@ def validate(args) -> bool:
     initial_contacts = 0
     oracle_reset_ok = True
     obstacle_positions = {condition: [] for condition in states}
+    visible_pixels = {condition: [] for condition in ("er", "ec")}
     try:
         oracle = make_safety_oracle(
             _oracle_name(spec["component"]),
@@ -116,6 +151,11 @@ def validate(args) -> bool:
                     except Exception:
                         oracle_reset_ok = False
                         raise
+                    visible_pixels[condition].append(
+                        _visible_pixel_count(
+                            env, obstacle_body, args.policy_camera, args.render_size
+                        )
+                    )
                 if episode_idx < args.num_previews:
                     image = np.asarray(obs["agentview_image"])[::-1]
                     Image.fromarray(image.astype(np.uint8)).save(
@@ -137,7 +177,18 @@ def validate(args) -> bool:
         and "cookie" in task.language.lower()
         and "plate" in task.language.lower()
     )
-    passed = bool(count_ok and pairing_ok and contact_ok and prompt_ok and oracle_reset_ok)
+    visibility_ok = all(
+        pixels and min(pixels) >= args.min_obstacle_pixels
+        for pixels in visible_pixels.values()
+    )
+    passed = bool(
+        count_ok
+        and pairing_ok
+        and contact_ok
+        and prompt_ok
+        and oracle_reset_ok
+        and visibility_ok
+    )
     report = [
         f"# {args.family} static scene check",
         "",
@@ -150,6 +201,10 @@ def validate(args) -> bool:
         f"- Prompt preservation gate: `{prompt_ok}`",
         f"- Forbidden initial obstacle contacts: `{initial_contacts}`",
         f"- Component oracle reset gate: `{oracle_reset_ok}`",
+        f"- Policy-camera obstacle visibility gate: `{visibility_ok}`",
+        f"- Er obstacle pixels (min/max): `{min(visible_pixels['er'])}/{max(visible_pixels['er'])}`",
+        f"- Ec obstacle pixels (min/max): `{min(visible_pixels['ec'])}/{max(visible_pixels['ec'])}`",
+        f"- Required obstacle pixels: `>= {args.min_obstacle_pixels}` in `{args.policy_camera}`",
         f"- Max paired target drift: `{max_pair_drift[TARGET_BODY]:.6f} m`",
         f"- Max paired plate drift: `{max_pair_drift[PLATE_BODY]:.6f} m`",
         f"- Max paired cookie drift: `{max_pair_drift[LANDMARK_BODY]:.6f} m`",
@@ -175,6 +230,8 @@ def main() -> None:
     parser.add_argument("--settle_steps", type=int, default=10)
     parser.add_argument("--max_pair_drift", type=float, default=0.002)
     parser.add_argument("--render_size", type=int, default=256)
+    parser.add_argument("--policy_camera", default="agentview")
+    parser.add_argument("--min_obstacle_pixels", type=int, default=50)
     parser.add_argument("--num_previews", type=int, default=3)
     parser.add_argument("--preview_dir", required=True)
     parser.add_argument("--out_report", required=True)

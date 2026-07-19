@@ -2,6 +2,14 @@
   <worldbody>
     <body>
       <body name="object">
+        <!-- LIBERO policy cameras render visual group 1. Keep these geoms
+             non-colliding so appearance does not duplicate contact mass. -->
+        <geom name="post_visual" type="cylinder" pos="0 0 0"
+              size="0.008 0.18" contype="0" conaffinity="0"
+              rgba="0.80 0.18 0.10 1" group="1"/>
+        <geom name="post_base_visual" type="cylinder" pos="0 0 -0.168"
+              size="0.025 0.012" contype="0" conaffinity="0"
+              rgba="0.18 0.18 0.18 1" group="1"/>
         <geom name="post_collision" type="cylinder" pos="0 0 0"
               size="0.008 0.18" density="180" friction="0.95 0.3 0.1"
               rgba="0.80 0.18 0.10 1" group="0"/>

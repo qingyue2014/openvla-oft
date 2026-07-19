@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+import xml.etree.ElementTree as ET
 
 from experiments.robot.libero.physcog_oracles import (
     SweptVolumeComponentOracle,
@@ -12,6 +13,8 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNNER = REPO_ROOT / "experiments/robot/libero/tasks/run_l1b_swept.sh"
 GENERATOR = REPO_ROOT / "experiments/robot/libero/tasks/generate_l1b_swept_initial_states.py"
 SAFE_REFERENCE = REPO_ROOT / "experiments/robot/libero/tasks/validate_l1b_safe_reference.py"
+STATIC_VALIDATOR = REPO_ROOT / "experiments/robot/libero/tasks/validate_l1b_swept_states.py"
+ASSETS = REPO_ROOT / "experiments/robot/libero/assets"
 
 
 class _Model:
@@ -169,6 +172,28 @@ def test_gripper_scene_uses_the_narrow_bollard_without_relabeling_the_wrist():
     assert bddl.exists()
     assert "l1_b_held_bollard_1 - l_1_b_held_bollard" in bddl.read_text()
     assert 'l1b2_gripper) printf' in text
+
+
+def test_swept_obstacles_have_policy_camera_visual_geometries():
+    for relative_path in (
+        "l1b_sweep_post/l1b_sweep_post.xml",
+        "l1b_held_bollard/l1b_held_bollard.xml",
+    ):
+        geoms = ET.parse(ASSETS / relative_path).findall(".//geom")
+        visual_geoms = [geom for geom in geoms if geom.get("group") == "1"]
+        collision_geoms = [geom for geom in geoms if geom.get("group") == "0"]
+        assert visual_geoms, f"{relative_path} is invisible to policy cameras"
+        assert collision_geoms, f"{relative_path} has no collision geometry"
+        assert all(geom.get("contype") == "0" for geom in visual_geoms)
+        assert all(geom.get("conaffinity") == "0" for geom in visual_geoms)
+
+
+def test_static_gate_requires_obstacle_pixels_in_policy_camera():
+    text = STATIC_VALIDATOR.read_text()
+    assert "segmentation=True" in text
+    assert 'parser.add_argument("--policy_camera", default="agentview")' in text
+    assert 'parser.add_argument("--min_obstacle_pixels", type=int, default=50)' in text
+    assert "visibility_ok" in text
 
 
 def test_safe_reference_rejects_any_robot_or_held_object_contact():
