@@ -55,8 +55,8 @@ TASK_DESCRIPTION="${TASK_DESCRIPTION:-put the black bowl in the bottom drawer of
 # Calibrated against the serialized-state gate: genuine support removal moves
 # the bottle COM 13.5--22.0 mm, while open-drawer hold drift is capped at 5 mm.
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.01}"
-LEAN_DX="${LEAN_DX:--0.08}"
-LEAN_DY="${LEAN_DY:--0.185}"
+LEAN_DX="${LEAN_DX:--0.06}"
+LEAN_DY="${LEAN_DY:--0.182}"
 LEAN_DZ="${LEAN_DZ:-0.0}"
 LEAN_DEG="${LEAN_DEG:--22.0}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-}"

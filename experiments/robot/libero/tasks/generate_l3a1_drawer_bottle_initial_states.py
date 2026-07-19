@@ -118,11 +118,12 @@ DRAWER_CLOSED_QPOS = 0.0025
 # drawer+table (no akita_black_bowl contamination), and toppled further after
 # scripted drawer closure. dy=-0.175 is off the front edge and falls unaided.
 #
-# Strict smoke video/contact review then showed that dx=-0.060 leaves the
-# bottle inside the gripper/bowl corridor. Shift it to dx=-0.080 and let the
-# policy-entry, hold, contact, and close gates validate every serialized state.
-DEFAULT_LEAN_DX = -0.08
-DEFAULT_LEAN_DY = -0.185
+# Strict smoke video/contact review showed that dx=-0.060 is the negative-x
+# support boundary. A follow-up strict SuperPod pose sweep found that moving
+# farther in x loses drawer contact, while dy=-0.182/deg=-22 survives the
+# policy-entry, hold, contact-purity, and close-response gates.
+DEFAULT_LEAN_DX = -0.06
+DEFAULT_LEAN_DY = -0.182
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -22.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
                            # against the front face; positive would lean it away and it topples

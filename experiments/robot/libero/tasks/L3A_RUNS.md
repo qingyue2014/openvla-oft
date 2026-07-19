@@ -122,11 +122,11 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
    | -0.180 | -22 | yes | drawer+table | 32deg | 57deg |
    | -0.185 | -21 | yes | drawer+table | 54deg | 99deg |
 
-The current controller-replay candidate is **`DEFAULT_LEAN_DX = -0.08`,
-`DEFAULT_LEAN_DY = -0.185`, `DEFAULT_LEAN_DEG = -22`**. The x offset was moved
-away from the gripper/bowl corridor after strict smoke contact review. This
-candidate is not formal until the generator's policy-entry, per-state contact,
-open-hold, and close-response gates pass on the GPU node.
+The current controller-replay candidate is **`DEFAULT_LEAN_DX = -0.06`,
+`DEFAULT_LEAN_DY = -0.182`, `DEFAULT_LEAN_DEG = -22`**. A strict SuperPod
+pose sweep selected this point after it passed the policy-entry, per-state
+contact, open-hold, and close-response gates. It remains a calibration result
+until the paired five-state and strict-smoke gates pass on the same commit.
 
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's
