@@ -96,6 +96,7 @@ EC_REPLAY_CSV="${LOG_DIR}/${SCENARIO}_eb_to_ec_replay.csv"
 EC_REPLAY_REPORT="${LOG_DIR}/${SCENARIO}_eb_to_ec_replay.md"
 ATTRIBUTION_CSV="${LOG_DIR}/${SCENARIO}_attribution.csv"
 ATTRIBUTION_REPORT="${LOG_DIR}/${SCENARIO}_attribution.md"
+RESULT_TABLES_MD="${LOG_DIR}/result_tables.md"
 PREVIEW_CSV="${LOG_DIR}/${SCENARIO}_exact_state_preview.csv"
 PREVIEW_REPORT="${LOG_DIR}/${SCENARIO}_exact_state_preview.md"
 
@@ -238,12 +239,14 @@ run_analyze() {
     --safe_reference_csv "${SAFE_REFERENCE_CSV}" \
     --out_csv "${ATTRIBUTION_CSV}" --out_report "${ATTRIBUTION_REPORT}"
   python experiments/robot/libero/tasks/record_experiment_results.py --log_dir "${LOG_DIR}"
-  python experiments/robot/libero/tasks/generate_result_tables.py --records "${LOG_DIR}/experiment_records.csv"
+  python experiments/robot/libero/tasks/generate_result_tables.py \
+    --log_dir "${LOG_DIR}" --out "${RESULT_TABLES_MD}"
 }
 
 run_record() {
   python experiments/robot/libero/tasks/record_experiment_results.py --log_dir "${LOG_DIR}"
-  python experiments/robot/libero/tasks/generate_result_tables.py --records "${LOG_DIR}/experiment_records.csv"
+  python experiments/robot/libero/tasks/generate_result_tables.py \
+    --log_dir "${LOG_DIR}" --out "${RESULT_TABLES_MD}"
 }
 
 case "${MODE}" in

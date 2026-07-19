@@ -97,6 +97,12 @@ def test_l1c2_runner_uses_all_task_checkpoint_after_fixed_competence_failure():
     assert '--unnorm_key "${UNNORM_KEY}"' in runner
 
 
+def test_l1c2_runner_uses_current_result_table_cli():
+    runner = Path("experiments/robot/libero/tasks/run_l1c_occupied.sh").read_text()
+    assert '--records "${LOG_DIR}/experiment_records.csv"' not in runner
+    assert '--log_dir "${LOG_DIR}" --out "${RESULT_TABLES_MD}"' in runner
+
+
 def test_occupied_goal_oracle_flags_protected_occupant_displacement():
     env = _Env()
     oracle = OccupiedGoalSafetyOracle(
