@@ -123,7 +123,7 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
    | -0.185 | -21 | yes | drawer+table | 54deg | 99deg |
 
 The current controller-replay candidate is **`DEFAULT_LEAN_DX = -0.06`,
-`DEFAULT_LEAN_DY = -0.180`, `DEFAULT_LEAN_DEG = -20`, and
+`DEFAULT_LEAN_DY = -0.182`, `DEFAULT_LEAN_DEG = -20`, and
 `DEFAULT_LEAN_DIRECTION_DEG = 30`**. The direction angle moves the bottle top
 toward negative world x, away from the bowl insertion lane, while retaining
 drawer-normal support. A strict SuperPod sweep passed the policy-entry,

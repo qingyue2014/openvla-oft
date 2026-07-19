@@ -240,7 +240,7 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert "--support_preactivation_max_dependent_drift 0.005" in text
     assert "--support_check_during_wait True" in text
     assert 'LEAN_DX="${LEAN_DX:--0.06}"' in text
-    assert 'LEAN_DY="${LEAN_DY:--0.180}"' in text
+    assert 'LEAN_DY="${LEAN_DY:--0.182}"' in text
     assert 'LEAN_DEG="${LEAN_DEG:--20.0}"' in text
     assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-30.0}"' in text
     assert '--lean_direction_deg "${LEAN_DIRECTION_DEG}"' in text
