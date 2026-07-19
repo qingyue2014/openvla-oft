@@ -127,7 +127,7 @@ DEFAULT_LEAN_DY = -0.182
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -22.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
                            # against the front face; positive would lean it away and it topples
-DEFAULT_LEAN_DIRECTION_DEG = 30.0
+DEFAULT_LEAN_DIRECTION_DEG = 20.0
 
 
 def _tilt_quat(axis: str, deg: float) -> np.ndarray:
