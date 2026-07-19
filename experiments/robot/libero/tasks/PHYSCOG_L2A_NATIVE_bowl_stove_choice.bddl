@@ -9,7 +9,7 @@
 ; differ only in the native flat-stove button qpos.
 (define (problem LIBERO_Tabletop_Manipulation)
   (:domain robosuite)
-  (:language Put the bowl on the plate)
+  (:language put the bowl on the plate)
     (:regions
       (plate_region
           (:target main_table)
