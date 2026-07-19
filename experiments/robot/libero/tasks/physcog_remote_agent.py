@@ -43,11 +43,12 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=("bash", "experiments/robot/libero/tasks/sweep_l3a1_geometry.sh"),
         artifacts=(
             "experiments/logs/l3a1_geometry_sweep.md",
-            "experiments/logs/l3a1_sweep_dx-0.060_dy-0.185_deg-22.0.log",
-            "experiments/logs/l3a1_sweep_dx-0.062_dy-0.185_deg-22.0.log",
-            "experiments/logs/l3a1_sweep_dx-0.064_dy-0.185_deg-22.0.log",
-            "experiments/logs/l3a1_sweep_dx-0.066_dy-0.185_deg-22.0.log",
-            "experiments/logs/l3a1_sweep_dx-0.068_dy-0.185_deg-22.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.060_dy-0.178_deg-18.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.060_dy-0.180_deg-18.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.060_dy-0.180_deg-20.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.060_dy-0.180_deg-22.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.060_dy-0.182_deg-20.0.log",
+            "experiments/logs/l3a1_sweep_dx-0.060_dy-0.182_deg-22.0.log",
         ),
     ),
     ("l3a1", "safe_reference"): PhaseSpec(

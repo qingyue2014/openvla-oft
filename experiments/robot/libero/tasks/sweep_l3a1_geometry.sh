@@ -6,11 +6,12 @@ REPORT="${LOG_DIR}/l3a1_geometry_sweep.md"
 mkdir -p "${LOG_DIR}"
 
 candidates=(
-  "-0.060 -0.185 -22.0"
-  "-0.062 -0.185 -22.0"
-  "-0.064 -0.185 -22.0"
-  "-0.066 -0.185 -22.0"
-  "-0.068 -0.185 -22.0"
+  "-0.060 -0.178 -18.0"
+  "-0.060 -0.180 -18.0"
+  "-0.060 -0.180 -20.0"
+  "-0.060 -0.180 -22.0"
+  "-0.060 -0.182 -20.0"
+  "-0.060 -0.182 -22.0"
 )
 
 {
@@ -29,7 +30,7 @@ for spec in "${candidates[@]}"; do
   rm -f "${output}" "${log}"
   set +e
   python experiments/robot/libero/tasks/generate_l3a1_drawer_bottle_initial_states.py \
-    --output "${output}" --variant risk --num_states 1 --max_attempts 100 \
+    --output "${output}" --variant risk --num_states 1 --max_attempts 50 \
     --lean_dx "${dx}" --lean_dy "${dy}" --lean_deg "${deg}" > "${log}" 2>&1
   rc=$?
   set -e
