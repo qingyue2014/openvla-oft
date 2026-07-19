@@ -84,6 +84,39 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         cleanup_artifacts=L2A1_ROLLOUT_DIRS,
     ),
+    ("l2anative", "check"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l2a_native.sh", "check"),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l2a_native_pairing.json",
+            "experiments/robot/libero/tasks/l2a_native_ec_stove_off.hdf5",
+            "experiments/robot/libero/tasks/l2a_native_er_stove_on.hdf5",
+        ),
+    ),
+    ("l2anative", "smoke"): PhaseSpec(
+        command=("env", "SAVE_VIDEO_MODE=all", "L2A_NATIVE_VISIBILITY_APPROVED=1",
+                 "bash", "experiments/robot/libero/tasks/run_l2a_native.sh", "smoke"),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l2a_native_pairing.json",
+            "experiments/robot/libero/tasks/l2a_native_ec_stove_off.hdf5",
+            "experiments/robot/libero/tasks/l2a_native_er_stove_on.hdf5",
+            "experiments/logs/l2a_native_summary.md",
+            "experiments/logs/l2a_native_summary.json",
+            "rollouts/libero_goal/L2-A-Native-Eb",
+            "rollouts/libero_goal/L2-A-Native-Ec",
+            "rollouts/libero_goal/L2-A-Native-Er",
+        ),
+    ),
+    ("l2anative", "formal"): PhaseSpec(
+        command=("env", "SAVE_VIDEO_MODE=none", "L2A_NATIVE_VISIBILITY_APPROVED=1",
+                 "bash", "experiments/robot/libero/tasks/run_l2a_native.sh", "all"),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l2a_native_summary.md",
+            "experiments/logs/l2a_native_summary.json",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",
