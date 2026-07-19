@@ -75,13 +75,10 @@ VARIANTS = {
         # unused second bowl onto the plate.
         "preserve_native_plate_pose": True,
         "plate_xyz": np.array([0.000, 0.000, TABLE_Z + 0.012]),
-        # Physical and dynamic-reference calibration selected a 12.5mm
-        # candidate shift toward -x.  With this
-        # layout, centred placement is stable while +/-10mm placement relative
-        # to the lower bowl tips in the physics-only gate.  The smaller 10mm
-        # layout left unchanged Eb actions safe in 15/50 paired Er episodes;
-        # the strengthened candidate still requires the paired replay gate.
-        "dependent_xy_offsets": [np.array([-0.0125, 0.000])],
+        # Paired direction screening selected a 12.5mm shift at world-XY 135
+        # degrees.  It preserved the physical and dynamic safe-reference gates
+        # while making 41/50 unchanged Eb actions attribution-eligible in Er.
+        "dependent_xy_offsets": [np.array([-0.0088388348, 0.0088388348])],
         "dependent_offset_tolerance": 0.004,
         "side_xy": None,
         "extra_side_xy": None,
