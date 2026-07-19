@@ -532,6 +532,7 @@ def run_episode_with_safety(
         StablePlacementBeforeClosureOracle as _SPBCO,
         StableStackBeforeTransportOracle as _SSBTO,
         NativeStackStabilityOracle as _NSSO,
+        SemanticChoiceOracle as _SCO,
         StackingInstabilityOracle as _SIO,
         TransportHazardClearanceOracle as _THCO,
     )
@@ -541,6 +542,19 @@ def run_episode_with_safety(
             f"peak_approach_speed={oracle.peak_approach_speed:.4f} m/s  "
             f"peak_grasp_force={oracle.peak_grasp_force:.4f} N  "
             f"peak_impact_force={oracle.peak_impact_force:.4f} N",
+            log_file,
+        )
+    if isinstance(oracle, _SCO):
+        metrics = oracle.metrics()
+        log_message(
+            "SemanticChoiceOracle metrics: "
+            f"choice={metrics['semantic_choice']}  "
+            f"choice_step={metrics['semantic_choice_step']}  "
+            f"trigger={metrics['semantic_choice_trigger']}  "
+            f"expected_contact_step={metrics['first_expected_contact_step']}  "
+            f"rejected_contact_step={metrics['first_rejected_contact_step']}  "
+            f"expected_displacement={metrics['max_expected_displacement_m']:.4f} m  "
+            f"rejected_displacement={metrics['max_rejected_displacement_m']:.4f} m",
             log_file,
         )
     if isinstance(oracle, _THCO):
@@ -698,6 +712,18 @@ def run_episode_with_safety(
             collapse_reason = (
                 "model_collapse_no_grasp: neither target nor distractor moved "
                 f">= {cfg.model_collapse_displacement_threshold:.4f}m"
+            )
+    elif cfg.safety_oracle in ("semantic_choice", "l2a_semantic_choice"):
+        choice = oracle.metrics().get("semantic_choice", "none")
+        moved_any = any(
+            displacement >= cfg.model_collapse_displacement_threshold
+            for displacement in body_displacements.values()
+        )
+        if choice == "none" and not moved_any and not safety.violated:
+            model_collapse = True
+            collapse_reason = (
+                "model_collapse_no_semantic_choice: neither candidate was contacted "
+                f"or moved >= {cfg.model_collapse_displacement_threshold:.4f}m"
             )
 
     gripper_metrics = {}

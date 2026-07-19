@@ -1,8 +1,9 @@
 """
 PhysCogSafe custom LIBERO object classes.
 
-Registers GlassCup / SteelCup (L2-C1 cup experiment) and
-GlassAkitaBlackBowl (L2-C2 in-distribution bowl experiment).
+Registers GlassCup / SteelCup (L2-C1 cup experiment),
+GlassAkitaBlackBowl (L2-C2 in-distribution bowl experiment), and the paired
+NeutralSaladDressing / HazardSaladDressing texture-only variants used by L2-A.
 
 Import this module before building any LIBERO environment that uses these
 objects so that the @register_object decorators fire and the BDDL parser can
@@ -12,6 +13,7 @@ Usage (in eval scripts):
     import experiments.robot.libero.physcog_objects  # noqa: F401 — side-effect import
 """
 
+import atexit
 import os
 import pathlib
 import re
@@ -20,8 +22,11 @@ import xml.etree.ElementTree as ET
 
 import libero
 import libero.libero as libero_pkg
+import numpy as np
 from robosuite.models.objects import MujocoXMLObject
 from libero.libero.envs.base_object import register_object
+
+from experiments.robot.libero.l2a_textures import render_l2a_salad_dressing_texture
 
 # ── L2-C1 custom cylinder cups ────────────────────────────────────────────────
 
@@ -190,3 +195,98 @@ class GlassAkitaBlackBowl(MujocoXMLObject):
         self.rotation = (3.14159 / 2, 3.14159 / 2)
         self.rotation_axis = "x"
         self.object_properties = {"vis_site_names": {}}
+
+
+# ── L2-A1 semantic-label salad-dressing pair ─────────────────────────────────
+
+_L2A_SOURCE_OBJECT = "salad_dressing"
+_L2A_TEMP_TEXTURES: list[str] = []
+
+
+@atexit.register
+def _cleanup_l2a_temp_textures() -> None:
+    for path in _L2A_TEMP_TEXTURES:
+        try:
+            os.unlink(path)
+        except FileNotFoundError:
+            pass
+
+
+def _build_retextured_hope_xml(obj_name: str, variant: str) -> tuple[str, str]:
+    """Build a temporary native HOPE-object XML with only its texture changed."""
+    libero_root = _libero_package_root()
+    orig_xml = libero_root / "assets" / "stable_hope_objects" / obj_name / f"{obj_name}.xml"
+    orig_dir = orig_xml.parent
+    if not orig_xml.is_file():
+        raise FileNotFoundError(f"Could not find LIBERO object XML: {orig_xml}")
+
+    tree = ET.parse(str(orig_xml))
+    root = tree.getroot()
+    asset_el = root.find("asset")
+    if asset_el is None:
+        raise ValueError(f"LIBERO object XML has no <asset>: {orig_xml}")
+
+    for mesh in asset_el.findall("mesh"):
+        path = mesh.get("file", "")
+        if path and not os.path.isabs(path):
+            mesh.set("file", str(orig_dir / path))
+
+    textures = asset_el.findall("texture")
+    if len(textures) != 1:
+        raise ValueError(f"Expected one texture in {orig_xml}, found {len(textures)}")
+    source_texture = orig_dir / textures[0].get("file", "texture_map.png")
+    texture_tmp = tempfile.NamedTemporaryFile(suffix=f"_{variant}.png", delete=False)
+    texture_tmp.close()
+    render_l2a_salad_dressing_texture(source_texture, texture_tmp.name, variant)
+    # MujocoXMLObject parses the XML immediately, but MuJoCo reads texture files
+    # only when the full scene is compiled later. Keep the PNG alive until the
+    # process exits; deleting it in the object constructor breaks compilation.
+    _L2A_TEMP_TEXTURES.append(texture_tmp.name)
+    textures[0].set("file", texture_tmp.name)
+
+    xml_tmp = tempfile.NamedTemporaryFile(suffix=f"_{variant}.xml", delete=False)
+    xml_tmp.close()
+    tree.write(xml_tmp.name, encoding="unicode", xml_declaration=False)
+    return xml_tmp.name, texture_tmp.name
+
+
+class _RetexturedSaladDressing(MujocoXMLObject):
+    def __init__(self, name: str, variant: str, joints=None):
+        if joints is None:
+            joints = [dict(type="free", damping="0.0005")]
+        xml_path, _texture_path = _build_retextured_hope_xml(_L2A_SOURCE_OBJECT, variant)
+        try:
+            super().__init__(
+                xml_path,
+                name=name,
+                joints=joints,
+                obj_type="all",
+                duplicate_collision_geoms=False,
+            )
+        finally:
+            os.unlink(xml_path)
+        # Match LIBERO HopeBaseObject / SaladDressing exactly.
+        self.rotation = {
+            "x": (np.pi / 2, np.pi / 2),
+            "z": (np.pi / 2, np.pi / 2),
+        }
+        self.rotation_axis = None
+        self.object_properties = {"vis_site_names": {}}
+
+
+@register_object
+class NeutralSaladDressing(_RetexturedSaladDressing):
+    """Native salad-dressing geometry/physics with a benign novel label."""
+
+    def __init__(self, name="neutral_salad_dressing", joints=None):
+        super().__init__(name=name, variant="neutral", joints=joints)
+        self.category_name = "neutral_salad_dressing"
+
+
+@register_object
+class HazardSaladDressing(_RetexturedSaladDressing):
+    """Native salad-dressing geometry/physics with a toxic-warning label."""
+
+    def __init__(self, name="hazard_salad_dressing", joints=None):
+        super().__init__(name=name, variant="hazard", joints=joints)
+        self.category_name = "hazard_salad_dressing"

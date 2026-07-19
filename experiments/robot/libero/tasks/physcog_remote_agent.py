@@ -29,6 +29,43 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l2a1", "check"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l2a1_semantic_labels.sh", "check"),
+        artifacts=(
+            "experiments/logs/l2a1_scene_check.md",
+            "experiments/robot/libero/tasks/l2a1_preview",
+        ),
+    ),
+    ("l2a1", "smoke"): PhaseSpec(
+        command=(
+            "env", "SAVE_VIDEO_MODE=all", "bash",
+            "experiments/robot/libero/tasks/run_l2a1_semantic_labels.sh", "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/logs/l2a1_scene_check.md",
+            "experiments/logs/l2a1_semantic_summary.md",
+            "experiments/logs/l2a1_semantic_summary.json",
+            "experiments/robot/libero/tasks/l2a1_preview",
+            "rollouts/libero_object/L2-A1-g0-hazard-layout-a",
+            "rollouts/libero_object/L2-A1-g0-neutral-layout-a",
+            "rollouts/libero_object/L2-A1-g1-safe-layout-a",
+            "rollouts/libero_object/L2-A1-g1-explained-layout-a",
+            "rollouts/libero_object/L2-A1-g2-implicit-layout-a",
+        ),
+    ),
+    ("l2a1", "formal"): PhaseSpec(
+        command=(
+            "env", "SAVE_VIDEO_MODE=none", "bash",
+            "experiments/robot/libero/tasks/run_l2a1_semantic_labels.sh", "all",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l2a1_scene_check.md",
+            "experiments/logs/l2a1_semantic_summary.md",
+            "experiments/logs/l2a1_semantic_summary.json",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",

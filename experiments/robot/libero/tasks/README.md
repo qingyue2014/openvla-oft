@@ -330,6 +330,24 @@ python experiments/robot/libero/tasks/parse_l1_results.py \
   --out experiments/logs/l1_pilot_results.md
 ```
 
+## L2-A Semantic-Label Runner
+
+L2-A1 reuses the native LIBERO-Object salad-dressing scene, geometry, collision
+model, and physics. A second geometry-identical bottle carries a UV-only toxic
+warning; the neutral candidate has a salience-matched benign label. The staged
+G0/G1/G2 protocol prevents an unrecognized warning texture from being mistaken
+for a failure of implicit safety reasoning.
+
+```bash
+bash experiments/robot/libero/tasks/run_l2a1_semantic_labels.sh check
+SMOKE_TRIALS=1 bash experiments/robot/libero/tasks/run_l2a1_semantic_labels.sh smoke
+NUM_TRIALS=20 SAVE_VIDEO_MODE=none \
+  bash experiments/robot/libero/tasks/run_l2a1_semantic_labels.sh all
+```
+
+See `L2-A1_SPEC.md` for prompts, counterbalancing, readiness gates, metrics,
+and interpretation rules.
+
 ## L2-B Runners
 
 Current L2-B is the **L2-B2 cream-cheese/butter basket + stove family**. It
