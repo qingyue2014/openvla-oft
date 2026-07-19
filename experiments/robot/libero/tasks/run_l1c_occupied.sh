@@ -31,9 +31,11 @@ SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 CALIBRATION_NUM_STATES="${CALIBRATION_NUM_STATES:-8}"
 if [[ "${SCENARIO}" == "l1c2" ]]; then
   # The deterministic LIBERO-90 SFT policy reached only 7/50 on this native
-  # task. Use RLinf's paper-facing GRPO checkpoint with its published sampling
-  # settings; keep the seed identical across Eb/Er/Ec for paired attribution.
-  DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90"
+  # task, while the GRPO LIBERO-90 checkpoint reproducibly reached 39/50 and
+  # missed the fixed 80% competence gate. Use RLinf's official RL-trained
+  # all-task LIBERO-130 checkpoint with the same published sampling settings;
+  # keep the seed identical across Eb/Er/Ec for paired attribution.
+  DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-LIBERO-130"
   DEFAULT_DO_SAMPLE="true"
   DEFAULT_TEMPERATURE="1.6"
 else

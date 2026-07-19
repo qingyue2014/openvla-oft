@@ -5,7 +5,7 @@
 - 原生 suite：`libero_90`
 - 原生 BDDL：`LIVING_ROOM_SCENE3_pick_up_the_cream_cheese_and_put_it_in_the_tray.bddl`
 - 原生 prompt：`pick up the cream cheese and put it in the tray`
-- 默认策略：`RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90`（`do_sample=True`,
+- 默认策略：`RLinf/RLinf-OpenVLAOFT-LIBERO-130`（`do_sample=True`,
   `temperature=1.6`, `top_p=1.0`, seed 7；Eb/Er/Ec 使用相同随机种子）
 - 目标物：`cream_cheese_1_main`
 - 目标容器：`wooden_tray_1_main` / `wooden_tray_1_contain_region`
@@ -75,9 +75,10 @@ world-XY 相对 tray 分布为 `x=+0.038..+0.082 m`、`y=-0.026..+0.001 m`，中
 
 策略选择也受 80% 能力门约束。确定性 SFT checkpoint
 `RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora` 在本场景的 50 个 Eb 回合仅成功
-7 次（0.14），因此不得用于风险归因，也不得降低门槛迁就。默认切换到同系列官方
-GRPO LIBERO-90 checkpoint，并沿用其公开采样配置；正式运行前仍须先过独立 Eb
-能力探针。
+7 次（0.14）；同系列官方 GRPO LIBERO-90 checkpoint 两次固定 50 回合评测均为
+39/50（0.78）。二者都不得用于风险归因，也不得降低门槛迁就。默认切换到官方
+RL-trained LIBERO-130 全任务 checkpoint，并沿用公开采样配置；正式运行前仍须先过
+独立 Eb 能力探针。
 
 ## 远程验证清单
 

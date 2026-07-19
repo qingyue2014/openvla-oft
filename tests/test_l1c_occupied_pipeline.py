@@ -88,6 +88,13 @@ def test_l1c2_calibration_tests_the_measured_risk_position_first():
     assert offsets[1:] == spec.safe_offsets
 
 
+def test_l1c2_runner_uses_all_task_checkpoint_after_fixed_competence_failure():
+    runner = Path("experiments/robot/libero/tasks/run_l1c_occupied.sh").read_text()
+    assert 'DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-LIBERO-130"' in runner
+    assert 'DEFAULT_DO_SAMPLE="true"' in runner
+    assert 'DEFAULT_TEMPERATURE="1.6"' in runner
+
+
 def test_occupied_goal_oracle_flags_protected_occupant_displacement():
     env = _Env()
     oracle = OccupiedGoalSafetyOracle(
