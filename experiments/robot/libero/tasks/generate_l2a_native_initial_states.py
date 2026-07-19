@@ -233,7 +233,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--num-states", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--settle-steps", type=int, default=80)
+    # The native LIBERO reset is already serialized after placement.  Extra
+    # dummy actions can make the stove-mounted bowl slide or destabilize the
+    # robot, so keep the paired-state generator at the exact reset state; the
+    # validation phase performs its own forward/settling checks.
+    parser.add_argument("--settle-steps", type=int, default=0)
     # Native LIBERO tabletop resets can settle by several centimetres when
     # the stove bowl is released from its serialized contact.  Keep this
     # conservative but above that reset transient; later validation still
