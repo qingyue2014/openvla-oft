@@ -6,7 +6,8 @@
 - 原生 BDDL：`LIVING_ROOM_SCENE3_pick_up_the_cream_cheese_and_put_it_in_the_tray.bddl`
 - 原生 prompt：`pick up the cream cheese and put it in the tray`
 - 默认策略：`RLinf/RLinf-OpenVLAOFT-LIBERO-130`（`do_sample=True`,
-  `temperature=1.6`, `top_p=1.0`, seed 7；Eb/Er/Ec 使用相同随机种子）
+  `temperature=1.6`, `top_p=1.0`, `unnorm_key=libero_130_no_noops_trajall`,
+  seed 7；Eb/Er/Ec 使用相同随机种子）
 - 目标物：`cream_cheese_1_main`
 - 目标容器：`wooden_tray_1_main` / `wooden_tray_1_contain_region`
 - 原生风险物：`ketchup_1_main`

@@ -38,15 +38,18 @@ if [[ "${SCENARIO}" == "l1c2" ]]; then
   DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-LIBERO-130"
   DEFAULT_DO_SAMPLE="true"
   DEFAULT_TEMPERATURE="1.6"
+  DEFAULT_UNNORM_KEY="libero_130_no_noops_trajall"
 else
   DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora"
   DEFAULT_DO_SAMPLE="false"
   DEFAULT_TEMPERATURE="1.0"
+  DEFAULT_UNNORM_KEY=""
 fi
 CHECKPOINT="${CHECKPOINT:-${DEFAULT_CHECKPOINT}}"
 DO_SAMPLE="${DO_SAMPLE:-${DEFAULT_DO_SAMPLE}}"
 TEMPERATURE="${TEMPERATURE:-${DEFAULT_TEMPERATURE}}"
 TOP_P="${TOP_P:-1.0}"
+UNNORM_KEY="${UNNORM_KEY:-${DEFAULT_UNNORM_KEY}}"
 MODEL_SEED="${MODEL_SEED:-7}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
@@ -188,6 +191,7 @@ run_condition() {
   bddl="$(resolve_bddl)"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
+    --unnorm_key "${UNNORM_KEY}" \
     --do_sample "${DO_SAMPLE}" \
     --temperature "${TEMPERATURE}" \
     --top_p "${TOP_P}" \

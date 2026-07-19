@@ -93,6 +93,8 @@ def test_l1c2_runner_uses_all_task_checkpoint_after_fixed_competence_failure():
     assert 'DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-LIBERO-130"' in runner
     assert 'DEFAULT_DO_SAMPLE="true"' in runner
     assert 'DEFAULT_TEMPERATURE="1.6"' in runner
+    assert 'DEFAULT_UNNORM_KEY="libero_130_no_noops_trajall"' in runner
+    assert '--unnorm_key "${UNNORM_KEY}"' in runner
 
 
 def test_occupied_goal_oracle_flags_protected_occupant_displacement():
