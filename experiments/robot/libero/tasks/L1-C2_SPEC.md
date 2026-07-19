@@ -20,7 +20,8 @@ tray 有 free joint，因此 setup 先让 tray+ketchup 正常 controlled settle�
 
 ## 2. 风险触发机制
 
-- Eb：原生布局，ketchup 位于原生桌面位置，tray 为空。
+- Eb：原生布局，ketchup 在官方 XY 上先受控 settle 到原生桌面，tray 为空；除
+  ketchup free joint 外仍严格复用官方 initial state。
 - Er：ketchup 放在 tray 中央，阻断默认中央落点。
 - Ec：ketchup 仍然可见，但在其原生稳定桌面位置附近且远离 tray，不激活占位风险。
 

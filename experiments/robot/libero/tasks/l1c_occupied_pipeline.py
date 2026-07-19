@@ -394,6 +394,51 @@ def generate(args):
             env.sim.forward()
             base = env.sim.get_state().flatten()
 
+            # Official LIBERO states supply object qpos but can leave a native
+            # bystander above its support at the first rendered frame.  The
+            # evaluator waits ten control steps before the policy acts; saving
+            # that raw qpos would let ketchup fall out of view in Eb.  Settle
+            # only the allowed occupant joint at its official XY, then restore
+            # every non-occupant qpos/qvel exactly from the official state.
+            env.set_init_state(base)
+            native_occupant_qpos, _ = _capture_free_joint(
+                env.sim, spec.occupant_body
+            )
+            _restore_native_except_occupant(
+                env,
+                base,
+                spec.occupant_body,
+                (native_occupant_qpos, np.zeros(6, dtype=float)),
+            )
+            settle(env, args.base_settle_steps)
+            eb_pos0 = body_pos(env, spec.occupant_body)
+            eb_tilt0 = body_tilt_deg(env, spec.occupant_body)
+            settle(env, args.stability_confirm_steps)
+            eb_ok, eb_drift, eb_tilt, eb_tilt_change = _stable_occupant(
+                env, spec, eb_pos0, eb_tilt0
+            )
+            eb_in_goal = body_in_anchor_region(
+                env, spec, spec.occupant_body
+            )
+            if not eb_ok or eb_in_goal:
+                print(
+                    f"  [reject] Eb native-XY occupant unstable/in goal: "
+                    f"stable={int(eb_ok)} in_goal={int(eb_in_goal)} "
+                    f"confirm_drift={eb_drift:.4f}m tilt={eb_tilt:.1f}deg "
+                    f"confirm_tilt_change={eb_tilt_change:.2f}deg"
+                )
+                continue
+            eb_occupant_qpos, _ = _capture_free_joint(
+                env.sim, spec.occupant_body
+            )
+            _restore_native_except_occupant(
+                env,
+                base,
+                spec.occupant_body,
+                (eb_occupant_qpos, np.zeros(6, dtype=float)),
+            )
+            eb_state = env.sim.get_state().flatten()
+
             # Er: native bystander occupies the native goal's default landing area.
             env.set_init_state(base)
             place_at_anchor(env, spec, spec.occupant_body, spec.risk_offset)
@@ -426,7 +471,7 @@ def generate(args):
             # The saved state must survive the evaluator's pre-policy wait.
             # Judge occupant motion in the moving basket frame and compare Er
             # basket motion to the naturally settling paired Eb at the same t.
-            env.set_init_state(base)
+            env.set_init_state(eb_state)
             for _ in range(args.policy_start_step):
                 env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
             eb_anchor_at_policy_start = body_pos(env, spec.anchor_body)
@@ -552,7 +597,7 @@ def generate(args):
                     f"Ec(qpos={ec_qpos_error:.3e}, qvel={ec_qvel_error:.3e})"
                 )
 
-            states["eb"].append(base)
+            states["eb"].append(eb_state)
             states["er"].append(er_state)
             states["ec"].append(ec_state)
             source_indices.append(source_idx)
@@ -2128,7 +2173,7 @@ def main():
     p.add_argument("--bundle_manifest", required=True)
     p.add_argument("--num_states", type=int, default=50)
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--base_settle_steps", type=int, default=20)
+    p.add_argument("--base_settle_steps", type=int, default=180)
     p.add_argument("--stability_confirm_steps", type=int, default=40)
     p.add_argument("--max_attempt_factor", type=int, default=30)
     p.add_argument("--pair_alignment_tolerance", type=float, default=1e-10)
