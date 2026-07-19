@@ -124,7 +124,7 @@ DRAWER_CLOSED_QPOS = 0.0025
 #
 # Strict smoke video/contact review showed that dx=-0.060 is the negative-x
 # support boundary. Follow-up strict SuperPod sweeps found that moving farther
-# in x loses drawer contact, while dy=-0.182/deg=-20/direction=30 survives the
+# in x loses drawer contact, while dy=-0.182/deg=-20/direction=35 survives the
 # three-action policy-entry stress gate plus hold, contact-purity, and
 # close-response gates.
 DEFAULT_LEAN_DX = -0.06
@@ -132,7 +132,7 @@ DEFAULT_LEAN_DY = -0.182
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -20.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
                            # against the front face; positive would lean it away and it topples
-DEFAULT_LEAN_DIRECTION_DEG = 30.0
+DEFAULT_LEAN_DIRECTION_DEG = 35.0
 
 
 def _tilt_quat(axis: str, deg: float) -> np.ndarray:
