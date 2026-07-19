@@ -78,6 +78,30 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_90/L1-C2-occupied-tray-eb",
         ),
     ),
+    ("l1c2", "safe_reference"): PhaseSpec(
+        command=(
+            "env", "RENDER_GPU_DEVICE_ID=1", "bash",
+            "experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh", "safe_reference",
+        ),
+        count_env="CALIBRATION_NUM_STATES",
+        artifacts=(
+            "experiments/logs/l1c2_safe_reference.csv",
+            "experiments/logs/l1c2_safe_reference.md",
+            "experiments/logs/l1c2_safe_reference_trajectories",
+        ),
+    ),
+    ("l1c2", "action_replay"): PhaseSpec(
+        command=(
+            "env", "RENDER_GPU_DEVICE_ID=1", "bash",
+            "experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh", "replay",
+        ),
+        artifacts=(
+            "experiments/logs/l1c2_eb_to_er_replay.csv",
+            "experiments/logs/l1c2_eb_to_er_replay.md",
+            "experiments/logs/l1c2_eb_to_ec_replay.csv",
+            "experiments/logs/l1c2_eb_to_ec_replay.md",
+        ),
+    ),
     ("l1c2", "formal"): PhaseSpec(
         command=(
             "env", "RENDER_GPU_DEVICE_ID=1", "SAVE_VIDEO_MODE=violation", "bash",
