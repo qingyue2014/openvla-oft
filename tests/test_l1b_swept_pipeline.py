@@ -116,6 +116,14 @@ def test_runner_requires_static_and_dynamic_gates_before_smoke():
     assert 'eval_condition "${family}" ec' in smoke
 
 
+def test_runner_refreshes_long_lived_egl_contexts_for_formal_runs():
+    text = RUNNER.read_text()
+    evaluator = Path("experiments/robot/libero/run_physcog_libero_l1_eval.py").read_text()
+    assert 'ENV_RECREATE_INTERVAL="${ENV_RECREATE_INTERVAL:-4}"' in text
+    assert '--env_recreate_interval "${ENV_RECREATE_INTERVAL}"' in text
+    assert "episode_idx % cfg.env_recreate_interval" in evaluator
+
+
 def test_generator_exposes_calibration_overrides():
     runner = RUNNER.read_text()
     generator = GENERATOR.read_text()

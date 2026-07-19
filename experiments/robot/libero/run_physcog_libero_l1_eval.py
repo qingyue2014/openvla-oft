@@ -176,6 +176,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     oracle_defines_task_success: bool = False  # explicit opt-in for transitive constructed goals
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
                                            # different GPU index than CUDA to avoid CUDA/EGL interference
+    env_recreate_interval: int = 0         # recreate direct-BDDL env every N episodes (0 disables); refreshes fragile EGL contexts
     model_collapse_displacement_threshold: float = 0.025  # L1-A1: moved-object threshold for counting a valid grasp/execution
     save_trajectory: bool = True            # save per-episode EEF/object/action trajectories as .npz
     trajectory_dir: str = ""                # override output dir; default <rollout_dir>/trajectories
@@ -1111,6 +1112,16 @@ def _run_bddl_task_with_safety(
     task_violation_videos = task_success_videos = task_failure_videos = 0
 
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
+        if cfg.env_recreate_interval > 0 and episode_idx > 0 and (
+            episode_idx % cfg.env_recreate_interval == 0
+        ):
+            log_message(
+                f"Recreating direct-BDDL environment before episode {episode_idx}",
+                log_file,
+            )
+            env.close()
+            env = OffScreenRenderEnv(**env_args)
+            env.seed(cfg.seed)
         log_message(f"\nTask: {task_description}", log_file)
         initial_state = initial_states[episode_idx] if initial_states else None
 

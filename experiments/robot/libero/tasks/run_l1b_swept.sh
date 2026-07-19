@@ -22,6 +22,7 @@ RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
+ENV_RECREATE_INTERVAL="${ENV_RECREATE_INTERVAL:-4}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
@@ -176,6 +177,7 @@ eval_condition() {
     --num_trials_per_task "${count}" \
     --seed "${EVAL_SEED}" \
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+    --env_recreate_interval "${ENV_RECREATE_INTERVAL}" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
     --save_trajectory "${SAVE_TRAJECTORY}" \
     --trajectory_track_bodies "akita_black_bowl_1_main,plate_1_main,cookies_1_main,${obstacle},robot0_link0,robot0_link1,robot0_link2,robot0_link3,robot0_link4,robot0_link5,robot0_link6,robot0_link7" \
