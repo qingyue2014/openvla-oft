@@ -44,6 +44,21 @@ class MotionFailure:
     target_eef_xyz: tuple = ()
 
 
+def _candidate_search_decision(row):
+    """Accept only a complete safe solution; retry recoverable candidates."""
+    if bool(row["safe_success"]):
+        return "accept"
+    if bool(row["grasp_verified"]):
+        return "continue"
+    if row["failure_stage"] in {
+        "descend_to_grasp",
+        "verify_grasp",
+        "lift_grasped_bowl",
+    }:
+        return "continue"
+    return "stop"
+
+
 def _position_action(
     current, target, gripper, position_scale=0.08, max_position_command=1.0
 ):
@@ -453,14 +468,11 @@ def run(args):
                     f"stage={candidate_row['failure_stage'] or '-'}"
                 )
                 row = candidate_row
-                if candidate_row["grasp_verified"]:
+                decision = _candidate_search_decision(candidate_row)
+                if decision == "accept":
                     selected_grasp_offset = offset.copy()
                     break
-                if candidate_row["failure_stage"] not in {
-                    "descend_to_grasp",
-                    "verify_grasp",
-                    "lift_grasped_bowl",
-                }:
+                if decision == "stop":
                     break
             rows.append(row)
             print(
