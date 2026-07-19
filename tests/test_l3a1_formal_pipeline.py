@@ -167,6 +167,7 @@ def test_generator_and_artifact_gate_policy_entry_transition():
     assert "policy_entry_displacement > RUNTIME_WAIT_MAX_DRIFT" in text
     assert '"policy_entry_displacement_m": policy_entry_displacement' in text
     assert '"policy_entry_probe_count": len(POLICY_ENTRY_PROBE_ACTIONS)' in text
+    assert '"settled_lean_direction_deg": settled_lean_direction_deg' in text
     assert '"policy_entry_direct_contacts"' in text
 
 

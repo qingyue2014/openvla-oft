@@ -238,6 +238,12 @@ def _lean_tilt_angle_deg(env, body_name: str) -> float:
     return float(np.degrees(np.arccos(up_z)))
 
 
+def _lean_direction_angle_deg(env, body_name: str) -> float:
+    """Signed world-xy direction of the bottle's serialized local +z axis."""
+    z_axis = _body_rotation(env, body_name)[:, 2]
+    return float(np.degrees(np.arctan2(-z_axis[0], z_axis[1])))
+
+
 def _find_joint_qadr(sim, *candidates) -> int:
     for name in candidates:
         try:
@@ -615,6 +621,7 @@ def generate_states(
         # Recompute instantaneous bottle quantities from the exact candidate
         # that will be serialized before running its hold/contact/close gates.
         tilt_deg = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+        settled_lean_direction_deg = _lean_direction_angle_deg(env, BOTTLE_BODY)
         ang_speed = (
             float(np.linalg.norm(env.sim.data.qvel[bottle_vadr + 3:bottle_vadr + 6]))
             if bottle_vadr >= 0 else 0.0
@@ -749,6 +756,8 @@ def generate_states(
             print(f"  support body        : {support_body}  @ xy=({support_pos[0]:+.4f},{support_pos[1]:+.4f})")
             print(f"  bottle target xy     : ({target_xy[0]:+.4f},{target_xy[1]:+.4f})")
             print(f"  settled tilt         : {tilt_deg:.2f} deg (requested {lean_deg:.1f} deg)")
+            print(f"  settled direction    : {settled_lean_direction_deg:+.2f} deg "
+                  f"(requested {lean_direction_deg:+.1f} deg)")
             print(f"  drawer-close topple  : {topple_delta:+.2f} deg  (variant={variant})")
             print(f"  close displacement/drop: {close_response['displacement_m']:.4f}m / "
                   f"{close_response['height_drop_m']:.4f}m  oracle_fires={oracle_fires}")
@@ -798,6 +807,7 @@ def generate_states(
                     sorted(entry_direct_contacts)
                 ),
                 "settled_tilt_deg": tilt_deg,
+                "settled_lean_direction_deg": settled_lean_direction_deg,
                 "hold_displacement_m": hold_displacement,
                 "hold_tilt_delta_deg": hold_tilt_delta,
                 "close_tilt_delta_deg": topple_delta,
