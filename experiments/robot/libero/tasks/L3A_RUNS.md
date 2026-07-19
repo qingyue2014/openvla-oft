@@ -122,7 +122,7 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
    | -0.180 | -22 | yes | drawer+table | 32deg | 57deg |
    | -0.185 | -21 | yes | drawer+table | 54deg | 99deg |
 
-The current controller-replay candidate is **`DEFAULT_LEAN_DX = -0.064`,
+The current controller-replay candidate is **`DEFAULT_LEAN_DX = -0.062`,
 `DEFAULT_LEAN_DY = -0.184`, `DEFAULT_LEAN_DEG = -20`, and
 `DEFAULT_LEAN_DIRECTION_DEG = 35`**. The direction angle moves the bottle top
 toward negative world x, away from the bowl insertion lane, while retaining
