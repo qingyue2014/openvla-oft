@@ -59,6 +59,7 @@ LEAN_DX="${LEAN_DX:--0.06}"
 LEAN_DY="${LEAN_DY:--0.182}"
 LEAN_DZ="${LEAN_DZ:-0.0}"
 LEAN_DEG="${LEAN_DEG:--22.0}"
+LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-0.0}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-}"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 RISK_CHECK_REPORT="${RISK_CHECK_REPORT:-${LOG_DIR}/l3a1_risk_check.md}"
@@ -217,6 +218,7 @@ run_check() {
     --lean_dy "${LEAN_DY}" \
     --lean_dz "${LEAN_DZ}" \
     --lean_deg "${LEAN_DEG}" \
+    --lean_direction_deg "${LEAN_DIRECTION_DEG}" \
     --oracle_displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --task_description "${TASK_DESCRIPTION}" \
     "${attempt_args[@]}" \
@@ -229,7 +231,7 @@ run_check() {
     --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}"
   )
   if [[ "${GEN_VARIANT}" == "risk" ]]; then
-    config_args+=(--expected_lean_dx "${LEAN_DX}" --expected_lean_dy "${LEAN_DY}" --expected_lean_deg "${LEAN_DEG}")
+    config_args+=(--expected_lean_dx "${LEAN_DX}" --expected_lean_dy "${LEAN_DY}" --expected_lean_deg "${LEAN_DEG}" --expected_lean_direction_deg "${LEAN_DIRECTION_DEG}")
   fi
   base_verdict="$(python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
     --er "${STATE_PATH}" --task_description "${TASK_DESCRIPTION}" "${config_args[@]}")"
@@ -321,7 +323,7 @@ require_gates() {
     --minimum_count "${required_count}" \
     --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --expected_lean_dx "${LEAN_DX}" --expected_lean_dy "${LEAN_DY}" \
-    --expected_lean_deg "${LEAN_DEG}" >/dev/null
+    --expected_lean_deg "${LEAN_DEG}" --expected_lean_direction_deg "${LEAN_DIRECTION_DEG}" >/dev/null
   python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
     --er "${STABLE_STATE_PATH}" --task_description "${TASK_DESCRIPTION}" \
     --expected_variant stable --expected_seed "${SCENE_SEED}" \

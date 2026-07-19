@@ -127,6 +127,7 @@ DEFAULT_LEAN_DY = -0.182
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -22.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
                            # against the front face; positive would lean it away and it topples
+DEFAULT_LEAN_DIRECTION_DEG = 0.0
 
 
 def _tilt_quat(axis: str, deg: float) -> np.ndarray:
@@ -137,6 +138,33 @@ def _tilt_quat(axis: str, deg: float) -> np.ndarray:
     if axis == "y":
         return np.array([np.cos(theta), 0.0, np.sin(theta), 0.0])
     raise ValueError(f"axis must be 'x' or 'y', got {axis!r}")
+
+
+def _quat_multiply(left: np.ndarray, right: np.ndarray) -> np.ndarray:
+    """Multiply MuJoCo wxyz quaternions."""
+    lw, lx, ly, lz = left
+    rw, rx, ry, rz = right
+    return np.array([
+        lw * rw - lx * rx - ly * ry - lz * rz,
+        lw * rx + lx * rw + ly * rz - lz * ry,
+        lw * ry - lx * rz + ly * rw + lz * rx,
+        lw * rz + lx * ry - ly * rx + lz * rw,
+    ])
+
+
+def _directed_tilt_quat(axis: str, deg: float, direction_deg: float) -> np.ndarray:
+    """Rotate the horizontal tilt direction around world z.
+
+    Positive direction moves the bottle top toward negative world x while
+    retaining the positive-y component that presses it into the drawer face.
+    """
+    yaw = np.deg2rad(direction_deg) / 2.0
+    yaw_quat = np.array([np.cos(yaw), 0.0, 0.0, np.sin(yaw)])
+    yaw_inverse = yaw_quat * np.array([1.0, -1.0, -1.0, -1.0])
+    result = _quat_multiply(
+        _quat_multiply(yaw_quat, _tilt_quat(axis, deg)), yaw_inverse
+    )
+    return result / np.linalg.norm(result)
 
 
 def _wxyz_to_matrix(quat: np.ndarray) -> np.ndarray:
@@ -278,6 +306,7 @@ def generate_states(
     lean_dz: float,
     lean_deg: float,
     lean_axis: str,
+    lean_direction_deg: float,
     max_settle_tilt_deg: float,
     max_settle_ang_speed: float,
     min_topple_deg: float,
@@ -308,6 +337,7 @@ def generate_states(
     print(f"Variant: {variant}  (support body: {support_body})")
     if paired_source_states is None:
         print(f"Generating {n} states (seed={seed}, lean_deg={lean_deg}, "
+              f"lean_direction_deg={lean_direction_deg}, "
               f"lean_offset=({lean_dx:+.3f},{lean_dy:+.3f},{lean_dz:+.3f}))...\n")
     else:
         print(f"Transforming {n} serialized Er states (upright, "
@@ -404,7 +434,7 @@ def generate_states(
         env.sim.data.qpos[bottle_qadr + 3:bottle_qadr + 7] = (
             _matrix_to_wxyz(support_rot @ risk_template_relative_rot)
             if risk_template_relative_pos is not None and source_state is None
-            else _tilt_quat(lean_axis, lean_deg)
+            else _directed_tilt_quat(lean_axis, lean_deg, lean_direction_deg)
         )
         if source_state is None:
             env.sim.data.qvel[:] = 0
@@ -804,6 +834,11 @@ def main():
     )
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
     parser.add_argument(
+        "--lean_direction_deg", type=float, default=DEFAULT_LEAN_DIRECTION_DEG,
+        help="Rotate the risk lean direction around world z; positive shifts the bottle top "
+             "toward negative world x while preserving drawer-normal support.",
+    )
+    parser.add_argument(
         "--max_settle_tilt_deg", type=float, default=65.0,
         help="Reject a layout if the bottle's tilt after settling (drawer still open) "
              "exceeds this -- means it toppled on its own instead of leaning. The current "
@@ -881,6 +916,7 @@ def main():
         args.lean_dz,
         effective_lean_deg,
         args.lean_axis,
+        args.lean_direction_deg,
         args.max_settle_tilt_deg,
         args.max_settle_ang_speed,
         args.min_topple_deg,
@@ -908,6 +944,7 @@ def main():
         group.attrs["lean_deg"] = effective_lean_deg
         group.attrs["stable_x_offset"] = args.stable_x_offset if args.variant == "stable" else 0.0
         group.attrs["lean_axis"] = args.lean_axis
+        group.attrs["lean_direction_deg"] = args.lean_direction_deg
         group.attrs["settle_steps"] = SETTLE_STEPS
         group.attrs["validation_hold_steps"] = args.validation_hold_steps
         group.attrs["verify_close_steps"] = args.verify_close_steps
