@@ -105,6 +105,7 @@ def test_batch_script_exports_explicit_libero_dependency_root():
         cfg, PhaseSpec(command=("true",)), count=1,
         scenario="l3a1", phase="check", remote_log="/tmp/job.out",
     )
+    assert "export LIBERO_ROOT='/home/researcher/LIBERO src'" in script
     assert "export PYTHONPATH='/home/researcher/LIBERO src':${PYTHONPATH:-}" in script
 
 
