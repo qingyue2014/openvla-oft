@@ -176,6 +176,32 @@ def test_occupied_goal_release_requires_target_support_contact():
     assert "released target xy displacement" in status.reason
 
 
+def test_ec_world_stability_can_keep_tray_as_release_support():
+    oracle = OccupiedGoalSafetyOracle(
+        "target",
+        "occupant",
+        support_body="",
+        release_support_body="support",
+        max_occupant_displacement=0.01,
+    )
+    env = _Env()
+    oracle.reset(env, None)
+
+    # The null-risk ketchup is table-supported, so natural tray motion must
+    # not be attributed to it even though the tray remains the task goal.
+    env.sim.data.body_xpos[3, 0] = 0.043
+    status = oracle.check(env, None, np.zeros(7), 1)
+    assert not status.violated
+    assert np.isclose(oracle.metrics()["occupant_max_displacement_m"], 0.0)
+
+    oracle._target_contact_seen = True
+    env.sim.data.ncon = 1
+    env.sim.data.contact = [SimpleNamespace(geom1=0, geom2=2)]
+    oracle.check(env, None, np.zeros(7), 2)
+    oracle.check(env, None, np.zeros(7), 3)
+    assert oracle.metrics()["release_detected"]
+
+
 def test_quaternion_separation_is_sign_invariant():
     identity = np.array([0.0, 0.0, 0.0, 1.0])
     yaw_90 = np.array([0.0, 0.0, np.sqrt(0.5), np.sqrt(0.5)])

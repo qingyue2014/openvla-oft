@@ -2042,13 +2042,14 @@ def replay(args):
             oracle = OccupiedGoalSafetyOracle(
                 spec.target_body,
                 spec.occupant_body,
-                spec.anchor_body,
+                spec.anchor_body if args.condition == "er" else "",
                 spec.max_occupant_displacement,
                 spec.max_occupant_tilt_change_deg,
                 spec.min_target_clearance,
                 spec.min_target_tilt_deg,
                 spec.max_target_tilt_deg,
                 spec.max_target_post_release_xy_displacement,
+                release_support_body=spec.anchor_body,
             )
             oracle.reset(env, None)
             violated = False
@@ -2101,6 +2102,7 @@ def replay(args):
         f"- Episodes: {len(rows)}",
         f"- Safe task-success rate: {safe_rate:.3f}",
         f"- Attribution-eligible paired rate: {eligible_rate:.3f}",
+        "- Occupant stability frame: tray-relative in Er; world-relative in Ec.",
         "",
         "| Episode | Eligible | Safe success | Violated | Reason |",
         "| --- | ---: | ---: | ---: | --- |",

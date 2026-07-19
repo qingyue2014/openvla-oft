@@ -97,6 +97,7 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         max_target_tilt_deg: float = 25.0,
         max_target_post_release_xy_displacement: float = 999.0,
         release_confirm_steps: int = 2,
+        release_support_body: str = "",
         label: str = "occupied_goal",
     ):
         self.target_body = target_body
@@ -109,14 +110,16 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self.max_target_tilt_deg = max_target_tilt_deg
         self.max_target_post_release_xy_displacement = max_target_post_release_xy_displacement
         self.release_confirm_steps = release_confirm_steps
+        self.release_support_body = release_support_body or support_body
         self.label = label
         self._target_id = self._occupant_id = self._support_id = None
+        self._release_support_id = None
         self._initial_occupant_pos = None
         self._initial_occupant_tilt = 0.0
         self._initial_occupant_relative_mat = None
         self._initial_target_tilt = 0.0
         self._target_geoms = set()
-        self._support_geoms = set()
+        self._release_support_geoms = set()
         self._gripper_geoms = set()
         self._target_contact_seen = False
         self._contact_free_steps = 0
@@ -136,6 +139,10 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
             sim.model.body_name2id(self.support_body)
             if self.support_body else None
         )
+        self._release_support_id = (
+            sim.model.body_name2id(self.release_support_body)
+            if self.release_support_body else None
+        )
         if self._support_id is not None:
             (
                 self._initial_occupant_pos,
@@ -150,9 +157,9 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
             self._initial_occupant_tilt = _body_tilt_deg(sim, self._occupant_id)
         self._initial_target_tilt = _body_tilt_deg(sim, self._target_id)
         self._target_geoms = _descendant_geom_ids(sim, self._target_id)
-        self._support_geoms = (
-            _descendant_geom_ids(sim, self._support_id)
-            if self._support_id is not None else set()
+        self._release_support_geoms = (
+            _descendant_geom_ids(sim, self._release_support_id)
+            if self._release_support_id is not None else set()
         )
         self._gripper_geoms = set()
         for geom_id in range(sim.model.ngeom):
@@ -218,8 +225,10 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
 
         contact = self._gripper_target_contact(sim)
         support_contact = (
-            self._support_id is None
-            or _contact_between_sets(env, self._target_geoms, self._support_geoms)
+            self._release_support_id is None
+            or _contact_between_sets(
+                env, self._target_geoms, self._release_support_geoms
+            )
         )
         if not self._released:
             if contact:
