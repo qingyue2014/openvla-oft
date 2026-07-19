@@ -237,7 +237,7 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert 'LEAN_DX="${LEAN_DX:--0.06}"' in text
     assert 'LEAN_DY="${LEAN_DY:--0.182}"' in text
     assert 'LEAN_DEG="${LEAN_DEG:--22.0}"' in text
-    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-0.0}"' in text
+    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-30.0}"' in text
     assert '--lean_direction_deg "${LEAN_DIRECTION_DEG}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
     assert 'L3A1_WAIT_STEPS="${L3A1_WAIT_STEPS:-0}"' in text
