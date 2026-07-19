@@ -26,6 +26,22 @@ class PhaseSpec:
     command: tuple[str, ...]
     count_env: str | None = None
     artifacts: tuple[str, ...] = ()
+    cleanup_artifacts: tuple[str, ...] = ()
+
+
+L2A1_ROLLOUT_DIRS = (
+    "rollouts/libero_object/L2-A1-eb-native-salad-dressing",
+    "rollouts/libero_object/L2-A1-g0-hazard-layout-a",
+    "rollouts/libero_object/L2-A1-g0-hazard-layout-b",
+    "rollouts/libero_object/L2-A1-g0-neutral-layout-a",
+    "rollouts/libero_object/L2-A1-g0-neutral-layout-b",
+    "rollouts/libero_object/L2-A1-g1-safe-layout-a",
+    "rollouts/libero_object/L2-A1-g1-safe-layout-b",
+    "rollouts/libero_object/L2-A1-g1-explained-layout-a",
+    "rollouts/libero_object/L2-A1-g1-explained-layout-b",
+    "rollouts/libero_object/L2-A1-g2-implicit-layout-a",
+    "rollouts/libero_object/L2-A1-g2-implicit-layout-b",
+)
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
@@ -53,6 +69,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_object/L2-A1-g1-explained-layout-a",
             "rollouts/libero_object/L2-A1-g2-implicit-layout-a",
         ),
+        cleanup_artifacts=L2A1_ROLLOUT_DIRS,
     ),
     ("l2a1", "formal"): PhaseSpec(
         command=(
@@ -65,6 +82,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l2a1_semantic_summary.md",
             "experiments/logs/l2a1_semantic_summary.json",
         ),
+        cleanup_artifacts=L2A1_ROLLOUT_DIRS,
     ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
@@ -223,7 +241,8 @@ def build_batch_script(
     env = []
     if spec.count_env:
         env.append(f"export {spec.count_env}={shlex.quote(str(count))}")
-    cleanup = [shell_join(("rm", "-rf", artifact)) for artifact in spec.artifacts]
+    cleanup_targets = tuple(dict.fromkeys((*spec.artifacts, *spec.cleanup_artifacts)))
+    cleanup = [shell_join(("rm", "-rf", artifact)) for artifact in cleanup_targets]
     job_name = f"pc-{scenario}-{phase}"[:64]
     lines = [
         "#!/bin/bash",

@@ -103,6 +103,18 @@ def test_smoke_batch_requests_five_fresh_all_video_trials():
     assert "rm -rf experiments/logs/l1a2_smoke_videos" in script
 
 
+def test_l2a_formal_cleans_all_layouts_without_fetching_trajectories():
+    spec = PHASES[("l2a1", "formal")]
+    script = build_batch_script(
+        _config(), spec, count=10,
+        scenario="l2a1", phase="formal", remote_log="/tmp/formal.out",
+    )
+    assert "export NUM_TRIALS=10" in script
+    assert "rm -rf rollouts/libero_object/L2-A1-g0-hazard-layout-b" in script
+    assert "rm -rf rollouts/libero_object/L2-A1-g2-implicit-layout-a" in script
+    assert not any(path.startswith("rollouts/") for path in spec.artifacts)
+
+
 def test_no_sync_omits_remote_checkout_mutation():
     script = build_sync_script(_config(), "/tmp/jobs", sync=False)
     assert "git fetch" not in script
