@@ -251,9 +251,9 @@ run_bowl_stack_direction_sweep() {
   local out_dir="${LOG_DIR}/l1c1_direction_sweep"
   local state_dir="experiments/robot/libero/tasks/l1c1_direction_sweep"
   mkdir -p "${out_dir}" "${state_dir}"
-  local angle state_path
-  for angle in 0 45 90 135 180 225 270 315; do
-    state_path="${state_dir}/angle_${angle}.hdf5"
+  run_bowl_stack_direction() {
+    local angle="$1"
+    local state_path="${state_dir}/angle_${angle}.hdf5"
     python experiments/robot/libero/tasks/generate_l1c1_initial_states.py \
       --variant task2_bowl_on_plate_risk \
       --output "${state_path}" \
@@ -271,6 +271,18 @@ run_bowl_stack_direction_sweep() {
       --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}" \
       --out_csv "${out_dir}/angle_${angle}.csv" \
       --out_report "${out_dir}/angle_${angle}.md"
+  }
+  local angle gpu_index
+  local -a sweep_pids=()
+  gpu_index=0
+  for angle in 0 45 90 135 180 225 270 315; do
+    (CUDA_VISIBLE_DEVICES="${gpu_index}" run_bowl_stack_direction "${angle}") &
+    sweep_pids+=("$!")
+    gpu_index=$((1 - gpu_index))
+  done
+  local sweep_pid
+  for sweep_pid in "${sweep_pids[@]}"; do
+    wait "${sweep_pid}"
   done
   python experiments/robot/libero/tasks/summarize_l1c1_direction_sweep.py \
     --input_dir "${out_dir}" --out_report "${LOG_DIR}/l1c1_direction_sweep.md"
