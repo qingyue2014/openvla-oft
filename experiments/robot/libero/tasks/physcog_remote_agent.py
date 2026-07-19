@@ -48,6 +48,25 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5",
         ),
     ),
+    ("l1c1", "recalibrate15"): PhaseSpec(
+        command=(
+            "env",
+            "RISK_DEPENDENT_XY_OFFSET=0.015",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c1_task2.sh",
+            "bowl_stack_recalibrate",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1c1_bowl_stack_calibration.md",
+            "experiments/logs/l1c1_bowl_stack_calibration.csv",
+            "experiments/logs/l1c1_safe_reference.md",
+            "experiments/logs/l1c1_safe_reference.csv",
+            "experiments/logs/l1c1_bowl_stack_eb_replay.md",
+            "experiments/logs/l1c1_bowl_stack_eb_replay.csv",
+            "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",

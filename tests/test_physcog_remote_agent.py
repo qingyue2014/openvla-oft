@@ -60,13 +60,16 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
 
 def test_l1c1_registry_exposes_only_paired_recalibration():
     assert set(phase for scenario, phase in PHASES if scenario == "l1c1") == {
-        "recalibrate"
+        "recalibrate", "recalibrate15",
     }
     phase = PHASES[("l1c1", "recalibrate")]
     assert phase.count_env == "NUM_TRIALS"
     assert "RISK_DEPENDENT_XY_OFFSET=0.0125" in phase.command
     assert "bowl_stack_recalibrate" in phase.command
     assert "experiments/logs/l1c1_bowl_stack_eb_replay.md" in phase.artifacts
+    assert "RISK_DEPENDENT_XY_OFFSET=0.015" in PHASES[
+        ("l1c1", "recalibrate15")
+    ].command
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
