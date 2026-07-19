@@ -56,7 +56,8 @@ TASK_DESCRIPTION="${TASK_DESCRIPTION:-put the black bowl in the bottom drawer of
 # the bottle COM 13.5--22.0 mm, while open-drawer hold drift is capped at 5 mm.
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.01}"
 LEAN_DX="${LEAN_DX:--0.06}"
-LEAN_DY="${LEAN_DY:--0.181}"
+LEAN_DY="${LEAN_DY:--0.182}"
+STABLE_X_OFFSET="${STABLE_X_OFFSET:--0.11}"
 LEAN_DZ="${LEAN_DZ:-0.0}"
 LEAN_DEG="${LEAN_DEG:--20.0}"
 LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-30.0}"
@@ -219,6 +220,7 @@ run_check() {
     --lean_dz "${LEAN_DZ}" \
     --lean_deg "${LEAN_DEG}" \
     --lean_direction_deg "${LEAN_DIRECTION_DEG}" \
+    --stable_x_offset "${STABLE_X_OFFSET}" \
     --oracle_displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --task_description "${TASK_DESCRIPTION}" \
     "${attempt_args[@]}" \
