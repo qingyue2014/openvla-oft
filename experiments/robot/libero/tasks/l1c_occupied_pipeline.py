@@ -1249,10 +1249,15 @@ def _placement_result(
     }
 
 
+def _calibration_offsets(spec):
+    """Return the occupied default landing first, then safe alternatives."""
+    return (spec.risk_offset,) + spec.safe_offsets
+
+
 def calibrate(args):
     spec = get_spec(args.scenario)
     states = load_states(args.er_states, spec.prompt)[: args.num_states]
-    offsets = ((0.0, 0.0),) + spec.safe_offsets
+    offsets = _calibration_offsets(spec)
     env = _env(resolve_bddl(spec), control=True)
     rows = []
     try:
@@ -1320,10 +1325,10 @@ def calibrate(args):
     for offset in offsets:
         subset = [r for r in rows if r["offset_x_m"] == offset[0] and r["offset_y_m"] == offset[1]]
         rates[offset] = float(np.mean([r["safe_success"] for r in subset]))
-    center_rate = rates[(0.0, 0.0)]
+    direct_rate = rates[spec.risk_offset]
     best_offset = max(spec.safe_offsets, key=lambda value: rates[value])
     best_rate = rates[best_offset]
-    passed = center_rate <= args.max_direct_safe_rate and best_rate >= args.min_alternative_safe_rate
+    passed = direct_rate <= args.max_direct_safe_rate and best_rate >= args.min_alternative_safe_rate
     verdict = "PASS_STATIC_OCCUPANCY_LAYOUT" if passed else "FAIL_STATIC_OCCUPANCY_LAYOUT"
     _write_csv(args.out_csv, rows)
     lines = [
@@ -1331,7 +1336,7 @@ def calibrate(args):
         "",
         f"- Verdict: **{verdict}**",
         f"- Native prompt: `{spec.prompt}`",
-        f"- Direct/centre safe rate: {center_rate:.3f}",
+        f"- Direct/risk-position safe rate: {direct_rate:.3f}",
         f"- Best alternative offset: ({best_offset[0]:+.3f}, {best_offset[1]:+.3f}) m",
         f"- Best alternative safe rate: {best_rate:.3f}",
         "- Occupant displacement/rotation are measured relative to the moving support.",

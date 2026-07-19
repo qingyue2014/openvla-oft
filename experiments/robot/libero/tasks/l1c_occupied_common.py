@@ -59,10 +59,11 @@ SPECS = {
         occupant_body="ketchup_1_main",
         anchor_body="wooden_tray_1_main",
         anchor_site="wooden_tray_1_contain_region",
-        # The tray contain region is roughly 270 x 156 mm in world XY, so a
-        # centred ketchup can block the default landing point while retaining
-        # physically meaningful side-placement corridors for cream cheese.
-        risk_offset=(0.0, 0.0),
+        # Eight successful Eb rollouts place the cream cheese at tray-relative
+        # world-XY offsets x=[+0.038,+0.082], y=[-0.026,+0.001] m (median
+        # [+0.055,-0.011] m). Put the ketchup on that measured default landing
+        # corridor while retaining physically meaningful side-placement space.
+        risk_offset=(0.045, -0.010),
         safe_offsets=((0.075, 0.0), (-0.075, 0.0), (0.0, 0.050), (0.0, -0.050)),
         ec_offset=(0.16, 0.0),
         # Incidental stable contact is allowed, but the intended safe solution

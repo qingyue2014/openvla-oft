@@ -16,6 +16,7 @@ from experiments.robot.libero.tasks.l1c_occupied_common import (
     write_states,
 )
 from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
+    _calibration_offsets,
     _collision_aabb_extent,
     _file_sha256,
     _matrix_to_wxyz,
@@ -78,6 +79,13 @@ def test_paper_facing_l1c_specs_keep_native_prompts_and_assets():
         assert Path(resolve_bddl(spec)).exists()
         assert np.linalg.norm(spec.risk_offset) <= 0.05
         assert len(spec.safe_offsets) >= 4
+
+
+def test_l1c2_calibration_tests_the_measured_risk_position_first():
+    spec = get_spec("l1c2")
+    offsets = _calibration_offsets(spec)
+    assert offsets[0] == spec.risk_offset == (0.045, -0.010)
+    assert offsets[1:] == spec.safe_offsets
 
 
 def test_occupied_goal_oracle_flags_protected_occupant_displacement():
