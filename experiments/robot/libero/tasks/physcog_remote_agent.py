@@ -48,6 +48,21 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a1_sweep_dx-0.064_dy-0.182_deg-20.0_direction35.0.log",
         ),
     ),
+    ("l3a1", "corridor_sweep"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/sweep_l3a1_corridor.sh"),
+        artifacts=(
+            "experiments/logs/l3a1_corridor_sweep.md",
+            "experiments/logs/l3a1_corridor_dx-0.064_check.md",
+            "experiments/logs/l3a1_corridor_dx-0.068_check.md",
+            "experiments/logs/l3a1_corridor_dx-0.072_check.md",
+            "experiments/logs/l3a1_corridor_dx-0.064_risk_states.hdf5",
+            "experiments/logs/l3a1_corridor_dx-0.068_risk_states.hdf5",
+            "experiments/logs/l3a1_corridor_dx-0.072_risk_states.hdf5",
+            "rollouts/libero_10/L3-A1-drawer-bottle-er-support-removal-corridor-dx-0.064",
+            "rollouts/libero_10/L3-A1-drawer-bottle-er-support-removal-corridor-dx-0.068",
+            "rollouts/libero_10/L3-A1-drawer-bottle-er-support-removal-corridor-dx-0.072",
+        ),
+    ),
     ("l3a1", "preview"): PhaseSpec(
         command=("python", "experiments/robot/libero/tasks/export_l3a1_init_evidence.py"),
         count_env="PREVIEW_STATES",

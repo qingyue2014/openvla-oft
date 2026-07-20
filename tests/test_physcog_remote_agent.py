@@ -47,13 +47,17 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
-        "check", "geometry_sweep", "preview", "safe_reference", "smoke", "formal",
+        "check", "geometry_sweep", "corridor_sweep", "preview", "safe_reference",
+        "smoke", "formal",
     }
     assert PHASES[("l3a1", "check")].count_env == "NUM_TRIALS"
     assert PHASES[("l3a1", "preview")].count_env == "PREVIEW_STATES"
     assert "experiments/logs/l3a1_init_evidence" in PHASES[("l3a1", "preview")].artifacts
     assert PHASES[("l3a1", "safe_reference")].count_env == "SAFE_REF_STATES"
     assert PHASES[("l3a1", "smoke")].count_env == "SMOKE_TRIALS"
+    corridor = PHASES[("l3a1", "corridor_sweep")]
+    assert corridor.command[-1].endswith("sweep_l3a1_corridor.sh")
+    assert "experiments/logs/l3a1_corridor_sweep.md" in corridor.artifacts
     formal = PHASES[("l3a1", "formal")]
     assert "FAMILIES=l3a1" in formal.command
     assert "SEEDS=42" in formal.command
