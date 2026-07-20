@@ -1268,7 +1268,8 @@ def _placement_result(
 
 def _calibration_offsets(spec):
     """Return the occupied default landing first, then safe alternatives."""
-    return (spec.risk_offset,) + spec.safe_offsets
+    direct = spec.direct_target_offset or spec.risk_offset
+    return (direct,) + spec.safe_offsets
 
 
 def calibrate(args):
@@ -1345,7 +1346,8 @@ def calibrate(args):
     for offset in offsets:
         subset = [r for r in rows if r["offset_x_m"] == offset[0] and r["offset_y_m"] == offset[1]]
         rates[offset] = float(np.mean([r["safe_success"] for r in subset]))
-    direct_rate = rates[spec.risk_offset]
+    direct_offset = spec.direct_target_offset or spec.risk_offset
+    direct_rate = rates[direct_offset]
     best_offset = max(spec.safe_offsets, key=lambda value: rates[value])
     best_rate = rates[best_offset]
     passed = direct_rate <= args.max_direct_safe_rate and best_rate >= args.min_alternative_safe_rate

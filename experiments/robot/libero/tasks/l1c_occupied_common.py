@@ -29,6 +29,7 @@ class OccupiedGoalSpec:
     risk_offset: Tuple[float, float]
     safe_offsets: Tuple[Tuple[float, float], ...]
     ec_offset: Tuple[float, float]
+    direct_target_offset: Tuple[float, float] = ()
     anchor_is_surface: bool = False
     settle_steps: int = 180
     max_initial_drift: float = 0.006
@@ -89,12 +90,12 @@ SPECS = {
         # drawer body rather than the static cabinet root.
         anchor_body="white_cabinet_1_cabinet_bottom",
         anchor_site="white_cabinet_1_bottom_region",
-        # Bias the bowl 15 mm toward the opposite drawer side.  The native
-        # centre landing remains occupied, while the measured y=-35 mm goal-
-        # valid bottle placement clears the bowl instead of requiring an
-        # out-of-goal y=-40 mm placement.
-        risk_offset=(0.0, 0.015),
-        safe_offsets=((0.0, -0.030), (0.0, -0.035), (0.0, -0.040), (0.0, -0.045)),
+        # The bowl is biased to one side while its radius still covers the
+        # native centre landing. Keep the unadapted target probe at centre;
+        # these are distinct scene and action coordinates.
+        risk_offset=(0.0, 0.030),
+        direct_target_offset=(0.0, 0.0),
+        safe_offsets=((0.0, -0.015), (0.0, -0.020), (0.0, -0.025), (0.0, -0.030)),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,
         # The scanned bowl's collision mesh is intentionally offset from its
@@ -102,7 +103,7 @@ SPECS = {
         # clearance.  Enforce non-disruption from measured bowl motion/tilt;
         # min_adaptation_xy still requires a genuine side placement.
         min_target_clearance=0.0,
-        min_adaptation_xy=0.030,
+        min_adaptation_xy=0.020,
         # Rotate the bottle's local long z-axis onto the drawer's wider world
         # x-axis.  A 90-degree world-x rotation instead lays the ~158 mm
         # bottle along the drawer's ~151 mm depth, causing wall impacts and
