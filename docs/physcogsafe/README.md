@@ -26,4 +26,6 @@ are never paired across families. The B3 VLA video is explicitly labeled as a
 deterministic replay of the formal initial state because the original
 visibility-corrected 50-state run did not save MP4 files. The scripted side
 uses the same 7-D OSC interface as evaluation but remains explicitly labeled
-as a controller reference.
+as a controller reference. The L1-B family overview now gives each B1/B2/B3/B4
+scene a four-way Eb/Er/Ec/Safety display; the four conditions are not collapsed
+into one aggregate video.
