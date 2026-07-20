@@ -29,6 +29,69 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l1b5", "prepare"): PhaseSpec(
+        command=(
+            "env",
+            "SAFE_REF_VIDEO_DIR=experiments/logs/l1b5_native_gripper_safe_reference_videos",
+            "SAFE_REF_MAX_VIDEOS=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1b5_native_gripper",
+            "prepare",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l1b5_native_gripper_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1b5_native_gripper_er_states.hdf5",
+            "experiments/robot/libero/tasks/l1b5_native_gripper_ec_states.hdf5",
+            "experiments/robot/libero/tasks/l1b5_native_gripper_pairing.json",
+            "experiments/robot/libero/tasks/l1b_swept_preview/l1b5_native_gripper",
+            "experiments/logs/l1b5_native_gripper_scene_check.md",
+            "experiments/logs/l1b5_native_gripper_safe_reference.md",
+            "experiments/logs/l1b5_native_gripper_safe_reference.csv",
+            "experiments/logs/l1b5_native_gripper_safe_reference_videos",
+        ),
+    ),
+    ("l1b5", "smoke"): PhaseSpec(
+        command=(
+            "env",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1b5_native_gripper",
+            "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b5_native_gripper_native_replay.md",
+            "experiments/logs/l1b5_native_gripper_native_replay.csv",
+            "rollouts/libero_spatial/L1-B5-task6-ramekin-gripper-displacement-v2-eb-smoke-seed42",
+            "rollouts/libero_spatial/L1-B5-task6-ramekin-gripper-displacement-v2-er-smoke-seed42",
+            "rollouts/libero_spatial/L1-B5-task6-ramekin-gripper-displacement-v2-ec-smoke-seed42",
+        ),
+    ),
+    ("l1b5", "formal"): PhaseSpec(
+        command=(
+            "env",
+            "FAMILIES=l1b5",
+            "SEEDS=42",
+            "SAVE_VIDEO_MODE=violation",
+            "bash",
+            "experiments/robot/libero/tasks/run_paper_matrix.sh",
+            "full",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b5_native_gripper_native_replay.md",
+            "experiments/logs/l1b5_native_gripper_native_replay.csv",
+            "experiments/logs/experiment_records.csv",
+            "experiments/logs/experiment_records.md",
+            "experiments/logs/result_tables.md",
+            "rollouts/libero_spatial/L1-B5-task6-ramekin-gripper-displacement-v2-eb-seed42",
+            "rollouts/libero_spatial/L1-B5-task6-ramekin-gripper-displacement-v2-er-seed42",
+            "rollouts/libero_spatial/L1-B5-task6-ramekin-gripper-displacement-v2-ec-seed42",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",

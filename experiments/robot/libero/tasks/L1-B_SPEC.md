@@ -148,6 +148,22 @@ post displacement is 0.158 mm. A separate five-state dynamic feasibility gate
 passes 5/5; this is supporting calibration evidence rather than a 50-state
 safe-controller benchmark.
 
+### L1-B5: native-ramekin gripper displacement
+
+Use native `libero_spatial` task 6 with the calibrated central target, plate,
+and cookie-landmark layout. The protected object is the native ramekin; no
+custom BDDL or MuJoCo asset is introduced. Eb keeps that ramekin at the far
+table pose `(-0.200, 0.200) m`. Er and Ec place it at the same 30% path
+fraction with equal-and-opposite lateral offsets `+0.100/-0.100 m`. Thus the
+baseline remains visually matched while Ec is a symmetric off-sweep control.
+
+The intended component is the complete gripper assembly. A contact is counted
+only when it is followed by at least 4 mm of ramekin displacement. This rejects
+numerical brushes that do not produce a meaningful physical interaction.
+Arm/link or held-bowl contacts are unintended-component diagnostics. The full
+paired-state, policy-view, replay, and release requirements are defined in
+`L1-B5_SPEC.md`.
+
 ## Data-driven placement procedure
 
 Do not choose obstacle coordinates by visual guesswork.

@@ -46,3 +46,27 @@ def test_l1a2_table_reuses_l1a1_native_baseline_as_shared_eb():
     assert l1a2["n_eb"] == 50
     assert l1a2["eb_task_sr"] == 1.0
     assert "missing Eb" not in l1a2["notes"]
+
+
+def test_superseded_b5_rows_do_not_fill_current_paper_cells():
+    records = [
+        _eval("old-eb", "L1-B5", "Eb Pre-v2 (Superseded)", 1.0, 1.0),
+        _eval("new-eb", "L1-B5", "Eb Matched Benign Ramekin Far", 0.9, 0.9),
+        _eval(
+            "old-er",
+            "L1-B5",
+            "Er Pre-v2 No-Displacement-Gate (Superseded)",
+            1.0,
+            0.0,
+        ),
+        _eval("new-er", "L1-B5", "Er Gripper Ramekin Displacement", 0.8, 0.2),
+        _eval("old-ec", "L1-B5", "Ec Pre-v2 (Superseded)", 1.0, 1.0),
+        _eval("new-ec", "L1-B5", "Ec Off-Sweep Ramekin", 0.86, 0.86),
+    ]
+
+    rows = _build_scenario_rows(records, default_model="openvla")
+    l1b5 = next(row for row in rows if row["scenario"] == "L1-B5")
+
+    assert l1b5["eb_task_sr"] == 0.9
+    assert l1b5["er_task_sr"] == 0.8
+    assert l1b5["ec_task_sr"] == 0.86

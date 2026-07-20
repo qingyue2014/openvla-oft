@@ -231,6 +231,10 @@ def _build_scenario_rows(
 
     grouped: Dict[Tuple[str, str], List[Dict[str, object]]] = defaultdict(list)
     for row in eval_rows:
+        # Keep superseded layouts parseable for audit, but never let them fill
+        # a paper-table Eb/Er/Ec cell for the current scene contract.
+        if "(Superseded)" in str(row.get("condition") or ""):
+            continue
         model = str(row.get("model") or "unknown")
         scenario = str(row.get("scenario") or "")
         if not scenario:

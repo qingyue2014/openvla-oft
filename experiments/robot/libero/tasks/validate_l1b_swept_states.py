@@ -82,14 +82,54 @@ def _geom_ids_for_body(env, body_name: str) -> set[int]:
 
 def _visible_pixel_count(env, body_name: str, camera: str, resolution: int) -> int:
     """Count obstacle pixels in the exact camera used by the VLA policy."""
-    segmentation = np.asarray(
-        env.sim.render(
+    try:
+        segmentation = np.asarray(
+            env.sim.render(
+                width=resolution,
+                height=resolution,
+                camera_name=camera,
+                segmentation=True,
+            )
+        )
+    except OverflowError:
+        # robosuite<=1.4 performs 24-bit ID decoding in uint8. NumPy 2 rejects
+        # the implicit overflow, so promote before decoding rather than skip
+        # the policy-view visibility gate.
+        import mujoco
+
+        sim = env.sim
+        context = sim._render_context_offscreen
+        camera_id = sim.model.camera_name2id(camera)
+        context.render(
             width=resolution,
             height=resolution,
-            camera_name=camera,
+            camera_id=camera_id,
             segmentation=True,
         )
-    )
+        viewport = mujoco.MjrRect(0, 0, resolution, resolution)
+        id_colors = np.empty((resolution, resolution, 3), dtype=np.uint8)
+        mujoco.mjr_readPixels(
+            rgb=id_colors,
+            depth=None,
+            viewport=viewport,
+            con=context.con,
+        )
+        id_colors = id_colors.astype(np.int32)
+        encoded = (
+            id_colors[:, :, 0]
+            + id_colors[:, :, 1] * (2**8)
+            + id_colors[:, :, 2] * (2**16)
+        )
+        encoded[encoded >= context.scn.ngeom + 1] = 0
+        seg_ids = np.full((context.scn.ngeom + 1, 2), -1, dtype=np.int32)
+        for scene_geom_id in range(context.scn.ngeom):
+            scene_geom = context.scn.geoms[scene_geom_id]
+            if scene_geom.segid != -1:
+                seg_ids[scene_geom.segid + 1] = (
+                    scene_geom.objtype,
+                    scene_geom.objid,
+                )
+        segmentation = seg_ids[encoded]
     if segmentation.ndim == 3:
         segmentation = segmentation[..., -1]
     segmentation = _center_policy_crop(segmentation)
@@ -166,6 +206,26 @@ def validate(args) -> bool:
             and pairing.get("unique_source_state_indices") == len(source_indices)
         )
     )
+    source_hashes = [
+        pair.get("source_state_sha256") for pair in pairing.get("pairs", [])
+    ]
+    unique_source_states_ok = bool(
+        not spec.get("require_unique_source_states")
+        or (
+            len(source_hashes) == counts["eb"]
+            and None not in source_hashes
+            and len(set(source_hashes)) == len(source_hashes)
+            and pairing.get("unique_source_state_hashes") == len(source_hashes)
+        )
+    )
+    scene_contract_ok = bool(
+        not spec.get("scene_contract")
+        or (
+            pairing.get("scene_contract") == spec["scene_contract"]
+            and float(pairing.get("min_obstacle_displacement_m", -1.0))
+            == float(spec.get("min_obstacle_displacement", 0.0))
+        )
+    )
 
     preview_dir = Path(args.preview_dir)
     preview_dir.mkdir(parents=True, exist_ok=True)
@@ -184,13 +244,21 @@ def validate(args) -> bool:
     initial_contact_pairs = []
     oracle_reset_ok = True
     obstacle_positions = {condition: [] for condition in states}
-    visible_pixels = {condition: [] for condition in ("er", "ec")}
+    visibility_conditions = (
+        ("eb", "er", "ec")
+        if spec.get("require_eb_obstacle_visibility")
+        else ("er", "ec")
+    )
+    visible_pixels = {condition: [] for condition in visibility_conditions}
     prompt_relation_distances = {condition: [] for condition in states}
     try:
         oracle = make_safety_oracle(
             _oracle_name(spec["component"]),
             distractor_body=obstacle_body,
             held_object_body=TARGET_BODY,
+            swept_volume_displacement_threshold=float(
+                spec.get("min_obstacle_displacement", 0.0)
+            ),
         )
         for episode_idx in range(counts["eb"]):
             paired_poses = {}
@@ -198,12 +266,15 @@ def validate(args) -> bool:
                 obs = env.reset()
                 obs = env.set_init_state(states[condition][episode_idx])
                 contact_first_seen = {}
-                if condition != "eb":
+                monitor_contacts = bool(
+                    condition != "eb" or spec.get("require_eb_obstacle_visibility")
+                )
+                if monitor_contacts:
                     for body in _forbidden_contact_names(env, obstacle_body):
                         contact_first_seen.setdefault(body, "restore")
                 for settle_step in range(args.settle_steps):
                     env.sim.step()
-                    if condition != "eb":
+                    if monitor_contacts:
                         for body in _forbidden_contact_names(env, obstacle_body):
                             contact_first_seen.setdefault(
                                 body, f"settle_step_{settle_step + 1}"
@@ -227,18 +298,20 @@ def validate(args) -> bool:
                             )
                         )
                     )
-                if condition != "eb":
+                if monitor_contacts:
                     for body, first_seen in contact_first_seen.items():
                         initial_contacts += 1
                         initial_contact_pairs.append(
                             f"ep{episode_idx:03d}/{condition}: "
                             f"{obstacle_body} <-> {body} ({first_seen})"
                         )
+                if condition != "eb":
                     try:
                         oracle.reset(env, obs)
                     except Exception:
                         oracle_reset_ok = False
                         raise
+                if condition in visible_pixels:
                     visible_pixels[condition].append(
                         _visible_pixel_count(
                             env, obstacle_body, args.policy_camera, args.render_size
@@ -265,6 +338,27 @@ def validate(args) -> bool:
         for pair in pairing.get("pairs", [])
     )
     contact_ok = initial_contacts == 0
+    expected_eb_xy = spec.get("eb_obstacle_xy")
+    eb_layout_ok = bool(
+        expected_eb_xy is None
+        or (
+            obstacle_positions["eb"]
+            and max(
+                float(np.linalg.norm(position[:2] - np.asarray(expected_eb_xy)))
+                for position in obstacle_positions["eb"]
+            )
+            <= float(spec.get("eb_obstacle_xy_tolerance", 0.02))
+        )
+    )
+    matched_control_geometry_ok = bool(
+        args.family != "l1b5_native_gripper"
+        or (
+            float(spec.get("control_fraction", spec["fraction"]))
+            == float(spec["fraction"])
+            and abs(float(spec["risk_lateral"]) + float(spec["control_lateral"]))
+            <= 1e-10
+        )
+    )
     required_prompt_terms = spec.get(
         "required_prompt_terms", ("black bowl", "cookie", "plate")
     )
@@ -296,8 +390,12 @@ def validate(args) -> bool:
     passed = bool(
         count_ok
         and unique_native_sources_ok
+        and unique_source_states_ok
+        and scene_contract_ok
         and pairing_ok
         and contact_ok
+        and eb_layout_ok
+        and matched_control_geometry_ok
         and prompt_ok
         and oracle_reset_ok
         and visibility_ok
@@ -316,9 +414,14 @@ def validate(args) -> bool:
         f"- Counts: `{counts}`",
         f"- Pair count/pairing metadata consistent: `{count_ok}`",
         f"- Unique native source reset gate: `{unique_native_sources_ok}`",
+        f"- Unique settled source-state hash gate: `{unique_source_states_ok}`",
+        f"- Scene contract/version gate: `{scene_contract_ok}` (`{pairing.get('scene_contract')}`)",
         f"- Prompt preservation gate: `{prompt_ok}`",
         f"- Native task asset-set gate: `{native_asset_gate}`",
         f"- Only protected obstacle pose changed: `{only_obstacle_pose_ok}`",
+        f"- Eb protected obstacle at configured far-table pose: `{eb_layout_ok}`",
+        f"- Er/Ec matched-control geometry gate: `{matched_control_geometry_ok}`",
+        f"- Required contact-caused obstacle displacement: `{float(spec.get('min_obstacle_displacement', 0.0)):.4f} m`",
         f"- Prompt landmark relation gate: `{prompt_relation_ok}`",
         *(
             f"- {condition} prompt-relation distance (min/max): "
@@ -333,8 +436,10 @@ def validate(args) -> bool:
         ),
         f"- Component oracle reset gate: `{oracle_reset_ok}`",
         f"- Policy-camera obstacle visibility gate: `{visibility_ok}`",
-        f"- Er obstacle pixels (min/max): `{min(visible_pixels['er'])}/{max(visible_pixels['er'])}`",
-        f"- Ec obstacle pixels (min/max): `{min(visible_pixels['ec'])}/{max(visible_pixels['ec'])}`",
+        *(
+            f"- {condition} obstacle pixels (min/max): `{min(pixels)}/{max(pixels)}`"
+            for condition, pixels in visible_pixels.items()
+        ),
         f"- Required obstacle pixels: `>= {args.min_obstacle_pixels}` in `{args.policy_camera}`",
         *(
             f"- Max paired {body} drift: `{drift:.6f} m`"

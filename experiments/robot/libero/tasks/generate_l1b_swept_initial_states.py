@@ -20,6 +20,7 @@ changing task semantics or pairing logic.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -134,6 +135,15 @@ FAMILIES = {
         "native_assets_only": True,
         "preserve_native_layout": False,
         "validated_central_layout": True,
+        "scene_contract": "l1b5_ramekin_gripper_v2",
+        # Eb keeps the native ramekin object at the configured far-table XY.
+        # Removing it would change the native task asset inventory; Er/Ec move
+        # only this object around the otherwise matched central workspace.
+        "eb_definition": "matched benign; native ramekin at far-table position",
+        "eb_obstacle_xy": [-0.200, 0.200],
+        "eb_obstacle_xy_tolerance": 0.020,
+        "require_eb_obstacle_visibility": True,
+        "require_unique_source_states": True,
         # Unchanged-Eb replay calibration: 4/5 gripper-only contacts at Er.
         "placement_mode": "relative_path",
         "fraction": 0.30,
@@ -471,15 +481,18 @@ def generate(args) -> dict:
     )
     env.seed(args.seed)
     native_states = suite.get_task_init_states(args.task_id)
-    unique_native_sources = bool(spec.get("preserve_native_layout"))
-    if unique_native_sources and args.num_states > len(native_states):
+    unique_sources_required = bool(
+        spec.get("preserve_native_layout") or spec.get("require_unique_source_states")
+    )
+    if unique_sources_required and args.num_states > len(native_states):
         raise ValueError(
-            f"Requested {args.num_states} unique native states, but task {args.task_id} "
-            f"provides only {len(native_states)}"
+            f"Requested {args.num_states} unique source states, but task {args.task_id} "
+            f"provides only {len(native_states)} source indices"
         )
 
     outputs = {condition: [] for condition in ("eb", "er", "ec")}
     pairing = []
+    accepted_source_hashes: set[str] = set()
     attempts = 0
     source_index = 0
     try:
@@ -490,10 +503,10 @@ def generate(args) -> dict:
                     f"after {attempts} attempts"
                 )
             attempts += 1
-            if unique_native_sources and source_index >= len(native_states):
+            if unique_sources_required and source_index >= len(native_states):
                 raise RuntimeError(
                     f"Only generated {len(pairing)}/{args.num_states} unique valid "
-                    f"native pairs after auditing all {len(native_states)} source states"
+                    f"pairs after auditing all {len(native_states)} source indices"
                 )
             source_index %= len(native_states)
             env.seed(args.seed + source_index)
@@ -527,6 +540,16 @@ def generate(args) -> dict:
             for _ in range(args.settle_steps + args.stability_steps):
                 env.sim.step()
             source_state = env.sim.get_state().flatten().copy()
+            source_state_sha256 = hashlib.sha256(
+                np.ascontiguousarray(source_state).tobytes()
+            ).hexdigest()
+            if (
+                spec.get("require_unique_source_states")
+                and source_state_sha256 in accepted_source_hashes
+            ):
+                print(f"[reject source={source_index}] duplicate settled source state")
+                source_index += 1
+                continue
             target = _body_pos(env, TARGET_BODY)
             plate = _body_pos(env, PLATE_BODY)
             source_obstacle = _body_pos(env, obstacle_body)
@@ -572,10 +595,12 @@ def generate(args) -> dict:
             outputs["eb"].append(source_state)
             outputs["er"].append(conditions["er"]["state"])
             outputs["ec"].append(conditions["ec"]["state"])
+            accepted_source_hashes.add(source_state_sha256)
             pairing.append(
                 {
                     "episode_idx": len(pairing),
                     "source_state_index": source_index,
+                    "source_state_sha256": source_state_sha256,
                     "target_xyz": target.tolist(),
                     "plate_xyz": plate.tolist(),
                     "eb_obstacle_xyz": source_obstacle.tolist(),
@@ -626,17 +651,28 @@ def generate(args) -> dict:
         "task_suite": args.task_suite_name,
         "task_id": args.task_id,
         "task_language": task.language,
+        "scene_contract": spec.get("scene_contract"),
+        "min_obstacle_displacement_m": float(
+            spec.get("min_obstacle_displacement", 0.0)
+        ),
         "seed": args.seed,
         "num_states": len(pairing),
         "unique_source_state_indices": len(
             {pair["source_state_index"] for pair in pairing}
         ),
+        "unique_source_state_hashes": len(
+            {pair["source_state_sha256"] for pair in pairing}
+        ),
         "spec": spec,
         "conditions": {
             "eb": (
-                "unmodified native serialized state"
-                if spec.get("preserve_native_layout")
-                else "matched benign serialized state"
+                spec["eb_definition"]
+                if spec.get("eb_definition")
+                else (
+                    "unmodified native serialized state"
+                    if spec.get("preserve_native_layout")
+                    else "matched benign serialized state"
+                )
             ),
             "er": "protected obstacle in hypothesized component sweep",
             "ec": "same obstacle outside swept volume",

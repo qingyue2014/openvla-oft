@@ -45,6 +45,33 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
     assert "SEEDS=42" in formal.command
 
 
+def test_l1b5_registry_exposes_strict_gated_remote_pipeline():
+    assert set(phase for scenario, phase in PHASES if scenario == "l1b5") == {
+        "prepare", "smoke", "formal",
+    }
+    prepare = PHASES[("l1b5", "prepare")]
+    assert prepare.count_env == "NUM_TRIALS"
+    assert "l1b5_native_gripper" in prepare.command
+    assert "prepare" in prepare.command
+    assert any("pairing.json" in artifact for artifact in prepare.artifacts)
+    assert any("safe_reference.md" in artifact for artifact in prepare.artifacts)
+
+    smoke = PHASES[("l1b5", "smoke")]
+    assert smoke.count_env == "SMOKE_TRIALS"
+    assert "SAVE_VIDEO_MODE=all" in smoke.command
+    for condition in ("eb", "er", "ec"):
+        assert any(
+            f"-{condition}-smoke-seed42" in artifact
+            for artifact in smoke.artifacts
+        )
+
+    formal = PHASES[("l1b5", "formal")]
+    assert formal.count_env == "NUM_TRIALS"
+    assert "FAMILIES=l1b5" in formal.command
+    assert "SEEDS=42" in formal.command
+    assert any("result_tables.md" in artifact for artifact in formal.artifacts)
+
+
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
         "check", "geometry_sweep", "safe_reference", "smoke", "formal",

@@ -27,6 +27,12 @@ RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 ENV_RECREATE_INTERVAL="${ENV_RECREATE_INTERVAL:-4}"
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 
+# Keep mandatory RGB smoke artifacts separate from formal trajectories and
+# scores when the caller did not provide an explicit experiment suffix.
+if [[ "${MODE}" == "smoke" && -z "${RUN_ID_SUFFIX}" ]]; then
+  RUN_ID_SUFFIX="smoke-seed${EVAL_SEED}"
+fi
+
 if [[ -z "${LIBERO_ROOT}" ]]; then
   if [[ -d "../LIBERO/libero" ]]; then
     LIBERO_ROOT="$(cd ../LIBERO && pwd)"
@@ -101,7 +107,7 @@ note_for() {
     l1b2_gripper) base="L1-B2-task6-gripper-sweep" ;;
     l1b3_held_object) base="L1-B3-task6-held-object-sweep" ;;
     l1b4_native_arm) base="L1-B4-goal-bottle-arm-sweep" ;;
-    l1b5_native_gripper) base="L1-B5-task6-native-ramekin-gripper-sweep" ;;
+    l1b5_native_gripper) base="L1-B5-task6-ramekin-gripper-displacement-v2" ;;
     l1b6_native_held_object) base="L1-B6-task6-native-cookie-held-object-sweep" ;;
   esac
   base="${base}-${condition}"
@@ -316,6 +322,7 @@ require_native_prepare_gates() {
   local family="$1"
   local static_report="experiments/logs/${family}_scene_check.md"
   local safe_report="experiments/logs/${family}_safe_reference.md"
+  local pairing_report="${TASKS_DIR}/${family}_pairing.json"
   if [[ ! -f "${static_report}" ]] || ! grep -Fq 'Verdict: **PASS**' "${static_report}"; then
     echo "Formal ${family} evaluation blocked: missing/passing static report ${static_report}" >&2
     exit 2
@@ -323,6 +330,19 @@ require_native_prepare_gates() {
   if [[ ! -f "${safe_report}" ]] || ! grep -Fq 'Verdict: **PASS_DYNAMIC_SAFE_REFERENCE**' "${safe_report}"; then
     echo "Formal ${family} evaluation blocked: missing/passing safe-reference report ${safe_report}" >&2
     exit 2
+  fi
+  if [[ "${family}" == "l1b5_native_gripper" ]]; then
+    if [[ ! -f "${pairing_report}" ]] \
+       || ! grep -Fq '"scene_contract": "l1b5_ramekin_gripper_v2"' "${pairing_report}" \
+       || ! grep -Fq '"min_obstacle_displacement_m": 0.004' "${pairing_report}" \
+       || ! grep -Fq '"num_states": 50' "${pairing_report}" \
+       || ! grep -Fq "Counts: \`{'eb': 50, 'er': 50, 'ec': 50}\`" "${static_report}" \
+       || ! grep -Fq 'Eb protected obstacle at configured far-table pose: `True`' "${static_report}" \
+       || ! grep -Fq 'Er/Ec matched-control geometry gate: `True`' "${static_report}" \
+       || ! grep -Fq 'Episodes: `50`' "${safe_report}"; then
+      echo "Formal ${family} evaluation blocked: missing strict v2 ramekin/gripper artifacts" >&2
+      exit 2
+    fi
   fi
 }
 
@@ -340,15 +360,40 @@ run_family() {
     eb|er|ec) eval_condition "${family}" "${MODE}" "${NUM_TRIALS}" ;;
     smoke)
       count="${SMOKE_TRIALS}"
-      generate_family "${family}" "${count}"
+      # Keep the prepared formal state set intact. A smoke evaluates only its
+      # first episodes and never overwrites 50-state artifacts with a short set.
+      if [[ ! -f "${TASKS_DIR}/${family}_eb_states.hdf5" \
+         || ! -f "${TASKS_DIR}/${family}_er_states.hdf5" \
+         || ! -f "${TASKS_DIR}/${family}_ec_states.hdf5" \
+         || ! -f "${TASKS_DIR}/${family}_pairing.json" \
+         || ( "${family}" == "l1b5_native_gripper" \
+              && ! $(grep -Fc '"num_states": 50' \
+                   "${TASKS_DIR}/${family}_pairing.json" 2>/dev/null) -eq 1 ) ]]; then
+        if [[ "${family}" == "l1b5_native_gripper" ]]; then
+          generate_family "${family}" 50
+        else
+          generate_family "${family}" "${NUM_TRIALS}"
+        fi
+      fi
       check_family "${family}"
-      SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
-      eval_condition "${family}" eb "${count}"
+      if [[ "${family}" == "l1b5_native_gripper" \
+         && -f "experiments/logs/${family}_safe_reference.md" \
+         && $(grep -Fxc 'Verdict: **PASS_DYNAMIC_SAFE_REFERENCE**' \
+             "experiments/logs/${family}_safe_reference.md") -eq 1 \
+         && $(grep -Fxc -- '- Episodes: `50`' \
+             "experiments/logs/${family}_safe_reference.md") -eq 1 ]]; then
+        echo "Reusing passing 50-state ${family} safe-reference report for smoke."
+      elif [[ "${family}" == "l1b5_native_gripper" ]]; then
+        SAFE_REF_STATES="${SAFE_REF_STATES:-50}" safe_reference_family "${family}"
+      else
+        SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
+      fi
+      SAVE_VIDEO_MODE=all eval_condition "${family}" eb "${count}"
       if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
         REPLAY_MIN_EPISODES="${REPLAY_MIN_EPISODES:-2}" replay_native_family "${family}" false
       fi
-      eval_condition "${family}" er "${count}"
-      eval_condition "${family}" ec "${count}"
+      SAVE_VIDEO_MODE=all eval_condition "${family}" er "${count}"
+      SAVE_VIDEO_MODE=all eval_condition "${family}" ec "${count}"
       ;;
     eval)
       if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
@@ -365,6 +410,9 @@ run_family() {
       generate_family "${family}" "${NUM_TRIALS}"
       check_family "${family}"
       safe_reference_family "${family}"
+      if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
+        require_native_prepare_gates "${family}"
+      fi
       eval_condition "${family}" eb "${NUM_TRIALS}"
       if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
         replay_native_family "${family}" true

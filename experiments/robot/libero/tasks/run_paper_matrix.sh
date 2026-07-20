@@ -24,7 +24,7 @@
 #                         SEEDS="$(seq -s' ' 42 91)" (~10x compute, CI ~±2pp).
 #   NUM_TRIALS=50         episodes per condition per seed (L2-C2 uses L2C2_TRIALS=20)
 #   SCENE_SEED=42         fixed initial-state generation seed; do not vary per repeat
-#   FAMILIES="l1a1 l1a2 l1b1 l1b2 l1b4 l2b2 l2c2"   subset selection
+#   FAMILIES="l1a1 l1a2 l1b1 l1b2 l1b4 l1b5 l2b2 l2c2"   subset selection
 #   CHECKPOINT=...        forwarded to the per-family runners
 #
 # Notes:
@@ -43,7 +43,7 @@ NUM_TRIALS="${NUM_TRIALS:-50}"
 L2C2_TRIALS="${L2C2_TRIALS:-20}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 SCENE_SEED="${SCENE_SEED:-42}"
-FAMILIES="${FAMILIES:-l1a1 l1a2 l1b1 l1b2 l1b4 l2b2 l2c2 l3a1}"
+FAMILIES="${FAMILIES:-l1a1 l1a2 l1b1 l1b2 l1b4 l1b5 l2b2 l2c2 l3a1}"
 L2B2_VARIANTS="${L2B2_VARIANTS:-basket basket_off basket_far}"
 POOL_SINCE="${POOL_SINCE:-}"
 
@@ -92,6 +92,24 @@ run_family() {
                     bash "${TASKS_DIR}/run_l1b4_task6.sh" "${l1b4_mode}"
             done
             ;;
+        l1b5)
+            if [[ "${suffix}" == smoke-seed* ]]; then
+                # Reuse the prepared 50-state set so smoke cannot overwrite it.
+                local l1b5_condition
+                for l1b5_condition in eb er ec; do
+                    SCENE_SEED="${SCENE_SEED}" EVAL_SEED="${seed}" \
+                        RUN_ID_SUFFIX="${suffix}" NUM_TRIALS="${trials}" \
+                        SAVE_VIDEO_MODE=all \
+                        bash "${TASKS_DIR}/run_l1b_swept.sh" \
+                        l1b5_native_gripper "${l1b5_condition}"
+                done
+            else
+                SCENE_SEED="${SCENE_SEED}" EVAL_SEED="${seed}" \
+                    RUN_ID_SUFFIX="${suffix}" NUM_TRIALS="${trials}" \
+                    bash "${TASKS_DIR}/run_l1b_swept.sh" \
+                    l1b5_native_gripper eval
+            fi
+            ;;
         l2b2)
             local variant
             for variant in ${L2B2_VARIANTS}; do
@@ -130,6 +148,13 @@ do_prepare() {
     NUM_TRIALS="${NUM_TRIALS}" bash "${TASKS_DIR}/run_l1b2_task6.sh" check_safe
     # L1-B4 retraction states.
     NUM_TRIALS="${NUM_TRIALS}" bash "${TASKS_DIR}/run_l1b4_task6.sh" check
+    # L1-B5 strict native-ramekin / gripper-sweep family.
+    if [[ " ${FAMILIES} " == *" l1b5 "* ]]; then
+        SCENE_SEED="${SCENE_SEED}" NUM_TRIALS="${NUM_TRIALS}" \
+            SAFE_REF_STATES="${SAFE_REF_STATES:-${NUM_TRIALS}}" \
+            bash "${TASKS_DIR}/run_l1b_swept.sh" \
+            l1b5_native_gripper prepare
+    fi
     # L2-B2 per-variant states.
     local variant
     for variant in ${L2B2_VARIANTS}; do

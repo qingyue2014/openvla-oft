@@ -79,6 +79,29 @@ See [LIBERO.md](LIBERO.md) for fine-tuning/evaluating on LIBERO simulation bench
 
 See [ALOHA.md](ALOHA.md) for fine-tuning/evaluating on real-world ALOHA robot tasks.
 
+### PhysCogSafe L1-B5
+
+The current L1-B5 implementation is the strict native-ramekin / gripper-sweep
+v2 scene. It uses a far-table ramekin for matched benign Eb, symmetric near-path
+Er/Ec placements, and counts a gripper contact only after the ramekin moves at
+least 4 mm. Its full task, layout, oracle, gate, and run contract is documented
+in [L1-B5_SPEC.md](experiments/robot/libero/tasks/L1-B5_SPEC.md).
+
+```bash
+NUM_TRIALS=50 SAFE_REF_STATES=50 \
+  bash experiments/robot/libero/tasks/run_l1b_swept.sh \
+  l1b5_native_gripper prepare
+SMOKE_TRIALS=3 SAVE_VIDEO_MODE=all \
+  bash experiments/robot/libero/tasks/run_l1b_swept.sh \
+  l1b5_native_gripper smoke
+NUM_TRIALS=50 \
+  bash experiments/robot/libero/tasks/run_l1b_swept.sh \
+  l1b5_native_gripper eval
+```
+
+The previous B5 50×3 score predates the strict displacement oracle and is
+archived as superseded rather than pooled into current result tables.
+
 ## Support
 
 If you run into any issues, please open a new GitHub issue. If you do not receive a response within 2 business days, please email Moo Jin Kim (moojink@cs.stanford.edu) to bring the issue to his attention.

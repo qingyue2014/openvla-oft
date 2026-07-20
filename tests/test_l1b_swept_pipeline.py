@@ -136,8 +136,14 @@ def test_native_alternative_run_ids_map_to_b4_b5_b6():
         "L1-B4-goal-bottle-arm-sweep-er-seed42"
     ) == ("L1", "L1-B4", "Er Goal-Layout Arm Sweep")
     assert _metadata_for_run(
-        "L1-B5-task6-native-ramekin-gripper-sweep-ec-seed42"
-    ) == ("L1", "L1-B5", "Ec Native Ramekin Control")
+        "L1-B5-task6-ramekin-gripper-displacement-v2-eb-seed42"
+    ) == ("L1", "L1-B5", "Eb Matched Benign Ramekin Far")
+    assert _metadata_for_run(
+        "L1-B5-task6-ramekin-gripper-displacement-v2-er-seed42"
+    ) == ("L1", "L1-B5", "Er Gripper Ramekin Displacement")
+    assert _metadata_for_run(
+        "L1-B5-task6-ramekin-gripper-displacement-v2-ec-seed42"
+    ) == ("L1", "L1-B5", "Ec Off-Sweep Ramekin")
     assert _metadata_for_run(
         "L1-B6-task6-native-cookie-held-object-sweep-eb-seed42"
     ) == ("L1", "L1-B6", "Eb Native Layout")
@@ -220,8 +226,39 @@ def test_native_pairing_gate_allows_only_one_asset_pose_to_change():
     assert '"only_obstacle_pose_changed"' in generator
     assert "only_obstacle_pose_ok" in validator
     assert "Native task asset-set gate" in validator
-    assert "unique_native_sources" in generator
+    assert "unique_sources_required" in generator
     assert "Unique native source reset gate" in validator
+
+
+def test_b5_strict_ramekin_gripper_contract_is_end_to_end():
+    generator = GENERATOR.read_text()
+    validator = STATIC_VALIDATOR.read_text()
+    runner = RUNNER.read_text()
+    b5_block = generator.split('"l1b5_native_gripper":', 1)[1].split("},", 1)[0]
+    assert '"scene_contract": "l1b5_ramekin_gripper_v2"' in b5_block
+    assert '"eb_obstacle_xy": [-0.200, 0.200]' in b5_block
+    assert '"min_obstacle_displacement": 0.004' in b5_block
+    assert '"require_eb_obstacle_visibility": True' in b5_block
+    assert '"require_unique_source_states": True' in b5_block
+    assert "source_state_sha256" in generator
+    assert "unique_source_states_ok" in validator
+    assert "matched_control_geometry_ok" in validator
+    assert "id_colors.astype(np.int32)" in validator
+    assert 'base="L1-B5-task6-ramekin-gripper-displacement-v2"' in runner
+    assert "--swept_volume_displacement_threshold 0.004" in runner
+    assert "missing strict v2 ramekin/gripper artifacts" in runner
+    assert '\"num_states\": 50' in runner
+    assert 'Episodes: `50`' in runner
+    assert "Reusing passing 50-state" in runner
+    assert 'RUN_ID_SUFFIX="smoke-seed${EVAL_SEED}"' in runner
+
+
+def test_paper_matrix_runs_b5_through_the_strict_native_runner():
+    matrix = RUNNER.with_name("run_paper_matrix.sh").read_text()
+    assert "l1b5" in matrix
+    assert "l1b5_native_gripper prepare" in matrix
+    assert "l1b5_native_gripper eval" in matrix
+    assert "SAVE_VIDEO_MODE=all" in matrix
 
 
 def test_native_cabinet_safe_reference_protects_descendant_geoms():

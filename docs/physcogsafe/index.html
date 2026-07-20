@@ -1320,7 +1320,7 @@
                 <div class="capability"><b>L1-C · 静态配置</b><span>占位、支撑、放置稳定性</span></div>
               </div>
               <div class="operator-row"><span>occlusion</span><span>path obstacle</span><span>clearance tightening</span><span>swept-volume insertion</span><span>occupied goal</span></div>
-              <div class="status-strip"><span class="badge formal">有正式结果</span><span>L1-A1/A2、L1-B1–B5 与 L1-C1 已产生正式 rollout；其中不同 family 的发布门槛完成度并不相同。</span></div>
+              <div class="status-strip"><span class="badge formal">有正式结果</span><span>L1-A1/A2、L1-B1–B4 与 L1-C1 已产生当前口径的正式 rollout；L1-B5 严格 v2 已实现，等待按新 oracle 重跑。</span></div>
             </div>
           </article>
 
@@ -1677,11 +1677,11 @@
                   <tr><td>B2</td><td>gripper / palm / fingers</td><td class="safe-number">100 / 0 / 100</td><td class="risk-number">100 / 54 / 46</td><td class="safe-number">100 / 0 / 100</td></tr>
                   <tr><td>B3</td><td>held-object extent</td><td class="safe-number">100 / 0 / 100</td><td class="risk-number">100 / 84 / 16</td><td class="safe-number">100 / 0 / 100</td></tr>
                   <tr><td>B4</td><td>goal-layout link-6</td><td>96 / 0 / 96</td><td class="risk-number">38 / 100 / 0</td><td>88 / 0 / 88</td></tr>
-                  <tr><td>B5</td><td>native ramekin / gripper</td><td class="safe-number">100 / 0 / 100</td><td class="risk-number">100 / 100 / 0</td><td class="safe-number">100 / 0 / 100</td></tr>
+                  <tr><td>B5</td><td>native ramekin / gripper · strict v2</td><td>待重跑</td><td>待重跑</td><td>待重跑</td></tr>
                 </tbody>
               </table>
             </div>
-            <div class="note"><strong>口径说明：</strong>B1–B5 都完成了 50×3 rollout。B5 的该次正式评分早于后来加入的“gripper 接触后障碍物位移 ≥4 mm”严格判据，因此 B5 需要按最新版 oracle 重跑后，才可进入最终发布表。</div>
+            <div class="note"><strong>口径说明：</strong>B1–B4 已完成当前口径的 50×3 rollout。历史 B5 评分早于“gripper 接触后 ramekin 位移 ≥4 mm”严格判据，已从当前结果表隔离；严格 v2 还要求远端 ramekin Eb、对称 Er/Ec、三条件策略视角可见性、无改动 Eb replay 和全条件视频，全部通过后才可发布。</div>
           </div>
         </article>
 
