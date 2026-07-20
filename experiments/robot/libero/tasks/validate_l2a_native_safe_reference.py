@@ -124,8 +124,14 @@ def _attempt(env, state, episode, offset, args):
     if failure is None:
         obs, step, failure = _hold(env, obs, oracle, recorder, opened, args.wait_steps, step)
     source = _body_pos(env, SAFE_BODY)
+    transit_z = max(float(_eef_pos(obs)[2]), float(source[2] + args.transit_height))
+    high_source = np.array([source[0] + offset[0], source[1] + offset[1], transit_z])
     approach = source + np.array([offset[0], offset[1], args.approach_height])
     grasp = source + np.array([offset[0], offset[1], args.grasp_height])
+    if failure is None:
+        obs, step, failure = _move_to(
+            env, obs, oracle, recorder, high_source, opened, step, args, "high_transit_to_source"
+        )
     if failure is None:
         obs, step, failure = _move_to(
             env, obs, oracle, recorder, approach, opened, step, args, "approach"
@@ -161,6 +167,12 @@ def _attempt(env, state, episode, offset, args):
     desired[2] = float(plate_hi[2] + origin_to_bottom + args.release_clearance)
     preplace = desired + np.array([0, 0, args.preplace_height])
     if failure is None:
+        high_goal = preplace + grasp_offset
+        high_goal[2] = max(high_goal[2], transit_z)
+        obs, step, failure = _move_to(
+            env, obs, oracle, recorder, high_goal, close, step, args, "high_transit_to_goal"
+        )
+    if failure is None:
         obs, step, failure = _move_to(
             env, obs, oracle, recorder, preplace + grasp_offset, close, step, args, "preplace"
         )
@@ -182,6 +194,9 @@ def _attempt(env, state, episode, offset, args):
     safe_success = bool(failure is None and oracle.task_success())
     reason = getattr(failure, "reason", "") if failure is not None else ""
     stage = getattr(failure, "stage", "") if failure is not None else ""
+    initial_error = getattr(failure, "initial_error_m", float("nan"))
+    best_error = getattr(failure, "best_error_m", float("nan"))
+    final_error = getattr(failure, "final_error_m", float("nan"))
     trajectory = Path(args.trajectory_dir) / f"episode_{episode:03d}.npz"
     recorder.save(
         str(trajectory),
@@ -200,6 +215,9 @@ def _attempt(env, state, episode, offset, args):
         "safe_success": int(safe_success),
         "failure_stage": stage,
         "failure_reason": reason,
+        "failure_initial_error_m": initial_error,
+        "failure_best_error_m": best_error,
+        "failure_final_error_m": final_error,
         "grasp_offset_x_m": float(offset[0]),
         "grasp_offset_y_m": float(offset[1]),
         "grasp_lift_m": grasp_lift,
@@ -300,6 +318,7 @@ def main() -> None:
     parser.add_argument("--wait-steps", type=int, default=10)
     parser.add_argument("--gripper-probe-steps", type=int, default=8)
     parser.add_argument("--approach-height", type=float, default=0.12)
+    parser.add_argument("--transit-height", type=float, default=0.27)
     parser.add_argument("--grasp-height", type=float, default=0.015)
     parser.add_argument("--grasp-seat-steps", type=int, default=15)
     parser.add_argument("--grasp-seat-max-command", type=float, default=0.08)
