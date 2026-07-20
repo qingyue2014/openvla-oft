@@ -27,7 +27,7 @@ from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
     benchmark,
     get_libero_path,
     _body_pos,
-    _forbidden_contact_names,
+    _forbidden_initial_contact_pairs,
 )
 
 
@@ -184,7 +184,7 @@ def validate(args) -> bool:
     initial_contact_pairs = []
     oracle_reset_ok = True
     obstacle_positions = {condition: [] for condition in states}
-    visible_pixels = {condition: [] for condition in ("er", "ec")}
+    visible_pixels = {condition: [] for condition in ("eb", "er", "ec")}
     prompt_relation_distances = {condition: [] for condition in states}
     try:
         oracle = make_safety_oracle(
@@ -198,16 +198,14 @@ def validate(args) -> bool:
                 obs = env.reset()
                 obs = env.set_init_state(states[condition][episode_idx])
                 contact_first_seen = {}
-                if condition != "eb":
-                    for body in _forbidden_contact_names(env, obstacle_body):
-                        contact_first_seen.setdefault(body, "restore")
+                for pair in _forbidden_initial_contact_pairs(env, obstacle_body):
+                    contact_first_seen.setdefault(pair, "restore")
                 for settle_step in range(args.settle_steps):
                     env.sim.step()
-                    if condition != "eb":
-                        for body in _forbidden_contact_names(env, obstacle_body):
-                            contact_first_seen.setdefault(
-                                body, f"settle_step_{settle_step + 1}"
-                            )
+                    for pair in _forbidden_initial_contact_pairs(env, obstacle_body):
+                        contact_first_seen.setdefault(
+                            pair, f"settle_step_{settle_step + 1}"
+                        )
                 obs = _fresh_observation(env)
                 tracked_bodies = set(invariant_bodies) | {obstacle_body}
                 relation_body = spec.get("prompt_relation_body")
@@ -227,23 +225,23 @@ def validate(args) -> bool:
                             )
                         )
                     )
+                for pair, first_seen in contact_first_seen.items():
+                    initial_contacts += 1
+                    initial_contact_pairs.append(
+                        f"ep{episode_idx:03d}/{condition}: "
+                        f"{pair} ({first_seen})"
+                    )
+                visible_pixels[condition].append(
+                    _visible_pixel_count(
+                        env, obstacle_body, args.policy_camera, args.render_size
+                    )
+                )
                 if condition != "eb":
-                    for body, first_seen in contact_first_seen.items():
-                        initial_contacts += 1
-                        initial_contact_pairs.append(
-                            f"ep{episode_idx:03d}/{condition}: "
-                            f"{obstacle_body} <-> {body} ({first_seen})"
-                        )
                     try:
                         oracle.reset(env, obs)
                     except Exception:
                         oracle_reset_ok = False
                         raise
-                    visible_pixels[condition].append(
-                        _visible_pixel_count(
-                            env, obstacle_body, args.policy_camera, args.render_size
-                        )
-                    )
                 if episode_idx < args.num_previews:
                     image = _policy_camera_image(
                         env, args.policy_camera, args.render_size
@@ -326,15 +324,18 @@ def validate(args) -> bool:
             for condition, distances in prompt_relation_distances.items()
             if distances
         ),
-        f"- Forbidden initial obstacle contacts: `{initial_contacts}`",
+        f"- Forbidden initial obstacle contacts/interpenetrations: `{initial_contacts}`",
         *(
             f"  - `{pair}`"
             for pair in initial_contact_pairs
         ),
         f"- Component oracle reset gate: `{oracle_reset_ok}`",
         f"- Policy-camera obstacle visibility gate: `{visibility_ok}`",
-        f"- Er obstacle pixels (min/max): `{min(visible_pixels['er'])}/{max(visible_pixels['er'])}`",
-        f"- Ec obstacle pixels (min/max): `{min(visible_pixels['ec'])}/{max(visible_pixels['ec'])}`",
+        *(
+            f"- {condition.upper()} obstacle pixels (min/max): "
+            f"`{min(pixels)}/{max(pixels)}`"
+            for condition, pixels in visible_pixels.items()
+        ),
         f"- Required obstacle pixels: `>= {args.min_obstacle_pixels}` in `{args.policy_camera}`",
         *(
             f"- Max paired {body} drift: `{drift:.6f} m`"
@@ -343,8 +344,8 @@ def validate(args) -> bool:
         f"- Required paired drift: `<= {args.max_pair_drift:.6f} m`",
         f"- Preview directory: `{preview_dir}`",
         "",
-        "Static PASS proves reset validity and pairing only. Component activation and",
-        "collision-free safe feasibility still require the dynamic calibration gate.",
+        "This static gate covers reset validity and pairing only. Component activation",
+        "and collision-free safe feasibility still require the dynamic calibration gate.",
     ]
     out = Path(args.out_report)
     out.parent.mkdir(parents=True, exist_ok=True)

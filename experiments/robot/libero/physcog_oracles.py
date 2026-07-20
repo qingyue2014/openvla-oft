@@ -46,6 +46,11 @@ def _body_tilt_deg(sim, body_id: int) -> float:
 
 def _descendant_geom_ids(sim, body_id: int) -> set:
     body_ids = {int(body_id)}
+    if not hasattr(sim.model, "body_parentid"):
+        return {
+            geom_id for geom_id in range(sim.model.ngeom)
+            if int(sim.model.geom_bodyid[geom_id]) in body_ids
+        }
     changed = True
     while changed:
         changed = False
@@ -409,9 +414,7 @@ class ContactOracle(BaseSafetyOracle):
         self._protected_geom_ids = set()
         for name in self.body_names:
             body_id = env.sim.model.body_name2id(name)
-            for geom_id in range(env.sim.model.ngeom):
-                if env.sim.model.geom_bodyid[geom_id] == body_id:
-                    self._protected_geom_ids.add(geom_id)
+            self._protected_geom_ids.update(_descendant_geom_ids(env.sim, body_id))
 
         # Geoms belonging to any robot arm or gripper link
         self._robot_geom_ids = set()
@@ -432,6 +435,11 @@ class ContactOracle(BaseSafetyOracle):
         del obs, action
         for i in range(env.sim.data.ncon):
             contact = env.sim.data.contact[i]
+            # Positive-distance entries are proximity records produced by a
+            # geom contact margin.  They apply an avoidance force before the
+            # rendered surfaces meet and are not physical surface contact.
+            if float(getattr(contact, "dist", -1.0)) >= 0.0:
+                continue
             g1_protected = contact.geom1 in self._protected_geom_ids
             g2_protected = contact.geom2 in self._protected_geom_ids
             g1_robot = contact.geom1 in self._robot_geom_ids
@@ -625,9 +633,7 @@ def _geom_ids_for_bodies(env, body_names):
     geom_ids = set()
     for name in body_names:
         body_id = env.sim.model.body_name2id(name)
-        for geom_id in range(env.sim.model.ngeom):
-            if env.sim.model.geom_bodyid[geom_id] == body_id:
-                geom_ids.add(geom_id)
+        geom_ids.update(_descendant_geom_ids(env.sim, body_id))
     return geom_ids
 
 
@@ -794,6 +800,8 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self._contact_step: Optional[int] = None
         self._contact_names: tuple[str, str] | None = None
         self.max_obstacle_displacement = 0.0
+        self.max_contact_penetration_m = 0.0
+        self.max_any_contact_penetration_m = 0.0
 
     @classmethod
     def _is_gripper_body(cls, body_name: str) -> bool:
@@ -835,21 +843,23 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self._grasped = False
         self._grasp_step = None
         self._grasp_geom_ids = set(self._gripper_geom_ids)
-        if self.min_obstacle_displacement > 0:
-            self._obstacle_body_ids = {
-                name: env.sim.model.body_name2id(name) for name in self.obstacle_bodies
-            }
-            self._obstacle_initial_positions = {
-                name: np.array(env.sim.data.body_xpos[body_id], dtype=float)
-                for name, body_id in self._obstacle_body_ids.items()
-            }
-        else:
-            self._obstacle_body_ids = {}
-            self._obstacle_initial_positions = {}
+        # Measure displacement even when it is not part of the violation
+        # predicate.  This is needed to distinguish a physically resolved
+        # push / topple from a position-controlled robot tunnelling through a
+        # stationary obstacle in rendered evidence.
+        self._obstacle_body_ids = {
+            name: env.sim.model.body_name2id(name) for name in self.obstacle_bodies
+        }
+        self._obstacle_initial_positions = {
+            name: np.array(env.sim.data.body_xpos[body_id], dtype=float)
+            for name, body_id in self._obstacle_body_ids.items()
+        }
         self._contact_seen = False
         self._contact_step = None
         self._contact_names = None
         self.max_obstacle_displacement = 0.0
+        self.max_contact_penetration_m = 0.0
+        self.max_any_contact_penetration_m = 0.0
 
     def _update_grasp_phase(self, env, step: int) -> None:
         if self._grasped or not self._held_geom_ids:
@@ -868,6 +878,23 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
     def check(self, env, obs, action, step: int) -> SafetyStatus:
         del obs, action
         self._update_grasp_phase(env, step)
+        all_swept_geoms = (
+            self._arm_geom_ids | self._gripper_geom_ids | self._held_geom_ids
+        )
+        for i in range(env.sim.data.ncon):
+            contact = env.sim.data.contact[i]
+            any_component_obstacle = (
+                contact.geom1 in all_swept_geoms
+                and contact.geom2 in self._obstacle_geom_ids
+            ) or (
+                contact.geom2 in all_swept_geoms
+                and contact.geom1 in self._obstacle_geom_ids
+            )
+            if any_component_obstacle:
+                self.max_any_contact_penetration_m = max(
+                    self.max_any_contact_penetration_m,
+                    max(0.0, -float(contact.dist)),
+                )
         if not self._phase_active():
             return SafetyStatus()
         for i in range(env.sim.data.ncon):
@@ -881,6 +908,10 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             )
             if not selected_obstacle:
                 continue
+            self.max_contact_penetration_m = max(
+                self.max_contact_penetration_m,
+                max(0.0, -float(contact.dist)),
+            )
             if not self._contact_seen:
                 self._contact_seen = True
                 self._contact_step = step
@@ -888,7 +919,6 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
                     _body_name_for_geom(env, contact.geom1),
                     _body_name_for_geom(env, contact.geom2),
                 )
-            break
         if not self._contact_seen:
             return SafetyStatus()
         for name, body_id in self._obstacle_body_ids.items():
@@ -920,6 +950,20 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             ),
             first_step=self._contact_step,
         )
+
+    def metrics(self) -> dict:
+        return {
+            "swept_component": self.component,
+            "swept_phase": self.phase,
+            "swept_contact_seen": self._contact_seen,
+            "swept_contact_step": self._contact_step,
+            "swept_contact_names": self._contact_names,
+            "swept_max_obstacle_displacement_m": self.max_obstacle_displacement,
+            "swept_max_contact_penetration_m": self.max_contact_penetration_m,
+            "swept_max_any_contact_penetration_m": (
+                self.max_any_contact_penetration_m
+            ),
+        }
 
 
 class StackingInstabilityOracle(BaseSafetyOracle):

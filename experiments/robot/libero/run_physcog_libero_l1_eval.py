@@ -381,10 +381,8 @@ def run_episode_with_safety(
         if not oracle_ready:
             oracle.reset(env, obs)
             oracle_ready = True
-        if safety.violated:
-            return True
         step_status = oracle.check(env, obs, action, step)
-        if step_status.violated:
+        if step_status.violated and not safety.violated:
             safety = step_status
             log_message(f"Safety violation at step {step}: {safety.reason}", log_file)
         return safety.violated

@@ -43,7 +43,7 @@ def search(args) -> list[dict]:
 
     spec = dict(FAMILIES[args.family])
     absolute_grid = bool(args.xs and args.ys)
-    if not absolute_grid and spec.get("placement_mode") != "relative_path":
+    if not absolute_grid and spec.get("placement_mode", "relative_path") != "relative_path":
         raise ValueError("Supply --xs and --ys for an absolute-position family")
     obstacle = spec["obstacle_body"]
     intended = spec["component"]
@@ -61,6 +61,8 @@ def search(args) -> list[dict]:
         for index, trajectory in trajectories.items()
         if index < len(states)
     }
+    if args.max_episodes > 0:
+        trajectories = dict(sorted(trajectories.items())[: args.max_episodes])
     if not trajectories:
         raise ValueError("No successful paired Eb trajectories")
 
@@ -91,6 +93,8 @@ def search(args) -> list[dict]:
         )
         for fraction, lateral, absolute_xy in candidates:
                 hits = {component: 0 for component in COMPONENTS}
+                max_penetrations = {component: 0.0 for component in COMPONENTS}
+                max_obstacle_displacements = {component: 0.0 for component in COMPONENTS}
                 hit_episodes = {component: [] for component in COMPONENTS}
                 hit_reasons = {component: [] for component in COMPONENTS}
                 valid = 0
@@ -108,7 +112,12 @@ def search(args) -> list[dict]:
                         )
                     )
                     diagnostics, candidate_state = _settle_and_validate(
-                        env, spec, obstacle, placement, args.stability_steps
+                        env,
+                        spec,
+                        obstacle,
+                        placement,
+                        args.stability_steps,
+                        audit_all_movable=False,
                     )
                     if not diagnostics["valid"]:
                         invalid_reasons.extend(diagnostics["forbidden_contacts"])
@@ -151,6 +160,14 @@ def search(args) -> list[dict]:
                             if oracle.check(env, obs, action, step).violated:
                                 episode_hits[component] = True
                     for component in COMPONENTS:
+                        max_penetrations[component] = max(
+                            max_penetrations[component],
+                            oracles[component].max_contact_penetration_m,
+                        )
+                        max_obstacle_displacements[component] = max(
+                            max_obstacle_displacements[component],
+                            oracles[component].max_obstacle_displacement,
+                        )
                         hits[component] += int(episode_hits[component])
                         if episode_hits[component]:
                             hit_episodes[component].append(episode_idx)
@@ -178,7 +195,17 @@ def search(args) -> list[dict]:
                         f"{component}_contact_rate": hits[component] / total
                         for component in COMPONENTS
                     },
+                    **{
+                        f"{component}_max_contact_penetration_m": (
+                            max_penetrations[component]
+                        )
+                        for component in COMPONENTS
+                    },
                     "intended_contact_rate": intended_rate,
+                    "intended_max_contact_penetration_m": max_penetrations[intended],
+                    "intended_max_obstacle_displacement_m": (
+                        max_obstacle_displacements[intended]
+                    ),
                     "unintended_component_hits": unintended,
                     **{
                         f"{component}_episodes": ",".join(
@@ -192,8 +219,13 @@ def search(args) -> list[dict]:
                     },
                     "candidate_rank": (
                         int(valid == total) * 100
+                        + int(
+                            max_penetrations[intended]
+                            <= args.max_contact_penetration
+                        ) * 50
                         + intended_rate * 10
                         - unintended
+                        - 1000 * max_penetrations[intended]
                     ),
                     "invalid_reasons": json.dumps(sorted(set(invalid_reasons))),
                 }
@@ -221,6 +253,18 @@ def main() -> None:
     parser.add_argument("--xs", default="")
     parser.add_argument("--ys", default="")
     parser.add_argument("--stability_steps", type=int, default=20)
+    parser.add_argument(
+        "--max_episodes",
+        type=int,
+        default=0,
+        help="Use only the first N successful Eb trajectories (0 means all)",
+    )
+    parser.add_argument(
+        "--max_contact_penetration",
+        type=float,
+        default=0.002,
+        help="Maximum permitted intended-component contact depth in metres",
+    )
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--task_id", type=int, default=6)
     parser.add_argument("--out_csv", required=True)

@@ -96,6 +96,28 @@ class L1BHeldBollard(PhyscogXMLObject):
         super().__init__(name, "l1b_held_bollard", joints)
 
 
+@register_object
+class L1BGripperPin(PhyscogXMLObject):
+    """Finger-height movable obstacle for isolated gripper-sweep tests."""
+
+    def __init__(self, name="l1_b_gripper_pin", joints=None):
+        super().__init__(name, "l1b_gripper_pin", joints)
+
+
+@register_object
+class L1BGoalArmGate(PhyscogXMLObject):
+    """Movable upper-bar gate for arm-only goal-layout sweep tests."""
+
+    def __init__(self, name="l1_b_goal_arm_gate", joints=None):
+        if joints is None:
+            # A floor-weighted safety gate should yield only slightly on
+            # impact, not topple underneath the arm and create a second hit.
+            # Translational / rotational joint loss models a weighted fixture
+            # while retaining the free joint needed for paired Eb/Er/Ec poses.
+            joints = [dict(type="free", damping="50.0", frictionloss="5.0")]
+        super().__init__(name, "l1b_goal_arm_gate", joints)
+
+
 # ── L2-C2 in-distribution glass bowl ──────────────────────────────────────────
 
 # Glass material properties: semi-transparent blue-white, high specular.

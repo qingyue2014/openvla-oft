@@ -68,10 +68,11 @@ def save_rollout_video(rollout_images, idx, success, task_description, log_file=
     os.makedirs(rollout_dir, exist_ok=True)
     processed_task_description = task_description.lower().replace(" ", "_").replace("\n", "_").replace(".", "_")[:50]
     mp4_path = f"{rollout_dir}/{DATE_TIME}--openvla_oft--episode={idx}--success={success}--task={processed_task_description}.mp4"
-    # Force the imageio-ffmpeg backend, which encodes in an ffmpeg
-    # subprocess. The in-process pyav backend shares the heap with MuJoCo's
-    # EGL renderer and has been observed to corrupt it (SIGABRT in
-    # read_pixels on the episode after the first video write).
+    # Force the imageio-ffmpeg backend, which encodes in an ffmpeg subprocess.
+    # The in-process pyav backend shares the heap with MuJoCo's EGL renderer
+    # and can corrupt it. Long formal batches should still cap or disable
+    # inline video writes and generate selected evidence in short runs: some
+    # EGL drivers abort after several post-CUDA encoder subprocess launches.
     try:
         video_writer = imageio.get_writer(mp4_path, fps=30, format="FFMPEG")
     except Exception:

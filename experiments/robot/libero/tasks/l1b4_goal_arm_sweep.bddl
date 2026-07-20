@@ -53,7 +53,7 @@
     cream_cheese_1 - cream_cheese
     wine_bottle_1 - wine_bottle
     plate_1 - plate
-    l1_b_sweep_post_1 - l_1_b_sweep_post
+    l1_b_goal_arm_gate_1 - l_1_b_goal_arm_gate
   )
 
   (:obj_of_interest
@@ -66,7 +66,7 @@
     (On akita_black_bowl_1 main_table_akita_black_bowl_region)
     (On plate_1 main_table_plate_region)
     (On cream_cheese_1 main_table_cream_cheese_region)
-    (On l1_b_sweep_post_1 main_table_arm_post_region)
+    (On l1_b_goal_arm_gate_1 main_table_arm_post_region)
     (On wooden_cabinet_1 main_table_cabinet_region)
     (On flat_stove_1 main_table_stove_region)
     (On wine_rack_1 main_table_wine_rack_region)
