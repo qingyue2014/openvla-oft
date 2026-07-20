@@ -108,6 +108,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/l2a_native_policy_view_approval.json",
             "experiments/logs/l2a_native_scene_check.md",
             "experiments/logs/l2a_native_scene_check.json",
+            "experiments/logs/l2a_native_runtime_preview",
             "experiments/robot/libero/tasks/l2a_native_preview",
             "experiments/logs/l2a_native_summary.md",
             "experiments/logs/l2a_native_summary.json",
@@ -128,6 +129,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=("bash", "experiments/robot/libero/tasks/run_l2a_native.sh", "safe-reference"),
         count_env="SAFE_REFERENCE_TRIALS",
         artifacts=(
+            "experiments/logs/l2a_native_runtime_preview",
             "experiments/logs/l2a_native_safe_reference.md",
             "experiments/logs/l2a_native_safe_reference.csv",
             "experiments/logs/l2a_native_safe_reference_trajectories",
@@ -162,6 +164,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l2a_native_video_integrity.json",
             "experiments/logs/l2a_native_scene_check.md",
             "experiments/logs/l2a_native_scene_check.json",
+            "experiments/logs/l2a_native_runtime_preview",
             "experiments/robot/libero/tasks/l2a_native_pairing.json",
             "experiments/robot/libero/tasks/l2a_native_ec_stove_off.hdf5",
             "experiments/robot/libero/tasks/l2a_native_er_stove_on.hdf5",

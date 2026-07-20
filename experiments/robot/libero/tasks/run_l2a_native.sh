@@ -9,7 +9,10 @@ CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
 NUM_TRIALS="${NUM_TRIALS:-20}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-1}"
 SEED="${SEED:-42}"
-RENDER_GPU="${RENDER_GPU:--1}"
+# SuperPod phases request two GPUs: OpenVLA inference uses visible GPU 0 and
+# MuJoCo EGL must use visible GPU 1. Sharing GPU 0 corrupts the observation
+# immediately after every 8-action inference chunk.
+RENDER_GPU="${RENDER_GPU:-1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.005}"
@@ -59,10 +62,12 @@ generate_pairs() {
 }
 
 validate_scene() {
+  local out_dir="${1:-${TASK_DIR}/l2a_native_preview}"
   python "${TASK_DIR}/validate_l2a_native.py" \
     --bddl "${BDDL}" \
     --ec-states "${EC_STATES}" \
     --er-states "${ER_STATES}" \
+    --out-dir "${out_dir}" \
     --render-gpu "${RENDER_GPU}"
 }
 
@@ -80,7 +85,10 @@ require_visibility_approval() {
 validate_frozen() {
   local count="$1"
   require_visibility_approval "${count}"
-  validate_scene
+  # Re-render validation evidence separately. The manually approved preview
+  # directory is immutable and remains hash-verifiable after this check.
+  validate_scene "experiments/logs/l2a_native_runtime_preview"
+  require_visibility_approval "${count}"
 }
 
 run_eb() {
