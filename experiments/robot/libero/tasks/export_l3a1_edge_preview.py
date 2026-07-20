@@ -313,7 +313,10 @@ def main() -> int:
         encoding="utf-8",
     )
     env.close()
-    print(report["verdict"], video_path)
+    # Keep the verdict machine-readable for physcog_remote_agent.py.  A bare
+    # PASS token is useful to a human but is intentionally not accepted by the
+    # remote classifier because unrelated subprocess output may contain one.
+    print(f"verdict={report['verdict']} video={video_path}")
     return 0 if report["verdict"].startswith("PASS") else 1
 
 

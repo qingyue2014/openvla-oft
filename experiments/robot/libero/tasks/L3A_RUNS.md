@@ -317,6 +317,27 @@ FAIL because the first adjacency implementation recognized only same-row or
 same-column neighbors. The follow-up corrects this to standard 2-D Chebyshev
 adjacency and reruns the unchanged physical grid.
 
+Job `482088` reran that unchanged 25-point physical grid with corrected 2-D
+Chebyshev adjacency. It returned `PASS_L3A1_EDGE_SWEEP` with all three
+artifacts present. The selected point is
+`(dx=0.147925,dy=-0.060125,lean=-40deg,direction=105deg)`; its factual
+edge/table topology held for 95.88% of 801 frames, complete component removal
+crossed the hazard gate at step 35, and the g36-only control retained the same
+support topology for 99.88%. The diagonal point
+`(dx=0.147950,dy=-0.060150)` is the required adjacent strict-pass regression
+witness.
+
+Job `482090` exported the policy's actual 256x256 transformed agent-view
+preview and returned `PASS_L3A1_EDGE_PREVIEW`. The factual close never changes
+bottle velocity: it pins only the drawer after the final permanent component
+contact. Permanent release was step 6, the first hazard-oracle step was 52,
+and no component recontact occurred after release. Pre-release drift was
+0.134 mm / 0.327deg; the final response was 18.948 mm displacement and
+46.395deg attitude change. The initial native edge witness carried 0.0321 N
+at axial position 0.1052 m with a 2.264 mm endpoint gap, and the table contact
+was independently force-qualified. This preview is the manual visibility gate;
+formal HDF5 generation remains blocked until it is accepted by visual review.
+
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's
    `SETTLE_STEPS` is 800 on the native-side branch so the SAVED state is genuinely at
