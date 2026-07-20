@@ -13,7 +13,7 @@ mkdir -p "${LOG_DIR}"
   exit 2
 }
 
-candidates=(-0.064 -0.068 -0.072)
+candidates=(-0.080 -0.100 -0.120)
 summary_args=()
 for dx in "${candidates[@]}"; do
   slug="dx${dx}"

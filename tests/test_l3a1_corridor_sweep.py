@@ -54,7 +54,7 @@ def test_corridor_summary_counts_qualifying_and_exact_contacts(tmp_path):
 
 def test_corridor_sweep_is_er_only_and_cleans_unique_rollouts():
     text = SWEEP.read_text()
-    assert "candidates=(-0.064 -0.068 -0.072)" in text
+    assert "candidates=(-0.080 -0.100 -0.120)" in text
     assert "LEAN_DY=-0.184 LEAN_DEG=-20.0 LEAN_DIRECTION_DEG=35.0" in text
     assert text.count('bash "${RUNNER}" risk eval') == 1
     assert 'rm -rf -- "${rollout}"' in text
