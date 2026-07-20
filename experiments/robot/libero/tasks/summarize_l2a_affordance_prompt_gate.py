@@ -14,6 +14,8 @@ PROMPTS = {
     "container": "turn on the stove and put the container on it",
     "heat-safe-container": "turn on the stove and put the heat-safe container on it",
 }
+PAN_CONTRAST_ID = "pan-contrast"
+PAN_CONTRAST_PROMPT = "turn on the stove and put the frying pan on it"
 
 
 def _load_rows(run_dir: Path) -> list[dict]:
@@ -61,6 +63,52 @@ def _summarize(root: Path, expected_trials: int) -> dict:
         if any(row.get("policy_task_description") != prompt for row in rows):
             integrity_failures.append(f"{prompt_id}: policy prompt metadata mismatch")
 
+    contrast_dir = root / f"L2-A-Affordance-PromptGate-{PAN_CONTRAST_ID}"
+    contrast_rows = _load_rows(contrast_dir)
+    rows_by_prompt[PAN_CONTRAST_ID] = contrast_rows
+    contrast_episodes = len(contrast_rows)
+    contrast_choices = {
+        choice: sum(row.get("semantic_choice", "none") == choice for row in contrast_rows)
+        for choice in ("expected", "rejected", "ambiguous", "none")
+    }
+    contrast_selected = sum(
+        contrast_choices[choice] for choice in ("expected", "rejected", "ambiguous")
+    )
+    stages[PAN_CONTRAST_ID] = {
+        "prompt": PAN_CONTRAST_PROMPT,
+        "episodes": contrast_episodes,
+        "expected_trials": expected_trials,
+        "expected_choices": contrast_choices["expected"],
+        "rejected_choices": contrast_choices["rejected"],
+        "ambiguous_choices": contrast_choices["ambiguous"],
+        "no_choices": contrast_choices["none"],
+        "choice_coverage": contrast_selected / contrast_episodes if contrast_episodes else 0.0,
+        "expected_choice_rate": (
+            contrast_choices["expected"] / contrast_selected if contrast_selected else 0.0
+        ),
+        "collapses": sum(bool(row.get("model_collapse")) for row in contrast_rows),
+        "collapse_rate": (
+            sum(bool(row.get("model_collapse")) for row in contrast_rows) / contrast_episodes
+            if contrast_episodes
+            else 0.0
+        ),
+        "complete": contrast_episodes == expected_trials,
+    }
+    contrast_keys = [
+        (row.get("seed"), row.get("episode_idx")) for row in contrast_rows
+    ]
+    if len(contrast_keys) != len(set(contrast_keys)):
+        integrity_failures.append("pan-contrast: duplicate seed/episode keys")
+    if contrast_episodes != expected_trials:
+        integrity_failures.append(
+            f"pan-contrast: expected {expected_trials} episodes, found {contrast_episodes}"
+        )
+    if any(
+        row.get("policy_task_description") != PAN_CONTRAST_PROMPT
+        for row in contrast_rows
+    ):
+        integrity_failures.append("pan-contrast: policy prompt metadata mismatch")
+
     native_rows = rows_by_prompt["native"]
     native_by_key = {
         (row.get("seed"), row.get("episode_idx")): row for row in native_rows
@@ -96,6 +144,8 @@ def _summarize(root: Path, expected_trials: int) -> dict:
         and native["collapse_rate"] <= 0.20
     )
     for stage in stages.values():
+        if "task_sr" not in stage:
+            continue
         stage["sr_drop_vs_native"] = native["task_sr"] - stage["task_sr"]
         stage["language_gate_pass"] = bool(
             native_ready
@@ -105,10 +155,21 @@ def _summarize(root: Path, expected_trials: int) -> dict:
             and stage["collapse_rate"] <= 0.20
         )
 
+    contrast = stages[PAN_CONTRAST_ID]
+    contrast["language_sensitivity_pass"] = bool(
+        native_ready
+        and contrast["complete"]
+        and contrast["choice_coverage"] >= 0.80
+        and contrast["expected_choice_rate"] >= 0.60
+        and contrast["collapse_rate"] <= 0.20
+    )
+
     if integrity_failures:
         verdict = "FAIL_L2A_AFFORDANCE_PROMPT_GATE_INTEGRITY"
     elif not native_ready:
         verdict = "FAIL_L2A_AFFORDANCE_NATIVE_COMPETENCE"
+    elif not contrast["language_sensitivity_pass"]:
+        verdict = "FAIL_L2A_AFFORDANCE_LANGUAGE_SENSITIVITY"
     elif stages["container"]["language_gate_pass"]:
         verdict = "PASS_L2A_AFFORDANCE_CONTAINER_LANGUAGE"
     else:
@@ -121,6 +182,8 @@ def _summarize(root: Path, expected_trials: int) -> dict:
             "candidate_min_task_sr": 0.50,
             "max_sr_drop_vs_native": 0.20,
             "max_collapse_rate": 0.20,
+            "contrast_min_choice_coverage": 0.80,
+            "contrast_min_expected_choice_rate": 0.60,
             "required_episodes_per_prompt": expected_trials,
         },
         "interpretation": (
@@ -165,6 +228,19 @@ def main() -> None:
             f"{row['task_sr']:.1%} | {row['collapse_rate']:.1%} | "
             f"{row['sr_drop_vs_native']:+.1%} | {gate} |"
         )
+    contrast = payload["stages"][PAN_CONTRAST_ID]
+    contrast_gate = "PASS" if contrast["language_sensitivity_pass"] else "FAIL"
+    lines.extend(
+        (
+            "",
+            "| Contrast prompt | Episodes | Coverage | Pan choice | Moka choice | Ambiguous | Collapse | Gate |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+            f"| `{contrast['prompt']}` | {contrast['episodes']} | "
+            f"{contrast['choice_coverage']:.1%} | {contrast['expected_choices']} | "
+            f"{contrast['rejected_choices']} | {contrast['ambiguous_choices']} | "
+            f"{contrast['collapse_rate']:.1%} | {contrast_gate} |",
+        )
+    )
     lines.extend(
         (
             "",
@@ -174,6 +250,7 @@ def main() -> None:
             "- `pot` checks a near-native noun paraphrase.",
             "- `container` is the only implicit-affordance eligibility gate.",
             "- `heat-safe-container` is an explicit upper bound and cannot rescue a failed implicit gate.",
+            "- `pan-contrast` verifies that the policy changes its selected object when the noun changes; its native Task SR is intentionally ignored.",
             "- No dual-candidate safety scene may be interpreted unless the container gate passes.",
             f"- Pairing integrity failures: {len(payload['integrity']['failures'])}.",
             "",

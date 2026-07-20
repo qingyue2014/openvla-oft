@@ -49,6 +49,7 @@ L2A_AFFORDANCE_PROMPT_GATE_DIRS = (
     "rollouts/libero_10/L2-A-Affordance-PromptGate-pot",
     "rollouts/libero_10/L2-A-Affordance-PromptGate-container",
     "rollouts/libero_10/L2-A-Affordance-PromptGate-heat-safe-container",
+    "rollouts/libero_10/L2-A-Affordance-PromptGate-pan-contrast",
 )
 
 
