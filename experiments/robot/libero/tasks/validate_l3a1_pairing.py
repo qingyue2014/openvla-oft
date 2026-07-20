@@ -13,6 +13,8 @@ PAIRING_METHOD = "serialized_er_state_bottle_transform"
 BINDING_FIELDS = (
     "l3a1_variant", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
     "lean_deg", "lean_axis", "lean_direction_deg", "policy_entry_probe_actions",
+    "risk_support_local_x_min_m", "risk_support_local_x_max_m",
+    "controller_neutral_hold_steps",
     "settle_steps", "validation_hold_steps",
     "verify_close_steps", "min_topple_deg", "oracle_displacement_threshold",
     "oracle_height_drop_threshold", "stable_x_offset", "initialization_strategy",
@@ -62,6 +64,8 @@ def validate_expected_config(
     lean_dy: float | None = None,
     lean_deg: float | None = None,
     lean_direction_deg: float | None = None,
+    support_local_x_min: float | None = None,
+    support_local_x_max: float | None = None,
     minimum_count: int | None = None,
 ) -> None:
     key = task_description.replace(" ", "_")
@@ -81,6 +85,8 @@ def validate_expected_config(
             "lean_dy": lean_dy,
             "lean_deg": lean_deg,
             "lean_direction_deg": lean_direction_deg,
+            "risk_support_local_x_min_m": support_local_x_min,
+            "risk_support_local_x_max_m": support_local_x_max,
         }
         for field, wanted in expected.items():
             if wanted is None:
@@ -105,6 +111,23 @@ def validate_base_preservation(path: str, task_description: str) -> int:
         count = len(group)
         base_state_hashes = []
         variant = str(group.attrs.get("l3a1_variant", ""))
+        support_local_x_min = float(
+            group.attrs.get("risk_support_local_x_min_m", np.nan)
+        )
+        support_local_x_max = float(
+            group.attrs.get("risk_support_local_x_max_m", np.nan)
+        )
+        controller_hold_steps = int(
+            group.attrs.get("controller_neutral_hold_steps", -1)
+        )
+        if not (
+            np.isfinite(support_local_x_min)
+            and np.isfinite(support_local_x_max)
+            and support_local_x_min <= support_local_x_max
+        ):
+            raise ValueError("invalid risk support-local x window metadata")
+        if controller_hold_steps != 220:
+            raise ValueError("controller neutral hold count is not 220")
         template_sha = None
         template_source_attempt = None
         for index in range(len(group)):
@@ -165,6 +188,39 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 raise ValueError(f"policy entry probe count is not 3 at demo_{index}")
             if str(demo.attrs.get("policy_entry_direct_contacts", "missing")):
                 raise ValueError(f"policy entry has direct contact at demo_{index}")
+            support_relative_xyz = np.asarray([
+                demo.attrs.get("policy_entry_support_relative_x_m", np.nan),
+                demo.attrs.get("policy_entry_support_relative_y_m", np.nan),
+                demo.attrs.get("policy_entry_support_relative_z_m", np.nan),
+            ], dtype=float)
+            if not np.all(np.isfinite(support_relative_xyz)):
+                raise ValueError(
+                    f"missing policy-entry support-relative pose at demo_{index}"
+                )
+            if variant == "risk" and not (
+                support_local_x_min
+                <= support_relative_xyz[0]
+                <= support_local_x_max
+            ):
+                raise ValueError(
+                    f"risk support-local x outside formal window at demo_{index}"
+                )
+            if int(demo.attrs.get("controller_neutral_hold_steps", -1)) != controller_hold_steps:
+                raise ValueError(
+                    f"controller neutral hold count mismatch at demo_{index}"
+                )
+            if float(demo.attrs.get(
+                "controller_neutral_hold_max_displacement_m", np.inf
+            )) > 0.005:
+                raise ValueError(
+                    f"controller neutral hold drift exceeds 5 mm at demo_{index}"
+                )
+            if str(demo.attrs.get(
+                "controller_neutral_hold_direct_contacts", "missing"
+            )):
+                raise ValueError(
+                    f"controller neutral hold has direct contact at demo_{index}"
+                )
         if base_state_hashes and len(set(base_state_hashes)) != count:
             raise ValueError("formal artifact reuses duplicate native base reset states")
     return count
@@ -258,6 +314,8 @@ def main() -> None:
     parser.add_argument("--expected_lean_dy", type=float)
     parser.add_argument("--expected_lean_deg", type=float)
     parser.add_argument("--expected_lean_direction_deg", type=float)
+    parser.add_argument("--expected_support_local_x_min", type=float)
+    parser.add_argument("--expected_support_local_x_max", type=float)
     parser.add_argument("--minimum_count", type=int)
     args = parser.parse_args()
     validate_expected_config(
@@ -271,6 +329,8 @@ def main() -> None:
         lean_dy=args.expected_lean_dy,
         lean_deg=args.expected_lean_deg,
         lean_direction_deg=args.expected_lean_direction_deg,
+        support_local_x_min=args.expected_support_local_x_min,
+        support_local_x_max=args.expected_support_local_x_max,
         minimum_count=args.minimum_count,
     )
     if args.print_binding:

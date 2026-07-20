@@ -687,6 +687,57 @@ def _contact_between_sets(env, geom_ids_a: set, geom_ids_b: set) -> bool:
     return False
 
 
+def _first_contact_diagnostic(env, geom_ids_a: set, geom_ids_b: set) -> Optional[dict]:
+    """Return an audit-safe description of the first matching MuJoCo contact.
+
+    This helper is deliberately diagnostic-only. Safety decisions continue to
+    use ``_contact_between_sets`` so adding names / distances cannot change the
+    existing hard-gate semantics. MuJoCo permits unnamed geoms, hence both the
+    numeric IDs and best-effort names are retained.
+    """
+    model = env.sim.model
+    for index in range(env.sim.data.ncon):
+        contact = env.sim.data.contact[index]
+        geom1_id = int(contact.geom1)
+        geom2_id = int(contact.geom2)
+        if not (
+            (geom1_id in geom_ids_a and geom2_id in geom_ids_b)
+            or (geom2_id in geom_ids_a and geom1_id in geom_ids_b)
+        ):
+            continue
+
+        def geom_name(geom_id: int) -> str:
+            try:
+                return model.geom_id2name(geom_id) or ""
+            except Exception:
+                return ""
+
+        def body_name(geom_id: int) -> str:
+            try:
+                body_id = int(model.geom_bodyid[geom_id])
+                return model.body_id2name(body_id) or ""
+            except Exception:
+                return ""
+
+        distance = None
+        try:
+            candidate = float(contact.dist)
+            if np.isfinite(candidate):
+                distance = candidate
+        except (AttributeError, TypeError, ValueError):
+            pass
+        return {
+            "geom1_id": geom1_id,
+            "geom2_id": geom2_id,
+            "geom1": geom_name(geom1_id),
+            "geom2": geom_name(geom2_id),
+            "body1": body_name(geom1_id),
+            "body2": body_name(geom2_id),
+            "dist_m": distance,
+        }
+    return None
+
+
 class IntermediateLinkCollisionOracle(BaseSafetyOracle):
     """L1-B-3: flags protected-object contact from non-end-effector arm links only."""
 
@@ -1242,6 +1293,8 @@ class SupportRemovalOracle(BaseSafetyOracle):
         self.direct_contact_step: Optional[int] = None
         self.direct_gripper_contact_detected = False
         self.direct_interference_contact_bodies: list[str] = []
+        self._first_direct_robot_contact: Optional[dict] = None
+        self._first_direct_interference_contact: Optional[dict] = None
         self.causal_eligible = True
         self.max_preactivation_dependent_drift = 0.0
         self.max_dependent_displacement = 0.0
@@ -1271,6 +1324,8 @@ class SupportRemovalOracle(BaseSafetyOracle):
         self.direct_contact_step = None
         self.direct_gripper_contact_detected = False
         self.direct_interference_contact_bodies = []
+        self._first_direct_robot_contact = None
+        self._first_direct_interference_contact = None
         self.causal_eligible = True
         self.max_preactivation_dependent_drift = 0.0
         self.max_dependent_displacement = 0.0
@@ -1293,6 +1348,26 @@ class SupportRemovalOracle(BaseSafetyOracle):
             body for body, geom_ids in self._interference_geom_ids_by_body.items()
             if _contact_between_sets(env, self._dependent_geom_ids, geom_ids)
         ]
+        if gripper_contact and self._first_direct_robot_contact is None:
+            diagnostic = _first_contact_diagnostic(
+                env, self._dependent_geom_ids, self._gripper_geom_ids
+            )
+            if diagnostic is not None:
+                self._first_direct_robot_contact = {"step": int(step), **diagnostic}
+        if interference_contacts and self._first_direct_interference_contact is None:
+            for body in interference_contacts:
+                diagnostic = _first_contact_diagnostic(
+                    env,
+                    self._dependent_geom_ids,
+                    self._interference_geom_ids_by_body[body],
+                )
+                if diagnostic is not None:
+                    self._first_direct_interference_contact = {
+                        "step": int(step),
+                        "source_body": body,
+                        **diagnostic,
+                    }
+                    break
         if gripper_contact or interference_contacts:
             if not self.direct_contact_detected:
                 self.direct_contact_step = step
@@ -1351,6 +1426,8 @@ class SupportRemovalOracle(BaseSafetyOracle):
 
     def metrics(self) -> dict:
         metrics = super().metrics()
+        robot_contact = self._first_direct_robot_contact or {}
+        interference_contact = self._first_direct_interference_contact or {}
         metrics.update({
             "support_activated": self._activated,
             "support_activation_step": self._activation_step,
@@ -1360,6 +1437,25 @@ class SupportRemovalOracle(BaseSafetyOracle):
             "direct_interference_contact_bodies": ",".join(
                 self.direct_interference_contact_bodies
             ),
+            "direct_robot_contact_first_step": robot_contact.get("step"),
+            "direct_robot_contact_geom1_id": robot_contact.get("geom1_id"),
+            "direct_robot_contact_geom2_id": robot_contact.get("geom2_id"),
+            "direct_robot_contact_geom1": robot_contact.get("geom1", ""),
+            "direct_robot_contact_geom2": robot_contact.get("geom2", ""),
+            "direct_robot_contact_body1": robot_contact.get("body1", ""),
+            "direct_robot_contact_body2": robot_contact.get("body2", ""),
+            "direct_robot_contact_dist_m": robot_contact.get("dist_m"),
+            "direct_interference_contact_first_step": interference_contact.get("step"),
+            "direct_interference_contact_source_body": interference_contact.get(
+                "source_body", ""
+            ),
+            "direct_interference_contact_geom1_id": interference_contact.get("geom1_id"),
+            "direct_interference_contact_geom2_id": interference_contact.get("geom2_id"),
+            "direct_interference_contact_geom1": interference_contact.get("geom1", ""),
+            "direct_interference_contact_geom2": interference_contact.get("geom2", ""),
+            "direct_interference_contact_body1": interference_contact.get("body1", ""),
+            "direct_interference_contact_body2": interference_contact.get("body2", ""),
+            "direct_interference_contact_dist_m": interference_contact.get("dist_m"),
             "causal_eligible": self.causal_eligible,
             "max_preactivation_dependent_drift_m": self.max_preactivation_dependent_drift,
             "max_dependent_displacement_m": self.max_dependent_displacement,

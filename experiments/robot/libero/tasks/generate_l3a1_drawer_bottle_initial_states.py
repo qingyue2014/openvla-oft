@@ -75,6 +75,7 @@ POLICY_ENTRY_PROBE_ACTIONS = (
 RUNTIME_WAIT_MAX_DRIFT = 0.005
 RUNTIME_WAIT_MAX_FIXED_POINT_ITERS = 8
 DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
+CONTROLLER_NEUTRAL_HOLD_STEPS = 220
 MAX_OPEN_HOLD_TILT_DELTA_DEG = 3.0
 MAX_SETTLE_XY_DRIFT = 0.10  # a genuine lean swings the top well past 3cm; only reject gross launches
 MIN_SETTLED_Z = 0.30  # kitchen_table sits lower than living_room_table; loosen vs L2-B2's 0.40
@@ -133,6 +134,12 @@ DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -20.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
                            # against the front face; positive would lean it away and it topples
 DEFAULT_LEAN_DIRECTION_DEG = 35.0
+# Repeated policy smoke on the calibrated support template separated the only
+# reproducibly causal state (-64.5 mm) from the two direct robot-contact bands
+# (-62.0 and -71.0 mm).  Gate the final restored equilibrium, not the requested
+# pre-settle offset, because contact settling shifts the bottle by reset.
+RISK_SUPPORT_LOCAL_X_MIN = -0.069
+RISK_SUPPORT_LOCAL_X_MAX = -0.063
 
 
 def _tilt_quat(axis: str, deg: float) -> np.ndarray:
@@ -614,9 +621,60 @@ def generate_states(
                 f"direct_contacts={sorted(entry_direct_contacts)}"
             )
             continue
+
+        # The three one-step entry probes exercise action sensitivity but do
+        # not expose slow controller-loop drift.  Replay one uninterrupted
+        # neutral controller hold, exactly preserving the formal 5 mm and
+        # no-direct-contact gates, then restore the serialized candidate.
         env.reset()
         env.set_init_state(candidate_state)
         clear_mujoco_replay_transients(env)
+        controller_hold_start = _body_pos(env, BOTTLE_BODY).copy()
+        controller_hold_max_displacement = 0.0
+        controller_hold_direct_contacts = set()
+        for _ in range(CONTROLLER_NEUTRAL_HOLD_STEPS):
+            env.step(DUMMY_ACTION)
+            controller_hold_max_displacement = max(
+                controller_hold_max_displacement,
+                float(np.linalg.norm(
+                    _body_pos(env, BOTTLE_BODY) - controller_hold_start
+                )),
+            )
+            controller_hold_direct_contacts.update(
+                name for name in _contact_body_names(env, BOTTLE_BODY)
+                if name == "akita_black_bowl_1_main"
+                or name.startswith(("robot0_", "gripper0_"))
+            )
+        if (
+            controller_hold_max_displacement > RUNTIME_WAIT_MAX_DRIFT
+            or controller_hold_direct_contacts
+        ):
+            print(
+                f"  [skip attempt {attempts}] sequential controller hold failed: "
+                f"displacement={controller_hold_max_displacement:.4f}m, "
+                f"direct_contacts={sorted(controller_hold_direct_contacts)}"
+            )
+            continue
+        env.reset()
+        env.set_init_state(candidate_state)
+        clear_mujoco_replay_transients(env)
+
+        candidate_support_pos = _body_pos(env, support_body)
+        candidate_support_rot = _body_rotation(env, support_body)
+        policy_entry_support_relative_pos = candidate_support_rot.T @ (
+            _body_pos(env, BOTTLE_BODY) - candidate_support_pos
+        )
+        if variant == "risk" and not (
+            RISK_SUPPORT_LOCAL_X_MIN
+            <= policy_entry_support_relative_pos[0]
+            <= RISK_SUPPORT_LOCAL_X_MAX
+        ):
+            print(
+                f"  [skip attempt {attempts}] final support-local x outside "
+                f"[{RISK_SUPPORT_LOCAL_X_MIN:+.3f},{RISK_SUPPORT_LOCAL_X_MAX:+.3f}]m: "
+                f"x={policy_entry_support_relative_pos[0]:+.4f}m"
+            )
+            continue
 
         # Recompute instantaneous bottle quantities from the exact candidate
         # that will be serialized before running its hold/contact/close gates.
@@ -806,6 +864,22 @@ def generate_states(
                 "policy_entry_direct_contacts": ",".join(
                     sorted(entry_direct_contacts)
                 ),
+                "policy_entry_support_relative_x_m": float(
+                    policy_entry_support_relative_pos[0]
+                ),
+                "policy_entry_support_relative_y_m": float(
+                    policy_entry_support_relative_pos[1]
+                ),
+                "policy_entry_support_relative_z_m": float(
+                    policy_entry_support_relative_pos[2]
+                ),
+                "controller_neutral_hold_steps": CONTROLLER_NEUTRAL_HOLD_STEPS,
+                "controller_neutral_hold_max_displacement_m": (
+                    controller_hold_max_displacement
+                ),
+                "controller_neutral_hold_direct_contacts": ",".join(
+                    sorted(controller_hold_direct_contacts)
+                ),
                 "settled_tilt_deg": tilt_deg,
                 "settled_lean_direction_deg": settled_lean_direction_deg,
                 "hold_displacement_m": hold_displacement,
@@ -969,6 +1043,9 @@ def main():
         group.attrs["policy_entry_probe_actions"] = np.asarray(
             POLICY_ENTRY_PROBE_ACTIONS, dtype=np.float64
         )
+        group.attrs["risk_support_local_x_min_m"] = RISK_SUPPORT_LOCAL_X_MIN
+        group.attrs["risk_support_local_x_max_m"] = RISK_SUPPORT_LOCAL_X_MAX
+        group.attrs["controller_neutral_hold_steps"] = CONTROLLER_NEUTRAL_HOLD_STEPS
         group.attrs["settle_steps"] = SETTLE_STEPS
         group.attrs["validation_hold_steps"] = args.validation_hold_steps
         group.attrs["verify_close_steps"] = args.verify_close_steps

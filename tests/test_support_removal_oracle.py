@@ -1,20 +1,30 @@
+import json
 from types import SimpleNamespace
 
 import numpy as np
 
 from experiments.robot.libero.physcog_oracles import SupportRemovalOracle, make_safety_oracle
+from experiments.robot.libero.physcog_trajectory import (
+    TrajectoryRecorder,
+    append_index_entry,
+    load_trajectory,
+)
 
 
 class _Model:
-    names = ["drawer", "bottle", "gripper0_finger"]
-    geom_bodyid = np.array([0, 1, 2])
-    ngeom = 3
+    names = ["drawer", "bottle", "gripper0_finger", "bowl"]
+    geom_names = ["drawer_collision", "bottle_collision", "left_finger_collision", "bowl_collision"]
+    geom_bodyid = np.array([0, 1, 2, 3])
+    ngeom = 4
 
     def body_name2id(self, name):
         return self.names.index(name)
 
     def body_id2name(self, body_id):
         return self.names[body_id]
+
+    def geom_id2name(self, geom_id):
+        return self.geom_names[geom_id]
 
 
 class _Env:
@@ -29,7 +39,15 @@ class _Env:
         )
 
     def set_contacts(self, *pairs):
-        self.sim.data.contact = [SimpleNamespace(geom1=a, geom2=b) for a, b in pairs]
+        contacts = []
+        for pair in pairs:
+            if len(pair) == 2:
+                contacts.append(SimpleNamespace(geom1=pair[0], geom2=pair[1]))
+            else:
+                contacts.append(
+                    SimpleNamespace(geom1=pair[0], geom2=pair[1], dist=pair[2])
+                )
+        self.sim.data.contact = contacts
         self.sim.data.ncon = len(pairs)
 
 
@@ -121,3 +139,85 @@ def test_l3_mode_requires_support_motion_and_marks_direct_contact_ineligible():
     assert metrics["direct_gripper_contact_detected"]
     assert metrics["direct_interference_contact_bodies"] == ""
     assert not metrics["causal_eligible"]
+
+
+def test_first_direct_contact_diagnostics_freeze_exact_robot_and_interference_pairs():
+    env = _Env()
+    oracle = SupportRemovalOracle(
+        "drawer",
+        ["bottle"],
+        activate_on_gripper_contact=False,
+        interference_bodies=["bowl"],
+    )
+    oracle.reset(env, None)
+    # Preserve MuJoCo's actual geom ordering: robot is geom1 in the first pair,
+    # while the dependent bottle is geom1 in the interference pair.
+    env.set_contacts((2, 1, -0.0015), (1, 3, -0.00025))
+    oracle.check(env, None, None, 7)
+    first = oracle.metrics()
+
+    assert first["direct_contact_detected"]
+    assert first["direct_gripper_contact_detected"]
+    assert first["direct_interference_contact_bodies"] == "bowl"
+    assert first["direct_robot_contact_first_step"] == 7
+    assert first["direct_robot_contact_geom1_id"] == 2
+    assert first["direct_robot_contact_geom2_id"] == 1
+    assert first["direct_robot_contact_geom1"] == "left_finger_collision"
+    assert first["direct_robot_contact_geom2"] == "bottle_collision"
+    assert first["direct_robot_contact_body1"] == "gripper0_finger"
+    assert first["direct_robot_contact_body2"] == "bottle"
+    assert first["direct_robot_contact_dist_m"] == -0.0015
+    assert first["direct_interference_contact_first_step"] == 7
+    assert first["direct_interference_contact_source_body"] == "bowl"
+    assert first["direct_interference_contact_geom1_id"] == 1
+    assert first["direct_interference_contact_geom2_id"] == 3
+    assert first["direct_interference_contact_geom1"] == "bottle_collision"
+    assert first["direct_interference_contact_geom2"] == "bowl_collision"
+    assert first["direct_interference_contact_body1"] == "bottle"
+    assert first["direct_interference_contact_body2"] == "bowl"
+    assert first["direct_interference_contact_dist_m"] == -0.00025
+
+    # Later contacts must not overwrite the first-event audit record.
+    env.set_contacts((1, 2, -0.02), (3, 1, -0.03))
+    oracle.check(env, None, None, 8)
+    assert oracle.metrics()["direct_robot_contact_first_step"] == 7
+    assert oracle.metrics()["direct_robot_contact_dist_m"] == -0.0015
+    assert oracle.metrics()["direct_interference_contact_first_step"] == 7
+    assert oracle.metrics()["direct_interference_contact_dist_m"] == -0.00025
+
+
+def test_contact_diagnostics_survive_trajectory_metadata_and_index(tmp_path):
+    env = _Env()
+    oracle = SupportRemovalOracle("drawer", ["bottle"])
+    oracle.reset(env, None)
+    env.set_contacts((1, 2, -0.0004))
+    oracle.check(env, None, None, 12)
+    metrics = oracle.metrics()
+
+    recorder = TrajectoryRecorder(env)
+    recorder.record(
+        {
+            "robot0_eef_pos": np.zeros(3),
+            "robot0_eef_quat": np.array([1.0, 0.0, 0.0, 0.0]),
+            "robot0_gripper_qpos": np.zeros(2),
+        },
+        np.zeros(7),
+        12,
+    )
+    trajectory_path = tmp_path / "trajectories" / "episode.npz"
+    recorder.save(str(trajectory_path), metrics)
+    append_index_entry(
+        str(trajectory_path.parent), {"file": trajectory_path.name, **metrics}
+    )
+
+    loaded = load_trajectory(str(trajectory_path))["metadata"]
+    index_entry = json.loads(
+        (trajectory_path.parent / "index.jsonl").read_text().splitlines()[0]
+    )
+    for audit_record in (loaded, index_entry):
+        assert audit_record["direct_robot_contact_first_step"] == 12
+        assert audit_record["direct_robot_contact_geom1"] == "bottle_collision"
+        assert audit_record["direct_robot_contact_geom2"] == "left_finger_collision"
+        assert audit_record["direct_robot_contact_body1"] == "bottle"
+        assert audit_record["direct_robot_contact_body2"] == "gripper0_finger"
+        assert audit_record["direct_robot_contact_dist_m"] == -0.0004

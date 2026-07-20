@@ -90,6 +90,9 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
         group.attrs["lean_deg"] = -20.0
         group.attrs["lean_axis"] = "x"
         group.attrs["lean_direction_deg"] = 0.0
+        group.attrs["risk_support_local_x_min_m"] = -0.069
+        group.attrs["risk_support_local_x_max_m"] = -0.063
+        group.attrs["controller_neutral_hold_steps"] = 220
         group.attrs["settle_steps"] = 400
         group.attrs["validation_hold_steps"] = 200
         group.attrs["verify_close_steps"] = 60
@@ -109,6 +112,12 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["policy_entry_displacement_m"] = 0.0
             demo.attrs["policy_entry_probe_count"] = 3
             demo.attrs["policy_entry_direct_contacts"] = ""
+            demo.attrs["policy_entry_support_relative_x_m"] = -0.065
+            demo.attrs["policy_entry_support_relative_y_m"] = -0.184
+            demo.attrs["policy_entry_support_relative_z_m"] = 0.011
+            demo.attrs["controller_neutral_hold_steps"] = 220
+            demo.attrs["controller_neutral_hold_max_displacement_m"] = 0.0
+            demo.attrs["controller_neutral_hold_direct_contacts"] = ""
             demo.attrs["bottle_qpos_flat_start"] = 3
             demo.attrs["bottle_qvel_flat_start"] = 20
             if source is not None:
@@ -169,6 +178,13 @@ def test_generator_and_artifact_gate_policy_entry_transition():
     assert '"policy_entry_probe_count": len(POLICY_ENTRY_PROBE_ACTIONS)' in text
     assert '"settled_lean_direction_deg": settled_lean_direction_deg' in text
     assert '"policy_entry_direct_contacts"' in text
+    assert "CONTROLLER_NEUTRAL_HOLD_STEPS = 220" in text
+    assert "for _ in range(CONTROLLER_NEUTRAL_HOLD_STEPS):" in text
+    assert '"controller_neutral_hold_max_displacement_m"' in text
+    assert '"controller_neutral_hold_direct_contacts"' in text
+    assert "RISK_SUPPORT_LOCAL_X_MIN = -0.069" in text
+    assert "RISK_SUPPORT_LOCAL_X_MAX = -0.063" in text
+    assert '"policy_entry_support_relative_x_m"' in text
 
 
 def test_base_preservation_rejects_unsafe_policy_entry(tmp_path):
@@ -185,6 +201,31 @@ def test_base_preservation_rejects_unsafe_policy_entry(tmp_path):
         demo.attrs["policy_entry_displacement_m"] = 0.0
         demo.attrs["policy_entry_direct_contacts"] = "gripper0_eef"
     with pytest.raises(ValueError, match="policy entry has direct contact"):
+        validate_base_preservation(str(artifact), "task")
+
+
+def test_base_preservation_rejects_unsafe_neutral_hold_or_risk_x(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        handle["task/demo_0"].attrs[
+            "controller_neutral_hold_max_displacement_m"
+        ] = 0.006
+    with pytest.raises(ValueError, match="neutral hold drift"):
+        validate_base_preservation(str(artifact), "task")
+
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        handle["task/demo_0"].attrs[
+            "controller_neutral_hold_direct_contacts"
+        ] = "robot0_forearm"
+    with pytest.raises(ValueError, match="neutral hold has direct contact"):
+        validate_base_preservation(str(artifact), "task")
+
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        handle["task/demo_0"].attrs["policy_entry_support_relative_x_m"] = -0.062
+    with pytest.raises(ValueError, match="support-local x outside"):
         validate_base_preservation(str(artifact), "task")
 
 
@@ -272,11 +313,14 @@ def test_artifact_config_rejects_stale_geometry_or_threshold(tmp_path):
     validate_expected_config(
         str(artifact), "task", variant="risk", seed=42, bddl="scene.bddl",
         displacement_threshold=0.01, lean_dx=-0.04, lean_dy=-0.18, lean_deg=-20.0,
+        support_local_x_min=-0.069, support_local_x_max=-0.063,
     )
     with pytest.raises(ValueError, match="lean_dx"):
         validate_expected_config(str(artifact), "task", lean_dx=-0.06)
     with pytest.raises(ValueError, match="oracle_displacement_threshold"):
         validate_expected_config(str(artifact), "task", displacement_threshold=0.03)
+    with pytest.raises(ValueError, match="risk_support_local_x_min_m"):
+        validate_expected_config(str(artifact), "task", support_local_x_min=-0.070)
     with pytest.raises(ValueError, match="below required"):
         validate_expected_config(str(artifact), "task", minimum_count=2)
 
