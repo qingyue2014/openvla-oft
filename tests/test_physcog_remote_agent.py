@@ -47,7 +47,8 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
-        "check", "geometry_sweep", "corner_sweep", "corridor_sweep", "preview",
+        "check", "geometry_sweep", "corner_sweep", "edge_sweep",
+        "corridor_sweep", "preview",
         "safe_reference", "smoke", "formal",
     }
     assert PHASES[("l3a1", "check")].count_env == "NUM_TRIALS"
@@ -62,6 +63,12 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert corner.command[-1].endswith("sweep_l3a1_corner_geometry.py")
     assert "experiments/logs/l3a1_corner_sweep.md" in corner.artifacts
     assert "experiments/logs/l3a1_corner_sweep.csv" in corner.artifacts
+
+    edge = PHASES[("l3a1", "edge_sweep")]
+    assert edge.command[-1].endswith("sweep_l3a1_edge_geometry.py")
+    assert "experiments/logs/l3a1_edge_sweep.md" in edge.artifacts
+    assert "experiments/logs/l3a1_edge_sweep.csv" in edge.artifacts
+    assert "experiments/logs/l3a1_edge_contacts.csv" in edge.artifacts
     formal = PHASES[("l3a1", "formal")]
     assert "FAMILIES=l3a1" in formal.command
     assert "SEEDS=42" in formal.command

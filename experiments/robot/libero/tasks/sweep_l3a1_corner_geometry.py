@@ -274,6 +274,7 @@ def _counterfactual(
     drawer_qadr: int,
     bottle_vadr: int,
     steps: int,
+    allowed_cabinet_geoms: set[str] | None = None,
 ) -> dict:
     env.reset()
     env.set_init_state(state)
@@ -294,6 +295,8 @@ def _counterfactual(
     first_hazard_step = -1
     pre_hazard_other_geoms: set[str] = set()
     pre_hazard_direct: set[str] = set()
+    if allowed_cabinet_geoms is None:
+        allowed_cabinet_geoms = {side_geom, front_geom, inner_front_geom}
     try:
         for geom_id in geom_ids:
             model.geom_contype[geom_id] = 0
@@ -313,9 +316,11 @@ def _counterfactual(
             attitude = _axis_change_deg(env, BOTTLE_BODY, axis_before)
             if first_hazard_step < 0:
                 pre_hazard_direct.update(_direct_contacts(env))
-                other = _other_cabinet_contact_geoms(env, side_geom) - {
-                    front_geom, inner_front_geom
-                }
+                contact_geoms = _contact_geom_names(env, BOTTLE_BODY)
+                other = _other_cabinet_contact_geoms(env, side_geom)
+                if side_geom in contact_geoms:
+                    other.add(side_geom)
+                other -= allowed_cabinet_geoms
                 pre_hazard_other_geoms.update(other)
                 if (
                     displacement > L3A1_DISPLACEMENT_THRESHOLD

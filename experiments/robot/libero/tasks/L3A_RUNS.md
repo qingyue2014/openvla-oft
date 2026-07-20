@@ -247,13 +247,34 @@ Job `482055` corrected the intervention to disable all of
 `C={g33,g35,g36}`. From the same zero-velocity settled state, the bottle
 crossed the 5° attitude hazard threshold at physics step 39 and reached
 23.86° attitude change, with no pre-hazard robot, bowl, or other cabinet
-contact. This confirms the native triangular support-removal mechanism. The
-job did not pass the final geometry gate because the old factual coverage
-counter counted only `g33` (86.07%) and misclassified `g33→g35` contact
-handoff. The follow-up therefore measures per-frame simultaneous
-`front_union_active && side_active`, retains the individual slab coverages
-for audit, and performs only a 3×3 sub-millimetre local scan around the
-confirmed pose.
+contact. This confirms that removing the complete native moving corner can
+cause the hazard, but it does not by itself establish which corner feature was
+the factual load-bearing support.
+
+Job `482065` resolved that attribution. No `g33→g35` handoff occurred:
+`g35` coverage was zero. The outer-front `g33` contact was at the exact
+right/inward front-board edge (drawer-local signed delta about
+`+1.33/-1.05 mm` relative to the earlier approximate seam, which equals the
+canonical g33 endpoint after accounting for that approximation). The `g36`
+contact was about 18.29 mm behind the edge along the side panel and therefore
+cannot be described as a seam contact. The experimental topology is
+accordingly refined to **table base + native g33 front-edge upper support**;
+`g35/g36` remain forbidden initial contacts but are included in complete
+component clearance `C`.
+
+The best edge-only point in job `482065` had 187/201 (93.03%) active g33
+frames, table contact in 201/201 frames, and an upper contact at the native
+bottle shoulder/collar collision boundary. It is not yet a pass: the existing
+95% threshold requires at least 191/201 frames, and a sharp box-edge contact
+must not be accepted from a single sub-millimetre setting. The edge follow-up
+records the full per-contact timeline and requires same-contact axial,
+edge-distance, force, and penetration qualification. A qualified edge witness
+must carry at least 5% of bottle weight, and a qualified table witness at least
+25%; raw force and `force/(m*g)` remain in the contact artifact for
+recalibration against the observed distribution and static moment balance.
+Complete `C` removal
+and front-component `F={g33,g35}` removal must both trigger the hazard; a
+g36-only removal must remain safe.
 
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's

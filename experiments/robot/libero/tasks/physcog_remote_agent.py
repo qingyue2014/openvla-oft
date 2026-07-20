@@ -65,6 +65,17 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a1_corner_sweep.csv",
         ),
     ),
+    ("l3a1", "edge_sweep"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/sweep_l3a1_edge_geometry.py",
+        ),
+        artifacts=(
+            "experiments/logs/l3a1_edge_sweep.md",
+            "experiments/logs/l3a1_edge_sweep.csv",
+            "experiments/logs/l3a1_edge_contacts.csv",
+        ),
+    ),
     ("l3a1", "corridor_sweep"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/sweep_l3a1_corridor.sh"),
         artifacts=(
