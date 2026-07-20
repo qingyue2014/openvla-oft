@@ -435,3 +435,13 @@ def test_safe_reference_video_recorder_matches_policy_camera_orientation():
 
     assert len(recorder.video_frames) == 1
     assert np.array_equal(recorder.video_frames[0], image[::-1, ::-1])
+
+
+def test_l1c3_safe_reference_reuses_paired_eb_grasp_and_rotates_the_bottle():
+    source = Path(
+        "experiments/robot/libero/tasks/l1c_occupied_pipeline.py"
+    ).read_text()
+    assert 'args.scenario in ("l1c2", "l1c3")' in source
+    assert "_reset_with_fixture_seed(env, reset_seeds[idx])" in source
+    assert "if failure is None and spec.horizontal_target:" in source
+    assert "step, sign=rotate_sign" in source

@@ -1698,11 +1698,11 @@ def _safe_reference_attempt(
 
 
 def safe_reference(args):
-    if args.scenario == "l1c2":
+    if args.scenario in ("l1c2", "l1c3"):
         files = sorted(glob.glob(os.path.join(args.eb_trajectories, "*.npz")))
         if not files:
             raise ValueError(
-                "L1-C2 safe_reference requires successful Eb trajectories; "
+                f"{args.scenario.upper()} safe_reference requires successful Eb trajectories; "
                 "run the 'eb' command first"
             )
         return _safe_reference_from_eb_prefix(args, files)
@@ -1900,6 +1900,9 @@ def _safe_reference_from_eb_prefix(args, files):
     """Replay a successful benign grasp prefix, then search safe Er placements."""
     spec = get_spec(args.scenario)
     states = load_states(args.er_states, spec.prompt)
+    reset_seeds = load_state_reset_seeds(args.er_states, spec.prompt)
+    if len(reset_seeds) != len(states):
+        raise RuntimeError("Er states are missing deterministic fixture-reset seeds")
     candidates = []
     for path in files:
         idx = _episode_index(path)
@@ -1911,7 +1914,9 @@ def _safe_reference_from_eb_prefix(args, files):
         candidates.append((idx, path, trajectory))
     candidates = candidates[: args.num_states]
     if not candidates:
-        raise ValueError("No successful paired Eb trajectories are available for L1-C2")
+        raise ValueError(
+            f"No successful paired Eb trajectories are available for {spec.scenario}"
+        )
 
     env = _env(
         resolve_bddl(spec), render=bool(args.video_dir), control=True
@@ -1921,8 +1926,9 @@ def _safe_reference_from_eb_prefix(args, files):
     os.makedirs(args.trajectory_dir, exist_ok=True)
     try:
         for idx, path, trajectory in candidates:
-            def attempt(offset, attempt_idx):
-                obs = env.reset()
+            def attempt(option, attempt_idx):
+                offset, rotate_sign = option
+                obs = _reset_with_fixture_seed(env, reset_seeds[idx])
                 obs = env.set_init_state(states[idx])
                 oracle = OccupiedGoalSafetyOracle(
                     spec.target_body,
@@ -1970,6 +1976,20 @@ def _safe_reference_from_eb_prefix(args, files):
                     failure = "eb_prefix_no_grasp"
 
                 opened = -1.0 if close > 0.0 else 1.0
+                if failure is None and spec.horizontal_target:
+                    obs, step, status = _rotate_horizontal(
+                        env, obs, oracle, recorder, close, args.rotate_steps,
+                        step, sign=rotate_sign,
+                    )
+                    failure = (
+                        status if status is not None and status.violated else None
+                    )
+                    if (
+                        failure is None
+                        and body_tilt_deg(env, spec.target_body)
+                        < args.min_horizontal_tilt_deg
+                    ):
+                        failure = "orientation_failed"
                 grasped_offset = _eef(obs) - body_pos(env, spec.target_body)
                 current_state = env.sim.get_state()
                 place_at_anchor(
@@ -2028,6 +2048,7 @@ def _safe_reference_from_eb_prefix(args, files):
                     "prefix_lift_m": prefix_lift,
                     "offset_x_m": offset[0],
                     "offset_y_m": offset[1],
+                    "rotate_sign": rotate_sign,
                     "release": int(metrics["release_detected"]),
                     "occupant_displacement_m": metrics[
                         "occupant_max_displacement_m"
@@ -2050,8 +2071,16 @@ def _safe_reference_from_eb_prefix(args, files):
                 )
                 return row, recorder
 
+            placement_options = tuple(
+                (offset, rotate_sign)
+                for offset in spec.safe_offsets
+                for rotate_sign in (
+                    (args.rotate_sign, -args.rotate_sign)
+                    if spec.horizontal_target else (0.0,)
+                )
+            )
             row, recorder, episode_attempts = _search_reference_offsets(
-                spec.safe_offsets,
+                placement_options,
                 attempt,
                 max_attempts=args.max_attempts_per_state,
             )

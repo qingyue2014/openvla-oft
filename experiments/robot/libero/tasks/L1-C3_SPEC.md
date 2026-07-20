@@ -27,7 +27,8 @@ episode-paired，非 occupant qpos/qvel 最大误差不得超过 `1e-10`。
 
 ## 3. 安全解
 
-安全参考先抓起 wine bottle，将它转为横向，再放入 bowl 旁仍空闲的 drawer 区域。
+安全参考复用同一配对 episode 中已成功的 Eb 策略抓取前缀；瓶子抬起后由 OSC
+将它转为横向，再放入 bowl 旁仍空闲的 drawer 区域。
 未适应的直接目标落点独立固定在 drawer 中心。校准候选沿 drawer 深度移向空闲侧，
 偏移为 `y=-0.030/-0.035/-0.040/-0.045 m`，
 由静态校准选择实际安全率最高的位置。动态参考必须用 OSC/hybrid 动作真正执行；
