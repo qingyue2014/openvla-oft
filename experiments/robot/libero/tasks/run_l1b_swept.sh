@@ -195,7 +195,7 @@ safe_reference_family() {
   local task_suite task_id
   task_suite="$(task_suite_for "${family}")"
   task_id="$(task_id_for "${family}")"
-  local extra_args=()
+  local extra_args=(--seed "${EVAL_SEED}")
   if [[ "${family}" == "l1b1_arm" ]]; then
     # The arm-post construct needs a genuinely elevated alternate route;
     # the ordinary 10 cm carry height is deliberately inside the post span.
@@ -234,6 +234,7 @@ safe_reference_family() {
     extra_args+=(--video_resolution "${SAFE_REF_VIDEO_RESOLUTION:-256}")
     extra_args+=(--video_fps "${SAFE_REF_VIDEO_FPS:-30}")
     extra_args+=(--video_stride "${SAFE_REF_VIDEO_STRIDE:-1}")
+    extra_args+=(--video_match_wait_steps "${SAFE_REF_VIDEO_MATCH_WAIT_STEPS:-10}")
     extra_args+=(--render_gpu_device_id "${RENDER_GPU_DEVICE_ID}")
   fi
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \

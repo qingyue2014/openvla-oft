@@ -333,8 +333,13 @@ def test_safe_reference_video_uses_the_policy_camera_and_is_optional():
     assert 'has_offscreen_renderer=bool(args.video_dir)' in shared
     assert 'parser.add_argument("--policy_camera", default="agentview")' in validator
     assert 'parser.add_argument("--video_resolution", type=int, default=256)' in validator
+    assert 'parser.add_argument("--video_match_wait_steps", type=int, default=10)' in validator
     assert 'if [[ -n "${SAFE_REF_VIDEO_DIR:-}" ]]' in runner
     assert '--video_dir "${SAFE_REF_VIDEO_DIR}"' in runner
+    safe_block = runner.split("safe_reference_family()", 1)[1].split(
+        "eval_condition()", 1
+    )[0]
+    assert 'local extra_args=(--seed "${EVAL_SEED}")' in safe_block
 
 
 def test_formal_safe_reference_gate_matches_specification():

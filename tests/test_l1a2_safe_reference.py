@@ -69,8 +69,10 @@ def test_policy_video_recorder_matches_evaluation_camera_transform(monkeypatch):
         object(), [], capture_video=True, video_stride=1
     )
 
+    recorder.record({}, np.zeros(7), 0, phase="wait")
     recorder.capture_initial({"agentview_image": raw})
 
+    assert len(recorder._frames) == 1
     np.testing.assert_array_equal(recorder._frames[0], raw[::-1, ::-1])
 
 

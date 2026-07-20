@@ -18,5 +18,8 @@ page is updated.
 
 Scripted safe-reference videos are also labeled separately from VLA rollouts.
 Their machine-readable run summaries live under `assets/evidence/`; the B1
-example uses the serialized Er state, the policy's 256×256 `agentview`, and the
-same 7-D OSC interface as evaluation.
+matched pair uses the same serialized Er `demo_1`, BDDL, seed, 10-step wait,
+and policy 256×256 `agentview` on both sides. Different families such as B1
+task-6 and B4 goal-layout must have separate headings and must never be
+presented as a visual pair. The scripted side uses the same 7-D OSC interface
+as evaluation but remains explicitly labeled as a controller reference.

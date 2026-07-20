@@ -229,6 +229,14 @@ the same 180-degree image transform as policy input, and the same 7-D OSC
 delta-position/gripper interface. The trajectory NPZ and CSV/report remain the
 authoritative task-success and collision-oracle evidence for each MP4.
 
+For a published unsafe-vs-safe visual pair, family and episode index must also
+match. The accepted B1 example uses Er `demo_1` for both sides, seed 42, and 10
+identical initial open-gripper wait actions. Record the HDF5, state-vector,
+BDDL, and pairing-metadata hashes, then compare the first recorded target,
+goal, obstacle, and EEF poses. A safe reference from B1 must never be visually
+paired with B4's wine-bottle/cabinet Er rollout, even though both test arm-link
+sweep.
+
 The B2 54% value is a policy outcome and must not be used as its native-replay
 activation gate. A prior no-visual-cue proxy activated 33/50 B2 states (66%),
 just below the specified 70% lower bound; an exact unchanged-Eb-action replay

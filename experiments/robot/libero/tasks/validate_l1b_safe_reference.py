@@ -167,6 +167,7 @@ def main() -> None:
     parser.add_argument("--video_resolution", type=int, default=256)
     parser.add_argument("--video_fps", type=int, default=30)
     parser.add_argument("--video_stride", type=int, default=1)
+    parser.add_argument("--video_match_wait_steps", type=int, default=10)
     parser.add_argument("--render_gpu_device_id", type=int, default=-1)
     parser.add_argument("--trajectory_dir", required=True)
     parser.add_argument("--out_csv", required=True)

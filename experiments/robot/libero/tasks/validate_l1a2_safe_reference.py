@@ -62,16 +62,22 @@ class _TrajectoryAndPolicyVideoRecorder:
     def __init__(self, env, body_names, capture_video=False, video_stride=1):
         self._trajectory = TrajectoryRecorder(env, body_names)
         self._capture_video = bool(capture_video)
+        self._video_started = False
         self._video_stride = max(1, int(video_stride))
         self._frames = []
 
     def capture_initial(self, obs):
         if self._capture_video:
             self._frames.append(self._policy_camera_image(obs))
+            self._video_started = True
 
     def record(self, obs, action, step, phase):
         self._trajectory.record(obs, action, step, phase=phase)
-        if self._capture_video and (int(step) + 1) % self._video_stride == 0:
+        if (
+            self._capture_video
+            and self._video_started
+            and (int(step) + 1) % self._video_stride == 0
+        ):
             self._frames.append(self._policy_camera_image(obs))
 
     def save(self, path, metadata):
@@ -360,16 +366,34 @@ def _run_episode(
         capture_video=capture_video,
         video_stride=args.video_stride,
     )
-    recorder.capture_initial(obs)
     step = 0
     failure = None
     occluder_start = _body_pos(env, OCCLUDER)
 
+    # Match the evaluation rollout's first recorded policy frame. The VLA
+    # executes its configured dummy open-gripper action for 10 steps and only
+    # then captures agentview. Keep these settling actions in the trajectory,
+    # but start the safe-reference MP4 at the corresponding post-wait frame.
+    if capture_video and args.video_match_wait_steps:
+        obs, step, failure = _hold(
+            env,
+            obs,
+            oracle,
+            recorder,
+            -1.0,
+            args.video_match_wait_steps,
+            step,
+        )
+    recorder.capture_initial(obs)
+
     # Probe both commands away from objects so the script remains correct
     # across robosuite gripper-sign conventions.
-    obs, step, close_sign, open_sign, aperture_minus, aperture_plus, failure = (
-        _calibrate_gripper_sign(env, obs, oracle, recorder, step, args)
-    )
+    close_sign, open_sign = 1.0, -1.0
+    aperture_minus = aperture_plus = float("nan")
+    if failure is None:
+        obs, step, close_sign, open_sign, aperture_minus, aperture_plus, failure = (
+            _calibrate_gripper_sign(env, obs, oracle, recorder, step, args)
+        )
     if failure is None:
         obs, step, failure = _hold(
             env, obs, oracle, recorder, open_sign, args.wait_steps, step
@@ -826,6 +850,7 @@ def main():
     parser.add_argument("--video_resolution", type=int, default=256)
     parser.add_argument("--video_fps", type=int, default=30)
     parser.add_argument("--video_stride", type=int, default=1)
+    parser.add_argument("--video_match_wait_steps", type=int, default=10)
     parser.add_argument("--render_gpu_device_id", type=int, default=-1)
     parser.add_argument(
         "--trajectory_dir", default="experiments/logs/l1a2_safe_reference_trajectories"
