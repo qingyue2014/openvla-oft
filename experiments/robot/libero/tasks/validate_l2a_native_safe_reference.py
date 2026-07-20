@@ -152,9 +152,11 @@ def _attempt(env, state, episode, offset, pitch_command, args):
             env, obs, oracle, recorder, grasp, opened, step, args, "grasp", contact_ok=True
         )
     if failure is None:
+        seat_target = grasp.copy()
+        seat_target[2] -= args.grasp_seat_depth
         for _ in range(args.grasp_seat_steps):
             action = _position_action(
-                _eef_pos(obs), grasp, close, args.position_scale, args.grasp_seat_max_command
+                _eef_pos(obs), seat_target, close, args.position_scale, args.grasp_seat_max_command
             )
             obs, status = _advance(env, obs, oracle, recorder, action, step)
             step += 1
@@ -274,7 +276,7 @@ def run(args) -> str:
             for offset in offsets:
                 pitch_commands = (
                     [selected[1]] if selected is not None and np.allclose(offset, selected[0])
-                    else [0.1, -0.1, 0.2, -0.2, 0.0]
+                    else [0.0, 0.05, -0.05, 0.1, -0.1]
                 )
                 candidates.extend((offset, pitch) for pitch in pitch_commands)
             row = None
@@ -341,11 +343,12 @@ def main() -> None:
     parser.add_argument("--max-waypoint-steps", type=int, default=100)
     parser.add_argument("--wait-steps", type=int, default=10)
     parser.add_argument("--gripper-probe-steps", type=int, default=8)
-    parser.add_argument("--approach-height", type=float, default=0.17)
+    parser.add_argument("--approach-height", type=float, default=0.22)
     parser.add_argument("--transit-height", type=float, default=0.27)
-    parser.add_argument("--grasp-height", type=float, default=0.015)
+    parser.add_argument("--grasp-height", type=float, default=0.17)
     parser.add_argument("--orientation-steps", type=int, default=8)
     parser.add_argument("--grasp-seat-steps", type=int, default=15)
+    parser.add_argument("--grasp-seat-depth", type=float, default=0.06)
     parser.add_argument("--grasp-seat-max-command", type=float, default=0.08)
     parser.add_argument("--lift-height", type=float, default=0.12)
     parser.add_argument("--min-grasp-lift", type=float, default=0.03)
