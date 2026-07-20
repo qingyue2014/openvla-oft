@@ -82,11 +82,14 @@ def _candidate_grid() -> list[tuple[float, float, float, float]]:
 
 
 def _contact_wrench(env, contact_index: int) -> np.ndarray:
-    from mujoco_py import functions as mj_functions
+    import mujoco
 
     wrench = np.zeros(6, dtype=float)
-    mj_functions.mj_contactForce(
-        env.sim.model, env.sim.data, contact_index, wrench
+    mujoco.mj_contactForce(
+        env.sim.model._model,
+        env.sim.data._data,
+        contact_index,
+        wrench,
     )
     return wrench
 
