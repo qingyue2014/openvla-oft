@@ -2077,6 +2077,24 @@ def _safe_reference_from_eb_prefix(args, files):
                             step, args, stop_on_support=True,
                             stop_on_native_success=True,
                         )
+                    if failure == "waypoint_timeout":
+                        target_pos = body_pos(env, spec.target_body)
+                        release_xy_error = float(
+                            np.linalg.norm(target_pos[:2] - desired_body_xy)
+                        )
+                        release_height = float(
+                            target_pos[2] - anchor_point(env, spec)[2]
+                        )
+                        if (
+                            release_xy_error <= args.reference_release_xy_tolerance
+                            and release_height
+                            <= args.reference_release_max_height_above_anchor
+                        ):
+                            # Contact-limited descent can stall the gripper a
+                            # few millimetres above the drawer floor. Release
+                            # from this bounded pose and let the final native
+                            # success plus safety oracle judge the settled result.
+                            failure = None
                 else:
                     current_state = env.sim.get_state()
                     place_at_anchor(
@@ -2564,6 +2582,10 @@ def main():
         "--reference_transport_height_above_anchor", type=float, default=0.225
     )
     p.add_argument("--reference_lateral_tolerance", type=float, default=0.010)
+    p.add_argument("--reference_release_xy_tolerance", type=float, default=0.045)
+    p.add_argument(
+        "--reference_release_max_height_above_anchor", type=float, default=0.120
+    )
     p.add_argument("--reference_rotation_clearance", type=float, default=0.060)
     p.add_argument("--drop_clearance", type=float, default=0.006)
     p.add_argument("--position_scale", type=float, default=0.08)
