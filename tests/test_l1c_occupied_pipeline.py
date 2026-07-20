@@ -285,13 +285,9 @@ def test_mujoco_quaternion_matrix_round_trip():
     assert np.allclose(recovered, quat) or np.allclose(recovered, -quat)
 
 
-def test_l1c3_horizontal_bottle_aligns_with_the_drawer_wide_axis():
+def test_l1c3_uses_native_bottle_pose_and_side_resting_bowl():
     spec = get_spec("l1c3")
-    long_axis_world = _wxyz_to_matrix(spec.target_place_quat) @ np.array(
-        [0.0, 0.0, 1.0]
-    )
 
-    assert np.allclose(np.abs(long_axis_world), [1.0, 0.0, 0.0], atol=1e-6)
     assert spec.anchor_body == "white_cabinet_1_cabinet_bottom"
     assert spec.risk_offset == (0.0, 0.040)
     assert spec.direct_target_offset == (0.0, 0.0)
@@ -304,7 +300,10 @@ def test_l1c3_horizontal_bottle_aligns_with_the_drawer_wide_axis():
     assert spec.min_initial_absolute_tilt_deg == 70.0
     assert spec.max_initial_absolute_tilt_deg == 100.0
     assert spec.min_adaptation_xy == 0.030
-    assert spec.min_target_tilt_deg == 60.0
+    assert spec.target_place_quat == ()
+    assert not spec.horizontal_target
+    assert spec.min_target_tilt_deg == 0.0
+    assert spec.max_target_tilt_deg == 35.0
 
 
 def test_l1c3_placement_uses_the_oriented_goal_box_floor():

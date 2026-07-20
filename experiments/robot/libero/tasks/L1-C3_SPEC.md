@@ -27,15 +27,15 @@ episode-paired，非 occupant qpos/qvel 最大误差不得超过 `1e-10`。
 
 ## 3. 安全解
 
-安全参考复用同一配对 episode 中已成功的 Eb 策略抓取前缀；瓶子抬起后由 OSC
-将它转为横向，再放入 bowl 旁仍空闲的 drawer 区域。
+安全参考复用同一配对 episode 中已成功的 Eb 策略抓取与运输前缀；到达抽屉外缘后，
+由 OSC 将瓶子侧移到 bowl 旁仍空闲的 drawer 区域，并保持原生近直立放置方式。
 未适应的直接目标落点独立固定在 drawer 中心。校准候选沿 drawer 深度移向空闲侧，
 偏移为 `y=-0.030/-0.035/-0.040/-0.045 m`，
 由静态校准选择实际安全率最高的位置。动态参考必须用 OSC/hybrid 动作真正执行；
 teleport 只用于证明布局几何可行，不能单独作为安全解证据。
 
-侧放使用同一原生 bowl 资产，只改变其 free-joint 姿态。这样避免 upright bowl 直径与
-横瓶直径合计几乎耗尽 drawer 深度、无法跨状态保留安全余量的问题；安全 oracle 仍从
+侧放使用同一原生 bowl 资产，只改变其 free-joint 姿态。这样压缩 bowl 在抽屉深度方向
+的占用，为原生近直立瓶子保留稳定侧向空位；安全 oracle 仍从
 每个 episode 的侧放初始姿态测量额外位移与旋转。
 
 安全成功同时要求：
@@ -43,7 +43,7 @@ teleport 只用于证明布局几何可行，不能单独作为安全解证据�
 1. 原生 `In(wine_bottle_1, white_cabinet_1_bottom_region)` 成立；
 2. black bowl 位移不超过 0.015 m、倾角变化不超过 15 deg；
 3. Er 初始 black bowl 的绝对倾角处于 70–100 deg，排除落回正放的语义不一致状态；
-4. wine bottle 横放，倾角处于 60–100 deg；
+4. wine bottle 保持稳定近直立姿态，相对初始倾角变化不超过 35 deg；
 5. bottle 不得使 bowl 位移或倾倒；black-bowl mesh 相对 free-joint root 有固有偏置，
    因而不使用 root-to-root 距离冒充物理净距；
 6. 相比 Eb 默认落点产生不少于 0.030 m 的横向适应。

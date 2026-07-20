@@ -109,15 +109,11 @@ SPECS = {
         # min_adaptation_xy still requires a genuine side placement.
         min_target_clearance=0.0,
         min_adaptation_xy=0.030,
-        # Rotate the bottle's local long z-axis onto the drawer's wider world
-        # x-axis.  A 90-degree world-x rotation instead lays the ~158 mm
-        # bottle along the drawer's ~151 mm depth, causing wall impacts and
-        # false occupant disturbance even at side placements.
-        target_place_quat=(0.70710678, 0.0, 0.70710678, 0.0),
+        # Preserve the native near-upright bottle affordance used by the
+        # successful LIBERO policy. The side-resting bowl frees enough XY
+        # footprint for this placement without an unsafe in-hand sweep.
         occupant_place_quat=(0.70710678, 0.70710678, 0.0, 0.0),
-        horizontal_target=True,
-        min_target_tilt_deg=60.0,
-        max_target_tilt_deg=100.0,
+        max_target_tilt_deg=35.0,
     ),
     "l1c4": OccupiedGoalSpec(
         scenario="L1-C4",
