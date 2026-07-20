@@ -245,6 +245,16 @@ def _run_episode(env, state, args, scenario, episode_idx, grasp_xy_offset,
             )
             if failure is not None and failure.reason == "waypoint_timeout":
                 _robot_stall_diagnostics(env, stage)
+    if failure is None and yaw_bearing_deg is not None:
+        # The single pre-approach alignment drifts during the long
+        # translational moves (measured up to ~0.15 rad by the time of grasp,
+        # above the 0.10 rad tolerance) because _move_to's zero-rotation
+        # actions do not perfectly hold pose under redundancy resolution.
+        # Re-align at the actual grasp pose, right before closing, so the
+        # closing axis is radial at the moment that matters.
+        obs, step, failure = _align_grasp_yaw(
+            env, obs, oracle, recorder, open_sign, yaw_bearing_deg, step, args
+        )
     if failure is None:
         obs, step, failure = _seat_grasp(
             env, obs, oracle, recorder, grasp_eef, close_sign, step, args
