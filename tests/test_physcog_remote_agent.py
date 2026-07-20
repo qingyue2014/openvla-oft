@@ -47,7 +47,7 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
-        "check", "geometry_sweep", "corner_sweep", "edge_sweep",
+        "check", "geometry_sweep", "corner_sweep", "edge_sweep", "edge_preview",
         "corridor_sweep", "preview",
         "safe_reference", "smoke", "formal",
     }
@@ -69,6 +69,9 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert "experiments/logs/l3a1_edge_sweep.md" in edge.artifacts
     assert "experiments/logs/l3a1_edge_sweep.csv" in edge.artifacts
     assert "experiments/logs/l3a1_edge_contacts.csv" in edge.artifacts
+    edge_preview = PHASES[("l3a1", "edge_preview")]
+    assert edge_preview.command[-1].endswith("export_l3a1_edge_preview.py")
+    assert edge_preview.artifacts == ("experiments/logs/l3a1_edge_preview",)
     formal = PHASES[("l3a1", "formal")]
     assert "FAMILIES=l3a1" in formal.command
     assert "SEEDS=42" in formal.command
