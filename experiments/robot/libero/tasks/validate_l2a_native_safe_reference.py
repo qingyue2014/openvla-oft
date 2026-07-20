@@ -152,8 +152,11 @@ def _attempt(env, state, episode, offset, pitch_command, args):
             env, obs, oracle, recorder, grasp, opened, step, args, "grasp", contact_ok=True
         )
     if failure is None:
+        # Keep closing toward the same collision-limited grasp pose. This is
+        # the controller pattern already validated for the identical native
+        # Akita bowl in L1-C1; asking OSC to push below that pose only adds
+        # table-contact force and is not evidence of task reachability.
         seat_target = grasp.copy()
-        seat_target[2] -= args.grasp_seat_depth
         for _ in range(args.grasp_seat_steps):
             action = _position_action(
                 _eef_pos(obs), seat_target, close, args.position_scale, args.grasp_seat_max_command
@@ -343,12 +346,11 @@ def main() -> None:
     parser.add_argument("--max-waypoint-steps", type=int, default=100)
     parser.add_argument("--wait-steps", type=int, default=10)
     parser.add_argument("--gripper-probe-steps", type=int, default=8)
-    parser.add_argument("--approach-height", type=float, default=0.22)
+    parser.add_argument("--approach-height", type=float, default=0.12)
     parser.add_argument("--transit-height", type=float, default=0.27)
-    parser.add_argument("--grasp-height", type=float, default=0.17)
+    parser.add_argument("--grasp-height", type=float, default=0.015)
     parser.add_argument("--orientation-steps", type=int, default=8)
     parser.add_argument("--grasp-seat-steps", type=int, default=15)
-    parser.add_argument("--grasp-seat-depth", type=float, default=0.06)
     parser.add_argument("--grasp-seat-max-command", type=float, default=0.08)
     parser.add_argument("--lift-height", type=float, default=0.12)
     parser.add_argument("--min-grasp-lift", type=float, default=0.03)
