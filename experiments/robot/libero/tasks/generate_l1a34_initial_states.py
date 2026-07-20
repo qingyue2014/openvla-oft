@@ -139,13 +139,27 @@ def _mover_pixels(env, mover_body: str) -> dict:
     }
 
 
-def _settle_and_capture_mover(env, official_state, mover_body, mover_xy):
+def _settled_baseline_positions(env, official_state):
+    """Positions of every scene body after the settle protocol, mover untouched.
+
+    LIBERO official init states start objects slightly above the table, so the
+    unmodified world already moves during the settle no-ops. The protected-
+    object gate must compare against this settled baseline — comparing against
+    the raw t=0 official positions counts the benchmark's own natural settling
+    as mover-induced disturbance and rejects every layout with an identical,
+    deterministic displacement.
+    """
+    _restore_state(env, official_state)
+    _settle(env, SETTLE_STEPS + STABILITY_CHECK_STEPS)
+    return {body: _body_pos(env, body).copy() for body in ALL_BODIES}
+
+
+def _settle_and_capture_mover(env, official_state, mover_body, mover_xy, baseline_positions):
     """Settle the mover at mover_xy in a scratch world; return its joint state.
 
     Returns (qpos7, qvel6, diagnostics) or (None, None, reason).
     """
     _restore_state(env, official_state)
-    official_positions = {body: _body_pos(env, body).copy() for body in ALL_BODIES}
 
     qpos_slice, qvel_slice = _free_joint_slices(env.sim, mover_body)
     env.sim.data.qpos[qpos_slice][:2] = mover_xy
@@ -158,7 +172,7 @@ def _settle_and_capture_mover(env, official_state, mover_body, mover_xy):
 
     mover_drift = float(np.linalg.norm(_body_pos(env, mover_body) - settled_pos))
     protected = {
-        body: float(np.linalg.norm(_body_pos(env, body) - official_positions[body]))
+        body: float(np.linalg.norm(_body_pos(env, body) - baseline_positions[body]))
         for body in ALL_BODIES
         if body != mover_body
     }
@@ -341,6 +355,7 @@ def generate_paired_states(scenario_key, task_suite_name, n, seed, audit_predica
     print(f"Generating {n} episode-paired states (seed={seed})...\n")
 
     er_states, ec_states, records = [], [], []
+    baseline_cache = {}
     reject_counts = Counter()
     predicate_audited = False
     attempts = 0
@@ -351,6 +366,10 @@ def generate_paired_states(scenario_key, task_suite_name, n, seed, audit_predica
         env.reset()
         env.set_init_state(official_states[state_idx])
         official_flat = env.sim.get_state().flatten()
+        baseline_key = official_flat.tobytes()
+        if baseline_key not in baseline_cache:
+            baseline_cache[baseline_key] = _settled_baseline_positions(env, official_flat)
+        baseline_positions = baseline_cache[baseline_key]
         gap_er = float(rng.uniform(*scenario["er_gap_range"]))
 
         pair = {}
@@ -360,7 +379,8 @@ def generate_paired_states(scenario_key, task_suite_name, n, seed, audit_predica
                 _restore_state(env, official_flat)
                 mover_xy = _mover_target_xy(env, scenario, gap, bearing_offset)
                 qpos7, qvel6, note = _settle_and_capture_mover(
-                    env, official_flat, scenario["mover_body"], mover_xy
+                    env, official_flat, scenario["mover_body"], mover_xy,
+                    baseline_positions,
                 )
                 if qpos7 is None:
                     reject_counts[f"{condition}_settle"] += 1

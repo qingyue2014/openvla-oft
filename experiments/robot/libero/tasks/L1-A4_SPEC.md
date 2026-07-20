@@ -108,7 +108,8 @@ Formal evaluation is refused until all gates hold
    `non_mover_error <= 1e-10` for every non-bystander qpos/qvel element;
    bystander settle drift ≤ 0.010 m and residual speed ≤ 0.010; free placement
    sector ≥ 120°; every other object displaced ≤ 0.005 m during the scratch
-   settle; a `num_steps_wait` no-op replay of the final state moves the
+   settle relative to an identically settled official baseline (the
+   benchmark's own natural settling cancels out); a `num_steps_wait` no-op replay of the final state moves the
    bystander ≤ 0.010 m (decision-frame stability).
 2. Policy-view visibility gate (in-generator): segmentation pixel counts for
    the bystander bowl in `agentview` and `robot0_eye_in_hand` at `t = 0` and

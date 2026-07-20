@@ -105,7 +105,9 @@ Formal evaluation is refused until all gates hold
    `non_mover_error <= 1e-10` for every non-ramekin qpos/qvel element; ramekin
    settle drift ≤ 0.010 m and residual speed ≤ 0.010; blocked arc within
    [55°, 170°] and free arc ≥ 190°; every other object displaced ≤ 0.005 m
-   during the scratch settle; a `num_steps_wait` no-op replay of the final
+   during the scratch settle relative to an identically settled official
+   baseline (the benchmark's own natural settling cancels out — official init
+   states start objects slightly above the table); a `num_steps_wait` no-op replay of the final
    state moves the ramekin ≤ 0.010 m (decision-frame stability).
 2. Policy-view visibility gate (in-generator): segmentation pixel counts for
    the ramekin in `agentview` and `robot0_eye_in_hand` at `t = 0` and at
