@@ -6,6 +6,7 @@ import pytest
 from experiments.robot.libero.physcog_attribution import Episode, score_against_benign
 from experiments.robot.libero.tasks.record_experiment_results import (
     _metadata_for_attribution,
+    _metadata_for_run,
     parse_attribution_report,
 )
 
@@ -50,6 +51,18 @@ def test_l1a2_attribution_report_metadata_is_registered() -> None:
         Path("experiments/logs/l1a2_attribution.md"),
         "L1-A2 upright-cookie visual occlusion",
     ) == ("L1", "L1-A2")
+
+
+@pytest.mark.parametrize(
+    ("run_id", "condition"),
+    [
+        ("L1-C2-occupied-tray-eb", "Eb Empty Tray"),
+        ("L1-C2-occupied-tray-risk", "Er Occupied Tray"),
+        ("L1-C2-occupied-tray-ec", "Ec Nearby Object"),
+    ],
+)
+def test_l1c2_occupied_tray_run_metadata_is_registered(run_id, condition) -> None:
+    assert _metadata_for_run(run_id) == ("L1", "L1-C2", condition)
 
 
 def test_five_primary_metrics_include_btf_in_result_registration(tmp_path) -> None:
