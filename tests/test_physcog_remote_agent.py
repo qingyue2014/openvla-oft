@@ -93,6 +93,35 @@ def test_l1c2_runner_passes_the_per_condition_video_cap():
     assert '--max_total_videos "${MAX_VIDEOS_PER_CONDITION}"' in runner
 
 
+def test_l1c3_registry_exposes_the_full_gated_evaluation_chain():
+    assert set(phase for scenario, phase in PHASES if scenario == "l1c3") == {
+        "init", "preview", "validate_layout", "policy_probe", "safe_reference",
+        "action_replay", "pilot", "formal",
+    }
+    assert PHASES[("l1c3", "init")].count_env == "NUM_TRIALS"
+    assert PHASES[("l1c3", "preview")].count_env == "PREVIEW_NUM_STATES"
+    assert PHASES[("l1c3", "validate_layout")].count_env == "NUM_TRIALS"
+    assert PHASES[("l1c3", "policy_probe")].count_env == "NUM_TRIALS"
+    safe_reference = PHASES[("l1c3", "safe_reference")]
+    assert safe_reference.count_env == "CALIBRATION_NUM_STATES"
+    assert "experiments/logs/l1c3_safe_reference_videos" in safe_reference.artifacts
+
+    pilot = PHASES[("l1c3", "pilot")]
+    assert pilot.count_env == "NUM_TRIALS"
+    assert "SAVE_VIDEO_MODE=all" in pilot.command
+    assert "MAX_VIDEOS_PER_OUTCOME=8" in pilot.command
+    for condition in ("eb", "risk", "ec"):
+        assert f"rollouts/libero_90/L1-C3-occupied-drawer-{condition}" in pilot.artifacts
+
+    formal = PHASES[("l1c3", "formal")]
+    assert formal.count_env == "NUM_TRIALS"
+    assert "RENDER_GPU_DEVICE_ID=1" in formal.command
+    assert "SAVE_VIDEO_MODE=all" in formal.command
+    assert "MAX_VIDEOS_PER_CONDITION=10" in formal.command
+    assert "experiments/robot/libero/tasks/l1c3_state_bundle.json" not in formal.artifacts
+    assert "experiments/robot/libero/tasks/l1c3_preview" not in formal.artifacts
+
+
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
         "check", "geometry_sweep", "safe_reference", "smoke", "formal",
