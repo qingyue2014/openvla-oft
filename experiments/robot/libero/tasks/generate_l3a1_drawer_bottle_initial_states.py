@@ -674,6 +674,8 @@ def generate_states(
         # restore the exact candidate before all remaining gates.
         policy_entry_displacement = 0.0
         policy_entry_contacts = set()
+        policy_entry_start_contact_geoms = set()
+        policy_entry_end_contact_geoms = set()
         entry_direct_contacts = set()
         policy_entry_support_wing_contact_all = True
         policy_entry_support_wing_contact_any = False
@@ -682,6 +684,9 @@ def generate_states(
             env.reset()
             env.set_init_state(candidate_state)
             clear_mujoco_replay_transients(env)
+            policy_entry_start_contact_geoms.update(
+                _contact_geom_names(env, BOTTLE_BODY)
+            )
             entry_start = _body_pos(env, BOTTLE_BODY).copy()
             env.step(entry_action)
             policy_entry_displacement = max(
@@ -690,6 +695,7 @@ def generate_states(
             )
             action_contacts = _contact_body_names(env, BOTTLE_BODY)
             action_contact_geoms = _contact_geom_names(env, BOTTLE_BODY)
+            policy_entry_end_contact_geoms.update(action_contact_geoms)
             policy_entry_contacts.update(action_contacts)
             policy_entry_support_wing_contact_all = (
                 policy_entry_support_wing_contact_all
@@ -720,7 +726,11 @@ def generate_states(
                 f"direct_contacts={sorted(entry_direct_contacts)}, "
                 f"wing_contact_all={policy_entry_support_wing_contact_all}, "
                 f"wing_contact_any={policy_entry_support_wing_contact_any}, "
-                f"wing_interference={sorted(policy_entry_wing_interference)}"
+                f"wing_interference={sorted(policy_entry_wing_interference)}, "
+                f"start_geoms={sorted(policy_entry_start_contact_geoms)}, "
+                f"end_geoms={sorted(policy_entry_end_contact_geoms)}, "
+                f"bottle_pos={_body_pos(env, BOTTLE_BODY).round(5).tolist()}, "
+                f"wing_pos={env.sim.data.geom_xpos[env.sim.model.geom_name2id(support_wing_geom)].round(5).tolist()}"
             )
             continue
 
@@ -1025,6 +1035,12 @@ def generate_states(
                 "policy_entry_displacement_m": policy_entry_displacement,
                 "policy_entry_probe_count": len(POLICY_ENTRY_PROBE_ACTIONS),
                 "policy_entry_contacts": ",".join(sorted(policy_entry_contacts)),
+                "policy_entry_start_contact_geoms": ",".join(
+                    sorted(policy_entry_start_contact_geoms)
+                ),
+                "policy_entry_end_contact_geoms": ",".join(
+                    sorted(policy_entry_end_contact_geoms)
+                ),
                 "policy_entry_direct_contacts": ",".join(
                     sorted(entry_direct_contacts)
                 ),
