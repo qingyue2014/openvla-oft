@@ -292,7 +292,9 @@ def test_l1c3_uses_native_bottle_pose_and_side_resting_bowl():
     assert spec.risk_offset == (0.0, -0.030)
     assert spec.direct_target_offset == (-0.038, -0.030)
     assert spec.safe_offsets == (
-        (0.0, 0.030), (0.0, 0.035), (0.0, 0.040), (0.0, 0.045)
+        (-0.060, 0.0), (-0.070, 0.0),
+        (0.060, 0.0), (0.070, 0.0),
+        (0.0, 0.045), (0.0, 0.050), (0.0, 0.055), (0.0, 0.060),
     )
     assert spec.min_target_clearance == 0.0
     assert spec.occupant_place_quat == (0.70710678, -0.70710678, 0.0, 0.0)

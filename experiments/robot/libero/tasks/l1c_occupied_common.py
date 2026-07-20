@@ -101,7 +101,11 @@ SPECS = {
         # opposite side of the occupied drawer.
         risk_offset=(0.0, -0.030),
         direct_target_offset=(-0.038, -0.030),
-        safe_offsets=((0.0, 0.030), (0.0, 0.035), (0.0, 0.040), (0.0, 0.045)),
+        safe_offsets=(
+            (-0.060, 0.0), (-0.070, 0.0),
+            (0.060, 0.0), (0.070, 0.0),
+            (0.0, 0.045), (0.0, 0.050), (0.0, 0.055), (0.0, 0.060),
+        ),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,
         # The mirrored bowl repeatedly settles at 46.6 degrees with sub-mm
