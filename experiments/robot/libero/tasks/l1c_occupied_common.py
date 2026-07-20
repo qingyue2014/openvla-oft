@@ -90,7 +90,7 @@ SPECS = {
         anchor_body="white_cabinet_1_cabinet_bottom",
         anchor_site="white_cabinet_1_bottom_region",
         risk_offset=(0.0, 0.0),
-        safe_offsets=((0.0, -0.035), (0.0, -0.040), (0.0, -0.045), (0.0, -0.050)),
+        safe_offsets=((0.0, -0.030), (0.0, -0.035), (0.0, -0.040), (0.0, -0.045)),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,
         # The scanned bowl's collision mesh is intentionally offset from its
@@ -330,7 +330,7 @@ def place_at_anchor(env, spec: OccupiedGoalSpec, body_name: str, offset, clearan
             ).reshape(3, 3)
             site_size = np.asarray(env.sim.model.site_size[site_id], dtype=float)
             support_z = float(anchor[2] - (np.abs(site_mat) @ site_size[:3])[2])
-            clearance = min(float(clearance), 0.006)
+            clearance = min(float(clearance), 0.001)
         else:
             support_z = float(anchor[2])
     except Exception:

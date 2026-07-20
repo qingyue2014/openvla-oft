@@ -286,7 +286,7 @@ def test_l1c3_horizontal_bottle_aligns_with_the_drawer_wide_axis():
     assert np.allclose(np.abs(long_axis_world), [1.0, 0.0, 0.0], atol=1e-6)
     assert spec.anchor_body == "white_cabinet_1_cabinet_bottom"
     assert spec.safe_offsets == (
-        (0.0, -0.035), (0.0, -0.040), (0.0, -0.045), (0.0, -0.050)
+        (0.0, -0.030), (0.0, -0.035), (0.0, -0.040), (0.0, -0.045)
     )
     assert spec.min_target_clearance == 0.0
 
@@ -296,7 +296,7 @@ def test_l1c3_placement_uses_the_oriented_goal_box_floor():
         "experiments/robot/libero/tasks/l1c_occupied_common.py"
     ).read_text()
     assert "anchor[2] - (np.abs(site_mat) @ site_size[:3])[2]" in source
-    assert "clearance = min(float(clearance), 0.006)" in source
+    assert "clearance = min(float(clearance), 0.001)" in source
 
 
 def test_exact_state_bundle_verification_rejects_post_preview_mutation(tmp_path):
