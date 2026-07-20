@@ -24,3 +24,11 @@ def test_ec_er_share_one_bddl_and_stove_starts_native_off():
     assert "(On akita_black_bowl_1 main_table_next_to_box_region)" in text
     assert "(On akita_black_bowl_2 flat_stove_1_cook_region)" in text
     assert "(Turnoff flat_stove_1)" in text
+
+
+def test_fixed_fixtures_remove_unserialized_reset_randomness():
+    text = BDDL.read_text(encoding="utf-8")
+
+    assert "(0.03 -0.27 0.03 -0.27)" in text
+    assert "(-0.41 -0.14 -0.41 -0.14)" in text
+    assert "(2.6927937030919655 2.6927937030919655)" in text

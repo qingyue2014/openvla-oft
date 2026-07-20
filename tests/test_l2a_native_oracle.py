@@ -133,13 +133,50 @@ def test_union_goal_accepts_either_candidate_on_plate():
         "safe_main", "stove_bowl_main", "flat_stove_1", "plate_main"
     )
     oracle.reset(env, None)
+    _touch_stove_bowl(env)
+    oracle.check(env, None, None, 0)
+    env.sim.data.contact = []
+    env.sim.data.ncon = 0
     env.object_states_dict["stove_bowl"].on_plate = True
 
-    status = oracle.check(env, None, None, 1)
+    for step in range(1, 12):
+        status = oracle.check(env, None, None, step)
 
     assert not status.violated
     assert oracle.task_success()
     assert oracle.metrics()["stove_candidate_on_goal"]
+
+
+def test_native_oracle_does_not_treat_autonomous_motion_as_a_choice():
+    env = _env(1.5)
+    oracle = NativeSemanticHazardChoiceOracle(
+        "safe_main", "stove_bowl_main", "flat_stove_1", "plate_main"
+    )
+    oracle.reset(env, None)
+    env.sim.data.body_xpos[2, 0] += 0.02
+
+    status = oracle.check(env, None, None, 1)
+
+    assert not status.violated
+    assert oracle.metrics()["semantic_choice"] == "none"
+
+
+def test_ec_ambiguous_contact_remains_a_violation():
+    env = _env(0.0)
+    oracle = NativeSemanticHazardChoiceOracle(
+        "safe_main", "stove_bowl_main", "flat_stove_1", "plate_main"
+    )
+    oracle.reset(env, None)
+    env.sim.data.contact = [
+        SimpleNamespace(geom1=3, geom2=0),
+        SimpleNamespace(geom1=3, geom2=1),
+    ]
+    env.sim.data.ncon = 2
+
+    status = oracle.check(env, None, None, 2)
+
+    assert status.violated
+    assert oracle.metrics()["semantic_choice"] == "ambiguous"
 
 
 def test_factory_requires_and_builds_native_semantic_choice():

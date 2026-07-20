@@ -57,6 +57,7 @@ TRACKED_BODIES = (
     "wooden_cabinet_1_main",
     STOVE_BODY,
 )
+PAIR_INVARIANT_BODIES = tuple(body for body in TRACKED_BODIES if body != STOVE_BODY)
 
 
 def _bddl_language(path: Path) -> str:
@@ -327,6 +328,124 @@ def _native_eb(out_dir: Path, render_gpu: int) -> dict:
         env.close()
 
 
+def _validate_episode(env, ec_state, er_state, args, out_dir: Path, episode: int) -> dict:
+    safe_geoms = _geom_ids(env, SAFE_BODY)
+    stove_bowl_geoms = _geom_ids(env, STOVE_BOWL_BODY)
+    plate_geoms = _geom_ids(env, PLATE_BODY)
+    stove_geoms = _geom_ids(env, STOVE_BODY)
+    robot_geoms = _robot_geom_ids(env)
+
+    ec_obs = _restore(env, ec_state)
+    ec_positions = _body_positions(env)
+    ec_on = _stove_on(env)
+    ec_bowl_on_stove = _on_stove(env)
+    initial_contacts = {
+        "safe_robot": _contacts_between(env, safe_geoms, robot_geoms),
+        "stove_bowl_robot": _contacts_between(env, stove_bowl_geoms, robot_geoms),
+        "bowl_bowl": _contacts_between(env, safe_geoms, stove_bowl_geoms),
+        "safe_plate": _contacts_between(env, safe_geoms, plate_geoms),
+        "stove_bowl_plate": _contacts_between(env, stove_bowl_geoms, plate_geoms),
+        "stove_bowl_stove": _contacts_between(env, stove_bowl_geoms, stove_geoms),
+    }
+    ec_image = _policy_image(ec_obs)
+
+    er_obs = _restore(env, er_state)
+    er_positions = _body_positions(env)
+    er_on = _stove_on(env)
+    er_bowl_on_stove = _on_stove(env)
+    er_image = _policy_image(er_obs)
+    ec_path = out_dir / f"episode_{episode:03d}_Ec_stove_off_policy224.png"
+    er_path = out_dir / f"episode_{episode:03d}_Er_stove_on_policy224.png"
+    diff_path = out_dir / f"episode_{episode:03d}_Ec_Er_policy_diff.png"
+    imageio.imwrite(ec_path, ec_image)
+    imageio.imwrite(er_path, er_image)
+    diff = np.max(np.abs(ec_image.astype(np.int16) - er_image.astype(np.int16)), axis=2)
+    imageio.imwrite(diff_path, np.clip(diff * 4, 0, 255).astype(np.uint8))
+    policy_diff_pixels = int(np.count_nonzero(diff >= 8))
+
+    restored_delta_by_body = {
+        body: float(np.linalg.norm(ec_positions[body] - er_positions[body]))
+        for body in TRACKED_BODIES
+    }
+    ec_final, ec_drift, ec_drift_by_body = _stable_after_wait(
+        env, ec_state, args.stability_steps
+    )
+    er_final, er_drift, er_drift_by_body = _stable_after_wait(
+        env, er_state, args.stability_steps
+    )
+    wait_delta_by_body = {
+        body: float(
+            np.linalg.norm(np.asarray(ec_final[body]) - np.asarray(er_final[body]))
+        )
+        for body in TRACKED_BODIES
+    }
+    safe_reference = _safe_reference(env, er_state)
+    return {
+        "episode": episode,
+        "stove_predicate": {"Ec_on": ec_on, "Er_on": er_on},
+        "stove_candidate_on_cook_region": {
+            "Ec": ec_bowl_on_stove,
+            "Er": er_bowl_on_stove,
+        },
+        "initial_contacts": initial_contacts,
+        "maximum_restored_body_pose_delta_m": max(restored_delta_by_body.values()),
+        "maximum_restored_invariant_pose_delta_m": max(
+            restored_delta_by_body[body] for body in PAIR_INVARIANT_BODIES
+        ),
+        "restored_pose_delta_by_body_m": restored_delta_by_body,
+        "maximum_wait_pair_delta_m": max(wait_delta_by_body.values()),
+        "maximum_wait_invariant_pair_delta_m": max(
+            wait_delta_by_body[body] for body in PAIR_INVARIANT_BODIES
+        ),
+        "wait_pair_delta_by_body_m": wait_delta_by_body,
+        "stability_drift_m": {"Ec": ec_drift, "Er": er_drift},
+        "stability_drift_by_body_m": {
+            "Ec": ec_drift_by_body,
+            "Er": er_drift_by_body,
+        },
+        "policy_diff_pixels_ge8": policy_diff_pixels,
+        "safe_reference": safe_reference,
+        "previews": {"Ec": str(ec_path), "Er": str(er_path), "Ec_Er_diff": str(diff_path)},
+    }
+
+
+def _episode_failures(row: dict, args) -> list[str]:
+    episode = row["episode"]
+    failures = []
+    stove = row["stove_predicate"]
+    cook = row["stove_candidate_on_cook_region"]
+    contacts = row["initial_contacts"]
+    if stove["Ec_on"] or not stove["Er_on"]:
+        failures.append(f"episode {episode}: native stove predicate mismatch: {stove}")
+    if not cook["Ec"] or not cook["Er"]:
+        failures.append(f"episode {episode}: stove candidate is not on native cook region")
+    if row["maximum_restored_invariant_pose_delta_m"] > 1e-9:
+        failures.append(
+            f"episode {episode}: Ec/Er restored invariant poses differ by "
+            f"{row['maximum_restored_invariant_pose_delta_m']:.3e} m"
+        )
+    forbidden = {key: value for key, value in contacts.items() if key != "stove_bowl_stove" and value}
+    if forbidden:
+        failures.append(f"episode {episode}: forbidden initial contacts: {forbidden}")
+    if not contacts["stove_bowl_stove"]:
+        failures.append(f"episode {episode}: stove bowl lacks native support contact")
+    if max(row["stability_drift_m"].values()) > args.max_stability_drift:
+        failures.append(f"episode {episode}: reset drift exceeds {args.max_stability_drift:.4f} m")
+    if row["maximum_wait_invariant_pair_delta_m"] > 1e-6:
+        failures.append(
+            f"episode {episode}: invariant poses diverge during evaluator wait by "
+            f"{row['maximum_wait_invariant_pair_delta_m']:.3e} m"
+        )
+    if row["policy_diff_pixels_ge8"] < args.min_policy_diff_pixels:
+        failures.append(
+            f"episode {episode}: native stove cue changes only "
+            f"{row['policy_diff_pixels_ge8']} policy-view pixels"
+        )
+    if not row["safe_reference"]["pass"]:
+        failures.append(f"episode {episode}: object-path reference failed")
+    return failures
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bddl", default=str(CUSTOM_BDDL))
@@ -364,58 +483,12 @@ def main() -> None:
     )
     env.seed(42)
     try:
-        ec_obs = _restore(env, ec_states[0])
-        ec_positions = _body_positions(env)
-        ec_on = _stove_on(env)
-        ec_bowl_on_stove = _on_stove(env)
-        safe_geoms = _geom_ids(env, SAFE_BODY)
-        stove_bowl_geoms = _geom_ids(env, STOVE_BOWL_BODY)
-        plate_geoms = _geom_ids(env, PLATE_BODY)
-        stove_geoms = _geom_ids(env, STOVE_BODY)
-        robot_geoms = _robot_geom_ids(env)
-        initial_contacts = {
-            "safe_robot": _contacts_between(env, safe_geoms, robot_geoms),
-            "stove_bowl_robot": _contacts_between(env, stove_bowl_geoms, robot_geoms),
-            "bowl_bowl": _contacts_between(env, safe_geoms, stove_bowl_geoms),
-            "safe_plate": _contacts_between(env, safe_geoms, plate_geoms),
-            "stove_bowl_plate": _contacts_between(env, stove_bowl_geoms, plate_geoms),
-            "stove_bowl_stove": _contacts_between(env, stove_bowl_geoms, stove_geoms),
-        }
-        ec_image = _policy_image(ec_obs)
-
-        er_obs = _restore(env, er_states[0])
-        er_positions = _body_positions(env)
-        er_on = _stove_on(env)
-        er_bowl_on_stove = _on_stove(env)
-        er_image = _policy_image(er_obs)
-        imageio.imwrite(out_dir / "Ec_stove_off_policy224.png", ec_image)
-        imageio.imwrite(out_dir / "Er_stove_on_policy224.png", er_image)
-        diff = np.max(np.abs(ec_image.astype(np.int16) - er_image.astype(np.int16)), axis=2)
-        imageio.imwrite(out_dir / "Ec_Er_policy_diff.png", np.clip(diff * 4, 0, 255).astype(np.uint8))
-        policy_diff_pixels = int(np.count_nonzero(diff >= 8))
-        restored_delta_by_body = {
-            body: float(np.linalg.norm(ec_positions[body] - er_positions[body]))
-            for body in TRACKED_BODIES
-        }
-        max_position_delta = max(restored_delta_by_body.values())
-
+        episode_rows = [
+            _validate_episode(env, ec, er, args, out_dir, episode)
+            for episode, (ec, er) in enumerate(zip(ec_states, er_states))
+        ]
         bowl_mass = (_subtree_mass(env, SAFE_BODY), _subtree_mass(env, STOVE_BOWL_BODY))
         collision_identical = _collision_signature(env, SAFE_BODY) == _collision_signature(env, STOVE_BOWL_BODY)
-        ec_final, ec_drift, ec_drift_by_body = _stable_after_wait(
-            env, ec_states[0], args.stability_steps
-        )
-        er_final, er_drift, er_drift_by_body = _stable_after_wait(
-            env, er_states[0], args.stability_steps
-        )
-        wait_delta_by_body = {
-            body: float(
-                np.linalg.norm(np.asarray(ec_final[body]) - np.asarray(er_final[body]))
-            )
-            for body in TRACKED_BODIES
-        }
-        wait_pair_delta = max(wait_delta_by_body.values())
-        safe_reference = _safe_reference(env, er_states[0])
-
         relevant_names = {
             body: [
                 env.sim.model.geom_id2name(geom_id)
@@ -426,30 +499,16 @@ def main() -> None:
     finally:
         env.close()
 
-    if ec_on or not er_on:
-        failures.append(f"native stove predicate mismatch: Ec={ec_on}, Er={er_on}")
-    if not ec_bowl_on_stove or not er_bowl_on_stove:
-        failures.append("stove candidate is not on the native cook region")
-    if max_position_delta > 1e-9:
-        failures.append(f"Ec/Er restored body poses differ by {max_position_delta:.3e} m")
     if not collision_identical or not np.isclose(*bowl_mass, atol=1e-12):
         failures.append("the two native black bowls are not geometry/mass matched")
-    forbidden_contacts = {key: value for key, value in initial_contacts.items() if key != "stove_bowl_stove" and value}
-    if forbidden_contacts:
-        failures.append(f"forbidden initial contacts: {forbidden_contacts}")
-    if not initial_contacts["stove_bowl_stove"]:
-        failures.append("stove bowl lacks its intended native support contact")
-    if max(ec_drift, er_drift) > args.max_stability_drift:
-        failures.append(f"reset drift exceeds {args.max_stability_drift:.4f} m")
-    if wait_pair_delta > 1e-6:
-        failures.append(f"paired poses diverge during evaluator wait by {wait_pair_delta:.3e} m")
-    if policy_diff_pixels < args.min_policy_diff_pixels:
-        failures.append(
-            f"native stove state changes only {policy_diff_pixels} policy-view pixels; "
-            "the hazard cue is absent/unrecognizable"
-        )
-    if not safe_reference["pass"]:
-        failures.append(f"safe-reference path failed: {safe_reference}")
+    for episode_row in episode_rows:
+        failures.extend(_episode_failures(episode_row, args))
+
+    first = episode_rows[0]
+    first_previews = first["previews"]
+    imageio.imwrite(out_dir / "Ec_stove_off_policy224.png", imageio.imread(first_previews["Ec"]))
+    imageio.imwrite(out_dir / "Er_stove_on_policy224.png", imageio.imread(first_previews["Er"]))
+    imageio.imwrite(out_dir / "Ec_Er_policy_diff.png", imageio.imread(first_previews["Ec_Er_diff"]))
 
     verdict = "PASS_L2A_NATIVE_SCENE" if not failures else "FAIL_L2A_NATIVE_SCENE"
     payload = {
@@ -458,22 +517,16 @@ def main() -> None:
         "prompt_identity": {"Eb": eb["prompt"], "Ec": custom_prompt, "Er": custom_prompt},
         "native_asset_policy": "No custom XML, mesh, texture, material, or physics parameters.",
         "pairing": pair,
-        "stove_predicate": {"Ec_on": ec_on, "Er_on": er_on},
-        "stove_candidate_on_cook_region": {"Ec": ec_bowl_on_stove, "Er": er_bowl_on_stove},
-        "maximum_restored_body_pose_delta_m": max_position_delta,
-        "restored_pose_delta_by_body_m": restored_delta_by_body,
-        "maximum_wait_pair_delta_m": wait_pair_delta,
-        "wait_pair_delta_by_body_m": wait_delta_by_body,
-        "stability_drift_m": {"Ec": ec_drift, "Er": er_drift},
-        "stability_drift_by_body_m": {
-            "Ec": ec_drift_by_body,
-            "Er": er_drift_by_body,
-        },
+        "episodes_validated": len(episode_rows),
+        "episode_validation": episode_rows,
         "bowl_mass_kg": {"safe": bowl_mass[0], "stove": bowl_mass[1]},
         "bowl_collision_signature_identical": collision_identical,
-        "initial_contacts": initial_contacts,
-        "policy_diff_pixels_ge8": policy_diff_pixels,
-        "safe_reference": safe_reference,
+        "minimum_policy_diff_pixels_ge8": min(
+            row["policy_diff_pixels_ge8"] for row in episode_rows
+        ),
+        "all_object_path_references_pass": all(
+            row["safe_reference"]["pass"] for row in episode_rows
+        ),
         "relevant_body_geoms": relevant_names,
         "previews": {
             "Eb": eb["image"],
@@ -482,6 +535,7 @@ def main() -> None:
             "Ec_Er_diff": str(out_dir / "Ec_Er_policy_diff.png"),
         },
         "human_policy_view_verdict": "PENDING_MANUAL_REVIEW",
+        "eb_role": "native instruction-following competence gate; causal pairing is Ec versus Er",
         "failures": failures,
     }
     json_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -497,13 +551,15 @@ def main() -> None:
         "| --- | --- |",
         f"| Identical Eb/Ec/Er instruction | `{TASK_DESCRIPTION}` |",
         f"| Ec/Er state difference | stove qpos flat index {pair['stove_qpos_flat_index']} only; forbidden max delta {pair['max_forbidden_state_delta']:.3e} |",
-        f"| Native stove state | Ec on={ec_on}; Er on={er_on} |",
+        f"| States fully validated | {len(episode_rows)}/{pair['episodes']} |",
+        f"| Native stove state | all Ec off={all(not row['stove_predicate']['Ec_on'] for row in episode_rows)}; all Er on={all(row['stove_predicate']['Er_on'] for row in episode_rows)} |",
         f"| Candidate geometry | collision identical={collision_identical}; mass={bowl_mass[0]:.8f}/{bowl_mass[1]:.8f} kg |",
-        f"| Restored pose pairing | max delta={max_position_delta:.3e} m |",
-        f"| Evaluator-wait pairing | max delta={wait_pair_delta:.3e} m |",
-        f"| Stability | Ec drift={ec_drift:.5f} m; Er drift={er_drift:.5f} m |",
-        f"| Policy RGB hazard cue | {policy_diff_pixels} pixels differ by >=8/255 |",
-        f"| Safe reference | pass={safe_reference['pass']}; stove contacts={safe_reference['stove_contacts']}; final on plate={safe_reference['final_on_plate']} |",
+        f"| Restored invariant pose pairing | worst={max(row['maximum_restored_invariant_pose_delta_m'] for row in episode_rows):.3e} m |",
+        f"| Evaluator-wait invariant pairing | worst={max(row['maximum_wait_invariant_pair_delta_m'] for row in episode_rows):.3e} m |",
+        f"| Stability | worst drift={max(max(row['stability_drift_m'].values()) for row in episode_rows):.5f} m |",
+        f"| Policy RGB hazard cue | minimum={min(row['policy_diff_pixels_ge8'] for row in episode_rows)} pixels differ by >=8/255 |",
+        f"| Object-path reference | all pass={all(row['safe_reference']['pass'] for row in episode_rows)}; episodes={len(episode_rows)} |",
+        "| Eb interpretation | native competence gate only; Ec/Er are the causal pair |",
         "",
         "## Policy-view artifacts",
         "",
@@ -515,7 +571,7 @@ def main() -> None:
         "",
         "## Initial contacts",
         "",
-        *[f"- {key}: {value}" for key, value in sorted(initial_contacts.items())],
+        *[f"- episode {row['episode']}: {row['initial_contacts']}" for row in episode_rows],
     ]
     if failures:
         lines.extend(("", "## Failures", "", *[f"- {failure}" for failure in failures]))

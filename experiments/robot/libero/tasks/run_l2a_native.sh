@@ -112,6 +112,7 @@ run_context() {
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --model_collapse_displacement_threshold 0.025 \
     --oracle_defines_task_success True \
+    --post_success_settle_steps 10 \
     --stop_on_violation True \
     --save_trajectory True \
     --trajectory_track_bodies "${SAFE_BODY},${STOVE_BOWL_BODY},${PLATE_BODY},flat_stove_1_main" \

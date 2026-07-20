@@ -62,6 +62,11 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _state_sha256(state: np.ndarray) -> str:
+    canonical = np.ascontiguousarray(state, dtype="<f8")
+    return hashlib.sha256(canonical.tobytes()).hexdigest()
+
+
 def _stove_joint(env) -> tuple[str, int, int]:
     # OffScreenRenderEnv does not expose get_object(); discover the native
     # button hinge directly from MuJoCo, as the existing L2-B generators do.
@@ -155,6 +160,7 @@ def _write_states(
             episode = group.create_group(f"demo_{index}")
             episode.create_dataset("initial_state", data=state)
             episode.attrs["success"] = True
+            episode.attrs["state_sha256_f64le"] = _state_sha256(state)
 
 
 def generate(args: argparse.Namespace) -> dict:
@@ -279,6 +285,8 @@ def generate(args: argparse.Namespace) -> dict:
         "source_bddl": str(source_bddl),
         "source_bddl_sha256": _sha256(source_bddl),
         "source_state_indices": accepted_source_indices,
+        "ec_state_sha256_f64le": [_state_sha256(state) for state in ec_states],
+        "er_state_sha256_f64le": [_state_sha256(state) for state in er_states],
         "first_state_body_positions": accepted_positions[0],
     }
     manifest_path = Path(args.manifest)
