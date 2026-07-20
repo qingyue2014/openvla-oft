@@ -287,6 +287,14 @@ def test_l1c3_horizontal_bottle_aligns_with_the_drawer_wide_axis():
     assert spec.anchor_body == "white_cabinet_1_cabinet_bottom"
 
 
+def test_l1c3_placement_uses_the_oriented_goal_box_floor():
+    source = Path(
+        "experiments/robot/libero/tasks/l1c_occupied_common.py"
+    ).read_text()
+    assert "anchor[2] - (np.abs(site_mat) @ site_size[:3])[2]" in source
+    assert "clearance = min(float(clearance), 0.006)" in source
+
+
 def test_exact_state_bundle_verification_rejects_post_preview_mutation(tmp_path):
     spec = get_spec("l1c2")
     paths = {

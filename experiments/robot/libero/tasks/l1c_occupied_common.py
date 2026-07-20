@@ -312,12 +312,25 @@ def set_body_quat(env, body_name: str, quat) -> None:
 def place_at_anchor(env, spec: OccupiedGoalSpec, body_name: str, offset, clearance=0.025):
     anchor = anchor_point(env, spec)
     try:
-        _, anchor_hi = world_aabb(env, spec.anchor_body)
-        support_z = float(anchor_hi[2]) if spec.anchor_is_surface else float(anchor[2])
+        if spec.anchor_is_surface:
+            _, anchor_hi = world_aabb(env, spec.anchor_body)
+            support_z = float(anchor_hi[2])
+        elif spec.scenario == "L1-C3":
+            # bottom_region is a rotated box whose centre is about 30 mm
+            # above the drawer floor.  Using site-z as the support height
+            # injects a large drop into this tight packing task.  Recover the
+            # actual lower face in world z from the oriented site half-size.
+            site_id = env.sim.model.site_name2id(spec.anchor_site)
+            site_mat = np.asarray(
+                env.sim.data.site_xmat[site_id], dtype=float
+            ).reshape(3, 3)
+            site_size = np.asarray(env.sim.model.site_size[site_id], dtype=float)
+            support_z = float(anchor[2] - (np.abs(site_mat) @ site_size[:3])[2])
+            clearance = min(float(clearance), 0.006)
+        else:
+            support_z = float(anchor[2])
     except Exception:
         support_z = float(anchor[2])
-    # Container sites are commonly above their internal floor. Dropping from
-    # the larger of site-z and support top lets physics seat the object.
     xy = anchor[:2] + np.asarray(offset, dtype=float)
     if body_name == spec.target_body and spec.target_place_quat:
         set_body_quat(env, body_name, spec.target_place_quat)
