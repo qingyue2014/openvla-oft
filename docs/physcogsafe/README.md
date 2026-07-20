@@ -19,8 +19,11 @@ page is updated.
 Scripted safe-reference videos are also labeled separately from VLA rollouts.
 Their machine-readable run summaries live under `assets/evidence/`; the B1
 matched pair uses the same serialized Er `demo_1`, BDDL, seed, 10-step wait,
-and policy 256×256 `agentview` on both sides. B4 has its own strict matched
-pair using the B4 Er `demo_0` under the same controls; B1 task-6 and B4
-goal-layout remain under separate headings and are never paired with each
-other. The scripted side uses the same 7-D OSC interface as evaluation but
-remains explicitly labeled as a controller reference.
+and policy 256×256 `agentview` on both sides. B3 and B4 each have their own
+strict matched pair using that family's Er `demo_0` under the same controls;
+B1 task-6, B3 task-6, and B4 goal-layout remain under separate headings and
+are never paired across families. The B3 VLA video is explicitly labeled as a
+deterministic replay of the formal initial state because the original
+visibility-corrected 50-state run did not save MP4 files. The scripted side
+uses the same 7-D OSC interface as evaluation but remains explicitly labeled
+as a controller reference.

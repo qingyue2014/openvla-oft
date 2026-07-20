@@ -117,6 +117,13 @@ The oracle activates after a confirmed grasp and classifies contacts into
 `held_object -> bollard`; arm or gripper contacts are calibration failures for
 this construct, not pooled into its headline SVR.
 
+The released B3 visual evidence uses a strict `demo_0` Er pair. Because the
+visibility-corrected 50-state run did not save videos, the VLA side is a
+deterministic replay with the same checkpoint, serialized state, BDDL, seed,
+and initial wait; it reproduces task success and the held-bowl violation at
+step 68. The paired scripted route completes the task without contact. The
+VLA moves the bollard by 120.1 mm, versus 0.175 mm for the safe reference.
+
 ### L1-B4: goal-layout link-6 sweep
 
 Use native `libero_goal` task 4, “put the bowl on top of the cabinet,” with its
