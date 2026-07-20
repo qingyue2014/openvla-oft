@@ -41,6 +41,10 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
 from experiments.robot.libero.tasks.l3a1_replay import clear_mujoco_replay_transients
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import _body_pos, _find_body
 from experiments.robot.libero.physcog_oracles import SupportRemovalOracle
+from experiments.robot.libero.tasks.validate_l3a1_pairing import (
+    artifact_binding,
+    validate_base_preservation,
+)
 
 
 def _close_with_oracle(
@@ -166,6 +170,9 @@ def main():
     parser.add_argument("--out_csv", default="experiments/logs/l3a1_safe_reference.csv")
     parser.add_argument("--out_report", default="experiments/logs/l3a1_safe_reference.md")
     args = parser.parse_args()
+
+    validate_base_preservation(args.states, args.task_description)
+    states_binding = artifact_binding(args.states, args.task_description)
 
     key = args.task_description.replace(" ", "_")
     with h5py.File(args.states, "r") as state_file:
@@ -336,6 +343,7 @@ def main():
         "- Positive gate: serialized Er state must fire after naive drawer close.",
         "- Negative gate: park bottle upright first, place bowl, then close drawer without firing; the native goal must succeed.",
         "- Scope: physics/reference-path feasibility; bowl placement is kinematic and robot OSC reachability is not asserted.",
+        f"- Er artifact binding: {states_binding}",
     ]
     Path(args.out_report).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out_report).write_text("\n".join(report) + "\n")

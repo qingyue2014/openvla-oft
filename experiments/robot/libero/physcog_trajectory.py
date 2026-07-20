@@ -19,6 +19,7 @@ episodes into SAR / UIR / OCR / NOR outcomes.
 
 import json
 import os
+import hashlib
 from datetime import datetime
 
 import numpy as np
@@ -106,6 +107,84 @@ def append_index_entry(traj_dir: str, entry: dict) -> None:
     os.makedirs(traj_dir, exist_ok=True)
     with open(os.path.join(traj_dir, "index.jsonl"), "a") as f:
         f.write(json.dumps(entry) + "\n")
+
+
+def load_l3a1_episode_evidence(
+    initial_states_path: str, task_description: str, episode_idx: int
+) -> dict:
+    """Load fail-closed L3-A1 topology evidence for one serialized episode."""
+    import h5py
+
+    digest = hashlib.sha256()
+    with open(initial_states_path, "rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    key = task_description.replace(" ", "_")
+    with h5py.File(initial_states_path, "r") as handle:
+        if key not in handle or f"demo_{episode_idx}" not in handle[key]:
+            raise ValueError(
+                f"missing L3-A1 episode binding {key}/demo_{episode_idx}"
+            )
+        group = handle[key]
+        demo = group[f"demo_{episode_idx}"]
+        if int(group.attrs.get("l3a1_topology_schema_version", -1)) != 2:
+            raise ValueError("L3-A1 artifact is not topology schema v2")
+        group_map = {
+            "l3a1_topology_id": "l3a1_topology_id",
+            "support_topology_contract_sha256": "support_topology_contract_sha256",
+            "native_cabinet_xml_sha256": "native_cabinet_xml_sha256",
+            "compiled_support_component_signatures_sha256": (
+                "compiled_support_component_signatures_sha256"
+            ),
+            "support_component_role_hashes_sha256": (
+                "support_component_role_hashes_sha256"
+            ),
+        }
+        demo_map = {
+            "support_initial_component_roles": "initial_component_roles",
+            "support_initial_edge_table_qualified": "initial_edge_table_qualified",
+            "support_component_release_step_rC": "factual_close_component_release_step_rC",
+            "support_first_oracle_step": "factual_close_first_oracle_step",
+            "support_component_recontact_after_rC": (
+                "factual_close_component_recontact_after_rC"
+            ),
+            "support_pre_oracle_other_cabinet_geoms": (
+                "factual_close_pre_oracle_other_cabinet_geoms"
+            ),
+            "support_direct_contact_bodies": "factual_close_direct_contact_bodies",
+            "support_bottle_qvel_overwritten": "factual_close_bottle_qvel_overwritten",
+        }
+        missing = [source for source in group_map.values() if source not in group.attrs]
+        missing += [source for source in demo_map.values() if source not in demo.attrs]
+        if missing:
+            raise ValueError(f"missing L3-A1 episode evidence fields: {sorted(missing)}")
+        evidence = {
+            target: _json_attr(group.attrs[source])
+            for target, source in group_map.items()
+        }
+        evidence.update({
+            target: _json_attr(demo.attrs[source])
+            for target, source in demo_map.items()
+        })
+        evidence.update({
+            "initial_states_artifact_sha256": digest.hexdigest(),
+            "initial_states_demo_index": int(episode_idx),
+            "initial_state_sha256": hashlib.sha256(
+                demo["initial_state"][:].tobytes()
+            ).hexdigest(),
+            "l3a1_variant": str(group.attrs.get("l3a1_variant", "")),
+        })
+        return evidence
+
+
+def _json_attr(value):
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return value
 
 
 def collect_tracked_bodies(*comma_separated_lists) -> list:

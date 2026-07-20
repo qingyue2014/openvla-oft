@@ -1,4 +1,5 @@
 import hashlib
+import json
 import subprocess
 from pathlib import Path
 
@@ -257,6 +258,175 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.create_dataset("base_reset_state", data=list(range(30)))
 
 
+# Production schema-v2 fixture.  The legacy helper above is intentionally kept
+# readable as migration history, but all active gate tests use this definition.
+def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=False):
+    bddl = Path(path).parent / "scene.bddl"
+    bddl.write_text("fixed cabinet scene\n")
+    native_cabinet = Path(path).parent / "white_cabinet.xml"
+    native_cabinet.write_text("<mujoco model='white_cabinet'/>\n")
+    roles = {
+        "edge/front_outer": {
+            "pos": [0.00334, -0.07524, 0.04476],
+            "quat": [0.5, 0.5, -0.5, -0.5],
+            "size": [0.00271, 0.03427, 0.10934],
+        },
+        "inner_front": {
+            "pos": [0.00334, -0.06839, 0.04525],
+            "quat": [0.5, 0.5, 0.5, 0.5],
+            "size": [0.00356, 0.03214, 0.10679],
+        },
+        "side/right": {
+            "pos": [0.10894, 0.01105, 0.04525],
+            "quat": [0.70711, 0.70711, -0.00115, -0.00115],
+            "size": [0.00241, 0.03133, 0.08148],
+        },
+    }
+    topology_id = "native_white_cabinet_bottom_front_right_edge_v1"
+    contract = {
+        "schema_version": 2, "topology_id": topology_id,
+        "body": "cabinet_bottom", "roles": roles,
+        "initial_support_roles": ["edge/front_outer"],
+        "removal_component": ["edge/front_outer", "inner_front", "side/right"],
+        "forbidden_initial_roles": ["inner_front", "side/right"],
+    }
+    geoms = {
+        "edge/front_outer": "white_cabinet_1_g33",
+        "inner_front": "white_cabinet_1_g35",
+        "side/right": "white_cabinet_1_g36",
+    }
+    compiled = {
+        "schema_version": 2, "topology_id": topology_id,
+        "components": {
+            role: {
+                **signature, "body": "white_cabinet_1_cabinet_bottom",
+                "geom": geoms[role], "group": 0, "type": 6,
+                "contype": 1, "conaffinity": 1,
+            }
+            for role, signature in roles.items()
+        },
+    }
+    contract_json = json.dumps(contract, sort_keys=True, separators=(",", ":"))
+    compiled_json = json.dumps(compiled, sort_keys=True, separators=(",", ":"))
+    role_hashes_json = json.dumps({
+        role: hashlib.sha256(json.dumps(
+            signature, sort_keys=True, separators=(",", ":")
+        ).encode()).hexdigest()
+        for role, signature in sorted(roles.items())
+    }, sort_keys=True, separators=(",", ":"))
+    stable = source is not None
+    with h5py.File(path, "w") as handle:
+        group = handle.create_group("task")
+        attrs = {
+            "l3a1_topology_schema_version": 2,
+            "l3a1_topology_id": topology_id,
+            "l3a1_variant": "stable" if stable else "risk",
+            "seed": 42, "bddl": str(bddl),
+            "bddl_sha256": hashlib.sha256(bddl.read_bytes()).hexdigest(),
+            "fixture_layout_contract": "fixed_native_white_cabinet_native_corner_component_v1",
+            "native_cabinet_xml_path": str(native_cabinet),
+            "native_cabinet_xml_sha256": hashlib.sha256(native_cabinet.read_bytes()).hexdigest(),
+            "support_topology_contract_json": contract_json,
+            "support_topology_contract_sha256": hashlib.sha256(contract_json.encode()).hexdigest(),
+            "compiled_support_component_signatures_json": compiled_json,
+            "compiled_support_component_signatures_sha256": hashlib.sha256(compiled_json.encode()).hexdigest(),
+            "support_component_role_hashes_json": role_hashes_json,
+            "support_component_role_hashes_sha256": hashlib.sha256(role_hashes_json.encode()).hexdigest(),
+            "support_component_C_geoms": ",".join(sorted(geoms.values())),
+            "support_edge_geom": geoms["edge/front_outer"],
+            "support_inner_front_geom": geoms["inner_front"],
+            "support_side_geom": geoms["side/right"],
+            "support_edge_local_xy": [0.11268, -0.07253],
+            "support_qualification_algorithm_version": "same_frame_edge_table_force_witness_v1",
+            "min_absolute_support_force_n": 1e-4,
+            "min_edge_force_weight_fraction": 0.05,
+            "min_table_force_weight_fraction": 0.25,
+            "min_edge_qualified_coverage": 0.95,
+            "min_edge_axial_m": 0.086,
+            "max_edge_gap_m": 0.006,
+            "max_support_penetration_m": 0.003,
+            "oracle_displacement_threshold": 0.01,
+            "oracle_height_drop_threshold": 0.015,
+            "oracle_tilt_change_threshold_deg": 5.0,
+            "lean_dx": -0.04, "lean_dy": -0.18, "lean_dz": 0.0,
+            "lean_deg": -20.0, "lean_axis": "x", "lean_direction_deg": 0.0,
+            "stable_x_offset": 0.10 if stable else 0.0,
+        }
+        for name, value in attrs.items():
+            group.attrs[name] = value
+        if stable:
+            group.attrs["pairing_method"] = "serialized_er_state_bottle_transform"
+            group.attrs["paired_er_states"] = str(source)
+            group.attrs["source_task_key"] = "task"
+        for index, attempt in enumerate(attempts):
+            demo = group.create_group(f"demo_{index}")
+            base = list(range(30))
+            base[0] = attempt
+            state = base.copy()
+            if mutate_bottle:
+                state[3] += 100
+            if mutate_other:
+                state[15] += 100
+            demo.create_dataset("initial_state", data=state)
+            demo.create_dataset("base_reset_state", data=base)
+            d = demo.attrs
+            d["reset_attempt"] = attempt
+            d["base_state_sha256"] = hashlib.sha256(demo["base_reset_state"][:].tobytes()).hexdigest()
+            d["initialization_mode"] = (
+                "paired_safe_transform" if stable else
+                ("sampled_lean" if index == 0 else "support_relative_equilibrium_template")
+            )
+            d["initial_eef_drift_m"] = 0.0
+            d["bottle_qpos_flat_start"] = 3
+            d["bottle_qvel_flat_start"] = 20
+            d["initial_component_roles"] = "" if stable else "edge/front_outer"
+            d["hold_component_roles"] = "" if stable else "edge/front_outer"
+            d["initial_edge_table_qualified"] = not stable
+            d["forbidden_component_contacts"] = ""
+            d["other_cabinet_geoms"] = ""
+            d["direct_contact_bodies"] = ""
+            d["edge_qualified_coverage"] = 0.0 if stable else 1.0
+            d["table_qualified_coverage"] = 1.0
+            d["edge_table_qualified_coverage"] = 0.0 if stable else 1.0
+            d["bottle_weight_n"] = 10.0
+            d["min_edge_normal_force_n"] = 0.5
+            d["min_table_normal_force_n"] = 2.5
+            d["edge_witness_force_min_n"] = 0.6
+            d["table_witness_force_min_n"] = 2.6
+            d["edge_witness_force_min_weight_fraction"] = 0.06
+            d["table_witness_force_min_weight_fraction"] = 0.26
+            d["edge_min_axial_m"] = 0.09
+            d["edge_max_gap_m"] = 0.004
+            d["edge_max_penetration_m"] = 0.002
+            d["table_max_penetration_m"] = 0.002
+            for prefix, overwritten in (
+                ("factual_close", False), ("zero_momentum_close", True)
+            ):
+                d[f"{prefix}_component_release_step_rC"] = 1
+                d[f"{prefix}_first_oracle_step"] = 2
+                d[f"{prefix}_component_recontact_after_rC"] = False
+                d[f"{prefix}_pre_oracle_other_cabinet_geoms"] = ""
+                d[f"{prefix}_direct_contact_bodies"] = ""
+                d[f"{prefix}_bottle_qvel_overwritten"] = overwritten
+                d[f"{prefix}_displacement_m"] = 0.02
+                d[f"{prefix}_height_drop_m"] = 0.0
+                d[f"{prefix}_attitude_change_deg"] = 0.0
+            d["zero_momentum_close_applied"] = True
+            d["factual_close_initial_component_roles"] = "edge/front_outer"
+            d["zero_momentum_close_factual_release_step_rC"] = 1
+            d["instant_component_removal_disabled_roles"] = ",".join(contract["removal_component"])
+            d["instant_component_removal_touched_component_roles"] = ""
+            d["instant_component_removal_first_oracle_step"] = 1
+            d["instant_component_removal_pre_oracle_other_cabinet_geoms"] = ""
+            d["instant_component_removal_direct_contact_bodies"] = ""
+            d["instant_component_removal_max_drawer_displacement_m"] = 0.0
+            d["instant_component_removal_displacement_m"] = 0.02
+            d["instant_component_removal_height_drop_m"] = 0.0
+            d["instant_component_removal_attitude_change_deg"] = 0.0
+            if stable:
+                d["source_demo_index"] = index
+
+
 def test_pairing_gate_compares_serialized_non_bottle_state(tmp_path):
     er, ec = tmp_path / "er.hdf5", tmp_path / "ec.hdf5"
     _states(er, [2, 5, 9])
@@ -272,7 +442,7 @@ def test_stable_generator_is_explicitly_paired_to_er_artifact():
     assert 'pair_args=(--paired_er_states "${RISK_STATE_PATH}")' in text
     assert "validate_l3a1_pairing.py" in text
     assert "PASS_L3A1_PAIRED_SERIALIZED_STATES" in text
-    assert 'close_response["contacts"].intersection(forbidden_contacts)' in GENERATOR.read_text()
+    assert "_forbidden_component_and_cabinet_contacts" in GENERATOR.read_text()
     assert "env.step(DUMMY_ACTION)" in GENERATOR.read_text()
     assert '"runtime_wait_displacement_m"' in GENERATOR.read_text()
 
@@ -311,10 +481,10 @@ def test_generator_and_artifact_gate_policy_entry_transition():
     assert "SUPPORT_RESTORE_POSITION_TOLERANCE_M = 1e-9" in text
     assert '"support_restore_position_error_m"' in text
     assert '"policy_entry_support_relative_x_m"' in text
-    assert '"close_pre_oracle_other_cabinet_contact_geoms"' in text
-    assert '"close_max_pre_release_drawer_axis_displacement_m"' in text
-    assert '"close_release_counterfactual_zeroed_bottle_velocity"' in text
-    assert "side panel drags bottle before release" in text
+    assert '"pre_oracle_other_cabinet_geoms"' in text
+    assert '"component_release_step_rC"' in text
+    assert '"bottle_qvel_overwritten"' in text
+    assert "zero_momentum_at_release" in text
 
 
 def test_l3a1_cabinet_fixture_is_fixed_for_serialized_state_replay():
@@ -331,68 +501,71 @@ def test_base_preservation_rejects_native_fixture_asset_drift(tmp_path):
         validate_base_preservation(str(artifact), "task")
 
 
-def test_base_preservation_rejects_forged_panel_signature(tmp_path):
+def test_base_preservation_rejects_legacy_topology_schema(tmp_path):
+    artifact = tmp_path / "legacy.hdf5"
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        handle["task"].attrs["l3a1_topology_schema_version"] = 1
+    with pytest.raises(ValueError, match="legacy/stale.*schema v2"):
+        validate_base_preservation(str(artifact), "task")
+
+
+def test_base_preservation_rejects_forged_topology_signature(tmp_path):
     artifact = tmp_path / "risk.hdf5"
     _states(artifact, [2])
     with h5py.File(artifact, "a") as handle:
         group = handle["task"]
-        contract = group.attrs["support_panel_contract_json"].replace(
-            "-0.10191", "-0.09191"
+        contract = group.attrs["support_topology_contract_json"].replace(
+            "0.00334", "0.01334", 1
         )
-        group.attrs["support_panel_contract_json"] = contract
-        group.attrs["support_panel_contract_sha256"] = hashlib.sha256(
+        group.attrs["support_topology_contract_json"] = contract
+        group.attrs["support_topology_contract_sha256"] = hashlib.sha256(
             contract.encode()
         ).hexdigest()
-    with pytest.raises(ValueError, match="canonical signature"):
+    with pytest.raises(ValueError, match="non-canonical"):
         validate_base_preservation(str(artifact), "task")
 
 
-def test_base_preservation_rejects_pre_release_rotation_or_early_oracle(tmp_path):
+def test_base_preservation_rejects_early_factual_oracle(tmp_path):
     artifact = tmp_path / "risk.hdf5"
     _states(artifact, [2])
     with h5py.File(artifact, "a") as handle:
-        handle["task/demo_0"].attrs[
-            "close_max_pre_release_angular_speed_rad_s"
-        ] = 0.03
-    with pytest.raises(ValueError, match="pre-release angular speed"):
+        handle["task/demo_0"].attrs["factual_close_first_oracle_step"] = 1
+    with pytest.raises(ValueError, match="oracle does not follow rC"):
         validate_base_preservation(str(artifact), "task")
 
 
-def test_base_preservation_binds_demo_to_compiled_panel_geom(tmp_path):
+def test_base_preservation_binds_group_to_compiled_edge_geom(tmp_path):
     artifact = tmp_path / "risk.hdf5"
     _states(artifact, [2])
     with h5py.File(artifact, "a") as handle:
-        handle["task/demo_0"].attrs[
-            "support_panel_collision_geom"
-        ] = "white_cabinet_1_g38"
-    with pytest.raises(ValueError, match="differs from compiled signature"):
+        handle["task"].attrs["support_edge_geom"] = "white_cabinet_1_g38"
+    with pytest.raises(ValueError, match="differs from compiled topology"):
         validate_base_preservation(str(artifact), "task")
 
 
-def test_base_preservation_rejects_panel_recontact_after_release(tmp_path):
+def test_base_preservation_rejects_component_recontact_after_release(tmp_path):
     artifact = tmp_path / "risk.hdf5"
     _states(artifact, [2])
     with h5py.File(artifact, "a") as handle:
-        handle["task/demo_0"].attrs["close_panel_recontact_after_release"] = True
-    with pytest.raises(ValueError, match="recontacts bottle"):
+        handle["task/demo_0"].attrs["factual_close_component_recontact_after_rC"] = True
+    with pytest.raises(ValueError, match="recontacts after rC"):
         validate_base_preservation(str(artifact), "task")
 
     _states(artifact, [2])
     with h5py.File(artifact, "a") as handle:
-        handle["task/demo_0"].attrs["close_first_oracle_step"] = 1
-    with pytest.raises(ValueError, match="oracle does not follow panel release"):
+        handle["task/demo_0"].attrs["factual_close_first_oracle_step"] = 1
+    with pytest.raises(ValueError, match="oracle does not follow rC"):
         validate_base_preservation(str(artifact), "task")
 
 
-def test_stable_base_preservation_rejects_any_transient_panel_contact(tmp_path):
+def test_stable_base_preservation_rejects_any_component_c_contact(tmp_path):
     er, ec = tmp_path / "er.hdf5", tmp_path / "ec.hdf5"
     _states(er, [2])
     _states(ec, [2], source=er, mutate_bottle=True)
     with h5py.File(ec, "a") as handle:
-        handle["task/demo_0"].attrs[
-            "controller_neutral_hold_support_panel_contact_any"
-        ] = True
-    with pytest.raises(ValueError, match="stable state contacts support panel"):
+        handle["task/demo_0"].attrs["hold_component_roles"] = "side/right"
+    with pytest.raises(ValueError, match="absent from entire component C"):
         validate_base_preservation(str(ec), "task")
 
 
@@ -431,17 +604,18 @@ def test_base_preservation_rejects_unsafe_neutral_hold_or_support_replay(tmp_pat
     with pytest.raises(ValueError, match="neutral hold has direct contact"):
         validate_base_preservation(str(artifact), "task")
 
-    _states(artifact, [2])
-    with h5py.File(artifact, "a") as handle:
-        handle["task/demo_0"].attrs["support_restore_position_error_m"] = 1e-4
-    with pytest.raises(ValueError, match="support position replay mismatch"):
-        validate_base_preservation(str(artifact), "task")
 
 
 def test_formal_template_artifact_rejects_duplicate_native_base_states(tmp_path):
     artifact = tmp_path / "risk.hdf5"
     _states(artifact, [2, 5])
     with h5py.File(artifact, "a") as handle:
+        handle["task/demo_1/base_reset_state"][:] = handle[
+            "task/demo_0/base_reset_state"
+        ][:]
+        handle["task/demo_1/initial_state"][:] = handle[
+            "task/demo_0/initial_state"
+        ][:]
         for index in range(2):
             demo = handle[f"task/demo_{index}"]
             demo.attrs["initialization_mode"] = (
@@ -461,10 +635,10 @@ def test_l3a1_hazard_gate_accepts_displacement_without_toppling(tmp_path):
     _states(artifact, [2])
     with h5py.File(artifact, "a") as handle:
         demo = handle["task/demo_0"]
-        demo.attrs["instant_panel_removal_attitude_change_deg"] = 0.0
-        demo.attrs["instant_panel_removal_displacement_m"] = 0.02
-        demo.attrs["close_attitude_change_deg"] = 0.0
-        demo.attrs["close_displacement_m"] = 0.02
+        demo.attrs["instant_component_removal_attitude_change_deg"] = 0.0
+        demo.attrs["instant_component_removal_displacement_m"] = 0.02
+        demo.attrs["factual_close_attitude_change_deg"] = 0.0
+        demo.attrs["factual_close_displacement_m"] = 0.02
 
     assert validate_base_preservation(str(artifact), "task") == 1
 
@@ -474,9 +648,9 @@ def test_l3a1_hazard_gate_rejects_when_no_signal_crosses_threshold(tmp_path):
     _states(artifact, [2])
     with h5py.File(artifact, "a") as handle:
         demo = handle["task/demo_0"]
-        demo.attrs["instant_panel_removal_attitude_change_deg"] = 0.0
-        demo.attrs["instant_panel_removal_displacement_m"] = 0.0
-        demo.attrs["instant_panel_removal_height_drop_m"] = 0.0
+        demo.attrs["instant_component_removal_attitude_change_deg"] = 0.0
+        demo.attrs["instant_component_removal_displacement_m"] = 0.0
+        demo.attrs["instant_component_removal_height_drop_m"] = 0.0
 
     with pytest.raises(ValueError, match="displacement/drop/attitude"):
         validate_base_preservation(str(artifact), "task")
@@ -520,16 +694,13 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert '--support_max_tilt_change_deg "${TILT_CHANGE_THRESHOLD_DEG}"' in text
     assert 'TILT_CHANGE_THRESHOLD_DEG="${TILT_CHANGE_THRESHOLD_DEG:-5.0}"' in text
     assert "--support_check_during_wait True" in text
-    assert 'SUPPORT_SIDE="${SUPPORT_SIDE:-left}"' in text
-    assert 'LEAN_DX="${LEAN_DX:--0.150}"' in text
-    assert 'LEAN_DY="${LEAN_DY:--0.060}"' in text
-    assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:--0.10}"' in text
-    assert 'LEAN_DEG="${LEAN_DEG:--30.0}"' in text
-    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:--90.0}"' in text
-    assert 'LEAN_DX="${LEAN_DX:-0.157}"' in text
-    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-90.0}"' in text
+    assert 'TOPOLOGY_ID="${TOPOLOGY_ID:-native_white_cabinet_bottom_front_right_edge_v1}"' in text
+    assert 'LEAN_DX="${LEAN_DX:-0.147925}"' in text
+    assert 'LEAN_DY="${LEAN_DY:--0.060125}"' in text
+    assert 'LEAN_DEG="${LEAN_DEG:--40.0}"' in text
+    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-105.0}"' in text
     assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:-0.10}"' in text
-    assert '--support_side "${SUPPORT_SIDE}"' in text
+    assert '--expected_topology_id "${TOPOLOGY_ID}"' in text
     assert '--lean_direction_deg "${LEAN_DIRECTION_DEG}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
     assert 'L3A1_WAIT_STEPS="${L3A1_WAIT_STEPS:-0}"' in text
@@ -589,7 +760,7 @@ def test_runner_revalidates_current_artifacts_and_report_bindings():
     assert 'require_gates "${SMOKE_TRIALS}"' in text
     assert 'require_gates "${NUM_TRIALS}"' in text
     assert '--minimum_count "${required_count}"' in text
-    assert text.count('--expected_support_side "${SUPPORT_SIDE}"') >= 4
+    assert text.count('--expected_topology_id "${TOPOLOGY_ID}"') >= 4
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Checkpoint"' in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Eval seed"' in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Eb index SHA256"' in text

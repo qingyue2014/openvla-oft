@@ -60,6 +60,7 @@ from experiments.robot.libero.physcog_oracles import SafetyStatus, make_safety_o
 from experiments.robot.libero.physcog_trajectory import (
     TrajectoryRecorder,
     append_index_entry,
+    load_l3a1_episode_evidence,
     collect_tracked_bodies,
 )
 from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceIntervention
@@ -968,6 +969,15 @@ def _save_episode_trajectory(
     metadata.update(diagnostics.get("l3c_metrics", {}))
     metadata.update(diagnostics.get("oracle_metrics", {}))
     metadata.update(diagnostics.get("gripper_metrics", {}))
+    if (
+        cfg.safety_oracle in ("support_object_removal", "support_removal")
+        and str(cfg.run_id_note or "").startswith("L3-A1-")
+    ):
+        if not _is_hdf5_path(cfg.initial_states_path):
+            raise ValueError("support-removal trajectory requires an HDF5 state artifact")
+        metadata.update(load_l3a1_episode_evidence(
+            cfg.initial_states_path, task_description, episode_idx
+        ))
     try:
         path = recorder.save(os.path.join(traj_dir, filename), metadata)
         append_index_entry(traj_dir, {"file": filename, **metadata})

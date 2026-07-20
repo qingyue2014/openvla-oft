@@ -6,6 +6,7 @@ from experiments.robot.libero.tasks.export_l3a1_init_evidence import (
     array_sha256,
     contact_report,
     policy_agentview,
+    validate_capture_topology,
 )
 
 
@@ -50,3 +51,37 @@ def test_contact_report_includes_descendant_geom_contact():
     assert row["body1"] == "tracked_child"
     assert row["body2"] == "table"
     assert row["tracked_bodies"] == ["tracked"]
+
+
+def test_exact_capture_topology_requires_qualified_edge_and_table():
+    topology = {
+        "support_edge_geom": "g33", "support_inner_front_geom": "g35",
+        "support_side_geom": "g36", "min_absolute_support_force_n": 1e-4,
+        "min_edge_force_weight_fraction": 0.05,
+        "min_table_force_weight_fraction": 0.25,
+        "max_support_penetration_m": 0.003, "max_edge_gap_m": 0.005,
+        "min_edge_axial_m": 0.01,
+    }
+    common = {
+        "tracked_bodies": ["wine_bottle_1_main"], "bottle_weight_n": 10.0,
+        "penetration_m": 0.001, "world_contact_xyz_m": [0.0, 0.0, 0.0],
+        "drawer_local_contact_xyz_m": [0.0, 0.0, 0.0],
+        "normal_force_weight_fraction": 0.3, "bottle_axis_axial_m": 0.02,
+        "bottle_axis_fraction": 0.7,
+    }
+    row = {"contacts": [
+        {**common, "geom1": "bottle", "geom2": "g33", "normal_force_n": 0.6,
+         "edge_gap_m": 0.004, "bottle_axis_axial_m": 0.02},
+        {**common, "geom1": "bottle", "geom2": "table_collision", "normal_force_n": 2.6},
+    ]}
+    validate_capture_topology(row, "Er", topology)
+    assert row["contacts"][0]["qualified_edge_witness"]
+    assert row["contacts"][1]["qualified_table_witness"]
+
+    contaminated = {"contacts": row["contacts"] + [
+        {**common, "geom1": "bottle", "geom2": "g35", "normal_force_n": 1.0}
+    ]}
+    with np.testing.assert_raises_regex(RuntimeError, "g35/g36"):
+        validate_capture_topology(contaminated, "Er", topology)
+    with np.testing.assert_raises_regex(RuntimeError, "component C"):
+        validate_capture_topology(contaminated, "Ec", topology)

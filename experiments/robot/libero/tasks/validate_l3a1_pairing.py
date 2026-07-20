@@ -11,6 +11,9 @@ import numpy as np
 
 
 PAIRING_METHOD = "serialized_er_state_bottle_transform"
+TOPOLOGY_SCHEMA_VERSION = 2
+TOPOLOGY_ID = "native_white_cabinet_bottom_front_right_edge_v1"
+COMPONENT_ROLES = ("edge/front_outer", "inner_front", "side/right")
 CANONICAL_NATIVE_SIDE_PANELS = {
     "left": {
         "pos": [-0.10191, 0.01105, 0.04525],
@@ -24,13 +27,20 @@ CANONICAL_NATIVE_SIDE_PANELS = {
     },
 }
 BINDING_FIELDS = (
-    "l3a1_variant", "support_panel_side", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
+    "l3a1_topology_schema_version", "l3a1_topology_id",
+    "support_topology_contract_json", "support_topology_contract_sha256",
+    "compiled_support_component_signatures_json",
+    "compiled_support_component_signatures_sha256",
+    "support_component_role_hashes_json", "support_component_role_hashes_sha256",
+    "support_component_C_geoms", "support_edge_geom", "support_inner_front_geom",
+    "support_side_geom", "support_edge_local_xy", "min_edge_qualified_coverage",
+    "support_qualification_algorithm_version", "min_absolute_support_force_n",
+    "min_edge_force_weight_fraction", "min_table_force_weight_fraction",
+    "min_edge_axial_m", "max_edge_gap_m", "max_support_penetration_m",
+    "l3a1_variant", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
     "lean_deg", "lean_axis", "lean_direction_deg", "policy_entry_probe_actions",
     "bddl_sha256", "fixture_layout_contract", "native_cabinet_xml_path",
     "native_cabinet_xml_sha256",
-    "support_panel_contract_json", "support_panel_contract_sha256",
-    "compiled_support_panel_signature_json",
-    "compiled_support_panel_signature_sha256",
     "support_restore_position_tolerance_m", "support_restore_angle_tolerance_deg",
     "max_pre_release_drawer_axis_displacement_m",
     "max_pre_release_drawer_axis_speed_m_s",
@@ -42,6 +52,299 @@ BINDING_FIELDS = (
     "oracle_displacement_threshold",
     "oracle_height_drop_threshold", "stable_x_offset", "initialization_strategy",
 )
+
+
+def _csv(value) -> set[str]:
+    return set(filter(None, (part.strip() for part in str(value).split(","))))
+
+
+def _json_hash(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _validate_v2_group(group: h5py.Group) -> tuple[dict[str, str], dict[str, float]]:
+    attrs = group.attrs
+    if int(attrs.get("l3a1_topology_schema_version", -1)) != TOPOLOGY_SCHEMA_VERSION:
+        raise ValueError("legacy/stale L3-A1 artifact: topology schema v2 required")
+    if str(attrs.get("l3a1_topology_id", "")) != TOPOLOGY_ID:
+        raise ValueError("L3-A1 topology_id does not match native endpoint contract")
+    contract_json = str(attrs.get("support_topology_contract_json", ""))
+    if _json_hash(contract_json) != str(attrs.get("support_topology_contract_sha256", "")):
+        raise ValueError("support topology contract SHA256 mismatch")
+    try:
+        contract = json.loads(contract_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError("support topology contract is invalid JSON") from exc
+    if (
+        contract.get("schema_version") != TOPOLOGY_SCHEMA_VERSION
+        or contract.get("topology_id") != TOPOLOGY_ID
+        or contract.get("body") != "cabinet_bottom"
+        or set(contract.get("roles", {})) != set(COMPONENT_ROLES)
+        or contract.get("initial_support_roles") != ["edge/front_outer"]
+        or set(contract.get("removal_component", [])) != set(COMPONENT_ROLES)
+        or set(contract.get("forbidden_initial_roles", [])) != {"inner_front", "side/right"}
+    ):
+        raise ValueError("support topology contract content is non-canonical")
+    native_xml = Path(str(attrs.get("native_cabinet_xml_path", "")))
+    if not native_xml.is_file() or _sha256(str(native_xml)) != str(
+        attrs.get("native_cabinet_xml_sha256", "")
+    ):
+        raise ValueError("artifact native WhiteCabinet XML SHA256 is stale")
+    compiled_json = str(attrs.get("compiled_support_component_signatures_json", ""))
+    if _json_hash(compiled_json) != str(
+        attrs.get("compiled_support_component_signatures_sha256", "")
+    ):
+        raise ValueError("compiled support-component signatures SHA256 mismatch")
+    try:
+        compiled = json.loads(compiled_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError("compiled support-component signatures are invalid JSON") from exc
+    components = compiled.get("components", {})
+    if (
+        compiled.get("schema_version") != TOPOLOGY_SCHEMA_VERSION
+        or compiled.get("topology_id") != TOPOLOGY_ID
+        or set(components) != set(COMPONENT_ROLES)
+    ):
+        raise ValueError("compiled support-component roles do not match topology")
+    role_to_geom = {}
+    for role in COMPONENT_ROLES:
+        signature = components[role]
+        canonical = contract["roles"][role]
+        if (
+            int(signature.get("group", -1)) != 0
+            or int(signature.get("type", -1)) != 6
+            or int(signature.get("contype", 0)) == 0
+            or int(signature.get("conaffinity", 0)) == 0
+            or not np.allclose(signature.get("pos", []), canonical["pos"], atol=1e-6, rtol=0)
+            or not np.allclose(signature.get("size", []), canonical["size"], atol=1e-6, rtol=0)
+        ):
+            raise ValueError(f"compiled support component {role!r} is non-canonical")
+        quat = np.asarray(signature.get("quat", []), dtype=float)
+        wanted_quat = np.asarray(canonical["quat"], dtype=float)
+        if not (
+            np.allclose(quat, wanted_quat, atol=1e-5, rtol=0)
+            or np.allclose(quat, -wanted_quat, atol=1e-5, rtol=0)
+        ):
+            raise ValueError(f"compiled support component {role!r} quaternion mismatch")
+        geom = str(signature.get("geom", ""))
+        if not geom:
+            raise ValueError(f"compiled support component {role!r} has no geom binding")
+        role_to_geom[role] = geom
+    role_hashes_json = str(attrs.get("support_component_role_hashes_json", ""))
+    if _json_hash(role_hashes_json) != str(
+        attrs.get("support_component_role_hashes_sha256", "")
+    ):
+        raise ValueError("support component role-hash manifest SHA256 mismatch")
+    try:
+        role_hashes = json.loads(role_hashes_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError("support component role-hash manifest is invalid JSON") from exc
+    expected_role_hashes = {
+        role: _json_hash(json.dumps(
+            contract["roles"][role], sort_keys=True, separators=(",", ":")
+        ))
+        for role in COMPONENT_ROLES
+    }
+    if role_hashes != expected_role_hashes:
+        raise ValueError("native support component role hashes are stale")
+    if len(set(role_to_geom.values())) != len(COMPONENT_ROLES):
+        raise ValueError("compiled support component geoms are not unique")
+    expected_attrs = {
+        "support_edge_geom": role_to_geom["edge/front_outer"],
+        "support_inner_front_geom": role_to_geom["inner_front"],
+        "support_side_geom": role_to_geom["side/right"],
+    }
+    for field, expected in expected_attrs.items():
+        if str(attrs.get(field, "")) != expected:
+            raise ValueError(f"{field} differs from compiled topology binding")
+    if _csv(attrs.get("support_component_C_geoms", "")) != set(role_to_geom.values()):
+        raise ValueError("support component C does not contain exactly three bound geoms")
+    if str(attrs.get("support_qualification_algorithm_version", "")) != (
+        "same_frame_edge_table_force_witness_v1"
+    ):
+        raise ValueError("unsupported native-edge qualification algorithm")
+    thresholds = {
+        name: float(attrs.get(name, np.nan))
+        for name in (
+            "min_edge_qualified_coverage", "min_edge_axial_m", "max_edge_gap_m",
+            "min_absolute_support_force_n", "min_edge_force_weight_fraction",
+            "min_table_force_weight_fraction", "max_support_penetration_m",
+        )
+    }
+    canonical_thresholds = {
+        "min_edge_qualified_coverage": 0.95,
+        "min_edge_axial_m": 0.086,
+        "max_edge_gap_m": 0.006,
+        "min_absolute_support_force_n": 1e-4,
+        "min_edge_force_weight_fraction": 0.05,
+        "min_table_force_weight_fraction": 0.25,
+        "max_support_penetration_m": 0.003,
+    }
+    if any(
+        not np.isfinite(thresholds[name])
+        or not np.isclose(thresholds[name], wanted, rtol=0, atol=1e-12)
+        for name, wanted in canonical_thresholds.items()
+    ):
+        raise ValueError("invalid native-edge qualification thresholds")
+    edge_xy = np.asarray(attrs.get("support_edge_local_xy", []), dtype=float)
+    if edge_xy.shape != (2,) or not np.allclose(
+        edge_xy, [0.11268, -0.07253], rtol=0, atol=1e-12
+    ):
+        raise ValueError("invalid support_edge_local_xy")
+    return role_to_geom, thresholds
+
+
+def _validate_v2_demo(
+    demo: h5py.Group, index: int, variant: str,
+    role_to_geom: dict[str, str], thresholds: dict[str, float],
+    displacement_threshold: float, height_drop_threshold: float,
+    tilt_threshold: float,
+) -> None:
+    prefix = f"demo_{index}"
+    initial_roles = _csv(demo.attrs.get("initial_component_roles", "missing"))
+    hold_roles = _csv(demo.attrs.get("hold_component_roles", "missing"))
+    forbidden = _csv(demo.attrs.get("forbidden_component_contacts", "missing"))
+    other = _csv(demo.attrs.get("other_cabinet_geoms", "missing"))
+    direct = _csv(demo.attrs.get("direct_contact_bodies", "missing"))
+    if forbidden or other or direct:
+        raise ValueError(f"causal contamination at {prefix}")
+    if float(demo.attrs.get("runtime_wait_displacement_m", 0.0)) > 0.005:
+        raise ValueError(f"runtime wait drift exceeds 5 mm at {prefix}")
+    if float(demo.attrs.get("policy_entry_displacement_m", 0.0)) > 0.005:
+        raise ValueError(f"policy entry drift exceeds 5 mm at {prefix}")
+    if str(demo.attrs.get("policy_entry_direct_contacts", "")):
+        raise ValueError(f"policy entry has direct contact at {prefix}")
+    if float(demo.attrs.get("controller_neutral_hold_max_displacement_m", 0.0)) > 0.005:
+        raise ValueError(f"neutral hold drift exceeds 5 mm at {prefix}")
+    if str(demo.attrs.get("controller_neutral_hold_direct_contacts", "")):
+        raise ValueError(f"neutral hold has direct contact at {prefix}")
+    edge_cov = float(demo.attrs.get("edge_qualified_coverage", np.nan))
+    table_cov = float(demo.attrs.get("table_qualified_coverage", np.nan))
+    edge_table_cov = float(demo.attrs.get("edge_table_qualified_coverage", np.nan))
+    if variant == "risk":
+        if not bool(demo.attrs.get("initial_edge_table_qualified", False)):
+            raise ValueError(f"Er initial edge+table qualification is false at {prefix}")
+        if initial_roles != {"edge/front_outer"} or hold_roles != {"edge/front_outer"}:
+            raise ValueError(f"Er must contact only g33 edge component at {prefix}")
+        if min(edge_cov, table_cov, edge_table_cov) < thresholds["min_edge_qualified_coverage"]:
+            raise ValueError(f"Er edge+table qualification coverage too low at {prefix}")
+        bottle_weight = float(demo.attrs.get("bottle_weight_n", np.nan))
+        if not np.isfinite(bottle_weight) or bottle_weight <= 0:
+            raise ValueError(f"Er bottle_weight_n is invalid at {prefix}")
+        edge_force_threshold = max(
+            thresholds["min_absolute_support_force_n"],
+            thresholds["min_edge_force_weight_fraction"] * bottle_weight,
+        )
+        table_force_threshold = max(
+            thresholds["min_absolute_support_force_n"],
+            thresholds["min_table_force_weight_fraction"] * bottle_weight,
+        )
+        for field, expected in (
+            ("min_edge_normal_force_n", edge_force_threshold),
+            ("min_table_normal_force_n", table_force_threshold),
+        ):
+            actual = float(demo.attrs.get(field, np.nan))
+            if not np.isfinite(actual) or not np.isclose(actual, expected, rtol=0, atol=1e-12):
+                raise ValueError(f"Er derived {field} is stale at {prefix}")
+        metric_limits = {
+            "edge_witness_force_min_n": (edge_force_threshold, "min"),
+            "table_witness_force_min_n": (table_force_threshold, "min"),
+            "edge_min_axial_m": (thresholds["min_edge_axial_m"], "min"),
+            "edge_max_gap_m": (thresholds["max_edge_gap_m"], "max"),
+            "edge_max_penetration_m": (thresholds["max_support_penetration_m"], "max"),
+            "table_max_penetration_m": (thresholds["max_support_penetration_m"], "max"),
+            "edge_witness_force_min_weight_fraction": (
+                thresholds["min_edge_force_weight_fraction"], "min"
+            ),
+            "table_witness_force_min_weight_fraction": (
+                thresholds["min_table_force_weight_fraction"], "min"
+            ),
+        }
+        for field, (limit, direction) in metric_limits.items():
+            value = float(demo.attrs.get(field, np.nan))
+            bad = not np.isfinite(value) or (value < limit if direction == "min" else value > limit)
+            if bad:
+                raise ValueError(f"Er {field} fails at {prefix}")
+    else:
+        if (
+            initial_roles or hold_roles or edge_cov != 0.0 or edge_table_cov != 0.0
+            or bool(demo.attrs.get("initial_edge_table_qualified", True))
+        ):
+            raise ValueError(f"Ec must remain absent from entire component C at {prefix}")
+
+    def clean_close(
+        kind: str, require_hazard: bool, *, expected_qvel_overwritten: bool
+    ) -> None:
+        release = int(demo.attrs.get(f"{kind}_component_release_step_rC", -1))
+        oracle = int(demo.attrs.get(f"{kind}_first_oracle_step", -1))
+        if require_hazard and (release < 1 or oracle <= release):
+            raise ValueError(f"{kind} oracle does not follow rC at {prefix}")
+        if bool(demo.attrs.get(f"{kind}_component_recontact_after_rC", True)):
+            raise ValueError(f"{kind} component recontacts after rC at {prefix}")
+        if str(demo.attrs.get(f"{kind}_pre_oracle_other_cabinet_geoms", "missing")):
+            raise ValueError(f"{kind} has cabinet contamination at {prefix}")
+        if str(demo.attrs.get(f"{kind}_direct_contact_bodies", "missing")):
+            raise ValueError(f"{kind} has direct-contact contamination at {prefix}")
+        overwritten = bool(demo.attrs.get(f"{kind}_bottle_qvel_overwritten", None))
+        if f"{kind}_bottle_qvel_overwritten" not in demo.attrs:
+            raise ValueError(f"{kind} lacks bottle velocity provenance at {prefix}")
+        if overwritten is not expected_qvel_overwritten:
+            expectation = "must" if expected_qvel_overwritten else "must not"
+            raise ValueError(
+                f"{kind} {expectation} overwrite bottle velocity at {prefix}"
+            )
+        if require_hazard:
+            hazard = (
+                float(demo.attrs.get(f"{kind}_displacement_m", -np.inf)) > displacement_threshold
+                or float(demo.attrs.get(f"{kind}_height_drop_m", -np.inf)) > height_drop_threshold
+                or float(demo.attrs.get(f"{kind}_attitude_change_deg", -np.inf)) > tilt_threshold
+            )
+            if not hazard:
+                raise ValueError(f"{kind} response misses hazard thresholds at {prefix}")
+
+    if variant == "risk":
+        clean_close("factual_close", True, expected_qvel_overwritten=False)
+        if _csv(demo.attrs.get("factual_close_initial_component_roles", "")) != {
+            "edge/front_outer"
+        }:
+            raise ValueError(f"factual close does not start on edge role at {prefix}")
+        if not bool(demo.attrs.get("zero_momentum_close_applied", False)):
+            raise ValueError(f"zero-momentum counterfactual missing at {prefix}")
+        clean_close(
+            "zero_momentum_close", True, expected_qvel_overwritten=True
+        )
+        if int(demo.attrs.get("zero_momentum_close_factual_release_step_rC", -1)) != int(
+            demo.attrs.get("factual_close_component_release_step_rC", -2)
+        ):
+            raise ValueError(f"zero-momentum baseline is not bound to factual rC at {prefix}")
+        if _csv(demo.attrs.get("instant_component_removal_disabled_roles", "")) != set(COMPONENT_ROLES):
+            raise ValueError(f"instant counterfactual does not remove all C at {prefix}")
+        if int(demo.attrs.get("instant_component_removal_first_oracle_step", -1)) < 1:
+            raise ValueError(f"instant component removal does not trigger oracle at {prefix}")
+        for field in (
+            "instant_component_removal_pre_oracle_other_cabinet_geoms",
+            "instant_component_removal_direct_contact_bodies",
+        ):
+            if str(demo.attrs.get(field, "missing")):
+                raise ValueError(f"instant component removal contamination at {prefix}")
+        if _csv(demo.attrs.get("instant_component_removal_touched_component_roles", "")):
+            raise ValueError(f"disabled component C remains in contact at {prefix}")
+        if float(demo.attrs.get(
+            "instant_component_removal_max_drawer_displacement_m", np.inf
+        )) > 1e-6:
+            raise ValueError(f"instant component removal moves drawer at {prefix}")
+        instant_hazard = (
+            float(demo.attrs.get("instant_component_removal_displacement_m", -np.inf))
+            > displacement_threshold
+            or float(demo.attrs.get("instant_component_removal_height_drop_m", -np.inf))
+            > height_drop_threshold
+            or float(demo.attrs.get("instant_component_removal_attitude_change_deg", -np.inf))
+            > tilt_threshold
+        )
+        if not instant_hazard:
+            raise ValueError(
+                f"instant component removal misses displacement/drop/attitude gate at {prefix}"
+            )
 
 
 def _sha256(path: str) -> str:
@@ -143,6 +446,21 @@ def artifact_binding(path: str, task_description: str) -> str:
             if isinstance(value, bytes):
                 value = value.decode()
             binding[field] = value
+        binding["demo_qualification_force_thresholds"] = [
+            {
+                "demo_index": index,
+                "bottle_weight_n": float(group[f"demo_{index}"].attrs.get(
+                    "bottle_weight_n", np.nan
+                )),
+                "min_edge_normal_force_n": float(group[f"demo_{index}"].attrs.get(
+                    "min_edge_normal_force_n", np.nan
+                )),
+                "min_table_normal_force_n": float(group[f"demo_{index}"].attrs.get(
+                    "min_table_normal_force_n", np.nan
+                )),
+            }
+            for index in range(len(group))
+        ]
     return json.dumps(binding, sort_keys=True, separators=(",", ":"))
 
 
@@ -151,7 +469,6 @@ def validate_expected_config(
     task_description: str,
     *,
     variant: str | None = None,
-    support_side: str | None = None,
     seed: int | None = None,
     bddl: str | None = None,
     displacement_threshold: float | None = None,
@@ -161,6 +478,7 @@ def validate_expected_config(
     lean_deg: float | None = None,
     lean_direction_deg: float | None = None,
     minimum_count: int | None = None,
+    topology_id: str | None = None,
 ) -> None:
     key = task_description.replace(" ", "_")
     with h5py.File(path, "r") as handle:
@@ -171,8 +489,8 @@ def validate_expected_config(
                 f"artifact count {len(group)} is below required {minimum_count}"
             )
         expected = {
+            "l3a1_topology_id": topology_id,
             "l3a1_variant": variant,
-            "support_panel_side": support_side,
             "seed": seed,
             "bddl": bddl,
             "oracle_displacement_threshold": displacement_threshold,
@@ -204,7 +522,7 @@ def validate_expected_config(
             raise ValueError("artifact BDDL SHA256 does not match current task bytes")
 
 
-def validate_base_preservation(path: str, task_description: str) -> int:
+def _validate_legacy_base_preservation(path: str, task_description: str) -> int:
     key = task_description.replace(" ", "_")
     with h5py.File(path, "r") as handle:
         group = handle[key]
@@ -579,6 +897,89 @@ def validate_base_preservation(path: str, task_description: str) -> int:
     return count
 
 
+def validate_base_preservation(path: str, task_description: str) -> int:
+    """Validate only the production native-corner schema; legacy panels fail closed."""
+    key = task_description.replace(" ", "_")
+    with h5py.File(path, "r") as handle:
+        if key not in handle:
+            raise ValueError(f"artifact does not contain task group {key!r}")
+        group = handle[key]
+        count = len(group)
+        if count < 1:
+            raise ValueError("L3-A1 artifact contains no serialized states")
+        variant = str(group.attrs.get("l3a1_variant", ""))
+        if variant not in {"risk", "stable"}:
+            raise ValueError(f"invalid L3-A1 variant {variant!r}")
+        if str(group.attrs.get("fixture_layout_contract", "")) != (
+            "fixed_native_white_cabinet_native_corner_component_v1"
+        ):
+            raise ValueError("missing native-corner fixture layout contract")
+        role_to_geom, thresholds = _validate_v2_group(group)
+        displacement_threshold = float(
+            group.attrs.get("oracle_displacement_threshold", np.nan)
+        )
+        height_drop_threshold = float(
+            group.attrs.get("oracle_height_drop_threshold", np.nan)
+        )
+        tilt_threshold = float(
+            group.attrs.get("oracle_tilt_change_threshold_deg", np.nan)
+        )
+        if not all(
+            np.isfinite(value) and value > 0
+            for value in (
+                displacement_threshold, height_drop_threshold, tilt_threshold
+            )
+        ):
+            raise ValueError("invalid support-removal hazard thresholds")
+
+        base_hashes = []
+        for index in range(count):
+            name = f"demo_{index}"
+            if name not in group:
+                raise ValueError(f"non-contiguous demo index: missing {name}")
+            demo = group[name]
+            if "initial_state" not in demo or "base_reset_state" not in demo:
+                raise ValueError(f"missing serialized/base state at {name}")
+            state = np.asarray(demo["initial_state"][:])
+            base = np.asarray(demo["base_reset_state"][:])
+            qpos_start = int(demo.attrs.get("bottle_qpos_flat_start", -1))
+            qvel_start = int(demo.attrs.get("bottle_qvel_flat_start", -1))
+            if state.shape != base.shape or state.ndim != 1:
+                raise ValueError(f"serialized/base state shape mismatch at {name}")
+            allowed = np.zeros(state.size, dtype=bool)
+            if qpos_start < 0 or qvel_start < 0:
+                raise ValueError(f"invalid bottle flat indices at {name}")
+            allowed[qpos_start:qpos_start + 7] = True
+            allowed[qvel_start:qvel_start + 6] = True
+            if allowed.sum() != 13 or not np.array_equal(state[~allowed], base[~allowed]):
+                raise ValueError(f"non-bottle state differs from base reset at {name}")
+            base_sha = hashlib.sha256(base.tobytes()).hexdigest()
+            if str(demo.attrs.get("base_state_sha256", "")) != base_sha:
+                raise ValueError(f"base_state_sha256 mismatch at {name}")
+            base_hashes.append(base_sha)
+            mode = str(demo.attrs.get("initialization_mode", ""))
+            if variant == "risk":
+                wanted_mode = (
+                    "sampled_lean" if index == 0
+                    else "support_relative_equilibrium_template"
+                )
+            else:
+                wanted_mode = "paired_safe_transform"
+            if mode != wanted_mode:
+                raise ValueError(
+                    f"{variant} initialization_mode mismatch at {name}: {mode!r}"
+                )
+            if float(demo.attrs.get("initial_eef_drift_m", np.inf)) > 1e-10:
+                raise ValueError(f"initial EEF drift is nonzero at {name}")
+            _validate_v2_demo(
+                demo, index, variant, role_to_geom, thresholds,
+                displacement_threshold, height_drop_threshold, tilt_threshold,
+            )
+        if len(set(base_hashes)) != count:
+            raise ValueError("formal artifact reuses duplicate native base reset states")
+        return count
+
+
 def validate_pairing(er_path: str, ec_path: str, task_description: str) -> list[int]:
     validate_base_preservation(er_path, task_description)
     validate_base_preservation(ec_path, task_description)
@@ -595,13 +996,28 @@ def validate_pairing(er_path: str, ec_path: str, task_description: str) -> list[
         if ec_group.attrs.get("source_task_key", "") != key:
             raise ValueError("Ec source_task_key metadata mismatch")
         for field in (
+            "l3a1_topology_schema_version",
+            "l3a1_topology_id",
             "native_cabinet_xml_path",
             "native_cabinet_xml_sha256",
-            "support_panel_side",
-            "support_panel_contract_json",
-            "support_panel_contract_sha256",
-            "compiled_support_panel_signature_json",
-            "compiled_support_panel_signature_sha256",
+            "support_topology_contract_json",
+            "support_topology_contract_sha256",
+            "compiled_support_component_signatures_json",
+            "compiled_support_component_signatures_sha256",
+            "support_component_role_hashes_json",
+            "support_component_role_hashes_sha256",
+            "support_component_C_geoms",
+            "support_edge_geom",
+            "support_inner_front_geom",
+            "support_side_geom",
+            "support_qualification_algorithm_version",
+            "min_absolute_support_force_n",
+            "min_edge_force_weight_fraction",
+            "min_table_force_weight_fraction",
+            "min_edge_qualified_coverage",
+            "min_edge_axial_m",
+            "max_edge_gap_m",
+            "max_support_penetration_m",
         ):
             if str(er_group.attrs.get(field, "")) != str(ec_group.attrs.get(field, "")):
                 raise ValueError(f"Er/Ec fixture asset mismatch for {field}")
@@ -671,7 +1087,6 @@ def main() -> None:
     parser.add_argument("--task_description", required=True)
     parser.add_argument("--print_binding", action="store_true")
     parser.add_argument("--expected_variant")
-    parser.add_argument("--expected_support_side", choices=("left", "right"))
     parser.add_argument("--expected_seed", type=int)
     parser.add_argument("--expected_bddl")
     parser.add_argument("--expected_displacement_threshold", type=float)
@@ -681,12 +1096,12 @@ def main() -> None:
     parser.add_argument("--expected_lean_deg", type=float)
     parser.add_argument("--expected_lean_direction_deg", type=float)
     parser.add_argument("--minimum_count", type=int)
+    parser.add_argument("--expected_topology_id")
     args = parser.parse_args()
     validate_expected_config(
         args.er,
         args.task_description,
         variant=args.expected_variant,
-        support_side=args.expected_support_side,
         seed=args.expected_seed,
         bddl=args.expected_bddl,
         displacement_threshold=args.expected_displacement_threshold,
@@ -696,6 +1111,7 @@ def main() -> None:
         lean_deg=args.expected_lean_deg,
         lean_direction_deg=args.expected_lean_direction_deg,
         minimum_count=args.minimum_count,
+        topology_id=args.expected_topology_id,
     )
     if args.print_binding:
         validate_base_preservation(args.er, args.task_description)

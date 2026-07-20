@@ -1,7 +1,12 @@
 import json
+import hashlib
 import subprocess
 import sys
 from pathlib import Path
+
+import h5py
+
+from experiments.robot.libero.tasks.validate_l3a1_pairing import artifact_binding
 
 from experiments.robot.libero.tasks.validate_l3a1_smoke_evidence import (
     ExpectedIdentity,
@@ -77,6 +82,81 @@ def _write_index(root, rows, condition):
     return root
 
 
+def _reviewed_artifacts(tmp_path, er_rows, ec_rows):
+    topology_id = "native_white_cabinet_bottom_front_right_edge_v1"
+    topology_sha = "a" * 64
+    native_sha = "b" * 64
+    compiled_sha = "c" * 64
+    role_hashes_sha = "d" * 64
+    artifacts = {}
+    key = TASK.replace(" ", "_")
+    for condition in ("Er", "Ec"):
+        path = tmp_path / f"{condition.lower()}.hdf5"
+        with h5py.File(path, "w") as handle:
+            group = handle.create_group(key)
+            group.attrs["l3a1_topology_id"] = topology_id
+            group.attrs["support_topology_contract_sha256"] = topology_sha
+            group.attrs["native_cabinet_xml_sha256"] = native_sha
+            group.attrs["compiled_support_component_signatures_sha256"] = compiled_sha
+            group.attrs["support_component_role_hashes_sha256"] = role_hashes_sha
+        artifacts[condition] = path
+    bindings = {
+        condition: artifact_binding(str(path), TASK)
+        for condition, path in artifacts.items()
+    }
+    image = tmp_path / "policy.png"
+    image.write_bytes(b"reviewed policy view")
+    image_sha = hashlib.sha256(image.read_bytes()).hexdigest()
+    evidence = tmp_path / "init_evidence.json"
+    evidence.write_text(json.dumps({
+        "artifact_bindings": bindings,
+        "captures": [{"policy_image": image.name, "policy_image_sha256": image_sha}],
+    }))
+    review = tmp_path / "manual_review.json"
+    review.write_text(json.dumps({
+        "schema_version": 1,
+        "verdict": "PASS_L3A1_POLICY_VIEW_REVIEWED",
+        "reviewer": "test reviewer",
+        "reviewed_at_utc": "2026-07-20T00:00:00Z",
+        "evidence_json_sha256": hashlib.sha256(evidence.read_bytes()).hexdigest(),
+        "artifact_bindings": bindings,
+        "reviewed_policy_images_sha256": {image.name: image_sha},
+    }))
+    artifact_shas = {
+        condition: json.loads(binding)["artifact_sha256"]
+        for condition, binding in bindings.items()
+    }
+    common = {
+        "l3a1_topology_id": topology_id,
+        "support_topology_contract_sha256": topology_sha,
+        "native_cabinet_xml_sha256": native_sha,
+        "compiled_support_component_signatures_sha256": compiled_sha,
+        "support_component_role_hashes_sha256": role_hashes_sha,
+        "support_component_recontact_after_rC": False,
+        "support_bottle_qvel_overwritten": False,
+        "support_pre_oracle_other_cabinet_geoms": "",
+        "support_direct_contact_bodies": "",
+    }
+    for row in er_rows:
+        row.update(common, initial_states_artifact_sha256=artifact_shas["Er"],
+                   support_initial_component_roles="edge/front_outer",
+                   support_initial_edge_table_qualified=True,
+                   support_component_release_step_rC=1,
+                   support_first_oracle_step=2)
+    for row in ec_rows:
+        row.update(common, initial_states_artifact_sha256=artifact_shas["Ec"],
+                   support_initial_component_roles="",
+                   support_initial_edge_table_qualified=False,
+                   support_component_release_step_rC=-1,
+                   support_first_oracle_step=-1)
+    return [
+        "--er_artifact", str(artifacts["Er"]),
+        "--ec_artifact", str(artifacts["Ec"]),
+        "--init_evidence", str(evidence),
+        "--manual_review", str(review),
+    ]
+
+
 def test_validator_accepts_four_of_five_complete_episode_chains():
     eb = [_eb() for _ in range(5)]
     er = [_er() for _ in range(5)]
@@ -121,9 +201,11 @@ def test_ec_rejects_bottle_drift_and_missing_drift_evidence():
 
 
 def test_cli_writes_pass_marker_and_markdown_report(tmp_path):
+    er_rows, ec_rows = [_er() for _ in range(5)], [_ec() for _ in range(5)]
+    evidence_args = _reviewed_artifacts(tmp_path, er_rows, ec_rows)
     eb = _write_index(tmp_path / "eb", [_eb()] * 5, "Eb")
-    er = _write_index(tmp_path / "er", [_er()] * 5, "Er")
-    ec = _write_index(tmp_path / "ec", [_ec()] * 5, "Ec")
+    er = _write_index(tmp_path / "er", er_rows, "Er")
+    ec = _write_index(tmp_path / "ec", ec_rows, "Ec")
     report = tmp_path / "report.md"
     result = subprocess.run(
         [
@@ -139,6 +221,7 @@ def test_cli_writes_pass_marker_and_markdown_report(tmp_path):
             "--expected_seed", "42",
             "--checkpoint", "test/checkpoint",
             "--report", str(report),
+            *evidence_args,
         ],
         cwd=REPO_ROOT,
         text=True,
@@ -158,9 +241,11 @@ def test_cli_writes_pass_marker_and_markdown_report(tmp_path):
 
 
 def test_cli_fails_nonzero_on_wrong_episode_count(tmp_path):
+    er_rows, ec_rows = [_er() for _ in range(5)], [_ec() for _ in range(5)]
+    evidence_args = _reviewed_artifacts(tmp_path, er_rows, ec_rows)
     eb = _write_index(tmp_path / "eb", [_eb()] * 4, "Eb")
-    er = _write_index(tmp_path / "er", [_er()] * 5, "Er")
-    ec = _write_index(tmp_path / "ec", [_ec()] * 5, "Ec")
+    er = _write_index(tmp_path / "er", er_rows, "Er")
+    ec = _write_index(tmp_path / "ec", ec_rows, "Ec")
     report = tmp_path / "report.md"
     result = subprocess.run(
         [
@@ -176,6 +261,7 @@ def test_cli_fails_nonzero_on_wrong_episode_count(tmp_path):
             "--expected_seed", "42",
             "--checkpoint", "test/checkpoint",
             "--report", str(report),
+            *evidence_args,
         ],
         cwd=REPO_ROOT,
         text=True,

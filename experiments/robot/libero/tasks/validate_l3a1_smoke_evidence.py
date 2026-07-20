@@ -39,6 +39,17 @@ class ExpectedIdentity:
     seed: int
 
 
+@dataclass(frozen=True)
+class ExpectedTopology:
+    topology_id: str
+    topology_sha256: str
+    native_xml_sha256: str
+    compiled_components_sha256: str
+    component_role_hashes_sha256: str
+    er_artifact_sha256: str
+    ec_artifact_sha256: str
+
+
 def _as_bool(value: Any, field: str) -> bool:
     if isinstance(value, bool):
         return value
@@ -136,6 +147,68 @@ def _identity_failures(
 
 def _episode_name(row: dict[str, Any], index: int) -> str:
     return str(row.get("file", f"episode[{index}]"))
+
+
+def _topology_failures(
+    condition: str, rows: list[dict[str, Any]], expected: ExpectedTopology
+) -> tuple[str, ...]:
+    failures = []
+    expected_common = {
+        "l3a1_topology_id": expected.topology_id,
+        "support_topology_contract_sha256": expected.topology_sha256,
+        "native_cabinet_xml_sha256": expected.native_xml_sha256,
+        "compiled_support_component_signatures_sha256": expected.compiled_components_sha256,
+        "support_component_role_hashes_sha256": expected.component_role_hashes_sha256,
+    }
+    artifact_sha = (
+        expected.er_artifact_sha256 if condition == "Er" else expected.ec_artifact_sha256
+    )
+    for index, row in enumerate(rows):
+        name = _episode_name(row, index)
+        for field, wanted in expected_common.items():
+            if row.get(field) != wanted:
+                failures.append(
+                    f"{condition} {name}: {field}={row.get(field)!r}, expected {wanted!r}"
+                )
+        if row.get("initial_states_artifact_sha256") != artifact_sha:
+            failures.append(f"{condition} {name}: stale initial-states artifact binding")
+        try:
+            roles = str(row.get("support_initial_component_roles", "missing"))
+            edge_table = _required_bool(row, "support_initial_edge_table_qualified")
+            release = row.get("support_component_release_step_rC")
+            first_oracle = row.get("support_first_oracle_step")
+            recontact = _required_bool(row, "support_component_recontact_after_rC")
+            overwritten = _required_bool(row, "support_bottle_qvel_overwritten")
+            polluted = any(str(row.get(field, "missing")).strip() for field in (
+                "support_pre_oracle_other_cabinet_geoms",
+                "support_direct_contact_bodies",
+            ))
+            if condition == "Er":
+                if roles != "edge/front_outer" or not edge_table:
+                    failures.append(f"Er {name}: initial topology must be edge+table only")
+                if not isinstance(release, int) or isinstance(release, bool) or release < 1:
+                    failures.append(f"Er {name}: invalid factual rC={release!r}")
+                if (
+                    not isinstance(first_oracle, int)
+                    or isinstance(first_oracle, bool)
+                    or not isinstance(release, int)
+                    or first_oracle <= release
+                ):
+                    failures.append(f"Er {name}: oracle does not follow factual rC")
+            else:
+                if roles or edge_table:
+                    failures.append(f"Ec {name}: component C must be absent initially")
+                if release not in (-1, None):
+                    failures.append(f"Ec {name}: unexpected component release step")
+            if recontact:
+                failures.append(f"{condition} {name}: component recontact after rC")
+            if overwritten:
+                failures.append(f"{condition} {name}: factual bottle velocity was overwritten")
+            if polluted:
+                failures.append(f"{condition} {name}: causal contamination is non-empty")
+        except ValueError as exc:
+            failures.append(f"{condition} {name}: {exc}")
+    return tuple(failures)
 
 
 def _evaluate_eb(rows: list[dict[str, Any]]) -> ConditionResult:
@@ -283,6 +356,7 @@ def validate(
     min_qualifying: int = 4,
     max_ec_bottle_drift_m: float = 0.005,
     expected_identities: dict[str, ExpectedIdentity] | None = None,
+    expected_topology: ExpectedTopology | None = None,
 ) -> tuple[bool, tuple[ConditionResult, ...], tuple[str, ...]]:
     results = (
         _evaluate_eb(eb_rows),
@@ -304,6 +378,9 @@ def validate(
                     expected_episodes,
                 )
             )
+    if expected_topology is not None:
+        gate_failures.extend(_topology_failures("Er", er_rows, expected_topology))
+        gate_failures.extend(_topology_failures("Ec", ec_rows, expected_topology))
     for result in results:
         if result.total != expected_episodes:
             gate_failures.append(
@@ -335,6 +412,8 @@ def render_report(
     checkpoint: str,
     eval_seed: int,
     identities: dict[str, ExpectedIdentity],
+    topology: ExpectedTopology,
+    review_sha256: str,
 ) -> str:
     marker = PASS_MARKER if passed else FAIL_MARKER
     lines = [
@@ -353,6 +432,14 @@ def render_report(
         f"- Eb index SHA256: {sources['Eb'][1]}",
         f"- Er index SHA256: {sources['Er'][1]}",
         f"- Ec index SHA256: {sources['Ec'][1]}",
+        f"- L3-A1 topology ID: {topology.topology_id}",
+        f"- Topology contract SHA256: {topology.topology_sha256}",
+        f"- Native cabinet XML SHA256: {topology.native_xml_sha256}",
+        f"- Compiled component signatures SHA256: {topology.compiled_components_sha256}",
+        f"- Native component role hashes SHA256: {topology.component_role_hashes_sha256}",
+        f"- Er artifact SHA256: {topology.er_artifact_sha256}",
+        f"- Ec artifact SHA256: {topology.ec_artifact_sha256}",
+        f"- Manual policy-view review SHA256: {review_sha256}",
         "",
         "| Condition | Episodes | Qualifying | Direct contact | Index SHA256 | Source |",
         "| --- | ---: | ---: | ---: | --- | --- |",
@@ -395,6 +482,10 @@ def main() -> int:
     parser.add_argument("--task_description", required=True)
     parser.add_argument("--expected_seed", required=True, type=int)
     parser.add_argument("--checkpoint", required=True)
+    parser.add_argument("--er_artifact", required=True, type=Path)
+    parser.add_argument("--ec_artifact", required=True, type=Path)
+    parser.add_argument("--init_evidence", required=True, type=Path)
+    parser.add_argument("--manual_review", required=True, type=Path)
     args = parser.parse_args()
     if args.expected_episodes <= 0:
         parser.error("--expected_episodes must be positive")
@@ -404,6 +495,30 @@ def main() -> int:
         parser.error("--max_ec_bottle_drift_m must be non-negative")
 
     try:
+        from experiments.robot.libero.tasks.export_l3a1_init_evidence import (
+            file_sha256,
+            validate_manual_review,
+        )
+        from experiments.robot.libero.tasks.validate_l3a1_pairing import artifact_binding
+
+        validate_manual_review(
+            args.manual_review, args.init_evidence, args.er_artifact, args.ec_artifact
+        )
+        er_binding = json.loads(artifact_binding(str(args.er_artifact), args.task_description))
+        ec_binding = json.loads(artifact_binding(str(args.ec_artifact), args.task_description))
+        topology = ExpectedTopology(
+            topology_id=str(er_binding["l3a1_topology_id"]),
+            topology_sha256=str(er_binding["support_topology_contract_sha256"]),
+            native_xml_sha256=str(er_binding["native_cabinet_xml_sha256"]),
+            compiled_components_sha256=str(
+                er_binding["compiled_support_component_signatures_sha256"]
+            ),
+            component_role_hashes_sha256=str(
+                er_binding["support_component_role_hashes_sha256"]
+            ),
+            er_artifact_sha256=str(er_binding["artifact_sha256"]),
+            ec_artifact_sha256=str(ec_binding["artifact_sha256"]),
+        )
         eb_path, eb_rows, eb_sha = load_index(args.eb)
         er_path, er_rows, er_sha = load_index(args.er)
         ec_path, ec_rows, ec_sha = load_index(args.ec)
@@ -432,6 +547,7 @@ def main() -> int:
             min_qualifying=args.min_qualifying,
             max_ec_bottle_drift_m=args.max_ec_bottle_drift_m,
             expected_identities=identities,
+            expected_topology=topology,
         )
         report = render_report(
             passed,
@@ -448,6 +564,8 @@ def main() -> int:
             checkpoint=args.checkpoint,
             eval_seed=args.expected_seed,
             identities=identities,
+            topology=topology,
+            review_sha256=file_sha256(args.manual_review),
         )
     except (OSError, ValueError) as exc:
         passed = False
