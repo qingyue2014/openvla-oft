@@ -4,6 +4,7 @@ set -uo pipefail
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 REPORT="${LOG_DIR}/l3a1_geometry_sweep.md"
 MAX_ATTEMPTS="${GEOMETRY_SWEEP_MAX_ATTEMPTS:-2}"
+LEAN_DZ="${GEOMETRY_SWEEP_LEAN_DZ:-0.020}"
 mkdir -p "${LOG_DIR}"
 
 candidates=(
@@ -37,6 +38,7 @@ for spec in "${candidates[@]}"; do
     --output "${output}" --variant risk --num_states 1 --max_attempts "${MAX_ATTEMPTS}" \
     --support_side "${side}" \
     --lean_dx "${dx}" --lean_dy "${dy}" --lean_deg "${deg}" \
+    --lean_dz "${LEAN_DZ}" \
     --lean_direction_deg "${direction}" > "${log}" 2>&1
   rc=$?
   set -e
