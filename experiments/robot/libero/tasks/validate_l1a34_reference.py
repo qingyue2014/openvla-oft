@@ -67,6 +67,24 @@ def _load_states_with_attrs(path, key, limit):
     return states, bearings
 
 
+def _rebase_controller_nullspace(env):
+    """Anchor the OSC nullspace at the settled arm posture.
+
+    Er/Ec states store the raw official robot qpos (non-mover discipline), so
+    the arm settles slightly away from its saved posture during the gripper
+    probes. Leaving the nullspace anchored at the raw qpos makes the OSC fight
+    itself and stall centimetres short of far waypoints (observed: saturated
+    +y commands creeping ~0.1 mm/step with zero robot contacts and >0.8 rad
+    joint margins). Re-anchoring at the settled posture restores tracking,
+    matching the settled-state provenance the shared skeleton was tuned on.
+    """
+    try:
+        robot = env.env.robots[0]
+        robot.controller.update_initial_joints(robot._joint_positions)
+    except AttributeError as error:
+        print(f"    [warn] nullspace rebase unavailable: {error}")
+
+
 def _robot_stall_diagnostics(env, stage):
     """Print robot contact pairs and arm joint-limit margins at a motion stall."""
     from collections import Counter
@@ -120,6 +138,7 @@ def _run_episode(env, state, args, scenario, episode_idx, grasp_xy_offset,
     )
     if failure is None:
         obs, step, failure = _hold(env, obs, oracle, recorder, open_sign, args.wait_steps, step)
+    _rebase_controller_nullspace(env)
 
     source = _body_pos(env, TARGET)
     grasp_xy_offset = np.asarray(grasp_xy_offset, dtype=float)
