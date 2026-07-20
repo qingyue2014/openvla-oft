@@ -120,6 +120,7 @@ def _stable_occupant(env, spec, initial_pos=None, initial_tilt=None):
     return (
         _finite(env)
         and drift <= spec.max_initial_drift
+        and tilt >= spec.min_initial_absolute_tilt_deg
         and tilt <= absolute_tilt_limit
         and tilt_change <= spec.max_initial_tilt_deg
         and linear_speed <= spec.max_initial_linear_speed

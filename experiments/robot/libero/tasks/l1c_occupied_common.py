@@ -34,6 +34,7 @@ class OccupiedGoalSpec:
     settle_steps: int = 180
     max_initial_drift: float = 0.006
     max_initial_tilt_deg: float = 15.0
+    min_initial_absolute_tilt_deg: float = 0.0
     max_initial_absolute_tilt_deg: float = 0.0
     max_initial_linear_speed: float = 0.015
     max_initial_angular_speed: float = 0.30
@@ -100,6 +101,7 @@ SPECS = {
         safe_offsets=((0.0, -0.030), (0.0, -0.035), (0.0, -0.040), (0.0, -0.045)),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,
+        min_initial_absolute_tilt_deg=70.0,
         max_initial_absolute_tilt_deg=100.0,
         # The scanned bowl's collision mesh is intentionally offset from its
         # free-joint root, so root-to-root XY distance is not a geometric
