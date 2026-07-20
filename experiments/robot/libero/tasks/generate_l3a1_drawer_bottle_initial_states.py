@@ -132,7 +132,7 @@ DRAWER_CLOSED_QPOS = 0.0025
 DEFAULT_LEAN_DX = -0.145
 DEFAULT_LEAN_DY = -0.184
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
-DEFAULT_LEAN_DEG = -20.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
+DEFAULT_LEAN_DEG = -30.0   # NEGATIVE: acquire the wing, then settle under gravity
                            # against the support wing; positive would lean it away and it topples
 DEFAULT_LEAN_DIRECTION_DEG = 0.0
 # Fixed fixtures live in ``model.body_pos`` and are not part of MuJoCo's

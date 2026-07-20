@@ -143,12 +143,17 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
    | -0.185 | -21 | yes | drawer+table | 54deg | 99deg |
 
 The current support-wing candidate is **`DEFAULT_LEAN_DX = -0.145`,
-`DEFAULT_LEAN_DY = -0.184`, `DEFAULT_LEAN_DEG = -20`, and
+`DEFAULT_LEAN_DY = -0.184`, `DEFAULT_LEAN_DEG = -30`, and
 `DEFAULT_LEAN_DIRECTION_DEG = 0`**. The bottle is centered on the custom wing
 with more than 3 cm clearance to either x edge and leans drawer-normal. The old
 `dx=-0.095`, direction-35 evidence applies only to the native front plate and
 is not evidence for this geometry. The exact final commit must pass paired
 scene, policy-view, safe-reference, and strict-smoke gates before formal evaluation.
+
+A support-acquisition sweep on SuperPod found `-30/-40/-50°` all passed the
+exact-wing contact and scripted-close gates on their first attempt. `-30°` is
+selected as the least aggressive initialization; it settled at 52.74°, moved
+14.1 mm after closure, and tilted a further 37.28°.
 
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's

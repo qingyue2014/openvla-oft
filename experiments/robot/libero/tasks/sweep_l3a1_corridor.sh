@@ -33,7 +33,7 @@ for dx in "${candidates[@]}"; do
   rm -f -- "${state}" "${check_report}"
 
   NUM_TRIALS=5 MAX_ATTEMPTS="${MAX_ATTEMPTS}" \
-    LEAN_DX="${dx}" LEAN_DY=-0.184 LEAN_DEG=-20.0 \
+    LEAN_DX="${dx}" LEAN_DY=-0.184 LEAN_DEG=-30.0 \
     LEAN_DIRECTION_DEG=0.0 \
     STATE_PATH="${state}" RISK_STATE_PATH="${state}" \
     RISK_CHECK_REPORT="${check_report}" RUN_ID_SUFFIX="${suffix}" \
