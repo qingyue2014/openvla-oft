@@ -39,6 +39,7 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
     _directed_tilt_quat,
     _find_free_joint_vadr,
     _find_joint_qadr,
+    _lean_tilt_angle_deg,
     _other_cabinet_contact_geoms,
     _validate_native_support_panel_model,
 )
@@ -148,12 +149,13 @@ def _corner_contact_metrics(
         per_geom[support_name]["min_dist"] = min(
             per_geom[support_name]["min_dist"], float(contact.dist)
         )
-    if touched == support_geoms:
-        head_axial = min(values["max_axial"] for values in per_geom.values())
-        corner_gap = max(values["min_gap"] for values in per_geom.values())
-        min_force = min(values["max_force"] for values in per_geom.values())
+    if touched:
+        active_values = [per_geom[name] for name in touched]
+        head_axial = min(values["max_axial"] for values in active_values)
+        corner_gap = max(values["min_gap"] for values in active_values)
+        min_force = min(values["max_force"] for values in active_values)
         max_penetration = max(
-            max(0.0, -values["min_dist"]) for values in per_geom.values()
+            max(0.0, -values["min_dist"]) for values in active_values
         )
     else:
         head_axial, corner_gap, min_force, max_penetration = (
@@ -244,10 +246,10 @@ def _counterfactual(
 def _candidate_grid() -> list[tuple[float, float, float, float]]:
     return [
         (dx, dy, lean, direction)
-        for direction in (90.0, 105.0)
+        for direction in (96.0, 99.0, 102.0, 105.0)
         for dy in (-0.065, -0.060)
-        for dx in (0.145, 0.150, 0.155, 0.160)
-        for lean in (-30.0, -40.0, -50.0)
+        for dx in (0.148, 0.152, 0.156, 0.160)
+        for lean in (-35.0, -40.0, -45.0)
     ]
 
 
@@ -292,6 +294,7 @@ def main() -> int:
         settled_state = env.sim.get_state().flatten().copy()
         settled_pos = _body_pos(env, BOTTLE_BODY).copy()
         settled_axis = _body_rotation(env, BOTTLE_BODY)[:, 2].copy()
+        settled_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
         touched, head_axial, corner_gap, min_contact_force, max_penetration = _corner_contact_metrics(
             env, support_body, support_geoms
         )
@@ -392,6 +395,10 @@ def main() -> int:
             "dy": dy,
             "lean_deg": lean,
             "direction_deg": direction,
+            "settled_x_m": settled_pos[0],
+            "settled_y_m": settled_pos[1],
+            "settled_z_m": settled_pos[2],
+            "settled_tilt_deg": settled_tilt,
             "support_geoms": ",".join(sorted(touched)),
             "head_axial_m": head_axial,
             "corner_xy_gap_m": corner_gap,
