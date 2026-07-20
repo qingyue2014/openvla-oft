@@ -108,7 +108,9 @@ def list_bodies(args):
         print(name)
 
 
-def _stable_occupant(env, spec, initial_pos=None, initial_tilt=None):
+def _stable_occupant(
+    env, spec, initial_pos=None, initial_tilt=None, enforce_absolute_tilt=False
+):
     pos = body_pos(env, spec.occupant_body)
     tilt = body_tilt_deg(env, spec.occupant_body)
     drift = 0.0 if initial_pos is None else float(np.linalg.norm(pos - initial_pos))
@@ -117,10 +119,13 @@ def _stable_occupant(env, spec, initial_pos=None, initial_tilt=None):
     absolute_tilt_limit = (
         spec.max_initial_absolute_tilt_deg or spec.max_initial_tilt_deg
     )
+    absolute_tilt_floor = (
+        spec.min_initial_absolute_tilt_deg if enforce_absolute_tilt else 0.0
+    )
     return (
         _finite(env)
         and drift <= spec.max_initial_drift
-        and tilt >= spec.min_initial_absolute_tilt_deg
+        and tilt >= absolute_tilt_floor
         and tilt <= absolute_tilt_limit
         and tilt_change <= spec.max_initial_tilt_deg
         and linear_speed <= spec.max_initial_linear_speed
@@ -462,7 +467,7 @@ def generate(args):
             risk_tilt0 = body_tilt_deg(env, spec.occupant_body)
             settle(env, args.stability_confirm_steps)
             risk_ok, risk_drift, risk_tilt, risk_tilt_change = _stable_occupant(
-                env, spec, risk_pos0, risk_tilt0
+                env, spec, risk_pos0, risk_tilt0, enforce_absolute_tilt=True
             )
             risk_linear_speed, risk_angular_speed = body_speeds(env, spec.occupant_body)
             risk_anchor_distance = float(
@@ -830,6 +835,14 @@ def preview(args):
                 placement_ok = bool(
                     occupant_t10_in_goal if condition == "er" else not occupant_t10_in_goal
                 )
+                semantic_pose_ok = bool(
+                    condition != "er"
+                    or (
+                        occupant_t0_tilt >= spec.min_initial_absolute_tilt_deg
+                        and occupant_t0_tilt
+                        <= (spec.max_initial_absolute_tilt_deg or 180.0)
+                    )
+                )
                 if condition == "er":
                     occupant_dynamics_ok = bool(
                         support_relative_displacement <= args.max_occupant_displacement
@@ -862,8 +875,11 @@ def preview(args):
                     "collision_extent_z_m": collision_extent[2],
                     "visibility_ok": int(visibility_ok),
                     "placement_ok": int(placement_ok),
+                    "semantic_pose_ok": int(semantic_pose_ok),
                     "dynamics_ok": int(dynamics_ok),
-                    "valid": int(visibility_ok and placement_ok and dynamics_ok),
+                    "valid": int(
+                        visibility_ok and placement_ok and semantic_pose_ok and dynamics_ok
+                    ),
                 }
                 rows.append(row)
                 print(
@@ -1000,7 +1016,7 @@ def screen_occupants(args):
             tilt0 = body_tilt_deg(env, body_name)
             settle(env, args.stability_confirm_steps)
             stable, drift, tilt, tilt_change = _stable_occupant(
-                env, candidate_spec, pos0, tilt0
+                env, candidate_spec, pos0, tilt0, enforce_absolute_tilt=True
             )
             linear_speed, angular_speed = body_speeds(env, body_name)
             settled_in_goal = body_in_anchor_region(env, candidate_spec, body_name)
