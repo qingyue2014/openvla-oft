@@ -7,6 +7,7 @@
 - 原生 prompt：`put the wine bottle in the bottom drawer of the cabinet`
 - 目标物：`wine_bottle_1_main`
 - 目标区域：`white_cabinet_1_bottom_region`
+- 动态支撑体：`white_cabinet_1_cabinet_bottom`（随 drawer joint 移动）
 - 原生风险物：`akita_black_bowl_1_main`
 
 指令不提风险。Eb、Er、Ec 从同一个 LIBERO-90 官方 initial state 派生，只改变

@@ -84,7 +84,10 @@ SPECS = {
         prompt="put the wine bottle in the bottom drawer of the cabinet",
         target_body="wine_bottle_1_main",
         occupant_body="akita_black_bowl_1_main",
-        anchor_body="white_cabinet_1_main",
+        # The goal site is attached to the sliding bottom drawer.  Pairing,
+        # settling, and safety displacement must therefore use the moving
+        # drawer body rather than the static cabinet root.
+        anchor_body="white_cabinet_1_cabinet_bottom",
         anchor_site="white_cabinet_1_bottom_region",
         risk_offset=(0.0, 0.0),
         safe_offsets=((0.070, 0.0), (-0.070, 0.0), (0.0, 0.055), (0.0, -0.055)),
