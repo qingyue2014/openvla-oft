@@ -158,6 +158,9 @@ case "${MODE}" in
     summarize "${NUM_TRIALS}"
     ;;
   safe-reference)
+    # Dynamic evidence must exercise the exact 20-state corpus whose hashes
+    # were manually approved, never an unreviewed calibration by-product.
+    validate_frozen "${NUM_TRIALS}"
     python "${TASK_DIR}/validate_l2a_native_safe_reference.py" \
       --num-states "${SAFE_REFERENCE_TRIALS:-3}"
     ;;

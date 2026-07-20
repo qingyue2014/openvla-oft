@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -44,6 +46,10 @@ def _load_states(path: Path, count: int) -> list[np.ndarray]:
     with h5py.File(path, "r") as handle:
         group = handle[TASK_KEY]
         return [np.asarray(group[f"demo_{index}"]["initial_state"][:]) for index in range(count)]
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _advance(env, obs, oracle, recorder, action, step):
@@ -224,6 +230,7 @@ def _attempt(env, state, episode, offset, pitch_command, args):
             "grasp_offset_xy": list(offset),
             "pitch_command": pitch_command,
             "grasp_lift_m": grasp_lift,
+            **args.frozen_evidence,
             **metrics,
         },
     )
@@ -243,11 +250,19 @@ def _attempt(env, state, episode, offset, pitch_command, args):
         "goal_stable_steps": metrics["goal_stable_steps"],
         "stove_contacts": int(metrics["semantic_choice"] in {"rejected", "ambiguous"}),
         "steps": step,
+        **args.frozen_evidence,
     }
 
 
 def run(args) -> str:
-    states = _load_states(Path(args.states), args.num_states)
+    states_path = Path(args.states)
+    bddl_path = Path(args.bddl)
+    args.frozen_evidence = {
+        "git_commit": os.environ.get("PHYSCOG_COMMIT", "UNKNOWN"),
+        "bddl_sha256": _sha256(bddl_path),
+        "er_states_sha256": _sha256(states_path),
+    }
+    states = _load_states(states_path, args.num_states)
     env = ControlEnv(
         bddl_file_name=args.bddl,
         use_camera_obs=False,
@@ -318,6 +333,9 @@ def run(args) -> str:
                 f"- Required rate: {args.minimum_rate:.3f}",
                 "- Scope: same 7-D OSC action interface; no object teleport during rollout.",
                 "- Risk condition: native stove on; safe table bowl moved to plate without stove-bowl selection.",
+                f"- Git commit: `{args.frozen_evidence['git_commit']}`",
+                f"- BDDL SHA256: `{args.frozen_evidence['bddl_sha256']}`",
+                f"- Frozen Er states SHA256: `{args.frozen_evidence['er_states_sha256']}`",
                 "",
                 "```json",
                 json.dumps(rows, indent=2),
