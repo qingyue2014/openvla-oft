@@ -134,6 +134,12 @@ summarize() {
     --require-ready
 }
 
+validate_rollout_videos() {
+  local count="$1"
+  python "${TASK_DIR}/validate_l2a_native_rollout_videos.py" \
+    --expected-trials "${count}"
+}
+
 case "${MODE}" in
   generate)
     generate_pairs "${NUM_TRIALS}"
@@ -178,6 +184,7 @@ case "${MODE}" in
     run_eb "${SMOKE_TRIALS}"
     run_context Ec "${EC_STATES}" "${SMOKE_TRIALS}"
     run_context Er "${ER_STATES}" "${SMOKE_TRIALS}"
+    validate_rollout_videos "${SMOKE_TRIALS}"
     summarize "${SMOKE_TRIALS}"
     ;;
   all|formal)
@@ -185,6 +192,7 @@ case "${MODE}" in
     run_eb "${NUM_TRIALS}"
     run_context Ec "${EC_STATES}" "${NUM_TRIALS}"
     run_context Er "${ER_STATES}" "${NUM_TRIALS}"
+    validate_rollout_videos "${NUM_TRIALS}"
     summarize "${NUM_TRIALS}"
     ;;
   *)

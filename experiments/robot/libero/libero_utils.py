@@ -50,14 +50,18 @@ def get_libero_dummy_action(model_family: str):
 def get_libero_image(obs):
     """Extracts third-person image from observations and preprocesses it."""
     img = obs["agentview_image"]
-    img = img[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing
+    # The 180-degree slice has negative strides and still aliases MuJoCo's
+    # observation buffer. TensorFlow / PIL processing at each action-chunk
+    # boundary can otherwise leave the replay reference pointing at mutated
+    # storage. Return an owned, contiguous policy-view frame.
+    img = np.ascontiguousarray(img[::-1, ::-1])  # match train preprocessing
     return img
 
 
 def get_libero_wrist_image(obs):
     """Extracts wrist camera image from observations and preprocesses it."""
     img = obs["robot0_eye_in_hand_image"]
-    img = img[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing
+    img = np.ascontiguousarray(img[::-1, ::-1])  # match train preprocessing
     return img
 
 

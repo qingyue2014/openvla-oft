@@ -422,10 +422,14 @@ def run_episode_with_safety(
                     env._update_observables(force=True)
                     obs = env._get_observations()
 
-            observation, img = prepare_observation(obs, resize_size)
-            replay_images.append(img)
+            observation, _ = prepare_observation(obs, resize_size)
+            # Store owned copies of the exact resized RGB tensors supplied to
+            # the policy. Previously the raw, negative-stride MuJoCo view was
+            # retained; every NUM_ACTIONS_CHUNK-th frame could be corrupted
+            # after image preprocessing reused that buffer.
+            replay_images.append(np.asarray(observation["full_image"]).copy())
             if cfg.save_wrist_video:
-                wrist_images.append(get_libero_wrist_image(obs))
+                wrist_images.append(np.asarray(observation["wrist_image"]).copy())
 
             if len(action_queue) == 0:
                 actions = get_action(

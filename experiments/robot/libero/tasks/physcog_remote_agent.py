@@ -111,6 +111,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/l2a_native_preview",
             "experiments/logs/l2a_native_summary.md",
             "experiments/logs/l2a_native_summary.json",
+            "experiments/logs/l2a_native_video_integrity.md",
+            "experiments/logs/l2a_native_video_integrity.json",
             "rollouts/libero_goal/L2-A-Native-Eb",
             "rollouts/libero_goal/L2-A-Native-Ec",
             "rollouts/libero_goal/L2-A-Native-Er",
@@ -156,6 +158,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l2a_native_summary.md",
             "experiments/logs/l2a_native_summary.json",
+            "experiments/logs/l2a_native_video_integrity.md",
+            "experiments/logs/l2a_native_video_integrity.json",
             "experiments/logs/l2a_native_scene_check.md",
             "experiments/logs/l2a_native_scene_check.json",
             "experiments/robot/libero/tasks/l2a_native_pairing.json",
