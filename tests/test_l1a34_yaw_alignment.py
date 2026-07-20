@@ -71,9 +71,10 @@ def test_l1a3_candidates_carry_yaw_only_for_safe(monkeypatch):
     safe = [c for c in candidates if c[0] == "safe"]
     assert all(c[3] is None for c in unsafe)
     assert all(c[3] is not None for c in safe)
-    # first safe bearings are the reachable east/west rotations
-    assert safe[0][3] == -86.0 + 90.0
-    assert safe[2][3] == -86.0 - 90.0
+    # First safe bearings clear the analytical blocked arc with the smallest
+    # useful wrist rotation and remain on the robot-side half of the bowl.
+    assert safe[0][3] == -86.0 + 45.0
+    assert safe[2][3] == -86.0 - 45.0
 
 
 def test_bearing_offset_uses_per_axis_radius_not_flat_max(monkeypatch):

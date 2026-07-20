@@ -276,10 +276,6 @@ def _run_episode(env, state, args, scenario, episode_idx, grasp_xy_offset,
     if failure is None:
         obs, step, failure = _hold(env, obs, oracle, recorder, open_sign, args.wait_steps, step)
     _rebase_controller_nullspace(env)
-    if failure is None and yaw_bearing_deg is not None:
-        obs, step, failure = _align_grasp_yaw(
-            env, obs, oracle, recorder, open_sign, yaw_bearing_deg, step, args
-        )
 
     source = _body_pos(env, TARGET)
     grasp_xy_offset = np.asarray(grasp_xy_offset, dtype=float)
@@ -290,17 +286,29 @@ def _run_episode(env, state, args, scenario, episode_idx, grasp_xy_offset,
     grasp_eef[2] += args.grasp_height
     grasp_eef[:2] += grasp_xy_offset
 
-    for stage, target, grip, tolerance, accept_contact in (
-        ("approach_source", above_source, open_sign, args.position_tolerance, False),
-        ("descend_to_grasp", grasp_eef, open_sign, args.precise_position_tolerance, True),
-    ):
-        if failure is None:
-            obs, step, failure = _move_to(
-                env, obs, oracle, recorder, target, grip, step, args, stage,
-                tolerance, accept_contact,
-            )
-            if failure is not None and failure.reason == "waypoint_timeout":
-                _robot_stall_diagnostics(env, stage)
+    # Translate to the hover waypoint in the settled native wrist posture.
+    # Rotating at the home pose first drove Panda joint 7 exactly to its limit
+    # and made otherwise reachable side-grasp waypoints fail.  Once the arm is
+    # above the bowl, the same yaw change can be distributed across the arm's
+    # remaining nullspace before the contact-sensitive descent.
+    if failure is None:
+        obs, step, failure = _move_to(
+            env, obs, oracle, recorder, above_source, open_sign, step, args,
+            "approach_source", args.position_tolerance, False,
+        )
+        if failure is not None and failure.reason == "waypoint_timeout":
+            _robot_stall_diagnostics(env, "approach_source")
+    if failure is None and yaw_bearing_deg is not None:
+        obs, step, failure = _align_grasp_yaw(
+            env, obs, oracle, recorder, open_sign, yaw_bearing_deg, step, args
+        )
+    if failure is None:
+        obs, step, failure = _move_to(
+            env, obs, oracle, recorder, grasp_eef, open_sign, step, args,
+            "descend_to_grasp", args.precise_position_tolerance, True,
+        )
+        if failure is not None and failure.reason == "waypoint_timeout":
+            _robot_stall_diagnostics(env, "descend_to_grasp")
     if failure is None and yaw_bearing_deg is not None:
         # The single pre-approach alignment drifts during the long
         # translational moves (measured up to ~0.15 rad by the time of grasp,
@@ -477,8 +485,12 @@ def _grasp_candidates(env, scenario, bearing_deg, mode):
         # Rim-wall depth: the working default-axis grasps sit at fraction 0.85
         # of the AABB half-extent (0.70 is marginal, 0.60 closes on the inner
         # slope and lifts nothing), so safe candidates grasp at 0.85/0.95.
-        # The far-side rotation (180 deg) is outside the dexterous workspace
-        # and is omitted.
+        # The analytical blocked arc is at most 170 degrees and is normally
+        # about 60--75 degrees, so +/-45 and +/-60 degrees move the pinch point
+        # just outside the crowded sector while remaining on the robot-side
+        # half of the bowl.  The previous +/-90/+/-135 pool demanded needless
+        # wrist rotation or placed the hover waypoint beyond the far edge of
+        # the Panda workspace.
         safe = [
             (
                 "safe",
@@ -486,7 +498,7 @@ def _grasp_candidates(env, scenario, bearing_deg, mode):
                 place,
                 bearing_deg + rotation,
             )
-            for rotation in (90.0, -90.0, 135.0, -135.0)
+            for rotation in (45.0, -45.0, 60.0, -60.0)
             for fraction in (0.85, 0.95)
         ]
     else:
