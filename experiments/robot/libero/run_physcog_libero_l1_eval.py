@@ -63,6 +63,7 @@ from experiments.robot.libero.physcog_trajectory import (
     append_index_entry,
     collect_tracked_bodies,
 )
+from experiments.robot.libero.post_success import settle_after_success
 from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceIntervention
 import experiments.robot.libero.physcog_objects  # noqa: F401 — registers GlassCup / SteelCup
 from experiments.robot.libero.run_libero_eval import (
@@ -372,8 +373,16 @@ def run_episode_with_safety(
     wrist_images = []
     max_steps = TASK_MAX_STEPS.get(cfg.task_suite_name, 300)
     success = False
+    success_revoked_after_settle = False
     raw_gripper_commands = []
     env_gripper_commands = []
+
+    def capture_replay_observation(current_obs) -> None:
+        """Append the refreshed policy-camera observation to saved videos."""
+        _observation, frame = prepare_observation(current_obs, resize_size)
+        replay_images.append(frame)
+        if cfg.save_wrist_video:
+            wrist_images.append(get_libero_wrist_image(current_obs))
 
     def check_safety(obs, action, step: int) -> bool:
         nonlocal safety, oracle_ready
@@ -478,12 +487,25 @@ def run_episode_with_safety(
                     log_file,
                 )
                 dummy_action = get_libero_dummy_action(cfg.model_family)
-                for settle_step in range(cfg.post_success_settle_steps):
-                    obs, reward, done, info = env.step(dummy_action)
-                    if recorder is not None:
-                        recorder.record(obs, dummy_action, t + 1 + settle_step, phase="settle")
-                    if check_safety(obs, dummy_action, t + 1 + settle_step):
-                        break
+                obs, success = settle_after_success(
+                    env,
+                    initial_obs=obs,
+                    dummy_action=dummy_action,
+                    num_steps=cfg.post_success_settle_steps,
+                    start_step=t + 1,
+                    initial_success=success,
+                    recorder=recorder,
+                    capture_observation=capture_replay_observation,
+                    check_safety=check_safety,
+                    success_after_step=lambda _done: bool(oracle.task_success()),
+                )
+                success_revoked_after_settle = not success
+                if success_revoked_after_settle:
+                    log_message(
+                        "Task success revoked after post-success settling: "
+                        "oracle goal no longer holds",
+                        log_file,
+                    )
                 break
 
             if done:
@@ -493,12 +515,24 @@ def run_episode_with_safety(
                 # predicate holds, which can be before the gripper lets go and the
                 # object settles.
                 dummy_action = get_libero_dummy_action(cfg.model_family)
-                for settle_step in range(cfg.post_success_settle_steps):
-                    obs, reward, done, info = env.step(dummy_action)
-                    if recorder is not None:
-                        recorder.record(obs, dummy_action, t + 1 + settle_step, phase="settle")
-                    if check_safety(obs, dummy_action, t + 1 + settle_step):
-                        break
+                obs, success = settle_after_success(
+                    env,
+                    initial_obs=obs,
+                    dummy_action=dummy_action,
+                    num_steps=cfg.post_success_settle_steps,
+                    start_step=t + 1,
+                    initial_success=success,
+                    recorder=recorder,
+                    capture_observation=capture_replay_observation,
+                    check_safety=check_safety,
+                )
+                success_revoked_after_settle = not success
+                if success_revoked_after_settle:
+                    log_message(
+                        "Task success revoked after post-success settling: "
+                        "native goal no longer holds",
+                        log_file,
+                    )
                 break
             t += 1
     except Exception as exc:
@@ -736,6 +770,7 @@ def run_episode_with_safety(
         "l3c_metrics": {} if l3c is None else l3c.metrics(),
         "oracle_metrics": oracle.metrics(),
         "gripper_metrics": gripper_metrics,
+        "success_revoked_after_settle": success_revoked_after_settle,
     }
 
     return success, replay_images, safety, diagnostics
@@ -968,6 +1003,9 @@ def _save_episode_trajectory(
         "violation_reason": safety.reason,
         "violation_step": safety.first_step,
         "model_collapse": bool(diagnostics.get("model_collapse", False)),
+        "success_revoked_after_settle": bool(
+            diagnostics.get("success_revoked_after_settle", False)
+        ),
     }
     metadata.update(diagnostics.get("l3c_metrics", {}))
     metadata.update(diagnostics.get("oracle_metrics", {}))
