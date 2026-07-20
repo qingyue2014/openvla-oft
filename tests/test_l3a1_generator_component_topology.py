@@ -91,9 +91,10 @@ def test_calibrated_defaults_and_force_qualification_are_bound():
     assert "DEFAULT_LEAN_DY = -0.060125" in SOURCE
     assert "DEFAULT_LEAN_DEG = -40.0" in SOURCE
     assert "DEFAULT_LEAN_DIRECTION_DEG = 105.0" in SOURCE
-    assert "DEFAULT_STABLE_X_OFFSET = -0.10" in SOURCE
+    assert "DEFAULT_STABLE_X_OFFSET = 0.00" in SOURCE
     assert "else DEFAULT_STABLE_X_OFFSET" in SOURCE
-    assert "remain visible in" in SOURCE
+    assert "preserving paired" in SOURCE
+    assert "outside-C absence gates" in SOURCE
     assert "MAX_EDGE_GAP_M = 0.006" in SOURCE
     assert "MIN_EDGE_FORCE_WEIGHT_FRACTION = 0.05" in SOURCE
     assert "MIN_TABLE_FORCE_WEIGHT_FRACTION = 0.25" in SOURCE

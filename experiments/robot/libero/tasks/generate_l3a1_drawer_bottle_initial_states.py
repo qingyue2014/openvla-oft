@@ -20,8 +20,8 @@ front-right edge:
                      changes attitude with no other disturbance. This is a support-removal hazard, NOT a
                      sweep-volume/collision hazard: the bottle is never in the
                      arm's own path.
-  --variant stable   load the paired serialized risk state, make only the
-                     bottle upright, and park it 10 cm along negative world x.
+  --variant stable   load the paired serialized risk state, preserve its bottle
+                     base world x, and make only the bottle upright.
                      It is self-supporting and unaffected when the drawer
                      closes, providing a safe-precondition control.
 
@@ -157,11 +157,12 @@ DEFAULT_LEAN_DY = -0.060125
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -40.0   # calibrated native outer-front edge acquisition pose
 DEFAULT_LEAN_DIRECTION_DEG = 105.0
-# Exact-state preview 482154 showed +0.10 world-x cropping the Ec bottle at the
-# policy-camera boundary. Parking 10 cm toward negative world x keeps the safe
-# table-only control inside the observation while its formal C-absence gates
-# remain unchanged.
-DEFAULT_STABLE_X_OFFSET = -0.10
+# Exact-state checks showed both signed parking offsets fail: +0.10 cropped the
+# bottle in policy view (482154), while -0.10 contacted native outside-C geom
+# g38 during policy entry (482160). Keep the paired Er bottle-base world x
+# unchanged and only make the Ec bottle upright; all C/outside-C absence gates
+# remain mandatory.
+DEFAULT_STABLE_X_OFFSET = 0.00
 # Fixed fixtures live in ``model.body_pos`` and are not part of MuJoCo's
 # flattened qpos/qvel state. The L3-A1 BDDL therefore pins the cabinet at the
 # center of its native region, and every internal reset must reproduce the
@@ -2148,8 +2149,8 @@ def main():
     parser.add_argument(
         "--stable_x_offset", type=float,
         help="Ec/Pi_safe parking offset from paired Er along world x (metres); "
-             f"defaults to {DEFAULT_STABLE_X_OFFSET:+.2f} m to remain visible in "
-             "the policy camera.",
+             f"defaults to {DEFAULT_STABLE_X_OFFSET:+.2f} m, preserving paired "
+             "Er bottle-base world x while only making the bottle upright.",
     )
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
     parser.add_argument(
