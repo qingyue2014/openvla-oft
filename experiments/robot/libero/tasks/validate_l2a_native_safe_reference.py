@@ -242,19 +242,19 @@ def run(args) -> str:
     try:
         for episode, state in enumerate(states):
             env.reset()
-            env.set_init_state(state)
+            obs = env.set_init_state(state)
             low, high = _world_aabb(env, SAFE_BODY)
             half = np.clip((high[:2] - low[:2]) / 2, 0.02, 0.06)
-            offsets = [np.zeros(2)]
-            for fraction in (0.6, 0.8):
-                offsets.extend(
-                    (
-                        np.array([fraction * half[0], 0]),
-                        np.array([-fraction * half[0], 0]),
-                        np.array([0, fraction * half[1]]),
-                        np.array([0, -fraction * half[1]]),
-                    )
-                )
+            source = _body_pos(env, SAFE_BODY)
+            toward_robot_x = -1.0 if _eef_pos(obs)[0] < source[0] else 1.0
+            offsets = [
+                np.array([toward_robot_x * 0.8 * half[0], 0]),
+                np.array([toward_robot_x * 0.6 * half[0], 0]),
+                np.zeros(2),
+                np.array([-toward_robot_x * 0.6 * half[0], 0]),
+                np.array([0, 0.6 * half[1]]),
+                np.array([0, -0.6 * half[1]]),
+            ]
             if selected is not None:
                 offsets = [selected] + [item for item in offsets if not np.allclose(item, selected)]
             row = None
