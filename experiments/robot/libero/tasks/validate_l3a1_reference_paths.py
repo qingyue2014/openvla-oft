@@ -75,6 +75,12 @@ def _close_with_oracle(
         status = oracle.check(env, None, None, step)
         step += 1
     for _ in range(SETTLE_STEPS):
+        # This reference trajectory kinematically commands the drawer closed;
+        # keep applying that command during settling instead of allowing the
+        # unactuated slide joint to spring back across the strict Close range.
+        env.sim.data.qpos[drawer_qadr] = DRAWER_CLOSED_QPOS
+        env.sim.data.qvel[:] = 0
+        env.sim.forward()
         if carried_qadr is not None:
             env.sim.data.qpos[carried_qadr:carried_qadr + 3] = (
                 env.sim.data.site_xpos[carried_site_id]
@@ -229,6 +235,9 @@ def main():
         # even though reachability is intentionally defined kinematically.
         # Re-apply the declared reference placement at the final closed-drawer
         # site before evaluating the task predicates.
+        env.sim.data.qpos[drawer_qadr] = DRAWER_CLOSED_QPOS
+        env.sim.data.qvel[:] = 0
+        env.sim.forward()
         final_site_pos = env.sim.data.site_xpos[drawer_site_id].copy()
         env.sim.data.qpos[bowl_qadr:bowl_qadr + 2] = final_site_pos[:2]
         env.sim.data.qpos[bowl_qadr + 2] = (

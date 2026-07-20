@@ -52,6 +52,7 @@ def test_l3a1_safe_reference_uses_public_success_api():
     assert "env._check_success()" not in text
     assert "and goal_reached" in text
     assert "final_site_pos = env.sim.data.site_xpos[drawer_site_id].copy()" in text
+    assert text.count("env.sim.data.qpos[drawer_qadr] = DRAWER_CLOSED_QPOS") >= 2
     assert '"goal_drawer_qpos"' in text
     assert 'default=-0.07' in text
     assert "carried_qadr=bowl_qadr" in text
