@@ -2035,6 +2035,19 @@ def _safe_reference_from_eb_prefix(args, files):
                             env, obs, oracle, recorder, lateral_eef, close,
                             step, args,
                         )
+                    if failure is None and spec.horizontal_target:
+                        obs, step, status = _rotate_horizontal(
+                            env, obs, oracle, recorder, close,
+                            args.rotate_steps, step, sign=rotate_sign,
+                        )
+                        failure = (
+                            status
+                            if status is not None and status.violated
+                            else None
+                        )
+                        preplace_target_tilt = body_tilt_deg(
+                            env, spec.target_body
+                        )
                     descent_eef = _eef(obs) + np.array(
                         [0.0, 0.0, -args.reference_descent]
                     )
@@ -2132,7 +2145,7 @@ def _safe_reference_from_eb_prefix(args, files):
                 for offset in spec.safe_offsets
                 for rotate_sign in (
                     (args.rotate_sign, -args.rotate_sign)
-                    if spec.horizontal_target and spec.scenario != "L1-C3"
+                    if spec.horizontal_target
                     else (0.0,)
                 )
             )
