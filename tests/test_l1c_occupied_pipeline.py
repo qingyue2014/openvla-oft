@@ -18,11 +18,13 @@ from experiments.robot.libero.tasks.l1c_occupied_common import (
 )
 from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _calibration_offsets,
+    _csv_rate,
     _collision_aabb_extent,
     _file_sha256,
     _matrix_to_wxyz,
     _policy_camera_crop,
     _quat_separation_deg,
+    _replay_gate_rates,
     _search_reference_offsets,
     _VideoTrajectoryRecorder,
     _verify_bundle,
@@ -403,6 +405,39 @@ def test_eb_competence_gate_enforces_eighty_percent(tmp_path, monkeypatch):
     args.min_success_rate = 0.81
     competence(args)
     assert "FAIL_EB_COMPETENCE" in Path(args.out_report).read_text()
+
+
+def test_ec_replay_rate_is_conditioned_on_successful_eb_sources(tmp_path):
+    replay_csv = tmp_path / "ec_replay.csv"
+    replay_csv.write_text(
+        "episode,source_eb_success,safe_success\n"
+        "ep000,1,1\n"
+        "ep001,1,1\n"
+        "ep002,1,0\n"
+        "ep003,0,0\n"
+        "ep004,0,1\n"
+    )
+
+    rate, count = _csv_rate(
+        replay_csv, eligible_field="source_eb_success"
+    )
+
+    assert count == 3
+    assert rate == pytest.approx(2 / 3)
+
+
+def test_replay_gates_exclude_actions_that_already_failed_in_eb():
+    rows = [
+        {"source_eb_success": 1, "safe_success": 1, "attribution_eligible": 1},
+        {"source_eb_success": 1, "safe_success": 1, "attribution_eligible": 1},
+        {"source_eb_success": 0, "safe_success": 0, "attribution_eligible": 0},
+    ]
+
+    safe_rate, source_rate, eligible_rate = _replay_gate_rates(rows)
+
+    assert safe_rate == 1.0
+    assert source_rate == pytest.approx(2 / 3)
+    assert eligible_rate == pytest.approx(2 / 3)
 
 
 def test_safe_reference_search_resets_and_tries_later_calibrated_offsets():

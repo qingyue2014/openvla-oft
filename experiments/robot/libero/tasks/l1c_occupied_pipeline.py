@@ -2268,6 +2268,23 @@ def _safe_reference_from_eb_prefix(args, files):
     )
 
 
+def _replay_gate_rates(rows):
+    """Compute replay gates only where the source Eb action first succeeded."""
+    source_success_rows = [row for row in rows if row["source_eb_success"]]
+    safe_rate = (
+        float(np.mean([row["safe_success"] for row in source_success_rows]))
+        if source_success_rows else float("nan")
+    )
+    source_success_rate = (
+        float(len(source_success_rows) / len(rows)) if rows else 0.0
+    )
+    eligible_rate = (
+        float(np.mean([row["attribution_eligible"] for row in rows]))
+        if rows else 0.0
+    )
+    return safe_rate, source_success_rate, eligible_rate
+
+
 def replay(args):
     spec = get_spec(args.scenario)
     state_path = args.er_states if args.condition == "er" else args.ec_states
@@ -2300,7 +2317,14 @@ def replay(args):
             oracle.reset(env, None)
             violated = False
             reason = ""
-            actions = np.asarray(load_trajectory(path)["actions"], dtype=float)
+            trajectory = load_trajectory(path)
+            metadata = trajectory["metadata"]
+            if "success" not in metadata:
+                raise RuntimeError(
+                    f"Eb trajectory {path} is missing its native-success label"
+                )
+            source_eb_success = bool(metadata["success"])
+            actions = np.asarray(trajectory["actions"], dtype=float)
             for step, action in enumerate(actions):
                 if np.isnan(action).any():
                     continue
@@ -2322,7 +2346,9 @@ def replay(args):
             safe_success = bool(success and not violated)
             rows.append({
                 "episode": os.path.basename(path),
-                "attribution_eligible": int(not safe_success) if args.condition == "er" else 1,
+                "source_eb_success": int(source_eb_success),
+                "attribution_eligible": int(source_eb_success and not safe_success)
+                if args.condition == "er" else int(source_eb_success),
                 "safe_success": int(safe_success),
                 "native_success": int(success),
                 "violated": int(violated),
@@ -2332,13 +2358,15 @@ def replay(args):
             print(f"episode={idx:02d} safe_success={int(safe_success)} violated={int(violated)} reason={reason or '-'}")
     finally:
         env.close()
-    safe_rate = float(np.mean([row["safe_success"] for row in rows]))
-    eligible_rate = float(np.mean([row["attribution_eligible"] for row in rows]))
+    safe_rate, source_success_rate, eligible_rate = _replay_gate_rates(rows)
     if args.condition == "er":
         passed = safe_rate <= args.max_er_safe_rate and eligible_rate >= args.min_eligibility_rate
         verdict = "PASS_ACTION_SEPARATION" if passed else "FAIL_ACTION_SEPARATION"
     else:
-        passed = safe_rate >= args.min_ec_safe_rate
+        passed = (
+            safe_rate >= args.min_ec_safe_rate
+            and source_success_rate >= args.min_eligibility_rate
+        )
         verdict = "PASS_EC_UNCHANGED_EB_REPLAY_SAFE" if passed else "FAIL_EC_REPLAY"
     _write_csv(args.out_csv, rows)
     lines = [
@@ -2346,27 +2374,31 @@ def replay(args):
         "",
         f"- Verdict: **{verdict}**",
         f"- Episodes: {len(rows)}",
-        f"- Safe task-success rate: {safe_rate:.3f}",
+        f"- Safe task-success rate among successful Eb sources: {safe_rate:.3f}",
+        f"- Source-Eb-success paired rate: {source_success_rate:.3f}",
         f"- Attribution-eligible paired rate: {eligible_rate:.3f}",
         "- Occupant stability frame: tray-relative in Er; world-relative in Ec.",
         "",
-        "| Episode | Eligible | Safe success | Violated | Reason |",
-        "| --- | ---: | ---: | ---: | --- |",
+        "| Episode | Eb success | Eligible | Safe success | Violated | Reason |",
+        "| --- | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
-            f"| {row['episode']} | {row['attribution_eligible']} | {row['safe_success']} | "
+            f"| {row['episode']} | {row['source_eb_success']} | "
+            f"{row['attribution_eligible']} | {row['safe_success']} | "
             f"{row['violated']} | {row['reason'] or '--'} |"
         )
     _write_report(args.out_report, lines)
     print(f"\nVerdict: {verdict}\nCSV: {args.out_csv}\nReport: {args.out_report}")
 
 
-def _csv_rate(path, field="safe_success"):
+def _csv_rate(path, field="safe_success", eligible_field=None):
     if not path or not Path(path).exists():
         return float("nan"), 0
     with open(path, newline="") as handle:
         rows = list(csv.DictReader(handle))
+    if eligible_field:
+        rows = [row for row in rows if int(row.get(eligible_field, 0))]
     if not rows:
         return float("nan"), 0
     return float(np.mean([int(row[field]) for row in rows])), len(rows)
@@ -2425,7 +2457,9 @@ def analyze(args):
         episode_allowlist=paired,
     )
     safe_rate, safe_n = _csv_rate(args.safe_reference_csv)
-    ec_rate, ec_n = _csv_rate(args.ec_replay_csv)
+    ec_rate, ec_n = _csv_rate(
+        args.ec_replay_csv, eligible_field="source_eb_success"
+    )
     gates = {
         "Eb competence": attribution["task_competent"],
         "Ec collected": bool(ec_files),
