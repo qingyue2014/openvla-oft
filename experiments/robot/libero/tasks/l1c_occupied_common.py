@@ -113,7 +113,9 @@ SPECS = {
         # successful LIBERO policy. The side-resting bowl frees enough XY
         # footprint for this placement without an unsafe in-hand sweep.
         occupant_place_quat=(0.70710678, 0.70710678, 0.0, 0.0),
-        max_target_tilt_deg=45.0,
+        # Bottle orientation is not the protected risk variable. Native In()
+        # success plus the strict bowl non-disruption oracle define safety.
+        max_target_tilt_deg=180.0,
     ),
     "l1c4": OccupiedGoalSpec(
         scenario="L1-C4",

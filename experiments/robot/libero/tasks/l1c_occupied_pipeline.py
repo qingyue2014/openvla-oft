@@ -2023,10 +2023,10 @@ def _safe_reference_from_eb_prefix(args, files):
                     # held bottle's XY to the calibrated free side, then lower
                     # until physical drawer contact. This avoids solving a
                     # long-range IK waypoint with a saturated wrist pose.
-                    rotation_eef = _eef(obs) + np.array(
-                        [0.0, 0.0, args.reference_rotation_clearance]
-                    )
-                    if failure is None:
+                    if failure is None and spec.horizontal_target:
+                        rotation_eef = _eef(obs) + np.array(
+                            [0.0, 0.0, args.reference_rotation_clearance]
+                        )
                         obs, step, failure, _ = _move(
                             env, obs, oracle, recorder, rotation_eef, close,
                             step, args,
