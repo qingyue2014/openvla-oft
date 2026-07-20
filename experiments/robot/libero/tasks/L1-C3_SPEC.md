@@ -49,6 +49,8 @@ teleport 只用于证明布局几何可行，不能单独作为安全解证据�
 
 ## 4. 实验门槛
 
+- Eb 使用固定探测淘汰 `LIBERO-90-Base-Lora`（8 条成功率 0%）后，统一采用
+  `RLinf-OpenVLAOFT-LIBERO-130`、temperature 1.6、model seed 7；
 - 精确状态包、预览图和 source index 的 SHA-256 清单一致；
 - 实际 OpenVLA 224×224 crop 中 drawer、bowl 和 bottle 可辨识，且 t0/t10 动力学稳定；
 - 静态中心风险位 safe rate ≤ 0.20，至少一个侧向位置 safe rate ≥ 0.80；

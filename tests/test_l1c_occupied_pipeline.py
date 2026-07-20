@@ -97,8 +97,9 @@ def test_l1c3_calibration_separates_obstacle_pose_from_unadapted_landing():
     assert spec.risk_offset == (0.0, 0.040)
 
 
-def test_l1c2_runner_uses_all_task_checkpoint_after_fixed_competence_failure():
+def test_l1c2_and_l1c3_use_all_task_checkpoint_after_competence_failures():
     runner = Path("experiments/robot/libero/tasks/run_l1c_occupied.sh").read_text()
+    assert '"${SCENARIO}" == "l1c2" || "${SCENARIO}" == "l1c3"' in runner
     assert 'DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-LIBERO-130"' in runner
     assert 'DEFAULT_DO_SAMPLE="true"' in runner
     assert 'DEFAULT_TEMPERATURE="1.6"' in runner
