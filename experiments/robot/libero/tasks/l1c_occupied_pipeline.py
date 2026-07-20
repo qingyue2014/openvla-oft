@@ -2066,6 +2066,7 @@ def _safe_reference_from_eb_prefix(args, files):
                         obs, step, failure, _ = _move(
                             env, obs, oracle, recorder, lateral_eef, close,
                             step, args,
+                            tolerance=args.reference_lateral_tolerance,
                         )
                     descent_eef = _eef(obs) + np.array(
                         [0.0, 0.0, -args.reference_descent]
@@ -2562,6 +2563,7 @@ def main():
     p.add_argument(
         "--reference_transport_height_above_anchor", type=float, default=0.225
     )
+    p.add_argument("--reference_lateral_tolerance", type=float, default=0.010)
     p.add_argument("--reference_rotation_clearance", type=float, default=0.060)
     p.add_argument("--drop_clearance", type=float, default=0.006)
     p.add_argument("--position_scale", type=float, default=0.08)
