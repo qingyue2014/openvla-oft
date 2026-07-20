@@ -106,6 +106,7 @@ def l3a1_cabinet_asset_contract() -> dict[str, str]:
     }
     wing_json = json.dumps(wing_contract, sort_keys=True, separators=(",", ":"))
     return {
+        "native_cabinet_xml_path": str(native_xml.resolve()),
         "native_cabinet_xml_sha256": hashlib.sha256(native_xml.read_bytes()).hexdigest(),
         "support_wing_contract_json": wing_json,
         "support_wing_contract_sha256": hashlib.sha256(wing_json.encode()).hexdigest(),

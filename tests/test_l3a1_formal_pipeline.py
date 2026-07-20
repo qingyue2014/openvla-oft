@@ -100,6 +100,8 @@ def test_paper_matrix_registers_l3a1_prepare_and_formal_paths():
 def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=False):
     bddl = Path(path).parent / "scene.bddl"
     bddl.write_text("fixed cabinet scene\n")
+    native_cabinet = Path(path).parent / "white_cabinet.xml"
+    native_cabinet.write_text("<mujoco model='white_cabinet'/>\n")
     with h5py.File(path, "w") as handle:
         group = handle.create_group("task")
         group.attrs["l3a1_variant"] = "stable" if source is not None else "risk"
@@ -110,7 +112,10 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             "fixed_physcog_white_cabinet_native_center_with_support_wing"
         )
         wing_json = "{}"
-        group.attrs["native_cabinet_xml_sha256"] = "a" * 64
+        group.attrs["native_cabinet_xml_path"] = str(native_cabinet)
+        group.attrs["native_cabinet_xml_sha256"] = hashlib.sha256(
+            native_cabinet.read_bytes()
+        ).hexdigest()
         group.attrs["support_wing_contract_json"] = wing_json
         group.attrs["support_wing_contract_sha256"] = hashlib.sha256(
             wing_json.encode()
@@ -148,6 +153,7 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["policy_entry_direct_contacts"] = ""
             demo.attrs["policy_entry_wing_interference"] = ""
             demo.attrs["policy_entry_support_wing_contact_all"] = source is None
+            demo.attrs["policy_entry_support_wing_contact_any"] = source is None
             demo.attrs["policy_entry_support_relative_x_m"] = -0.065
             demo.attrs["policy_entry_support_relative_y_m"] = -0.184
             demo.attrs["policy_entry_support_relative_z_m"] = 0.011
@@ -165,8 +171,12 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["controller_neutral_hold_support_wing_contact_all"] = (
                 source is None
             )
+            demo.attrs["controller_neutral_hold_support_wing_contact_any"] = (
+                source is None
+            )
             demo.attrs["hold_wing_interference"] = ""
             demo.attrs["hold_support_wing_contact_all"] = source is None
+            demo.attrs["hold_support_wing_contact_any"] = source is None
             support_geom = "white_cabinet_1_l3a1_support_wing_collision"
             demo.attrs["support_wing_collision_geom"] = support_geom
             demo.attrs["contact_geoms"] = support_geom if source is None else ""
@@ -244,6 +254,26 @@ def test_l3a1_cabinet_fixture_is_fixed_for_serialized_state_replay():
     text = L3A1_BDDL.read_text()
     assert "(-0.000000000001 0.299999999999 0.000000000001 0.300000000001)" in text
     assert "model.body_pos" in text
+
+
+def test_base_preservation_rejects_native_fixture_asset_drift(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2])
+    (tmp_path / "white_cabinet.xml").write_text("changed fixture\n")
+    with pytest.raises(ValueError, match="native WhiteCabinet XML SHA256 is stale"):
+        validate_base_preservation(str(artifact), "task")
+
+
+def test_stable_base_preservation_rejects_any_transient_wing_contact(tmp_path):
+    er, ec = tmp_path / "er.hdf5", tmp_path / "ec.hdf5"
+    _states(er, [2])
+    _states(ec, [2], source=er, mutate_bottle=True)
+    with h5py.File(ec, "a") as handle:
+        handle["task/demo_0"].attrs[
+            "controller_neutral_hold_support_wing_contact_any"
+        ] = True
+    with pytest.raises(ValueError, match="stable state contacts support wing"):
+        validate_base_preservation(str(ec), "task")
 
 
 def test_base_preservation_rejects_unsafe_policy_entry(tmp_path):

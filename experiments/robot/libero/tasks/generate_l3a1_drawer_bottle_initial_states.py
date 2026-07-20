@@ -676,6 +676,7 @@ def generate_states(
         policy_entry_contacts = set()
         entry_direct_contacts = set()
         policy_entry_support_wing_contact_all = True
+        policy_entry_support_wing_contact_any = False
         policy_entry_wing_interference = set()
         for entry_action in POLICY_ENTRY_PROBE_ACTIONS:
             env.reset()
@@ -694,6 +695,10 @@ def generate_states(
                 policy_entry_support_wing_contact_all
                 and support_wing_geom in action_contact_geoms
             )
+            policy_entry_support_wing_contact_any = (
+                policy_entry_support_wing_contact_any
+                or support_wing_geom in action_contact_geoms
+            )
             policy_entry_wing_interference.update(
                 _wing_interference_bodies(env, support_wing_geom)
             )
@@ -707,12 +712,14 @@ def generate_states(
             or entry_direct_contacts
             or policy_entry_wing_interference
             or (variant == "risk" and not policy_entry_support_wing_contact_all)
+            or (variant == "stable" and policy_entry_support_wing_contact_any)
         ):
             print(
                 f"  [skip attempt {attempts}] policy-entry probe failed: "
                 f"displacement={policy_entry_displacement:.4f}m, "
                 f"direct_contacts={sorted(entry_direct_contacts)}, "
                 f"wing_contact_all={policy_entry_support_wing_contact_all}, "
+                f"wing_contact_any={policy_entry_support_wing_contact_any}, "
                 f"wing_interference={sorted(policy_entry_wing_interference)}"
             )
             continue
@@ -728,6 +735,7 @@ def generate_states(
         controller_hold_max_displacement = 0.0
         controller_hold_direct_contacts = set()
         controller_hold_support_wing_contact_all = True
+        controller_hold_support_wing_contact_any = False
         controller_hold_wing_interference = set()
         for _ in range(CONTROLLER_NEUTRAL_HOLD_STEPS):
             env.step(DUMMY_ACTION)
@@ -746,6 +754,10 @@ def generate_states(
                 controller_hold_support_wing_contact_all
                 and support_wing_geom in _contact_geom_names(env, BOTTLE_BODY)
             )
+            controller_hold_support_wing_contact_any = (
+                controller_hold_support_wing_contact_any
+                or support_wing_geom in _contact_geom_names(env, BOTTLE_BODY)
+            )
             controller_hold_wing_interference.update(
                 _wing_interference_bodies(env, support_wing_geom)
             )
@@ -754,12 +766,14 @@ def generate_states(
             or controller_hold_direct_contacts
             or controller_hold_wing_interference
             or (variant == "risk" and not controller_hold_support_wing_contact_all)
+            or (variant == "stable" and controller_hold_support_wing_contact_any)
         ):
             print(
                 f"  [skip attempt {attempts}] sequential controller hold failed: "
                 f"displacement={controller_hold_max_displacement:.4f}m, "
                 f"direct_contacts={sorted(controller_hold_direct_contacts)}, "
                 f"wing_contact_all={controller_hold_support_wing_contact_all}, "
+                f"wing_contact_any={controller_hold_support_wing_contact_any}, "
                 f"wing_interference={sorted(controller_hold_wing_interference)}"
             )
             continue
@@ -804,12 +818,17 @@ def generate_states(
         hold_pos = _body_pos(env, BOTTLE_BODY).copy()
         hold_tilt = tilt_deg
         hold_support_wing_contact_all = True
+        hold_support_wing_contact_any = False
         hold_wing_interference = set()
         for _ in range(validation_hold_steps):
             env.sim.step()
             hold_support_wing_contact_all = (
                 hold_support_wing_contact_all
                 and support_wing_geom in _contact_geom_names(env, BOTTLE_BODY)
+            )
+            hold_support_wing_contact_any = (
+                hold_support_wing_contact_any
+                or support_wing_geom in _contact_geom_names(env, BOTTLE_BODY)
             )
             hold_wing_interference.update(
                 _wing_interference_bodies(env, support_wing_geom)
@@ -824,12 +843,14 @@ def generate_states(
                 or hold_tilt_delta > MAX_OPEN_HOLD_TILT_DELTA_DEG
                 or ang_speed > max_settle_ang_speed
                 or hold_wing_interference
-                or (variant == "risk" and not hold_support_wing_contact_all)):
+                or (variant == "risk" and not hold_support_wing_contact_all)
+                or (variant == "stable" and hold_support_wing_contact_any)):
             print(
                 f"  [skip attempt {attempts}] bottle not stable with drawer open: "
                 f"hold displacement={hold_displacement:.4f}m, tilt change={hold_tilt_delta:.2f}deg, "
                 f"angular speed={ang_speed:.3f}rad/s, "
                 f"wing_contact_all={hold_support_wing_contact_all}, "
+                f"wing_contact_any={hold_support_wing_contact_any}, "
                 f"wing_interference={sorted(hold_wing_interference)}"
             )
             continue
@@ -1010,6 +1031,9 @@ def generate_states(
                 "policy_entry_support_wing_contact_all": (
                     policy_entry_support_wing_contact_all
                 ),
+                "policy_entry_support_wing_contact_any": (
+                    policy_entry_support_wing_contact_any
+                ),
                 "policy_entry_wing_interference": ",".join(
                     sorted(policy_entry_wing_interference)
                 ),
@@ -1037,6 +1061,9 @@ def generate_states(
                 "controller_neutral_hold_support_wing_contact_all": (
                     controller_hold_support_wing_contact_all
                 ),
+                "controller_neutral_hold_support_wing_contact_any": (
+                    controller_hold_support_wing_contact_any
+                ),
                 "controller_neutral_hold_wing_interference": ",".join(
                     sorted(controller_hold_wing_interference)
                 ),
@@ -1045,6 +1072,7 @@ def generate_states(
                 "hold_displacement_m": hold_displacement,
                 "hold_tilt_delta_deg": hold_tilt_delta,
                 "hold_support_wing_contact_all": hold_support_wing_contact_all,
+                "hold_support_wing_contact_any": hold_support_wing_contact_any,
                 "hold_wing_interference": ",".join(sorted(hold_wing_interference)),
                 "close_tilt_delta_deg": topple_delta,
                 "close_displacement_m": close_response["displacement_m"],

@@ -13,7 +13,8 @@ PAIRING_METHOD = "serialized_er_state_bottle_transform"
 BINDING_FIELDS = (
     "l3a1_variant", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
     "lean_deg", "lean_axis", "lean_direction_deg", "policy_entry_probe_actions",
-    "bddl_sha256", "fixture_layout_contract", "native_cabinet_xml_sha256",
+    "bddl_sha256", "fixture_layout_contract", "native_cabinet_xml_path",
+    "native_cabinet_xml_sha256",
     "support_wing_contract_json", "support_wing_contract_sha256",
     "fixture_python_sha256",
     "support_restore_position_tolerance_m", "support_restore_angle_tolerance_deg",
@@ -134,6 +135,11 @@ def validate_base_preservation(path: str, task_description: str) -> int:
         }
         if any(len(value) != 64 for value in asset_hashes.values()):
             raise ValueError("missing L3-A1 fixture asset SHA256 metadata")
+        native_xml = Path(str(group.attrs.get("native_cabinet_xml_path", "")))
+        if not native_xml.is_file():
+            raise ValueError(f"current native WhiteCabinet XML does not exist: {native_xml}")
+        if _sha256(str(native_xml)) != asset_hashes["native_cabinet_xml_sha256"]:
+            raise ValueError("artifact native WhiteCabinet XML SHA256 is stale")
         wing_json = str(group.attrs.get("support_wing_contract_json", ""))
         if hashlib.sha256(wing_json.encode()).hexdigest() != asset_hashes[
             "support_wing_contract_sha256"
@@ -303,8 +309,18 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                     raise ValueError(
                         f"risk state retains wing contact after drawer close at demo_{index}"
                     )
-            elif support_wing_geom in contact_geoms:
-                raise ValueError(f"stable state touches support wing at demo_{index}")
+            else:
+                if support_wing_geom in contact_geoms:
+                    raise ValueError(f"stable state touches support wing at demo_{index}")
+                for field in (
+                    "policy_entry_support_wing_contact_any",
+                    "controller_neutral_hold_support_wing_contact_any",
+                    "hold_support_wing_contact_any",
+                ):
+                    if bool(demo.attrs.get(field, True)):
+                        raise ValueError(
+                            f"stable state contacts support wing during {field} at demo_{index}"
+                        )
         if base_state_hashes and len(set(base_state_hashes)) != count:
             raise ValueError("formal artifact reuses duplicate native base reset states")
     return count
@@ -326,6 +342,7 @@ def validate_pairing(er_path: str, ec_path: str, task_description: str) -> list[
         if ec_group.attrs.get("source_task_key", "") != key:
             raise ValueError("Ec source_task_key metadata mismatch")
         for field in (
+            "native_cabinet_xml_path",
             "native_cabinet_xml_sha256",
             "support_wing_contract_json",
             "support_wing_contract_sha256",
