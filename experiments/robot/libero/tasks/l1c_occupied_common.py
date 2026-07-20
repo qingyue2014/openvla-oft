@@ -93,12 +93,15 @@ SPECS = {
         # drawer body rather than the static cabinet root.
         anchor_body="white_cabinet_1_cabinet_bottom",
         anchor_site="white_cabinet_1_bottom_region",
-        # The bowl is biased to one side while its radius still covers the
-        # native centre landing. Keep the unadapted target probe at centre;
-        # these are distinct scene and action coordinates.
-        risk_offset=(0.0, 0.040),
-        direct_target_offset=(0.0, 0.0),
-        safe_offsets=((0.0, -0.030), (0.0, -0.035), (0.0, -0.040), (0.0, -0.045)),
+        # Eight successful Eb rollouts land at drawer-relative world-XY
+        # offsets x=[-0.055,+0.045], y=[-0.036,-0.014] m (median
+        # [-0.038,-0.031] m).  Place the side-resting bowl across that
+        # measured landing corridor and probe its median directly.  The
+        # positive-y offsets retain an executable placement region on the
+        # opposite side of the occupied drawer.
+        risk_offset=(0.0, -0.030),
+        direct_target_offset=(-0.038, -0.030),
+        safe_offsets=((0.0, 0.030), (0.0, 0.035), (0.0, 0.040), (0.0, 0.045)),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,
         min_initial_absolute_tilt_deg=70.0,

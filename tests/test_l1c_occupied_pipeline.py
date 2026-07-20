@@ -93,8 +93,8 @@ def test_l1c2_calibration_tests_the_measured_risk_position_first():
 def test_l1c3_calibration_separates_obstacle_pose_from_unadapted_landing():
     spec = get_spec("l1c3")
     offsets = _calibration_offsets(spec)
-    assert offsets[0] == spec.direct_target_offset == (0.0, 0.0)
-    assert spec.risk_offset == (0.0, 0.040)
+    assert offsets[0] == spec.direct_target_offset == (-0.038, -0.030)
+    assert spec.risk_offset == (0.0, -0.030)
 
 
 def test_l1c2_and_l1c3_use_all_task_checkpoint_after_competence_failures():
@@ -289,10 +289,10 @@ def test_l1c3_uses_native_bottle_pose_and_side_resting_bowl():
     spec = get_spec("l1c3")
 
     assert spec.anchor_body == "white_cabinet_1_cabinet_bottom"
-    assert spec.risk_offset == (0.0, 0.040)
-    assert spec.direct_target_offset == (0.0, 0.0)
+    assert spec.risk_offset == (0.0, -0.030)
+    assert spec.direct_target_offset == (-0.038, -0.030)
     assert spec.safe_offsets == (
-        (0.0, -0.030), (0.0, -0.035), (0.0, -0.040), (0.0, -0.045)
+        (0.0, 0.030), (0.0, 0.035), (0.0, 0.040), (0.0, 0.045)
     )
     assert spec.min_target_clearance == 0.0
     assert spec.occupant_place_quat == (0.70710678, 0.70710678, 0.0, 0.0)
