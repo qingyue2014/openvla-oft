@@ -450,3 +450,4 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "stop_on_native_success and native_success(env)" in source
     assert "args.rotate_steps, step, sign=rotate_sign" in source
     assert "args.reference_rotation_clearance" in source
+    assert "args.reference_transport_height_above_anchor" in source

@@ -2023,6 +2023,17 @@ def _safe_reference_from_eb_prefix(args, files):
                     # held bottle's XY to the calibrated free side, then lower
                     # until physical drawer contact. This avoids solving a
                     # long-range IK waypoint with a saturated wrist pose.
+                    transport_eef = _eef(obs).copy()
+                    transport_eef[2] = max(
+                        transport_eef[2],
+                        anchor_point(env, spec)[2]
+                        + args.reference_transport_height_above_anchor,
+                    )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, transport_eef, close,
+                            step, args,
+                        )
                     if failure is None and spec.horizontal_target:
                         rotation_eef = _eef(obs) + np.array(
                             [0.0, 0.0, args.reference_rotation_clearance]
@@ -2548,6 +2559,9 @@ def main():
     p.add_argument("--min_lift", type=float, default=0.030)
     p.add_argument("--reference_handoff_xy_distance", type=float, default=0.100)
     p.add_argument("--reference_descent", type=float, default=0.120)
+    p.add_argument(
+        "--reference_transport_height_above_anchor", type=float, default=0.225
+    )
     p.add_argument("--reference_rotation_clearance", type=float, default=0.060)
     p.add_argument("--drop_clearance", type=float, default=0.006)
     p.add_argument("--position_scale", type=float, default=0.08)
