@@ -169,6 +169,7 @@ def _validate_v2_group(group: h5py.Group) -> tuple[dict[str, str], dict[str, flo
             "min_edge_qualified_coverage", "min_edge_axial_m", "max_edge_gap_m",
             "min_absolute_support_force_n", "min_edge_force_weight_fraction",
             "min_table_force_weight_fraction", "max_support_penetration_m",
+            "max_pre_release_angular_speed_rad_s",
         )
     }
     canonical_thresholds = {
@@ -179,6 +180,7 @@ def _validate_v2_group(group: h5py.Group) -> tuple[dict[str, str], dict[str, flo
         "min_edge_force_weight_fraction": 0.05,
         "min_table_force_weight_fraction": 0.25,
         "max_support_penetration_m": 0.003,
+        "max_pre_release_angular_speed_rad_s": 1.5,
     }
     if any(
         not np.isfinite(thresholds[name])
@@ -283,8 +285,12 @@ def _validate_v2_demo(
             raise ValueError(f"{kind} component recontacts after rC at {prefix}")
         if str(demo.attrs.get(f"{kind}_pre_oracle_other_cabinet_geoms", "missing")):
             raise ValueError(f"{kind} has cabinet contamination at {prefix}")
-        if str(demo.attrs.get(f"{kind}_direct_contact_bodies", "missing")):
+        pre_direct_field = f"{kind}_pre_oracle_direct_contact_bodies"
+        post_direct_field = f"{kind}_post_oracle_direct_contact_bodies"
+        if str(demo.attrs.get(pre_direct_field, "missing")):
             raise ValueError(f"{kind} has direct-contact contamination at {prefix}")
+        if post_direct_field not in demo.attrs:
+            raise ValueError(f"{kind} lacks post-oracle direct-contact diagnostics at {prefix}")
         overwritten = bool(demo.attrs.get(f"{kind}_bottle_qvel_overwritten", None))
         if f"{kind}_bottle_qvel_overwritten" not in demo.attrs:
             raise ValueError(f"{kind} lacks bottle velocity provenance at {prefix}")
@@ -301,6 +307,12 @@ def _validate_v2_demo(
             )
             if not hazard:
                 raise ValueError(f"{kind} response misses hazard thresholds at {prefix}")
+        if kind == "factual_close":
+            angular_speed = float(demo.attrs.get(
+                "factual_close_max_pre_release_angular_speed_rad_s", np.inf
+            ))
+            if angular_speed > thresholds["max_pre_release_angular_speed_rad_s"]:
+                raise ValueError(f"factual close pre-release angular speed fails at {prefix}")
 
     if variant == "risk":
         clean_close("factual_close", True, expected_qvel_overwritten=False)
@@ -323,10 +335,14 @@ def _validate_v2_demo(
             raise ValueError(f"instant component removal does not trigger oracle at {prefix}")
         for field in (
             "instant_component_removal_pre_oracle_other_cabinet_geoms",
-            "instant_component_removal_direct_contact_bodies",
+            "instant_component_removal_pre_oracle_direct_contact_bodies",
         ):
             if str(demo.attrs.get(field, "missing")):
                 raise ValueError(f"instant component removal contamination at {prefix}")
+        if "instant_component_removal_post_oracle_direct_contact_bodies" not in demo.attrs:
+            raise ValueError(
+                f"instant component removal lacks post-oracle diagnostics at {prefix}"
+            )
         if _csv(demo.attrs.get("instant_component_removal_touched_component_roles", "")):
             raise ValueError(f"disabled component C remains in contact at {prefix}")
         if float(demo.attrs.get(

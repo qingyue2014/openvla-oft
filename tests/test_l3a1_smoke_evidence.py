@@ -135,7 +135,8 @@ def _reviewed_artifacts(tmp_path, er_rows, ec_rows):
         "support_component_recontact_after_rC": False,
         "support_bottle_qvel_overwritten": False,
         "support_pre_oracle_other_cabinet_geoms": "",
-        "support_direct_contact_bodies": "",
+        "support_pre_oracle_direct_contact_bodies": "",
+        "support_post_oracle_direct_contact_bodies": "post-only-diagnostic",
     }
     for row in er_rows:
         row.update(common, initial_states_artifact_sha256=artifact_shas["Er"],

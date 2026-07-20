@@ -293,6 +293,18 @@ def load_hdf_states(path: Path, count: int, condition: str) -> list[dict[str, An
             demo = group[demo_name]
             initial_roles = str(demo.attrs.get("initial_component_roles", "missing"))
             edge_table = bool(demo.attrs.get("initial_edge_table_qualified", False))
+            factual_pre_direct = str(demo.attrs.get(
+                "factual_close_pre_oracle_direct_contact_bodies", "missing"
+            ))
+            if factual_pre_direct:
+                raise ValueError(
+                    f"{condition} {demo_name} has pre-oracle direct-contact contamination"
+                )
+            if "factual_close_post_oracle_direct_contact_bodies" not in demo.attrs:
+                raise ValueError(f"{condition} {demo_name} lacks post-oracle diagnostics")
+            factual_post_direct = str(
+                demo.attrs["factual_close_post_oracle_direct_contact_bodies"]
+            )
             if condition == "Er" and (
                 initial_roles != "edge/front_outer" or not edge_table
             ):
@@ -307,6 +319,8 @@ def load_hdf_states(path: Path, count: int, condition: str) -> list[dict[str, An
                 "hdf5_topology_evidence": group_evidence,
                 "hdf5_initial_component_roles": initial_roles,
                 "hdf5_initial_edge_table_qualified": edge_table,
+                "hdf5_factual_pre_oracle_direct_contact_bodies": factual_pre_direct,
+                "hdf5_factual_post_oracle_direct_contact_bodies": factual_post_direct,
             })
     return rows
 

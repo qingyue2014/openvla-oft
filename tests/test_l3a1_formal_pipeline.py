@@ -345,6 +345,7 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             "min_edge_axial_m": 0.086,
             "max_edge_gap_m": 0.006,
             "max_support_penetration_m": 0.003,
+            "max_pre_release_angular_speed_rad_s": 1.5,
             "oracle_displacement_threshold": 0.01,
             "oracle_height_drop_threshold": 0.015,
             "oracle_tilt_change_threshold_deg": 5.0,
@@ -406,19 +407,24 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
                 d[f"{prefix}_first_oracle_step"] = 2
                 d[f"{prefix}_component_recontact_after_rC"] = False
                 d[f"{prefix}_pre_oracle_other_cabinet_geoms"] = ""
-                d[f"{prefix}_direct_contact_bodies"] = ""
+                d[f"{prefix}_pre_oracle_direct_contact_bodies"] = ""
+                d[f"{prefix}_post_oracle_direct_contact_bodies"] = "post-only-diagnostic"
                 d[f"{prefix}_bottle_qvel_overwritten"] = overwritten
                 d[f"{prefix}_displacement_m"] = 0.02
                 d[f"{prefix}_height_drop_m"] = 0.0
                 d[f"{prefix}_attitude_change_deg"] = 0.0
             d["zero_momentum_close_applied"] = True
+            d["factual_close_max_pre_release_angular_speed_rad_s"] = 1.5
             d["factual_close_initial_component_roles"] = "edge/front_outer"
             d["zero_momentum_close_factual_release_step_rC"] = 1
             d["instant_component_removal_disabled_roles"] = ",".join(contract["removal_component"])
             d["instant_component_removal_touched_component_roles"] = ""
             d["instant_component_removal_first_oracle_step"] = 1
             d["instant_component_removal_pre_oracle_other_cabinet_geoms"] = ""
-            d["instant_component_removal_direct_contact_bodies"] = ""
+            d["instant_component_removal_pre_oracle_direct_contact_bodies"] = ""
+            d["instant_component_removal_post_oracle_direct_contact_bodies"] = (
+                "post-only-diagnostic"
+            )
             d["instant_component_removal_max_drawer_displacement_m"] = 0.0
             d["instant_component_removal_displacement_m"] = 0.02
             d["instant_component_removal_height_drop_m"] = 0.0
@@ -532,6 +538,23 @@ def test_base_preservation_rejects_early_factual_oracle(tmp_path):
     with h5py.File(artifact, "a") as handle:
         handle["task/demo_0"].attrs["factual_close_first_oracle_step"] = 1
     with pytest.raises(ValueError, match="oracle does not follow rC"):
+        validate_base_preservation(str(artifact), "task")
+
+
+def test_base_preservation_binds_calibrated_angular_speed_threshold(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        handle["task"].attrs["max_pre_release_angular_speed_rad_s"] = 1.4
+    with pytest.raises(ValueError, match="qualification thresholds"):
+        validate_base_preservation(str(artifact), "task")
+
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        handle["task/demo_0"].attrs[
+            "factual_close_max_pre_release_angular_speed_rad_s"
+        ] = 1.500001
+    with pytest.raises(ValueError, match="pre-release angular speed"):
         validate_base_preservation(str(artifact), "task")
 
 
@@ -717,6 +740,7 @@ def test_artifact_binding_covers_bytes_count_and_geometry(tmp_path):
     before = artifact_binding(str(artifact), "task")
     assert '"count":2' in before
     assert '"lean_dx":-0.04' in before
+    assert '"max_pre_release_angular_speed_rad_s":1.5' in before
     with h5py.File(artifact, "a") as handle:
         handle["task/demo_0/initial_state"][0] = 999
     after = artifact_binding(str(artifact), "task")

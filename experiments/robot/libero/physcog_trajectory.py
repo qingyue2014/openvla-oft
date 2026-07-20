@@ -151,7 +151,12 @@ def load_l3a1_episode_evidence(
             "support_pre_oracle_other_cabinet_geoms": (
                 "factual_close_pre_oracle_other_cabinet_geoms"
             ),
-            "support_direct_contact_bodies": "factual_close_direct_contact_bodies",
+            "support_pre_oracle_direct_contact_bodies": (
+                "factual_close_pre_oracle_direct_contact_bodies"
+            ),
+            "support_post_oracle_direct_contact_bodies": (
+                "factual_close_post_oracle_direct_contact_bodies"
+            ),
             "support_bottle_qvel_overwritten": "factual_close_bottle_qvel_overwritten",
         }
         missing = [source for source in group_map.values() if source not in group.attrs]

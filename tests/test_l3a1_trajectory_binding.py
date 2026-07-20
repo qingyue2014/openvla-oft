@@ -24,7 +24,8 @@ def test_l3a1_episode_evidence_maps_exact_hdf_demo_and_artifact(tmp_path):
         demo.attrs["factual_close_first_oracle_step"] = 52
         demo.attrs["factual_close_component_recontact_after_rC"] = False
         demo.attrs["factual_close_pre_oracle_other_cabinet_geoms"] = ""
-        demo.attrs["factual_close_direct_contact_bodies"] = ""
+        demo.attrs["factual_close_pre_oracle_direct_contact_bodies"] = ""
+        demo.attrs["factual_close_post_oracle_direct_contact_bodies"] = "post-contact"
         demo.attrs["factual_close_bottle_qvel_overwritten"] = False
 
     evidence = load_l3a1_episode_evidence(str(artifact), "task", 0)
@@ -36,4 +37,6 @@ def test_l3a1_episode_evidence_maps_exact_hdf_demo_and_artifact(tmp_path):
     assert evidence["support_component_release_step_rC"] == 6
     assert evidence["support_first_oracle_step"] == 52
     assert evidence["support_bottle_qvel_overwritten"] is False
+    assert evidence["support_pre_oracle_direct_contact_bodies"] == ""
+    assert evidence["support_post_oracle_direct_contact_bodies"] == "post-contact"
     assert evidence["support_component_role_hashes_sha256"] == "d" * 64

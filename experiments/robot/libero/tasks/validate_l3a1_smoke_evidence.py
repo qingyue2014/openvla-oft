@@ -181,7 +181,7 @@ def _topology_failures(
             overwritten = _required_bool(row, "support_bottle_qvel_overwritten")
             polluted = any(str(row.get(field, "missing")).strip() for field in (
                 "support_pre_oracle_other_cabinet_geoms",
-                "support_direct_contact_bodies",
+                "support_pre_oracle_direct_contact_bodies",
             ))
             if condition == "Er":
                 if roles != "edge/front_outer" or not edge_table:
