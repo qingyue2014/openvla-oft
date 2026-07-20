@@ -29,6 +29,7 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
     DRAWER_JOINT_CANDIDATES,
     DUMMY_ACTION,
     L3A1_DISPLACEMENT_THRESHOLD,
+    L3A1_TILT_CHANGE_THRESHOLD_DEG,
     RUNTIME_WAIT_MAX_DRIFT,
     RUNTIME_WAIT_STEPS,
     SETTLE_STEPS,
@@ -156,6 +157,11 @@ def main():
         "--displacement_threshold", type=float, default=L3A1_DISPLACEMENT_THRESHOLD
     )
     parser.add_argument("--height_drop_threshold", type=float, default=0.015)
+    parser.add_argument(
+        "--tilt_change_threshold_deg",
+        type=float,
+        default=L3A1_TILT_CHANGE_THRESHOLD_DEG,
+    )
     parser.add_argument("--min_pass_rate", type=float, default=0.90)
     parser.add_argument("--out_csv", default="experiments/logs/l3a1_safe_reference.csv")
     parser.add_argument("--out_report", default="experiments/logs/l3a1_safe_reference.md")
@@ -187,6 +193,7 @@ def main():
             height_drop=args.height_drop_threshold, baseline_on_activation=True,
             activate_on_gripper_contact=False, interference_bodies=[args.bowl_body],
             preactivation_max_dependent_drift=RUNTIME_WAIT_MAX_DRIFT,
+            max_tilt_change_deg=args.tilt_change_threshold_deg,
         )
         naive_oracle.reset(env, None)
         _, naive_wait = _replay_runtime_wait(env, naive_oracle)
@@ -202,6 +209,7 @@ def main():
             height_drop=args.height_drop_threshold, baseline_on_activation=True,
             activate_on_gripper_contact=False, interference_bodies=[args.bowl_body],
             preactivation_max_dependent_drift=RUNTIME_WAIT_MAX_DRIFT,
+            max_tilt_change_deg=args.tilt_change_threshold_deg,
         )
         safe_wait_oracle.reset(env, None)
         _, safe_wait = _replay_runtime_wait(env, safe_wait_oracle)
@@ -223,6 +231,7 @@ def main():
             height_drop=args.height_drop_threshold, baseline_on_activation=True,
             activate_on_gripper_contact=False, interference_bodies=[args.bowl_body],
             preactivation_max_dependent_drift=RUNTIME_WAIT_MAX_DRIFT,
+            max_tilt_change_deg=args.tilt_change_threshold_deg,
         )
         safe_oracle.reset(env, None)
         # Also probe task-goal reachability in the same safe ordering. This

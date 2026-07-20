@@ -164,7 +164,7 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
         group.attrs["settle_steps"] = 400
         group.attrs["validation_hold_steps"] = 200
         group.attrs["verify_close_steps"] = 60
-        group.attrs["min_topple_deg"] = 10.0
+        group.attrs["oracle_tilt_change_threshold_deg"] = 5.0
         group.attrs["oracle_displacement_threshold"] = 0.01
         group.attrs["oracle_height_drop_threshold"] = 0.015
         group.attrs["stable_x_offset"] = -0.10 if source is not None else 0.0
@@ -224,6 +224,11 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["instant_panel_removal_tilt_delta_deg"] = (
                 20.0 if source is None else 0.0
             )
+            demo.attrs["instant_panel_removal_attitude_change_deg"] = (
+                20.0 if source is None else 0.0
+            )
+            demo.attrs["instant_panel_removal_displacement_m"] = 0.0
+            demo.attrs["instant_panel_removal_height_drop_m"] = 0.0
             demo.attrs["instant_panel_removal_pre_oracle_other_cabinet_geoms"] = ""
             demo.attrs["instant_panel_removal_direct_contacts"] = ""
             demo.attrs["instant_panel_removal_max_drawer_displacement_m"] = 0.0
@@ -236,6 +241,9 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
                 source is None
             )
             demo.attrs["close_panel_recontact_after_release"] = False
+            demo.attrs["close_attitude_change_deg"] = 20.0 if source is None else 0.0
+            demo.attrs["close_displacement_m"] = 0.0
+            demo.attrs["close_height_drop_m"] = 0.0
             demo.attrs["bottle_qpos_flat_start"] = 3
             demo.attrs["bottle_qvel_flat_start"] = 20
             if source is not None:
@@ -448,6 +456,32 @@ def test_formal_template_artifact_rejects_duplicate_native_base_states(tmp_path)
         validate_base_preservation(str(artifact), "task")
 
 
+def test_l3a1_hazard_gate_accepts_displacement_without_toppling(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        demo = handle["task/demo_0"]
+        demo.attrs["instant_panel_removal_attitude_change_deg"] = 0.0
+        demo.attrs["instant_panel_removal_displacement_m"] = 0.02
+        demo.attrs["close_attitude_change_deg"] = 0.0
+        demo.attrs["close_displacement_m"] = 0.02
+
+    assert validate_base_preservation(str(artifact), "task") == 1
+
+
+def test_l3a1_hazard_gate_rejects_when_no_signal_crosses_threshold(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        demo = handle["task/demo_0"]
+        demo.attrs["instant_panel_removal_attitude_change_deg"] = 0.0
+        demo.attrs["instant_panel_removal_displacement_m"] = 0.0
+        demo.attrs["instant_panel_removal_height_drop_m"] = 0.0
+
+    with pytest.raises(ValueError, match="displacement/drop/attitude"):
+        validate_base_preservation(str(artifact), "task")
+
+
 def test_pairing_gate_rejects_wrong_source_metadata(tmp_path):
     er, other, ec = tmp_path / "er.hdf5", tmp_path / "other.hdf5", tmp_path / "ec.hdf5"
     _states(er, [2])
@@ -483,6 +517,8 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert 'SUPPORT_ACTIVATION_DISPLACEMENT="${SUPPORT_ACTIVATION_DISPLACEMENT:-0.001}"' in text
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
     assert "--support_preactivation_max_dependent_drift 0.005" in text
+    assert '--support_max_tilt_change_deg "${TILT_CHANGE_THRESHOLD_DEG}"' in text
+    assert 'TILT_CHANGE_THRESHOLD_DEG="${TILT_CHANGE_THRESHOLD_DEG:-5.0}"' in text
     assert "--support_check_during_wait True" in text
     assert 'SUPPORT_SIDE="${SUPPORT_SIDE:-left}"' in text
     assert 'LEAN_DX="${LEAN_DX:--0.150}"' in text
@@ -523,11 +559,14 @@ def test_artifact_config_rejects_stale_geometry_or_threshold(tmp_path):
         str(artifact), "task", variant="risk", seed=42,
         bddl=str(tmp_path / "scene.bddl"),
         displacement_threshold=0.01, lean_dx=-0.04, lean_dy=-0.18, lean_deg=-20.0,
+        tilt_change_threshold_deg=5.0,
     )
     with pytest.raises(ValueError, match="lean_dx"):
         validate_expected_config(str(artifact), "task", lean_dx=-0.06)
     with pytest.raises(ValueError, match="oracle_displacement_threshold"):
         validate_expected_config(str(artifact), "task", displacement_threshold=0.03)
+    with pytest.raises(ValueError, match="oracle_tilt_change_threshold_deg"):
+        validate_expected_config(str(artifact), "task", tilt_change_threshold_deg=9.0)
     with h5py.File(artifact, "a") as handle:
         handle["task"].attrs["bddl_sha256"] = "stale"
     with pytest.raises(ValueError, match="BDDL SHA256"):

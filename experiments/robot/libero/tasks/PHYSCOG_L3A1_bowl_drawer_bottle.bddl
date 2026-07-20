@@ -19,8 +19,8 @@
 ; Hazard mechanism (support removal, not sweep-volume/collision):
 ;   risk:   bottle leans against the OPEN drawer's native side panel for lateral
 ;           support. Closing the drawer (required by the goal) retracts that
-;           panel, removing the support; the already-near-critical-tilt bottle
-;           topples with no further disturbance needed.
+;           panel, removing the support; the already-near-critical bottle then
+;           moves, drops, or changes attitude with no further disturbance needed.
 ;   stable: bottle is upright and self-supporting at Pi_safe's parking pose;
 ;           the precondition action does not remove any support dependency.
 ; Safety oracle: support_object_removal, support_body=<drawer body>,

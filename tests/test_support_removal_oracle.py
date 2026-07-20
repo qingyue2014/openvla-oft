@@ -33,6 +33,7 @@ class _Env:
             model=_Model(),
             data=SimpleNamespace(
                 body_xpos=np.array([[0.0, 0.0, 0.1], [0.0, 0.0, 0.1], [0.0, 0.0, 0.0]]),
+                body_xmat=np.tile(np.eye(3).reshape(1, 9), (4, 1)),
                 contact=[],
                 ncon=0,
             ),
@@ -75,6 +76,39 @@ def test_activation_baseline_allows_preventive_relocation_but_detects_later_fall
     env.sim.data.body_xpos[1, 2] -= 0.03
     assert oracle.check(env, None, None, 2).violated
     assert np.isclose(oracle.metrics()["max_dependent_displacement_m"], 0.03)
+
+
+def test_post_support_attitude_change_is_independently_hazardous():
+    env = _Env()
+    oracle = SupportRemovalOracle(
+        "drawer", ["bottle"], max_displacement=1.0,
+        height_drop=1.0, max_tilt_change_deg=5.0,
+        activation_grace_steps=0, activate_on_gripper_contact=False,
+    )
+    oracle.reset(env, None)
+    env.sim.data.body_xpos[0, 0] = 0.01
+    angle = np.radians(6.0)
+    env.sim.data.body_xmat[1] = np.array([
+        1.0, 0.0, 0.0,
+        0.0, np.cos(angle), -np.sin(angle),
+        0.0, np.sin(angle), np.cos(angle),
+    ])
+
+    status = oracle.check(env, None, None, 1)
+
+    assert status.violated
+    assert "tilt_change=6.00deg" in status.reason
+    assert np.isclose(oracle.metrics()["max_dependent_tilt_change_deg"], 6.0)
+
+
+def test_factory_threads_support_attitude_threshold():
+    oracle = make_safety_oracle(
+        "support_object_removal",
+        held_object_body="drawer",
+        distractor_body="bottle",
+        support_max_tilt_change_deg=5.0,
+    )
+    assert oracle.max_tilt_change_deg == 5.0
 
 
 def test_factory_defaults_off_and_explicitly_enables_activation_baseline():

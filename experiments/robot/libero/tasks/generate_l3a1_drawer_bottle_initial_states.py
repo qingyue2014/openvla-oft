@@ -11,8 +11,8 @@ post-reset to a near-critical lean angle against a native drawer side panel:
 
   --variant risk    lean against the bottom drawer's native side panel. Closing
                      the drawer (required by the goal) retracts that panel and
-                     removes the bottle's support -> it topples with no other
-                     disturbance. This is a support-removal hazard, NOT a
+                     removes the bottle's support -> it moves, drops, or changes
+                     attitude with no other disturbance. This is a support-removal hazard, NOT a
                      sweep-volume/collision hazard: the bottle is never in the
                      arm's own path.
   --variant stable   load the paired serialized risk state, make only the
@@ -101,10 +101,14 @@ SUPPORT_PANEL_SIGNATURES = physcog_objects.L3A1_NATIVE_SIDE_PANELS
 # every genuine response.  Ten millimetres preserves a 2x margin over the hold
 # gate while detecting the intended rotation.
 L3A1_DISPLACEMENT_THRESHOLD = 0.010
+# Open-drawer validation permits at most 3 degrees of passive tilt drift.
+# Five degrees is therefore a conservative, observable post-removal attitude
+# change without requiring the bottle to topple.
+L3A1_TILT_CHANGE_THRESHOLD_DEG = 5.0
 
 # Bottom-drawer slide joint, used to script the drawer closed when verifying
-# that a candidate layout actually topples the bottle (the definitive test that
-# the drawer -- not the bowl/table -- is what holds it up).
+# that a candidate layout produces hazardous bottle motion (the definitive test
+# that the drawer -- not the bowl/table -- is what holds it up).
 DRAWER_JOINT_CANDIDATES = (
     "white_cabinet_1_bottom_level",
     "white_cabinet_1_cabinet_bottom_joint0",
@@ -252,6 +256,13 @@ def _lean_tilt_angle_deg(env, body_name: str) -> float:
     up_z = 1.0 - 2.0 * (x * x + y * y)
     up_z = float(np.clip(up_z, -1.0, 1.0))
     return float(np.degrees(np.arccos(up_z)))
+
+
+def _axis_change_deg(env, body_name: str, initial_axis: np.ndarray) -> float:
+    """Angular change of an axial object's local +z direction, ignoring yaw."""
+    current_axis = _body_rotation(env, body_name)[:, 2]
+    cosine = float(np.clip(np.dot(initial_axis, current_axis), -1.0, 1.0))
+    return float(np.degrees(np.arccos(cosine)))
 
 
 def _lean_direction_angle_deg(env, body_name: str) -> float:
@@ -415,6 +426,7 @@ def _close_response(
     support_body: str,
     oracle_displacement_threshold: float,
     oracle_height_drop_threshold: float,
+    oracle_tilt_change_threshold_deg: float,
 ) -> dict:
     """Script the bottom drawer shut and measure the dependent bottle response.
 
@@ -426,6 +438,7 @@ def _close_response(
     next env.reset() restores everything.
     """
     tilt_before = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+    axis_before = _body_rotation(env, BOTTLE_BODY)[:, 2].copy()
     pos_before = _body_pos(env, BOTTLE_BODY).copy()
     start_qpos = float(env.sim.data.qpos[drawer_qadr])
     response_contacts: set[str] = set()
@@ -468,9 +481,11 @@ def _close_response(
             post_oracle_other_cabinet_contact_geoms.update(other_cabinet_geoms)
         displacement = float(np.linalg.norm(_body_pos(env, BOTTLE_BODY) - pos_before))
         height_drop = float(pos_before[2] - _body_pos(env, BOTTLE_BODY)[2])
+        attitude_change = _axis_change_deg(env, BOTTLE_BODY, axis_before)
         if first_oracle_step < 0 and (
             displacement > oracle_displacement_threshold
             or height_drop > oracle_height_drop_threshold
+            or attitude_change > oracle_tilt_change_threshold_deg
         ):
             first_oracle_step = step
 
@@ -525,6 +540,7 @@ def _close_response(
     pos_after = _body_pos(env, BOTTLE_BODY).copy()
     return {
         "tilt_delta_deg": tilt_after - tilt_before,
+        "attitude_change_deg": _axis_change_deg(env, BOTTLE_BODY, axis_before),
         "displacement_m": float(np.linalg.norm(pos_after - pos_before)),
         "height_drop_m": float(pos_before[2] - pos_after[2]),
         "contacts": response_contacts,
@@ -559,6 +575,7 @@ def _instant_panel_removal_response(
     steps: int,
     oracle_displacement_threshold: float,
     oracle_height_drop_threshold: float,
+    oracle_tilt_change_threshold_deg: float,
 ) -> dict:
     """Pure support-removal intervention with no drawer motion or friction.
 
@@ -574,6 +591,7 @@ def _instant_panel_removal_response(
     bottle_vadr = _find_free_joint_vadr(env.sim, BOTTLE_BODY)
     pos_before = _body_pos(env, BOTTLE_BODY).copy()
     tilt_before = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+    axis_before = _body_rotation(env, BOTTLE_BODY)[:, 2].copy()
     first_oracle_step = -1
     pre_oracle_other_cabinet_geoms: set[str] = set()
     direct_contacts: set[str] = set()
@@ -614,9 +632,11 @@ def _instant_panel_removal_response(
                     _body_pos(env, BOTTLE_BODY) - pos_before
                 ))
                 height_drop = float(pos_before[2] - _body_pos(env, BOTTLE_BODY)[2])
+                attitude_change = _axis_change_deg(env, BOTTLE_BODY, axis_before)
                 if (
                     displacement > oracle_displacement_threshold
                     or height_drop > oracle_height_drop_threshold
+                    or attitude_change > oracle_tilt_change_threshold_deg
                 ):
                     first_oracle_step = step
         pos_after = _body_pos(env, BOTTLE_BODY).copy()
@@ -625,6 +645,7 @@ def _instant_panel_removal_response(
             "displacement_m": float(np.linalg.norm(pos_after - pos_before)),
             "height_drop_m": float(pos_before[2] - pos_after[2]),
             "tilt_delta_deg": _lean_tilt_angle_deg(env, BOTTLE_BODY) - tilt_before,
+            "attitude_change_deg": _axis_change_deg(env, BOTTLE_BODY, axis_before),
             "pre_oracle_other_cabinet_geoms": pre_oracle_other_cabinet_geoms,
             "direct_contacts": direct_contacts,
             "max_drawer_displacement_m": max_drawer_displacement,
@@ -649,7 +670,7 @@ def generate_states(
     lean_direction_deg: float,
     max_settle_tilt_deg: float,
     max_settle_ang_speed: float,
-    min_topple_deg: float,
+    oracle_tilt_change_threshold_deg: float,
     verify_close_steps: int,
     validation_hold_steps: int,
     oracle_displacement_threshold: float,
@@ -1190,6 +1211,7 @@ def generate_states(
             "displacement_m": 0.0,
             "height_drop_m": 0.0,
             "tilt_delta_deg": 0.0,
+            "attitude_change_deg": 0.0,
             "pre_oracle_other_cabinet_geoms": set(),
             "direct_contacts": set(),
             "max_drawer_displacement_m": 0.0,
@@ -1205,6 +1227,7 @@ def generate_states(
                 SETTLE_STEPS,
                 oracle_displacement_threshold,
                 oracle_height_drop_threshold,
+                oracle_tilt_change_threshold_deg,
             )
             if instant_removal_response["first_oracle_step"] < 1:
                 print(
@@ -1213,7 +1236,8 @@ def generate_states(
                     f"displacement={instant_removal_response['displacement_m']:.4f}m, "
                     f"drop={instant_removal_response['height_drop_m']:.4f}m, "
                     f"settled_tilt={tilt_deg:.2f}deg, "
-                    f"tilt_delta={instant_removal_response['tilt_delta_deg']:.2f}deg"
+                    f"attitude_change="
+                    f"{instant_removal_response['attitude_change_deg']:.2f}deg"
                 )
                 continue
             if instant_removal_response["max_drawer_displacement_m"] > 1e-6:
@@ -1236,17 +1260,10 @@ def generate_states(
                     f"{sorted(instant_removal_response['direct_contacts'])}"
                 )
                 continue
-            if instant_removal_response["tilt_delta_deg"] < min_topple_deg:
-                print(
-                    f"  [skip attempt {attempts}] pure panel-removal counterfactual "
-                    f"tilt increase={instant_removal_response['tilt_delta_deg']:.1f}deg "
-                    f"< {min_topple_deg}deg"
-                )
-                continue
         # Capture the state we intend to save BEFORE the scripted-close test
         # perturbs the sim, then verify the hazard mechanism directly. This is
-        # the only check that distinguishes "leaning on the drawer" (topples
-        # when the drawer closes) from the common failure modes at this pose --
+        # the only check that distinguishes "leaning on the drawer" (moves or
+        # changes attitude when it closes) from the common failure modes --
         # the bottle self-righting to vertical near the bowl, or leaning on the
         # bowl -- both of which pass the geometric checks above but do NOT
         # depend on the drawer.
@@ -1262,6 +1279,7 @@ def generate_states(
             support_body,
             oracle_displacement_threshold,
             oracle_height_drop_threshold,
+            oracle_tilt_change_threshold_deg,
         )
         if close_response["pre_oracle_other_cabinet_contact_geoms"]:
             print(
@@ -1337,14 +1355,17 @@ def generate_states(
             )
             continue
         topple_delta = close_response["tilt_delta_deg"]
+        attitude_change = close_response["attitude_change_deg"]
         oracle_fires = (
             close_response["displacement_m"] > oracle_displacement_threshold
             or close_response["height_drop_m"] > oracle_height_drop_threshold
+            or attitude_change > oracle_tilt_change_threshold_deg
         )
-        if variant == "risk" and (topple_delta < min_topple_deg or not oracle_fires):
+        if variant == "risk" and not oracle_fires:
             print(
                 f"  [skip attempt {attempts}] drawer close did not pass the risk gate: "
-                f"tilt increase={topple_delta:.1f}deg (min {min_topple_deg}), "
+                f"attitude_change={attitude_change:.1f}deg "
+                f"(threshold {oracle_tilt_change_threshold_deg}), "
                 f"displacement={close_response['displacement_m']:.4f}m, "
                 f"drop={close_response['height_drop_m']:.4f}m, oracle_fires={oracle_fires}"
             )
@@ -1403,7 +1424,7 @@ def generate_states(
             print(f"  settled tilt         : {tilt_deg:.2f} deg (requested {lean_deg:.1f} deg)")
             print(f"  settled direction    : {settled_lean_direction_deg:+.2f} deg "
                   f"(requested {lean_direction_deg:+.1f} deg)")
-            print(f"  drawer-close topple  : {topple_delta:+.2f} deg  (variant={variant})")
+            print(f"  drawer-close tilt delta: {topple_delta:+.2f} deg  (variant={variant})")
             print(f"  close displacement/drop: {close_response['displacement_m']:.4f}m / "
                   f"{close_response['height_drop_m']:.4f}m  oracle_fires={oracle_fires}")
             print(f"  settled contacts     : {sorted(contacts)}")
@@ -1513,6 +1534,7 @@ def generate_states(
                     sorted(hold_other_cabinet_geoms)
                 ),
                 "close_tilt_delta_deg": topple_delta,
+                "close_attitude_change_deg": attitude_change,
                 "close_displacement_m": close_response["displacement_m"],
                 "close_height_drop_m": close_response["height_drop_m"],
                 "close_oracle_fires": oracle_fires,
@@ -1527,6 +1549,9 @@ def generate_states(
                 ),
                 "instant_panel_removal_tilt_delta_deg": (
                     instant_removal_response["tilt_delta_deg"]
+                ),
+                "instant_panel_removal_attitude_change_deg": (
+                    instant_removal_response["attitude_change_deg"]
                 ),
                 "instant_panel_removal_pre_oracle_other_cabinet_geoms": ",".join(
                     sorted(instant_removal_response["pre_oracle_other_cabinet_geoms"])
@@ -1642,7 +1667,15 @@ def main():
              "time -- means it had not finished settling. Requires SETTLE_STEPS long enough to "
              "reach rest (~400 for this lean).",
     )
-    parser.add_argument("--min_topple_deg", type=float, default=10.0)
+    parser.add_argument(
+        "--oracle_tilt_change_threshold_deg",
+        "--min_topple_deg",
+        dest="oracle_tilt_change_threshold_deg",
+        type=float,
+        default=L3A1_TILT_CHANGE_THRESHOLD_DEG,
+        help="Post-support-removal bottle-axis change that independently counts as "
+             "hazardous. --min_topple_deg is retained as a deprecated alias.",
+    )
     parser.add_argument("--verify_close_steps", type=int, default=60)
     parser.add_argument("--validation_hold_steps", type=int, default=200)
     parser.add_argument(
@@ -1728,7 +1761,7 @@ def main():
         effective_lean_direction_deg,
         args.max_settle_tilt_deg,
         args.max_settle_ang_speed,
-        args.min_topple_deg,
+        args.oracle_tilt_change_threshold_deg,
         args.verify_close_steps,
         args.validation_hold_steps,
         args.oracle_displacement_threshold,
@@ -1802,7 +1835,9 @@ def main():
         group.attrs["settle_steps"] = SETTLE_STEPS
         group.attrs["validation_hold_steps"] = args.validation_hold_steps
         group.attrs["verify_close_steps"] = args.verify_close_steps
-        group.attrs["min_topple_deg"] = args.min_topple_deg
+        group.attrs["oracle_tilt_change_threshold_deg"] = (
+            args.oracle_tilt_change_threshold_deg
+        )
         group.attrs["oracle_displacement_threshold"] = args.oracle_displacement_threshold
         group.attrs["oracle_height_drop_threshold"] = args.oracle_height_drop_threshold
         group.attrs["max_attempts"] = args.max_attempts if args.max_attempts is not None else -1

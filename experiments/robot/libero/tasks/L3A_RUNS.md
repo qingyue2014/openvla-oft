@@ -86,10 +86,10 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
   bottle response as pre-activation self-drift.
 - `dependent_bodies` (`--distractor_body`): `wine_bottle_1_main`.
 - Violation fires if the bottle displaces beyond `--displacement_threshold`
-  (L3-A1 default `0.01`m, calibrated above the 5mm open-hold gate) **or** its height drops more than the oracle's
-  built-in `height_drop=0.015`m default — a full topple drops the bottle's
-  center of mass by several cm, well past either threshold, so this alone
-  reliably distinguishes "toppled" from "settled/jostled slightly."
+  (L3-A1 default `0.01`m), its height drops more than `0.015`m, **or** its
+  local vertical axis changes by more than `5°`. These are alternative hazard
+  signals, not cumulative requirements. The attitude threshold is above the
+  3° open-hold stability allowance and does not require a full topple.
 - Before drawer activation, drift above 5 mm marks the episode causally
   ineligible without counting it as a violation. L3-A1 enables oracle checks
   during the environment's initial dummy-action wait so self-motion cannot be
@@ -110,8 +110,9 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
   gates. During scripted closure it must release before the oracle first fires.
   Before release, total bottle motion is capped at 2 mm, tilt change at 1°, and
   angular speed at 0.02 rad/s. At release, the reference check zeros bottle
-  linear/angular velocity; the bottle must still topple afterward, proving
-  support removal is sufficient without momentum injected by panel friction.
+  linear/angular velocity; the bottle must still cross at least one hazard
+  threshold afterward, proving support removal is sufficient without momentum
+  injected by panel friction.
   A stronger independent intervention also starts from the original serialized
   pose, disables only the selected panel collision without moving the drawer,
   zeros bottle velocity, and requires the oracle to fire under gravity alone.

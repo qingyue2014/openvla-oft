@@ -38,7 +38,8 @@ BINDING_FIELDS = (
     "max_pre_release_angular_speed_rad_s",
     "controller_neutral_hold_steps",
     "settle_steps", "validation_hold_steps",
-    "verify_close_steps", "min_topple_deg", "oracle_displacement_threshold",
+    "verify_close_steps", "oracle_tilt_change_threshold_deg",
+    "oracle_displacement_threshold",
     "oracle_height_drop_threshold", "stable_x_offset", "initialization_strategy",
 )
 
@@ -154,6 +155,7 @@ def validate_expected_config(
     seed: int | None = None,
     bddl: str | None = None,
     displacement_threshold: float | None = None,
+    tilt_change_threshold_deg: float | None = None,
     lean_dx: float | None = None,
     lean_dy: float | None = None,
     lean_deg: float | None = None,
@@ -174,6 +176,7 @@ def validate_expected_config(
             "seed": seed,
             "bddl": bddl,
             "oracle_displacement_threshold": displacement_threshold,
+            "oracle_tilt_change_threshold_deg": tilt_change_threshold_deg,
             "lean_dx": lean_dx,
             "lean_dy": lean_dy,
             "lean_deg": lean_deg,
@@ -274,6 +277,19 @@ def validate_base_preservation(path: str, task_description: str) -> int:
         controller_hold_steps = int(
             group.attrs.get("controller_neutral_hold_steps", -1)
         )
+        displacement_threshold = float(
+            group.attrs.get("oracle_displacement_threshold", np.nan)
+        )
+        height_drop_threshold = float(
+            group.attrs.get("oracle_height_drop_threshold", np.nan)
+        )
+        tilt_change_threshold = float(
+            group.attrs.get("oracle_tilt_change_threshold_deg", np.nan)
+        )
+        if not all(np.isfinite(value) and value > 0 for value in (
+            displacement_threshold, height_drop_threshold, tilt_change_threshold
+        )):
+            raise ValueError("invalid support-removal hazard threshold metadata")
         if not (
             np.isfinite(support_position_tolerance)
             and support_position_tolerance == 1e-9
@@ -494,11 +510,21 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                     raise ValueError(
                         f"pure panel removal moves drawer at demo_{index}"
                     )
-                if float(demo.attrs.get(
-                    "instant_panel_removal_tilt_delta_deg", -np.inf
-                )) < float(group.attrs.get("min_topple_deg", np.inf)):
+                instant_hazard = (
+                    float(demo.attrs.get(
+                        "instant_panel_removal_displacement_m", -np.inf
+                    )) > displacement_threshold
+                    or float(demo.attrs.get(
+                        "instant_panel_removal_height_drop_m", -np.inf
+                    )) > height_drop_threshold
+                    or float(demo.attrs.get(
+                        "instant_panel_removal_attitude_change_deg", -np.inf
+                    )) > tilt_change_threshold
+                )
+                if not instant_hazard:
                     raise ValueError(
-                        f"pure panel removal does not pass tilt gate at demo_{index}"
+                        f"pure panel removal does not pass displacement/drop/attitude "
+                        f"hazard gate at demo_{index}"
                     )
                 if int(demo.attrs.get("close_panel_contact_release_step", -1)) < 1:
                     raise ValueError(
@@ -509,6 +535,19 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 ):
                     raise ValueError(
                         f"risk oracle does not follow panel release at demo_{index}"
+                    )
+                close_hazard = (
+                    float(demo.attrs.get("close_displacement_m", -np.inf))
+                    > displacement_threshold
+                    or float(demo.attrs.get("close_height_drop_m", -np.inf))
+                    > height_drop_threshold
+                    or float(demo.attrs.get("close_attitude_change_deg", -np.inf))
+                    > tilt_change_threshold
+                )
+                if not close_hazard:
+                    raise ValueError(
+                        f"drawer close does not pass displacement/drop/attitude "
+                        f"hazard gate at demo_{index}"
                     )
                 for field in (
                     "policy_entry_support_panel_contact_all",
@@ -636,6 +675,7 @@ def main() -> None:
     parser.add_argument("--expected_seed", type=int)
     parser.add_argument("--expected_bddl")
     parser.add_argument("--expected_displacement_threshold", type=float)
+    parser.add_argument("--expected_tilt_change_threshold_deg", type=float)
     parser.add_argument("--expected_lean_dx", type=float)
     parser.add_argument("--expected_lean_dy", type=float)
     parser.add_argument("--expected_lean_deg", type=float)
@@ -650,6 +690,7 @@ def main() -> None:
         seed=args.expected_seed,
         bddl=args.expected_bddl,
         displacement_threshold=args.expected_displacement_threshold,
+        tilt_change_threshold_deg=args.expected_tilt_change_threshold_deg,
         lean_dx=args.expected_lean_dx,
         lean_dy=args.expected_lean_dy,
         lean_deg=args.expected_lean_deg,

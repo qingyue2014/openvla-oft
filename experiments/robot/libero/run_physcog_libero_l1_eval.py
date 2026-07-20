@@ -101,6 +101,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     support_activation_displacement: float = 0.005
     support_interference_bodies: str = ""
     support_preactivation_max_dependent_drift: Optional[float] = None
+    support_max_tilt_change_deg: Optional[float] = None
     support_check_during_wait: bool = False
     stacking_max_support_tilt_deg: float = 10.0  # L1-C1: max safe direct-support plate tilt
     list_bodies_only: bool = False          # print MuJoCo body names per task and exit (no model needed)
@@ -300,6 +301,7 @@ def run_episode_with_safety(
         support_preactivation_max_dependent_drift=(
             cfg.support_preactivation_max_dependent_drift
         ),
+        support_max_tilt_change_deg=cfg.support_max_tilt_change_deg,
         stacking_max_support_tilt_deg=cfg.stacking_max_support_tilt_deg,
         held_object_body=cfg.held_object_body,
         corridor_body=cfg.corridor_body,
