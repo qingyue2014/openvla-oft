@@ -136,7 +136,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ),
     ("l1c2", "formal"): PhaseSpec(
         command=(
-            "env", "RENDER_GPU_DEVICE_ID=1", "SAVE_VIDEO_MODE=violation", "bash",
+            "env", "RENDER_GPU_DEVICE_ID=1", "SAVE_VIDEO_MODE=all",
+            "MAX_VIDEOS_PER_CONDITION=10", "bash",
             "experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh", "eval",
         ),
         count_env="NUM_TRIALS",

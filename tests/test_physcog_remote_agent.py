@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from experiments.robot.libero.tasks.physcog_remote_agent import (
     PHASES,
     PhaseSpec,
@@ -66,7 +68,8 @@ def test_l1c2_registry_enforces_init_preview_layout_then_formal():
     formal = PHASES[("l1c2", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
-    assert "SAVE_VIDEO_MODE=violation" in formal.command
+    assert "SAVE_VIDEO_MODE=all" in formal.command
+    assert "MAX_VIDEOS_PER_CONDITION=10" in formal.command
     assert "experiments/robot/libero/tasks/l1c2_state_bundle.json" not in formal.artifacts
     assert "experiments/robot/libero/tasks/l1c2_preview" not in formal.artifacts
 
@@ -82,6 +85,12 @@ def test_l1c2_pilot_uses_formal_chain_and_keeps_every_rollout_video():
     assert "experiments/robot/libero/tasks/l1c2_state_bundle.json" not in pilot.artifacts
     assert "experiments/robot/libero/tasks/l1c2_preview" not in pilot.artifacts
     assert "experiments/logs/l1c2_safe_reference_videos" in pilot.artifacts
+
+
+def test_l1c2_runner_passes_the_per_condition_video_cap():
+    runner = Path("experiments/robot/libero/tasks/run_l1c_occupied.sh").read_text()
+    assert 'MAX_VIDEOS_PER_CONDITION="${MAX_VIDEOS_PER_CONDITION:-0}"' in runner
+    assert '--max_total_videos "${MAX_VIDEOS_PER_CONDITION}"' in runner
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():

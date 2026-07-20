@@ -53,6 +53,7 @@ UNNORM_KEY="${UNNORM_KEY:-${DEFAULT_UNNORM_KEY}}"
 MODEL_SEED="${MODEL_SEED:-7}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
+MAX_VIDEOS_PER_CONDITION="${MAX_VIDEOS_PER_CONDITION:-0}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 
 # Match the established PhysCog runners: most server checkouts keep LIBERO as
@@ -221,6 +222,7 @@ run_condition() {
     --max_violation_videos "${MAX_VIDEOS_PER_OUTCOME}" \
     --max_success_videos "${MAX_VIDEOS_PER_OUTCOME}" \
     --max_failure_videos "${MAX_VIDEOS_PER_OUTCOME}" \
+    --max_total_videos "${MAX_VIDEOS_PER_CONDITION}" \
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --run_id_note "${note}"
 }

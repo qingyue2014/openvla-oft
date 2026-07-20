@@ -109,6 +109,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     max_violation_videos: int = 10          # max violation videos per task (0 = unlimited)
     max_success_videos: int = 10            # max safe-success videos per task (0 = unlimited)
     max_failure_videos: int = 10            # max task-failure (no violation) videos per task (0 = unlimited)
+    max_total_videos: int = 0               # max primary-camera videos per task/condition (0 = unlimited)
     bddl_file: Optional[str] = None        # L1-B-2: path to a custom BDDL file; bypasses task_suite lookup
     retraction_intro_timing: str = "after_grasp"  # L1-B-4: before_grasp | during_grasp | after_grasp
     retraction_bystander_xyz: Optional[str] = None # L1-B-4: "x,y" or "x,y,z" insertion pose
@@ -773,6 +774,7 @@ def run_task_with_safety(
     task_episodes = task_successes = task_violations = task_safe_successes = 0
     task_model_collapses = task_valid_executions = task_valid_violations = 0
     task_violation_videos = task_success_videos = task_failure_videos = 0
+    task_total_videos = 0
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
         log_message(f"\nTask: {task_description}", log_file)
         if policy_task_description != task_description:
@@ -840,7 +842,16 @@ def run_task_with_safety(
         save_as_success = cfg.save_video_mode == "all" and safe_success
         save_as_failure = cfg.save_video_mode == "all" and task_failed
 
-        if save_as_violation or save_as_success or save_as_failure or cfg.save_video_mode == "all":
+        under_total_video_cap = (
+            cfg.max_total_videos == 0
+            or task_total_videos < cfg.max_total_videos
+        )
+        if under_total_video_cap and (
+            save_as_violation
+            or save_as_success
+            or save_as_failure
+            or cfg.save_video_mode == "all"
+        ):
             save_rollout_video(
                 replay_images,
                 totals["episodes"],
@@ -864,6 +875,7 @@ def run_task_with_safety(
                 task_success_videos += 1
             else:
                 task_failure_videos += 1
+            task_total_videos += 1
 
         _save_episode_trajectory(
             cfg, diagnostics, rollout_dir, task_id, episode_idx,
@@ -1109,6 +1121,7 @@ def _run_bddl_task_with_safety(
     task_episodes = task_successes = task_violations = task_safe_successes = 0
     task_model_collapses = task_valid_executions = task_valid_violations = 0
     task_violation_videos = task_success_videos = task_failure_videos = 0
+    task_total_videos = 0
 
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
         log_message(f"\nTask: {task_description}", log_file)
@@ -1144,8 +1157,18 @@ def _run_bddl_task_with_safety(
         task_failed = not success and not violated
         vcap, scap, fcap = cfg.max_violation_videos, cfg.max_success_videos, cfg.max_failure_videos
 
-        if (cfg.save_video_mode == "violation" and violated and (vcap == 0 or task_violation_videos < vcap)) or \
-           cfg.save_video_mode == "all":
+        under_total_video_cap = (
+            cfg.max_total_videos == 0
+            or task_total_videos < cfg.max_total_videos
+        )
+        if under_total_video_cap and (
+            (
+                cfg.save_video_mode == "violation"
+                and violated
+                and (vcap == 0 or task_violation_videos < vcap)
+            )
+            or cfg.save_video_mode == "all"
+        ):
             save_rollout_video(
                 replay_images, totals["episodes"], success=safe_success,
                 task_description=f"safety={not violated} {task_description}",
@@ -1163,6 +1186,7 @@ def _run_bddl_task_with_safety(
                 task_success_videos += 1
             else:
                 task_failure_videos += 1
+            task_total_videos += 1
 
         _save_episode_trajectory(
             cfg, diagnostics, rollout_dir, "bddl", episode_idx,

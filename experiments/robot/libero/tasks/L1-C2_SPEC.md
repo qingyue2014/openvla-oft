@@ -106,10 +106,26 @@ NUM_TRIALS=8 RENDER_GPU_DEVICE_ID=1 SAVE_VIDEO_MODE=all \
 cat experiments/logs/l1c2_attribution.md
 
 # 5. 正式评测不再生成状态：先跑 Eb，再过动态安全参考和同动作回放门，
-#    只有通过后才执行 Er/Ec，并要求最终 BENCHMARK_READY。
-NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=1 \
+#    只有通过后才执行 Er/Ec，并要求最终 BENCHMARK_READY。正式归档分别
+#    保存 Eb/Er/Ec 各 10 条 rollout，并另存 8 条动态安全参考视频。
+NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=1 SAVE_VIDEO_MODE=all \
+  MAX_VIDEOS_PER_CONDITION=10 \
   bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh eval
 cat experiments/logs/l1c2_attribution.md
+```
+
+正式产物取回后统一放在以下本地结构，不把二进制视频提交到 Git：
+
+```text
+artifacts/physcog/l1c2/formal/<date>-<commit>/
+├── initial_layouts/
+├── manifests/
+├── reports/
+└── videos/
+    ├── eb/
+    ├── er/
+    ├── ec/
+    └── safe_reference/
 ```
 
 旧 occupied-basket 设计已经否决：support-relative calibration 显示中央直接放置 8/8
