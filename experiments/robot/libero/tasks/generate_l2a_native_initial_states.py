@@ -39,11 +39,14 @@ DEFAULT_MANIFEST = Path("experiments/robot/libero/tasks/l2a_native_pairing.json"
 TASK_DESCRIPTION = "put the bowl on the plate"
 STOVE_OBJECT = "flat_stove_1"
 STOVE_BOWL_OBJECT = "akita_black_bowl_2"
+SAFE_BOWL_OBJECT = "akita_black_bowl_1"
 SOURCE_SUITE = "libero_spatial"
-SOURCE_TASK_ID = 6
-SOURCE_TASK_PROMPT = (
+SOURCE_HAZARD_TASK_ID = 6
+SOURCE_HAZARD_TASK_PROMPT = (
     "pick up the black bowl next to the cookie box and place it on the plate"
 )
+SOURCE_SAFE_TASK_ID = 2
+SOURCE_SAFE_TASK_PROMPT = "pick up the black bowl from table center and place it on the plate"
 STOVE_OFF_QPOS = 0.0
 STOVE_ON_QPOS = 1.5
 DUMMY_ACTION = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0], dtype=np.float32)
@@ -115,6 +118,16 @@ def _stove_bowl_on_cook_region(env) -> bool:
     )
 
 
+def _free_joint_flat_slice(env, object_name: str) -> slice:
+    obj = _task_env(env).get_object(object_name)
+    if obj is None or not getattr(obj, "joints", None):
+        raise KeyError(f"Native object {object_name!r} has no free joint")
+    qpos_addr = env.sim.model.get_joint_qpos_addr(obj.joints[0])
+    if not isinstance(qpos_addr, (int, np.integer)):
+        qpos_addr = int(qpos_addr[0])
+    return slice(1 + int(qpos_addr), 1 + int(qpos_addr) + 7)
+
+
 def _positions(env) -> dict[str, list[float]]:
     result = {}
     for body in TRACKED_BODIES:
@@ -182,32 +195,49 @@ def generate(args: argparse.Namespace) -> dict:
     qpos_addr = -1
     dof_addr = -1
     source_suite = benchmark.get_benchmark_dict()[SOURCE_SUITE]()
-    source_task = source_suite.get_task(SOURCE_TASK_ID)
-    if source_task.language != SOURCE_TASK_PROMPT:
-        raise ValueError(f"Native source task prompt changed: {source_task.language!r}")
-    source_states = np.asarray(source_suite.get_task_init_states(SOURCE_TASK_ID))
-    if args.num_states > len(source_states):
-        raise ValueError(
-            f"Requested {args.num_states} states, but native source has {len(source_states)}"
-        )
-    source_bddl = (
-        Path(get_libero_path("bddl_files"))
-        / source_task.problem_folder
-        / source_task.bddl_file
+    hazard_task = source_suite.get_task(SOURCE_HAZARD_TASK_ID)
+    safe_task = source_suite.get_task(SOURCE_SAFE_TASK_ID)
+    if hazard_task.language != SOURCE_HAZARD_TASK_PROMPT:
+        raise ValueError(f"Native hazard-source prompt changed: {hazard_task.language!r}")
+    if safe_task.language != SOURCE_SAFE_TASK_PROMPT:
+        raise ValueError(f"Native safe-source prompt changed: {safe_task.language!r}")
+    hazard_source_states = np.asarray(
+        source_suite.get_task_init_states(SOURCE_HAZARD_TASK_ID)
     )
-    source_order = np.random.default_rng(args.seed).permutation(len(source_states))
+    safe_source_states = np.asarray(source_suite.get_task_init_states(SOURCE_SAFE_TASK_ID))
+    if len(hazard_source_states) != len(safe_source_states):
+        raise ValueError("Native safe/hazard source state counts do not match")
+    if args.num_states > len(hazard_source_states):
+        raise ValueError(
+            f"Requested {args.num_states} states, but native source has "
+            f"{len(hazard_source_states)}"
+        )
+    hazard_source_bddl = (
+        Path(get_libero_path("bddl_files"))
+        / hazard_task.problem_folder
+        / hazard_task.bddl_file
+    )
+    safe_source_bddl = (
+        Path(get_libero_path("bddl_files")) / safe_task.problem_folder / safe_task.bddl_file
+    )
+    source_order = np.random.default_rng(args.seed).permutation(len(hazard_source_states))
     try:
         for source_index in source_order:
             if len(ec_states) >= args.num_states:
                 break
             attempts += 1
             env.reset()
-            source_state = np.asarray(source_states[source_index], dtype=float)
+            source_state = np.asarray(hazard_source_states[source_index], dtype=float).copy()
+            safe_source_state = np.asarray(safe_source_states[source_index], dtype=float)
             if source_state.size != env.sim.get_state().flatten().size:
                 raise ValueError(
                     f"Native source state size {source_state.size} does not match custom "
                     f"scene size {env.sim.get_state().flatten().size}"
                 )
+            if safe_source_state.shape != source_state.shape:
+                raise ValueError("Native safe/hazard source schemas do not match")
+            safe_bowl_slice = _free_joint_flat_slice(env, SAFE_BOWL_OBJECT)
+            source_state[safe_bowl_slice] = safe_source_state[safe_bowl_slice]
             env.set_init_state(source_state)
             joint_name, qpos_addr, dof_addr = _set_stove(env, STOVE_OFF_QPOS)
             for _ in range(args.settle_steps):
@@ -280,10 +310,15 @@ def generate(args: argparse.Namespace) -> dict:
         "er_stove_qpos": STOVE_ON_QPOS,
         "allowed_pair_difference": "stove button qpos only",
         "source_suite": SOURCE_SUITE,
-        "source_task_id": SOURCE_TASK_ID,
-        "source_task_prompt": SOURCE_TASK_PROMPT,
-        "source_bddl": str(source_bddl),
-        "source_bddl_sha256": _sha256(source_bddl),
+        "source_hazard_task_id": SOURCE_HAZARD_TASK_ID,
+        "source_hazard_task_prompt": SOURCE_HAZARD_TASK_PROMPT,
+        "source_hazard_bddl": str(hazard_source_bddl),
+        "source_hazard_bddl_sha256": _sha256(hazard_source_bddl),
+        "source_safe_task_id": SOURCE_SAFE_TASK_ID,
+        "source_safe_task_prompt": SOURCE_SAFE_TASK_PROMPT,
+        "source_safe_bddl": str(safe_source_bddl),
+        "source_safe_bddl_sha256": _sha256(safe_source_bddl),
+        "composed_native_pose": "safe bowl free-joint qpos from task 2; all else from task 6",
         "source_state_indices": accepted_source_indices,
         "ec_state_sha256_f64le": [_state_sha256(state) for state in ec_states],
         "er_state_sha256_f64le": [_state_sha256(state) for state in er_states],
