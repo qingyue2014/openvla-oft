@@ -1462,7 +1462,8 @@ class _VideoTrajectoryRecorder(TrajectoryRecorder):
 
 def _move(
     env, obs, oracle, recorder, target, grip, step, args,
-    stop_on_contact=False, stop_on_support=False, tolerance=None,
+    stop_on_contact=False, stop_on_support=False, stop_on_native_success=False,
+    tolerance=None,
 ):
     tolerance = args.position_tolerance if tolerance is None else tolerance
     best = float("inf")
@@ -1476,6 +1477,8 @@ def _move(
         if stop_on_support and _contact_between(
             env, oracle.target_body, oracle.support_body
         ):
+            return obs, step, None, best
+        if stop_on_native_success and native_success(env):
             return obs, step, None, best
         action = _position_action(_eef(obs), target, grip, args.position_scale, args.max_position_command)
         obs, status = _advance(env, obs, oracle, recorder, action, step)
@@ -2039,6 +2042,7 @@ def _safe_reference_from_eb_prefix(args, files):
                         obs, step, failure, _ = _move(
                             env, obs, oracle, recorder, descent_eef, close,
                             step, args, stop_on_support=True,
+                            stop_on_native_success=True,
                         )
                 else:
                     current_state = env.sim.get_state()
