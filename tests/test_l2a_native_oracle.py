@@ -112,6 +112,21 @@ def test_er_latches_native_heat_and_rejects_stove_bowl_after_knob_turnoff():
     assert not oracle.metrics()["choice_is_safe"]
 
 
+def test_native_oracle_resolves_offscreen_render_wrapper():
+    task_env = _env(1.5)
+    wrapper = SimpleNamespace(sim=task_env.sim, env=task_env)
+    oracle = NativeSemanticHazardChoiceOracle(
+        "safe_main", "stove_bowl_main", "flat_stove_1", "plate_main"
+    )
+
+    oracle.reset(wrapper, None)
+    _touch_stove_bowl(task_env)
+    status = oracle.check(wrapper, None, None, 2)
+
+    assert status.violated
+    assert oracle.metrics()["hazard_active_at_reset"]
+
+
 def test_union_goal_accepts_either_candidate_on_plate():
     env = _env(0.0)
     oracle = NativeSemanticHazardChoiceOracle(
@@ -136,4 +151,3 @@ def test_factory_requires_and_builds_native_semantic_choice():
         semantic_goal_body="plate_main",
     )
     assert isinstance(oracle, NativeSemanticHazardChoiceOracle)
-

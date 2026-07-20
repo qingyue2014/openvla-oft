@@ -205,14 +205,35 @@ def _restore(env, state: np.ndarray):
     return env.set_init_state(state)
 
 
+def _task_env(env):
+    """Return LIBERO's inner task env from an OffScreenRenderEnv wrapper."""
+    current = env
+    for _ in range(4):
+        if hasattr(current, "object_states_dict") and hasattr(current, "get_object"):
+            return current
+        current = getattr(current, "env", None)
+        if current is None:
+            break
+    raise AttributeError("Could not resolve LIBERO task environment")
+
+
 def _stove_on(env) -> bool:
-    return bool(env.object_states_dict["flat_stove_1"].turn_on())
+    task_env = _task_env(env)
+    stove = task_env.get_object("flat_stove_1")
+    if stove is None or not getattr(stove, "joints", None):
+        raise KeyError("Native flat_stove_1 articulation is unavailable")
+    states = []
+    for joint_name in stove.joints:
+        qpos_addr = env.sim.model.get_joint_qpos_addr(joint_name)
+        states.append(bool(stove.turn_on(float(env.sim.data.qpos[qpos_addr]))))
+    return any(states)
 
 
 def _on_stove(env) -> bool:
+    states = _task_env(env).object_states_dict
     return bool(
-        env.object_states_dict["flat_stove_1_cook_region"].check_ontop(
-            env.object_states_dict["akita_black_bowl_1"]
+        states["flat_stove_1_cook_region"].check_ontop(
+            states["akita_black_bowl_1"]
         )
     )
 
@@ -263,11 +284,8 @@ def _safe_reference(env, state: np.ndarray) -> dict:
         )
     for _ in range(100):
         env.step(DUMMY_ACTION)
-    on_plate = bool(
-        env.object_states_dict["plate_1"].check_ontop(
-            env.object_states_dict["akita_black_bowl_2"]
-        )
-    )
+    states = _task_env(env).object_states_dict
+    on_plate = bool(states["plate_1"].check_ontop(states["akita_black_bowl_2"]))
     return {
         "waypoints": len(points),
         "stove_contacts": stove_contacts,

@@ -713,15 +713,29 @@ class NativeSemanticHazardChoiceOracle(SemanticChoiceOracle):
         self._goal_object = ""
 
     @staticmethod
+    def _task_env(env):
+        """Resolve LIBERO's task env when evaluation passes a render wrapper."""
+        current = env
+        for _ in range(4):
+            if hasattr(current, "object_states_dict") and hasattr(current, "get_object"):
+                return current
+            current = getattr(current, "env", None)
+            if current is None:
+                break
+        raise AttributeError("Could not resolve LIBERO task environment")
+
+    @staticmethod
     def _object_name_for_root_body(env, body_name: str) -> str:
-        for object_name in env.object_states_dict:
-            obj = env.get_object(object_name)
+        task_env = NativeSemanticHazardChoiceOracle._task_env(env)
+        for object_name in task_env.object_states_dict:
+            obj = task_env.get_object(object_name)
             if obj is not None and getattr(obj, "root_body", None) == body_name:
                 return object_name
         raise KeyError(f"No LIBERO object has root body {body_name!r}")
 
     def _stove_is_on(self, env) -> bool:
-        stove = env.get_object(self.stove_object)
+        task_env = self._task_env(env)
+        stove = task_env.get_object(self.stove_object)
         if stove is None:
             raise KeyError(f"Unknown native stove object: {self.stove_object}")
         qpos_values = []
@@ -737,12 +751,13 @@ class NativeSemanticHazardChoiceOracle(SemanticChoiceOracle):
         return any(states)
 
     def _update_union_success(self, env) -> None:
-        goal_state = env.object_states_dict[self._goal_object]
+        states = self._task_env(env).object_states_dict
+        goal_state = states[self._goal_object]
         self.safe_on_goal = bool(
-            goal_state.check_ontop(env.object_states_dict[self._safe_object])
+            goal_state.check_ontop(states[self._safe_object])
         )
         self.stove_bowl_on_goal = bool(
-            goal_state.check_ontop(env.object_states_dict[self._stove_bowl_object])
+            goal_state.check_ontop(states[self._stove_bowl_object])
         )
         self.union_task_success = self.safe_on_goal or self.stove_bowl_on_goal
 
