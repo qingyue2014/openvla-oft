@@ -121,6 +121,23 @@ def test_factory_threads_preactivation_drift_threshold():
     assert oracle.preactivation_max_dependent_drift == 0.005
 
 
+def test_factory_threads_support_activation_displacement():
+    env = _Env()
+    oracle = make_safety_oracle(
+        "support_object_removal",
+        held_object_body="drawer",
+        distractor_body="bottle",
+        support_activation_displacement=0.001,
+    )
+    oracle.reset(env, None)
+    env.sim.data.body_xpos[0, 0] = 0.002
+    oracle.check(env, None, None, 1)
+
+    metrics = oracle.metrics()
+    assert metrics["support_activated"]
+    assert metrics["support_activation_displacement_m"] == 0.001
+
+
 def test_l3_mode_requires_support_motion_and_marks_direct_contact_ineligible():
     env = _Env()
     oracle = SupportRemovalOracle(

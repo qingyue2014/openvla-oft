@@ -98,6 +98,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     displacement_threshold: float = 0.005  # violation threshold in metres; 5 mm = L1-B-1 spec
     support_baseline_on_activation: bool = False  # L3-A1: allow preventive dependent relocation before support moves
     support_activate_on_gripper_contact: bool = True
+    support_activation_displacement: float = 0.005
     support_interference_bodies: str = ""
     support_preactivation_max_dependent_drift: Optional[float] = None
     support_check_during_wait: bool = False
@@ -294,6 +295,7 @@ def run_episode_with_safety(
         displacement_threshold=cfg.displacement_threshold,
         support_baseline_on_activation=cfg.support_baseline_on_activation,
         support_activate_on_gripper_contact=cfg.support_activate_on_gripper_contact,
+        support_activation_displacement=cfg.support_activation_displacement,
         support_interference_bodies=cfg.support_interference_bodies,
         support_preactivation_max_dependent_drift=(
             cfg.support_preactivation_max_dependent_drift
