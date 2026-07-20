@@ -34,7 +34,6 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
     _body_rotation,
     _contact_geom_names,
     _directed_tilt_quat,
-    _find_free_joint_vadr,
     _find_joint_qadr,
 )
 from experiments.robot.libero.tasks.sweep_l3a1_corner_geometry import (
@@ -104,8 +103,13 @@ def main() -> int:
     }
     clearance_component = set(component_roles)
     bottle_qadr = _find_free_joint_qadr(env.sim, BOTTLE_BODY)
-    bottle_vadr = _find_free_joint_vadr(env.sim, BOTTLE_BODY)
     drawer_qadr = _find_joint_qadr(env.sim, *DRAWER_JOINT_CANDIDATES)
+    drawer_joint_ids = np.flatnonzero(env.sim.model.jnt_qposadr == drawer_qadr)
+    if len(drawer_joint_ids) != 1:
+        raise RuntimeError("cannot resolve drawer dof")
+    drawer_dofadr = int(
+        env.sim.model.jnt_dofadr[int(drawer_joint_ids[0])]
+    )
     support_pos = _body_pos(env, support_body)
     native_z = float(env.sim.data.qpos[bottle_qadr + 2])
     env.sim.data.qpos[bottle_qadr:bottle_qadr + 2] = (
@@ -157,18 +161,11 @@ def main() -> int:
     env.sim.set_state_from_flattened(candidate_state)
     env.sim.forward()
     start_qpos = float(env.sim.data.qpos[drawer_qadr])
-    release_step = -1
     first_oracle_step = -1
-    recontact_after_release = False
-    release_velocity_zeroed = False
-    max_pre_release_displacement = 0.0
-    max_pre_release_attitude = 0.0
     timeline = []
 
     def record(step: int, phase: str) -> None:
-        nonlocal release_step, first_oracle_step, recontact_after_release
-        nonlocal release_velocity_zeroed
-        nonlocal max_pre_release_displacement, max_pre_release_attitude
+        nonlocal first_oracle_step
         contacts = _contact_geom_names(env, BOTTLE_BODY)
         active_component = sorted(contacts & clearance_component)
         displacement = float(
@@ -178,21 +175,6 @@ def main() -> int:
             initial_pos[2] - _body_pos(env, BOTTLE_BODY)[2]
         )
         attitude = _axis_change_deg(env, BOTTLE_BODY, initial_axis)
-        if release_step < 0:
-            max_pre_release_displacement = max(
-                max_pre_release_displacement, displacement
-            )
-            max_pre_release_attitude = max(
-                max_pre_release_attitude, attitude
-            )
-            if not active_component:
-                release_step = step
-                if bottle_vadr >= 0:
-                    env.sim.data.qvel[bottle_vadr:bottle_vadr + 6] = 0
-                    env.sim.forward()
-                    release_velocity_zeroed = True
-        elif active_component:
-            recontact_after_release = True
         if first_oracle_step < 0 and (
             displacement > L3A1_DISPLACEMENT_THRESHOLD
             or height_drop > HEIGHT_DROP_THRESHOLD_M
@@ -215,19 +197,55 @@ def main() -> int:
         env.sim.data.qpos[drawer_qadr] = (
             start_qpos + frac * (DRAWER_CLOSED_QPOS - start_qpos)
         )
-        env.sim.data.qvel[:] = 0
+        env.sim.data.qvel[drawer_dofadr] = 0
         env.sim.forward()
         env.sim.step()
+        env.sim.data.qpos[drawer_qadr] = (
+            start_qpos + frac * (DRAWER_CLOSED_QPOS - start_qpos)
+        )
+        env.sim.data.qvel[drawer_dofadr] = 0
+        env.sim.forward()
         step += 1
         record(step, "close")
         frames.append(_render_policy_frame(env))
     for _ in range(args.post_frames):
         for _ in range(args.post_steps_per_frame):
+            env.sim.data.qpos[drawer_qadr] = DRAWER_CLOSED_QPOS
+            env.sim.data.qvel[drawer_dofadr] = 0
             env.sim.step()
+            env.sim.data.qpos[drawer_qadr] = DRAWER_CLOSED_QPOS
+            env.sim.data.qvel[drawer_dofadr] = 0
+            env.sim.forward()
             step += 1
             record(step, "post_release")
         frames.append(_render_policy_frame(env))
 
+    component_contact_steps = [
+        row["step"] for row in timeline if row["component_contacts"]
+    ]
+    release_step = (
+        max(component_contact_steps) + 1
+        if component_contact_steps
+        and max(component_contact_steps) < timeline[-1]["step"]
+        else -1
+    )
+    recontact_after_release = (
+        release_step >= 1
+        and any(
+            row["step"] >= release_step and row["component_contacts"]
+            for row in timeline
+        )
+    )
+    pre_release_rows = [
+        row for row in timeline
+        if release_step < 0 or row["step"] <= release_step
+    ]
+    max_pre_release_displacement = max(
+        (row["displacement_m"] for row in pre_release_rows), default=0.0
+    )
+    max_pre_release_attitude = max(
+        (row["attitude_change_deg"] for row in pre_release_rows), default=0.0
+    )
     video_path = out_dir / "native_edge_policy_agentview.mp4"
     imageio.mimsave(
         video_path,
@@ -248,7 +266,6 @@ def main() -> int:
             if (
                 release_step >= 1
                 and first_oracle_step > release_step
-                and release_velocity_zeroed
                 and not recontact_after_release
             )
             else "FAIL_L3A1_EDGE_PREVIEW"
@@ -269,7 +286,7 @@ def main() -> int:
         "initial_contact_rows": initial_details,
         "release_step": release_step,
         "first_oracle_step": first_oracle_step,
-        "release_velocity_zeroed": release_velocity_zeroed,
+        "factual_close_modified_bottle_velocity": False,
         "recontact_after_release": recontact_after_release,
         "max_pre_release_displacement_m": max_pre_release_displacement,
         "max_pre_release_attitude_change_deg": max_pre_release_attitude,
