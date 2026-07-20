@@ -351,7 +351,7 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             "oracle_tilt_change_threshold_deg": 5.0,
             "lean_dx": -0.04, "lean_dy": -0.18, "lean_dz": 0.0,
             "lean_deg": -20.0, "lean_axis": "x", "lean_direction_deg": 0.0,
-            "stable_x_offset": -0.10 if stable else 0.0,
+            "stable_x_offset": 0.00,
         }
         for name, value in attrs.items():
             group.attrs[name] = value
@@ -722,7 +722,7 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert 'LEAN_DY="${LEAN_DY:--0.060125}"' in text
     assert 'LEAN_DEG="${LEAN_DEG:--40.0}"' in text
     assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-105.0}"' in text
-    assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:--0.10}"' in text
+    assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:-0.00}"' in text
     assert '--expected_topology_id "${TOPOLOGY_ID}"' in text
     assert '--lean_direction_deg "${LEAN_DIRECTION_DEG}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
