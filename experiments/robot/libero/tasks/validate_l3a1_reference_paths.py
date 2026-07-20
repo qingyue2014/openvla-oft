@@ -53,6 +53,21 @@ def _close_with_oracle(
     start_step=RUNTIME_WAIT_STEPS,
 ):
     """Close the drawer while checking the same oracle used by evaluation."""
+    qpos_adrs = np.asarray(env.sim.model.jnt_qposadr)
+    drawer_joint_ids = np.flatnonzero(qpos_adrs == drawer_qadr)
+    if drawer_joint_ids.size != 1:
+        raise RuntimeError(f"cannot resolve drawer dof from qpos address {drawer_qadr}")
+    drawer_dofadr = int(env.sim.model.jnt_dofadr[int(drawer_joint_ids[0])])
+    carried_dofadr = None
+    if carried_qadr is not None:
+        carried_joint_ids = np.flatnonzero(qpos_adrs == carried_qadr)
+        if carried_joint_ids.size != 1:
+            raise RuntimeError(
+                f"cannot resolve carried-object dof from qpos address {carried_qadr}"
+            )
+        carried_dofadr = int(
+            env.sim.model.jnt_dofadr[int(carried_joint_ids[0])]
+        )
     before = _body_pos(env, BOTTLE_BODY).copy()
     from_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     start_qpos = float(env.sim.data.qpos[drawer_qadr])
@@ -61,7 +76,7 @@ def _close_with_oracle(
     for index in range(close_steps):
         fraction = (index + 1) / close_steps
         env.sim.data.qpos[drawer_qadr] = start_qpos + fraction * (DRAWER_CLOSED_QPOS - start_qpos)
-        env.sim.data.qvel[:] = 0
+        env.sim.data.qvel[drawer_dofadr] = 0
         env.sim.forward()
         if carried_qadr is not None:
             site_pos = env.sim.data.site_xpos[carried_site_id].copy()
@@ -69,7 +84,7 @@ def _close_with_oracle(
             # strictly inside the moving contain-site while closing rather
             # than relying on friction from a teleported drawer joint.
             env.sim.data.qpos[carried_qadr:carried_qadr + 3] = site_pos
-            env.sim.data.qvel[:] = 0
+            env.sim.data.qvel[carried_dofadr:carried_dofadr + 6] = 0
             env.sim.forward()
         env.sim.step()
         status = oracle.check(env, None, None, step)
@@ -79,13 +94,13 @@ def _close_with_oracle(
         # keep applying that command during settling instead of allowing the
         # unactuated slide joint to spring back across the strict Close range.
         env.sim.data.qpos[drawer_qadr] = DRAWER_CLOSED_QPOS
-        env.sim.data.qvel[:] = 0
+        env.sim.data.qvel[drawer_dofadr] = 0
         env.sim.forward()
         if carried_qadr is not None:
             env.sim.data.qpos[carried_qadr:carried_qadr + 3] = (
                 env.sim.data.site_xpos[carried_site_id]
             )
-            env.sim.data.qvel[:] = 0
+            env.sim.data.qvel[carried_dofadr:carried_dofadr + 6] = 0
             env.sim.forward()
         env.sim.step()
         status = oracle.check(env, None, None, step)
