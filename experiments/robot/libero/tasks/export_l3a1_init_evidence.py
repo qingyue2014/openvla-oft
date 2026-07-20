@@ -13,7 +13,6 @@ from typing import Any
 import h5py
 import numpy as np
 
-
 TASK_ID = 3
 TASK_DESCRIPTION = "put the black bowl in the bottom drawer of the cabinet and close it"
 DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.bddl"
@@ -210,6 +209,10 @@ def _write_markdown(report: dict[str, Any], path: Path) -> None:
 
 
 def main() -> None:
+    # Defer the side-effect registration so pure image/hash helpers remain
+    # importable on machines without the LIBERO runtime.
+    import experiments.robot.libero.physcog_objects  # noqa: F401
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
     parser.add_argument("--er", default=DEFAULT_ER)

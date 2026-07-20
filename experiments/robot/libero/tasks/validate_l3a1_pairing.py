@@ -13,7 +13,9 @@ PAIRING_METHOD = "serialized_er_state_bottle_transform"
 BINDING_FIELDS = (
     "l3a1_variant", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
     "lean_deg", "lean_axis", "lean_direction_deg", "policy_entry_probe_actions",
-    "bddl_sha256", "fixture_layout_contract",
+    "bddl_sha256", "fixture_layout_contract", "native_cabinet_xml_sha256",
+    "support_wing_contract_json", "support_wing_contract_sha256",
+    "fixture_python_sha256",
     "support_restore_position_tolerance_m", "support_restore_angle_tolerance_deg",
     "controller_neutral_hold_steps",
     "settle_steps", "validation_hold_steps",
@@ -115,9 +117,30 @@ def validate_base_preservation(path: str, task_description: str) -> int:
         base_state_hashes = []
         variant = str(group.attrs.get("l3a1_variant", ""))
         if str(group.attrs.get("fixture_layout_contract", "")) != (
-            "fixed_white_cabinet_native_center"
+            "fixed_physcog_white_cabinet_native_center_with_support_wing"
         ):
             raise ValueError("missing fixed-cabinet fixture layout contract")
+        fixture_python = Path(__file__).resolve().parents[1] / "physcog_objects.py"
+        asset_hashes = {
+            "native_cabinet_xml_sha256": str(
+                group.attrs.get("native_cabinet_xml_sha256", "")
+            ),
+            "support_wing_contract_sha256": str(
+                group.attrs.get("support_wing_contract_sha256", "")
+            ),
+            "fixture_python_sha256": str(
+                group.attrs.get("fixture_python_sha256", "")
+            ),
+        }
+        if any(len(value) != 64 for value in asset_hashes.values()):
+            raise ValueError("missing L3-A1 fixture asset SHA256 metadata")
+        wing_json = str(group.attrs.get("support_wing_contract_json", ""))
+        if hashlib.sha256(wing_json.encode()).hexdigest() != asset_hashes[
+            "support_wing_contract_sha256"
+        ]:
+            raise ValueError("support-wing contract SHA256 mismatch")
+        if _sha256(str(fixture_python)) != asset_hashes["fixture_python_sha256"]:
+            raise ValueError("artifact fixture Python SHA256 does not match current source")
         support_position_tolerance = float(
             group.attrs.get("support_restore_position_tolerance_m", np.nan)
         )
@@ -196,6 +219,8 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 raise ValueError(f"policy entry probe count is not 3 at demo_{index}")
             if str(demo.attrs.get("policy_entry_direct_contacts", "missing")):
                 raise ValueError(f"policy entry has direct contact at demo_{index}")
+            if str(demo.attrs.get("policy_entry_wing_interference", "missing")):
+                raise ValueError(f"policy entry has support-wing interference at demo_{index}")
             support_relative_xyz = np.asarray([
                 demo.attrs.get("policy_entry_support_relative_x_m", np.nan),
                 demo.attrs.get("policy_entry_support_relative_y_m", np.nan),
@@ -243,6 +268,43 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 raise ValueError(
                     f"controller neutral hold has direct contact at demo_{index}"
                 )
+            if str(demo.attrs.get(
+                "controller_neutral_hold_wing_interference", "missing"
+            )):
+                raise ValueError(
+                    f"controller neutral hold has support-wing interference at demo_{index}"
+                )
+            if str(demo.attrs.get("hold_wing_interference", "missing")):
+                raise ValueError(f"open hold has support-wing interference at demo_{index}")
+            support_wing_geom = str(
+                demo.attrs.get("support_wing_collision_geom", "")
+            )
+            contact_geoms = set(filter(None, str(
+                demo.attrs.get("contact_geoms", "")
+            ).split(",")))
+            close_final_geoms = set(filter(None, str(
+                demo.attrs.get("close_final_contact_geoms", "")
+            ).split(",")))
+            if not support_wing_geom.endswith("l3a1_support_wing_collision"):
+                raise ValueError(f"missing exact support-wing geom at demo_{index}")
+            if variant == "risk":
+                if support_wing_geom not in contact_geoms:
+                    raise ValueError(f"risk state misses exact support wing at demo_{index}")
+                for field in (
+                    "policy_entry_support_wing_contact_all",
+                    "controller_neutral_hold_support_wing_contact_all",
+                    "hold_support_wing_contact_all",
+                ):
+                    if not bool(demo.attrs.get(field, False)):
+                        raise ValueError(
+                            f"risk state loses support-wing contact during {field} at demo_{index}"
+                        )
+                if support_wing_geom in close_final_geoms:
+                    raise ValueError(
+                        f"risk state retains wing contact after drawer close at demo_{index}"
+                    )
+            elif support_wing_geom in contact_geoms:
+                raise ValueError(f"stable state touches support wing at demo_{index}")
         if base_state_hashes and len(set(base_state_hashes)) != count:
             raise ValueError("formal artifact reuses duplicate native base reset states")
     return count
@@ -263,6 +325,14 @@ def validate_pairing(er_path: str, ec_path: str, task_description: str) -> list[
             raise ValueError(f"Ec paired_er_states source mismatch: {source!r} != {er_path!r}")
         if ec_group.attrs.get("source_task_key", "") != key:
             raise ValueError("Ec source_task_key metadata mismatch")
+        for field in (
+            "native_cabinet_xml_sha256",
+            "support_wing_contract_json",
+            "support_wing_contract_sha256",
+            "fixture_python_sha256",
+        ):
+            if str(er_group.attrs.get(field, "")) != str(ec_group.attrs.get(field, "")):
+                raise ValueError(f"Er/Ec fixture asset mismatch for {field}")
 
         attempts = []
         for index in range(len(er_group)):

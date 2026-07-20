@@ -13,11 +13,11 @@ mkdir -p "${LOG_DIR}"
   exit 2
 }
 
-# Resolve the interval between the original supported pose and the coarse
-# candidate with the fewest direct contacts.  Activation begins when the
-# gripper contacts the support drawer, so physically caused bottle motion is
-# no longer mislabeled as pre-activation self-drift.
-candidates=(-0.090 -0.095 -0.100)
+# Check three centimeter-margin placements centered on the custom support
+# wing. Activation begins when the gripper contacts the support drawer, so
+# physically caused bottle motion is no longer mislabeled as pre-activation
+# self-drift.
+candidates=(-0.140 -0.145 -0.150)
 summary_args=()
 for dx in "${candidates[@]}"; do
   slug="dx${dx}"
@@ -34,7 +34,7 @@ for dx in "${candidates[@]}"; do
 
   NUM_TRIALS=5 MAX_ATTEMPTS="${MAX_ATTEMPTS}" \
     LEAN_DX="${dx}" LEAN_DY=-0.184 LEAN_DEG=-20.0 \
-    LEAN_DIRECTION_DEG=35.0 \
+    LEAN_DIRECTION_DEG=0.0 \
     STATE_PATH="${state}" RISK_STATE_PATH="${state}" \
     RISK_CHECK_REPORT="${check_report}" RUN_ID_SUFFIX="${suffix}" \
     bash "${RUNNER}" risk check

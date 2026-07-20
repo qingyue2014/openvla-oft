@@ -20,6 +20,7 @@ PAPER_MATRIX = REPO_ROOT / "experiments/robot/libero/tasks/run_paper_matrix.sh"
 SAFE_REFERENCE = REPO_ROOT / "experiments/robot/libero/tasks/validate_l3a1_reference_paths.py"
 GENERATOR = REPO_ROOT / "experiments/robot/libero/tasks/generate_l3a1_drawer_bottle_initial_states.py"
 L3A1_BDDL = REPO_ROOT / "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.bddl"
+FIXTURE_SOURCE = REPO_ROOT / "experiments/robot/libero/physcog_objects.py"
 
 
 def test_l3a1_run_ids_map_to_distinct_formal_conditions():
@@ -28,12 +29,24 @@ def test_l3a1_run_ids_map_to_distinct_formal_conditions():
     )
 
 
+def test_l3a1_bddl_and_fixture_define_aligned_custom_support_wing():
+    bddl = L3A1_BDDL.read_text()
+    fixture = FIXTURE_SOURCE.read_text()
+    assert "white_cabinet_1 - physcog_white_cabinet" in bddl
+    assert 'L3A1_SUPPORT_WING_COLLISION = "l3a1_support_wing_collision"' in fixture
+    assert 'L3A1_SUPPORT_WING_VISUAL = "l3a1_support_wing_visual"' in fixture
+    assert '"pos": "-0.143 -0.07524 0.04476"' in fixture
+    assert '"size": "0.00271 0.03427 0.03700"' in fixture
+    assert "**L3A1_SUPPORT_WING_COMMON" in fixture
+    assert "l3a1_cabinet_asset_contract" in fixture
+
+
 def test_l3a1_safe_reference_uses_public_success_api():
     text = SAFE_REFERENCE.read_text()
     assert "env.check_success()" in text
     assert "env._check_success()" not in text
     assert "and goal_reached" in text
-    assert 'default=-0.10' in text
+    assert 'default=-0.07' in text
     assert "carried_qadr=bowl_qadr" in text
     assert "_, naive_wait = _replay_runtime_wait(env, naive_oracle)" in text
     assert "_, safe_wait = _replay_runtime_wait(env, safe_wait_oracle)" in text
@@ -88,7 +101,18 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
         group.attrs["seed"] = 42
         group.attrs["bddl"] = str(bddl)
         group.attrs["bddl_sha256"] = hashlib.sha256(bddl.read_bytes()).hexdigest()
-        group.attrs["fixture_layout_contract"] = "fixed_white_cabinet_native_center"
+        group.attrs["fixture_layout_contract"] = (
+            "fixed_physcog_white_cabinet_native_center_with_support_wing"
+        )
+        wing_json = "{}"
+        group.attrs["native_cabinet_xml_sha256"] = "a" * 64
+        group.attrs["support_wing_contract_json"] = wing_json
+        group.attrs["support_wing_contract_sha256"] = hashlib.sha256(
+            wing_json.encode()
+        ).hexdigest()
+        group.attrs["fixture_python_sha256"] = hashlib.sha256(
+            FIXTURE_SOURCE.read_bytes()
+        ).hexdigest()
         group.attrs["support_restore_position_tolerance_m"] = 1e-9
         group.attrs["support_restore_angle_tolerance_deg"] = 1e-6
         group.attrs["lean_dx"] = -0.04
@@ -104,7 +128,7 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
         group.attrs["min_topple_deg"] = 10.0
         group.attrs["oracle_displacement_threshold"] = 0.01
         group.attrs["oracle_height_drop_threshold"] = 0.015
-        group.attrs["stable_x_offset"] = -0.10 if source is not None else 0.0
+        group.attrs["stable_x_offset"] = -0.07 if source is not None else 0.0
         if source is not None:
             group.attrs["pairing_method"] = "serialized_er_state_bottle_transform"
             group.attrs["paired_er_states"] = str(source)
@@ -117,6 +141,8 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["policy_entry_displacement_m"] = 0.0
             demo.attrs["policy_entry_probe_count"] = 3
             demo.attrs["policy_entry_direct_contacts"] = ""
+            demo.attrs["policy_entry_wing_interference"] = ""
+            demo.attrs["policy_entry_support_wing_contact_all"] = source is None
             demo.attrs["policy_entry_support_relative_x_m"] = -0.065
             demo.attrs["policy_entry_support_relative_y_m"] = -0.184
             demo.attrs["policy_entry_support_relative_z_m"] = 0.011
@@ -130,6 +156,16 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["controller_neutral_hold_steps"] = 220
             demo.attrs["controller_neutral_hold_max_displacement_m"] = 0.0
             demo.attrs["controller_neutral_hold_direct_contacts"] = ""
+            demo.attrs["controller_neutral_hold_wing_interference"] = ""
+            demo.attrs["controller_neutral_hold_support_wing_contact_all"] = (
+                source is None
+            )
+            demo.attrs["hold_wing_interference"] = ""
+            demo.attrs["hold_support_wing_contact_all"] = source is None
+            support_geom = "white_cabinet_1_l3a1_support_wing_collision"
+            demo.attrs["support_wing_collision_geom"] = support_geom
+            demo.attrs["contact_geoms"] = support_geom if source is None else ""
+            demo.attrs["close_final_contact_geoms"] = ""
             demo.attrs["bottle_qpos_flat_start"] = 3
             demo.attrs["bottle_qvel_flat_start"] = 20
             if source is not None:
@@ -301,11 +337,11 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
     assert "--support_preactivation_max_dependent_drift 0.005" in text
     assert "--support_check_during_wait True" in text
-    assert 'LEAN_DX="${LEAN_DX:--0.095}"' in text
+    assert 'LEAN_DX="${LEAN_DX:--0.145}"' in text
     assert 'LEAN_DY="${LEAN_DY:--0.184}"' in text
-    assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:--0.10}"' in text
+    assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:--0.07}"' in text
     assert 'LEAN_DEG="${LEAN_DEG:--20.0}"' in text
-    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-35.0}"' in text
+    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-0.0}"' in text
     assert '--lean_direction_deg "${LEAN_DIRECTION_DEG}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
     assert 'L3A1_WAIT_STEPS="${L3A1_WAIT_STEPS:-0}"' in text

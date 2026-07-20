@@ -12,6 +12,8 @@ Usage (in eval scripts):
     import experiments.robot.libero.physcog_objects  # noqa: F401 — side-effect import
 """
 
+import hashlib
+import json
 import os
 import pathlib
 import re
@@ -20,12 +22,40 @@ import xml.etree.ElementTree as ET
 
 import libero
 import libero.libero as libero_pkg
+import numpy as np
 from robosuite.models.objects import MujocoXMLObject
 from libero.libero.envs.base_object import register_object
 
 # ── L2-C1 custom cylinder cups ────────────────────────────────────────────────
 
 _ASSETS_DIR = pathlib.Path(__file__).parent / "assets"
+
+L3A1_SUPPORT_WING_BODY = "cabinet_bottom"
+L3A1_SUPPORT_WING_COLLISION = "l3a1_support_wing_collision"
+L3A1_SUPPORT_WING_VISUAL = "l3a1_support_wing_visual"
+# The third box half-size maps to world x under this drawer-local quaternion.
+# The interval [-0.180, -0.106] meets the native front plate without a seam;
+# the formal bottle center at x=-0.145 retains at least 35 mm edge clearance.
+L3A1_SUPPORT_WING_COMMON = {
+    "type": "box",
+    "pos": "-0.143 -0.07524 0.04476",
+    "quat": "0.50000 0.50000 -0.50000 -0.50000",
+    "size": "0.00271 0.03427 0.03700",
+}
+L3A1_SUPPORT_WING_COLLISION_ATTRS = {
+    "solimp": "0.998 0.998 0.001",
+    "solref": "0.001 1",
+    "density": "100",
+    "friction": "0.95 0.3 0.1",
+    "group": "0",
+    "rgba": "0.8 0.8 0.8 0.3",
+}
+L3A1_SUPPORT_WING_VISUAL_ATTRS = {
+    "conaffinity": "0",
+    "contype": "0",
+    "group": "1",
+    "material": "white_cabinet_bottom",
+}
 
 
 class PhyscogXMLObject(MujocoXMLObject):
@@ -52,6 +82,112 @@ class PhyscogXMLObject(MujocoXMLObject):
         self.rotation = (0, 0)
         self.rotation_axis = "z"
         self.object_properties = {"vis_site_names": {}}
+
+
+def _l3a1_native_cabinet_xml() -> pathlib.Path:
+    return (
+        _libero_package_root()
+        / "assets"
+        / "articulated_objects"
+        / "white_cabinet.xml"
+    )
+
+
+def l3a1_cabinet_asset_contract() -> dict[str, str]:
+    """Return deterministic hashes for the native fixture and injected wing."""
+    native_xml = _l3a1_native_cabinet_xml()
+    wing_contract = {
+        "body": L3A1_SUPPORT_WING_BODY,
+        "collision_name": L3A1_SUPPORT_WING_COLLISION,
+        "visual_name": L3A1_SUPPORT_WING_VISUAL,
+        "common": L3A1_SUPPORT_WING_COMMON,
+        "collision": L3A1_SUPPORT_WING_COLLISION_ATTRS,
+        "visual": L3A1_SUPPORT_WING_VISUAL_ATTRS,
+    }
+    wing_json = json.dumps(wing_contract, sort_keys=True, separators=(",", ":"))
+    return {
+        "native_cabinet_xml_sha256": hashlib.sha256(native_xml.read_bytes()).hexdigest(),
+        "support_wing_contract_json": wing_json,
+        "support_wing_contract_sha256": hashlib.sha256(wing_json.encode()).hexdigest(),
+        "fixture_python_sha256": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
+    }
+
+
+def _build_l3a1_cabinet_xml() -> str:
+    """Build the native white cabinet with a visible moving support wing.
+
+    The wing extends only the negative-x end of the bottom drawer's existing
+    front plate.  It is part of ``cabinet_bottom`` and therefore retracts with
+    the task-required close action.  Absolute asset paths make the temporary
+    XML independent of the checkout and LIBERO install locations.
+    """
+    orig_xml = _l3a1_native_cabinet_xml()
+    orig_dir = orig_xml.parent
+    tree = ET.parse(str(orig_xml))
+    root = tree.getroot()
+    asset_el = root.find("asset")
+    if asset_el is None:
+        raise ValueError(f"missing asset element in {orig_xml}")
+    for tag in ("mesh", "texture"):
+        for asset in asset_el.findall(tag):
+            path = asset.get("file", "")
+            if path and not os.path.isabs(path):
+                asset.set("file", str(orig_dir / path))
+
+    drawer = root.find(f".//body[@name='{L3A1_SUPPORT_WING_BODY}']")
+    if drawer is None:
+        raise ValueError(f"missing cabinet_bottom body in {orig_xml}")
+    ET.SubElement(drawer, "geom", {
+        **L3A1_SUPPORT_WING_COMMON,
+        **L3A1_SUPPORT_WING_COLLISION_ATTRS,
+        "name": L3A1_SUPPORT_WING_COLLISION,
+    })
+    ET.SubElement(drawer, "geom", {
+        **L3A1_SUPPORT_WING_COMMON,
+        **L3A1_SUPPORT_WING_VISUAL_ATTRS,
+        "name": L3A1_SUPPORT_WING_VISUAL,
+    })
+
+    tmp = tempfile.NamedTemporaryFile(suffix=".xml", delete=False)
+    tmp.close()
+    tree.write(tmp.name, encoding="unicode", xml_declaration=False)
+    return tmp.name
+
+
+@register_object
+class PhyscogWhiteCabinet(MujocoXMLObject):
+    """Native WhiteCabinet plus L3-A1's moving negative-x support wing."""
+
+    def __init__(self, name="physcog_white_cabinet", joints=None):
+        if joints is None:
+            joints = [dict(type="free", damping="0.0005")]
+        tmp_path = _build_l3a1_cabinet_xml()
+        try:
+            super().__init__(
+                tmp_path,
+                name=name,
+                joints=joints,
+                obj_type="all",
+                duplicate_collision_geoms=False,
+            )
+        finally:
+            os.unlink(tmp_path)
+        self.category_name = "physcog_white_cabinet"
+        self.rotation = (np.pi / 4, np.pi / 2)
+        self.rotation_axis = "x"
+        self.object_properties = {
+            "articulation": {
+                "default_open_ranges": [-0.16, -0.14],
+                "default_close_ranges": [0.0, 0.005],
+            },
+            "vis_site_names": {},
+        }
+
+    def is_open(self, qpos):
+        return qpos < max(self.object_properties["articulation"]["default_open_ranges"])
+
+    def is_close(self, qpos):
+        return qpos > min(self.object_properties["articulation"]["default_close_ranges"])
 
 
 @register_object

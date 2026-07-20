@@ -121,7 +121,7 @@ def main() -> None:
     parser.add_argument("--lean_dy", type=float, default=DEFAULT_LEAN_DY)
     parser.add_argument("--lean_dz", type=float, default=DEFAULT_LEAN_DZ)
     parser.add_argument("--lean_deg", type=float, default=DEFAULT_LEAN_DEG)
-    parser.add_argument("--stable_x_offset", type=float, default=-0.10)
+    parser.add_argument("--stable_x_offset", type=float, default=-0.07)
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
     parser.add_argument("--close_steps", type=int, default=60)
     parser.add_argument("--hold_chunks", type=int, default=5,
