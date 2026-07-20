@@ -374,6 +374,7 @@ def test_exact_states_preserve_fixture_reset_seeds_for_cross_process_replay(tmp_
     evaluator = Path(
         "experiments/robot/libero/run_physcog_libero_l1_eval.py"
     ).read_text()
+    assert "import numpy as np" in evaluator
     assert "env.seed(initial_state_reset_seeds[episode_idx])" in evaluator
 
 
