@@ -277,6 +277,15 @@ def test_mujoco_quaternion_matrix_round_trip():
     assert np.allclose(recovered, quat) or np.allclose(recovered, -quat)
 
 
+def test_l1c3_horizontal_bottle_aligns_with_the_drawer_wide_axis():
+    spec = get_spec("l1c3")
+    long_axis_world = _wxyz_to_matrix(spec.target_place_quat) @ np.array(
+        [0.0, 0.0, 1.0]
+    )
+
+    assert np.allclose(np.abs(long_axis_world), [1.0, 0.0, 0.0], atol=1e-6)
+
+
 def test_exact_state_bundle_verification_rejects_post_preview_mutation(tmp_path):
     spec = get_spec("l1c2")
     paths = {

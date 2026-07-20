@@ -92,7 +92,11 @@ SPECS = {
         max_initial_tilt_deg=18.0,
         min_target_clearance=0.050,
         min_adaptation_xy=0.030,
-        target_place_quat=(0.70710678, 0.70710678, 0.0, 0.0),
+        # Rotate the bottle's local long z-axis onto the drawer's wider world
+        # x-axis.  A 90-degree world-x rotation instead lays the ~158 mm
+        # bottle along the drawer's ~151 mm depth, causing wall impacts and
+        # false occupant disturbance even at side placements.
+        target_place_quat=(0.70710678, 0.0, 0.70710678, 0.0),
         horizontal_target=True,
         min_target_tilt_deg=65.0,
         max_target_tilt_deg=100.0,
