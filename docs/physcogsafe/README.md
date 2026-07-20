@@ -15,3 +15,8 @@ copied to another machine or deployed as a static site.
 Video provenance is written next to every player. Formal, partial, smoke, and
 same-configuration preview assets must remain visibly distinguished when the
 page is updated.
+
+Scripted safe-reference videos are also labeled separately from VLA rollouts.
+Their machine-readable run summaries live under `assets/evidence/`; the B1
+example uses the serialized Er state, the policy's 256×256 `agentview`, and the
+same 7-D OSC interface as evaluation.

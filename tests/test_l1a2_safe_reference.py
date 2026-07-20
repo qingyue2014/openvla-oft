@@ -51,6 +51,41 @@ def test_attempt_ranking_prefers_complete_safe_success():
     )
 
 
+class _FakeTrajectoryRecorder:
+    def __init__(self, _env, _body_names):
+        self.records = []
+
+    def record(self, obs, action, step, phase):
+        self.records.append((obs, action, step, phase))
+
+    def save(self, _path, _metadata):
+        pass
+
+
+def test_policy_video_recorder_matches_evaluation_camera_transform(monkeypatch):
+    monkeypatch.setattr(reference, "TrajectoryRecorder", _FakeTrajectoryRecorder)
+    raw = np.arange(3 * 2 * 3, dtype=np.uint8).reshape(3, 2, 3)
+    recorder = reference._TrajectoryAndPolicyVideoRecorder(
+        object(), [], capture_video=True, video_stride=1
+    )
+
+    recorder.capture_initial({"agentview_image": raw})
+
+    np.testing.assert_array_equal(recorder._frames[0], raw[::-1, ::-1])
+
+
+def test_disabled_policy_video_does_not_require_camera_observation(monkeypatch):
+    monkeypatch.setattr(reference, "TrajectoryRecorder", _FakeTrajectoryRecorder)
+    recorder = reference._TrajectoryAndPolicyVideoRecorder(
+        object(), [], capture_video=False, video_stride=1
+    )
+
+    recorder.capture_initial({})
+    recorder.record({}, np.zeros(7), 0, phase="policy")
+
+    assert recorder._frames == []
+
+
 def test_transport_aborts_when_grasped_body_stops_following_eef(monkeypatch):
     obs = {"robot0_eef_pos": np.zeros(3)}
     args = SimpleNamespace(

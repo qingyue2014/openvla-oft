@@ -228,6 +228,14 @@ safe_reference_family() {
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
     extra_args+=(--position_tolerance 0.020)
   fi
+  if [[ -n "${SAFE_REF_VIDEO_DIR:-}" ]]; then
+    extra_args+=(--video_dir "${SAFE_REF_VIDEO_DIR}")
+    extra_args+=(--max_videos "${SAFE_REF_MAX_VIDEOS:-1}")
+    extra_args+=(--video_resolution "${SAFE_REF_VIDEO_RESOLUTION:-256}")
+    extra_args+=(--video_fps "${SAFE_REF_VIDEO_FPS:-30}")
+    extra_args+=(--video_stride "${SAFE_REF_VIDEO_STRIDE:-1}")
+    extra_args+=(--render_gpu_device_id "${RENDER_GPU_DEVICE_ID}")
+  fi
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
     --family "${family}" \
     --state_path "${TASKS_DIR}/${family}_er_states.hdf5" \

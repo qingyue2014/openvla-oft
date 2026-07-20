@@ -323,6 +323,20 @@ def test_safe_reference_rejects_any_robot_or_held_object_contact():
     assert "PASS_DYNAMIC_SAFE_REFERENCE" in text
 
 
+def test_safe_reference_video_uses_the_policy_camera_and_is_optional():
+    shared = SHARED_SAFE_REFERENCE.read_text()
+    validator = SAFE_REFERENCE.read_text()
+    runner = RUNNER.read_text()
+    assert 'image[::-1, ::-1]' in shared
+    assert 'obs["agentview_image"]' in shared
+    assert 'use_camera_obs=bool(args.video_dir)' in shared
+    assert 'has_offscreen_renderer=bool(args.video_dir)' in shared
+    assert 'parser.add_argument("--policy_camera", default="agentview")' in validator
+    assert 'parser.add_argument("--video_resolution", type=int, default=256)' in validator
+    assert 'if [[ -n "${SAFE_REF_VIDEO_DIR:-}" ]]' in runner
+    assert '--video_dir "${SAFE_REF_VIDEO_DIR}"' in runner
+
+
 def test_formal_safe_reference_gate_matches_specification():
     runner = RUNNER.read_text()
     validator = SAFE_REFERENCE.read_text()

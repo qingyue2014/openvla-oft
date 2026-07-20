@@ -747,6 +747,71 @@
       font-size: 13px;
     }
 
+    .safe-reference-demo {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
+      gap: 0;
+      border-top: 1px solid var(--line);
+      background: linear-gradient(135deg, #edf7f0, #fffaf0);
+    }
+
+    .safe-reference-demo figure { background: transparent; }
+
+    .safe-reference-copy {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 28px 30px 28px 16px;
+    }
+
+    .safe-reference-copy h4 {
+      margin: 13px 0 8px;
+      font-size: 22px;
+      line-height: 1.22;
+      letter-spacing: -0.025em;
+    }
+
+    .safe-reference-copy p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .safe-proof-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .safe-proof {
+      padding: 10px;
+      border: 1px solid rgba(31, 96, 69, 0.16);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .safe-proof b { display: block; color: var(--forest-2); font-size: 15px; }
+    .safe-proof span { color: var(--muted); font-size: 10px; }
+
+    .evidence-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 15px;
+    }
+
+    .evidence-links a {
+      padding: 6px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--forest-2);
+      background: rgba(255, 255, 255, 0.72);
+      font-size: 10px;
+      font-weight: 760;
+      text-decoration: none;
+    }
+
     .metrics-wrap {
       padding: 24px 34px 32px;
       border-top: 1px solid var(--line);
@@ -999,6 +1064,8 @@
       .level-panel { grid-template-columns: 1fr; }
       .level-heading { min-height: 245px; }
       .video-grid { grid-template-columns: 1fr; }
+      .safe-reference-demo { grid-template-columns: 1fr; }
+      .safe-reference-copy { padding: 8px 28px 28px; }
       .oracle-grid, .snapshot-grid { grid-template-columns: 1fr; }
     }
 
@@ -1045,6 +1112,8 @@
       .footer-grid { grid-template-columns: 1fr; }
       .lab-card.wide { grid-column: auto; }
       .evidence-head { flex-direction: column; padding: 25px 20px 18px; }
+      .safe-reference-copy { padding: 6px 20px 24px; }
+      .safe-proof-grid { grid-template-columns: 1fr; }
       .metrics-wrap { padding: 21px 20px 25px; }
       .snapshot-row { grid-template-columns: 54px 1fr; }
       .snapshot-row .badge { grid-column: 2; justify-self: start; }
@@ -1341,6 +1410,30 @@
               <figcaption><strong>Ec · null risk</strong>正式 episode 1：同一红色 post 仍然可见，但位于扫掠路径之外。</figcaption>
             </figure>
           </div>
+          <div class="safe-reference-demo">
+            <figure>
+              <video controls muted playsinline preload="metadata" aria-label="L1-B1 Er scripted safe reference 安全解视频">
+                <source src="assets/videos/l1-b1-safe-reference.mp4" type="video/mp4">
+              </video>
+              <figcaption><strong>L1-B1 · Er scripted safe reference</strong>同一真实 Er 初始状态：抓取碗后先获得垂直净空，再分段横移绕过红色 post，最后完成原生 bowl-to-plate 目标。</figcaption>
+            </figure>
+            <div class="safe-reference-copy">
+              <span class="badge formal">安全解证据</span>
+              <h4>风险条件不是“无解陷阱”</h4>
+              <p>这不是 VLA rollout，而是使用评测同一 7-D OSC 动作接口的闭环脚本参考轨迹。全程检查 arm、wrist/gripper 与 held bowl 对障碍物的接触；视频采用模型实际使用的 256×256 agentview。</p>
+              <div class="safe-proof-grid">
+                <div class="safe-proof"><b>1 / 1</b><span>展示 episode 安全完成</span></div>
+                <div class="safe-proof"><b>50 / 50</b><span>完整动态门安全完成</span></div>
+                <div class="safe-proof"><b>0.2 mm</b><span>展示中障碍物位移</span></div>
+              </div>
+              <div class="evidence-links">
+                <a href="assets/evidence/l1-b1-safe-reference-full.md">50-state 验证报告</a>
+                <a href="assets/evidence/l1-b1-safe-reference-full.csv">50-state 逐 episode 记录</a>
+                <a href="assets/evidence/l1-b1-safe-reference.csv">视频样片记录</a>
+                <a href="assets/evidence/l1-b1-safe-reference-video-review.md">人工可见性复核</a>
+              </div>
+            </div>
+          </div>
           <div class="metrics-wrap">
             <div class="metrics-title"><h4>L1-B 正式 50×3 sweep</h4><span>当前 checkpoint；每格为 Task SR / SVR / Safe SR</span></div>
             <div class="metric-table-wrap">
@@ -1462,7 +1555,7 @@
           </p>
         </div>
         <div class="snapshot-list">
-          <div class="snapshot-row"><strong>L1</strong><span>A / B / C 均有正式 rollout；B4 的静态、可见性、安全参考和 unchanged-action replay 链最完整。</span><span class="badge formal">Formal evidence</span></div>
+          <div class="snapshot-row"><strong>L1</strong><span>A / B / C 均有正式 rollout；B1 现已展示同 Er 状态下的可执行安全解，B4 的静态、可见性、安全参考和 unchanged-action replay 链最完整。</span><span class="badge formal">Formal evidence</span></div>
           <div class="snapshot-row"><strong>L2</strong><span>热源状态与易碎材质方向已有实现和 pilot/partial 数据；尚无完整正式 Eb/Er/Ec 结论。</span><span class="badge partial">Calibration</span></div>
           <div class="snapshot-row"><strong>L3</strong><span>支撑移除、稳定中间态和动态共享空间方向已有 runner；现有结果只适合场景 QA。</span><span class="badge smoke">In development</span></div>
         </div>

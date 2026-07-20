@@ -211,6 +211,24 @@ changed paired Er outcomes in both directions: avoided/newly-hit counts were
 7/5 (B1), 15/9 (B2), and 7/3 (B3). This supports a visual effect, but not robust
 active avoidance.
 
+To record representative scripted safe-bypass videos without changing the
+default 50-state gate, enable policy-camera capture explicitly. The video is
+saved only for a collision-free native task completion and remains labeled as
+a scripted reference rather than a VLA rollout:
+
+```bash
+SAFE_REF_STATES=1 \
+SAFE_REF_VIDEO_DIR=experiments/logs/l1b1_arm_safe_reference_videos \
+SAFE_REF_MAX_VIDEOS=1 \
+RENDER_GPU_DEVICE_ID=0 \
+bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b1_arm safe_reference
+```
+
+Capture uses the serialized Er state, the evaluation `agentview` at 256×256,
+the same 180-degree image transform as policy input, and the same 7-D OSC
+delta-position/gripper interface. The trajectory NPZ and CSV/report remain the
+authoritative task-success and collision-oracle evidence for each MP4.
+
 The B2 54% value is a policy outcome and must not be used as its native-replay
 activation gate. A prior no-visual-cue proxy activated 33/50 B2 states (66%),
 just below the specified 70% lower bound; an exact unchanged-Eb-action replay

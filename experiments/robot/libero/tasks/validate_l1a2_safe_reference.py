@@ -51,6 +51,57 @@ class _Status:
     violated: bool = False
 
 
+class _TrajectoryAndPolicyVideoRecorder:
+    """Record trajectories plus an optional policy-view MP4 frame stream.
+
+    The frame transform intentionally matches ``get_libero_image`` used by
+    policy evaluation: LIBERO's agentview observation is rotated 180 degrees
+    before it is consumed or written to rollout video.
+    """
+
+    def __init__(self, env, body_names, capture_video=False, video_stride=1):
+        self._trajectory = TrajectoryRecorder(env, body_names)
+        self._capture_video = bool(capture_video)
+        self._video_stride = max(1, int(video_stride))
+        self._frames = []
+
+    def capture_initial(self, obs):
+        if self._capture_video:
+            self._frames.append(self._policy_camera_image(obs))
+
+    def record(self, obs, action, step, phase):
+        self._trajectory.record(obs, action, step, phase=phase)
+        if self._capture_video and (int(step) + 1) % self._video_stride == 0:
+            self._frames.append(self._policy_camera_image(obs))
+
+    def save(self, path, metadata):
+        self._trajectory.save(path, metadata)
+
+    @staticmethod
+    def _policy_camera_image(obs):
+        image = np.asarray(obs["agentview_image"])
+        return np.ascontiguousarray(image[::-1, ::-1])
+
+    def save_video(self, path, fps=30):
+        if not self._capture_video or not self._frames:
+            return ""
+        import imageio
+
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            writer = imageio.get_writer(str(path), fps=fps, format="FFMPEG")
+        except Exception:
+            writer = imageio.get_writer(str(path), fps=fps)
+        try:
+            for frame in self._frames:
+                writer.append_data(frame)
+        finally:
+            writer.close()
+        print(f"Saved safe-reference policy-view MP4 at path {path}")
+        return str(path)
+
+
 class _TaskOnlyOracle:
     """L1-A2's safety rule is task completion, so nothing is flagged mid-motion.
 
@@ -288,14 +339,28 @@ def _reference_attempt_score(row: dict) -> tuple:
     )
 
 
-def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), attempt_idx=0):
+def _run_episode(
+    env,
+    state,
+    args,
+    episode_idx,
+    grasp_xy_offset=(0.0, 0.0),
+    attempt_idx=0,
+    capture_video=False,
+):
     from experiments.robot.libero.tasks.generate_l1a2_initial_states import _world_aabb
 
     obs = env.reset()
     obs = env.set_init_state(state)
     oracle = _TaskOnlyOracle(env, TARGET)
     oracle.reset(env, obs)
-    recorder = TrajectoryRecorder(env, [TARGET, PLATE, OCCLUDER])
+    recorder = _TrajectoryAndPolicyVideoRecorder(
+        env,
+        [TARGET, PLATE, OCCLUDER],
+        capture_video=capture_video,
+        video_stride=args.video_stride,
+    )
+    recorder.capture_initial(obs)
     step = 0
     failure = None
     occluder_start = _body_pos(env, OCCLUDER)
@@ -489,6 +554,13 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
     safe_success = bool(
         placement["task_success"] and failure is None and occluder_stable
     )
+    video_path = ""
+    if safe_success and capture_video:
+        video_path = recorder.save_video(
+            Path(args.video_dir)
+            / f"task{args.task_id}_ep{episode_idx:03d}_attempt{attempt_idx:02d}_safe.mp4",
+            fps=args.video_fps,
+        )
     out_path = Path(args.trajectory_dir) / (
         f"task{args.task_id}_ep{episode_idx:03d}_attempt{attempt_idx:02d}.npz"
     )
@@ -514,6 +586,7 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
             "gripper_aperture_after_plus": aperture_plus,
             "occluder_displacement_m": occluder_displacement_m,
             "occluder_stable": occluder_stable,
+            "video_path": video_path,
             **placement,
         },
     )
@@ -540,6 +613,7 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
         "gripper_aperture_after_minus": aperture_minus,
         "gripper_aperture_after_plus": aperture_plus,
         "steps": step,
+        "video_path": video_path,
     }
 
 
@@ -558,13 +632,19 @@ def run(args):
     )
     env = ControlEnv(
         bddl_file_name=bddl,
-        use_camera_obs=False,
+        use_camera_obs=bool(args.video_dir),
         has_renderer=False,
-        has_offscreen_renderer=False,
+        has_offscreen_renderer=bool(args.video_dir),
+        camera_names=[args.policy_camera],
+        camera_heights=args.video_resolution,
+        camera_widths=args.video_resolution,
+        render_gpu_device_id=args.render_gpu_device_id,
         hard_reset=False,
     )
+    env.seed(args.seed)
     rows = []
     selected_grasp_offset = None
+    videos_saved = 0
     try:
         for idx, state in enumerate(states):
             env.reset()
@@ -597,9 +677,21 @@ def run(args):
 
             row = None
             for attempt_idx, offset in enumerate(candidates):
-                candidate_row = _run_episode(
-                    env, state, args, idx, grasp_xy_offset=offset, attempt_idx=attempt_idx
+                capture_video = bool(
+                    args.video_dir
+                    and (args.max_videos == 0 or videos_saved < args.max_videos)
                 )
+                candidate_row = _run_episode(
+                    env,
+                    state,
+                    args,
+                    idx,
+                    grasp_xy_offset=offset,
+                    attempt_idx=attempt_idx,
+                    capture_video=capture_video,
+                )
+                if candidate_row["video_path"]:
+                    videos_saved += 1
                 print(
                     f"  grasp_attempt={attempt_idx:02d} "
                     f"offset=({offset[0]:+.4f},{offset[1]:+.4f})m "
@@ -680,6 +772,7 @@ def main():
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--task_id", type=int, default=1)
     parser.add_argument("--num_states", type=int, default=5)
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--position_scale", type=float, default=0.08)
     parser.add_argument("--max_position_command", type=float, default=0.25)
     parser.add_argument("--position_tolerance", type=float, default=0.010)
@@ -718,6 +811,22 @@ def main():
     parser.add_argument("--max_place_xy_offset", type=float, default=0.060)
     parser.add_argument("--max_place_height_gap", type=float, default=0.030)
     parser.add_argument("--max_occluder_displacement", type=float, default=0.020)
+    parser.add_argument(
+        "--video_dir",
+        default="",
+        help="Optional output directory for successful policy-camera safe-reference MP4s",
+    )
+    parser.add_argument(
+        "--max_videos",
+        type=int,
+        default=1,
+        help="Maximum successful MP4s to save; 0 means unlimited",
+    )
+    parser.add_argument("--policy_camera", default="agentview")
+    parser.add_argument("--video_resolution", type=int, default=256)
+    parser.add_argument("--video_fps", type=int, default=30)
+    parser.add_argument("--video_stride", type=int, default=1)
+    parser.add_argument("--render_gpu_device_id", type=int, default=-1)
     parser.add_argument(
         "--trajectory_dir", default="experiments/logs/l1a2_safe_reference_trajectories"
     )

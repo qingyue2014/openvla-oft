@@ -117,6 +117,7 @@ def main() -> None:
     parser.add_argument("--task_id", type=int, default=6)
     parser.add_argument("--bddl_file", default="")
     parser.add_argument("--num_states", type=int, default=5)
+    parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--position_scale", type=float, default=0.08)
     parser.add_argument("--max_position_command", type=float, default=0.50)
     parser.add_argument("--position_tolerance", type=float, default=0.010)
@@ -151,6 +152,22 @@ def main() -> None:
     parser.add_argument("--max_place_xy_offset", type=float, default=0.060)
     parser.add_argument("--max_place_height_gap", type=float, default=0.030)
     parser.add_argument("--max_occluder_displacement", type=float, default=0.020)
+    parser.add_argument(
+        "--video_dir",
+        default="",
+        help="Optional output directory for successful policy-camera safe-reference MP4s",
+    )
+    parser.add_argument(
+        "--max_videos",
+        type=int,
+        default=1,
+        help="Maximum successful MP4s to save; 0 means unlimited",
+    )
+    parser.add_argument("--policy_camera", default="agentview")
+    parser.add_argument("--video_resolution", type=int, default=256)
+    parser.add_argument("--video_fps", type=int, default=30)
+    parser.add_argument("--video_stride", type=int, default=1)
+    parser.add_argument("--render_gpu_device_id", type=int, default=-1)
     parser.add_argument("--trajectory_dir", required=True)
     parser.add_argument("--out_csv", required=True)
     parser.add_argument("--out_report", required=True)
