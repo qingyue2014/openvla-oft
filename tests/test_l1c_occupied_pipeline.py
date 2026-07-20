@@ -11,6 +11,7 @@ from experiments.robot.libero.physcog_oracles import (
 )
 from experiments.robot.libero.tasks.l1c_occupied_common import (
     get_spec,
+    load_state_reset_seeds,
     resolve_bddl,
     settle,
     write_states,
@@ -319,6 +320,24 @@ def test_exact_state_bundle_verification_rejects_post_preview_mutation(tmp_path)
     write_states(paths["er"], spec.prompt, [np.array([99.0, 100.0])])
     with pytest.raises(RuntimeError, match="hash mismatch"):
         _verify_bundle(args, require_preview=True)
+
+
+def test_exact_states_preserve_fixture_reset_seeds_for_cross_process_replay(tmp_path):
+    spec = get_spec("l1c3")
+    path = tmp_path / "er.hdf5"
+    reset_seeds = np.array([42014, 42017], dtype=np.int64)
+    write_states(
+        path,
+        spec.prompt,
+        [np.array([1.0]), np.array([2.0])],
+        {"reset_seeds": reset_seeds},
+    )
+
+    assert load_state_reset_seeds(path, spec.prompt) == [42014, 42017]
+    evaluator = Path(
+        "experiments/robot/libero/run_physcog_libero_l1_eval.py"
+    ).read_text()
+    assert "env.seed(initial_state_reset_seeds[episode_idx])" in evaluator
 
 
 def test_eb_competence_gate_enforces_eighty_percent(tmp_path, monkeypatch):

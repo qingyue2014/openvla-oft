@@ -36,6 +36,7 @@ from experiments.robot.libero.tasks.l1c_occupied_common import (
     descendant_geom_ids,
     get_spec,
     load_states,
+    load_state_reset_seeds,
     native_success,
     place_at_anchor,
     place_null_risk,
@@ -78,6 +79,13 @@ def _env(bddl, render=False, control=False):
 
 def _finite(env):
     return bool(np.isfinite(env.sim.data.qpos).all() and np.isfinite(env.sim.data.qvel).all())
+
+
+def _reset_with_fixture_seed(env, reset_seed):
+    """Recreate fixed-fixture placement before restoring serialized qpos/qvel."""
+    if reset_seed is not None:
+        env.seed(int(reset_seed))
+    return env.reset()
 
 
 def list_bodies(args):
@@ -383,13 +391,15 @@ def generate(args):
     )
     states = {"eb": [], "er": [], "ec": []}
     source_indices = []
+    reset_seeds = []
     attempts = 0
     max_attempts = max(args.num_states * args.max_attempt_factor, args.num_states)
     try:
         while len(states["eb"]) < args.num_states and attempts < max_attempts:
             source_idx = attempts % len(native_states)
+            reset_seed = args.seed * 1000 + source_idx
             attempts += 1
-            env.reset()
+            _reset_with_fixture_seed(env, reset_seed)
             env.set_init_state(native_states[source_idx])
             env.sim.forward()
             base = env.sim.get_state().flatten()
@@ -601,6 +611,7 @@ def generate(args):
             states["er"].append(er_state)
             states["ec"].append(ec_state)
             source_indices.append(source_idx)
+            reset_seeds.append(reset_seed)
             print(
                 f"  [{len(states['eb']):02d}/{args.num_states}] paired source={source_idx} "
                 f"Er_offset={risk_anchor_distance:.4f}m Ec_offset={ec_anchor_distance:.4f}m "
@@ -632,6 +643,8 @@ def generate(args):
                 "native_task_id": native_task_id,
                 "official_init_states": True,
                 "paired": True,
+                "reset_seeds": np.asarray(reset_seeds, dtype=np.int64),
+                "reset_seed_scheme": "generation_seed_x1000_plus_native_source_index",
             },
         )
         print(f"Wrote {condition}: {path}")
@@ -649,6 +662,7 @@ def generate(args):
         "paired": True,
         "pair_alignment_tolerance": args.pair_alignment_tolerance,
         "source_indices": source_indices,
+        "reset_seeds": reset_seeds,
         "source_indices_sha256": _file_sha256(index_path),
         "state_files": _state_files(args),
         "state_sha256": _state_hashes(args),
@@ -671,11 +685,14 @@ def preview(args):
     out.mkdir(parents=True, exist_ok=True)
     rows = []
     preview_count = min(args.num_states, counts["eb"])
+    reset_seeds = [int(seed) for seed in bundle.get("reset_seeds", [])]
+    if len(reset_seeds) < preview_count:
+        raise RuntimeError("State bundle is missing deterministic fixture-reset seeds")
     eb_anchor_policy_start = {}
     try:
         eb_states = load_states(args.eb_states, spec.prompt)
         for idx, state in enumerate(eb_states[:preview_count]):
-            env.reset()
+            _reset_with_fixture_seed(env, reset_seeds[idx])
             env.set_init_state(state)
             for _ in range(args.policy_start_step):
                 env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
@@ -684,7 +701,7 @@ def preview(args):
         for condition, path in (("eb", args.eb_states), ("er", args.er_states), ("ec", args.ec_states)):
             states = load_states(path, spec.prompt)
             for idx, state in enumerate(states[:preview_count]):
-                env.reset()
+                _reset_with_fixture_seed(env, reset_seeds[idx])
                 obs = env.set_init_state(state)
                 image = obs.get("agentview_image")
                 if image is None:
@@ -1257,13 +1274,16 @@ def _calibration_offsets(spec):
 def calibrate(args):
     spec = get_spec(args.scenario)
     states = load_states(args.er_states, spec.prompt)[: args.num_states]
+    reset_seeds = load_state_reset_seeds(args.er_states, spec.prompt)[: len(states)]
+    if len(reset_seeds) != len(states):
+        raise RuntimeError("Er states are missing deterministic fixture-reset seeds")
     offsets = _calibration_offsets(spec)
     env = _env(resolve_bddl(spec), control=True)
     rows = []
     try:
         for episode_idx, state in enumerate(states):
             for offset in offsets:
-                env.reset()
+                _reset_with_fixture_seed(env, reset_seeds[episode_idx])
                 env.set_init_state(state)
                 occupant_relative_pos0, occupant_relative_mat0 = (
                     _body_pose_relative_to_anchor(
@@ -1520,9 +1540,9 @@ def _contact_between(env, body_a, body_b):
 
 def _safe_reference_attempt(
     env, state, spec, offset, grasp_offset, args, episode_idx, attempt_idx,
-    rotate_sign=1.0, grasp_yaw_sign=0.0,
+    rotate_sign=1.0, grasp_yaw_sign=0.0, reset_seed=None,
 ):
-    obs = env.reset()
+    obs = _reset_with_fixture_seed(env, reset_seed)
     obs = env.set_init_state(state)
     oracle = OccupiedGoalSafetyOracle(
         spec.target_body,
@@ -1665,6 +1685,9 @@ def safe_reference(args):
         return _safe_reference_from_eb_prefix(args, files)
     spec = get_spec(args.scenario)
     states = load_states(args.er_states, spec.prompt)[: args.num_states]
+    reset_seeds = load_state_reset_seeds(args.er_states, spec.prompt)[: len(states)]
+    if len(reset_seeds) != len(states):
+        raise RuntimeError("Er states are missing deterministic fixture-reset seeds")
     env = _env(resolve_bddl(spec), control=True)
     rows = []
     attempt_rows = []
@@ -1682,7 +1705,7 @@ def safe_reference(args):
                             row = _safe_reference_attempt(
                                 env, state, spec, offset, grasp_offset, args,
                                 episode_idx, attempt, rotate_sign,
-                                grasp_yaw_sign,
+                                grasp_yaw_sign, reset_seeds[episode_idx],
                             )
                             attempt += 1
                             attempt_rows.append(row)
@@ -2089,6 +2112,9 @@ def replay(args):
     spec = get_spec(args.scenario)
     state_path = args.er_states if args.condition == "er" else args.ec_states
     states = load_states(state_path, spec.prompt)
+    reset_seeds = load_state_reset_seeds(state_path, spec.prompt)
+    if len(reset_seeds) != len(states):
+        raise RuntimeError(f"{args.condition.upper()} states are missing fixture-reset seeds")
     files = sorted(glob.glob(os.path.join(args.eb_trajectories, "*.npz")))
     indexed = [(idx, p) for p in files if (idx := _episode_index(p)) is not None and idx < len(states)]
     if not indexed:
@@ -2097,7 +2123,7 @@ def replay(args):
     rows = []
     try:
         for idx, path in indexed:
-            env.reset()
+            _reset_with_fixture_seed(env, reset_seeds[idx])
             env.set_init_state(states[idx])
             oracle = OccupiedGoalSafetyOracle(
                 spec.target_body,

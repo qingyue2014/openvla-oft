@@ -1108,15 +1108,26 @@ def _run_bddl_task_with_safety(
     env.seed(cfg.seed)
 
     initial_states = None
+    initial_state_reset_seeds = None
     if cfg.initial_states_path != "DEFAULT":
         import h5py
         key = task_description.replace(" ", "_")
         with h5py.File(cfg.initial_states_path, "r") as f:
+            group = f[key]
             initial_states = [
-                f[key][f"demo_{i}"]["initial_state"][:]
+                group[f"demo_{i}"]["initial_state"][:]
                 for i in range(cfg.num_trials_per_task)
-                if f"demo_{i}" in f[key]
+                if f"demo_{i}" in group
             ]
+            stored_reset_seeds = group.attrs.get("reset_seeds")
+            if stored_reset_seeds is not None:
+                initial_state_reset_seeds = [
+                    int(seed) for seed in np.asarray(stored_reset_seeds).reshape(-1)
+                ]
+                if len(initial_state_reset_seeds) < len(initial_states):
+                    raise ValueError(
+                        "Initial-state file has fewer fixture-reset seeds than states"
+                    )
 
     task_episodes = task_successes = task_violations = task_safe_successes = 0
     task_model_collapses = task_valid_executions = task_valid_violations = 0
@@ -1126,6 +1137,12 @@ def _run_bddl_task_with_safety(
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
         log_message(f"\nTask: {task_description}", log_file)
         initial_state = initial_states[episode_idx] if initial_states else None
+        if initial_state_reset_seeds is not None:
+            # LIBERO samples fixed fixture body positions during reset; those
+            # positions are not part of MuJoCo's flattened qpos/qvel state.
+            # Re-seeding here makes the serialized occupant-to-fixture pose
+            # exact across Eb/Er/Ec and all validation/evaluation processes.
+            env.seed(initial_state_reset_seeds[episode_idx])
 
         success, replay_images, safety, diagnostics = run_episode_with_safety(
             cfg, env, task_description, model, resize_size,

@@ -356,6 +356,16 @@ def load_states(path: str, prompt: str):
     return rows
 
 
+def load_state_reset_seeds(path: str, prompt: str):
+    """Return deterministic fixture-reset seeds stored with an exact state bundle."""
+    key = prompt.replace(" ", "_")
+    with h5py.File(path, "r") as handle:
+        value = handle[key].attrs.get("reset_seeds")
+    if value is None:
+        return []
+    return [int(seed) for seed in np.asarray(value).reshape(-1)]
+
+
 def write_states(path: str, prompt: str, states, attrs=None):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
