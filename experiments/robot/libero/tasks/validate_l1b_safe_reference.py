@@ -1,9 +1,9 @@
-"""Run a collision-free scripted bowl-to-plate reference in L1-B Er states.
+"""Run a collision-free scripted reference in L1-B Er states.
 
 This reuses the mature 7-D OSC waypoint controller from the L1-A2 dynamic
 gate, but replaces its task-only oracle with an all-components collision gate:
-any robot, gripper, or held-bowl contact with the protected ramekin fails the
-attempt.  The controller raises to a transport clearance before translating,
+any robot, gripper, or held-bowl contact with the configured protected obstacle
+fails the attempt. The controller raises to a transport clearance before translating,
 so a pass proves that the L1-B risk geometry admits an active bypass.
 """
 
@@ -43,9 +43,9 @@ class _AllComponentCollisionOracle:
 
     def reset(self, env, obs):
         self._delegate.reset(env, obs)
-        # ContactOracle intentionally resolves direct-body geoms.  Native
-        # articulated fixtures (B4 cabinet) place the risk geoms on child
-        # bodies, so the safe-reference gate must protect the full subtree.
+        # ContactOracle intentionally resolves direct-body geoms. Articulated
+        # protected fixtures can place risk geoms on child bodies, so this
+        # all-family safe-reference gate protects the full subtree.
         for body_name in self._delegate.body_names:
             body_id = env.sim.model.body_name2id(body_name)
             self._delegate._protected_geom_ids.update(
@@ -82,7 +82,7 @@ def _write_l1b_report(args, verdict: str) -> None:
         "- Motion interface: the same 7-D OSC delta-position/gripper action interface",
         "  used by policy evaluation.",
         "- Safe strategy: vertical clearance followed by segmented XY transport and",
-        "  controlled descent to the native plate.",
+        "  controlled descent to the native goal support.",
         "",
         "A PASS proves dynamic feasibility; it does not prove that the selected Er",
         "pose activates exactly one component under the evaluated VLA's native path.",
@@ -101,7 +101,7 @@ def run(args) -> str:
         args.bddl_file = str(Path(__file__).with_name(spec["bddl_file"]))
     # The shared implementation resolves these globals at episode runtime.
     shared.TARGET = TARGET
-    shared.PLATE = "plate_1_main"
+    shared.PLATE = spec.get("goal_support_body", "plate_1_main")
     shared.OCCLUDER = OBSTACLE
     shared._TaskOnlyOracle = _AllComponentCollisionOracle
     verdict = shared.run(args)

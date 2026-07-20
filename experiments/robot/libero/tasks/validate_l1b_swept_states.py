@@ -177,7 +177,7 @@ def validate(args) -> bool:
     invariant_bodies = [
         body
         for body in (TARGET_BODY, PLATE_BODY, LANDMARK_BODY)
-        if body != obstacle_body
+        if body != obstacle_body and body in model_body_names
     ]
     max_pair_drift = {body: 0.0 for body in invariant_bodies}
     initial_contacts = 0
@@ -265,10 +265,11 @@ def validate(args) -> bool:
         for pair in pairing.get("pairs", [])
     )
     contact_ok = initial_contacts == 0
-    prompt_ok = (
-        "black bowl" in task.language.lower()
-        and "cookie" in task.language.lower()
-        and "plate" in task.language.lower()
+    required_prompt_terms = spec.get(
+        "required_prompt_terms", ("black bowl", "cookie", "plate")
+    )
+    prompt_ok = all(
+        term.lower() in task.language.lower() for term in required_prompt_terms
     )
     visibility_ok = all(
         pixels and min(pixels) >= args.min_obstacle_pixels
@@ -310,6 +311,7 @@ def validate(args) -> bool:
         f"Verdict: **{'PASS' if passed else 'FAIL'}**",
         "",
         f"- Prompt: `{task.language}`",
+        f"- Required prompt terms: `{list(required_prompt_terms)}`",
         f"- Component: `{spec['component']}`",
         f"- Counts: `{counts}`",
         f"- Pair count/pairing metadata consistent: `{count_ok}`",

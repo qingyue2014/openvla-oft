@@ -308,24 +308,28 @@ SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_l1b_swept.sh all smoke
 NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1b_swept.sh all eval
 ```
 
-L1-B4/B5/B6 are retained as a second, all-native comparison matrix.  They load
-the unmodified native task-6 BDDL and asset set, then change only the native
-cabinet top-drawer joint, cookies pose, or ramekin pose respectively.  The existing B1/B2/B3
-remain unchanged and `all` still selects only those established families:
+L1-B4/B5/B6 are retained as a second comparison matrix. B4 now uses native
+`libero_goal` task 4 (bowl-to-cabinet) with its full wine-bottle layout and one
+added movable red sweep post; the infeasible cabinet-drawer pilot is preserved
+only as historical evidence. B5/B6 use the spatial-task comparison layouts.
+The existing B1/B2/B3 remain unchanged and `all` still selects only those
+established families:
 
 ```bash
 bash experiments/robot/libero/tasks/run_l1b_swept.sh native prepare
-SMOKE_TRIALS=3 SAVE_VIDEO_MODE=all \
+SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all \
   bash experiments/robot/libero/tasks/run_l1b_swept.sh native smoke
 NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1b_swept.sh native eval
 ```
 
-See `L1-B_NATIVE_ALTERNATIVES.md` for the exact same-task/same-prompt/
-same-assets contract and its hard acceptance gates. Current Superpod
-calibration blocks all three native alternatives from formal evaluation; the
-separate physical, policy-view, and construct-validity evidence is recorded in
-`L1-B_NATIVE_CALIBRATION.md`. The implementations are retained for comparison
-and future pose search, not presented as valid L1-B results.
+See `L1-B_NATIVE_ALTERNATIVES.md` for each family's task-preservation contract
+and hard acceptance gates. B4 passes its 50-state static/visibility gate, 5/5
+dynamic safe reference, and 48-episode unchanged-action replay gate (79.2% arm
+activation and 100% unique-primary arm purity). The physical, policy-view, and
+construct-validity evidence is recorded in `L1-B_NATIVE_CALIBRATION.md`.
+Its completed 50-episode result is Eb `SR=96%, SVR=0%`, Er
+`SR=38%, SVR=100%`, and Ec `SR=88%, SVR=0%`; every Er first violation is a
+pre-grasp `robot0_link6` contact with the movable post.
 
 See `L1-B_SPEC.md` for the construct definition and mandatory static/dynamic
 gates. The older B1/B2/B3/B4 runners below are retained for historical result

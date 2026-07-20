@@ -42,8 +42,9 @@ def search(args) -> list[dict]:
     from libero.libero.envs.env_wrapper import ControlEnv
 
     spec = dict(FAMILIES[args.family])
-    if spec.get("placement_mode") != "relative_path":
-        raise ValueError("Grid search requires a path-relative native family")
+    absolute_grid = bool(args.xs and args.ys)
+    if not absolute_grid and spec.get("placement_mode") != "relative_path":
+        raise ValueError("Supply --xs and --ys for an absolute-position family")
     obstacle = spec["obstacle_body"]
     intended = spec["component"]
     states = _load_states(Path(args.eb_states))
@@ -65,9 +66,12 @@ def search(args) -> list[dict]:
 
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
-    bddl = os.path.join(
-        get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
-    )
+    if spec.get("bddl_file"):
+        bddl = str(Path(__file__).with_name(spec["bddl_file"]))
+    else:
+        bddl = os.path.join(
+            get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
+        )
     env = ControlEnv(
         bddl_file_name=bddl,
         use_camera_obs=False,
@@ -77,9 +81,18 @@ def search(args) -> list[dict]:
     )
     rows = []
     try:
-        for fraction in _values(args.fractions):
-            for lateral in _values(args.laterals):
+        candidates = (
+            [(None, None, np.array([x, y], dtype=float))
+             for x in _values(args.xs) for y in _values(args.ys)]
+            if absolute_grid
+            else [(fraction, lateral, None)
+                  for fraction in _values(args.fractions)
+                  for lateral in _values(args.laterals)]
+        )
+        for fraction, lateral, absolute_xy in candidates:
                 hits = {component: 0 for component in COMPONENTS}
+                hit_episodes = {component: [] for component in COMPONENTS}
+                hit_reasons = {component: [] for component in COMPONENTS}
                 valid = 0
                 invalid_reasons = []
                 for episode_idx, trajectory in trajectories.items():
@@ -87,8 +100,12 @@ def search(args) -> list[dict]:
                     env.set_init_state(states[episode_idx])
                     target = _body_pos(env, TARGET_BODY)
                     plate = _body_pos(env, PLATE_BODY)
-                    placement = _relative_obstacle_xy(
-                        target[:2], plate[:2], fraction, lateral
+                    placement = (
+                        absolute_xy.copy()
+                        if absolute_xy is not None
+                        else _relative_obstacle_xy(
+                            target[:2], plate[:2], fraction, lateral
+                        )
                     )
                     diagnostics, candidate_state = _settle_and_validate(
                         env, spec, obstacle, placement, args.stability_steps
@@ -112,6 +129,10 @@ def search(args) -> list[dict]:
                                 else "all"
                             ),
                             label=f"l1b_grid_{component}",
+                            min_obstacle_displacement=(
+                                float(spec.get("min_obstacle_displacement", 0.0))
+                                if component == intended else 0.0
+                            ),
                         )
                         for component in COMPONENTS
                     }
@@ -131,6 +152,14 @@ def search(args) -> list[dict]:
                                 episode_hits[component] = True
                     for component in COMPONENTS:
                         hits[component] += int(episode_hits[component])
+                        if episode_hits[component]:
+                            hit_episodes[component].append(episode_idx)
+                            names = oracles[component]._contact_names or (
+                                "unknown", "unknown"
+                            )
+                            hit_reasons[component].append(
+                                f"ep{episode_idx}:{names[0]}<->{names[1]}"
+                            )
                 total = len(trajectories)
                 intended_rate = hits[intended] / total
                 unintended = sum(
@@ -141,6 +170,8 @@ def search(args) -> list[dict]:
                 row = {
                     "fraction": fraction,
                     "lateral_m": lateral,
+                    "x": None if absolute_xy is None else float(absolute_xy[0]),
+                    "y": None if absolute_xy is None else float(absolute_xy[1]),
                     "episodes": total,
                     "physically_valid_episodes": valid,
                     **{
@@ -149,6 +180,16 @@ def search(args) -> list[dict]:
                     },
                     "intended_contact_rate": intended_rate,
                     "unintended_component_hits": unintended,
+                    **{
+                        f"{component}_episodes": ",".join(
+                            str(index) for index in hit_episodes[component]
+                        )
+                        for component in COMPONENTS
+                    },
+                    **{
+                        f"{component}_reasons": ";".join(hit_reasons[component])
+                        for component in COMPONENTS
+                    },
                     "candidate_rank": (
                         int(valid == total) * 100
                         + intended_rate * 10
@@ -177,6 +218,8 @@ def main() -> None:
     parser.add_argument("--eb_states", required=True)
     parser.add_argument("--fractions", default="0.30,0.40,0.50,0.60,0.70,0.80")
     parser.add_argument("--laterals", default="-0.08,-0.06,-0.04,-0.02,0.02,0.04,0.06,0.08")
+    parser.add_argument("--xs", default="")
+    parser.add_argument("--ys", default="")
     parser.add_argument("--stability_steps", type=int, default=20)
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--task_id", type=int, default=6)

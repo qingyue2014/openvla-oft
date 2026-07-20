@@ -47,8 +47,6 @@ def replay(args) -> str:
     from libero.libero.envs.env_wrapper import ControlEnv
 
     spec = FAMILIES[args.family]
-    if not spec.get("native_assets_only") or spec.get("bddl_file") is not None:
-        raise ValueError(f"{args.family} is not an all-native L1-B alternative")
     obstacle_body = spec["obstacle_body"]
     intended_component = spec["component"]
 
@@ -60,9 +58,12 @@ def replay(args) -> str:
     states = _load_states(Path(args.risk_states))
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
-    bddl = os.path.join(
-        get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
-    )
+    if spec.get("bddl_file"):
+        bddl = str(Path(__file__).with_name(spec["bddl_file"]))
+    else:
+        bddl = os.path.join(
+            get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
+        )
     env = ControlEnv(
         bddl_file_name=bddl,
         use_camera_obs=False,
@@ -91,6 +92,11 @@ def replay(args) -> str:
                     held_object_body=TARGET_BODY,
                     phase="post_grasp" if component == "held_object" else "all",
                     label=f"l1b_replay_{component}",
+                    min_obstacle_displacement=(
+                        float(spec.get("min_obstacle_displacement", 0.0))
+                        if component == intended_component
+                        else 0.0
+                    ),
                 )
                 for component in COMPONENTS
             }
@@ -116,6 +122,28 @@ def replay(args) -> str:
                 for component in COMPONENTS
                 if component != intended_component
             )
+            contact_steps = {
+                component: oracles[component]._contact_step
+                for component in COMPONENTS
+            }
+            finite_steps = {
+                component: step_value
+                for component, step_value in contact_steps.items()
+                if step_value is not None
+            }
+            primary_components = []
+            if finite_steps:
+                first_contact_step = min(finite_steps.values())
+                primary_components = [
+                    component
+                    for component, step_value in finite_steps.items()
+                    if step_value == first_contact_step
+                ]
+            else:
+                first_contact_step = None
+            primary_component = (
+                primary_components[0] if len(primary_components) == 1 else ""
+            )
             row = {
                 "episode": os.path.basename(path),
                 "episode_idx": episode_idx,
@@ -124,6 +152,22 @@ def replay(args) -> str:
                 "policy_actions_replayed": int(np.sum(phases == "policy")),
                 "er_task_success": int(task_success),
                 **{f"{component}_contact": int(hits[component]) for component in COMPONENTS},
+                **{
+                    f"{component}_first_step": (
+                        "" if contact_steps[component] is None
+                        else int(contact_steps[component])
+                    )
+                    for component in COMPONENTS
+                },
+                "first_contact_step": (
+                    "" if first_contact_step is None else int(first_contact_step)
+                ),
+                "primary_component": primary_component,
+                "primary_tie": int(len(primary_components) > 1),
+                "intended_primary": int(primary_component == intended_component),
+                f"{intended_component}_max_obstacle_displacement_m": (
+                    oracles[intended_component].max_obstacle_displacement
+                ),
                 "intended_contact": int(hits[intended_component]),
                 "unintended_contact": int(unintended),
                 **{f"{component}_reason": reasons[component] for component in COMPONENTS},
@@ -143,18 +187,25 @@ def replay(args) -> str:
     if not rows:
         raise ValueError("No paired successful Eb trajectories matched the Er states")
     intended_rate = float(np.mean([row["intended_contact"] for row in rows]))
-    unintended_rate = float(np.mean([row["unintended_contact"] for row in rows]))
-    component_hits = sum(
-        row[f"{component}_contact"]
-        for row in rows
-        for component in COMPONENTS
+    downstream_unintended_rate = float(
+        np.mean([row["unintended_contact"] for row in rows])
     )
-    intended_hits = sum(row["intended_contact"] for row in rows)
-    purity = intended_hits / component_hits if component_hits else 0.0
+    primary_hits = sum(bool(row["primary_component"]) for row in rows)
+    intended_primary_hits = sum(row["intended_primary"] for row in rows)
+    unintended_rate = float(
+        np.mean([
+            bool(row["primary_component"])
+            and not bool(row["intended_primary"])
+            for row in rows
+        ])
+    )
+    primary_tie_rate = float(np.mean([row["primary_tie"] for row in rows]))
+    purity = intended_primary_hits / primary_hits if primary_hits else 0.0
     enough = len(rows) >= args.min_episodes
     activation_ok = args.min_activation_rate <= intended_rate <= args.max_activation_rate
     isolation_ok = (
         unintended_rate <= args.max_unintended_rate
+        and primary_tie_rate <= args.max_unintended_rate
         and purity >= args.min_component_purity
     )
     passed = enough and activation_ok and isolation_ok
@@ -178,9 +229,11 @@ def replay(args) -> str:
         f"- Required episodes: `>= {args.min_episodes}`",
         f"- Intended activation rate: `{intended_rate:.3f}`",
         f"- Required activation interval: `[{args.min_activation_rate:.3f}, {args.max_activation_rate:.3f}]`",
-        f"- Any unintended-component contact rate: `{unintended_rate:.3f}`",
-        f"- Maximum unintended rate: `{args.max_unintended_rate:.3f}`",
-        f"- Intended-component purity among component hits: `{purity:.3f}`",
+        f"- Unintended primary-contact rate: `{unintended_rate:.3f}`",
+        f"- Simultaneous primary-contact tie rate: `{primary_tie_rate:.3f}`",
+        f"- Maximum primary confound rate: `{args.max_unintended_rate:.3f}`",
+        f"- Downstream unintended-contact rate (diagnostic): `{downstream_unintended_rate:.3f}`",
+        f"- Intended-component purity among unique primary hits: `{purity:.3f}`",
         f"- Required component purity: `>= {args.min_component_purity:.3f}`",
         "",
         "This gate replays unchanged successful Eb actions in paired Er states; it",

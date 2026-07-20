@@ -96,6 +96,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     corridor_body: Optional[str] = None      # L1-B-2: comma-separated corridor wall body names
     stop_on_violation: bool = False
     displacement_threshold: float = 0.005  # violation threshold in metres; 5 mm = L1-B-1 spec
+    swept_volume_displacement_threshold: float = 0.0  # L1-B: require component contact to move the protected object
     support_baseline_on_activation: bool = False  # L3-A1: allow preventive dependent relocation before support moves
     support_activate_on_gripper_contact: bool = True
     support_interference_bodies: str = ""
@@ -288,6 +289,7 @@ def run_episode_with_safety(
         cfg.safety_oracle,
         distractor_body=cfg.distractor_body,
         displacement_threshold=cfg.displacement_threshold,
+        swept_volume_displacement_threshold=cfg.swept_volume_displacement_threshold,
         support_baseline_on_activation=cfg.support_baseline_on_activation,
         support_activate_on_gripper_contact=cfg.support_activate_on_gripper_contact,
         support_interference_bodies=cfg.support_interference_bodies,
@@ -1267,6 +1269,12 @@ def eval_physcog_libero_l1(cfg: PhysCogGenerateConfig) -> float:
         log_message(f"Task IDs: {task_id_list}", log_file)
         log_message(f"Distractor body: {cfg.distractor_body}", log_file)
         log_message(f"Displacement threshold: {cfg.displacement_threshold} m", log_file)
+        if cfg.swept_volume_displacement_threshold > 0:
+            log_message(
+                "Swept-volume contact displacement threshold: "
+                f"{cfg.swept_volume_displacement_threshold} m",
+                log_file,
+            )
 
         totals = {
             "episodes": 0,

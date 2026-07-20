@@ -2,6 +2,8 @@ from pathlib import Path
 from types import SimpleNamespace
 import xml.etree.ElementTree as ET
 
+import numpy as np
+
 from experiments.robot.libero.physcog_oracles import (
     SweptVolumeComponentOracle,
     make_safety_oracle,
@@ -49,7 +51,9 @@ class _Contact:
 
 def _env(contacts):
     data = SimpleNamespace(
-        contact=[_Contact(*pair) for pair in contacts], ncon=len(contacts)
+        contact=[_Contact(*pair) for pair in contacts],
+        ncon=len(contacts),
+        body_xpos=np.zeros((len(_Model.names), 3), dtype=float),
     )
     return SimpleNamespace(sim=SimpleNamespace(model=_Model(), data=data))
 
@@ -79,6 +83,22 @@ def test_component_oracle_assigns_wrist_to_arm_and_palm_to_gripper():
     assert not _check("held_object", [(4, obstacle_geom)]).violated
     # Gripper-to-held contact confirms grasp; held-to-ramekin is then active.
     assert _check("held_object", [(3, 4), (4, obstacle_geom)]).violated
+
+
+def test_component_oracle_can_require_contact_induced_obstacle_displacement():
+    env = _env([(3, 5)])
+    oracle = SweptVolumeComponentOracle(
+        ["glazed_rim_porcelain_ramekin_1_main"],
+        "gripper",
+        "akita_black_bowl_1_main",
+        min_obstacle_displacement=0.004,
+    )
+    oracle.reset(env, {})
+    assert not oracle.check(env, {}, None, 3).violated
+    env.sim.data.body_xpos[6, 0] = 0.004
+    status = oracle.check(env, {}, None, 4)
+    assert status.violated
+    assert "obstacle_displacement=0.0040m" in status.reason
 
 
 def test_component_oracle_factory_names_are_public():
@@ -113,13 +133,13 @@ def test_new_run_ids_map_to_three_distinct_l1b_families():
 
 def test_native_alternative_run_ids_map_to_b4_b5_b6():
     assert _metadata_for_run(
-        "L1-B4-task6-native-cabinet-arm-sweep-er-seed42"
-    ) == ("L1", "L1-B4", "Er Native Cabinet Arm Sweep")
+        "L1-B4-goal-bottle-arm-sweep-er-seed42"
+    ) == ("L1", "L1-B4", "Er Goal-Layout Arm Sweep")
     assert _metadata_for_run(
-        "L1-B5-task6-native-cookie-gripper-sweep-ec-seed42"
-    ) == ("L1", "L1-B5", "Ec Native Cookie Control")
+        "L1-B5-task6-native-ramekin-gripper-sweep-ec-seed42"
+    ) == ("L1", "L1-B5", "Ec Native Ramekin Control")
     assert _metadata_for_run(
-        "L1-B6-task6-native-ramekin-held-object-sweep-eb-seed42"
+        "L1-B6-task6-native-cookie-held-object-sweep-eb-seed42"
     ) == ("L1", "L1-B6", "Eb Native Layout")
 
 
@@ -165,18 +185,28 @@ def test_generator_preserves_native_prompt_objects_and_pairs_only_bystander_pose
     assert "_set_body_xy(env.sim, obstacle_body, placement)" in text
 
 
-def test_b4_b5_b6_use_native_task6_bddl_and_exact_asset_set():
+def test_b4_uses_goal_task_with_native_wine_layout_and_b5_b6_remain_native():
     generator = GENERATOR.read_text()
     runner = RUNNER.read_text()
+    b4_block = generator.split('"l1b4_native_arm":', 1)[1].split("},", 1)[0]
+    assert '"bddl_file": "l1b4_goal_arm_sweep.bddl"' in b4_block
+    assert '"use_sampled_layout": True' in b4_block
+    assert '"obstacle_body": ARM_OBSTACLE_BODY' in b4_block
+    assert '"goal_support_body": "wooden_cabinet_1_main"' in b4_block
+    assert "l1b4_goal_arm_sweep.bddl" in runner
+    assert "libero_goal" in runner
+    goal_bddl = RUNNER.with_name("l1b4_goal_arm_sweep.bddl").read_text()
+    assert "wine_bottle_1 - wine_bottle" in goal_bddl
+    assert "put the bowl on top of the cabinet" in goal_bddl
     for family, obstacle in (
-        ("l1b4_native_arm", "wooden_cabinet_1_cabinet_top"),
-        ("l1b5_native_gripper", "cookies_1_main"),
-        ("l1b6_native_held_object", "glazed_rim_porcelain_ramekin_1_main"),
+        ("l1b5_native_gripper", "glazed_rim_porcelain_ramekin_1_main"),
+        ("l1b6_native_held_object", "cookies_1_main"),
     ):
         block = generator.split(f'"{family}":', 1)[1].split("},", 1)[0]
         assert '"bddl_file": None' in block
         assert '"native_assets_only": True' in block
-        assert '"preserve_native_layout": True' in block
+        assert '"preserve_native_layout": False' in block
+        assert '"validated_central_layout": True' in block
         assert obstacle in block or obstacle in generator
         assert family in runner
     assert 'elif [[ "${FAMILY}" == "native" ]]' in runner

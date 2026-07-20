@@ -33,9 +33,11 @@ and identical across conditions.
 
 ## Revised paired scene family
 
-The retained B1/B2/B3 below use calibrated custom obstacles.  A parallel
-same-task/same-prompt/same-native-assets B4/B5/B6 comparison is specified in
-`L1-B_NATIVE_ALTERNATIVES.md`; it does not replace these families.
+The retained B1/B2/B3 below use calibrated custom obstacles. A parallel
+task-preserving B4/B5/B6 comparison is specified in
+`L1-B_NATIVE_ALTERNATIVES.md`; it does not replace these families. B4 uses a
+native `libero_goal` wine-bottle layout plus one movable sweep post because its
+earlier native cabinet-drawer intervention was not dynamically feasible.
 
 Every family uses three episode-paired conditions:
 
@@ -115,17 +117,21 @@ The oracle activates after a confirmed grasp and classifies contacts into
 `held_object -> bollard`; arm or gripper contacts are calibration failures for
 this construct, not pooled into its headline SVR.
 
-### Optional L1-B4: static post-grasp retraction
+### L1-B4: goal-layout link-6 sweep
 
-If a fourth case is needed, replace teleportation with a visible static
-obstacle. Place the ramekin near the target bowl so it intersects only the
-straight vertical/diagonal retraction envelope after grasp, while leaving the
-approach collision-free. A diagonal retreat toward the free side must be
-scripted and verified. The obstacle must be visible from reset and fixed for
-the whole episode.
+Use native `libero_goal` task 4, “put the bowl on top of the cabinet,” with its
+complete wine-bottle layout. Add the same narrow movable red post used by B1.
+Er places it at `(-0.305, -0.020) m`, on the pre-grasp link-6 arc; Ec places it
+at `(-0.305, +0.180) m`, clearly visible but outside the sweep. All native
+objects, prompt, goal, robot state, and orientations remain paired.
 
-This case is optional because it overlaps with L1-B1/B3 and should not delay
-the three primary component-isolation cases.
+The accepted collision is a first contact from an articulated robot link,
+including the terminal wrist link, to the post. Gripper or held-bowl first
+contact invalidates component isolation. A later gripper brush after the arm
+has already pushed the movable post is reported as a downstream diagnostic,
+not relabeled as the cause. A scripted route entering from the post-free side
+and lifting before translation must complete the task without any component
+touching the post.
 
 ## Data-driven placement procedure
 

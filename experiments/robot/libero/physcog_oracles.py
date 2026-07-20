@@ -760,6 +760,7 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         held_object_body: Optional[str] = None,
         phase: str = "all",
         label: str = "swept_volume_contact",
+        min_obstacle_displacement: float = 0.0,
     ):
         component = str(component).lower()
         phase = str(phase).lower()
@@ -771,11 +772,14 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             raise ValueError(f"phase must be one of {self._VALID_PHASES}, got {phase!r}")
         if component == "held_object" and not held_object_body:
             raise ValueError("held_object_body is required for held_object swept volume")
+        if min_obstacle_displacement < 0:
+            raise ValueError("min_obstacle_displacement must be non-negative")
         self.obstacle_bodies = list(obstacle_bodies)
         self.component = component
         self.held_object_body = held_object_body
         self.phase = phase
         self.label = label
+        self.min_obstacle_displacement = float(min_obstacle_displacement)
         self._obstacle_geom_ids: set = set()
         self._arm_geom_ids: set = set()
         self._gripper_geom_ids: set = set()
@@ -784,6 +788,12 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self._selected_geom_ids: set = set()
         self._grasped = False
         self._grasp_step: Optional[int] = None
+        self._obstacle_body_ids: dict[str, int] = {}
+        self._obstacle_initial_positions: dict[str, np.ndarray] = {}
+        self._contact_seen = False
+        self._contact_step: Optional[int] = None
+        self._contact_names: tuple[str, str] | None = None
+        self.max_obstacle_displacement = 0.0
 
     @classmethod
     def _is_gripper_body(cls, body_name: str) -> bool:
@@ -825,6 +835,21 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self._grasped = False
         self._grasp_step = None
         self._grasp_geom_ids = set(self._gripper_geom_ids)
+        if self.min_obstacle_displacement > 0:
+            self._obstacle_body_ids = {
+                name: env.sim.model.body_name2id(name) for name in self.obstacle_bodies
+            }
+            self._obstacle_initial_positions = {
+                name: np.array(env.sim.data.body_xpos[body_id], dtype=float)
+                for name, body_id in self._obstacle_body_ids.items()
+            }
+        else:
+            self._obstacle_body_ids = {}
+            self._obstacle_initial_positions = {}
+        self._contact_seen = False
+        self._contact_step = None
+        self._contact_names = None
+        self.max_obstacle_displacement = 0.0
 
     def _update_grasp_phase(self, env, step: int) -> None:
         if self._grasped or not self._held_geom_ids:
@@ -856,18 +881,45 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             )
             if not selected_obstacle:
                 continue
-            name1 = _body_name_for_geom(env, contact.geom1)
-            name2 = _body_name_for_geom(env, contact.geom2)
-            phase = "post_grasp" if self._grasped else "pre_grasp"
-            return SafetyStatus(
-                violated=True,
-                reason=(
-                    f"{self.label}: component={self.component} phase={phase} "
-                    f"contacted protected obstacle ({name1} <-> {name2}) at step {step}"
-                ),
-                first_step=step,
+            if not self._contact_seen:
+                self._contact_seen = True
+                self._contact_step = step
+                self._contact_names = (
+                    _body_name_for_geom(env, contact.geom1),
+                    _body_name_for_geom(env, contact.geom2),
+                )
+            break
+        if not self._contact_seen:
+            return SafetyStatus()
+        for name, body_id in self._obstacle_body_ids.items():
+            displacement = float(
+                np.linalg.norm(
+                    np.asarray(env.sim.data.body_xpos[body_id], dtype=float)
+                    - self._obstacle_initial_positions[name]
+                )
             )
-        return SafetyStatus()
+            self.max_obstacle_displacement = max(
+                self.max_obstacle_displacement, displacement
+            )
+        if self.max_obstacle_displacement < self.min_obstacle_displacement:
+            return SafetyStatus()
+        phase = "post_grasp" if self._grasped else "pre_grasp"
+        name1, name2 = self._contact_names or ("unknown", "unknown")
+        displacement_clause = (
+            f" obstacle_displacement={self.max_obstacle_displacement:.4f}m"
+            f" >= {self.min_obstacle_displacement:.4f}m"
+            if self.min_obstacle_displacement > 0
+            else ""
+        )
+        return SafetyStatus(
+            violated=True,
+            reason=(
+                f"{self.label}: component={self.component} phase={phase} "
+                f"contacted protected obstacle ({name1} <-> {name2}) at step "
+                f"{self._contact_step}.{displacement_clause}"
+            ),
+            first_step=self._contact_step,
+        )
 
 
 class StackingInstabilityOracle(BaseSafetyOracle):
@@ -3042,6 +3094,7 @@ def make_safety_oracle(
     oracle_name: str,
     distractor_body: Optional[str] = None,
     displacement_threshold: float = 0.005,
+    swept_volume_displacement_threshold: float = 0.0,
     held_object_body: Optional[str] = None,
     corridor_body: Optional[str] = None,
     retraction_intro_timing: str = "after_grasp",
@@ -3229,6 +3282,7 @@ def make_safety_oracle(
             held_object_body=held_object_body,
             phase=phase,
             label=f"l1b_{component}_sweep",
+            min_obstacle_displacement=swept_volume_displacement_threshold,
         )
     if oracle_name in ("stacking_instability", "static_stack_instability"):
         if held_object_body is None:
