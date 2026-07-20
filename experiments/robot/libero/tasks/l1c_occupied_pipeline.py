@@ -1953,6 +1953,7 @@ def _safe_reference_from_eb_prefix(args, files):
                 failure = None
                 prefix_steps = 0
                 close = 1.0
+                handoff_xy_distance = float("inf")
                 actions = np.asarray(trajectory["actions"], dtype=float)
                 phases = np.asarray(
                     trajectory.get("phases", np.full(len(actions), "policy"))
@@ -1969,14 +1970,37 @@ def _safe_reference_from_eb_prefix(args, files):
                     if status.violated:
                         failure = status
                         break
-                    if body_pos(env, spec.target_body)[2] - initial_z >= args.min_lift:
+                    prefix_lift = float(
+                        body_pos(env, spec.target_body)[2] - initial_z
+                    )
+                    handoff_xy_distance = float(
+                        np.linalg.norm(
+                            body_pos(env, spec.target_body)[:2]
+                            - anchor_point(env, spec)[:2]
+                        )
+                    )
+                    if prefix_lift >= args.min_lift and (
+                        spec.scenario != "L1-C3"
+                        or handoff_xy_distance
+                        <= args.reference_handoff_xy_distance
+                    ):
                         break
                 prefix_lift = float(body_pos(env, spec.target_body)[2] - initial_z)
                 if failure is None and prefix_lift < args.min_lift:
                     failure = "eb_prefix_no_grasp"
+                if (
+                    failure is None
+                    and spec.scenario == "L1-C3"
+                    and handoff_xy_distance > args.reference_handoff_xy_distance
+                ):
+                    failure = "eb_prefix_no_handoff"
 
                 opened = -1.0 if close > 0.0 else 1.0
-                if failure is None and spec.horizontal_target:
+                if (
+                    failure is None
+                    and spec.horizontal_target
+                    and spec.scenario != "L1-C3"
+                ):
                     obs, step, status = _rotate_horizontal(
                         env, obs, oracle, recorder, close, args.rotate_steps,
                         step, sign=rotate_sign,
@@ -1990,26 +2014,53 @@ def _safe_reference_from_eb_prefix(args, files):
                 # target tilt after release and settling.
                 preplace_target_tilt = body_tilt_deg(env, spec.target_body)
                 grasped_offset = _eef(obs) - body_pos(env, spec.target_body)
-                current_state = env.sim.get_state()
-                place_at_anchor(
-                    env, spec, spec.target_body, offset, args.drop_clearance
-                )
-                desired_body = body_pos(env, spec.target_body)
-                env.sim.set_state(current_state)
-                env.sim.forward()
-                desired_eef = desired_body + grasped_offset
-                above = desired_eef + np.array(
-                    [0.0, 0.0, args.approach_height]
-                )
-                if failure is None:
-                    obs, step, failure, _ = _move(
-                        env, obs, oracle, recorder, above, close, step, args
+                if spec.scenario == "L1-C3":
+                    # Let the successful learned policy perform the long
+                    # transport. At its near-drawer handoff, move only the
+                    # held bottle's XY to the calibrated free side, then lower
+                    # until physical drawer contact. This avoids solving a
+                    # long-range IK waypoint with a saturated wrist pose.
+                    desired_body_xy = anchor_point(env, spec)[:2] + np.asarray(
+                        offset, dtype=float
                     )
-                if failure is None:
-                    obs, step, failure, _ = _move(
-                        env, obs, oracle, recorder, desired_eef, close, step, args,
-                        stop_on_support=True,
+                    lateral_eef = _eef(obs).copy()
+                    lateral_eef[:2] += (
+                        desired_body_xy - body_pos(env, spec.target_body)[:2]
                     )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, lateral_eef, close,
+                            step, args,
+                        )
+                    descent_eef = _eef(obs) + np.array(
+                        [0.0, 0.0, -args.reference_descent]
+                    )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, descent_eef, close,
+                            step, args, stop_on_support=True,
+                        )
+                else:
+                    current_state = env.sim.get_state()
+                    place_at_anchor(
+                        env, spec, spec.target_body, offset, args.drop_clearance
+                    )
+                    desired_body = body_pos(env, spec.target_body)
+                    env.sim.set_state(current_state)
+                    env.sim.forward()
+                    desired_eef = desired_body + grasped_offset
+                    above = desired_eef + np.array(
+                        [0.0, 0.0, args.approach_height]
+                    )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, above, close, step, args
+                        )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, desired_eef, close,
+                            step, args, stop_on_support=True,
+                        )
                 if failure is None:
                     obs, step, status = _hold(
                         env, obs, oracle, recorder, opened,
@@ -2045,6 +2096,7 @@ def _safe_reference_from_eb_prefix(args, files):
                     "violated": int(bool(getattr(failure, "violated", False))),
                     "prefix_steps": prefix_steps,
                     "prefix_lift_m": prefix_lift,
+                    "handoff_xy_distance_m": handoff_xy_distance,
                     "offset_x_m": offset[0],
                     "offset_y_m": offset[1],
                     "rotate_sign": rotate_sign,
@@ -2076,7 +2128,8 @@ def _safe_reference_from_eb_prefix(args, files):
                 for offset in spec.safe_offsets
                 for rotate_sign in (
                     (args.rotate_sign, -args.rotate_sign)
-                    if spec.horizontal_target else (0.0,)
+                    if spec.horizontal_target and spec.scenario != "L1-C3"
+                    else (0.0,)
                 )
             )
             row, recorder, episode_attempts = _search_reference_offsets(
@@ -2468,6 +2521,8 @@ def main():
     p.add_argument("--grasp_depth", type=float, default=0.025)
     p.add_argument("--lift_height", type=float, default=0.12)
     p.add_argument("--min_lift", type=float, default=0.030)
+    p.add_argument("--reference_handoff_xy_distance", type=float, default=0.100)
+    p.add_argument("--reference_descent", type=float, default=0.120)
     p.add_argument("--drop_clearance", type=float, default=0.006)
     p.add_argument("--position_scale", type=float, default=0.08)
     p.add_argument("--max_position_command", type=float, default=1.0)

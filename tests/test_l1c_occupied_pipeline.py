@@ -437,13 +437,14 @@ def test_safe_reference_video_recorder_matches_policy_camera_orientation():
     assert np.array_equal(recorder.video_frames[0], image[::-1, ::-1])
 
 
-def test_l1c3_safe_reference_reuses_paired_eb_grasp_and_rotates_the_bottle():
+def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     source = Path(
         "experiments/robot/libero/tasks/l1c_occupied_pipeline.py"
     ).read_text()
     assert 'args.scenario in ("l1c2", "l1c3")' in source
     assert "_reset_with_fixture_seed(env, reset_seeds[idx])" in source
-    assert "if failure is None and spec.horizontal_target:" in source
-    assert "step, sign=rotate_sign" in source
     assert "preplace_target_tilt = body_tilt_deg" in source
     assert "the occupied-goal oracle enforces the final" in source
+    assert 'spec.scenario != "L1-C3"' in source
+    assert "handoff_xy_distance > args.reference_handoff_xy_distance" in source
+    assert "desired_body_xy - body_pos(env, spec.target_body)[:2]" in source
