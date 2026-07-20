@@ -62,7 +62,7 @@ DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.b
 # (probe showed angular speed still ~2 rad/s at step 80, converging to ~0 only
 # by ~step 300). Settle long enough that the SAVED state is genuinely at rest,
 # otherwise eval loads a still-toppling bottle. See L3A_RUNS.md.
-SETTLE_STEPS = 400
+SETTLE_STEPS = 800
 # A near-critical support contact must be shown to the policy before any
 # controller-generated action changes it.  L3-A1 Er/Ec therefore use zero
 # pre-policy dummy actions; physical stability is instead enforced by the

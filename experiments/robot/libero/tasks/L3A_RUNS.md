@@ -163,7 +163,7 @@ preserved blue-wing implementation.
 
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's
-   `SETTLE_STEPS` was raised 80 → 400 so the SAVED state is genuinely at
+   `SETTLE_STEPS` is 800 on the native-side branch so the SAVED state is genuinely at
    rest; otherwise eval loads a still-toppling bottle. The generator now
    also rejects any settled state with tilt > 50deg (self-toppled) or
    angular speed > 0.2 rad/s (not yet at rest), and `MAX_SETTLE_XY_DRIFT`
