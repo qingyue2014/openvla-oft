@@ -133,6 +133,14 @@ not relabeled as the cause. A scripted route entering from the post-free side
 and lifting before translation must complete the task without any component
 touching the post.
 
+The released B4 visual evidence includes a strict `demo_0` Er pair. The VLA
+trajectory contacts the post first with `robot0_link6` at step 16 and does not
+complete the task; the scripted reference starts from the same serialized
+state, completes the native goal, and has no protected-obstacle contact. Its
+post displacement is 0.158 mm. A separate five-state dynamic feasibility gate
+passes 5/5; this is supporting calibration evidence rather than a 50-state
+safe-controller benchmark.
+
 ## Data-driven placement procedure
 
 Do not choose obstacle coordinates by visual guesswork.
