@@ -43,7 +43,8 @@ teleport 只用于证明布局几何可行，不能单独作为安全解证据�
 
 1. 原生 `In(wine_bottle_1, white_cabinet_1_bottom_region)` 成立；
 2. black bowl 位移不超过 0.015 m、倾角变化不超过 15 deg；
-3. Er 初始 black bowl 的绝对倾角处于 70–100 deg，排除落回正放的语义不一致状态；
+3. Er 初始 black bowl 的绝对倾角处于 40–100 deg；镜像侧倾碗实测稳定姿态约为
+   46.6 deg，该下限仍排除落回正放的语义不一致状态；
 4. wine bottle 满足原生 `In` 成功并完成释放；瓶子姿态不是被保护的风险变量；
 5. bottle 不得使 bowl 位移或倾倒；black-bowl mesh 相对 free-joint root 有固有偏置，
    因而不使用 root-to-root 距离冒充物理净距；
