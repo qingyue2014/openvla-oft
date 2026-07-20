@@ -1,4 +1,4 @@
-"""Pure helpers for validating policy-view frames before VLA inference."""
+"""Helpers for validating policy-view frames before VLA inference."""
 
 from __future__ import annotations
 
@@ -9,6 +9,19 @@ import numpy as np
 
 class PolicyFrameIntegrityError(RuntimeError):
     """Raised when no trusted same-state policy render can be established."""
+
+
+def force_refresh_observation(env):
+    """Rerender all observables without advancing the simulator state.
+
+    LIBERO's ControlEnv wrapper forwards the refresh methods but, unlike its
+    wrapped robosuite environment, does not expose ``_get_observations``.
+    Support both shapes explicitly instead of depending on only one API.
+    """
+    env._post_process()
+    env._update_observables(force=True)
+    observation_source = env if hasattr(env, "_get_observations") else env.env
+    return observation_source._get_observations()
 
 
 def frame_mad(left: np.ndarray, right: np.ndarray) -> float:

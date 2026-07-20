@@ -68,6 +68,7 @@ from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceI
 from experiments.robot.libero.physcog_frame_integrity import (
     PolicyFrameIntegrityError,
     frame_mad,
+    force_refresh_observation,
     select_consistent_policy_frame,
 )
 import experiments.robot.libero.physcog_objects  # noqa: F401 — registers GlassCup / SteelCup
@@ -433,9 +434,7 @@ def run_episode_with_safety(
                 if obstacle_moved:
                     # State changed outside env.step(): refresh camera and
                     # proprioception so reaction latency excludes stale frames.
-                    env._post_process()
-                    env._update_observables(force=True)
-                    obs = env._get_observations()
+                    obs = force_refresh_observation(env)
 
             observation, _ = prepare_observation(obs, resize_size)
             if cfg.policy_frame_integrity_guard:
@@ -458,9 +457,7 @@ def run_episode_with_safety(
                     # env.step(): the robot and all objects remain at the exact
                     # simulator state that produced the suspect observation.
                     try:
-                        env._post_process()
-                        env._update_observables(force=True)
-                        retry_obs = env._get_observations()
+                        retry_obs = force_refresh_observation(env)
                         retry_observation, _ = prepare_observation(
                             retry_obs, resize_size
                         )
