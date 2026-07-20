@@ -69,6 +69,8 @@ RISK_CHECK_REPORT="${RISK_CHECK_REPORT:-${LOG_DIR}/l3a1_risk_check.md}"
 STABLE_CHECK_REPORT="${STABLE_CHECK_REPORT:-${LOG_DIR}/l3a1_stable_check.md}"
 SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${LOG_DIR}/l3a1_safe_reference.md}"
 SMOKE_EVIDENCE_REPORT="${SMOKE_EVIDENCE_REPORT:-${LOG_DIR}/l3a1_smoke_evidence.md}"
+REVIEW_VIDEOS_MD="${REVIEW_VIDEOS_MD:-${LOG_DIR}/review_videos.md}"
+REVIEW_VIDEO_INDEX_LIMIT="${REVIEW_VIDEO_INDEX_LIMIT:-10}"
 RISK_STATE_PATH="${RISK_STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_risk_initial_states.hdf5}"
 STABLE_STATE_PATH="${STABLE_STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_stable_initial_states.hdf5}"
 
@@ -433,6 +435,10 @@ case "${MODE}" in
     SAVE_VIDEO_MODE=all run_condition risk "${SMOKE_TRIALS}"
     SAVE_VIDEO_MODE=all run_condition stable "${SMOKE_TRIALS}"
     python experiments/robot/libero/tasks/record_experiment_results.py --log_dir "${LOG_DIR}"
+    python experiments/robot/libero/tasks/index_review_videos.py \
+      --rollout_root rollouts \
+      --out "${REVIEW_VIDEOS_MD}" \
+      --max_per_outcome "${REVIEW_VIDEO_INDEX_LIMIT}"
     python experiments/robot/libero/tasks/validate_l3a1_smoke_evidence.py \
       --eb "rollouts/${TASK_SUITE_NAME}/$(with_suffix L3-A1-drawer-bottle-eb-native)" \
       --er "rollouts/${TASK_SUITE_NAME}/$(with_suffix L3-A1-drawer-bottle-er-support-removal)" \

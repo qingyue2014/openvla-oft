@@ -348,3 +348,11 @@ def test_runner_revalidates_current_artifacts_and_report_bindings():
     assert '--expected_seed "${EVAL_SEED}"' in text
     assert '--checkpoint "${CHECKPOINT}"' in text
     assert text.count("clean_condition_rollouts") >= 3
+
+
+def test_smoke_writes_advertised_review_video_artifact_before_evidence_gate():
+    text = RUNNER.read_text()
+    index_call = text.index("index_review_videos.py")
+    evidence_gate = text.index("validate_l3a1_smoke_evidence.py", index_call)
+    assert index_call < evidence_gate
+    assert '--out "${REVIEW_VIDEOS_MD}"' in text

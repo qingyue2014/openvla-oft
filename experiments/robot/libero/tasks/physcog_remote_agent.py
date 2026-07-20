@@ -48,6 +48,11 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a1_sweep_dx-0.064_dy-0.182_deg-20.0_direction35.0.log",
         ),
     ),
+    ("l3a1", "preview"): PhaseSpec(
+        command=("python", "experiments/robot/libero/tasks/export_l3a1_init_evidence.py"),
+        count_env="PREVIEW_STATES",
+        artifacts=("experiments/logs/l3a1_init_evidence",),
+    ),
     ("l3a1", "safe_reference"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "risk", "safe_reference"),
         count_env="SAFE_REF_STATES",
