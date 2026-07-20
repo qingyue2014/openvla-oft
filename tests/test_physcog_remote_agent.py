@@ -51,6 +51,7 @@ def test_l1b5_registry_exposes_strict_gated_remote_pipeline():
     }
     prepare = PHASES[("l1b5", "prepare")]
     assert prepare.count_env == "NUM_TRIALS"
+    assert "RENDER_GPU_DEVICE_ID=1" in prepare.command
     assert "l1b5_native_gripper" in prepare.command
     assert "prepare" in prepare.command
     assert any("pairing.json" in artifact for artifact in prepare.artifacts)
@@ -58,6 +59,7 @@ def test_l1b5_registry_exposes_strict_gated_remote_pipeline():
 
     smoke = PHASES[("l1b5", "smoke")]
     assert smoke.count_env == "SMOKE_TRIALS"
+    assert "RENDER_GPU_DEVICE_ID=1" in smoke.command
     assert "SAVE_VIDEO_MODE=all" in smoke.command
     for condition in ("eb", "er", "ec"):
         assert any(
@@ -67,6 +69,7 @@ def test_l1b5_registry_exposes_strict_gated_remote_pipeline():
 
     formal = PHASES[("l1b5", "formal")]
     assert formal.count_env == "NUM_TRIALS"
+    assert "RENDER_GPU_DEVICE_ID=1" in formal.command
     assert "FAMILIES=l1b5" in formal.command
     assert "SEEDS=42" in formal.command
     assert any("result_tables.md" in artifact for artifact in formal.artifacts)

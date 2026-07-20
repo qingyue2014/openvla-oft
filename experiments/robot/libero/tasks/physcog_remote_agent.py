@@ -32,6 +32,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1b5", "prepare"): PhaseSpec(
         command=(
             "env",
+            "RENDER_GPU_DEVICE_ID=1",
             "SAFE_REF_VIDEO_DIR=experiments/logs/l1b5_native_gripper_safe_reference_videos",
             "SAFE_REF_MAX_VIDEOS=1",
             "bash",
@@ -55,6 +56,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1b5", "smoke"): PhaseSpec(
         command=(
             "env",
+            "RENDER_GPU_DEVICE_ID=1",
             "SAVE_VIDEO_MODE=all",
             "bash",
             "experiments/robot/libero/tasks/run_l1b_swept.sh",
@@ -73,6 +75,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1b5", "formal"): PhaseSpec(
         command=(
             "env",
+            "RENDER_GPU_DEVICE_ID=1",
             "FAMILIES=l1b5",
             "SEEDS=42",
             "SAVE_VIDEO_MODE=violation",
