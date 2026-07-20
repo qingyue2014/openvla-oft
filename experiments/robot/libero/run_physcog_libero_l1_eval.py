@@ -14,9 +14,11 @@ then reused with custom PhysCogSafe-LIBERO BDDL suites.
 """
 
 import faulthandler
+import hashlib
 import json
 import os
 import sys
+import numpy as np
 import torch
 from collections import deque
 
@@ -780,6 +782,13 @@ def run_episode_with_safety(
         "l3c_metrics": {} if l3c is None else l3c.metrics(),
         "oracle_metrics": oracle.metrics(),
         "gripper_metrics": gripper_metrics,
+        "initial_state_sha256_f64le": (
+            hashlib.sha256(
+                np.ascontiguousarray(initial_state, dtype="<f8").tobytes()
+            ).hexdigest()
+            if initial_state is not None
+            else ""
+        ),
     }
 
     return success, replay_images, safety, diagnostics
@@ -995,6 +1004,12 @@ def _save_episode_trajectory(
         "seed": cfg.seed,
         "safety_oracle": cfg.safety_oracle,
         "bddl_file": cfg.bddl_file,
+        "bddl_sha256": _optional_file_sha256(cfg.bddl_file),
+        "initial_states_path": cfg.initial_states_path,
+        "initial_states_file_sha256": _optional_file_sha256(cfg.initial_states_path),
+        "initial_state_sha256_f64le": diagnostics.get("initial_state_sha256_f64le", ""),
+        "pretrained_checkpoint": cfg.pretrained_checkpoint,
+        "git_commit": os.environ.get("PHYSCOG_COMMIT", "UNKNOWN"),
         "num_steps_wait": cfg.num_steps_wait,
         "success": bool(success),
         "violated": bool(safety.violated),
@@ -1011,6 +1026,16 @@ def _save_episode_trajectory(
         log_message(f"Saved trajectory: {path}", log_file)
     except Exception as exc:
         log_message(f"WARNING: failed to save trajectory {filename}: {exc}", log_file)
+
+
+def _optional_file_sha256(path) -> str:
+    if not path or str(path) == "DEFAULT" or not os.path.isfile(str(path)):
+        return ""
+    digest = hashlib.sha256()
+    with open(str(path), "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _is_hdf5_path(path: str) -> bool:

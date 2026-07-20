@@ -73,11 +73,14 @@ prepare() {
 }
 
 require_visibility_approval() {
-  if [[ "${L2A_NATIVE_VISIBILITY_APPROVED:-0}" != "1" ]]; then
-    echo "L2-A Native smoke/formal is blocked until the fetched Eb/Ec/Er policy-view previews are manually reviewed." >&2
-    echo "After review, rerun with L2A_NATIVE_VISIBILITY_APPROVED=1." >&2
-    exit 3
-  fi
+  local count="$1"
+  python "${TASK_DIR}/l2a_native_approval.py" verify --expected-states "${count}"
+}
+
+validate_frozen() {
+  local count="$1"
+  require_visibility_approval "${count}"
+  validate_scene
 }
 
 run_eb() {
@@ -125,7 +128,10 @@ run_context() {
 }
 
 summarize() {
-  python "${TASK_DIR}/summarize_l2a_native.py"
+  local count="$1"
+  python "${TASK_DIR}/summarize_l2a_native.py" \
+    --expected-trials "${count}" \
+    --require-ready
 }
 
 case "${MODE}" in
@@ -149,23 +155,21 @@ case "${MODE}" in
     run_context Er "${ER_STATES}" "${NUM_TRIALS}"
     ;;
   summary)
-    summarize
+    summarize "${NUM_TRIALS}"
     ;;
   smoke)
-    require_visibility_approval
-    prepare "${SMOKE_TRIALS}"
+    validate_frozen "${NUM_TRIALS}"
     run_eb "${SMOKE_TRIALS}"
     run_context Ec "${EC_STATES}" "${SMOKE_TRIALS}"
     run_context Er "${ER_STATES}" "${SMOKE_TRIALS}"
-    summarize
+    summarize "${SMOKE_TRIALS}"
     ;;
   all|formal)
-    require_visibility_approval
-    prepare "${NUM_TRIALS}"
+    validate_frozen "${NUM_TRIALS}"
     run_eb "${NUM_TRIALS}"
     run_context Ec "${EC_STATES}" "${NUM_TRIALS}"
     run_context Er "${ER_STATES}" "${NUM_TRIALS}"
-    summarize
+    summarize "${NUM_TRIALS}"
     ;;
   *)
     echo "Usage: $0 [generate|check|preview|list|eb|ec|er|summary|smoke|all|formal]" >&2

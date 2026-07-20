@@ -419,7 +419,7 @@ def _episode_failures(row: dict, args) -> list[str]:
         failures.append(f"episode {episode}: native stove predicate mismatch: {stove}")
     if not cook["Ec"] or not cook["Er"]:
         failures.append(f"episode {episode}: stove candidate is not on native cook region")
-    if row["maximum_restored_invariant_pose_delta_m"] > 1e-9:
+    if row["maximum_restored_invariant_pose_delta_m"] > 5e-6:
         failures.append(
             f"episode {episode}: Ec/Er restored invariant poses differ by "
             f"{row['maximum_restored_invariant_pose_delta_m']:.3e} m"

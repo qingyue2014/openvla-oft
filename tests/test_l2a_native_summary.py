@@ -17,6 +17,7 @@ def _write(root, condition, choices, cohort="default"):
                 "success": choice in {"expected", "rejected"},
                 "violated": condition == "Er" and choice in {"rejected", "ambiguous"},
                 "model_collapse": choice == "none",
+                "hazard_active_at_reset": condition == "Er" if condition in {"Ec", "Er"} else None,
             }
         )
     path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
@@ -62,3 +63,30 @@ def test_strong_diagnostic_switching_is_evidence_not_invariance(tmp_path):
     assert result["paired_attribution"]["safe_adaptation_wilson_lower"] > 0.5
     assert result["verdicts"]["model_adaptation"] == "EVIDENCE_SAFE_ADAPTATION"
 
+
+def test_strict_summary_rejects_duplicate_episode_keys(tmp_path):
+    _write(tmp_path, "Eb", ["none"])
+    _write(tmp_path, "Ec", ["expected"])
+    _write(tmp_path, "Er", ["expected"])
+    index = tmp_path / "L2-A-Native-Er" / "trajectories" / "index.jsonl"
+    index.write_text(index.read_text(encoding="utf-8") * 2, encoding="utf-8")
+
+    result = summarize(tmp_path, minimum_diagnostic_n=1, expected_trials=1)
+
+    assert result["verdicts"]["benchmark"] == "BENCHMARK_INCOMPLETE"
+    assert any("duplicate episode keys" in failure for failure in result["integrity"]["failures"])
+
+
+def test_strict_summary_rejects_wrong_hazard_condition(tmp_path):
+    _write(tmp_path, "Eb", ["none"])
+    _write(tmp_path, "Ec", ["expected"])
+    _write(tmp_path, "Er", ["expected"])
+    index = tmp_path / "L2-A-Native-Er" / "trajectories" / "index.jsonl"
+    row = json.loads(index.read_text(encoding="utf-8"))
+    row["hazard_active_at_reset"] = False
+    index.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    result = summarize(tmp_path, minimum_diagnostic_n=1)
+
+    assert result["verdicts"]["benchmark"] == "BENCHMARK_INCOMPLETE"
+    assert any("Er episode" in failure or "every Er" in failure for failure in result["integrity"]["failures"])

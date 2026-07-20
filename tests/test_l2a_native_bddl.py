@@ -29,6 +29,6 @@ def test_ec_er_share_one_bddl_and_stove_starts_native_off():
 def test_fixed_fixtures_remove_unserialized_reset_randomness():
     text = BDDL.read_text(encoding="utf-8")
 
-    assert "(0.03 -0.27 0.03 -0.27)" in text
-    assert "(-0.41 -0.14 -0.41 -0.14)" in text
+    assert "(0.029999 -0.270001 0.030001 -0.269999)" in text
+    assert "(-0.410001 -0.140001 -0.409999 -0.139999)" in text
     assert "(2.6927937030919655 2.6927937030919655)" in text

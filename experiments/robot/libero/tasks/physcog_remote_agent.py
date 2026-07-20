@@ -27,6 +27,7 @@ class PhaseSpec:
     count_env: str | None = None
     artifacts: tuple[str, ...] = ()
     cleanup_artifacts: tuple[str, ...] = ()
+    clean_artifacts_before_run: bool = True
 
 
 L2A1_ROLLOUT_DIRS = (
@@ -97,28 +98,54 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
     ),
     ("l2anative", "smoke"): PhaseSpec(
-        command=("env", "SAVE_VIDEO_MODE=all", "L2A_NATIVE_VISIBILITY_APPROVED=1",
+        command=("env", "SAVE_VIDEO_MODE=all",
                  "bash", "experiments/robot/libero/tasks/run_l2a_native.sh", "smoke"),
         count_env="SMOKE_TRIALS",
         artifacts=(
             "experiments/robot/libero/tasks/l2a_native_pairing.json",
             "experiments/robot/libero/tasks/l2a_native_ec_stove_off.hdf5",
             "experiments/robot/libero/tasks/l2a_native_er_stove_on.hdf5",
+            "experiments/robot/libero/tasks/l2a_native_policy_view_approval.json",
+            "experiments/logs/l2a_native_scene_check.md",
+            "experiments/logs/l2a_native_scene_check.json",
+            "experiments/robot/libero/tasks/l2a_native_preview",
             "experiments/logs/l2a_native_summary.md",
             "experiments/logs/l2a_native_summary.json",
             "rollouts/libero_goal/L2-A-Native-Eb",
             "rollouts/libero_goal/L2-A-Native-Ec",
             "rollouts/libero_goal/L2-A-Native-Er",
         ),
+        cleanup_artifacts=(
+            "rollouts/libero_goal/L2-A-Native-Eb",
+            "rollouts/libero_goal/L2-A-Native-Ec",
+            "rollouts/libero_goal/L2-A-Native-Er",
+        ),
+        clean_artifacts_before_run=False,
     ),
     ("l2anative", "formal"): PhaseSpec(
-        command=("env", "SAVE_VIDEO_MODE=none", "L2A_NATIVE_VISIBILITY_APPROVED=1",
+        command=("env", "SAVE_VIDEO_MODE=all",
                  "bash", "experiments/robot/libero/tasks/run_l2a_native.sh", "all"),
         count_env="NUM_TRIALS",
         artifacts=(
             "experiments/logs/l2a_native_summary.md",
             "experiments/logs/l2a_native_summary.json",
+            "experiments/logs/l2a_native_scene_check.md",
+            "experiments/logs/l2a_native_scene_check.json",
+            "experiments/robot/libero/tasks/l2a_native_pairing.json",
+            "experiments/robot/libero/tasks/l2a_native_ec_stove_off.hdf5",
+            "experiments/robot/libero/tasks/l2a_native_er_stove_on.hdf5",
+            "experiments/robot/libero/tasks/l2a_native_policy_view_approval.json",
+            "experiments/robot/libero/tasks/l2a_native_preview",
+            "rollouts/libero_goal/L2-A-Native-Eb",
+            "rollouts/libero_goal/L2-A-Native-Ec",
+            "rollouts/libero_goal/L2-A-Native-Er",
         ),
+        cleanup_artifacts=(
+            "rollouts/libero_goal/L2-A-Native-Eb",
+            "rollouts/libero_goal/L2-A-Native-Ec",
+            "rollouts/libero_goal/L2-A-Native-Er",
+        ),
+        clean_artifacts_before_run=False,
     ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
@@ -277,7 +304,13 @@ def build_batch_script(
     env = []
     if spec.count_env:
         env.append(f"export {spec.count_env}={shlex.quote(str(count))}")
-    cleanup_targets = tuple(dict.fromkeys((*spec.artifacts, *spec.cleanup_artifacts)))
+    cleanup_targets = tuple(
+        dict.fromkeys(
+            (*spec.artifacts, *spec.cleanup_artifacts)
+            if spec.clean_artifacts_before_run
+            else spec.cleanup_artifacts
+        )
+    )
     cleanup = [shell_join(("rm", "-rf", artifact)) for artifact in cleanup_targets]
     job_name = f"pc-{scenario}-{phase}"[:64]
     lines = [
@@ -301,6 +334,7 @@ def build_batch_script(
             if cfg.libero_root else []
         ),
         "export PYTHONUNBUFFERED=1",
+        'export PHYSCOG_COMMIT="$(git rev-parse HEAD)"',
         *env,
         "printf '__PHYSCOG_COMPUTE_NODE__=%s\\n' \"$(hostname)\"",
         "printf '__PHYSCOG_COMMIT__=%s\\n' \"$(git rev-parse HEAD)\"",

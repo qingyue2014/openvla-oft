@@ -78,7 +78,7 @@
       (cabinet_region
           (:target main_table)
           (:ranges (
-              (0.03 -0.27 0.03 -0.27)
+              (0.029999 -0.270001 0.030001 -0.269999)
             )
           )
           (:yaw_rotation (
@@ -89,7 +89,7 @@
       (stove_region
           (:target main_table)
           (:ranges (
-              (-0.41 -0.14 -0.41 -0.14)
+              (-0.410001 -0.140001 -0.409999 -0.139999)
             )
           )
       )
