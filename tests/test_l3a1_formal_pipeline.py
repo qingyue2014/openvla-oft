@@ -201,7 +201,7 @@ def test_generator_and_artifact_gate_policy_entry_transition():
 
 def test_l3a1_cabinet_fixture_is_fixed_for_serialized_state_replay():
     text = L3A1_BDDL.read_text()
-    assert "(0.0 0.30 0.0 0.30)" in text
+    assert "(-0.000000000001 0.299999999999 0.000000000001 0.300000000001)" in text
     assert "model.body_pos" in text
 
 
