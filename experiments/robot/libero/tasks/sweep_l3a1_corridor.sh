@@ -5,7 +5,7 @@ LOG_DIR="${LOG_DIR:-experiments/logs}"
 RUNNER="experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh"
 REPORT="${LOG_DIR}/l3a1_corridor_sweep.md"
 TRIALS="${CORRIDOR_SWEEP_TRIALS:-5}"
-MAX_ATTEMPTS="${CORRIDOR_SWEEP_MAX_ATTEMPTS:-1000}"
+MAX_ATTEMPTS="${CORRIDOR_SWEEP_MAX_ATTEMPTS:-150}"
 mkdir -p "${LOG_DIR}"
 
 [[ "${TRIALS}" == "5" ]] || {
@@ -13,7 +13,11 @@ mkdir -p "${LOG_DIR}"
   exit 2
 }
 
-candidates=(-0.080 -0.100 -0.120)
+# The coarse sweep found that -0.100 still supports the bottle while -0.120
+# cannot reach a supported equilibrium.  Resolve the remaining 2 cm interval
+# finely; this is also the interval where the bottle clears the policy's hand
+# trajectory.
+candidates=(-0.105 -0.110 -0.115)
 summary_args=()
 for dx in "${candidates[@]}"; do
   slug="dx${dx}"
