@@ -163,11 +163,11 @@ preserved blue-wing implementation.
 
 #### Native-side feasibility result (2026-07-20)
 
-Nine isolated SuperPod geometry sweeps were run from commits on this branch
+Ten isolated SuperPod geometry sweeps were run from commits on this branch
 (jobs `481934`, `481942`, `481954`, `481958`, `481970`, `481980`, `481981`,
-`481982`, and `481992`). No tested candidate passed the strict causal gates, so
-this experimental branch is **not a formal L3-A1 result** and must not replace
-`codex/l3a1-formal-ready@df7bb47`.
+`481982`, `481992`, and `482000`). No tested candidate passed the strict causal
+gates, so this experimental branch is **not a formal L3-A1 result** and must not
+replace `codex/l3a1-formal-ready@df7bb47`.
 
 The right-side scans covered coarse and near-contact poses, steeper leans,
 front-edge placements, a 2 cm vertical lift, and oblique approach directions.
@@ -185,6 +185,17 @@ threshold, while the selected panel was present. This rules out the tested
 grid, not the entire native-left topology or L3-A1 generally. The retained
 evidence is under `.physcog-agent/runs/*-l3a1-geometry_sweep`; the final mirror
 summary is in run `20260720T090013Z-l3a1-geometry_sweep`.
+
+Job `482000` then resolved the remaining right-side transition interval at
+0.5 mm spacing (`dx=0.153/0.1535/0.154/0.1545`, `lean=-44/-45/-46°`). All 12
+settings failed both attempts: the bottle contacted drawer geom `g33` and did
+not contact the selected native side panel `g36`. At the previously tested
+`dx=0.155` boundary, panel-contacting states instead survived the independent
+panel-disable intervention because bottle/table friction was sufficient to
+self-support them. The searched transition therefore contains no clean state
+where the native side panel is the unique removable support. Sub-millimetre
+interpolation beyond this point would overfit a contact boundary rather than
+establish a robust experiment, so this native-only route is stopped here.
 
 No preview or smoke video is generated for these candidates because video is a
 post-geometry gate: a visually convincing pose is insufficient unless exact
