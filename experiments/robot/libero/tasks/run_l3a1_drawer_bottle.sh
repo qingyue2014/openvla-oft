@@ -16,7 +16,7 @@ set -euo pipefail
 #               sweep-volume/collision hazard (the bottle is never in the
 #               arm's own path).
 #   stable  Ec  load each serialized Er state, make only the bottle upright,
-#               and apply Pi_safe's 7 cm parking move; all non-bottle state
+#               and apply Pi_safe's 10 cm parking move; all non-bottle state
 #               remains bit-identical to Er.
 #
 # IMPORTANT: DRAWER_BODY below is a best-effort guess at the compiled MuJoCo
@@ -57,12 +57,12 @@ TASK_DESCRIPTION="${TASK_DESCRIPTION:-put the black bowl in the bottom drawer of
 # Calibrated against the serialized-state gate: genuine support removal moves
 # the bottle COM 13.5--22.0 mm, while open-drawer hold drift is capped at 5 mm.
 DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.01}"
-LEAN_DX="${LEAN_DX:--0.145}"
+LEAN_DX="${LEAN_DX:--0.155}"
 LEAN_DY="${LEAN_DY:--0.184}"
-STABLE_X_OFFSET="${STABLE_X_OFFSET:--0.07}"
+STABLE_X_OFFSET="${STABLE_X_OFFSET:--0.10}"
 LEAN_DZ="${LEAN_DZ:-0.0}"
 LEAN_DEG="${LEAN_DEG:--30.0}"
-LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-0.0}"
+LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-15.0}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-}"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 RISK_CHECK_REPORT="${RISK_CHECK_REPORT:-${LOG_DIR}/l3a1_risk_check.md}"

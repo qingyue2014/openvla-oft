@@ -16,7 +16,7 @@ post-reset to a near-critical lean angle against a support surface:
                      sweep-volume/collision hazard: the bottle is never in the
                      arm's own path.
   --variant stable   load the paired serialized risk state, make only the
-                     bottle upright, and park it 7 cm along negative world x.
+                     bottle upright, and park it 10 cm along negative world x.
                      It is self-supporting and unaffected when the drawer
                      closes, providing a safe-precondition control.
 
@@ -127,14 +127,14 @@ DRAWER_CLOSED_QPOS = 0.0025
 # scripted drawer closure. dy=-0.175 is off the front edge and falls unaided.
 #
 # The custom support wing provides a centimetre-scale support margin outside
-# the robot/bowl corridor.  Its formal center is dx=-0.145; unlike the old
+# the robot/bowl corridor.  Its formal bottle x is dx=-0.155; unlike the old
 # native-front calibration, this is not a millimetre-clearance placement.
-DEFAULT_LEAN_DX = -0.145
+DEFAULT_LEAN_DX = -0.155
 DEFAULT_LEAN_DY = -0.184
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -30.0   # NEGATIVE: acquire the wing, then settle under gravity
                            # against the support wing; positive would lean it away and it topples
-DEFAULT_LEAN_DIRECTION_DEG = 0.0
+DEFAULT_LEAN_DIRECTION_DEG = 15.0
 # Fixed fixtures live in ``model.body_pos`` and are not part of MuJoCo's
 # flattened qpos/qvel state. The L3-A1 BDDL therefore pins the cabinet at the
 # center of its native region, and every internal reset must reproduce the
@@ -348,12 +348,23 @@ def _validate_support_wing_model(env, support_body: str) -> tuple[str, str]:
         or not np.allclose(model.geom_pos[collision_id], model.geom_pos[visual_id])
         or not np.allclose(model.geom_quat[collision_id], model.geom_quat[visual_id])
         or not np.allclose(model.geom_size[collision_id], model.geom_size[visual_id])
+        or not np.isclose(model.body_mass[support_id], 3.0)
+        or not np.allclose(model.body_inertia[support_id], np.ones(3))
     ):
-        raise RuntimeError("support-wing collision and visual geometry are not aligned")
+        raise RuntimeError(
+            "support-wing geometry is misaligned or native drawer inertia changed"
+        )
     return collision[0], visual[0]
 
 
-def _close_response(env, drawer_qadr: int, close_steps: int, settle_steps: int) -> dict:
+def _close_response(
+    env,
+    drawer_qadr: int,
+    close_steps: int,
+    settle_steps: int,
+    support_wing_geom: str,
+    support_body: str,
+) -> dict:
     """Script the bottom drawer shut and measure the dependent bottle response.
 
     This is the definitive test that the DRAWER is what holds the bottle up: a
@@ -367,6 +378,7 @@ def _close_response(env, drawer_qadr: int, close_steps: int, settle_steps: int) 
     pos_before = _body_pos(env, BOTTLE_BODY).copy()
     start_qpos = float(env.sim.data.qpos[drawer_qadr])
     response_contacts: set[str] = set()
+    wing_fixture_interference: set[str] = set()
     for i in range(close_steps):
         frac = (i + 1) / close_steps
         env.sim.data.qpos[drawer_qadr] = start_qpos + frac * (DRAWER_CLOSED_QPOS - start_qpos)
@@ -374,9 +386,17 @@ def _close_response(env, drawer_qadr: int, close_steps: int, settle_steps: int) 
         env.sim.forward()
         env.sim.step()
         response_contacts.update(_contact_body_names(env, BOTTLE_BODY))
+        wing_fixture_interference.update(
+            name for name in _contact_bodies_for_geom(env, support_wing_geom)
+            if name.startswith("white_cabinet_1_") and name != support_body
+        )
     for _ in range(settle_steps):
         env.sim.step()
         response_contacts.update(_contact_body_names(env, BOTTLE_BODY))
+        wing_fixture_interference.update(
+            name for name in _contact_bodies_for_geom(env, support_wing_geom)
+            if name.startswith("white_cabinet_1_") and name != support_body
+        )
     tilt_after = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     pos_after = _body_pos(env, BOTTLE_BODY).copy()
     return {
@@ -385,6 +405,7 @@ def _close_response(env, drawer_qadr: int, close_steps: int, settle_steps: int) 
         "height_drop_m": float(pos_before[2] - pos_after[2]),
         "contacts": response_contacts,
         "final_contact_geoms": _contact_geom_names(env, BOTTLE_BODY),
+        "wing_fixture_interference": wing_fixture_interference,
     }
 
 
@@ -905,8 +926,19 @@ def generate_states(
         # bowl -- both of which pass the geometric checks above but do NOT
         # depend on the drawer.
         close_response = _close_response(
-            env, drawer_qadr, verify_close_steps, SETTLE_STEPS
+            env,
+            drawer_qadr,
+            verify_close_steps,
+            SETTLE_STEPS,
+            support_wing_geom,
+            support_body,
         )
+        if close_response["wing_fixture_interference"]:
+            print(
+                f"  [skip attempt {attempts}] support wing jams cabinet during closure: "
+                f"{sorted(close_response['wing_fixture_interference'])}"
+            )
+            continue
         close_contamination = close_response["contacts"].intersection(forbidden_contacts)
         if close_contamination:
             print(
@@ -1100,6 +1132,9 @@ def generate_states(
                 "close_final_contact_geoms": ",".join(
                     sorted(close_response["final_contact_geoms"])
                 ),
+                "close_wing_fixture_interference": ",".join(
+                    sorted(close_response["wing_fixture_interference"])
+                ),
             }
         )
         if variant == "risk" and risk_template_relative_pos is None:
@@ -1135,7 +1170,7 @@ def main():
         help="Upright/self-supporting Ec tilt.",
     )
     parser.add_argument(
-        "--stable_x_offset", type=float, default=-0.07,
+        "--stable_x_offset", type=float, default=-0.10,
         help="Ec/Pi_safe parking offset from paired Er along world x (metres).",
     )
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")

@@ -12,7 +12,7 @@
 ; teleported in post-reset by generate_l3a1_drawer_bottle_initial_states.py,
 ; which places the bottle at a near-critical lean angle against either:
 ;   --variant risk   the bottom drawer's visible support wing (moves when closed)
-;   --variant stable  upright at Pi_safe's paired 7 cm parking pose
+;   --variant stable  upright at Pi_safe's paired 10 cm parking pose
 ; The BDDL region here only needs to keep the sampler from raising an error
 ; and from overlapping other native objects before the teleport happens.
 ;

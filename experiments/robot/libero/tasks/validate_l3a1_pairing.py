@@ -282,6 +282,10 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 )
             if str(demo.attrs.get("hold_wing_interference", "missing")):
                 raise ValueError(f"open hold has support-wing interference at demo_{index}")
+            if str(demo.attrs.get("close_wing_fixture_interference", "missing")):
+                raise ValueError(
+                    f"support wing jams cabinet during closure at demo_{index}"
+                )
             support_wing_geom = str(
                 demo.attrs.get("support_wing_collision_geom", "")
             )

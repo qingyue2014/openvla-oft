@@ -34,18 +34,19 @@ L3A1_SUPPORT_WING_BODY = "cabinet_bottom"
 L3A1_SUPPORT_WING_COLLISION = "l3a1_support_wing_collision"
 L3A1_SUPPORT_WING_VISUAL = "l3a1_support_wing_visual"
 # The third box half-size maps to world x under this drawer-local quaternion.
-# The interval [-0.180, -0.106] meets the native front plate without a seam;
-# the formal bottle center at x=-0.145 retains at least 35 mm edge clearance.
+# The world-x interval [-0.200, -0.106] lies outboard of the native drawer.
+# Its y center is 16 mm in front of the cabinet side-wall swept volume, so the
+# cantilevered support can retract fully without jamming the drawer.
 L3A1_SUPPORT_WING_COMMON = {
     "type": "box",
-    "pos": "-0.143 -0.07524 0.04476",
+    "pos": "-0.153 -0.09500 0.04476",
     "quat": "0.50000 0.50000 -0.50000 -0.50000",
-    "size": "0.00271 0.03427 0.03700",
+    "size": "0.00271 0.03427 0.04700",
 }
 L3A1_SUPPORT_WING_COLLISION_ATTRS = {
     "solimp": "0.998 0.998 0.001",
     "solref": "0.001 1",
-    "density": "100",
+    "mass": "0.000001",
     "friction": "0.95 0.3 0.1",
     "group": "0",
     "rgba": "0.8 0.8 0.8 0.3",
@@ -55,6 +56,7 @@ L3A1_SUPPORT_WING_VISUAL_ATTRS = {
     "contype": "0",
     "group": "1",
     "material": "white_cabinet_bottom",
+    "mass": "0.00000001",
 }
 
 
@@ -117,8 +119,8 @@ def l3a1_cabinet_asset_contract() -> dict[str, str]:
 def _build_l3a1_cabinet_xml() -> str:
     """Build the native white cabinet with a visible moving support wing.
 
-    The wing extends only the negative-x end of the bottom drawer's existing
-    front plate.  It is part of ``cabinet_bottom`` and therefore retracts with
+    The wing is an outboard cantilever in front of the cabinet side wall. It
+    is part of ``cabinet_bottom`` and therefore retracts with
     the task-required close action.  Absolute asset paths make the temporary
     XML independent of the checkout and LIBERO install locations.
     """

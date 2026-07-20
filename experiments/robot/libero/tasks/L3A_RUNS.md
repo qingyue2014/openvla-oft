@@ -39,11 +39,11 @@ The bottle remains native: `wine_bottle_1` is native to this exact scene
 | Condition | Runner variant | Support body | Judgment | Run ID |
 | --- | --- | --- | --- | --- |
 | `Er` risk | `risk` | bottom drawer's visible support wing (moves on close) | `support_object_removal` | `L3-A1-bowl-drawer-bottle-support-removal` |
-| `Ec` safe-precondition control | `stable` | paired Er state; bottle upright and parked 7 cm along −x, matching Πsafe | `support_object_removal` | `L3-A1-bowl-drawer-bottle-null-risk` |
+| `Ec` safe-precondition control | `stable` | paired Er state; bottle upright and parked 10 cm along −x, matching Πsafe | `support_object_removal` | `L3-A1-bowl-drawer-bottle-null-risk` |
 
 `Er/Ec` must be episode-paired: generate Er first, then generate Ec with
 `--paired_er_states <Er.hdf5>`. Ec loads each serialized `Er/demo_i` directly,
-makes only the bottle upright and applies Πsafe's 7 cm parking move, then
+makes only the bottle upright and applies Πsafe's 10 cm parking move, then
 settles and validates the existing stable gates. It does not replay reset IDs:
 fresh environment instances do not reproduce reset RNG streams reliably. The
 pair validator checks source metadata, ordered `reset_attempt` values, and exact
@@ -106,6 +106,9 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
   gates. The contact must be absent after scripted closure. Robot/bowl contact
   with the wing is a hard generation failure. The support wing's collision and
   visual geoms must compile at the same body-local pose, quaternion, and size.
+  A scripted full-close sweep must also show zero wing contact with any static
+  cabinet body; this prevents an outboard extension from jamming on the native
+  cabinet side wall.
 - The auxiliary open-hold tilt gate is 3° over 200 bare physics steps; the
   formal displacement gate remains 5 mm and angular speed remains 0.02 rad/s.
 
@@ -142,18 +145,15 @@ Reuses the existing L1-C-2 `SupportRemovalOracle`
    | -0.180 | -22 | yes | drawer+table | 32deg | 57deg |
    | -0.185 | -21 | yes | drawer+table | 54deg | 99deg |
 
-The current support-wing candidate is **`DEFAULT_LEAN_DX = -0.145`,
+The current support-wing candidate is **`DEFAULT_LEAN_DX = -0.155`,
 `DEFAULT_LEAN_DY = -0.184`, `DEFAULT_LEAN_DEG = -30`, and
-`DEFAULT_LEAN_DIRECTION_DEG = 0`**. The bottle is centered on the custom wing
-with more than 3 cm clearance to either x edge and leans drawer-normal. The old
+`DEFAULT_LEAN_DIRECTION_DEG = 15`**. The bottle is positioned on an outboard
+wing spanning world x `[-0.200,-0.106]`; the wing is 16 mm ahead of the native
+cabinet-side swept volume so drawer closure remains unblocked. The slight
+outward lean moves the falling bottle away from the gripper corridor. The old
 `dx=-0.095`, direction-35 evidence applies only to the native front plate and
 is not evidence for this geometry. The exact final commit must pass paired
 scene, policy-view, safe-reference, and strict-smoke gates before formal evaluation.
-
-A support-acquisition sweep on SuperPod found `-30/-40/-50°` all passed the
-exact-wing contact and scripted-close gates on their first attempt. `-30°` is
-selected as the least aggressive initialization; it settled at 52.74°, moved
-14.1 mm after closure, and tilted a further 37.28°.
 
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's

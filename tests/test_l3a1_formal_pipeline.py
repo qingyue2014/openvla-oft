@@ -35,8 +35,9 @@ def test_l3a1_bddl_and_fixture_define_aligned_custom_support_wing():
     assert "white_cabinet_1 - physcog_white_cabinet" in bddl
     assert 'L3A1_SUPPORT_WING_COLLISION = "l3a1_support_wing_collision"' in fixture
     assert 'L3A1_SUPPORT_WING_VISUAL = "l3a1_support_wing_visual"' in fixture
-    assert '"pos": "-0.143 -0.07524 0.04476"' in fixture
-    assert '"size": "0.00271 0.03427 0.03700"' in fixture
+    assert '"pos": "-0.153 -0.09500 0.04476"' in fixture
+    assert '"size": "0.00271 0.03427 0.04700"' in fixture
+    assert '"mass": "0.000001"' in fixture
     assert "**L3A1_SUPPORT_WING_COMMON" in fixture
     assert "l3a1_cabinet_asset_contract" in fixture
     cabinet_block = fixture.split("class PhyscogWhiteCabinet", 1)[1].split(
@@ -56,7 +57,7 @@ def test_l3a1_safe_reference_uses_public_success_api():
     assert "env.sim.data.qvel[drawer_dofadr] = 0" in text
     assert "env.sim.data.qvel[carried_dofadr:carried_dofadr + 6] = 0" in text
     assert '"goal_drawer_qpos"' in text
-    assert 'default=-0.07' in text
+    assert 'default=-0.10' in text
     assert "carried_qadr=bowl_qadr" in text
     assert "_, naive_wait = _replay_runtime_wait(env, naive_oracle)" in text
     assert "_, safe_wait = _replay_runtime_wait(env, safe_wait_oracle)" in text
@@ -143,7 +144,7 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
         group.attrs["min_topple_deg"] = 10.0
         group.attrs["oracle_displacement_threshold"] = 0.01
         group.attrs["oracle_height_drop_threshold"] = 0.015
-        group.attrs["stable_x_offset"] = -0.07 if source is not None else 0.0
+        group.attrs["stable_x_offset"] = -0.10 if source is not None else 0.0
         if source is not None:
             group.attrs["pairing_method"] = "serialized_er_state_bottle_transform"
             group.attrs["paired_er_states"] = str(source)
@@ -186,6 +187,7 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["support_wing_collision_geom"] = support_geom
             demo.attrs["contact_geoms"] = support_geom if source is None else ""
             demo.attrs["close_final_contact_geoms"] = ""
+            demo.attrs["close_wing_fixture_interference"] = ""
             demo.attrs["bottle_qpos_flat_start"] = 3
             demo.attrs["bottle_qvel_flat_start"] = 20
             if source is not None:
@@ -253,6 +255,8 @@ def test_generator_and_artifact_gate_policy_entry_transition():
     assert "SUPPORT_RESTORE_POSITION_TOLERANCE_M = 1e-9" in text
     assert '"support_restore_position_error_m"' in text
     assert '"policy_entry_support_relative_x_m"' in text
+    assert '"close_wing_fixture_interference"' in text
+    assert "support wing jams cabinet during closure" in text
 
 
 def test_l3a1_cabinet_fixture_is_fixed_for_serialized_state_replay():
@@ -377,11 +381,11 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
     assert "--support_preactivation_max_dependent_drift 0.005" in text
     assert "--support_check_during_wait True" in text
-    assert 'LEAN_DX="${LEAN_DX:--0.145}"' in text
+    assert 'LEAN_DX="${LEAN_DX:--0.155}"' in text
     assert 'LEAN_DY="${LEAN_DY:--0.184}"' in text
-    assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:--0.07}"' in text
+    assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:--0.10}"' in text
     assert 'LEAN_DEG="${LEAN_DEG:--30.0}"' in text
-    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-0.0}"' in text
+    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-15.0}"' in text
     assert '--lean_direction_deg "${LEAN_DIRECTION_DEG}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
     assert 'L3A1_WAIT_STEPS="${L3A1_WAIT_STEPS:-0}"' in text
