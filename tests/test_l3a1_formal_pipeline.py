@@ -55,7 +55,6 @@ def test_l3a1_safe_reference_uses_public_success_api():
     assert "env.sim.data.qvel[drawer_dofadr] = 0" in text
     assert "env.sim.data.qvel[carried_dofadr:carried_dofadr + 6] = 0" in text
     assert '"goal_drawer_qpos"' in text
-    assert 'default=-0.10' in text
     assert "carried_qadr=bowl_qadr" in text
     assert "_, naive_wait = _replay_runtime_wait(env, naive_oracle)" in text
     assert "_, safe_wait = _replay_runtime_wait(env, safe_wait_oracle)" in text
@@ -70,6 +69,18 @@ def test_l3a1_safe_reference_uses_public_success_api():
     assert "env.seed(args.seed)" in text
     assert 'and naive_wait["passes_5mm_gate"]' in text
     assert 'and safe_wait["passes_5mm_gate"]' in text
+    assert "validate_pairing(args.states, args.stable_states" in text
+    assert 'env.set_init_state(pair["er_state"])' in text
+    assert 'env.set_init_state(pair["ec_state"])' in text
+    assert "bottle_qadr" not in text
+    assert "park_dx" not in text
+    assert "_tilt_quat" not in text
+    assert '"safe_initial_contacts"' in text
+    assert '"safe_parked_contacts"' in text
+    assert '"er_artifact_binding": er_binding' in text
+    assert '"ec_artifact_binding": ec_binding' in text
+    assert "| Episode | Er source demo | Ec source demo |" in text
+    assert 'f"- Ec artifact binding: {ec_binding}"' in text
     assert _metadata_for_run("L3-A1-drawer-bottle-er-support-removal-seed42") == (
         "L3", "L3-A1", "Er Support Removal"
     )
@@ -776,6 +787,9 @@ def test_runner_revalidates_current_artifacts_and_report_bindings():
     assert "require_bound_report" in text
     assert 'require_bound_report "${STABLE_CHECK_REPORT}" "Paired Er binding"' in text
     assert 'require_bound_report "${SAFE_REFERENCE_REPORT}" "Er artifact binding"' in text
+    assert 'require_bound_report "${SAFE_REFERENCE_REPORT}" "Ec artifact binding"' in text
+    assert '--states "${RISK_STATE_PATH}"' in text
+    assert '--stable_states "${STABLE_STATE_PATH}"' in text
     assert '--er "${RISK_STATE_PATH}" --ec "${STABLE_STATE_PATH}"' in text
     assert "validate_l3a1_smoke_evidence.py" in text
     assert "require_smoke_gate" in text

@@ -367,16 +367,17 @@ require_gates() {
   require_bound_report "${STABLE_CHECK_REPORT}" "Artifact binding" "${stable_binding}"
   require_bound_report "${STABLE_CHECK_REPORT}" "Paired Er binding" "${risk_binding}"
   require_bound_report "${SAFE_REFERENCE_REPORT}" "Er artifact binding" "${risk_binding}"
+  require_bound_report "${SAFE_REFERENCE_REPORT}" "Ec artifact binding" "${stable_binding}"
   python experiments/robot/libero/tasks/export_l3a1_init_evidence.py \
     --er "${RISK_STATE_PATH}" --ec "${STABLE_STATE_PATH}" \
     --out_dir "${INIT_EVIDENCE_DIR}" --verify_review "${INIT_EVIDENCE_REVIEW}" >/dev/null
 }
 
 run_safe_reference() {
-  local reference_states="${STATE_PATH:-${RISK_STATE_PATH}}"
   python experiments/robot/libero/tasks/validate_l3a1_reference_paths.py \
     --bddl "${BDDL_FILE}" \
-    --states "${reference_states}" \
+    --states "${RISK_STATE_PATH}" \
+    --stable_states "${STABLE_STATE_PATH}" \
     --num_states "${SAFE_REF_STATES:-5}" \
     --seed "${EVAL_SEED}" \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
@@ -439,7 +440,7 @@ case "${MODE}" in
     NUM_TRIALS="${NUM_TRIALS}" bash "$0" stable check
     ;;
   safe_reference)
-    STATE_PATH="${STATE_PATH:-${RISK_STATE_PATH}}" run_safe_reference
+    run_safe_reference
     ;;
   smoke)
     [[ "${VARIANT}" == "all" ]] || { echo "smoke requires variant 'all'" >&2; exit 2; }

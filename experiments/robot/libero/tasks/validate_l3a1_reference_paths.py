@@ -1,10 +1,9 @@
-"""Validate L3-A1's causal mechanism on the exact serialized Er states.
+"""Validate L3-A1's causal mechanism on exact paired Er/Ec states.
 
-For every state, compare (1) naive drawer close and (2) a scripted safe
-ordering that first parks the bottle upright, lets it settle, and only then
-closes the drawer. This is a physics/reference-path gate, not a claim that an
-OSC controller can execute the bottle relocation; policy evaluation remains
-separate.
+For every paired demo, compare (1) naive drawer close from Er and (2) bowl
+placement plus drawer close from the serialized Ec state.  No bottle pose is
+edited by this script.  This is a physics/reference-path gate; policy
+evaluation remains separate.
 """
 
 import argparse
@@ -36,14 +35,13 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
     _contact_body_names,
     _find_joint_qadr,
     _lean_tilt_angle_deg,
-    _tilt_quat,
 )
 from experiments.robot.libero.tasks.l3a1_replay import clear_mujoco_replay_transients
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import _body_pos, _find_body
 from experiments.robot.libero.physcog_oracles import SupportRemovalOracle
 from experiments.robot.libero.tasks.validate_l3a1_pairing import (
     artifact_binding,
-    validate_base_preservation,
+    validate_pairing,
 )
 
 
@@ -143,12 +141,12 @@ def _replay_runtime_wait(env, oracle):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--states", required=True)
+    parser.add_argument("--stable_states", required=True)
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
     parser.add_argument("--task_description", default="put the black bowl in the bottom drawer of the cabinet and close it")
     parser.add_argument("--num_states", type=int, default=0, help="0 validates every state")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--close_steps", type=int, default=60)
-    parser.add_argument("--park_dx", type=float, default=-0.10)
     parser.add_argument("--bowl_body", default="akita_black_bowl_1_main")
     parser.add_argument("--drawer_site", default="white_cabinet_1_bottom_region")
     parser.add_argument(
@@ -171,14 +169,28 @@ def main():
     parser.add_argument("--out_report", default="experiments/logs/l3a1_safe_reference.md")
     args = parser.parse_args()
 
-    validate_base_preservation(args.states, args.task_description)
-    states_binding = artifact_binding(args.states, args.task_description)
+    validate_pairing(args.states, args.stable_states, args.task_description)
+    er_binding = artifact_binding(args.states, args.task_description)
+    ec_binding = artifact_binding(args.stable_states, args.task_description)
 
     key = args.task_description.replace(" ", "_")
-    with h5py.File(args.states, "r") as state_file:
-        group = state_file[key]
-        count = len(group) if args.num_states <= 0 else min(args.num_states, len(group))
-        states = [group[f"demo_{i}"]["initial_state"][:] for i in range(count)]
+    with h5py.File(args.states, "r") as er_file, h5py.File(
+        args.stable_states, "r"
+    ) as ec_file:
+        er_group, ec_group = er_file[key], ec_file[key]
+        paired_count = min(len(er_group), len(ec_group))
+        count = paired_count if args.num_states <= 0 else min(args.num_states, paired_count)
+        pairs = [
+            {
+                "er_state": er_group[f"demo_{i}"]["initial_state"][:],
+                "ec_state": ec_group[f"demo_{i}"]["initial_state"][:],
+                "er_source_demo_index": i,
+                "ec_source_demo_index": int(
+                    ec_group[f"demo_{i}"].attrs["source_demo_index"]
+                ),
+            }
+            for i in range(count)
+        ]
 
     env = OffScreenRenderEnv(bddl_file_name=args.bddl, camera_heights=256, camera_widths=256)
     env.seed(args.seed)
@@ -186,14 +198,19 @@ def main():
     drawer_qadr = _find_joint_qadr(env.sim, *DRAWER_JOINT_CANDIDATES)
     if drawer_qadr < 0:
         raise RuntimeError(f"drawer joint not found: {DRAWER_JOINT_CANDIDATES}")
-    bottle_qadr = _find_free_joint_qadr(env.sim, BOTTLE_BODY)
     drawer_body = _find_body(env, *DRAWER_BODY_CANDIDATES)
     bowl_qadr = _find_free_joint_qadr(env.sim, args.bowl_body)
     drawer_site_id = env.sim.model.site_name2id(args.drawer_site)
+    table_geom_id = env.sim.model.geom_name2id("table_collision")
+    table_body = env.sim.model.body_id2name(
+        int(env.sim.model.geom_bodyid[table_geom_id])
+    )
+    if not table_body:
+        raise RuntimeError("table_collision has no owning body name")
     rows = []
-    for index, state in enumerate(states):
+    for index, pair in enumerate(pairs):
         env.reset()
-        env.set_init_state(state)
+        env.set_init_state(pair["er_state"])
         clear_mujoco_replay_transients(env)
         naive_oracle = SupportRemovalOracle(
             drawer_body, [BOTTLE_BODY], max_displacement=args.displacement_threshold,
@@ -209,8 +226,9 @@ def main():
         naive_contacts = ",".join(sorted(_contact_body_names(env, BOTTLE_BODY)))
 
         env.reset()
-        env.set_init_state(state)
+        env.set_init_state(pair["ec_state"])
         clear_mujoco_replay_transients(env)
+        safe_initial_contact_set = _contact_body_names(env, BOTTLE_BODY)
         safe_wait_oracle = SupportRemovalOracle(
             drawer_body, [BOTTLE_BODY], max_displacement=args.displacement_threshold,
             height_drop=args.height_drop_threshold, baseline_on_activation=True,
@@ -220,19 +238,11 @@ def main():
         )
         safe_wait_oracle.reset(env, None)
         _, safe_wait = _replay_runtime_wait(env, safe_wait_oracle)
-        # Script the required precondition: remove the support dependency by
-        # parking the bottle upright away from the moving drawer face.
-        env.sim.data.qpos[bottle_qadr] += args.park_dx
-        env.sim.data.qpos[bottle_qadr + 3:bottle_qadr + 7] = _tilt_quat("x", 0.0)
-        env.sim.data.qvel[:] = 0
-        env.sim.forward()
-        for _ in range(SETTLE_STEPS):
-            env.sim.step()
-        parked_contacts = ",".join(sorted(_contact_body_names(env, BOTTLE_BODY)))
-        # The initial runtime wait has already been gated above. Start the
-        # mechanism oracle after the intentional Pi_safe relocation so that
-        # its 5 mm preactivation gate measures unintended drift during bowl
-        # placement, rather than rejecting the required safe action itself.
+        safe_parked_contact_set = _contact_body_names(env, BOTTLE_BODY)
+        safe_initial_table_only = safe_initial_contact_set == {table_body}
+        safe_parked_table_only = safe_parked_contact_set == {table_body}
+        # Establish the mechanism oracle only after exact Ec restore and the
+        # evaluator-equivalent runtime wait.  No bottle qpos/quat is edited.
         safe_oracle = SupportRemovalOracle(
             drawer_body, [BOTTLE_BODY], max_displacement=args.displacement_threshold,
             height_drop=args.height_drop_threshold, baseline_on_activation=True,
@@ -281,6 +291,10 @@ def main():
         goal_reached = bool(env.check_success())
         rows.append({
             "episode": index,
+            "er_artifact_binding": er_binding,
+            "ec_artifact_binding": ec_binding,
+            "er_source_demo_index": pair["er_source_demo_index"],
+            "ec_source_demo_index": pair["ec_source_demo_index"],
             "naive_oracle_fires": int(naive_fires),
             "naive_displacement_m": naive["displacement_m"],
             "naive_height_drop_m": naive["height_drop_m"],
@@ -302,7 +316,10 @@ def main():
             "safe_wait_causal_ineligible_reason": safe_wait_oracle.causal_ineligible_reason,
             "safe_causal_eligible": int(safe_oracle.causal_eligible),
             "safe_causal_ineligible_reason": safe_oracle.causal_ineligible_reason,
-            "parked_contacts": parked_contacts,
+            "safe_initial_contacts": ",".join(sorted(safe_initial_contact_set)),
+            "safe_parked_contacts": ",".join(sorted(safe_parked_contact_set)),
+            "safe_initial_table_only": int(safe_initial_table_only),
+            "safe_parked_table_only": int(safe_parked_table_only),
             "scripted_goal_reached": int(goal_reached),
             "goal_bowl_site_offset_m": float(np.linalg.norm(
                 _body_pos(env, args.bowl_body) - final_site_pos
@@ -316,6 +333,8 @@ def main():
                 and safe_wait["passes_5mm_gate"]
                 and safe_wait_oracle.causal_eligible
                 and safe_oracle.causal_eligible
+                and safe_initial_table_only
+                and safe_parked_table_only
                 and goal_reached
             ),
         })
@@ -340,11 +359,22 @@ def main():
         f"- Scripted task-goal reachability: {goal_rate:.3f} (required by path gate)",
         f"- Runtime wait gate: {RUNTIME_WAIT_STEPS} evaluator dummy-action steps; "
         f"maximum bottle displacement <= {RUNTIME_WAIT_MAX_DRIFT * 1000:.1f} mm.",
-        "- Positive gate: serialized Er state must fire after naive drawer close.",
-        "- Negative gate: park bottle upright first, place bowl, then close drawer without firing; the native goal must succeed.",
+        "- Positive gate: exact serialized Er state must fire after naive drawer close.",
+        "- Negative gate: exact paired Ec state must remain table-only through runtime wait, then place bowl and close drawer without firing; the native goal must succeed.",
+        "- Bottle intervention: none; safe path never edits bottle qpos, quaternion, or velocity.",
         "- Scope: physics/reference-path feasibility; bowl placement is kinematic and robot OSC reachability is not asserted.",
-        f"- Er artifact binding: {states_binding}",
+        f"- Er artifact binding: {er_binding}",
+        f"- Ec artifact binding: {ec_binding}",
+        "",
+        "| Episode | Er source demo | Ec source demo | Safe initial contacts | Safe parked contacts | Pass |",
+        "| ---: | ---: | ---: | --- | --- | ---: |",
     ]
+    report.extend(
+        f"| {row['episode']} | {row['er_source_demo_index']} | "
+        f"{row['ec_source_demo_index']} | `{row['safe_initial_contacts']}` | "
+        f"`{row['safe_parked_contacts']}` | {row['path_pass']} |"
+        for row in rows
+    )
     Path(args.out_report).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out_report).write_text("\n".join(report) + "\n")
     print(verdict, f"rate={rate:.3f}", f"csv={out_csv}", f"report={args.out_report}")
