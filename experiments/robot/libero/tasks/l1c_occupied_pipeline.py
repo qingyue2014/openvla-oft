@@ -2023,18 +2023,6 @@ def _safe_reference_from_eb_prefix(args, files):
                     # held bottle's XY to the calibrated free side, then lower
                     # until physical drawer contact. This avoids solving a
                     # long-range IK waypoint with a saturated wrist pose.
-                    desired_body_xy = anchor_point(env, spec)[:2] + np.asarray(
-                        offset, dtype=float
-                    )
-                    lateral_eef = _eef(obs).copy()
-                    lateral_eef[:2] += (
-                        desired_body_xy - body_pos(env, spec.target_body)[:2]
-                    )
-                    if failure is None:
-                        obs, step, failure, _ = _move(
-                            env, obs, oracle, recorder, lateral_eef, close,
-                            step, args,
-                        )
                     rotation_eef = _eef(obs) + np.array(
                         [0.0, 0.0, args.reference_rotation_clearance]
                     )
@@ -2055,6 +2043,18 @@ def _safe_reference_from_eb_prefix(args, files):
                         )
                         preplace_target_tilt = body_tilt_deg(
                             env, spec.target_body
+                        )
+                    desired_body_xy = anchor_point(env, spec)[:2] + np.asarray(
+                        offset, dtype=float
+                    )
+                    lateral_eef = _eef(obs).copy()
+                    lateral_eef[:2] += (
+                        desired_body_xy - body_pos(env, spec.target_body)[:2]
+                    )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, lateral_eef, close,
+                            step, args,
                         )
                     descent_eef = _eef(obs) + np.array(
                         [0.0, 0.0, -args.reference_descent]
