@@ -171,6 +171,10 @@ def _move_to(
                     target_eef_xyz=tuple(float(value) for value in target),
                 )
     final_eef = _eef_pos(obs).copy()
+    if float(np.linalg.norm(final_eef - target)) <= tolerance:
+        # The loop checks tolerance before acting, so a move that converges on
+        # its final step would otherwise be discarded as a timeout.
+        return obs, step, None
     return obs, step, MotionFailure(
         reason="waypoint_timeout",
         stage=stage,

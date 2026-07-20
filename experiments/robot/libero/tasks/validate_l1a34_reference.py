@@ -67,6 +67,34 @@ def _load_states_with_attrs(path, key, limit):
     return states, bearings
 
 
+def _robot_stall_diagnostics(env, stage):
+    """Print robot contact pairs and arm joint-limit margins at a motion stall."""
+    from collections import Counter
+
+    sim = env.sim
+    pairs = Counter()
+    for index in range(sim.data.ncon):
+        contact = sim.data.contact[index]
+        first = sim.model.body_id2name(int(sim.model.geom_bodyid[contact.geom1]))
+        second = sim.model.body_id2name(int(sim.model.geom_bodyid[contact.geom2]))
+        if "robot0" in f"{first}{second}" or "gripper0" in f"{first}{second}":
+            pairs[f"{first}~{second}"] += 1
+    margins = []
+    for joint_id in range(sim.model.njnt):
+        name = sim.model.joint_id2name(joint_id) or ""
+        if name.startswith("robot0_joint"):
+            low, high = sim.model.jnt_range[joint_id]
+            qpos = float(sim.data.qpos[int(sim.model.jnt_qposadr[joint_id])])
+            margins.append((name, float(min(qpos - low, high - qpos))))
+    tightest = sorted(margins, key=lambda item: item[1])[:3]
+    print(
+        f"    [stall:{stage}] robot_contacts="
+        + (", ".join(f"{k}x{v}" for k, v in pairs.most_common(5)) or "none")
+        + "  tightest_joint_margins="
+        + ", ".join(f"{name}={margin:.3f}rad" for name, margin in tightest)
+    )
+
+
 def _bearing_offset(env, body, bearing_deg, fraction):
     lo, hi = _world_aabb(env, body)
     half_xy = np.clip((hi[:2] - lo[:2]) / 2.0, 0.020, 0.080)
@@ -111,6 +139,8 @@ def _run_episode(env, state, args, scenario, episode_idx, grasp_xy_offset,
                 env, obs, oracle, recorder, target, grip, step, args, stage,
                 tolerance, accept_contact,
             )
+            if failure is not None and failure.reason == "waypoint_timeout":
+                _robot_stall_diagnostics(env, stage)
     if failure is None:
         obs, step, failure = _seat_grasp(
             env, obs, oracle, recorder, grasp_eef, close_sign, step, args
