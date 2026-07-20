@@ -65,6 +65,11 @@ from experiments.robot.libero.physcog_trajectory import (
     collect_tracked_bodies,
 )
 from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceIntervention
+from experiments.robot.libero.physcog_frame_integrity import (
+    PolicyFrameIntegrityError,
+    frame_mad,
+    select_consistent_policy_frame,
+)
 import experiments.robot.libero.physcog_objects  # noqa: F401 — registers GlassCup / SteelCup
 from experiments.robot.libero.run_libero_eval import (
     GenerateConfig as LiberoGenerateConfig,
@@ -178,6 +183,11 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     oracle_defines_task_success: bool = False  # explicit opt-in for transitive constructed goals
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
                                            # different GPU index than CUDA to avoid CUDA/EGL interference
+    policy_frame_integrity_guard: bool = False  # same-state rerender gate before policy inference
+    policy_frame_transition_threshold: float = 25.0  # RGB MAD that triggers same-state verification
+    policy_frame_same_state_threshold: float = 10.0  # max RGB MAD between repeated clean renders
+    policy_frame_render_retries: int = 3   # retries before failing closed on an untrusted policy frame
+    fail_on_episode_error: bool = False    # formal runs must not relabel runtime errors as task failures
     model_collapse_displacement_threshold: float = 0.025  # L1-A1: moved-object threshold for counting a valid grasp/execution
     save_trajectory: bool = True            # save per-episode EEF/object/action trajectories as .npz
     trajectory_dir: str = ""                # override output dir; default <rollout_dir>/trajectories
@@ -200,6 +210,9 @@ def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
     if "image_aug" in str(cfg.pretrained_checkpoint):
         assert cfg.center_crop, "Expecting center_crop=True because model was trained with image augmentations!"
     assert not (cfg.load_in_8bit and cfg.load_in_4bit), "Cannot use both 8-bit and 4-bit quantization!"
+    assert cfg.policy_frame_transition_threshold > 0
+    assert cfg.policy_frame_same_state_threshold >= 0
+    assert cfg.policy_frame_render_retries >= 1
 
     benchmark_dict = benchmark.get_benchmark_dict()
     assert cfg.task_suite_name in benchmark_dict, (
@@ -375,6 +388,8 @@ def run_episode_with_safety(
     t = 0
     replay_images = []
     wrist_images = []
+    previous_policy_frame = None
+    policy_frame_integrity_events = []
     max_steps = TASK_MAX_STEPS.get(cfg.task_suite_name, 300)
     success = False
     raw_gripper_commands = []
@@ -423,6 +438,99 @@ def run_episode_with_safety(
                     obs = env._get_observations()
 
             observation, _ = prepare_observation(obs, resize_size)
+            if cfg.policy_frame_integrity_guard:
+                same_state_observations = [(obs, observation)]
+                same_state_frames = [
+                    np.asarray(observation["full_image"]).copy()
+                ]
+                selected_index, resolution = select_consistent_policy_frame(
+                    previous_policy_frame,
+                    same_state_frames,
+                    cfg.policy_frame_transition_threshold,
+                    cfg.policy_frame_same_state_threshold,
+                )
+                attempts = 0
+                while (
+                    selected_index is None
+                    and attempts < cfg.policy_frame_render_retries
+                ):
+                    # Refresh every observable, including both cameras, without
+                    # env.step(): the robot and all objects remain at the exact
+                    # simulator state that produced the suspect observation.
+                    try:
+                        env._post_process()
+                        env._update_observables(force=True)
+                        retry_obs = env._get_observations()
+                        retry_observation, _ = prepare_observation(
+                            retry_obs, resize_size
+                        )
+                    except Exception as exc:
+                        raise PolicyFrameIntegrityError(
+                            "Policy-frame same-state rerender failed at "
+                            f"step {t}, attempt {attempts + 1}: {exc}"
+                        ) from exc
+                    same_state_observations.append(
+                        (retry_obs, retry_observation)
+                    )
+                    same_state_frames.append(
+                        np.asarray(retry_observation["full_image"]).copy()
+                    )
+                    attempts += 1
+                    selected_index, resolution = select_consistent_policy_frame(
+                        previous_policy_frame,
+                        same_state_frames,
+                        cfg.policy_frame_transition_threshold,
+                        cfg.policy_frame_same_state_threshold,
+                    )
+
+                if selected_index is None:
+                    transition_mads = (
+                        []
+                        if previous_policy_frame is None
+                        else [
+                            frame_mad(previous_policy_frame, frame)
+                            for frame in same_state_frames
+                        ]
+                    )
+                    raise PolicyFrameIntegrityError(
+                        "Policy-frame integrity guard failed closed at "
+                        f"step {t} after {attempts} rerenders; "
+                        f"resolution={resolution}, "
+                        f"transition_mads={transition_mads}"
+                    )
+
+                obs, observation = same_state_observations[selected_index]
+                selected_frame = same_state_frames[selected_index]
+                if attempts:
+                    event = {
+                        "step": int(t),
+                        "resolution": resolution,
+                        "rerender_attempts": attempts,
+                        "selected_render_index": int(selected_index),
+                        "original_transition_mad": (
+                            None
+                            if previous_policy_frame is None
+                            else frame_mad(
+                                previous_policy_frame, same_state_frames[0]
+                            )
+                        ),
+                        "selected_transition_mad": (
+                            None
+                            if previous_policy_frame is None
+                            else frame_mad(previous_policy_frame, selected_frame)
+                        ),
+                        "original_selected_same_state_mad": frame_mad(
+                            same_state_frames[0], selected_frame
+                        ),
+                    }
+                    policy_frame_integrity_events.append(event)
+                    log_message(
+                        "Policy-frame integrity event: "
+                        + json.dumps(event, sort_keys=True),
+                        log_file,
+                    )
+
+                previous_policy_frame = selected_frame.copy()
             # Store owned copies of the exact resized RGB tensors supplied to
             # the policy. Previously the raw, negative-stride MuJoCo view was
             # retained; every NUM_ACTIONS_CHUNK-th frame could be corrupted
@@ -510,8 +618,15 @@ def run_episode_with_safety(
                         break
                 break
             t += 1
+    except PolicyFrameIntegrityError:
+        # Formal L2-A evaluation must never convert a missing or corrupt policy
+        # input into an ordinary task failure. Abort the run so the job gate
+        # cannot publish incomplete evidence.
+        raise
     except Exception as exc:
         log_message(f"Episode error: {exc}", log_file)
+        if cfg.fail_on_episode_error:
+            raise
 
     # Post-episode outcome attribution must run before oracle metrics are
     # logged. L3 closure attribution depends on the final task outcome and
@@ -777,12 +892,37 @@ def run_episode_with_safety(
             log_file,
         )
 
+    if cfg.policy_frame_integrity_guard:
+        recovery_count = sum(
+            event["resolution"]
+            in ("recovered_corrupt_frame", "recovered_initial_frame")
+            for event in policy_frame_integrity_events
+        )
+        log_message(
+            "Policy-frame integrity totals: "
+            f"recoveries={recovery_count}  "
+            f"same_state_verifications={len(policy_frame_integrity_events)}",
+            log_file,
+        )
+
     diagnostics = {
         "model_collapse": model_collapse,
         "collapse_reason": collapse_reason,
         "body_displacements": body_displacements,
         "trajectory_recorder": recorder,
         "wrist_images": wrist_images,
+        "policy_frame_integrity_guard": cfg.policy_frame_integrity_guard,
+        "fail_on_episode_error": cfg.fail_on_episode_error,
+        "policy_frame_transition_threshold": cfg.policy_frame_transition_threshold,
+        "policy_frame_same_state_threshold": cfg.policy_frame_same_state_threshold,
+        "policy_frame_render_retries": cfg.policy_frame_render_retries,
+        "policy_frame_recovery_count": sum(
+            event["resolution"]
+            in ("recovered_corrupt_frame", "recovered_initial_frame")
+            for event in policy_frame_integrity_events
+        ),
+        "policy_frame_verification_count": len(policy_frame_integrity_events),
+        "policy_frame_integrity_events": policy_frame_integrity_events,
         "l3c_metrics": {} if l3c is None else l3c.metrics(),
         "oracle_metrics": oracle.metrics(),
         "gripper_metrics": gripper_metrics,
@@ -1020,6 +1160,30 @@ def _save_episode_trajectory(
         "violation_reason": safety.reason,
         "violation_step": safety.first_step,
         "model_collapse": bool(diagnostics.get("model_collapse", False)),
+        "policy_frame_integrity_guard": bool(
+            diagnostics.get("policy_frame_integrity_guard", False)
+        ),
+        "fail_on_episode_error": bool(
+            diagnostics.get("fail_on_episode_error", False)
+        ),
+        "policy_frame_transition_threshold": diagnostics.get(
+            "policy_frame_transition_threshold"
+        ),
+        "policy_frame_same_state_threshold": diagnostics.get(
+            "policy_frame_same_state_threshold"
+        ),
+        "policy_frame_render_retries": diagnostics.get(
+            "policy_frame_render_retries"
+        ),
+        "policy_frame_recovery_count": int(
+            diagnostics.get("policy_frame_recovery_count", 0)
+        ),
+        "policy_frame_verification_count": int(
+            diagnostics.get("policy_frame_verification_count", 0)
+        ),
+        "policy_frame_integrity_events": diagnostics.get(
+            "policy_frame_integrity_events", []
+        ),
     }
     metadata.update(diagnostics.get("l3c_metrics", {}))
     metadata.update(diagnostics.get("oracle_metrics", {}))

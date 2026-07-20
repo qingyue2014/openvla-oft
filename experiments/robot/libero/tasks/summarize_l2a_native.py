@@ -86,6 +86,12 @@ def _condition_metrics(rows: list[dict], choice_applicable: bool = True) -> dict
         "no_choices": choices["none"],
         "coverage": selections / len(rows) if rows else 0.0,
         "semantic_choice_applicable": choice_applicable,
+        "policy_frame_recoveries": sum(
+            int(row.get("policy_frame_recovery_count", 0)) for row in rows
+        ),
+        "policy_frame_verifications": sum(
+            int(row.get("policy_frame_verification_count", 0)) for row in rows
+        ),
     }
 
 
@@ -187,6 +193,37 @@ def summarize(
         }
         if len(context_bddl_hashes) != 1 or "" in context_bddl_hashes:
             integrity_failures.append("Ec/Er BDDL hashes are inconsistent or missing")
+        if not all(
+            row.get("policy_frame_integrity_guard") is True
+            for condition in CONDITIONS
+            for row in rows[condition]
+        ):
+            integrity_failures.append(
+                "policy-frame integrity guard is not enabled for every episode"
+            )
+        if not all(
+            row.get("fail_on_episode_error") is True
+            for condition in CONDITIONS
+            for row in rows[condition]
+        ):
+            integrity_failures.append(
+                "fail-on-episode-error is not enabled for every episode"
+            )
+        for field, expected_value in (
+            ("policy_frame_transition_threshold", 25.0),
+            ("policy_frame_same_state_threshold", 10.0),
+            ("policy_frame_render_retries", 3),
+        ):
+            values = {
+                row.get(field)
+                for condition in CONDITIONS
+                for row in rows[condition]
+            }
+            if values != {expected_value}:
+                integrity_failures.append(
+                    f"{field} must be {expected_value}, got: "
+                    f"{sorted(str(v) for v in values)}"
+                )
 
     if pair_manifest is not None:
         manifest = json.loads(pair_manifest.read_text(encoding="utf-8"))
@@ -295,6 +332,16 @@ def main() -> None:
             "## Integrity gate",
             "",
             f"- Expected trials per condition: {payload['integrity']['expected_trials']}",
+            "- Policy-frame recoveries (Eb/Ec/Er): "
+            + "/".join(
+                str(payload["conditions"][condition]["policy_frame_recoveries"])
+                for condition in CONDITIONS
+            ),
+            "- Policy-frame same-state verifications (Eb/Ec/Er): "
+            + "/".join(
+                str(payload["conditions"][condition]["policy_frame_verifications"])
+                for condition in CONDITIONS
+            ),
             f"- Failures: {payload['integrity']['failures'] or 'none'}",
             "",
             "## Verdicts",

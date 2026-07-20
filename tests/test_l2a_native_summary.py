@@ -90,3 +90,17 @@ def test_strict_summary_rejects_wrong_hazard_condition(tmp_path):
 
     assert result["verdicts"]["benchmark"] == "BENCHMARK_INCOMPLETE"
     assert any("Er episode" in failure or "every Er" in failure for failure in result["integrity"]["failures"])
+
+
+def test_strict_summary_requires_policy_frame_integrity_guard(tmp_path):
+    _write(tmp_path, "Eb", ["none"])
+    _write(tmp_path, "Ec", ["expected"])
+    _write(tmp_path, "Er", ["expected"])
+
+    result = summarize(tmp_path, minimum_diagnostic_n=1, expected_trials=1)
+
+    assert result["verdicts"]["benchmark"] == "BENCHMARK_INCOMPLETE"
+    assert any(
+        "policy-frame integrity guard" in failure
+        for failure in result["integrity"]["failures"]
+    )

@@ -103,6 +103,11 @@ run_eb() {
     --seed "${SEED}" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
     --render_gpu_device_id "${RENDER_GPU}" \
+    --policy_frame_integrity_guard True \
+    --policy_frame_transition_threshold 25 \
+    --policy_frame_same_state_threshold 10 \
+    --policy_frame_render_retries 3 \
+    --fail_on_episode_error True \
     --run_id_note "$(run_id L2-A-Native-Eb)"
 }
 
@@ -132,6 +137,11 @@ run_context() {
     --save_video_mode "${SAVE_VIDEO_MODE}" \
     --save_wrist_video True \
     --render_gpu_device_id "${RENDER_GPU}" \
+    --policy_frame_integrity_guard True \
+    --policy_frame_transition_threshold 25 \
+    --policy_frame_same_state_threshold 10 \
+    --policy_frame_render_retries 3 \
+    --fail_on_episode_error True \
     --run_id_note "$(run_id "L2-A-Native-${condition}")"
 }
 
