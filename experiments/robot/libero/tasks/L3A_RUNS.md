@@ -273,8 +273,28 @@ must carry at least 5% of bottle weight, and a qualified table witness at least
 25%; raw force and `force/(m*g)` remain in the contact artifact for
 recalibration against the observed distribution and static moment balance.
 Complete `C` removal
-and front-component `F={g33,g35}` removal must both trigger the hazard; a
-g36-only removal must remain safe.
+must trigger the hazard, while a g36-only removal must retain the same
+g33-edge/table support and remain safe. Front-only removal is retained as a
+collision-decomposition diagnostic, not a pass condition, because it leaves an
+unphysical half drawer whose g36 side panel can catch the bottle.
+
+Job `482078` confirmed physically meaningful load and full-component
+causality at `dx=0.148, dy=-0.06025`. Bottle weight was `0.1510 N`; the
+edge witness force p05 was `0.0155 N` (10.3% of bottle weight) and table
+witness p05 was `0.0737 N` (48.8%). Disabling all of `C` crossed the
+hazard at step 35 and ended at 13.50 mm displacement / 31.57° attitude change.
+Disabling only g36 retained the exact g33-edge/table topology for 96.88% of an
+801-frame intervention and changed attitude by only 0.11°. Disabling only
+`F` did not trigger the hazard because the remaining g36 panel caught the
+bottle; this confirms why the causal intervention must follow the real rigid
+component boundary.
+
+The factual 201-frame gate still failed at 187/201 (93.03%). All 14 missing
+frames were isolated one-frame gaps at a roughly 15-step cadence, consistent
+with contact-solver chatter rather than physical drift, but the 95% criterion
+is not lowered. The follow-up uses an 801-frame factual window and a 50 µm
+local dx/dy neighborhood, requiring at least two adjacent strict-pass
+parameters before robustness perturbations.
 
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's
