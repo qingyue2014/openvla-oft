@@ -165,6 +165,14 @@ def replay(args) -> str:
                 "primary_component": primary_component,
                 "primary_tie": int(len(primary_components) > 1),
                 "intended_primary": int(primary_component == intended_component),
+                # Attribution requires strict intended-risk activation, not a
+                # contact that stayed below the configured displacement gate.
+                "attribution_eligible": int(
+                    hits[intended_component]
+                    and primary_component == intended_component
+                    and len(primary_components) == 1
+                    and not unintended
+                ),
                 f"{intended_component}_max_obstacle_displacement_m": (
                     oracles[intended_component].max_obstacle_displacement
                 ),

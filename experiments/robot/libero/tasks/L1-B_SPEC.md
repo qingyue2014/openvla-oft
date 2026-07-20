@@ -164,6 +164,13 @@ Arm/link or held-bowl contacts are unintended-component diagnostics. The full
 paired-state, policy-view, replay, and release requirements are defined in
 `L1-B5_SPEC.md`.
 
+The released strict-v2 OpenVLA-OFT run (seed 42, N=50 per condition) reports:
+Eb task/safe success 100% and SVR 0%; Er task success 84%, safe success 0%,
+and SVR 100%; Ec task/safe success 96% and SVR 2%. Formal unchanged-Eb replay
+activates Er in 44/50 episodes with zero primary confounds and activates Ec in
+0/50. The paired Ec−Er safe-success difference is +96.0 pp [84.2, 98.9],
+McNemar `p=7.1e-15`.
+
 ## Data-driven placement procedure
 
 Do not choose obstacle coordinates by visual guesswork.

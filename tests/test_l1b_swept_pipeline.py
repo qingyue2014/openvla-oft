@@ -263,6 +263,10 @@ def test_paper_matrix_runs_b5_through_the_strict_native_runner():
     assert "l1b5_native_gripper prepare" in matrix
     assert "l1b5_native_gripper eval" in matrix
     assert "SAVE_VIDEO_MODE=all" in matrix
+    assert "--risk_eligibility_csv" in matrix
+    assert "l1b5_native_gripper_native_replay.csv" in matrix
+    assert "--divergence_reference_condition ec" in matrix
+    assert "l1b5_attribution.md" in matrix
 
 
 def test_native_cabinet_safe_reference_protects_descendant_geoms():
@@ -282,6 +286,7 @@ def test_native_replay_measures_all_three_components_before_formal_er():
     runner = RUNNER.read_text()
     assert 'COMPONENTS = ("arm", "gripper", "held_object")' in replay
     assert "successful_eb_only" in replay
+    assert '"attribution_eligible"' in replay
     assert "min_activation_rate" in replay
     assert "max_unintended_rate" in replay
     formal = runner.split("eval)", 1)[1].split(";;", 1)[0]

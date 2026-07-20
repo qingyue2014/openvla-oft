@@ -102,6 +102,7 @@ def test_l1b5_registry_exposes_strict_gated_remote_pipeline():
     assert "SEEDS=42" in formal.command
     assert any("result_tables.md" in artifact for artifact in formal.artifacts)
     assert any("control_replay.md" in artifact for artifact in formal.artifacts)
+    assert any("l1b5_attribution.md" in artifact for artifact in formal.artifacts)
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():

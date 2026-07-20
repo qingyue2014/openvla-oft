@@ -45,6 +45,10 @@ central layout with the native ramekin retained at the far-table pose
 lateral offsets `+0.078/-0.078 m`. The target bowl, plate, cookie landmark,
 robot state, orientations, and prompt are identical across the triplet. See
 `L1-B5_SPEC.md` for the complete condition and release contract.
+This strict-v2 geometry has passed its final 50-state scene gates, 50/50 safe
+reference, 50-action Er/Ec replay gates, all-condition video review, and the
+formal 50×3 OpenVLA-OFT evaluation. Historical pre-v2 B5 results remain
+superseded.
 
 The retained pose parameters are deterministic per source reset. B4 uses the
 absolute XY pair listed above. B5/B6 retain their path-relative parameters in
