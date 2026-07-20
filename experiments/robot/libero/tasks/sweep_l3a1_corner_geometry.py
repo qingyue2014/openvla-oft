@@ -246,10 +246,10 @@ def _counterfactual(
 def _candidate_grid() -> list[tuple[float, float, float, float]]:
     return [
         (dx, dy, lean, direction)
-        for direction in (96.0, 99.0, 102.0, 105.0)
-        for dy in (-0.065, -0.060)
-        for dx in (0.148, 0.152, 0.156, 0.160)
-        for lean in (-35.0, -40.0, -45.0)
+        for direction in (103.0, 104.0, 105.0, 106.0)
+        for dy in (-0.059, -0.060, -0.061, -0.062, -0.063)
+        for dx in (0.144, 0.146, 0.148, 0.150)
+        for lean in (-38.0, -40.0, -42.0)
     ]
 
 
@@ -340,6 +340,8 @@ def main() -> int:
         support_coverage = min(
             count / (args.hold_steps + 1) for count in support_contact_counts.values()
         )
+        front_coverage = support_contact_counts[front_geom] / (args.hold_steps + 1)
+        side_coverage = support_contact_counts[side_geom] / (args.hold_steps + 1)
         table_coverage = table_contact_count / (args.hold_steps + 1)
         stable = (
             hold_max_drift <= MAX_OPEN_DRIFT_M
@@ -359,6 +361,19 @@ def main() -> int:
             and np.isfinite(corner_gap)
             and corner_gap <= MAX_CORNER_XY_DISTANCE_M
         )
+        calibration_eligible = (
+            touched == support_geoms
+            and table_coverage >= MIN_SUPPORT_COVERAGE
+            and hold_max_drift <= MAX_OPEN_DRIFT_M
+            and hold_max_attitude <= MAX_OPEN_ATTITUDE_CHANGE_DEG
+            and angular_speed <= MAX_OPEN_ANGULAR_SPEED_RAD_S
+            and np.isfinite(head_axial)
+            and head_axial >= MIN_HEAD_AXIAL_M
+            and np.isfinite(corner_gap)
+            and corner_gap <= 0.025
+            and not other_geoms
+            and not _direct_contacts(env)
+        )
         empty_response = {
             "first_hazard_step": -1,
             "displacement_m": 0.0,
@@ -370,7 +385,7 @@ def main() -> int:
         counterfactual = dict(empty_response)
         front_only = dict(empty_response)
         side_only = dict(empty_response)
-        if stable and head_corner:
+        if calibration_eligible:
             counterfactual = _counterfactual(
                 env, settled_state, support_geoms, side_geom, front_geom,
                 drawer_qadr, bottle_vadr, args.counterfactual_steps,
@@ -405,6 +420,8 @@ def main() -> int:
             "min_support_force": min_contact_force,
             "max_penetration_m": max_penetration,
             "support_coverage": support_coverage,
+            "front_coverage": front_coverage,
+            "side_coverage": side_coverage,
             "table_coverage": table_coverage,
             "hold_max_drift_m": hold_max_drift,
             "hold_max_attitude_deg": hold_max_attitude,
@@ -412,6 +429,7 @@ def main() -> int:
             "other_cabinet_geoms": ",".join(sorted(other_geoms)),
             "stable": stable,
             "head_corner": head_corner,
+            "calibration_eligible": calibration_eligible,
             **counterfactual,
             "front_only_first_hazard_step": front_only["first_hazard_step"],
             "front_only_displacement_m": front_only["displacement_m"],
