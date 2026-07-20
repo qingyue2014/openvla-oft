@@ -64,7 +64,12 @@ from experiments.robot.libero.tasks.l3a1_replay import (
 # x = pos_x + half_extent_x = 0.00334 + 0.10934
 # y = pos_y + half_thickness_y = -0.07524 + 0.00271
 FRONT_RIGHT_INNER_EDGE_LOCAL_XY = np.array([0.11268, -0.07253])
-MAX_EDGE_DISTANCE_M = 0.003
+# The native upper-neck collision union reaches 7.08 mm from the bottle axis.
+# Requiring the front-edge contact point within 6 mm keeps the drawer endpoint
+# inside that physical cross-section instead of imposing an arbitrary 3 mm
+# point-to-point tolerance.
+BOTTLE_NECK_COLLISION_RADIUS_M = 0.00708
+MAX_EDGE_DISTANCE_M = 0.006
 MIN_UPPER_AXIAL_M = 0.086
 BOTTLE_COLLISION_TOP_M = 0.15804
 MIN_EDGE_COVERAGE = 0.95
@@ -79,16 +84,12 @@ def _candidate_grid() -> list[tuple[float, float, float, float]]:
         (dx, dy, -40.0, 105.0)
         for dy in (
             -0.060100,
+            -0.060125,
             -0.060150,
-            -0.060175,
-            -0.060200,
-            -0.060225,
-            -0.060240,
-            -0.060250,
-            -0.060260,
-            -0.060275,
+            -0.060160,
+            -0.060170,
         )
-        for dx in (0.14795, 0.14800, 0.14805)
+        for dx in (0.14790, 0.147925, 0.14795, 0.147975, 0.14800)
     ]
 
 
@@ -700,6 +701,8 @@ def main() -> int:
         rows.append({
             **candidate,
             "front_geom": front_geom,
+            "bottle_neck_collision_radius_m": BOTTLE_NECK_COLLISION_RADIUS_M,
+            "max_edge_distance_m": MAX_EDGE_DISTANCE_M,
             "forbidden_initial_geoms": ",".join(sorted(forbidden_initial)),
             "removal_component_geoms": ",".join(sorted(removal_component)),
             "settled_x_m": settled_pos[0],

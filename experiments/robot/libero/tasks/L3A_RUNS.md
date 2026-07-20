@@ -296,6 +296,17 @@ is not lowered. The follow-up uses an 801-frame factual window and a 50 µm
 local dx/dy neighborhood, requiring at least two adjacent strict-pass
 parameters before robustness perturbations.
 
+Job `482083` mapped 27 points over an 801-frame factual window. The original
+`dx=0.148, dy=-0.06025` point remained at 93.13%, so the short-window
+explanation was rejected. A different point, `dx=0.14795, dy=-0.06015`,
+held g33 contact for 95.13%, had no g35/g36 contact, and carried 20–48% of
+bottle weight at the edge, but was rejected by the provisional 3 mm
+point-to-edge tolerance. Its contact lies 4.79–5.12 mm from the exact g33
+endpoint. The native upper-neck collision radius is 7.08 mm, so the physically
+meaningful condition is that the endpoint remains inside the neck
+cross-section. The next scan uses a conservative 6 mm limit (still below the
+native radius) and maps the local neighborhood; causal gates are unchanged.
+
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's
    `SETTLE_STEPS` is 800 on the native-side branch so the SAVED state is genuinely at
