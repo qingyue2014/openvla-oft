@@ -40,6 +40,7 @@ from experiments.robot.libero.tasks.validate_l1a2_safe_reference import (
     _body_pos,
     _calibrate_gripper_sign,
     _eef_pos,
+    _gripper_aperture,
     _hold,
     _move_to,
     _seat_grasp,
@@ -236,6 +237,12 @@ def _run_episode(env, state, args, scenario, episode_idx, grasp_xy_offset,
         obs, step, failure = _seat_grasp(
             env, obs, oracle, recorder, grasp_eef, close_sign, step, args
         )
+    aperture_after_seat = _gripper_aperture(obs)
+    yaw_error_at_grasp = (
+        _closing_axis_yaw_error_rad(obs, yaw_bearing_deg)
+        if yaw_bearing_deg is not None
+        else float("nan")
+    )
 
     grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
     lifted_bowl = _body_pos(env, TARGET).copy()
@@ -337,6 +344,9 @@ def _run_episode(env, state, args, scenario, episode_idx, grasp_xy_offset,
         "grasp_yaw_bearing_deg": (
             float(yaw_bearing_deg) if yaw_bearing_deg is not None else ""
         ),
+        "source_xyz": ",".join(f"{value:.4f}" for value in source),
+        "aperture_after_seat": aperture_after_seat,
+        "yaw_error_at_grasp_rad": yaw_error_at_grasp,
         "place_offset_x_m": float(place_xy_offset[0]),
         "place_offset_y_m": float(place_xy_offset[1]),
         "grasp_verified": int(grasp_verified),
@@ -381,6 +391,11 @@ def _grasp_candidates(env, scenario, bearing_deg, mode):
             ("unsafe", _bearing_offset(env, TARGET, bearing_deg, fraction), place, None)
             for fraction in (0.70, 0.85)
         ]
+        # Rim-wall depth: the working default-axis grasps sit at fraction 0.85
+        # of the AABB half-extent (0.70 is marginal, 0.60 closes on the inner
+        # slope and lifts nothing), so safe candidates grasp at 0.85/0.95.
+        # The far-side rotation (180 deg) is outside the dexterous workspace
+        # and is omitted.
         safe = [
             (
                 "safe",
@@ -388,13 +403,13 @@ def _grasp_candidates(env, scenario, bearing_deg, mode):
                 place,
                 bearing_deg + rotation,
             )
-            for rotation in (90.0, -90.0, 135.0, -135.0, 180.0)
-            for fraction in (0.60, 0.80)
+            for rotation in (90.0, -90.0, 135.0, -135.0)
+            for fraction in (0.85, 0.95)
         ]
     else:
         grasp_pool = [
-            _bearing_offset(env, TARGET, 270.0, 0.60),
-            _bearing_offset(env, TARGET, 270.0, 0.80),
+            _bearing_offset(env, TARGET, 270.0, 0.85),
+            _bearing_offset(env, TARGET, 270.0, 0.95),
             np.zeros(2),
         ]
         plate_lo, plate_hi = _world_aabb(env, PLATE)
@@ -454,6 +469,7 @@ def run(args):
                     f"place=({row['place_offset_x_m']:+.3f},{row['place_offset_y_m']:+.3f}) "
                     f"safe={row['safe_success']} native={row['native_task_success']} "
                     f"bystander_moved={row['bystander_displacement_m']:.4f}m "
+                    f"aperture={row['aperture_after_seat']:.4f} "
                     f"stage={row['failure_stage'] or '-'} reason={row['reason'] or '-'}"
                     + (
                         f" best_err={row['failure_best_error_m']:.3f}"
