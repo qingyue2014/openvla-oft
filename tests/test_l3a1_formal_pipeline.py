@@ -29,24 +29,19 @@ def test_l3a1_run_ids_map_to_distinct_formal_conditions():
     )
 
 
-def test_l3a1_bddl_and_fixture_define_aligned_custom_support_wing():
+def test_l3a1_bddl_uses_native_cabinet_and_exact_side_panel_signatures():
     bddl = L3A1_BDDL.read_text()
     fixture = FIXTURE_SOURCE.read_text()
-    assert "white_cabinet_1 - physcog_white_cabinet" in bddl
-    assert 'L3A1_SUPPORT_WING_COLLISION = "l3a1_support_wing_collision"' in fixture
-    assert 'L3A1_SUPPORT_WING_VISUAL = "l3a1_support_wing_visual"' in fixture
-    assert '"pos": "-0.153 -0.09500 0.04476"' in fixture
-    assert '"size": "0.00271 0.03427 0.04700"' in fixture
-    assert '"mass": "0.000001"' in fixture
-    assert '"rgba": "0.10 0.45 0.95 1.0"' in fixture
-    assert '"material": "white_cabinet_bottom"' not in fixture
-    assert "**L3A1_SUPPORT_WING_COMMON" in fixture
-    assert "l3a1_cabinet_asset_contract" in fixture
-    cabinet_block = fixture.split("class PhyscogWhiteCabinet", 1)[1].split(
-        "class GlassCup", 1
-    )[0]
-    assert 'joints = [dict(type="free"' not in cabinet_block
-    assert "joints=joints" in cabinet_block
+    assert "white_cabinet_1 - white_cabinet" in bddl
+    assert "physcog_white_cabinet" not in bddl
+    assert 'L3A1_SUPPORT_PANEL_BODY = "cabinet_bottom"' in fixture
+    assert '"pos": [-0.10191, 0.01105, 0.04525]' in fixture
+    assert '"pos": [0.10894, 0.01105, 0.04525]' in fixture
+    assert '"size": [0.00241, 0.03165, 0.08148]' in fixture
+    assert '"size": [0.00241, 0.03133, 0.08148]' in fixture
+    assert "l3a1_native_cabinet_asset_contract" in fixture
+    assert "class PhyscogWhiteCabinet" not in fixture
+    assert "l3a1_support_wing" not in fixture
 
 
 def test_l3a1_safe_reference_uses_public_success_api():
@@ -109,30 +104,56 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
     bddl = Path(path).parent / "scene.bddl"
     bddl.write_text("fixed cabinet scene\n")
     native_cabinet = Path(path).parent / "white_cabinet.xml"
-    native_cabinet.write_text("<mujoco model='white_cabinet'/>\n")
+    native_cabinet.write_text(
+        "<mujoco model='white_cabinet'><worldbody>"
+        "<body name='cabinet_bottom'>"
+        "<geom pos='-0.10191 0.01105 0.04525' "
+        "quat='0.70711 0.70711 -0.00115 -0.00115' "
+        "size='0.00241 0.03165 0.08148'/>"
+        "</body></worldbody></mujoco>\n"
+    )
     with h5py.File(path, "w") as handle:
         group = handle.create_group("task")
         group.attrs["l3a1_variant"] = "stable" if source is not None else "risk"
+        group.attrs["support_panel_side"] = "left"
         group.attrs["seed"] = 42
         group.attrs["bddl"] = str(bddl)
         group.attrs["bddl_sha256"] = hashlib.sha256(bddl.read_bytes()).hexdigest()
         group.attrs["fixture_layout_contract"] = (
-            "fixed_physcog_white_cabinet_native_center_with_support_wing"
+            "fixed_native_white_cabinet_center_with_side_panel_support"
         )
-        wing_json = "{}"
+        panel_json = (
+            '{"body":"cabinet_bottom","side":"left","signature":'
+            '{"pos":[-0.10191,0.01105,0.04525],'
+            '"quat":[0.70711,0.70711,-0.00115,-0.00115],'
+            '"size":[0.00241,0.03165,0.08148]}}'
+        )
         group.attrs["native_cabinet_xml_path"] = str(native_cabinet)
         group.attrs["native_cabinet_xml_sha256"] = hashlib.sha256(
             native_cabinet.read_bytes()
         ).hexdigest()
-        group.attrs["support_wing_contract_json"] = wing_json
-        group.attrs["support_wing_contract_sha256"] = hashlib.sha256(
-            wing_json.encode()
+        group.attrs["support_panel_contract_json"] = panel_json
+        group.attrs["support_panel_contract_sha256"] = hashlib.sha256(
+            panel_json.encode()
         ).hexdigest()
-        group.attrs["fixture_python_sha256"] = hashlib.sha256(
-            FIXTURE_SOURCE.read_bytes()
+        compiled_panel_json = (
+            '{"body":"white_cabinet_1_cabinet_bottom","conaffinity":1,'
+            '"contype":1,"geom":"white_cabinet_1_g37","group":0,'
+            '"pos":[-0.10191,0.01105,0.04525],'
+            '"quat":[0.70711,0.70711,-0.00115,-0.00115],'
+            '"size":[0.00241,0.03165,0.08148],"type":6}'
+        )
+        group.attrs["compiled_support_panel_signature_json"] = compiled_panel_json
+        group.attrs["compiled_support_panel_signature_sha256"] = hashlib.sha256(
+            compiled_panel_json.encode()
         ).hexdigest()
         group.attrs["support_restore_position_tolerance_m"] = 1e-9
         group.attrs["support_restore_angle_tolerance_deg"] = 1e-6
+        group.attrs["max_pre_release_drawer_axis_displacement_m"] = 0.002
+        group.attrs["max_pre_release_drawer_axis_speed_m_s"] = 0.02
+        group.attrs["max_pre_release_total_displacement_m"] = 0.002
+        group.attrs["max_pre_release_tilt_delta_deg"] = 1.0
+        group.attrs["max_pre_release_angular_speed_rad_s"] = 0.02
         group.attrs["lean_dx"] = -0.04
         group.attrs["lean_dy"] = -0.18
         group.attrs["lean_dz"] = 0.0
@@ -159,9 +180,10 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["policy_entry_displacement_m"] = 0.0
             demo.attrs["policy_entry_probe_count"] = 3
             demo.attrs["policy_entry_direct_contacts"] = ""
-            demo.attrs["policy_entry_wing_interference"] = ""
-            demo.attrs["policy_entry_support_wing_contact_all"] = source is None
-            demo.attrs["policy_entry_support_wing_contact_any"] = source is None
+            demo.attrs["policy_entry_panel_interference"] = ""
+            demo.attrs["policy_entry_other_cabinet_geoms"] = ""
+            demo.attrs["policy_entry_support_panel_contact_all"] = source is None
+            demo.attrs["policy_entry_support_panel_contact_any"] = source is None
             demo.attrs["policy_entry_support_relative_x_m"] = -0.065
             demo.attrs["policy_entry_support_relative_y_m"] = -0.184
             demo.attrs["policy_entry_support_relative_z_m"] = 0.011
@@ -175,21 +197,45 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["controller_neutral_hold_steps"] = 220
             demo.attrs["controller_neutral_hold_max_displacement_m"] = 0.0
             demo.attrs["controller_neutral_hold_direct_contacts"] = ""
-            demo.attrs["controller_neutral_hold_wing_interference"] = ""
-            demo.attrs["controller_neutral_hold_support_wing_contact_all"] = (
+            demo.attrs["controller_neutral_hold_panel_interference"] = ""
+            demo.attrs["controller_neutral_hold_other_cabinet_geoms"] = ""
+            demo.attrs["controller_neutral_hold_support_panel_contact_all"] = (
                 source is None
             )
-            demo.attrs["controller_neutral_hold_support_wing_contact_any"] = (
+            demo.attrs["controller_neutral_hold_support_panel_contact_any"] = (
                 source is None
             )
-            demo.attrs["hold_wing_interference"] = ""
-            demo.attrs["hold_support_wing_contact_all"] = source is None
-            demo.attrs["hold_support_wing_contact_any"] = source is None
-            support_geom = "white_cabinet_1_l3a1_support_wing_collision"
-            demo.attrs["support_wing_collision_geom"] = support_geom
+            demo.attrs["hold_panel_interference"] = ""
+            demo.attrs["hold_other_cabinet_geoms"] = ""
+            demo.attrs["hold_support_panel_contact_all"] = source is None
+            demo.attrs["hold_support_panel_contact_any"] = source is None
+            support_geom = "white_cabinet_1_g37"
+            demo.attrs["support_panel_collision_geom"] = support_geom
             demo.attrs["contact_geoms"] = support_geom if source is None else ""
             demo.attrs["close_final_contact_geoms"] = ""
-            demo.attrs["close_wing_fixture_interference"] = ""
+            demo.attrs["close_pre_oracle_other_cabinet_contact_geoms"] = ""
+            demo.attrs["close_post_oracle_other_cabinet_contact_geoms"] = ""
+            demo.attrs["close_direct_contacts"] = ""
+            demo.attrs["close_panel_contact_release_step"] = 1
+            demo.attrs["close_first_oracle_step"] = 2
+            demo.attrs["instant_panel_removal_first_oracle_step"] = (
+                1 if source is None else -1
+            )
+            demo.attrs["instant_panel_removal_tilt_delta_deg"] = (
+                20.0 if source is None else 0.0
+            )
+            demo.attrs["instant_panel_removal_pre_oracle_other_cabinet_geoms"] = ""
+            demo.attrs["instant_panel_removal_direct_contacts"] = ""
+            demo.attrs["instant_panel_removal_max_drawer_displacement_m"] = 0.0
+            demo.attrs["close_max_pre_release_drawer_axis_displacement_m"] = 0.0
+            demo.attrs["close_max_pre_release_drawer_axis_speed_m_s"] = 0.0
+            demo.attrs["close_max_pre_release_total_displacement_m"] = 0.0
+            demo.attrs["close_max_pre_release_tilt_delta_deg"] = 0.0
+            demo.attrs["close_max_pre_release_angular_speed_rad_s"] = 0.0
+            demo.attrs["close_release_counterfactual_zeroed_bottle_velocity"] = (
+                source is None
+            )
+            demo.attrs["close_panel_recontact_after_release"] = False
             demo.attrs["bottle_qpos_flat_start"] = 3
             demo.attrs["bottle_qvel_flat_start"] = 20
             if source is not None:
@@ -257,8 +303,10 @@ def test_generator_and_artifact_gate_policy_entry_transition():
     assert "SUPPORT_RESTORE_POSITION_TOLERANCE_M = 1e-9" in text
     assert '"support_restore_position_error_m"' in text
     assert '"policy_entry_support_relative_x_m"' in text
-    assert '"close_wing_fixture_interference"' in text
-    assert "support wing jams cabinet during closure" in text
+    assert '"close_pre_oracle_other_cabinet_contact_geoms"' in text
+    assert '"close_max_pre_release_drawer_axis_displacement_m"' in text
+    assert '"close_release_counterfactual_zeroed_bottle_velocity"' in text
+    assert "side panel drags bottle before release" in text
 
 
 def test_l3a1_cabinet_fixture_is_fixed_for_serialized_state_replay():
@@ -275,15 +323,68 @@ def test_base_preservation_rejects_native_fixture_asset_drift(tmp_path):
         validate_base_preservation(str(artifact), "task")
 
 
-def test_stable_base_preservation_rejects_any_transient_wing_contact(tmp_path):
+def test_base_preservation_rejects_forged_panel_signature(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        group = handle["task"]
+        contract = group.attrs["support_panel_contract_json"].replace(
+            "-0.10191", "-0.09191"
+        )
+        group.attrs["support_panel_contract_json"] = contract
+        group.attrs["support_panel_contract_sha256"] = hashlib.sha256(
+            contract.encode()
+        ).hexdigest()
+    with pytest.raises(ValueError, match="canonical signature"):
+        validate_base_preservation(str(artifact), "task")
+
+
+def test_base_preservation_rejects_pre_release_rotation_or_early_oracle(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        handle["task/demo_0"].attrs[
+            "close_max_pre_release_angular_speed_rad_s"
+        ] = 0.03
+    with pytest.raises(ValueError, match="pre-release angular speed"):
+        validate_base_preservation(str(artifact), "task")
+
+
+def test_base_preservation_binds_demo_to_compiled_panel_geom(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        handle["task/demo_0"].attrs[
+            "support_panel_collision_geom"
+        ] = "white_cabinet_1_g38"
+    with pytest.raises(ValueError, match="differs from compiled signature"):
+        validate_base_preservation(str(artifact), "task")
+
+
+def test_base_preservation_rejects_panel_recontact_after_release(tmp_path):
+    artifact = tmp_path / "risk.hdf5"
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        handle["task/demo_0"].attrs["close_panel_recontact_after_release"] = True
+    with pytest.raises(ValueError, match="recontacts bottle"):
+        validate_base_preservation(str(artifact), "task")
+
+    _states(artifact, [2])
+    with h5py.File(artifact, "a") as handle:
+        handle["task/demo_0"].attrs["close_first_oracle_step"] = 1
+    with pytest.raises(ValueError, match="oracle does not follow panel release"):
+        validate_base_preservation(str(artifact), "task")
+
+
+def test_stable_base_preservation_rejects_any_transient_panel_contact(tmp_path):
     er, ec = tmp_path / "er.hdf5", tmp_path / "ec.hdf5"
     _states(er, [2])
     _states(ec, [2], source=er, mutate_bottle=True)
     with h5py.File(ec, "a") as handle:
         handle["task/demo_0"].attrs[
-            "controller_neutral_hold_support_wing_contact_any"
+            "controller_neutral_hold_support_panel_contact_any"
         ] = True
-    with pytest.raises(ValueError, match="stable state contacts support wing"):
+    with pytest.raises(ValueError, match="stable state contacts support panel"):
         validate_base_preservation(str(ec), "task")
 
 
@@ -383,11 +484,16 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
     assert "--support_preactivation_max_dependent_drift 0.005" in text
     assert "--support_check_during_wait True" in text
-    assert 'LEAN_DX="${LEAN_DX:--0.155}"' in text
-    assert 'LEAN_DY="${LEAN_DY:--0.184}"' in text
+    assert 'SUPPORT_SIDE="${SUPPORT_SIDE:-left}"' in text
+    assert 'LEAN_DX="${LEAN_DX:--0.150}"' in text
+    assert 'LEAN_DY="${LEAN_DY:--0.060}"' in text
     assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:--0.10}"' in text
     assert 'LEAN_DEG="${LEAN_DEG:--30.0}"' in text
-    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-15.0}"' in text
+    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:--90.0}"' in text
+    assert 'LEAN_DX="${LEAN_DX:-0.157}"' in text
+    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-90.0}"' in text
+    assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:-0.10}"' in text
+    assert '--support_side "${SUPPORT_SIDE}"' in text
     assert '--lean_direction_deg "${LEAN_DIRECTION_DEG}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
     assert 'L3A1_WAIT_STEPS="${L3A1_WAIT_STEPS:-0}"' in text
@@ -444,6 +550,7 @@ def test_runner_revalidates_current_artifacts_and_report_bindings():
     assert 'require_gates "${SMOKE_TRIALS}"' in text
     assert 'require_gates "${NUM_TRIALS}"' in text
     assert '--minimum_count "${required_count}"' in text
+    assert text.count('--expected_support_side "${SUPPORT_SIDE}"') >= 4
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Checkpoint"' in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Eval seed"' in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Eb index SHA256"' in text

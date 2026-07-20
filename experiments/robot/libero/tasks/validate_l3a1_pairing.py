@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import h5py
@@ -10,14 +11,31 @@ import numpy as np
 
 
 PAIRING_METHOD = "serialized_er_state_bottle_transform"
+CANONICAL_NATIVE_SIDE_PANELS = {
+    "left": {
+        "pos": [-0.10191, 0.01105, 0.04525],
+        "quat": [0.70711, 0.70711, -0.00115, -0.00115],
+        "size": [0.00241, 0.03165, 0.08148],
+    },
+    "right": {
+        "pos": [0.10894, 0.01105, 0.04525],
+        "quat": [0.70711, 0.70711, -0.00115, -0.00115],
+        "size": [0.00241, 0.03133, 0.08148],
+    },
+}
 BINDING_FIELDS = (
-    "l3a1_variant", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
+    "l3a1_variant", "support_panel_side", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
     "lean_deg", "lean_axis", "lean_direction_deg", "policy_entry_probe_actions",
     "bddl_sha256", "fixture_layout_contract", "native_cabinet_xml_path",
     "native_cabinet_xml_sha256",
-    "support_wing_contract_json", "support_wing_contract_sha256",
-    "fixture_python_sha256",
+    "support_panel_contract_json", "support_panel_contract_sha256",
+    "compiled_support_panel_signature_json",
+    "compiled_support_panel_signature_sha256",
     "support_restore_position_tolerance_m", "support_restore_angle_tolerance_deg",
+    "max_pre_release_drawer_axis_displacement_m",
+    "max_pre_release_drawer_axis_speed_m_s",
+    "max_pre_release_total_displacement_m", "max_pre_release_tilt_delta_deg",
+    "max_pre_release_angular_speed_rad_s",
     "controller_neutral_hold_steps",
     "settle_steps", "validation_hold_steps",
     "verify_close_steps", "min_topple_deg", "oracle_displacement_threshold",
@@ -31,6 +49,77 @@ def _sha256(path: str) -> str:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def _validate_panel_contract(panel_json: str, native_xml: Path, side: str) -> None:
+    """Bind artifact metadata to the canonical panel and current native XML."""
+    expected_signature = CANONICAL_NATIVE_SIDE_PANELS.get(side)
+    if expected_signature is None:
+        raise ValueError(f"invalid support-panel side: {side!r}")
+    contract = json.loads(panel_json)
+    expected_contract = {
+        "body": "cabinet_bottom",
+        "side": side,
+        "signature": expected_signature,
+    }
+    if contract != expected_contract:
+        raise ValueError("support-panel contract does not match canonical signature")
+
+    root = ET.parse(native_xml).getroot()
+    drawer = root.find(".//body[@name='cabinet_bottom']")
+    if drawer is None:
+        raise ValueError("native WhiteCabinet XML is missing cabinet_bottom")
+    matches = []
+    for geom in drawer.findall("geom"):
+        try:
+            pos = [float(value) for value in geom.attrib["pos"].split()]
+            quat = [float(value) for value in geom.attrib["quat"].split()]
+            size = [float(value) for value in geom.attrib["size"].split()]
+        except (KeyError, ValueError):
+            continue
+        if (
+            np.allclose(pos, expected_signature["pos"], atol=1e-9, rtol=0.0)
+            and (
+                np.allclose(quat, expected_signature["quat"], atol=1e-9, rtol=0.0)
+                or np.allclose(quat, -np.asarray(expected_signature["quat"]), atol=1e-9, rtol=0.0)
+            )
+            and np.allclose(size, expected_signature["size"], atol=1e-9, rtol=0.0)
+        ):
+            matches.append(geom)
+    if len(matches) != 1:
+        raise ValueError(
+            f"native WhiteCabinet XML must contain one canonical {side} side panel; "
+            f"found {len(matches)}"
+        )
+
+
+def _validate_compiled_panel_signature(signature_json: str, side: str) -> str:
+    """Validate the actual compiled geom evidence recorded by the generator."""
+    signature = json.loads(signature_json)
+    expected = CANONICAL_NATIVE_SIDE_PANELS[side]
+    if not str(signature.get("body", "")).endswith("cabinet_bottom"):
+        raise ValueError("compiled support panel is not on cabinet_bottom")
+    if not str(signature.get("geom", "")):
+        raise ValueError("compiled support panel is missing its runtime geom name")
+    if (
+        int(signature.get("group", -1)) != 0
+        or int(signature.get("type", -1)) != 6
+        or int(signature.get("contype", 0)) == 0
+        or int(signature.get("conaffinity", 0)) == 0
+    ):
+        raise ValueError("compiled support panel is not a collidable box")
+    quat = np.asarray(signature.get("quat", []), dtype=float)
+    expected_quat = np.asarray(expected["quat"], dtype=float)
+    if not (
+        np.allclose(signature.get("pos", []), expected["pos"], atol=1e-6, rtol=0.0)
+        and (
+            np.allclose(quat, expected_quat, atol=1e-5, rtol=0.0)
+            or np.allclose(quat, -expected_quat, atol=1e-5, rtol=0.0)
+        )
+        and np.allclose(signature.get("size", []), expected["size"], atol=1e-6, rtol=0.0)
+    ):
+        raise ValueError("compiled support panel does not match canonical signature")
+    return str(signature["geom"])
 
 
 def artifact_binding(path: str, task_description: str) -> str:
@@ -61,6 +150,7 @@ def validate_expected_config(
     task_description: str,
     *,
     variant: str | None = None,
+    support_side: str | None = None,
     seed: int | None = None,
     bddl: str | None = None,
     displacement_threshold: float | None = None,
@@ -80,6 +170,7 @@ def validate_expected_config(
             )
         expected = {
             "l3a1_variant": variant,
+            "support_panel_side": support_side,
             "seed": seed,
             "bddl": bddl,
             "oracle_displacement_threshold": displacement_threshold,
@@ -118,19 +209,18 @@ def validate_base_preservation(path: str, task_description: str) -> int:
         base_state_hashes = []
         variant = str(group.attrs.get("l3a1_variant", ""))
         if str(group.attrs.get("fixture_layout_contract", "")) != (
-            "fixed_physcog_white_cabinet_native_center_with_support_wing"
+            "fixed_native_white_cabinet_center_with_side_panel_support"
         ):
             raise ValueError("missing fixed-cabinet fixture layout contract")
-        fixture_python = Path(__file__).resolve().parents[1] / "physcog_objects.py"
         asset_hashes = {
             "native_cabinet_xml_sha256": str(
                 group.attrs.get("native_cabinet_xml_sha256", "")
             ),
-            "support_wing_contract_sha256": str(
-                group.attrs.get("support_wing_contract_sha256", "")
+            "support_panel_contract_sha256": str(
+                group.attrs.get("support_panel_contract_sha256", "")
             ),
-            "fixture_python_sha256": str(
-                group.attrs.get("fixture_python_sha256", "")
+            "compiled_support_panel_signature_sha256": str(
+                group.attrs.get("compiled_support_panel_signature_sha256", "")
             ),
         }
         if any(len(value) != 64 for value in asset_hashes.values()):
@@ -140,19 +230,47 @@ def validate_base_preservation(path: str, task_description: str) -> int:
             raise ValueError(f"current native WhiteCabinet XML does not exist: {native_xml}")
         if _sha256(str(native_xml)) != asset_hashes["native_cabinet_xml_sha256"]:
             raise ValueError("artifact native WhiteCabinet XML SHA256 is stale")
-        wing_json = str(group.attrs.get("support_wing_contract_json", ""))
-        if hashlib.sha256(wing_json.encode()).hexdigest() != asset_hashes[
-            "support_wing_contract_sha256"
+        panel_json = str(group.attrs.get("support_panel_contract_json", ""))
+        if hashlib.sha256(panel_json.encode()).hexdigest() != asset_hashes[
+            "support_panel_contract_sha256"
         ]:
-            raise ValueError("support-wing contract SHA256 mismatch")
-        if _sha256(str(fixture_python)) != asset_hashes["fixture_python_sha256"]:
-            raise ValueError("artifact fixture Python SHA256 does not match current source")
+            raise ValueError("support-panel contract SHA256 mismatch")
+        panel_contract = json.loads(panel_json)
+        support_side = str(group.attrs.get("support_panel_side", ""))
+        if panel_contract.get("side") != support_side:
+            raise ValueError("support-panel side does not match its geometry contract")
+        _validate_panel_contract(panel_json, native_xml, support_side)
+        compiled_signature_json = str(
+            group.attrs.get("compiled_support_panel_signature_json", "")
+        )
+        if hashlib.sha256(compiled_signature_json.encode()).hexdigest() != asset_hashes[
+            "compiled_support_panel_signature_sha256"
+        ]:
+            raise ValueError("compiled support-panel signature SHA256 mismatch")
+        compiled_support_panel_geom = _validate_compiled_panel_signature(
+            compiled_signature_json, support_side
+        )
         support_position_tolerance = float(
             group.attrs.get("support_restore_position_tolerance_m", np.nan)
         )
         support_angle_tolerance = float(
             group.attrs.get("support_restore_angle_tolerance_deg", np.nan)
         )
+        max_pre_release_displacement = float(group.attrs.get(
+            "max_pre_release_drawer_axis_displacement_m", np.nan
+        ))
+        max_pre_release_speed = float(group.attrs.get(
+            "max_pre_release_drawer_axis_speed_m_s", np.nan
+        ))
+        max_pre_release_total_displacement = float(group.attrs.get(
+            "max_pre_release_total_displacement_m", np.nan
+        ))
+        max_pre_release_tilt_delta = float(group.attrs.get(
+            "max_pre_release_tilt_delta_deg", np.nan
+        ))
+        max_pre_release_angular_speed = float(group.attrs.get(
+            "max_pre_release_angular_speed_rad_s", np.nan
+        ))
         controller_hold_steps = int(
             group.attrs.get("controller_neutral_hold_steps", -1)
         )
@@ -163,6 +281,14 @@ def validate_base_preservation(path: str, task_description: str) -> int:
             and support_angle_tolerance == 1e-6
         ):
             raise ValueError("invalid fixed-support replay tolerance metadata")
+        if not (
+            np.isclose(max_pre_release_displacement, 0.002)
+            and np.isclose(max_pre_release_speed, 0.02)
+            and np.isclose(max_pre_release_total_displacement, 0.002)
+            and np.isclose(max_pre_release_tilt_delta, 1.0)
+            and np.isclose(max_pre_release_angular_speed, 0.02)
+        ):
+            raise ValueError("invalid pre-release anti-drag threshold metadata")
         if controller_hold_steps != 220:
             raise ValueError("controller neutral hold count is not 220")
         template_sha = None
@@ -225,8 +351,10 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 raise ValueError(f"policy entry probe count is not 3 at demo_{index}")
             if str(demo.attrs.get("policy_entry_direct_contacts", "missing")):
                 raise ValueError(f"policy entry has direct contact at demo_{index}")
-            if str(demo.attrs.get("policy_entry_wing_interference", "missing")):
-                raise ValueError(f"policy entry has support-wing interference at demo_{index}")
+            if str(demo.attrs.get("policy_entry_panel_interference", "missing")):
+                raise ValueError(f"policy entry has support-panel interference at demo_{index}")
+            if str(demo.attrs.get("policy_entry_other_cabinet_geoms", "missing")):
+                raise ValueError(f"policy entry contacts another cabinet geom at demo_{index}")
             support_relative_xyz = np.asarray([
                 demo.attrs.get("policy_entry_support_relative_x_m", np.nan),
                 demo.attrs.get("policy_entry_support_relative_y_m", np.nan),
@@ -275,19 +403,59 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                     f"controller neutral hold has direct contact at demo_{index}"
                 )
             if str(demo.attrs.get(
-                "controller_neutral_hold_wing_interference", "missing"
+                "controller_neutral_hold_panel_interference", "missing"
             )):
                 raise ValueError(
-                    f"controller neutral hold has support-wing interference at demo_{index}"
+                    f"controller neutral hold has support-panel interference at demo_{index}"
                 )
-            if str(demo.attrs.get("hold_wing_interference", "missing")):
-                raise ValueError(f"open hold has support-wing interference at demo_{index}")
-            if str(demo.attrs.get("close_wing_fixture_interference", "missing")):
+            if str(demo.attrs.get(
+                "controller_neutral_hold_other_cabinet_geoms", "missing"
+            )):
                 raise ValueError(
-                    f"support wing jams cabinet during closure at demo_{index}"
+                    f"controller neutral hold contacts another cabinet geom at demo_{index}"
                 )
-            support_wing_geom = str(
-                demo.attrs.get("support_wing_collision_geom", "")
+            if str(demo.attrs.get("hold_panel_interference", "missing")):
+                raise ValueError(f"open hold has support-panel interference at demo_{index}")
+            if str(demo.attrs.get("hold_other_cabinet_geoms", "missing")):
+                raise ValueError(f"open hold contacts another cabinet geom at demo_{index}")
+            if str(demo.attrs.get(
+                "close_pre_oracle_other_cabinet_contact_geoms", "missing"
+            )):
+                raise ValueError(
+                    f"another cabinet geom contacts bottle before oracle at demo_{index}"
+                )
+            if str(demo.attrs.get("close_direct_contacts", "missing")):
+                raise ValueError(f"drawer close has direct robot/bowl contact at demo_{index}")
+            if float(demo.attrs.get(
+                "close_max_pre_release_drawer_axis_displacement_m", np.inf
+            )) > max_pre_release_displacement:
+                raise ValueError(f"pre-release drawer-axis drag exceeds limit at demo_{index}")
+            if float(demo.attrs.get(
+                "close_max_pre_release_drawer_axis_speed_m_s", np.inf
+            )) > max_pre_release_speed:
+                raise ValueError(f"pre-release drawer-axis speed exceeds limit at demo_{index}")
+            if float(demo.attrs.get(
+                "close_max_pre_release_total_displacement_m", np.inf
+            )) > max_pre_release_total_displacement:
+                raise ValueError(f"pre-release total displacement exceeds limit at demo_{index}")
+            if float(demo.attrs.get(
+                "close_max_pre_release_tilt_delta_deg", np.inf
+            )) > max_pre_release_tilt_delta:
+                raise ValueError(f"pre-release tilt change exceeds limit at demo_{index}")
+            if float(demo.attrs.get(
+                "close_max_pre_release_angular_speed_rad_s", np.inf
+            )) > max_pre_release_angular_speed:
+                raise ValueError(f"pre-release angular speed exceeds limit at demo_{index}")
+            if variant == "risk" and not bool(demo.attrs.get(
+                "close_release_counterfactual_zeroed_bottle_velocity", False
+            )):
+                raise ValueError(f"missing zero-momentum release counterfactual at demo_{index}")
+            if variant == "risk" and bool(demo.attrs.get(
+                "close_panel_recontact_after_release", True
+            )):
+                raise ValueError(f"support panel recontacts bottle after release at demo_{index}")
+            support_panel_geom = str(
+                demo.attrs.get("support_panel_collision_geom", "")
             )
             contact_geoms = set(filter(None, str(
                 demo.attrs.get("contact_geoms", "")
@@ -295,35 +463,77 @@ def validate_base_preservation(path: str, task_description: str) -> int:
             close_final_geoms = set(filter(None, str(
                 demo.attrs.get("close_final_contact_geoms", "")
             ).split(",")))
-            if not support_wing_geom.endswith("l3a1_support_wing_collision"):
-                raise ValueError(f"missing exact support-wing geom at demo_{index}")
+            if support_panel_geom != compiled_support_panel_geom:
+                raise ValueError(
+                    f"demo support-panel geom differs from compiled signature at demo_{index}"
+                )
             if variant == "risk":
-                if support_wing_geom not in contact_geoms:
-                    raise ValueError(f"risk state misses exact support wing at demo_{index}")
+                if support_panel_geom not in contact_geoms:
+                    raise ValueError(f"risk state misses exact support panel at demo_{index}")
+                if int(demo.attrs.get(
+                    "instant_panel_removal_first_oracle_step", -1
+                )) < 1:
+                    raise ValueError(
+                        f"pure panel removal does not trigger oracle at demo_{index}"
+                    )
+                if str(demo.attrs.get(
+                    "instant_panel_removal_pre_oracle_other_cabinet_geoms", "missing"
+                )):
+                    raise ValueError(
+                        f"pure panel removal contacts another cabinet geom at demo_{index}"
+                    )
+                if str(demo.attrs.get(
+                    "instant_panel_removal_direct_contacts", "missing"
+                )):
+                    raise ValueError(
+                        f"pure panel removal has direct robot/bowl contact at demo_{index}"
+                    )
+                if float(demo.attrs.get(
+                    "instant_panel_removal_max_drawer_displacement_m", np.inf
+                )) > 1e-6:
+                    raise ValueError(
+                        f"pure panel removal moves drawer at demo_{index}"
+                    )
+                if float(demo.attrs.get(
+                    "instant_panel_removal_tilt_delta_deg", -np.inf
+                )) < float(group.attrs.get("min_topple_deg", np.inf)):
+                    raise ValueError(
+                        f"pure panel removal does not pass tilt gate at demo_{index}"
+                    )
+                if int(demo.attrs.get("close_panel_contact_release_step", -1)) < 1:
+                    raise ValueError(
+                        f"risk state does not release panel contact during close at demo_{index}"
+                    )
+                if int(demo.attrs.get("close_first_oracle_step", -1)) <= int(
+                    demo.attrs.get("close_panel_contact_release_step", -1)
+                ):
+                    raise ValueError(
+                        f"risk oracle does not follow panel release at demo_{index}"
+                    )
                 for field in (
-                    "policy_entry_support_wing_contact_all",
-                    "controller_neutral_hold_support_wing_contact_all",
-                    "hold_support_wing_contact_all",
+                    "policy_entry_support_panel_contact_all",
+                    "controller_neutral_hold_support_panel_contact_all",
+                    "hold_support_panel_contact_all",
                 ):
                     if not bool(demo.attrs.get(field, False)):
                         raise ValueError(
-                            f"risk state loses support-wing contact during {field} at demo_{index}"
+                            f"risk state loses support-panel contact during {field} at demo_{index}"
                         )
-                if support_wing_geom in close_final_geoms:
+                if support_panel_geom in close_final_geoms:
                     raise ValueError(
-                        f"risk state retains wing contact after drawer close at demo_{index}"
+                        f"risk state retains panel contact after drawer close at demo_{index}"
                     )
             else:
-                if support_wing_geom in contact_geoms:
-                    raise ValueError(f"stable state touches support wing at demo_{index}")
+                if support_panel_geom in contact_geoms:
+                    raise ValueError(f"stable state touches support panel at demo_{index}")
                 for field in (
-                    "policy_entry_support_wing_contact_any",
-                    "controller_neutral_hold_support_wing_contact_any",
-                    "hold_support_wing_contact_any",
+                    "policy_entry_support_panel_contact_any",
+                    "controller_neutral_hold_support_panel_contact_any",
+                    "hold_support_panel_contact_any",
                 ):
                     if bool(demo.attrs.get(field, True)):
                         raise ValueError(
-                            f"stable state contacts support wing during {field} at demo_{index}"
+                            f"stable state contacts support panel during {field} at demo_{index}"
                         )
         if base_state_hashes and len(set(base_state_hashes)) != count:
             raise ValueError("formal artifact reuses duplicate native base reset states")
@@ -348,9 +558,11 @@ def validate_pairing(er_path: str, ec_path: str, task_description: str) -> list[
         for field in (
             "native_cabinet_xml_path",
             "native_cabinet_xml_sha256",
-            "support_wing_contract_json",
-            "support_wing_contract_sha256",
-            "fixture_python_sha256",
+            "support_panel_side",
+            "support_panel_contract_json",
+            "support_panel_contract_sha256",
+            "compiled_support_panel_signature_json",
+            "compiled_support_panel_signature_sha256",
         ):
             if str(er_group.attrs.get(field, "")) != str(ec_group.attrs.get(field, "")):
                 raise ValueError(f"Er/Ec fixture asset mismatch for {field}")
@@ -420,6 +632,7 @@ def main() -> None:
     parser.add_argument("--task_description", required=True)
     parser.add_argument("--print_binding", action="store_true")
     parser.add_argument("--expected_variant")
+    parser.add_argument("--expected_support_side", choices=("left", "right"))
     parser.add_argument("--expected_seed", type=int)
     parser.add_argument("--expected_bddl")
     parser.add_argument("--expected_displacement_threshold", type=float)
@@ -433,6 +646,7 @@ def main() -> None:
         args.er,
         args.task_description,
         variant=args.expected_variant,
+        support_side=args.expected_support_side,
         seed=args.expected_seed,
         bddl=args.expected_bddl,
         displacement_threshold=args.expected_displacement_threshold,

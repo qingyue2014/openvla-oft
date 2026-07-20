@@ -13,11 +13,11 @@ mkdir -p "${LOG_DIR}"
   exit 2
 }
 
-# Check three centimeter-margin placements centered on the custom support
-# wing. Activation begins when the gripper contacts the support drawer, so
+# Check three placements centered on the native left side panel. Activation
+# begins when the gripper contacts the support drawer, so
 # physically caused bottle motion is no longer mislabeled as pre-activation
 # self-drift.
-candidates=(-0.150 -0.155 -0.160)
+candidates=(-0.145 -0.150 -0.155)
 summary_args=()
 for dx in "${candidates[@]}"; do
   slug="dx${dx}"
@@ -33,8 +33,8 @@ for dx in "${candidates[@]}"; do
   rm -f -- "${state}" "${check_report}"
 
   NUM_TRIALS=5 MAX_ATTEMPTS="${MAX_ATTEMPTS}" \
-    LEAN_DX="${dx}" LEAN_DY=-0.184 LEAN_DEG=-30.0 \
-    LEAN_DIRECTION_DEG=15.0 \
+    SUPPORT_SIDE=left LEAN_DX="${dx}" LEAN_DY=-0.060 LEAN_DEG=-30.0 \
+    LEAN_DIRECTION_DEG=-90.0 \
     STATE_PATH="${state}" RISK_STATE_PATH="${state}" \
     RISK_CHECK_REPORT="${check_report}" RUN_ID_SUFFIX="${suffix}" \
     bash "${RUNNER}" risk check

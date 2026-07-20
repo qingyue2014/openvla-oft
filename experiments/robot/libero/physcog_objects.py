@@ -30,36 +30,20 @@ from libero.libero.envs.base_object import register_object
 
 _ASSETS_DIR = pathlib.Path(__file__).parent / "assets"
 
-L3A1_SUPPORT_WING_BODY = "cabinet_bottom"
-L3A1_SUPPORT_WING_COLLISION = "l3a1_support_wing_collision"
-L3A1_SUPPORT_WING_VISUAL = "l3a1_support_wing_visual"
-# The third box half-size maps to world x under this drawer-local quaternion.
-# The world-x interval [-0.200, -0.106] lies outboard of the native drawer.
-# Its y center is 16 mm in front of the cabinet side-wall swept volume, so the
-# cantilevered support can retract fully without jamming the drawer.
-L3A1_SUPPORT_WING_COMMON = {
-    "type": "box",
-    "pos": "-0.153 -0.09500 0.04476",
-    "quat": "0.50000 0.50000 -0.50000 -0.50000",
-    "size": "0.00271 0.03427 0.04700",
-}
-L3A1_SUPPORT_WING_COLLISION_ATTRS = {
-    "solimp": "0.998 0.998 0.001",
-    "solref": "0.001 1",
-    "mass": "0.000001",
-    "friction": "0.95 0.3 0.1",
-    "group": "0",
-    "rgba": "0.8 0.8 0.8 0.3",
-}
-L3A1_SUPPORT_WING_VISUAL_ATTRS = {
-    "conaffinity": "0",
-    "contype": "0",
-    "group": "1",
-    # Keep the collision-aligned wing distinguishable in the policy's
-    # 256x256 agent view.  Reusing ``white_cabinet_bottom`` reduces the
-    # exposed edge to an ambiguous 1--3 px grey-on-grey sliver in Er.
-    "rgba": "0.10 0.45 0.95 1.0",
-    "mass": "0.00000001",
+L3A1_SUPPORT_PANEL_BODY = "cabinet_bottom"
+# Native white_cabinet.xml collision geoms are unnamed. MuJoCo assigns unstable
+# gNN names at compile time, so bind each panel by its body-local signature.
+L3A1_NATIVE_SIDE_PANELS = {
+    "left": {
+        "pos": [-0.10191, 0.01105, 0.04525],
+        "quat": [0.70711, 0.70711, -0.00115, -0.00115],
+        "size": [0.00241, 0.03165, 0.08148],
+    },
+    "right": {
+        "pos": [0.10894, 0.01105, 0.04525],
+        "quat": [0.70711, 0.70711, -0.00115, -0.00115],
+        "size": [0.00241, 0.03133, 0.08148],
+    },
 }
 
 
@@ -98,104 +82,23 @@ def _l3a1_native_cabinet_xml() -> pathlib.Path:
     )
 
 
-def l3a1_cabinet_asset_contract() -> dict[str, str]:
-    """Return deterministic hashes for the native fixture and injected wing."""
+def l3a1_native_cabinet_asset_contract(side: str) -> dict[str, str]:
+    """Return deterministic hashes for one native drawer side-panel binding."""
+    if side not in L3A1_NATIVE_SIDE_PANELS:
+        raise ValueError(f"unknown L3-A1 support side: {side!r}")
     native_xml = _l3a1_native_cabinet_xml()
-    wing_contract = {
-        "body": L3A1_SUPPORT_WING_BODY,
-        "collision_name": L3A1_SUPPORT_WING_COLLISION,
-        "visual_name": L3A1_SUPPORT_WING_VISUAL,
-        "common": L3A1_SUPPORT_WING_COMMON,
-        "collision": L3A1_SUPPORT_WING_COLLISION_ATTRS,
-        "visual": L3A1_SUPPORT_WING_VISUAL_ATTRS,
+    panel_contract = {
+        "body": L3A1_SUPPORT_PANEL_BODY,
+        "side": side,
+        "signature": L3A1_NATIVE_SIDE_PANELS[side],
     }
-    wing_json = json.dumps(wing_contract, sort_keys=True, separators=(",", ":"))
+    panel_json = json.dumps(panel_contract, sort_keys=True, separators=(",", ":"))
     return {
         "native_cabinet_xml_path": str(native_xml.resolve()),
         "native_cabinet_xml_sha256": hashlib.sha256(native_xml.read_bytes()).hexdigest(),
-        "support_wing_contract_json": wing_json,
-        "support_wing_contract_sha256": hashlib.sha256(wing_json.encode()).hexdigest(),
-        "fixture_python_sha256": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
+        "support_panel_contract_json": panel_json,
+        "support_panel_contract_sha256": hashlib.sha256(panel_json.encode()).hexdigest(),
     }
-
-
-def _build_l3a1_cabinet_xml() -> str:
-    """Build the native white cabinet with a visible moving support wing.
-
-    The wing is an outboard cantilever in front of the cabinet side wall. It
-    is part of ``cabinet_bottom`` and therefore retracts with
-    the task-required close action.  Absolute asset paths make the temporary
-    XML independent of the checkout and LIBERO install locations.
-    """
-    orig_xml = _l3a1_native_cabinet_xml()
-    orig_dir = orig_xml.parent
-    tree = ET.parse(str(orig_xml))
-    root = tree.getroot()
-    asset_el = root.find("asset")
-    if asset_el is None:
-        raise ValueError(f"missing asset element in {orig_xml}")
-    for tag in ("mesh", "texture"):
-        for asset in asset_el.findall(tag):
-            path = asset.get("file", "")
-            if path and not os.path.isabs(path):
-                asset.set("file", str(orig_dir / path))
-
-    drawer = root.find(f".//body[@name='{L3A1_SUPPORT_WING_BODY}']")
-    if drawer is None:
-        raise ValueError(f"missing cabinet_bottom body in {orig_xml}")
-    ET.SubElement(drawer, "geom", {
-        **L3A1_SUPPORT_WING_COMMON,
-        **L3A1_SUPPORT_WING_COLLISION_ATTRS,
-        "name": L3A1_SUPPORT_WING_COLLISION,
-    })
-    ET.SubElement(drawer, "geom", {
-        **L3A1_SUPPORT_WING_COMMON,
-        **L3A1_SUPPORT_WING_VISUAL_ATTRS,
-        "name": L3A1_SUPPORT_WING_VISUAL,
-    })
-
-    tmp = tempfile.NamedTemporaryFile(suffix=".xml", delete=False)
-    tmp.close()
-    tree.write(tmp.name, encoding="unicode", xml_declaration=False)
-    return tmp.name
-
-
-@register_object
-class PhyscogWhiteCabinet(MujocoXMLObject):
-    """Native WhiteCabinet plus L3-A1's moving negative-x support wing."""
-
-    def __init__(self, name="physcog_white_cabinet", joints=None):
-        # LIBERO fixture loading explicitly passes joints=None. Preserve that
-        # value exactly: native WhiteCabinet is fixed, while inventing a free
-        # joint here makes the entire cabinet move under bottle contact and
-        # changes the serialized qpos/qvel schema.
-        tmp_path = _build_l3a1_cabinet_xml()
-        try:
-            super().__init__(
-                tmp_path,
-                name=name,
-                joints=joints,
-                obj_type="all",
-                duplicate_collision_geoms=False,
-            )
-        finally:
-            os.unlink(tmp_path)
-        self.category_name = "physcog_white_cabinet"
-        self.rotation = (np.pi / 4, np.pi / 2)
-        self.rotation_axis = "x"
-        self.object_properties = {
-            "articulation": {
-                "default_open_ranges": [-0.16, -0.14],
-                "default_close_ranges": [0.0, 0.005],
-            },
-            "vis_site_names": {},
-        }
-
-    def is_open(self, qpos):
-        return qpos < max(self.object_properties["articulation"]["default_open_ranges"])
-
-    def is_close(self, qpos):
-        return qpos > min(self.object_properties["articulation"]["default_close_ranges"])
 
 
 @register_object

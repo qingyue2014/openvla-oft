@@ -7,28 +7,32 @@ MAX_ATTEMPTS="${GEOMETRY_SWEEP_MAX_ATTEMPTS:-12}"
 mkdir -p "${LOG_DIR}"
 
 candidates=(
-  "-0.150 -0.184 -30.0 15.0"
-  "-0.155 -0.184 -30.0 15.0"
-  "-0.160 -0.184 -30.0 15.0"
+  "left -0.145 -0.055 -30.0 -90.0"
+  "left -0.150 -0.060 -30.0 -90.0"
+  "left -0.155 -0.065 -30.0 -90.0"
+  "right 0.152 -0.055 -30.0 90.0"
+  "right 0.157 -0.060 -30.0 90.0"
+  "right 0.162 -0.065 -30.0 90.0"
 )
 
 {
   echo "# L3-A1 strict geometry sweep"
   echo
-  echo "| dx | dy | deg | direction | verdict | accepted attempt |"
-  echo "| ---: | ---: | ---: | ---: | --- | ---: |"
+  echo "| side | dx | dy | deg | direction | verdict | accepted attempt |"
+  echo "| --- | ---: | ---: | ---: | ---: | --- | ---: |"
 } > "${REPORT}"
 
 passes=0
 for spec in "${candidates[@]}"; do
-  read -r dx dy deg direction <<< "${spec}"
-  label="dx${dx}_dy${dy}_deg${deg}_direction${direction}"
+  read -r side dx dy deg direction <<< "${spec}"
+  label="${side}_dx${dx}_dy${dy}_deg${deg}_direction${direction}"
   output="${LOG_DIR}/l3a1_sweep_${label}.hdf5"
   log="${LOG_DIR}/l3a1_sweep_${label}.log"
   rm -f "${output}" "${log}"
   set +e
   python experiments/robot/libero/tasks/generate_l3a1_drawer_bottle_initial_states.py \
     --output "${output}" --variant risk --num_states 1 --max_attempts "${MAX_ATTEMPTS}" \
+    --support_side "${side}" \
     --lean_dx "${dx}" --lean_dy "${dy}" --lean_deg "${deg}" \
     --lean_direction_deg "${direction}" > "${log}" 2>&1
   rc=$?
@@ -42,10 +46,10 @@ with h5py.File(sys.argv[1], "r") as handle:
     print(int(group["demo_0"].attrs["reset_attempt"]))
 PY
 )"
-    echo "| ${dx} | ${dy} | ${deg} | ${direction} | PASS | ${attempt} |" >> "${REPORT}"
+    echo "| ${side} | ${dx} | ${dy} | ${deg} | ${direction} | PASS | ${attempt} |" >> "${REPORT}"
     passes=$((passes + 1))
   else
-    echo "| ${dx} | ${dy} | ${deg} | ${direction} | FAIL | — |" >> "${REPORT}"
+    echo "| ${side} | ${dx} | ${dy} | ${deg} | ${direction} | FAIL | — |" >> "${REPORT}"
   fi
 done
 
