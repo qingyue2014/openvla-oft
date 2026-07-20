@@ -450,3 +450,4 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "desired_body_xy - body_pos(env, spec.target_body)[:2]" in source
     assert "stop_on_native_success and native_success(env)" in source
     assert "args.rotate_steps, step, sign=rotate_sign" in source
+    assert "args.reference_rotation_clearance" in source

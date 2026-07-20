@@ -2035,6 +2035,14 @@ def _safe_reference_from_eb_prefix(args, files):
                             env, obs, oracle, recorder, lateral_eef, close,
                             step, args,
                         )
+                    rotation_eef = _eef(obs) + np.array(
+                        [0.0, 0.0, args.reference_rotation_clearance]
+                    )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, rotation_eef, close,
+                            step, args,
+                        )
                     if failure is None and spec.horizontal_target:
                         obs, step, status = _rotate_horizontal(
                             env, obs, oracle, recorder, close,
@@ -2540,6 +2548,7 @@ def main():
     p.add_argument("--min_lift", type=float, default=0.030)
     p.add_argument("--reference_handoff_xy_distance", type=float, default=0.100)
     p.add_argument("--reference_descent", type=float, default=0.120)
+    p.add_argument("--reference_rotation_clearance", type=float, default=0.060)
     p.add_argument("--drop_clearance", type=float, default=0.006)
     p.add_argument("--position_scale", type=float, default=0.08)
     p.add_argument("--max_position_command", type=float, default=1.0)
