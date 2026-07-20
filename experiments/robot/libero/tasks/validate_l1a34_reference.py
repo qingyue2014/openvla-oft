@@ -123,11 +123,23 @@ def _robot_stall_diagnostics(env, stage):
 
 
 def _bearing_offset(env, body, bearing_deg, fraction):
+    """XY offset from `body`'s centroid toward `bearing_deg`, sized to land at
+    `fraction` of the body's rim in that specific direction.
+
+    Uses a per-direction elliptical radius (matching the AABB half-extent
+    exactly along each axis and interpolating smoothly between them) instead
+    of a single flat max(half_x, half_y) applied uniformly: a flat radius is
+    only correct along whichever axis happens to be larger and otherwise
+    overshoots the rim off that axis (fingers close on empty space) or
+    undershoots it (grazing contact, no secure grip, no lift).
+    """
     lo, hi = _world_aabb(env, body)
     half_xy = np.clip((hi[:2] - lo[:2]) / 2.0, 0.020, 0.080)
-    radius = float(np.max(half_xy))
     theta = np.radians(bearing_deg)
-    return fraction * radius * np.array([np.cos(theta), np.sin(theta)])
+    cos_t, sin_t = float(np.cos(theta)), float(np.sin(theta))
+    denom = (cos_t / half_xy[0]) ** 2 + (sin_t / half_xy[1]) ** 2
+    radius = float(1.0 / np.sqrt(denom)) if denom > 0 else float(np.max(half_xy))
+    return fraction * radius * np.array([cos_t, sin_t])
 
 
 def _quat_xyzw_to_mat(quat):

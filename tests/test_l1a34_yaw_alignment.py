@@ -1,6 +1,7 @@
 import numpy as np
 
 from experiments.robot.libero.tasks.validate_l1a34_reference import (
+    _bearing_offset,
     _closing_axis_yaw_error_rad,
     _grasp_candidates,
     _quat_xyzw_to_mat,
@@ -52,6 +53,29 @@ def test_l1a3_candidates_carry_yaw_only_for_safe(monkeypatch):
     # first safe bearings are the reachable east/west rotations
     assert safe[0][3] == -86.0 + 90.0
     assert safe[2][3] == -86.0 - 90.0
+
+
+def test_bearing_offset_uses_per_axis_radius_not_flat_max(monkeypatch):
+    import experiments.robot.libero.tasks.validate_l1a34_reference as mod
+
+    # A body whose AABB is longer along y (half_x=0.03, half_y=0.06) — like the
+    # elongated flat-max radius bug uncovered in the L1-A3 calibrate failures,
+    # where every bearing used the SAME radius = max(half_x, half_y) = 0.06,
+    # overshooting the rim off the y-axis and missing the grasp entirely.
+    monkeypatch.setattr(
+        mod, "_world_aabb",
+        lambda _env, _body: (np.array([-0.03, -0.06, 0.0]), np.array([0.03, 0.06, 0.05])),
+    )
+    east = _bearing_offset(None, "body", 0.0, 1.0)
+    north = _bearing_offset(None, "body", 90.0, 1.0)
+    # Along each axis the offset must land exactly on that axis's half-extent,
+    # not the other axis's (larger) half-extent.
+    np.testing.assert_allclose(east, np.array([0.03, 0.0]), atol=1e-9)
+    np.testing.assert_allclose(north, np.array([0.0, 0.06]), atol=1e-9)
+    # Off-axis bearings interpolate strictly between the two extents.
+    diag = _bearing_offset(None, "body", 45.0, 1.0)
+    diag_radius = float(np.linalg.norm(diag))
+    assert 0.03 < diag_radius < 0.06
 
 
 def test_l1a4_candidates_prefer_robot_side_rim_grasp(monkeypatch):
