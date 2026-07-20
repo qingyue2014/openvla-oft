@@ -88,6 +88,7 @@ SAFE_REFERENCE_CSV="${LOG_DIR}/${SCENARIO}_safe_reference.csv"
 SAFE_REFERENCE_ATTEMPTS_CSV="${LOG_DIR}/${SCENARIO}_safe_reference_attempts.csv"
 SAFE_REFERENCE_REPORT="${LOG_DIR}/${SCENARIO}_safe_reference.md"
 SAFE_REFERENCE_TRAJ="${LOG_DIR}/${SCENARIO}_safe_reference_trajectories"
+SAFE_REFERENCE_VIDEOS="${LOG_DIR}/${SCENARIO}_safe_reference_videos"
 EB_COMPETENCE_CSV="${LOG_DIR}/${SCENARIO}_eb_competence.csv"
 EB_COMPETENCE_REPORT="${LOG_DIR}/${SCENARIO}_eb_competence.md"
 ER_REPLAY_CSV="${LOG_DIR}/${SCENARIO}_eb_to_er_replay.csv"
@@ -162,12 +163,14 @@ run_safe_reference() {
   # the prerequisite Eb-trajectory check exits before writing new results.
   rm -f "${SAFE_REFERENCE_CSV}" "${SAFE_REFERENCE_ATTEMPTS_CSV}" \
     "${SAFE_REFERENCE_REPORT}"
-  mkdir -p "${SAFE_REFERENCE_TRAJ}"
+  mkdir -p "${SAFE_REFERENCE_TRAJ}" "${SAFE_REFERENCE_VIDEOS}"
   find "${SAFE_REFERENCE_TRAJ}" -maxdepth 1 -type f -name '*.npz' -delete
+  find "${SAFE_REFERENCE_VIDEOS}" -maxdepth 1 -type f -name '*.mp4' -delete
   python "${PIPELINE}" safe-reference "${common_state_args[@]}" \
     --num_states "${CALIBRATION_NUM_STATES}" \
     --max_attempts_per_state "${SAFE_REFERENCE_MAX_ATTEMPTS:-0}" \
     --eb_trajectories "${EB_TRAJ}" --trajectory_dir "${SAFE_REFERENCE_TRAJ}" \
+    --video_dir "${SAFE_REFERENCE_VIDEOS}" \
     --out_csv "${SAFE_REFERENCE_CSV}" --out_report "${SAFE_REFERENCE_REPORT}"
 }
 

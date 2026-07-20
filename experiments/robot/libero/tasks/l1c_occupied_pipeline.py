@@ -1376,6 +1376,47 @@ def _advance(env, obs, oracle, recorder, action, step):
     return obs, oracle.check(env, obs, action, step)
 
 
+class _VideoTrajectoryRecorder(TrajectoryRecorder):
+    """Trajectory recorder that can retain the policy camera for review."""
+
+    def __init__(self, env, tracked_bodies=None, capture_video=False):
+        super().__init__(env, tracked_bodies)
+        self.capture_video = bool(capture_video)
+        self.video_frames = []
+
+    def capture(self, obs):
+        if not self.capture_video:
+            return
+        image = obs.get("agentview_image") if hasattr(obs, "get") else None
+        if image is None:
+            image = self.env.sim.render(256, 256, camera_name="agentview")
+        # Match the primary-camera orientation used in OpenVLA rollout videos.
+        self.video_frames.append(np.asarray(image)[::-1, ::-1].copy())
+
+    def record(self, obs, action, step: int, phase: str = "policy"):
+        super().record(obs, action, step, phase)
+        self.capture(obs)
+
+    def save_video(self, path, fps=30):
+        if not self.capture_video or not self.video_frames:
+            return None
+        import imageio.v2 as imageio
+
+        path = str(path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        try:
+            writer = imageio.get_writer(path, fps=fps, format="FFMPEG")
+        except Exception:
+            writer = imageio.get_writer(path, fps=fps)
+        try:
+            for frame in self.video_frames:
+                writer.append_data(frame)
+        finally:
+            writer.close()
+        print(f"Saved safe-reference MP4 at path {path}")
+        return path
+
+
 def _move(
     env, obs, oracle, recorder, target, grip, step, args,
     stop_on_contact=False, stop_on_support=False, tolerance=None,
@@ -1826,7 +1867,9 @@ def _safe_reference_from_eb_prefix(args, files):
     if not candidates:
         raise ValueError("No successful paired Eb trajectories are available for L1-C2")
 
-    env = _env(resolve_bddl(spec), control=True)
+    env = _env(
+        resolve_bddl(spec), render=bool(args.video_dir), control=True
+    )
     rows = []
     attempt_rows = []
     os.makedirs(args.trajectory_dir, exist_ok=True)
@@ -1847,9 +1890,12 @@ def _safe_reference_from_eb_prefix(args, files):
                     spec.max_target_post_release_xy_displacement,
                 )
                 oracle.reset(env, obs)
-                recorder = TrajectoryRecorder(
-                    env, [spec.target_body, spec.occupant_body, spec.anchor_body]
+                recorder = _VideoTrajectoryRecorder(
+                    env,
+                    [spec.target_body, spec.occupant_body, spec.anchor_body],
+                    capture_video=bool(args.video_dir),
                 )
+                recorder.capture(obs)
                 initial_z = float(body_pos(env, spec.target_body)[2])
                 step = 0
                 failure = None
@@ -1976,6 +2022,14 @@ def _safe_reference_from_eb_prefix(args, files):
                     "violation_reason": row["reason"],
                 },
             )
+            if args.video_dir:
+                recorder.save_video(
+                    os.path.join(
+                        args.video_dir,
+                        f"safe_reference_ep{idx:03d}--safe={bool(row['safe_success'])}.mp4",
+                    ),
+                    fps=args.video_fps,
+                )
             print(
                 f"state={idx:02d} selected_attempt={row['attempt']:02d} "
                 f"safe={row['safe_success']} prefix_steps={row['prefix_steps']} "
@@ -2006,6 +2060,7 @@ def _safe_reference_from_eb_prefix(args, files):
         f"- Dynamic safe-success rate: {rate:.3f}",
         f"- Required: N >= {args.min_reference_episodes}, rate >= {args.min_safe_rate:.3f}",
         "- Scope: fully executable OSC actions; no object teleport is retained in the rollout.",
+        f"- Videos: `{args.video_dir or 'disabled'}`",
         "",
         "| Episode | Eb trajectory | Safe | Attempt | Prefix steps | Prefix lift | "
         "Offset x | Offset y | Release | Occupant move | Occupant tilt | Target XY drift | Reason |",
@@ -2329,6 +2384,8 @@ def main():
     p.add_argument("--min_reference_episodes", type=int, default=3)
     p.add_argument("--eb_trajectories", default="")
     p.add_argument("--trajectory_dir", default="experiments/logs/l1c_safe_reference_trajectories")
+    p.add_argument("--video_dir", default="")
+    p.add_argument("--video_fps", type=int, default=30)
     p.add_argument("--approach_height", type=float, default=0.10)
     p.add_argument("--grasp_depth", type=float, default=0.025)
     p.add_argument("--lift_height", type=float, default=0.12)

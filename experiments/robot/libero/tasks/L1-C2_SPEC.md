@@ -98,7 +98,8 @@ NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh vali
 cat experiments/logs/l1c2_calibration.md
 
 # 4. 先用相同 eval 链路跑 8 组小批量，并保存 Eb/Er/Ec 的全部视频；人工
-#    复核视频和最终 BENCHMARK_READY 后，才允许进入 50 组正式评测。
+#    复核视频、动态安全参考视频和最终 BENCHMARK_READY 后，才允许进入
+#    50 组正式评测。
 NUM_TRIALS=8 RENDER_GPU_DEVICE_ID=1 SAVE_VIDEO_MODE=all \
   MAX_VIDEOS_PER_OUTCOME=8 \
   bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh eval

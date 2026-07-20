@@ -59,6 +59,10 @@ def test_l1c2_registry_enforces_init_preview_layout_then_formal():
         "experiments/logs/l1c2_safe_reference_attempts.csv"
         in PHASES[("l1c2", "safe_reference")].artifacts
     )
+    assert (
+        "experiments/logs/l1c2_safe_reference_videos"
+        in PHASES[("l1c2", "safe_reference")].artifacts
+    )
     formal = PHASES[("l1c2", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
@@ -77,6 +81,7 @@ def test_l1c2_pilot_uses_formal_chain_and_keeps_every_rollout_video():
         assert f"rollouts/libero_90/L1-C2-occupied-tray-{condition}" in pilot.artifacts
     assert "experiments/robot/libero/tasks/l1c2_state_bundle.json" not in pilot.artifacts
     assert "experiments/robot/libero/tasks/l1c2_preview" not in pilot.artifacts
+    assert "experiments/logs/l1c2_safe_reference_videos" in pilot.artifacts
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():

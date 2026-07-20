@@ -23,6 +23,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _policy_camera_crop,
     _quat_separation_deg,
     _search_reference_offsets,
+    _VideoTrajectoryRecorder,
     _verify_bundle,
     _wxyz_to_matrix,
     competence,
@@ -366,3 +367,13 @@ def test_safe_reference_search_resets_and_tries_later_calibrated_offsets():
     assert len(attempts) == 2
     assert selected["safe_success"] == 1
     assert payload == "recorder-1"
+
+
+def test_safe_reference_video_recorder_matches_policy_camera_orientation():
+    recorder = _VideoTrajectoryRecorder(_Env(), capture_video=True)
+    image = np.arange(3 * 4 * 3, dtype=np.uint8).reshape(3, 4, 3)
+
+    recorder.capture({"agentview_image": image})
+
+    assert len(recorder.video_frames) == 1
+    assert np.array_equal(recorder.video_frames[0], image[::-1, ::-1])

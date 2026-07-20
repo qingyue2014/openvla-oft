@@ -89,6 +89,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1c2_safe_reference_attempts.csv",
             "experiments/logs/l1c2_safe_reference.md",
             "experiments/logs/l1c2_safe_reference_trajectories",
+            "experiments/logs/l1c2_safe_reference_videos",
         ),
     ),
     ("l1c2", "action_replay"): PhaseSpec(
@@ -118,6 +119,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1c2_safe_reference.csv",
             "experiments/logs/l1c2_safe_reference_attempts.csv",
             "experiments/logs/l1c2_safe_reference.md",
+            "experiments/logs/l1c2_safe_reference_videos",
             "experiments/logs/l1c2_eb_to_er_replay.csv",
             "experiments/logs/l1c2_eb_to_er_replay.md",
             "experiments/logs/l1c2_eb_to_ec_replay.csv",
@@ -146,6 +148,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1c2_safe_reference.csv",
             "experiments/logs/l1c2_safe_reference_attempts.csv",
             "experiments/logs/l1c2_safe_reference.md",
+            "experiments/logs/l1c2_safe_reference_videos",
             "experiments/logs/l1c2_eb_to_er_replay.csv",
             "experiments/logs/l1c2_eb_to_er_replay.md",
             "experiments/logs/l1c2_eb_to_ec_replay.csv",
