@@ -4,22 +4,20 @@ set -uo pipefail
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 REPORT="${LOG_DIR}/l3a1_geometry_sweep.md"
 MAX_ATTEMPTS="${GEOMETRY_SWEEP_MAX_ATTEMPTS:-2}"
-LEAN_DZ="${GEOMETRY_SWEEP_LEAN_DZ:-0.020}"
+LEAN_DZ="${GEOMETRY_SWEEP_LEAN_DZ:-0.0}"
 mkdir -p "${LOG_DIR}"
 
 candidates=(
-  "right 0.153 -0.065 -44.0 105.0"
-  "right 0.153 -0.065 -45.0 105.0"
-  "right 0.153 -0.065 -46.0 105.0"
-  "right 0.1535 -0.065 -44.0 105.0"
-  "right 0.1535 -0.065 -45.0 105.0"
-  "right 0.1535 -0.065 -46.0 105.0"
-  "right 0.154 -0.065 -44.0 105.0"
-  "right 0.154 -0.065 -45.0 105.0"
-  "right 0.154 -0.065 -46.0 105.0"
-  "right 0.1545 -0.065 -44.0 105.0"
-  "right 0.1545 -0.065 -45.0 105.0"
-  "right 0.1545 -0.065 -46.0 105.0"
+  "right 0.142 -0.060 -25.0 90.0"
+  "right 0.143 -0.060 -30.0 90.0"
+  "right 0.144 -0.060 -27.5 90.0"
+  "right 0.144 -0.060 -30.0 90.0"
+  "right 0.145 -0.060 -27.5 90.0"
+  "right 0.150 -0.060 -40.0 90.0"
+  "right 0.150 -0.060 -45.0 90.0"
+  "right 0.155 -0.060 -40.0 90.0"
+  "right 0.160 -0.060 -35.0 90.0"
+  "right 0.160 -0.060 -40.0 90.0"
 )
 
 {
