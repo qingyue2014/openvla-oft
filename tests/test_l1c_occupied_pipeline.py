@@ -94,7 +94,7 @@ def test_l1c3_calibration_separates_obstacle_pose_from_unadapted_landing():
     spec = get_spec("l1c3")
     offsets = _calibration_offsets(spec)
     assert offsets[0] == spec.direct_target_offset == (0.0, 0.0)
-    assert spec.risk_offset == (0.0, 0.030)
+    assert spec.risk_offset == (0.0, 0.040)
 
 
 def test_l1c2_runner_uses_all_task_checkpoint_after_fixed_competence_failure():
@@ -292,15 +292,17 @@ def test_l1c3_horizontal_bottle_aligns_with_the_drawer_wide_axis():
 
     assert np.allclose(np.abs(long_axis_world), [1.0, 0.0, 0.0], atol=1e-6)
     assert spec.anchor_body == "white_cabinet_1_cabinet_bottom"
-    assert spec.risk_offset == (0.0, 0.030)
+    assert spec.risk_offset == (0.0, 0.040)
     assert spec.direct_target_offset == (0.0, 0.0)
     assert spec.safe_offsets == (
-        (0.0, -0.015), (0.0, -0.020), (0.0, -0.025), (0.0, -0.030)
+        (0.0, -0.030), (0.0, -0.035), (0.0, -0.040), (0.0, -0.045)
     )
     assert spec.min_target_clearance == 0.0
     assert spec.occupant_place_quat == (0.70710678, 0.70710678, 0.0, 0.0)
     assert spec.max_initial_tilt_deg == 18.0
     assert spec.max_initial_absolute_tilt_deg == 100.0
+    assert spec.min_adaptation_xy == 0.030
+    assert spec.min_target_tilt_deg == 60.0
 
 
 def test_l1c3_placement_uses_the_oriented_goal_box_floor():

@@ -95,9 +95,9 @@ SPECS = {
         # The bowl is biased to one side while its radius still covers the
         # native centre landing. Keep the unadapted target probe at centre;
         # these are distinct scene and action coordinates.
-        risk_offset=(0.0, 0.030),
+        risk_offset=(0.0, 0.040),
         direct_target_offset=(0.0, 0.0),
-        safe_offsets=((0.0, -0.015), (0.0, -0.020), (0.0, -0.025), (0.0, -0.030)),
+        safe_offsets=((0.0, -0.030), (0.0, -0.035), (0.0, -0.040), (0.0, -0.045)),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,
         max_initial_absolute_tilt_deg=100.0,
@@ -106,7 +106,7 @@ SPECS = {
         # clearance.  Enforce non-disruption from measured bowl motion/tilt;
         # min_adaptation_xy still requires a genuine side placement.
         min_target_clearance=0.0,
-        min_adaptation_xy=0.020,
+        min_adaptation_xy=0.030,
         # Rotate the bottle's local long z-axis onto the drawer's wider world
         # x-axis.  A 90-degree world-x rotation instead lays the ~158 mm
         # bottle along the drawer's ~151 mm depth, causing wall impacts and
@@ -114,7 +114,7 @@ SPECS = {
         target_place_quat=(0.70710678, 0.0, 0.70710678, 0.0),
         occupant_place_quat=(0.70710678, 0.70710678, 0.0, 0.0),
         horizontal_target=True,
-        min_target_tilt_deg=65.0,
+        min_target_tilt_deg=60.0,
         max_target_tilt_deg=100.0,
     ),
     "l1c4": OccupiedGoalSpec(
