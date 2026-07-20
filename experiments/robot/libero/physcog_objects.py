@@ -46,6 +46,190 @@ L3A1_NATIVE_SIDE_PANELS = {
     },
 }
 
+# Versioned native-cabinet topology used by the formal L3-A1 edge condition.
+# The native XML leaves collision geoms unnamed, and MuJoCo's compiled gNN
+# names are not stable.  Every role is therefore bound exclusively by its
+# body-local collision signature.
+L3A1_NATIVE_CORNER_EDGE_SIGNATURES = {
+    "edge/front_outer": {
+        "pos": [0.00334, -0.07524, 0.04476],
+        "quat": [0.5, 0.5, -0.5, -0.5],
+        "size": [0.00271, 0.03427, 0.10934],
+    },
+    "inner_front": {
+        "pos": [0.00334, -0.06839, 0.04525],
+        "quat": [0.5, 0.5, 0.5, 0.5],
+        "size": [0.00356, 0.03214, 0.10679],
+    },
+    "side/right": {
+        "pos": [0.10894, 0.01105, 0.04525],
+        "quat": [0.70711, 0.70711, -0.00115, -0.00115],
+        "size": [0.00241, 0.03133, 0.08148],
+    },
+}
+
+L3A1_NATIVE_CORNER_EDGE_V1 = {
+    "schema_version": 2,
+    "topology_id": "native_white_cabinet_bottom_front_right_edge_v1",
+    "body": L3A1_SUPPORT_PANEL_BODY,
+    "roles": L3A1_NATIVE_CORNER_EDGE_SIGNATURES,
+    "initial_support_roles": ["edge/front_outer"],
+    "removal_component": ["edge/front_outer", "inner_front", "side/right"],
+    "forbidden_initial_roles": ["inner_front", "side/right"],
+}
+
+_L3A1_GEOM_POS_ATOL = 1e-6
+_L3A1_GEOM_QUAT_ATOL = 1e-5
+_L3A1_GEOM_SIZE_ATOL = 1e-6
+_MUJOCO_GEOM_BOX = 6
+
+
+def l3a1_contract_json_and_sha256(contract: dict) -> tuple[str, str]:
+    """Return canonical JSON and its SHA256 for an L3-A1 contract."""
+    contract_json = json.dumps(contract, sort_keys=True, separators=(",", ":"))
+    return contract_json, hashlib.sha256(contract_json.encode()).hexdigest()
+
+
+def l3a1_native_corner_edge_contract_hash() -> str:
+    """Return the deterministic hash of ``L3A1_NATIVE_CORNER_EDGE_V1``."""
+    return l3a1_contract_json_and_sha256(L3A1_NATIVE_CORNER_EDGE_V1)[1]
+
+
+def l3a1_native_edge_component_contract() -> dict:
+    """Return an isolated copy of the canonical formal topology contract."""
+    contract_json, _ = l3a1_contract_json_and_sha256(
+        L3A1_NATIVE_CORNER_EDGE_V1
+    )
+    return json.loads(contract_json)
+
+
+def _l3a1_model(env_or_model):
+    """Accept a LIBERO env, MuJoCo sim, or compiled MuJoCo model."""
+    candidate = env_or_model
+    if hasattr(candidate, "sim"):
+        candidate = candidate.sim
+    if hasattr(candidate, "model"):
+        candidate = candidate.model
+    required = (
+        "ngeom", "geom_bodyid", "geom_group", "geom_type", "geom_contype",
+        "geom_conaffinity", "geom_pos", "geom_quat", "geom_size",
+        "body_name2id", "geom_id2name", "geom_name2id",
+    )
+    missing = [name for name in required if not hasattr(candidate, name)]
+    if missing:
+        raise TypeError(f"object is not a compiled MuJoCo model; missing={missing}")
+    return candidate
+
+
+def _l3a1_quat_matches(actual, expected) -> bool:
+    actual = np.asarray(actual, dtype=float)
+    expected = np.asarray(expected, dtype=float)
+    return bool(
+        np.allclose(actual, expected, atol=_L3A1_GEOM_QUAT_ATOL, rtol=0.0)
+        or np.allclose(actual, -expected, atol=_L3A1_GEOM_QUAT_ATOL, rtol=0.0)
+    )
+
+
+def _l3a1_geom_matches_signature(model, geom_id: int, signature: dict) -> bool:
+    return bool(
+        np.allclose(
+            model.geom_pos[geom_id], signature["pos"],
+            atol=_L3A1_GEOM_POS_ATOL, rtol=0.0,
+        )
+        and _l3a1_quat_matches(model.geom_quat[geom_id], signature["quat"])
+        and np.allclose(
+            model.geom_size[geom_id], signature["size"],
+            atol=_L3A1_GEOM_SIZE_ATOL, rtol=0.0,
+        )
+    )
+
+
+def resolve_l3a1_native_corner_edge_geoms(
+    env_or_model, support_body: str
+) -> dict[str, str]:
+    """Resolve the three canonical edge-component roles in a compiled model.
+
+    Resolution is deliberately independent of compiled geom names.  Each role
+    must match exactly one collidable box on ``support_body``; missing,
+    duplicate, cross-body, non-box, non-collidable, or unnamed matches fail
+    closed.
+    """
+    model = _l3a1_model(env_or_model)
+    support_id = int(model.body_name2id(support_body))
+    resolved: dict[str, str] = {}
+    resolved_ids: set[int] = set()
+    for role, signature in L3A1_NATIVE_CORNER_EDGE_SIGNATURES.items():
+        signature_matches = [
+            geom_id
+            for geom_id in range(int(model.ngeom))
+            if _l3a1_geom_matches_signature(model, geom_id, signature)
+        ]
+        cross_body = [
+            geom_id for geom_id in signature_matches
+            if int(model.geom_bodyid[geom_id]) != support_id
+        ]
+        if cross_body:
+            raise RuntimeError(
+                f"L3-A1 topology role {role!r} has cross-body signature "
+                f"matches: geom_ids={cross_body}"
+            )
+        body_matches = [
+            geom_id for geom_id in signature_matches
+            if int(model.geom_bodyid[geom_id]) == support_id
+        ]
+        if len(body_matches) != 1:
+            raise RuntimeError(
+                f"L3-A1 topology role {role!r} must match exactly one geom on "
+                f"{support_body!r}; geom_ids={body_matches}"
+            )
+        geom_id = body_matches[0]
+        if (
+            int(model.geom_group[geom_id]) != 0
+            or int(model.geom_type[geom_id]) != _MUJOCO_GEOM_BOX
+            or int(model.geom_contype[geom_id]) == 0
+            or int(model.geom_conaffinity[geom_id]) == 0
+        ):
+            raise RuntimeError(
+                f"L3-A1 topology role {role!r} is not a group-0 collidable box"
+            )
+        if geom_id in resolved_ids:
+            raise RuntimeError(
+                f"one compiled geom cannot satisfy multiple L3-A1 roles: {geom_id}"
+            )
+        geom_name = model.geom_id2name(geom_id)
+        if not geom_name:
+            raise RuntimeError(
+                f"L3-A1 topology role {role!r} has no addressable runtime geom name"
+            )
+        # Round-trip the name to prevent an ambiguous or inconsistent model API
+        # from silently binding the intervention to a different geom.
+        if int(model.geom_name2id(geom_name)) != geom_id:
+            raise RuntimeError(
+                f"L3-A1 topology role {role!r} has an inconsistent runtime geom name"
+            )
+        resolved[role] = str(geom_name)
+        resolved_ids.add(geom_id)
+    return resolved
+
+
+def validate_l3a1_native_corner_edge_runtime_binding(
+    env_or_model, support_body: str, role_to_geom: dict[str, str]
+) -> dict[str, str]:
+    """Validate an explicit role binding and return the canonical resolution."""
+    expected_roles = set(L3A1_NATIVE_CORNER_EDGE_SIGNATURES)
+    if set(role_to_geom) != expected_roles:
+        raise RuntimeError(
+            "L3-A1 runtime binding roles differ from the canonical topology: "
+            f"actual={sorted(role_to_geom)}, expected={sorted(expected_roles)}"
+        )
+    resolved = resolve_l3a1_native_corner_edge_geoms(env_or_model, support_body)
+    if role_to_geom != resolved:
+        raise RuntimeError(
+            f"L3-A1 runtime role binding mismatch: actual={role_to_geom}, "
+            f"expected={resolved}"
+        )
+    return resolved
+
 
 class PhyscogXMLObject(MujocoXMLObject):
     """Base class for PhysCogSafe-injected objects.
@@ -98,6 +282,23 @@ def l3a1_native_cabinet_asset_contract(side: str) -> dict[str, str]:
         "native_cabinet_xml_sha256": hashlib.sha256(native_xml.read_bytes()).hexdigest(),
         "support_panel_contract_json": panel_json,
         "support_panel_contract_sha256": hashlib.sha256(panel_json.encode()).hexdigest(),
+    }
+
+
+def l3a1_native_corner_edge_asset_contract() -> dict[str, str]:
+    """Bind the versioned edge topology to the current native cabinet XML."""
+    native_xml = _l3a1_native_cabinet_xml()
+    topology_json, topology_sha256 = l3a1_contract_json_and_sha256(
+        L3A1_NATIVE_CORNER_EDGE_V1
+    )
+    return {
+        "native_cabinet_xml_path": str(native_xml.resolve()),
+        "native_cabinet_xml_sha256": hashlib.sha256(
+            native_xml.read_bytes()
+        ).hexdigest(),
+        "l3a1_topology_id": L3A1_NATIVE_CORNER_EDGE_V1["topology_id"],
+        "support_topology_contract_json": topology_json,
+        "support_topology_contract_sha256": topology_sha256,
     }
 
 
