@@ -1984,12 +1984,11 @@ def _safe_reference_from_eb_prefix(args, files):
                     failure = (
                         status if status is not None and status.violated else None
                     )
-                    if (
-                        failure is None
-                        and body_tilt_deg(env, spec.target_body)
-                        < args.min_horizontal_tilt_deg
-                    ):
-                        failure = "orientation_failed"
+                # Do not reject an in-hand intermediate pose.  The bottle can
+                # finish rotating as it contacts the shallow drawer floor;
+                # the occupied-goal oracle enforces the final 60--100 degree
+                # target tilt after release and settling.
+                preplace_target_tilt = body_tilt_deg(env, spec.target_body)
                 grasped_offset = _eef(obs) - body_pos(env, spec.target_body)
                 current_state = env.sim.get_state()
                 place_at_anchor(
@@ -2049,6 +2048,7 @@ def _safe_reference_from_eb_prefix(args, files):
                     "offset_x_m": offset[0],
                     "offset_y_m": offset[1],
                     "rotate_sign": rotate_sign,
+                    "preplace_target_tilt_deg": preplace_target_tilt,
                     "release": int(metrics["release_detected"]),
                     "occupant_displacement_m": metrics[
                         "occupant_max_displacement_m"

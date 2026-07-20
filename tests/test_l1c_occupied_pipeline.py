@@ -445,3 +445,5 @@ def test_l1c3_safe_reference_reuses_paired_eb_grasp_and_rotates_the_bottle():
     assert "_reset_with_fixture_seed(env, reset_seeds[idx])" in source
     assert "if failure is None and spec.horizontal_target:" in source
     assert "step, sign=rotate_sign" in source
+    assert "preplace_target_tilt = body_tilt_deg" in source
+    assert "the occupied-goal oracle enforces the final" in source
