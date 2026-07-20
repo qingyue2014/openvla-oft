@@ -38,6 +38,8 @@ def test_l3a1_bddl_and_fixture_define_aligned_custom_support_wing():
     assert '"pos": "-0.153 -0.09500 0.04476"' in fixture
     assert '"size": "0.00271 0.03427 0.04700"' in fixture
     assert '"mass": "0.000001"' in fixture
+    assert '"rgba": "0.10 0.45 0.95 1.0"' in fixture
+    assert '"material": "white_cabinet_bottom"' not in fixture
     assert "**L3A1_SUPPORT_WING_COMMON" in fixture
     assert "l3a1_cabinet_asset_contract" in fixture
     cabinet_block = fixture.split("class PhyscogWhiteCabinet", 1)[1].split(

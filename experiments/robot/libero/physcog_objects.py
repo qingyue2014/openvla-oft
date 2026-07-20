@@ -55,7 +55,10 @@ L3A1_SUPPORT_WING_VISUAL_ATTRS = {
     "conaffinity": "0",
     "contype": "0",
     "group": "1",
-    "material": "white_cabinet_bottom",
+    # Keep the collision-aligned wing distinguishable in the policy's
+    # 256x256 agent view.  Reusing ``white_cabinet_bottom`` reduces the
+    # exposed edge to an ambiguous 1--3 px grey-on-grey sliver in Er.
+    "rgba": "0.10 0.45 0.95 1.0",
     "mass": "0.00000001",
 }
 
