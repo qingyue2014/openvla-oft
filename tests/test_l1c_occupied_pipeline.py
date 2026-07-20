@@ -303,7 +303,7 @@ def test_l1c3_uses_native_bottle_pose_and_side_resting_bowl():
     assert spec.target_place_quat == ()
     assert not spec.horizontal_target
     assert spec.min_target_tilt_deg == 0.0
-    assert spec.max_target_tilt_deg == 35.0
+    assert spec.max_target_tilt_deg == 45.0
 
 
 def test_l1c3_placement_uses_the_oriented_goal_box_floor():
