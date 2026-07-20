@@ -134,12 +134,12 @@ DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -20.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
                            # against the front face; positive would lean it away and it topples
 DEFAULT_LEAN_DIRECTION_DEG = 35.0
-# Repeated policy smoke on the calibrated support template separated the only
-# reproducibly causal state (-64.5 mm) from the two direct robot-contact bands
-# (-62.0 and -71.0 mm).  Gate the final restored equilibrium, not the requested
-# pre-settle offset, because contact settling shifts the bottle by reset.
-RISK_SUPPORT_LOCAL_X_MIN = -0.069
-RISK_SUPPORT_LOCAL_X_MAX = -0.063
+# Fixed fixtures live in ``model.body_pos`` and are not part of MuJoCo's
+# flattened qpos/qvel state. The L3-A1 BDDL therefore pins the cabinet at the
+# center of its native region, and every internal reset must reproduce the
+# support pose exactly before a candidate can be serialized.
+SUPPORT_RESTORE_POSITION_TOLERANCE_M = 1e-9
+SUPPORT_RESTORE_ANGLE_TOLERANCE_DEG = 1e-6
 
 
 def _tilt_quat(axis: str, deg: float) -> np.ndarray:
@@ -661,20 +661,25 @@ def generate_states(
 
         candidate_support_pos = _body_pos(env, support_body)
         candidate_support_rot = _body_rotation(env, support_body)
+        support_restore_position_error = float(np.linalg.norm(
+            candidate_support_pos - support_pos
+        ))
+        support_restore_delta = support_rot.T @ candidate_support_rot
+        support_restore_angle_error = float(np.degrees(np.arccos(np.clip(
+            (np.trace(support_restore_delta) - 1.0) / 2.0, -1.0, 1.0
+        ))))
+        if (
+            support_restore_position_error > SUPPORT_RESTORE_POSITION_TOLERANCE_M
+            or support_restore_angle_error > SUPPORT_RESTORE_ANGLE_TOLERANCE_DEG
+        ):
+            raise RuntimeError(
+                "fixed cabinet support pose changed across reset: "
+                f"position_error={support_restore_position_error:.3e}m, "
+                f"angle_error={support_restore_angle_error:.3e}deg"
+            )
         policy_entry_support_relative_pos = candidate_support_rot.T @ (
             _body_pos(env, BOTTLE_BODY) - candidate_support_pos
         )
-        if variant == "risk" and not (
-            RISK_SUPPORT_LOCAL_X_MIN
-            <= policy_entry_support_relative_pos[0]
-            <= RISK_SUPPORT_LOCAL_X_MAX
-        ):
-            print(
-                f"  [skip attempt {attempts}] final support-local x outside "
-                f"[{RISK_SUPPORT_LOCAL_X_MIN:+.3f},{RISK_SUPPORT_LOCAL_X_MAX:+.3f}]m: "
-                f"x={policy_entry_support_relative_pos[0]:+.4f}m"
-            )
-            continue
 
         # Recompute instantaneous bottle quantities from the exact candidate
         # that will be serialized before running its hold/contact/close gates.
@@ -873,6 +878,11 @@ def generate_states(
                 "policy_entry_support_relative_z_m": float(
                     policy_entry_support_relative_pos[2]
                 ),
+                "support_world_x_m": float(candidate_support_pos[0]),
+                "support_world_y_m": float(candidate_support_pos[1]),
+                "support_world_z_m": float(candidate_support_pos[2]),
+                "support_restore_position_error_m": support_restore_position_error,
+                "support_restore_angle_error_deg": support_restore_angle_error,
                 "controller_neutral_hold_steps": CONTROLLER_NEUTRAL_HOLD_STEPS,
                 "controller_neutral_hold_max_displacement_m": (
                     controller_hold_max_displacement
@@ -1043,8 +1053,16 @@ def main():
         group.attrs["policy_entry_probe_actions"] = np.asarray(
             POLICY_ENTRY_PROBE_ACTIONS, dtype=np.float64
         )
-        group.attrs["risk_support_local_x_min_m"] = RISK_SUPPORT_LOCAL_X_MIN
-        group.attrs["risk_support_local_x_max_m"] = RISK_SUPPORT_LOCAL_X_MAX
+        group.attrs["bddl_sha256"] = hashlib.sha256(
+            Path(args.bddl).read_bytes()
+        ).hexdigest()
+        group.attrs["fixture_layout_contract"] = "fixed_white_cabinet_native_center"
+        group.attrs["support_restore_position_tolerance_m"] = (
+            SUPPORT_RESTORE_POSITION_TOLERANCE_M
+        )
+        group.attrs["support_restore_angle_tolerance_deg"] = (
+            SUPPORT_RESTORE_ANGLE_TOLERANCE_DEG
+        )
         group.attrs["controller_neutral_hold_steps"] = CONTROLLER_NEUTRAL_HOLD_STEPS
         group.attrs["settle_steps"] = SETTLE_STEPS
         group.attrs["validation_hold_steps"] = args.validation_hold_steps

@@ -19,6 +19,7 @@ RUNNER = REPO_ROOT / "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh"
 PAPER_MATRIX = REPO_ROOT / "experiments/robot/libero/tasks/run_paper_matrix.sh"
 SAFE_REFERENCE = REPO_ROOT / "experiments/robot/libero/tasks/validate_l3a1_reference_paths.py"
 GENERATOR = REPO_ROOT / "experiments/robot/libero/tasks/generate_l3a1_drawer_bottle_initial_states.py"
+L3A1_BDDL = REPO_ROOT / "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.bddl"
 
 
 def test_l3a1_run_ids_map_to_distinct_formal_conditions():
@@ -79,19 +80,23 @@ def test_paper_matrix_registers_l3a1_prepare_and_formal_paths():
 
 
 def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=False):
+    bddl = Path(path).parent / "scene.bddl"
+    bddl.write_text("fixed cabinet scene\n")
     with h5py.File(path, "w") as handle:
         group = handle.create_group("task")
         group.attrs["l3a1_variant"] = "stable" if source is not None else "risk"
         group.attrs["seed"] = 42
-        group.attrs["bddl"] = "scene.bddl"
+        group.attrs["bddl"] = str(bddl)
+        group.attrs["bddl_sha256"] = hashlib.sha256(bddl.read_bytes()).hexdigest()
+        group.attrs["fixture_layout_contract"] = "fixed_white_cabinet_native_center"
+        group.attrs["support_restore_position_tolerance_m"] = 1e-9
+        group.attrs["support_restore_angle_tolerance_deg"] = 1e-6
         group.attrs["lean_dx"] = -0.04
         group.attrs["lean_dy"] = -0.18
         group.attrs["lean_dz"] = 0.0
         group.attrs["lean_deg"] = -20.0
         group.attrs["lean_axis"] = "x"
         group.attrs["lean_direction_deg"] = 0.0
-        group.attrs["risk_support_local_x_min_m"] = -0.069
-        group.attrs["risk_support_local_x_max_m"] = -0.063
         group.attrs["controller_neutral_hold_steps"] = 220
         group.attrs["settle_steps"] = 400
         group.attrs["validation_hold_steps"] = 200
@@ -115,6 +120,13 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["policy_entry_support_relative_x_m"] = -0.065
             demo.attrs["policy_entry_support_relative_y_m"] = -0.184
             demo.attrs["policy_entry_support_relative_z_m"] = 0.011
+            demo.attrs["support_world_x_m"] = 0.0
+            demo.attrs["support_world_y_m"] = 0.30
+            demo.attrs["support_world_z_m"] = 0.90
+            demo.attrs["support_restore_position_error_m"] = 0.0
+            demo.attrs["support_restore_angle_error_deg"] = 0.0
+            demo.attrs["template_position_error_m"] = 0.0
+            demo.attrs["template_angle_error_deg"] = 0.0
             demo.attrs["controller_neutral_hold_steps"] = 220
             demo.attrs["controller_neutral_hold_max_displacement_m"] = 0.0
             demo.attrs["controller_neutral_hold_direct_contacts"] = ""
@@ -182,9 +194,15 @@ def test_generator_and_artifact_gate_policy_entry_transition():
     assert "for _ in range(CONTROLLER_NEUTRAL_HOLD_STEPS):" in text
     assert '"controller_neutral_hold_max_displacement_m"' in text
     assert '"controller_neutral_hold_direct_contacts"' in text
-    assert "RISK_SUPPORT_LOCAL_X_MIN = -0.069" in text
-    assert "RISK_SUPPORT_LOCAL_X_MAX = -0.063" in text
+    assert "SUPPORT_RESTORE_POSITION_TOLERANCE_M = 1e-9" in text
+    assert '"support_restore_position_error_m"' in text
     assert '"policy_entry_support_relative_x_m"' in text
+
+
+def test_l3a1_cabinet_fixture_is_fixed_for_serialized_state_replay():
+    text = L3A1_BDDL.read_text()
+    assert "(0.0 0.30 0.0 0.30)" in text
+    assert "model.body_pos" in text
 
 
 def test_base_preservation_rejects_unsafe_policy_entry(tmp_path):
@@ -204,7 +222,7 @@ def test_base_preservation_rejects_unsafe_policy_entry(tmp_path):
         validate_base_preservation(str(artifact), "task")
 
 
-def test_base_preservation_rejects_unsafe_neutral_hold_or_risk_x(tmp_path):
+def test_base_preservation_rejects_unsafe_neutral_hold_or_support_replay(tmp_path):
     artifact = tmp_path / "risk.hdf5"
     _states(artifact, [2])
     with h5py.File(artifact, "a") as handle:
@@ -224,8 +242,8 @@ def test_base_preservation_rejects_unsafe_neutral_hold_or_risk_x(tmp_path):
 
     _states(artifact, [2])
     with h5py.File(artifact, "a") as handle:
-        handle["task/demo_0"].attrs["policy_entry_support_relative_x_m"] = -0.062
-    with pytest.raises(ValueError, match="support-local x outside"):
+        handle["task/demo_0"].attrs["support_restore_position_error_m"] = 1e-4
+    with pytest.raises(ValueError, match="support position replay mismatch"):
         validate_base_preservation(str(artifact), "task")
 
 
@@ -311,16 +329,18 @@ def test_artifact_config_rejects_stale_geometry_or_threshold(tmp_path):
     artifact = tmp_path / "risk.hdf5"
     _states(artifact, [2])
     validate_expected_config(
-        str(artifact), "task", variant="risk", seed=42, bddl="scene.bddl",
+        str(artifact), "task", variant="risk", seed=42,
+        bddl=str(tmp_path / "scene.bddl"),
         displacement_threshold=0.01, lean_dx=-0.04, lean_dy=-0.18, lean_deg=-20.0,
-        support_local_x_min=-0.069, support_local_x_max=-0.063,
     )
     with pytest.raises(ValueError, match="lean_dx"):
         validate_expected_config(str(artifact), "task", lean_dx=-0.06)
     with pytest.raises(ValueError, match="oracle_displacement_threshold"):
         validate_expected_config(str(artifact), "task", displacement_threshold=0.03)
-    with pytest.raises(ValueError, match="risk_support_local_x_min_m"):
-        validate_expected_config(str(artifact), "task", support_local_x_min=-0.070)
+    with h5py.File(artifact, "a") as handle:
+        handle["task"].attrs["bddl_sha256"] = "stale"
+    with pytest.raises(ValueError, match="BDDL SHA256"):
+        validate_expected_config(str(artifact), "task")
     with pytest.raises(ValueError, match="below required"):
         validate_expected_config(str(artifact), "task", minimum_count=2)
 

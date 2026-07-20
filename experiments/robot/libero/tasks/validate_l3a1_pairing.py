@@ -13,7 +13,8 @@ PAIRING_METHOD = "serialized_er_state_bottle_transform"
 BINDING_FIELDS = (
     "l3a1_variant", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
     "lean_deg", "lean_axis", "lean_direction_deg", "policy_entry_probe_actions",
-    "risk_support_local_x_min_m", "risk_support_local_x_max_m",
+    "bddl_sha256", "fixture_layout_contract",
+    "support_restore_position_tolerance_m", "support_restore_angle_tolerance_deg",
     "controller_neutral_hold_steps",
     "settle_steps", "validation_hold_steps",
     "verify_close_steps", "min_topple_deg", "oracle_displacement_threshold",
@@ -64,8 +65,6 @@ def validate_expected_config(
     lean_dy: float | None = None,
     lean_deg: float | None = None,
     lean_direction_deg: float | None = None,
-    support_local_x_min: float | None = None,
-    support_local_x_max: float | None = None,
     minimum_count: int | None = None,
 ) -> None:
     key = task_description.replace(" ", "_")
@@ -85,8 +84,6 @@ def validate_expected_config(
             "lean_dy": lean_dy,
             "lean_deg": lean_deg,
             "lean_direction_deg": lean_direction_deg,
-            "risk_support_local_x_min_m": support_local_x_min,
-            "risk_support_local_x_max_m": support_local_x_max,
         }
         for field, wanted in expected.items():
             if wanted is None:
@@ -102,6 +99,12 @@ def validate_expected_config(
                 raise ValueError(
                     f"artifact config mismatch for {field}: actual={actual!r}, expected={wanted!r}"
                 )
+        artifact_bddl = Path(str(group.attrs.get("bddl", "")))
+        if not artifact_bddl.is_file():
+            raise ValueError(f"artifact BDDL does not exist: {artifact_bddl}")
+        current_bddl_sha = hashlib.sha256(artifact_bddl.read_bytes()).hexdigest()
+        if str(group.attrs.get("bddl_sha256", "")) != current_bddl_sha:
+            raise ValueError("artifact BDDL SHA256 does not match current task bytes")
 
 
 def validate_base_preservation(path: str, task_description: str) -> int:
@@ -111,21 +114,26 @@ def validate_base_preservation(path: str, task_description: str) -> int:
         count = len(group)
         base_state_hashes = []
         variant = str(group.attrs.get("l3a1_variant", ""))
-        support_local_x_min = float(
-            group.attrs.get("risk_support_local_x_min_m", np.nan)
+        if str(group.attrs.get("fixture_layout_contract", "")) != (
+            "fixed_white_cabinet_native_center"
+        ):
+            raise ValueError("missing fixed-cabinet fixture layout contract")
+        support_position_tolerance = float(
+            group.attrs.get("support_restore_position_tolerance_m", np.nan)
         )
-        support_local_x_max = float(
-            group.attrs.get("risk_support_local_x_max_m", np.nan)
+        support_angle_tolerance = float(
+            group.attrs.get("support_restore_angle_tolerance_deg", np.nan)
         )
         controller_hold_steps = int(
             group.attrs.get("controller_neutral_hold_steps", -1)
         )
         if not (
-            np.isfinite(support_local_x_min)
-            and np.isfinite(support_local_x_max)
-            and support_local_x_min <= support_local_x_max
+            np.isfinite(support_position_tolerance)
+            and support_position_tolerance == 1e-9
+            and np.isfinite(support_angle_tolerance)
+            and support_angle_tolerance == 1e-6
         ):
-            raise ValueError("invalid risk support-local x window metadata")
+            raise ValueError("invalid fixed-support replay tolerance metadata")
         if controller_hold_steps != 220:
             raise ValueError("controller neutral hold count is not 220")
         template_sha = None
@@ -197,14 +205,28 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 raise ValueError(
                     f"missing policy-entry support-relative pose at demo_{index}"
                 )
-            if variant == "risk" and not (
-                support_local_x_min
-                <= support_relative_xyz[0]
-                <= support_local_x_max
-            ):
+            support_world_xyz = np.asarray([
+                demo.attrs.get("support_world_x_m", np.nan),
+                demo.attrs.get("support_world_y_m", np.nan),
+                demo.attrs.get("support_world_z_m", np.nan),
+            ], dtype=float)
+            if not np.all(np.isfinite(support_world_xyz)):
                 raise ValueError(
-                    f"risk support-local x outside formal window at demo_{index}"
+                    f"missing fixed support world pose at demo_{index}"
                 )
+            if float(demo.attrs.get(
+                "support_restore_position_error_m", np.inf
+            )) > support_position_tolerance:
+                raise ValueError(f"support position replay mismatch at demo_{index}")
+            if float(demo.attrs.get(
+                "support_restore_angle_error_deg", np.inf
+            )) > support_angle_tolerance:
+                raise ValueError(f"support rotation replay mismatch at demo_{index}")
+            if variant == "risk" and index > 0:
+                if float(demo.attrs.get("template_position_error_m", np.inf)) > 1e-9:
+                    raise ValueError(f"risk template position mismatch at demo_{index}")
+                if float(demo.attrs.get("template_angle_error_deg", np.inf)) > 1e-6:
+                    raise ValueError(f"risk template rotation mismatch at demo_{index}")
             if int(demo.attrs.get("controller_neutral_hold_steps", -1)) != controller_hold_steps:
                 raise ValueError(
                     f"controller neutral hold count mismatch at demo_{index}"
@@ -314,8 +336,6 @@ def main() -> None:
     parser.add_argument("--expected_lean_dy", type=float)
     parser.add_argument("--expected_lean_deg", type=float)
     parser.add_argument("--expected_lean_direction_deg", type=float)
-    parser.add_argument("--expected_support_local_x_min", type=float)
-    parser.add_argument("--expected_support_local_x_max", type=float)
     parser.add_argument("--minimum_count", type=int)
     args = parser.parse_args()
     validate_expected_config(
@@ -329,8 +349,6 @@ def main() -> None:
         lean_dy=args.expected_lean_dy,
         lean_deg=args.expected_lean_deg,
         lean_direction_deg=args.expected_lean_direction_deg,
-        support_local_x_min=args.expected_support_local_x_min,
-        support_local_x_max=args.expected_support_local_x_max,
         minimum_count=args.minimum_count,
     )
     if args.print_binding:

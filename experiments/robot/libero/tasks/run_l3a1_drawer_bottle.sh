@@ -61,8 +61,6 @@ STABLE_X_OFFSET="${STABLE_X_OFFSET:--0.12}"
 LEAN_DZ="${LEAN_DZ:-0.0}"
 LEAN_DEG="${LEAN_DEG:--20.0}"
 LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-35.0}"
-RISK_SUPPORT_LOCAL_X_MIN="${RISK_SUPPORT_LOCAL_X_MIN:--0.069}"
-RISK_SUPPORT_LOCAL_X_MAX="${RISK_SUPPORT_LOCAL_X_MAX:--0.063}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-}"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 RISK_CHECK_REPORT="${RISK_CHECK_REPORT:-${LOG_DIR}/l3a1_risk_check.md}"
@@ -235,8 +233,6 @@ run_check() {
     --expected_seed "${SCENE_SEED}"
     --expected_bddl "${BDDL_FILE}"
     --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}"
-    --expected_support_local_x_min "${RISK_SUPPORT_LOCAL_X_MIN}"
-    --expected_support_local_x_max "${RISK_SUPPORT_LOCAL_X_MAX}"
   )
   if [[ "${GEN_VARIANT}" == "risk" ]]; then
     config_args+=(--expected_lean_dx "${LEAN_DX}" --expected_lean_dy "${LEAN_DY}" --expected_lean_deg "${LEAN_DEG}" --expected_lean_direction_deg "${LEAN_DIRECTION_DEG}")
@@ -331,17 +327,13 @@ require_gates() {
     --minimum_count "${required_count}" \
     --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --expected_lean_dx "${LEAN_DX}" --expected_lean_dy "${LEAN_DY}" \
-    --expected_lean_deg "${LEAN_DEG}" --expected_lean_direction_deg "${LEAN_DIRECTION_DEG}" \
-    --expected_support_local_x_min "${RISK_SUPPORT_LOCAL_X_MIN}" \
-    --expected_support_local_x_max "${RISK_SUPPORT_LOCAL_X_MAX}" >/dev/null
+    --expected_lean_deg "${LEAN_DEG}" --expected_lean_direction_deg "${LEAN_DIRECTION_DEG}" >/dev/null
   python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
     --er "${STABLE_STATE_PATH}" --task_description "${TASK_DESCRIPTION}" \
     --expected_variant stable --expected_seed "${SCENE_SEED}" \
     --expected_bddl "${BDDL_FILE}" \
     --minimum_count "${required_count}" \
-    --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
-    --expected_support_local_x_min "${RISK_SUPPORT_LOCAL_X_MIN}" \
-    --expected_support_local_x_max "${RISK_SUPPORT_LOCAL_X_MAX}" >/dev/null
+    --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}" >/dev/null
   python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
     --er "${RISK_STATE_PATH}" --ec "${STABLE_STATE_PATH}" \
     --task_description "${TASK_DESCRIPTION}" \
