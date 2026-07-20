@@ -161,10 +161,10 @@ def capture(env: Any, state: np.ndarray, condition: str, episode: int, out_dir: 
     env.set_init_state(state)
     restored = np.asarray(env.sim.get_state().flatten()).copy()
     # Explicitly refresh the observation after the exact restore. Neither this
-    # nor set_init_state advances MuJoCo with sim.step().
-    env._post_process()
-    env._update_observables(force=True)
-    obs = env._get_observations()
+    # nor set_init_state advances MuJoCo with sim.step(). ControlEnv exposes
+    # the refreshed observation through regenerate_obs_from_state rather than
+    # forwarding robosuite's private _get_observations method.
+    obs = env.regenerate_obs_from_state(restored)
     refreshed = np.asarray(env.sim.get_state().flatten()).copy()
     restore_delta = _delta(state, restored)
     refresh_delta = _delta(restored, refreshed)
