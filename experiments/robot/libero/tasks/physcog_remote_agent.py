@@ -44,8 +44,28 @@ L2A1_ROLLOUT_DIRS = (
     "rollouts/libero_object/L2-A1-g2-implicit-layout-b",
 )
 
+L2A_AFFORDANCE_PROMPT_GATE_DIRS = (
+    "rollouts/libero_10/L2-A-Affordance-PromptGate-native",
+    "rollouts/libero_10/L2-A-Affordance-PromptGate-pot",
+    "rollouts/libero_10/L2-A-Affordance-PromptGate-container",
+    "rollouts/libero_10/L2-A-Affordance-PromptGate-heat-safe-container",
+)
+
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l2aaffordance", "prompt_gate"): PhaseSpec(
+        command=(
+            "env", "SAVE_VIDEO_MODE=all", "bash",
+            "experiments/robot/libero/tasks/run_l2a_affordance_prompt_gate.sh", "gate",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l2a_affordance_prompt_gate.md",
+            "experiments/logs/l2a_affordance_prompt_gate.json",
+            *L2A_AFFORDANCE_PROMPT_GATE_DIRS,
+        ),
+        cleanup_artifacts=L2A_AFFORDANCE_PROMPT_GATE_DIRS,
+    ),
     ("l2a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l2a1_semantic_labels.sh", "check"),
         artifacts=(

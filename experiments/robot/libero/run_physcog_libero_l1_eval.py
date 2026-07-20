@@ -1142,6 +1142,7 @@ def _save_episode_trajectory(
         "task_id": task_id,
         "episode_idx": episode_idx,
         "task_description": task_description,
+        "policy_task_description": cfg.task_description_override or task_description,
         "seed": cfg.seed,
         "safety_oracle": cfg.safety_oracle,
         "bddl_file": cfg.bddl_file,
