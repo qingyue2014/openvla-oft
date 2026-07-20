@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Strict coarse sweep for a native drawer-corner / bottle-head support.
+"""Strict local sweep for a native drawer-corner / bottle-head support.
 
 The bottle base remains on the table while its upper portion contacts the
 native junction of the bottom drawer's front board and right side panel.  The
-counterfactual disables exactly those two collision boxes, pins the drawer,
+front board is compiled as two adjacent collision slabs, so factual support is
+measured as the union of those slabs plus the right side panel.  The complete
+counterfactual disables those three exact collision boxes, pins the drawer,
 zeros bottle velocity, and checks whether gravity alone produces hazardous
 displacement, drop, or attitude change.
 """
@@ -106,15 +108,16 @@ def _resolve_geom_by_signature(env, body_name: str, signature: dict) -> str:
 
 
 def _corner_contact_metrics(
-    env, support_body: str, support_geoms: set[str]
-) -> tuple[set[str], float, float, float, float]:
-    """Return dual-support head-contact geometry and solver activity metrics."""
+    env, support_body: str, front_geoms: set[str], side_geom: str
+) -> dict:
+    """Return grouped front-union / side-panel contact metrics for one frame."""
     model, data = env.sim.model, env.sim.data
     bottle_id = model.body_name2id(BOTTLE_BODY)
     bottle_geom_ids = {
         geom_id for geom_id in range(model.ngeom)
         if int(model.geom_bodyid[geom_id]) == bottle_id
     }
+    support_geoms = set(front_geoms) | {side_geom}
     support_ids = {model.geom_name2id(name): name for name in support_geoms}
     bottle_pos = _body_pos(env, BOTTLE_BODY)
     bottle_axis = _body_rotation(env, BOTTLE_BODY)[:, 2]
@@ -122,7 +125,14 @@ def _corner_contact_metrics(
     support_rot = _body_rotation(env, support_body)
     touched: set[str] = set()
     per_geom = {
-        name: {"max_axial": -np.inf, "min_gap": np.inf, "max_force": 0.0, "min_dist": np.inf}
+        name: {
+            "contacts": [],
+            "max_axial": -np.inf,
+            "min_gap": np.inf,
+            "corner_delta": np.array([np.nan, np.nan]),
+            "max_force": 0.0,
+            "min_dist": np.inf,
+        }
         for name in support_geoms
     }
     for index in range(data.ncon):
@@ -136,37 +146,114 @@ def _corner_contact_metrics(
         support_name = support_ids[support_geom_id]
         touched.add(support_name)
         point = np.asarray(contact.pos, dtype=float)
+        axial = float(np.dot(point - bottle_pos, bottle_axis))
         per_geom[support_name]["max_axial"] = max(
-            per_geom[support_name]["max_axial"],
-            float(np.dot(point - bottle_pos, bottle_axis)),
+            per_geom[support_name]["max_axial"], axial
         )
         point_local = support_rot.T @ (point - support_pos)
-        per_geom[support_name]["min_gap"] = min(
-            per_geom[support_name]["min_gap"],
-            float(np.linalg.norm(point_local[:2] - RIGHT_FRONT_CORNER_LOCAL_XY)),
-        )
+        corner_delta = point_local[:2] - RIGHT_FRONT_CORNER_LOCAL_XY
+        corner_gap = float(np.linalg.norm(corner_delta))
+        if corner_gap < per_geom[support_name]["min_gap"]:
+            per_geom[support_name]["min_gap"] = corner_gap
+            per_geom[support_name]["corner_delta"] = corner_delta.copy()
         efc_address = int(getattr(contact, "efc_address", -1))
+        contact_force = 0.0
         if 0 <= efc_address < len(data.efc_force):
+            contact_force = abs(float(data.efc_force[efc_address]))
             per_geom[support_name]["max_force"] = max(
-                per_geom[support_name]["max_force"],
-                abs(float(data.efc_force[efc_address])),
+                per_geom[support_name]["max_force"], contact_force
             )
+        contact_dist = float(contact.dist)
         per_geom[support_name]["min_dist"] = min(
-            per_geom[support_name]["min_dist"], float(contact.dist)
+            per_geom[support_name]["min_dist"], contact_dist
         )
-    if touched:
-        active_values = [per_geom[name] for name in touched]
-        head_axial = min(values["max_axial"] for values in active_values)
-        corner_gap = max(values["min_gap"] for values in active_values)
-        min_force = min(values["max_force"] for values in active_values)
-        max_penetration = max(
-            max(0.0, -values["min_dist"]) for values in active_values
-        )
-    else:
-        head_axial, corner_gap, min_force, max_penetration = (
-            -np.inf, np.inf, 0.0, np.inf
-        )
-    return touched, head_axial, corner_gap, min_force, max_penetration
+        per_geom[support_name]["contacts"].append({
+            "axial": axial,
+            "gap": corner_gap,
+            "force": contact_force,
+            "penetration": max(0.0, -contact_dist),
+        })
+    def _reduce_group(names: set[str]) -> dict:
+        active = [per_geom[name] for name in names if name in touched]
+        if not active:
+            return {
+                "active": False,
+                "head_axial": -np.inf,
+                "corner_gap": np.inf,
+                "corner_delta": np.array([np.nan, np.nan]),
+                "force": 0.0,
+                "penetration": np.inf,
+            }
+        nearest = min(active, key=lambda values: values["min_gap"])
+        contacts = [
+            contact for values in active for contact in values["contacts"]
+        ]
+        def _qualified(contact: dict, max_gap: float) -> bool:
+            return (
+                contact["axial"] >= MIN_HEAD_AXIAL_M
+                and contact["gap"] <= max_gap
+                and contact["force"] >= MIN_SUPPORT_CONTACT_FORCE
+                and contact["penetration"] <= MAX_SUPPORT_PENETRATION_M
+            )
+        return {
+            "active": True,
+            # g33 and g35 are decomposition slabs of one front surface. A
+            # contact on either slab supplies the front component support.
+            "head_axial": max(values["max_axial"] for values in active),
+            "corner_gap": nearest["min_gap"],
+            "corner_delta": nearest["corner_delta"],
+            "force": max(values["max_force"] for values in active),
+            "penetration": max(
+                max(0.0, -values["min_dist"]) for values in active
+            ),
+            "strict_qualified": any(
+                _qualified(contact, MAX_CORNER_XY_DISTANCE_M)
+                for contact in contacts
+            ),
+            "calibration_qualified": any(
+                _qualified(contact, 0.025) for contact in contacts
+            ),
+        }
+
+    front = _reduce_group(front_geoms)
+    side = _reduce_group({side_geom})
+    dual_active = front["active"] and side["active"]
+    strict_dual_qualified = (
+        front.get("strict_qualified", False)
+        and side.get("strict_qualified", False)
+    )
+    calibration_dual_qualified = (
+        front.get("calibration_qualified", False)
+        and side.get("calibration_qualified", False)
+    )
+    return {
+        "touched": touched,
+        "front_touched": touched & front_geoms,
+        "front_active": front["active"],
+        "side_active": side["active"],
+        "dual_active": dual_active,
+        "strict_dual_qualified": strict_dual_qualified,
+        "calibration_dual_qualified": calibration_dual_qualified,
+        "head_axial": (
+            min(front["head_axial"], side["head_axial"])
+            if dual_active else -np.inf
+        ),
+        "corner_gap": (
+            max(front["corner_gap"], side["corner_gap"])
+            if dual_active else np.inf
+        ),
+        "min_force": (
+            min(front["force"], side["force"]) if dual_active else 0.0
+        ),
+        "max_penetration": (
+            max(front["penetration"], side["penetration"])
+            if dual_active else np.inf
+        ),
+        "front_corner_delta": front["corner_delta"],
+        "side_corner_delta": side["corner_delta"],
+        "front_corner_gap": front["corner_gap"],
+        "side_corner_gap": side["corner_gap"],
+    }
 
 
 def _direct_contacts(env) -> set[str]:
@@ -254,10 +341,10 @@ def _counterfactual(
 def _candidate_grid() -> list[tuple[float, float, float, float]]:
     return [
         (dx, dy, lean, direction)
-        for direction in (104.0, 105.0, 106.0)
-        for dy in (-0.0595, -0.0600, -0.0605)
-        for dx in (0.146, 0.147, 0.148, 0.149, 0.150)
-        for lean in (-39.0, -40.0, -41.0)
+        for direction in (105.0,)
+        for dy in (-0.06025, -0.06000, -0.05975)
+        for dx in (0.1475, 0.1480, 0.1485)
+        for lean in (-40.0,)
     ]
 
 
@@ -283,7 +370,8 @@ def main() -> int:
     inner_front_geom = _resolve_geom_by_signature(
         env, support_body, INNER_FRONT_BOARD_SIGNATURE
     )
-    support_geoms = {side_geom, front_geom}
+    front_geoms = {front_geom, inner_front_geom}
+    support_geoms = front_geoms | {side_geom}
     removal_geoms = {side_geom, front_geom, inner_front_geom}
     bottle_qadr = _find_free_joint_qadr(env.sim, BOTTLE_BODY)
     bottle_vadr = _find_free_joint_vadr(env.sim, BOTTLE_BODY)
@@ -307,13 +395,36 @@ def main() -> int:
         settled_pos = _body_pos(env, BOTTLE_BODY).copy()
         settled_axis = _body_rotation(env, BOTTLE_BODY)[:, 2].copy()
         settled_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
-        touched, head_axial, corner_gap, min_contact_force, max_penetration = _corner_contact_metrics(
-            env, support_body, support_geoms
+        metrics = _corner_contact_metrics(
+            env, support_body, front_geoms, side_geom
         )
-        other_geoms = _other_cabinet_contact_geoms(env, side_geom) - {front_geom}
+        touched = metrics["touched"]
+        initial_front_geoms = metrics["front_touched"]
+        initial_front_active = metrics["front_active"]
+        initial_side_active = metrics["side_active"]
+        head_axial = metrics["head_axial"]
+        corner_gap = metrics["corner_gap"]
+        min_contact_force = metrics["min_force"]
+        max_penetration = metrics["max_penetration"]
+        initial_front_corner_delta = metrics["front_corner_delta"].copy()
+        initial_side_corner_delta = metrics["side_corner_delta"].copy()
+        worst_front_corner_gap = metrics["front_corner_gap"]
+        worst_side_corner_gap = metrics["side_corner_gap"]
+        worst_front_corner_delta = initial_front_corner_delta.copy()
+        worst_side_corner_delta = initial_side_corner_delta.copy()
+        other_geoms = _other_cabinet_contact_geoms(env, side_geom) - front_geoms
+        direct_contacts = _direct_contacts(env)
         hold_max_drift = 0.0
         hold_max_attitude = 0.0
         support_contact_counts = {name: int(name in touched) for name in support_geoms}
+        front_union_count = int(metrics["front_active"])
+        side_contact_count = int(metrics["side_active"])
+        dual_support_count = int(metrics["dual_active"])
+        strict_qualified_count = int(metrics["strict_dual_qualified"])
+        calibration_qualified_count = int(
+            metrics["calibration_dual_qualified"]
+        )
+        hold_front_geoms_union = set(initial_front_geoms)
         table_contact_count = int("table_collision" in _contact_geom_names(env, BOTTLE_BODY))
         for _ in range(args.hold_steps):
             env.sim.step()
@@ -324,67 +435,83 @@ def main() -> int:
             hold_max_attitude = max(
                 hold_max_attitude, _axis_change_deg(env, BOTTLE_BODY, settled_axis)
             )
-            (
-                current_touched,
-                current_axial,
-                current_gap,
-                current_force,
-                current_penetration,
-            ) = _corner_contact_metrics(
-                env, support_body, support_geoms
+            current = _corner_contact_metrics(
+                env, support_body, front_geoms, side_geom
             )
+            current_touched = current["touched"]
             for name in support_geoms:
                 support_contact_counts[name] += int(name in current_touched)
+            front_union_count += int(current["front_active"])
+            side_contact_count += int(current["side_active"])
+            dual_support_count += int(current["dual_active"])
+            strict_qualified_count += int(current["strict_dual_qualified"])
+            calibration_qualified_count += int(
+                current["calibration_dual_qualified"]
+            )
+            hold_front_geoms_union.update(current["front_touched"])
             table_contact_count += int(
                 "table_collision" in _contact_geom_names(env, BOTTLE_BODY)
             )
-            head_axial = min(head_axial, current_axial)
-            corner_gap = max(corner_gap, current_gap)
-            min_contact_force = min(min_contact_force, current_force)
-            max_penetration = max(max_penetration, current_penetration)
+            if current["dual_active"]:
+                head_axial = min(head_axial, current["head_axial"])
+                corner_gap = max(corner_gap, current["corner_gap"])
+                min_contact_force = min(min_contact_force, current["min_force"])
+                max_penetration = max(
+                    max_penetration, current["max_penetration"]
+                )
+                if current["front_corner_gap"] > worst_front_corner_gap:
+                    worst_front_corner_gap = current["front_corner_gap"]
+                    worst_front_corner_delta = current[
+                        "front_corner_delta"
+                    ].copy()
+                if current["side_corner_gap"] > worst_side_corner_gap:
+                    worst_side_corner_gap = current["side_corner_gap"]
+                    worst_side_corner_delta = current[
+                        "side_corner_delta"
+                    ].copy()
             other_geoms.update(
-                _other_cabinet_contact_geoms(env, side_geom) - {front_geom}
+                _other_cabinet_contact_geoms(env, side_geom) - front_geoms
             )
+            direct_contacts.update(_direct_contacts(env))
         angular_speed = (
             float(np.linalg.norm(env.sim.data.qvel[bottle_vadr + 3:bottle_vadr + 6]))
             if bottle_vadr >= 0 else 0.0
         )
-        support_coverage = min(
-            count / (args.hold_steps + 1) for count in support_contact_counts.values()
-        )
-        front_coverage = support_contact_counts[front_geom] / (args.hold_steps + 1)
-        side_coverage = support_contact_counts[side_geom] / (args.hold_steps + 1)
-        table_coverage = table_contact_count / (args.hold_steps + 1)
+        frame_count = args.hold_steps + 1
+        front_outer_coverage = support_contact_counts[front_geom] / frame_count
+        front_inner_coverage = support_contact_counts[inner_front_geom] / frame_count
+        front_union_coverage = front_union_count / frame_count
+        side_coverage = side_contact_count / frame_count
+        dual_support_coverage = dual_support_count / frame_count
+        dual_qualified_coverage = strict_qualified_count / frame_count
+        dual_calibration_coverage = calibration_qualified_count / frame_count
+        support_coverage = dual_support_coverage
+        front_coverage = front_union_coverage
+        table_coverage = table_contact_count / frame_count
         stable = (
             hold_max_drift <= MAX_OPEN_DRIFT_M
             and hold_max_attitude <= MAX_OPEN_ATTITUDE_CHANGE_DEG
             and angular_speed <= MAX_OPEN_ANGULAR_SPEED_RAD_S
-            and touched == support_geoms
-            and support_coverage >= MIN_SUPPORT_COVERAGE
+            and initial_front_active
+            and initial_side_active
+            and dual_support_coverage >= MIN_SUPPORT_COVERAGE
             and table_coverage >= MIN_SUPPORT_COVERAGE
-            and min_contact_force >= MIN_SUPPORT_CONTACT_FORCE
-            and max_penetration <= MAX_SUPPORT_PENETRATION_M
             and not other_geoms
-            and not _direct_contacts(env)
+            and not direct_contacts
         )
         head_corner = (
-            np.isfinite(head_axial)
-            and head_axial >= MIN_HEAD_AXIAL_M
-            and np.isfinite(corner_gap)
-            and corner_gap <= MAX_CORNER_XY_DISTANCE_M
+            metrics["strict_dual_qualified"]
+            and dual_qualified_coverage >= MIN_SUPPORT_COVERAGE
         )
         calibration_eligible = (
-            touched == support_geoms
+            metrics["calibration_dual_qualified"]
+            and dual_calibration_coverage >= MIN_SUPPORT_COVERAGE
             and table_coverage >= MIN_SUPPORT_COVERAGE
             and hold_max_drift <= MAX_OPEN_DRIFT_M
             and hold_max_attitude <= MAX_OPEN_ATTITUDE_CHANGE_DEG
             and angular_speed <= MAX_OPEN_ANGULAR_SPEED_RAD_S
-            and np.isfinite(head_axial)
-            and head_axial >= MIN_HEAD_AXIAL_M
-            and np.isfinite(corner_gap)
-            and corner_gap <= 0.025
             and not other_geoms
-            and not _direct_contacts(env)
+            and not direct_contacts
         )
         empty_response = {
             "first_hazard_step": -1,
@@ -425,23 +552,44 @@ def main() -> int:
             "dy": dy,
             "lean_deg": lean,
             "direction_deg": direction,
+            "front_component_geoms": ",".join(sorted(front_geoms)),
+            "full_removal_geoms": ",".join(sorted(removal_geoms)),
             "settled_x_m": settled_pos[0],
             "settled_y_m": settled_pos[1],
             "settled_z_m": settled_pos[2],
             "settled_tilt_deg": settled_tilt,
             "support_geoms": ",".join(sorted(touched)),
+            "initial_front_geoms": ",".join(sorted(initial_front_geoms)),
+            "hold_front_geoms_union": ",".join(sorted(hold_front_geoms_union)),
             "head_axial_m": head_axial,
             "corner_xy_gap_m": corner_gap,
+            "initial_front_corner_dx_m": initial_front_corner_delta[0],
+            "initial_front_corner_dy_m": initial_front_corner_delta[1],
+            "initial_side_corner_dx_m": initial_side_corner_delta[0],
+            "initial_side_corner_dy_m": initial_side_corner_delta[1],
+            "worst_front_corner_gap_m": worst_front_corner_gap,
+            "worst_front_corner_dx_m": worst_front_corner_delta[0],
+            "worst_front_corner_dy_m": worst_front_corner_delta[1],
+            "worst_side_corner_gap_m": worst_side_corner_gap,
+            "worst_side_corner_dx_m": worst_side_corner_delta[0],
+            "worst_side_corner_dy_m": worst_side_corner_delta[1],
             "min_support_force": min_contact_force,
             "max_penetration_m": max_penetration,
             "support_coverage": support_coverage,
             "front_coverage": front_coverage,
+            "front_outer_coverage": front_outer_coverage,
+            "front_inner_coverage": front_inner_coverage,
+            "front_union_coverage": front_union_coverage,
             "side_coverage": side_coverage,
+            "dual_support_coverage": dual_support_coverage,
+            "dual_qualified_coverage": dual_qualified_coverage,
+            "dual_calibration_coverage": dual_calibration_coverage,
             "table_coverage": table_coverage,
             "hold_max_drift_m": hold_max_drift,
             "hold_max_attitude_deg": hold_max_attitude,
             "angular_speed_rad_s": angular_speed,
             "other_cabinet_geoms": ",".join(sorted(other_geoms)),
+            "direct_contact_bodies": ",".join(sorted(direct_contacts)),
             "stable": stable,
             "head_corner": head_corner,
             "calibration_eligible": calibration_eligible,
@@ -466,19 +614,20 @@ def main() -> int:
     lines = [
         "# L3-A1 native corner geometry sweep",
         "",
-        f"- Front geom: `{front_geom}`",
-        f"- Inner-front geom removed with the same drawer corner: `{inner_front_geom}`",
+        f"- Front component union: `{','.join(sorted(front_geoms))}`",
         f"- Right-side geom: `{side_geom}`",
+        f"- Full counterfactual disabled set: `{','.join(sorted(removal_geoms))}`",
         f"- Candidates: {len(rows)}",
         f"- Strict passes: {len(passed_rows)}",
         "",
-        "| dx | dy | lean | dir | support | head axial | corner gap | dpos | datt | verdict |",
-        "| ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- |",
+        "| dx | dy | lean | dir | support | front union | dual | head axial | corner gap | dpos | datt | verdict |",
+        "| ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
             f"| {row['dx']:.3f} | {row['dy']:.3f} | {row['lean_deg']:.1f} | "
             f"{row['direction_deg']:.1f} | {row['support_geoms'] or '—'} | "
+            f"{row['front_union_coverage']:.3f} | {row['dual_support_coverage']:.3f} | "
             f"{row['head_axial_m']:.4f} | {row['corner_xy_gap_m']:.4f} | "
             f"{row['displacement_m']:.4f} | {row['attitude_change_deg']:.2f} | "
             f"{row['verdict']} |"

@@ -216,22 +216,44 @@ other cabinet contact, and the independent panel-disable intervention all pass.
 
 #### Native front-right corner follow-up
 
-The corner experiment treats the native bottom-drawer front board and right
-side panel as the exact support set `S={g33,g36}` (resolved by canonical local
-signatures, never by unstable runtime names). The intended topology is a
-three-point support: bottle base on the table, with the bottle neck/head loaded
-against both members of the drawer corner. This is distinct from the failed
-side-only topology above.
+The corner experiment treats the native bottom-drawer front component and
+right side panel as the exact support topology (resolved by canonical local
+signatures, never by unstable runtime names). The compiled front component is
+split into adjacent collision slabs `F={g33,g35}`; the side component is
+`{g36}`, and the complete moving corner is `C={g33,g35,g36}`. The intended
+topology is a three-point support: bottle base on the table, with the bottle
+neck/head loaded against the front-component union and the right side panel.
+This is distinct from the failed side-only topology above.
 
-The coarse gate requires both support contacts to persist for at least 95% of a
-200-step hold, table contact to persist, each upper contact to lie at least 4 cm
-along the bottle axis and within 5 mm of the theoretical seam, and no other
-cabinet/robot/bowl contact. The independent intervention pins the drawer,
-clears solver transients, zeros bottle 6-D velocity, and disables both `g33`
-and `g36`. It also records front-only and side-only ablations so a passing
-candidate can be classified as joint, front-dominant, or side-dominant support.
-This is a geometry-feasibility scan only; formal artifact-schema and release-set
-integration follow only if a robust candidate passes.
+The gate requires the front union and side component to be active in the same
+frame for at least 95% of a 200-step hold, table contact to persist, each upper
+contact to lie at least 4 cm along the bottle axis and within 5 mm of the
+theoretical seam, and no other cabinet/robot/bowl contact. The independent
+intervention pins the drawer, clears solver transients, zeros bottle 6-D
+velocity, and disables exactly `C`. Component ablations disable
+`F={g33,g35}` or `{g36}` separately. The initial-contact, component-clearance,
+and other-collision labels remain separate; no whole-body cabinet allowlist is
+used. This is a geometry-feasibility scan only; formal artifact-schema and
+release-set integration follow only if a robust candidate passes.
+
+Jobs `482046`, `482049`, and `482053` localized one stable candidate at
+`dx=0.148, dy=-0.060, lean=-40°, direction=105°`. It keeps table contact and
+touches both the outer front slab and right side panel, but disabling only
+`g33+g36` left the adjacent inner front slab `g35` in place. That
+under-scoped intervention could not test removal of the physical front
+component.
+
+Job `482055` corrected the intervention to disable all of
+`C={g33,g35,g36}`. From the same zero-velocity settled state, the bottle
+crossed the 5° attitude hazard threshold at physics step 39 and reached
+23.86° attitude change, with no pre-hazard robot, bowl, or other cabinet
+contact. This confirms the native triangular support-removal mechanism. The
+job did not pass the final geometry gate because the old factual coverage
+counter counted only `g33` (86.07%) and misclassified `g33→g35` contact
+handoff. The follow-up therefore measures per-frame simultaneous
+`front_union_active && side_active`, retains the individual slab coverages
+for audit, and performs only a 3×3 sub-millimetre local scan around the
+confirmed pose.
 
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's
