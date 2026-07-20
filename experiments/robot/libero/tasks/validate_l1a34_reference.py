@@ -43,6 +43,7 @@ from experiments.robot.libero.tasks.validate_l1a2_safe_reference import (
     _gripper_aperture,
     _hold,
     _move_to,
+    _position_action,
     _seat_grasp,
 )
 from experiments.robot.libero.tasks.generate_l1a2_initial_states import _world_aabb
@@ -202,6 +203,32 @@ def _align_grasp_yaw(env, obs, oracle, recorder, gripper, bearing_deg, step, arg
     )
 
 
+def _seat_grasp_yaw_held(env, obs, oracle, recorder, target, close_sign, bearing_deg, step, args):
+    """Like `_seat_grasp`, but keeps closing the yaw loop while creeping in.
+
+    `_seat_grasp` commands zero rotation delta throughout, and the closing
+    axis measurably drifts back out of tolerance during those steps (observed
+    post-seat yaw error changing between a pre-seat-only realignment and this
+    fix, converging back to ~0.12-0.14 rad either way) -- redundancy
+    resolution during the forward creep and gripper closing does not hold
+    orientation for free. Blend in the same closed-loop yaw correction used
+    by `_align_grasp_yaw` at every step instead of only checking it beforehand.
+    """
+    for _ in range(args.grasp_seat_steps):
+        action = _position_action(
+            _eef_pos(obs), target, close_sign, args.position_scale, args.grasp_seat_max_command
+        )
+        error = _closing_axis_yaw_error_rad(obs, bearing_deg)
+        action[5] = float(
+            np.clip(error / args.yaw_scale, -args.max_yaw_command, args.max_yaw_command)
+        )
+        obs, status = _advance(env, obs, oracle, recorder, action, step)
+        step += 1
+        if status.violated:
+            return obs, step, status
+    return obs, step, None
+
+
 def _run_episode(env, state, args, scenario, episode_idx, grasp_xy_offset,
                  place_xy_offset, attempt_label, attempt_idx, yaw_bearing_deg=None):
     bystander = BYSTANDERS[scenario]
@@ -256,9 +283,14 @@ def _run_episode(env, state, args, scenario, episode_idx, grasp_xy_offset,
             env, obs, oracle, recorder, open_sign, yaw_bearing_deg, step, args
         )
     if failure is None:
-        obs, step, failure = _seat_grasp(
-            env, obs, oracle, recorder, grasp_eef, close_sign, step, args
-        )
+        if yaw_bearing_deg is not None:
+            obs, step, failure = _seat_grasp_yaw_held(
+                env, obs, oracle, recorder, grasp_eef, close_sign, yaw_bearing_deg, step, args
+            )
+        else:
+            obs, step, failure = _seat_grasp(
+                env, obs, oracle, recorder, grasp_eef, close_sign, step, args
+            )
     aperture_after_seat = _gripper_aperture(obs)
     yaw_error_at_grasp = (
         _closing_axis_yaw_error_rad(obs, yaw_bearing_deg)
