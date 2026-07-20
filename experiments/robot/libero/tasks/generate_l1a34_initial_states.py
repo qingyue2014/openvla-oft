@@ -40,7 +40,6 @@ from experiments.robot.libero.tasks.generate_l1a2_initial_states import (  # noq
     _import_libero_modules,
     _min_contact_distance_between_bodies,
     _settle,
-    _visible_pixel_count,
     _world_aabb,
     _zero_free_joint_velocity,
 )
@@ -98,7 +97,9 @@ MAX_NON_MOVER_ERROR = 1e-10
 MAX_MOVER_RESIDUAL_SPEED = 0.010
 
 VIS_CAMERAS = ("agentview", "robot0_eye_in_hand")
-VIS_RESOLUTION = 512
+VIS_RESOLUTION = 256  # exact environment observation resolution used by evaluation
+POLICY_RESOLUTION = 224
+POLICY_CENTER_CROP_AREA = 0.9
 MIN_MOVER_PIXELS = 30
 
 BEARING_SWEEP_DEG = (0.0, 12.0, -12.0, 25.0, -25.0)
@@ -132,9 +133,39 @@ def _restore_state(env, flat_state: np.ndarray) -> None:
     env.sim.forward()
 
 
+def _policy_crop_slices(height: int, width: int, crop_area: float = POLICY_CENTER_CROP_AREA):
+    """Integer support of OpenVLA's centered ``crop_and_resize`` box.
+
+    The policy uses ``sqrt(crop_area)`` independently for height and width.
+    Counts are measured before interpolation so a visible pixel is never
+    invented by Lanczos / bilinear resizing.
+    """
+    scale = float(np.sqrt(np.clip(crop_area, 0.0, 1.0)))
+    crop_h = max(1, int(round(height * scale)))
+    crop_w = max(1, int(round(width * scale)))
+    top = (height - crop_h) // 2
+    left = (width - crop_w) // 2
+    return slice(top, top + crop_h), slice(left, left + crop_w)
+
+
+def _body_policy_mask(env, body_name: str, camera: str) -> np.ndarray:
+    from experiments.robot.libero.tasks.generate_l1a2_initial_states import (
+        _geom_ids_for_body,
+        _render_segmentation_geom_ids,
+    )
+
+    geom_ids = np.fromiter(_geom_ids_for_body(env, body_name), dtype=np.int64)
+    seg = _render_segmentation_geom_ids(env, camera, VIS_RESOLUTION)
+    # RGB observations are rotated 180 degrees by get_libero_*_image before
+    # policy inference.  Apply the same transform to the segmentation evidence.
+    mask = np.isin(seg, geom_ids)[::-1, ::-1]
+    rows, cols = _policy_crop_slices(*mask.shape)
+    return mask[rows, cols]
+
+
 def _mover_pixels(env, mover_body: str) -> dict:
     return {
-        camera: _visible_pixel_count(env, mover_body, camera, VIS_RESOLUTION)
+        camera: int(_body_policy_mask(env, mover_body, camera).sum())
         for camera in VIS_CAMERAS
     }
 
@@ -516,9 +547,26 @@ def write_manifest(path, scenario_key, args, records):
 
 
 def render_previews_from_hdf5(scenario_key, task_suite_name, hdf5_paths, out_root, limit):
-    """Render previews from the exact HDF5 states that will be evaluated."""
+    """Render exact OpenVLA policy inputs from paired Eb/Er/Ec states.
+
+    Evidence is saved both immediately after ``set_init_state`` and after the
+    evaluator's ten no-op wait steps.  The RGB path is the real policy path:
+    256-pixel robosuite observation, 180-degree LIBERO rotation, JPEG
+    round-trip + Lanczos resize to 224, then the configured 0.9-area center
+    crop resized back to 224.  Raw/debug renders are not used as the gate.
+    """
     import h5py
     import imageio.v2 as imageio
+    from PIL import Image
+
+    from experiments.robot.libero.libero_utils import (
+        get_libero_image,
+        get_libero_wrist_image,
+    )
+    from experiments.robot.openvla_utils import (
+        center_crop_image,
+        resize_image_for_policy,
+    )
 
     scenario = SCENARIOS[scenario_key]
     benchmark, get_libero_path, OffScreenRenderEnv = _import_libero_modules()
@@ -535,38 +583,114 @@ def render_previews_from_hdf5(scenario_key, task_suite_name, hdf5_paths, out_roo
     )
     env.seed(0)
     key = task.language.replace(" ", "_")
+
+    def policy_rgb(obs, camera):
+        image = (
+            get_libero_image(obs)
+            if camera == "agentview"
+            else get_libero_wrist_image(obs)
+        )
+        resized = resize_image_for_policy(image, POLICY_RESOLUTION)
+        return np.asarray(center_crop_image(resized))
+
+    def read_records(path):
+        records = []
+        with h5py.File(path, "r") as handle:
+            demos = [name for name in handle[key] if name.startswith("demo_")]
+            demos.sort(key=lambda name: int(name.split("_")[1]))
+            for name in demos[:limit]:
+                group = handle[key][name]
+                records.append(
+                    {
+                        "demo": int(name.split("_")[1]),
+                        "state": group["initial_state"][()],
+                        "native_state_index": int(group.attrs["native_state_index"]),
+                    }
+                )
+        return records
+
+    er_records = read_records(hdf5_paths["Er"])
+    ec_records = read_records(hdf5_paths["Ec"])
+    if [r["native_state_index"] for r in er_records] != [
+        r["native_state_index"] for r in ec_records
+    ]:
+        raise RuntimeError("Er/Ec preview records are not episode paired")
+    official_states = task_suite.get_task_init_states(TASK_ID)
+    eb_records = [
+        {
+            "demo": record["demo"],
+            "state": official_states[record["native_state_index"]],
+            "native_state_index": record["native_state_index"],
+        }
+        for record in er_records
+    ]
+    conditions = {"Eb": eb_records, "Er": er_records, "Ec": ec_records}
+
     try:
-        for label, hdf5_path in hdf5_paths.items():
+        for label, records in conditions.items():
             out_dir = Path(out_root) / label
             out_dir.mkdir(parents=True, exist_ok=True)
-            with h5py.File(hdf5_path, "r") as f:
-                demos = [name for name in f[key] if name.startswith("demo_")]
-                demos.sort(key=lambda name: int(name.split("_")[1]))
-                for name in demos[:limit]:
-                    idx = int(name.split("_")[1])
-                    state = f[key][name]["initial_state"][()]
-                    env.reset()
-                    env.set_init_state(state)
-                    info = {"cameras": {}, "hdf5": str(hdf5_path), "demo": idx}
-                    for camera in VIS_CAMERAS:
-                        image = env.sim.render(
-                            height=VIS_RESOLUTION, width=VIS_RESOLUTION, camera_name=camera
-                        )[::-1]
-                        imageio.imwrite(out_dir / f"{camera}_{idx:03d}.png", image)
-                        info["cameras"][camera] = {
-                            "mover_pixels": _visible_pixel_count(
-                                env, scenario["mover_body"], camera, VIS_RESOLUTION
-                            ),
-                            "anchor_pixels": _visible_pixel_count(
-                                env, scenario["anchor_body"], camera, VIS_RESOLUTION
-                            ),
+            for record in records:
+                idx = record["demo"]
+                obs = env.reset()
+                obs = env.set_init_state(record["state"])
+                info = {
+                        "condition": label,
+                        "source": "official_native_state" if label == "Eb" else str(hdf5_paths[label]),
+                        "demo": idx,
+                        "native_state_index": record["native_state_index"],
+                        "policy_pipeline": {
+                            "environment_resolution": VIS_RESOLUTION,
+                            "rotate_180_degrees": True,
+                            "jpeg_round_trip": True,
+                            "resize_resolution": POLICY_RESOLUTION,
+                            "center_crop_area": POLICY_CENTER_CROP_AREA,
+                            "policy_wait_steps": NUM_STEPS_WAIT,
+                        },
+                        "cameras": {},
+                        "bodies": {},
+                }
+                snapshots = {"t0": (obs, env.sim.get_state().flatten())}
+                for _ in range(NUM_STEPS_WAIT):
+                    obs, _, _, _ = env.step([0, 0, 0, 0, 0, 0, -1])
+                snapshots["policy_start"] = (obs, env.sim.get_state().flatten())
+
+                for camera in VIS_CAMERAS:
+                    info["cameras"][camera] = {}
+                    for stage, (stage_obs, flat_state) in snapshots.items():
+                        _restore_state(env, flat_state)
+                        image = policy_rgb(stage_obs, camera)
+                        imageio.imwrite(
+                            out_dir / f"{camera}_policy_{stage}_{idx:03d}.png", image
+                        )
+                        mover_mask = _body_policy_mask(
+                            env, scenario["mover_body"], camera
+                        )
+                        anchor_mask = _body_policy_mask(
+                            env, scenario["anchor_body"], camera
+                        )
+                        mask_image = Image.fromarray(
+                            mover_mask.astype(np.uint8) * 255
+                        ).resize(
+                            (POLICY_RESOLUTION, POLICY_RESOLUTION),
+                            resample=Image.Resampling.NEAREST,
+                        )
+                        mask_image.save(
+                            out_dir / f"{camera}_mover_mask_{stage}_{idx:03d}.png"
+                        )
+                        info["cameras"][camera][stage] = {
+                            "mover_pixels_policy_crop": int(mover_mask.sum()),
+                            "anchor_pixels_policy_crop": int(anchor_mask.sum()),
                         }
-                    info["bodies"] = {
-                        body: _body_pos(env, body).round(6).tolist() for body in ALL_BODIES
+                for stage, (_, flat_state) in snapshots.items():
+                    _restore_state(env, flat_state)
+                    info["bodies"][stage] = {
+                        body: _body_pos(env, body).round(6).tolist()
+                        for body in ALL_BODIES
                     }
-                    (out_dir / f"preview_{idx:03d}.json").write_text(
-                        json.dumps(info, indent=2) + "\n"
-                    )
+                (out_dir / f"preview_{idx:03d}.json").write_text(
+                    json.dumps(info, indent=2) + "\n"
+                )
             print(f"Previews for {label} -> {out_dir}")
     finally:
         env.close()

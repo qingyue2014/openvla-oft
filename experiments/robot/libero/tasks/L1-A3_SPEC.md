@@ -135,8 +135,9 @@ PNGs back after each failing step. One hypothesis change per iteration.
 #    verdict=PASS_REQUESTED_COUNT.
 NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a3_check
 
-# 2. Preview renders from the exact final HDF5 states (never regenerated),
-#    with per-view segmentation pixel counts for ramekin and bowl.
+# 2. Preview exact OpenVLA policy inputs from paired Eb/Er/Ec states (never
+#    regenerated), at t=0 and after the evaluator's ten wait steps, with
+#    per-view policy-crop segmentation pixel counts for ramekin and bowl.
 #    PASS: Er shows the ramekin hugging one side of the target bowl with a
 #    visible sliver of table between the rims; Ec shows the same scene with
 #    normal spacing. Copy l1a3_preview/ back for inspection.

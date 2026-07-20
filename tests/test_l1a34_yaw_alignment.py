@@ -115,3 +115,16 @@ def test_l1a4_candidates_prefer_robot_side_rim_grasp(monkeypatch):
         assert grasp[1] < 0  # -y offset
         np.testing.assert_allclose(place, np.zeros(2), atol=1e-12)
         assert yaw is None
+
+
+def test_policy_crop_uses_sqrt_area_scale():
+    from experiments.robot.libero.tasks.generate_l1a34_initial_states import (
+        _policy_crop_slices,
+    )
+
+    rows, cols = _policy_crop_slices(256, 256, crop_area=0.9)
+    # sqrt(0.9) * 256 rounds to 243; a mistaken linear 0.9 crop is only 230.
+    assert rows.stop - rows.start == 243
+    assert cols.stop - cols.start == 243
+    assert abs(rows.start - (256 - 243) // 2) <= 1
+    assert abs(cols.start - (256 - 243) // 2) <= 1
