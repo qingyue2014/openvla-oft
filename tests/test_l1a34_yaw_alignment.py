@@ -2,14 +2,34 @@ import numpy as np
 
 from experiments.robot.libero.tasks.validate_l1a34_reference import (
     _bearing_offset,
+    _closing_axis_xy,
     _closing_axis_yaw_error_rad,
     _grasp_candidates,
     _quat_xyzw_to_mat,
 )
 
-# 180-degree rotation about (1,1,0)/sqrt(2): the default OSC hand orientation
-# [[0,1,0],[1,0,0],[0,0,-1]], whose closing axis (hand x) is world +y.
+# 180-degree rotation about (1,1,0)/sqrt(2): retained as a quaternion conversion
+# regression.  It must not be used to infer the mounted gripper's finger axis.
 DEFAULT_HAND_QUAT = np.array([np.sqrt(0.5), np.sqrt(0.5), 0.0, 0.0])
+
+
+class _FakeModel:
+    _ids = {
+        "gripper0_finger_joint1_tip": 0,
+        "gripper0_finger_joint2_tip": 1,
+    }
+
+    def body_name2id(self, name):
+        return self._ids[name]
+
+
+class _FakeEnv:
+    def __init__(self, first_xy, second_xy):
+        data = type("Data", (), {})()
+        data.body_xpos = np.array(
+            [[*first_xy, 1.0], [*second_xy, 1.0]], dtype=float
+        )
+        self.sim = type("Sim", (), {"model": _FakeModel(), "data": data})()
 
 
 def test_quat_to_mat_reproduces_default_hand_orientation():
@@ -19,22 +39,23 @@ def test_quat_to_mat_reproduces_default_hand_orientation():
     )
 
 
-def test_default_axis_has_zero_error_at_south_bearing():
-    obs = {"robot0_eef_quat": DEFAULT_HAND_QUAT}
-    assert abs(_closing_axis_yaw_error_rad(obs, -90.0)) < 1e-9
-    assert abs(_closing_axis_yaw_error_rad(obs, 90.0)) < 1e-9  # modulo 180
+def test_closing_axis_is_measured_from_native_fingertip_bodies():
+    env = _FakeEnv((0.0, -0.03), (0.0, 0.03))
+    np.testing.assert_allclose(_closing_axis_xy(env), np.array([0.0, -1.0]))
+    assert abs(_closing_axis_yaw_error_rad(env, -90.0)) < 1e-9
+    assert abs(_closing_axis_yaw_error_rad(env, 90.0)) < 1e-9  # modulo 180
 
 
 def test_east_bearing_needs_quarter_turn():
-    obs = {"robot0_eef_quat": DEFAULT_HAND_QUAT}
-    error = _closing_axis_yaw_error_rad(obs, 0.0)
+    env = _FakeEnv((0.0, -0.03), (0.0, 0.03))
+    error = _closing_axis_yaw_error_rad(env, 0.0)
     assert abs(abs(error) - np.pi / 2.0) < 1e-9
 
 
 def test_error_is_wrapped_to_half_turn():
-    obs = {"robot0_eef_quat": DEFAULT_HAND_QUAT}
+    env = _FakeEnv((0.0, -0.03), (0.0, 0.03))
     for bearing in (-86.0, 94.0):
-        error = _closing_axis_yaw_error_rad(obs, bearing)
+        error = _closing_axis_yaw_error_rad(env, bearing)
         assert abs(error) < np.radians(5.0)
 
 

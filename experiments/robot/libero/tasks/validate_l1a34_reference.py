@@ -152,17 +152,46 @@ def _quat_xyzw_to_mat(quat):
     ])
 
 
-def _closing_axis_yaw_error_rad(obs, bearing_deg):
-    """Signed yaw between the finger-closing axis and the radial grasp bearing.
+def _closing_axis_xy(env):
+    """Measure the Panda fingers' world-XY opening / closing axis.
 
-    The hand-frame x column is the closing axis (the default OSC orientation
-    [[0,1,0],[1,0,0],[0,0,-1]] closes along world y, which matches the
-    observed default rim-grasp behaviour). A rim grasp needs that axis
-    radial to the bowl, modulo 180 degrees.
+    Do not infer this axis from ``robot0_eef_quat``.  In robosuite 1.4 the
+    position observable is taken from the grip site while the quaternion is
+    taken from ``robot_model.eef_name``; the upstream code explicitly warns
+    that gripper orientations are inconsistent.  The mounted Panda gripper
+    also contains additional fixed rotations.  Using a column of the
+    observable quaternion therefore produced a repeatable 90-degree error:
+    the L1-A3 "safe" reference pushed the bowl sideways and closed on empty
+    space instead of pinching its rim.
+
+    The vector between the two native fingertip bodies is the physical axis
+    we need and remains well defined throughout closing.  Its sign is
+    irrelevant because parallel-jaw grasps are symmetric modulo 180 degrees.
     """
-    axis = _quat_xyzw_to_mat(np.asarray(obs["robot0_eef_quat"], dtype=float))[:2, 0]
-    if float(np.linalg.norm(axis)) < 1e-6:
-        return 0.0
+    model = env.sim.model
+    data = env.sim.data
+    name_pairs = (
+        ("gripper0_finger_joint1_tip", "gripper0_finger_joint2_tip"),
+        ("robot0_gripper_finger_joint1_tip", "robot0_gripper_finger_joint2_tip"),
+    )
+    for first_name, second_name in name_pairs:
+        try:
+            first_id = model.body_name2id(first_name)
+            second_id = model.body_name2id(second_name)
+        except Exception:
+            continue
+        axis = np.asarray(data.body_xpos[first_id, :2] - data.body_xpos[second_id, :2])
+        norm = float(np.linalg.norm(axis))
+        if norm >= 1e-6:
+            return axis / norm
+    raise RuntimeError(
+        "Panda fingertip bodies not found; cannot measure the physical closing axis"
+    )
+
+
+def _closing_axis_yaw_error_rad(env, bearing_deg):
+    """Signed yaw from the measured finger axis to a radial grasp bearing."""
+    axis = _closing_axis_xy(env)
     angle_axis = float(np.arctan2(axis[1], axis[0]))
     angle_bearing = float(np.radians(bearing_deg))
     return float((angle_bearing - angle_axis + np.pi / 2.0) % np.pi - np.pi / 2.0)
@@ -179,7 +208,7 @@ def _align_grasp_yaw(env, obs, oracle, recorder, gripper, bearing_deg, step, arg
     sign = 1.0
     reference_error = None
     for iteration in range(args.max_yaw_steps):
-        error = _closing_axis_yaw_error_rad(obs, bearing_deg)
+        error = _closing_axis_yaw_error_rad(env, bearing_deg)
         if abs(error) <= args.yaw_tolerance_rad:
             return obs, step, None
         if iteration % 6 == 0:
@@ -195,7 +224,7 @@ def _align_grasp_yaw(env, obs, oracle, recorder, gripper, bearing_deg, step, arg
         step += 1
         if status.violated:
             return obs, step, MotionFailure(reason=status.reason, stage="align_grasp_yaw")
-    error = _closing_axis_yaw_error_rad(obs, bearing_deg)
+    error = _closing_axis_yaw_error_rad(env, bearing_deg)
     if abs(error) <= args.yaw_tolerance_rad:
         return obs, step, None
     return obs, step, MotionFailure(
@@ -218,7 +247,7 @@ def _seat_grasp_yaw_held(env, obs, oracle, recorder, target, close_sign, bearing
         action = _position_action(
             _eef_pos(obs), target, close_sign, args.position_scale, args.grasp_seat_max_command
         )
-        error = _closing_axis_yaw_error_rad(obs, bearing_deg)
+        error = _closing_axis_yaw_error_rad(env, bearing_deg)
         action[5] = float(
             np.clip(error / args.yaw_scale, -args.max_yaw_command, args.max_yaw_command)
         )
@@ -293,7 +322,7 @@ def _run_episode(env, state, args, scenario, episode_idx, grasp_xy_offset,
             )
     aperture_after_seat = _gripper_aperture(obs)
     yaw_error_at_grasp = (
-        _closing_axis_yaw_error_rad(obs, yaw_bearing_deg)
+        _closing_axis_yaw_error_rad(env, yaw_bearing_deg)
         if yaw_bearing_deg is not None
         else float("nan")
     )
