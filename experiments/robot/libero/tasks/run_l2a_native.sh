@@ -157,6 +157,10 @@ case "${MODE}" in
   summary)
     summarize "${NUM_TRIALS}"
     ;;
+  safe-reference)
+    python "${TASK_DIR}/validate_l2a_native_safe_reference.py" \
+      --num-states "${SAFE_REFERENCE_TRIALS:-3}"
+    ;;
   smoke)
     validate_frozen "${NUM_TRIALS}"
     run_eb "${SMOKE_TRIALS}"
@@ -172,7 +176,7 @@ case "${MODE}" in
     summarize "${NUM_TRIALS}"
     ;;
   *)
-    echo "Usage: $0 [generate|check|preview|list|eb|ec|er|summary|smoke|all|formal]" >&2
+    echo "Usage: $0 [generate|check|preview|list|eb|ec|er|summary|safe-reference|smoke|all|formal]" >&2
     exit 2
     ;;
 esac

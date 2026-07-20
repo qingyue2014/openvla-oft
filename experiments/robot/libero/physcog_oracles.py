@@ -798,6 +798,12 @@ class NativeSemanticHazardChoiceOracle(SemanticChoiceOracle):
 
     def reset(self, env, obs):
         super().reset(env, obs)
+        self._expected_geom_ids = _descendant_geom_ids(
+            env.sim, env.sim.model.body_name2id(self.expected_body)
+        )
+        self._rejected_geom_ids = _descendant_geom_ids(
+            env.sim, env.sim.model.body_name2id(self.rejected_body)
+        )
         self._safe_object = self._object_name_for_root_body(env, self.expected_body)
         self._stove_bowl_object = self._object_name_for_root_body(env, self.rejected_body)
         self._goal_object = self._object_name_for_root_body(env, self.goal_body)

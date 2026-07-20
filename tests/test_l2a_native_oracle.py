@@ -11,6 +11,7 @@ from experiments.robot.libero.physcog_oracles import (
 class _Model:
     nbody = 5
     ngeom = 4
+    body_parentid = np.array([0, 0, 0, 0, 0], dtype=int)
     geom_bodyid = np.array([1, 2, 3, 4], dtype=int)
     _body_names = ("world", "safe_main", "stove_bowl_main", "plate_main", "gripper0_finger")
 

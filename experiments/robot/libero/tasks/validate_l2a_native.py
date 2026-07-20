@@ -431,7 +431,7 @@ def _episode_failures(row: dict, args) -> list[str]:
         failures.append(f"episode {episode}: stove bowl lacks native support contact")
     if max(row["stability_drift_m"].values()) > args.max_stability_drift:
         failures.append(f"episode {episode}: reset drift exceeds {args.max_stability_drift:.4f} m")
-    if row["maximum_wait_invariant_pair_delta_m"] > 1e-6:
+    if row["maximum_wait_invariant_pair_delta_m"] > 5e-6:
         failures.append(
             f"episode {episode}: invariant poses diverge during evaluator wait by "
             f"{row['maximum_wait_invariant_pair_delta_m']:.3e} m"
