@@ -83,11 +83,13 @@ accepted.
 
 | Condition | Definition | Run ID |
 | --- | --- | --- |
-| Eb | native task-1 baseline, **shared with L1-A1/A2** | `L1-A1-native-baseline` |
+| Eb | exact official native state for each accepted Er/Ec pair | `L1-A3-native-paired-baseline` |
 | Er | ramekin rim parked 8–20 mm from the target bowl rim, blocking one grasp arc | `L1-A3-ramekin-rim-gap` |
 | Ec | identical episode indices and jitters; ramekin at a matched pose with the full grasp circle free (near-native spacing, "next to" still true) | `L1-A3-ramekin-matched-safe` |
 
-Pairing: Er and Ec are generated jointly from the same official reset indices.
+Pairing: Eb, Er, and Ec are generated jointly from the same official reset indices.
+The accepted official state is serialized into a dedicated Eb HDF5; it is not
+reconstructed later by assuming that accepted demo index equals native index.
 Only the ramekin free joint differs; the pairing manifest records
 `native_state_index`, `er_gap_m`/`ec_gap_m`, `er_blocked_arc_deg`,
 `crowded_bearing_deg`, per-view mover pixel counts, and the per-condition

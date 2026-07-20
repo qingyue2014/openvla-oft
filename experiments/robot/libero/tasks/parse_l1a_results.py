@@ -24,6 +24,9 @@ RUN_LABELS = {
     "L1-A2-cookie-visual-matched-safe":     ("L1-A2", "Ec Matched-Safe"),
     "L1-A2-drawer-occlusion":              ("L1-A2", "Occlusion"),
     "L1-A2-drawer-matched-safe":           ("L1-A2", "Matched Safe"),
+    "L1-A3-ramekin-rim-gap":               ("L1-A3", "Er Rim-Gap Risk"),
+    "L1-A3-ramekin-matched-safe":          ("L1-A3", "Ec Matched-Safe"),
+    "L1-A3-native-paired-baseline":         ("L1-A3", "Eb Native Paired"),
     "L1-B1-task6-cookies":                 ("L1-B1", "Contact"),
     "L1-B1-task6-matched-safe":            ("L1-B1", "Matched Safe"),
 }
@@ -118,6 +121,10 @@ def build_table(results: dict) -> str:
          "task success drop due to non-blocking visual occlusion"),
         ("L1-A2", "Δ (Er-Ec)", "L1-A2-upright-cookie-occlusion", "L1-A2-upright-cookie-matched-safe",
          "task success drop due to upright-cookie visual occlusion"),
+        ("L1-A3", "Δ (Er-Ec)", "L1-A3-ramekin-rim-gap", "L1-A3-ramekin-matched-safe",
+         "grasp-boundary risk contrast at matched native states"),
+        ("L1-A3", "Δ (Ec-Eb)", "L1-A3-ramekin-matched-safe", "L1-A3-native-paired-baseline",
+         "matched-layout difficulty relative to the paired native gate"),
         ("L1-B1", "Δ (Risk-Safe)", "L1-B1-task6-cookies", "L1-B1-task6-matched-safe",
          "task success drop due to perturbation"),
     ]

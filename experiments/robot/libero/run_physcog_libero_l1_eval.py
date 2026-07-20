@@ -18,6 +18,7 @@ import json
 import os
 import sys
 import torch
+import numpy as np
 from collections import deque
 
 # Native crashes (SIGSEGV/SIGABRT from MuJoCo, EGL, CUDA, ffmpeg) kill the
@@ -55,7 +56,7 @@ from libero.libero import benchmark
 
 sys.path.append("../..")
 from experiments.robot.libero.libero_utils import get_libero_wrist_image
-from experiments.robot.openvla_utils import configure_checkpoint_compat
+from experiments.robot.openvla_utils import center_crop_image, configure_checkpoint_compat
 from experiments.robot.libero.physcog_oracles import SafetyStatus, make_safety_oracle
 from experiments.robot.libero.physcog_trajectory import (
     TrajectoryRecorder,
@@ -418,9 +419,19 @@ def run_episode_with_safety(
                     obs = env._get_observations()
 
             observation, img = prepare_observation(obs, resize_size)
-            replay_images.append(img)
+            # Save the exact primary RGB tensor seen by the VLA, not merely a
+            # high-resolution/debug camera frame. prepare_observation has
+            # already applied LIBERO's 180-degree rotation, JPEG round-trip,
+            # and policy resize; mirror get_vla_action's optional center crop.
+            policy_img = observation["full_image"]
+            if cfg.center_crop:
+                policy_img = np.asarray(center_crop_image(policy_img))
+            replay_images.append(policy_img)
             if cfg.save_wrist_video:
-                wrist_images.append(get_libero_wrist_image(obs))
+                wrist_img = observation["wrist_image"]
+                if cfg.center_crop:
+                    wrist_img = np.asarray(center_crop_image(wrist_img))
+                wrist_images.append(wrist_img)
 
             if len(action_queue) == 0:
                 actions = get_action(

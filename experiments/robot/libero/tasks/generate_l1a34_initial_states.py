@@ -385,7 +385,7 @@ def generate_paired_states(scenario_key, task_suite_name, n, seed, audit_predica
     print(f"Task {TASK_ID}: {task.language}")
     print(f"Generating {n} episode-paired states (seed={seed})...\n")
 
-    er_states, ec_states, records = [], [], []
+    eb_states, er_states, ec_states, records = [], [], [], []
     baseline_cache = {}
     reject_counts = Counter()
     predicate_audited = False
@@ -447,6 +447,12 @@ def generate_paired_states(scenario_key, task_suite_name, n, seed, audit_predica
             _audit_l1a4_goal_predicate(env, pair["er"]["state"])
             predicate_audited = True
 
+        # Preserve the exact official state that produced this accepted pair.
+        # Generation may reject candidates and advance to another native index,
+        # so evaluating Eb by plain episode number is not guaranteed to match
+        # the Er/Ec episode.  A dedicated paired baseline HDF5 removes that
+        # attribution confound without changing any native geometry.
+        eb_states.append(official_flat.copy())
         er_states.append(pair["er"]["state"])
         ec_states.append(pair["ec"]["state"])
         records.append(
@@ -486,7 +492,7 @@ def generate_paired_states(scenario_key, task_suite_name, n, seed, audit_predica
             f"Only generated {len(records)} paired {scenario_key} states "
             f"after {attempts} attempts."
         )
-    return er_states, ec_states, records, task.language
+    return eb_states, er_states, ec_states, records, task.language
 
 
 def save_hdf5(states, task_description, out_path, records, gap_key, paired_with):
@@ -521,6 +527,7 @@ def write_manifest(path, scenario_key, args, records):
         "anchor_body": scenario["anchor_body"],
         "er_hdf5": args.out_risk,
         "ec_hdf5": args.out_safe,
+        "eb_hdf5": args.out_baseline,
         "boundary_gate": "PASS",
         "gate_thresholds": {
             "er_gap_range_m": list(scenario["er_gap_range"]),
@@ -609,21 +616,15 @@ def render_previews_from_hdf5(scenario_key, task_suite_name, hdf5_paths, out_roo
                 )
         return records
 
+    eb_records = read_records(hdf5_paths["Eb"])
     er_records = read_records(hdf5_paths["Er"])
     ec_records = read_records(hdf5_paths["Ec"])
-    if [r["native_state_index"] for r in er_records] != [
-        r["native_state_index"] for r in ec_records
-    ]:
-        raise RuntimeError("Er/Ec preview records are not episode paired")
-    official_states = task_suite.get_task_init_states(TASK_ID)
-    eb_records = [
-        {
-            "demo": record["demo"],
-            "state": official_states[record["native_state_index"]],
-            "native_state_index": record["native_state_index"],
-        }
-        for record in er_records
-    ]
+    indices = {
+        label: [record["native_state_index"] for record in records]
+        for label, records in (("Eb", eb_records), ("Er", er_records), ("Ec", ec_records))
+    }
+    if not (indices["Eb"] == indices["Er"] == indices["Ec"]):
+        raise RuntimeError(f"Eb/Er/Ec preview records are not episode paired: {indices}")
     conditions = {"Eb": eb_records, "Er": er_records, "Ec": ec_records}
 
     try:
@@ -706,6 +707,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--out_risk", help="Er HDF5 output path")
     parser.add_argument("--out_safe", help="Ec HDF5 output path")
+    parser.add_argument("--out_baseline", help="episode-paired native Eb HDF5 output path")
     parser.add_argument("--pairing_manifest", help="JSON manifest output path")
     parser.add_argument(
         "--preview_from_hdf5",
@@ -722,26 +724,34 @@ def main():
     args = parser.parse_args()
 
     if args.preview_from_hdf5:
-        if not (args.out_risk and args.out_safe and args.preview_dir):
-            parser.error("--preview_from_hdf5 requires --out_risk, --out_safe, --preview_dir")
+        if not (args.out_baseline and args.out_risk and args.out_safe and args.preview_dir):
+            parser.error(
+                "--preview_from_hdf5 requires --out_baseline, --out_risk, "
+                "--out_safe, and --preview_dir"
+            )
         render_previews_from_hdf5(
             args.scenario,
             args.task_suite_name,
-            {"Er": args.out_risk, "Ec": args.out_safe},
+            {"Eb": args.out_baseline, "Er": args.out_risk, "Ec": args.out_safe},
             args.preview_dir,
             args.preview_limit,
         )
         return
 
-    if not (args.out_risk and args.out_safe and args.pairing_manifest):
-        parser.error("generation requires --out_risk, --out_safe, and --pairing_manifest")
-    er_states, ec_states, records, task_desc = generate_paired_states(
+    if not (args.out_baseline and args.out_risk and args.out_safe and args.pairing_manifest):
+        parser.error(
+            "generation requires --out_baseline, --out_risk, --out_safe, "
+            "and --pairing_manifest"
+        )
+    eb_states, er_states, ec_states, records, task_desc = generate_paired_states(
         args.scenario,
         args.task_suite_name,
         args.num_states,
         args.seed,
         audit_predicate=not args.skip_predicate_audit,
     )
+    save_hdf5(eb_states, task_desc, args.out_baseline, records, "er_gap_m",
+              os.path.basename(args.out_risk))
     save_hdf5(er_states, task_desc, args.out_risk, records, "er_gap_m",
               os.path.basename(args.out_safe))
     save_hdf5(ec_states, task_desc, args.out_safe, records, "ec_gap_m",

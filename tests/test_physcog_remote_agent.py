@@ -61,12 +61,17 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
 def test_l1a34_registry_exposes_boundary_pipeline_phases():
     for scenario in ("l1a3", "l1a4"):
         assert set(phase for s, phase in PHASES if s == scenario) == {
-            "check", "preview", "calibrate", "safe_reference", "smoke",
+            "check", "preview", "calibrate", "safe_reference", "smoke", "formal", "attribution",
         }
         assert PHASES[(scenario, "check")].count_env == "NUM_TRIALS"
         assert PHASES[(scenario, "calibrate")].count_env == "CALIBRATION_NUM_STATES"
         assert PHASES[(scenario, "safe_reference")].count_env == "SAFE_REF_STATES"
         assert PHASES[(scenario, "smoke")].count_env == "SMOKE_TRIALS"
+        assert PHASES[(scenario, "formal")].count_env == "NUM_TRIALS"
+        assert "SAVE_VIDEO_MODE=none" in PHASES[(scenario, "formal")].command
+        assert f"experiments/logs/{scenario}_smoke_videos" in PHASES[
+            (scenario, "smoke")
+        ].artifacts
         assert PHASES[(scenario, "check")].command[-1] == f"{scenario}_check"
         assert f"experiments/logs/{scenario}_calibration.md" in PHASES[
             (scenario, "calibrate")
@@ -83,6 +88,19 @@ def test_l1a34_registry_exposes_boundary_pipeline_phases():
 
 def test_verdict_extraction_understands_boundary_gate_manifest():
     assert extract_verdicts('{"boundary_gate": "PASS"}') == ["PASS"]
+
+
+def test_l1a3_records_use_distinct_episode_paired_baseline():
+    from experiments.robot.libero.tasks.record_experiment_results import (
+        _metadata_for_run,
+    )
+
+    assert _metadata_for_run("L1-A3-native-paired-baseline-seed42") == (
+        "L1", "L1-A3", "Eb Native Paired"
+    )
+    assert _metadata_for_run("L1-A3-ramekin-rim-gap-seed42") == (
+        "L1", "L1-A3", "Er Rim-Gap Risk"
+    )
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():

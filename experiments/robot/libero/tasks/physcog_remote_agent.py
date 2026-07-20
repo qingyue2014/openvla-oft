@@ -187,7 +187,33 @@ def _l1a34_phases(scenario: str) -> dict[tuple[str, str], PhaseSpec]:
             artifacts=(
                 "experiments/logs/l1a_results.md",
                 "experiments/logs/review_videos.md",
+                f"experiments/logs/{scenario}_smoke_videos",
             ),
+        ),
+        (scenario, "formal"): PhaseSpec(
+            command=(
+                "env", "EVAL_SEED=42", "RUN_ID_SUFFIX=seed42",
+                "SAVE_VIDEO_MODE=none", "bash",
+                "experiments/robot/libero/tasks/run_l1a_evals.sh",
+                f"{scenario}_formal",
+            ),
+            count_env="NUM_TRIALS",
+            artifacts=(
+                f"experiments/logs/{scenario}_attribution.md",
+                "experiments/logs/l1a_results.md",
+                "experiments/logs/experiment_records.csv",
+                "experiments/logs/experiment_records.md",
+                "experiments/logs/result_tables.md",
+            ),
+        ),
+        (scenario, "attribution"): PhaseSpec(
+            command=(
+                "env", "L1A1_RUN_SUFFIX=seed42",
+                f"{scenario.upper()}_RUN_SUFFIX=seed42", "bash",
+                "experiments/robot/libero/tasks/run_l1a_evals.sh",
+                f"{scenario}_attribution",
+            ),
+            artifacts=(f"experiments/logs/{scenario}_attribution.md",),
         ),
     }
 

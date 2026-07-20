@@ -90,6 +90,7 @@ SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 SAFE_REF_STATES="${SAFE_REF_STATES:-5}"
 
 # L1-A3/L1-A4 boundary-estimation paths (shared generator/validator).
+L1A3_BASELINE_HDF5="${TASKS_DIR}/l1a3_task1_native_paired_initial_states.hdf5"
 L1A3_RISK_HDF5="${TASKS_DIR}/l1a3_task1_ramekin_rim_gap_initial_states.hdf5"
 L1A3_SAFE_HDF5="${TASKS_DIR}/l1a3_task1_ramekin_matched_safe_initial_states.hdf5"
 L1A3_PAIRING_JSON="${TASKS_DIR}/l1a3_task1_ramekin_rim_gap_pairing.json"
@@ -97,6 +98,8 @@ L1A3_PREVIEW_DIR="${TASKS_DIR}/l1a3_preview"
 L1A3_CALIBRATION_REPORT="${L1A3_CALIBRATION_REPORT:-experiments/logs/l1a3_calibration.md}"
 L1A3_SAFE_REF_REPORT="${L1A3_SAFE_REF_REPORT:-experiments/logs/l1a3_safe_reference.md}"
 L1A3_ATTRIBUTION_OUT="${L1A3_ATTRIBUTION_OUT:-experiments/logs/l1a3_attribution.md}"
+L1A3_SMOKE_VIDEO_DIR="${L1A3_SMOKE_VIDEO_DIR:-experiments/logs/l1a3_smoke_videos}"
+L1A4_BASELINE_HDF5="${TASKS_DIR}/l1a4_task1_native_paired_initial_states.hdf5"
 L1A4_RISK_HDF5="${TASKS_DIR}/l1a4_task1_plate_crowding_initial_states.hdf5"
 L1A4_SAFE_HDF5="${TASKS_DIR}/l1a4_task1_plate_crowding_matched_safe_initial_states.hdf5"
 L1A4_PAIRING_JSON="${TASKS_DIR}/l1a4_task1_plate_crowding_pairing.json"
@@ -104,6 +107,7 @@ L1A4_PREVIEW_DIR="${TASKS_DIR}/l1a4_preview"
 L1A4_CALIBRATION_REPORT="${L1A4_CALIBRATION_REPORT:-experiments/logs/l1a4_calibration.md}"
 L1A4_SAFE_REF_REPORT="${L1A4_SAFE_REF_REPORT:-experiments/logs/l1a4_safe_reference.md}"
 L1A4_ATTRIBUTION_OUT="${L1A4_ATTRIBUTION_OUT:-experiments/logs/l1a4_attribution.md}"
+L1A4_SMOKE_VIDEO_DIR="${L1A4_SMOKE_VIDEO_DIR:-experiments/logs/l1a4_smoke_videos}"
 L1A34_TRACK_BODIES="akita_black_bowl_1_main,akita_black_bowl_2_main,glazed_rim_porcelain_ramekin_1_main,plate_1_main,cookies_1_main"
 L1A3_RUN_SUFFIX="${L1A3_RUN_SUFFIX:-${RUN_ID_SUFFIX}}"
 L1A4_RUN_SUFFIX="${L1A4_RUN_SUFFIX:-${RUN_ID_SUFFIX}}"
@@ -558,31 +562,37 @@ l1a34_vars() {
     local scenario="$1"
     case "${scenario}" in
         l1a3)
+            S_BASELINE_HDF5="${L1A3_BASELINE_HDF5}"
             S_RISK_HDF5="${L1A3_RISK_HDF5}"; S_SAFE_HDF5="${L1A3_SAFE_HDF5}"
             S_PAIRING_JSON="${L1A3_PAIRING_JSON}"; S_PREVIEW_DIR="${L1A3_PREVIEW_DIR}"
             S_CALIBRATION_REPORT="${L1A3_CALIBRATION_REPORT}"
             S_SAFE_REF_REPORT="${L1A3_SAFE_REF_REPORT}"
             S_ATTRIBUTION_OUT="${L1A3_ATTRIBUTION_OUT}"
+            S_SMOKE_VIDEO_DIR="${L1A3_SMOKE_VIDEO_DIR}"
             S_RUN_SUFFIX="${L1A3_RUN_SUFFIX}"
             S_RISK_RUN_BASE="L1-A3-ramekin-rim-gap"
             S_SAFE_RUN_BASE="L1-A3-ramekin-matched-safe"
+            S_BASE_RUN_BASE="L1-A3-native-paired-baseline"
             S_DISTRACTOR_BODY="glazed_rim_porcelain_ramekin_1_main"
             S_POST_SUCCESS_SETTLE=0
-            S_FAMILY_NAME="L1-A3 ramekin rim-gap grasp boundary (Eb shared L1-A1 native gate; Er vs Ec primary contrast)"
+            S_FAMILY_NAME="L1-A3 ramekin rim-gap grasp boundary (episode-paired native Eb; Er vs Ec primary contrast)"
             ;;
         l1a4)
+            S_BASELINE_HDF5="${L1A4_BASELINE_HDF5}"
             S_RISK_HDF5="${L1A4_RISK_HDF5}"; S_SAFE_HDF5="${L1A4_SAFE_HDF5}"
             S_PAIRING_JSON="${L1A4_PAIRING_JSON}"; S_PREVIEW_DIR="${L1A4_PREVIEW_DIR}"
             S_CALIBRATION_REPORT="${L1A4_CALIBRATION_REPORT}"
             S_SAFE_REF_REPORT="${L1A4_SAFE_REF_REPORT}"
             S_ATTRIBUTION_OUT="${L1A4_ATTRIBUTION_OUT}"
+            S_SMOKE_VIDEO_DIR="${L1A4_SMOKE_VIDEO_DIR}"
             S_RUN_SUFFIX="${L1A4_RUN_SUFFIX}"
             S_RISK_RUN_BASE="L1-A4-plate-crowding"
             S_SAFE_RUN_BASE="L1-A4-plate-crowding-matched-safe"
+            S_BASE_RUN_BASE="L1-A4-native-paired-baseline"
             S_DISTRACTOR_BODY="akita_black_bowl_2_main"
             # Judge release impact transferred to the bystander after success.
             S_POST_SUCCESS_SETTLE=20
-            S_FAMILY_NAME="L1-A4 plate-crowding placement boundary (Eb shared L1-A1 native gate; Er vs Ec primary contrast)"
+            S_FAMILY_NAME="L1-A4 plate-crowding placement boundary (episode-paired native Eb; Er vs Ec primary contrast)"
             ;;
         *)
             echo "l1a34_vars: unknown scenario ${scenario}" >&2; exit 1
@@ -593,14 +603,15 @@ l1a34_vars() {
 gen_l1a34() {
     local scenario="$1"
     l1a34_vars "${scenario}"
-    log "${scenario} generate: episode-paired Er/Ec transplanted states (+ boundary gates)"
-    if [[ -f "${S_RISK_HDF5}" && -f "${S_SAFE_HDF5}" && -f "${S_PAIRING_JSON}" ]]; then
-        echo "  [skip] paired HDF5 files and pairing manifest exist"
+    log "${scenario} generate: episode-paired Eb/Er/Ec states (+ boundary gates)"
+    if [[ -f "${S_BASELINE_HDF5}" && -f "${S_RISK_HDF5}" && -f "${S_SAFE_HDF5}" && -f "${S_PAIRING_JSON}" ]]; then
+        echo "  [skip] paired Eb/Er/Ec HDF5 files and pairing manifest exist"
         return
     fi
-    rm -f "${S_RISK_HDF5}" "${S_SAFE_HDF5}" "${S_PAIRING_JSON}"
+    rm -f "${S_BASELINE_HDF5}" "${S_RISK_HDF5}" "${S_SAFE_HDF5}" "${S_PAIRING_JSON}"
     python "${TASKS_DIR}/generate_l1a34_initial_states.py" \
         --scenario "${scenario}" \
+        --out_baseline "${S_BASELINE_HDF5}" \
         --out_risk "${S_RISK_HDF5}" \
         --out_safe "${S_SAFE_HDF5}" \
         --pairing_manifest "${S_PAIRING_JSON}" \
@@ -611,7 +622,7 @@ check_l1a34() {
     local scenario="$1"
     l1a34_vars "${scenario}"
     log "${scenario} check: force paired regeneration + boundary gates"
-    rm -f "${S_RISK_HDF5}" "${S_SAFE_HDF5}" "${S_PAIRING_JSON}"
+    rm -f "${S_BASELINE_HDF5}" "${S_RISK_HDF5}" "${S_SAFE_HDF5}" "${S_PAIRING_JSON}"
     gen_l1a34 "${scenario}"
 }
 
@@ -619,14 +630,15 @@ preview_l1a34() {
     local scenario="$1"
     l1a34_vars "${scenario}"
     log "${scenario} preview: render from the final paired HDF5 states"
-    if [[ ! -f "${S_RISK_HDF5}" || ! -f "${S_SAFE_HDF5}" ]]; then
-        echo "  [error] paired HDF5 missing; run ${scenario}_check first" >&2
+    if [[ ! -f "${S_BASELINE_HDF5}" || ! -f "${S_RISK_HDF5}" || ! -f "${S_SAFE_HDF5}" ]]; then
+        echo "  [error] paired Eb/Er/Ec HDF5 missing; run ${scenario}_check first" >&2
         exit 1
     fi
     rm -rf "${S_PREVIEW_DIR}"
     python "${TASKS_DIR}/generate_l1a34_initial_states.py" \
         --scenario "${scenario}" \
         --preview_from_hdf5 \
+        --out_baseline "${S_BASELINE_HDF5}" \
         --out_risk "${S_RISK_HDF5}" \
         --out_safe "${S_SAFE_HDF5}" \
         --preview_dir "${S_PREVIEW_DIR}"
@@ -742,26 +754,92 @@ eval_l1a34() {
             --run_id_note "${safe_run_id}"
 }
 
+eval_l1a34_baseline() {
+    local scenario="$1" baseline_run_id
+    require_l1a34_gates "${scenario}"
+    l1a34_vars "${scenario}"
+    baseline_run_id="$(with_suffix "${S_BASE_RUN_BASE}" "${S_RUN_SUFFIX}")"
+    log "${scenario} eval: episode-paired native Eb baseline"
+    maybe_eval_with_traj "${baseline_run_id}" \
+        python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+            --pretrained_checkpoint "${CHECKPOINT}" \
+            --task_suite_name libero_spatial --task_ids 1 \
+            --initial_states_path "${S_BASELINE_HDF5}" \
+            --safety_oracle none \
+            --held_object_body akita_black_bowl_1_main \
+            --trajectory_track_bodies "${L1A34_TRACK_BODIES}" \
+            --save_trajectory "${SAVE_TRAJECTORY}" \
+            --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+            --num_trials_per_task "${NUM_TRIALS}" \
+            --seed "${EVAL_SEED}" \
+            --save_video_mode "${SAVE_VIDEO_MODE}" \
+            "${VIDEO_ARGS[@]}" \
+            --run_id_note "${baseline_run_id}"
+}
+
 smoke_l1a34() {
     local scenario="$1"
     l1a34_vars "${scenario}"
-    local job_token smoke_suffix
+    local job_token smoke_suffix eb_run_id risk_run_id safe_run_id condition run_dir video_count
     job_token="${SLURM_JOB_ID:-manual-$(date -u +%Y%m%dT%H%M%SZ)}"
     smoke_suffix="$(with_suffix smoke "${S_RUN_SUFFIX:-${job_token}}")"
-    log "${scenario} smoke: ${SMOKE_TRIALS} fresh trials per condition (suffix '${smoke_suffix}')"
-    NUM_TRIALS="${SMOKE_TRIALS}" \
-    L1A3_RUN_SUFFIX="${smoke_suffix}" \
-    L1A4_RUN_SUFFIX="${smoke_suffix}" \
-        eval_l1a34 "${scenario}"
-    echo "verdict=PASS_$(echo "${scenario}" | tr '[:lower:]' '[:upper:]')_SMOKE suffix=${smoke_suffix}"
+    if [[ "${scenario}" == "l1a3" ]]; then
+        L1A3_RUN_SUFFIX="${smoke_suffix}"
+    else
+        L1A4_RUN_SUFFIX="${smoke_suffix}"
+    fi
+    l1a34_vars "${scenario}"
+    eb_run_id="$(with_suffix "${S_BASE_RUN_BASE}" "${smoke_suffix}")"
+    risk_run_id="$(with_suffix "${S_RISK_RUN_BASE}" "${smoke_suffix}")"
+    safe_run_id="$(with_suffix "${S_SAFE_RUN_BASE}" "${smoke_suffix}")"
+
+    log "${scenario} smoke: ${SMOKE_TRIALS} fresh Eb/Er/Ec trials (suffix '${smoke_suffix}')"
+    NUM_TRIALS="${SMOKE_TRIALS}" eval_l1a34_baseline "${scenario}"
+    NUM_TRIALS="${SMOKE_TRIALS}" eval_l1a34 "${scenario}"
+
+    rm -rf "${S_SMOKE_VIDEO_DIR}"
+    mkdir -p "${S_SMOKE_VIDEO_DIR}/Eb" "${S_SMOKE_VIDEO_DIR}/Er" "${S_SMOKE_VIDEO_DIR}/Ec"
+    for condition in Eb Er Ec; do
+        case "${condition}" in
+            Eb) run_dir="rollouts/libero_spatial/${eb_run_id}" ;;
+            Er) run_dir="rollouts/libero_spatial/${risk_run_id}" ;;
+            Ec) run_dir="rollouts/libero_spatial/${safe_run_id}" ;;
+        esac
+        find "${run_dir}" -maxdepth 1 -type f -name '*.mp4' \
+            -exec cp {} "${S_SMOKE_VIDEO_DIR}/${condition}/" \;
+        video_count="$(find "${S_SMOKE_VIDEO_DIR}/${condition}" -type f -name '*.mp4' | wc -l | tr -d ' ')"
+        if [[ "${video_count}" -lt "${SMOKE_TRIALS}" ]]; then
+            echo "${scenario} smoke video collection incomplete: ${condition}=${video_count}, expected=${SMOKE_TRIALS}" >&2
+            return 1
+        fi
+    done
+    find "${S_SMOKE_VIDEO_DIR}" -type f -name '*.mp4' | sort \
+        > "${S_SMOKE_VIDEO_DIR}/manifest.txt"
+    echo "verdict=PASS_$(echo "${scenario}" | tr '[:lower:]' '[:upper:]')_SMOKE Eb=${SMOKE_TRIALS} Er=${SMOKE_TRIALS} Ec=${SMOKE_TRIALS} suffix=${smoke_suffix}"
+}
+
+formal_l1a34() {
+    local scenario="$1" formal_suffix
+    formal_suffix="${RUN_ID_SUFFIX:-seed${EVAL_SEED}}"
+    if [[ "${scenario}" == "l1a3" ]]; then
+        L1A3_RUN_SUFFIX="${formal_suffix}"
+    else
+        L1A4_RUN_SUFFIX="${formal_suffix}"
+    fi
+    l1a34_vars "${scenario}"
+    log "${scenario} formal: self-contained Eb/Er/Ec, ${NUM_TRIALS} trials each, suffix '${formal_suffix}'"
+    eval_l1a34_baseline "${scenario}"
+    eval_l1a34 "${scenario}"
+    attribution_l1a34 "${scenario}"
+    parse_results
+    echo "verdict=PASS_$(echo "${scenario}" | tr '[:lower:]' '[:upper:]')_FORMAL suffix=${formal_suffix} trials_per_condition=${NUM_TRIALS}"
 }
 
 attribution_l1a34() {
     local scenario="$1"
     l1a34_vars "${scenario}"
     local eb_run_id risk_run_id safe_run_id
-    # Eb is shared with L1-A1: identical native suite/task/prompt/states.
-    eb_run_id="$(with_suffix L1-A1-native-baseline "${L1A1_RUN_SUFFIX}")"
+    eb_run_id="$(with_suffix "${S_BASE_RUN_BASE}" "${S_RUN_SUFFIX}")"
     risk_run_id="$(with_suffix "${S_RISK_RUN_BASE}" "${S_RUN_SUFFIX}")"
     safe_run_id="$(with_suffix "${S_SAFE_RUN_BASE}" "${S_RUN_SUFFIX}")"
 
@@ -852,6 +930,9 @@ case "${MODE}" in
     l1a3_smoke|l1a4_smoke)
         gen_l1a34 "${MODE%_smoke}"; smoke_l1a34 "${MODE%_smoke}"
         parse_results
+        ;;
+    l1a3_formal|l1a4_formal)
+        formal_l1a34 "${MODE%_formal}"
         ;;
     l1a3_attribution|l1a4_attribution)
         attribution_l1a34 "${MODE%_attribution}"
