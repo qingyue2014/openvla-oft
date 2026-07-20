@@ -19,13 +19,13 @@ def _function_source(name: str) -> str:
     return ast.get_source_segment(SOURCE, node)
 
 
-def _load_pure_function(name: str):
+def _load_pure_function(name: str, namespace=None):
     node = next(
         item for item in TREE.body
         if isinstance(item, ast.FunctionDef) and item.name == name
     )
     module = ast.Module(body=[node], type_ignores=[])
-    namespace = {}
+    namespace = {} if namespace is None else dict(namespace)
     exec(compile(ast.fix_missing_locations(module), str(GENERATOR), "exec"), namespace)
     return namespace[name]
 
@@ -96,3 +96,51 @@ def test_calibrated_defaults_and_force_qualification_are_bound():
     assert "MIN_TABLE_FORCE_WEIGHT_FRACTION = 0.25" in SOURCE
     assert "MIN_ABSOLUTE_FORCE_N = 1e-4" in SOURCE
     assert "mujoco.mj_contactForce" in SOURCE
+
+
+def test_verified_natural_release_angular_speed_boundary_is_accepted():
+    limits = {
+        "MAX_PRE_RELEASE_DRAWER_AXIS_DISPLACEMENT_M": 0.002,
+        "MAX_PRE_RELEASE_DRAWER_AXIS_SPEED_M_S": 0.02,
+        "MAX_PRE_RELEASE_TOTAL_DISPLACEMENT_M": 0.002,
+        "MAX_PRE_RELEASE_TILT_DELTA_DEG": 1.0,
+        "MAX_PRE_RELEASE_ANGULAR_SPEED_RAD_S": 1.5,
+    }
+    acceptable = _load_pure_function(
+        "_pre_release_motion_is_acceptable", limits
+    )
+    response = {
+        "max_pre_release_drawer_axis_displacement_m": 0.0001,
+        "max_pre_release_drawer_axis_speed_m_s": 0.0023,
+        "max_pre_release_total_displacement_m": 0.0001,
+        "max_pre_release_tilt_delta_deg": 0.31,
+        "max_pre_release_angular_speed_rad_s": 1.5,
+    }
+    assert acceptable(response)
+    response["max_pre_release_angular_speed_rad_s"] = 1.500001
+    assert not acceptable(response)
+    assert "MAX_PRE_RELEASE_DRAWER_AXIS_DISPLACEMENT_M = 0.002" in SOURCE
+    assert "MAX_PRE_RELEASE_DRAWER_AXIS_SPEED_M_S = 0.02" in SOURCE
+    assert "MAX_PRE_RELEASE_TOTAL_DISPLACEMENT_M = 0.002" in SOURCE
+    assert "MAX_PRE_RELEASE_TILT_DELTA_DEG = 1.0" in SOURCE
+
+
+def test_counterfactual_contacts_are_split_at_oracle_for_formal_gates():
+    close = _function_source("_component_close_response")
+    instant = _function_source("_instant_component_removal_response")
+    for source in (close, instant):
+        assert "pre_oracle_direct_contact_bodies" in source
+        assert "post_oracle_direct_contact_bodies" in source
+        assert "pre_oracle_other_cabinet_geoms" in source
+        assert "post_oracle_other_cabinet_geoms" in source
+    assert 'close_response["pre_oracle_direct_contact_bodies"]' in SOURCE
+    assert 'close_response["post_oracle_direct_contact_bodies"]' not in SOURCE.split(
+        'validation_records.append(', 1
+    )[0]
+    assert '"factual_close_pre_oracle_direct_contact_bodies"' in SOURCE
+    assert '"factual_close_post_oracle_direct_contact_bodies"' in SOURCE
+    assert '"instant_component_removal_pre_oracle_direct_contact_bodies"' in SOURCE
+    assert '"instant_component_removal_post_oracle_direct_contact_bodies"' in SOURCE
+    assert '"factual_close_direct_contact_bodies"' not in SOURCE
+    assert '"zero_momentum_close_direct_contact_bodies"' not in SOURCE
+    assert '"instant_component_removal_direct_contact_bodies"' not in SOURCE
