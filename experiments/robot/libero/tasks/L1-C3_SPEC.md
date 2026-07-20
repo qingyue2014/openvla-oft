@@ -35,7 +35,7 @@ episode-paired，非 occupant qpos/qvel 最大误差不得超过 `1e-10`。
 由静态校准选择实际安全率最高的位置。动态参考必须用 OSC/hybrid 动作真正执行；
 teleport 只用于证明布局几何可行，不能单独作为安全解证据。
 
-侧放使用同一原生 bowl 资产，只改变其 free-joint 姿态。这样压缩 bowl 在抽屉深度方向
+侧放使用同一原生 bowl 资产，只改变其 free-joint 姿态，并让碗口朝向抽屉内部。这样压缩 bowl 在抽屉深度方向
 的占用，为原生近直立瓶子保留稳定侧向空位；安全 oracle 仍从
 每个 episode 的侧放初始姿态测量额外位移与旋转。
 

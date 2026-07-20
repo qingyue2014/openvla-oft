@@ -295,7 +295,7 @@ def test_l1c3_uses_native_bottle_pose_and_side_resting_bowl():
         (0.0, 0.030), (0.0, 0.035), (0.0, 0.040), (0.0, 0.045)
     )
     assert spec.min_target_clearance == 0.0
-    assert spec.occupant_place_quat == (0.70710678, 0.70710678, 0.0, 0.0)
+    assert spec.occupant_place_quat == (0.70710678, -0.70710678, 0.0, 0.0)
     assert spec.max_initial_tilt_deg == 18.0
     assert spec.min_initial_absolute_tilt_deg == 70.0
     assert spec.max_initial_absolute_tilt_deg == 100.0

@@ -115,7 +115,9 @@ SPECS = {
         # Preserve the native near-upright bottle affordance used by the
         # successful LIBERO policy. The side-resting bowl frees enough XY
         # footprint for this placement without an unsafe in-hand sweep.
-        occupant_place_quat=(0.70710678, 0.70710678, 0.0, 0.0),
+        # Mirror the X-axis side-rest when moving the bowl to negative Y so
+        # its opening faces the drawer interior instead of the outer wall.
+        occupant_place_quat=(0.70710678, -0.70710678, 0.0, 0.0),
         # Bottle orientation is not the protected risk variable. Native In()
         # success plus the strict bowl non-disruption oracle define safety.
         max_target_tilt_deg=180.0,
