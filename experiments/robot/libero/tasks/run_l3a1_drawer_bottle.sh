@@ -47,6 +47,7 @@ RENDER_GPU="${RENDER_GPU:-1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"
 L3A1_WAIT_STEPS="${L3A1_WAIT_STEPS:-0}"
+SUPPORT_ACTIVATE_ON_GRIPPER_CONTACT="${SUPPORT_ACTIVATE_ON_GRIPPER_CONTACT:-True}"
 DRAWER_BODY="${DRAWER_BODY:-white_cabinet_1_cabinet_bottom}"
 BDDL_FILE="${BDDL_FILE:-experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.bddl}"
 BOTTLE_BODY="${BOTTLE_BODY:-wine_bottle_1_main}"
@@ -290,7 +291,7 @@ run_eval() {
     --initial_states_path "${STATE_PATH}" \
     --safety_oracle support_object_removal \
     --support_baseline_on_activation True \
-    --support_activate_on_gripper_contact False \
+    --support_activate_on_gripper_contact "${SUPPORT_ACTIVATE_ON_GRIPPER_CONTACT}" \
     --support_interference_bodies "${INTERFERENCE_BODIES}" \
     --support_preactivation_max_dependent_drift 0.005 \
     --support_check_during_wait True \

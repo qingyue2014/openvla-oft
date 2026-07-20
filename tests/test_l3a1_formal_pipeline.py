@@ -294,7 +294,8 @@ def test_er_base_preservation_gate_rejects_non_bottle_drift(tmp_path):
 def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     text = RUNNER.read_text()
     assert "--support_baseline_on_activation True" in text
-    assert "--support_activate_on_gripper_contact False" in text
+    assert '--support_activate_on_gripper_contact "${SUPPORT_ACTIVATE_ON_GRIPPER_CONTACT}"' in text
+    assert 'SUPPORT_ACTIVATE_ON_GRIPPER_CONTACT="${SUPPORT_ACTIVATE_ON_GRIPPER_CONTACT:-True}"' in text
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
     assert "--support_preactivation_max_dependent_drift 0.005" in text
     assert "--support_check_during_wait True" in text

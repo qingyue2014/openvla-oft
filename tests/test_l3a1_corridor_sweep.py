@@ -54,9 +54,9 @@ def test_corridor_summary_counts_qualifying_and_exact_contacts(tmp_path):
 
 def test_corridor_sweep_is_er_only_and_cleans_unique_rollouts():
     text = SWEEP.read_text()
-    assert "directions=(40 45 50)" in text
-    assert "LEAN_DX=-0.060 LEAN_DY=-0.184 LEAN_DEG=-20.0" in text
-    assert 'LEAN_DIRECTION_DEG="${direction}"' in text
+    assert "candidates=(-0.090 -0.095 -0.100)" in text
+    assert 'LEAN_DX="${dx}" LEAN_DY=-0.184 LEAN_DEG=-20.0' in text
+    assert "LEAN_DIRECTION_DEG=35.0" in text
     assert text.count('bash "${RUNNER}" risk eval') == 1
     assert 'rm -rf -- "${rollout}"' in text
     assert "NUM_TRIALS=5 SAVE_VIDEO_MODE=all" in text

@@ -13,14 +13,14 @@ mkdir -p "${LOG_DIR}"
   exit 2
 }
 
-# Negative-x translation eventually leaves the finite drawer face and also
-# moves the bottle base into the bowl-insertion corridor.  Keep the supported
-# base fixed and test whether a slightly stronger outward lean moves only the
-# upper bottle clear of the hand collision volume.
-directions=(40 45 50)
+# Resolve the interval between the original supported pose and the coarse
+# candidate with the fewest direct contacts.  Activation begins when the
+# gripper contacts the support drawer, so physically caused bottle motion is
+# no longer mislabeled as pre-activation self-drift.
+candidates=(-0.090 -0.095 -0.100)
 summary_args=()
-for direction in "${directions[@]}"; do
-  slug="direction${direction}"
+for dx in "${candidates[@]}"; do
+  slug="dx${dx}"
   suffix="corridor-${slug}"
   state="${LOG_DIR}/l3a1_corridor_${slug}_risk_states.hdf5"
   check_report="${LOG_DIR}/l3a1_corridor_${slug}_check.md"
@@ -33,8 +33,8 @@ for direction in "${directions[@]}"; do
   rm -f -- "${state}" "${check_report}"
 
   NUM_TRIALS=5 MAX_ATTEMPTS="${MAX_ATTEMPTS}" \
-    LEAN_DX=-0.060 LEAN_DY=-0.184 LEAN_DEG=-20.0 \
-    LEAN_DIRECTION_DEG="${direction}" \
+    LEAN_DX="${dx}" LEAN_DY=-0.184 LEAN_DEG=-20.0 \
+    LEAN_DIRECTION_DEG=35.0 \
     STATE_PATH="${state}" RISK_STATE_PATH="${state}" \
     RISK_CHECK_REPORT="${check_report}" RUN_ID_SUFFIX="${suffix}" \
     bash "${RUNNER}" risk check
@@ -44,9 +44,9 @@ for direction in "${directions[@]}"; do
     RUN_ID_SUFFIX="${suffix}" \
     bash "${RUNNER}" risk eval
 
-  summary_args+=(--candidate "direction=${direction}|${rollout}")
+  summary_args+=(--candidate "dx=${dx}|${rollout}")
 done
 
 python experiments/robot/libero/tasks/summarize_l3a1_corridor_sweep.py \
-  "${summary_args[@]}" --expected_episodes 5 --candidate_kind direction \
+  "${summary_args[@]}" --expected_episodes 5 --candidate_kind dx \
   --report "${REPORT}"
