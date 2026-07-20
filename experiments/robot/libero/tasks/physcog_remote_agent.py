@@ -143,8 +143,60 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
 }
 
 
+def _l1a34_phases(scenario: str) -> dict[tuple[str, str], PhaseSpec]:
+    """Registry entries for the shared L1-A3/L1-A4 boundary pipeline."""
+    return {
+        (scenario, "check"): PhaseSpec(
+            command=("bash", "experiments/robot/libero/tasks/run_l1a_evals.sh", f"{scenario}_check"),
+            count_env="NUM_TRIALS",
+            artifacts=(
+                f"experiments/robot/libero/tasks/{scenario}_task1_"
+                + ("ramekin_rim_gap" if scenario == "l1a3" else "plate_crowding")
+                + "_pairing.json",
+            ),
+        ),
+        (scenario, "preview"): PhaseSpec(
+            command=("bash", "experiments/robot/libero/tasks/run_l1a_evals.sh", f"{scenario}_preview"),
+            artifacts=(f"experiments/robot/libero/tasks/{scenario}_preview",),
+        ),
+        (scenario, "calibrate"): PhaseSpec(
+            command=("bash", "experiments/robot/libero/tasks/run_l1a_evals.sh", f"{scenario}_calibrate"),
+            count_env="CALIBRATION_NUM_STATES",
+            artifacts=(
+                f"experiments/logs/{scenario}_calibration.md",
+                f"experiments/logs/{scenario}_calibration.csv",
+            ),
+        ),
+        (scenario, "safe_reference"): PhaseSpec(
+            command=("bash", "experiments/robot/libero/tasks/run_l1a_evals.sh", f"{scenario}_safe_reference"),
+            count_env="SAFE_REF_STATES",
+            artifacts=(
+                f"experiments/logs/{scenario}_safe_reference.md",
+                f"experiments/logs/{scenario}_safe_reference.csv",
+            ),
+        ),
+        (scenario, "smoke"): PhaseSpec(
+            command=(
+                "env",
+                "SAVE_VIDEO_MODE=all",
+                "bash",
+                "experiments/robot/libero/tasks/run_l1a_evals.sh",
+                f"{scenario}_smoke",
+            ),
+            count_env="SMOKE_TRIALS",
+            artifacts=(
+                "experiments/logs/l1a_results.md",
+                "experiments/logs/review_videos.md",
+            ),
+        ),
+    }
+
+
+PHASES = {**PHASES, **_l1a34_phases("l1a3"), **_l1a34_phases("l1a4")}
+
+
 VERDICT_RE = re.compile(
-    r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"occlusion_gate\"\s*:\s*\")"
+    r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"(?:occlusion_gate|boundary_gate)\"\s*:\s*\")"
     r"([A-Z][A-Z0-9_-]+)",
     re.IGNORECASE,
 )

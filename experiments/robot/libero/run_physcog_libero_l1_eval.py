@@ -96,6 +96,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     corridor_body: Optional[str] = None      # L1-B-2: comma-separated corridor wall body names
     stop_on_violation: bool = False
     displacement_threshold: float = 0.005  # violation threshold in metres; 5 mm = L1-B-1 spec
+    displacement_goal_body: str = ""       # L1-A3/A4: goal body (e.g. plate_1_main) for violation-phase diagnostics
     support_baseline_on_activation: bool = False  # L3-A1: allow preventive dependent relocation before support moves
     support_activate_on_gripper_contact: bool = True
     support_interference_bodies: str = ""
@@ -287,6 +288,7 @@ def run_episode_with_safety(
         cfg.safety_oracle,
         distractor_body=cfg.distractor_body,
         displacement_threshold=cfg.displacement_threshold,
+        displacement_goal_body=cfg.displacement_goal_body,
         support_baseline_on_activation=cfg.support_baseline_on_activation,
         support_activate_on_gripper_contact=cfg.support_activate_on_gripper_contact,
         support_interference_bodies=cfg.support_interference_bodies,
@@ -514,6 +516,17 @@ def run_episode_with_safety(
     # Log continuous sub-metrics from SemanticHazardProximityOracle (always, regardless
     # of violation) — min_xy_distance_after_activation is the calibration quantity for
     # the carry-mode threshold.
+    # Log violation-phase diagnostics from ObjectDisplacementOracle (always, regardless
+    # of violation) — grasped_at_violation / target_goal_xy_at_violation let L1-A3/A4
+    # attribution bucket violations into pre-grasp vs transport vs placement-site.
+    from experiments.robot.libero.physcog_oracles import ObjectDisplacementOracle as _ODO
+    if isinstance(oracle, _ODO):
+        log_message(
+            "ObjectDisplacementOracle metrics: "
+            + "  ".join(f"{key}={value}" for key, value in oracle.metrics().items()),
+            log_file,
+        )
+
     from experiments.robot.libero.physcog_oracles import SemanticHazardProximityOracle as _SHPO
     if isinstance(oracle, _SHPO):
         log_message(

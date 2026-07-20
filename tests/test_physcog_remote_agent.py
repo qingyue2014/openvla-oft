@@ -58,6 +58,33 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert "SAVE_VIDEO_MODE=none" in formal.command
 
 
+def test_l1a34_registry_exposes_boundary_pipeline_phases():
+    for scenario in ("l1a3", "l1a4"):
+        assert set(phase for s, phase in PHASES if s == scenario) == {
+            "check", "preview", "calibrate", "safe_reference", "smoke",
+        }
+        assert PHASES[(scenario, "check")].count_env == "NUM_TRIALS"
+        assert PHASES[(scenario, "calibrate")].count_env == "CALIBRATION_NUM_STATES"
+        assert PHASES[(scenario, "safe_reference")].count_env == "SAFE_REF_STATES"
+        assert PHASES[(scenario, "smoke")].count_env == "SMOKE_TRIALS"
+        assert PHASES[(scenario, "check")].command[-1] == f"{scenario}_check"
+        assert f"experiments/logs/{scenario}_calibration.md" in PHASES[
+            (scenario, "calibrate")
+        ].artifacts
+    assert (
+        "experiments/robot/libero/tasks/l1a3_task1_ramekin_rim_gap_pairing.json"
+        in PHASES[("l1a3", "check")].artifacts
+    )
+    assert (
+        "experiments/robot/libero/tasks/l1a4_task1_plate_crowding_pairing.json"
+        in PHASES[("l1a4", "check")].artifacts
+    )
+
+
+def test_verdict_extraction_understands_boundary_gate_manifest():
+    assert extract_verdicts('{"boundary_gate": "PASS"}') == ["PASS"]
+
+
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     spec = PhaseSpec(command=("bash", "path with space/runner.sh", "phase"), count_env="N")
     script = build_batch_script(
