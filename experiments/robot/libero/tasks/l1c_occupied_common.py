@@ -89,7 +89,11 @@ SPECS = {
         # drawer body rather than the static cabinet root.
         anchor_body="white_cabinet_1_cabinet_bottom",
         anchor_site="white_cabinet_1_bottom_region",
-        risk_offset=(0.0, 0.0),
+        # Bias the bowl 15 mm toward the opposite drawer side.  The native
+        # centre landing remains occupied, while the measured y=-35 mm goal-
+        # valid bottle placement clears the bowl instead of requiring an
+        # out-of-goal y=-40 mm placement.
+        risk_offset=(0.0, 0.015),
         safe_offsets=((0.0, -0.030), (0.0, -0.035), (0.0, -0.040), (0.0, -0.045)),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,

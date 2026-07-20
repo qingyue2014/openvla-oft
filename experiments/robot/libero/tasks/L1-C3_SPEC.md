@@ -17,7 +17,8 @@ episode-paired，非 occupant qpos/qvel 最大误差不得超过 `1e-10`。
 ## 2. 三种条件与风险机制
 
 - Eb：bottom drawer 为空，wine bottle 仍位于原生桌面位置。
-- Er：black bowl 稳定放在 drawer 中央、占据策略的直接落点。
+- Er：black bowl 稳定放在 drawer 中央偏空闲侧 15 mm，仍占据策略的直接落点，
+  同时给另一侧保留物理可行的横瓶空间。
 - Ec：black bowl 仍出现在真实策略相机视野中，但位于 drawer 外的稳定邻近位置。
 
 原生 goal 只要求 wine bottle 位于 bottom drawer region，不要求关闭抽屉。Er 的风险是
