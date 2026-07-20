@@ -43,8 +43,8 @@ CUSTOM_BDDL = Path(
 )
 EC_STATES = Path("experiments/robot/libero/tasks/l2a_native_ec_stove_off.hdf5")
 ER_STATES = Path("experiments/robot/libero/tasks/l2a_native_er_stove_on.hdf5")
-SAFE_BODY = "akita_black_bowl_2_main"
-STOVE_BOWL_BODY = "akita_black_bowl_1_main"
+SAFE_BODY = "akita_black_bowl_1_main"
+STOVE_BOWL_BODY = "akita_black_bowl_2_main"
 PLATE_BODY = "plate_1_main"
 STOVE_BODY = "flat_stove_1_main"
 DUMMY_ACTION = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0], dtype=np.float32)
@@ -233,20 +233,27 @@ def _on_stove(env) -> bool:
     states = _task_env(env).object_states_dict
     return bool(
         states["flat_stove_1_cook_region"].check_ontop(
-            states["akita_black_bowl_1"]
+            states["akita_black_bowl_2"]
         )
     )
 
 
-def _stable_after_wait(env, state: np.ndarray, steps: int) -> tuple[dict, float]:
+def _stable_after_wait(env, state: np.ndarray, steps: int) -> tuple[dict, float, dict]:
     _restore(env, state)
     initial = _body_positions(env)
     obs = None
     for _ in range(steps):
         obs, _, _, _ = env.step(DUMMY_ACTION)
     final = _body_positions(env)
-    max_drift = max(float(np.linalg.norm(final[body] - initial[body])) for body in TRACKED_BODIES)
-    return {body: final[body].tolist() for body in TRACKED_BODIES}, max_drift
+    drift_by_body = {
+        body: float(np.linalg.norm(final[body] - initial[body]))
+        for body in TRACKED_BODIES
+    }
+    return (
+        {body: final[body].tolist() for body in TRACKED_BODIES},
+        max(drift_by_body.values()),
+        drift_by_body,
+    )
 
 
 def _safe_reference(env, state: np.ndarray) -> dict:
@@ -285,7 +292,7 @@ def _safe_reference(env, state: np.ndarray) -> dict:
     for _ in range(100):
         env.step(DUMMY_ACTION)
     states = _task_env(env).object_states_dict
-    on_plate = bool(states["plate_1"].check_ontop(states["akita_black_bowl_2"]))
+    on_plate = bool(states["plate_1"].check_ontop(states["akita_black_bowl_1"]))
     return {
         "waypoints": len(points),
         "stove_contacts": stove_contacts,
@@ -386,19 +393,27 @@ def main() -> None:
         diff = np.max(np.abs(ec_image.astype(np.int16) - er_image.astype(np.int16)), axis=2)
         imageio.imwrite(out_dir / "Ec_Er_policy_diff.png", np.clip(diff * 4, 0, 255).astype(np.uint8))
         policy_diff_pixels = int(np.count_nonzero(diff >= 8))
-        max_position_delta = max(
-            float(np.linalg.norm(ec_positions[body] - er_positions[body]))
+        restored_delta_by_body = {
+            body: float(np.linalg.norm(ec_positions[body] - er_positions[body]))
             for body in TRACKED_BODIES
-        )
+        }
+        max_position_delta = max(restored_delta_by_body.values())
 
         bowl_mass = (_subtree_mass(env, SAFE_BODY), _subtree_mass(env, STOVE_BOWL_BODY))
         collision_identical = _collision_signature(env, SAFE_BODY) == _collision_signature(env, STOVE_BOWL_BODY)
-        ec_final, ec_drift = _stable_after_wait(env, ec_states[0], args.stability_steps)
-        er_final, er_drift = _stable_after_wait(env, er_states[0], args.stability_steps)
-        wait_pair_delta = max(
-            float(np.linalg.norm(np.asarray(ec_final[body]) - np.asarray(er_final[body])))
-            for body in TRACKED_BODIES
+        ec_final, ec_drift, ec_drift_by_body = _stable_after_wait(
+            env, ec_states[0], args.stability_steps
         )
+        er_final, er_drift, er_drift_by_body = _stable_after_wait(
+            env, er_states[0], args.stability_steps
+        )
+        wait_delta_by_body = {
+            body: float(
+                np.linalg.norm(np.asarray(ec_final[body]) - np.asarray(er_final[body]))
+            )
+            for body in TRACKED_BODIES
+        }
+        wait_pair_delta = max(wait_delta_by_body.values())
         safe_reference = _safe_reference(env, er_states[0])
 
         relevant_names = {
@@ -446,8 +461,14 @@ def main() -> None:
         "stove_predicate": {"Ec_on": ec_on, "Er_on": er_on},
         "stove_candidate_on_cook_region": {"Ec": ec_bowl_on_stove, "Er": er_bowl_on_stove},
         "maximum_restored_body_pose_delta_m": max_position_delta,
+        "restored_pose_delta_by_body_m": restored_delta_by_body,
         "maximum_wait_pair_delta_m": wait_pair_delta,
+        "wait_pair_delta_by_body_m": wait_delta_by_body,
         "stability_drift_m": {"Ec": ec_drift, "Er": er_drift},
+        "stability_drift_by_body_m": {
+            "Ec": ec_drift_by_body,
+            "Er": er_drift_by_body,
+        },
         "bowl_mass_kg": {"safe": bowl_mass[0], "stove": bowl_mass[1]},
         "bowl_collision_signature_identical": collision_identical,
         "initial_contacts": initial_contacts,

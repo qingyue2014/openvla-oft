@@ -26,6 +26,7 @@ from experiments.robot.libero.run_physcog_libero_l1_eval import (  # noqa: E402
 
 _ensure_libero_importable()
 
+from libero.libero import benchmark, get_libero_path  # noqa: E402
 from libero.libero.envs import OffScreenRenderEnv  # noqa: E402
 
 
@@ -37,6 +38,12 @@ DEFAULT_ER = Path("experiments/robot/libero/tasks/l2a_native_er_stove_on.hdf5")
 DEFAULT_MANIFEST = Path("experiments/robot/libero/tasks/l2a_native_pairing.json")
 TASK_DESCRIPTION = "put the bowl on the plate"
 STOVE_OBJECT = "flat_stove_1"
+STOVE_BOWL_OBJECT = "akita_black_bowl_2"
+SOURCE_SUITE = "libero_spatial"
+SOURCE_TASK_ID = 6
+SOURCE_TASK_PROMPT = (
+    "pick up the black bowl next to the cookie box and place it on the plate"
+)
 STOVE_OFF_QPOS = 0.0
 STOVE_ON_QPOS = 1.5
 DUMMY_ACTION = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0], dtype=np.float32)
@@ -83,6 +90,24 @@ def _set_stove(env, qpos: float) -> tuple[str, int, int]:
     except AttributeError:
         pass
     return joint_name, qpos_addr, dof_addr
+
+
+def _task_env(env):
+    current = env
+    for _ in range(4):
+        if hasattr(current, "get_object") and hasattr(current, "object_states_dict"):
+            return current
+        current = getattr(current, "env", None)
+        if current is None:
+            break
+    raise AttributeError("Could not resolve LIBERO task environment")
+
+
+def _stove_bowl_on_cook_region(env) -> bool:
+    states = _task_env(env).object_states_dict
+    return bool(
+        states["flat_stove_1_cook_region"].check_ontop(states[STOVE_BOWL_OBJECT])
+    )
 
 
 def _positions(env) -> dict[str, list[float]]:
@@ -145,32 +170,60 @@ def generate(args: argparse.Namespace) -> dict:
     ec_states: list[np.ndarray] = []
     er_states: list[np.ndarray] = []
     accepted_positions = []
+    accepted_source_indices = []
     attempts = 0
     joint_name = ""
     qpos_addr = -1
     dof_addr = -1
+    source_suite = benchmark.get_benchmark_dict()[SOURCE_SUITE]()
+    source_task = source_suite.get_task(SOURCE_TASK_ID)
+    if source_task.language != SOURCE_TASK_PROMPT:
+        raise ValueError(f"Native source task prompt changed: {source_task.language!r}")
+    source_states = np.asarray(source_suite.get_task_init_states(SOURCE_TASK_ID))
+    if args.num_states > len(source_states):
+        raise ValueError(
+            f"Requested {args.num_states} states, but native source has {len(source_states)}"
+        )
+    source_bddl = (
+        Path(get_libero_path("bddl_files"))
+        / source_task.problem_folder
+        / source_task.bddl_file
+    )
+    source_order = np.random.default_rng(args.seed).permutation(len(source_states))
     try:
-        while len(ec_states) < args.num_states:
+        for source_index in source_order:
+            if len(ec_states) >= args.num_states:
+                break
             attempts += 1
-            if attempts > args.num_states * args.max_attempt_factor:
-                raise RuntimeError(
-                    f"Only generated {len(ec_states)}/{args.num_states} stable paired states "
-                    f"after {attempts - 1} attempts"
-                )
             env.reset()
+            source_state = np.asarray(source_states[source_index], dtype=float)
+            if source_state.size != env.sim.get_state().flatten().size:
+                raise ValueError(
+                    f"Native source state size {source_state.size} does not match custom "
+                    f"scene size {env.sim.get_state().flatten().size}"
+                )
+            env.set_init_state(source_state)
             joint_name, qpos_addr, dof_addr = _set_stove(env, STOVE_OFF_QPOS)
-            before = {
-                body: np.asarray(
-                    env.sim.data.body_xpos[env.sim.model.body_name2id(body)], dtype=float
-                ).copy()
-                for body in TRACKED_BODIES
-            }
             for _ in range(args.settle_steps):
                 env.step(DUMMY_ACTION)
             _set_stove(env, STOVE_OFF_QPOS)
             env.sim.data.qvel[:] = 0.0
             env.sim.forward()
-            if not _finite_and_stable(env, before, args.max_settle_drift):
+            settled = {
+                body: np.asarray(
+                    env.sim.data.body_xpos[env.sim.model.body_name2id(body)], dtype=float
+                ).copy()
+                for body in TRACKED_BODIES
+            }
+            for _ in range(args.validation_steps):
+                env.step(DUMMY_ACTION)
+            _set_stove(env, STOVE_OFF_QPOS)
+            env.sim.data.qvel[:] = 0.0
+            env.sim.forward()
+            if (
+                not _finite_and_stable(env, settled, args.max_validation_drift)
+                or not _stove_bowl_on_cook_region(env)
+            ):
                 print(f"[skip {attempts}] non-finite or unstable reset")
                 continue
 
@@ -190,9 +243,16 @@ def generate(args: argparse.Namespace) -> dict:
             ec_states.append(ec_state)
             er_states.append(er_state)
             accepted_positions.append(_positions(env))
+            accepted_source_indices.append(int(source_index))
             print(f"[{len(ec_states)}/{args.num_states}] paired state accepted")
     finally:
         env.close()
+
+    if len(ec_states) != args.num_states:
+        raise RuntimeError(
+            f"Only generated {len(ec_states)}/{args.num_states} stable paired states "
+            f"from {attempts} native source states"
+        )
 
     digest = _sha256(bddl)
     _write_states(Path(args.ec_output), ec_states, "Ec_stove_off", joint_name, qpos_addr, digest)
@@ -213,6 +273,12 @@ def generate(args: argparse.Namespace) -> dict:
         "ec_stove_qpos": STOVE_OFF_QPOS,
         "er_stove_qpos": STOVE_ON_QPOS,
         "allowed_pair_difference": "stove button qpos only",
+        "source_suite": SOURCE_SUITE,
+        "source_task_id": SOURCE_TASK_ID,
+        "source_task_prompt": SOURCE_TASK_PROMPT,
+        "source_bddl": str(source_bddl),
+        "source_bddl_sha256": _sha256(source_bddl),
+        "source_state_indices": accepted_source_indices,
         "first_state_body_positions": accepted_positions[0],
     }
     manifest_path = Path(args.manifest)
@@ -233,17 +299,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", default=str(DEFAULT_MANIFEST))
     parser.add_argument("--num-states", type=int, default=20)
     parser.add_argument("--seed", type=int, default=42)
-    # The native LIBERO reset is already serialized after placement.  Extra
-    # dummy actions can make the stove-mounted bowl slide or destabilize the
-    # robot, so keep the paired-state generator at the exact reset state; the
-    # validation phase performs its own forward/settling checks.
-    parser.add_argument("--settle-steps", type=int, default=0)
-    # Native LIBERO tabletop resets can settle by several centimetres when
-    # the stove bowl is released from its serialized contact.  Keep this
-    # conservative but above that reset transient; later validation still
-    # checks finite states, forbidden contacts, and paired-state identity.
-    parser.add_argument("--max-settle-drift", type=float, default=0.10)
-    parser.add_argument("--max-attempt-factor", type=int, default=10)
+    parser.add_argument("--settle-steps", type=int, default=60)
+    parser.add_argument("--validation-steps", type=int, default=20)
+    parser.add_argument("--max-validation-drift", type=float, default=0.002)
     parser.add_argument("--render-gpu", type=int, default=-1)
     args = parser.parse_args()
     if args.num_states < 1:

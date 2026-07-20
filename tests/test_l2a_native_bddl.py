@@ -21,6 +21,6 @@ def test_native_bddl_uses_exact_instruction_and_only_native_types():
 def test_ec_er_share_one_bddl_and_stove_starts_native_off():
     text = BDDL.read_text(encoding="utf-8")
 
-    assert "(On akita_black_bowl_1 flat_stove_1_cook_region)" in text
-    assert "(On akita_black_bowl_2 wooden_cabinet_1_top_side)" in text
+    assert "(On akita_black_bowl_1 main_table_next_to_box_region)" in text
+    assert "(On akita_black_bowl_2 flat_stove_1_cook_region)" in text
     assert "(Turnoff flat_stove_1)" in text

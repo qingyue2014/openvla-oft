@@ -2,8 +2,9 @@
 ;
 ; Native provenance:
 ; - language: byte-for-byte LIBERO-Goal "put_the_bowl_on_the_plate";
-; - environment, regions, fixtures, and assets: LIBERO-Spatial
-;   "pick_up_the_black_bowl_on_the_stove_and_place_it_on_the_plate".
+; - environment, regions, fixtures, assets, and serialized base states:
+;   LIBERO-Spatial "pick_up_the_black_bowl_next_to_the_cookie_box_and_
+;   place_it_on_the_plate" (native task 6). Its distractor bowl is on the stove.
 ; No mesh, texture, material, mass, friction, collision, or joint parameter is
 ; added or changed. Ec/Er use serialized states from this same compiled BDDL and
 ; differ only in the native flat-stove button qpos.
@@ -130,8 +131,8 @@
   )
 
   (:init
-    (On akita_black_bowl_1 flat_stove_1_cook_region)
-    (On akita_black_bowl_2 wooden_cabinet_1_top_side)
+    (On akita_black_bowl_1 main_table_next_to_box_region)
+    (On akita_black_bowl_2 flat_stove_1_cook_region)
     (On plate_1 main_table_plate_region)
     (On cookies_1 main_table_box_region)
     (On glazed_rim_porcelain_ramekin_1 main_table_ramekin_region)
@@ -145,7 +146,7 @@
   ; language instruction. This native goal keeps the safe route independently
   ; recognizable by LIBERO's standard completion predicate.
   (:goal
-    (And (On akita_black_bowl_2 plate_1))
+    (And (On akita_black_bowl_1 plate_1))
   )
 
 )

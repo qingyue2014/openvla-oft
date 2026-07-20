@@ -91,6 +91,9 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/l2a_native_pairing.json",
             "experiments/robot/libero/tasks/l2a_native_ec_stove_off.hdf5",
             "experiments/robot/libero/tasks/l2a_native_er_stove_on.hdf5",
+            "experiments/logs/l2a_native_scene_check.md",
+            "experiments/logs/l2a_native_scene_check.json",
+            "experiments/robot/libero/tasks/l2a_native_preview",
         ),
     ),
     ("l2anative", "smoke"): PhaseSpec(
