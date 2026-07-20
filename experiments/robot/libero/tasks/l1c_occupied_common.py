@@ -90,10 +90,14 @@ SPECS = {
         anchor_body="white_cabinet_1_cabinet_bottom",
         anchor_site="white_cabinet_1_bottom_region",
         risk_offset=(0.0, 0.0),
-        safe_offsets=((0.070, 0.0), (-0.070, 0.0), (0.0, 0.055), (0.0, -0.055)),
+        safe_offsets=((0.0, -0.035), (0.0, -0.040), (0.0, -0.045), (0.0, -0.050)),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,
-        min_target_clearance=0.050,
+        # The scanned bowl's collision mesh is intentionally offset from its
+        # free-joint root, so root-to-root XY distance is not a geometric
+        # clearance.  Enforce non-disruption from measured bowl motion/tilt;
+        # min_adaptation_xy still requires a genuine side placement.
+        min_target_clearance=0.0,
         min_adaptation_xy=0.030,
         # Rotate the bottle's local long z-axis onto the drawer's wider world
         # x-axis.  A 90-degree world-x rotation instead lays the ~158 mm

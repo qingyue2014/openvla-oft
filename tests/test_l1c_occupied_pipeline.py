@@ -285,6 +285,10 @@ def test_l1c3_horizontal_bottle_aligns_with_the_drawer_wide_axis():
 
     assert np.allclose(np.abs(long_axis_world), [1.0, 0.0, 0.0], atol=1e-6)
     assert spec.anchor_body == "white_cabinet_1_cabinet_bottom"
+    assert spec.safe_offsets == (
+        (0.0, -0.035), (0.0, -0.040), (0.0, -0.045), (0.0, -0.050)
+    )
+    assert spec.min_target_clearance == 0.0
 
 
 def test_l1c3_placement_uses_the_oriented_goal_box_floor():
