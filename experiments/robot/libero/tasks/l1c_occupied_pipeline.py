@@ -114,9 +114,13 @@ def _stable_occupant(env, spec, initial_pos=None, initial_tilt=None):
     drift = 0.0 if initial_pos is None else float(np.linalg.norm(pos - initial_pos))
     tilt_change = 0.0 if initial_tilt is None else abs(tilt - initial_tilt)
     linear_speed, angular_speed = body_speeds(env, spec.occupant_body)
+    absolute_tilt_limit = (
+        spec.max_initial_absolute_tilt_deg or spec.max_initial_tilt_deg
+    )
     return (
         _finite(env)
         and drift <= spec.max_initial_drift
+        and tilt <= absolute_tilt_limit
         and tilt_change <= spec.max_initial_tilt_deg
         and linear_speed <= spec.max_initial_linear_speed
         and angular_speed <= spec.max_initial_angular_speed

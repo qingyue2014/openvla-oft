@@ -298,6 +298,9 @@ def test_l1c3_horizontal_bottle_aligns_with_the_drawer_wide_axis():
         (0.0, -0.015), (0.0, -0.020), (0.0, -0.025), (0.0, -0.030)
     )
     assert spec.min_target_clearance == 0.0
+    assert spec.occupant_place_quat == (0.70710678, 0.70710678, 0.0, 0.0)
+    assert spec.max_initial_tilt_deg == 18.0
+    assert spec.max_initial_absolute_tilt_deg == 100.0
 
 
 def test_l1c3_placement_uses_the_oriented_goal_box_floor():

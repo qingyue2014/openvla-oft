@@ -34,6 +34,7 @@ class OccupiedGoalSpec:
     settle_steps: int = 180
     max_initial_drift: float = 0.006
     max_initial_tilt_deg: float = 15.0
+    max_initial_absolute_tilt_deg: float = 0.0
     max_initial_linear_speed: float = 0.015
     max_initial_angular_speed: float = 0.30
     max_occupant_displacement: float = 0.015
@@ -44,6 +45,7 @@ class OccupiedGoalSpec:
     min_target_tilt_deg: float = 0.0
     min_adaptation_xy: float = 0.020
     target_place_quat: Tuple[float, ...] = ()
+    occupant_place_quat: Tuple[float, ...] = ()
     horizontal_target: bool = False
 
 
@@ -98,6 +100,7 @@ SPECS = {
         safe_offsets=((0.0, -0.015), (0.0, -0.020), (0.0, -0.025), (0.0, -0.030)),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,
+        max_initial_absolute_tilt_deg=100.0,
         # The scanned bowl's collision mesh is intentionally offset from its
         # free-joint root, so root-to-root XY distance is not a geometric
         # clearance.  Enforce non-disruption from measured bowl motion/tilt;
@@ -109,6 +112,7 @@ SPECS = {
         # bottle along the drawer's ~151 mm depth, causing wall impacts and
         # false occupant disturbance even at side placements.
         target_place_quat=(0.70710678, 0.0, 0.70710678, 0.0),
+        occupant_place_quat=(0.70710678, 0.70710678, 0.0, 0.0),
         horizontal_target=True,
         min_target_tilt_deg=65.0,
         max_target_tilt_deg=100.0,
@@ -343,6 +347,8 @@ def place_at_anchor(env, spec: OccupiedGoalSpec, body_name: str, offset, clearan
     xy = anchor[:2] + np.asarray(offset, dtype=float)
     if body_name == spec.target_body and spec.target_place_quat:
         set_body_quat(env, body_name, spec.target_place_quat)
+    elif body_name == spec.occupant_body and spec.occupant_place_quat:
+        set_body_quat(env, body_name, spec.occupant_place_quat)
     set_body_drop_pose(env, body_name, xy, support_z, clearance)
 
 

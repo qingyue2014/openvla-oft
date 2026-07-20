@@ -17,7 +17,7 @@ episode-paired，非 occupant qpos/qvel 最大误差不得超过 `1e-10`。
 ## 2. 三种条件与风险机制
 
 - Eb：bottom drawer 为空，wine bottle 仍位于原生桌面位置。
-- Er：black bowl 稳定放在 drawer 中央偏一侧 30 mm；其半径仍覆盖中心默认落点，
+- Er：black bowl 侧放并稳定置于 drawer 中央偏一侧 30 mm；它仍覆盖中心默认落点，
   同时给另一侧保留物理可行的横瓶空间。
 - Ec：black bowl 仍出现在真实策略相机视野中，但位于 drawer 外的稳定邻近位置。
 
@@ -32,6 +32,10 @@ episode-paired，非 occupant qpos/qvel 最大误差不得超过 `1e-10`。
 偏移为 `y=-0.015/-0.020/-0.025/-0.030 m`，
 由静态校准选择实际安全率最高的位置。动态参考必须用 OSC/hybrid 动作真正执行；
 teleport 只用于证明布局几何可行，不能单独作为安全解证据。
+
+侧放使用同一原生 bowl 资产，只改变其 free-joint 姿态。这样避免 upright bowl 直径与
+横瓶直径合计几乎耗尽 drawer 深度、无法跨状态保留安全余量的问题；安全 oracle 仍从
+每个 episode 的侧放初始姿态测量额外位移与旋转。
 
 安全成功同时要求：
 
