@@ -1212,6 +1212,7 @@ def generate_states(
                     "removal does not trigger the oracle: "
                     f"displacement={instant_removal_response['displacement_m']:.4f}m, "
                     f"drop={instant_removal_response['height_drop_m']:.4f}m, "
+                    f"settled_tilt={tilt_deg:.2f}deg, "
                     f"tilt_delta={instant_removal_response['tilt_delta_deg']:.2f}deg"
                 )
                 continue
