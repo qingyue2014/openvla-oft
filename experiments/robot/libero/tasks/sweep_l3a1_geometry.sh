@@ -3,6 +3,7 @@ set -uo pipefail
 
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 REPORT="${LOG_DIR}/l3a1_geometry_sweep.md"
+MAX_ATTEMPTS="${GEOMETRY_SWEEP_MAX_ATTEMPTS:-12}"
 mkdir -p "${LOG_DIR}"
 
 candidates=(
@@ -27,7 +28,7 @@ for spec in "${candidates[@]}"; do
   rm -f "${output}" "${log}"
   set +e
   python experiments/robot/libero/tasks/generate_l3a1_drawer_bottle_initial_states.py \
-    --output "${output}" --variant risk --num_states 1 --max_attempts 50 \
+    --output "${output}" --variant risk --num_states 1 --max_attempts "${MAX_ATTEMPTS}" \
     --lean_dx "${dx}" --lean_dy "${dy}" --lean_deg "${deg}" \
     --lean_direction_deg "${direction}" > "${log}" 2>&1
   rc=$?
