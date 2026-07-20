@@ -223,6 +223,15 @@ def _run_episode(env, state, args, scenario, episode_idx, grasp_xy_offset,
         "safe_success": int(safe_success),
         "failure_stage": getattr(failure, "stage", "") if failure is not None else "",
         "reason": reason,
+        "failure_initial_error_m": getattr(failure, "initial_error_m", float("nan")),
+        "failure_best_error_m": getattr(failure, "best_error_m", float("nan")),
+        "failure_final_error_m": getattr(failure, "final_error_m", float("nan")),
+        "failure_final_eef_xyz": ",".join(
+            f"{value:.4f}" for value in getattr(failure, "final_eef_xyz", ())
+        ),
+        "failure_target_eef_xyz": ",".join(
+            f"{value:.4f}" for value in getattr(failure, "target_eef_xyz", ())
+        ),
         "gripper_close_sign": close_sign,
         "gripper_aperture_after_minus": aperture_minus,
         "gripper_aperture_after_plus": aperture_plus,
@@ -308,6 +317,14 @@ def run(args):
                     f"safe={row['safe_success']} native={row['native_task_success']} "
                     f"bystander_moved={row['bystander_displacement_m']:.4f}m "
                     f"stage={row['failure_stage'] or '-'} reason={row['reason'] or '-'}"
+                    + (
+                        f" best_err={row['failure_best_error_m']:.3f}"
+                        f" final_err={row['failure_final_error_m']:.3f}"
+                        f" eef=({row['failure_final_eef_xyz']})"
+                        f" tgt=({row['failure_target_eef_xyz']})"
+                        if row["failure_stage"]
+                        else ""
+                    )
                 )
                 if label == "unsafe" and state_summary["unsafe_bad"] is None:
                     # The first default-action attempt is the calibration probe.
