@@ -108,7 +108,7 @@ def _calibrate_gripper(env, obs, oracle, recorder, step, args):
     return obs, step, close, opened, failure
 
 
-def _attempt(env, state, episode, offset, args):
+def _attempt(env, state, episode, offset, pitch_command, args):
     obs = env.reset()
     obs = env.set_init_state(state)
     oracle = NativeSemanticHazardChoiceOracle(
@@ -128,6 +128,17 @@ def _attempt(env, state, episode, offset, args):
     high_source = np.array([source[0] + offset[0], source[1] + offset[1], transit_z])
     approach = source + np.array([offset[0], offset[1], args.approach_height])
     grasp = source + np.array([offset[0], offset[1], args.grasp_height])
+    if failure is None:
+        for _ in range(args.orientation_steps):
+            action = _position_action(
+                _eef_pos(obs), high_source, opened, args.position_scale, args.max_position_command
+            )
+            action[4] = pitch_command
+            obs, status = _advance(env, obs, oracle, recorder, action, step)
+            step += 1
+            if status.violated:
+                failure = status
+                break
     if failure is None:
         obs, step, failure = _move_to(
             env, obs, oracle, recorder, high_source, opened, step, args, "high_transit_to_source"
@@ -206,6 +217,7 @@ def _attempt(env, state, episode, offset, args):
             "failure_reason": reason,
             "failure_stage": stage,
             "grasp_offset_xy": list(offset),
+            "pitch_command": pitch_command,
             "grasp_lift_m": grasp_lift,
             **metrics,
         },
@@ -220,6 +232,7 @@ def _attempt(env, state, episode, offset, args):
         "failure_final_error_m": final_error,
         "grasp_offset_x_m": float(offset[0]),
         "grasp_offset_y_m": float(offset[1]),
+        "pitch_command": pitch_command,
         "grasp_lift_m": grasp_lift,
         "choice": metrics["semantic_choice"],
         "goal_stable_steps": metrics["goal_stable_steps"],
@@ -256,15 +269,26 @@ def run(args) -> str:
                 np.array([0, -0.6 * half[1]]),
             ]
             if selected is not None:
-                offsets = [selected] + [item for item in offsets if not np.allclose(item, selected)]
-            row = None
+                offsets = [selected[0]] + [item for item in offsets if not np.allclose(item, selected[0])]
+            candidates = []
             for offset in offsets:
-                row = _attempt(env, state, episode, offset, args)
-                print(f"episode={episode} offset={offset.tolist()} result={row}")
+                pitch_commands = (
+                    [selected[1]] if selected is not None and np.allclose(offset, selected[0])
+                    else [0.1, -0.1, 0.2, -0.2, 0.0]
+                )
+                candidates.extend((offset, pitch) for pitch in pitch_commands)
+            row = None
+            for offset, pitch in candidates:
+                row = _attempt(env, state, episode, offset, pitch, args)
+                print(
+                    f"episode={episode} offset={offset.tolist()} pitch={pitch:+.2f} result={row}"
+                )
                 if row["safe_success"]:
-                    selected = offset.copy()
+                    selected = (offset.copy(), pitch)
                     break
-                if row["failure_stage"] not in {"grasp", "verify_grasp", "lift"}:
+                if row["failure_stage"] not in {
+                    "high_transit_to_source", "approach", "grasp", "verify_grasp", "lift"
+                }:
                     break
             rows.append(row)
     finally:
@@ -317,9 +341,10 @@ def main() -> None:
     parser.add_argument("--max-waypoint-steps", type=int, default=100)
     parser.add_argument("--wait-steps", type=int, default=10)
     parser.add_argument("--gripper-probe-steps", type=int, default=8)
-    parser.add_argument("--approach-height", type=float, default=0.12)
+    parser.add_argument("--approach-height", type=float, default=0.17)
     parser.add_argument("--transit-height", type=float, default=0.27)
     parser.add_argument("--grasp-height", type=float, default=0.015)
+    parser.add_argument("--orientation-steps", type=int, default=8)
     parser.add_argument("--grasp-seat-steps", type=int, default=15)
     parser.add_argument("--grasp-seat-max-command", type=float, default=0.08)
     parser.add_argument("--lift-height", type=float, default=0.12)
