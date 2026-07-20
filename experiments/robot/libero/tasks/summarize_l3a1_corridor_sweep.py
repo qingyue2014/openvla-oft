@@ -68,15 +68,28 @@ def _contact_geoms(rows: list[dict[str, Any]]) -> str:
     return "<br>".join(sorted(pairs)) if pairs else "—"
 
 
-def write_report(candidates: list[tuple[str, Path]], expected: int, report: Path) -> None:
+def write_report(
+    candidates: list[tuple[str, Path]],
+    expected: int,
+    report: Path,
+    candidate_kind: str = "dx",
+) -> None:
+    if candidate_kind not in {"dx", "direction"}:
+        raise ValueError(f"unsupported candidate kind: {candidate_kind}")
     loaded = [(dx, path, _load(path, expected)) for dx, path in candidates]
+    parameter_label = "lean dx" if candidate_kind == "dx" else "lean direction (deg)"
+    fixed_geometry = (
+        "dy=-0.184, lean=-20 deg, direction=35 deg"
+        if candidate_kind == "dx"
+        else "dx=-0.060, dy=-0.184, lean=-20 deg"
+    )
     lines = [
         "# L3-A1 policy-corridor sweep",
         "",
-        "Fixed geometry: dy=-0.184, lean=-20 deg, direction=35 deg. "
+        f"Fixed geometry: {fixed_geometry}. "
         "All conditions use the unchanged formal generation and direct-contact gates.",
         "",
-        "| lean dx | episodes | qualifying | direct | exact contact geom pair(s) |",
+        f"| {parameter_label} | episodes | qualifying | direct | exact contact geom pair(s) |",
         "| ---: | ---: | ---: | ---: | --- |",
     ]
     for dx, _, rows in loaded:
@@ -88,7 +101,7 @@ def write_report(candidates: list[tuple[str, Path]], expected: int, report: Path
     lines.extend(("", "## Episode audit", ""))
     for dx, path, rows in loaded:
         lines.extend((
-            f"### dx={dx}",
+            f"### {candidate_kind}={dx}",
             "",
             f"Trajectory index: `{_index_path(path)}`",
             "",
@@ -116,15 +129,22 @@ def main() -> None:
         help="Candidate encoded as dx=<value>|<rollout-or-trajectory-directory>.",
     )
     parser.add_argument("--expected_episodes", type=int, default=5)
+    parser.add_argument("--candidate_kind", choices=("dx", "direction"), default="dx")
     parser.add_argument("--report", required=True)
     args = parser.parse_args()
     candidates = []
     for spec in args.candidate:
         label, separator, raw_path = spec.partition("|")
-        if not separator or not label.startswith("dx=") or not raw_path:
+        prefix = f"{args.candidate_kind}="
+        if not separator or not label.startswith(prefix) or not raw_path:
             parser.error(f"invalid --candidate {spec!r}")
-        candidates.append((label.removeprefix("dx="), Path(raw_path)))
-    write_report(candidates, args.expected_episodes, Path(args.report))
+        candidates.append((label.removeprefix(prefix), Path(raw_path)))
+    write_report(
+        candidates,
+        args.expected_episodes,
+        Path(args.report),
+        candidate_kind=args.candidate_kind,
+    )
     print(f"PASS_L3A1_CORRIDOR_SWEEP_COMPLETED report={args.report}")
 
 
