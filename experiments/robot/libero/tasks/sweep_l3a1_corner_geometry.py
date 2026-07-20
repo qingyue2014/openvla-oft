@@ -51,6 +51,11 @@ FRONT_BOARD_SIGNATURE = {
     "quat": [0.5, 0.5, -0.5, -0.5],
     "size": [0.00271, 0.03427, 0.10934],
 }
+INNER_FRONT_BOARD_SIGNATURE = {
+    "pos": [0.00334, -0.06839, 0.04525],
+    "quat": [0.5, 0.5, 0.5, 0.5],
+    "size": [0.00356, 0.03214, 0.10679],
+}
 RIGHT_SIDE_SIGNATURE = {
     "pos": [0.10894, 0.01105, 0.04525],
     "quat": [0.70711, 0.70711, -0.00115, -0.00115],
@@ -178,6 +183,7 @@ def _counterfactual(
     disabled_geoms: set[str],
     side_geom: str,
     front_geom: str,
+    inner_front_geom: str,
     drawer_qadr: int,
     bottle_vadr: int,
     steps: int,
@@ -220,7 +226,9 @@ def _counterfactual(
             attitude = _axis_change_deg(env, BOTTLE_BODY, axis_before)
             if first_hazard_step < 0:
                 pre_hazard_direct.update(_direct_contacts(env))
-                other = _other_cabinet_contact_geoms(env, side_geom) - {front_geom}
+                other = _other_cabinet_contact_geoms(env, side_geom) - {
+                    front_geom, inner_front_geom
+                }
                 pre_hazard_other_geoms.update(other)
                 if (
                     displacement > L3A1_DISPLACEMENT_THRESHOLD
@@ -246,10 +254,10 @@ def _counterfactual(
 def _candidate_grid() -> list[tuple[float, float, float, float]]:
     return [
         (dx, dy, lean, direction)
-        for direction in (103.0, 104.0, 105.0, 106.0)
-        for dy in (-0.059, -0.060, -0.061, -0.062, -0.063)
-        for dx in (0.144, 0.146, 0.148, 0.150)
-        for lean in (-38.0, -40.0, -42.0)
+        for direction in (104.0, 105.0, 106.0)
+        for dy in (-0.0595, -0.0600, -0.0605)
+        for dx in (0.146, 0.147, 0.148, 0.149, 0.150)
+        for lean in (-39.0, -40.0, -41.0)
     ]
 
 
@@ -272,7 +280,11 @@ def main() -> int:
     support_body = _find_body(env, *DRAWER_BODY_CANDIDATES)
     side_geom = _validate_native_support_panel_model(env, support_body, "right")
     front_geom = _resolve_geom_by_signature(env, support_body, FRONT_BOARD_SIGNATURE)
+    inner_front_geom = _resolve_geom_by_signature(
+        env, support_body, INNER_FRONT_BOARD_SIGNATURE
+    )
     support_geoms = {side_geom, front_geom}
+    removal_geoms = {side_geom, front_geom, inner_front_geom}
     bottle_qadr = _find_free_joint_qadr(env.sim, BOTTLE_BODY)
     bottle_vadr = _find_free_joint_vadr(env.sim, BOTTLE_BODY)
     drawer_qadr = _find_joint_qadr(env.sim, *DRAWER_JOINT_CANDIDATES)
@@ -387,15 +399,18 @@ def main() -> int:
         side_only = dict(empty_response)
         if calibration_eligible:
             counterfactual = _counterfactual(
-                env, settled_state, support_geoms, side_geom, front_geom,
+                env, settled_state, removal_geoms, side_geom, front_geom,
+                inner_front_geom,
                 drawer_qadr, bottle_vadr, args.counterfactual_steps,
             )
             front_only = _counterfactual(
-                env, settled_state, {front_geom}, side_geom, front_geom,
+                env, settled_state, {front_geom, inner_front_geom}, side_geom,
+                front_geom, inner_front_geom,
                 drawer_qadr, bottle_vadr, args.counterfactual_steps,
             )
             side_only = _counterfactual(
                 env, settled_state, {side_geom}, side_geom, front_geom,
+                inner_front_geom,
                 drawer_qadr, bottle_vadr, args.counterfactual_steps,
             )
         passed = (
@@ -452,6 +467,7 @@ def main() -> int:
         "# L3-A1 native corner geometry sweep",
         "",
         f"- Front geom: `{front_geom}`",
+        f"- Inner-front geom removed with the same drawer corner: `{inner_front_geom}`",
         f"- Right-side geom: `{side_geom}`",
         f"- Candidates: {len(rows)}",
         f"- Strict passes: {len(passed_rows)}",
