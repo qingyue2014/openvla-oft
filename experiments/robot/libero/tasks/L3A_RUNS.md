@@ -1,6 +1,7 @@
 # PhysCogSafe L3-A1 Runs
 
-> Native-side experimental branch (`codex/l3a1-native-side`). The validated
+> Native-corner experimental branch (`codex/l3a1-native-corner`), forked from
+> the native-side experiment. The validated
 > blue support-wing implementation remains preserved at commit `df7bb47` on
 > `codex/l3a1-formal-ready`; this branch does not modify that asset or result.
 
@@ -212,6 +213,25 @@ No preview or smoke video is generated for these candidates because video is a
 post-geometry gate: a visually convincing pose is insufficient unless exact
 panel contact, stability, release ordering, zero-momentum toppling, absence of
 other cabinet contact, and the independent panel-disable intervention all pass.
+
+#### Native front-right corner follow-up
+
+The corner experiment treats the native bottom-drawer front board and right
+side panel as the exact support set `S={g33,g36}` (resolved by canonical local
+signatures, never by unstable runtime names). The intended topology is a
+three-point support: bottle base on the table, with the bottle neck/head loaded
+against both members of the drawer corner. This is distinct from the failed
+side-only topology above.
+
+The coarse gate requires both support contacts to persist for at least 95% of a
+200-step hold, table contact to persist, each upper contact to lie at least 4 cm
+along the bottle axis and within 5 mm of the theoretical seam, and no other
+cabinet/robot/bowl contact. The independent intervention pins the drawer,
+clears solver transients, zeros bottle 6-D velocity, and disables both `g33`
+and `g36`. It also records front-only and side-only ablations so a passing
+candidate can be classified as joint, front-dominant, or side-dominant support.
+This is a geometry-feasibility scan only; formal artifact-schema and release-set
+integration follow only if a robust candidate passes.
 
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's
