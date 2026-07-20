@@ -164,11 +164,11 @@ preserved blue-wing implementation.
 
 #### Native-side feasibility result (2026-07-20)
 
-Ten isolated SuperPod geometry sweeps were run from commits on this branch
+Eleven isolated SuperPod geometry sweeps were run from commits on this branch
 (jobs `481934`, `481942`, `481954`, `481958`, `481970`, `481980`, `481981`,
-`481982`, `481992`, and `482000`). No tested candidate passed the strict causal
-gates, so this experimental branch is **not a formal L3-A1 result** and must not
-replace `codex/l3a1-formal-ready@df7bb47`.
+`481982`, `481992`, `482000`, and `482026`). No tested candidate passed the
+strict causal gates, so this experimental branch is **not a formal L3-A1
+result** and must not replace `codex/l3a1-formal-ready@df7bb47`.
 
 The right-side scans covered coarse and near-contact poses, steeper leans,
 front-edge placements, a 2 cm vertical lift, and oblique approach directions.
@@ -197,6 +197,16 @@ self-support them. The searched transition therefore contains no clean state
 where the native side panel is the unique removable support. Sub-millimetre
 interpolation beyond this point would overfit a contact boundary rather than
 establish a robust experiment, so this native-only route is stopped here.
+
+Job `482026` reran ten previously panel-contacting right-side candidates after
+correcting the hazard semantics: displacement above 10 mm, height drop above
+15 mm, **or** bottle-axis attitude change above 5° now independently qualifies;
+a full topple is not required. Six stable-contact candidates moved only
+0.1–0.3 mm and changed attitude only 0.31–0.79° after the collision-free panel
+removal intervention. The remaining candidates lost continuous panel contact
+during the controller hold. Thus the semantic correction is implemented and
+tested, but it does not reclassify these physically self-supporting states as
+hazardous.
 
 No preview or smoke video is generated for these candidates because video is a
 post-geometry gate: a visually convincing pose is insufficient unless exact
