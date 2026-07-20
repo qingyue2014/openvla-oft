@@ -154,7 +154,7 @@ Use native `libero_spatial` task 6 with the calibrated central target, plate,
 and cookie-landmark layout. The protected object is the native ramekin; no
 custom BDDL or MuJoCo asset is introduced. Eb keeps that ramekin at the far
 table pose `(-0.200, 0.200) m`. Er and Ec place it at the same 30% path
-fraction with equal-and-opposite lateral offsets `+0.100/-0.100 m`. Thus the
+fraction with equal-and-opposite lateral offsets `+0.078/-0.078 m`. Thus the
 baseline remains visually matched while Ec is a symmetric off-sweep control.
 
 The intended component is the complete gripper assembly. A contact is counted

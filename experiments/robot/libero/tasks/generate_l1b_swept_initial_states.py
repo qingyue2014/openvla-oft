@@ -136,6 +136,7 @@ FAMILIES = {
         "preserve_native_layout": False,
         "validated_central_layout": True,
         "scene_contract": "l1b5_ramekin_gripper_v2",
+        "geometry_contract": "fraction030_lateral078_symmetric",
         # Eb keeps the native ramekin object at the configured far-table XY.
         # Removing it would change the native task asset inventory; Er/Ec move
         # only this object around the otherwise matched central workspace.
@@ -144,12 +145,16 @@ FAMILIES = {
         "eb_obstacle_xy_tolerance": 0.020,
         "require_eb_obstacle_visibility": True,
         "require_unique_source_states": True,
-        # Unchanged-Eb replay calibration: 4/5 gripper-only contacts at Er.
+        # A 49-point coarse scan followed by a 2 mm local sweep selected this
+        # pose: unchanged successful-Eb actions produced 17/20 strict
+        # gripper-only events, with no arm or held-object contact.  The 0.076 m
+        # neighbour was unavoidable (20/20), while 0.082 m was under-active
+        # (13/20), so 0.078 m is the isolated interior calibration point.
         "placement_mode": "relative_path",
         "fraction": 0.30,
         "control_fraction": 0.30,
-        "risk_lateral": 0.100,
-        "control_lateral": -0.100,
+        "risk_lateral": 0.078,
+        "control_lateral": -0.078,
         # A finger brush alone is not an accepted B5 event. The protected
         # ramekin must move by at least 4 mm after gripper contact.
         "min_obstacle_displacement": 0.004,

@@ -47,7 +47,8 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
 
 def test_l1b5_registry_exposes_strict_gated_remote_pipeline():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b5") == {
-        "prepare", "smoke", "formal",
+        "prepare", "smoke", "calibration_eb", "geometry_sweep",
+        "geometry_refine", "replay_calibration", "formal",
     }
     prepare = PHASES[("l1b5", "prepare")]
     assert prepare.count_env == "NUM_TRIALS"
@@ -67,12 +68,40 @@ def test_l1b5_registry_exposes_strict_gated_remote_pipeline():
             for artifact in smoke.artifacts
         )
 
+    calibration_eb = PHASES[("l1b5", "calibration_eb")]
+    assert calibration_eb.count_env == "NUM_TRIALS"
+    assert "RUN_ID_SUFFIX=calibration-seed42" in calibration_eb.command
+    assert "SAVE_VIDEO_MODE=none" in calibration_eb.command
+
+    replay_calibration = PHASES[("l1b5", "replay_calibration")]
+    assert replay_calibration.count_env is None
+    assert "RUN_ID_SUFFIX=calibration-seed42" in replay_calibration.command
+    assert "replay_calibration" in replay_calibration.command
+    assert any("native_replay.md" in artifact for artifact in replay_calibration.artifacts)
+    assert any("control_replay.md" in artifact for artifact in replay_calibration.artifacts)
+    assert not any("native_replay" in artifact for artifact in smoke.artifacts)
+
+    geometry_sweep = PHASES[("l1b5", "geometry_sweep")]
+    assert geometry_sweep.count_env is None
+    assert any(
+        value.endswith("search_l1b_native_replay_positions.py")
+        for value in geometry_sweep.command
+    )
+    assert "0.10,0.15,0.20,0.25,0.30,0.35,0.40" in geometry_sweep.command
+    assert "0.07,0.08,0.09,0.10,0.11,0.12,0.13" in geometry_sweep.command
+
+    geometry_refine = PHASES[("l1b5", "geometry_refine")]
+    assert geometry_refine.count_env is None
+    assert "0.30" in geometry_refine.command
+    assert "0.076,0.078,0.080,0.082,0.084,0.086,0.088" in geometry_refine.command
+
     formal = PHASES[("l1b5", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
     assert "FAMILIES=l1b5" in formal.command
     assert "SEEDS=42" in formal.command
     assert any("result_tables.md" in artifact for artifact in formal.artifacts)
+    assert any("control_replay.md" in artifact for artifact in formal.artifacts)
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():

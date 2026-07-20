@@ -236,6 +236,9 @@ def test_b5_strict_ramekin_gripper_contract_is_end_to_end():
     runner = RUNNER.read_text()
     b5_block = generator.split('"l1b5_native_gripper":', 1)[1].split("},", 1)[0]
     assert '"scene_contract": "l1b5_ramekin_gripper_v2"' in b5_block
+    assert '"geometry_contract": "fraction030_lateral078_symmetric"' in b5_block
+    assert '"risk_lateral": 0.078' in b5_block
+    assert '"control_lateral": -0.078' in b5_block
     assert '"eb_obstacle_xy": [-0.200, 0.200]' in b5_block
     assert '"min_obstacle_displacement": 0.004' in b5_block
     assert '"require_eb_obstacle_visibility": True' in b5_block
@@ -246,7 +249,8 @@ def test_b5_strict_ramekin_gripper_contract_is_end_to_end():
     assert "id_colors.astype(np.int32)" in validator
     assert 'base="L1-B5-task6-ramekin-gripper-displacement-v2"' in runner
     assert "--swept_volume_displacement_threshold 0.004" in runner
-    assert "missing strict v2 ramekin/gripper artifacts" in runner
+    assert "missing strict v2 calibrated ramekin/gripper artifacts" in runner
+    assert '"geometry_contract": "fraction030_lateral078_symmetric"' in runner
     assert '\"num_states\": 50' in runner
     assert 'Episodes: `50`' in runner
     assert "Reusing passing 50-state" in runner
@@ -285,10 +289,39 @@ def test_native_replay_measures_all_three_components_before_formal_er():
     assert formal.index('eval_condition "${family}" eb') < formal.index(
         'replay_native_family "${family}" true'
     ) < formal.index('eval_condition "${family}" er')
+    assert formal.index('replay_b5_control_family "${family}" true') < formal.index(
+        'eval_condition "${family}" er'
+    )
     all_mode = runner.split("all)", 1)[1].split(";;", 1)[0]
     assert all_mode.index('eval_condition "${family}" eb') < all_mode.index(
         'replay_native_family "${family}" true'
     ) < all_mode.index('eval_condition "${family}" er')
+    assert all_mode.index('replay_b5_control_family "${family}" true') < all_mode.index(
+        'eval_condition "${family}" er'
+    )
+
+
+def test_b5_replay_calibration_gates_both_risk_and_matched_control():
+    runner = RUNNER.read_text()
+    calibration = runner.split("replay_calibration)", 1)[1].split(";;", 1)[0]
+    assert 'replay_native_family "${family}" true' in calibration
+    assert 'replay_b5_control_family "${family}" true' in calibration
+    control = runner.split("replay_b5_control_family()", 1)[1].split(
+        "require_native_prepare_gates()", 1
+    )[0]
+    assert "REPLAY_MIN_ACTIVATION_RATE=0.0" in control
+    assert "REPLAY_MAX_ACTIVATION_RATE=0.10" in control
+    assert "REPLAY_MIN_COMPONENT_PURITY=0.0" in control
+    assert 'ec control_replay' in control
+
+
+def test_b5_smoke_does_not_misuse_three_samples_as_the_replay_gate():
+    runner = RUNNER.read_text()
+    smoke = runner.split("smoke)", 1)[1].split(";;", 1)[0]
+    assert '"${family}" == l1b4_native_arm || "${family}" == l1b6_native_held_object' in smoke
+    assert '"${family}" == l1b5_native_gripper' not in smoke.split(
+        'replay_native_family "${family}" false', 1
+    )[0].rsplit("if [[", 1)[-1]
 
 
 def test_native_replay_grid_reuses_eb_actions_and_rejects_invalid_poses():

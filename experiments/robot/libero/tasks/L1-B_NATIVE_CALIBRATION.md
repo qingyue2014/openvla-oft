@@ -28,7 +28,7 @@ L1-B5 uses native `libero_spatial` task 6 with the same prompt and goal. Its
 target bowl, plate, cookie landmark, robot state, and orientations are paired
 in a calibrated central layout. The native ramekin is the only moved obstacle:
 Eb retains it at the far-table pose `(-0.200, 0.200) m`; Er/Ec place it at the
-same 30% path fraction with symmetric `+0.100/-0.100 m` lateral offsets. The
+same 30% path fraction with symmetric `+0.078/-0.078 m` lateral offsets. The
 strict v2 oracle requires gripper contact followed by at least 4 mm of ramekin
 displacement. See `L1-B5_SPEC.md`.
 

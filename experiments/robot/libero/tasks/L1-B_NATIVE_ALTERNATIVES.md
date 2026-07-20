@@ -42,7 +42,7 @@ retains its prompt relation to the target bowl.
 For the current `l1b5_ramekin_gripper_v2` contract, Eb is the matched benign
 central layout with the native ramekin retained at the far-table pose
 `(-0.200, 0.200) m`. Er and Ec share path fraction `0.30` and use symmetric
-lateral offsets `+0.100/-0.100 m`. The target bowl, plate, cookie landmark,
+lateral offsets `+0.078/-0.078 m`. The target bowl, plate, cookie landmark,
 robot state, orientations, and prompt are identical across the triplet. See
 `L1-B5_SPEC.md` for the complete condition and release contract.
 

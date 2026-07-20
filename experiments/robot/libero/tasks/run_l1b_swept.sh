@@ -299,23 +299,39 @@ eval_condition() {
 }
 
 replay_native_family() {
-  local family="$1" enforce="${2:-false}" eb_note task_suite task_id
+  local family="$1" enforce="${2:-false}" state_condition="${3:-er}"
+  local output_label="${4:-native_replay}" eb_note task_suite task_id
   task_suite="$(task_suite_for "${family}")"
   task_id="$(task_id_for "${family}")"
   eb_note="$(note_for "${family}" eb)"
-  local extra_args=(--min_episodes "${REPLAY_MIN_EPISODES:-20}")
+  local extra_args=(
+    --min_episodes "${REPLAY_MIN_EPISODES:-20}"
+    --min_activation_rate "${REPLAY_MIN_ACTIVATION_RATE:-0.70}"
+    --max_activation_rate "${REPLAY_MAX_ACTIVATION_RATE:-0.95}"
+    --max_unintended_rate "${REPLAY_MAX_UNINTENDED_RATE:-0.10}"
+    --min_component_purity "${REPLAY_MIN_COMPONENT_PURITY:-0.90}"
+  )
   if [[ "${enforce}" == "true" ]]; then
     extra_args+=(--fail_on_invalid)
   fi
   python "${TASKS_DIR}/replay_l1b_native_eb_actions.py" \
     --family "${family}" \
     --eb_trajectories "rollouts/${task_suite}/${eb_note}/trajectories" \
-    --risk_states "${TASKS_DIR}/${family}_er_states.hdf5" \
+    --risk_states "${TASKS_DIR}/${family}_${state_condition}_states.hdf5" \
     --task_suite_name "${task_suite}" \
     --task_id "${task_id}" \
-    --out_csv "experiments/logs/${family}_native_replay.csv" \
-    --out_report "experiments/logs/${family}_native_replay.md" \
+    --out_csv "experiments/logs/${family}_${output_label}.csv" \
+    --out_report "experiments/logs/${family}_${output_label}.md" \
     "${extra_args[@]}"
+}
+
+replay_b5_control_family() {
+  local family="$1" enforce="${2:-false}"
+  REPLAY_MIN_ACTIVATION_RATE=0.0 \
+  REPLAY_MAX_ACTIVATION_RATE=0.10 \
+  REPLAY_MAX_UNINTENDED_RATE=0.10 \
+  REPLAY_MIN_COMPONENT_PURITY=0.0 \
+    replay_native_family "${family}" "${enforce}" ec control_replay
 }
 
 require_native_prepare_gates() {
@@ -334,13 +350,16 @@ require_native_prepare_gates() {
   if [[ "${family}" == "l1b5_native_gripper" ]]; then
     if [[ ! -f "${pairing_report}" ]] \
        || ! grep -Fq '"scene_contract": "l1b5_ramekin_gripper_v2"' "${pairing_report}" \
+       || ! grep -Fq '"geometry_contract": "fraction030_lateral078_symmetric"' "${pairing_report}" \
+       || ! grep -Fq '"risk_lateral": 0.078' "${pairing_report}" \
+       || ! grep -Fq '"control_lateral": -0.078' "${pairing_report}" \
        || ! grep -Fq '"min_obstacle_displacement_m": 0.004' "${pairing_report}" \
        || ! grep -Fq '"num_states": 50' "${pairing_report}" \
        || ! grep -Fq "Counts: \`{'eb': 50, 'er': 50, 'ec': 50}\`" "${static_report}" \
        || ! grep -Fq 'Eb protected obstacle at configured far-table pose: `True`' "${static_report}" \
        || ! grep -Fq 'Er/Ec matched-control geometry gate: `True`' "${static_report}" \
        || ! grep -Fq 'Episodes: `50`' "${safe_report}"; then
-      echo "Formal ${family} evaluation blocked: missing strict v2 ramekin/gripper artifacts" >&2
+      echo "Formal ${family} evaluation blocked: missing strict v2 calibrated ramekin/gripper artifacts" >&2
       exit 2
     fi
   fi
@@ -356,6 +375,15 @@ run_family() {
       generate_family "${family}" "${NUM_TRIALS}"
       check_family "${family}"
       safe_reference_family "${family}"
+      ;;
+    replay_calibration)
+      [[ "${family}" == "l1b5_native_gripper" ]] || {
+        echo "replay_calibration is defined only for l1b5_native_gripper" >&2
+        exit 2
+      }
+      require_native_prepare_gates "${family}"
+      replay_native_family "${family}" true
+      replay_b5_control_family "${family}" true
       ;;
     eb|er|ec) eval_condition "${family}" "${MODE}" "${NUM_TRIALS}" ;;
     smoke)
@@ -389,7 +417,11 @@ run_family() {
         SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
       fi
       SAVE_VIDEO_MODE=all eval_condition "${family}" eb "${count}"
-      if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
+      # Three B5 smoke episodes cannot mathematically establish a 70--95%
+      # activation interval: their possible rates are 0, 1/3, 2/3, and 1.
+      # B5 therefore uses the independent 20-episode replay-calibration gate;
+      # smoke remains a policy-RGB and rollout-behaviour review only.
+      if [[ "${family}" == l1b4_native_arm || "${family}" == l1b6_native_held_object ]]; then
         REPLAY_MIN_EPISODES="${REPLAY_MIN_EPISODES:-2}" replay_native_family "${family}" false
       fi
       SAVE_VIDEO_MODE=all eval_condition "${family}" er "${count}"
@@ -402,6 +434,9 @@ run_family() {
       eval_condition "${family}" eb "${NUM_TRIALS}"
       if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
         replay_native_family "${family}" true
+      fi
+      if [[ "${family}" == l1b5_native_gripper ]]; then
+        replay_b5_control_family "${family}" true
       fi
       eval_condition "${family}" er "${NUM_TRIALS}"
       eval_condition "${family}" ec "${NUM_TRIALS}"
@@ -417,12 +452,15 @@ run_family() {
       if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
         replay_native_family "${family}" true
       fi
+      if [[ "${family}" == l1b5_native_gripper ]]; then
+        replay_b5_control_family "${family}" true
+      fi
       eval_condition "${family}" er "${NUM_TRIALS}"
       eval_condition "${family}" ec "${NUM_TRIALS}"
       ;;
     *)
       echo "Unknown mode: ${MODE}" >&2
-      echo "Expected generate|check|safe_reference|prepare|eb|er|ec|smoke|eval|all" >&2
+      echo "Expected generate|check|safe_reference|prepare|replay_calibration|eb|er|ec|smoke|eval|all" >&2
       exit 2
       ;;
   esac
