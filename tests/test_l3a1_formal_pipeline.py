@@ -39,6 +39,11 @@ def test_l3a1_bddl_and_fixture_define_aligned_custom_support_wing():
     assert '"size": "0.00271 0.03427 0.03700"' in fixture
     assert "**L3A1_SUPPORT_WING_COMMON" in fixture
     assert "l3a1_cabinet_asset_contract" in fixture
+    cabinet_block = fixture.split("class PhyscogWhiteCabinet", 1)[1].split(
+        "class GlassCup", 1
+    )[0]
+    assert 'joints = [dict(type="free"' not in cabinet_block
+    assert "joints=joints" in cabinet_block
 
 
 def test_l3a1_safe_reference_uses_public_success_api():

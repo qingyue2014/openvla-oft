@@ -159,8 +159,10 @@ class PhyscogWhiteCabinet(MujocoXMLObject):
     """Native WhiteCabinet plus L3-A1's moving negative-x support wing."""
 
     def __init__(self, name="physcog_white_cabinet", joints=None):
-        if joints is None:
-            joints = [dict(type="free", damping="0.0005")]
+        # LIBERO fixture loading explicitly passes joints=None. Preserve that
+        # value exactly: native WhiteCabinet is fixed, while inventing a free
+        # joint here makes the entire cabinet move under bottle contact and
+        # changes the serialized qpos/qvel schema.
         tmp_path = _build_l3a1_cabinet_xml()
         try:
             super().__init__(
