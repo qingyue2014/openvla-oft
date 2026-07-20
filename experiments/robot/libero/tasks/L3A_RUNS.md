@@ -161,6 +161,36 @@ must pass the strict zero-momentum release counterfactual, policy-view,
 safe-reference, and smoke gates before this alternative can replace the
 preserved blue-wing implementation.
 
+#### Native-side feasibility result (2026-07-20)
+
+Nine isolated SuperPod geometry sweeps were run from commits on this branch
+(jobs `481934`, `481942`, `481954`, `481958`, `481970`, `481980`, `481981`,
+`481982`, and `481992`). No tested candidate passed the strict causal gates, so
+this experimental branch is **not a formal L3-A1 result** and must not replace
+`codex/l3a1-formal-ready@df7bb47`.
+
+The right-side scans covered coarse and near-contact poses, steeper leans,
+front-edge placements, a 2 cm vertical lift, and oblique approach directions.
+They exposed three physical failure modes: the bottle never acquired the exact
+side-panel contact; it also contacted another drawer geom; or it settled into a
+self-supporting bottle/table pose and barely moved when only the selected panel
+collision was disabled. The last case fails the independent support-removal
+counterfactual even though the visible pose can look plausible.
+
+Job `481992` mirrored the final near-critical edge grid to the native left panel
+(`dx=-0.148/-0.153/-0.158`, `dy=-0.040`, `lean=-43/-45/-47°`, direction
+`-120°`, `lean_dz=+0.020`). All 9 parameter settings failed both attempts at the
+pre-release settle gate: the bottle reached 90° tilt, above the 65° rejection
+threshold, while the selected panel was present. This rules out the tested
+grid, not the entire native-left topology or L3-A1 generally. The retained
+evidence is under `.physcog-agent/runs/*-l3a1-geometry_sweep`; the final mirror
+summary is in run `20260720T090013Z-l3a1-geometry_sweep`.
+
+No preview or smoke video is generated for these candidates because video is a
+post-geometry gate: a visually convincing pose is insufficient unless exact
+panel contact, stability, release ordering, zero-momentum toppling, absence of
+other cabinet contact, and the independent panel-disable intervention all pass.
+
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's
    `SETTLE_STEPS` is 800 on the native-side branch so the SAVED state is genuinely at
