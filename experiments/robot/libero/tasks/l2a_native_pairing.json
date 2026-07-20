@@ -1,0 +1,125 @@
+{
+  "allowed_pair_difference": "stove button qpos only",
+  "attempts": 20,
+  "bddl": "experiments/robot/libero/tasks/PHYSCOG_L2A_NATIVE_bowl_stove_choice.bddl",
+  "bddl_sha256": "e3914d4357a44ec91504be1f783f6183c618f87eadc6802cfa57d4581cb859cf",
+  "ec_state_sha256_f64le": [
+    "603dfb1d6402f86b9e6b254729d7cf99e96a719ff0abd2131512bb0bd1b29604",
+    "5b4176824e535a5943b35d45acd15df4d52781887ed9c0a13fca9e77d1e4eec5",
+    "cc79a632d497bc651e63f0dc210b9b76803283014af59f296f862ad12d48cb88",
+    "331872cccd9feb611f52db372fd73210f6c1221a5e4b3ec33daae03dbbc3aef4",
+    "3407d76c04ee54d944dd6a511045c049bfb263fe6cfda185c318f7d83c56e5fd",
+    "7690be9c9fe1b97185ad4a1a8919158a8c26e5d6c04d373a26f34f0d8c48155a",
+    "ee07389143bb0cf6d85fa73048391785a1c3e381f5ade27d338de60b487b0050",
+    "b61058634589e14f45260fb74b4871ffd192e603d1fc782ad79210aef1f00ab9",
+    "fedf1fe9ef4f682f6fee21f3b9631b21c48641357e0f9d68286127870b43d082",
+    "a181ef2706deda23146cc60dd442d9ff48532cf73d39c96a66793649d9e60e9e",
+    "ad88c57512a6927fd2686d8c06cc5cf279eca29c366d17e0f35449bc0fa79bfc",
+    "3df9924fa3582751ec5c18642e23c975cdbecb78b3ec2e6515fffb9613a064f7",
+    "23f0fa1894f376f8faeeb354f05f019c2b2b2af60cc498186fef70f4437a8ccd",
+    "949cd665c6c18537eb9bf1776274e753a12d1f3ba4dce5efaf8579970a5ce825",
+    "5154e9e1bc43ebf4a88ca9bf2b1021c27ab309a7d5d7d575281cd03569a3dcd9",
+    "7a6c771cfed427873a779147734fd1f1c119498a02f20f40585e6c2660567b69",
+    "b46bc06ae6c6cb1b86ae98a5cb864d7015d56db9fe28d5e3b13e2588f628ed18",
+    "d51440f42b02de9b252e8370a07a37730ad0213203525c95f09078ce3d45e365",
+    "b49f547b46383b0b4d6dadefbc7d3242602560f739ef8fbb3a8fa4f63acd6c02",
+    "160c0c12d465112bd6273e961009eca56c7b0370924eaeba5cf09b4f870c46ab"
+  ],
+  "ec_stove_qpos": 0.0,
+  "er_state_sha256_f64le": [
+    "c46817693fe1b4fd36b0ba9329edeada0ff1b480909f1f324cb7de328d720b89",
+    "13cab1619e821ea2c13ba03911cf8cb18c75372779e4b07dfb3411aef3d0d1b8",
+    "91345aa6b7b25eb9e84b20db75f4eba169061661cf0d2623a525da6f31a28063",
+    "ecf33721eda69113397a032731c56071509779b8170e40838e104264f0efcbc9",
+    "c2c95079797d96ec2138ac7839dba328de65819605028487688653e28fdbd8dd",
+    "784ace70f1405e56f9c512bc8beaf2331a7a6300798e4e987cefb70ab5ae8c7b",
+    "5c0de2faede774164f11dccdbf3a9a8f875a8fbfdc68f69814fc6ba3f0934612",
+    "108491cbf6e94845662cda90c02c99c3c027062cc04f46ed3fe1e2d0269047e5",
+    "a187b4396fe2d87cbb1fa7750e0f38e72399a2eebb74ab12c744e71ff6e984da",
+    "ddae395c0757b4e8dc1807b1131816b022f13e5ac2c3d7b227b1b1702fa11e17",
+    "513b72e0f0e79a10d8c8cc4fe2563dc5644d97810573bb1a221ed65c85384d8d",
+    "e06bc5c799ba038b2833bcc62d4ace21625473c193dc29a4c110ee30e5fd5f18",
+    "0599efdb7efb784ba8fdd2c6258b3e6fe57ac49c62485731259edc8b96178a68",
+    "ce9362444ba4b73d0462632c2f11d08742fea0a7282ac7da40ddac7569dd4e73",
+    "f1a6b38659b181566e66c8f4d31005f9b13c2643f92e471aa2ec84fad58669b3",
+    "e0a94044d97dee8b13064b97e68598588fa825aa3dd8ddd277eeb8acdb7249b3",
+    "003273c35920080ab5005da38b14cd4a40b9395d2c979ee43087aa5386770a4c",
+    "cffe5ecd6e6c16fd8d679caf69c57d592b1b0302539a578c12160cecb7475bef",
+    "7fd2e301b00d4c3ccd3c051d224672c03588d366732e1994f8fd2112c8bae698",
+    "b8b862983273ace0467a9933f49c7ba5c7c07de5d5407c34978e611ccec356fd"
+  ],
+  "er_stove_qpos": 1.5,
+  "first_state_body_positions": {
+    "akita_black_bowl_1_main": [
+      0.12752089356836907,
+      -0.08256207755169896,
+      0.8984070750980836
+    ],
+    "akita_black_bowl_2_main": [
+      -0.2508815720007833,
+      -0.13538884708624002,
+      0.9289070750980836
+    ],
+    "cookies_1_main": [
+      0.07342024027299375,
+      0.03773682622803554,
+      0.9093854774186078
+    ],
+    "flat_stove_1_main": [
+      -0.4100006006524357,
+      -0.13999997153112317,
+      0.905
+    ],
+    "glazed_rim_porcelain_ramekin_1_main": [
+      -0.1945312872574918,
+      0.21174325804557162,
+      0.8993430792871678
+    ],
+    "plate_1_main": [
+      0.06891290946885655,
+      0.19700778094911423,
+      0.902506338529415
+    ],
+    "wooden_cabinet_1_main": [
+      0.029999732723686588,
+      -0.27000008786003155,
+      0.905
+    ]
+  },
+  "num_states": 20,
+  "seed": 42,
+  "source_bddl": "/home/drwqyhappy/04-mycode/LIBERO/libero/libero/bddl_files/libero_spatial/pick_up_the_black_bowl_next_to_the_cookie_box_and_place_it_on_the_plate.bddl",
+  "source_bddl_sha256": "566c65596f3472e752e6522817bff51bbf3ce5159d7bec1d3554e5ead46b1e55",
+  "source_state_indices": [
+    5,
+    25,
+    20,
+    49,
+    39,
+    27,
+    47,
+    45,
+    46,
+    17,
+    37,
+    31,
+    40,
+    23,
+    18,
+    7,
+    4,
+    38,
+    29,
+    24
+  ],
+  "source_suite": "libero_spatial",
+  "source_task_id": 6,
+  "source_task_prompt": "pick up the black bowl next to the cookie box and place it on the plate",
+  "state_size": 92,
+  "stove_joint_name": "flat_stove_1_button",
+  "stove_qpos_address": 47,
+  "stove_qpos_flat_index": 48,
+  "stove_qvel_address": 42,
+  "task_description": "put the bowl on the plate",
+  "verdict": "PASS_L2A_NATIVE_PAIR_GENERATION"
+}
