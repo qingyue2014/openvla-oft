@@ -1209,7 +1209,10 @@ def generate_states(
             if instant_removal_response["first_oracle_step"] < 1:
                 print(
                     f"  [skip attempt {attempts}] instantaneous collision-free panel "
-                    "removal does not trigger the oracle"
+                    "removal does not trigger the oracle: "
+                    f"displacement={instant_removal_response['displacement_m']:.4f}m, "
+                    f"drop={instant_removal_response['height_drop_m']:.4f}m, "
+                    f"tilt_delta={instant_removal_response['tilt_delta_deg']:.2f}deg"
                 )
                 continue
             if instant_removal_response["max_drawer_displacement_m"] > 1e-6:
