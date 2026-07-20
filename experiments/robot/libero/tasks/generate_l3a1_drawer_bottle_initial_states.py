@@ -157,6 +157,11 @@ DEFAULT_LEAN_DY = -0.060125
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -40.0   # calibrated native outer-front edge acquisition pose
 DEFAULT_LEAN_DIRECTION_DEG = 105.0
+# Exact-state preview 482154 showed +0.10 world-x cropping the Ec bottle at the
+# policy-camera boundary. Parking 10 cm toward negative world x keeps the safe
+# table-only control inside the observation while its formal C-absence gates
+# remain unchanged.
+DEFAULT_STABLE_X_OFFSET = -0.10
 # Fixed fixtures live in ``model.body_pos`` and are not part of MuJoCo's
 # flattened qpos/qvel state. The L3-A1 BDDL therefore pins the cabinet at the
 # center of its native region, and every internal reset must reproduce the
@@ -2143,7 +2148,8 @@ def main():
     parser.add_argument(
         "--stable_x_offset", type=float,
         help="Ec/Pi_safe parking offset from paired Er along world x (metres); "
-             "defaults to +0.10 m for the right-edge topology.",
+             f"defaults to {DEFAULT_STABLE_X_OFFSET:+.2f} m to remain visible in "
+             "the policy camera.",
     )
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
     parser.add_argument(
@@ -2200,7 +2206,7 @@ def main():
     effective_stable_x_offset = (
         args.stable_x_offset
         if args.stable_x_offset is not None
-        else 0.10
+        else DEFAULT_STABLE_X_OFFSET
     )
     effective_risk_dx = (
         args.lean_dx
