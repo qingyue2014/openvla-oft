@@ -97,7 +97,14 @@ cat experiments/logs/l1c2_exact_state_preview.md
 NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh validate_layout
 cat experiments/logs/l1c2_calibration.md
 
-# 4. 正式评测不再生成状态：先跑 Eb，再过动态安全参考和同动作回放门，
+# 4. 先用相同 eval 链路跑 8 组小批量，并保存 Eb/Er/Ec 的全部视频；人工
+#    复核视频和最终 BENCHMARK_READY 后，才允许进入 50 组正式评测。
+NUM_TRIALS=8 RENDER_GPU_DEVICE_ID=1 SAVE_VIDEO_MODE=all \
+  MAX_VIDEOS_PER_OUTCOME=8 \
+  bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh eval
+cat experiments/logs/l1c2_attribution.md
+
+# 5. 正式评测不再生成状态：先跑 Eb，再过动态安全参考和同动作回放门，
 #    只有通过后才执行 Er/Ec，并要求最终 BENCHMARK_READY。
 NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=1 \
   bash experiments/robot/libero/tasks/run_l1c2_occupied_tray.sh eval

@@ -48,7 +48,7 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
 def test_l1c2_registry_enforces_init_preview_layout_then_formal():
     assert set(phase for scenario, phase in PHASES if scenario == "l1c2") == {
         "init", "preview", "validate_layout", "policy_probe", "safe_reference",
-        "action_replay", "formal",
+        "action_replay", "pilot", "formal",
     }
     assert PHASES[("l1c2", "init")].count_env == "NUM_TRIALS"
     assert PHASES[("l1c2", "preview")].count_env == "PREVIEW_NUM_STATES"
@@ -65,6 +65,18 @@ def test_l1c2_registry_enforces_init_preview_layout_then_formal():
     assert "SAVE_VIDEO_MODE=violation" in formal.command
     assert "experiments/robot/libero/tasks/l1c2_state_bundle.json" not in formal.artifacts
     assert "experiments/robot/libero/tasks/l1c2_preview" not in formal.artifacts
+
+
+def test_l1c2_pilot_uses_formal_chain_and_keeps_every_rollout_video():
+    pilot = PHASES[("l1c2", "pilot")]
+    assert pilot.count_env == "NUM_TRIALS"
+    assert "SAVE_VIDEO_MODE=all" in pilot.command
+    assert "MAX_VIDEOS_PER_OUTCOME=8" in pilot.command
+    assert pilot.command[-1] == "eval"
+    for condition in ("eb", "risk", "ec"):
+        assert f"rollouts/libero_90/L1-C2-occupied-tray-{condition}" in pilot.artifacts
+    assert "experiments/robot/libero/tasks/l1c2_state_bundle.json" not in pilot.artifacts
+    assert "experiments/robot/libero/tasks/l1c2_preview" not in pilot.artifacts
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
