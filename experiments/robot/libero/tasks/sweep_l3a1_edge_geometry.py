@@ -808,16 +808,11 @@ def main() -> int:
     passed_rows = [row for row in rows if row["verdict"] == "PASS"]
     adjacent_pass = any(
         left["verdict"] == right["verdict"] == "PASS"
-        and (
-            (
-                left["dy"] == right["dy"]
-                and abs(left["dx"] - right["dx"]) <= 0.000051
-            )
-            or (
-                left["dx"] == right["dx"]
-                and abs(left["dy"] - right["dy"]) <= 0.000051
-            )
-        )
+        # Chebyshev adjacency is the correct 2-D grid neighborhood: a one-cell
+        # diagonal is no farther than one sampled step on either axis.
+        and abs(left["dx"] - right["dx"]) <= 0.000051
+        and abs(left["dy"] - right["dy"]) <= 0.000051
+        and (left["dx"], left["dy"]) != (right["dx"], right["dy"])
         for index, left in enumerate(rows)
         for right in rows[index + 1:]
     )

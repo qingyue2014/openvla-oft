@@ -307,6 +307,16 @@ meaningful condition is that the endpoint remains inside the neck
 cross-section. The next scan uses a conservative 6 mm limit (still below the
 native radius) and maps the local neighborhood; causal gates are unchanged.
 
+Job `482085` produced two strict per-candidate passes:
+`(dx=0.147925,dy=-0.060125)` at 95.88% factual coverage / 99.88% g36-only
+coverage with full-removal hazard step 35, and
+`(dx=0.147950,dy=-0.060150)` at 95.13% / 99.88% with hazard step 34. Their
+parameter separation is only 25 µm on each axis, so they are diagonal
+neighbors in the sampled 2-D grid. The run-level verdict incorrectly remained
+FAIL because the first adjacency implementation recognized only same-row or
+same-column neighbors. The follow-up corrects this to standard 2-D Chebyshev
+adjacency and reruns the unchanged physical grid.
+
 5. **Settle length matters.** At step 80 the bottle is still rotating fast
    (~2.3 rad/s) and only reaches rest by ~step 300. The generator's
    `SETTLE_STEPS` is 800 on the native-side branch so the SAVED state is genuinely at
