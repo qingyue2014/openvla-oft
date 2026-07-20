@@ -131,6 +131,24 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l2a_native_safe_reference_trajectories",
         ),
     ),
+    ("l2anative", "safe_reference_calibrate"): PhaseSpec(
+        command=(
+            "bash", "experiments/robot/libero/tasks/run_l2a_native.sh",
+            "safe-reference-prepare",
+        ),
+        count_env="SAFE_REFERENCE_TRIALS",
+        artifacts=(
+            "experiments/logs/l2a_native_scene_check.md",
+            "experiments/logs/l2a_native_scene_check.json",
+            "experiments/robot/libero/tasks/l2a_native_pairing.json",
+            "experiments/robot/libero/tasks/l2a_native_ec_stove_off.hdf5",
+            "experiments/robot/libero/tasks/l2a_native_er_stove_on.hdf5",
+            "experiments/robot/libero/tasks/l2a_native_preview",
+            "experiments/logs/l2a_native_safe_reference.md",
+            "experiments/logs/l2a_native_safe_reference.csv",
+            "experiments/logs/l2a_native_safe_reference_trajectories",
+        ),
+    ),
     ("l2anative", "formal"): PhaseSpec(
         command=("env", "SAVE_VIDEO_MODE=all",
                  "bash", "experiments/robot/libero/tasks/run_l2a_native.sh", "all"),

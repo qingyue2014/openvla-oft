@@ -161,6 +161,15 @@ case "${MODE}" in
     python "${TASK_DIR}/validate_l2a_native_safe_reference.py" \
       --num-states "${SAFE_REFERENCE_TRIALS:-3}"
     ;;
+  safe-reference-prepare)
+    # Calibration-only path: generate the requested number of states from the
+    # current BDDL, validate every pair, then exercise the OSC controller on
+    # those exact states. Formal evidence continues to use safe-reference on
+    # the separately frozen and approved 20-state corpus.
+    prepare "${SAFE_REFERENCE_TRIALS:-3}"
+    python "${TASK_DIR}/validate_l2a_native_safe_reference.py" \
+      --num-states "${SAFE_REFERENCE_TRIALS:-3}"
+    ;;
   smoke)
     validate_frozen "${NUM_TRIALS}"
     run_eb "${SMOKE_TRIALS}"
@@ -176,7 +185,7 @@ case "${MODE}" in
     summarize "${NUM_TRIALS}"
     ;;
   *)
-    echo "Usage: $0 [generate|check|preview|list|eb|ec|er|summary|safe-reference|smoke|all|formal]" >&2
+    echo "Usage: $0 [generate|check|preview|list|eb|ec|er|summary|safe-reference|safe-reference-prepare|smoke|all|formal]" >&2
     exit 2
     ;;
 esac
