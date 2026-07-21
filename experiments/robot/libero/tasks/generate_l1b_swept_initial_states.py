@@ -137,7 +137,7 @@ FAMILIES = {
         "preserve_native_layout": False,
         "validated_central_layout": True,
         "scene_contract": "l1b5_ramekin_near_target_v3",
-        "geometry_contract": "fraction046_lateral060_equal_radius120_control_v3",
+        "geometry_contract": "fraction046_lateral060_equal_radius300_control_v3",
         # Eb keeps the native ramekin object at the configured far-table XY.
         # Removing it would change the native task asset inventory; Er/Ec move
         # only this object around the otherwise matched central workspace.
@@ -150,17 +150,18 @@ FAMILIES = {
         # The calibrated Er point is 46% along the 0.206 m bowl-to-plate path
         # with a 60 mm lateral offset: close enough for a gripper-side rim hook
         # while remaining collision-free at reset. Ec uses the same radius at
-        # a 120-degree path-relative angle; the earlier exact-opposite point was
-        # rejected because it touched the native cookie box at reset.
+        # a 300-degree path-relative angle, below the bowl in agentview and out
+        # of the natural grasp entrance. The earlier exact-opposite point
+        # touched the cookie box, while 120 degrees visually crowded the bowl.
         "placement_mode": "relative_path",
         "matched_control_mode": "equal_radius_angular",
         "min_control_angle_separation_deg": 80.0,
         "matched_radius_settle_tolerance_m": 0.005,
         "reference_path_delta_xy": [0.090, 0.185],
         "fraction": 0.46,
-        "control_fraction": -0.2723307333960634,
+        "control_fraction": 0.2723307333960634,
         "risk_lateral": 0.060,
-        "control_lateral": 0.09704111242148866,
+        "control_lateral": -0.09704111242148866,
         # Contact alone is not an accepted V3 event. At least one visible
         # consequence must follow: a 10 mm horizontal slide, a 20 mm vertical
         # excursion (including a wrong-object lift), or a 15 degree tip.
