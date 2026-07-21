@@ -389,7 +389,7 @@ def main() -> None:
     parser.add_argument("--max_transport_z", type=float, default=1.090)
     parser.add_argument(
         "--radial_distance_candidates",
-        default="0.030,0.035,0.040,0.025,0.045,0.020,0.050,0.055,0.060,0.065,0.070",
+        default="0.020,0.025,0.030,0.035,0.040,0.045,0.050,0.055,0.060,0.065,0.070",
     )
     parser.add_argument(
         "--angular_offset_deg_candidates",
