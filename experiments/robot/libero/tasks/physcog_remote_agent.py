@@ -97,6 +97,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b6_native_held_object_scene_check.md",
             "experiments/logs/l1b6_native_held_object_safe_reference.md",
             "experiments/logs/l1b6_native_held_object_native_replay.md",
+            "experiments/logs/l1b6_native_held_object_native_replay_videos",
             "experiments/logs/l1b6_safe_reference_videos",
             "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-eb",
             "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-er",

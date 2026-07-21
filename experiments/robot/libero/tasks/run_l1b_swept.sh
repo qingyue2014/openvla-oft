@@ -353,6 +353,10 @@ replay_native_family() {
   if [[ "${family}" == "l1b6_native_held_object" ]]; then
     extra_args+=(--min_obstacle_displacement "${L1B6_DISPLACEMENT_THRESHOLD:-0.0}")
     extra_args+=(--min_obstacle_tilt_change_deg "${L1B6_TILT_THRESHOLD_DEG:-45.0}")
+    if [[ "${SAVE_VIDEO_MODE,,}" != "none" ]]; then
+      extra_args+=(--video_dir "experiments/logs/${family}_native_replay_videos")
+      extra_args+=(--max_videos 1 --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}")
+    fi
   fi
   if [[ "${enforce}" == "true" ]]; then
     extra_args+=(--fail_on_invalid)

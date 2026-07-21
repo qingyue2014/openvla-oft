@@ -43,6 +43,28 @@ def _episode_index(path: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _policy_frame(obs) -> np.ndarray:
+    image = np.asarray(obs["agentview_image"])
+    return np.ascontiguousarray(image[::-1, ::-1])
+
+
+def _save_replay_video(frames, path: Path, fps: int) -> str:
+    import imageio
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        writer = imageio.get_writer(str(path), fps=fps, format="FFMPEG")
+    except Exception:
+        writer = imageio.get_writer(str(path), fps=fps)
+    try:
+        for frame in frames:
+            writer.append_data(frame)
+    finally:
+        writer.close()
+    print(f"Saved intended-contact replay MP4 at path {path}")
+    return str(path)
+
+
 def replay(args) -> str:
     from libero.libero.envs.env_wrapper import ControlEnv
 
@@ -65,14 +87,20 @@ def replay(args) -> str:
         bddl = os.path.join(
             get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
         )
+    capture_video = bool(args.video_dir)
     env = ControlEnv(
         bddl_file_name=bddl,
-        use_camera_obs=False,
+        use_camera_obs=capture_video,
         has_renderer=False,
-        has_offscreen_renderer=False,
+        has_offscreen_renderer=capture_video,
+        camera_names=[args.video_camera] if capture_video else "agentview",
+        camera_heights=args.video_resolution,
+        camera_widths=args.video_resolution,
+        render_gpu_device_id=args.render_gpu_device_id,
         hard_reset=False,
     )
     rows = []
+    videos_saved = 0
     try:
         for path in files:
             episode_idx = _episode_index(path)
@@ -86,6 +114,7 @@ def replay(args) -> str:
             phases = np.asarray(trajectory["phases"])
             env.reset()
             obs = env.set_init_state(states[episode_idx])
+            frames = [_policy_frame(obs)] if capture_video else []
             oracles = {
                 component: SweptVolumeComponentOracle(
                     [obstacle_body],
@@ -113,6 +142,8 @@ def replay(args) -> str:
                 if np.isnan(action).any():
                     continue
                 obs, reward, done, info = env.step(action.tolist())
+                if capture_video and (step + 1) % args.video_stride == 0:
+                    frames.append(_policy_frame(obs))
                 task_success = task_success or bool(reward > 0 or done)
                 for component, oracle in oracles.items():
                     if hits[component]:
@@ -178,7 +209,20 @@ def replay(args) -> str:
                 "intended_contact": int(hits[intended_component]),
                 "unintended_contact": int(unintended),
                 **{f"{component}_reason": reasons[component] for component in COMPONENTS},
+                "video_path": "",
             }
+            if (
+                capture_video
+                and hits[intended_component]
+                and (args.max_videos == 0 or videos_saved < args.max_videos)
+            ):
+                row["video_path"] = _save_replay_video(
+                    frames,
+                    Path(args.video_dir)
+                    / f"task{args.task_id}_ep{episode_idx:03d}_held_object_knockdown.mp4",
+                    args.video_fps,
+                )
+                videos_saved += 1
             rows.append(row)
             print(
                 f"episode={episode_idx:03d} intended={row['intended_contact']} "
@@ -275,6 +319,13 @@ def main() -> None:
     parser.add_argument("--min_obstacle_tilt_change_deg", type=float, default=10.0)
     parser.add_argument("--out_csv", required=True)
     parser.add_argument("--out_report", required=True)
+    parser.add_argument("--video_dir", default="")
+    parser.add_argument("--video_camera", default="agentview")
+    parser.add_argument("--video_resolution", type=int, default=256)
+    parser.add_argument("--video_fps", type=int, default=30)
+    parser.add_argument("--video_stride", type=int, default=1)
+    parser.add_argument("--max_videos", type=int, default=1)
+    parser.add_argument("--render_gpu_device_id", type=int, default=-1)
     parser.add_argument("--fail_on_invalid", action="store_true")
     replay(parser.parse_args())
 
