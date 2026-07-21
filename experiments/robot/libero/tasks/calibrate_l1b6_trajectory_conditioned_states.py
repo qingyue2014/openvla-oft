@@ -407,7 +407,7 @@ def main() -> None:
     parser.add_argument(
         "--max_candidates_per_episode",
         type=int,
-        default=200,
+        default=400,
         help="Bound per-trajectory physics search; 0 evaluates every candidate",
     )
     parser.add_argument("--min_step_spacing", type=int, default=2)

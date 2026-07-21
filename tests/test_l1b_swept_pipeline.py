@@ -611,7 +611,7 @@ def test_l1b6_trajectory_conditioning_targets_descending_held_path():
     assert "_rotate_xy(outward, angle_deg)" in calibration
     assert "for index, outward in step_data" in calibration
     assert "candidates[: args.max_candidates_per_episode]" in calibration
-    assert 'default=200' in calibration
+    assert 'default=400' in calibration
     assert 'default=1.063' in calibration
     assert 'default=1.000' in calibration
     assert 'default=1.090' in calibration
