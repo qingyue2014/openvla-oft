@@ -230,9 +230,9 @@ FAMILIES = {
         "fraction": 0.225,
         "risk_lateral": 0.0715,
         "control_fraction": 0.50,
-        # Keep Ec visibly on the same side of the learned carry path but well
-        # outside both the held-box sweep and the bowl/plate interaction area.
-        "control_lateral": 0.120,
+        # Put Ec on the opposite side of the learned carry path, away from the
+        # held-box sweep and the native plate occupying the positive-X side.
+        "control_lateral": -0.100,
         "source_target_x_min": -0.055,
         # The native goal-x subregion selects the learned carry arc that passes
         # the bottle. In unchanged-Eb replay, goal x <= -0.098 m retained both
