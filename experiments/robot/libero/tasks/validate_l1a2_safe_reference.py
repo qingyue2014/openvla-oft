@@ -351,6 +351,7 @@ def _run_episode(
     args,
     episode_idx,
     grasp_xy_offset=(0.0, 0.0),
+    grasp_height=None,
     attempt_idx=0,
     capture_video=False,
 ):
@@ -402,7 +403,9 @@ def _run_episode(
     above_source = source.copy()
     above_source[2] += args.approach_height
     grasp_eef = source.copy()
-    grasp_eef[2] += args.grasp_height
+    if grasp_height is None:
+        grasp_height = args.grasp_height
+    grasp_eef[2] += grasp_height
     grasp_xy_offset = np.asarray(grasp_xy_offset, dtype=float)
     above_source[:2] += grasp_xy_offset
     grasp_eef[:2] += grasp_xy_offset
@@ -614,6 +617,7 @@ def _run_episode(
             "episode_idx": episode_idx,
             "attempt_idx": attempt_idx,
             "grasp_xy_offset_m": grasp_xy_offset.tolist(),
+            "grasp_height_m": float(grasp_height),
             "grasp_verified": grasp_verified,
             "grasp_lift_m": grasp_lift_m,
             "success": safe_success,
@@ -638,6 +642,7 @@ def _run_episode(
         "attempt": attempt_idx,
         "grasp_offset_x_m": float(grasp_xy_offset[0]),
         "grasp_offset_y_m": float(grasp_xy_offset[1]),
+        "grasp_height_m": float(grasp_height),
         "grasp_verified": int(grasp_verified),
         "grasp_lift_m": grasp_lift_m,
         "safe_success": int(safe_success),
@@ -686,7 +691,7 @@ def run(args):
     )
     env.seed(args.seed)
     rows = []
-    selected_grasp_offset = None
+    selected_grasp = None
     videos_saved = 0
     try:
         for idx, state in enumerate(states):
@@ -711,15 +716,28 @@ def run(args):
                         np.array([0.0, -fraction * half_xy[1]]),
                     ]
                 )
-            if selected_grasp_offset is not None:
-                candidates = [selected_grasp_offset] + [
-                    offset
-                    for offset in candidates
-                    if not np.allclose(offset, selected_grasp_offset)
+            height_values = getattr(args, "grasp_height_candidates", "")
+            heights = [
+                float(value.strip())
+                for value in height_values.split(",")
+                if value.strip()
+            ] or [args.grasp_height]
+            grasp_candidates = [
+                (height, offset) for height in heights for offset in candidates
+            ]
+            if selected_grasp is not None:
+                selected_height, selected_offset = selected_grasp
+                grasp_candidates = [selected_grasp] + [
+                    (height, offset)
+                    for height, offset in grasp_candidates
+                    if not (
+                        np.isclose(height, selected_height)
+                        and np.allclose(offset, selected_offset)
+                    )
                 ]
 
             row = None
-            for attempt_idx, offset in enumerate(candidates):
+            for attempt_idx, (grasp_height, offset) in enumerate(grasp_candidates):
                 capture_video = bool(
                     args.video_dir
                     and (args.max_videos == 0 or videos_saved < args.max_videos)
@@ -730,6 +748,7 @@ def run(args):
                     args,
                     idx,
                     grasp_xy_offset=offset,
+                    grasp_height=grasp_height,
                     attempt_idx=attempt_idx,
                     capture_video=capture_video,
                 )
@@ -737,6 +756,7 @@ def run(args):
                     videos_saved += 1
                 print(
                     f"  grasp_attempt={attempt_idx:02d} "
+                    f"height={grasp_height:.4f}m "
                     f"offset=({offset[0]:+.4f},{offset[1]:+.4f})m "
                     f"verified={candidate_row['grasp_verified']} "
                     f"lift={candidate_row['grasp_lift_m']:.4f}m "
@@ -747,7 +767,7 @@ def run(args):
                 ) > _reference_attempt_score(row):
                     row = candidate_row
                 if candidate_row["safe_success"]:
-                    selected_grasp_offset = offset.copy()
+                    selected_grasp = (grasp_height, offset.copy())
                     break
             rows.append(row)
             print(
@@ -760,6 +780,7 @@ def run(args):
                 f"close_sign={row['gripper_close_sign']:+.0f} "
                 f"grasp_offset=({row['grasp_offset_x_m']:+.4f},"
                 f"{row['grasp_offset_y_m']:+.4f})m "
+                f"grasp_height={row['grasp_height_m']:.4f}m "
                 f"grasp_lift={row['grasp_lift_m']:.4f}m "
                 f"reason={row['reason'] or '-'}"
             )
@@ -834,6 +855,11 @@ def main():
     parser.add_argument("--pregrasp_clearance", type=float, default=0.0)
     parser.add_argument("--transport_via_x", type=float, default=None)
     parser.add_argument("--grasp_height", type=float, default=0.015)
+    parser.add_argument(
+        "--grasp_height_candidates",
+        default="",
+        help="Optional comma-separated grasp heights searched before XY offsets",
+    )
     parser.add_argument(
         "--grasp_offset_fractions",
         default="0.60,0.80",

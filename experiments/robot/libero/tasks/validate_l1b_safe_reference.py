@@ -137,6 +137,11 @@ def main() -> None:
     parser.add_argument("--pregrasp_clearance", type=float, default=0.0)
     parser.add_argument("--transport_via_x", type=float, default=None)
     parser.add_argument("--grasp_height", type=float, default=0.015)
+    parser.add_argument(
+        "--grasp_height_candidates",
+        default="",
+        help="Optional comma-separated grasp heights searched before XY offsets",
+    )
     parser.add_argument("--grasp_offset_fractions", default="0.60,0.80")
     parser.add_argument("--grasp_seat_steps", type=int, default=15)
     parser.add_argument("--grasp_seat_max_command", type=float, default=0.08)

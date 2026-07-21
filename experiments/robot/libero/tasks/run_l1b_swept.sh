@@ -249,6 +249,7 @@ safe_reference_family() {
     # before the scripted reference has established a grasp.
     extra_args+=(--pregrasp_clearance 0.15)
     extra_args+=(--pregrasp_detour_x -0.15 --pregrasp_detour_y 0.25)
+    extra_args+=(--grasp_height_candidates 0.020,0.025,0.030,0.035)
     extra_args+=(--grasp_offset_fractions 0.30,0.40,0.50,0.60,0.80)
     # Prove an active bypass around the bottle without lifting the held box to an
     # implausible height. The via corridor stays on the open table side.
