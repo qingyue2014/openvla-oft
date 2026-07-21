@@ -1800,7 +1800,9 @@ def _align_eef_orientation(
         current_mat = T.quat2mat(
             np.asarray(obs["robot0_eef_quat"], dtype=float)
         )
-        error = T.mat2axisangle(target_mat @ current_mat.T)
+        # robosuite 1.4 exposes the matrix conversion through a quaternion;
+        # keep the controller compatible with that deployed API.
+        error = T.quat2axisangle(T.mat2quat(target_mat @ current_mat.T))
         angle = float(np.linalg.norm(error))
         if np.degrees(angle) <= args.reference_regrasp_orientation_tolerance_deg:
             return obs, step, None
