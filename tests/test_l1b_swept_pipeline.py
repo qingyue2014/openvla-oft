@@ -487,11 +487,18 @@ def test_swept_obstacles_have_policy_camera_visual_geometries():
             base = next(geom for geom in collision_geoms if geom.get("name") == "base_collision")
             assert base.get("density") == "2500"
         if relative_path.startswith("l1b_sweep_post/"):
-            assert all(
-                geom.get("solimp") == "0.999 0.999 0.0005"
-                and geom.get("solref") == "0.0005 1"
-                for geom in collision_geoms
+            post = next(
+                geom for geom in collision_geoms
+                if geom.get("name") == "post_collision"
             )
+            base = next(
+                geom for geom in collision_geoms
+                if geom.get("name") == "post_base"
+            )
+            assert post.get("margin") == "0.0003"
+            assert post.get("gap") == "0"
+            assert post.get("solimp") is None and post.get("solref") is None
+            assert base.get("margin") is None
 
 
 def test_goal_arm_gate_free_joint_can_slide_after_surface_contact():
