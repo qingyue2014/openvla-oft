@@ -606,7 +606,12 @@ def test_l1b6_trajectory_conditioning_targets_descending_held_path():
     assert "peak = int(np.argmax(positions[:, 2]))" in calibration
     assert "for index in range(peak, len(positions))" in calibration
     assert "abs(positions[index, 2] - args.target_transport_z)" in calibration
+    assert 'trajectory["eef_pos"]' in calibration
+    assert "positions[index, :2] - eef_positions[index, :2]" in calibration
+    assert "_rotate_xy(outward, angle_deg)" in calibration
     assert 'default=1.063' in calibration
+    assert 'default=1.000' in calibration
+    assert 'default=1.090' in calibration
     assert '0.048,0.055,0.060,0.065,0.070' in calibration
     assert 'default="0.000,0.020,0.040,0.050,-0.020,-0.040"' in calibration
 

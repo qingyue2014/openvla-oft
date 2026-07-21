@@ -52,10 +52,20 @@ def _float_values(text: str) -> list[float]:
     return [float(value.strip()) for value in text.split(",") if value.strip()]
 
 
+def _rotate_xy(vector: np.ndarray, angle_deg: float) -> np.ndarray:
+    angle = np.deg2rad(angle_deg)
+    rotation = np.array(
+        [[np.cos(angle), -np.sin(angle)], [np.sin(angle), np.cos(angle)]],
+        dtype=float,
+    )
+    return rotation @ vector
+
+
 def _trajectory_candidates(trajectory: dict, args) -> list[tuple[int, np.ndarray]]:
     positions = np.asarray(
         trajectory["body_pos__cream_cheese_1_main"], dtype=float
     )
+    eef_positions = np.asarray(trajectory["eef_pos"], dtype=float)
     if len(positions) == 0:
         return []
     peak = int(np.argmax(positions[:, 2]))
@@ -77,6 +87,23 @@ def _trajectory_candidates(trajectory: dict, args) -> list[tuple[int, np.ndarray
             break
     candidates = []
     for index in selected_steps:
+        # The grasp can rotate by more than 90 degrees across native layouts.
+        # Use the measured gripper-to-box-center direction as the primary
+        # protrusion axis, then search small angular and radial variations.
+        outward = positions[index, :2] - eef_positions[index, :2]
+        outward_norm = float(np.linalg.norm(outward))
+        if outward_norm < 1e-5:
+            outward = np.array([1.0, 0.0], dtype=float)
+        else:
+            outward = outward / outward_norm
+        for angle_deg in _float_values(args.angular_offset_deg_candidates):
+            direction = _rotate_xy(outward, angle_deg)
+            for distance in _float_values(args.radial_distance_candidates):
+                candidates.append(
+                    (index, positions[index, :2] + distance * direction)
+                )
+        # Retain the original world-axis grid as a conservative fallback for
+        # nearly centered grasps whose sub-centimetre EEF offset is noisy.
         for offset_y in _float_values(args.offset_y_candidates):
             for offset_x in _float_values(args.offset_x_candidates):
                 xy = positions[index, :2] + np.array(
@@ -299,6 +326,12 @@ def calibrate(args) -> str:
         "target_transport_z": args.target_transport_z,
         "offset_x_candidates": _float_values(args.offset_x_candidates),
         "offset_y_candidates": _float_values(args.offset_y_candidates),
+        "radial_distance_candidates": _float_values(
+            args.radial_distance_candidates
+        ),
+        "angular_offset_deg_candidates": _float_values(
+            args.angular_offset_deg_candidates
+        ),
         "verdict": verdict,
     }
     pairing_path.write_text(json.dumps(metadata, indent=2) + "\n")
@@ -340,8 +373,16 @@ def main() -> None:
     parser.add_argument("--task_suite_name", default="libero_goal")
     parser.add_argument("--task_id", type=int, default=6)
     parser.add_argument("--target_transport_z", type=float, default=1.063)
-    parser.add_argument("--min_transport_z", type=float, default=1.045)
-    parser.add_argument("--max_transport_z", type=float, default=1.075)
+    parser.add_argument("--min_transport_z", type=float, default=1.000)
+    parser.add_argument("--max_transport_z", type=float, default=1.090)
+    parser.add_argument(
+        "--radial_distance_candidates",
+        default="0.040,0.045,0.050,0.055,0.060,0.065,0.070,0.035",
+    )
+    parser.add_argument(
+        "--angular_offset_deg_candidates",
+        default="0,20,-20,40,-40,60,-60,90,-90,120,-120,180",
+    )
     parser.add_argument(
         "--offset_x_candidates",
         default="0.040,0.038,0.042,0.045,0.035,0.048,0.055,0.060,0.065,0.070",

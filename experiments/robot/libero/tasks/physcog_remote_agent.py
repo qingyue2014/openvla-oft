@@ -63,6 +63,20 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         artifacts=("experiments/logs/l1b6_wine_bottle_pose_search.csv",),
     ),
+    ("l1b6", "path_calibrate"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/calibrate_l1b6_trajectory_conditioned_states.py",
+            "--eb_trajectories",
+            "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-eb/trajectories",
+            "--fail_on_invalid",
+        ),
+        artifacts=(
+            "experiments/logs/l1b6_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1b6_trajectory_conditioned_calibration.csv",
+            "experiments/robot/libero/tasks/l1b6_native_held_object_pairing.json",
+        ),
+    ),
     ("l1b6", "prepare"): PhaseSpec(
         command=(
             "env",
