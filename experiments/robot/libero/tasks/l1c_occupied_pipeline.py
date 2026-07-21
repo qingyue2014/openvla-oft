@@ -1601,6 +1601,44 @@ def _rotate_horizontal(
     return obs, step, status
 
 
+def _align_body_axis(
+    env, obs, oracle, recorder, body_name, desired_axis, grip, count, step,
+    controller_sign=1.0, tolerance_deg=10.0,
+):
+    """Closed-loop OSC alignment of a body's local +z with a world axis."""
+    desired_axis = np.asarray(desired_axis, dtype=float)
+    desired_axis /= np.linalg.norm(desired_axis)
+    status = None
+    for _ in range(count):
+        body_id = env.sim.model.body_name2id(body_name)
+        body_mat = np.asarray(
+            env.sim.data.body_xmat[body_id], dtype=float
+        ).reshape(3, 3)
+        body_axis = body_mat[:, 2]
+        signed_desired = (
+            desired_axis
+            if float(np.dot(body_axis, desired_axis)) >= 0.0
+            else -desired_axis
+        )
+        cosine = float(np.clip(np.dot(body_axis, signed_desired), -1.0, 1.0))
+        if float(np.degrees(np.arccos(cosine))) <= tolerance_deg:
+            return obs, step, status, True
+        rotation_axis = np.cross(body_axis, signed_desired)
+        norm = float(np.linalg.norm(rotation_axis))
+        if norm < 1e-8:
+            break
+        action = np.zeros(7, dtype=float)
+        action[3:6] = (
+            float(controller_sign) * rotation_axis / norm
+        )
+        action[-1] = grip
+        obs, status = _advance(env, obs, oracle, recorder, action, step)
+        step += 1
+        if status.violated:
+            return obs, step, status, False
+    return obs, step, status, False
+
+
 def _contact_between(env, body_a, body_b):
     a = descendant_geom_ids(env, body_a)
     b = descendant_geom_ids(env, body_b)
@@ -2105,16 +2143,19 @@ def _safe_reference_from_eb_prefix(args, files):
                             step, args,
                         )
                     if failure is None and spec.horizontal_target:
-                        obs, step, status = _rotate_horizontal(
-                            env, obs, oracle, recorder, close,
-                            args.rotate_steps, step, sign=rotate_sign,
-                            axis=l1c3_horizontal_rotation_axis(env, spec),
+                        desired_depth = np.cross(
+                            l1c3_horizontal_rotation_axis(env, spec),
+                            np.array([0.0, 0.0, 1.0]),
                         )
-                        failure = (
-                            status
-                            if status is not None and status.violated
-                            else None
+                        obs, step, status, aligned = _align_body_axis(
+                            env, obs, oracle, recorder, spec.target_body,
+                            desired_depth, close, args.rotate_steps, step,
+                            controller_sign=rotate_sign,
                         )
+                        if status is not None and status.violated:
+                            failure = status
+                        elif not aligned:
+                            failure = "orientation_timeout"
                         preplace_target_tilt = body_tilt_deg(
                             env, spec.target_body
                         )
@@ -2747,7 +2788,7 @@ def main():
     p.add_argument("--grasp_seat_max_command", type=float, default=0.35)
     p.add_argument("--release_steps", type=int, default=15)
     p.add_argument("--settle_steps", type=int, default=80)
-    p.add_argument("--rotate_steps", type=int, default=16)
+    p.add_argument("--rotate_steps", type=int, default=40)
     p.add_argument("--rotate_sign", type=float, default=1.0)
     p.add_argument("--min_horizontal_tilt_deg", type=float, default=65.0)
     p.add_argument("--out_csv", required=True)
