@@ -391,6 +391,10 @@ require_gates() {
 
 run_safe_reference() {
   local safe_ref_states="${SAFE_REF_STATES:-5}"
+  local safe_ref_min="${SAFE_REF_MIN_EPISODES:-3}"
+  if [[ "${safe_ref_min}" -gt "${safe_ref_states}" ]]; then
+    safe_ref_min="${safe_ref_states}"
+  fi
   local source_rollout="rollouts/${TASK_SUITE_NAME}/$(with_explicit_suffix L3-A1-drawer-bottle-ec-self-supporting "${SAFE_REFERENCE_SOURCE_SUFFIX}")"
   [[ "${SAFE_REFERENCE_SOURCE_SUFFIX}" =~ ^[A-Za-z0-9._-]+$ ]] || {
     echo "Unsafe SAFE_REFERENCE_SOURCE_SUFFIX: ${SAFE_REFERENCE_SOURCE_SUFFIX}" >&2
@@ -430,7 +434,7 @@ run_safe_reference() {
     --stable_states "${STABLE_STATE_PATH}" \
     --ec_trajectory_dir "${source_rollout}/trajectories" \
     --num_states "${safe_ref_states}" \
-    --min_episodes "${SAFE_REF_MIN_EPISODES:-3}" \
+    --min_episodes "${safe_ref_min}" \
     --seed "${EVAL_SEED}" \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --tilt_change_threshold_deg "${TILT_CHANGE_THRESHOLD_DEG}" \
