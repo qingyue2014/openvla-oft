@@ -24,6 +24,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _csv_rate,
     _collision_aabb_extent,
     _file_sha256,
+    _l1c3_release_gate_passes,
     _matrix_to_wxyz,
     _policy_camera_crop,
     _quat_separation_deg,
@@ -594,17 +595,17 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert 'args.scenario in ("l1c2", "l1c3")' in source
     assert "_reset_with_fixture_seed(env, reset_seeds[idx])" in source
     assert "preplace_target_tilt = body_tilt_deg" in source
-    assert "the occupied-goal oracle enforces the final" in source
+    assert "Judge the required" in source
     assert 'spec.scenario != "L1-C3"' in source
     assert "handoff_xy_distance > args.reference_handoff_xy_distance" in source
     assert "desired_body_xy - body_pos(env, spec.target_body)[:2]" in source
     assert "stop_on_native_success and native_success(env)" in source
     assert "_align_body_axis(" in source
-    assert "failure = \"orientation_timeout\"" in source
+    assert "failure = \"pre_release_orientation_timeout\"" in source
     assert "rotation_axis = np.cross(body_axis, desired_axis)" in source
     assert "desired_body[2] - body_pos(env, spec.target_body)[2]" in source
-    assert "explicit drawer-floor" in source
-    assert "args.reference_rotation_clearance" in source
+    assert "set_body_drop_pose(" in source
+    assert "stop_on_support=True" in source
     assert "command=args.reference_rotation_command" in source
     assert "args.reference_alignment_steps" in source
     assert "args.reference_rotation_settle_steps" in source
@@ -615,8 +616,55 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "args.reference_tracking_rotation_command" in source
     assert "args.reference_transport_height_above_anchor" in source
     assert "tolerance=args.reference_lateral_tolerance" in source
-    assert "release_xy_error <= args.reference_release_xy_tolerance" in source
-    assert "args.reference_release_max_height_above_anchor" in source
-    assert "release_horizontal_margin" in source
-    assert "release_tilt >= spec.min_target_tilt_deg" in source
+    assert "_l1c3_release_gate_metrics(" in source
+    assert "_l1c3_release_gate_passes(" in source
+    assert "pre_release_drawer_insertion_gate" in source
+    assert "reference_release_root_vertical_margin" in source
+    assert "target_final_body_not_inside_drawer_vertical" in source
     assert "-abs(args.rotate_sign)" in source
+
+
+def test_l1c3_release_gate_rejects_hovering_bottle_before_gripper_open():
+    spec = get_spec("l1c3")
+    args = SimpleNamespace(
+        reference_release_xy_tolerance=0.015,
+        reference_release_root_vertical_margin=-0.004,
+        reference_pre_release_min_tilt_deg=25.0,
+        reference_pre_release_max_tilt_deg=50.0,
+    )
+    valid = {
+        "support_contact": True,
+        "xy_error_m": 0.004,
+        "root_vertical_margin_m": 0.002,
+        "body_vertical_margin_m": -0.100,
+        "body_horizontal_margin_m": 0.006,
+        "tilt_deg": 35.0,
+    }
+    assert _l1c3_release_gate_passes(valid, spec, args)
+
+    hovering = dict(valid, support_contact=False, root_vertical_margin_m=-0.120)
+    assert not _l1c3_release_gate_passes(hovering, spec, args)
+
+
+def test_l1c3_release_gate_rejects_root_or_footprint_outside_drawer():
+    spec = get_spec("l1c3")
+    args = SimpleNamespace(
+        reference_release_xy_tolerance=0.015,
+        reference_release_root_vertical_margin=-0.004,
+        reference_pre_release_min_tilt_deg=25.0,
+        reference_pre_release_max_tilt_deg=50.0,
+    )
+    base = {
+        "support_contact": True,
+        "xy_error_m": 0.004,
+        "root_vertical_margin_m": 0.002,
+        "body_vertical_margin_m": -0.100,
+        "body_horizontal_margin_m": 0.006,
+        "tilt_deg": 35.0,
+    }
+    assert not _l1c3_release_gate_passes(
+        dict(base, root_vertical_margin_m=-0.010), spec, args
+    )
+    assert not _l1c3_release_gate_passes(
+        dict(base, body_horizontal_margin_m=0.001), spec, args
+    )

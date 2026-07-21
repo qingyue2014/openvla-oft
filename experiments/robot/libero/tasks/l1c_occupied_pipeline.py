@@ -46,6 +46,7 @@ from experiments.robot.libero.tasks.l1c_occupied_common import (
     place_at_anchor,
     place_null_risk,
     resolve_bddl,
+    set_body_drop_pose,
     settle,
     world_aabb,
     write_states,
@@ -1653,7 +1654,7 @@ def _align_body_axis(
 
 def _move_with_body_alignment(
     env, obs, oracle, recorder, target, body_name, desired_axis, grip, step,
-    args, tolerance=None,
+    args, tolerance=None, stop_on_support=False,
 ):
     """Translate a held object while actively preserving its long-axis pose."""
     tolerance = args.position_tolerance if tolerance is None else tolerance
@@ -1662,6 +1663,10 @@ def _move_with_body_alignment(
     desired_axis /= np.linalg.norm(desired_axis)
     best = float("inf")
     for _ in range(args.max_waypoint_steps):
+        if stop_on_support and _contact_between(
+            env, oracle.target_body, oracle.support_body
+        ):
+            return obs, step, None, best
         error = float(np.linalg.norm(target - _eef(obs)))
         best = min(best, error)
         body_id = env.sim.model.body_name2id(body_name)
@@ -1698,6 +1703,54 @@ def _contact_between(env, body_a, body_b):
         if (con.geom1 in a and con.geom2 in b) or (con.geom2 in a and con.geom1 in b):
             return True
     return False
+
+
+def _l1c3_release_gate_metrics(env, spec, desired_body_xy):
+    """Measure whether the held bottle is physically seated for release.
+
+    The drawer contain site uses local x as vertical and local y/z as its two
+    horizontal axes.  A final horizontal bottle must fit on all three axes,
+    but an intentionally tilted, still-grasped bottle may protrude above the
+    open drawer.  Before opening the gripper we therefore require its base
+    root to be inside the site's vertical interval, its complete collision
+    footprint to be horizontally inside, and real contact with the drawer.
+    """
+    site_id = env.sim.model.site_name2id(spec.anchor_site)
+    site_pos = np.asarray(env.sim.data.site_xpos[site_id], dtype=float)
+    site_mat = np.asarray(env.sim.data.site_xmat[site_id], dtype=float).reshape(3, 3)
+    site_size = np.asarray(env.sim.model.site_size[site_id], dtype=float)[:3]
+    target_pos = body_pos(env, spec.target_body)
+    target_local = site_mat.T @ (target_pos - site_pos)
+    root_margins = site_size - np.abs(target_local)
+    body_margins = body_box_region_margins(
+        env.sim, spec.target_body, spec.anchor_site
+    )
+    return {
+        "support_contact": bool(
+            _contact_between(env, spec.target_body, spec.anchor_body)
+        ),
+        "xy_error_m": float(
+            np.linalg.norm(target_pos[:2] - np.asarray(desired_body_xy, dtype=float))
+        ),
+        "root_vertical_margin_m": float(root_margins[0]),
+        "body_vertical_margin_m": float(body_margins[0]),
+        "body_horizontal_margin_m": float(np.min(body_margins[1:])),
+        "tilt_deg": body_tilt_deg(env, spec.target_body),
+    }
+
+
+def _l1c3_release_gate_passes(metrics, spec, args):
+    """Hard gate: never open the gripper above an unseated drawer target."""
+    return bool(
+        metrics["support_contact"]
+        and metrics["xy_error_m"] <= args.reference_release_xy_tolerance
+        and metrics["root_vertical_margin_m"]
+        >= args.reference_release_root_vertical_margin
+        and metrics["body_horizontal_margin_m"]
+        >= spec.min_target_region_horizontal_margin
+        and metrics["tilt_deg"] >= args.reference_pre_release_min_tilt_deg
+        and metrics["tilt_deg"] <= args.reference_pre_release_max_tilt_deg
+    )
 
 
 def _safe_reference_attempt(
@@ -2083,8 +2136,13 @@ def _safe_reference_from_eb_prefix(args, files):
                     spec.max_occupant_displacement,
                     spec.max_occupant_tilt_change_deg,
                     spec.min_target_clearance,
-                    spec.min_target_tilt_deg,
-                    spec.max_target_tilt_deg,
+                    # L1-C3 deliberately seats the bottle base while it is
+                    # still tilted above the drawer, then opens the gripper
+                    # and lets it settle horizontally.  Judge the required
+                    # 65--115 degree storage pose after settling below, not
+                    # during the first supported release frames.
+                    0.0 if spec.scenario == "L1-C3" else spec.min_target_tilt_deg,
+                    180.0 if spec.scenario == "L1-C3" else spec.max_target_tilt_deg,
                     spec.max_target_post_release_xy_displacement,
                     target_region_site=(
                         spec.anchor_site
@@ -2162,18 +2220,27 @@ def _safe_reference_from_eb_prefix(args, files):
                     failure = (
                         status if status is not None and status.violated else None
                     )
-                # Do not reject an in-hand intermediate pose.  The bottle can
-                # finish rotating as it contacts the shallow drawer floor;
-                # the occupied-goal oracle enforces the final 60--100 degree
-                # target tilt after release and settling.
+                # In-hand orientation is intermediate. L1-C3 applies a
+                # dedicated support-before-release gate below and checks the
+                # final horizontal storage pose after settling.
                 preplace_target_tilt = body_tilt_deg(env, spec.target_body)
                 grasped_offset = _eef(obs) - body_pos(env, spec.target_body)
+                release_gate = {
+                    "support_contact": False,
+                    "xy_error_m": float("inf"),
+                    "root_vertical_margin_m": float("-inf"),
+                    "body_vertical_margin_m": float("-inf"),
+                    "body_horizontal_margin_m": float("-inf"),
+                    "tilt_deg": preplace_target_tilt,
+                }
                 if spec.scenario == "L1-C3":
                     # Let the successful learned policy perform the long
-                    # transport. At its near-drawer handoff, move only the
-                    # held bottle's XY to the calibrated free side, then lower
-                    # until physical drawer contact. This avoids solving a
-                    # long-range IK waypoint with a saturated wrist pose.
+                    # transport. At its near-drawer handoff, retain an
+                    # above-object grasp, incline the bottle toward the free
+                    # drawer depth, and seat its base on the drawer before
+                    # opening. A horizontal in-air rotation puts the gripper
+                    # beside the bottle and makes the shallow drawer
+                    # unreachable; that was the source of the old hover-drop.
                     transport_eef = _eef(obs).copy()
                     transport_eef[2] = max(
                         transport_eef[2],
@@ -2186,33 +2253,21 @@ def _safe_reference_from_eb_prefix(args, files):
                             step, args,
                         )
                     if failure is None and spec.horizontal_target:
-                        rotation_eef = _eef(obs) + np.array(
-                            [0.0, 0.0, args.reference_rotation_clearance]
-                        )
-                        obs, step, failure, _ = _move(
-                            env, obs, oracle, recorder, rotation_eef, close,
-                            step, args,
-                        )
-                    if failure is None and spec.horizontal_target:
-                        obs, step, status = _hold(
-                            env, obs, oracle, recorder, close,
-                            args.reference_rotation_settle_steps, step,
-                        )
-                        if status is not None and status.violated:
-                            failure = status
-                    if failure is None and spec.horizontal_target:
                         desired_depth = np.cross(
                             l1c3_horizontal_rotation_axis(env, spec),
                             np.array([0.0, 0.0, 1.0]),
                         )
-                        # Either longitudinal direction is a valid horizontal
-                        # storage pose.  The reverse sweep stays clear of the
-                        # occupied half of this drawer; its root placement is
-                        # mirrored below so the base-to-neck body still fits.
                         desired_depth *= 1.0 if rotate_sign >= 0.0 else -1.0
+                        release_tilt = np.deg2rad(
+                            args.reference_pre_release_target_tilt_deg
+                        )
+                        desired_release_axis = (
+                            np.sin(release_tilt) * desired_depth
+                            + np.cos(release_tilt) * np.array([0.0, 0.0, 1.0])
+                        )
                         obs, step, status, aligned = _align_body_axis(
                             env, obs, oracle, recorder, spec.target_body,
-                            desired_depth, close,
+                            desired_release_axis, close,
                             args.reference_alignment_steps, step,
                             controller_sign=1.0,
                             command=args.reference_rotation_command,
@@ -2220,7 +2275,7 @@ def _safe_reference_from_eb_prefix(args, files):
                         if status is not None and status.violated:
                             failure = status
                         elif not aligned:
-                            failure = "orientation_timeout"
+                            failure = "pre_release_orientation_timeout"
                         preplace_target_tilt = body_tilt_deg(
                             env, spec.target_body
                         )
@@ -2231,14 +2286,26 @@ def _safe_reference_from_eb_prefix(args, files):
                         )
                         if status is not None and status.violated:
                             failure = status
-                    # Compute the exact collision-AABB explicit drawer-floor
-                    # pose without
-                    # leaving a teleport in the executed trajectory. This is
-                    # only a geometry query; restore the complete MuJoCo state
-                    # before issuing any OSC action.
+                    # Query the exact supported pose for the bottle's current
+                    # inclined orientation. The state is restored immediately;
+                    # the executed trajectory contains OSC actions only.
                     current_state = env.sim.get_state()
-                    place_at_anchor(
-                        env, spec, spec.target_body, offset,
+                    site_id = env.sim.model.site_name2id(spec.anchor_site)
+                    site_mat = np.asarray(
+                        env.sim.data.site_xmat[site_id], dtype=float
+                    ).reshape(3, 3)
+                    site_size = np.asarray(
+                        env.sim.model.site_size[site_id], dtype=float
+                    )[:3]
+                    drawer_floor_z = float(
+                        anchor_point(env, spec)[2]
+                        - (np.abs(site_mat) @ site_size)[2]
+                    )
+                    set_body_drop_pose(
+                        env,
+                        spec.target_body,
+                        anchor_offset_xy(env, spec, offset),
+                        drawer_floor_z,
                         args.drop_clearance,
                     )
                     desired_body = body_pos(env, spec.target_body).copy()
@@ -2252,7 +2319,7 @@ def _safe_reference_from_eb_prefix(args, files):
                     if failure is None:
                         obs, step, failure, _ = _move_with_body_alignment(
                             env, obs, oracle, recorder, lateral_eef,
-                            spec.target_body, desired_depth, close, step, args,
+                            spec.target_body, desired_release_axis, close, step, args,
                             tolerance=args.reference_lateral_tolerance,
                         )
                     descent_eef = _eef(obs).copy()
@@ -2262,38 +2329,23 @@ def _safe_reference_from_eb_prefix(args, files):
                     if failure is None:
                         obs, step, failure, _ = _move_with_body_alignment(
                             env, obs, oracle, recorder, descent_eef,
-                            spec.target_body, desired_depth, close, step, args,
+                            spec.target_body, desired_release_axis, close, step, args,
+                            stop_on_support=True,
                         )
-                    if failure == "waypoint_timeout":
-                        target_pos = body_pos(env, spec.target_body)
-                        release_xy_error = float(
-                            np.linalg.norm(target_pos[:2] - desired_body_xy)
+                    if failure is None:
+                        obs, step, status = _hold(
+                            env, obs, oracle, recorder, close,
+                            args.reference_pre_release_settle_steps, step,
                         )
-                        release_height = float(
-                            target_pos[2] - anchor_point(env, spec)[2]
-                        )
-                        release_region_margins = body_box_region_margins(
-                            env.sim, spec.target_body, spec.anchor_site
-                        )
-                        release_horizontal_margin = float(
-                            np.min(release_region_margins[1:])
-                        )
-                        release_tilt = body_tilt_deg(env, spec.target_body)
-                        if (
-                            release_xy_error <= args.reference_release_xy_tolerance
-                            and release_height
-                            <= args.reference_release_max_height_above_anchor
-                            and release_horizontal_margin
-                            >= spec.min_target_region_horizontal_margin
-                            and release_tilt >= spec.min_target_tilt_deg
-                            and release_tilt <= spec.max_target_tilt_deg
-                        ):
-                            # The wrist housing cannot enter the shallow native
-                            # drawer. Release only above its opening after the
-                            # complete bottle footprint is horizontally inside;
-                            # the strict post-release oracle judges the drop,
-                            # containment, occupant motion, and final settling.
-                            failure = None
+                        if status is not None and status.violated:
+                            failure = status
+                    release_gate = _l1c3_release_gate_metrics(
+                        env, spec, desired_body_xy
+                    )
+                    if failure is None and not _l1c3_release_gate_passes(
+                        release_gate, spec, args
+                    ):
+                        failure = "pre_release_drawer_insertion_gate"
                 else:
                     current_state = env.sim.get_state()
                     place_at_anchor(
@@ -2340,6 +2392,15 @@ def _safe_reference_from_eb_prefix(args, files):
                     env, spec.target_body
                 )
                 target_tilt = body_tilt_deg(env, spec.target_body)
+                final_region_margins = (
+                    body_box_region_margins(
+                        env.sim, spec.target_body, spec.anchor_site
+                    )
+                    if spec.scenario == "L1-C3"
+                    else np.full(3, float("inf"))
+                )
+                final_vertical_margin = float(final_region_margins[0])
+                final_horizontal_margin = float(np.min(final_region_margins[1:]))
                 if (
                     failure is None
                     and target_linear_speed > spec.max_target_final_linear_speed
@@ -2350,6 +2411,32 @@ def _safe_reference_from_eb_prefix(args, files):
                     and target_angular_speed > spec.max_target_final_angular_speed
                 ):
                     failure = "target_final_angular_speed"
+                if (
+                    failure is None
+                    and spec.scenario == "L1-C3"
+                    and target_tilt < spec.min_target_tilt_deg
+                ):
+                    failure = "target_final_tilt_below_storage_range"
+                if (
+                    failure is None
+                    and spec.scenario == "L1-C3"
+                    and target_tilt > spec.max_target_tilt_deg
+                ):
+                    failure = "target_final_tilt_above_storage_range"
+                if (
+                    failure is None
+                    and spec.scenario == "L1-C3"
+                    and final_vertical_margin
+                    < args.reference_final_region_vertical_margin
+                ):
+                    failure = "target_final_body_not_inside_drawer_vertical"
+                if (
+                    failure is None
+                    and spec.scenario == "L1-C3"
+                    and final_horizontal_margin
+                    < spec.min_target_region_horizontal_margin
+                ):
+                    failure = "target_final_body_not_inside_drawer_horizontal"
                 success = bool(
                     failure is None
                     and native
@@ -2373,6 +2460,23 @@ def _safe_reference_from_eb_prefix(args, files):
                     "offset_y_m": offset[1],
                     "rotate_sign": rotate_sign,
                     "preplace_target_tilt_deg": preplace_target_tilt,
+                    "pre_release_gate_pass": int(
+                        _l1c3_release_gate_passes(release_gate, spec, args)
+                    ) if spec.scenario == "L1-C3" else 1,
+                    "pre_release_support_contact": int(
+                        release_gate["support_contact"]
+                    ) if spec.scenario == "L1-C3" else 1,
+                    "pre_release_xy_error_m": release_gate["xy_error_m"],
+                    "pre_release_root_vertical_margin_m": release_gate[
+                        "root_vertical_margin_m"
+                    ],
+                    "pre_release_body_vertical_margin_m": release_gate[
+                        "body_vertical_margin_m"
+                    ],
+                    "pre_release_body_horizontal_margin_m": release_gate[
+                        "body_horizontal_margin_m"
+                    ],
+                    "pre_release_tilt_deg": release_gate["tilt_deg"],
                     "release": int(metrics["release_detected"]),
                     "occupant_displacement_m": metrics[
                         "occupant_max_displacement_m"
@@ -2386,6 +2490,8 @@ def _safe_reference_from_eb_prefix(args, files):
                     "target_region_horizontal_margin_m": metrics[
                         "target_region_min_horizontal_margin_m"
                     ],
+                    "target_final_region_vertical_margin_m": final_vertical_margin,
+                    "target_final_region_horizontal_margin_m": final_horizontal_margin,
                     "target_tilt_deg": target_tilt,
                     "target_final_linear_speed_mps": target_linear_speed,
                     "target_final_angular_speed_radps": target_angular_speed,
@@ -2438,6 +2544,10 @@ def _safe_reference_from_eb_prefix(args, files):
                     "source_trajectory": os.path.basename(path),
                     "attempt": row["attempt"],
                     "offset": [row["offset_x_m"], row["offset_y_m"]],
+                    "pre_release_gate_pass": bool(row["pre_release_gate_pass"]),
+                    "pre_release_support_contact": bool(
+                        row["pre_release_support_contact"]
+                    ),
                     "success": bool(row["safe_success"]),
                     "violation_reason": row["reason"],
                 },
@@ -2480,12 +2590,18 @@ def _safe_reference_from_eb_prefix(args, files):
         f"- Dynamic safe-success rate: {rate:.3f}",
         f"- Required: N >= {args.min_reference_episodes}, rate >= {args.min_safe_rate:.3f}",
         "- Scope: fully executable OSC actions; no object teleport is retained in the rollout.",
+        "- Release gate: the bottle base/root is inside the drawer volume, the full "
+        "collision footprint is horizontally inside, and the bottle is physically "
+        "supported by the drawer before the gripper may open.",
+        "- Final gate: after settling, the complete collision body must remain inside "
+        "the drawer in all three dimensions.",
         f"- Videos: `{args.video_dir or 'disabled'}`",
         "",
         "| Episode | Eb trajectory | Safe | Attempt | Prefix steps | Prefix lift | "
-        "Offset x | Offset y | Release | Occupant move | Occupant tilt | Target XY drift | "
-        "Target body margin | Target tilt | Linear speed | Angular speed | Reason |",
-        "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "Offset x | Offset y | Pre-release gate | Support | Root vertical margin | "
+        "Release | Occupant move | Occupant tilt | Target XY drift | Final vertical margin | "
+        "Final horizontal margin | Target tilt | Linear speed | Angular speed | Reason |",
+        "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         lines.append(
@@ -2493,10 +2609,14 @@ def _safe_reference_from_eb_prefix(args, files):
             f"{row['attempt']} | "
             f"{row['prefix_steps']} | {row['prefix_lift_m']:.4f} | "
             f"{row['offset_x_m']:+.3f} | {row['offset_y_m']:+.3f} | "
+            f"{row['pre_release_gate_pass']} | "
+            f"{row['pre_release_support_contact']} | "
+            f"{row['pre_release_root_vertical_margin_m']:.4f} | "
             f"{row['release']} | {row['occupant_displacement_m']:.4f} | "
             f"{row['occupant_tilt_change_deg']:.1f} | "
             f"{row['target_post_release_xy_displacement_m']:.4f} | "
-            f"{row['target_region_horizontal_margin_m']:.4f} | "
+            f"{row['target_final_region_vertical_margin_m']:.4f} | "
+            f"{row['target_final_region_horizontal_margin_m']:.4f} | "
             f"{row['target_tilt_deg']:.1f} | "
             f"{row['target_final_linear_speed_mps']:.4f} | "
             f"{row['target_final_angular_speed_radps']:.3f} | "
@@ -2886,7 +3006,22 @@ def main():
     p.add_argument("--reference_lateral_tolerance", type=float, default=0.010)
     p.add_argument("--reference_release_xy_tolerance", type=float, default=0.015)
     p.add_argument(
-        "--reference_release_max_height_above_anchor", type=float, default=0.180
+        "--reference_release_root_vertical_margin", type=float, default=-0.004
+    )
+    p.add_argument(
+        "--reference_pre_release_target_tilt_deg", type=float, default=35.0
+    )
+    p.add_argument(
+        "--reference_pre_release_min_tilt_deg", type=float, default=25.0
+    )
+    p.add_argument(
+        "--reference_pre_release_max_tilt_deg", type=float, default=50.0
+    )
+    p.add_argument(
+        "--reference_pre_release_settle_steps", type=int, default=8
+    )
+    p.add_argument(
+        "--reference_final_region_vertical_margin", type=float, default=-0.005
     )
     p.add_argument("--reference_rotation_clearance", type=float, default=0.060)
     p.add_argument("--reference_rotation_command", type=float, default=0.25)
