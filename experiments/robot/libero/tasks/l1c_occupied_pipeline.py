@@ -2152,11 +2152,16 @@ def _safe_reference_from_eb_prefix(args, files):
                             l1c3_horizontal_rotation_axis(env, spec),
                             np.array([0.0, 0.0, 1.0]),
                         )
+                        # Either longitudinal direction is a valid horizontal
+                        # storage pose.  The reverse sweep stays clear of the
+                        # occupied half of this drawer; its root placement is
+                        # mirrored below so the base-to-neck body still fits.
+                        desired_depth *= 1.0 if rotate_sign >= 0.0 else -1.0
                         obs, step, status, aligned = _align_body_axis(
                             env, obs, oracle, recorder, spec.target_body,
                             desired_depth, close,
                             args.reference_alignment_steps, step,
-                            controller_sign=rotate_sign,
+                            controller_sign=1.0,
                             command=args.reference_rotation_command,
                         )
                         if status is not None and status.violated:
@@ -2336,7 +2341,14 @@ def _safe_reference_from_eb_prefix(args, files):
                 return row, recorder
 
             placement_options = tuple(
-                (offset, rotate_sign)
+                (
+                    (
+                        (-offset[0], offset[1])
+                        if spec.scenario == "L1-C3" and rotate_sign < 0.0
+                        else offset
+                    ),
+                    rotate_sign,
+                )
                 for offset in spec.safe_offsets
                 for rotate_sign in (
                     (args.rotate_sign, -args.rotate_sign)
