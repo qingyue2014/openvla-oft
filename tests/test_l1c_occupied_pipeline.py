@@ -605,6 +605,7 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "_align_eef_orientation(" in source
     assert "T.quat2axisangle(T.mat2quat(" in source
     assert "table_regrasp_failed" in source
+    assert "env, obs, oracle, recorder, regrasp, close" in source
     assert "reference_regrasp_table_clearance" in source
     assert "reference_regrasp_approach_height" in source
     assert "drawer_floor_z" in source

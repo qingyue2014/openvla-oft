@@ -2440,6 +2440,13 @@ def _safe_reference_from_eb_prefix(args, files):
                             tolerance=args.grasp_position_tolerance,
                         )
                     if failure is None:
+                        obs, step, status = _seat_grasp(
+                            env, obs, oracle, recorder, regrasp, close,
+                            args.grasp_seat_steps, step, args,
+                        )
+                        if status is not None and status.violated:
+                            failure = status
+                    if failure is None:
                         obs, step, status = _hold(
                             env, obs, oracle, recorder, close,
                             args.grasp_steps, step,
