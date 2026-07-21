@@ -60,10 +60,12 @@ to solve bottle physics only and cannot alter the robot, bowl, or drawer state.
 `Πsafe` (the ordering constraint) is not a separate scene: it is an executable
 reference behavior evaluated on the **same serialized `Er` states**. The robot
 uses the evaluated 7-D OSC interface to secure the bottle, raise it clear of
-the native panel, relocate it to a reachable task-path-clear table pose, and
-confirm that it is self-supporting after release. The executable staging pose
-need not equal Ec's upright null-risk pose: Ec remains the matched visual/
-causal control, while `Pi_safe` must respect the robot's actual workspace. It
+the native panel, relocate it to a reachable task-path-clear table pose, pivot
+it upright on its native base, and confirm that it is independently supported
+by the table after release. A horizontal resting pose is explicitly invalid.
+The executable staging position need not equal Ec's upright null-risk position:
+Ec remains the matched visual/causal control, while `Pi_safe` must respect the
+robot's actual workspace. It
 then completes bowl placement and drawer closure with an
 episode-paired successful Ec OSC trajectory. The entire path is executed with
 `env.step(action)` and saved as an NPZ trajectory plus policy-view MP4 by

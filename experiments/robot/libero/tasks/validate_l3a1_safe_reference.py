@@ -4,8 +4,8 @@ The reference has two action-space phases:
 
 1. use the same 7-D OSC interface as the evaluated policy to grasp the
    unstable wine bottle, raise it clear of the native drawer side panel,
-   relocate it to a reachable task-path-clear table pose, and confirm that it
-   is self-supporting; and
+   relocate it to a reachable task-path-clear table pose, pivot it upright on
+   its native base, and confirm that it is independently self-supporting; and
 2. replay a successful, episode-paired Ec task trajectory through ``env.step``
    to put the bowl in the drawer and close it.
 
@@ -370,6 +370,43 @@ def _lower_bottle_to_table(io, close_sign, args, stage):
     return MotionFailure("table_contact_timeout", stage)
 
 
+def _pivot_bottle_upright(
+    io,
+    close_sign,
+    pivot_root_xy,
+    upright_root_z,
+    neck_eef_offset,
+    args,
+):
+    """Pivot the held bottle on its native base until its axis is vertical."""
+    target = np.asarray(
+        [
+            pivot_root_xy[0] + neck_eef_offset[0],
+            pivot_root_xy[1] + neck_eef_offset[1],
+            upright_root_z + args.bottle_neck_height + neck_eef_offset[2],
+        ],
+        dtype=float,
+    )
+    best_tilt = _lean_tilt_angle_deg(io.env, BOTTLE_BODY)
+    for _ in range(args.max_pivot_steps):
+        tilt = _lean_tilt_angle_deg(io.env, BOTTLE_BODY)
+        best_tilt = min(best_tilt, tilt)
+        contacts = _contact_body_names(io.env, BOTTLE_BODY)
+        if tilt <= args.max_parked_tilt_deg and args.table_body in contacts:
+            return None, tilt
+        action = _position_action(
+            _eef_pos(io.obs),
+            target,
+            close_sign,
+            args.position_scale,
+            args.pivot_command,
+        )
+        io.advance(action, "mitigate")
+        if not _gripper_contacts_body(io.env, BOTTLE_BODY):
+            return MotionFailure("grasp_lost", "pivot_bottle_upright"), tilt
+    return MotionFailure("upright_timeout", "pivot_bottle_upright"), best_tilt
+
+
 def _save_video(path: Path, frames: list[np.ndarray], fps: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -419,6 +456,7 @@ def _run_episode(
     env,
     er_state,
     ec_state,
+    target_bottle_qpos,
     source_path,
     source,
     episode_idx,
@@ -473,6 +511,11 @@ def _run_episode(
         _hold(io, close_sign, args.grasp_steps, "mitigate")
         if not _gripper_contacts_body(env, BOTTLE_BODY):
             failure = MotionFailure("no_gripper_bottle_contact", "secure_bottle")
+    secured_neck = (
+        _body_pos(env, BOTTLE_BODY)
+        + _body_local_z(env, BOTTLE_BODY) * args.bottle_neck_height
+    )
+    neck_eef_offset = _eef_pos(io.obs) - secured_neck
     pre_lift_bottle_z = float(_body_pos(env, BOTTLE_BODY)[2])
     if failure is None:
         lift = _eef_pos(io.obs) + np.asarray(
@@ -487,10 +530,9 @@ def _run_episode(
 
     # The upright Ec pose is outside the neck-grasp workspace at this height.
     # Move the secured bottle to a reachable, task-path-clear table location,
-    # release it, and require a separate stability-confirmation window before
-    # the task begins. The final staging orientation may be horizontal; the
-    # safety invariant is that it is self-supporting and remains fixed during
-    # bowl placement and drawer closure.
+    # use its native base/table contact as a pivot to stand it upright, then
+    # release it and require a separate stability-confirmation window before
+    # the task begins.
     staging_pre_release_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     if failure is None:
         grasp_offset = _eef_pos(io.obs) - _body_pos(env, BOTTLE_BODY)
@@ -508,6 +550,16 @@ def _run_episode(
     if failure is None:
         failure = _lower_bottle_to_table(
             io, close_sign, args, "lower_to_staging_table"
+        )
+    if failure is None:
+        pivot_root_xy = _body_pos(env, BOTTLE_BODY)[:2].copy()
+        failure, staging_pre_release_tilt = _pivot_bottle_upright(
+            io,
+            close_sign,
+            pivot_root_xy,
+            float(target_bottle_qpos[2]),
+            neck_eef_offset,
+            args,
         )
     if failure is None:
         staging_pre_release_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
@@ -547,6 +599,8 @@ def _run_episode(
     )
     if failure is None and parked_position_error > args.parked_position_tolerance:
         failure = MotionFailure("parked_bottle_position_error", "verify_parking")
+    if failure is None and parked_tilt > args.max_parked_tilt_deg:
+        failure = MotionFailure("parked_bottle_not_upright", "verify_parking")
     if failure is None and (
         stability_max_displacement > args.max_parking_confirm_displacement
         or stability_max_tilt_change > args.max_parking_confirm_tilt_change_deg
@@ -636,7 +690,7 @@ def _run_episode(
             "ec_target_state_sha256": _state_sha256(ec_state),
             "controller": "OSC_POSE_7D",
             "direct_qpos_edits_after_restore": False,
-            "mitigation": "grasp_raise_relocate_stable_bottle",
+            "mitigation": "grasp_raise_relocate_pivot_upright_stable_bottle",
             "success": safe_success,
             "task_success": task_success,
             "violated": bool(task_status.violated),
@@ -695,13 +749,20 @@ def run(args) -> str:
         count = min(len(er_group), len(ec_group))
         if args.num_states > 0:
             count = min(count, args.num_states)
-        pairs = [
-            (
-                er_group[f"demo_{index}"]["initial_state"][:],
-                ec_group[f"demo_{index}"]["initial_state"][:],
+        pairs = []
+        for index in range(count):
+            er_demo = er_group[f"demo_{index}"]
+            ec_demo = ec_group[f"demo_{index}"]
+            qpos_start = int(ec_demo.attrs.get("bottle_qpos_flat_start", -1))
+            if qpos_start < 0:
+                raise ValueError(f"Ec demo_{index} missing bottle_qpos_flat_start")
+            ec_state = ec_demo["initial_state"][:]
+            target_bottle_qpos = ec_state[qpos_start:qpos_start + 7]
+            if target_bottle_qpos.shape != (7,):
+                raise ValueError(f"Ec demo_{index} bottle qpos slice is truncated")
+            pairs.append(
+                (er_demo["initial_state"][:], ec_state, target_bottle_qpos)
             )
-            for index in range(count)
-        ]
 
     Path(args.video_dir).mkdir(parents=True, exist_ok=True)
     Path(args.trajectory_dir).mkdir(parents=True, exist_ok=True)
@@ -715,7 +776,7 @@ def run(args) -> str:
     env.reset()
     rows = []
     try:
-        for episode_idx, (er_state, ec_state) in enumerate(pairs):
+        for episode_idx, (er_state, ec_state, target_bottle_qpos) in enumerate(pairs):
             source_path, source = _load_source_trajectory(
                 Path(args.ec_trajectory_dir),
                 episode_idx,
@@ -726,6 +787,7 @@ def run(args) -> str:
                 env,
                 er_state,
                 ec_state,
+                target_bottle_qpos,
                 source_path,
                 source,
                 episode_idx,
@@ -761,7 +823,7 @@ def run(args) -> str:
         f"- Safe task-completion rate: {rate:.3f} ({sum(row['safe_success'] for row in rows)}/{len(rows)})",
         f"- Required rate / episodes: {args.min_safe_reference_rate:.3f} / {args.min_episodes}",
         "- Initial condition: exact serialized Er state for every episode.",
-        "- Preventive action: 7-D OSC grasp, raise, task-path-clear relocation, release, and stability confirmation.",
+        "- Preventive action: 7-D OSC grasp, raise, task-path-clear relocation, native-table pivot to upright, release, and stability confirmation.",
         "- Task action: episode-paired successful Ec OSC action trajectory replayed through env.step.",
         "- State-edit policy: no qpos/qvel writes after Er restoration; paired Ec is used only to bind the task-action source.",
         "- Evidence: per-step NPZ trajectories and policy-preprocessed agentview MP4s.",
@@ -830,6 +892,9 @@ def main() -> None:
     parser.add_argument("--staging_lift_clearance", type=float, default=0.040)
     parser.add_argument("--table_lower_command", type=float, default=0.08)
     parser.add_argument("--max_table_lower_steps", type=int, default=180)
+    parser.add_argument("--max_pivot_steps", type=int, default=260)
+    parser.add_argument("--pivot_command", type=float, default=0.08)
+    parser.add_argument("--max_parked_tilt_deg", type=float, default=5.0)
     parser.add_argument("--pre_release_hold_steps", type=int, default=10)
     parser.add_argument("--release_steps", type=int, default=15)
     parser.add_argument("--parking_settle_steps", type=int, default=120)
