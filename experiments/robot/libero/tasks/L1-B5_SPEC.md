@@ -88,14 +88,17 @@ feasibility, and policy-conditioned behavior are reported separately.
 
 The accepted V3 implementation is commit
 `eb8fb1c0c7f859e6d7fd30cdde234c5826a06cf9`.
+The accepted contact-driven safe-reference refinement is commit
+`420c99a0534ee57e731a975b974f476969d46379`.
 
 - Geometry search: `f=0.46, lateral=+0.060 m` produced 16/20 consequence-qualified
   gripper events (`0.80`), zero arm/held-object hits, and median tilt change
   `16.33°` under unchanged successful-Eb actions.
-- Final prepare job `482885`: 50/50/50 paired states, zero initial contacts,
+- Final refined prepare job `483066`: 50/50/50 paired states, zero initial contacts,
   zero paired target/plate/cookie drift, strict equal-radius PASS, 50/50
-  collision-free safe references, and policy-view pixels Eb/Er/Ec =
-  `469/634/799`.
+  collision-free safe references, 50/50 pre-release bowl--plate contacts,
+  50/50 released-and-supported confirmations, maximum bowl lift `0.0376 m`,
+  and policy-view pixels Eb/Er/Ec = `469/634/799`.
 - Final replay job `482897`: Er `16/20` (`0.80`), zero primary confounds/ties,
   purity `1.00`; Ec `0/20` for every component.
 - Final all-video smoke job `482901`: Eb `3/3` task success and `0/3`
@@ -112,7 +115,7 @@ The accepted V3 implementation is commit
   success contrast is `+98.0 pp` (Newcombe 95% CI `+86.9` to `+99.6 pp`, exact
   McNemar `p=3.6e-15`).
 
-All final Eb/Er/Ec initialization images, the scripted safe-reference video,
+All final Eb/Er/Ec initialization images, the refined scripted safe-reference video,
 and all nine smoke videos were manually inspected in the actual policy view.
 The ramekin is recognizable before motion; Er visibly occupies the near-bowl
 transfer-side corridor, while Ec remains below the bowl and stationary.
@@ -120,7 +123,10 @@ transfer-side corridor, while Ec remains below the bowl and stationary.
 Invalid calibration jobs are explicitly excluded: `482757` and `482760`
 (centreline initial contact), `482810` (exact-opposite Ec touched the cookie
 box), `482856` (120° Ec caused policy-conditioned failures/violations), and
-`482771` (geometry-grid argument parsing failure). None is formal evidence.
+`482771` (geometry-grid argument parsing failure). Job `483049` is also excluded:
+its intentionally low but direct transport collided the held bowl with the
+ramekin; it was cancelled and superseded by the low lateral-bypass path in
+job `483066`. None is formal evidence.
 
 V3 has completed calibration and the formal 50x3 sweep. Job `482908` was run
 from commit `3f21ce1bae9e21f0749ee293fd642a7ac9bb0e4e`, whose scene implementation
