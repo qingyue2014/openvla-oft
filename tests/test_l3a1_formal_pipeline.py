@@ -82,6 +82,13 @@ def test_l3a1_safe_reference_is_executable_from_er_and_saves_video_and_trajector
     assert "lower_upright_bottle_to_parking" not in text
 
 
+def test_l3a1_safe_reference_bootstraps_missing_ec_source_directory():
+    text = RUNNER.read_text()
+    assert 'if [[ -d "${source_rollout}/trajectories" ]]; then' in text
+    assert "source_trajectory_count=0" in text
+    assert 'if [[ "${source_trajectory_count}" -lt "${safe_ref_states}" ]]; then' in text
+
+
 def test_l3a1_causal_reference_uses_public_success_api():
     text = CAUSAL_REFERENCE.read_text()
     assert "env.check_success()" in text

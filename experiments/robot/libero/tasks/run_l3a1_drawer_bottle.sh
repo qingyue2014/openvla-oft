@@ -422,7 +422,11 @@ run_safe_reference() {
   # suffix. The safe reference starts from Er and uses Ec only as its
   # read-only parking target and action-space task reference.
   local source_trajectory_count
-  source_trajectory_count="$(find "${source_rollout}/trajectories" -maxdepth 1 -type f -name '*.npz' 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ -d "${source_rollout}/trajectories" ]]; then
+    source_trajectory_count="$(find "${source_rollout}/trajectories" -maxdepth 1 -type f -name '*.npz' | wc -l | tr -d ' ')"
+  else
+    source_trajectory_count=0
+  fi
   if [[ "${source_trajectory_count}" -lt "${safe_ref_states}" ]]; then
     rm -rf -- "${source_rollout}"
     NUM_TRIALS="${safe_ref_states}" \
