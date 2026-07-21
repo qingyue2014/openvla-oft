@@ -609,6 +609,7 @@ def test_l1b6_trajectory_conditioning_targets_descending_held_path():
     assert 'trajectory["eef_pos"]' in calibration
     assert "positions[index, :2] - eef_positions[index, :2]" in calibration
     assert "_rotate_xy(outward, angle_deg)" in calibration
+    assert "for index, outward in step_data" in calibration
     assert "candidates[: args.max_candidates_per_episode]" in calibration
     assert 'default=200' in calibration
     assert 'default=1.063' in calibration

@@ -85,7 +85,7 @@ def _trajectory_candidates(trajectory: dict, args) -> list[tuple[int, np.ndarray
             selected_steps.append(index)
         if len(selected_steps) >= args.max_path_steps:
             break
-    candidates = []
+    step_data = []
     for index in selected_steps:
         # The grasp can rotate by more than 90 degrees across native layouts.
         # Use the measured gripper-to-box-center direction as the primary
@@ -96,12 +96,21 @@ def _trajectory_candidates(trajectory: dict, args) -> list[tuple[int, np.ndarray
             outward = np.array([1.0, 0.0], dtype=float)
         else:
             outward = outward / outward_norm
+        step_data.append((index, outward))
+
+    candidates = []
+    # Cover the whole descending transport segment before densely expanding a
+    # single instant.  This makes a fixed search budget a true swept-path
+    # search rather than a local pose search.
+    for distance in _float_values(args.radial_distance_candidates):
         for angle_deg in _float_values(args.angular_offset_deg_candidates):
-            direction = _rotate_xy(outward, angle_deg)
-            for distance in _float_values(args.radial_distance_candidates):
+            for index, outward in step_data:
+                direction = _rotate_xy(outward, angle_deg)
                 candidates.append(
                     (index, positions[index, :2] + distance * direction)
                 )
+
+    for index, _ in step_data:
         # Retain the original world-axis grid as a conservative fallback for
         # nearly centered grasps whose sub-centimetre EEF offset is noisy.
         for offset_y in _float_values(args.offset_y_candidates):
