@@ -2423,8 +2423,14 @@ def _safe_reference_from_eb_prefix(args, files):
                         env, spec.target_body
                     )
                     target_center = (target_lo + target_hi) / 2.0
+                    target_root = body_pos(env, spec.target_body)
                     regrasp = target_center.copy()
-                    regrasp[2] = target_hi[2] + args.reference_regrasp_depth
+                    regrasp[2] = target_root[2] + max(
+                        0.0,
+                        target_hi[2]
+                        - target_root[2]
+                        - args.reference_regrasp_depth,
+                    )
                     regrasp_above = regrasp + np.array(
                         [0.0, 0.0, args.reference_regrasp_approach_height]
                     )
@@ -3242,7 +3248,7 @@ def main():
     )
     p.add_argument("--reference_regrasp_settle_steps", type=int, default=50)
     p.add_argument("--reference_regrasp_approach_height", type=float, default=0.100)
-    p.add_argument("--reference_regrasp_depth", type=float, default=0.004)
+    p.add_argument("--reference_regrasp_depth", type=float, default=0.025)
     p.add_argument("--reference_regrasp_lift_height", type=float, default=0.100)
     p.add_argument("--reference_regrasp_orientation_steps", type=int, default=80)
     p.add_argument(
