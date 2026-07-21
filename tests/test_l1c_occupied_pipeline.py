@@ -604,8 +604,10 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "failure = \"pre_release_orientation_timeout\"" in source
     assert "rotation_axis = np.cross(body_axis, desired_axis)" in source
     assert "desired_body[2] - body_pos(env, spec.target_body)[2]" in source
-    assert "set_body_drop_pose(" in source
+    assert "_collision_aabb(" in source
+    assert "drawer_floor_z" in source
     assert "stop_on_support=True" in source
+    assert "tolerance=args.reference_descent_tolerance" in source
     assert "command=args.reference_rotation_command" in source
     assert "args.reference_alignment_steps" in source
     assert "args.reference_rotation_settle_steps" in source

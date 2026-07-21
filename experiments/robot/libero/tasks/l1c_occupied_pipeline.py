@@ -38,6 +38,7 @@ from experiments.robot.libero.tasks.l1c_occupied_common import (
     body_speeds,
     body_tilt_deg,
     descendant_geom_ids,
+    find_free_joint_qadr,
     get_spec,
     load_states,
     load_state_reset_seeds,
@@ -46,7 +47,6 @@ from experiments.robot.libero.tasks.l1c_occupied_common import (
     place_at_anchor,
     place_null_risk,
     resolve_bddl,
-    set_body_drop_pose,
     settle,
     world_aabb,
     write_states,
@@ -1212,8 +1212,8 @@ def _visible_pixels_in_policy_crop(
     return int(policy_mask.sum())
 
 
-def _collision_aabb_extent(env, body_name: str) -> np.ndarray:
-    """World-axis extent of group-0 collision boxes for an orientation check."""
+def _collision_aabb(env, body_name: str):
+    """World bounds of a body's physical group-0 box collision geometry."""
     mins = np.full(3, np.inf)
     maxs = np.full(3, -np.inf)
     for geom_id in descendant_geom_ids(env, body_name):
@@ -1235,6 +1235,12 @@ def _collision_aabb_extent(env, body_name: str) -> np.ndarray:
         maxs = np.maximum(maxs, world.max(axis=0))
     if not np.isfinite(mins).all():
         raise RuntimeError(f"No group-0 collision boxes found for {body_name}")
+    return mins, maxs
+
+
+def _collision_aabb_extent(env, body_name: str) -> np.ndarray:
+    """World-axis extent of group-0 collision boxes for an orientation check."""
+    mins, maxs = _collision_aabb(env, body_name)
     return maxs - mins
 
 
@@ -2252,6 +2258,8 @@ def _safe_reference_from_eb_prefix(args, files):
                             env, obs, oracle, recorder, transport_eef, close,
                             step, args,
                         )
+                        if failure == "waypoint_timeout":
+                            failure = "transport_waypoint_timeout"
                     if failure is None and spec.horizontal_target:
                         desired_depth = np.cross(
                             l1c3_horizontal_rotation_axis(env, spec),
@@ -2301,13 +2309,26 @@ def _safe_reference_from_eb_prefix(args, files):
                         anchor_point(env, spec)[2]
                         - (np.abs(site_mat) @ site_size)[2]
                     )
-                    set_body_drop_pose(
-                        env,
-                        spec.target_body,
-                        anchor_offset_xy(env, spec, offset),
-                        drawer_floor_z,
-                        args.drop_clearance,
+                    target_qadr = find_free_joint_qadr(
+                        env.sim, spec.target_body
                     )
+                    if target_qadr < 0:
+                        raise RuntimeError(
+                            f"No free joint for {spec.target_body}"
+                        )
+                    env.sim.data.qpos[target_qadr:target_qadr + 2] = (
+                        anchor_offset_xy(env, spec, offset)
+                    )
+                    env.sim.forward()
+                    collision_lo, _ = _collision_aabb(
+                        env, spec.target_body
+                    )
+                    env.sim.data.qpos[target_qadr + 2] += (
+                        drawer_floor_z
+                        + args.drop_clearance
+                        - collision_lo[2]
+                    )
+                    env.sim.forward()
                     desired_body = body_pos(env, spec.target_body).copy()
                     env.sim.set_state(current_state)
                     env.sim.forward()
@@ -2322,6 +2343,8 @@ def _safe_reference_from_eb_prefix(args, files):
                             spec.target_body, desired_release_axis, close, step, args,
                             tolerance=args.reference_lateral_tolerance,
                         )
+                        if failure == "waypoint_timeout":
+                            failure = "lateral_waypoint_timeout"
                     descent_eef = _eef(obs).copy()
                     descent_eef[2] += (
                         desired_body[2] - body_pos(env, spec.target_body)[2]
@@ -2330,8 +2353,11 @@ def _safe_reference_from_eb_prefix(args, files):
                         obs, step, failure, _ = _move_with_body_alignment(
                             env, obs, oracle, recorder, descent_eef,
                             spec.target_body, desired_release_axis, close, step, args,
+                            tolerance=args.reference_descent_tolerance,
                             stop_on_support=True,
                         )
+                        if failure == "waypoint_timeout":
+                            failure = "descent_waypoint_timeout"
                     if failure is None:
                         obs, step, status = _hold(
                             env, obs, oracle, recorder, close,
@@ -3004,6 +3030,7 @@ def main():
         "--reference_transport_height_above_anchor", type=float, default=0.225
     )
     p.add_argument("--reference_lateral_tolerance", type=float, default=0.010)
+    p.add_argument("--reference_descent_tolerance", type=float, default=0.004)
     p.add_argument("--reference_release_xy_tolerance", type=float, default=0.015)
     p.add_argument(
         "--reference_release_root_vertical_margin", type=float, default=-0.004
