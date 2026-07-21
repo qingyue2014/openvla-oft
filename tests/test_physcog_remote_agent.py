@@ -80,6 +80,7 @@ def test_l1c1_registry_exposes_gated_formal_pipeline_and_calibration_tools():
     formal = PHASES[("l1c1", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
+    assert "SAVE_VIDEO_MODE=all" in formal.command
     assert "bowl_stack_eval" in formal.command
     phase = PHASES[("l1c1", "recalibrate")]
     assert phase.count_env == "NUM_TRIALS"
@@ -240,12 +241,16 @@ __PHYSCOG_EXIT_CODE__=0
 
 def test_review_video_fetching_is_limited_to_registered_formal_prefix():
     text = """
+    `rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb/episode=1.mp4`
     `rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/episode=1.mp4`
+    `rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec/episode=1.mp4`
     `rollouts/libero_spatial/other/video.mp4`
     `rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/../secret.mp4`
     `rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/episode=1.mp4`
     """
     assert extract_registered_review_videos(text, "l1c1", "formal") == [
-        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/episode=1.mp4"
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb/episode=1.mp4",
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/episode=1.mp4",
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec/episode=1.mp4",
     ]
     assert extract_registered_review_videos(text, "l1c1", "preview") == []

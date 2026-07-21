@@ -95,7 +95,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "env",
             "RENDER_GPU_DEVICE_ID=1",
-            "SAVE_VIDEO_MODE=violation",
+            "SAVE_VIDEO_MODE=all",
             "bash",
             "experiments/robot/libero/tasks/run_l1c1_task2.sh",
             "bowl_stack_eval",
@@ -291,7 +291,9 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
 
 REVIEW_VIDEO_PREFIXES: Mapping[tuple[str, str], tuple[str, ...]] = {
     ("l1c1", "formal"): (
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb/",
         "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk/",
+        "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec/",
     ),
 }
 
