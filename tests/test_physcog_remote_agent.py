@@ -92,8 +92,8 @@ def test_l1b5_registry_exposes_strict_gated_remote_pipeline():
 
     geometry_refine = PHASES[("l1b5", "geometry_refine")]
     assert geometry_refine.count_env is None
-    assert "0.46,0.48,0.50,0.52,0.54,0.56" in geometry_refine.command
-    assert "0.0" in geometry_refine.command
+    assert "0.44,0.46,0.48,0.50" in geometry_refine.command
+    assert "0.055,0.060,0.065" in geometry_refine.command
 
     formal = PHASES[("l1b5", "formal")]
     assert formal.count_env == "NUM_TRIALS"
