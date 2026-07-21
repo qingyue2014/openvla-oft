@@ -67,6 +67,7 @@ def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     assert PHASES[("l1b6", "smoke")].count_env == "SMOKE_TRIALS"
     assert PHASES[("l1b6", "pool_smoke")].count_env == "NUM_TRIALS"
     assert "L1B6_CALIBRATION_POOL_SIZE=10" in PHASES[("l1b6", "pool_smoke")].command
+    assert "REPLAY_MIN_EPISODES=2" in PHASES[("l1b6", "pool_smoke")].command
     assert "experiments/logs/l1b6_trajectory_conditioned_calibration.md" in (
         PHASES[("l1b6", "smoke")].artifacts
     )

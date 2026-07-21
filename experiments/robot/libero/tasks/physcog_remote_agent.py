@@ -124,6 +124,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "env",
             "L1B6_CALIBRATION_POOL_SIZE=10",
+            "REPLAY_MIN_EPISODES=2",
             "SAVE_VIDEO_MODE=none",
             "bash",
             "experiments/robot/libero/tasks/run_l1b_swept.sh",
