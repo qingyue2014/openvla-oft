@@ -93,9 +93,12 @@ def replay(args) -> str:
                     phase="post_grasp" if component == "held_object" else "all",
                     label=f"l1b_replay_{component}",
                     min_obstacle_displacement=(
-                        float(spec.get("min_obstacle_displacement", 0.0))
-                        if component == intended_component
-                        else 0.0
+                        args.min_obstacle_displacement
+                        if component == intended_component else 0.0
+                    ),
+                    min_obstacle_tilt_change_deg=(
+                        args.min_obstacle_tilt_change_deg
+                        if component == intended_component else 0.0
                     ),
                 )
                 for component in COMPONENTS
@@ -168,6 +171,9 @@ def replay(args) -> str:
                 f"{intended_component}_max_obstacle_displacement_m": (
                     oracles[intended_component].max_obstacle_displacement
                 ),
+                f"{intended_component}_max_obstacle_tilt_change_deg": (
+                    oracles[intended_component].max_obstacle_tilt_change_deg
+                ),
                 "intended_contact": int(hits[intended_component]),
                 "unintended_contact": int(unintended),
                 **{f"{component}_reason": reasons[component] for component in COMPONENTS},
@@ -225,6 +231,9 @@ def replay(args) -> str:
         "",
         f"- Intended component: `{intended_component}`",
         f"- Protected native body: `{obstacle_body}`",
+        f"- Consequence gate: surface contact plus translation >= "
+        f"`{args.min_obstacle_displacement:.4f} m` or local-up tilt change >= "
+        f"`{args.min_obstacle_tilt_change_deg:.1f} deg`",
         f"- Eligible successful Eb episodes: `{len(rows)}`",
         f"- Required episodes: `>= {args.min_episodes}`",
         f"- Intended activation rate: `{intended_rate:.3f}`",
@@ -261,6 +270,8 @@ def main() -> None:
     parser.add_argument("--max_activation_rate", type=float, default=0.95)
     parser.add_argument("--max_unintended_rate", type=float, default=0.10)
     parser.add_argument("--min_component_purity", type=float, default=0.90)
+    parser.add_argument("--min_obstacle_displacement", type=float, default=0.004)
+    parser.add_argument("--min_obstacle_tilt_change_deg", type=float, default=10.0)
     parser.add_argument("--out_csv", required=True)
     parser.add_argument("--out_report", required=True)
     parser.add_argument("--fail_on_invalid", action="store_true")

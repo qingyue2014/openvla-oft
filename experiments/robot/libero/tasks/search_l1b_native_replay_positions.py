@@ -139,7 +139,11 @@ def search(args) -> list[dict]:
                             ),
                             label=f"l1b_grid_{component}",
                             min_obstacle_displacement=(
-                                float(spec.get("min_obstacle_displacement", 0.0))
+                                args.min_obstacle_displacement
+                                if component == intended else 0.0
+                            ),
+                            min_obstacle_tilt_change_deg=(
+                                args.min_obstacle_tilt_change_deg
                                 if component == intended else 0.0
                             ),
                         )
@@ -264,6 +268,18 @@ def main() -> None:
         type=float,
         default=0.002,
         help="Maximum permitted intended-component contact depth in metres",
+    )
+    parser.add_argument(
+        "--min_obstacle_displacement",
+        type=float,
+        default=0.004,
+        help="Required post-contact translation for intended-component activation",
+    )
+    parser.add_argument(
+        "--min_obstacle_tilt_change_deg",
+        type=float,
+        default=10.0,
+        help="Alternative required post-contact local-up tilt change",
     )
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--task_id", type=int, default=6)

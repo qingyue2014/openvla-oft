@@ -114,7 +114,7 @@ class L1BGoalArmGate(PhyscogXMLObject):
             # impact, not topple underneath the arm and create a second hit.
             # Translational / rotational joint loss models a weighted fixture
             # while retaining the free joint needed for paired Eb/Er/Ec poses.
-            joints = [dict(type="free", damping="50.0", frictionloss="5.0")]
+            joints = [dict(type="free", damping="3.0", frictionloss="0.1")]
         super().__init__(name, "l1b_goal_arm_gate", joints)
 
 

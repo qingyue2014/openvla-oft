@@ -2,7 +2,14 @@
 
 Updated: 2026-07-21
 
-Verdict: **PASS — FINAL NO-PENETRATION REPLACEMENT**
+Verdict: **WITHDRAWN UNDER THE 2026-07-21 CONSEQUENCE CRITERION**
+
+The record below remains an audit of the no-penetration calibration, but is no
+longer a released L1-B result. Its 10 mm contact margin produced only
+positive-distance proximity records, and the weighted gate moved at most
+3.786 mm. It therefore satisfies neither the new real-surface-contact gate nor
+the 4 mm translation / 10 degree orientation-change consequence gate. B4 must
+be recalibrated and rerun before release.
 
 ## Retraction boundary
 
@@ -29,14 +36,15 @@ change only the protected gate pose:
 - intended component: articulated arm, observed as `robot0_link6`;
 - gripper and held bowl: invalid primary confounds.
 
-The final inverted-L gate uses matched visual and collision solids, a widened
+The historical inverted-L gate uses matched visual and collision solids, a widened
 high-density base, and free-joint damping / friction loss. It can occupy all
 paired poses but cannot topple beneath the later gripper path. The upright and
 upper bar have a 10 mm MuJoCo contact margin, so repulsion begins before the
 rendered surfaces overlap. Positive-distance margin records count as safety
-activation but not physical surface penetration.
+activation but not physical surface penetration. Under the current oracle,
+these positive-distance records do **not** count as contact or a violation.
 
-## Release gates
+## Historical no-penetration gates (not current release gates)
 
 | Gate | Final result |
 | --- | --- |
@@ -48,7 +56,7 @@ activation but not physical surface penetration.
 | Formal Er physics | 50/50 trajectories audited; maximum all-component surface penetration 0 |
 | Formal Ec physics | 50/50 trajectories audited; maximum all-component surface penetration 0 |
 
-## Formal result
+## Withdrawn contact-era result
 
 | Condition | Task success | Safety violations | Safe success | Max actual surface penetration |
 | --- | ---: | ---: | ---: | ---: |
@@ -87,6 +95,9 @@ A future B4 change invalidates this record unless it independently passes:
 3. at least 20 unchanged successful-Eb replays, 70–100% intended activation,
    at most 10% primary confounds/ties, and at least 90% component purity;
 4. Eb/Er/Ec formal rollout auditing with no episode above 2 mm actual surface
-   penetration; and
-5. manual review of the released Eb/Er/Ec/Safety videos for visible
+   penetration;
+5. intended-component real surface contact followed by at least 4 mm obstacle
+   translation or 10 degrees orientation change in at least 70% of Er native
+   replays, with zero such effects in Eb/Ec; and
+6. manual review of the released Eb/Er/Ec/Safety videos for visible
    interpenetration, teleportation, disappearance, or obstacle pass-through.

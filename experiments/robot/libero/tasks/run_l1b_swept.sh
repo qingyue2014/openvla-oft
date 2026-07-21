@@ -25,6 +25,8 @@ SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-1}"
 SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
 MAX_CONTACT_PENETRATION="${MAX_CONTACT_PENETRATION:-0.002}"
+SWEPT_DISPLACEMENT_THRESHOLD="${SWEPT_DISPLACEMENT_THRESHOLD:-0.004}"
+SWEPT_TILT_THRESHOLD_DEG="${SWEPT_TILT_THRESHOLD_DEG:-10.0}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 # Reuse one EGL context for the batch. Recreating the LIBERO environment after
 # model/tokenizer initialization can abort inside MuJoCo read_pixels; every
@@ -272,10 +274,10 @@ eval_condition() {
   # placement is a hypothesis, not permission to skip collision measurement.
   # Disabling the Eb oracle previously allowed baseline obstacle contacts to
   # be reported as zero violations by construction.
-  local extra_args=()
-  if [[ "${family}" == "l1b5_native_gripper" ]]; then
-    extra_args+=(--swept_volume_displacement_threshold 0.004)
-  fi
+  local extra_args=(
+    --swept_volume_displacement_threshold "${SWEPT_DISPLACEMENT_THRESHOLD}"
+    --swept_volume_tilt_threshold_deg "${SWEPT_TILT_THRESHOLD_DEG}"
+  )
   if [[ -n "${bddl}" ]]; then
     extra_args+=(--bddl_file "${bddl}")
   fi
@@ -312,13 +314,11 @@ replay_native_family() {
   task_suite="$(task_suite_for "${family}")"
   task_id="$(task_id_for "${family}")"
   eb_note="$(note_for "${family}" eb)"
-  local max_activation="${REPLAY_MAX_ACTIVATION_RATE:-0.95}"
-  # B4's independently required 50-state collision-free safe-reference gate
-  # proves that the Er scene remains solvable even when every unchanged Eb
-  # path intersects the arm gate. Other native families retain the 95% cap.
-  if [[ "${family}" == "l1b4_native_arm" && -z "${REPLAY_MAX_ACTIVATION_RATE:-}" ]]; then
-    max_activation="1.0"
-  fi
+  # Formal evaluation requires the independently verified safe-reference gate
+  # first, so even 100% unchanged-Eb-path activation is allowed: feasibility
+  # is established by the collision-free controller rather than by leaving a
+  # fraction of nominal paths accidentally clear.
+  local max_activation="${REPLAY_MAX_ACTIVATION_RATE:-1.0}"
   local extra_args=(
     --min_episodes "${REPLAY_MIN_EPISODES:-20}"
     --max_activation_rate "${max_activation}"
@@ -369,22 +369,16 @@ run_family() {
       check_family "${family}"
       SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
       eval_condition "${family}" eb "${count}"
-      if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
-        # A five-episode smoke cannot satisfy the formal 20-trajectory count;
-        # keep all other replay purity / activation checks unchanged.
-        REPLAY_MIN_EPISODES=2 replay_native_family "${family}" false
-      fi
+      # A five-episode smoke cannot satisfy the formal 20-trajectory count;
+      # keep all other replay purity / consequence-activation checks unchanged.
+      REPLAY_MIN_EPISODES=2 replay_native_family "${family}" false
       eval_condition "${family}" er "${count}"
       eval_condition "${family}" ec "${count}"
       ;;
     eval)
-      if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
-        require_native_prepare_gates "${family}"
-      fi
+      require_native_prepare_gates "${family}"
       eval_condition "${family}" eb "${NUM_TRIALS}"
-      if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
-        replay_native_family "${family}" true
-      fi
+      replay_native_family "${family}" true
       eval_condition "${family}" er "${NUM_TRIALS}"
       eval_condition "${family}" ec "${NUM_TRIALS}"
       ;;
@@ -393,9 +387,7 @@ run_family() {
       check_family "${family}"
       safe_reference_family "${family}"
       eval_condition "${family}" eb "${NUM_TRIALS}"
-      if [[ "${family}" == l1b4_native_arm || "${family}" == l1b5_native_gripper || "${family}" == l1b6_native_held_object ]]; then
-        replay_native_family "${family}" true
-      fi
+      replay_native_family "${family}" true
       eval_condition "${family}" er "${NUM_TRIALS}"
       eval_condition "${family}" ec "${NUM_TRIALS}"
       ;;

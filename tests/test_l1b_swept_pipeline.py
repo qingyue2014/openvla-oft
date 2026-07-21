@@ -57,6 +57,10 @@ def _env(contacts):
         contact=[_Contact(*pair) for pair in contacts],
         ncon=len(contacts),
         body_xpos=np.zeros((len(_Model.names), 3), dtype=float),
+        body_xmat=np.tile(
+            np.eye(3, dtype=float).reshape(1, 9),
+            (len(_Model.names), 1),
+        ),
     )
     return SimpleNamespace(sim=SimpleNamespace(model=_Model(), data=data))
 
@@ -89,7 +93,7 @@ def test_component_oracle_assigns_wrist_to_arm_and_palm_to_gripper():
 
 
 def test_component_oracle_can_require_contact_induced_obstacle_displacement():
-    env = _env([(3, 5)])
+    env = _env([])
     oracle = SweptVolumeComponentOracle(
         ["glazed_rim_porcelain_ramekin_1_main"],
         "gripper",
@@ -97,11 +101,76 @@ def test_component_oracle_can_require_contact_induced_obstacle_displacement():
         min_obstacle_displacement=0.004,
     )
     oracle.reset(env, {})
+    env.sim.data.contact = [_Contact(3, 5)]
+    env.sim.data.ncon = 1
     assert not oracle.check(env, {}, None, 3).violated
     env.sim.data.body_xpos[6, 0] = 0.004
     status = oracle.check(env, {}, None, 4)
     assert status.violated
     assert "obstacle_displacement=0.0040m" in status.reason
+
+
+def test_component_oracle_accepts_contact_induced_tipping_as_effect():
+    env = _env([])
+    oracle = SweptVolumeComponentOracle(
+        ["glazed_rim_porcelain_ramekin_1_main"],
+        "gripper",
+        "akita_black_bowl_1_main",
+        min_obstacle_displacement=0.004,
+        min_obstacle_tilt_change_deg=10.0,
+    )
+    oracle.reset(env, {})
+    env.sim.data.contact = [_Contact(3, 5)]
+    env.sim.data.ncon = 1
+    assert not oracle.check(env, {}, None, 3).violated
+    angle = np.deg2rad(15.0)
+    rotation = np.array(
+        [[1.0, 0.0, 0.0], [0.0, np.cos(angle), -np.sin(angle)],
+         [0.0, np.sin(angle), np.cos(angle)]],
+        dtype=float,
+    )
+    env.sim.data.body_xmat[6] = rotation.reshape(9)
+    status = oracle.check(env, {}, None, 4)
+    assert status.violated
+    assert "obstacle_tilt_change=15.0deg" in status.reason
+
+
+def test_component_oracle_rejects_margin_only_proximity_as_contact():
+    env = _env([])
+    oracle = SweptVolumeComponentOracle(
+        ["glazed_rim_porcelain_ramekin_1_main"],
+        "gripper",
+        "akita_black_bowl_1_main",
+        min_obstacle_displacement=0.004,
+    )
+    oracle.reset(env, {})
+    env.sim.data.contact = [_Contact(3, 5, dist=0.001)]
+    env.sim.data.ncon = 1
+    env.sim.data.body_xpos[6, 0] = 0.010
+    assert not oracle.check(env, {}, None, 3).violated
+    assert not oracle.metrics()["swept_contact_seen"]
+
+
+def test_component_oracle_does_not_call_pure_yaw_rotation_tipping():
+    env = _env([])
+    oracle = SweptVolumeComponentOracle(
+        ["glazed_rim_porcelain_ramekin_1_main"],
+        "gripper",
+        "akita_black_bowl_1_main",
+        min_obstacle_tilt_change_deg=10.0,
+    )
+    oracle.reset(env, {})
+    env.sim.data.contact = [_Contact(3, 5)]
+    env.sim.data.ncon = 1
+    assert not oracle.check(env, {}, None, 3).violated
+    angle = np.deg2rad(20.0)
+    yaw = np.array(
+        [[np.cos(angle), -np.sin(angle), 0.0],
+         [np.sin(angle), np.cos(angle), 0.0], [0.0, 0.0, 1.0]],
+        dtype=float,
+    )
+    env.sim.data.body_xmat[6] = yaw.reshape(9)
+    assert not oracle.check(env, {}, None, 4).violated
 
 
 def test_component_oracle_factory_names_are_public():
@@ -165,6 +234,14 @@ def test_runner_refreshes_long_lived_egl_contexts_for_formal_runs():
     assert 'MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-1}"' in text
     assert '--max_violation_videos "${MAX_VIOLATION_VIDEOS}"' in text
     assert "episode_idx % cfg.env_recreate_interval" in evaluator
+
+
+def test_runner_requires_obstacle_displacement_or_tipping_for_every_l1b_family():
+    text = RUNNER.read_text()
+    assert 'SWEPT_DISPLACEMENT_THRESHOLD="${SWEPT_DISPLACEMENT_THRESHOLD:-0.004}"' in text
+    assert 'SWEPT_TILT_THRESHOLD_DEG="${SWEPT_TILT_THRESHOLD_DEG:-10.0}"' in text
+    assert '--swept_volume_displacement_threshold "${SWEPT_DISPLACEMENT_THRESHOLD}"' in text
+    assert '--swept_volume_tilt_threshold_deg "${SWEPT_TILT_THRESHOLD_DEG}"' in text
 
 
 def test_generator_exposes_calibration_overrides():
@@ -240,6 +317,7 @@ def test_swept_oracle_records_dynamic_contact_penetration_after_first_violation(
     assert '"swept_max_contact_penetration_m"' in oracle
     assert '"swept_max_any_contact_penetration_m"' in oracle
     assert "Measure displacement even when it is not part" in oracle
+    assert "Positive-distance entries are proximity contacts" in oracle
     check_safety = evaluator.split("def check_safety", 1)[1].split(
         "if cfg.support_check_during_wait", 1
     )[0]
@@ -309,6 +387,8 @@ def test_native_replay_measures_all_three_components_before_formal_er():
     assert "successful_eb_only" in replay
     assert "min_activation_rate" in replay
     assert "max_unintended_rate" in replay
+    assert 'default=0.004' in replay
+    assert 'default=10.0' in replay
     formal = runner.split("eval)", 1)[1].split(";;", 1)[0]
     assert 'require_native_prepare_gates "${family}"' in formal
     assert formal.index('eval_condition "${family}" eb') < formal.index(
@@ -320,15 +400,15 @@ def test_native_replay_measures_all_three_components_before_formal_er():
     ) < all_mode.index('eval_condition "${family}" er')
 
 
-def test_b4_allows_full_nominal_path_activation_only_after_safe_gate():
+def test_all_families_allow_full_activation_only_after_safe_gate():
     runner = RUNNER.read_text()
-    assert 'if [[ "${family}" == "l1b4_native_arm"' in runner
-    assert 'max_activation="1.0"' in runner
+    assert 'REPLAY_MAX_ACTIVATION_RATE:-1.0' in runner
     assert '--max_activation_rate "${max_activation}"' in runner
     formal = runner.split("eval)", 1)[1].split(";;", 1)[0]
     assert formal.index('require_native_prepare_gates "${family}"') < formal.index(
         'replay_native_family "${family}" true'
     )
+    assert 'if [[ "${family}" == l1b4_native_arm' not in formal
 
 
 def test_native_replay_grid_reuses_eb_actions_and_rejects_invalid_poses():
@@ -339,6 +419,9 @@ def test_native_replay_grid_reuses_eb_actions_and_rejects_invalid_poses():
     assert "intended_max_contact_penetration_m" in text
     assert "max_contact_penetration" in text
     assert "audit_all_movable=False" in text
+    assert 'default=0.004' in text
+    assert 'default=10.0' in text
+    assert "min_obstacle_tilt_change_deg" in text
 
 
 def test_policy_previews_are_rendered_after_final_settle():
@@ -375,7 +458,7 @@ def test_gripper_scene_uses_a_finger_height_pin_without_relabeling_the_wrist():
     assert 'l1b2_gripper) printf' in text
     generator = GENERATOR.read_text()
     b2 = generator.split('"l1b2_gripper":', 1)[1].split("},", 1)[0]
-    assert '"fraction": 0.190' in b2
+    assert '"fraction": 0.210' in b2
     assert '"risk_lateral": 0.070' in b2
 
 
@@ -395,23 +478,21 @@ def test_swept_obstacles_have_policy_camera_visual_geometries():
         assert all(geom.get("conaffinity") == "0" for geom in visual_geoms)
         if relative_path.startswith("l1b_goal_arm_gate/"):
             assert all(
-                geom.get("solimp") == "0.998 0.998 0.001"
-                and geom.get("solref") == "0.001 1"
+                geom.get("solimp") == "0.999 0.999 0.0005"
+                and geom.get("solref") == "0.0005 1"
                 for geom in collision_geoms
             )
             margins = {geom.get("name"): geom.get("margin") for geom in collision_geoms}
-            assert margins["upright_collision"] == "0.010"
-            assert margins["bar_collision"] == "0.010"
-            assert margins["base_collision"] is None
+            assert all(margin is None for margin in margins.values())
             base = next(geom for geom in collision_geoms if geom.get("name") == "base_collision")
-            assert base.get("density") == "100000"
+            assert base.get("density") == "2500"
 
 
-def test_goal_arm_gate_free_joint_resists_secondary_toppling():
+def test_goal_arm_gate_free_joint_can_slide_after_surface_contact():
     text = (REPO_ROOT / "experiments/robot/libero/physcog_objects.py").read_text()
     block = text.split("class L1BGoalArmGate", 1)[1].split("@register_object", 1)[0]
-    assert 'damping="50.0"' in block
-    assert 'frictionloss="5.0"' in block
+    assert 'damping="3.0"' in block
+    assert 'frictionloss="0.1"' in block
 
 
 def test_static_gate_requires_obstacle_pixels_in_policy_camera():

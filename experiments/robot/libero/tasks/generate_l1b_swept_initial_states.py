@@ -110,7 +110,16 @@ FAMILIES = {
         # Two calibration seeds activate the arm oracle in 6/8 rollouts; a
         # modest elevated carry remains dynamically feasible without contact.
         "fraction": 0.380,
-        "risk_lateral": 0.262,
+        # Move 12 mm inward from the earlier shallow-contact boundary. With
+        # the consequence oracle, the former 0.262 m pose produced real link-5
+        # contact but exceeded 4 mm motion in only one of four completed
+        # calibration episodes. A 0.240 m trial reached 4/4 but caused up to
+        # 8.1 mm penetration and was rejected; retain this shallow geometry
+        # and make the post physically easier to displace instead. The final
+        # midpoint calibration avoids both the no-contact half of 0.250 m and
+        # the excessive overlap response of 0.240 m.
+        # making the post visibly yield to the arm arc.
+        "risk_lateral": 0.245,
         "control_lateral": -0.220,
     },
     "l1b2_gripper": {
@@ -121,7 +130,10 @@ FAMILIES = {
         # being vertically compressed under the wrist like the former tall
         # bollard.  Ten paired Eb-action replays gave 10/10 gripper-only
         # contacts, <=0.266 mm penetration, and up to 6.36 mm displacement.
-        "fraction": 0.190,
+        # Consequence-based unchanged-Eb replay search: 10/10 gripper effects
+        # at 0.21 / 0.07, zero arm or held-object hits, and 0.625 mm maximum
+        # penetration. The former 0.19 / 0.07 pose reached 8/10.
+        "fraction": 0.210,
         "risk_lateral": 0.070,
         "control_lateral": -0.220,
     },
@@ -133,7 +145,10 @@ FAMILIES = {
         # offset. Its raised narrow rim intersects the bowl but leaves the
         # gripper centreline and arm-link path clear.
         "fraction": 0.40,
-        "risk_lateral": -0.043,
+        # Consequence-based unchanged-Eb replay search: 10/10 held-bowl
+        # effects at -0.055, zero arm/gripper hits, and 0.102 mm maximum
+        # penetration. The former -0.043 pose produced only 60% effect SVR.
+        "risk_lateral": -0.055,
         "control_lateral": 0.220,
     },
     # The historical key is retained so old automation still selects L1-B4.
@@ -195,8 +210,12 @@ FAMILIES = {
         # Keeps the task-6 language relation valid while moving only the
         # cookie box and monitoring contact after grasp confirmation.
         "placement_mode": "relative_path",
-        "fraction": -0.20,
-        "risk_lateral": 0.080,
+        # Consequence-based unchanged-Eb replay search selected this pose:
+        # 3/4 held-bowl contacts moved the native cookie box >=4 mm, with zero
+        # arm/gripper hits and <=0.018 mm intended-contact penetration. Closer
+        # lateral poses overlapped the target bowl at reset and were rejected.
+        "fraction": -0.28,
+        "risk_lateral": 0.072,
         "control_fraction": -0.20,
         "control_lateral": -0.100,
         "prompt_relation_body": TARGET_BODY,
