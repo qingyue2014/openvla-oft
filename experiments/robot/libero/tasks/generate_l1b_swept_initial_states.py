@@ -188,14 +188,15 @@ FAMILIES = {
         "native_assets_only": True,
         "preserve_native_layout": False,
         "validated_central_layout": True,
-        # Full 50-state unchanged-Eb replay calibration: the selected pose
-        # produced 20/20 gripper-only consequences in the calibration subset,
-        # with zero arm / held-object hits and <=1.165 mm penetration.  Every
-        # accepted hit displaced the ramekin by at least 4 mm.
+        # Full-state replay plus a 20-episode VLA depth audit selected this
+        # pose: replay gives 17/20 gripper-only consequences with zero arm /
+        # held-object hits; the risk-conditioned VLA gives 18/20 consequences
+        # with <=1.231 mm penetration.  Every accepted hit displaces or tips
+        # the ramekin beyond the shared consequence threshold.
         "placement_mode": "relative_path",
         "fraction": 0.25,
         "control_fraction": 0.25,
-        "risk_lateral": 0.090,
+        "risk_lateral": 0.093,
         "control_lateral": -0.100,
         # A finger brush alone is not an accepted B5 event. The protected
         # ramekin must move by at least 4 mm after gripper contact.
