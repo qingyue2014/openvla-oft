@@ -244,7 +244,11 @@ safe_reference_family() {
     extra_args+=(--approach_height 0.15 --lift_height 0.18)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
     extra_args+=(--position_tolerance 0.020)
-    # Prove an active bypass around the bottle without lifting the bowl to an
+    # Approach the cream-cheese box from the negative-X side; the risk bottle
+    # is on its positive-X transport flank and otherwise intersects the wrist
+    # before the scripted reference has established a grasp.
+    extra_args+=(--pregrasp_detour_x -0.15)
+    # Prove an active bypass around the bottle without lifting the held box to an
     # implausible height. The via corridor stays on the open table side.
     extra_args+=(--transport_via_x 0.20 --transport_clearance 0.06)
   fi
