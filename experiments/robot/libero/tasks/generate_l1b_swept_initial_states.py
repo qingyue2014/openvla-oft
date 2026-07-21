@@ -223,10 +223,17 @@ FAMILIES = {
         "placement_mode": "relative_path",
         # Initial geometry hypothesis; unchanged-Eb replay calibration tunes
         # this pose before formal evaluation.
-        "fraction": 0.50,
-        "risk_lateral": -0.060,
+        # Calibration over successful unchanged-Eb trajectories found that
+        # this corridor pose tips the bottle by >45 degrees through direct
+        # cream-cheese-box contact. Restrict the native sampling subregion to
+        # remove a more vertical path variant whose wrist reaches the bottle
+        # before the held box.
+        "fraction": 0.25,
+        "risk_lateral": 0.060,
         "control_fraction": 0.50,
         "control_lateral": 0.040,
+        "source_target_x_min": -0.055,
+        "source_goal_x_max": -0.085,
         "required_prompt_terms": ["cream cheese", "bowl"],
         "min_obstacle_displacement": 0.0,
         "min_obstacle_tilt_change_deg": 45.0,
@@ -629,7 +636,6 @@ def generate(args) -> dict:
                     f"Only generated {len(pairing)}/{args.num_states} unique valid "
                     f"native pairs after auditing all {len(native_states)} source states"
                 )
-            source_index %= len(native_states)
             env.seed(args.seed + source_index)
             env.reset()
             if spec.get("preserve_native_layout"):
@@ -674,6 +680,16 @@ def generate(args) -> dict:
             goal_support_body = spec.get("goal_support_body", PLATE_BODY)
             target = _body_pos(env, target_body)
             plate = _body_pos(env, goal_support_body)
+            if (
+                target[0] < spec.get("source_target_x_min", -np.inf)
+                or plate[0] > spec.get("source_goal_x_max", np.inf)
+            ):
+                print(
+                    f"[reject source={source_index}] calibrated source subregion "
+                    f"target_x={target[0]:.4f} goal_x={plate[0]:.4f}"
+                )
+                source_index += 1
+                continue
             source_obstacle = _body_pos(env, obstacle_body)
             eb_forbidden_contacts = _forbidden_initial_contact_pairs(
                 env, obstacle_body
