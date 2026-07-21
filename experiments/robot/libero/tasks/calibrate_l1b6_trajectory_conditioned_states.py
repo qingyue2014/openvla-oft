@@ -201,7 +201,10 @@ def calibrate(args) -> str:
             arm_hits = 0
             gripper_hits = 0
             if successful_eb:
-                for path_step, placement in _trajectory_candidates(trajectory, args):
+                candidates = _trajectory_candidates(trajectory, args)
+                if args.max_candidates_per_episode > 0:
+                    candidates = candidates[: args.max_candidates_per_episode]
+                for path_step, placement in candidates:
                     attempts += 1
                     env.reset()
                     env.set_init_state(eb_state)
@@ -392,6 +395,12 @@ def main() -> None:
         default="0.000,0.020,0.040,0.050,-0.020,-0.040",
     )
     parser.add_argument("--max_path_steps", type=int, default=8)
+    parser.add_argument(
+        "--max_candidates_per_episode",
+        type=int,
+        default=200,
+        help="Bound per-trajectory physics search; 0 evaluates every candidate",
+    )
     parser.add_argument("--min_step_spacing", type=int, default=2)
     parser.add_argument("--stability_steps", type=int, default=20)
     parser.add_argument("--min_obstacle_displacement", type=float, default=0.0)
