@@ -72,6 +72,10 @@ LOG_DIR="${LOG_DIR:-experiments/logs}"
 RISK_CHECK_REPORT="${RISK_CHECK_REPORT:-${LOG_DIR}/l3a1_risk_check.md}"
 STABLE_CHECK_REPORT="${STABLE_CHECK_REPORT:-${LOG_DIR}/l3a1_stable_check.md}"
 SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${LOG_DIR}/l3a1_safe_reference.md}"
+CAUSAL_REFERENCE_REPORT="${CAUSAL_REFERENCE_REPORT:-${LOG_DIR}/l3a1_causal_reference.md}"
+SAFE_REFERENCE_TRAJECTORY_DIR="${SAFE_REFERENCE_TRAJECTORY_DIR:-${LOG_DIR}/l3a1_safe_reference_trajectories}"
+SAFE_REFERENCE_VIDEO_DIR="${SAFE_REFERENCE_VIDEO_DIR:-${LOG_DIR}/l3a1_safe_reference_videos}"
+SAFE_REFERENCE_SOURCE_SUFFIX="${SAFE_REFERENCE_SOURCE_SUFFIX:-safe-reference-source}"
 SMOKE_EVIDENCE_REPORT="${SMOKE_EVIDENCE_REPORT:-${LOG_DIR}/l3a1_smoke_evidence.md}"
 INIT_EVIDENCE_DIR="${INIT_EVIDENCE_DIR:-${LOG_DIR}/l3a1_init_evidence}"
 INIT_EVIDENCE_REVIEW="${INIT_EVIDENCE_REVIEW:-${INIT_EVIDENCE_DIR}/manual_review.json}"
@@ -329,6 +333,16 @@ require_gates() {
     echo "L3-A1 Er/Ec pairing gate missing/failed: ${STABLE_CHECK_REPORT}" >&2; return 2; }
   grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}" 2>/dev/null || {
     echo "L3-A1 dynamic safe-reference gate missing/failed: ${SAFE_REFERENCE_REPORT}" >&2; return 2; }
+  grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${CAUSAL_REFERENCE_REPORT}" 2>/dev/null || {
+    echo "L3-A1 causal reference-path gate missing/failed: ${CAUSAL_REFERENCE_REPORT}" >&2; return 2; }
+  local safe_ref_min="${SAFE_REF_MIN_EPISODES:-3}"
+  local safe_ref_trajectories safe_ref_videos
+  safe_ref_trajectories="$(find "${SAFE_REFERENCE_TRAJECTORY_DIR}" -maxdepth 1 -type f -name 'episode_*.npz' 2>/dev/null | wc -l | tr -d ' ')"
+  safe_ref_videos="$(find "${SAFE_REFERENCE_VIDEO_DIR}" -maxdepth 1 -type f -name 'episode_*.mp4' 2>/dev/null | wc -l | tr -d ' ')"
+  [[ "${safe_ref_trajectories}" -ge "${safe_ref_min}" && "${safe_ref_videos}" -ge "${safe_ref_min}" ]] || {
+    echo "L3-A1 executable safe-reference evidence incomplete: trajectories=${safe_ref_trajectories} videos=${safe_ref_videos} required=${safe_ref_min}" >&2
+    return 2
+  }
   [[ -f "${RISK_STATE_PATH}" && -f "${STABLE_STATE_PATH}" ]] || {
     echo "L3-A1 Er/Ec artifact missing; rerun prepare" >&2; return 2; }
 
@@ -368,22 +382,63 @@ require_gates() {
   require_bound_report "${STABLE_CHECK_REPORT}" "Paired Er binding" "${risk_binding}"
   require_bound_report "${SAFE_REFERENCE_REPORT}" "Er artifact binding" "${risk_binding}"
   require_bound_report "${SAFE_REFERENCE_REPORT}" "Ec artifact binding" "${stable_binding}"
+  require_bound_report "${CAUSAL_REFERENCE_REPORT}" "Er artifact binding" "${risk_binding}"
+  require_bound_report "${CAUSAL_REFERENCE_REPORT}" "Ec artifact binding" "${stable_binding}"
   python experiments/robot/libero/tasks/export_l3a1_init_evidence.py \
     --er "${RISK_STATE_PATH}" --ec "${STABLE_STATE_PATH}" \
     --out_dir "${INIT_EVIDENCE_DIR}" --verify_review "${INIT_EVIDENCE_REVIEW}" >/dev/null
 }
 
 run_safe_reference() {
+  local safe_ref_states="${SAFE_REF_STATES:-5}"
+  local source_rollout="rollouts/${TASK_SUITE_NAME}/$(with_explicit_suffix L3-A1-drawer-bottle-ec-self-supporting "${SAFE_REFERENCE_SOURCE_SUFFIX}")"
+  [[ "${SAFE_REFERENCE_SOURCE_SUFFIX}" =~ ^[A-Za-z0-9._-]+$ ]] || {
+    echo "Unsafe SAFE_REFERENCE_SOURCE_SUFFIX: ${SAFE_REFERENCE_SOURCE_SUFFIX}" >&2
+    return 2
+  }
+  [[ -f "${RISK_STATE_PATH}" && -f "${STABLE_STATE_PATH}" ]] || {
+    echo "L3-A1 safe reference requires paired Er/Ec states; run 'all prepare' first" >&2
+    return 2
+  }
+
+  # Retain the exact Er/Ec causal intervention as a separate physics gate. It
+  # is not accepted as the executable safe solution.
   python experiments/robot/libero/tasks/validate_l3a1_reference_paths.py \
     --bddl "${BDDL_FILE}" \
     --states "${RISK_STATE_PATH}" \
     --stable_states "${STABLE_STATE_PATH}" \
-    --num_states "${SAFE_REF_STATES:-5}" \
+    --num_states "${safe_ref_states}" \
     --seed "${EVAL_SEED}" \
     --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --tilt_change_threshold_deg "${TILT_CHANGE_THRESHOLD_DEG}" \
+    --out_report "${CAUSAL_REFERENCE_REPORT}" \
+    --out_csv "${LOG_DIR}/l3a1_causal_reference.csv"
+
+  # Produce an episode-paired, successful Ec controller trace for the task
+  # suffix. The safe reference starts from Er and uses Ec only as its
+  # read-only parking target and action-space task reference.
+  rm -rf -- "${source_rollout}"
+  NUM_TRIALS="${safe_ref_states}" \
+    RUN_ID_SUFFIX="${SAFE_REFERENCE_SOURCE_SUFFIX}" \
+    SAVE_VIDEO_MODE=none \
+    bash "$0" stable eval
+
+  rm -rf -- "${SAFE_REFERENCE_TRAJECTORY_DIR}" "${SAFE_REFERENCE_VIDEO_DIR}"
+  python experiments/robot/libero/tasks/validate_l3a1_safe_reference.py \
+    --bddl "${BDDL_FILE}" \
+    --states "${RISK_STATE_PATH}" \
+    --stable_states "${STABLE_STATE_PATH}" \
+    --ec_trajectory_dir "${source_rollout}/trajectories" \
+    --num_states "${safe_ref_states}" \
+    --min_episodes "${SAFE_REF_MIN_EPISODES:-3}" \
+    --seed "${EVAL_SEED}" \
+    --displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
+    --tilt_change_threshold_deg "${TILT_CHANGE_THRESHOLD_DEG}" \
+    --trajectory_dir "${SAFE_REFERENCE_TRAJECTORY_DIR}" \
+    --video_dir "${SAFE_REFERENCE_VIDEO_DIR}" \
     --out_report "${SAFE_REFERENCE_REPORT}" \
-    --out_csv "${LOG_DIR}/l3a1_safe_reference.csv"
+    --out_csv "${LOG_DIR}/l3a1_safe_reference.csv" \
+    --fail_on_invalid
 }
 
 run_condition() {

@@ -55,6 +55,10 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert PHASES[("l3a1", "preview")].count_env == "PREVIEW_STATES"
     assert "experiments/logs/l3a1_init_evidence" in PHASES[("l3a1", "preview")].artifacts
     assert PHASES[("l3a1", "safe_reference")].count_env == "SAFE_REF_STATES"
+    safe_reference = PHASES[("l3a1", "safe_reference")]
+    assert "experiments/logs/l3a1_safe_reference_trajectories" in safe_reference.artifacts
+    assert "experiments/logs/l3a1_safe_reference_videos" in safe_reference.artifacts
+    assert "experiments/logs/l3a1_causal_reference.md" in safe_reference.artifacts
     assert PHASES[("l3a1", "smoke")].count_env == "SMOKE_TRIALS"
     corridor = PHASES[("l3a1", "corridor_sweep")]
     assert corridor.command[-1].endswith("sweep_l3a1_corridor.sh")

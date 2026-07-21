@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -18,7 +19,8 @@ from experiments.robot.libero.tasks.validate_l3a1_pairing import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNNER = REPO_ROOT / "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh"
 PAPER_MATRIX = REPO_ROOT / "experiments/robot/libero/tasks/run_paper_matrix.sh"
-SAFE_REFERENCE = REPO_ROOT / "experiments/robot/libero/tasks/validate_l3a1_reference_paths.py"
+SAFE_REFERENCE = REPO_ROOT / "experiments/robot/libero/tasks/validate_l3a1_safe_reference.py"
+CAUSAL_REFERENCE = REPO_ROOT / "experiments/robot/libero/tasks/validate_l3a1_reference_paths.py"
 GENERATOR = REPO_ROOT / "experiments/robot/libero/tasks/generate_l3a1_drawer_bottle_initial_states.py"
 L3A1_BDDL = REPO_ROOT / "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.bddl"
 FIXTURE_SOURCE = REPO_ROOT / "experiments/robot/libero/physcog_objects.py"
@@ -45,8 +47,25 @@ def test_l3a1_bddl_uses_native_cabinet_and_exact_side_panel_signatures():
     assert "l3a1_support_wing" not in fixture
 
 
-def test_l3a1_safe_reference_uses_public_success_api():
+def test_l3a1_safe_reference_is_executable_from_er_and_saves_video_and_trajectory():
     text = SAFE_REFERENCE.read_text()
+    assert "env.check_success()" in text
+    assert "env._check_success()" not in text
+    assert "obs = env.set_init_state(er_state)" in text
+    assert "env.set_init_state(ec_state)" not in text
+    assert "io.advance(action, \"mitigate\")" in text
+    assert "io.advance(action, \"task\", oracle)" in text
+    assert "TrajectoryRecorder" in text
+    assert "_save_video(video_path" in text
+    assert "direct_qpos_edits_after_restore\": False" in text
+    assert re.search(r"sim\.data\.qpos\[[^\n]+\]\s*=", text) is None
+    assert re.search(r"sim\.data\.qvel\[[^\n]+\]\s*=", text) is None
+    assert "source_ec_trajectory" in text
+    assert "oracle.causal_eligible" in text
+
+
+def test_l3a1_causal_reference_uses_public_success_api():
+    text = CAUSAL_REFERENCE.read_text()
     assert "env.check_success()" in text
     assert "env._check_success()" not in text
     assert "and goal_reached" in text
@@ -787,6 +806,9 @@ def test_runner_revalidates_current_artifacts_and_report_bindings():
     assert "require_bound_report" in text
     assert 'require_bound_report "${STABLE_CHECK_REPORT}" "Paired Er binding"' in text
     assert 'require_bound_report "${SAFE_REFERENCE_REPORT}" "Er artifact binding"' in text
+    assert 'require_bound_report "${CAUSAL_REFERENCE_REPORT}" "Er artifact binding"' in text
+    assert "l3a1_safe_reference_trajectories" in text
+    assert "l3a1_safe_reference_videos" in text
     assert 'require_bound_report "${SAFE_REFERENCE_REPORT}" "Ec artifact binding"' in text
     assert '--states "${RISK_STATE_PATH}"' in text
     assert '--stable_states "${STABLE_STATE_PATH}"' in text

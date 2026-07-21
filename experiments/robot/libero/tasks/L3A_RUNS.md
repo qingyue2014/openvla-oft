@@ -43,11 +43,11 @@ The bottle remains native: `wine_bottle_1` is native to this exact scene
 | Condition | Runner variant | Support body | Judgment | Run ID |
 | --- | --- | --- | --- | --- |
 | `Er` risk | `risk` | selected native bottom-drawer side panel | `support_object_removal` | `L3-A1-bowl-drawer-bottle-support-removal` |
-| `Ec` safe-precondition control | `stable` | paired Er state; bottle upright and parked 10 cm outward from that side | `support_object_removal` | `L3-A1-bowl-drawer-bottle-null-risk` |
+| `Ec` safe-precondition control | `stable` | paired Er state; only the bottle is made upright in the calibrated table-only parking pose | `support_object_removal` | `L3-A1-bowl-drawer-bottle-null-risk` |
 
 `Er/Ec` must be episode-paired: generate Er first, then generate Ec with
 `--paired_er_states <Er.hdf5>`. Ec loads each serialized `Er/demo_i` directly,
-makes only the bottle upright and applies Πsafe's 10 cm parking move, then
+makes only the bottle upright in the calibrated parking pose, then
 settles and validates the existing stable gates. It does not replay reset IDs:
 fresh environment instances do not reproduce reset RNG streams reliably. The
 pair validator checks source metadata, ordered `reset_attempt` values, and exact
@@ -57,12 +57,17 @@ requires bit-exact preservation outside the bottle's 7-qpos/6-qvel free-joint
 slices and records `initial_eef_drift_m=0`. Passive settling is therefore used
 to solve bottle physics only and cannot alter the robot, bowl, or drawer state.
 
-`Πsafe` (the ordering constraint) is not a separate scene: it is a scripted
-reference behavior evaluated on the **same serialized `Er` states** — move the bottle to
-a stable, self-supporting pose *before* closing the drawer, then place the
-bowl and close it. See `validate_l3a1_reference_paths.py` (to be added once
-the geometry below is confirmed) for a non-policy scripted check that this
-ordering avoids the oracle firing while the naive close-first order does not.
+`Πsafe` (the ordering constraint) is not a separate scene: it is an executable
+reference behavior evaluated on the **same serialized `Er` states**. The robot
+uses the evaluated 7-D OSC interface to secure the bottle, raise it clear of
+the native panel, make it upright, and release it in the paired Ec's stable
+table-only pose. It then completes bowl placement and drawer closure with an
+episode-paired successful Ec OSC trajectory. The entire path is executed with
+`env.step(action)` and saved as an NPZ trajectory plus policy-view MP4 by
+`validate_l3a1_safe_reference.py`; no object or drawer qpos/qvel is written
+after Er restoration. `validate_l3a1_reference_paths.py` remains a separate
+causal physics gate comparing naive Er closure with the paired Ec negative
+intervention and is not accepted as the executable safe solution.
 
 ### Why this isn't just L1 sweep-volume
 
