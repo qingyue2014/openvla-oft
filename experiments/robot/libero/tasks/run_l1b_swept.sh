@@ -352,9 +352,9 @@ require_native_prepare_gates() {
   if [[ "${family}" == "l1b5_native_gripper" ]]; then
     if [[ ! -f "${pairing_report}" ]] \
        || ! grep -Fq '"scene_contract": "l1b5_ramekin_near_target_v3"' "${pairing_report}" \
-       || ! grep -Fq '"geometry_contract": "fraction040_centerline_opposite_control_v3"' "${pairing_report}" \
-       || ! grep -Fq '"fraction": 0.4' "${pairing_report}" \
-       || ! grep -Fq '"control_fraction": -0.4' "${pairing_report}" \
+       || ! grep -Fq '"geometry_contract": "fraction050_centerline_opposite_control_v3"' "${pairing_report}" \
+       || ! grep -Fq '"fraction": 0.5' "${pairing_report}" \
+       || ! grep -Fq '"control_fraction": -0.5' "${pairing_report}" \
        || ! grep -Fq '"risk_lateral": 0.0' "${pairing_report}" \
        || ! grep -Fq '"control_lateral": 0.0' "${pairing_report}" \
        || ! grep -Fq '"min_obstacle_xy_displacement_m": 0.01' "${pairing_report}" \

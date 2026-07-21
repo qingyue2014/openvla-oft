@@ -136,7 +136,7 @@ FAMILIES = {
         "preserve_native_layout": False,
         "validated_central_layout": True,
         "scene_contract": "l1b5_ramekin_near_target_v3",
-        "geometry_contract": "fraction040_centerline_opposite_control_v3",
+        "geometry_contract": "fraction050_centerline_opposite_control_v3",
         # Eb keeps the native ramekin object at the configured far-table XY.
         # Removing it would change the native task asset inventory; Er/Ec move
         # only this object around the otherwise matched central workspace.
@@ -145,16 +145,16 @@ FAMILIES = {
         "eb_obstacle_xy_tolerance": 0.020,
         "require_eb_obstacle_visibility": True,
         "require_unique_source_states": True,
-        # The first V3 candidate is 40% along the 0.206 m bowl-to-plate path,
-        # about 82 mm from the target. Calibration scans nearby fractions and
-        # must replace this value if it is initially colliding, unavoidable,
-        # or too weak. Ec is equally far from the bowl in the exact opposite
-        # direction, preserving near-target visual salience without occupying
-        # the transfer path.
+        # A 40% candidate was rejected because both Er and Ec initially
+        # contacted the target bowl. V3 therefore starts 50% along the 0.206 m
+        # bowl-to-plate path, about 103 mm from the target, and searches back
+        # toward the nearest collision-free boundary. Ec is equally far from
+        # the bowl in the exact opposite direction, preserving near-target
+        # visual salience without occupying the transfer path.
         "placement_mode": "relative_path",
         "matched_control_mode": "equal_radius_opposite",
-        "fraction": 0.40,
-        "control_fraction": -0.40,
+        "fraction": 0.50,
+        "control_fraction": -0.50,
         "risk_lateral": 0.0,
         "control_lateral": 0.0,
         # Contact alone is not an accepted V3 event. At least one visible
