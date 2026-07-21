@@ -564,9 +564,9 @@ def test_l1b6_native_layout_contract_is_explicit_and_task_preserving():
     assert '"native_assets_only": True' in block
     assert '"use_sampled_layout": True' in block
     assert '"fraction": 0.50' in block
-    assert '"risk_lateral": -0.055' in block
+    assert '"risk_lateral": -0.100' in block
     assert '"control_fraction": 0.50' in block
-    assert '"control_lateral": 0.180' in block
+    assert '"control_lateral": -0.200' in block
     assert '"required_prompt_terms": ["bowl", "plate"]' in block
     assert '"min_obstacle_displacement": 0.0' in block
     assert '"min_obstacle_tilt_change_deg": 45.0' in block

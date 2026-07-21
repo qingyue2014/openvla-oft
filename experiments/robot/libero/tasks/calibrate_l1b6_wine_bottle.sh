@@ -6,7 +6,7 @@ set -euo pipefail
 TRIALS="${CALIBRATION_TRIALS:-20}"
 SEARCH_EPISODES="${SEARCH_EPISODES:-10}"
 FRACTIONS="${L1B6_SEARCH_FRACTIONS:-0.30,0.40,0.50,0.60,0.70}"
-LATERALS="${L1B6_SEARCH_LATERALS:--0.10,-0.08,-0.06,-0.04,-0.02,0.00,0.02}"
+LATERALS="${L1B6_SEARCH_LATERALS:--0.16,-0.14,-0.12,-0.10,-0.08,-0.06}"
 TASKS_DIR="experiments/robot/libero/tasks"
 RUN_NOTE="L1-B6-goal-bowl-native-wine-bottle-knockdown-eb"
 
