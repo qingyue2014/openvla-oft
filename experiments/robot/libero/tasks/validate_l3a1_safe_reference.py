@@ -260,11 +260,14 @@ class EpisodeIO:
         self.recorder = recorder
         self.obs = initial_obs
         self.step = 0
+        self.done = False
         self.video_stride = max(1, int(video_stride))
         self.frames = [get_libero_image(initial_obs).copy()]
 
     def advance(self, action, phase: str, oracle=None):
-        self.obs, _, _, _ = self.env.step(np.asarray(action, dtype=float).tolist())
+        self.obs, _, self.done, _ = self.env.step(
+            np.asarray(action, dtype=float).tolist()
+        )
         self.recorder.record(self.obs, action, self.step, phase=phase)
         if self.step % self.video_stride == 0:
             self.frames.append(get_libero_image(self.obs).copy())
@@ -405,7 +408,7 @@ def _replay_task(io, source, open_sign, oracle, args):
         )
         action[:6] = np.clip(action[:6], -1.0, 1.0)
         status = io.advance(action, "task", oracle)
-        if status.violated:
+        if status.violated or io.done:
             break
     if status is None:
         status = oracle.check(io.env, io.obs, np.r_[np.zeros(6), open_sign], io.step)
