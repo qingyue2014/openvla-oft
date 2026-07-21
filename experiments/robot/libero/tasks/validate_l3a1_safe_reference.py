@@ -949,7 +949,7 @@ def main() -> None:
     parser.add_argument("--staging_xy", type=float, nargs=2, default=(-0.10, 0.05))
     parser.add_argument("--staging_lift_clearance", type=float, default=0.040)
     parser.add_argument("--parking_xy", type=float, nargs=2, default=(-0.13, 0.05))
-    parser.add_argument("--upright_transport_lift", type=float, default=0.050)
+    parser.add_argument("--upright_transport_lift", type=float, default=0.120)
     parser.add_argument("--table_lower_command", type=float, default=0.08)
     parser.add_argument("--max_table_lower_steps", type=int, default=180)
     parser.add_argument("--max_pivot_steps", type=int, default=420)
