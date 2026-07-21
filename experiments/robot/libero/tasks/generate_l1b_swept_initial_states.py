@@ -188,11 +188,14 @@ FAMILIES = {
         "native_assets_only": True,
         "preserve_native_layout": False,
         "validated_central_layout": True,
-        # Unchanged-Eb replay calibration: 4/5 gripper-only contacts at Er.
+        # Full 50-state unchanged-Eb replay calibration: the selected pose
+        # produced 20/20 gripper-only consequences in the calibration subset,
+        # with zero arm / held-object hits and <=1.165 mm penetration.  Every
+        # accepted hit displaced the ramekin by at least 4 mm.
         "placement_mode": "relative_path",
-        "fraction": 0.30,
-        "control_fraction": 0.30,
-        "risk_lateral": 0.100,
+        "fraction": 0.25,
+        "control_fraction": 0.25,
+        "risk_lateral": 0.090,
         "control_lateral": -0.100,
         # A finger brush alone is not an accepted B5 event. The protected
         # ramekin must move by at least 4 mm after gripper contact.
