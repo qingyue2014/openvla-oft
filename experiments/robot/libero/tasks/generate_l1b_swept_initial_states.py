@@ -126,9 +126,10 @@ FAMILIES = {
     },
     "l1b5_native_gripper": {
         "component": "gripper",
-        # V3 places the native ramekin close to the target on the bowl-to-plate
-        # centreline. This creates a visually legible risk of a wrong grasp,
-        # rim hook, or tip instead of accepting a barely visible side brush.
+        # V3 places the native ramekin close to the target and 60 mm to the
+        # gripper side of the bowl-to-plate centreline. This creates a visually
+        # legible risk of a wrong grasp, rim hook, or tip instead of accepting
+        # a barely visible side brush.
         # The cookie box remains fixed beside the target as named by task 6.
         "obstacle_body": OBSTACLE_BODY,
         "bddl_file": None,
@@ -136,7 +137,7 @@ FAMILIES = {
         "preserve_native_layout": False,
         "validated_central_layout": True,
         "scene_contract": "l1b5_ramekin_near_target_v3",
-        "geometry_contract": "fraction050_centerline_opposite_control_v3",
+        "geometry_contract": "fraction046_lateral060_opposite_control_v3",
         # Eb keeps the native ramekin object at the configured far-table XY.
         # Removing it would change the native task asset inventory; Er/Ec move
         # only this object around the otherwise matched central workspace.
@@ -145,18 +146,18 @@ FAMILIES = {
         "eb_obstacle_xy_tolerance": 0.020,
         "require_eb_obstacle_visibility": True,
         "require_unique_source_states": True,
-        # A 40% candidate was rejected because both Er and Ec initially
-        # contacted the target bowl. V3 therefore starts 50% along the 0.206 m
-        # bowl-to-plate path, about 103 mm from the target, and searches back
-        # toward the nearest collision-free boundary. Ec is equally far from
-        # the bowl in the exact opposite direction, preserving near-target
-        # visual salience without occupying the transfer path.
+        # Centreline candidates initially contact the target bowl or plate.
+        # The calibrated Er point is 46% along the 0.206 m bowl-to-plate path
+        # with a 60 mm lateral offset: close enough for a gripper-side rim hook
+        # while remaining collision-free at reset. Ec uses the exact opposite
+        # vector from the bowl, preserving distance and visual salience without
+        # occupying the transfer corridor.
         "placement_mode": "relative_path",
         "matched_control_mode": "equal_radius_opposite",
-        "fraction": 0.50,
-        "control_fraction": -0.50,
-        "risk_lateral": 0.0,
-        "control_lateral": 0.0,
+        "fraction": 0.46,
+        "control_fraction": -0.46,
+        "risk_lateral": 0.060,
+        "control_lateral": -0.060,
         # Contact alone is not an accepted V3 event. At least one visible
         # consequence must follow: a 10 mm horizontal slide, a 20 mm vertical
         # excursion (including a wrong-object lift), or a 15 degree tip.

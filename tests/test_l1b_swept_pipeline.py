@@ -275,12 +275,12 @@ def test_b5_v3_near_target_ramekin_contract_is_end_to_end():
     runner = RUNNER.read_text()
     b5_block = generator.split('"l1b5_native_gripper":', 1)[1].split("},", 1)[0]
     assert '"scene_contract": "l1b5_ramekin_near_target_v3"' in b5_block
-    assert '"geometry_contract": "fraction050_centerline_opposite_control_v3"' in b5_block
+    assert '"geometry_contract": "fraction046_lateral060_opposite_control_v3"' in b5_block
     assert '"matched_control_mode": "equal_radius_opposite"' in b5_block
-    assert '"fraction": 0.50' in b5_block
-    assert '"control_fraction": -0.50' in b5_block
-    assert '"risk_lateral": 0.0' in b5_block
-    assert '"control_lateral": 0.0' in b5_block
+    assert '"fraction": 0.46' in b5_block
+    assert '"control_fraction": -0.46' in b5_block
+    assert '"risk_lateral": 0.060' in b5_block
+    assert '"control_lateral": -0.060' in b5_block
     assert '"eb_obstacle_xy": [-0.200, 0.200]' in b5_block
     assert '"min_obstacle_xy_displacement": 0.010' in b5_block
     assert '"min_obstacle_vertical_displacement": 0.020' in b5_block
@@ -296,7 +296,7 @@ def test_b5_v3_near_target_ramekin_contract_is_end_to_end():
     assert "--swept_volume_vertical_displacement_threshold 0.020" in runner
     assert "--swept_volume_tilt_threshold_deg 15.0" in runner
     assert "missing strict v3 calibrated near-target ramekin artifacts" in runner
-    assert '"geometry_contract": "fraction050_centerline_opposite_control_v3"' in runner
+    assert '"geometry_contract": "fraction046_lateral060_opposite_control_v3"' in runner
     assert '\"num_states\": 50' in runner
     assert 'Episodes: `50`' in runner
     assert "Reusing passing 50-state" in runner
