@@ -224,6 +224,14 @@ def validate(args) -> bool:
             pairing.get("scene_contract") == spec["scene_contract"]
             and float(pairing.get("min_obstacle_displacement_m", -1.0))
             == float(spec.get("min_obstacle_displacement", 0.0))
+            and float(pairing.get("min_obstacle_xy_displacement_m", -1.0))
+            == float(spec.get("min_obstacle_xy_displacement", 0.0))
+            and float(
+                pairing.get("min_obstacle_vertical_displacement_m", -1.0)
+            )
+            == float(spec.get("min_obstacle_vertical_displacement", 0.0))
+            and float(pairing.get("min_obstacle_tilt_change_deg", -1.0))
+            == float(spec.get("min_obstacle_tilt_change_deg", 0.0))
         )
     )
 
@@ -258,6 +266,15 @@ def validate(args) -> bool:
             held_object_body=TARGET_BODY,
             swept_volume_displacement_threshold=float(
                 spec.get("min_obstacle_displacement", 0.0)
+            ),
+            swept_volume_xy_displacement_threshold=float(
+                spec.get("min_obstacle_xy_displacement", 0.0)
+            ),
+            swept_volume_vertical_displacement_threshold=float(
+                spec.get("min_obstacle_vertical_displacement", 0.0)
+            ),
+            swept_volume_tilt_threshold_deg=float(
+                spec.get("min_obstacle_tilt_change_deg", 0.0)
             ),
         )
         for episode_idx in range(counts["eb"]):
@@ -350,15 +367,30 @@ def validate(args) -> bool:
             <= float(spec.get("eb_obstacle_xy_tolerance", 0.02))
         )
     )
-    matched_control_geometry_ok = bool(
-        args.family != "l1b5_native_gripper"
-        or (
-            float(spec.get("control_fraction", spec["fraction"]))
-            == float(spec["fraction"])
-            and abs(float(spec["risk_lateral"]) + float(spec["control_lateral"]))
-            <= 1e-10
+    if spec.get("matched_control_mode") == "equal_radius_opposite":
+        matched_control_geometry_ok = bool(
+            np.allclose(
+                [
+                    float(spec.get("control_fraction", spec["fraction"])),
+                    float(spec["control_lateral"]),
+                ],
+                [-float(spec["fraction"]), -float(spec["risk_lateral"])],
+                atol=1e-10,
+            )
         )
-    )
+    else:
+        matched_control_geometry_ok = bool(
+            args.family != "l1b5_native_gripper"
+            or (
+                float(spec.get("control_fraction", spec["fraction"]))
+                == float(spec["fraction"])
+                and abs(
+                    float(spec["risk_lateral"])
+                    + float(spec["control_lateral"])
+                )
+                <= 1e-10
+            )
+        )
     required_prompt_terms = spec.get(
         "required_prompt_terms", ("black bowl", "cookie", "plate")
     )
@@ -421,7 +453,10 @@ def validate(args) -> bool:
         f"- Only protected obstacle pose changed: `{only_obstacle_pose_ok}`",
         f"- Eb protected obstacle at configured far-table pose: `{eb_layout_ok}`",
         f"- Er/Ec matched-control geometry gate: `{matched_control_geometry_ok}`",
-        f"- Required contact-caused obstacle displacement: `{float(spec.get('min_obstacle_displacement', 0.0)):.4f} m`",
+        f"- Required contact-caused 3D displacement: `{float(spec.get('min_obstacle_displacement', 0.0)):.4f} m`",
+        f"- Required horizontal displacement alternative: `{float(spec.get('min_obstacle_xy_displacement', 0.0)):.4f} m`",
+        f"- Required vertical displacement alternative: `{float(spec.get('min_obstacle_vertical_displacement', 0.0)):.4f} m`",
+        f"- Required tilt-change alternative: `{float(spec.get('min_obstacle_tilt_change_deg', 0.0)):.1f} deg`",
         f"- Prompt landmark relation gate: `{prompt_relation_ok}`",
         *(
             f"- {condition} prompt-relation distance (min/max): "

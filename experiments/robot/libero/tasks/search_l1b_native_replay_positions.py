@@ -93,6 +93,12 @@ def search(args) -> list[dict]:
                 hits = {component: 0 for component in COMPONENTS}
                 hit_episodes = {component: [] for component in COMPONENTS}
                 hit_reasons = {component: [] for component in COMPONENTS}
+                intended_motion = {
+                    "max_3d_m": [],
+                    "max_xy_m": [],
+                    "max_vertical_m": [],
+                    "max_tilt_deg": [],
+                }
                 valid = 0
                 invalid_reasons = []
                 for episode_idx, trajectory in trajectories.items():
@@ -133,6 +139,28 @@ def search(args) -> list[dict]:
                                 float(spec.get("min_obstacle_displacement", 0.0))
                                 if component == intended else 0.0
                             ),
+                            min_obstacle_xy_displacement=(
+                                float(
+                                    spec.get(
+                                        "min_obstacle_xy_displacement", 0.0
+                                    )
+                                )
+                                if component == intended else 0.0
+                            ),
+                            min_obstacle_vertical_displacement=(
+                                float(
+                                    spec.get(
+                                        "min_obstacle_vertical_displacement", 0.0
+                                    )
+                                )
+                                if component == intended else 0.0
+                            ),
+                            min_obstacle_tilt_change_deg=(
+                                float(
+                                    spec.get("min_obstacle_tilt_change_deg", 0.0)
+                                )
+                                if component == intended else 0.0
+                            ),
                         )
                         for component in COMPONENTS
                     }
@@ -160,12 +188,33 @@ def search(args) -> list[dict]:
                             hit_reasons[component].append(
                                 f"ep{episode_idx}:{names[0]}<->{names[1]}"
                             )
+                    intended_oracle = oracles[intended]
+                    intended_motion["max_3d_m"].append(
+                        intended_oracle.max_obstacle_displacement
+                    )
+                    intended_motion["max_xy_m"].append(
+                        intended_oracle.max_obstacle_xy_displacement
+                    )
+                    intended_motion["max_vertical_m"].append(
+                        intended_oracle.max_obstacle_vertical_displacement
+                    )
+                    intended_motion["max_tilt_deg"].append(
+                        intended_oracle.max_obstacle_tilt_change_deg
+                    )
                 total = len(trajectories)
                 intended_rate = hits[intended] / total
                 unintended = sum(
                     hits[component]
                     for component in COMPONENTS
                     if component != intended
+                )
+                unintended_rate = unintended / total
+                calibration_qualified = bool(
+                    valid == total
+                    and args.min_activation_rate
+                    <= intended_rate
+                    <= args.max_activation_rate
+                    and unintended_rate <= args.max_unintended_rate
                 )
                 row = {
                     "fraction": fraction,
@@ -180,6 +229,20 @@ def search(args) -> list[dict]:
                     },
                     "intended_contact_rate": intended_rate,
                     "unintended_component_hits": unintended,
+                    "unintended_component_rate": unintended_rate,
+                    "calibration_qualified": int(calibration_qualified),
+                    **{
+                        f"intended_{name}_median": (
+                            float(np.median(values)) if values else 0.0
+                        )
+                        for name, values in intended_motion.items()
+                    },
+                    **{
+                        f"intended_{name}_max": (
+                            float(np.max(values)) if values else 0.0
+                        )
+                        for name, values in intended_motion.items()
+                    },
                     **{
                         f"{component}_episodes": ",".join(
                             str(index) for index in hit_episodes[component]
@@ -191,8 +254,9 @@ def search(args) -> list[dict]:
                         for component in COMPONENTS
                     },
                     "candidate_rank": (
-                        int(valid == total) * 100
-                        + intended_rate * 10
+                        int(calibration_qualified) * 1000
+                        + int(valid == total) * 100
+                        - abs(intended_rate - 0.825) * 10
                         - unintended
                     ),
                     "invalid_reasons": json.dumps(sorted(set(invalid_reasons))),
@@ -221,6 +285,9 @@ def main() -> None:
     parser.add_argument("--xs", default="")
     parser.add_argument("--ys", default="")
     parser.add_argument("--stability_steps", type=int, default=20)
+    parser.add_argument("--min_activation_rate", type=float, default=0.70)
+    parser.add_argument("--max_activation_rate", type=float, default=0.95)
+    parser.add_argument("--max_unintended_rate", type=float, default=0.10)
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--task_id", type=int, default=6)
     parser.add_argument("--out_csv", required=True)

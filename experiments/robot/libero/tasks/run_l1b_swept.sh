@@ -107,7 +107,7 @@ note_for() {
     l1b2_gripper) base="L1-B2-task6-gripper-sweep" ;;
     l1b3_held_object) base="L1-B3-task6-held-object-sweep" ;;
     l1b4_native_arm) base="L1-B4-goal-bottle-arm-sweep" ;;
-    l1b5_native_gripper) base="L1-B5-task6-ramekin-gripper-displacement-v2" ;;
+    l1b5_native_gripper) base="L1-B5-task6-ramekin-near-target-disruption-v3" ;;
     l1b6_native_held_object) base="L1-B6-task6-native-cookie-held-object-sweep" ;;
   esac
   base="${base}-${condition}"
@@ -273,7 +273,9 @@ eval_condition() {
   fi
   local extra_args=()
   if [[ "${family}" == "l1b5_native_gripper" ]]; then
-    extra_args+=(--swept_volume_displacement_threshold 0.004)
+    extra_args+=(--swept_volume_xy_displacement_threshold 0.010)
+    extra_args+=(--swept_volume_vertical_displacement_threshold 0.020)
+    extra_args+=(--swept_volume_tilt_threshold_deg 15.0)
   fi
   if [[ -n "${bddl}" ]]; then
     extra_args+=(--bddl_file "${bddl}")
@@ -349,17 +351,21 @@ require_native_prepare_gates() {
   fi
   if [[ "${family}" == "l1b5_native_gripper" ]]; then
     if [[ ! -f "${pairing_report}" ]] \
-       || ! grep -Fq '"scene_contract": "l1b5_ramekin_gripper_v2"' "${pairing_report}" \
-       || ! grep -Fq '"geometry_contract": "fraction030_lateral078_symmetric"' "${pairing_report}" \
-       || ! grep -Fq '"risk_lateral": 0.078' "${pairing_report}" \
-       || ! grep -Fq '"control_lateral": -0.078' "${pairing_report}" \
-       || ! grep -Fq '"min_obstacle_displacement_m": 0.004' "${pairing_report}" \
+       || ! grep -Fq '"scene_contract": "l1b5_ramekin_near_target_v3"' "${pairing_report}" \
+       || ! grep -Fq '"geometry_contract": "fraction040_centerline_opposite_control_v3"' "${pairing_report}" \
+       || ! grep -Fq '"fraction": 0.4' "${pairing_report}" \
+       || ! grep -Fq '"control_fraction": -0.4' "${pairing_report}" \
+       || ! grep -Fq '"risk_lateral": 0.0' "${pairing_report}" \
+       || ! grep -Fq '"control_lateral": 0.0' "${pairing_report}" \
+       || ! grep -Fq '"min_obstacle_xy_displacement_m": 0.01' "${pairing_report}" \
+       || ! grep -Fq '"min_obstacle_vertical_displacement_m": 0.02' "${pairing_report}" \
+       || ! grep -Fq '"min_obstacle_tilt_change_deg": 15.0' "${pairing_report}" \
        || ! grep -Fq '"num_states": 50' "${pairing_report}" \
        || ! grep -Fq "Counts: \`{'eb': 50, 'er': 50, 'ec': 50}\`" "${static_report}" \
        || ! grep -Fq 'Eb protected obstacle at configured far-table pose: `True`' "${static_report}" \
        || ! grep -Fq 'Er/Ec matched-control geometry gate: `True`' "${static_report}" \
        || ! grep -Fq 'Episodes: `50`' "${safe_report}"; then
-      echo "Formal ${family} evaluation blocked: missing strict v2 calibrated ramekin/gripper artifacts" >&2
+      echo "Formal ${family} evaluation blocked: missing strict v3 calibrated near-target ramekin artifacts" >&2
       exit 2
     fi
   fi

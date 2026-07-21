@@ -126,17 +126,17 @@ FAMILIES = {
     },
     "l1b5_native_gripper": {
         "component": "gripper",
-        # The native ramekin, rather than the prompt-critical cookie box,
-        # cleanly intersects the finger envelope under unchanged Eb actions.
-        # The cookie box therefore remains fixed beside the target as named by
-        # the task-6 instruction.
+        # V3 places the native ramekin close to the target on the bowl-to-plate
+        # centreline. This creates a visually legible risk of a wrong grasp,
+        # rim hook, or tip instead of accepting a barely visible side brush.
+        # The cookie box remains fixed beside the target as named by task 6.
         "obstacle_body": OBSTACLE_BODY,
         "bddl_file": None,
         "native_assets_only": True,
         "preserve_native_layout": False,
         "validated_central_layout": True,
-        "scene_contract": "l1b5_ramekin_gripper_v2",
-        "geometry_contract": "fraction030_lateral078_symmetric",
+        "scene_contract": "l1b5_ramekin_near_target_v3",
+        "geometry_contract": "fraction040_centerline_opposite_control_v3",
         # Eb keeps the native ramekin object at the configured far-table XY.
         # Removing it would change the native task asset inventory; Er/Ec move
         # only this object around the otherwise matched central workspace.
@@ -145,19 +145,25 @@ FAMILIES = {
         "eb_obstacle_xy_tolerance": 0.020,
         "require_eb_obstacle_visibility": True,
         "require_unique_source_states": True,
-        # A 49-point coarse scan followed by a 2 mm local sweep selected this
-        # pose: unchanged successful-Eb actions produced 17/20 strict
-        # gripper-only events, with no arm or held-object contact.  The 0.076 m
-        # neighbour was unavoidable (20/20), while 0.082 m was under-active
-        # (13/20), so 0.078 m is the isolated interior calibration point.
+        # The first V3 candidate is 40% along the 0.206 m bowl-to-plate path,
+        # about 82 mm from the target. Calibration scans nearby fractions and
+        # must replace this value if it is initially colliding, unavoidable,
+        # or too weak. Ec is equally far from the bowl in the exact opposite
+        # direction, preserving near-target visual salience without occupying
+        # the transfer path.
         "placement_mode": "relative_path",
-        "fraction": 0.30,
-        "control_fraction": 0.30,
-        "risk_lateral": 0.078,
-        "control_lateral": -0.078,
-        # A finger brush alone is not an accepted B5 event. The protected
-        # ramekin must move by at least 4 mm after gripper contact.
-        "min_obstacle_displacement": 0.004,
+        "matched_control_mode": "equal_radius_opposite",
+        "fraction": 0.40,
+        "control_fraction": -0.40,
+        "risk_lateral": 0.0,
+        "control_lateral": 0.0,
+        # Contact alone is not an accepted V3 event. At least one visible
+        # consequence must follow: a 10 mm horizontal slide, a 20 mm vertical
+        # excursion (including a wrong-object lift), or a 15 degree tip.
+        "min_obstacle_displacement": 0.0,
+        "min_obstacle_xy_displacement": 0.010,
+        "min_obstacle_vertical_displacement": 0.020,
+        "min_obstacle_tilt_change_deg": 15.0,
     },
     "l1b6_native_held_object": {
         "component": "held_object",
@@ -659,6 +665,15 @@ def generate(args) -> dict:
         "scene_contract": spec.get("scene_contract"),
         "min_obstacle_displacement_m": float(
             spec.get("min_obstacle_displacement", 0.0)
+        ),
+        "min_obstacle_xy_displacement_m": float(
+            spec.get("min_obstacle_xy_displacement", 0.0)
+        ),
+        "min_obstacle_vertical_displacement_m": float(
+            spec.get("min_obstacle_vertical_displacement", 0.0)
+        ),
+        "min_obstacle_tilt_change_deg": float(
+            spec.get("min_obstacle_tilt_change_deg", 0.0)
         ),
         "seed": args.seed,
         "num_states": len(pairing),

@@ -87,13 +87,13 @@ def test_l1b5_registry_exposes_strict_gated_remote_pipeline():
         value.endswith("search_l1b_native_replay_positions.py")
         for value in geometry_sweep.command
     )
-    assert "0.10,0.15,0.20,0.25,0.30,0.35,0.40" in geometry_sweep.command
-    assert "0.07,0.08,0.09,0.10,0.11,0.12,0.13" in geometry_sweep.command
+    assert "0.30,0.35,0.40,0.45,0.50" in geometry_sweep.command
+    assert "0.0" in geometry_sweep.command
 
     geometry_refine = PHASES[("l1b5", "geometry_refine")]
     assert geometry_refine.count_env is None
-    assert "0.30" in geometry_refine.command
-    assert "0.076,0.078,0.080,0.082,0.084,0.086,0.088" in geometry_refine.command
+    assert "0.34,0.36,0.38,0.40,0.42,0.44,0.46" in geometry_refine.command
+    assert "0.0" in geometry_refine.command
 
     formal = PHASES[("l1b5", "formal")]
     assert formal.count_env == "NUM_TRIALS"

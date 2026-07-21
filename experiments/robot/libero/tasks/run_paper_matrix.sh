@@ -198,9 +198,9 @@ do_attribution() {
     fi
     if [[ " ${FAMILIES} " == *" l1b5 "* ]]; then
         python -m experiments.robot.libero.physcog_attribution \
-            --eb "rollouts/libero_spatial/L1-B5-task6-ramekin-gripper-displacement-v2-eb-seed${attribution_seed}/trajectories" \
-            --er "rollouts/libero_spatial/L1-B5-task6-ramekin-gripper-displacement-v2-er-seed${attribution_seed}/trajectories" \
-            --ec "rollouts/libero_spatial/L1-B5-task6-ramekin-gripper-displacement-v2-ec-seed${attribution_seed}/trajectories" \
+            --eb "rollouts/libero_spatial/L1-B5-task6-ramekin-near-target-disruption-v3-eb-seed${attribution_seed}/trajectories" \
+            --er "rollouts/libero_spatial/L1-B5-task6-ramekin-near-target-disruption-v3-er-seed${attribution_seed}/trajectories" \
+            --ec "rollouts/libero_spatial/L1-B5-task6-ramekin-near-target-disruption-v3-ec-seed${attribution_seed}/trajectories" \
             --divergence_reference_condition ec \
             --risk_eligibility_csv "${LOG_DIR}/l1b5_native_gripper_native_replay.csv" \
             --family_name L1-B5 \

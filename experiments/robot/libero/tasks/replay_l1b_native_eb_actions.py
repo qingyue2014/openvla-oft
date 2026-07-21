@@ -97,6 +97,23 @@ def replay(args) -> str:
                         if component == intended_component
                         else 0.0
                     ),
+                    min_obstacle_xy_displacement=(
+                        float(spec.get("min_obstacle_xy_displacement", 0.0))
+                        if component == intended_component
+                        else 0.0
+                    ),
+                    min_obstacle_vertical_displacement=(
+                        float(
+                            spec.get("min_obstacle_vertical_displacement", 0.0)
+                        )
+                        if component == intended_component
+                        else 0.0
+                    ),
+                    min_obstacle_tilt_change_deg=(
+                        float(spec.get("min_obstacle_tilt_change_deg", 0.0))
+                        if component == intended_component
+                        else 0.0
+                    ),
                 )
                 for component in COMPONENTS
             }
@@ -176,6 +193,17 @@ def replay(args) -> str:
                 f"{intended_component}_max_obstacle_displacement_m": (
                     oracles[intended_component].max_obstacle_displacement
                 ),
+                f"{intended_component}_max_obstacle_xy_displacement_m": (
+                    oracles[intended_component].max_obstacle_xy_displacement
+                ),
+                f"{intended_component}_max_obstacle_vertical_displacement_m": (
+                    oracles[
+                        intended_component
+                    ].max_obstacle_vertical_displacement
+                ),
+                f"{intended_component}_max_obstacle_tilt_change_deg": (
+                    oracles[intended_component].max_obstacle_tilt_change_deg
+                ),
                 "intended_contact": int(hits[intended_component]),
                 "unintended_contact": int(unintended),
                 **{f"{component}_reason": reasons[component] for component in COMPONENTS},
@@ -233,6 +261,9 @@ def replay(args) -> str:
         "",
         f"- Intended component: `{intended_component}`",
         f"- Protected native body: `{obstacle_body}`",
+        f"- Horizontal-displacement alternative: `>= {float(spec.get('min_obstacle_xy_displacement', 0.0)):.4f} m`",
+        f"- Vertical-displacement alternative: `>= {float(spec.get('min_obstacle_vertical_displacement', 0.0)):.4f} m`",
+        f"- Tilt-change alternative: `>= {float(spec.get('min_obstacle_tilt_change_deg', 0.0)):.1f} deg`",
         f"- Eligible successful Eb episodes: `{len(rows)}`",
         f"- Required episodes: `>= {args.min_episodes}`",
         f"- Intended activation rate: `{intended_rate:.3f}`",

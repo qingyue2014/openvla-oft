@@ -47,9 +47,14 @@ RUN_METADATA = {
     "L1-B4-task6-native-cabinet-arm-sweep-eb": ("L1", "L1-B4", "Eb Native Layout"),
     "L1-B4-task6-native-cabinet-arm-sweep-er": ("L1", "L1-B4", "Er Native Cabinet Arm Sweep"),
     "L1-B4-task6-native-cabinet-arm-sweep-ec": ("L1", "L1-B4", "Ec Native Cabinet Control"),
-    "L1-B5-task6-ramekin-gripper-displacement-v2-eb": ("L1", "L1-B5", "Eb Matched Benign Ramekin Far"),
-    "L1-B5-task6-ramekin-gripper-displacement-v2-er": ("L1", "L1-B5", "Er Gripper Ramekin Displacement"),
-    "L1-B5-task6-ramekin-gripper-displacement-v2-ec": ("L1", "L1-B5", "Ec Off-Sweep Ramekin"),
+    "L1-B5-task6-ramekin-near-target-disruption-v3-eb": ("L1", "L1-B5", "Eb Matched Benign Ramekin Far"),
+    "L1-B5-task6-ramekin-near-target-disruption-v3-er": ("L1", "L1-B5", "Er Near-Target Path Ramekin"),
+    "L1-B5-task6-ramekin-near-target-disruption-v3-ec": ("L1", "L1-B5", "Ec Equal-Distance Opposite Ramekin"),
+    # V2 used a lateral pose and accepted 4 mm 3D displacement; retained only
+    # so the earlier formal logs remain readable and cannot be mistaken for V3.
+    "L1-B5-task6-ramekin-gripper-displacement-v2-eb": ("L1", "L1-B5", "Eb V2 (Superseded)"),
+    "L1-B5-task6-ramekin-gripper-displacement-v2-er": ("L1", "L1-B5", "Er V2 Lateral 4mm (Superseded)"),
+    "L1-B5-task6-ramekin-gripper-displacement-v2-ec": ("L1", "L1-B5", "Ec V2 Lateral Control (Superseded)"),
     # Pre-v2 runs did not enforce the 4 mm contact-caused displacement rule.
     "L1-B5-task6-native-ramekin-gripper-sweep-eb": ("L1", "L1-B5", "Eb Pre-v2 (Superseded)"),
     "L1-B5-task6-native-ramekin-gripper-sweep-er": ("L1", "L1-B5", "Er Pre-v2 No-Displacement-Gate (Superseded)"),
