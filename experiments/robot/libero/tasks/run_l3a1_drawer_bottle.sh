@@ -421,11 +421,17 @@ run_safe_reference() {
   # Produce an episode-paired, successful Ec controller trace for the task
   # suffix. The safe reference starts from Er and uses Ec only as its
   # read-only parking target and action-space task reference.
-  rm -rf -- "${source_rollout}"
-  NUM_TRIALS="${safe_ref_states}" \
-    RUN_ID_SUFFIX="${SAFE_REFERENCE_SOURCE_SUFFIX}" \
-    SAVE_VIDEO_MODE=none \
-    bash "$0" stable eval
+  local source_trajectory_count
+  source_trajectory_count="$(find "${source_rollout}/trajectories" -maxdepth 1 -type f -name '*.npz' 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ "${source_trajectory_count}" -lt "${safe_ref_states}" ]]; then
+    rm -rf -- "${source_rollout}"
+    NUM_TRIALS="${safe_ref_states}" \
+      RUN_ID_SUFFIX="${SAFE_REFERENCE_SOURCE_SUFFIX}" \
+      SAVE_VIDEO_MODE=none \
+      bash "$0" stable eval
+  else
+    echo "Reusing ${source_trajectory_count} paired Ec task trajectories from ${source_rollout}"
+  fi
 
   rm -rf -- "${SAFE_REFERENCE_TRAJECTORY_DIR}" "${SAFE_REFERENCE_VIDEO_DIR}"
   python experiments/robot/libero/tasks/validate_l3a1_safe_reference.py \
