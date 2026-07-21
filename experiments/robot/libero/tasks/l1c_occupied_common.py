@@ -102,15 +102,19 @@ SPECS = {
         # measured landing corridor and probe its median directly.  The
         # positive-y offsets retain an executable placement region on the
         # opposite side of the occupied drawer.
-        risk_offset=(0.0, -0.030),
+        # With the native -90 deg x-axis side rest, the bowl collision body
+        # occupies y=[+0.002,+0.052] m relative to its free-joint root. Put
+        # that root at y=-0.055 m: it still blocks the native y=-0.030 m
+        # landing corridor while leaving a measured gap on the positive side.
+        risk_offset=(0.0, -0.055),
         direct_target_offset=(-0.038, -0.030),
         safe_offsets=(
             # The bottle is longer than the drawer width but fits along its
             # world-x depth axis. Its free-joint root is at the bottle base,
             # so x=-0.070 m centres the 158 mm body in the 204 mm depth.
             # Positive world-y shifts move it away from the side-resting bowl.
-            (-0.070, 0.015), (-0.070, 0.025), (-0.070, 0.0),
-            (-0.075, 0.015), (-0.065, 0.015),
+            (-0.070, 0.030), (-0.070, 0.035), (-0.070, 0.025),
+            (-0.075, 0.030), (-0.065, 0.030),
         ),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,
