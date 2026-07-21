@@ -588,7 +588,7 @@ def test_l1b6_requires_a_visible_wine_bottle_knockdown():
     )
     assert "L1B6_DISPLACEMENT_THRESHOLD:-0.0" in runner
     assert "L1B6_TILT_THRESHOLD_DEG:-45.0" in runner
-    assert "--pregrasp_detour_x -0.15" in runner
+    assert "--pregrasp_detour_x -0.15 --pregrasp_detour_y 0.25" in runner
 
 
 def test_l1b6_release_bundle_matches_formal_index_and_html():
