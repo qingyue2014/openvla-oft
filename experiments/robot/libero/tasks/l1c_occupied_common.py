@@ -289,6 +289,92 @@ def anchor_point(env, spec: OccupiedGoalSpec) -> np.ndarray:
         return point
 
 
+def _wxyz_to_matrix(quat) -> np.ndarray:
+    w, x, y, z = np.asarray(quat, dtype=float)
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ])
+
+
+def _matrix_to_wxyz(matrix) -> np.ndarray:
+    matrix = np.asarray(matrix, dtype=float)
+    trace = float(np.trace(matrix))
+    if trace > 0.0:
+        scale = np.sqrt(trace + 1.0) * 2.0
+        quat = np.array([
+            0.25 * scale,
+            (matrix[2, 1] - matrix[1, 2]) / scale,
+            (matrix[0, 2] - matrix[2, 0]) / scale,
+            (matrix[1, 0] - matrix[0, 1]) / scale,
+        ])
+    else:
+        index = int(np.argmax(np.diag(matrix)))
+        if index == 0:
+            scale = np.sqrt(1.0 + matrix[0, 0] - matrix[1, 1] - matrix[2, 2]) * 2.0
+            quat = np.array([
+                (matrix[2, 1] - matrix[1, 2]) / scale,
+                0.25 * scale,
+                (matrix[0, 1] + matrix[1, 0]) / scale,
+                (matrix[0, 2] + matrix[2, 0]) / scale,
+            ])
+        elif index == 1:
+            scale = np.sqrt(1.0 + matrix[1, 1] - matrix[0, 0] - matrix[2, 2]) * 2.0
+            quat = np.array([
+                (matrix[0, 2] - matrix[2, 0]) / scale,
+                (matrix[0, 1] + matrix[1, 0]) / scale,
+                0.25 * scale,
+                (matrix[1, 2] + matrix[2, 1]) / scale,
+            ])
+        else:
+            scale = np.sqrt(1.0 + matrix[2, 2] - matrix[0, 0] - matrix[1, 1]) * 2.0
+            quat = np.array([
+                (matrix[1, 0] - matrix[0, 1]) / scale,
+                (matrix[0, 2] + matrix[2, 0]) / scale,
+                (matrix[1, 2] + matrix[2, 1]) / scale,
+                0.25 * scale,
+            ])
+    return quat / np.linalg.norm(quat)
+
+
+def anchor_offset_xy(env, spec: OccupiedGoalSpec, offset) -> np.ndarray:
+    """Map a logical offset to world XY; L1-C3 offsets are drawer-local.
+
+    The tuple is (drawer depth, drawer width). At the nominal cabinet pose
+    these coincide with world (x, y), but the mapping remains correct for the
+    fixture yaw sampled independently by each reset seed.
+    """
+    anchor = anchor_point(env, spec)
+    offset = np.asarray(offset, dtype=float)
+    if spec.scenario != "L1-C3":
+        return anchor[:2] + offset
+    site_id = env.sim.model.site_name2id(spec.anchor_site)
+    site_mat = np.asarray(env.sim.data.site_xmat[site_id], dtype=float).reshape(3, 3)
+    world_delta = site_mat[:, 2] * offset[0] + site_mat[:, 1] * offset[1]
+    return anchor[:2] + world_delta[:2]
+
+
+def l1c3_horizontal_rotation_axis(env, spec: OccupiedGoalSpec) -> np.ndarray:
+    """World axis that rotates an upright bottle toward drawer-local depth."""
+    site_id = env.sim.model.site_name2id(spec.anchor_site)
+    site_mat = np.asarray(env.sim.data.site_xmat[site_id], dtype=float).reshape(3, 3)
+    depth = site_mat[:, 2]
+    axis = np.cross(np.array([0.0, 0.0, 1.0]), depth)
+    norm = float(np.linalg.norm(axis))
+    if norm < 1e-8:
+        raise RuntimeError("Drawer depth is parallel to world up")
+    return axis / norm
+
+
+def _l1c3_fixture_aligned_quat(env, spec: OccupiedGoalSpec, nominal_quat) -> np.ndarray:
+    site_id = env.sim.model.site_name2id(spec.anchor_site)
+    site_mat = np.asarray(env.sim.data.site_xmat[site_id], dtype=float).reshape(3, 3)
+    nominal_site_mat = _wxyz_to_matrix(spec.target_place_quat)
+    fixture_yaw = site_mat @ nominal_site_mat.T
+    return _matrix_to_wxyz(fixture_yaw @ _wxyz_to_matrix(nominal_quat))
+
+
 def body_in_anchor_region(env, spec: OccupiedGoalSpec, body_name: str, tolerance=0.015) -> bool:
     """Conservative centre-in-region check used when accepting generated Er states."""
     try:
@@ -371,11 +457,30 @@ def place_at_anchor(env, spec: OccupiedGoalSpec, body_name: str, offset, clearan
             support_z = float(anchor[2])
     except Exception:
         support_z = float(anchor[2])
-    xy = anchor[:2] + np.asarray(offset, dtype=float)
+    xy = anchor_offset_xy(env, spec, offset)
     if body_name == spec.target_body and spec.target_place_quat:
-        set_body_quat(env, body_name, spec.target_place_quat)
+        quat = (
+            _matrix_to_wxyz(
+                np.asarray(
+                    env.sim.data.site_xmat[
+                        env.sim.model.site_name2id(spec.anchor_site)
+                    ],
+                    dtype=float,
+                ).reshape(3, 3)
+            )
+            if spec.scenario == "L1-C3"
+            else spec.target_place_quat
+        )
+        set_body_quat(env, body_name, quat)
     elif body_name == spec.occupant_body and spec.occupant_place_quat:
-        set_body_quat(env, body_name, spec.occupant_place_quat)
+        quat = (
+            _l1c3_fixture_aligned_quat(
+                env, spec, spec.occupant_place_quat
+            )
+            if spec.scenario == "L1-C3"
+            else spec.occupant_place_quat
+        )
+        set_body_quat(env, body_name, quat)
     set_body_drop_pose(env, body_name, xy, support_z, clearance)
 
 

@@ -11,7 +11,9 @@ from experiments.robot.libero.physcog_oracles import (
     make_safety_oracle,
 )
 from experiments.robot.libero.tasks.l1c_occupied_common import (
+    anchor_offset_xy,
     get_spec,
+    l1c3_horizontal_rotation_axis,
     load_state_reset_seeds,
     resolve_bddl,
     settle,
@@ -392,6 +394,23 @@ def test_l1c3_placement_uses_the_oriented_goal_box_floor():
     assert "clearance = min(float(clearance), 0.001)" in source
 
 
+def test_l1c3_offsets_and_rotation_axis_follow_drawer_frame():
+    spec = get_spec("l1c3")
+    env = _Env()
+    env.sim.model.site_name2id = lambda name: 0
+    env.sim.data.site_xpos = np.array([[1.0, 2.0, 3.0]])
+    # Drawer local depth (+z) points world +y and local width (+y) points -x.
+    env.sim.data.site_xmat = np.array([[
+        0.0, -1.0, 0.0,
+        0.0, 0.0, 1.0,
+        1.0, 0.0, 0.0,
+    ]])
+    xy = anchor_offset_xy(env, spec, (-0.070, 0.030))
+    assert np.allclose(xy, [0.970, 1.930])
+    axis = l1c3_horizontal_rotation_axis(env, spec)
+    assert np.allclose(axis, [-1.0, 0.0, 0.0])
+
+
 def test_exact_state_bundle_verification_rejects_post_preview_mutation(tmp_path):
     spec = get_spec("l1c2")
     paths = {
@@ -560,7 +579,7 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "desired_body_xy - body_pos(env, spec.target_body)[:2]" in source
     assert "stop_on_native_success and native_success(env)" in source
     assert "args.rotate_steps, step, sign=rotate_sign" in source
-    assert "args.rotate_steps, step, sign=rotate_sign, axis=1" in source
+    assert "axis=l1c3_horizontal_rotation_axis(env, spec)" in source
     assert "args.reference_rotation_clearance" in source
     assert "args.reference_transport_height_above_anchor" in source
     assert "tolerance=args.reference_lateral_tolerance" in source

@@ -31,6 +31,7 @@ from experiments.robot.libero.physcog_oracles import (
 )
 from experiments.robot.libero.physcog_trajectory import TrajectoryRecorder, load_trajectory
 from experiments.robot.libero.tasks.l1c_occupied_common import (
+    anchor_offset_xy,
     anchor_point,
     body_in_anchor_region,
     body_pos,
@@ -40,6 +41,7 @@ from experiments.robot.libero.tasks.l1c_occupied_common import (
     get_spec,
     load_states,
     load_state_reset_seeds,
+    l1c3_horizontal_rotation_axis,
     native_success,
     place_at_anchor,
     place_null_risk,
@@ -1586,7 +1588,11 @@ def _rotate_horizontal(
     status = None
     for _ in range(count):
         action = np.zeros(7, dtype=float)
-        action[3 + axis] = float(sign)
+        if np.isscalar(axis):
+            action[3 + int(axis)] = float(sign)
+        else:
+            rotation_axis = np.asarray(axis, dtype=float)
+            action[3:6] = float(sign) * rotation_axis / np.linalg.norm(rotation_axis)
         action[-1] = grip
         obs, status = _advance(env, obs, oracle, recorder, action, step)
         step += 1
@@ -2101,7 +2107,8 @@ def _safe_reference_from_eb_prefix(args, files):
                     if failure is None and spec.horizontal_target:
                         obs, step, status = _rotate_horizontal(
                             env, obs, oracle, recorder, close,
-                            args.rotate_steps, step, sign=rotate_sign, axis=1,
+                            args.rotate_steps, step, sign=rotate_sign,
+                            axis=l1c3_horizontal_rotation_axis(env, spec),
                         )
                         failure = (
                             status
@@ -2111,9 +2118,7 @@ def _safe_reference_from_eb_prefix(args, files):
                         preplace_target_tilt = body_tilt_deg(
                             env, spec.target_body
                         )
-                    desired_body_xy = anchor_point(env, spec)[:2] + np.asarray(
-                        offset, dtype=float
-                    )
+                    desired_body_xy = anchor_offset_xy(env, spec, offset)
                     lateral_eef = _eef(obs).copy()
                     lateral_eef[:2] += (
                         desired_body_xy - body_pos(env, spec.target_body)[:2]

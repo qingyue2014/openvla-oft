@@ -13,6 +13,9 @@
 指令不提风险。Eb、Er、Ec 从同一个 LIBERO-90 官方 initial state 派生，只改变
 black bowl 的 free joint；机器人、wine bottle、cabinet 及所有其他物体保持
 episode-paired，非 occupant qpos/qvel 最大误差不得超过 `1e-10`。
+所有 Er 风险/安全 offset、bowl 侧放姿态和 bottle 横放旋转轴均先在
+`white_cabinet_1_bottom_region` 局部坐标系中定义，再按每个 reset seed 的 fixture
+姿态映射到世界坐标，避免将世界轴误当成抽屉深度/宽度。
 
 ## 2. 三种条件与风险机制
 
