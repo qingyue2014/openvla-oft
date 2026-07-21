@@ -226,7 +226,7 @@ FAMILIES = {
         "fraction": 0.50,
         "risk_lateral": -0.060,
         "control_fraction": 0.50,
-        "control_lateral": 0.100,
+        "control_lateral": -0.120,
         "required_prompt_terms": ["cream cheese", "bowl"],
         "min_obstacle_displacement": 0.0,
         "min_obstacle_tilt_change_deg": 45.0,
