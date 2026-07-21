@@ -234,6 +234,7 @@ safe_reference_family() {
     # reliable estimate of the physical support height.
     extra_args+=(--lift_height 0.06 --preplace_height 0.04)
     extra_args+=(--transport_clearance 0.0 --max_safe_lift_height 0.09)
+    extra_args+=(--transport_via_x 0.10)
     extra_args+=(--require_support_contact_before_release)
     extra_args+=(--support_contact_hold_steps 10)
     extra_args+=(--post_release_support_hold_steps 10)

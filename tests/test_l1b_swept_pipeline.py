@@ -482,6 +482,7 @@ def test_l1b5_safe_reference_places_before_release_and_uses_minimum_lift():
 
     assert "--lift_height 0.06 --preplace_height 0.04" in l1b5_block
     assert "--transport_clearance 0.0 --max_safe_lift_height 0.09" in l1b5_block
+    assert "--transport_via_x 0.10" in l1b5_block
     assert "--require_support_contact_before_release" in l1b5_block
     assert "_descend_until_support_contact" in shared
     assert "_hold_until_stable_support_contact" in shared
