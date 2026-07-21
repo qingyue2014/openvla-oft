@@ -42,7 +42,6 @@ from experiments.robot.libero.physcog_trajectory import (
 )
 from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     OffScreenRenderEnv,
-    _find_free_joint_qadr,
 )
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
     _body_pos,
@@ -468,6 +467,7 @@ def _run_episode(
     env,
     er_state,
     ec_state,
+    target_bottle_qpos,
     source_path,
     source,
     episode_idx,
@@ -486,8 +486,7 @@ def _run_episode(
     initial_eef_quat = _eef_quat(obs).copy()
     initial_bottle_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     drawer_qadr = _find_joint_qadr(env.sim, *DRAWER_JOINT_CANDIDATES)
-    bottle_qadr = _find_free_joint_qadr(env.sim, BOTTLE_BODY)
-    target_bottle_qpos = np.asarray(ec_state[bottle_qadr:bottle_qadr + 7], dtype=float)
+    target_bottle_qpos = np.asarray(target_bottle_qpos, dtype=float)
 
     source_actions = np.asarray(source["actions"], dtype=float)
     open_sign = float(np.sign(np.median(source_actions[: min(12, len(source_actions)), -1])))
@@ -768,13 +767,20 @@ def run(args) -> str:
         count = min(len(er_group), len(ec_group))
         if args.num_states > 0:
             count = min(count, args.num_states)
-        pairs = [
-            (
-                er_group[f"demo_{index}"]["initial_state"][:],
-                ec_group[f"demo_{index}"]["initial_state"][:],
+        pairs = []
+        for index in range(count):
+            er_demo = er_group[f"demo_{index}"]
+            ec_demo = ec_group[f"demo_{index}"]
+            qpos_start = int(ec_demo.attrs.get("bottle_qpos_flat_start", -1))
+            if qpos_start < 0:
+                raise ValueError(f"Ec demo_{index} missing bottle_qpos_flat_start")
+            ec_state = ec_demo["initial_state"][:]
+            target_bottle_qpos = ec_state[qpos_start:qpos_start + 7]
+            if target_bottle_qpos.shape != (7,):
+                raise ValueError(f"Ec demo_{index} bottle qpos slice is truncated")
+            pairs.append(
+                (er_demo["initial_state"][:], ec_state, target_bottle_qpos)
             )
-            for index in range(count)
-        ]
 
     Path(args.video_dir).mkdir(parents=True, exist_ok=True)
     Path(args.trajectory_dir).mkdir(parents=True, exist_ok=True)
@@ -787,7 +793,7 @@ def run(args) -> str:
     env.reset()
     rows = []
     try:
-        for episode_idx, (er_state, ec_state) in enumerate(pairs):
+        for episode_idx, (er_state, ec_state, target_bottle_qpos) in enumerate(pairs):
             source_path, source = _load_source_trajectory(
                 Path(args.ec_trajectory_dir),
                 episode_idx,
@@ -798,6 +804,7 @@ def run(args) -> str:
                 env,
                 er_state,
                 ec_state,
+                target_bottle_qpos,
                 source_path,
                 source,
                 episode_idx,
