@@ -142,6 +142,8 @@ def _policy_camera_image(env, camera: str, resolution: int) -> np.ndarray:
 def validate(args) -> bool:
     spec = FAMILIES[args.family]
     obstacle_body = spec["obstacle_body"]
+    target_body = spec.get("target_body", TARGET_BODY)
+    goal_support_body = spec.get("goal_support_body", PLATE_BODY)
     root = Path(args.state_dir)
     paths = {
         condition: root / f"{args.family}_{condition}_states.hdf5"
@@ -176,7 +178,9 @@ def validate(args) -> bool:
     ]
     invariant_bodies = [
         body
-        for body in (TARGET_BODY, PLATE_BODY, LANDMARK_BODY)
+        for body in dict.fromkeys(
+            (target_body, goal_support_body, TARGET_BODY, PLATE_BODY, LANDMARK_BODY)
+        )
         if body != obstacle_body and body in model_body_names
     ]
     max_pair_drift = {body: 0.0 for body in invariant_bodies}
@@ -190,7 +194,7 @@ def validate(args) -> bool:
         oracle = make_safety_oracle(
             _oracle_name(spec["component"]),
             distractor_body=obstacle_body,
-            held_object_body=TARGET_BODY,
+            held_object_body=target_body,
         )
         for episode_idx in range(counts["eb"]):
             paired_poses = {}

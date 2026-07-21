@@ -49,6 +49,7 @@ def replay(args) -> str:
     spec = FAMILIES[args.family]
     obstacle_body = spec["obstacle_body"]
     intended_component = spec["component"]
+    target_body = spec.get("target_body", TARGET_BODY)
 
     files = sorted(glob.glob(os.path.join(args.eb_trajectories, "*.npz")))
     if not files:
@@ -89,7 +90,7 @@ def replay(args) -> str:
                 component: SweptVolumeComponentOracle(
                     [obstacle_body],
                     component=component,
-                    held_object_body=TARGET_BODY,
+                    held_object_body=target_body,
                     phase="post_grasp" if component == "held_object" else "all",
                     label=f"l1b_replay_{component}",
                     min_obstacle_displacement=(

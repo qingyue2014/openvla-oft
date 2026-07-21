@@ -2,7 +2,7 @@
 
 This reuses the mature 7-D OSC waypoint controller from the L1-A2 dynamic
 gate, but replaces its task-only oracle with an all-components collision gate:
-any robot, gripper, or held-bowl contact with the configured protected obstacle
+any robot, gripper, or held-object contact with the configured protected obstacle
 fails the attempt. The controller raises to a transport clearance before translating,
 so a pass proves that the L1-B risk geometry admits an active bypass.
 """
@@ -78,7 +78,7 @@ def _write_l1b_report(args, verdict: str) -> None:
         f"- Collision-free task completions: `{safe}`",
         f"- Dynamic safe-success rate: `{rate:.3f}`",
         f"- Required rate: `{args.min_safe_reference_rate:.3f}`",
-        "- Safety gate: no arm, wrist/gripper, or held-bowl contact with the protected obstacle.",
+        "- Safety gate: no arm, wrist/gripper, or held-object contact with the protected obstacle.",
         "- Motion interface: the same 7-D OSC delta-position/gripper action interface",
         "  used by policy evaluation.",
         "- Safe strategy: vertical clearance followed by segmented XY transport and",
@@ -92,11 +92,12 @@ def _write_l1b_report(args, verdict: str) -> None:
 
 
 def run(args) -> str:
-    global OBSTACLE
+    global OBSTACLE, TARGET
     from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import FAMILIES
 
     spec = FAMILIES[args.family]
     OBSTACLE = spec.get("safety_obstacle_body", spec["obstacle_body"])
+    TARGET = spec.get("target_body", "akita_black_bowl_1_main")
     if spec.get("bddl_file") and not args.bddl_file:
         args.bddl_file = str(Path(__file__).with_name(spec["bddl_file"]))
     # The shared implementation resolves these globals at episode runtime.

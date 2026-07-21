@@ -92,6 +92,13 @@ obstacle_for() {
   esac
 }
 
+held_object_for() {
+  case "$1" in
+    l1b6_native_held_object) printf '%s\n' cream_cheese_1_main ;;
+    *) printf '%s\n' akita_black_bowl_1_main ;;
+  esac
+}
+
 bddl_for() {
   case "$1" in
     l1b1_arm) printf '%s\n' "${TASKS_DIR}/l1b1_arm_sweep.bddl" ;;
@@ -110,7 +117,7 @@ note_for() {
     l1b3_held_object) base="L1-B3-task6-held-object-sweep" ;;
     l1b4_native_arm) base="L1-B4-goal-bottle-arm-sweep" ;;
     l1b5_native_gripper) base="L1-B5-task6-native-ramekin-gripper-sweep" ;;
-    l1b6_native_held_object) base="L1-B6-goal-bowl-native-wine-bottle-knockdown" ;;
+    l1b6_native_held_object) base="L1-B6-goal-cream-cheese-native-wine-bottle-knockdown" ;;
   esac
   base="${base}-${condition}"
   if [[ -n "${RUN_ID_SUFFIX}" ]]; then
@@ -129,7 +136,7 @@ task_suite_for() {
 task_id_for() {
   case "$1" in
     l1b4_native_arm) printf '%s\n' 4 ;;
-    l1b6_native_held_object) printf '%s\n' 8 ;;
+    l1b6_native_held_object) printf '%s\n' 6 ;;
     *) printf '%s\n' 6 ;;
   esac
 }
@@ -265,7 +272,7 @@ safe_reference_family() {
 
 eval_condition() {
   local family="$1" condition="$2" count="$3"
-  local oracle state_path note trajectory_dir obstacle bddl task_suite task_id checkpoint
+  local oracle state_path note trajectory_dir obstacle held_object bddl task_suite task_id checkpoint
   task_suite="$(task_suite_for "${family}")"
   task_id="$(task_id_for "${family}")"
   checkpoint="$(checkpoint_for "${family}")"
@@ -274,6 +281,7 @@ eval_condition() {
   note="$(note_for "${family}" "${condition}")"
   trajectory_dir="rollouts/${task_suite}/${note}/trajectories"
   obstacle="$(obstacle_for "${family}")"
+  held_object="$(held_object_for "${family}")"
   bddl="$(bddl_for "${family}")"
   # Monitor the same protected component in Eb, Er, and Ec.  A benign
   # placement is a hypothesis, not permission to skip collision measurement.
@@ -298,7 +306,7 @@ eval_condition() {
     --task_ids "${task_id}" \
     --initial_states_path "${state_path}" \
     --safety_oracle "${oracle}" \
-    --held_object_body akita_black_bowl_1_main \
+    --held_object_body "${held_object}" \
     --distractor_body "${obstacle}" \
     --num_trials_per_task "${count}" \
     --seed "${EVAL_SEED}" \
@@ -307,7 +315,7 @@ eval_condition() {
     --save_video_mode "${SAVE_VIDEO_MODE}" \
     --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
     --save_trajectory "${SAVE_TRAJECTORY}" \
-    --trajectory_track_bodies "akita_black_bowl_1_main,plate_1_main,${obstacle},robot0_link0,robot0_link1,robot0_link2,robot0_link3,robot0_link4,robot0_link5,robot0_link6,robot0_link7" \
+    --trajectory_track_bodies "${held_object},akita_black_bowl_1_main,${obstacle},robot0_link0,robot0_link1,robot0_link2,robot0_link3,robot0_link4,robot0_link5,robot0_link6,robot0_link7" \
     --trajectory_dir "${trajectory_dir}" \
     --run_id_note "${note}" \
     "${extra_args[@]}"

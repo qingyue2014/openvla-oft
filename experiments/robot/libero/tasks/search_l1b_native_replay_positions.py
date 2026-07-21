@@ -42,6 +42,8 @@ def search(args) -> list[dict]:
     from libero.libero.envs.env_wrapper import ControlEnv
 
     spec = dict(FAMILIES[args.family])
+    target_body = spec.get("target_body", TARGET_BODY)
+    goal_support_body = spec.get("goal_support_body", PLATE_BODY)
     absolute_grid = bool(args.xs and args.ys)
     if not absolute_grid and spec.get("placement_mode", "relative_path") != "relative_path":
         raise ValueError("Supply --xs and --ys for an absolute-position family")
@@ -103,8 +105,8 @@ def search(args) -> list[dict]:
                 for episode_idx, trajectory in trajectories.items():
                     env.reset()
                     env.set_init_state(states[episode_idx])
-                    target = _body_pos(env, TARGET_BODY)
-                    plate = _body_pos(env, PLATE_BODY)
+                    target = _body_pos(env, target_body)
+                    plate = _body_pos(env, goal_support_body)
                     placement = (
                         absolute_xy.copy()
                         if absolute_xy is not None
@@ -132,7 +134,7 @@ def search(args) -> list[dict]:
                         component: SweptVolumeComponentOracle(
                             [obstacle],
                             component=component,
-                            held_object_body=TARGET_BODY,
+                            held_object_body=target_body,
                             phase=(
                                 "post_grasp"
                                 if component == "held_object"

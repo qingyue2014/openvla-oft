@@ -5,10 +5,10 @@ set -euo pipefail
 # and replay them over a grid of native wine-bottle corridor poses.
 TRIALS="${CALIBRATION_TRIALS:-20}"
 SEARCH_EPISODES="${SEARCH_EPISODES:-10}"
-FRACTIONS="${L1B6_SEARCH_FRACTIONS:-0.30,0.40,0.50,0.60,0.70}"
-LATERALS="${L1B6_SEARCH_LATERALS:--0.16,-0.14,-0.12,-0.10,-0.08,-0.06}"
+FRACTIONS="${L1B6_SEARCH_FRACTIONS:-0.25,0.35,0.45,0.55,0.65,0.75}"
+LATERALS="${L1B6_SEARCH_LATERALS:--0.08,-0.06,-0.04,-0.02,0.00,0.02,0.04,0.06}"
 TASKS_DIR="experiments/robot/libero/tasks"
-RUN_NOTE="L1-B6-goal-bowl-native-wine-bottle-knockdown-eb"
+RUN_NOTE="L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-eb"
 
 NUM_TRIALS="${TRIALS}" bash "${TASKS_DIR}/run_l1b_swept.sh" \
   l1b6_native_held_object generate
@@ -21,7 +21,7 @@ python "${TASKS_DIR}/search_l1b_native_replay_positions.py" \
   --eb_trajectories "rollouts/libero_goal/${RUN_NOTE}/trajectories" \
   --eb_states "${TASKS_DIR}/l1b6_native_held_object_eb_states.hdf5" \
   --task_suite_name libero_goal \
-  --task_id 8 \
+  --task_id 6 \
   --fractions="${FRACTIONS}" \
   --laterals="${LATERALS}" \
   --max_episodes "${SEARCH_EPISODES}" \

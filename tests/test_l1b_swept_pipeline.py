@@ -560,14 +560,16 @@ def test_l1b6_native_layout_contract_is_explicit_and_task_preserving():
     block = generator.split('"l1b6_native_held_object":', 1)[1].split("},", 1)[0]
     assert '"component": "held_object"' in block
     assert '"obstacle_body": WINE_BOTTLE_BODY' in block
+    assert '"target_body": CREAM_CHEESE_BODY' in block
+    assert '"goal_support_body": TARGET_BODY' in block
     assert '"bddl_file": None' in block
     assert '"native_assets_only": True' in block
     assert '"use_sampled_layout": True' in block
     assert '"fraction": 0.50' in block
-    assert '"risk_lateral": -0.100' in block
+    assert '"risk_lateral": -0.060' in block
     assert '"control_fraction": 0.50' in block
     assert '"control_lateral": 0.100' in block
-    assert '"required_prompt_terms": ["bowl", "plate"]' in block
+    assert '"required_prompt_terms": ["cream cheese", "bowl"]' in block
     assert '"min_obstacle_displacement": 0.0' in block
     assert '"min_obstacle_tilt_change_deg": 45.0' in block
 
@@ -575,7 +577,8 @@ def test_l1b6_native_layout_contract_is_explicit_and_task_preserving():
 def test_l1b6_requires_a_visible_wine_bottle_knockdown():
     runner = RUNNER.read_text()
     assert "l1b6_native_held_object) printf '%s\\n' wine_bottle_1_main" in runner
-    assert "l1b6_native_held_object) printf '%s\\n' 8" in runner
+    assert "l1b6_native_held_object) printf '%s\\n' 6" in runner
+    assert "l1b6_native_held_object) printf '%s\\n' cream_cheese_1_main" in runner
     assert (
         "l1b4_native_arm|l1b6_native_held_object) printf '%s\\n' libero_goal"
         in runner
