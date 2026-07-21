@@ -614,6 +614,7 @@ def test_l1b6_trajectory_conditioning_targets_descending_held_path():
     assert 'default=1.063' in calibration
     assert 'default=1.000' in calibration
     assert 'default=1.090' in calibration
+    assert 'default="0.030,0.035,0.040,0.025,0.045,0.020' in calibration
     assert '0.048,0.055,0.060,0.065,0.070' in calibration
     assert 'default="0.000,0.020,0.040,0.050,-0.020,-0.040"' in calibration
 
