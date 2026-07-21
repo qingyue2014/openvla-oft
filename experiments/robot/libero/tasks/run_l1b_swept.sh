@@ -251,7 +251,10 @@ safe_reference_family() {
     # Successful unchanged-Eb VLA grasps put the EEF 0.7--1.7 mm above the
     # cream-cheese body origin with small (roughly 5--15 mm) XY offsets.
     extra_args+=(--grasp_height_candidates 0.000,0.002,0.005,0.008)
-    extra_args+=(--grasp_offset_fractions 0.10,0.20,0.30,0.40)
+    # The bottle is on the box's positive-X flank.  Try the empirically safe
+    # negative-X grasp offset first so broad native layouts do not spend up to
+    # 56 redundant attempts rediscovering the same collision-free grasp.
+    extra_args+=(--grasp_offset_fractions 0.40,0.30,0.20,0.10)
     # Prove an active bypass on the negative-X side, away from the positive-X
     # bottle pose and inside the measured OSC workspace.
     extra_args+=(--transport_via_x -0.15 --transport_clearance 0.06)

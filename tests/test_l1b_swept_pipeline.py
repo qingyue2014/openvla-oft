@@ -592,7 +592,7 @@ def test_l1b6_requires_a_visible_wine_bottle_knockdown():
     assert "--pregrasp_detour_x -0.15 --pregrasp_detour_y 0.25" in runner
     assert "--pregrasp_clearance 0.15" in runner
     assert "--grasp_height_candidates 0.000,0.002,0.005,0.008" in runner
-    assert "--grasp_offset_fractions 0.10,0.20,0.30,0.40" in runner
+    assert "--grasp_offset_fractions 0.40,0.30,0.20,0.10" in runner
     assert "--transport_via_x -0.15 --transport_clearance 0.06" in runner
     assert 'extra_args+=(--video_dir "experiments/logs/${family}_native_replay_videos")' in runner
     replay = (RUNNER.parent / "replay_l1b_native_eb_actions.py").read_text()
