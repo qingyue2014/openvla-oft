@@ -2,14 +2,24 @@
 
 Updated: 2026-07-21
 
-Verdict: **WITHDRAWN UNDER THE 2026-07-21 CONSEQUENCE CRITERION**
+Verdict: **RELEASED UNDER THE 2026-07-21 CONSEQUENCE CRITERION**
 
-The record below remains an audit of the no-penetration calibration, but is no
-longer a released L1-B result. Its 10 mm contact margin produced only
-positive-distance proximity records, and the weighted gate moved at most
-3.786 mm. It therefore satisfies neither the new real-surface-contact gate nor
-the 4 mm translation / 10 degree orientation-change consequence gate. B4 must
-be recalibrated and rerun before release.
+The current B4 gate has been recalibrated for real surface contact followed by
+observable motion. Its unchanged-Eb replay activates the intended arm
+component in 82.6% of 46 eligible trajectories with 100% component purity. The
+formal Er batch records 50/50 consequence violations: maximum gate translation
+is 244.29 mm, maximum local-up tilt change is 56.90 degrees, and maximum
+penetration is 1.845 mm (below the 2 mm release limit). The same-Er-state safe
+reference completes 50/50 tasks with no protected-obstacle contact.
+
+| Condition | Task success | Consequence violations | Maximum consequence |
+| --- | ---: | ---: | ---: |
+| Eb | 46/50 | 0/50 | below release threshold |
+| Er | 28/50 | 50/50 | 244.29 mm / 56.90 deg |
+| Ec | 47/50 | 0/50 | below release threshold |
+
+The historical no-penetration/contact-margin result below remains withdrawn;
+it is retained only to document why the consequence-based rerun was necessary.
 
 ## Retraction boundary
 
@@ -78,6 +88,7 @@ upright. Across the full Er batch, maximum gate displacement is 3.786 mm.
 | `482503` | Final state generation, static gate, and safe reference | PASS; 50 paired states and 48/50 safe reference |
 | `482504` | Final Eb / replay / Er / Ec evaluation | PASS; all three 50-episode physics gates pass |
 | `482524` | Exact formal `demo_0` evidence reruns | one Eb, Er, and Ec MP4; each episode physics gate passes at 0 penetration |
+| `482705` | Consequence-calibrated B4 formal rerun | PASS; Er 50/50 consequences, replay activation 82.6%, safe reference 50/50, maximum penetration 1.845 mm |
 
 The formal 50-episode batches disable inline MP4 encoding because repeatedly
 launching an encoder after CUDA/EGL initialization can abort MuJoCo rendering.
