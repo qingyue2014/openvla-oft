@@ -2485,6 +2485,19 @@ def _safe_reference_from_eb_prefix(args, files):
                             failure = status
                         elif not aligned:
                             failure = "regrasp_storage_orientation_timeout"
+                    regrasp_transport = _eef(obs).copy()
+                    regrasp_transport[2] = max(
+                        regrasp_transport[2],
+                        anchor_point(env, spec)[2]
+                        + args.reference_transport_height_above_anchor,
+                    )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, regrasp_transport,
+                            close, step, args,
+                        )
+                        if failure == "waypoint_timeout":
+                            failure = "regrasp_transport_raise_timeout"
                     grasped_offset = _eef(obs) - body_pos(
                         env, spec.target_body
                     )
@@ -2507,14 +2520,15 @@ def _safe_reference_from_eb_prefix(args, files):
                     )
                     desired_body_xy = desired_body[:2]
                     desired_eef = desired_body + grasped_offset
-                    drawer_above = desired_eef + np.array(
-                        [0.0, 0.0, args.reference_regrasp_approach_height]
-                    )
+                    drawer_above = desired_eef.copy()
+                    drawer_above[2] = regrasp_transport[2]
                     if failure is None:
                         obs, step, failure, _ = _move(
                             env, obs, oracle, recorder, drawer_above, close,
                             step, args,
                         )
+                        if failure == "waypoint_timeout":
+                            failure = "regrasp_transport_lateral_timeout"
                     if failure is None:
                         obs, step, failure, _ = _move(
                             env, obs, oracle, recorder, desired_eef, close,
