@@ -232,7 +232,10 @@ FAMILIES = {
         "control_fraction": 0.50,
         "control_lateral": 0.040,
         "source_target_x_min": -0.055,
-        "source_goal_x_max": -0.085,
+        # The native goal-x subregion selects the learned carry arc that passes
+        # the bottle. In unchanged-Eb replay, goal x <= -0.098 m retained both
+        # held-box knockdowns and excluded all three clean misses.
+        "source_goal_x_max": -0.098,
         "required_prompt_terms": ["cream cheese", "bowl"],
         "min_obstacle_displacement": 0.0,
         "min_obstacle_tilt_change_deg": 45.0,
