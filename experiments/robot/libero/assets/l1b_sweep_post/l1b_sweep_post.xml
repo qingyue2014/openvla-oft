@@ -11,10 +11,10 @@
               size="0.025 0.012" contype="0" conaffinity="0"
               rgba="0.18 0.18 0.18 1" group="1"/>
         <geom name="post_collision" type="cylinder" pos="0 0 0"
-              size="0.008 0.18" density="40" friction="0.30 0.15 0.03"
+              size="0.008 0.18" density="30" friction="0.30 0.15 0.03"
               rgba="0.80 0.18 0.10 1" group="0"/>
         <geom name="post_base" type="cylinder" pos="0 0 -0.168"
-              size="0.025 0.012" density="75" friction="0.20 0.15 0.03"
+              size="0.025 0.012" density="55" friction="0.20 0.15 0.03"
               rgba="0.18 0.18 0.18 1" group="0"/>
       </body>
       <site rgba="0 0 0 0" size="0.005" pos="0 0 -0.18" name="bottom_site"/>

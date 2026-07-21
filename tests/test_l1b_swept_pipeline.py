@@ -495,10 +495,10 @@ def test_swept_obstacles_have_policy_camera_visual_geometries():
                 geom for geom in collision_geoms
                 if geom.get("name") == "post_base"
             )
-            assert post.get("density") == "40"
+            assert post.get("density") == "30"
             assert post.get("solimp") is None and post.get("solref") is None
             assert base.get("margin") is None
-            assert base.get("density") == "75"
+            assert base.get("density") == "55"
 
 
 def test_goal_arm_gate_free_joint_can_slide_after_surface_contact():
