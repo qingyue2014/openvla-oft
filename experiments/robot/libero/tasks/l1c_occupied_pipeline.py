@@ -2422,9 +2422,15 @@ def _safe_reference_from_eb_prefix(args, files):
                     target_lo, target_hi = _collision_aabb(
                         env, spec.target_body
                     )
-                    target_center = (target_lo + target_hi) / 2.0
                     target_root = body_pos(env, spec.target_body)
-                    regrasp = target_center.copy()
+                    # Grasp near the bottle base rather than at its center.
+                    # The neck points into drawer depth, leaving the gripper
+                    # and wrist near the open edge during final insertion.
+                    regrasp = target_root.copy()
+                    regrasp[:2] += (
+                        args.reference_regrasp_from_root_distance
+                        * desired_depth[:2]
+                    )
                     regrasp[2] = target_root[2] + max(
                         0.0,
                         target_hi[2]
@@ -3263,6 +3269,9 @@ def main():
     p.add_argument("--reference_regrasp_settle_steps", type=int, default=50)
     p.add_argument("--reference_regrasp_approach_height", type=float, default=0.100)
     p.add_argument("--reference_regrasp_depth", type=float, default=0.025)
+    p.add_argument(
+        "--reference_regrasp_from_root_distance", type=float, default=0.035
+    )
     p.add_argument("--reference_regrasp_lift_height", type=float, default=0.100)
     p.add_argument("--reference_regrasp_orientation_steps", type=int, default=80)
     p.add_argument(

@@ -611,6 +611,7 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "reference_regrasp_table_clearance" in source
     assert "reference_regrasp_approach_height" in source
     assert "target_hi[2]" in source and "args.reference_regrasp_depth" in source
+    assert "args.reference_regrasp_from_root_distance" in source
     assert "drawer_floor_z" in source
     assert "-args.reference_contact_descent_overtravel" in source
     assert "stop_on_support=True" in source
