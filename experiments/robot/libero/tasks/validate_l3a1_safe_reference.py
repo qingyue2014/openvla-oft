@@ -551,7 +551,10 @@ def _run_episode(
         grasp_offset = _eef_pos(io.obs) - _body_pos(env, BOTTLE_BODY)
         pivot_hover_root = target_bottle_qpos[:3].copy()
         pivot_hover_root[0] += args.pivot_outward_x
-        pivot_hover_root[2] += args.parking_hover_height
+        pivot_hover_root[2] = max(
+            float(_body_pos(env, BOTTLE_BODY)[2] + args.pivot_lift_clearance),
+            float(target_bottle_qpos[2] + args.pivot_hover_height),
+        )
         failure = _move_position(
             io,
             pivot_hover_root + grasp_offset,
@@ -906,6 +909,8 @@ def main() -> None:
     parser.add_argument("--min_grasp_lift", type=float, default=0.035)
     parser.add_argument("--grasped_upright_tolerance_deg", type=float, default=7.0)
     parser.add_argument("--pivot_outward_x", type=float, default=0.060)
+    parser.add_argument("--pivot_hover_height", type=float, default=0.140)
+    parser.add_argument("--pivot_lift_clearance", type=float, default=0.040)
     parser.add_argument("--pivot_command", type=float, default=0.10)
     parser.add_argument("--pivot_position_tolerance", type=float, default=0.012)
     parser.add_argument("--max_pivot_steps", type=int, default=220)
