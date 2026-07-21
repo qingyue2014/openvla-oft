@@ -110,6 +110,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l1b6_native_held_object_scene_check.md",
             "experiments/logs/l1b6_native_held_object_safe_reference.md",
+            "experiments/logs/l1b6_native_held_object_safe_reference.csv",
             "experiments/logs/l1b6_trajectory_conditioned_calibration.md",
             "experiments/logs/l1b6_trajectory_conditioned_calibration.csv",
             "experiments/logs/l1b6_native_held_object_native_replay.md",
@@ -160,6 +161,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b6_native_held_object_eb_rollout_physics.md",
             "experiments/logs/l1b6_native_held_object_er_rollout_physics.md",
             "experiments/logs/l1b6_native_held_object_ec_rollout_physics.md",
+            "experiments/robot/libero/tasks/l1b6_native_held_object_pairing.json",
+            "experiments/robot/libero/tasks/l1b_swept_preview/l1b6_native_held_object",
             "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-eb/trajectories",
             "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-er/trajectories",
             "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-ec/trajectories",
