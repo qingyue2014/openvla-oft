@@ -82,7 +82,7 @@ def test_paper_facing_l1c_specs_keep_native_prompts_and_assets():
         assert spec.occupant_body == occupant
         assert prompt_word in spec.prompt
         assert Path(resolve_bddl(spec)).exists()
-        assert np.linalg.norm(spec.risk_offset) <= 0.06
+        assert np.linalg.norm(spec.risk_offset) <= 0.075
         assert len(spec.safe_offsets) >= 4
 
 
@@ -97,7 +97,7 @@ def test_l1c3_calibration_separates_obstacle_pose_from_unadapted_landing():
     spec = get_spec("l1c3")
     offsets = _calibration_offsets(spec)
     assert offsets[0] == spec.direct_target_offset == (-0.038, -0.030)
-    assert spec.risk_offset == (0.0, -0.055)
+    assert spec.risk_offset == (0.0, -0.070)
 
 
 def test_l1c2_and_l1c3_use_all_task_checkpoint_after_competence_failures():
@@ -294,7 +294,7 @@ def test_l1c3_uses_stable_horizontal_bottle_pose_and_side_resting_bowl():
     spec = get_spec("l1c3")
 
     assert spec.anchor_body == "white_cabinet_1_cabinet_bottom"
-    assert spec.risk_offset == (0.0, -0.055)
+    assert spec.risk_offset == (0.0, -0.070)
     assert spec.direct_target_offset == (-0.038, -0.030)
     assert spec.safe_offsets == (
         (-0.070, 0.030), (-0.070, 0.035), (-0.070, 0.025),
