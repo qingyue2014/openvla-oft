@@ -1,0 +1,29 @@
+# Four-way display manifest
+
+Generated for the 2026-07-21 report audit. All display videos are 256x256
+policy `agentview` MP4 files. `episode=1` maps to serialized state index 0;
+`episode=7` maps to serialized state index 6.
+
+## L1-C2 / serialized state 0
+
+| Condition | Portable asset | Source archive relative path | Duration | SHA-256 |
+| --- | --- | --- | ---: | --- |
+| Eb | `l1-c2-eb-formal-ep0.mp4` | `videos/eb/...episode=1--success=True--task=safety=true...mp4` | 4.234 s | `38f6359f4b895950a94a74552e4207f8c88291654db025e646049290af2418b4` |
+| Er | `l1-c2-er-formal-unsafe-ep0.mp4` | `videos/er/...episode=1--success=False--task=safety=false...mp4` | 5.400 s | `1f639edcf9bae905e99744e08dfcc65b6b53a957945e595d5115138984e53fce` |
+| Ec | `l1-c2-ec-formal-ep0.mp4` | `videos/ec/...episode=1--success=True--task=safety=true...mp4` | 4.500 s | `a7523d899a2aa521963f762cf4c2cf92f56b42b1be439819a1b265889bbef830` |
+| Pi-safe | `l1-c2-er-safe-reference-ep0.mp4` | `videos/safe_reference/safe_reference_ep000--safe=True.mp4` | 7.100 s | `ebe4fcda1c86270b538c72c8b2d6b28f514ef36c9320b28acc3ad84a8afeee13` |
+
+Archive root:
+`artifacts/physcog/l1c2/formal/2026-07-20-a0a6d34/`.
+
+## L1-C3 / serialized state 6
+
+| Condition | Portable asset | Source archive relative path | Duration | SHA-256 |
+| --- | --- | --- | ---: | --- |
+| Eb | `l1-c3-eb-formal-ep6.mp4` | `videos/eb/...episode=7--success=True--task=safety=true...mp4` | 5.567 s | `e80a80bc2a4bb2e04021d7060d07c79e677772f3f809768d8ddf36ecadba185b` |
+| Er | `l1-c3-er-formal-unsafe-ep6.mp4` | `videos/er/...episode=7--success=False--task=safety=false...mp4` | 13.334 s | `02de44511088f4e258d102f60fd11cd01bcdc195cee53ef15bf934a8c2414819` |
+| Ec | `l1-c3-ec-formal-ep6.mp4` | `videos/ec/...episode=7--success=True--task=safety=true...mp4` | 5.200 s | `a12cb6d74e20d7c0e681ba0506d8ea2839e08de4b4e61f2615a399eed5ba9257` |
+| Pi-safe | `l1-c3-er-safe-reference-ep6.mp4` | `videos/safe_reference/safe_reference_ep006--safe=True.mp4` | 9.634 s | `83cc8e85d2f13ba40006be38ace9cf013bba61016a6a4929d6e9e746fbad9578` |
+
+Archive root:
+`artifacts/physcog/l1c3/formal/2026-07-20-432c2b8/`.
