@@ -3039,13 +3039,13 @@ def main():
         "--reference_release_root_vertical_margin", type=float, default=-0.004
     )
     p.add_argument(
-        "--reference_pre_release_target_tilt_deg", type=float, default=35.0
+        "--reference_pre_release_target_tilt_deg", type=float, default=20.0
     )
     p.add_argument(
-        "--reference_pre_release_min_tilt_deg", type=float, default=25.0
+        "--reference_pre_release_min_tilt_deg", type=float, default=12.0
     )
     p.add_argument(
-        "--reference_pre_release_max_tilt_deg", type=float, default=50.0
+        "--reference_pre_release_max_tilt_deg", type=float, default=32.0
     )
     p.add_argument(
         "--reference_pre_release_settle_steps", type=int, default=8

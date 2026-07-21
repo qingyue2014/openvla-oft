@@ -632,8 +632,8 @@ def test_l1c3_release_gate_rejects_hovering_bottle_before_gripper_open():
     args = SimpleNamespace(
         reference_release_xy_tolerance=0.015,
         reference_release_root_vertical_margin=-0.004,
-        reference_pre_release_min_tilt_deg=25.0,
-        reference_pre_release_max_tilt_deg=50.0,
+        reference_pre_release_min_tilt_deg=12.0,
+        reference_pre_release_max_tilt_deg=32.0,
     )
     valid = {
         "support_contact": True,
@@ -641,7 +641,7 @@ def test_l1c3_release_gate_rejects_hovering_bottle_before_gripper_open():
         "root_vertical_margin_m": 0.002,
         "body_vertical_margin_m": -0.100,
         "body_horizontal_margin_m": 0.006,
-        "tilt_deg": 35.0,
+        "tilt_deg": 20.0,
     }
     assert _l1c3_release_gate_passes(valid, spec, args)
 
@@ -654,8 +654,8 @@ def test_l1c3_release_gate_rejects_root_or_footprint_outside_drawer():
     args = SimpleNamespace(
         reference_release_xy_tolerance=0.015,
         reference_release_root_vertical_margin=-0.004,
-        reference_pre_release_min_tilt_deg=25.0,
-        reference_pre_release_max_tilt_deg=50.0,
+        reference_pre_release_min_tilt_deg=12.0,
+        reference_pre_release_max_tilt_deg=32.0,
     )
     base = {
         "support_contact": True,
@@ -663,7 +663,7 @@ def test_l1c3_release_gate_rejects_root_or_footprint_outside_drawer():
         "root_vertical_margin_m": 0.002,
         "body_vertical_margin_m": -0.100,
         "body_horizontal_margin_m": 0.006,
-        "tilt_deg": 35.0,
+        "tilt_deg": 20.0,
     }
     assert not _l1c3_release_gate_passes(
         dict(base, root_vertical_margin_m=-0.010), spec, args
