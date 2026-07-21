@@ -722,8 +722,11 @@ def run(args):
                 for value in height_values.split(",")
                 if value.strip()
             ] or [args.grasp_height]
+            # Test the centered grasp at every height before expanding into
+            # lateral offsets. Height is the cleanest way to clear a nearby
+            # bottle neck while retaining a symmetric box grasp.
             grasp_candidates = [
-                (height, offset) for height in heights for offset in candidates
+                (height, offset) for offset in candidates for height in heights
             ]
             if selected_grasp is not None:
                 selected_height, selected_offset = selected_grasp
