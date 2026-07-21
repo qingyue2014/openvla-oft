@@ -22,8 +22,8 @@ python "${TASKS_DIR}/search_l1b_native_replay_positions.py" \
   --eb_states "${TASKS_DIR}/l1b6_native_held_object_eb_states.hdf5" \
   --task_suite_name libero_goal \
   --task_id 8 \
-  --fractions "${FRACTIONS}" \
-  --laterals "${LATERALS}" \
+  --fractions="${FRACTIONS}" \
+  --laterals="${LATERALS}" \
   --max_episodes "${SEARCH_EPISODES}" \
   --min_obstacle_displacement 0.0 \
   --min_obstacle_tilt_change_deg "${L1B6_TILT_THRESHOLD_DEG:-45.0}" \

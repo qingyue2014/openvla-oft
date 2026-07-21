@@ -43,6 +43,26 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_goal/L1-B6-goal-bowl-native-wine-bottle-knockdown-eb/trajectories",
         ),
     ),
+    ("l1b6", "search"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/search_l1b_native_replay_positions.py",
+            "--family", "l1b6_native_held_object",
+            "--eb_trajectories",
+            "rollouts/libero_goal/L1-B6-goal-bowl-native-wine-bottle-knockdown-eb/trajectories",
+            "--eb_states",
+            "experiments/robot/libero/tasks/l1b6_native_held_object_eb_states.hdf5",
+            "--task_suite_name", "libero_goal",
+            "--task_id", "8",
+            "--fractions=0.30,0.40,0.50,0.60,0.70",
+            "--laterals=-0.16,-0.14,-0.12,-0.10,-0.08,-0.06",
+            "--max_episodes", "10",
+            "--min_obstacle_displacement", "0.0",
+            "--min_obstacle_tilt_change_deg", "45.0",
+            "--out_csv", "experiments/logs/l1b6_wine_bottle_pose_search.csv",
+        ),
+        artifacts=("experiments/logs/l1b6_wine_bottle_pose_search.csv",),
+    ),
     ("l1b6", "prepare"): PhaseSpec(
         command=(
             "env",
