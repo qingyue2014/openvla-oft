@@ -393,6 +393,7 @@ safe_reference_l1a2() {
         --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
         --video_dir "${L1A2_SAFE_REF_VIDEO_DIR}" \
         --save_failed_videos \
+        --forbid_protected_contact \
         --out_csv experiments/logs/l1a2_safe_reference.csv \
         --out_report "${L1A2_SAFE_REF_REPORT}"
 }
