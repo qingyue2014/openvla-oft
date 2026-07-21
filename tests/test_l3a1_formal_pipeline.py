@@ -73,6 +73,7 @@ def test_l3a1_safe_reference_is_executable_from_er_and_saves_video_and_trajector
     assert "placement_hover_root[:2] = placement_xy" in text
     assert "placement_xy = parking_xy - np.asarray(" in text
     assert "pivot_slide_compensation_xy" in text
+    assert 'default=(-0.17, 0.05)' in text
     assert "root_correction = np.clip(" not in text
     assert "held_steps_after_upright" in text
     assert "move_above_final_placement" in text

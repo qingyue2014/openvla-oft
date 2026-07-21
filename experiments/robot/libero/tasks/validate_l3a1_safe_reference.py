@@ -929,7 +929,7 @@ def main() -> None:
     parser.add_argument("--lift_away_y", type=float, default=0.0)
     parser.add_argument("--lift_height", type=float, default=0.12)
     parser.add_argument("--min_grasp_lift", type=float, default=0.035)
-    parser.add_argument("--parking_xy", type=float, nargs=2, default=(-0.13, 0.05))
+    parser.add_argument("--parking_xy", type=float, nargs=2, default=(-0.17, 0.05))
     parser.add_argument("--placement_lift_clearance", type=float, default=0.040)
     parser.add_argument("--table_lower_command", type=float, default=0.08)
     parser.add_argument("--max_table_lower_steps", type=int, default=180)
