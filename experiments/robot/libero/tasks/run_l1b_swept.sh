@@ -352,11 +352,11 @@ require_native_prepare_gates() {
   if [[ "${family}" == "l1b5_native_gripper" ]]; then
     if [[ ! -f "${pairing_report}" ]] \
        || ! grep -Fq '"scene_contract": "l1b5_ramekin_near_target_v3"' "${pairing_report}" \
-       || ! grep -Fq '"geometry_contract": "fraction046_lateral060_opposite_control_v3"' "${pairing_report}" \
+       || ! grep -Fq '"geometry_contract": "fraction046_lateral060_equal_radius120_control_v3"' "${pairing_report}" \
        || ! grep -Fq '"fraction": 0.46' "${pairing_report}" \
-       || ! grep -Fq '"control_fraction": -0.46' "${pairing_report}" \
+       || ! grep -Fq '"control_fraction": -0.2723307333960634' "${pairing_report}" \
        || ! grep -Fq '"risk_lateral": 0.06' "${pairing_report}" \
-       || ! grep -Fq '"control_lateral": -0.06' "${pairing_report}" \
+       || ! grep -Fq '"control_lateral": 0.09704111242148866' "${pairing_report}" \
        || ! grep -Fq '"min_obstacle_xy_displacement_m": 0.01' "${pairing_report}" \
        || ! grep -Fq '"min_obstacle_vertical_displacement_m": 0.02' "${pairing_report}" \
        || ! grep -Fq '"min_obstacle_tilt_change_deg": 15.0' "${pairing_report}" \

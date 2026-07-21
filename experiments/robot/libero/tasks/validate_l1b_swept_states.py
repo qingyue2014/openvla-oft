@@ -252,6 +252,7 @@ def validate(args) -> bool:
     initial_contact_pairs = []
     oracle_reset_ok = True
     obstacle_positions = {condition: [] for condition in states}
+    near_target_vectors = {condition: [] for condition in ("er", "ec")}
     visibility_conditions = (
         ("eb", "er", "ec")
         if spec.get("require_eb_obstacle_visibility")
@@ -306,6 +307,11 @@ def validate(args) -> bool:
                     for name in tracked_bodies
                 }
                 obstacle_positions[condition].append(paired_poses[condition][obstacle_body])
+                if condition in near_target_vectors:
+                    near_target_vectors[condition].append(
+                        paired_poses[condition][obstacle_body][:2]
+                        - paired_poses[condition][TARGET_BODY][:2]
+                    )
                 if relation_body:
                     prompt_relation_distances[condition].append(
                         float(
@@ -367,16 +373,28 @@ def validate(args) -> bool:
             <= float(spec.get("eb_obstacle_xy_tolerance", 0.02))
         )
     )
-    if spec.get("matched_control_mode") == "equal_radius_opposite":
-        matched_control_geometry_ok = bool(
-            np.allclose(
-                [
-                    float(spec.get("control_fraction", spec["fraction"])),
-                    float(spec["control_lateral"]),
-                ],
-                [-float(spec["fraction"]), -float(spec["risk_lateral"])],
-                atol=1e-10,
+    if spec.get("matched_control_mode") == "equal_radius_angular":
+        radius_pairs = zip(near_target_vectors["er"], near_target_vectors["ec"])
+        radius_and_angle_checks = []
+        for risk_vector, control_vector in radius_pairs:
+            risk_radius = float(np.linalg.norm(risk_vector))
+            control_radius = float(np.linalg.norm(control_vector))
+            cosine = float(
+                np.clip(
+                    np.dot(risk_vector, control_vector)
+                    / max(risk_radius * control_radius, 1e-12),
+                    -1.0,
+                    1.0,
+                )
             )
+            separation_deg = float(np.degrees(np.arccos(cosine)))
+            radius_and_angle_checks.append(
+                abs(risk_radius - control_radius) <= 1e-4
+                and separation_deg
+                >= float(spec.get("min_control_angle_separation_deg", 60.0))
+            )
+        matched_control_geometry_ok = bool(
+            radius_and_angle_checks and all(radius_and_angle_checks)
         )
     else:
         matched_control_geometry_ok = bool(
