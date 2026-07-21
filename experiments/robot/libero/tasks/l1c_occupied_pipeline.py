@@ -1637,6 +1637,45 @@ def _align_body_axis(
     return obs, step, status, False
 
 
+def _move_with_body_alignment(
+    env, obs, oracle, recorder, target, body_name, desired_axis, grip, step,
+    args, tolerance=None,
+):
+    """Translate a held object while actively preserving its long-axis pose."""
+    tolerance = args.position_tolerance if tolerance is None else tolerance
+    target = np.asarray(target, dtype=float)
+    desired_axis = np.asarray(desired_axis, dtype=float)
+    desired_axis /= np.linalg.norm(desired_axis)
+    best = float("inf")
+    for _ in range(args.max_waypoint_steps):
+        error = float(np.linalg.norm(target - _eef(obs)))
+        best = min(best, error)
+        body_id = env.sim.model.body_name2id(body_name)
+        body_mat = np.asarray(
+            env.sim.data.body_xmat[body_id], dtype=float
+        ).reshape(3, 3)
+        body_axis = body_mat[:, 2]
+        cosine = float(np.clip(np.dot(body_axis, desired_axis), -1.0, 1.0))
+        axis_error_deg = float(np.degrees(np.arccos(cosine)))
+        if error <= tolerance and axis_error_deg <= args.reference_alignment_tolerance_deg:
+            return obs, step, None, best
+        action = _position_action(
+            _eef(obs), target, grip, args.position_scale,
+            args.reference_translation_max_command,
+        )
+        rotation_axis = np.cross(body_axis, desired_axis)
+        norm = float(np.linalg.norm(rotation_axis))
+        if norm >= 1e-8 and axis_error_deg > args.reference_alignment_tolerance_deg:
+            action[3:6] = (
+                args.reference_tracking_rotation_command * rotation_axis / norm
+            )
+        obs, status = _advance(env, obs, oracle, recorder, action, step)
+        step += 1
+        if status.violated:
+            return obs, step, status, best
+    return obs, step, "waypoint_timeout", best
+
+
 def _contact_between(env, body_a, body_b):
     a = descendant_geom_ids(env, body_a)
     b = descendant_geom_ids(env, body_b)
@@ -2196,9 +2235,9 @@ def _safe_reference_from_eb_prefix(args, files):
                         desired_body_xy - body_pos(env, spec.target_body)[:2]
                     )
                     if failure is None:
-                        obs, step, failure, _ = _move(
-                            env, obs, oracle, recorder, lateral_eef, close,
-                            step, args,
+                        obs, step, failure, _ = _move_with_body_alignment(
+                            env, obs, oracle, recorder, lateral_eef,
+                            spec.target_body, desired_depth, close, step, args,
                             tolerance=args.reference_lateral_tolerance,
                         )
                     descent_eef = _eef(obs).copy()
@@ -2206,9 +2245,9 @@ def _safe_reference_from_eb_prefix(args, files):
                         desired_body[2] - body_pos(env, spec.target_body)[2]
                     )
                     if failure is None:
-                        obs, step, failure, _ = _move(
-                            env, obs, oracle, recorder, descent_eef, close,
-                            step, args,
+                        obs, step, failure, _ = _move_with_body_alignment(
+                            env, obs, oracle, recorder, descent_eef,
+                            spec.target_body, desired_depth, close, step, args,
                         )
                     if failure == "waypoint_timeout":
                         target_pos = body_pos(env, spec.target_body)
@@ -2810,6 +2849,11 @@ def main():
     p.add_argument("--reference_rotation_command", type=float, default=0.25)
     p.add_argument("--reference_alignment_steps", type=int, default=120)
     p.add_argument("--reference_rotation_settle_steps", type=int, default=10)
+    p.add_argument("--reference_alignment_tolerance_deg", type=float, default=10.0)
+    p.add_argument("--reference_translation_max_command", type=float, default=0.35)
+    p.add_argument(
+        "--reference_tracking_rotation_command", type=float, default=0.15
+    )
     p.add_argument("--drop_clearance", type=float, default=0.006)
     p.add_argument("--position_scale", type=float, default=0.08)
     p.add_argument("--max_position_command", type=float, default=1.0)

@@ -589,6 +589,9 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "args.reference_rotation_settle_steps" in source
     assert "desired_depth *= 1.0 if rotate_sign >= 0.0 else -1.0" in source
     assert "-offset[0], offset[1]" in source
+    assert "_move_with_body_alignment(" in source
+    assert "args.reference_translation_max_command" in source
+    assert "args.reference_tracking_rotation_command" in source
     assert "args.reference_transport_height_above_anchor" in source
     assert "tolerance=args.reference_lateral_tolerance" in source
     assert "release_xy_error <= args.reference_release_xy_tolerance" in source
