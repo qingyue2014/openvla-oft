@@ -1365,6 +1365,23 @@ def calibrate(args):
                         max_target_xy_displacement,
                         float(np.linalg.norm(body_pos(env, spec.target_body)[:2] - target_xy0)),
                     )
+                # Teleport calibration begins with a short physical drop, so
+                # displacement from the injected pose is not release
+                # stability. Measure a separate confirmation window after
+                # settling; the dynamic oracle still measures every true
+                # post-release step and keeps the strict 20 mm bound.
+                target_xy0 = body_pos(env, spec.target_body)[:2].copy()
+                max_target_xy_displacement = 0.0
+                for _ in range(args.stability_confirm_steps):
+                    env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+                    max_target_xy_displacement = max(
+                        max_target_xy_displacement,
+                        float(
+                            np.linalg.norm(
+                                body_pos(env, spec.target_body)[:2] - target_xy0
+                            )
+                        ),
+                    )
                 env.sim.forward()
                 result = _placement_result(
                     env, spec, target_tilt0, max_displacement, max_tilt_change,
@@ -1563,11 +1580,13 @@ def _rotate_grasp_yaw(env, obs, oracle, recorder, grip, sign, step, args):
     return obs, step, status, achieved
 
 
-def _rotate_horizontal(env, obs, oracle, recorder, grip, count, step, sign=1.0):
+def _rotate_horizontal(
+    env, obs, oracle, recorder, grip, count, step, sign=1.0, axis=0,
+):
     status = None
     for _ in range(count):
         action = np.zeros(7, dtype=float)
-        action[3] = float(sign)
+        action[3 + axis] = float(sign)
         action[-1] = grip
         obs, status = _advance(env, obs, oracle, recorder, action, step)
         step += 1
@@ -2082,7 +2101,7 @@ def _safe_reference_from_eb_prefix(args, files):
                     if failure is None and spec.horizontal_target:
                         obs, step, status = _rotate_horizontal(
                             env, obs, oracle, recorder, close,
-                            args.rotate_steps, step, sign=rotate_sign,
+                            args.rotate_steps, step, sign=rotate_sign, axis=1,
                         )
                         failure = (
                             status
@@ -2673,6 +2692,7 @@ def main():
     p.add_argument("--num_states", type=int, default=8)
     p.add_argument("--drop_clearance", type=float, default=0.020)
     p.add_argument("--settle_steps", type=int, default=180)
+    p.add_argument("--stability_confirm_steps", type=int, default=40)
     p.add_argument("--max_direct_safe_rate", type=float, default=0.20)
     p.add_argument("--min_alternative_safe_rate", type=float, default=0.80)
     p.add_argument("--out_csv", required=True)

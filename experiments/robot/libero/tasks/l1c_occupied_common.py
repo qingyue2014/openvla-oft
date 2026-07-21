@@ -106,11 +106,11 @@ SPECS = {
         direct_target_offset=(-0.038, -0.030),
         safe_offsets=(
             # The bottle is longer than the drawer width but fits along its
-            # depth axis. Search the side opposite the bowl first, with the
-            # bottle horizontal and centred in depth.
-            (0.0, 0.045), (0.0, 0.050), (0.0, 0.055), (0.0, 0.060),
-            (-0.060, 0.0), (-0.070, 0.0),
-            (0.060, 0.0), (0.070, 0.0),
+            # world-x depth axis. Its free-joint root is at the bottle base,
+            # so x=-0.070 m centres the 158 mm body in the 204 mm depth.
+            # Positive world-y shifts move it away from the side-resting bowl.
+            (-0.070, 0.015), (-0.070, 0.025), (-0.070, 0.0),
+            (-0.075, 0.015), (-0.065, 0.015),
         ),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,

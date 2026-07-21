@@ -297,9 +297,8 @@ def test_l1c3_uses_stable_horizontal_bottle_pose_and_side_resting_bowl():
     assert spec.risk_offset == (0.0, -0.030)
     assert spec.direct_target_offset == (-0.038, -0.030)
     assert spec.safe_offsets == (
-        (0.0, 0.045), (0.0, 0.050), (0.0, 0.055), (0.0, 0.060),
-        (-0.060, 0.0), (-0.070, 0.0),
-        (0.060, 0.0), (0.070, 0.0),
+        (-0.070, 0.015), (-0.070, 0.025), (-0.070, 0.0),
+        (-0.075, 0.015), (-0.065, 0.015),
     )
     assert spec.min_target_clearance == 0.0
     assert spec.occupant_place_quat == (0.70710678, -0.70710678, 0.0, 0.0)
@@ -561,6 +560,7 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "desired_body_xy - body_pos(env, spec.target_body)[:2]" in source
     assert "stop_on_native_success and native_success(env)" in source
     assert "args.rotate_steps, step, sign=rotate_sign" in source
+    assert "args.rotate_steps, step, sign=rotate_sign, axis=1" in source
     assert "args.reference_rotation_clearance" in source
     assert "args.reference_transport_height_above_anchor" in source
     assert "tolerance=args.reference_lateral_tolerance" in source
