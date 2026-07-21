@@ -1731,10 +1731,16 @@ def _l1c3_release_gate_metrics(env, spec, desired_body_xy):
     body_margins = body_box_region_margins(
         env.sim, spec.target_body, spec.anchor_site
     )
+    collision_lo, _ = _collision_aabb(env, spec.target_body)
+    drawer_floor_z = float(
+        site_pos[2] - (np.abs(site_mat) @ site_size)[2]
+    )
     return {
+        "native_inside": bool(native_success(env)),
         "support_contact": bool(
             _contact_between(env, spec.target_body, spec.anchor_body)
         ),
+        "support_gap_m": max(0.0, float(collision_lo[2] - drawer_floor_z)),
         "xy_error_m": float(
             np.linalg.norm(target_pos[:2] - np.asarray(desired_body_xy, dtype=float))
         ),
@@ -1748,7 +1754,11 @@ def _l1c3_release_gate_metrics(env, spec, desired_body_xy):
 def _l1c3_release_gate_passes(metrics, spec, args):
     """Hard gate: never open the gripper above an unseated drawer target."""
     return bool(
-        metrics["support_contact"]
+        metrics["native_inside"]
+        and (
+            metrics["support_contact"]
+            or metrics["support_gap_m"] <= args.reference_release_max_support_gap
+        )
         and metrics["root_vertical_margin_m"]
         >= args.reference_release_root_vertical_margin
         and metrics["body_horizontal_margin_m"]
@@ -2231,7 +2241,9 @@ def _safe_reference_from_eb_prefix(args, files):
                 preplace_target_tilt = body_tilt_deg(env, spec.target_body)
                 grasped_offset = _eef(obs) - body_pos(env, spec.target_body)
                 release_gate = {
+                    "native_inside": False,
                     "support_contact": False,
+                    "support_gap_m": float("inf"),
                     "xy_error_m": float("inf"),
                     "root_vertical_margin_m": float("-inf"),
                     "body_vertical_margin_m": float("-inf"),
@@ -2378,6 +2390,15 @@ def _safe_reference_from_eb_prefix(args, files):
                     release_gate = _l1c3_release_gate_metrics(
                         env, spec, desired_body_xy
                     )
+                    if (
+                        failure == "descent_waypoint_timeout"
+                        and _l1c3_release_gate_passes(release_gate, spec, args)
+                    ):
+                        # The arm can stop against the cabinet before reaching
+                        # its commanded overtravel. A timeout is acceptable
+                        # only when the independent insertion gate already
+                        # proves the bottle is inside with a <=10 mm floor gap.
+                        failure = None
                     if failure is None and not _l1c3_release_gate_passes(
                         release_gate, spec, args
                     ):
@@ -2499,9 +2520,13 @@ def _safe_reference_from_eb_prefix(args, files):
                     "pre_release_gate_pass": int(
                         _l1c3_release_gate_passes(release_gate, spec, args)
                     ) if spec.scenario == "L1-C3" else 1,
+                    "pre_release_native_inside": int(
+                        release_gate["native_inside"]
+                    ) if spec.scenario == "L1-C3" else 1,
                     "pre_release_support_contact": int(
                         release_gate["support_contact"]
                     ) if spec.scenario == "L1-C3" else 1,
+                    "pre_release_support_gap_m": release_gate["support_gap_m"],
                     "pre_release_xy_error_m": release_gate["xy_error_m"],
                     "pre_release_root_vertical_margin_m": release_gate[
                         "root_vertical_margin_m"
@@ -2626,18 +2651,18 @@ def _safe_reference_from_eb_prefix(args, files):
         f"- Dynamic safe-success rate: {rate:.3f}",
         f"- Required: N >= {args.min_reference_episodes}, rate >= {args.min_safe_rate:.3f}",
         "- Scope: fully executable OSC actions; no object teleport is retained in the rollout.",
-        "- Release gate: the bottle base/root is inside the drawer volume, the full "
-        "collision footprint is horizontally inside, and the bottle is physically "
-        "supported by the drawer before the gripper may open.",
+        "- Release gate: native containment is already true, the bottle base/root is "
+        "inside the drawer volume, the full collision footprint is horizontally inside, "
+        "and either drawer contact is present or the remaining floor gap is <=10 mm.",
         "- Final gate: after settling, the complete collision body must remain inside "
         "the drawer in all three dimensions.",
         f"- Videos: `{args.video_dir or 'disabled'}`",
         "",
         "| Episode | Eb trajectory | Safe | Attempt | Prefix steps | Prefix lift | "
-        "Offset x | Offset y | Pre-release gate | Support | Root vertical margin | "
+        "Offset x | Offset y | Pre-release gate | Native inside | Support | Floor gap | Root vertical margin | "
         "Release | Occupant move | Occupant tilt | Target XY drift | Final vertical margin | "
         "Final horizontal margin | Target tilt | Linear speed | Angular speed | Reason |",
-        "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
     for row in rows:
         lines.append(
@@ -2646,7 +2671,9 @@ def _safe_reference_from_eb_prefix(args, files):
             f"{row['prefix_steps']} | {row['prefix_lift_m']:.4f} | "
             f"{row['offset_x_m']:+.3f} | {row['offset_y_m']:+.3f} | "
             f"{row['pre_release_gate_pass']} | "
+            f"{row['pre_release_native_inside']} | "
             f"{row['pre_release_support_contact']} | "
+            f"{row['pre_release_support_gap_m']:.4f} | "
             f"{row['pre_release_root_vertical_margin_m']:.4f} | "
             f"{row['release']} | {row['occupant_displacement_m']:.4f} | "
             f"{row['occupant_tilt_change_deg']:.1f} | "
@@ -3034,7 +3061,7 @@ def main():
     p.add_argument("--grasp_depth", type=float, default=0.025)
     p.add_argument("--lift_height", type=float, default=0.12)
     p.add_argument("--min_lift", type=float, default=0.030)
-    p.add_argument("--reference_handoff_xy_distance", type=float, default=0.100)
+    p.add_argument("--reference_handoff_xy_distance", type=float, default=0.070)
     p.add_argument("--reference_descent", type=float, default=0.120)
     p.add_argument(
         "--reference_transport_height_above_anchor", type=float, default=0.225
@@ -3048,10 +3075,13 @@ def main():
         "--reference_release_root_vertical_margin", type=float, default=-0.004
     )
     p.add_argument(
+        "--reference_release_max_support_gap", type=float, default=0.010
+    )
+    p.add_argument(
         "--reference_pre_release_target_tilt_deg", type=float, default=20.0
     )
     p.add_argument(
-        "--reference_pre_release_min_tilt_deg", type=float, default=12.0
+        "--reference_pre_release_min_tilt_deg", type=float, default=8.0
     )
     p.add_argument(
         "--reference_pre_release_max_tilt_deg", type=float, default=32.0

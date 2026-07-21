@@ -632,11 +632,14 @@ def test_l1c3_release_gate_rejects_hovering_bottle_before_gripper_open():
     spec = get_spec("l1c3")
     args = SimpleNamespace(
         reference_release_root_vertical_margin=-0.004,
+        reference_release_max_support_gap=0.010,
         reference_pre_release_min_tilt_deg=12.0,
         reference_pre_release_max_tilt_deg=32.0,
     )
     valid = {
+        "native_inside": True,
         "support_contact": True,
+        "support_gap_m": 0.0,
         "xy_error_m": 0.004,
         "root_vertical_margin_m": 0.002,
         "body_vertical_margin_m": -0.100,
@@ -648,7 +651,19 @@ def test_l1c3_release_gate_rejects_hovering_bottle_before_gripper_open():
     alternate_inside_xy = dict(valid, xy_error_m=0.080)
     assert _l1c3_release_gate_passes(alternate_inside_xy, spec, args)
 
-    hovering = dict(valid, support_contact=False, root_vertical_margin_m=-0.120)
+    near_supported = dict(valid, support_contact=False, support_gap_m=0.008)
+    assert _l1c3_release_gate_passes(near_supported, spec, args)
+
+    assert not _l1c3_release_gate_passes(
+        dict(valid, native_inside=False), spec, args
+    )
+
+    hovering = dict(
+        valid,
+        support_contact=False,
+        support_gap_m=0.120,
+        root_vertical_margin_m=-0.120,
+    )
     assert not _l1c3_release_gate_passes(hovering, spec, args)
 
 
@@ -656,11 +671,14 @@ def test_l1c3_release_gate_rejects_root_or_footprint_outside_drawer():
     spec = get_spec("l1c3")
     args = SimpleNamespace(
         reference_release_root_vertical_margin=-0.004,
+        reference_release_max_support_gap=0.010,
         reference_pre_release_min_tilt_deg=12.0,
         reference_pre_release_max_tilt_deg=32.0,
     )
     base = {
+        "native_inside": True,
         "support_contact": True,
+        "support_gap_m": 0.0,
         "xy_error_m": 0.004,
         "root_vertical_margin_m": 0.002,
         "body_vertical_margin_m": -0.100,
