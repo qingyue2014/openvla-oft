@@ -1749,7 +1749,6 @@ def _l1c3_release_gate_passes(metrics, spec, args):
     """Hard gate: never open the gripper above an unseated drawer target."""
     return bool(
         metrics["support_contact"]
-        and metrics["xy_error_m"] <= args.reference_release_xy_tolerance
         and metrics["root_vertical_margin_m"]
         >= args.reference_release_root_vertical_margin
         and metrics["body_horizontal_margin_m"]
@@ -2344,15 +2343,26 @@ def _safe_reference_from_eb_prefix(args, files):
                             tolerance=args.reference_lateral_tolerance,
                         )
                         if failure == "waypoint_timeout":
-                            failure = "lateral_waypoint_timeout"
+                            current_margins = body_box_region_margins(
+                                env.sim, spec.target_body, spec.anchor_site
+                            )
+                            if float(np.min(current_margins[1:])) >= (
+                                spec.min_target_region_horizontal_margin
+                            ):
+                                # The calibrated point is a search target, not
+                                # a semantic requirement. Continue from any
+                                # collision-footprint-contained XY pose.
+                                failure = None
+                            else:
+                                failure = "lateral_waypoint_timeout"
                     descent_eef = _eef(obs).copy()
                     descent_eef[2] += (
                         desired_body[2] - body_pos(env, spec.target_body)[2]
                     )
                     if failure is None:
-                        obs, step, failure, _ = _move_with_body_alignment(
-                            env, obs, oracle, recorder, descent_eef,
-                            spec.target_body, desired_release_axis, close, step, args,
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, descent_eef, close,
+                            step, args,
                             tolerance=args.reference_descent_tolerance,
                             stop_on_support=True,
                         )
@@ -3034,7 +3044,6 @@ def main():
     p.add_argument(
         "--reference_contact_descent_overtravel", type=float, default=0.010
     )
-    p.add_argument("--reference_release_xy_tolerance", type=float, default=0.015)
     p.add_argument(
         "--reference_release_root_vertical_margin", type=float, default=-0.004
     )
