@@ -51,6 +51,7 @@ class OccupiedGoalSpec:
     target_place_quat: Tuple[float, ...] = ()
     occupant_place_quat: Tuple[float, ...] = ()
     horizontal_target: bool = False
+    calibration_drop_clearance: float = 0.0
 
 
 SPECS = {
@@ -143,6 +144,12 @@ SPECS = {
         min_target_region_horizontal_margin=0.003,
         max_target_final_linear_speed=0.010,
         max_target_final_angular_speed=0.250,
+        # The executable OSC reference releases above the shallow drawer
+        # because the wrist housing cannot descend to the floor.  Static
+        # calibration must reproduce that physical drop instead of injecting
+        # the horizontal bottle 1 mm above the floor, where tiny overlap with
+        # the drawer mesh can eject it before the layout is assessed.
+        calibration_drop_clearance=0.155,
     ),
     "l1c4": OccupiedGoalSpec(
         scenario="L1-C4",
@@ -435,7 +442,10 @@ def set_body_quat(env, body_name: str, quat) -> None:
     env.sim.forward()
 
 
-def place_at_anchor(env, spec: OccupiedGoalSpec, body_name: str, offset, clearance=0.025):
+def place_at_anchor(
+    env, spec: OccupiedGoalSpec, body_name: str, offset, clearance=0.025,
+    drawer_clearance_cap=0.001,
+):
     anchor = anchor_point(env, spec)
     try:
         if spec.anchor_is_surface:
@@ -452,7 +462,8 @@ def place_at_anchor(env, spec: OccupiedGoalSpec, body_name: str, offset, clearan
             ).reshape(3, 3)
             site_size = np.asarray(env.sim.model.site_size[site_id], dtype=float)
             support_z = float(anchor[2] - (np.abs(site_mat) @ site_size[:3])[2])
-            clearance = min(float(clearance), 0.001)
+            if drawer_clearance_cap is not None:
+                clearance = min(float(clearance), float(drawer_clearance_cap))
         else:
             support_z = float(anchor[2])
     except Exception:

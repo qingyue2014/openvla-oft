@@ -1343,7 +1343,14 @@ def calibrate(args):
                     )
                 )
                 target_tilt0 = body_tilt_deg(env, spec.target_body)
-                place_at_anchor(env, spec, spec.target_body, offset, args.drop_clearance)
+                drop_clearance = max(
+                    float(args.drop_clearance),
+                    float(spec.calibration_drop_clearance),
+                )
+                place_at_anchor(
+                    env, spec, spec.target_body, offset, drop_clearance,
+                    drawer_clearance_cap=None,
+                )
                 target_xy0 = body_pos(env, spec.target_body)[:2].copy()
                 max_displacement = 0.0
                 max_tilt_change = 0.0

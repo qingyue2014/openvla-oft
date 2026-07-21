@@ -319,6 +319,7 @@ def test_l1c3_uses_stable_horizontal_bottle_pose_and_side_resting_bowl():
     assert spec.min_target_region_horizontal_margin == 0.003
     assert spec.max_target_final_linear_speed == 0.010
     assert spec.max_target_final_angular_speed == 0.250
+    assert spec.calibration_drop_clearance == 0.155
 
 
 def test_body_box_region_margins_use_all_physical_box_corners():
@@ -395,7 +396,16 @@ def test_l1c3_placement_uses_the_oriented_goal_box_floor():
         "experiments/robot/libero/tasks/l1c_occupied_common.py"
     ).read_text()
     assert "anchor[2] - (np.abs(site_mat) @ site_size[:3])[2]" in source
-    assert "clearance = min(float(clearance), 0.001)" in source
+    assert "if drawer_clearance_cap is not None:" in source
+    assert "clearance = min(float(clearance), float(drawer_clearance_cap))" in source
+
+
+def test_l1c3_calibration_disables_the_floor_pose_clearance_cap():
+    source = Path(
+        "experiments/robot/libero/tasks/l1c_occupied_pipeline.py"
+    ).read_text()
+    assert "float(spec.calibration_drop_clearance)" in source
+    assert "drawer_clearance_cap=None" in source
 
 
 def test_l1c3_offsets_and_rotation_axis_follow_drawer_frame():
