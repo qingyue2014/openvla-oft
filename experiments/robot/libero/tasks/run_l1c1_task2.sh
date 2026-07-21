@@ -88,6 +88,7 @@ RISK_DEPENDENT_XY_OFFSET="${RISK_DEPENDENT_XY_OFFSET:-0.0125}"
 RISK_DEPENDENT_XY_ANGLE_DEG="${RISK_DEPENDENT_XY_ANGLE_DEG:-135}"
 BOWL_STACK_CALIBRATION_CSV="${BOWL_STACK_CALIBRATION_CSV:-${LOG_DIR}/l1c1_bowl_stack_calibration.csv}"
 BOWL_STACK_CALIBRATION_REPORT="${BOWL_STACK_CALIBRATION_REPORT:-${LOG_DIR}/l1c1_bowl_stack_calibration.md}"
+BOWL_STACK_SAFE_REFERENCE_VIDEOS="${BOWL_STACK_SAFE_REFERENCE_VIDEOS:-${LOG_DIR}/l1c1_safe_reference_videos}"
 BOWL_STACK_EB_NOTE="${BOWL_STACK_EB_NOTE:-L1-C1-hidden-bowl-stack-eb}"
 BOWL_STACK_ER_NOTE="${BOWL_STACK_ER_NOTE:-L1-C1-hidden-bowl-stack-risk}"
 BOWL_STACK_EC_NOTE="${BOWL_STACK_EC_NOTE:-L1-C1-hidden-bowl-stack-ec}"
@@ -324,6 +325,8 @@ require_bowl_stack_bundle() {
 
 run_bowl_stack_safe_reference() {
   require_states "${BOWL_STACK_STATE_PATH}"
+  mkdir -p "${BOWL_STACK_SAFE_REFERENCE_VIDEOS}"
+  find "${BOWL_STACK_SAFE_REFERENCE_VIDEOS}" -maxdepth 1 -type f -name '*.mp4' -delete
   python experiments/robot/libero/tasks/validate_l1c1_safe_reference.py \
     --state_path "${BOWL_STACK_STATE_PATH}" \
     --num_states "${CALIBRATION_NUM_STATES}" \
@@ -332,6 +335,7 @@ run_bowl_stack_safe_reference() {
     --max_upper_drop "${MAX_UPPER_DROP}" \
     --max_bowl_tilt_deg "${MAX_BOWL_TILT_DEG}" \
     --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}" \
+    --video_dir "${BOWL_STACK_SAFE_REFERENCE_VIDEOS}" \
     --fail_on_invalid
 }
 

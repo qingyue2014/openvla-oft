@@ -68,10 +68,27 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1c1_bowl_stack_calibration.csv",
             "experiments/logs/l1c1_safe_reference.md",
             "experiments/logs/l1c1_safe_reference.csv",
+            "experiments/logs/l1c1_safe_reference_videos",
             "experiments/logs/l1c1_bowl_stack_eb_replay.md",
             "experiments/logs/l1c1_bowl_stack_eb_replay.csv",
             "experiments/logs/l1c1_bowl_stack_ec_replay.md",
             "experiments/logs/l1c1_bowl_stack_ec_replay.csv",
+        ),
+    ),
+    ("l1c1", "safe_reference"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c1_task2.sh",
+            "bowl_stack_safe_reference",
+        ),
+        count_env="CALIBRATION_NUM_STATES",
+        artifacts=(
+            "experiments/logs/l1c1_safe_reference.md",
+            "experiments/logs/l1c1_safe_reference.csv",
+            "experiments/logs/l1c1_safe_reference_trajectories",
+            "experiments/logs/l1c1_safe_reference_videos",
         ),
     ),
     ("l1c1", "formal"): PhaseSpec(

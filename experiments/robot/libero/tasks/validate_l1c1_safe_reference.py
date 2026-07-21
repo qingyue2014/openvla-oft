@@ -91,6 +91,50 @@ def _advance(env, obs, oracle, recorder, action, step):
     return obs, oracle.check(env, obs, action, step)
 
 
+def _policy_frame(obs, env):
+    """Return a copied frame with the exact orientation used by OpenVLA videos."""
+    image = obs.get("agentview_image") if hasattr(obs, "get") else None
+    if image is None:
+        image = env.sim.render(256, 256, camera_name="agentview")
+    return np.asarray(image)[::-1, ::-1].copy()
+
+
+class _VideoTrajectoryRecorder(TrajectoryRecorder):
+    """Trajectory recorder that optionally retains the policy camera stream."""
+
+    def __init__(self, env, tracked_bodies=None, capture_video=False):
+        super().__init__(env, tracked_bodies)
+        self.capture_video = bool(capture_video)
+        self.video_frames = []
+
+    def capture(self, obs):
+        if self.capture_video:
+            self.video_frames.append(_policy_frame(obs, self.env))
+
+    def record(self, obs, action, step: int, phase: str = "policy"):
+        super().record(obs, action, step, phase)
+        self.capture(obs)
+
+    def save_video(self, path, fps=30):
+        if not self.capture_video or not self.video_frames:
+            return None
+        import imageio.v2 as imageio
+
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            writer = imageio.get_writer(str(path), fps=fps, format="FFMPEG")
+        except Exception:
+            writer = imageio.get_writer(str(path), fps=fps)
+        try:
+            for frame in self.video_frames:
+                writer.append_data(frame)
+        finally:
+            writer.close()
+        print(f"Saved safe-reference MP4 at path {path}")
+        return str(path)
+
+
 def _move_to(
     env,
     obs,
@@ -219,7 +263,14 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
         max_plate_tilt_deg=args.max_plate_tilt_deg,
     )
     oracle.reset(env, obs)
-    recorder = TrajectoryRecorder(env, [UPPER, LOWER, PLATE])
+    recorder = _VideoTrajectoryRecorder(
+        env,
+        [UPPER, LOWER, PLATE],
+        capture_video=bool(args.video_dir),
+    )
+    # set_init_state returns the refreshed observation for the exact serialized
+    # state. Capture it only after restoration and oracle initialization.
+    recorder.capture(obs)
     step = 0
     failure = None
 
@@ -354,6 +405,15 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
     failure_best_error = getattr(failure, "best_error_m", float("nan"))
     failure_final_error = getattr(failure, "final_error_m", float("nan"))
     safe_success = bool(oracle.task_success() and not violated)
+    video_path = ""
+    if safe_success and args.video_dir:
+        video_path = str(
+            Path(args.video_dir)
+            / (
+                f"safe_reference_ep{episode_idx:03d}_attempt{attempt_idx:02d}"
+                "--safe=True.mp4"
+            )
+        )
     out_path = Path(args.trajectory_dir) / f"task{args.task_id}_ep{episode_idx:03d}.npz"
     recorder.save(
         str(out_path),
@@ -371,6 +431,7 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
             "failure_initial_error_m": failure_initial_error,
             "failure_best_error_m": failure_best_error,
             "failure_final_error_m": failure_final_error,
+            "video_path": video_path,
             "gripper_close_sign": close_sign,
             "gripper_open_sign": open_sign,
             "gripper_aperture_after_minus": aperture_minus,
@@ -378,6 +439,8 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
             **metrics,
         },
     )
+    if video_path:
+        recorder.save_video(video_path, fps=args.video_fps)
     return {
         "episode": episode_idx,
         "attempt": attempt_idx,
@@ -392,6 +455,7 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
         "failure_initial_error_m": failure_initial_error,
         "failure_best_error_m": failure_best_error,
         "failure_final_error_m": failure_final_error,
+        "video_path": video_path,
         "gripper_close_sign": close_sign,
         "gripper_open_sign": open_sign,
         "gripper_aperture_after_minus": aperture_minus,
@@ -416,12 +480,22 @@ def run(args):
     task = suite.get_task(args.task_id)
     states = _load_states(args.state_path, task.language.replace(" ", "_"), args.num_states)
     bddl = os.path.join(get_libero_path("bddl_files"), task.problem_folder, task.bddl_file)
+    capture_video = bool(args.video_dir)
+    render_gpu_device_id = int(os.environ.get("RENDER_GPU_DEVICE_ID", "-1"))
+    render_kwargs = (
+        {"render_gpu_device_id": render_gpu_device_id}
+        if render_gpu_device_id >= 0
+        else {}
+    )
     env = ControlEnv(
         bddl_file_name=bddl,
-        use_camera_obs=False,
+        use_camera_obs=capture_video,
         has_renderer=False,
-        has_offscreen_renderer=False,
+        has_offscreen_renderer=capture_video,
         hard_reset=False,
+        camera_heights=256,
+        camera_widths=256,
+        **render_kwargs,
     )
     rows = []
     selected_grasp_offset = None
@@ -512,6 +586,7 @@ def run(args):
         f"- Dynamic safe-success rate: {safe_rate:.3f}",
         f"- Required rate: {args.min_safe_reference_rate:.3f}",
         "- Scope: executable OSC action sequence in Er, not teleport-only physics.",
+        f"- Videos: `{args.video_dir or 'disabled'}`",
         "",
         "| Episode | Safe success | Violated | Contact | Release | Failure stage | Best error (m) | Final error (m) | Reason |",
         "| ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | --- |",
@@ -575,6 +650,8 @@ def main():
     parser.add_argument(
         "--trajectory_dir", default="experiments/logs/l1c1_safe_reference_trajectories"
     )
+    parser.add_argument("--video_dir", default="")
+    parser.add_argument("--video_fps", type=int, default=30)
     parser.add_argument("--out_csv", default="experiments/logs/l1c1_safe_reference.csv")
     parser.add_argument("--out_report", default="experiments/logs/l1c1_safe_reference.md")
     parser.add_argument("--fail_on_invalid", action="store_true")
