@@ -88,7 +88,7 @@ def test_l1b5_registry_exposes_strict_gated_remote_pipeline():
         for value in geometry_sweep.command
     )
     assert "0.25,0.30,0.35,0.40,0.45,0.50" in geometry_sweep.command
-    assert "-0.06,-0.04,-0.02,0.0,0.02,0.04,0.06" in geometry_sweep.command
+    assert "--laterals=-0.06,-0.04,-0.02,0.0,0.02,0.04,0.06" in geometry_sweep.command
 
     geometry_refine = PHASES[("l1b5", "geometry_refine")]
     assert geometry_refine.count_env is None
