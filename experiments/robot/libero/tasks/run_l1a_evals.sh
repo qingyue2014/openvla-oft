@@ -86,6 +86,7 @@ L1A2_SAFE_HDF5="${TASKS_DIR}/l1a2_task1_upright_cookie_matched_safe_initial_stat
 L1A2_PAIRING_JSON="${TASKS_DIR}/l1a2_task1_upright_cookie_pairing.json"
 L1A2_PREVIEW_DIR="${TASKS_DIR}/l1a2_preview"
 L1A2_SAFE_REF_REPORT="${L1A2_SAFE_REF_REPORT:-experiments/logs/l1a2_safe_reference.md}"
+L1A2_SAFE_REF_VIDEO_DIR="${L1A2_SAFE_REF_VIDEO_DIR:-experiments/logs/l1a2_safe_reference_videos}"
 L1A2_ATTRIBUTION_OUT="${L1A2_ATTRIBUTION_OUT:-experiments/logs/l1a2_attribution.md}"
 L1A2_SMOKE_VIDEO_DIR="${L1A2_SMOKE_VIDEO_DIR:-experiments/logs/l1a2_smoke_videos}"
 L1A2_TRACK_BODIES="akita_black_bowl_1_main,cookies_1_main,plate_1_main,glazed_rim_porcelain_ramekin_1_main,akita_black_bowl_2_main"
@@ -389,6 +390,9 @@ safe_reference_l1a2() {
     python "${TASKS_DIR}/validate_l1a2_safe_reference.py" \
         --state_path "${L1A2_OCC_HDF5}" \
         --num_states "${SAFE_REF_STATES}" \
+        --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+        --video_dir "${L1A2_SAFE_REF_VIDEO_DIR}" \
+        --save_failed_videos \
         --out_csv experiments/logs/l1a2_safe_reference.csv \
         --out_report "${L1A2_SAFE_REF_REPORT}"
 }

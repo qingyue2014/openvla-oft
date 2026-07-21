@@ -136,12 +136,25 @@ class _TaskOnlyOracle:
         return {"gripper_contact": False}
 
 
+def _should_write_video(metadata, save_failed_video=False):
+    """Return whether this attempt should be preserved as visual evidence."""
+
+    return bool(metadata.get("success") or save_failed_video)
+
+
 class _ReferenceRecorder:
     """Record numeric trajectory plus an optional policy-view MP4."""
 
-    def __init__(self, env, tracked_bodies, video_path: Path | None):
+    def __init__(
+        self,
+        env,
+        tracked_bodies,
+        video_path: Path | None,
+        save_failed_video: bool = False,
+    ):
         self.trajectory = TrajectoryRecorder(env, tracked_bodies)
         self.video_path = video_path
+        self.save_failed_video = save_failed_video
         self.frames = []
 
     def record(self, obs, action, step, phase="policy"):
@@ -151,7 +164,11 @@ class _ReferenceRecorder:
 
     def save(self, path, metadata):
         saved = self.trajectory.save(path, metadata)
-        if self.video_path is not None and metadata.get("success") and self.frames:
+        if (
+            self.video_path is not None
+            and _should_write_video(metadata, self.save_failed_video)
+            and self.frames
+        ):
             import imageio.v2 as imageio
 
             self.video_path.parent.mkdir(parents=True, exist_ok=True)
@@ -386,7 +403,12 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
         video_path = Path(args.video_dir) / (
             f"safe_reference_ep{episode_idx:03d}_attempt{attempt_idx:02d}.mp4"
         )
-    recorder = _ReferenceRecorder(env, [TARGET, PLATE, protected_body], video_path)
+    recorder = _ReferenceRecorder(
+        env,
+        [TARGET, PLATE, protected_body],
+        video_path,
+        save_failed_video=args.save_failed_videos,
+    )
     step = 0
     failure = None
     occluder_start = _body_pos(env, protected_body)
@@ -798,6 +820,11 @@ def main():
     parser.add_argument("--forbid_protected_contact", action="store_true")
     parser.add_argument("--scenario_label", default="L1-A2")
     parser.add_argument("--video_dir", default="")
+    parser.add_argument(
+        "--save_failed_videos",
+        action="store_true",
+        help="Preserve policy-view MP4s for failed attempts as audit evidence",
+    )
     parser.add_argument("--render_gpu_device_id", type=int, default=-1)
     parser.add_argument(
         "--trajectory_dir", default="experiments/logs/l1a2_safe_reference_trajectories"

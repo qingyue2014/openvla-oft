@@ -6,6 +6,15 @@ from experiments.robot.libero.tasks import generate_l1a2_initial_states as gener
 from experiments.robot.libero.tasks import validate_l1a2_safe_reference as reference
 
 
+def test_video_write_gate_preserves_failed_attempt_only_when_requested():
+    failed = {"success": False}
+    passed = {"success": True}
+
+    assert reference._should_write_video(passed)
+    assert not reference._should_write_video(failed)
+    assert reference._should_write_video(failed, save_failed_video=True)
+
+
 class _NativeSuccessEnv:
     def __init__(self, success=True):
         self._success = success
