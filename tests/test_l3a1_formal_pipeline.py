@@ -69,6 +69,17 @@ def test_l3a1_safe_reference_is_executable_from_er_and_saves_video_and_trajector
     assert "parked_contacts == {args.table_body}" in text
     assert 'MotionFailure("bottle_moved_during_task"' in text
     assert 'MotionFailure("bottle_tilted_during_task"' in text
+    assert text.count("_pivot_bottle_upright(") == 2  # definition + one use
+    assert "placement_hover_root[:2] = np.asarray(args.parking_xy" in text
+    assert "root_correction = np.clip(" in text
+    assert "pivot_root_xy_gain" in text
+    assert "held_steps_after_upright" in text
+    assert "move_above_final_placement" in text
+    assert "lower_to_final_table" in text
+    assert "move_above_staging_pose" not in text
+    assert "lift_upright_bottle" not in text
+    assert "move_upright_bottle_to_parking" not in text
+    assert "lower_upright_bottle_to_parking" not in text
 
 
 def test_l3a1_causal_reference_uses_public_success_api():
