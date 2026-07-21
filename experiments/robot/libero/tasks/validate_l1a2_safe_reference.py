@@ -412,6 +412,20 @@ def _run_episode(
     detour_y = getattr(args, "pregrasp_detour_y", None)
     if detour_x is not None or detour_y is not None:
         detour = _eef_pos(obs).copy()
+        pregrasp_clearance = getattr(args, "pregrasp_clearance", 0.0)
+        if pregrasp_clearance > 0:
+            raised = detour.copy()
+            raised[2] += pregrasp_clearance
+            stages.append(
+                (
+                    "pregrasp_vertical_clearance",
+                    raised,
+                    open_sign,
+                    args.position_tolerance,
+                    False,
+                )
+            )
+            detour = raised
         if detour_x is not None:
             detour[0] = detour_x
         if detour_y is not None:
@@ -812,6 +826,7 @@ def main():
     parser.add_argument("--approach_height", type=float, default=0.12)
     parser.add_argument("--pregrasp_detour_x", type=float, default=None)
     parser.add_argument("--pregrasp_detour_y", type=float, default=None)
+    parser.add_argument("--pregrasp_clearance", type=float, default=0.0)
     parser.add_argument("--transport_via_x", type=float, default=None)
     parser.add_argument("--grasp_height", type=float, default=0.015)
     parser.add_argument(

@@ -247,6 +247,7 @@ safe_reference_family() {
     # Approach the cream-cheese box from the negative-X side; the risk bottle
     # is on its positive-X transport flank and otherwise intersects the wrist
     # before the scripted reference has established a grasp.
+    extra_args+=(--pregrasp_clearance 0.15)
     extra_args+=(--pregrasp_detour_x -0.15 --pregrasp_detour_y 0.25)
     # Prove an active bypass around the bottle without lifting the held box to an
     # implausible height. The via corridor stays on the open table side.
