@@ -38,14 +38,17 @@ episode-paired，非 occupant qpos/qvel 最大误差不得超过 `1e-10`。
 保留明确的物理余量；不修改酒瓶、抽屉或控制器的原生几何与物理参数。
 旋转不是固定步数的开环动作：每步从 MuJoCo body pose 重新计算 bottle local +z 长轴与
 drawer-local depth 的夹角，闭环 OSC 对齐至 10 deg 以内才允许下降。
-由于 free-joint root 位于瓶底，`+depth/-depth` 不等价：必须强制 bottle local +z
-（瓶底指向瓶口）对齐 drawer +depth，才能与 `depth=-0.070 m` 的 root 偏移配套。
+由于 free-joint root 位于瓶底，`+depth/-depth` 不等价：实际闭环标定选择 bottle local +z
+（瓶底指向瓶口）对齐 drawer -depth，并将 `depth=-0.070 m` 的名义候选镜像为
+`depth=+0.070 m`，使瓶身从瓶底向抽屉内部延伸。静态校准必须使用同一有向姿态和镜像
+root 位置，不能把两种纵向姿态当成等价。
 下降同样不以“首次接触任意 drawer geom”为释放条件；目标高度由 drawer floor 与原生
 bottle collision AABB 计算，OSC 到达该明确 floor pose（或其严格容差内）后才松手，
 避免把触碰抽屉前沿误判为已经放稳。
 未适应的直接目标落点固定为 8 条成功 Eb 轨迹的中位数
-`(-0.038,-0.030) m`。酒瓶 free-joint root 位于瓶底，因此校准候选以
-`x=-0.070 m` 将约 158 mm 的瓶身置中于约 204 mm 的抽屉深度，并用
+`(-0.038,-0.030) m`。酒瓶 free-joint root 位于瓶底，因此名义候选
+`x=-0.070 m` 与反向瓶身一起镜像为实际执行/校准位置 `x=+0.070 m`，将约
+158 mm 的瓶身置于约 204 mm 的抽屉深度内，并用
 `y=+0.025/+0.030/+0.035 m` 搜索远离 black bowl 的横向空位。横放 bottle
 的 y 向碰撞范围相对 root 为约 `[-0.022,+0.022] m`；候选位置必须再通过逐状态
 碰撞仿真、bowl 非扰动和整瓶 containment gate，不能只依赖名义姿态估算；

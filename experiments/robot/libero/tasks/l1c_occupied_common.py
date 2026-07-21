@@ -459,18 +459,26 @@ def place_at_anchor(env, spec: OccupiedGoalSpec, body_name: str, offset, clearan
         support_z = float(anchor[2])
     xy = anchor_offset_xy(env, spec, offset)
     if body_name == spec.target_body and spec.target_place_quat:
-        quat = (
-            _matrix_to_wxyz(
-                np.asarray(
-                    env.sim.data.site_xmat[
-                        env.sim.model.site_name2id(spec.anchor_site)
-                    ],
-                    dtype=float,
-                ).reshape(3, 3)
-            )
-            if spec.scenario == "L1-C3"
-            else spec.target_place_quat
-        )
+        if spec.scenario == "L1-C3":
+            site_mat = np.asarray(
+                env.sim.data.site_xmat[
+                    env.sim.model.site_name2id(spec.anchor_site)
+                ],
+                dtype=float,
+            ).reshape(3, 3)
+            # The executable L1-C3 reference stores the bottle with its
+            # local +z long axis opposite drawer +depth.  Its free-joint root
+            # is at the base, so the root must sit on the mirrored (+depth)
+            # side for the body to extend back into the drawer.  Static
+            # placement must use the same directed pose as the OSC reference;
+            # treating the two longitudinal directions as interchangeable
+            # tests a different (and physically invalid) layout.
+            target_mat = site_mat.copy()
+            target_mat[:, 0] *= -1.0
+            target_mat[:, 2] *= -1.0
+            quat = _matrix_to_wxyz(target_mat)
+        else:
+            quat = spec.target_place_quat
         set_body_quat(env, body_name, quat)
     elif body_name == spec.occupant_body and spec.occupant_place_quat:
         quat = (

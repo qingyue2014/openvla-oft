@@ -1314,7 +1314,13 @@ def _placement_result(
 def _calibration_offsets(spec):
     """Return the occupied default landing first, then safe alternatives."""
     direct = spec.direct_target_offset or spec.risk_offset
-    return (direct,) + spec.safe_offsets
+    safe_offsets = spec.safe_offsets
+    if spec.scenario == "L1-C3":
+        # L1-C3's executable reference deliberately reverses the bottle's
+        # long axis and mirrors its base-root offset.  Calibrate those exact
+        # physical placements instead of the nominal +depth convention.
+        safe_offsets = tuple((-offset[0], offset[1]) for offset in safe_offsets)
+    return (direct,) + safe_offsets
 
 
 def calibrate(args):
@@ -1410,7 +1416,8 @@ def calibrate(args):
         rates[offset] = float(np.mean([r["safe_success"] for r in subset]))
     direct_offset = spec.direct_target_offset or spec.risk_offset
     direct_rate = rates[direct_offset]
-    best_offset = max(spec.safe_offsets, key=lambda value: rates[value])
+    safe_offsets = offsets[1:]
+    best_offset = max(safe_offsets, key=lambda value: rates[value])
     best_rate = rates[best_offset]
     passed = direct_rate <= args.max_direct_safe_rate and best_rate >= args.min_alternative_safe_rate
     verdict = "PASS_STATIC_OCCUPANCY_LAYOUT" if passed else "FAIL_STATIC_OCCUPANCY_LAYOUT"

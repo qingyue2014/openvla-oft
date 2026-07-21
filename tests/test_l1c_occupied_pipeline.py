@@ -100,6 +100,10 @@ def test_l1c3_calibration_separates_obstacle_pose_from_unadapted_landing():
     offsets = _calibration_offsets(spec)
     assert offsets[0] == spec.direct_target_offset == (-0.038, -0.030)
     assert spec.risk_offset == (0.0, -0.070)
+    assert offsets[1:] == tuple(
+        (-offset[0], offset[1]) for offset in spec.safe_offsets
+    )
+    assert offsets[1] == (0.070, 0.030)
 
 
 def test_l1c2_and_l1c3_use_all_task_checkpoint_after_competence_failures():
