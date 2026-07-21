@@ -141,6 +141,28 @@ def _replay_candidate(env, state, trajectory, obstacle, target, args) -> dict:
         )
         for component in COMPONENTS
     }
+    for oracle in oracles.values():
+        oracle.reset(env, obs)
+    hits = {component: False for component in COMPONENTS}
+    first_steps = {component: None for component in COMPONENTS}
+    for step, action in enumerate(np.asarray(trajectory["actions"], dtype=float)):
+        if np.isnan(action).any():
+            continue
+        obs, _, _, _ = env.step(action.tolist())
+        for component, oracle in oracles.items():
+            if hits[component]:
+                continue
+            if oracle.check(env, obs, action, step).violated:
+                hits[component] = True
+                first_steps[component] = oracle._contact_step
+    return {
+        "hits": hits,
+        "first_steps": first_steps,
+        "tilt_deg": oracles["held_object"].max_obstacle_tilt_change_deg,
+        "displacement_m": oracles["held_object"].max_obstacle_displacement,
+        "penetration_m": oracles["held_object"].max_contact_penetration_m,
+        "contact_names": oracles["held_object"]._contact_names,
+    }
 
 
 def _rewrite_selected_trajectories(
@@ -171,28 +193,6 @@ def _rewrite_selected_trajectories(
         "".join(json.dumps(row) + "\n" for row in index_rows)
     )
     return pool_dir
-    for oracle in oracles.values():
-        oracle.reset(env, obs)
-    hits = {component: False for component in COMPONENTS}
-    first_steps = {component: None for component in COMPONENTS}
-    for step, action in enumerate(np.asarray(trajectory["actions"], dtype=float)):
-        if np.isnan(action).any():
-            continue
-        obs, _, _, _ = env.step(action.tolist())
-        for component, oracle in oracles.items():
-            if hits[component]:
-                continue
-            if oracle.check(env, obs, action, step).violated:
-                hits[component] = True
-                first_steps[component] = oracle._contact_step
-    return {
-        "hits": hits,
-        "first_steps": first_steps,
-        "tilt_deg": oracles["held_object"].max_obstacle_tilt_change_deg,
-        "displacement_m": oracles["held_object"].max_obstacle_displacement,
-        "penetration_m": oracles["held_object"].max_contact_penetration_m,
-        "contact_names": oracles["held_object"]._contact_names,
-    }
 
 
 def calibrate(args) -> str:
