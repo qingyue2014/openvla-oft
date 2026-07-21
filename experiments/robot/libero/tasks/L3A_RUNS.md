@@ -73,6 +73,9 @@ episode-paired successful Ec OSC trajectory. The entire path is executed with
 after Er restoration. `validate_l3a1_reference_paths.py` remains a separate
 causal physics gate comparing naive Er closure with the paired Ec negative
 intervention and is not accepted as the executable safe solution.
+The executable gate additionally requires the upright bottle to move no more
+than 1 mm and change attitude no more than 0.5 degrees during the task phase;
+the broader hazard oracle threshold is not used as the safe-solution target.
 
 ### Why this isn't just L1 sweep-volume
 

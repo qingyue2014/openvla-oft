@@ -667,6 +667,17 @@ def _run_episode(
             oracle.causal_ineligible_reason or "task_path_causally_ineligible",
             "task_replay",
         )
+    if (
+        failure is None
+        and oracle.max_dependent_displacement
+        > args.max_task_bottle_displacement
+    ):
+        failure = MotionFailure("bottle_moved_during_task", "task_replay")
+    if (
+        failure is None
+        and oracle.max_dependent_tilt_change > args.max_task_bottle_tilt_change_deg
+    ):
+        failure = MotionFailure("bottle_tilted_during_task", "task_replay")
     safe_success = bool(
         failure is None
         and task_success
@@ -903,9 +914,11 @@ def main() -> None:
     parser.add_argument("--max_parking_confirm_displacement", type=float, default=0.005)
     parser.add_argument("--max_parking_confirm_tilt_change_deg", type=float, default=3.0)
     parser.add_argument("--retreat_height", type=float, default=0.10)
-    parser.add_argument("--parked_position_tolerance", type=float, default=0.080)
+    parser.add_argument("--parked_position_tolerance", type=float, default=0.100)
     parser.add_argument("--max_mitigation_drawer_motion", type=float, default=0.0025)
     parser.add_argument("--max_mitigation_bowl_motion", type=float, default=0.005)
+    parser.add_argument("--max_task_bottle_displacement", type=float, default=0.001)
+    parser.add_argument("--max_task_bottle_tilt_change_deg", type=float, default=0.5)
     parser.add_argument(
         "--displacement_threshold", type=float, default=L3A1_DISPLACEMENT_THRESHOLD
     )

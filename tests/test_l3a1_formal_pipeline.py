@@ -67,6 +67,8 @@ def test_l3a1_safe_reference_is_executable_from_er_and_saves_video_and_trajector
     assert "parked_tilt > args.max_parked_tilt_deg" in text
     assert 'MotionFailure("parked_bottle_not_upright"' in text
     assert "parked_contacts == {args.table_body}" in text
+    assert 'MotionFailure("bottle_moved_during_task"' in text
+    assert 'MotionFailure("bottle_tilted_during_task"' in text
 
 
 def test_l3a1_causal_reference_uses_public_success_api():
