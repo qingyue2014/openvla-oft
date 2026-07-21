@@ -454,6 +454,11 @@ def _run_episode(
                 tolerance,
                 accept_contact,
             )
+            if failure is not None:
+                print(
+                    f"  waypoint_failure stage={stage} step={step} "
+                    f"reason={getattr(failure, 'reason', failure)}"
+                )
     if failure is None:
         obs, step, failure = _seat_grasp(
             env, obs, oracle, recorder, grasp_eef, close_sign, step, args
