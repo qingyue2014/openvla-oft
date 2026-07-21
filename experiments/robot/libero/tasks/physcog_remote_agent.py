@@ -29,6 +29,82 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l1b6", "calibrate"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/calibrate_l1b6_wine_bottle.sh",
+        ),
+        count_env="CALIBRATION_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b6_wine_bottle_pose_search.csv",
+            "experiments/logs/l1b6_native_held_object_scene_check.md",
+            "experiments/robot/libero/tasks/l1b_swept_preview/l1b6_native_held_object",
+            "experiments/robot/libero/tasks/l1b6_native_held_object_pairing.json",
+            "rollouts/libero_goal/L1-B6-goal-bowl-native-wine-bottle-knockdown-eb/trajectories",
+        ),
+    ),
+    ("l1b6", "prepare"): PhaseSpec(
+        command=(
+            "env",
+            "SAFE_REF_VIDEO_DIR=experiments/logs/l1b6_safe_reference_videos",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1b6_native_held_object",
+            "prepare",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b6_native_held_object_scene_check.md",
+            "experiments/logs/l1b6_native_held_object_safe_reference.md",
+            "experiments/logs/l1b6_native_held_object_safe_reference.csv",
+            "experiments/logs/l1b6_safe_reference_videos",
+            "experiments/robot/libero/tasks/l1b_swept_preview/l1b6_native_held_object",
+            "experiments/robot/libero/tasks/l1b6_native_held_object_pairing.json",
+        ),
+    ),
+    ("l1b6", "smoke"): PhaseSpec(
+        command=(
+            "env",
+            "SAVE_VIDEO_MODE=all",
+            "SAFE_REF_VIDEO_DIR=experiments/logs/l1b6_safe_reference_videos",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1b6_native_held_object",
+            "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b6_native_held_object_scene_check.md",
+            "experiments/logs/l1b6_native_held_object_safe_reference.md",
+            "experiments/logs/l1b6_native_held_object_native_replay.md",
+            "experiments/logs/l1b6_safe_reference_videos",
+            "rollouts/libero_goal/L1-B6-goal-bowl-native-wine-bottle-knockdown-eb",
+            "rollouts/libero_goal/L1-B6-goal-bowl-native-wine-bottle-knockdown-er",
+            "rollouts/libero_goal/L1-B6-goal-bowl-native-wine-bottle-knockdown-ec",
+        ),
+    ),
+    ("l1b6", "formal"): PhaseSpec(
+        command=(
+            "env",
+            "SAVE_VIDEO_MODE=none",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1b6_native_held_object",
+            "all",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b6_native_held_object_scene_check.md",
+            "experiments/logs/l1b6_native_held_object_safe_reference.md",
+            "experiments/logs/l1b6_native_held_object_native_replay.md",
+            "experiments/logs/l1b6_native_held_object_eb_rollout_physics.md",
+            "experiments/logs/l1b6_native_held_object_er_rollout_physics.md",
+            "experiments/logs/l1b6_native_held_object_ec_rollout_physics.md",
+            "rollouts/libero_goal/L1-B6-goal-bowl-native-wine-bottle-knockdown-eb/trajectories",
+            "rollouts/libero_goal/L1-B6-goal-bowl-native-wine-bottle-knockdown-er/trajectories",
+            "rollouts/libero_goal/L1-B6-goal-bowl-native-wine-bottle-knockdown-ec/trajectories",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",

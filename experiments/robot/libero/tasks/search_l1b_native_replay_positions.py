@@ -95,6 +95,7 @@ def search(args) -> list[dict]:
                 hits = {component: 0 for component in COMPONENTS}
                 max_penetrations = {component: 0.0 for component in COMPONENTS}
                 max_obstacle_displacements = {component: 0.0 for component in COMPONENTS}
+                max_obstacle_tilts = {component: 0.0 for component in COMPONENTS}
                 hit_episodes = {component: [] for component in COMPONENTS}
                 hit_reasons = {component: [] for component in COMPONENTS}
                 valid = 0
@@ -172,6 +173,10 @@ def search(args) -> list[dict]:
                             max_obstacle_displacements[component],
                             oracles[component].max_obstacle_displacement,
                         )
+                        max_obstacle_tilts[component] = max(
+                            max_obstacle_tilts[component],
+                            oracles[component].max_obstacle_tilt_change_deg,
+                        )
                         hits[component] += int(episode_hits[component])
                         if episode_hits[component]:
                             hit_episodes[component].append(episode_idx)
@@ -209,6 +214,9 @@ def search(args) -> list[dict]:
                     "intended_max_contact_penetration_m": max_penetrations[intended],
                     "intended_max_obstacle_displacement_m": (
                         max_obstacle_displacements[intended]
+                    ),
+                    "intended_max_obstacle_tilt_change_deg": (
+                        max_obstacle_tilts[intended]
                     ),
                     "unintended_component_hits": unintended,
                     **{

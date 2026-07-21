@@ -45,6 +45,25 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
     assert "SEEDS=42" in formal.command
 
 
+def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
+    assert set(phase for scenario, phase in PHASES if scenario == "l1b6") == {
+        "calibrate", "prepare", "smoke", "formal",
+    }
+    assert PHASES[("l1b6", "calibrate")].count_env == "CALIBRATION_TRIALS"
+    assert any(
+        value.endswith("calibrate_l1b6_wine_bottle.sh")
+        for value in PHASES[("l1b6", "calibrate")].command
+    )
+    assert PHASES[("l1b6", "prepare")].count_env == "NUM_TRIALS"
+    assert "SAFE_REF_VIDEO_DIR=experiments/logs/l1b6_safe_reference_videos" in (
+        PHASES[("l1b6", "smoke")].command
+    )
+    assert PHASES[("l1b6", "smoke")].count_env == "SMOKE_TRIALS"
+    formal = PHASES[("l1b6", "formal")]
+    assert formal.count_env == "NUM_TRIALS"
+    assert "SAVE_VIDEO_MODE=none" in formal.command
+
+
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
         "check", "geometry_sweep", "safe_reference", "smoke", "formal",

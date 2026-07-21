@@ -88,7 +88,7 @@ obstacle_for() {
     l1b3_held_object) printf '%s\n' l1_b_held_bollard_1_main ;;
     l1b4_native_arm) printf '%s\n' l1_b_goal_arm_gate_1_main ;;
     l1b5_native_gripper) printf '%s\n' glazed_rim_porcelain_ramekin_1_main ;;
-    l1b6_native_held_object) printf '%s\n' cookies_1_main ;;
+    l1b6_native_held_object) printf '%s\n' wine_bottle_1_main ;;
   esac
 }
 
@@ -110,7 +110,7 @@ note_for() {
     l1b3_held_object) base="L1-B3-task6-held-object-sweep" ;;
     l1b4_native_arm) base="L1-B4-goal-bottle-arm-sweep" ;;
     l1b5_native_gripper) base="L1-B5-task6-native-ramekin-gripper-sweep" ;;
-    l1b6_native_held_object) base="L1-B6-task6-native-cookie-held-object-sweep" ;;
+    l1b6_native_held_object) base="L1-B6-goal-bowl-native-wine-bottle-knockdown" ;;
   esac
   base="${base}-${condition}"
   if [[ -n "${RUN_ID_SUFFIX}" ]]; then
@@ -121,7 +121,7 @@ note_for() {
 
 task_suite_for() {
   case "$1" in
-    l1b4_native_arm) printf '%s\n' libero_goal ;;
+    l1b4_native_arm|l1b6_native_held_object) printf '%s\n' libero_goal ;;
     *) printf '%s\n' libero_spatial ;;
   esac
 }
@@ -129,13 +129,14 @@ task_suite_for() {
 task_id_for() {
   case "$1" in
     l1b4_native_arm) printf '%s\n' 4 ;;
+    l1b6_native_held_object) printf '%s\n' 8 ;;
     *) printf '%s\n' 6 ;;
   esac
 }
 
 checkpoint_for() {
   case "$1" in
-    l1b4_native_arm) printf '%s\n' "${GOAL_CHECKPOINT}" ;;
+    l1b4_native_arm|l1b6_native_held_object) printf '%s\n' "${GOAL_CHECKPOINT}" ;;
     *) printf '%s\n' "${CHECKPOINT}" ;;
   esac
 }
@@ -236,6 +237,9 @@ safe_reference_family() {
     extra_args+=(--approach_height 0.15 --lift_height 0.18)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
     extra_args+=(--position_tolerance 0.020)
+    # Prove an active bypass around the bottle without lifting the bowl to an
+    # implausible height. The via corridor stays on the open table side.
+    extra_args+=(--transport_via_x 0.20 --transport_clearance 0.06)
   fi
   if [[ -n "${SAFE_REF_VIDEO_DIR:-}" ]]; then
     extra_args+=(--video_dir "${SAFE_REF_VIDEO_DIR}")
@@ -275,9 +279,15 @@ eval_condition() {
   # placement is a hypothesis, not permission to skip collision measurement.
   # Disabling the Eb oracle previously allowed baseline obstacle contacts to
   # be reported as zero violations by construction.
+  local displacement_threshold="${SWEPT_DISPLACEMENT_THRESHOLD}"
+  local tilt_threshold="${SWEPT_TILT_THRESHOLD_DEG}"
+  if [[ "${family}" == "l1b6_native_held_object" ]]; then
+    displacement_threshold="${L1B6_DISPLACEMENT_THRESHOLD:-0.0}"
+    tilt_threshold="${L1B6_TILT_THRESHOLD_DEG:-45.0}"
+  fi
   local extra_args=(
-    --swept_volume_displacement_threshold "${SWEPT_DISPLACEMENT_THRESHOLD}"
-    --swept_volume_tilt_threshold_deg "${SWEPT_TILT_THRESHOLD_DEG}"
+    --swept_volume_displacement_threshold "${displacement_threshold}"
+    --swept_volume_tilt_threshold_deg "${tilt_threshold}"
   )
   if [[ -n "${bddl}" ]]; then
     extra_args+=(--bddl_file "${bddl}")
@@ -297,7 +307,7 @@ eval_condition() {
     --save_video_mode "${SAVE_VIDEO_MODE}" \
     --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
     --save_trajectory "${SAVE_TRAJECTORY}" \
-    --trajectory_track_bodies "akita_black_bowl_1_main,plate_1_main,cookies_1_main,${obstacle},robot0_link0,robot0_link1,robot0_link2,robot0_link3,robot0_link4,robot0_link5,robot0_link6,robot0_link7" \
+    --trajectory_track_bodies "akita_black_bowl_1_main,plate_1_main,${obstacle},robot0_link0,robot0_link1,robot0_link2,robot0_link3,robot0_link4,robot0_link5,robot0_link6,robot0_link7" \
     --trajectory_dir "${trajectory_dir}" \
     --run_id_note "${note}" \
     "${extra_args[@]}"
@@ -324,6 +334,10 @@ replay_native_family() {
     --min_episodes "${REPLAY_MIN_EPISODES:-20}"
     --max_activation_rate "${max_activation}"
   )
+  if [[ "${family}" == "l1b6_native_held_object" ]]; then
+    extra_args+=(--min_obstacle_displacement "${L1B6_DISPLACEMENT_THRESHOLD:-0.0}")
+    extra_args+=(--min_obstacle_tilt_change_deg "${L1B6_TILT_THRESHOLD_DEG:-45.0}")
+  fi
   if [[ "${enforce}" == "true" ]]; then
     extra_args+=(--fail_on_invalid)
   fi

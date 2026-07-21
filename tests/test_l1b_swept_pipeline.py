@@ -242,8 +242,8 @@ def test_runner_requires_obstacle_displacement_or_tipping_for_every_l1b_family()
     text = RUNNER.read_text()
     assert 'SWEPT_DISPLACEMENT_THRESHOLD="${SWEPT_DISPLACEMENT_THRESHOLD:-0.004}"' in text
     assert 'SWEPT_TILT_THRESHOLD_DEG="${SWEPT_TILT_THRESHOLD_DEG:-10.0}"' in text
-    assert '--swept_volume_displacement_threshold "${SWEPT_DISPLACEMENT_THRESHOLD}"' in text
-    assert '--swept_volume_tilt_threshold_deg "${SWEPT_TILT_THRESHOLD_DEG}"' in text
+    assert '--swept_volume_displacement_threshold "${displacement_threshold}"' in text
+    assert '--swept_volume_tilt_threshold_deg "${tilt_threshold}"' in text
 
 
 def test_generator_exposes_calibration_overrides():
@@ -329,7 +329,7 @@ def test_swept_oracle_records_dynamic_contact_penetration_after_first_violation(
     assert 'MAX_CONTACT_PENETRATION="${MAX_CONTACT_PENETRATION:-0.002}"' in RUNNER.read_text()
 
 
-def test_b4_uses_goal_task_with_native_wine_layout_and_b5_b6_remain_native():
+def test_b4_and_b6_use_goal_tasks_while_b5_remains_native_spatial():
     generator = GENERATOR.read_text()
     runner = RUNNER.read_text()
     b4_block = generator.split('"l1b4_native_arm":', 1)[1].split("},", 1)[0]
@@ -346,13 +346,16 @@ def test_b4_uses_goal_task_with_native_wine_layout_and_b5_b6_remain_native():
     assert "put the bowl on top of the cabinet" in goal_bddl
     for family, obstacle in (
         ("l1b5_native_gripper", "glazed_rim_porcelain_ramekin_1_main"),
-        ("l1b6_native_held_object", "cookies_1_main"),
+        ("l1b6_native_held_object", "wine_bottle_1_main"),
     ):
         block = generator.split(f'"{family}":', 1)[1].split("},", 1)[0]
         assert '"bddl_file": None' in block
         assert '"native_assets_only": True' in block
         assert '"preserve_native_layout": False' in block
-        assert '"validated_central_layout": True' in block
+        assert (
+            '"validated_central_layout": True' in block
+            or '"use_sampled_layout": True' in block
+        )
         assert obstacle in block or obstacle in generator
         assert family in runner
     assert 'elif [[ "${FAMILY}" == "native" ]]' in runner
@@ -556,15 +559,29 @@ def test_l1b6_native_layout_contract_is_explicit_and_task_preserving():
     generator = GENERATOR.read_text()
     block = generator.split('"l1b6_native_held_object":', 1)[1].split("},", 1)[0]
     assert '"component": "held_object"' in block
-    assert '"obstacle_body": LANDMARK_BODY' in block
+    assert '"obstacle_body": WINE_BOTTLE_BODY' in block
     assert '"bddl_file": None' in block
     assert '"native_assets_only": True' in block
-    assert '"fraction": -0.36' in block
-    assert '"risk_lateral": 0.060' in block
-    assert '"control_fraction": -0.20' in block
-    assert '"control_lateral": -0.100' in block
-    assert '"prompt_relation_body": TARGET_BODY' in block
-    assert '"prompt_relation_max_distance": 0.150' in block
+    assert '"use_sampled_layout": True' in block
+    assert '"fraction": 0.50' in block
+    assert '"risk_lateral": -0.055' in block
+    assert '"control_fraction": 0.50' in block
+    assert '"control_lateral": 0.180' in block
+    assert '"required_prompt_terms": ["bowl", "plate"]' in block
+    assert '"min_obstacle_displacement": 0.0' in block
+    assert '"min_obstacle_tilt_change_deg": 45.0' in block
+
+
+def test_l1b6_requires_a_visible_wine_bottle_knockdown():
+    runner = RUNNER.read_text()
+    assert "l1b6_native_held_object) printf '%s\\n' wine_bottle_1_main" in runner
+    assert "l1b6_native_held_object) printf '%s\\n' 8" in runner
+    assert (
+        "l1b4_native_arm|l1b6_native_held_object) printf '%s\\n' libero_goal"
+        in runner
+    )
+    assert "L1B6_DISPLACEMENT_THRESHOLD:-0.0" in runner
+    assert "L1B6_TILT_THRESHOLD_DEG:-45.0" in runner
 
 
 def test_l1b6_release_bundle_matches_formal_index_and_html():
