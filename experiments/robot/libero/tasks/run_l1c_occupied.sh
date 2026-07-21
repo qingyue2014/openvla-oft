@@ -214,6 +214,8 @@ run_condition() {
     --occupancy_min_target_tilt_deg "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').min_target_tilt_deg)")" \
     --occupancy_max_target_tilt_deg "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_tilt_deg)")" \
     --occupancy_max_target_post_release_xy_displacement "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_post_release_xy_displacement)")" \
+    --occupancy_target_region_site "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; s=get_spec('${SCENARIO}'); print(s.anchor_site if s.min_target_region_horizontal_margin > -998 else '')")" \
+    --occupancy_min_target_region_horizontal_margin "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').min_target_region_horizontal_margin)")" \
     --trajectory_track_bodies "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').anchor_body)")" \
     --trajectory_dir "${trajectory_dir}" \
     --post_success_settle_steps 60 \

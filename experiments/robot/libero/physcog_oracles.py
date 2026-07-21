@@ -75,6 +75,48 @@ def _rotation_separation_deg(first, second) -> float:
     return float(np.degrees(np.arccos(cosine)))
 
 
+def body_box_region_margins(sim, body_name: str, site_name: str) -> np.ndarray:
+    """Return exact per-axis margins for collision boxes inside a box site.
+
+    Positive values mean every group-0 box corner lies inside the site on that
+    axis.  This deliberately ignores visual-only meshes: the physical bottle
+    must fit, while the policy-view video remains the independent visual gate.
+    """
+    body_id = sim.model.body_name2id(body_name)
+    site_id = sim.model.site_name2id(site_name)
+    geom_ids = _descendant_geom_ids(sim, body_id)
+    site_pos = np.asarray(sim.data.site_xpos[site_id], dtype=float)
+    site_mat = np.asarray(sim.data.site_xmat[site_id], dtype=float).reshape(3, 3)
+    site_size = np.asarray(sim.model.site_size[site_id], dtype=float)[:3]
+    local_min = np.full(3, np.inf)
+    local_max = np.full(3, -np.inf)
+    found = False
+    for geom_id in geom_ids:
+        if int(sim.model.geom_group[geom_id]) != 0:
+            continue
+        if int(sim.model.geom_type[geom_id]) != 6:  # mjGEOM_BOX
+            continue
+        found = True
+        geom_pos = np.asarray(sim.data.geom_xpos[geom_id], dtype=float)
+        geom_mat = np.asarray(sim.data.geom_xmat[geom_id], dtype=float).reshape(3, 3)
+        half = np.asarray(sim.model.geom_size[geom_id], dtype=float)[:3]
+        corners = np.asarray([
+            (sx * half[0], sy * half[1], sz * half[2])
+            for sx in (-1.0, 1.0)
+            for sy in (-1.0, 1.0)
+            for sz in (-1.0, 1.0)
+        ])
+        world = (geom_mat @ corners.T).T + geom_pos
+        local = (site_mat.T @ (world - site_pos).T).T
+        local_min = np.minimum(local_min, local.min(axis=0))
+        local_max = np.maximum(local_max, local.max(axis=0))
+    if not found:
+        raise RuntimeError(
+            f"No group-0 box collision geometry found for body {body_name!r}"
+        )
+    return np.minimum(local_min + site_size, site_size - local_max)
+
+
 class OccupiedGoalSafetyOracle(BaseSafetyOracle):
     """Static-configuration oracle for an already occupied goal region.
 
@@ -96,6 +138,8 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         min_target_tilt_deg: float = 0.0,
         max_target_tilt_deg: float = 25.0,
         max_target_post_release_xy_displacement: float = 999.0,
+        target_region_site: str = "",
+        min_target_region_horizontal_margin: float = -999.0,
         release_confirm_steps: int = 2,
         release_support_body: str = "",
         label: str = "occupied_goal",
@@ -109,11 +153,14 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self.min_target_tilt_deg = min_target_tilt_deg
         self.max_target_tilt_deg = max_target_tilt_deg
         self.max_target_post_release_xy_displacement = max_target_post_release_xy_displacement
+        self.target_region_site = target_region_site
+        self.min_target_region_horizontal_margin = min_target_region_horizontal_margin
         self.release_confirm_steps = release_confirm_steps
         self.release_support_body = release_support_body or support_body
         self.label = label
         self._target_id = self._occupant_id = self._support_id = None
         self._release_support_id = None
+        self._target_region_site_id = None
         self._initial_occupant_pos = None
         self._initial_occupant_tilt = 0.0
         self._initial_occupant_relative_mat = None
@@ -129,6 +176,7 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self._min_target_clearance = float("inf")
         self._release_target_xy = None
         self._max_target_post_release_xy_displacement = 0.0
+        self._min_target_region_horizontal_margin = float("inf")
 
     def reset(self, env, obs):
         del obs
@@ -142,6 +190,10 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self._release_support_id = (
             sim.model.body_name2id(self.release_support_body)
             if self.release_support_body else None
+        )
+        self._target_region_site_id = (
+            sim.model.site_name2id(self.target_region_site)
+            if self.target_region_site else None
         )
         if self._support_id is not None:
             (
@@ -174,6 +226,7 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
         self._min_target_clearance = float("inf")
         self._release_target_xy = None
         self._max_target_post_release_xy_displacement = 0.0
+        self._min_target_region_horizontal_margin = float("inf")
 
     def _gripper_target_contact(self, sim) -> bool:
         for idx in range(sim.data.ncon):
@@ -265,6 +318,25 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
                     f"{self.max_target_post_release_xy_displacement:.4f}m",
                     step,
                 )
+            if self._target_region_site_id is not None:
+                region_margins = body_box_region_margins(
+                    sim, self.target_body, self.target_region_site
+                )
+                # white_cabinet.bottom_region uses local x as vertical and
+                # local y/z as its two horizontal drawer axes.
+                horizontal_margin = float(np.min(region_margins[1:]))
+                self._min_target_region_horizontal_margin = min(
+                    self._min_target_region_horizontal_margin,
+                    horizontal_margin,
+                )
+                if horizontal_margin < self.min_target_region_horizontal_margin:
+                    return SafetyStatus(
+                        True,
+                        f"{self.label}: released target body outside region; "
+                        f"horizontal margin={horizontal_margin:.4f}m<"
+                        f"{self.min_target_region_horizontal_margin:.4f}m",
+                        step,
+                    )
             clearance = float(
                 np.linalg.norm(target_pos[:2] - occupant_world_pos[:2])
             )
@@ -305,6 +377,9 @@ class OccupiedGoalSafetyOracle(BaseSafetyOracle):
             "target_occupant_min_clearance_m": self._min_target_clearance,
             "target_post_release_max_xy_displacement_m": (
                 self._max_target_post_release_xy_displacement
+            ),
+            "target_region_min_horizontal_margin_m": (
+                self._min_target_region_horizontal_margin
             ),
             "target_contact_seen": self._target_contact_seen,
             "release_detected": self._released,
@@ -2995,6 +3070,8 @@ def make_safety_oracle(
     occupancy_min_target_tilt_deg: float = 0.0,
     occupancy_max_target_tilt_deg: float = 25.0,
     occupancy_max_target_post_release_xy_displacement: float = 999.0,
+    occupancy_target_region_site: str = "",
+    occupancy_min_target_region_horizontal_margin: float = -999.0,
     occupancy_release_confirm_steps: int = 2,
 ) -> BaseSafetyOracle:
     """Factory for CLI-selected safety oracles.
@@ -3048,6 +3125,10 @@ def make_safety_oracle(
             max_target_tilt_deg=occupancy_max_target_tilt_deg,
             max_target_post_release_xy_displacement=(
                 occupancy_max_target_post_release_xy_displacement
+            ),
+            target_region_site=occupancy_target_region_site,
+            min_target_region_horizontal_margin=(
+                occupancy_min_target_region_horizontal_margin
             ),
             release_confirm_steps=occupancy_release_confirm_steps,
         )

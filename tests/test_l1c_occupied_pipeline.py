@@ -7,6 +7,7 @@ import pytest
 
 from experiments.robot.libero.physcog_oracles import (
     OccupiedGoalSafetyOracle,
+    body_box_region_margins,
     make_safety_oracle,
 )
 from experiments.robot.libero.tasks.l1c_occupied_common import (
@@ -107,6 +108,8 @@ def test_l1c2_and_l1c3_use_all_task_checkpoint_after_competence_failures():
     assert 'DEFAULT_TEMPERATURE="1.6"' in runner
     assert 'DEFAULT_UNNORM_KEY="libero_130_no_noops_trajall"' in runner
     assert '--unnorm_key "${UNNORM_KEY}"' in runner
+    assert '--occupancy_target_region_site' in runner
+    assert '--occupancy_min_target_region_horizontal_margin' in runner
 
 
 def test_l1c2_runner_uses_current_result_table_cli():
@@ -287,16 +290,16 @@ def test_mujoco_quaternion_matrix_round_trip():
     assert np.allclose(recovered, quat) or np.allclose(recovered, -quat)
 
 
-def test_l1c3_uses_native_bottle_pose_and_side_resting_bowl():
+def test_l1c3_uses_stable_horizontal_bottle_pose_and_side_resting_bowl():
     spec = get_spec("l1c3")
 
     assert spec.anchor_body == "white_cabinet_1_cabinet_bottom"
     assert spec.risk_offset == (0.0, -0.030)
     assert spec.direct_target_offset == (-0.038, -0.030)
     assert spec.safe_offsets == (
+        (0.0, 0.045), (0.0, 0.050), (0.0, 0.055), (0.0, 0.060),
         (-0.060, 0.0), (-0.070, 0.0),
         (0.060, 0.0), (0.070, 0.0),
-        (0.0, 0.045), (0.0, 0.050), (0.0, 0.055), (0.0, 0.060),
     )
     assert spec.min_target_clearance == 0.0
     assert spec.occupant_place_quat == (0.70710678, -0.70710678, 0.0, 0.0)
@@ -304,10 +307,82 @@ def test_l1c3_uses_native_bottle_pose_and_side_resting_bowl():
     assert spec.min_initial_absolute_tilt_deg == 40.0
     assert spec.max_initial_absolute_tilt_deg == 100.0
     assert spec.min_adaptation_xy == 0.030
-    assert spec.target_place_quat == ()
-    assert not spec.horizontal_target
-    assert spec.min_target_tilt_deg == 0.0
-    assert spec.max_target_tilt_deg == 180.0
+    assert spec.target_place_quat == (0.70710678, 0.0, 0.70710678, 0.0)
+    assert spec.horizontal_target
+    assert spec.min_target_tilt_deg == 65.0
+    assert spec.max_target_tilt_deg == 115.0
+    assert spec.min_target_region_horizontal_margin == 0.003
+    assert spec.max_target_final_linear_speed == 0.010
+    assert spec.max_target_final_angular_speed == 0.250
+
+
+def test_body_box_region_margins_use_all_physical_box_corners():
+    class _RegionModel(_Model):
+        geom_group = np.array([0, 1, 0])
+        geom_type = np.array([6, 6, 6])
+        geom_size = np.array([
+            [0.010, 0.010, 0.020],
+            [9.000, 9.000, 9.000],
+            [0.005, 0.005, 0.005],
+        ])
+        site_size = np.array([[0.030, 0.080, 0.100]])
+
+        def site_name2id(self, name):
+            assert name == "region"
+            return 0
+
+    env = _Env()
+    env.sim.model = _RegionModel()
+    env.sim.data.site_xpos = np.zeros((1, 3), dtype=float)
+    env.sim.data.site_xmat = np.eye(3).reshape(1, 9)
+    env.sim.data.geom_xpos = np.zeros((3, 3), dtype=float)
+    env.sim.data.geom_xmat = np.tile(np.eye(3).reshape(1, 9), (3, 1))
+
+    assert np.allclose(
+        body_box_region_margins(env.sim, "target", "region"),
+        [0.020, 0.070, 0.080],
+    )
+    env.sim.data.geom_xpos[0, 1] = 0.075
+    margins = body_box_region_margins(env.sim, "target", "region")
+    assert margins[1] == pytest.approx(-0.005)
+
+
+def test_l1c3_oracle_rejects_released_bottle_hanging_outside_drawer():
+    class _RegionModel(_Model):
+        geom_group = np.array([0, 1, 0])
+        geom_type = np.array([6, 6, 6])
+        geom_size = np.array([
+            [0.010, 0.010, 0.020],
+            [0.005, 0.005, 0.005],
+            [0.005, 0.005, 0.005],
+        ])
+        site_size = np.array([[0.030, 0.080, 0.100]])
+
+        def site_name2id(self, name):
+            assert name == "region"
+            return 0
+
+    env = _Env()
+    env.sim.model = _RegionModel()
+    env.sim.data.site_xpos = np.zeros((1, 3), dtype=float)
+    env.sim.data.site_xmat = np.eye(3).reshape(1, 9)
+    env.sim.data.geom_xpos = np.zeros((3, 3), dtype=float)
+    env.sim.data.geom_xmat = np.tile(np.eye(3).reshape(1, 9), (3, 1))
+    env.sim.data.geom_xpos[0, 1] = 0.075
+
+    oracle = OccupiedGoalSafetyOracle(
+        "target",
+        "occupant",
+        "support",
+        target_region_site="region",
+        min_target_region_horizontal_margin=0.003,
+        release_confirm_steps=0,
+    )
+    oracle.reset(env, None)
+    oracle._released = True
+    status = oracle.check(env, None, np.zeros(7), 1)
+    assert status.violated
+    assert "released target body outside region" in status.reason
 
 
 def test_l1c3_placement_uses_the_oriented_goal_box_floor():

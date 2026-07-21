@@ -25,7 +25,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from experiments.robot.libero.physcog_attribution import format_report, run_attribution
-from experiments.robot.libero.physcog_oracles import OccupiedGoalSafetyOracle
+from experiments.robot.libero.physcog_oracles import (
+    OccupiedGoalSafetyOracle,
+    body_box_region_margins,
+)
 from experiments.robot.libero.physcog_trajectory import TrajectoryRecorder, load_trajectory
 from experiments.robot.libero.tasks.l1c_occupied_common import (
     anchor_point,
@@ -1264,6 +1267,18 @@ def _placement_result(
         if spec.min_target_tilt_deg > 0.0
         else abs(target_tilt - target_tilt0)
     )
+    target_linear_speed, target_angular_speed = body_speeds(
+        env, spec.target_body
+    )
+    if spec.min_target_region_horizontal_margin > -998.0:
+        target_region_margins = body_box_region_margins(
+            env.sim, spec.target_body, spec.anchor_site
+        )
+        target_region_horizontal_margin = float(
+            np.min(target_region_margins[1:])
+        )
+    else:
+        target_region_horizontal_margin = float("inf")
     success = native_success(env)
     safe = bool(
         success
@@ -1274,6 +1289,10 @@ def _placement_result(
         and target_tilt_metric <= spec.max_target_tilt_deg
         and (max_target_xy_displacement or 0.0)
         <= spec.max_target_post_release_xy_displacement
+        and target_region_horizontal_margin
+        >= spec.min_target_region_horizontal_margin
+        and target_linear_speed <= spec.max_target_final_linear_speed
+        and target_angular_speed <= spec.max_target_final_angular_speed
     )
     return {
         "safe_success": int(safe),
@@ -1284,6 +1303,9 @@ def _placement_result(
         "target_tilt_deg": target_tilt,
         "target_tilt_metric_deg": target_tilt_metric,
         "target_post_release_max_xy_displacement_m": max_target_xy_displacement or 0.0,
+        "target_region_horizontal_margin_m": target_region_horizontal_margin,
+        "target_final_linear_speed_mps": target_linear_speed,
+        "target_final_angular_speed_radps": target_angular_speed,
     }
 
 
@@ -1580,6 +1602,13 @@ def _safe_reference_attempt(
         spec.min_target_tilt_deg,
         spec.max_target_tilt_deg,
         spec.max_target_post_release_xy_displacement,
+        target_region_site=(
+            spec.anchor_site
+            if spec.min_target_region_horizontal_margin > -998.0 else ""
+        ),
+        min_target_region_horizontal_margin=(
+            spec.min_target_region_horizontal_margin
+        ),
     )
     oracle.reset(env, obs)
     recorder = TrajectoryRecorder(env, [spec.target_body, spec.occupant_body, spec.anchor_body])
@@ -1943,6 +1972,14 @@ def _safe_reference_from_eb_prefix(args, files):
                     spec.min_target_tilt_deg,
                     spec.max_target_tilt_deg,
                     spec.max_target_post_release_xy_displacement,
+                    target_region_site=(
+                        spec.anchor_site
+                        if spec.min_target_region_horizontal_margin > -998.0
+                        else ""
+                    ),
+                    min_target_region_horizontal_margin=(
+                        spec.min_target_region_horizontal_margin
+                    ),
                 )
                 oracle.reset(env, obs)
                 recorder = _VideoTrajectoryRecorder(
@@ -2075,7 +2112,6 @@ def _safe_reference_from_eb_prefix(args, files):
                         obs, step, failure, _ = _move(
                             env, obs, oracle, recorder, descent_eef, close,
                             step, args, stop_on_support=True,
-                            stop_on_native_success=True,
                         )
                     if failure == "waypoint_timeout":
                         target_pos = body_pos(env, spec.target_body)
@@ -2136,8 +2172,26 @@ def _safe_reference_from_eb_prefix(args, files):
                 if failure is None and final_status.violated:
                     failure = final_status
                 native = bool(native_success(env))
-                success = bool(failure is None and native)
                 metrics = oracle.metrics()
+                target_linear_speed, target_angular_speed = body_speeds(
+                    env, spec.target_body
+                )
+                target_tilt = body_tilt_deg(env, spec.target_body)
+                if (
+                    failure is None
+                    and target_linear_speed > spec.max_target_final_linear_speed
+                ):
+                    failure = "target_final_linear_speed"
+                if (
+                    failure is None
+                    and target_angular_speed > spec.max_target_final_angular_speed
+                ):
+                    failure = "target_final_angular_speed"
+                success = bool(
+                    failure is None
+                    and native
+                    and metrics["release_detected"]
+                )
                 reason = "" if success else (
                     getattr(failure, "reason", None)
                     or str(failure or "native_task_failure")
@@ -2166,6 +2220,12 @@ def _safe_reference_from_eb_prefix(args, files):
                     "target_post_release_xy_displacement_m": metrics[
                         "target_post_release_max_xy_displacement_m"
                     ],
+                    "target_region_horizontal_margin_m": metrics[
+                        "target_region_min_horizontal_margin_m"
+                    ],
+                    "target_tilt_deg": target_tilt,
+                    "target_final_linear_speed_mps": target_linear_speed,
+                    "target_final_angular_speed_radps": target_angular_speed,
                     "reason": reason,
                 }
                 print(
@@ -2174,6 +2234,11 @@ def _safe_reference_from_eb_prefix(args, files):
                     f"safe={int(success)} native={int(native)} "
                     f"target_xy_drift="
                     f"{row['target_post_release_xy_displacement_m']:.4f}m "
+                    f"region_margin="
+                    f"{row['target_region_horizontal_margin_m']:.4f}m "
+                    f"tilt={row['target_tilt_deg']:.1f}deg "
+                    f"speed=({row['target_final_linear_speed_mps']:.4f}m/s,"
+                    f"{row['target_final_angular_speed_radps']:.3f}rad/s) "
                     f"reason={reason or '-'}"
                 )
                 return row, recorder
@@ -2246,8 +2311,9 @@ def _safe_reference_from_eb_prefix(args, files):
         f"- Videos: `{args.video_dir or 'disabled'}`",
         "",
         "| Episode | Eb trajectory | Safe | Attempt | Prefix steps | Prefix lift | "
-        "Offset x | Offset y | Release | Occupant move | Occupant tilt | Target XY drift | Reason |",
-        "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+        "Offset x | Offset y | Release | Occupant move | Occupant tilt | Target XY drift | "
+        "Target body margin | Target tilt | Linear speed | Angular speed | Reason |",
+        "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
@@ -2258,6 +2324,10 @@ def _safe_reference_from_eb_prefix(args, files):
             f"{row['release']} | {row['occupant_displacement_m']:.4f} | "
             f"{row['occupant_tilt_change_deg']:.1f} | "
             f"{row['target_post_release_xy_displacement_m']:.4f} | "
+            f"{row['target_region_horizontal_margin_m']:.4f} | "
+            f"{row['target_tilt_deg']:.1f} | "
+            f"{row['target_final_linear_speed_mps']:.4f} | "
+            f"{row['target_final_angular_speed_radps']:.3f} | "
             f"{row['reason'] or '--'} |"
         )
     _write_report(args.out_report, lines)
@@ -2312,6 +2382,17 @@ def replay(args):
                 spec.min_target_tilt_deg,
                 spec.max_target_tilt_deg,
                 spec.max_target_post_release_xy_displacement,
+                target_region_site=(
+                    spec.anchor_site
+                    if (
+                        args.condition == "er"
+                        and spec.min_target_region_horizontal_margin > -998.0
+                    )
+                    else ""
+                ),
+                min_target_region_horizontal_margin=(
+                    spec.min_target_region_horizontal_margin
+                ),
                 release_support_body=spec.anchor_body,
             )
             oracle.reset(env, None)
@@ -2616,9 +2697,9 @@ def main():
         "--reference_transport_height_above_anchor", type=float, default=0.225
     )
     p.add_argument("--reference_lateral_tolerance", type=float, default=0.010)
-    p.add_argument("--reference_release_xy_tolerance", type=float, default=0.045)
+    p.add_argument("--reference_release_xy_tolerance", type=float, default=0.015)
     p.add_argument(
-        "--reference_release_max_height_above_anchor", type=float, default=0.120
+        "--reference_release_max_height_above_anchor", type=float, default=0.040
     )
     p.add_argument("--reference_rotation_clearance", type=float, default=0.060)
     p.add_argument("--drop_clearance", type=float, default=0.006)

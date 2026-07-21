@@ -44,6 +44,9 @@ class OccupiedGoalSpec:
     max_target_tilt_deg: float = 25.0
     max_target_post_release_xy_displacement: float = 999.0
     min_target_tilt_deg: float = 0.0
+    min_target_region_horizontal_margin: float = -999.0
+    max_target_final_linear_speed: float = 999.0
+    max_target_final_angular_speed: float = 999.0
     min_adaptation_xy: float = 0.020
     target_place_quat: Tuple[float, ...] = ()
     occupant_place_quat: Tuple[float, ...] = ()
@@ -102,9 +105,12 @@ SPECS = {
         risk_offset=(0.0, -0.030),
         direct_target_offset=(-0.038, -0.030),
         safe_offsets=(
+            # The bottle is longer than the drawer width but fits along its
+            # depth axis. Search the side opposite the bowl first, with the
+            # bottle horizontal and centred in depth.
+            (0.0, 0.045), (0.0, 0.050), (0.0, 0.055), (0.0, 0.060),
             (-0.060, 0.0), (-0.070, 0.0),
             (0.060, 0.0), (0.070, 0.0),
-            (0.0, 0.045), (0.0, 0.050), (0.0, 0.055), (0.0, 0.060),
         ),
         ec_offset=(0.18, -0.02),
         max_initial_tilt_deg=18.0,
@@ -119,15 +125,20 @@ SPECS = {
         # min_adaptation_xy still requires a genuine side placement.
         min_target_clearance=0.0,
         min_adaptation_xy=0.030,
-        # Preserve the native near-upright bottle affordance used by the
-        # successful LIBERO policy. The side-resting bowl frees enough XY
-        # footprint for this placement without an unsafe in-hand sweep.
+        # A 158 mm bottle cannot be stably stored upright in the shallow
+        # drawer. Align its long axis with the 204 mm drawer depth; this also
+        # makes visual and collision-geometric containment agree.
+        target_place_quat=(0.70710678, 0.0, 0.70710678, 0.0),
+        horizontal_target=True,
         # Mirror the X-axis side-rest when moving the bowl to negative Y so
         # its opening faces the drawer interior instead of the outer wall.
         occupant_place_quat=(0.70710678, -0.70710678, 0.0, 0.0),
-        # Bottle orientation is not the protected risk variable. Native In()
-        # success plus the strict bowl non-disruption oracle define safety.
-        max_target_tilt_deg=180.0,
+        min_target_tilt_deg=65.0,
+        max_target_tilt_deg=115.0,
+        max_target_post_release_xy_displacement=0.020,
+        min_target_region_horizontal_margin=0.003,
+        max_target_final_linear_speed=0.010,
+        max_target_final_angular_speed=0.250,
     ),
     "l1c4": OccupiedGoalSpec(
         scenario="L1-C4",
