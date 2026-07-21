@@ -200,9 +200,10 @@ check_family() {
 
 safe_reference_family() {
   local family="$1" count="${SAFE_REF_STATES:-${NUM_TRIALS}}"
-  local task_suite task_id
+  local task_suite task_id state_path
   task_suite="$(task_suite_for "${family}")"
   task_id="$(task_id_for "${family}")"
+  state_path="${SAFE_REF_STATE_PATH_OVERRIDE:-${TASKS_DIR}/${family}_er_states.hdf5}"
   local extra_args=(--seed "${EVAL_SEED}")
   if [[ "${family}" == "l1b1_arm" ]]; then
     # The arm-post construct needs a genuinely elevated alternate route;
@@ -247,7 +248,7 @@ safe_reference_family() {
   fi
   python "${TASKS_DIR}/validate_l1b_safe_reference.py" \
     --family "${family}" \
-    --state_path "${TASKS_DIR}/${family}_er_states.hdf5" \
+    --state_path "${state_path}" \
     --task_suite_name "${task_suite}" \
     --task_id "${task_id}" \
     --num_states "${count}" \
@@ -265,7 +266,7 @@ eval_condition() {
   task_id="$(task_id_for "${family}")"
   checkpoint="$(checkpoint_for "${family}")"
   oracle="$(oracle_for "${family}")"
-  state_path="${TASKS_DIR}/${family}_${condition}_states.hdf5"
+  state_path="${STATE_PATH_OVERRIDE:-${TASKS_DIR}/${family}_${condition}_states.hdf5}"
   note="$(note_for "${family}" "${condition}")"
   trajectory_dir="rollouts/${task_suite}/${note}/trajectories"
   obstacle="$(obstacle_for "${family}")"
