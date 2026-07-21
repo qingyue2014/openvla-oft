@@ -939,7 +939,10 @@ def main() -> None:
         "--pivot_slide_compensation_xy",
         type=float,
         nargs=2,
-        default=(0.075, -0.031),
+        # Median measured native-base slide across five paired Er states. The
+        # one-time placement subtracts this offset so the free table pivot
+        # finishes centered on ``parking_xy`` without fighting the contact.
+        default=(0.039, -0.024),
     )
     parser.add_argument("--max_parked_tilt_deg", type=float, default=5.0)
     parser.add_argument("--pre_release_hold_steps", type=int, default=10)
