@@ -169,9 +169,12 @@ paired-state, policy-view, replay, and release requirements are defined in
 V3 calibration passes 50/50/50 static states, 50/50 safe references, and
 20-action replay with Er activation `0.80`, zero confounds, and purity `1.00`;
 Ec is `0.00` for all components. Three-video smoke gives Eb/Er/Ec task success
-`3/3, 3/3, 3/3` and violations `0/3, 3/3, 0/3`. The released V2 formal scores
-remain historical and must not populate the V3 paper cell; V3 formal evaluation
-is the next independent stage.
+`3/3, 3/3, 3/3` and violations `0/3, 3/3, 0/3`. Formal job `482908` gives
+Eb/Er/Ec task success `50/50, 48/50, 49/50`, violations `0/50, 49/50, 0/50`,
+and safe success `50/50, 0/50, 49/50`; model collapse is `0/150`. Formal
+unchanged-Eb replay activates Er in `42/50` and Ec in `0/50`, with zero primary
+confounds/ties and Er gripper purity `1.00`. The released V2 scores remain
+historical and must not populate the V3 paper cell.
 
 ## Data-driven placement procedure
 

@@ -46,6 +46,8 @@ same target-bowl radius at angle `300°`. The target bowl, plate, cookie landmar
 robot state, orientations, and prompt are identical across the triplet. See
 `L1-B5_SPEC.md` for the complete contract. V3 passes its 50-state scene gates,
 50/50 safe reference, 20-action Er/Ec replay, and all-condition smoke review.
+Formal job `482908` gives Eb/Er/Ec task SR `100/96/98%`, SVR `0/98/0%`, and
+safe SR `100/0/98%`; the formal replay activates Er in 42/50 and Ec in 0/50.
 The earlier V2 formal score is historical and is not a V3 result.
 
 The retained pose parameters are deterministic per source reset. B4 uses the
@@ -94,14 +96,15 @@ contacts independently; it is not inferred from obstacle coordinates.
   unique settled-source hashes, actual policy-view visibility, and a
   consequence-qualified motion/tilt oracle. It passes 50-state static and safe
   gates, 20-action replay (`Er=0.80`, `Ec=0.00`), and 3×3 video smoke with
-  violations `Eb/Er/Ec=0/3,3/3,0/3`. A new V3 formal sweep remains separate
-  from the historical V2 50×3 result.
+  violations `Eb/Er/Ec=0/3,3/3,0/3`. Its V3 formal 50x3 sweep passes with task
+  SR `100/96/98%`, SVR `0/98/0%`, safe SR `100/0/98%`, and zero model collapse.
+  This result remains separate from the historical V2 50×3 result.
 - B6 is outside this recalibration record. Its current release status must be
   read from its latest generated scene, safe-reference, and replay reports
   rather than from the superseded 2026-07-19 pilot coordinates.
 
-B4 is eligible for formal VLA evaluation. The B5/B6 notes above preserve their
-earlier calibration record and do not alter B4's independent release decision.
+B4 and B5 V3 have completed formal VLA evaluation. The B6 note above preserves
+its independent calibration record and does not alter either release decision.
 See `L1-B_NATIVE_CALIBRATION.md` for physical, policy-visibility, and construct-
 validity evidence, including Superpod jobs and artifact paths.
 

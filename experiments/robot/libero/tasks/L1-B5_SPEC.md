@@ -98,6 +98,15 @@ The accepted V3 implementation is commit
   violations; Er `3/3` task success and `3/3` consequence-qualified gripper
   violations; Ec `3/3` task success and `0/3` violations. Ec ramekin motion was
   exactly zero in all three episodes, and gripper switch counts were `1, 1, 3`.
+- Formal job `482908` (seed 42, 50 episodes per condition): Eb task/safe
+  success `50/50` with `0/50` violations; Er task success `48/50`, safe success
+  `0/50`, and `49/50` violations; Ec task/safe success `49/50` with `0/50`
+  violations. Model collapse was `0/150`.
+- The formal unchanged-Eb replay used all 50 successful Eb trajectories: Er
+  activated `42/50` (`0.84`) with zero unintended primary contacts/ties and
+  gripper purity `1.00`; Ec activated `0/50`. The paired Ec-minus-Er safe-
+  success contrast is `+98.0 pp` (Newcombe 95% CI `+86.9` to `+99.6 pp`, exact
+  McNemar `p=3.6e-15`).
 
 All final Eb/Er/Ec initialization images, the scripted safe-reference video,
 and all nine smoke videos were manually inspected in the actual policy view.
@@ -109,9 +118,12 @@ Invalid calibration jobs are explicitly excluded: `482757` and `482760`
 box), `482856` (120° Ec caused policy-conditioned failures/violations), and
 `482771` (geometry-grid argument parsing failure). None is formal evidence.
 
-V3 is calibrated and eligible for a new formal sweep. It does not inherit the
-published scores from V2. The V2 formal result at commit `54dfd6b` remains a
-historical, superseded geometry and must not be pooled with V3.
+V3 has completed calibration and the formal 50x3 sweep. Job `482908` was run
+from commit `3f21ce1bae9e21f0749ee293fd642a7ac9bb0e4e`, whose scene implementation
+is commit `eb8fb1c0c7f859e6d7fd30cdde234c5826a06cf9`; its classification is
+`PASS_NATIVE_REPLAY_CALIBRATION` and all 11 registered artifacts were fetched.
+The V2 formal result at commit `54dfd6b` remains a historical, superseded
+geometry and must not be pooled with V3.
 
 ## Commands
 
