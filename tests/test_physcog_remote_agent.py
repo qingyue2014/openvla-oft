@@ -56,7 +56,10 @@ def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     )
     assert PHASES[("l1b6", "prepare")].count_env == "NUM_TRIALS"
     search = PHASES[("l1b6", "search")]
-    assert "--laterals=0.0705,0.0715,0.0725,0.0735,0.0745" in search.command
+    assert (
+        "--laterals=0.064,0.065,0.066,0.067,0.068,0.069,0.070,0.0705,0.0715"
+        in search.command
+    )
     assert "--min_obstacle_tilt_change_deg" in search.command
     assert "SAFE_REF_VIDEO_DIR=experiments/logs/l1b6_safe_reference_videos" in (
         PHASES[("l1b6", "smoke")].command
