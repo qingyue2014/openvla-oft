@@ -2159,7 +2159,19 @@ def _safe_reference_from_eb_prefix(args, files):
                         preplace_target_tilt = body_tilt_deg(
                             env, spec.target_body
                         )
-                    desired_body_xy = anchor_offset_xy(env, spec, offset)
+                    # Compute the exact collision-AABB floor pose without
+                    # leaving a teleport in the executed trajectory. This is
+                    # only a geometry query; restore the complete MuJoCo state
+                    # before issuing any OSC action.
+                    current_state = env.sim.get_state()
+                    place_at_anchor(
+                        env, spec, spec.target_body, offset,
+                        args.drop_clearance,
+                    )
+                    desired_body = body_pos(env, spec.target_body).copy()
+                    env.sim.set_state(current_state)
+                    env.sim.forward()
+                    desired_body_xy = desired_body[:2]
                     lateral_eef = _eef(obs).copy()
                     lateral_eef[:2] += (
                         desired_body_xy - body_pos(env, spec.target_body)[:2]
@@ -2170,13 +2182,14 @@ def _safe_reference_from_eb_prefix(args, files):
                             step, args,
                             tolerance=args.reference_lateral_tolerance,
                         )
-                    descent_eef = _eef(obs) + np.array(
-                        [0.0, 0.0, -args.reference_descent]
+                    descent_eef = _eef(obs).copy()
+                    descent_eef[2] += (
+                        desired_body[2] - body_pos(env, spec.target_body)[2]
                     )
                     if failure is None:
                         obs, step, failure, _ = _move(
                             env, obs, oracle, recorder, descent_eef, close,
-                            step, args, stop_on_support=True,
+                            step, args,
                         )
                     if failure == "waypoint_timeout":
                         target_pos = body_pos(env, spec.target_body)
@@ -2192,9 +2205,9 @@ def _safe_reference_from_eb_prefix(args, files):
                             <= args.reference_release_max_height_above_anchor
                         ):
                             # Contact-limited descent can stall the gripper a
-                            # few millimetres above the drawer floor. Release
-                            # from this bounded pose and let the final native
-                            # success plus safety oracle judge the settled result.
+                            # few millimetres above the explicit drawer-floor
+                            # pose. Release only from this bounded pose and let
+                            # the containment/stability oracle judge settling.
                             failure = None
                 else:
                     current_state = env.sim.get_state()
