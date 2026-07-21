@@ -449,7 +449,7 @@ run_family() {
       ;;
     all)
       if [[ "${family}" == "l1b6_native_held_object" ]]; then
-        pool_count="${L1B6_CALIBRATION_POOL_SIZE:-100}"
+        pool_count="${L1B6_CALIBRATION_POOL_SIZE:-120}"
         # The native policy's transport curve varies with the serialized
         # layout. Qualify a larger unique-state Eb pool, select 50 successful
         # isolated held-object knockdowns, then rerun every downstream gate on

@@ -643,7 +643,7 @@ def test_l1b6_reruns_all_gates_after_trajectory_conditioning():
         "def _rewrite_selected_trajectories", 1
     )[0]
     assert 'return {\n        "hits": hits' in replay_block
-    assert 'L1B6_CALIBRATION_POOL_SIZE:-100' in runner
+    assert 'L1B6_CALIBRATION_POOL_SIZE:-120' in runner
     assert 'calibrate_l1b6_trajectory_states "${family}" "${NUM_TRIALS}"' in runner
 
 
