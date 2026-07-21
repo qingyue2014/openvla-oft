@@ -13,17 +13,17 @@
   ],
   "num_steps": 30,
   "minimum_visible_pixels": {
-    "target_body": 616,
+    "target_body": 612,
     "distractor_body": 1191,
-    "ramekin_body": 486,
-    "plate_body": 1389
+    "ramekin_body": 484,
+    "plate_body": 1388
   },
   "object_drift_m": {
-    "target_body": 2.645047524970606e-07,
-    "distractor_body": 2.645047524970766e-07,
-    "ramekin_body": 2.3747600160609814e-07,
-    "plate_body": 2.409630105650557e-07,
-    "side_body": 2.280269489896014e-07
+    "target_body": 4.3387515891129186e-13,
+    "distractor_body": 4.3387517688885053e-13,
+    "ramekin_body": 3.7325698087897763e-13,
+    "plate_body": 3.251843431610905e-13,
+    "side_body": 2.1649348980190553e-13
   },
   "gate": "PASS"
 }

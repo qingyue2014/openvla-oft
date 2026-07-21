@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, replace
@@ -52,6 +53,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l1a1_safe_reference.md",
             "experiments/logs/l1a1_safe_reference.csv",
+            "experiments/logs/l1a1_safe_reference_trajectories",
             "experiments/logs/l1a1_safe_reference_videos",
         ),
     ),
@@ -85,7 +87,6 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/experiment_records.csv",
             "experiments/logs/experiment_records.md",
             "experiments/logs/result_tables.md",
-            "experiments/logs/review_videos.md",
         ),
     ),
     ("l3a1", "check"): PhaseSpec(
@@ -255,7 +256,8 @@ PHASES = {**PHASES, **_l1a34_phases("l1a3"), **_l1a34_phases("l1a4")}
 
 
 VERDICT_RE = re.compile(
-    r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"(?:occlusion_gate|boundary_gate)\"\s*:\s*\")"
+    r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"(?:occlusion_gate|boundary_gate|"
+    r"physical_gate|policy_visibility_gate|pairing_gate)\"\s*:\s*\")"
     r"([A-Z][A-Z0-9_-]+)",
     re.IGNORECASE,
 )
@@ -489,6 +491,13 @@ def _run_dir(root: Path, scenario: str, phase: str) -> Path:
 def _fetch_artifact(cfg: RemoteConfig, remote_path: str, output_root: Path) -> bool:
     destination = output_root / remote_path
     destination.parent.mkdir(parents=True, exist_ok=True)
+    # A repeated status refresh must replace a downloaded directory. Passing an
+    # existing directory directly to ``scp -r`` otherwise nests another copy
+    # of the artifact inside itself on every refresh.
+    if destination.is_dir():
+        shutil.rmtree(destination)
+    elif destination.exists():
+        destination.unlink()
     source = f"{cfg.target}:{cfg.remote_repo.rstrip('/')}/{remote_path}"
     argv = [
         "scp",

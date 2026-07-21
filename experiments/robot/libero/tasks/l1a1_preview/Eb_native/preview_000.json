@@ -3,36 +3,36 @@
   "resolution": 256,
   "preprocessing": "obs.agentview_image[::-1, ::-1]",
   "visible_pixels": {
-    "target_body": 616,
+    "target_body": 612,
     "distractor_body": 1191,
-    "ramekin_body": 486,
-    "plate_body": 1389
+    "ramekin_body": 484,
+    "plate_body": 1388
   },
   "bodies": {
     "akita_black_bowl_1_main": [
       -0.194848,
       0.315221,
-      0.898404
+      0.898407
     ],
     "akita_black_bowl_2_main": [
       0.138193,
       -0.084983,
-      0.898404
+      0.898407
     ],
     "glazed_rim_porcelain_ramekin_1_main": [
       -0.18578,
       0.193777,
-      0.899341
+      0.899343
     ],
     "plate_1_main": [
       0.069778,
       0.188173,
-      0.9025
+      0.902506
     ],
     "cookies_1_main": [
       0.064345,
       0.03148,
-      0.909371
+      0.909385
     ]
   }
 }

@@ -1,7 +1,10 @@
+from types import SimpleNamespace
+
 from experiments.robot.libero.tasks.physcog_remote_agent import (
     PHASES,
     PhaseSpec,
     RemoteConfig,
+    _fetch_artifact,
     build_batch_script,
     build_isolated_sync_script,
     build_sync_script,
@@ -58,6 +61,9 @@ def test_l1a1_registry_requires_full_gated_pipeline():
         PHASES[("l1a1", "safe_reference")].count_env
         == "L1A1_SAFE_REF_STATES"
     )
+    assert "experiments/logs/l1a1_safe_reference_trajectories" in PHASES[
+        ("l1a1", "safe_reference")
+    ].artifacts
     assert "SAVE_VIDEO_MODE=all" in PHASES[("l1a1", "smoke")].command
     formal = PHASES[("l1a1", "formal")]
     assert "FAMILIES=l1a1" in formal.command
@@ -103,6 +109,14 @@ def test_l1a34_registry_exposes_boundary_pipeline_phases():
 
 def test_verdict_extraction_understands_boundary_gate_manifest():
     assert extract_verdicts('{"boundary_gate": "PASS"}') == ["PASS"]
+
+
+def test_verdict_extraction_understands_l1a1_readiness_gates():
+    text = (
+        '{"physical_gate": "PASS", "policy_visibility_gate": "PASS", '
+        '"pairing_gate": "PASS"}'
+    )
+    assert extract_verdicts(text) == ["PASS"]
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
@@ -176,6 +190,21 @@ def test_isolated_sync_uses_commit_worktree_without_mutating_shared_checkout():
     assert "abc1234" in script
     assert "git checkout" not in script
     assert "git pull" not in script
+
+
+def test_repeated_artifact_fetch_replaces_directory_instead_of_nesting(
+    monkeypatch, tmp_path
+):
+    destination = tmp_path / "experiments" / "logs" / "videos"
+    destination.mkdir(parents=True)
+    (destination / "stale.mp4").write_bytes(b"stale")
+    monkeypatch.setattr(
+        "experiments.robot.libero.tasks.physcog_remote_agent.subprocess.run",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0),
+    )
+
+    assert _fetch_artifact(_config(), "experiments/logs/videos", tmp_path)
+    assert not destination.exists()
 
 
 def test_verdict_extraction_understands_reports_stdout_and_pairing_manifest():

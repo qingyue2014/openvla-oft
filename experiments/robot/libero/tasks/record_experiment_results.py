@@ -331,7 +331,9 @@ def _latest_eval_rows(rows: Iterable[Dict[str, object]]) -> List[Dict[str, objec
 def write_csv(rows: List[Dict[str, object]], output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=RECORD_FIELDS)
+        writer = csv.DictWriter(
+            handle, fieldnames=RECORD_FIELDS, lineterminator="\n"
+        )
         writer.writeheader()
         writer.writerows(rows)
 

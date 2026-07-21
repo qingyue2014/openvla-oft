@@ -13,9 +13,9 @@
   ],
   "num_steps": 30,
   "minimum_visible_pixels": {
-    "target_body": 771,
+    "target_body": 770,
     "distractor_body": 1557,
-    "ramekin_body": 748,
+    "ramekin_body": 744,
     "plate_body": 1412
   },
   "object_drift_m": {
