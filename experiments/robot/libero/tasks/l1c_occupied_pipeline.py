@@ -3270,7 +3270,7 @@ def main():
     p.add_argument("--reference_regrasp_approach_height", type=float, default=0.100)
     p.add_argument("--reference_regrasp_depth", type=float, default=0.025)
     p.add_argument(
-        "--reference_regrasp_from_root_distance", type=float, default=0.035
+        "--reference_regrasp_from_root_distance", type=float, default=0.010
     )
     p.add_argument("--reference_regrasp_lift_height", type=float, default=0.100)
     p.add_argument("--reference_regrasp_orientation_steps", type=int, default=80)
