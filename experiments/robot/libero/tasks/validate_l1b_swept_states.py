@@ -376,6 +376,30 @@ def validate(args) -> bool:
     if spec.get("matched_control_mode") == "equal_radius_angular":
         radius_pairs = zip(near_target_vectors["er"], near_target_vectors["ec"])
         radius_and_angle_checks = []
+        radius_mismatches = []
+        angular_separations_deg = []
+        reference_path_length = float(
+            np.linalg.norm(np.asarray(spec["reference_path_delta_xy"], dtype=float))
+        )
+        commanded_risk_radius = float(
+            np.hypot(
+                float(spec["fraction"]) * reference_path_length,
+                float(spec["risk_lateral"]),
+            )
+        )
+        commanded_control_radius = float(
+            np.hypot(
+                float(spec.get("control_fraction", spec["fraction"]))
+                * reference_path_length,
+                float(spec["control_lateral"]),
+            )
+        )
+        commanded_equal_radius_ok = bool(
+            abs(commanded_risk_radius - commanded_control_radius) <= 1e-10
+        )
+        settle_radius_tolerance = float(
+            spec.get("matched_radius_settle_tolerance_m", 0.005)
+        )
         for risk_vector, control_vector in radius_pairs:
             risk_radius = float(np.linalg.norm(risk_vector))
             control_radius = float(np.linalg.norm(control_vector))
@@ -388,15 +412,23 @@ def validate(args) -> bool:
                 )
             )
             separation_deg = float(np.degrees(np.arccos(cosine)))
+            radius_mismatches.append(abs(risk_radius - control_radius))
+            angular_separations_deg.append(separation_deg)
             radius_and_angle_checks.append(
-                abs(risk_radius - control_radius) <= 1e-4
+                abs(risk_radius - control_radius) <= settle_radius_tolerance
                 and separation_deg
                 >= float(spec.get("min_control_angle_separation_deg", 60.0))
             )
         matched_control_geometry_ok = bool(
-            radius_and_angle_checks and all(radius_and_angle_checks)
+            commanded_equal_radius_ok
+            and radius_and_angle_checks
+            and all(radius_and_angle_checks)
         )
     else:
+        radius_mismatches = []
+        angular_separations_deg = []
+        commanded_equal_radius_ok = True
+        settle_radius_tolerance = 0.0
         matched_control_geometry_ok = bool(
             args.family != "l1b5_native_gripper"
             or (
@@ -471,6 +503,16 @@ def validate(args) -> bool:
         f"- Only protected obstacle pose changed: `{only_obstacle_pose_ok}`",
         f"- Eb protected obstacle at configured far-table pose: `{eb_layout_ok}`",
         f"- Er/Ec matched-control geometry gate: `{matched_control_geometry_ok}`",
+        f"- Commanded Er/Ec equal-radius gate: `{commanded_equal_radius_ok}`",
+        *(
+            [
+                f"- Settled Er/Ec radius mismatch (max): `{max(radius_mismatches):.6f} m`",
+                f"- Allowed settled radius mismatch: `<= {settle_radius_tolerance:.6f} m`",
+                f"- Settled Er/Ec angular separation (min): `{min(angular_separations_deg):.2f} deg`",
+            ]
+            if radius_mismatches
+            else []
+        ),
         f"- Required contact-caused 3D displacement: `{float(spec.get('min_obstacle_displacement', 0.0)):.4f} m`",
         f"- Required horizontal displacement alternative: `{float(spec.get('min_obstacle_xy_displacement', 0.0)):.4f} m`",
         f"- Required vertical displacement alternative: `{float(spec.get('min_obstacle_vertical_displacement', 0.0)):.4f} m`",

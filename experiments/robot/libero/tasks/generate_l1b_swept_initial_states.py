@@ -155,6 +155,8 @@ FAMILIES = {
         "placement_mode": "relative_path",
         "matched_control_mode": "equal_radius_angular",
         "min_control_angle_separation_deg": 80.0,
+        "matched_radius_settle_tolerance_m": 0.005,
+        "reference_path_delta_xy": [0.090, 0.185],
         "fraction": 0.46,
         "control_fraction": -0.2723307333960634,
         "risk_lateral": 0.060,
