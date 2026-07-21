@@ -1615,15 +1615,13 @@ def _align_body_axis(
             env.sim.data.body_xmat[body_id], dtype=float
         ).reshape(3, 3)
         body_axis = body_mat[:, 2]
-        signed_desired = (
-            desired_axis
-            if float(np.dot(body_axis, desired_axis)) >= 0.0
-            else -desired_axis
-        )
-        cosine = float(np.clip(np.dot(body_axis, signed_desired), -1.0, 1.0))
+        # Bottle local +z runs from its free-joint root at the base toward the
+        # neck. The sign is therefore physical, not interchangeable: the root
+        # offset is calibrated assuming +z points into drawer +depth.
+        cosine = float(np.clip(np.dot(body_axis, desired_axis), -1.0, 1.0))
         if float(np.degrees(np.arccos(cosine))) <= tolerance_deg:
             return obs, step, status, True
-        rotation_axis = np.cross(body_axis, signed_desired)
+        rotation_axis = np.cross(body_axis, desired_axis)
         norm = float(np.linalg.norm(rotation_axis))
         if norm < 1e-8:
             break

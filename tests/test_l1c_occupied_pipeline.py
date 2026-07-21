@@ -580,6 +580,7 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "stop_on_native_success and native_success(env)" in source
     assert "_align_body_axis(" in source
     assert "failure = \"orientation_timeout\"" in source
+    assert "rotation_axis = np.cross(body_axis, desired_axis)" in source
     assert "desired_body[2] - body_pos(env, spec.target_body)[2]" in source
     assert "explicit drawer-floor" in source
     assert "args.reference_rotation_clearance" in source
