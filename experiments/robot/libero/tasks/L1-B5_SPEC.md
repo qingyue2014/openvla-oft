@@ -70,6 +70,9 @@ Before formal evaluation, L1-B5 must independently pass:
 5. at least 50 visible ramekin segmentation pixels in the actual 256×256
    `agentview` after final state restoration and settling;
 6. at least 95% collision-free scripted Er task completion;
+   the scripted reference must keep maximum bowl lift `<= 0.09 m`, detect
+   persistent bowl--plate contact before opening the gripper, and confirm the
+   released bowl remains plate-supported before retreating;
 7. under at least 20 unchanged successful-Eb replays: Er activation in
    `[70%, 95%]`, unintended primary-contact/tie rate `<= 10%`, and intended
    component purity `>= 90%`;

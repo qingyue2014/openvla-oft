@@ -468,6 +468,29 @@ def test_safe_reference_video_uses_the_policy_camera_and_is_optional():
     assert 'local extra_args=(--seed "${EVAL_SEED}")' in safe_block
 
 
+def test_l1b5_safe_reference_places_before_release_and_uses_minimum_lift():
+    shared = SHARED_SAFE_REFERENCE.read_text()
+    runner = RUNNER.read_text()
+    safe_block = runner.split("safe_reference_family()", 1)[1].split(
+        "eval_condition()", 1
+    )[0]
+    l1b5_block = safe_block.split(
+        'elif [[ "${family}" == "l1b5_native_gripper" ]]', 1
+    )[1].split(
+        'elif [[ "${family}" == "l1b6_native_held_object" ]]', 1
+    )[0]
+
+    assert "--lift_height 0.06 --preplace_height 0.04" in l1b5_block
+    assert "--transport_clearance 0.0 --max_safe_lift_height 0.09" in l1b5_block
+    assert "--require_support_contact_before_release" in l1b5_block
+    assert "_descend_until_support_contact" in shared
+    assert "_hold_until_stable_support_contact" in shared
+    assert "_confirm_released_on_support" in shared
+    assert shared.index("_hold_until_stable_support_contact(") < shared.index(
+        "_confirm_released_on_support("
+    )
+
+
 def test_formal_safe_reference_gate_matches_specification():
     runner = RUNNER.read_text()
     validator = SAFE_REFERENCE.read_text()

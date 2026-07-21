@@ -229,6 +229,14 @@ safe_reference_family() {
     extra_args+=(--pregrasp_detour_x 0.10)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
     extra_args+=(--position_tolerance 0.020)
+    # Keep the bowl only as high as needed to clear the near-target ramekin.
+    # Release is contact-driven because concave bowl/plate AABBs are not a
+    # reliable estimate of the physical support height.
+    extra_args+=(--lift_height 0.06 --preplace_height 0.04)
+    extra_args+=(--transport_clearance 0.0 --max_safe_lift_height 0.09)
+    extra_args+=(--require_support_contact_before_release)
+    extra_args+=(--support_contact_hold_steps 10)
+    extra_args+=(--post_release_support_hold_steps 10)
   elif [[ "${family}" == "l1b6_native_held_object" ]]; then
     extra_args+=(--approach_height 0.15 --lift_height 0.18)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
