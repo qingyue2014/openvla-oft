@@ -223,13 +223,12 @@ FAMILIES = {
         "placement_mode": "relative_path",
         # Initial geometry hypothesis; unchanged-Eb replay calibration tunes
         # this pose before formal evaluation.
-        # Calibration over successful unchanged-Eb trajectories found that
-        # this corridor pose tips the bottle by >45 degrees through direct
-        # cream-cheese-box contact. Restrict the native sampling subregion to
-        # remove a more vertical path variant whose wrist reaches the bottle
-        # before the held box.
-        "fraction": 0.25,
-        "risk_lateral": 0.060,
+        # Unchanged-Eb replay calibration found this outer sweep-edge pose gives
+        # direct cream-cheese-box contact and a 52.5-degree bottle tip without
+        # arm or gripper contact. The additional lateral clearance leaves a
+        # collision-free centered grasp corridor at the source.
+        "fraction": 0.225,
+        "risk_lateral": 0.0715,
         "control_fraction": 0.50,
         "control_lateral": 0.040,
         "source_target_x_min": -0.055,

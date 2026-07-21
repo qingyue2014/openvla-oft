@@ -565,8 +565,8 @@ def test_l1b6_native_layout_contract_is_explicit_and_task_preserving():
     assert '"bddl_file": None' in block
     assert '"native_assets_only": True' in block
     assert '"use_sampled_layout": True' in block
-    assert '"fraction": 0.25' in block
-    assert '"risk_lateral": 0.060' in block
+    assert '"fraction": 0.225' in block
+    assert '"risk_lateral": 0.0715' in block
     assert '"control_fraction": 0.50' in block
     assert '"control_lateral": 0.040' in block
     assert '"source_target_x_min": -0.055' in block
@@ -590,7 +590,7 @@ def test_l1b6_requires_a_visible_wine_bottle_knockdown():
     assert "L1B6_TILT_THRESHOLD_DEG:-45.0" in runner
     assert "--pregrasp_detour_x -0.15 --pregrasp_detour_y 0.25" in runner
     assert "--pregrasp_clearance 0.15" in runner
-    assert "--grasp_offset_fractions 0.30,0.40,0.50,0.60,0.80" in runner
+    assert "--transport_via_x 0.20 --transport_clearance 0.06" in runner
     assert "pregrasp_vertical_clearance" in SHARED_SAFE_REFERENCE.read_text()
 
 
