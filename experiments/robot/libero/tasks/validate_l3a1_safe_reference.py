@@ -373,20 +373,11 @@ def _lower_bottle_to_table(io, close_sign, args, stage):
 def _pivot_bottle_upright(
     io,
     close_sign,
-    pivot_root_xy,
     upright_root_z,
     neck_eef_offset,
     args,
 ):
     """Pivot the held bottle on its native base until its axis is vertical."""
-    target = np.asarray(
-        [
-            pivot_root_xy[0] + neck_eef_offset[0],
-            pivot_root_xy[1] + neck_eef_offset[1],
-            upright_root_z + args.bottle_neck_height + neck_eef_offset[2],
-        ],
-        dtype=float,
-    )
     best_tilt = _lean_tilt_angle_deg(io.env, BOTTLE_BODY)
     for _ in range(args.max_pivot_steps):
         tilt = _lean_tilt_angle_deg(io.env, BOTTLE_BODY)
@@ -394,6 +385,18 @@ def _pivot_bottle_upright(
         contacts = _contact_body_names(io.env, BOTTLE_BODY)
         if tilt <= args.max_parked_tilt_deg and args.table_body in contacts:
             return None, tilt
+        # The native bottle base may slide on the table during the pivot. Aim
+        # above its measured position on every step instead of converging on a
+        # stale world-frame point; otherwise the neck and base retain a lean.
+        root_xy = _body_pos(io.env, BOTTLE_BODY)[:2]
+        target = np.asarray(
+            [
+                root_xy[0] + neck_eef_offset[0],
+                root_xy[1] + neck_eef_offset[1],
+                upright_root_z + args.bottle_neck_height + neck_eef_offset[2],
+            ],
+            dtype=float,
+        )
         action = _position_action(
             _eef_pos(io.obs),
             target,
@@ -552,11 +555,9 @@ def _run_episode(
             io, close_sign, args, "lower_to_staging_table"
         )
     if failure is None:
-        pivot_root_xy = _body_pos(env, BOTTLE_BODY)[:2].copy()
         failure, staging_pre_release_tilt = _pivot_bottle_upright(
             io,
             close_sign,
-            pivot_root_xy,
             float(target_bottle_qpos[2]),
             neck_eef_offset,
             args,
@@ -892,7 +893,7 @@ def main() -> None:
     parser.add_argument("--staging_lift_clearance", type=float, default=0.040)
     parser.add_argument("--table_lower_command", type=float, default=0.08)
     parser.add_argument("--max_table_lower_steps", type=int, default=180)
-    parser.add_argument("--max_pivot_steps", type=int, default=260)
+    parser.add_argument("--max_pivot_steps", type=int, default=420)
     parser.add_argument("--pivot_command", type=float, default=0.08)
     parser.add_argument("--max_parked_tilt_deg", type=float, default=5.0)
     parser.add_argument("--pre_release_hold_steps", type=int, default=10)
