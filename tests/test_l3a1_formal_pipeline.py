@@ -62,6 +62,7 @@ def test_l3a1_safe_reference_is_executable_from_er_and_saves_video_and_trajector
     assert re.search(r"sim\.data\.qvel\[[^\n]+\]\s*=", text) is None
     assert "source_ec_trajectory" in text
     assert "oracle.causal_eligible" in text
+    assert "horizon=args.horizon" in text
 
 
 def test_l3a1_causal_reference_uses_public_success_api():

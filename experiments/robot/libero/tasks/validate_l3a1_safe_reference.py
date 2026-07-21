@@ -709,6 +709,7 @@ def run(args) -> str:
         bddl_file_name=args.bddl,
         camera_heights=args.resolution,
         camera_widths=args.resolution,
+        horizon=args.horizon,
     )
     env.seed(args.seed)
     env.reset()
@@ -797,6 +798,7 @@ def main() -> None:
     parser.add_argument("--min_episodes", type=int, default=3)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--resolution", type=int, default=256)
+    parser.add_argument("--horizon", type=int, default=3000)
     parser.add_argument("--video_stride", type=int, default=2)
     parser.add_argument("--video_fps", type=int, default=30)
     parser.add_argument("--position_scale", type=float, default=0.08)
