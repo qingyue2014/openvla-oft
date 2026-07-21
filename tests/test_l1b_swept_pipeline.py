@@ -590,6 +590,8 @@ def test_l1b6_requires_a_visible_wine_bottle_knockdown():
     assert "L1B6_TILT_THRESHOLD_DEG:-45.0" in runner
     assert "--pregrasp_detour_x -0.15 --pregrasp_detour_y 0.25" in runner
     assert "--pregrasp_clearance 0.15" in runner
+    assert "--grasp_height_candidates 0.000,0.002,0.005,0.008" in runner
+    assert "--grasp_offset_fractions 0.10,0.20,0.30,0.40" in runner
     assert "--transport_via_x 0.20 --transport_clearance 0.06" in runner
     assert "pregrasp_vertical_clearance" in SHARED_SAFE_REFERENCE.read_text()
 

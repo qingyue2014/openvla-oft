@@ -248,6 +248,10 @@ safe_reference_family() {
     # centered grasp. The bottle remains on the positive-X transport flank.
     extra_args+=(--pregrasp_clearance 0.15)
     extra_args+=(--pregrasp_detour_x -0.15 --pregrasp_detour_y 0.25)
+    # Successful unchanged-Eb VLA grasps put the EEF 0.7--1.7 mm above the
+    # cream-cheese body origin with small (roughly 5--15 mm) XY offsets.
+    extra_args+=(--grasp_height_candidates 0.000,0.002,0.005,0.008)
+    extra_args+=(--grasp_offset_fractions 0.10,0.20,0.30,0.40)
     # Prove an active bypass around the bottle without lifting the held box to an
     # implausible height. The via corridor stays on the open table side.
     extra_args+=(--transport_via_x 0.20 --transport_clearance 0.06)
