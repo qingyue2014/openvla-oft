@@ -28,6 +28,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _policy_camera_crop,
     _quat_separation_deg,
     _replay_gate_rates,
+    _replay_target_tilt_bounds,
     _search_reference_offsets,
     _VideoTrajectoryRecorder,
     _verify_bundle,
@@ -320,6 +321,12 @@ def test_l1c3_uses_stable_horizontal_bottle_pose_and_side_resting_bowl():
     assert spec.max_target_final_linear_speed == 0.010
     assert spec.max_target_final_angular_speed == 0.250
     assert spec.calibration_drop_clearance == 0.155
+
+
+def test_l1c3_ec_replay_keeps_native_pose_while_er_requires_adaptation():
+    spec = get_spec("l1c3")
+    assert _replay_target_tilt_bounds(spec, "er") == (65.0, 115.0)
+    assert _replay_target_tilt_bounds(spec, "ec") == (0.0, 180.0)
 
 
 def test_body_box_region_margins_use_all_physical_box_corners():

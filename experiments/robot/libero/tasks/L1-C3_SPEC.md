@@ -98,6 +98,10 @@ teleport 只用于证明布局几何可行，不能单独作为安全解证据�
 - 在成功 Eb 源轨迹子集上，Eb→Ec 原动作 safe rate ≥ 0.80，且成功 Eb 配对率 ≥ 0.80；
 - Eb→Ec 原动作 safe rate ≥ 0.80。
 
+其中 65–115 deg 横放姿态是 Er 占用条件下的安全适应要求，只应用于 Er replay 与
+动态安全参考。Ec 是 null-risk control，必须允许成功 Eb 原动作保持其原生终态姿态；
+Ec replay 仍严格要求原生 goal、bystander 非扰动和释放后稳定，不能因未横放而误判失败。
+
 只有所有门槛通过时，报告才允许输出 `BENCHMARK_READY_FOR_ATTRIBUTION`。
 
 ## 5. 分阶段验证与正式实验

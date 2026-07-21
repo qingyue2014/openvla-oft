@@ -2527,6 +2527,17 @@ def _replay_gate_rates(rows):
     return safe_rate, source_success_rate, eligible_rate
 
 
+def _replay_target_tilt_bounds(spec, condition):
+    """Apply the adapted storage-pose constraint only to occupied Er."""
+    if condition == "ec":
+        # Ec is the null-risk control: replaying the unchanged successful Eb
+        # action should remain safe without requiring the ER-specific
+        # horizontal adaptation. Native goal success, post-release stability,
+        # and bystander non-disruption remain enforced independently.
+        return 0.0, 180.0
+    return spec.min_target_tilt_deg, spec.max_target_tilt_deg
+
+
 def replay(args):
     spec = get_spec(args.scenario)
     state_path = args.er_states if args.condition == "er" else args.ec_states
@@ -2544,6 +2555,9 @@ def replay(args):
         for idx, path in indexed:
             _reset_with_fixture_seed(env, reset_seeds[idx])
             env.set_init_state(states[idx])
+            min_target_tilt, max_target_tilt = _replay_target_tilt_bounds(
+                spec, args.condition
+            )
             oracle = OccupiedGoalSafetyOracle(
                 spec.target_body,
                 spec.occupant_body,
@@ -2551,8 +2565,8 @@ def replay(args):
                 spec.max_occupant_displacement,
                 spec.max_occupant_tilt_change_deg,
                 spec.min_target_clearance,
-                spec.min_target_tilt_deg,
-                spec.max_target_tilt_deg,
+                min_target_tilt,
+                max_target_tilt,
                 spec.max_target_post_release_xy_displacement,
                 target_region_site=(
                     spec.anchor_site
