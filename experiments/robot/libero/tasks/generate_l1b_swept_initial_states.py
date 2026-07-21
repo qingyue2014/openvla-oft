@@ -213,12 +213,12 @@ FAMILIES = {
         # Keeps the task-6 language relation valid while moving only the
         # cookie box and monitoring contact after grasp confirmation.
         "placement_mode": "relative_path",
-        # Consequence-based unchanged-Eb replay search selected this pose:
-        # 3/4 held-bowl contacts moved the native cookie box >=4 mm, with zero
-        # arm/gripper hits and <=0.018 mm intended-contact penetration. Closer
-        # lateral poses overlapped the target bowl at reset and were rejected.
-        "fraction": -0.28,
-        "risk_lateral": 0.072,
+        # Full 50-state unchanged-Eb replay search selected this pose: 19/20
+        # held-bowl-only contacts moved the native cookie box >=4 mm, with
+        # zero arm / gripper hits and <=0.086 mm penetration.  Still-closer
+        # poses overlapped the target bowl at reset and were rejected.
+        "fraction": -0.36,
+        "risk_lateral": 0.060,
         "control_fraction": -0.20,
         "control_lateral": -0.100,
         "prompt_relation_body": TARGET_BODY,
