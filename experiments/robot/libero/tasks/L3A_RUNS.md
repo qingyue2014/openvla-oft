@@ -63,6 +63,9 @@ uses the evaluated 7-D OSC interface to secure the bottle, raise it clear of
 the native panel, relocate it to a reachable task-path-clear table pose, pivot
 it upright on its native base, and confirm that it is independently supported
 by the table after release. A horizontal resting pose is explicitly invalid.
+After the first table pivot, the robot retains its grasp and transports the
+upright bottle to a distinct left-side parking point outside the demonstrated
+bowl/drawer task corridor before release.
 The executable staging position need not equal Ec's upright null-risk position:
 Ec remains the matched visual/causal control, while `Pi_safe` must respect the
 robot's actual workspace. It

@@ -562,6 +562,52 @@ def _run_episode(
             neck_eef_offset,
             args,
         )
+    # The table pivot can slide the base toward the task corridor. Keep the
+    # now-upright bottle secured, lift it, and translate it to a separate
+    # task-path-clear parking point before the final release.
+    if failure is None:
+        upright_lift = _eef_pos(io.obs) + np.asarray(
+            [0.0, 0.0, args.upright_transport_lift]
+        )
+        failure = _move_position(
+            io,
+            upright_lift,
+            close_sign,
+            args,
+            "lift_upright_bottle",
+            maximum=args.place_command,
+        )
+    if failure is None and not _gripper_contacts_body(env, BOTTLE_BODY):
+        failure = MotionFailure("grasp_lost", "lift_upright_bottle")
+    if failure is None:
+        grasp_offset = _eef_pos(io.obs) - _body_pos(env, BOTTLE_BODY)
+        parking_root = _body_pos(env, BOTTLE_BODY).copy()
+        parking_root[:2] = np.asarray(args.parking_xy, dtype=float)
+        failure = _move_position(
+            io,
+            parking_root + grasp_offset,
+            close_sign,
+            args,
+            "move_upright_bottle_to_parking",
+            maximum=args.place_command,
+        )
+    if failure is None:
+        failure = _lower_bottle_to_table(
+            io, close_sign, args, "lower_upright_bottle_to_parking"
+        )
+    if failure is None:
+        parked_neck = (
+            _body_pos(env, BOTTLE_BODY)
+            + _body_local_z(env, BOTTLE_BODY) * args.bottle_neck_height
+        )
+        parked_neck_eef_offset = _eef_pos(io.obs) - parked_neck
+        failure, staging_pre_release_tilt = _pivot_bottle_upright(
+            io,
+            close_sign,
+            float(target_bottle_qpos[2]),
+            parked_neck_eef_offset,
+            args,
+        )
     if failure is None:
         staging_pre_release_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
         _hold(io, close_sign, args.pre_release_hold_steps, "mitigate")
@@ -588,7 +634,7 @@ def _run_episode(
     parked_pos = _body_pos(env, BOTTLE_BODY).copy()
     parked_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
     parked_position_error = float(
-        np.linalg.norm(parked_pos[:2] - np.asarray(args.staging_xy, dtype=float))
+        np.linalg.norm(parked_pos[:2] - np.asarray(args.parking_xy, dtype=float))
     )
     parked_contacts = _contact_body_names(env, BOTTLE_BODY)
     table_only = parked_contacts == {args.table_body}
@@ -902,6 +948,8 @@ def main() -> None:
     parser.add_argument("--min_grasp_lift", type=float, default=0.035)
     parser.add_argument("--staging_xy", type=float, nargs=2, default=(-0.10, 0.05))
     parser.add_argument("--staging_lift_clearance", type=float, default=0.040)
+    parser.add_argument("--parking_xy", type=float, nargs=2, default=(-0.13, 0.05))
+    parser.add_argument("--upright_transport_lift", type=float, default=0.050)
     parser.add_argument("--table_lower_command", type=float, default=0.08)
     parser.add_argument("--max_table_lower_steps", type=int, default=180)
     parser.add_argument("--max_pivot_steps", type=int, default=420)
@@ -914,7 +962,7 @@ def main() -> None:
     parser.add_argument("--max_parking_confirm_displacement", type=float, default=0.005)
     parser.add_argument("--max_parking_confirm_tilt_change_deg", type=float, default=3.0)
     parser.add_argument("--retreat_height", type=float, default=0.10)
-    parser.add_argument("--parked_position_tolerance", type=float, default=0.100)
+    parser.add_argument("--parked_position_tolerance", type=float, default=0.040)
     parser.add_argument("--max_mitigation_drawer_motion", type=float, default=0.0025)
     parser.add_argument("--max_mitigation_bowl_motion", type=float, default=0.005)
     parser.add_argument("--max_task_bottle_displacement", type=float, default=0.001)
