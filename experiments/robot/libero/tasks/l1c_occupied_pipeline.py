@@ -2325,7 +2325,7 @@ def _safe_reference_from_eb_prefix(args, files):
                     )
                     env.sim.data.qpos[target_qadr + 2] += (
                         drawer_floor_z
-                        + args.drop_clearance
+                        - args.reference_contact_descent_overtravel
                         - collision_lo[2]
                     )
                     env.sim.forward()
@@ -3031,6 +3031,9 @@ def main():
     )
     p.add_argument("--reference_lateral_tolerance", type=float, default=0.010)
     p.add_argument("--reference_descent_tolerance", type=float, default=0.004)
+    p.add_argument(
+        "--reference_contact_descent_overtravel", type=float, default=0.010
+    )
     p.add_argument("--reference_release_xy_tolerance", type=float, default=0.015)
     p.add_argument(
         "--reference_release_root_vertical_margin", type=float, default=-0.004
