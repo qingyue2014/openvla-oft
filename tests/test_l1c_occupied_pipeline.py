@@ -596,3 +596,6 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "tolerance=args.reference_lateral_tolerance" in source
     assert "release_xy_error <= args.reference_release_xy_tolerance" in source
     assert "args.reference_release_max_height_above_anchor" in source
+    assert "release_horizontal_margin" in source
+    assert "release_tilt >= spec.min_target_tilt_deg" in source
+    assert "-abs(args.rotate_sign)" in source

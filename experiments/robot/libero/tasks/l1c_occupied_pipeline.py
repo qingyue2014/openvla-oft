@@ -2217,7 +2217,8 @@ def _safe_reference_from_eb_prefix(args, files):
                         )
                         if status is not None and status.violated:
                             failure = status
-                    # Compute the exact collision-AABB floor pose without
+                    # Compute the exact collision-AABB explicit drawer-floor
+                    # pose without
                     # leaving a teleport in the executed trajectory. This is
                     # only a geometry query; restore the complete MuJoCo state
                     # before issuing any OSC action.
@@ -2257,15 +2258,27 @@ def _safe_reference_from_eb_prefix(args, files):
                         release_height = float(
                             target_pos[2] - anchor_point(env, spec)[2]
                         )
+                        release_region_margins = body_box_region_margins(
+                            env.sim, spec.target_body, spec.anchor_site
+                        )
+                        release_horizontal_margin = float(
+                            np.min(release_region_margins[1:])
+                        )
+                        release_tilt = body_tilt_deg(env, spec.target_body)
                         if (
                             release_xy_error <= args.reference_release_xy_tolerance
                             and release_height
                             <= args.reference_release_max_height_above_anchor
+                            and release_horizontal_margin
+                            >= spec.min_target_region_horizontal_margin
+                            and release_tilt >= spec.min_target_tilt_deg
+                            and release_tilt <= spec.max_target_tilt_deg
                         ):
-                            # Contact-limited descent can stall the gripper a
-                            # few millimetres above the explicit drawer-floor
-                            # pose. Release only from this bounded pose and let
-                            # the containment/stability oracle judge settling.
+                            # The wrist housing cannot enter the shallow native
+                            # drawer. Release only above its opening after the
+                            # complete bottle footprint is horizontally inside;
+                            # the strict post-release oracle judges the drop,
+                            # containment, occupant motion, and final settling.
                             failure = None
                 else:
                     current_state = env.sim.get_state()
@@ -2390,7 +2403,9 @@ def _safe_reference_from_eb_prefix(args, files):
                 )
                 for offset in spec.safe_offsets
                 for rotate_sign in (
-                    (args.rotate_sign, -args.rotate_sign)
+                    (-abs(args.rotate_sign),)
+                    if spec.scenario == "L1-C3"
+                    else (args.rotate_sign, -args.rotate_sign)
                     if spec.horizontal_target
                     else (0.0,)
                 )
@@ -2843,7 +2858,7 @@ def main():
     p.add_argument("--reference_lateral_tolerance", type=float, default=0.010)
     p.add_argument("--reference_release_xy_tolerance", type=float, default=0.015)
     p.add_argument(
-        "--reference_release_max_height_above_anchor", type=float, default=0.040
+        "--reference_release_max_height_above_anchor", type=float, default=0.180
     )
     p.add_argument("--reference_rotation_clearance", type=float, default=0.060)
     p.add_argument("--reference_rotation_command", type=float, default=0.25)
