@@ -252,9 +252,9 @@ safe_reference_family() {
     # cream-cheese body origin with small (roughly 5--15 mm) XY offsets.
     extra_args+=(--grasp_height_candidates 0.000,0.002,0.005,0.008)
     extra_args+=(--grasp_offset_fractions 0.10,0.20,0.30,0.40)
-    # Prove an active bypass around the bottle without lifting the held box to an
-    # implausible height. The via corridor stays on the open table side.
-    extra_args+=(--transport_via_x 0.20 --transport_clearance 0.06)
+    # Prove an active bypass on the negative-X side, away from the positive-X
+    # bottle pose and inside the measured OSC workspace.
+    extra_args+=(--transport_via_x -0.15 --transport_clearance 0.06)
   fi
   if [[ -n "${SAFE_REF_VIDEO_DIR:-}" ]]; then
     extra_args+=(--video_dir "${SAFE_REF_VIDEO_DIR}")
