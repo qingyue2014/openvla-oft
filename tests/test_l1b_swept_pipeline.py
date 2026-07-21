@@ -570,8 +570,8 @@ def test_l1b6_native_layout_contract_is_explicit_and_task_preserving():
     assert '"risk_lateral": 0.0715' in block
     assert '"control_fraction": 0.50' in block
     assert '"control_lateral": -0.060' in block
-    assert '"source_target_x_min": -0.055' in block
-    assert '"source_goal_x_max": -0.098' in block
+    assert '"source_target_x_min"' not in block
+    assert '"source_goal_x_max"' not in block
     assert '"required_prompt_terms": ["cream cheese", "bowl"]' in block
     assert '"min_obstacle_displacement": 0.0' in block
     assert '"min_obstacle_tilt_change_deg": 45.0' in block

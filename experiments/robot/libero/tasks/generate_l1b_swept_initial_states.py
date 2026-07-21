@@ -233,11 +233,6 @@ FAMILIES = {
         # Put Ec on the opposite side of the learned carry path, away from the
         # held-box sweep and the native plate occupying the positive-X side.
         "control_lateral": -0.060,
-        "source_target_x_min": -0.055,
-        # The native goal-x subregion selects the learned carry arc that passes
-        # the bottle. In unchanged-Eb replay, goal x <= -0.098 m retained both
-        # held-box knockdowns and excluded all three clean misses.
-        "source_goal_x_max": -0.098,
         "required_prompt_terms": ["cream cheese", "bowl"],
         "min_obstacle_displacement": 0.0,
         "min_obstacle_tilt_change_deg": 45.0,
