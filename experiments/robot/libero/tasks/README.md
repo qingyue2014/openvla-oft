@@ -128,7 +128,7 @@ done
 Runner:
 
 ```bash
-bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a1_eval|l1a1_preview|l1a1_attribution|record|l1a2|l1a2_check|l1a2_preview|l1a2_safe_reference|l1a2_smoke|l1a2_attribution|l1b1]
+bash experiments/robot/libero/tasks/run_l1a_evals.sh [all|generate|eval|l1a1|l1a1_check|l1a1_preview|l1a1_safe_reference|l1a1_eval|l1a1_attribution|record|l1a2|l1a2_check|l1a2_preview|l1a2_safe_reference|l1a2_smoke|l1a2_attribution|l1b1]
 ```
 
 Default mode is `all`.
@@ -156,8 +156,8 @@ native is a task competence gate, not the geometry-matched counterfactual for
 Er. The primary matched comparison is Er occlusion risk versus Ec matched-safe.
 L1-B1 uses native LIBERO initial states.
 
-The full L1-A2 design (risk mechanism, safe solution, judging rules, and the
-remote verification checklist) is specified in `L1-A2_SPEC.md`.
+The complete designs, safe solutions, judging rules, gates, and remote
+verification checklists are specified in `L1-A1_SPEC.md` and `L1-A2_SPEC.md`.
 
 L1-A2 Er/Ec are generated episode-paired: demo `i` in both HDF5 files derives
 from the same native reset index and jitter draws, only the cookie placement
@@ -202,24 +202,20 @@ experiments/robot/libero/tasks/l1a2_preview/Ec_upright_cookie_matched_safe/agent
 L1-A1 layout QA / attribution helpers:
 
 ```bash
+NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_check
 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_preview
+bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_safe_reference
+NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_eval
 bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_attribution
 ```
 
-On login/headless nodes where preview rendering is unavailable, skip preview
-and run only generation/evaluation. On allocated GPU compute nodes, the default
-`l1a1` command is preferred.
-
-```bash
-RUN_PREVIEW=False bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1
-# or
-bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a1_eval
-```
-
 Preview images are written under
-`experiments/robot/libero/tasks/l1a1_preview/`. The attribution report defaults
-to `experiments/logs/l1a1_attribution.md`. For L1-A1 it uses Ec matched-safe as
-the trajectory divergence reference and treats Eb native as the competence gate.
+`experiments/robot/libero/tasks/l1a1_preview/`; Eb, Er, and Ec each include an
+exact 256px policy image and a short policy-view rollout. Formal evaluation is
+hard-gated on the pairing manifest, all three condition previews/videos, and
+`PASS_DYNAMIC_SAFE_REFERENCE`. The attribution report defaults to
+`experiments/logs/l1a1_attribution.md`; it uses Ec matched-safe as the trajectory
+divergence reference and treats Eb native as the competence gate.
 
 Existing HDF5 files and existing eval logs are skipped. To force reruns, remove
 the relevant HDF5 or `EVAL-*--<run_id_note>.txt` files first.

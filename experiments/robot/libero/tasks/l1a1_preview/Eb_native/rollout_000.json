@@ -1,0 +1,29 @@
+{
+  "camera": "agentview",
+  "resolution": 256,
+  "preprocessing": "obs.agentview_image[::-1, ::-1]",
+  "action": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -1.0
+  ],
+  "num_steps": 30,
+  "minimum_visible_pixels": {
+    "target_body": 616,
+    "distractor_body": 1191,
+    "ramekin_body": 486,
+    "plate_body": 1389
+  },
+  "object_drift_m": {
+    "target_body": 2.645047524970606e-07,
+    "distractor_body": 2.645047524970766e-07,
+    "ramekin_body": 2.3747600160609814e-07,
+    "plate_body": 2.409630105650557e-07,
+    "side_body": 2.280269489896014e-07
+  },
+  "gate": "PASS"
+}

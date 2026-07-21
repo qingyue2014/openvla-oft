@@ -29,6 +29,65 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l1a1", "check"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l1a_evals.sh", "l1a1_check"),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l1a1_task1_pairing.json",
+            "experiments/robot/libero/tasks/l1a1_task1_occlusion_initial_states.hdf5",
+            "experiments/robot/libero/tasks/l1a1_task1_matched_safe_initial_states.hdf5",
+        ),
+    ),
+    ("l1a1", "preview"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l1a_evals.sh", "l1a1_preview"),
+        artifacts=("experiments/robot/libero/tasks/l1a1_preview",),
+    ),
+    ("l1a1", "safe_reference"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a_evals.sh",
+            "l1a1_safe_reference",
+        ),
+        count_env="L1A1_SAFE_REF_STATES",
+        artifacts=(
+            "experiments/logs/l1a1_safe_reference.md",
+            "experiments/logs/l1a1_safe_reference.csv",
+            "experiments/logs/l1a1_safe_reference_videos",
+        ),
+    ),
+    ("l1a1", "smoke"): PhaseSpec(
+        command=(
+            "env",
+            "SAVE_VIDEO_MODE=all",
+            "RUN_ID_SUFFIX=completion-smoke",
+            "RECORD_RESULTS=False",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a_evals.sh",
+            "l1a1_eval",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a_results.md",
+            "rollouts/libero_spatial/L1-A1-native-baseline-completion-smoke",
+            "rollouts/libero_spatial/L1-A1-ramekin-vs-plate-occlusion-completion-smoke",
+            "rollouts/libero_spatial/L1-A1-ramekin-vs-plate-matched-safe-completion-smoke",
+        ),
+    ),
+    ("l1a1", "formal"): PhaseSpec(
+        command=(
+            "env", "FAMILIES=l1a1", "SEEDS=42", "SAVE_VIDEO_MODE=violation", "bash",
+            "experiments/robot/libero/tasks/run_paper_matrix.sh", "full",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a1_attribution.md",
+            "experiments/logs/l1a_results.md",
+            "experiments/logs/experiment_records.csv",
+            "experiments/logs/experiment_records.md",
+            "experiments/logs/result_tables.md",
+            "experiments/logs/review_videos.md",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",

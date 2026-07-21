@@ -73,7 +73,11 @@ TASKS_DIR="experiments/robot/libero/tasks"
 # L1-A1 paths
 L1A1_OCC_HDF5="${TASKS_DIR}/l1a1_task1_occlusion_initial_states.hdf5"
 L1A1_SAFE_HDF5="${TASKS_DIR}/l1a1_task1_matched_safe_initial_states.hdf5"
+L1A1_PAIRING_JSON="${TASKS_DIR}/l1a1_task1_pairing.json"
 L1A1_PREVIEW_DIR="${TASKS_DIR}/l1a1_preview"
+L1A1_SAFE_REF_REPORT="${L1A1_SAFE_REF_REPORT:-experiments/logs/l1a1_safe_reference.md}"
+L1A1_SAFE_REF_VIDEO_DIR="${L1A1_SAFE_REF_VIDEO_DIR:-experiments/logs/l1a1_safe_reference_videos}"
+L1A1_SAFE_REF_STATES="${L1A1_SAFE_REF_STATES:-8}"
 L1A1_TRACK_BODIES="akita_black_bowl_1_main,akita_black_bowl_2_main,glazed_rim_porcelain_ramekin_1_main,plate_1_main,cookies_1_main"
 
 # L1-A2 paths
@@ -260,37 +264,90 @@ record_results() {
 
 # ── Generate functions ─────────────────────────────────────────────────────────
 gen_l1a1() {
-    log "L1-A1 generate: occlusion"
-    maybe_gen "${L1A1_OCC_HDF5}" \
-        python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
-            --variant task1_ramekin_vs_plate \
-            --output "${L1A1_OCC_HDF5}" \
-            --num_states "${NUM_TRIALS}" --seed "${SEED}"
+    log "L1-A1 generate: strict episode-paired Er/Ec states with physical + policy-view gates"
+    if [[ -f "${L1A1_OCC_HDF5}" && -f "${L1A1_SAFE_HDF5}" && -f "${L1A1_PAIRING_JSON}" ]]; then
+        echo "  [skip] paired HDF5 files and pairing manifest exist"
+        return
+    fi
+    rm -f "${L1A1_OCC_HDF5}" "${L1A1_SAFE_HDF5}" "${L1A1_PAIRING_JSON}"
+    python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
+        --paired \
+        --out_er "${L1A1_OCC_HDF5}" \
+        --out_ec "${L1A1_SAFE_HDF5}" \
+        --pairing_manifest "${L1A1_PAIRING_JSON}" \
+        --num_states "${NUM_TRIALS}" --seed "${SEED}"
+}
 
-    log "L1-A1 generate: matched safe control"
-    maybe_gen "${L1A1_SAFE_HDF5}" \
-        python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
-            --variant task1_matched_safe_control \
-            --output "${L1A1_SAFE_HDF5}" \
-            --num_states "${NUM_TRIALS}" --seed "${SEED}"
+check_l1a1() {
+    log "L1-A1 check: force paired regeneration and all static gates"
+    rm -f "${L1A1_OCC_HDF5}" "${L1A1_SAFE_HDF5}" "${L1A1_PAIRING_JSON}"
+    gen_l1a1
 }
 
 preview_l1a1() {
-    log "L1-A1 preview: Er risk layout"
-    rm -rf "${L1A1_PREVIEW_DIR}/Er_ramekin_vs_plate"
+    if [[ ! -f "${L1A1_OCC_HDF5}" || ! -f "${L1A1_SAFE_HDF5}" ]]; then
+        echo "  [error] paired state files missing; run l1a1_check first" >&2
+        exit 1
+    fi
+    log "L1-A1 preview: exact Eb/Er/Ec policy observations"
+    rm -rf "${L1A1_PREVIEW_DIR}"
+    python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
+        --preview_native \
+        --preview_dir "${L1A1_PREVIEW_DIR}/Eb_native" \
+        --preview_limit 5 --seed "${SEED}"
     python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
         --variant task1_ramekin_vs_plate \
-        --preview_only \
+        --preview_from_hdf5 \
+        --output "${L1A1_OCC_HDF5}" \
         --preview_dir "${L1A1_PREVIEW_DIR}/Er_ramekin_vs_plate" \
-        --num_states 5 --seed "${SEED}"
-
-    log "L1-A1 preview: Ec matched-safe layout"
-    rm -rf "${L1A1_PREVIEW_DIR}/Ec_matched_safe"
+        --preview_limit 5 --seed "${SEED}"
     python "${TASKS_DIR}/generate_l1a1_initial_states.py" \
         --variant task1_matched_safe_control \
-        --preview_only \
+        --preview_from_hdf5 \
+        --output "${L1A1_SAFE_HDF5}" \
         --preview_dir "${L1A1_PREVIEW_DIR}/Ec_matched_safe" \
-        --num_states 5 --seed "${SEED}"
+        --preview_limit 5 --seed "${SEED}"
+}
+
+safe_reference_l1a1() {
+    log "L1-A1 safe reference: same-Er-state OSC execution with protected-bowl contact oracle"
+    if [[ ! -f "${L1A1_OCC_HDF5}" ]]; then
+        echo "  [error] ${L1A1_OCC_HDF5} missing; run l1a1_check first" >&2
+        exit 1
+    fi
+    rm -rf "${L1A1_SAFE_REF_VIDEO_DIR}"
+    python "${TASKS_DIR}/validate_l1a1_safe_reference.py" \
+        --state_path "${L1A1_OCC_HDF5}" \
+        --num_states "${L1A1_SAFE_REF_STATES}" \
+        --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+        --video_dir "${L1A1_SAFE_REF_VIDEO_DIR}" \
+        --out_csv experiments/logs/l1a1_safe_reference.csv \
+        --out_report "${L1A1_SAFE_REF_REPORT}" \
+        --fail_on_invalid
+}
+
+l1a1_gates_ok() {
+    [[ -f "${L1A1_PAIRING_JSON}" ]] \
+        && grep -q '"physical_gate": "PASS"' "${L1A1_PAIRING_JSON}" \
+        && grep -q '"policy_visibility_gate": "PASS"' "${L1A1_PAIRING_JSON}" \
+        && grep -q '"pairing_gate": "PASS"' "${L1A1_PAIRING_JSON}" \
+        && [[ -f "${L1A1_SAFE_REF_REPORT}" ]] \
+        && grep -q "PASS_DYNAMIC_SAFE_REFERENCE" "${L1A1_SAFE_REF_REPORT}" \
+        && [[ -f "${L1A1_PREVIEW_DIR}/Eb_native/agentview_000.png" ]] \
+        && [[ -f "${L1A1_PREVIEW_DIR}/Eb_native/rollout_000.mp4" ]] \
+        && [[ -f "${L1A1_PREVIEW_DIR}/Er_ramekin_vs_plate/agentview_000.png" ]] \
+        && [[ -f "${L1A1_PREVIEW_DIR}/Er_ramekin_vs_plate/rollout_000.mp4" ]] \
+        && [[ -f "${L1A1_PREVIEW_DIR}/Ec_matched_safe/agentview_000.png" ]] \
+        && [[ -f "${L1A1_PREVIEW_DIR}/Ec_matched_safe/rollout_000.mp4" ]] \
+        && [[ "$(find "${L1A1_SAFE_REF_VIDEO_DIR}" -maxdepth 1 -name '*.mp4' 2>/dev/null | wc -l | tr -d ' ')" -ge 1 ]]
+}
+
+require_l1a1_gates() {
+    if ! l1a1_gates_ok; then
+        echo "L1-A1 BENCHMARK_NOT_READY: run l1a1_check, l1a1_preview, and l1a1_safe_reference first" >&2
+        exit 1
+    fi
+    echo "  L1-A1 BENCHMARK_READY_FOR_ATTRIBUTION: physical, visibility, pairing, video, and safe-reference gates passed"
 }
 
 maybe_preview_l1a1() {
@@ -406,6 +463,7 @@ eval_l1a1() {
     occ_run_id="$(with_suffix L1-A1-ramekin-vs-plate-occlusion "${L1A1_RUN_SUFFIX}")"
     safe_run_id="$(with_suffix L1-A1-ramekin-vs-plate-matched-safe "${L1A1_RUN_SUFFIX}")"
 
+    require_l1a1_gates
     eval_l1a_native_eb
 
     log "L1-A1 eval: occlusion group  (oracle=depth_disambiguation)"
@@ -780,7 +838,7 @@ attribution_l1a34() {
 MODE="${1:-all}"
 case "${MODE}" in
     all)
-        gen_l1a1; eval_l1a1
+        gen_l1a1; preview_l1a1; safe_reference_l1a1; eval_l1a1
         gen_l1a2; eval_l1a2
         eval_l1b1
         parse_results
@@ -793,8 +851,10 @@ case "${MODE}" in
         parse_results
         ;;
     l1a1)
+        check_l1a1
         maybe_preview_l1a1
-        gen_l1a1; eval_l1a1
+        safe_reference_l1a1
+        eval_l1a1
         parse_results
         ;;
     l1a1_eval)
@@ -806,6 +866,15 @@ case "${MODE}" in
         ;;
     l1a1_preview)
         preview_l1a1
+        ;;
+    l1a1_check)
+        check_l1a1
+        ;;
+    l1a1_safe_reference)
+        safe_reference_l1a1
+        ;;
+    l1a1_ready)
+        require_l1a1_gates
         ;;
     l1a1_attribution)
         attribution_l1a1
@@ -862,7 +931,7 @@ case "${MODE}" in
         ;;
     *)
         echo "Unknown mode: ${MODE}" >&2
-        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_eval|l1a_native_eb|l1a1_preview|l1a1_attribution|record|l1a2|l1a2_check|l1a2_preview|l1a2_safe_reference|l1a2_smoke|l1a2_attribution|l1a3*|l1a4*|l1b1]" >&2
+        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_check|l1a1_preview|l1a1_safe_reference|l1a1_ready|l1a1_eval|l1a_native_eb|l1a1_attribution|record|l1a2|l1a2_check|l1a2_preview|l1a2_safe_reference|l1a2_smoke|l1a2_attribution|l1a3*|l1a4*|l1b1]" >&2
         exit 1
         ;;
 esac

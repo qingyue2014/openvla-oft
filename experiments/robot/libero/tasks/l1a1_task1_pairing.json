@@ -1,0 +1,7481 @@
+{
+  "scenario": "L1-A1",
+  "task_suite_name": "libero_spatial",
+  "task_id": 1,
+  "prompt": "pick up the black bowl next to the ramekin and place it on the plate",
+  "er_variant": "task1_ramekin_vs_plate",
+  "ec_variant": "task1_matched_safe_control",
+  "er_hdf5": "experiments/robot/libero/tasks/l1a1_task1_occlusion_initial_states.hdf5",
+  "ec_hdf5": "experiments/robot/libero/tasks/l1a1_task1_matched_safe_initial_states.hdf5",
+  "seed": 42,
+  "num_states": 50,
+  "physical_gate": "PASS",
+  "policy_visibility_gate": "PASS",
+  "pairing_gate": "PASS",
+  "thresholds": {
+    "policy_camera": "agentview",
+    "policy_resolution": 256,
+    "minimum_visible_pixels": {
+      "target_body": 400,
+      "distractor_body": 400,
+      "ramekin_body": 250,
+      "plate_body": 250
+    },
+    "max_post_settle_drift_m": 0.002,
+    "max_residual_qvel": 0.02,
+    "max_matched_pose_delta_m": 0.002,
+    "max_non_intervention_qpos_qvel_error": 1e-10
+  },
+  "pairs": [
+    {
+      "demo": 0,
+      "native_state_index": 0,
+      "pair_rng_index": 0,
+      "er_state_sha256": "5b11876903fbd316b07eca66e206fee4ecf8945e445f802906f568783a1ac769",
+      "ec_state_sha256": "181c7f95d00abd44626f2e1d6fc1e88e919eedd6d2a76857d0ed50275ec8ce9d",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 5.2668508660272395e-18,
+      "non_intervention_qvel_error": 2.58358200659982e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.056397,
+            0.021293,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.005243,
+            0.146206,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.074906,
+            0.252473,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 862,
+          "ramekin_body": 748,
+          "plate_body": 1412
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0006006119828232341,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.056397,
+            0.021293,
+            0.898404
+          ],
+          "distractor_body": [
+            0.239757,
+            0.021206,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.074906,
+            0.252473,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 1557,
+          "ramekin_body": 748,
+          "plate_body": 1412
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0006006119828232344,
+        "failures": []
+      }
+    },
+    {
+      "demo": 1,
+      "native_state_index": 1,
+      "pair_rng_index": 1,
+      "er_state_sha256": "2b8e7c8b7a77eb911df212b6da0ca59390dc5718936fcddfaf1cb4ae0a8b4519",
+      "ec_state_sha256": "c070a8dab30164c63680f81a735da806d9ed2924e4a70a6c3c63792f6a117930",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 1.8736368793265124e-18,
+      "non_intervention_qvel_error": 4.413499023348772e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.05427,
+            0.018596,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.005859,
+            0.142926,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.073507,
+            0.256664,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 775,
+          "distractor_body": 863,
+          "ramekin_body": 748,
+          "plate_body": 1408
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.00043212554973919243,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.05427,
+            0.018596,
+            0.898404
+          ],
+          "distractor_body": [
+            0.239141,
+            0.017926,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.073507,
+            0.256664,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 775,
+          "distractor_body": 1560,
+          "ramekin_body": 748,
+          "plate_body": 1408
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004321255497391924,
+        "failures": []
+      }
+    },
+    {
+      "demo": 2,
+      "native_state_index": 2,
+      "pair_rng_index": 2,
+      "er_state_sha256": "2d293cb45b835a9fe481a1250f612c37a63143729676f78f842ad54cfcfd6843",
+      "ec_state_sha256": "6dadf4fc0e06b4ed127b45ae2f089bb88e63d4d7fae1018c6a7ce37335a1a323",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 7.36071631163987e-18,
+      "non_intervention_qvel_error": 2.7447203345985914e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.059051,
+            0.023108,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.006774,
+            0.148698,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.082691,
+            0.255622,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 762,
+          "distractor_body": 859,
+          "ramekin_body": 748,
+          "plate_body": 1438
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.37490065103858e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0010216480879672698,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.059051,
+            0.023108,
+            0.898404
+          ],
+          "distractor_body": [
+            0.238226,
+            0.023698,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.082691,
+            0.255622,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 762,
+          "distractor_body": 1551,
+          "ramekin_body": 748,
+          "plate_body": 1438
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0010216480879672695,
+        "failures": []
+      }
+    },
+    {
+      "demo": 3,
+      "native_state_index": 3,
+      "pair_rng_index": 3,
+      "er_state_sha256": "9c19011ee4956b8c14de438e0060aafcff45c3874e5ea68fd9c0930d512b2f0f",
+      "ec_state_sha256": "7ab789a6849960a1bc6569c8a32f69bd26baf6ad1e8d0728cd4c1437bfd86267",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.3796614595446584e-18,
+      "non_intervention_qvel_error": 2.5832909869365826e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.053221,
+            0.023972,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.001567,
+            0.141757,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.066169,
+            0.252681,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 776,
+          "distractor_body": 874,
+          "ramekin_body": 748,
+          "plate_body": 1381
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900649529499e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0005062442534548373,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.053221,
+            0.023972,
+            0.898404
+          ],
+          "distractor_body": [
+            0.243433,
+            0.016757,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.066169,
+            0.252681,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 776,
+          "distractor_body": 1559,
+          "ramekin_body": 748,
+          "plate_body": 1381
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0005062442534548373,
+        "failures": []
+      }
+    },
+    {
+      "demo": 4,
+      "native_state_index": 4,
+      "pair_rng_index": 4,
+      "er_state_sha256": "8b48be7bd4c77e65b876f8fd744cca1fc266d4be5e4f85b695b9d7fadf37d3e0",
+      "ec_state_sha256": "62904bc74a9137c8a7e9eae35a5def47638e7f61e9a919bcf01ad772a3d9dae7",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 5.192311966668861e-18,
+      "non_intervention_qvel_error": 8.27230406015342e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.053349,
+            0.024736,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.000793,
+            0.140687,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.074009,
+            0.242269,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 872,
+          "ramekin_body": 748,
+          "plate_body": 1412
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900652574214e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0006420846806707548,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.053349,
+            0.024736,
+            0.898404
+          ],
+          "distractor_body": [
+            0.244207,
+            0.015687,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.074009,
+            0.242269,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 1559,
+          "ramekin_body": 748,
+          "plate_body": 1412
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0006420846806707548,
+        "failures": []
+      }
+    },
+    {
+      "demo": 5,
+      "native_state_index": 5,
+      "pair_rng_index": 5,
+      "er_state_sha256": "10964932bc086666c1578de0b8cd3155728e991eaed9b34264c3813fd343e7c3",
+      "ec_state_sha256": "372ea273cfa6deaa99ae5a0753d2a1a18a76c9d289c824155df56422e996afa9",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 4.2528994886046386e-18,
+      "non_intervention_qvel_error": 1.270001222161846e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.052063,
+            0.016967,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.005738,
+            0.143456,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080152,
+            0.244402,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 769,
+          "distractor_body": 857,
+          "ramekin_body": 748,
+          "plate_body": 1428
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0035000645551423815,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.052063,
+            0.016967,
+            0.898404
+          ],
+          "distractor_body": [
+            0.239262,
+            0.018456,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080152,
+            0.244402,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 769,
+          "distractor_body": 1564,
+          "ramekin_body": 748,
+          "plate_body": 1428
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0035000645551423806,
+        "failures": []
+      }
+    },
+    {
+      "demo": 6,
+      "native_state_index": 6,
+      "pair_rng_index": 6,
+      "er_state_sha256": "a2d98e98041236a3b752f3656a8a42777dc9351030f28a9adec66ba4a2f3d3f5",
+      "ec_state_sha256": "d31013dc058dc76080abff089647bb552612bf6c250227fae612c779763a7cb2",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 1.1102230246251565e-16,
+      "non_intervention_qvel_error": 3.2445875216233327e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.059557,
+            0.018187,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.008949,
+            0.140075,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.067535,
+            0.24115,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 768,
+          "distractor_body": 858,
+          "ramekin_body": 748,
+          "plate_body": 1383
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0018327855484487363,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.059557,
+            0.018187,
+            0.898404
+          ],
+          "distractor_body": [
+            0.236051,
+            0.015075,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.067535,
+            0.24115,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 768,
+          "distractor_body": 1547,
+          "ramekin_body": 748,
+          "plate_body": 1383
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.37490064516157e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0018327855484487766,
+        "failures": []
+      }
+    },
+    {
+      "demo": 7,
+      "native_state_index": 7,
+      "pair_rng_index": 7,
+      "er_state_sha256": "4f20ecf3bb624ada0bf462a30154ee75aae1c226dc1727c18c1ec4f5bb368102",
+      "ec_state_sha256": "14c00d02965f77c63b59b3a8e31f07eb249b6134cfb0ac1a09626f7a6ab85a15",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.97697850603655e-18,
+      "non_intervention_qvel_error": 3.619552523493762e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.059079,
+            0.014996,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.001881,
+            0.141658,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.073449,
+            0.25656,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 765,
+          "distractor_body": 875,
+          "ramekin_body": 748,
+          "plate_body": 1409
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900646672127e-13,
+          "distractor_body": 6.374900649779168e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0012423750035674664,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.059079,
+            0.014996,
+            0.898404
+          ],
+          "distractor_body": [
+            0.243119,
+            0.016658,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.073449,
+            0.25656,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 765,
+          "distractor_body": 1558,
+          "ramekin_body": 748,
+          "plate_body": 1409
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900646672127e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0012423750035674664,
+        "failures": []
+      }
+    },
+    {
+      "demo": 8,
+      "native_state_index": 8,
+      "pair_rng_index": 8,
+      "er_state_sha256": "d42adb0f66c4059f8a2909505575a1e1b1c64d86216da268451c797446f3dc34",
+      "ec_state_sha256": "4e57c012bb3de95408fce23173ba98a1f9149dc720c6c5e5281e9b48c03f433f",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 5.719166459861036e-18,
+      "non_intervention_qvel_error": 2.6272384781869333e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.052342,
+            0.020677,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.004127,
+            0.149803,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.079056,
+            0.258483,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 772,
+          "distractor_body": 868,
+          "ramekin_body": 748,
+          "plate_body": 1424
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.37490065103858e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0005203145013019012,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.052342,
+            0.020677,
+            0.898404
+          ],
+          "distractor_body": [
+            0.240873,
+            0.024803,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.079056,
+            0.258483,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 772,
+          "distractor_body": 1559,
+          "ramekin_body": 748,
+          "plate_body": 1424
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0005203145013019012,
+        "failures": []
+      }
+    },
+    {
+      "demo": 9,
+      "native_state_index": 9,
+      "pair_rng_index": 9,
+      "er_state_sha256": "aa7abc2844da45590346ac13be5ebe914cba353ec0baeb9747b2281ee856e07c",
+      "ec_state_sha256": "7c4d0397b0d2210b5806170fe93fd3741db8be8e51999f63230122aaa61fe0f0",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 2.524158182817815e-18,
+      "non_intervention_qvel_error": 9.272925922248744e-16,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.050951,
+            0.024427,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.007156,
+            0.148617,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.070006,
+            0.250408,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 778,
+          "distractor_body": 855,
+          "ramekin_body": 748,
+          "plate_body": 1391
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0008593737960135082,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.050951,
+            0.024427,
+            0.898404
+          ],
+          "distractor_body": [
+            0.237844,
+            0.023617,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.070006,
+            0.250408,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 778,
+          "distractor_body": 1550,
+          "ramekin_body": 748,
+          "plate_body": 1391
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0008593737960135081,
+        "failures": []
+      }
+    },
+    {
+      "demo": 10,
+      "native_state_index": 10,
+      "pair_rng_index": 10,
+      "er_state_sha256": "bfa491fc979af5ef847bcf02237fd0689da55a19ca4692735c7d9d3931074bdf",
+      "ec_state_sha256": "3fffa38c6eeccfc18b80d9ccf17e279afb6269bd26b5f7ca1b19442d674b8d7f",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 5.671732614814795e-18,
+      "non_intervention_qvel_error": 4.1436950103572995e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.050928,
+            0.016962,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.009537,
+            0.145941,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.079994,
+            0.255973,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 773,
+          "distractor_body": 855,
+          "ramekin_body": 748,
+          "plate_body": 1426
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004321561495981072,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.050928,
+            0.016962,
+            0.898404
+          ],
+          "distractor_body": [
+            0.235463,
+            0.020941,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.079994,
+            0.255973,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 773,
+          "distractor_body": 1537,
+          "ramekin_body": 748,
+          "plate_body": 1426
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004321561495981072,
+        "failures": []
+      }
+    },
+    {
+      "demo": 11,
+      "native_state_index": 11,
+      "pair_rng_index": 11,
+      "er_state_sha256": "41dc5a5c5ccdc6dd5390e3bc9d1ece56b595a1cada047ee739b7e7688f25f236",
+      "ec_state_sha256": "1cca46232c6a8b5c40614fefa7dec210f6d2e4dfef7140bd39fd7c9e1d36e915",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.206866738304781e-18,
+      "non_intervention_qvel_error": 4.589084776002356e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.054837,
+            0.023965,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.002148,
+            0.148702,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.072818,
+            0.240433,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 776,
+          "distractor_body": 868,
+          "ramekin_body": 748,
+          "plate_body": 1403
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900648538196e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.002641380081940074,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.054837,
+            0.023965,
+            0.898404
+          ],
+          "distractor_body": [
+            0.242852,
+            0.023702,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.072818,
+            0.240433,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 776,
+          "distractor_body": 1554,
+          "ramekin_body": 748,
+          "plate_body": 1403
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0026413800819400737,
+        "failures": []
+      }
+    },
+    {
+      "demo": 12,
+      "native_state_index": 12,
+      "pair_rng_index": 12,
+      "er_state_sha256": "9da5964f333d3ee43eff312b99d2af9e6ddd7c5497f534225e13881caf3e96f0",
+      "ec_state_sha256": "a3cf7e6c764014c34c81c0debb561d5cd47272c65a21434c272cd39ea1c94824",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 5.861467994999758e-18,
+      "non_intervention_qvel_error": 3.65173740499947e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.050005,
+            0.019308,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.004974,
+            0.141327,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.078828,
+            0.252921,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 778,
+          "distractor_body": 864,
+          "ramekin_body": 748,
+          "plate_body": 1429
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0006598374974294187,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.050005,
+            0.019308,
+            0.898404
+          ],
+          "distractor_body": [
+            0.240026,
+            0.016327,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.078828,
+            0.252921,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 778,
+          "distractor_body": 1558,
+          "ramekin_body": 748,
+          "plate_body": 1429
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0006598374974294187,
+        "failures": []
+      }
+    },
+    {
+      "demo": 13,
+      "native_state_index": 13,
+      "pair_rng_index": 13,
+      "er_state_sha256": "7e0a4a0cd9c66cc98139bdb4416278a16311d7d880931bf9b69253f96e277489",
+      "ec_state_sha256": "a29aadc1531a428d791348784646ea5b87290ca3613227701d71b152753248a3",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 6.02918051855611e-18,
+      "non_intervention_qvel_error": 2.5295737389006536e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.055341,
+            0.024808,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.008524,
+            0.148392,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.081791,
+            0.258612,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 777,
+          "distractor_body": 859,
+          "ramekin_body": 748,
+          "plate_body": 1440
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.003033117799058513,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.055341,
+            0.024808,
+            0.898404
+          ],
+          "distractor_body": [
+            0.236476,
+            0.023392,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.081791,
+            0.258612,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 777,
+          "distractor_body": 1544,
+          "ramekin_body": 748,
+          "plate_body": 1440
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.003033117799058513,
+        "failures": []
+      }
+    },
+    {
+      "demo": 14,
+      "native_state_index": 14,
+      "pair_rng_index": 14,
+      "er_state_sha256": "b0c753b297c8eec27054fe3a1bc47f71b8f82928488fd40f7790906785c02f2f",
+      "ec_state_sha256": "82f809772a178604018fc3366408d09008c34029616def55561931aee82862fc",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.613442552986845e-18,
+      "non_intervention_qvel_error": 4.3059669305561554e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.050195,
+            0.02391,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.003648,
+            0.147895,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.066414,
+            0.254578,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 774,
+          "distractor_body": 862,
+          "ramekin_body": 748,
+          "plate_body": 1380
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900648538196e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.000754547366336355,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.050195,
+            0.02391,
+            0.898404
+          ],
+          "distractor_body": [
+            0.241352,
+            0.022895,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.066414,
+            0.254578,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 774,
+          "distractor_body": 1561,
+          "ramekin_body": 748,
+          "plate_body": 1380
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0007545473663363552,
+        "failures": []
+      }
+    },
+    {
+      "demo": 15,
+      "native_state_index": 15,
+      "pair_rng_index": 15,
+      "er_state_sha256": "812150d5ff8edb4feb13ccde3e18edf12fd73c2195f43afbb52711b92c791d9d",
+      "ec_state_sha256": "302650870d722437ec51a9c469a23a4575bffd1e2d3398464e0563020b608069",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 2.5732860937585644e-18,
+      "non_intervention_qvel_error": 2.155538302742988e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.050715,
+            0.016896,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.009319,
+            0.148113,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.077322,
+            0.246007,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 777,
+          "distractor_body": 856,
+          "ramekin_body": 748,
+          "plate_body": 1416
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004323407209691963,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.050715,
+            0.016896,
+            0.898404
+          ],
+          "distractor_body": [
+            0.235681,
+            0.023113,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.077322,
+            0.246007,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 777,
+          "distractor_body": 1542,
+          "ramekin_body": 748,
+          "plate_body": 1416
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004323407209691964,
+        "failures": []
+      }
+    },
+    {
+      "demo": 16,
+      "native_state_index": 16,
+      "pair_rng_index": 16,
+      "er_state_sha256": "dabd6c9bc5af7b432b5702b76f8321e6460e6bbf8b1bbc4b9f793d960133dc12",
+      "ec_state_sha256": "3045a3392d35b97aa1f8f0ec5d5dbc21e579321b6a8fe0522039e3e167d73fc6",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.9861370497787374e-18,
+      "non_intervention_qvel_error": 1.2894648499830828e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.053209,
+            0.019567,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.00203,
+            0.145363,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.07598,
+            0.240739,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 774,
+          "distractor_body": 872,
+          "ramekin_body": 748,
+          "plate_body": 1413
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900648538196e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004321876379830248,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.053209,
+            0.019567,
+            0.898404
+          ],
+          "distractor_body": [
+            0.24297,
+            0.020363,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.07598,
+            0.240739,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 774,
+          "distractor_body": 1564,
+          "ramekin_body": 748,
+          "plate_body": 1413
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004321876379830248,
+        "failures": []
+      }
+    },
+    {
+      "demo": 17,
+      "native_state_index": 17,
+      "pair_rng_index": 17,
+      "er_state_sha256": "2d5de9cb58e4aa9b33927d1505832a686fc0d1fd37e344487baf8d37f9b0e2f2",
+      "ec_state_sha256": "cb29ffc64b753d5ff4462d72c7f5fbc4f9415cfa6d5b1a46a61ded63ca1958ef",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 4.440892098500626e-16,
+      "non_intervention_qvel_error": 1.7299144960034679e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.055455,
+            0.018354,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.00428,
+            0.142326,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.07946,
+            0.257452,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 775,
+          "distractor_body": 862,
+          "ramekin_body": 748,
+          "plate_body": 1430
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.002250901433238442,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.055455,
+            0.018354,
+            0.898404
+          ],
+          "distractor_body": [
+            0.24072,
+            0.017326,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.07946,
+            0.257452,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 775,
+          "distractor_body": 1566,
+          "ramekin_body": 748,
+          "plate_body": 1430
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.002250901433238485,
+        "failures": []
+      }
+    },
+    {
+      "demo": 18,
+      "native_state_index": 18,
+      "pair_rng_index": 18,
+      "er_state_sha256": "43d7da3a7fda2a4a53e2c7eece3518b62351da79f5a8a2c55249482642c844e7",
+      "ec_state_sha256": "cff7cd90355a07ec4e4b4db0124aae2227bb869de9b6feb37630aafc7bd336dc",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.4118487115403218e-18,
+      "non_intervention_qvel_error": 4.402313734476275e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.056584,
+            0.020547,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.003263,
+            0.145728,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080197,
+            0.242641,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 765,
+          "distractor_body": 866,
+          "ramekin_body": 748,
+          "plate_body": 1427
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900649032371e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004323725260938296,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.056584,
+            0.020547,
+            0.898404
+          ],
+          "distractor_body": [
+            0.241737,
+            0.020728,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080197,
+            0.242641,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 765,
+          "distractor_body": 1566,
+          "ramekin_body": 748,
+          "plate_body": 1427
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.00043237252609382973,
+        "failures": []
+      }
+    },
+    {
+      "demo": 19,
+      "native_state_index": 19,
+      "pair_rng_index": 19,
+      "er_state_sha256": "df7622f8657ef39cb1b4db2f1aba66dc57d84460f00828bac90f71bb62eecefe",
+      "ec_state_sha256": "705b4d2ab94db618d8d710f77be0501ea38c74fa52cbcb2bf8fb7728b36d4cfa",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 2.624505117287848e-18,
+      "non_intervention_qvel_error": 2.5094664542034248e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.059722,
+            0.024583,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.009146,
+            0.141568,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.071103,
+            0.241259,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 770,
+          "distractor_body": 856,
+          "ramekin_body": 748,
+          "plate_body": 1400
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.002635764312987257,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.059722,
+            0.024583,
+            0.898404
+          ],
+          "distractor_body": [
+            0.235854,
+            0.016568,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.071103,
+            0.241259,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 770,
+          "distractor_body": 1543,
+          "ramekin_body": 748,
+          "plate_body": 1400
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0026357643129872564,
+        "failures": []
+      }
+    },
+    {
+      "demo": 20,
+      "native_state_index": 20,
+      "pair_rng_index": 20,
+      "er_state_sha256": "d33c60c383494325bfaa9b5248f6424996ede1839d8e108f2be43df8019dd418",
+      "ec_state_sha256": "c9f6791c25fe72119d9040feae735f576296ce988a29235cd259143fba45f239",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 1.7867651802561113e-16,
+      "non_intervention_qvel_error": 2.7438186747599255e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.052289,
+            0.016013,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.006794,
+            0.140175,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.067757,
+            0.250239,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 779,
+          "distractor_body": 858,
+          "ramekin_body": 748,
+          "plate_body": 1387
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.37490065103858e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004321026736292699,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.052289,
+            0.016013,
+            0.898404
+          ],
+          "distractor_body": [
+            0.238206,
+            0.015175,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.067757,
+            0.250239,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 779,
+          "distractor_body": 1553,
+          "ramekin_body": 748,
+          "plate_body": 1387
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.00043210267362927076,
+        "failures": []
+      }
+    },
+    {
+      "demo": 21,
+      "native_state_index": 21,
+      "pair_rng_index": 21,
+      "er_state_sha256": "c91af865a153f18f8ecca74b0072d182e037a223c28bb3540a57fe9c08bebd52",
+      "ec_state_sha256": "825785c215f30548230225d21d6ec2b3beed188c6c38efec6bb81b212db398dd",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.0865880597946704e-18,
+      "non_intervention_qvel_error": 3.4086293093370772e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.051625,
+            0.02274,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.006062,
+            0.14892,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.082038,
+            0.254839,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 776,
+          "distractor_body": 862,
+          "ramekin_body": 748,
+          "plate_body": 1443
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.00043214072651791583,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.051625,
+            0.02274,
+            0.898404
+          ],
+          "distractor_body": [
+            0.238938,
+            0.02392,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.082038,
+            0.254839,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 776,
+          "distractor_body": 1557,
+          "ramekin_body": 748,
+          "plate_body": 1443
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004321407265179158,
+        "failures": []
+      }
+    },
+    {
+      "demo": 22,
+      "native_state_index": 22,
+      "pair_rng_index": 22,
+      "er_state_sha256": "a60cfac89212f349afd7b18b971d5bec5c6d9079527d42e223ab6f1bd773923e",
+      "ec_state_sha256": "560f54dc5ec80bd249a7a1789e7820fc5267c78feb34bc56ea6f4eb3a5dbdf7c",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.469446951953614e-18,
+      "non_intervention_qvel_error": 2.1215863329553046e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.050354,
+            0.017937,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.009292,
+            0.144914,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.066233,
+            0.244552,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 779,
+          "distractor_body": 854,
+          "ramekin_body": 748,
+          "plate_body": 1381
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.000496903782586528,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.050354,
+            0.017937,
+            0.898404
+          ],
+          "distractor_body": [
+            0.235708,
+            0.019914,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.066233,
+            0.244552,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 779,
+          "distractor_body": 1540,
+          "ramekin_body": 748,
+          "plate_body": 1381
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.000496903782586528,
+        "failures": []
+      }
+    },
+    {
+      "demo": 23,
+      "native_state_index": 23,
+      "pair_rng_index": 23,
+      "er_state_sha256": "bfff09d405251f07a959938d8c0a78beecce849467ac40933a7dcf1da43e1990",
+      "ec_state_sha256": "dadfd172d7f7a4d45608570dbc2a574cc22f15fa959a6df4f82e247d2eb6a243",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 5.110996803732448e-18,
+      "non_intervention_qvel_error": 2.3432552194469247e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.050711,
+            0.02343,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.005763,
+            0.145192,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080656,
+            0.256656,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 774,
+          "distractor_body": 863,
+          "ramekin_body": 748,
+          "plate_body": 1436
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0007123636348974914,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.050711,
+            0.02343,
+            0.898404
+          ],
+          "distractor_body": [
+            0.239237,
+            0.020192,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080656,
+            0.256656,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 774,
+          "distractor_body": 1562,
+          "ramekin_body": 748,
+          "plate_body": 1436
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0007123636348974914,
+        "failures": []
+      }
+    },
+    {
+      "demo": 24,
+      "native_state_index": 24,
+      "pair_rng_index": 24,
+      "er_state_sha256": "641f5acd5e0a142baaa4895530928cc1962679ff01dc8db985cd2a9f5f51dcce",
+      "ec_state_sha256": "40eb9132291ccf1dc7f4129423234550367fde632a02ab081a1b673b648ffbc7",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 4.6349642873755315e-18,
+      "non_intervention_qvel_error": 2.357532933060408e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.052818,
+            0.023844,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.001885,
+            0.144443,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.069914,
+            0.248751,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 778,
+          "distractor_body": 875,
+          "ramekin_body": 748,
+          "plate_body": 1396
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900649529499e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0007360006664977932,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.052818,
+            0.023844,
+            0.898404
+          ],
+          "distractor_body": [
+            0.243115,
+            0.019443,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.069914,
+            0.248751,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 778,
+          "distractor_body": 1561,
+          "ramekin_body": 748,
+          "plate_body": 1396
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0007360006664977932,
+        "failures": []
+      }
+    },
+    {
+      "demo": 25,
+      "native_state_index": 25,
+      "pair_rng_index": 25,
+      "er_state_sha256": "c3fadb795c58dc74bfa2c37dfc1aa6aba79685a9483d6ea148d7c87e914eb835",
+      "ec_state_sha256": "f0ccf16709dfd05f1d417187c9e689a9502928f16c532c18e61dc5a8bb2bd72e",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 8.670229248095018e-18,
+      "non_intervention_qvel_error": 3.1449796899340482e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.057551,
+            0.019513,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.009794,
+            0.145691,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.084773,
+            0.243334,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 770,
+          "distractor_body": 855,
+          "ramekin_body": 748,
+          "plate_body": 1448
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004323842257793359,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.057551,
+            0.019513,
+            0.898404
+          ],
+          "distractor_body": [
+            0.235206,
+            0.020691,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.084773,
+            0.243334,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 770,
+          "distractor_body": 1540,
+          "ramekin_body": 748,
+          "plate_body": 1448
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.00043238422577933594,
+        "failures": []
+      }
+    },
+    {
+      "demo": 26,
+      "native_state_index": 26,
+      "pair_rng_index": 26,
+      "er_state_sha256": "dc570fe79272a31fe373d96d244f166848fe63a8885c0a2e231fb711730059b9",
+      "ec_state_sha256": "fe8c6787cb18ef070a6a8fe59dd0e73e0a10dd19dcc54bfe1bba5f38eb096cbe",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 4.001383642829315e-18,
+      "non_intervention_qvel_error": 3.436514143306861e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.057431,
+            0.021299,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.006624,
+            0.148333,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.074777,
+            0.259206,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 859,
+          "ramekin_body": 748,
+          "plate_body": 1411
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004322081345199491,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.057431,
+            0.021299,
+            0.898404
+          ],
+          "distractor_body": [
+            0.238376,
+            0.023333,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.074777,
+            0.259206,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 1555,
+          "ramekin_body": 748,
+          "plate_body": 1411
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004322081345199491,
+        "failures": []
+      }
+    },
+    {
+      "demo": 27,
+      "native_state_index": 27,
+      "pair_rng_index": 27,
+      "er_state_sha256": "ae1283664d8d6a8f11105383e958f5198487edea7ff5345bb5d1b046512d1b70",
+      "ec_state_sha256": "98a63a08ccc22f397c9fb9574e70050a6538e96c1b6b03870e7d269e4c68b4c7",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 6.2595734802092795e-18,
+      "non_intervention_qvel_error": 2.2901517678012487e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.056315,
+            0.021936,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.002299,
+            0.147403,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.079789,
+            0.251673,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 773,
+          "distractor_body": 874,
+          "ramekin_body": 748,
+          "plate_body": 1431
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900648538196e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0007325871055736876,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.056315,
+            0.021936,
+            0.898404
+          ],
+          "distractor_body": [
+            0.242701,
+            0.022403,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.079789,
+            0.251673,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 773,
+          "distractor_body": 1566,
+          "ramekin_body": 748,
+          "plate_body": 1431
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0007325871055736876,
+        "failures": []
+      }
+    },
+    {
+      "demo": 28,
+      "native_state_index": 28,
+      "pair_rng_index": 28,
+      "er_state_sha256": "b938fe7bbe634bad883b9d361a337086856135b2b6a6144bc34ec5977a94e417",
+      "ec_state_sha256": "ef6476582b40e62186fa38708810b7ce9de4888e270a62fec622c285ea6dd462",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.469446951953614e-18,
+      "non_intervention_qvel_error": 2.2623944905763556e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.059264,
+            0.019029,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.006422,
+            0.1407,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.083134,
+            0.246965,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 767,
+          "distractor_body": 859,
+          "ramekin_body": 748,
+          "plate_body": 1435
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0023843438395096243,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.059264,
+            0.019029,
+            0.898404
+          ],
+          "distractor_body": [
+            0.238578,
+            0.0157,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.083134,
+            0.246965,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 767,
+          "distractor_body": 1555,
+          "ramekin_body": 748,
+          "plate_body": 1435
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.002384343839509624,
+        "failures": []
+      }
+    },
+    {
+      "demo": 29,
+      "native_state_index": 29,
+      "pair_rng_index": 29,
+      "er_state_sha256": "13e4b496392a10b45b1f94b55d9be32ee56adcc5e038989ca03ebcef6504c4f0",
+      "ec_state_sha256": "da9f280aa986da94020a4fa0abc1e3e43bf2f4b58c6b383f3a9ed94aeafb990b",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.991219247462263e-18,
+      "non_intervention_qvel_error": 2.6761475227486426e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.055779,
+            0.01688,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.007732,
+            0.140801,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.082596,
+            0.253431,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 859,
+          "ramekin_body": 748,
+          "plate_body": 1443
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.002048228847780401,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.055779,
+            0.01688,
+            0.898404
+          ],
+          "distractor_body": [
+            0.237268,
+            0.015801,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.082596,
+            0.253431,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 1554,
+          "ramekin_body": 748,
+          "plate_body": 1443
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0020482288477804015,
+        "failures": []
+      }
+    },
+    {
+      "demo": 30,
+      "native_state_index": 30,
+      "pair_rng_index": 30,
+      "er_state_sha256": "488ebbae58ae3b80f35a447e506010b6280804d085710e5c5d9f379cf4533691",
+      "ec_state_sha256": "f0f633c802f4ec83f6a6b6cb67b3a3b8c498836cd09b5df188bdc8471e7ceb16",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 6.940587969801737e-18,
+      "non_intervention_qvel_error": 2.2522133509010746e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.055418,
+            0.022143,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.004331,
+            0.143837,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080499,
+            0.254762,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 778,
+          "distractor_body": 867,
+          "ramekin_body": 748,
+          "plate_body": 1432
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0041774571615566395,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.055418,
+            0.022143,
+            0.898404
+          ],
+          "distractor_body": [
+            0.240669,
+            0.018837,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080499,
+            0.254762,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 778,
+          "distractor_body": 1559,
+          "ramekin_body": 748,
+          "plate_body": 1432
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0041774571615566395,
+        "failures": []
+      }
+    },
+    {
+      "demo": 31,
+      "native_state_index": 31,
+      "pair_rng_index": 31,
+      "er_state_sha256": "b6ccb8b5da7fe7de310f1f645df1de212792c769167799746c46906a47a6617d",
+      "ec_state_sha256": "11d83db2a1063bb84b3fed6ff38e387e0f7c4b0fa26359dddd1ba75ff1a9607c",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 5.373577017381281e-18,
+      "non_intervention_qvel_error": 2.4283558599628228e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.056053,
+            0.017706,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.005031,
+            0.147315,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.078943,
+            0.256416,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 770,
+          "distractor_body": 868,
+          "ramekin_body": 748,
+          "plate_body": 1426
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0012908743523275979,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.056053,
+            0.017706,
+            0.898404
+          ],
+          "distractor_body": [
+            0.239969,
+            0.022315,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.078943,
+            0.256416,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 770,
+          "distractor_body": 1567,
+          "ramekin_body": 748,
+          "plate_body": 1426
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0012908743523275979,
+        "failures": []
+      }
+    },
+    {
+      "demo": 32,
+      "native_state_index": 32,
+      "pair_rng_index": 32,
+      "er_state_sha256": "cbe90bd075984b4cdacb05174a4c8d85fb6ecf511efc1739f0c8ef9ab8c050e1",
+      "ec_state_sha256": "5ad19ce7bc14aa5637747afff902383a37dbc4c6a11d139c92fc3a8cdf31d67d",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 6.6542908336297835e-18,
+      "non_intervention_qvel_error": 1.3427097739691364e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.059023,
+            0.01734,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.002746,
+            0.144042,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.08066,
+            0.249775,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 766,
+          "distractor_body": 865,
+          "ramekin_body": 748,
+          "plate_body": 1433
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900648538196e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0013054038624732767,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.059023,
+            0.01734,
+            0.898404
+          ],
+          "distractor_body": [
+            0.242254,
+            0.019042,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.08066,
+            0.249775,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 766,
+          "distractor_body": 1556,
+          "ramekin_body": 748,
+          "plate_body": 1433
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0013054038624732765,
+        "failures": []
+      }
+    },
+    {
+      "demo": 33,
+      "native_state_index": 33,
+      "pair_rng_index": 33,
+      "er_state_sha256": "2685cb2b7a50d2c0fd577470d880399c4bb1c7532aebc67bd541e8a4a944ffa3",
+      "ec_state_sha256": "a191a2176285302b3ac4959357b9a05a8f194cf2179e497d0d2369c587cf2ac5",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 7.767292126321934e-18,
+      "non_intervention_qvel_error": 3.3583521083787305e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.059572,
+            0.020293,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.003162,
+            0.14035,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.072006,
+            0.240139,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 766,
+          "distractor_body": 870,
+          "ramekin_body": 748,
+          "plate_body": 1401
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900648538196e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.004824214653897438,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.059572,
+            0.020293,
+            0.898404
+          ],
+          "distractor_body": [
+            0.241838,
+            0.01535,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.072006,
+            0.240139,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 766,
+          "distractor_body": 1560,
+          "ramekin_body": 748,
+          "plate_body": 1401
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.37490064516157e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.004824214653897438,
+        "failures": []
+      }
+    },
+    {
+      "demo": 34,
+      "native_state_index": 34,
+      "pair_rng_index": 34,
+      "er_state_sha256": "75dc417f315429034b705c875be46cf945b21f23fa83462410c21c7f7c9e6609",
+      "ec_state_sha256": "5e97e1b2b792eaf7827771f12bd1402ad3bd41bc8a15abc24ee95f465a172242",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 1.9142944607947188e-18,
+      "non_intervention_qvel_error": 3.9110393920408185e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.057268,
+            0.024934,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.000921,
+            0.141183,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.07863,
+            0.257175,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 770,
+          "distractor_body": 868,
+          "ramekin_body": 748,
+          "plate_body": 1430
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900652832735e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0017000453003724859,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.057268,
+            0.024934,
+            0.898404
+          ],
+          "distractor_body": [
+            0.244079,
+            0.016183,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.07863,
+            0.257175,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 770,
+          "distractor_body": 1560,
+          "ramekin_body": 748,
+          "plate_body": 1430
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0017000453003724865,
+        "failures": []
+      }
+    },
+    {
+      "demo": 35,
+      "native_state_index": 35,
+      "pair_rng_index": 35,
+      "er_state_sha256": "491e25281b41d2a837a853231e4a03e55930e854b1225e4282560940330fec10",
+      "ec_state_sha256": "7422dca9219ebe26f059b53a0114b19b94c1ee064b08e899abde727eaabf1dca",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 8.673617379884035e-18,
+      "non_intervention_qvel_error": 1.524333956158591e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.059757,
+            0.017561,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.003369,
+            0.144626,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.07145,
+            0.249223,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 767,
+          "distractor_body": 864,
+          "ramekin_body": 748,
+          "plate_body": 1401
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900648538196e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.004068111107560506,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.059757,
+            0.017561,
+            0.898404
+          ],
+          "distractor_body": [
+            0.241631,
+            0.019626,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.07145,
+            0.249223,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 767,
+          "distractor_body": 1562,
+          "ramekin_body": 748,
+          "plate_body": 1401
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.004068111107560634,
+        "failures": []
+      }
+    },
+    {
+      "demo": 36,
+      "native_state_index": 36,
+      "pair_rng_index": 36,
+      "er_state_sha256": "fa8d4f17c9c5ee57cb49b1112dbb4e0a4789094dde93682334359857eaf2cb03",
+      "ec_state_sha256": "735a34388df132ff82f2b5b62fdb1c87611a94dbfa7587f2b1ad15815e94048a",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 2.2985086056692694e-17,
+      "non_intervention_qvel_error": 2.4664581215288304e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.059942,
+            0.018277,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.005523,
+            0.140655,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.07184,
+            0.258956,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 769,
+          "distractor_body": 858,
+          "ramekin_body": 748,
+          "plate_body": 1402
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.37490065103858e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0009489390731418168,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.059942,
+            0.018277,
+            0.898404
+          ],
+          "distractor_body": [
+            0.239477,
+            0.015655,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.07184,
+            0.258956,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 769,
+          "distractor_body": 1560,
+          "ramekin_body": 748,
+          "plate_body": 1402
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0009489390731420374,
+        "failures": []
+      }
+    },
+    {
+      "demo": 37,
+      "native_state_index": 37,
+      "pair_rng_index": 37,
+      "er_state_sha256": "1491ad85806019f76329d86ba8529eec3e8de02cbadb65300c65cd5f12934187",
+      "ec_state_sha256": "c0171382e51fe97a9f0145522a65927fdc717876e75219dd16f3e54af8328336",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 2.9578390518120168e-18,
+      "non_intervention_qvel_error": 3.957895885822032e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.056991,
+            0.021778,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.009384,
+            0.141247,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080215,
+            0.241412,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 851,
+          "ramekin_body": 748,
+          "plate_body": 1427
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0010007804917043796,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.056991,
+            0.021778,
+            0.898404
+          ],
+          "distractor_body": [
+            0.235616,
+            0.016247,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080215,
+            0.241412,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 1539,
+          "ramekin_body": 748,
+          "plate_body": 1427
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0010007804917043796,
+        "failures": []
+      }
+    },
+    {
+      "demo": 38,
+      "native_state_index": 38,
+      "pair_rng_index": 38,
+      "er_state_sha256": "23823d399540c76f6b9079a7fdc5201c1976d3e93a9d3c32215ec06b610a1e80",
+      "ec_state_sha256": "0a069cf2e27a5371ee90b5dd87d50c95ccde05b7b0303a84d2363681149d7e02",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 6.903318520122548e-18,
+      "non_intervention_qvel_error": 3.0609662773480646e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.056876,
+            0.021056,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.003715,
+            0.147138,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.068003,
+            0.259006,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 767,
+          "distractor_body": 866,
+          "ramekin_body": 748,
+          "plate_body": 1390
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900649032371e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0005981107062547193,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.056876,
+            0.021056,
+            0.898404
+          ],
+          "distractor_body": [
+            0.241285,
+            0.022138,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.068003,
+            0.259006,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 767,
+          "distractor_body": 1562,
+          "ramekin_body": 748,
+          "plate_body": 1390
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0005981107062547193,
+        "failures": []
+      }
+    },
+    {
+      "demo": 39,
+      "native_state_index": 39,
+      "pair_rng_index": 39,
+      "er_state_sha256": "198f3212f3818eb5a3efa527aef98b033dc19c5ea015266bcd849d38c4c525d1",
+      "ec_state_sha256": "12840d43408ad7231f2da165e931f29d2a20beec1be90c71048d65e57429290b",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 4.8551928536616495e-18,
+      "non_intervention_qvel_error": 2.5347194055978347e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.055235,
+            0.016653,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.003695,
+            0.149352,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080504,
+            0.250046,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 773,
+          "distractor_body": 870,
+          "ramekin_body": 748,
+          "plate_body": 1433
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900649032371e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004321169455994915,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.055235,
+            0.016653,
+            0.898404
+          ],
+          "distractor_body": [
+            0.241305,
+            0.024352,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080504,
+            0.250046,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 773,
+          "distractor_body": 1562,
+          "ramekin_body": 748,
+          "plate_body": 1433
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004321169455994916,
+        "failures": []
+      }
+    },
+    {
+      "demo": 40,
+      "native_state_index": 40,
+      "pair_rng_index": 40,
+      "er_state_sha256": "0779a22fe595a16a757a97da3bb7c12ad3d0b8f9d98a8171e7b663d2282a7f86",
+      "ec_state_sha256": "872c54222cd7b3c8f6cbbeb9e912a8647cdbaf2f2d9d94bd04c269125f91dd84",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 4.335114624047509e-18,
+      "non_intervention_qvel_error": 3.4711426426029603e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.054765,
+            0.016336,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.001196,
+            0.144967,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.077496,
+            0.246172,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 776,
+          "distractor_body": 872,
+          "ramekin_body": 748,
+          "plate_body": 1421
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900649529499e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0004321824914106519,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.054765,
+            0.016336,
+            0.898404
+          ],
+          "distractor_body": [
+            0.243804,
+            0.019967,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.077496,
+            0.246172,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 776,
+          "distractor_body": 1561,
+          "ramekin_body": 748,
+          "plate_body": 1421
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.00043218249141065184,
+        "failures": []
+      }
+    },
+    {
+      "demo": 41,
+      "native_state_index": 41,
+      "pair_rng_index": 41,
+      "er_state_sha256": "54827664316d2466fc6e8169ca8784d3cd08106a19b47e2747c3ca6f1bed12d9",
+      "ec_state_sha256": "ba8064457f53bac140c9b0ab9d0d8e8dc2e49786c57ca117e200bb8170afb3c7",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.469446951953614e-18,
+      "non_intervention_qvel_error": 2.74968095887769e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.053427,
+            0.023646,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.001515,
+            0.149917,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.068058,
+            0.257634,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 774,
+          "distractor_body": 874,
+          "ramekin_body": 748,
+          "plate_body": 1388
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900649529499e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0011728876192812657,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.053427,
+            0.023646,
+            0.898404
+          ],
+          "distractor_body": [
+            0.243485,
+            0.024917,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.068058,
+            0.257634,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 774,
+          "distractor_body": 1556,
+          "ramekin_body": 748,
+          "plate_body": 1388
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0011728876192812659,
+        "failures": []
+      }
+    },
+    {
+      "demo": 42,
+      "native_state_index": 42,
+      "pair_rng_index": 42,
+      "er_state_sha256": "4ff5c6af5b1d124d4e27941e15cb7d69b9ee255375a3ac273be7e393fe448f18",
+      "ec_state_sha256": "f6ff9dca10fc0fc62e12cc7f2dd9bc6716481f3782326e0fd16ccdfbdf39aaf1",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.469446951953614e-18,
+      "non_intervention_qvel_error": 3.8643864551543e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.052407,
+            0.018366,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.007955,
+            0.146069,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.066951,
+            0.246838,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 777,
+          "distractor_body": 858,
+          "ramekin_body": 748,
+          "plate_body": 1378
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.00043229287744019144,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.052407,
+            0.018366,
+            0.898404
+          ],
+          "distractor_body": [
+            0.237045,
+            0.021069,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.066951,
+            0.246838,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 777,
+          "distractor_body": 1548,
+          "ramekin_body": 748,
+          "plate_body": 1378
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.00043229287744019144,
+        "failures": []
+      }
+    },
+    {
+      "demo": 43,
+      "native_state_index": 43,
+      "pair_rng_index": 43,
+      "er_state_sha256": "1fc939633d208218c1b012d095c55c498ac7d18838f64af2fb20e0f9dd80dcc5",
+      "ec_state_sha256": "e40d531fd019ed5fe17c9cf7631dc64f2985c7c6625db64e6fca7b90aa7a4b56",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 5.929230630780102e-18,
+      "non_intervention_qvel_error": 1.8276707426921585e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.052353,
+            0.019427,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.003686,
+            0.145333,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.071834,
+            0.252046,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 776,
+          "distractor_body": 861,
+          "ramekin_body": 748,
+          "plate_body": 1404
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900648538196e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.00043214920621257544,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.052353,
+            0.019427,
+            0.898404
+          ],
+          "distractor_body": [
+            0.241314,
+            0.020333,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.071834,
+            0.252046,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 776,
+          "distractor_body": 1560,
+          "ramekin_body": 748,
+          "plate_body": 1404
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.00043214920621257566,
+        "failures": []
+      }
+    },
+    {
+      "demo": 44,
+      "native_state_index": 44,
+      "pair_rng_index": 44,
+      "er_state_sha256": "73c23e1df3454b0cddc2284574d933b02a0e6d42ea926c76055fe7746f2db2a9",
+      "ec_state_sha256": "90af93309dabcad1486e52ec2065dd306ed2fc9221115e91cbff20e06dcb078b",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 5.976664475826343e-18,
+      "non_intervention_qvel_error": 1.8945951333913964e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.054363,
+            0.019765,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.007276,
+            0.149249,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.074169,
+            0.250208,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 773,
+          "distractor_body": 860,
+          "ramekin_body": 748,
+          "plate_body": 1410
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.002495929939767347,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.054363,
+            0.019765,
+            0.898404
+          ],
+          "distractor_body": [
+            0.237724,
+            0.024249,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.074169,
+            0.250208,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 773,
+          "distractor_body": 1547,
+          "ramekin_body": 748,
+          "plate_body": 1410
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.002495929939767347,
+        "failures": []
+      }
+    },
+    {
+      "demo": 45,
+      "native_state_index": 45,
+      "pair_rng_index": 45,
+      "er_state_sha256": "f3c758df7bb0f85f6fcdf7c3f5cb69ed9a8ee4dffc39dc25e92d762079668a17",
+      "ec_state_sha256": "b0126adc7877108eb9708a03746640f94180c6c23d19107d3ae2439ea8b0d48f",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 4.800982745037374e-18,
+      "non_intervention_qvel_error": 1.6380637812007023e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.052231,
+            0.017456,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.004245,
+            0.144683,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.073768,
+            0.257224,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 867,
+          "ramekin_body": 748,
+          "plate_body": 1409
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.004169436242159474,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.052231,
+            0.017456,
+            0.898404
+          ],
+          "distractor_body": [
+            0.240755,
+            0.019683,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.073768,
+            0.257224,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 1567,
+          "ramekin_body": 748,
+          "plate_body": 1409
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.004169436242159474,
+        "failures": []
+      }
+    },
+    {
+      "demo": 46,
+      "native_state_index": 46,
+      "pair_rng_index": 46,
+      "er_state_sha256": "cdd2d31bde69b63f13d2fbf5f4b83b8d9974e52562c29b2d0769bf5578b1ec23",
+      "ec_state_sha256": "a8b23335f6bfcd6d19354590f57478ff5c4aad28b7715596741060e17174b374",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.469446951953614e-18,
+      "non_intervention_qvel_error": 4.753741478381018e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.05166,
+            0.017522,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.000539,
+            0.14534,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.081523,
+            0.25681,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 773,
+          "distractor_body": 866,
+          "ramekin_body": 748,
+          "plate_body": 1438
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900652832735e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0013831055630747478,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.05166,
+            0.017522,
+            0.898404
+          ],
+          "distractor_body": [
+            0.244461,
+            0.02034,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.081523,
+            0.25681,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 773,
+          "distractor_body": 1562,
+          "ramekin_body": 748,
+          "plate_body": 1438
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0013831055630747478,
+        "failures": []
+      }
+    },
+    {
+      "demo": 47,
+      "native_state_index": 47,
+      "pair_rng_index": 47,
+      "er_state_sha256": "55eae86699a2b79184e1e8ba23f159738ebeb8dba847abf4198b796a4f3009c0",
+      "ec_state_sha256": "9557ba17bc871b9c5e8f1ed4416582f2beb2baa9b2147826d1e2f47d9f4cbdc2",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.570819078712696e-18,
+      "non_intervention_qvel_error": 3.0472374541791763e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.055796,
+            0.017157,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.00675,
+            0.145753,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.083352,
+            0.250154,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 859,
+          "ramekin_body": 748,
+          "plate_body": 1439
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900650029575e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.003269168428148107,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.055796,
+            0.017157,
+            0.898404
+          ],
+          "distractor_body": [
+            0.23825,
+            0.020753,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.083352,
+            0.250154,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 771,
+          "distractor_body": 1553,
+          "ramekin_body": 748,
+          "plate_body": 1439
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.003269168428148107,
+        "failures": []
+      }
+    },
+    {
+      "demo": 48,
+      "native_state_index": 48,
+      "pair_rng_index": 48,
+      "er_state_sha256": "956de980748d9f801b18729a19514c7eb6f5235421dfa7846f6f7844b5e79b87",
+      "ec_state_sha256": "ad05081cd7464367b5fd783e30a0d5e0b498d257956b4bf89cef3eb4d5e880f0",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 5.149960319306146e-18,
+      "non_intervention_qvel_error": 4.553286277171338e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.050437,
+            0.015101,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.009729,
+            0.141471,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080429,
+            0.245314,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 780,
+          "distractor_body": 854,
+          "ramekin_body": 748,
+          "plate_body": 1429
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900646672127e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0018341140590941332,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.050437,
+            0.015101,
+            0.898404
+          ],
+          "distractor_body": [
+            0.235271,
+            0.016471,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080429,
+            0.245314,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 780,
+          "distractor_body": 1537,
+          "ramekin_body": 748,
+          "plate_body": 1429
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900646672127e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0018341140590941334,
+        "failures": []
+      }
+    },
+    {
+      "demo": 49,
+      "native_state_index": 49,
+      "pair_rng_index": 49,
+      "er_state_sha256": "326d62722299755ed226eac32a88982b5953867323419215f12ee26ecad712c0",
+      "ec_state_sha256": "f489c0c124850365c9e58a235fa8d302bdf011238758fab3bd2cdedd89793a16",
+      "matched_pose_delta_m": {
+        "target_body": 0.0,
+        "ramekin_body": 0.0,
+        "plate_body": 0.0,
+        "side_body": 0.0
+      },
+      "non_intervention_qpos_error": 3.567702773835113e-18,
+      "non_intervention_qvel_error": 3.3697911640607093e-15,
+      "er": {
+        "positions": {
+          "target_body": [
+            -0.054586,
+            0.017392,
+            0.898404
+          ],
+          "distractor_body": [
+            -0.008094,
+            0.144142,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080663,
+            0.255458,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 774,
+          "distractor_body": 859,
+          "ramekin_body": 748,
+          "plate_body": 1438
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900643296976e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0013902021363511744,
+        "failures": []
+      },
+      "ec": {
+        "positions": {
+          "target_body": [
+            -0.054586,
+            0.017392,
+            0.898404
+          ],
+          "distractor_body": [
+            0.236906,
+            0.019142,
+            0.898404
+          ],
+          "ramekin_body": [
+            0.055001,
+            0.025005,
+            0.899341
+          ],
+          "plate_body": [
+            0.080663,
+            0.255458,
+            0.9025
+          ],
+          "side_body": [
+            0.165,
+            -0.125,
+            0.909371
+          ]
+        },
+        "visible_pixels": {
+          "target_body": 774,
+          "distractor_body": 1550,
+          "ramekin_body": 748,
+          "plate_body": 1438
+        },
+        "forbidden_contacts": [],
+        "geom_groups": {
+          "akita_black_bowl_1_main": [
+            0,
+            1
+          ],
+          "akita_black_bowl_2_main": [
+            0,
+            1
+          ],
+          "glazed_rim_porcelain_ramekin_1_main": [
+            0,
+            1
+          ],
+          "plate_1_main": [
+            0,
+            1
+          ],
+          "cookies_1_main": [
+            0,
+            1
+          ]
+        },
+        "post_settle_drift_m": {
+          "target_body": 6.374900639496981e-13,
+          "distractor_body": 6.374900637986424e-13,
+          "ramekin_body": 5.737632591262809e-13,
+          "plate_body": 5.758726828730687e-13,
+          "side_body": 5.332401187274627e-13
+        },
+        "max_residual_qvel": 0.0013902021363511744,
+        "failures": []
+      }
+    }
+  ]
+}

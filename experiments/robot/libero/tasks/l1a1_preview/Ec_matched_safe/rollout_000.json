@@ -1,0 +1,29 @@
+{
+  "camera": "agentview",
+  "resolution": 256,
+  "preprocessing": "obs.agentview_image[::-1, ::-1]",
+  "action": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    -1.0
+  ],
+  "num_steps": 30,
+  "minimum_visible_pixels": {
+    "target_body": 771,
+    "distractor_body": 1557,
+    "ramekin_body": 748,
+    "plate_body": 1412
+  },
+  "object_drift_m": {
+    "target_body": 0.0,
+    "distractor_body": 0.0,
+    "ramekin_body": 0.0,
+    "plate_body": 0.0,
+    "side_body": 0.0
+  },
+  "gate": "PASS"
+}

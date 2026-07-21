@@ -1,0 +1,38 @@
+{
+  "camera": "agentview",
+  "resolution": 256,
+  "preprocessing": "obs.agentview_image[::-1, ::-1]",
+  "visible_pixels": {
+    "target_body": 776,
+    "distractor_body": 1559,
+    "ramekin_body": 748,
+    "plate_body": 1381
+  },
+  "bodies": {
+    "akita_black_bowl_1_main": [
+      -0.053221,
+      0.023972,
+      0.898404
+    ],
+    "akita_black_bowl_2_main": [
+      0.243433,
+      0.016757,
+      0.898404
+    ],
+    "glazed_rim_porcelain_ramekin_1_main": [
+      0.055001,
+      0.025005,
+      0.899341
+    ],
+    "plate_1_main": [
+      0.066169,
+      0.252681,
+      0.9025
+    ],
+    "cookies_1_main": [
+      0.165,
+      -0.125,
+      0.909371
+    ]
+  }
+}
