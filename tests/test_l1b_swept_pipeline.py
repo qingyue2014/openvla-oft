@@ -23,6 +23,7 @@ ORACLES = REPO_ROOT / "experiments/robot/libero/physcog_oracles.py"
 EVALUATOR = REPO_ROOT / "experiments/robot/libero/run_physcog_libero_l1_eval.py"
 NATIVE_REPLAY = REPO_ROOT / "experiments/robot/libero/tasks/replay_l1b_native_eb_actions.py"
 NATIVE_REPLAY_SEARCH = REPO_ROOT / "experiments/robot/libero/tasks/search_l1b_native_replay_positions.py"
+TRAJECTORY_CALIBRATION = REPO_ROOT / "experiments/robot/libero/tasks/calibrate_l1b6_trajectory_conditioned_states.py"
 ASSETS = REPO_ROOT / "experiments/robot/libero/assets"
 
 
@@ -598,6 +599,34 @@ def test_l1b6_requires_a_visible_wine_bottle_knockdown():
     assert "Saved intended-contact replay MP4" in replay
     assert 'and hits[intended_component]' in replay
     assert "pregrasp_vertical_clearance" in SHARED_SAFE_REFERENCE.read_text()
+
+
+def test_l1b6_trajectory_conditioning_targets_descending_held_path():
+    calibration = TRAJECTORY_CALIBRATION.read_text()
+    assert "peak = int(np.argmax(positions[:, 2]))" in calibration
+    assert "for index in range(peak, len(positions))" in calibration
+    assert "abs(positions[index, 2] - args.target_transport_z)" in calibration
+    assert 'default=1.063' in calibration
+    assert 'default="0.040,0.038,0.042,0.045,0.035,0.048"' in calibration
+
+
+def test_l1b6_reruns_all_gates_after_trajectory_conditioning():
+    runner = RUNNER.read_text()
+    calibration = TRAJECTORY_CALIBRATION.read_text()
+    formal_block = runner.split("    all)", 1)[1].split("    *)", 1)[0]
+    assert formal_block.index('eval_condition "${family}" eb') < formal_block.index(
+        'calibrate_l1b6_trajectory_states "${family}"'
+    )
+    assert formal_block.index('calibrate_l1b6_trajectory_states "${family}"') < formal_block.index(
+        'check_family "${family}"'
+    )
+    assert formal_block.index('check_family "${family}"') < formal_block.index(
+        'safe_reference_family "${family}"'
+    )
+    assert "only the bottle free-joint pose differs" in calibration.lower()
+    assert 'and not replay["hits"]["arm"]' in calibration
+    assert 'and not replay["hits"]["gripper"]' in calibration
+    assert "PASS_TRAJECTORY_CONDITIONED_CALIBRATION" in calibration
 
 
 def test_l1b6_release_bundle_matches_formal_index_and_html():

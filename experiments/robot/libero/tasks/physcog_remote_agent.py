@@ -96,6 +96,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l1b6_native_held_object_scene_check.md",
             "experiments/logs/l1b6_native_held_object_safe_reference.md",
+            "experiments/logs/l1b6_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1b6_trajectory_conditioned_calibration.csv",
             "experiments/logs/l1b6_native_held_object_native_replay.md",
             "experiments/logs/l1b6_native_held_object_native_replay_videos",
             "experiments/logs/l1b6_safe_reference_videos",
@@ -117,6 +119,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l1b6_native_held_object_scene_check.md",
             "experiments/logs/l1b6_native_held_object_safe_reference.md",
+            "experiments/logs/l1b6_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1b6_trajectory_conditioned_calibration.csv",
             "experiments/logs/l1b6_native_held_object_native_replay.md",
             "experiments/logs/l1b6_native_held_object_eb_rollout_physics.md",
             "experiments/logs/l1b6_native_held_object_er_rollout_physics.md",

@@ -64,9 +64,15 @@ def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
         PHASES[("l1b6", "smoke")].command
     )
     assert PHASES[("l1b6", "smoke")].count_env == "SMOKE_TRIALS"
+    assert "experiments/logs/l1b6_trajectory_conditioned_calibration.md" in (
+        PHASES[("l1b6", "smoke")].artifacts
+    )
     formal = PHASES[("l1b6", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "SAVE_VIDEO_MODE=none" in formal.command
+    assert "experiments/logs/l1b6_trajectory_conditioned_calibration.csv" in (
+        formal.artifacts
+    )
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():

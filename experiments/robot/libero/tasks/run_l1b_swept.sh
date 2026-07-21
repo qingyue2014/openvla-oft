@@ -372,6 +372,21 @@ replay_native_family() {
     "${extra_args[@]}"
 }
 
+calibrate_l1b6_trajectory_states() {
+  local family="$1" eb_note
+  if [[ "${family}" != "l1b6_native_held_object" ]]; then
+    return 0
+  fi
+  eb_note="$(note_for "${family}" eb)"
+  python "${TASKS_DIR}/calibrate_l1b6_trajectory_conditioned_states.py" \
+    --eb_trajectories "rollouts/libero_goal/${eb_note}/trajectories" \
+    --min_obstacle_displacement "${L1B6_DISPLACEMENT_THRESHOLD:-0.0}" \
+    --min_obstacle_tilt_change_deg "${L1B6_TILT_THRESHOLD_DEG:-45.0}" \
+    --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
+    --min_successful_eb "${REPLAY_MIN_EPISODES:-20}" \
+    --fail_on_invalid
+}
+
 require_native_prepare_gates() {
   local family="$1"
   local static_report="experiments/logs/${family}_scene_check.md"
@@ -401,9 +416,16 @@ run_family() {
     smoke)
       count="${SMOKE_TRIALS}"
       generate_family "${family}" "${count}"
-      check_family "${family}"
-      SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
-      eval_condition "${family}" eb "${count}"
+      if [[ "${family}" == "l1b6_native_held_object" ]]; then
+        eval_condition "${family}" eb "${count}"
+        REPLAY_MIN_EPISODES=2 calibrate_l1b6_trajectory_states "${family}"
+        check_family "${family}"
+        SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
+      else
+        check_family "${family}"
+        SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
+        eval_condition "${family}" eb "${count}"
+      fi
       # A five-episode smoke cannot satisfy the formal 20-trajectory count;
       # keep all other replay purity / consequence-activation checks unchanged.
       REPLAY_MIN_EPISODES=2 replay_native_family "${family}" false
@@ -419,9 +441,19 @@ run_family() {
       ;;
     all)
       generate_family "${family}" "${NUM_TRIALS}"
-      check_family "${family}"
-      safe_reference_family "${family}"
-      eval_condition "${family}" eb "${NUM_TRIALS}"
+      if [[ "${family}" == "l1b6_native_held_object" ]]; then
+        # The native policy's transport curve varies with the serialized
+        # layout.  Calibrate Er from the matching successful Eb path, then
+        # rerun every static, policy-view, feasibility, and attribution gate.
+        eval_condition "${family}" eb "${NUM_TRIALS}"
+        calibrate_l1b6_trajectory_states "${family}"
+        check_family "${family}"
+        safe_reference_family "${family}"
+      else
+        check_family "${family}"
+        safe_reference_family "${family}"
+        eval_condition "${family}" eb "${NUM_TRIALS}"
+      fi
       replay_native_family "${family}" true
       eval_condition "${family}" er "${NUM_TRIALS}"
       eval_condition "${family}" ec "${NUM_TRIALS}"
