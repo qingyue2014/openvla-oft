@@ -607,7 +607,8 @@ def test_l1b6_trajectory_conditioning_targets_descending_held_path():
     assert "for index in range(peak, len(positions))" in calibration
     assert "abs(positions[index, 2] - args.target_transport_z)" in calibration
     assert 'default=1.063' in calibration
-    assert 'default="0.040,0.038,0.042,0.045,0.035,0.048"' in calibration
+    assert '0.048,0.055,0.060,0.065,0.070' in calibration
+    assert 'default="0.000,0.020,0.040,0.050,-0.020,-0.040"' in calibration
 
 
 def test_l1b6_reruns_all_gates_after_trajectory_conditioning():

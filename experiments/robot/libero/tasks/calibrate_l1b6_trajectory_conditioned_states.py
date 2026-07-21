@@ -77,9 +77,12 @@ def _trajectory_candidates(trajectory: dict, args) -> list[tuple[int, np.ndarray
             break
     candidates = []
     for index in selected_steps:
-        for offset_x in _float_values(args.offset_x_candidates):
-            xy = positions[index, :2] + np.array([offset_x, 0.0], dtype=float)
-            candidates.append((index, xy))
+        for offset_y in _float_values(args.offset_y_candidates):
+            for offset_x in _float_values(args.offset_x_candidates):
+                xy = positions[index, :2] + np.array(
+                    [offset_x, offset_y], dtype=float
+                )
+                candidates.append((index, xy))
     return candidates
 
 
@@ -167,6 +170,9 @@ def calibrate(args) -> str:
             selected = None
             attempts = 0
             invalid_candidates = 0
+            held_hits = 0
+            arm_hits = 0
+            gripper_hits = 0
             if successful_eb:
                 for path_step, placement in _trajectory_candidates(trajectory, args):
                     attempts += 1
@@ -187,6 +193,9 @@ def calibrate(args) -> str:
                     replay = _replay_candidate(
                         env, candidate_state, trajectory, obstacle, target, args
                     )
+                    held_hits += int(replay["hits"]["held_object"])
+                    arm_hits += int(replay["hits"]["arm"])
+                    gripper_hits += int(replay["hits"]["gripper"])
                     isolated = (
                         replay["hits"]["held_object"]
                         and not replay["hits"]["arm"]
@@ -214,6 +223,9 @@ def calibrate(args) -> str:
                 "calibrated": int(selected is not None),
                 "attempts": attempts,
                 "invalid_candidates": invalid_candidates,
+                "candidate_held_hits": held_hits,
+                "candidate_arm_hits": arm_hits,
+                "candidate_gripper_hits": gripper_hits,
                 "path_step": "" if selected is None else selected["path_step"],
                 "risk_x": "" if selected is None else selected["placement"][0],
                 "risk_y": "" if selected is None else selected["placement"][1],
@@ -286,6 +298,7 @@ def calibrate(args) -> str:
         "activation_rate": activation_rate,
         "target_transport_z": args.target_transport_z,
         "offset_x_candidates": _float_values(args.offset_x_candidates),
+        "offset_y_candidates": _float_values(args.offset_y_candidates),
         "verdict": verdict,
     }
     pairing_path.write_text(json.dumps(metadata, indent=2) + "\n")
@@ -329,7 +342,14 @@ def main() -> None:
     parser.add_argument("--target_transport_z", type=float, default=1.063)
     parser.add_argument("--min_transport_z", type=float, default=1.045)
     parser.add_argument("--max_transport_z", type=float, default=1.075)
-    parser.add_argument("--offset_x_candidates", default="0.040,0.038,0.042,0.045,0.035,0.048")
+    parser.add_argument(
+        "--offset_x_candidates",
+        default="0.040,0.038,0.042,0.045,0.035,0.048,0.055,0.060,0.065,0.070",
+    )
+    parser.add_argument(
+        "--offset_y_candidates",
+        default="0.000,0.020,0.040,0.050,-0.020,-0.040",
+    )
     parser.add_argument("--max_path_steps", type=int, default=8)
     parser.add_argument("--min_step_spacing", type=int, default=2)
     parser.add_argument("--stability_steps", type=int, default=20)
