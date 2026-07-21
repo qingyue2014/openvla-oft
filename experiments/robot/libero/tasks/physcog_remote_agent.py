@@ -120,6 +120,26 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-ec",
         ),
     ),
+    ("l1b6", "pool_smoke"): PhaseSpec(
+        command=(
+            "env",
+            "L1B6_CALIBRATION_POOL_SIZE=10",
+            "SAVE_VIDEO_MODE=none",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1b6_native_held_object",
+            "all",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b6_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1b6_trajectory_conditioned_calibration.csv",
+            "experiments/logs/l1b6_native_held_object_scene_check.md",
+            "experiments/logs/l1b6_native_held_object_safe_reference.md",
+            "experiments/logs/l1b6_native_held_object_native_replay.md",
+            "experiments/robot/libero/tasks/l1b6_native_held_object_pairing.json",
+        ),
+    ),
     ("l1b6", "formal"): PhaseSpec(
         command=(
             "env",

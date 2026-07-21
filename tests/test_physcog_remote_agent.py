@@ -47,7 +47,7 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
 
 def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b6") == {
-        "calibrate", "search", "path_calibrate", "prepare", "smoke", "formal",
+        "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke", "formal",
     }
     assert PHASES[("l1b6", "calibrate")].count_env == "CALIBRATION_TRIALS"
     assert any(
@@ -65,6 +65,8 @@ def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
         PHASES[("l1b6", "smoke")].command
     )
     assert PHASES[("l1b6", "smoke")].count_env == "SMOKE_TRIALS"
+    assert PHASES[("l1b6", "pool_smoke")].count_env == "NUM_TRIALS"
+    assert "L1B6_CALIBRATION_POOL_SIZE=10" in PHASES[("l1b6", "pool_smoke")].command
     assert "experiments/logs/l1b6_trajectory_conditioned_calibration.md" in (
         PHASES[("l1b6", "smoke")].artifacts
     )
