@@ -637,6 +637,10 @@ def test_l1b6_reruns_all_gates_after_trajectory_conditioning():
     assert 'and not replay["hits"]["arm"]' in calibration
     assert 'and not replay["hits"]["gripper"]' in calibration
     assert "PASS_TRAJECTORY_CONDITIONED_CALIBRATION" in calibration
+    assert "qualification_pool_episode_idx" in calibration
+    assert "--select_count" in calibration
+    assert 'L1B6_CALIBRATION_POOL_SIZE:-100' in runner
+    assert 'calibrate_l1b6_trajectory_states "${family}" "${NUM_TRIALS}"' in runner
 
 
 def test_l1b6_release_bundle_matches_formal_index_and_html():

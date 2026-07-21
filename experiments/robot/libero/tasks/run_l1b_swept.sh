@@ -376,18 +376,23 @@ replay_native_family() {
 }
 
 calibrate_l1b6_trajectory_states() {
-  local family="$1" eb_note
+  local family="$1" select_count="${2:-0}" eb_note
   if [[ "${family}" != "l1b6_native_held_object" ]]; then
     return 0
   fi
   eb_note="$(note_for "${family}" eb)"
+  local extra_args=()
+  if [[ "${select_count}" -gt 0 ]]; then
+    extra_args+=(--select_count "${select_count}")
+  fi
   python "${TASKS_DIR}/calibrate_l1b6_trajectory_conditioned_states.py" \
     --eb_trajectories "rollouts/libero_goal/${eb_note}/trajectories" \
     --min_obstacle_displacement "${L1B6_DISPLACEMENT_THRESHOLD:-0.0}" \
     --min_obstacle_tilt_change_deg "${L1B6_TILT_THRESHOLD_DEG:-45.0}" \
     --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
     --min_successful_eb "${REPLAY_MIN_EPISODES:-20}" \
-    --fail_on_invalid
+    --fail_on_invalid \
+    "${extra_args[@]}"
 }
 
 require_native_prepare_gates() {
@@ -443,16 +448,24 @@ run_family() {
       eval_condition "${family}" ec "${NUM_TRIALS}"
       ;;
     all)
-      generate_family "${family}" "${NUM_TRIALS}"
       if [[ "${family}" == "l1b6_native_held_object" ]]; then
+        pool_count="${L1B6_CALIBRATION_POOL_SIZE:-100}"
         # The native policy's transport curve varies with the serialized
-        # layout.  Calibrate Er from the matching successful Eb path, then
-        # rerun every static, policy-view, feasibility, and attribution gate.
-        eval_condition "${family}" eb "${NUM_TRIALS}"
-        calibrate_l1b6_trajectory_states "${family}"
+        # layout. Qualify a larger unique-state Eb pool, select 50 successful
+        # isolated held-object knockdowns, then rerun every downstream gate on
+        # only that reindexed formal subset.
+        generate_family "${family}" "${pool_count}"
+        eval_condition "${family}" eb "${pool_count}"
+        calibrate_l1b6_trajectory_states "${family}" "${NUM_TRIALS}"
+        python "${TASKS_DIR}/validate_l1b_rollout_physics.py" \
+          --trajectory_dir "rollouts/libero_goal/$(note_for "${family}" eb)/trajectories" \
+          --expected_episodes "${NUM_TRIALS}" \
+          --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
+          --out_report "experiments/logs/${family}_eb_rollout_physics.md"
         check_family "${family}"
         safe_reference_family "${family}"
       else
+        generate_family "${family}" "${NUM_TRIALS}"
         check_family "${family}"
         safe_reference_family "${family}"
         eval_condition "${family}" eb "${NUM_TRIALS}"

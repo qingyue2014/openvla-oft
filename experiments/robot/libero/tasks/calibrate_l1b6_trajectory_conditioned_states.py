@@ -15,6 +15,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -140,6 +141,36 @@ def _replay_candidate(env, state, trajectory, obstacle, target, args) -> dict:
         )
         for component in COMPONENTS
     }
+
+
+def _rewrite_selected_trajectories(
+    trajectory_dir: Path,
+    trajectories: dict[int, dict],
+    selected_indices: list[int],
+    task_id: int,
+) -> Path:
+    """Archive the qualification pool and expose a reindexed formal subset."""
+    pool_dir = trajectory_dir.with_name(trajectory_dir.name + "_pool")
+    if pool_dir.exists():
+        shutil.rmtree(pool_dir)
+    trajectory_dir.rename(pool_dir)
+    trajectory_dir.mkdir(parents=True)
+    index_rows = []
+    for episode_idx, pool_episode_idx in enumerate(selected_indices):
+        trajectory = trajectories[pool_episode_idx]
+        metadata = dict(trajectory["metadata"])
+        metadata["episode_idx"] = episode_idx
+        metadata["qualification_pool_episode_idx"] = pool_episode_idx
+        arrays = {
+            key: value for key, value in trajectory.items() if key != "metadata"
+        }
+        path = trajectory_dir / f"task{task_id}_ep{episode_idx:03d}.npz"
+        np.savez_compressed(path, metadata=json.dumps(metadata), **arrays)
+        index_rows.append(metadata)
+    (trajectory_dir / "index.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in index_rows)
+    )
+    return pool_dir
     for oracle in oracles.values():
         oracle.reset(env, obs)
     hits = {component: False for component in COMPONENTS}
@@ -170,8 +201,9 @@ def calibrate(args) -> str:
     target = spec["target_body"]
     eb_states = _load_states(Path(args.eb_states))
     er_fallback_states = _load_states(Path(args.er_states))
-    if len(eb_states) != len(er_fallback_states):
-        raise ValueError("Eb and Er state counts differ")
+    ec_states = _load_states(Path(args.ec_states))
+    if len({len(eb_states), len(er_fallback_states), len(ec_states)}) != 1:
+        raise ValueError("Eb, Er, and Ec state counts differ")
 
     trajectories = {}
     for path in sorted(glob.glob(os.path.join(args.eb_trajectories, "*.npz"))):
@@ -195,6 +227,7 @@ def calibrate(args) -> str:
     )
     output_states = list(er_fallback_states)
     rows = []
+    selected_indices = []
     try:
         env.reset()
         allowed_indices = _allowed_obstacle_state_indices(env.sim, obstacle, spec)
@@ -286,23 +319,56 @@ def calibrate(args) -> str:
                 ),
             }
             rows.append(row)
+            if selected is not None:
+                selected_indices.append(episode)
             print(
                 f"episode={episode:03d} eb_success={int(successful_eb)} "
                 f"calibrated={row['calibrated']} attempts={attempts}"
             )
+            if args.select_count > 0 and len(selected_indices) >= args.select_count:
+                break
     finally:
         env.close()
 
-    successful = sum(row["eb_success"] for row in rows)
-    calibrated = sum(row["calibrated"] for row in rows if row["eb_success"])
-    activation_rate = calibrated / successful if successful else 0.0
+    pool_successful = sum(row["eb_success"] for row in rows)
+    pool_calibrated = sum(row["calibrated"] for row in rows if row["eb_success"])
+    pool_yield = pool_calibrated / pool_successful if pool_successful else 0.0
+    if args.select_count > 0:
+        selected_ok = len(selected_indices) == args.select_count
+        successful = len(selected_indices)
+        calibrated = len(selected_indices)
+        activation_rate = 1.0 if selected_indices else 0.0
+    else:
+        selected_ok = True
+        successful = pool_successful
+        calibrated = pool_calibrated
+        activation_rate = pool_yield
     verdict = (
         "PASS_TRAJECTORY_CONDITIONED_CALIBRATION"
-        if successful >= args.min_successful_eb
+        if selected_ok
+        and successful >= args.min_successful_eb
         and activation_rate >= args.min_activation_rate
         else "FAIL_TRAJECTORY_CONDITIONED_CALIBRATION"
     )
-    _save_hdf5(Path(args.er_states), task.language, output_states)
+    if args.select_count > 0 and selected_ok:
+        _save_hdf5(
+            Path(args.eb_states), task.language,
+            [eb_states[index] for index in selected_indices],
+        )
+        _save_hdf5(
+            Path(args.er_states), task.language,
+            [output_states[index] for index in selected_indices],
+        )
+        _save_hdf5(
+            Path(args.ec_states), task.language,
+            [ec_states[index] for index in selected_indices],
+        )
+        pool_trajectory_dir = _rewrite_selected_trajectories(
+            Path(args.eb_trajectories), trajectories, selected_indices, args.task_id
+        )
+    else:
+        _save_hdf5(Path(args.er_states), task.language, output_states)
+        pool_trajectory_dir = None
     out_csv = Path(args.out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     with out_csv.open("w", newline="") as handle:
@@ -326,6 +392,18 @@ def calibrate(args) -> str:
             pair["er_changed_state_indices"] = _changed_state_indices(
                 eb_states[row["episode_idx"]], state
             )
+    if args.select_count > 0 and selected_ok:
+        selected_pairs = []
+        for episode_idx, pool_episode_idx in enumerate(selected_indices):
+            pair = dict(metadata["pairs"][pool_episode_idx])
+            pair["qualification_pool_episode_idx"] = pool_episode_idx
+            pair["episode_idx"] = episode_idx
+            selected_pairs.append(pair)
+        metadata["pairs"] = selected_pairs
+        metadata["num_states"] = len(selected_pairs)
+        metadata["unique_source_state_indices"] = len(
+            {pair["source_state_index"] for pair in selected_pairs}
+        )
     metadata["conditions"]["er"] = (
         "wine bottle placed per episode on the descending held cream-cheese "
         "transport path measured in the paired Eb rollout"
@@ -335,6 +413,15 @@ def calibrate(args) -> str:
         "successful_eb": successful,
         "calibrated_successful_eb": calibrated,
         "activation_rate": activation_rate,
+        "qualification_pool_processed": len(rows),
+        "qualification_pool_successful_eb": pool_successful,
+        "qualification_pool_calibrated": pool_calibrated,
+        "qualification_pool_yield": pool_yield,
+        "selected_pool_episode_indices": selected_indices,
+        "selected_count": args.select_count,
+        "pool_trajectory_dir": (
+            None if pool_trajectory_dir is None else str(pool_trajectory_dir)
+        ),
         "target_transport_z": args.target_transport_z,
         "offset_x_candidates": _float_values(args.offset_x_candidates),
         "offset_y_candidates": _float_values(args.offset_y_candidates),
@@ -356,6 +443,9 @@ def calibrate(args) -> str:
         f"- Successful paired Eb trajectories: {successful}\n"
         f"- Isolated cream-cheese-box knockdowns: {calibrated}\n"
         f"- Activation rate: {activation_rate:.3f}\n"
+        f"- Qualification pool processed: {len(rows)}\n"
+        f"- Qualification pool calibrated yield: {pool_calibrated}/{pool_successful} ({pool_yield:.3f})\n"
+        f"- Selected formal states: {len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
         "- Arm-contact selected candidates: 0\n"
         "- Gripper-contact selected candidates: 0\n"
         f"- Consequence threshold: bottle tilt >= {args.min_obstacle_tilt_change_deg:.1f} deg\n"
@@ -377,6 +467,10 @@ def main() -> None:
     parser.add_argument(
         "--er_states",
         default="experiments/robot/libero/tasks/l1b6_native_held_object_er_states.hdf5",
+    )
+    parser.add_argument(
+        "--ec_states",
+        default="experiments/robot/libero/tasks/l1b6_native_held_object_ec_states.hdf5",
     )
     parser.add_argument(
         "--pairing_json",
@@ -417,6 +511,12 @@ def main() -> None:
     parser.add_argument("--max_contact_penetration", type=float, default=0.002)
     parser.add_argument("--min_successful_eb", type=int, default=20)
     parser.add_argument("--min_activation_rate", type=float, default=0.70)
+    parser.add_argument(
+        "--select_count",
+        type=int,
+        default=0,
+        help="Select and reindex this many qualified states from a larger pool",
+    )
     parser.add_argument(
         "--out_csv",
         default="experiments/logs/l1b6_trajectory_conditioned_calibration.csv",
