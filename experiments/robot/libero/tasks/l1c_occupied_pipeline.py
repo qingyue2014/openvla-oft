@@ -1715,11 +1715,8 @@ def _l1c3_release_gate_metrics(env, spec, desired_body_xy):
     """Measure whether the held bottle is physically seated for release.
 
     The drawer contain site uses local x as vertical and local y/z as its two
-    horizontal axes.  A final horizontal bottle must fit on all three axes,
-    but an intentionally tilted, still-grasped bottle may protrude above the
-    open drawer.  Before opening the gripper we therefore require its base
-    root to be inside the site's vertical interval, its complete collision
-    footprint to be horizontally inside, and real contact with the drawer.
+    horizontal axes. Before opening the gripper, the complete collision body
+    must already fit on all three axes in its final horizontal storage pose.
     """
     site_id = env.sim.model.site_name2id(spec.anchor_site)
     site_pos = np.asarray(env.sim.data.site_xpos[site_id], dtype=float)
@@ -1761,11 +1758,63 @@ def _l1c3_release_gate_passes(metrics, spec, args):
         )
         and metrics["root_vertical_margin_m"]
         >= args.reference_release_root_vertical_margin
+        and metrics["body_vertical_margin_m"]
+        >= args.reference_final_region_vertical_margin
         and metrics["body_horizontal_margin_m"]
         >= spec.min_target_region_horizontal_margin
-        and metrics["tilt_deg"] >= args.reference_pre_release_min_tilt_deg
-        and metrics["tilt_deg"] <= args.reference_pre_release_max_tilt_deg
+        and metrics["tilt_deg"] >= spec.min_target_tilt_deg
+        and metrics["tilt_deg"] <= spec.max_target_tilt_deg
     )
+
+
+def _query_collision_drop_body_position(
+    env, body_name, xy, support_z, clearance
+):
+    """Query a collision-box-supported pose without retaining a teleport."""
+    state = env.sim.get_state()
+    try:
+        qadr = find_free_joint_qadr(env.sim, body_name)
+        if qadr < 0:
+            raise RuntimeError(f"No free joint for {body_name}")
+        env.sim.data.qpos[qadr:qadr + 2] = np.asarray(xy, dtype=float)
+        env.sim.forward()
+        collision_lo, _ = _collision_aabb(env, body_name)
+        env.sim.data.qpos[qadr + 2] += (
+            float(support_z) + float(clearance) - collision_lo[2]
+        )
+        env.sim.forward()
+        return body_pos(env, body_name)
+    finally:
+        env.sim.set_state(state)
+        env.sim.forward()
+
+
+def _align_eef_orientation(
+    env, obs, oracle, recorder, target_quat, grip, step, args
+):
+    """Restore a recorded downward grasp orientation with closed-loop OSC."""
+    from robosuite.utils import transform_utils as T
+
+    target_mat = T.quat2mat(np.asarray(target_quat, dtype=float))
+    for _ in range(args.reference_regrasp_orientation_steps):
+        current_mat = T.quat2mat(
+            np.asarray(obs["robot0_eef_quat"], dtype=float)
+        )
+        error = T.mat2axisangle(target_mat @ current_mat.T)
+        angle = float(np.linalg.norm(error))
+        if np.degrees(angle) <= args.reference_regrasp_orientation_tolerance_deg:
+            return obs, step, None
+        action = np.zeros(7, dtype=float)
+        action[3:6] = (
+            args.reference_regrasp_rotation_command
+            * error / max(angle, 1e-12)
+        )
+        action[-1] = grip
+        obs, status = _advance(env, obs, oracle, recorder, action, step)
+        step += 1
+        if status.violated:
+            return obs, step, status
+    return obs, step, "regrasp_orientation_timeout"
 
 
 def _safe_reference_attempt(
@@ -2151,13 +2200,8 @@ def _safe_reference_from_eb_prefix(args, files):
                     spec.max_occupant_displacement,
                     spec.max_occupant_tilt_change_deg,
                     spec.min_target_clearance,
-                    # L1-C3 deliberately seats the bottle base while it is
-                    # still tilted above the drawer, then opens the gripper
-                    # and lets it settle horizontally.  Judge the required
-                    # 65--115 degree storage pose after settling below, not
-                    # during the first supported release frames.
-                    0.0 if spec.scenario == "L1-C3" else spec.min_target_tilt_deg,
-                    180.0 if spec.scenario == "L1-C3" else spec.max_target_tilt_deg,
+                    spec.min_target_tilt_deg,
+                    spec.max_target_tilt_deg,
                     spec.max_target_post_release_xy_displacement,
                     target_region_site=(
                         spec.anchor_site
@@ -2176,6 +2220,14 @@ def _safe_reference_from_eb_prefix(args, files):
                 )
                 recorder.capture(obs)
                 initial_z = float(body_pos(env, spec.target_body)[2])
+                initial_target_xy = body_pos(env, spec.target_body)[:2]
+                initial_collision_lo, _ = _collision_aabb(
+                    env, spec.target_body
+                )
+                initial_support_z = float(initial_collision_lo[2])
+                home_eef_quat = np.asarray(
+                    obs["robot0_eef_quat"], dtype=float
+                ).copy()
                 step = 0
                 failure = None
                 prefix_steps = 0
@@ -2235,9 +2287,8 @@ def _safe_reference_from_eb_prefix(args, files):
                     failure = (
                         status if status is not None and status.violated else None
                     )
-                # In-hand orientation is intermediate. L1-C3 applies a
-                # dedicated support-before-release gate below and checks the
-                # final horizontal storage pose after settling.
+                # In-hand orientation is intermediate. L1-C3 applies a strict
+                # complete-body containment gate before the final release.
                 preplace_target_tilt = body_tilt_deg(env, spec.target_body)
                 grasped_offset = _eef(obs) - body_pos(env, spec.target_body)
                 release_gate = {
@@ -2251,13 +2302,13 @@ def _safe_reference_from_eb_prefix(args, files):
                     "tilt_deg": preplace_target_tilt,
                 }
                 if spec.scenario == "L1-C3":
-                    # Let the successful learned policy perform the long
-                    # transport. At its near-drawer handoff, retain an
-                    # above-object grasp, incline the bottle toward the free
-                    # drawer depth, and seat its base on the drawer before
-                    # opening. A horizontal in-air rotation puts the gripper
-                    # beside the bottle and makes the shallow drawer
-                    # unreachable; that was the source of the old hover-drop.
+                    # The policy's neck grasp puts the gripper beside a
+                    # horizontal bottle, so the wrist collides with the cabinet
+                    # before the bottle reaches the shallow drawer. Lay the
+                    # bottle down at its original clear table location, restore
+                    # a downward gripper pose, and regrasp from above. This
+                    # keeps the wrist above the drawer while the complete
+                    # bottle collision body descends into it.
                     transport_eef = _eef(obs).copy()
                     transport_eef[2] = max(
                         transport_eef[2],
@@ -2271,22 +2322,15 @@ def _safe_reference_from_eb_prefix(args, files):
                         )
                         if failure == "waypoint_timeout":
                             failure = "transport_waypoint_timeout"
-                    if failure is None and spec.horizontal_target:
-                        desired_depth = np.cross(
-                            l1c3_horizontal_rotation_axis(env, spec),
-                            np.array([0.0, 0.0, 1.0]),
-                        )
-                        desired_depth *= 1.0 if rotate_sign >= 0.0 else -1.0
-                        release_tilt = np.deg2rad(
-                            args.reference_pre_release_target_tilt_deg
-                        )
-                        desired_release_axis = (
-                            np.sin(release_tilt) * desired_depth
-                            + np.cos(release_tilt) * np.array([0.0, 0.0, 1.0])
-                        )
+                    desired_depth = np.cross(
+                        l1c3_horizontal_rotation_axis(env, spec),
+                        np.array([0.0, 0.0, 1.0]),
+                    )
+                    desired_depth *= 1.0 if rotate_sign >= 0.0 else -1.0
+                    if failure is None:
                         obs, step, status, aligned = _align_body_axis(
                             env, obs, oracle, recorder, spec.target_body,
-                            desired_release_axis, close,
+                            desired_depth, close,
                             args.reference_alignment_steps, step,
                             controller_sign=1.0,
                             command=args.reference_rotation_command,
@@ -2294,21 +2338,141 @@ def _safe_reference_from_eb_prefix(args, files):
                         if status is not None and status.violated:
                             failure = status
                         elif not aligned:
-                            failure = "pre_release_orientation_timeout"
-                        preplace_target_tilt = body_tilt_deg(
-                            env, spec.target_body
-                        )
-                    if failure is None and spec.horizontal_target:
+                            failure = "table_laydown_orientation_timeout"
+                    if failure is None:
                         obs, step, status = _hold(
                             env, obs, oracle, recorder, close,
                             args.reference_rotation_settle_steps, step,
                         )
                         if status is not None and status.violated:
                             failure = status
-                    # Query the exact supported pose for the bottle's current
-                    # inclined orientation. The state is restored immediately;
-                    # the executed trajectory contains OSC actions only.
-                    current_state = env.sim.get_state()
+                    stage_body = _query_collision_drop_body_position(
+                        env, spec.target_body, initial_target_xy,
+                        initial_support_z, args.reference_regrasp_table_clearance,
+                    )
+                    stage_eef = _eef(obs).copy()
+                    stage_eef[:2] += (
+                        stage_body[:2] - body_pos(env, spec.target_body)[:2]
+                    )
+                    if failure is None:
+                        obs, step, failure, _ = _move_with_body_alignment(
+                            env, obs, oracle, recorder, stage_eef,
+                            spec.target_body, desired_depth, close, step, args,
+                            tolerance=args.reference_lateral_tolerance,
+                        )
+                        if failure == "waypoint_timeout":
+                            failure = "table_stage_lateral_timeout"
+                    stage_descent = _eef(obs).copy()
+                    stage_descent[2] += (
+                        stage_body[2] - body_pos(env, spec.target_body)[2]
+                    )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, stage_descent, close,
+                            step, args,
+                            tolerance=args.reference_descent_tolerance,
+                        )
+                        if failure == "waypoint_timeout":
+                            collision_lo, _ = _collision_aabb(
+                                env, spec.target_body
+                            )
+                            stage_gap = max(
+                                0.0, float(collision_lo[2] - initial_support_z)
+                            )
+                            stage_xy_error = float(np.linalg.norm(
+                                body_pos(env, spec.target_body)[:2]
+                                - initial_target_xy
+                            ))
+                            failure = (
+                                None
+                                if stage_gap <= args.reference_regrasp_max_table_gap
+                                and stage_xy_error
+                                <= args.reference_regrasp_table_xy_tolerance
+                                else "table_stage_descent_timeout"
+                            )
+                    if failure is None:
+                        obs, step, status = _hold(
+                            env, obs, oracle, recorder, opened,
+                            args.release_steps, step,
+                        )
+                        if status is not None and status.violated:
+                            failure = status
+                    if failure is None:
+                        obs, step, status = _hold(
+                            env, obs, oracle, recorder, opened,
+                            args.reference_regrasp_settle_steps, step,
+                        )
+                        if status is not None and status.violated:
+                            failure = status
+                    lift_open = _eef(obs) + np.array(
+                        [0.0, 0.0, args.reference_regrasp_approach_height]
+                    )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, lift_open, opened,
+                            step, args,
+                        )
+                    if failure is None:
+                        obs, step, failure = _align_eef_orientation(
+                            env, obs, oracle, recorder, home_eef_quat,
+                            opened, step, args,
+                        )
+                    target_lo, target_hi = _collision_aabb(
+                        env, spec.target_body
+                    )
+                    target_center = (target_lo + target_hi) / 2.0
+                    regrasp = target_center.copy()
+                    regrasp[2] = target_hi[2] + args.reference_regrasp_depth
+                    regrasp_above = regrasp + np.array(
+                        [0.0, 0.0, args.reference_regrasp_approach_height]
+                    )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, regrasp_above,
+                            opened, step, args,
+                        )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, regrasp,
+                            opened, step, args, stop_on_contact=True,
+                            tolerance=args.grasp_position_tolerance,
+                        )
+                    if failure is None:
+                        obs, step, status = _hold(
+                            env, obs, oracle, recorder, close,
+                            args.grasp_steps, step,
+                        )
+                        if status is not None and status.violated:
+                            failure = status
+                    regrasp_initial_z = float(body_pos(env, spec.target_body)[2])
+                    regrasp_lift = _eef(obs) + np.array(
+                        [0.0, 0.0, args.reference_regrasp_lift_height]
+                    )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, regrasp_lift,
+                            close, step, args,
+                        )
+                    if failure is None and (
+                        body_pos(env, spec.target_body)[2] - regrasp_initial_z
+                        < args.min_lift
+                    ):
+                        failure = "table_regrasp_failed"
+                    if failure is None:
+                        obs, step, status, aligned = _align_body_axis(
+                            env, obs, oracle, recorder, spec.target_body,
+                            desired_depth, close,
+                            args.reference_alignment_steps, step,
+                            controller_sign=1.0,
+                            command=args.reference_rotation_command,
+                        )
+                        if status is not None and status.violated:
+                            failure = status
+                        elif not aligned:
+                            failure = "regrasp_storage_orientation_timeout"
+                    grasped_offset = _eef(obs) - body_pos(
+                        env, spec.target_body
+                    )
                     site_id = env.sim.model.site_name2id(spec.anchor_site)
                     site_mat = np.asarray(
                         env.sim.data.site_xmat[site_id], dtype=float
@@ -2320,60 +2484,25 @@ def _safe_reference_from_eb_prefix(args, files):
                         anchor_point(env, spec)[2]
                         - (np.abs(site_mat) @ site_size)[2]
                     )
-                    target_qadr = find_free_joint_qadr(
-                        env.sim, spec.target_body
+                    desired_body = _query_collision_drop_body_position(
+                        env, spec.target_body,
+                        anchor_offset_xy(env, spec, offset),
+                        drawer_floor_z,
+                        -args.reference_contact_descent_overtravel,
                     )
-                    if target_qadr < 0:
-                        raise RuntimeError(
-                            f"No free joint for {spec.target_body}"
-                        )
-                    env.sim.data.qpos[target_qadr:target_qadr + 2] = (
-                        anchor_offset_xy(env, spec, offset)
-                    )
-                    env.sim.forward()
-                    collision_lo, _ = _collision_aabb(
-                        env, spec.target_body
-                    )
-                    env.sim.data.qpos[target_qadr + 2] += (
-                        drawer_floor_z
-                        - args.reference_contact_descent_overtravel
-                        - collision_lo[2]
-                    )
-                    env.sim.forward()
-                    desired_body = body_pos(env, spec.target_body).copy()
-                    env.sim.set_state(current_state)
-                    env.sim.forward()
                     desired_body_xy = desired_body[:2]
-                    lateral_eef = _eef(obs).copy()
-                    lateral_eef[:2] += (
-                        desired_body_xy - body_pos(env, spec.target_body)[:2]
-                    )
-                    if failure is None:
-                        obs, step, failure, _ = _move_with_body_alignment(
-                            env, obs, oracle, recorder, lateral_eef,
-                            spec.target_body, desired_release_axis, close, step, args,
-                            tolerance=args.reference_lateral_tolerance,
-                        )
-                        if failure == "waypoint_timeout":
-                            current_margins = body_box_region_margins(
-                                env.sim, spec.target_body, spec.anchor_site
-                            )
-                            if float(np.min(current_margins[1:])) >= (
-                                spec.min_target_region_horizontal_margin
-                            ):
-                                # The calibrated point is a search target, not
-                                # a semantic requirement. Continue from any
-                                # collision-footprint-contained XY pose.
-                                failure = None
-                            else:
-                                failure = "lateral_waypoint_timeout"
-                    descent_eef = _eef(obs).copy()
-                    descent_eef[2] += (
-                        desired_body[2] - body_pos(env, spec.target_body)[2]
+                    desired_eef = desired_body + grasped_offset
+                    drawer_above = desired_eef + np.array(
+                        [0.0, 0.0, args.reference_regrasp_approach_height]
                     )
                     if failure is None:
                         obs, step, failure, _ = _move(
-                            env, obs, oracle, recorder, descent_eef, close,
+                            env, obs, oracle, recorder, drawer_above, close,
+                            step, args,
+                        )
+                    if failure is None:
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, desired_eef, close,
                             step, args,
                             tolerance=args.reference_descent_tolerance,
                             stop_on_support=True,
@@ -2397,7 +2526,8 @@ def _safe_reference_from_eb_prefix(args, files):
                         # The arm can stop against the cabinet before reaching
                         # its commanded overtravel. A timeout is acceptable
                         # only when the independent insertion gate already
-                        # proves the bottle is inside with a <=10 mm floor gap.
+                        # proves the complete bottle is inside with a <=10 mm
+                        # floor gap.
                         failure = None
                     if failure is None and not _l1c3_release_gate_passes(
                         release_gate, spec, args
@@ -2601,7 +2731,7 @@ def _safe_reference_from_eb_prefix(args, files):
             recorder.save(
                 os.path.join(args.trajectory_dir, f"safe_reference_ep{idx:03d}.npz"),
                 {
-                    "mode": "eb_grasp_prefix_plus_searched_safe_er_placement",
+                    "mode": "eb_grasp_prefix_plus_table_regrasp_safe_er_placement",
                     "source_trajectory": os.path.basename(path),
                     "attempt": row["attempt"],
                     "offset": [row["offset_x_m"], row["offset_y_m"]],
@@ -2651,9 +2781,13 @@ def _safe_reference_from_eb_prefix(args, files):
         f"- Dynamic safe-success rate: {rate:.3f}",
         f"- Required: N >= {args.min_reference_episodes}, rate >= {args.min_safe_rate:.3f}",
         "- Scope: fully executable OSC actions; no object teleport is retained in the rollout.",
-        "- Release gate: native containment is already true, the bottle base/root is "
-        "inside the drawer volume, the full collision footprint is horizontally inside, "
-        "and either drawer contact is present or the remaining floor gap is <=10 mm.",
+        "- Safe-reference motion: replay the successful Eb grasp/transport prefix, "
+        "lay the bottle horizontally on a clear matched table pose, regrasp it from "
+        "above, and lower it into the drawer.",
+        "- Release gate: native containment is already true, the complete bottle "
+        "collision body is inside the drawer in all three dimensions and within the "
+        "65--115 degree horizontal storage range, and either drawer contact is present "
+        "or the remaining floor gap is <=10 mm.",
         "- Final gate: after settling, the complete collision body must remain inside "
         "the drawer in all three dimensions.",
         f"- Videos: `{args.video_dir or 'disabled'}`",
@@ -3061,7 +3195,7 @@ def main():
     p.add_argument("--grasp_depth", type=float, default=0.025)
     p.add_argument("--lift_height", type=float, default=0.12)
     p.add_argument("--min_lift", type=float, default=0.030)
-    p.add_argument("--reference_handoff_xy_distance", type=float, default=0.070)
+    p.add_argument("--reference_handoff_xy_distance", type=float, default=0.100)
     p.add_argument("--reference_descent", type=float, default=0.120)
     p.add_argument(
         "--reference_transport_height_above_anchor", type=float, default=0.225
@@ -3078,15 +3212,6 @@ def main():
         "--reference_release_max_support_gap", type=float, default=0.010
     )
     p.add_argument(
-        "--reference_pre_release_target_tilt_deg", type=float, default=20.0
-    )
-    p.add_argument(
-        "--reference_pre_release_min_tilt_deg", type=float, default=8.0
-    )
-    p.add_argument(
-        "--reference_pre_release_max_tilt_deg", type=float, default=32.0
-    )
-    p.add_argument(
         "--reference_pre_release_settle_steps", type=int, default=8
     )
     p.add_argument(
@@ -3101,6 +3226,20 @@ def main():
     p.add_argument(
         "--reference_tracking_rotation_command", type=float, default=0.15
     )
+    p.add_argument("--reference_regrasp_table_clearance", type=float, default=0.004)
+    p.add_argument("--reference_regrasp_max_table_gap", type=float, default=0.012)
+    p.add_argument(
+        "--reference_regrasp_table_xy_tolerance", type=float, default=0.030
+    )
+    p.add_argument("--reference_regrasp_settle_steps", type=int, default=50)
+    p.add_argument("--reference_regrasp_approach_height", type=float, default=0.100)
+    p.add_argument("--reference_regrasp_depth", type=float, default=0.004)
+    p.add_argument("--reference_regrasp_lift_height", type=float, default=0.100)
+    p.add_argument("--reference_regrasp_orientation_steps", type=int, default=80)
+    p.add_argument(
+        "--reference_regrasp_orientation_tolerance_deg", type=float, default=8.0
+    )
+    p.add_argument("--reference_regrasp_rotation_command", type=float, default=0.25)
     p.add_argument("--drop_clearance", type=float, default=0.006)
     p.add_argument("--position_scale", type=float, default=0.08)
     p.add_argument("--max_position_command", type=float, default=1.0)

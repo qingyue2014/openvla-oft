@@ -595,20 +595,20 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert 'args.scenario in ("l1c2", "l1c3")' in source
     assert "_reset_with_fixture_seed(env, reset_seeds[idx])" in source
     assert "preplace_target_tilt = body_tilt_deg" in source
-    assert "Judge the required" in source
     assert 'spec.scenario != "L1-C3"' in source
     assert "handoff_xy_distance > args.reference_handoff_xy_distance" in source
-    assert "desired_body_xy - body_pos(env, spec.target_body)[:2]" in source
-    assert "stop_on_native_success and native_success(env)" in source
     assert "_align_body_axis(" in source
-    assert "failure = \"pre_release_orientation_timeout\"" in source
     assert "rotation_axis = np.cross(body_axis, desired_axis)" in source
-    assert "desired_body[2] - body_pos(env, spec.target_body)[2]" in source
     assert "_collision_aabb(" in source
+    assert "_query_collision_drop_body_position(" in source
+    assert "table_laydown_orientation_timeout" in source
+    assert "_align_eef_orientation(" in source
+    assert "table_regrasp_failed" in source
+    assert "reference_regrasp_table_clearance" in source
+    assert "reference_regrasp_approach_height" in source
     assert "drawer_floor_z" in source
-    assert "- args.reference_contact_descent_overtravel" in source
+    assert "-args.reference_contact_descent_overtravel" in source
     assert "stop_on_support=True" in source
-    assert "Continue from any" in source
     assert "tolerance=args.reference_descent_tolerance" in source
     assert "command=args.reference_rotation_command" in source
     assert "args.reference_alignment_steps" in source
@@ -625,6 +625,7 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "pre_release_drawer_insertion_gate" in source
     assert "reference_release_root_vertical_margin" in source
     assert "target_final_body_not_inside_drawer_vertical" in source
+    assert "eb_grasp_prefix_plus_table_regrasp_safe_er_placement" in source
     assert "-abs(args.rotate_sign)" in source
 
 
@@ -633,8 +634,7 @@ def test_l1c3_release_gate_rejects_hovering_bottle_before_gripper_open():
     args = SimpleNamespace(
         reference_release_root_vertical_margin=-0.004,
         reference_release_max_support_gap=0.010,
-        reference_pre_release_min_tilt_deg=12.0,
-        reference_pre_release_max_tilt_deg=32.0,
+        reference_final_region_vertical_margin=-0.005,
     )
     valid = {
         "native_inside": True,
@@ -642,9 +642,9 @@ def test_l1c3_release_gate_rejects_hovering_bottle_before_gripper_open():
         "support_gap_m": 0.0,
         "xy_error_m": 0.004,
         "root_vertical_margin_m": 0.002,
-        "body_vertical_margin_m": -0.100,
+        "body_vertical_margin_m": 0.001,
         "body_horizontal_margin_m": 0.006,
-        "tilt_deg": 20.0,
+        "tilt_deg": 90.0,
     }
     assert _l1c3_release_gate_passes(valid, spec, args)
 
@@ -672,8 +672,7 @@ def test_l1c3_release_gate_rejects_root_or_footprint_outside_drawer():
     args = SimpleNamespace(
         reference_release_root_vertical_margin=-0.004,
         reference_release_max_support_gap=0.010,
-        reference_pre_release_min_tilt_deg=12.0,
-        reference_pre_release_max_tilt_deg=32.0,
+        reference_final_region_vertical_margin=-0.005,
     )
     base = {
         "native_inside": True,
@@ -681,13 +680,19 @@ def test_l1c3_release_gate_rejects_root_or_footprint_outside_drawer():
         "support_gap_m": 0.0,
         "xy_error_m": 0.004,
         "root_vertical_margin_m": 0.002,
-        "body_vertical_margin_m": -0.100,
+        "body_vertical_margin_m": 0.001,
         "body_horizontal_margin_m": 0.006,
-        "tilt_deg": 20.0,
+        "tilt_deg": 90.0,
     }
     assert not _l1c3_release_gate_passes(
         dict(base, root_vertical_margin_m=-0.010), spec, args
     )
     assert not _l1c3_release_gate_passes(
         dict(base, body_horizontal_margin_m=0.001), spec, args
+    )
+    assert not _l1c3_release_gate_passes(
+        dict(base, body_vertical_margin_m=-0.010), spec, args
+    )
+    assert not _l1c3_release_gate_passes(
+        dict(base, tilt_deg=20.0), spec, args
     )
