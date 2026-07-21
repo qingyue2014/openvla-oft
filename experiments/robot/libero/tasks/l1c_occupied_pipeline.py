@@ -1603,7 +1603,7 @@ def _rotate_horizontal(
 
 def _align_body_axis(
     env, obs, oracle, recorder, body_name, desired_axis, grip, count, step,
-    controller_sign=1.0, tolerance_deg=10.0,
+    controller_sign=1.0, tolerance_deg=10.0, command=1.0,
 ):
     """Closed-loop OSC alignment of a body's local +z with a world axis."""
     desired_axis = np.asarray(desired_axis, dtype=float)
@@ -1627,7 +1627,7 @@ def _align_body_axis(
             break
         action = np.zeros(7, dtype=float)
         action[3:6] = (
-            float(controller_sign) * rotation_axis / norm
+            float(controller_sign * command) * rotation_axis / norm
         )
         action[-1] = grip
         obs, status = _advance(env, obs, oracle, recorder, action, step)
@@ -2141,14 +2141,23 @@ def _safe_reference_from_eb_prefix(args, files):
                             step, args,
                         )
                     if failure is None and spec.horizontal_target:
+                        obs, step, status = _hold(
+                            env, obs, oracle, recorder, close,
+                            args.reference_rotation_settle_steps, step,
+                        )
+                        if status is not None and status.violated:
+                            failure = status
+                    if failure is None and spec.horizontal_target:
                         desired_depth = np.cross(
                             l1c3_horizontal_rotation_axis(env, spec),
                             np.array([0.0, 0.0, 1.0]),
                         )
                         obs, step, status, aligned = _align_body_axis(
                             env, obs, oracle, recorder, spec.target_body,
-                            desired_depth, close, args.rotate_steps, step,
+                            desired_depth, close,
+                            args.reference_alignment_steps, step,
                             controller_sign=rotate_sign,
+                            command=args.reference_rotation_command,
                         )
                         if status is not None and status.violated:
                             failure = status
@@ -2157,6 +2166,13 @@ def _safe_reference_from_eb_prefix(args, files):
                         preplace_target_tilt = body_tilt_deg(
                             env, spec.target_body
                         )
+                    if failure is None and spec.horizontal_target:
+                        obs, step, status = _hold(
+                            env, obs, oracle, recorder, close,
+                            args.reference_rotation_settle_steps, step,
+                        )
+                        if status is not None and status.violated:
+                            failure = status
                     # Compute the exact collision-AABB floor pose without
                     # leaving a teleport in the executed trajectory. This is
                     # only a geometry query; restore the complete MuJoCo state
@@ -2779,6 +2795,9 @@ def main():
         "--reference_release_max_height_above_anchor", type=float, default=0.040
     )
     p.add_argument("--reference_rotation_clearance", type=float, default=0.060)
+    p.add_argument("--reference_rotation_command", type=float, default=0.25)
+    p.add_argument("--reference_alignment_steps", type=int, default=120)
+    p.add_argument("--reference_rotation_settle_steps", type=int, default=10)
     p.add_argument("--drop_clearance", type=float, default=0.006)
     p.add_argument("--position_scale", type=float, default=0.08)
     p.add_argument("--max_position_command", type=float, default=1.0)

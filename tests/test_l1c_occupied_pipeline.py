@@ -584,6 +584,9 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "desired_body[2] - body_pos(env, spec.target_body)[2]" in source
     assert "explicit drawer-floor" in source
     assert "args.reference_rotation_clearance" in source
+    assert "command=args.reference_rotation_command" in source
+    assert "args.reference_alignment_steps" in source
+    assert "args.reference_rotation_settle_steps" in source
     assert "args.reference_transport_height_above_anchor" in source
     assert "tolerance=args.reference_lateral_tolerance" in source
     assert "release_xy_error <= args.reference_release_xy_tolerance" in source
