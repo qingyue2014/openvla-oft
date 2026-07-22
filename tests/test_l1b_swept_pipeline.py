@@ -24,6 +24,7 @@ EVALUATOR = REPO_ROOT / "experiments/robot/libero/run_physcog_libero_l1_eval.py"
 NATIVE_REPLAY = REPO_ROOT / "experiments/robot/libero/tasks/replay_l1b_native_eb_actions.py"
 NATIVE_REPLAY_SEARCH = REPO_ROOT / "experiments/robot/libero/tasks/search_l1b_native_replay_positions.py"
 TRAJECTORY_CALIBRATION = REPO_ROOT / "experiments/robot/libero/tasks/calibrate_l1b6_trajectory_conditioned_states.py"
+ER_PHYSICS_FILTER = REPO_ROOT / "experiments/robot/libero/tasks/filter_l1b6_er_physics_qualified_states.py"
 ASSETS = REPO_ROOT / "experiments/robot/libero/assets"
 
 
@@ -648,8 +649,33 @@ def test_l1b6_reruns_all_gates_after_trajectory_conditioning():
         "def _rewrite_selected_trajectories", 1
     )[0]
     assert 'return {\n        "hits": hits' in replay_block
-    assert 'L1B6_CALIBRATION_POOL_SIZE:-140' in runner
-    assert 'calibrate_l1b6_trajectory_states "${family}" "${NUM_TRIALS}"' in runner
+    assert 'L1B6_CALIBRATION_POOL_SIZE:-240' in runner
+    assert 'L1B6_ER_PHYSICS_QUALIFICATION_SIZE:-100' in runner
+    assert 'calibrate_l1b6_trajectory_states "${family}" "${qualification_count}"' in runner
+    assert 'filter_l1b6_er_physics_states' in runner
+    assert formal_block.index('calibrate_l1b6_trajectory_states') < formal_block.index(
+        'eval_l1b6_er_physics_qualification'
+    )
+    assert formal_block.index('eval_l1b6_er_physics_qualification') < formal_block.index(
+        'filter_l1b6_er_physics_states'
+    )
+    physics_filter = ER_PHYSICS_FILTER.read_text()
+    assert 'swept_max_any_contact_penetration_m' in physics_filter
+    assert 'duplicate Er episode index' in physics_filter
+    assert 'no duplication and no threshold relaxation' in physics_filter
+
+
+def test_l1b6_er_physics_filter_is_deterministic_and_strict():
+    from experiments.robot.libero.tasks.filter_l1b6_er_physics_qualified_states import (
+        select_qualified_indices,
+    )
+
+    rows = [
+        {"episode_idx": 0, "swept_max_any_contact_penetration_m": 0.002},
+        {"episode_idx": 1, "swept_max_any_contact_penetration_m": 0.002001},
+        {"episode_idx": 2, "swept_max_any_contact_penetration_m": 0.0},
+    ]
+    assert select_qualified_indices(rows, 2, 0.002) == [0, 2]
 
 
 def test_l1b6_release_bundle_matches_formal_index_and_html():

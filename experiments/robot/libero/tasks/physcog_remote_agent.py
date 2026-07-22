@@ -125,6 +125,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "env",
             "L1B6_CALIBRATION_POOL_SIZE=10",
+            "L1B6_ER_PHYSICS_QUALIFICATION_SIZE=5",
             "REPLAY_MIN_EPISODES=2",
             "SAVE_VIDEO_MODE=none",
             "bash",
@@ -136,6 +137,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l1b6_trajectory_conditioned_calibration.md",
             "experiments/logs/l1b6_trajectory_conditioned_calibration.csv",
+            "experiments/logs/l1b6_er_physics_qualification.md",
             "experiments/logs/l1b6_native_held_object_scene_check.md",
             "experiments/logs/l1b6_native_held_object_safe_reference.md",
             "experiments/logs/l1b6_native_held_object_native_replay.md",
@@ -157,6 +159,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b6_native_held_object_safe_reference.md",
             "experiments/logs/l1b6_trajectory_conditioned_calibration.md",
             "experiments/logs/l1b6_trajectory_conditioned_calibration.csv",
+            "experiments/logs/l1b6_er_physics_qualification.md",
             "experiments/logs/l1b6_native_held_object_native_replay.md",
             "experiments/logs/l1b6_native_held_object_eb_rollout_physics.md",
             "experiments/logs/l1b6_native_held_object_er_rollout_physics.md",

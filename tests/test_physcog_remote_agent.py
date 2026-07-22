@@ -67,6 +67,7 @@ def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     assert PHASES[("l1b6", "smoke")].count_env == "SMOKE_TRIALS"
     assert PHASES[("l1b6", "pool_smoke")].count_env == "NUM_TRIALS"
     assert "L1B6_CALIBRATION_POOL_SIZE=10" in PHASES[("l1b6", "pool_smoke")].command
+    assert "L1B6_ER_PHYSICS_QUALIFICATION_SIZE=5" in PHASES[("l1b6", "pool_smoke")].command
     assert "REPLAY_MIN_EPISODES=2" in PHASES[("l1b6", "pool_smoke")].command
     assert "experiments/logs/l1b6_trajectory_conditioned_calibration.md" in (
         PHASES[("l1b6", "smoke")].artifacts
@@ -77,6 +78,7 @@ def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     assert "experiments/logs/l1b6_trajectory_conditioned_calibration.csv" in (
         formal.artifacts
     )
+    assert "experiments/logs/l1b6_er_physics_qualification.md" in formal.artifacts
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():

@@ -398,6 +398,27 @@ calibrate_l1b6_trajectory_states() {
     "${extra_args[@]}"
 }
 
+filter_l1b6_er_physics_states() {
+  local family="$1" select_count="$2" qualification_count="$3" eb_note er_note
+  if [[ "${family}" != "l1b6_native_held_object" ]]; then
+    return 0
+  fi
+  eb_note="$(note_for "${family}" eb)"
+  er_note="$(note_for "${family}" er)"
+  python "${TASKS_DIR}/filter_l1b6_er_physics_qualified_states.py" \
+    --eb_trajectories "rollouts/libero_goal/${eb_note}/trajectories" \
+    --er_trajectories "rollouts/libero_goal/${er_note}/trajectories" \
+    --qualification_count "${qualification_count}" \
+    --select_count "${select_count}" \
+    --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
+    --fail_on_invalid
+}
+
+eval_l1b6_er_physics_qualification() {
+  local family="$1" qualification_count="$2"
+  eval_condition "${family}" er "${qualification_count}"
+}
+
 require_native_prepare_gates() {
   local family="$1"
   local static_report="experiments/logs/${family}_scene_check.md"
@@ -452,14 +473,29 @@ run_family() {
       ;;
     all)
       if [[ "${family}" == "l1b6_native_held_object" ]]; then
-        pool_count="${L1B6_CALIBRATION_POOL_SIZE:-140}"
+        pool_count="${L1B6_CALIBRATION_POOL_SIZE:-240}"
+        qualification_count="${L1B6_ER_PHYSICS_QUALIFICATION_SIZE:-100}"
         # The native policy's transport curve varies with the serialized
-        # layout. Qualify a larger unique-state Eb pool, select 50 successful
-        # isolated held-object knockdowns, then rerun every downstream gate on
-        # only that reindexed formal subset.
+        # layout. First qualify isolated held-object knockdowns. Then observe
+        # the actual Er policy on a larger provisional paired subset, reject
+        # any globally excessive contact penetration, and select 50 unique
+        # physical pairs without relaxing the 2 mm threshold.
         generate_family "${family}" "${pool_count}"
         eval_condition "${family}" eb "${pool_count}"
-        calibrate_l1b6_trajectory_states "${family}" "${NUM_TRIALS}"
+        calibrate_l1b6_trajectory_states "${family}" "${qualification_count}"
+        # This provisional batch is a qualification input, so expected
+        # per-state rejections do not abort before the deterministic filter.
+        set +e
+        eval_l1b6_er_physics_qualification "${family}" "${qualification_count}"
+        qualification_eval_status=$?
+        set -e
+        if [[ "${qualification_eval_status}" -ne 0 && ! -f \
+          "rollouts/libero_goal/$(note_for "${family}" er)/trajectories/index.jsonl" ]]; then
+          echo "L1-B6 Er physics qualification did not produce a complete index" >&2
+          exit "${qualification_eval_status}"
+        fi
+        filter_l1b6_er_physics_states \
+          "${family}" "${NUM_TRIALS}" "${qualification_count}"
         python "${TASKS_DIR}/validate_l1b_rollout_physics.py" \
           --trajectory_dir "rollouts/libero_goal/$(note_for "${family}" eb)/trajectories" \
           --expected_episodes "${NUM_TRIALS}" \
