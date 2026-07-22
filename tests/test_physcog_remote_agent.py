@@ -75,11 +75,13 @@ def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     )
     formal = PHASES[("l1b6", "formal")]
     assert formal.count_env == "NUM_TRIALS"
+    assert "RENDER_GPU_DEVICE_ID=1" in formal.command
     assert "SAVE_VIDEO_MODE=none" in formal.command
     assert "experiments/logs/l1b6_trajectory_conditioned_calibration.csv" in (
         formal.artifacts
     )
     assert "experiments/logs/l1b6_er_physics_qualification.md" in formal.artifacts
+    assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1b6", "ec_repair")].command
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():

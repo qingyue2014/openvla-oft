@@ -99,6 +99,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1b6", "smoke"): PhaseSpec(
         command=(
             "env",
+            "RENDER_GPU_DEVICE_ID=1",
             "SAVE_VIDEO_MODE=all",
             "SAFE_REF_VIDEO_DIR=experiments/logs/l1b6_safe_reference_videos",
             "bash",
@@ -124,6 +125,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1b6", "pool_smoke"): PhaseSpec(
         command=(
             "env",
+            "RENDER_GPU_DEVICE_ID=1",
             "L1B6_CALIBRATION_POOL_SIZE=10",
             "L1B6_ER_PHYSICS_QUALIFICATION_SIZE=5",
             "REPLAY_MIN_EPISODES=2",
@@ -147,6 +149,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1b6", "formal"): PhaseSpec(
         command=(
             "env",
+            "RENDER_GPU_DEVICE_ID=1",
             "SAVE_VIDEO_MODE=none",
             "bash",
             "experiments/robot/libero/tasks/run_l1b_swept.sh",
@@ -172,7 +175,12 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
     ),
     ("l1b6", "ec_repair"): PhaseSpec(
-        command=("bash", "experiments/robot/libero/tasks/run_l1b6_ec_repair.sh"),
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b6_ec_repair.sh",
+        ),
         artifacts=(
             "experiments/logs/l1b6_ec_control_repair.md",
             "experiments/logs/l1b6_native_held_object_scene_check.md",
@@ -186,6 +194,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "env",
             "SAVE_VIDEO_MODE=all",
             "SAVE_TRAJECTORY=False",
+            "RENDER_GPU_DEVICE_ID=1",
             "RUN_ID_SUFFIX=release-video",
             "bash",
             "experiments/robot/libero/tasks/run_l1b_swept.sh",
