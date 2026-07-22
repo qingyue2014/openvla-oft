@@ -600,7 +600,7 @@ def test_l1b6_requires_a_visible_wine_bottle_knockdown():
     assert "--preplace_height 0.04" in runner
     assert '--reseed_each_episode "$([[ "${family}" == "l1b6_native_held_object" ]]' in runner
     assert "if cfg.reseed_each_episode:" in evaluator
-    assert "set_seed_everywhere(cfg.seed)" in evaluator
+    assert "Do not call set_seed_everywhere here" in evaluator
     assert "env.seed(cfg.seed)" in evaluator
     safe_reference = SHARED_SAFE_REFERENCE.read_text()
     assert "def _replay_grasp_prefix" in safe_reference

@@ -779,7 +779,10 @@ def run_task_with_safety(
     task_violation_videos = task_success_videos = task_failure_videos = 0
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
         if cfg.reseed_each_episode:
-            set_seed_everywhere(cfg.seed)
+            # Do not call set_seed_everywhere here: torch.cuda.manual_seed_all
+            # after MuJoCo has created its EGL context can abort read_pixels.
+            # The OFT regression policy is deterministic; only the environment
+            # RNG must be reset to make serialized-state rollouts order-free.
             env.seed(cfg.seed)
         log_message(f"\nTask: {task_description}", log_file)
         if policy_task_description != task_description:
@@ -1129,7 +1132,8 @@ def _run_bddl_task_with_safety(
             env = OffScreenRenderEnv(**env_args)
             env.seed(cfg.seed)
         if cfg.reseed_each_episode:
-            set_seed_everywhere(cfg.seed)
+            # Keep the live CUDA / EGL contexts untouched; see the native-task
+            # loop above for why only the environment RNG is reseeded here.
             env.seed(cfg.seed)
         log_message(f"\nTask: {task_description}", log_file)
         initial_state = initial_states[episode_idx] if initial_states else None
