@@ -85,7 +85,7 @@ def repair(args) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--control_lateral", type=float, default=-0.100)
+    parser.add_argument("--control_lateral", type=float, default=-0.080)
     parser.add_argument("--stability_steps", type=int, default=10)
     parser.add_argument("--eb_states", default="experiments/robot/libero/tasks/l1b6_native_held_object_eb_states.hdf5")
     parser.add_argument("--ec_states", default="experiments/robot/libero/tasks/l1b6_native_held_object_ec_states.hdf5")
