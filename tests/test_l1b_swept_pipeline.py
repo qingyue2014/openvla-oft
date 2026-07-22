@@ -593,7 +593,12 @@ def test_l1b6_requires_a_visible_wine_bottle_knockdown():
     assert "--pregrasp_clearance 0.15" in runner
     assert "--grasp_height_candidates 0.000,0.002,0.005,0.008" in runner
     assert "--grasp_offset_fractions 0.40,0.30,0.20,0.10" in runner
-    assert "--transport_via_x -0.15 --transport_clearance 0.06" in runner
+    assert "--grasp_action_trajectories" in runner
+    assert "--transport_via_x -0.15 --transport_clearance 0.02" in runner
+    assert "--preplace_height 0.04" in runner
+    safe_reference = SHARED_SAFE_REFERENCE.read_text()
+    assert "def _replay_grasp_prefix" in safe_reference
+    assert "paired_eb_prefix_did_not_verify_grasp" in safe_reference
     assert 'extra_args+=(--video_dir "experiments/logs/${family}_native_replay_videos")' in runner
     replay = (RUNNER.parent / "replay_l1b_native_eb_actions.py").read_text()
     assert "Saved intended-contact replay MP4" in replay

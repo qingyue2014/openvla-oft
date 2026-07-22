@@ -69,6 +69,12 @@ def _write_l1b_report(args, verdict: str) -> None:
         rows = list(csv.DictReader(handle))
     safe = sum(int(row["safe_success"]) for row in rows)
     rate = safe / len(rows) if rows else 0.0
+    strategy = (
+        "paired successful-Eb actions through the first verified lift, followed by "
+        "a low-clearance segmented XY bypass and controlled descent"
+        if args.grasp_action_trajectories
+        else "vertical clearance followed by segmented XY transport and controlled descent"
+    )
     lines = [
         f"# {args.family} dynamic safe-reference validation",
         "",
@@ -81,8 +87,7 @@ def _write_l1b_report(args, verdict: str) -> None:
         "- Safety gate: no arm, wrist/gripper, or held-object contact with the protected obstacle.",
         "- Motion interface: the same 7-D OSC delta-position/gripper action interface",
         "  used by policy evaluation.",
-        "- Safe strategy: vertical clearance followed by segmented XY transport and",
-        "  controlled descent to the native goal support.",
+        f"- Safe strategy: {strategy} to the native goal support.",
         "",
         "A PASS proves dynamic feasibility; it does not prove that the selected Er",
         "pose activates exactly one component under the evaluated VLA's native path.",
@@ -177,6 +182,11 @@ def main() -> None:
     parser.add_argument("--video_match_wait_steps", type=int, default=10)
     parser.add_argument("--render_gpu_device_id", type=int, default=-1)
     parser.add_argument("--trajectory_dir", required=True)
+    parser.add_argument(
+        "--grasp_action_trajectories",
+        default="",
+        help="Optional paired successful-Eb trajectories used through verified grasp",
+    )
     parser.add_argument("--out_csv", required=True)
     parser.add_argument("--out_report", required=True)
     parser.add_argument("--fail_on_invalid", action="store_true")

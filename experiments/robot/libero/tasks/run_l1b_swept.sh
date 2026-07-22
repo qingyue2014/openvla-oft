@@ -208,7 +208,7 @@ check_family() {
 
 safe_reference_family() {
   local family="$1" count="${SAFE_REF_STATES:-${NUM_TRIALS}}"
-  local task_suite task_id state_path
+  local task_suite task_id state_path eb_note
   task_suite="$(task_suite_for "${family}")"
   task_id="$(task_id_for "${family}")"
   state_path="${SAFE_REF_STATE_PATH_OVERRIDE:-${TASKS_DIR}/${family}_er_states.hdf5}"
@@ -241,7 +241,9 @@ safe_reference_family() {
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
     extra_args+=(--position_tolerance 0.020)
   elif [[ "${family}" == "l1b6_native_held_object" ]]; then
-    extra_args+=(--approach_height 0.15 --lift_height 0.18)
+    eb_note="$(note_for "${family}" eb)"
+    extra_args+=(--grasp_action_trajectories "rollouts/${task_suite}/${eb_note}/trajectories")
+    extra_args+=(--approach_height 0.10 --lift_height 0.06)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
     extra_args+=(--position_tolerance 0.020)
     # Approach the cream-cheese box from the negative-X side before taking the
@@ -257,7 +259,8 @@ safe_reference_family() {
     extra_args+=(--grasp_offset_fractions 0.40,0.30,0.20,0.10)
     # Prove an active bypass on the negative-X side, away from the positive-X
     # bottle pose and inside the measured OSC workspace.
-    extra_args+=(--transport_via_x -0.15 --transport_clearance 0.06)
+    extra_args+=(--transport_via_x -0.15 --transport_clearance 0.02)
+    extra_args+=(--preplace_height 0.04)
   fi
   if [[ -n "${SAFE_REF_VIDEO_DIR:-}" ]]; then
     extra_args+=(--video_dir "${SAFE_REF_VIDEO_DIR}")

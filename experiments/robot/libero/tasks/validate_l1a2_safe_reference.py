@@ -345,6 +345,39 @@ def _reference_attempt_score(row: dict) -> tuple:
     )
 
 
+def _replay_grasp_prefix(env, obs, oracle, recorder, actions, source, step, args):
+    """Replay a paired successful-Eb prefix until the target is securely lifted.
+
+    L1-B6 calibrates the bottle against the evaluated policy's actual path.  Reusing
+    that already-validated pre-contact prefix avoids proving feasibility with a
+    different scripted approach that can sweep the wrist through the bottle before
+    the grasp.  The controller branches to its collision-free bypass immediately
+    after the minimum verified lift, before the calibrated held-object contact.
+    """
+    close_sign = 1.0
+    video_start_step = max(0, int(args.video_match_wait_steps))
+    for prefix_idx, action in enumerate(np.asarray(actions, dtype=float)):
+        if recorder._capture_video and not recorder._video_started and prefix_idx >= video_start_step:
+            recorder.capture_initial(obs)
+        obs, status = _advance(env, obs, oracle, recorder, action, step)
+        step += 1
+        if status.violated:
+            return obs, step, close_sign, status
+        if abs(float(action[-1])) > 1e-6:
+            close_sign = float(np.sign(action[-1]))
+        lift_m = float(_body_pos(env, TARGET)[2] - source[2])
+        if lift_m >= args.min_grasp_lift:
+            if recorder._capture_video and not recorder._video_started:
+                recorder.capture_initial(obs)
+            return obs, step, close_sign, None
+    if recorder._capture_video and not recorder._video_started:
+        recorder.capture_initial(obs)
+    return obs, step, close_sign, MotionFailure(
+        reason="paired_eb_prefix_did_not_verify_grasp",
+        stage="replay_grasp_prefix",
+    )
+
+
 def _run_episode(
     env,
     state,
@@ -370,118 +403,131 @@ def _run_episode(
     step = 0
     failure = None
     occluder_start = _body_pos(env, OCCLUDER)
+    source = _body_pos(env, TARGET)
+    grasp_prefix_path = getattr(args, "grasp_action_path", "")
+    use_grasp_prefix = bool(grasp_prefix_path)
 
-    # Match the evaluation rollout's first recorded policy frame. The VLA
-    # executes its configured dummy open-gripper action for 10 steps and only
-    # then captures agentview. Keep these settling actions in the trajectory,
-    # but start the safe-reference MP4 at the corresponding post-wait frame.
-    if capture_video and args.video_match_wait_steps:
-        obs, step, failure = _hold(
-            env,
-            obs,
-            oracle,
-            recorder,
-            -1.0,
-            args.video_match_wait_steps,
-            step,
-        )
-    recorder.capture_initial(obs)
-
-    # Probe both commands away from objects so the script remains correct
-    # across robosuite gripper-sign conventions.
     close_sign, open_sign = 1.0, -1.0
     aperture_minus = aperture_plus = float("nan")
-    if failure is None:
-        obs, step, close_sign, open_sign, aperture_minus, aperture_plus, failure = (
-            _calibrate_gripper_sign(env, obs, oracle, recorder, step, args)
-        )
-    if failure is None:
-        obs, step, failure = _hold(
-            env, obs, oracle, recorder, open_sign, args.wait_steps, step
-        )
-    source = _body_pos(env, TARGET)
-    above_source = source.copy()
-    above_source[2] += args.approach_height
-    grasp_eef = source.copy()
     if grasp_height is None:
         grasp_height = args.grasp_height
-    grasp_eef[2] += grasp_height
     grasp_xy_offset = np.asarray(grasp_xy_offset, dtype=float)
-    above_source[:2] += grasp_xy_offset
-    grasp_eef[:2] += grasp_xy_offset
 
-    stages = []
-    detour_x = getattr(args, "pregrasp_detour_x", None)
-    detour_y = getattr(args, "pregrasp_detour_y", None)
-    if detour_x is not None or detour_y is not None:
-        detour = _eef_pos(obs).copy()
-        pregrasp_clearance = getattr(args, "pregrasp_clearance", 0.0)
-        if pregrasp_clearance > 0:
-            raised = detour.copy()
-            raised[2] += pregrasp_clearance
-            stages.append(
-                (
-                    "pregrasp_vertical_clearance",
-                    raised,
-                    open_sign,
-                    args.position_tolerance,
-                    False,
-                )
-            )
-            detour = raised
-        if detour_x is not None:
-            detour[0] = detour_x
-        if detour_y is not None:
-            detour[1] = detour_y
-        stages.append(
-            ("pregrasp_lateral_detour", detour, open_sign, args.position_tolerance, False)
+    if use_grasp_prefix:
+        with np.load(grasp_prefix_path, allow_pickle=False) as trajectory:
+            prefix_actions = np.asarray(trajectory["actions"], dtype=float)
+        obs, step, close_sign, failure = _replay_grasp_prefix(
+            env, obs, oracle, recorder, prefix_actions, source, step, args
         )
-    stages.extend(
-        [
-            ("approach_source", above_source, open_sign, args.position_tolerance, False),
-            ("descend_to_grasp", grasp_eef, open_sign, args.precise_position_tolerance, True),
-        ]
-    )
-    for stage, target, grip, tolerance, accept_contact in stages:
+        open_sign = -close_sign
+    else:
+        # Match the evaluation rollout's first recorded policy frame. The VLA
+        # executes its configured dummy open-gripper action for 10 steps and only
+        # then captures agentview. Keep these settling actions in the trajectory,
+        # but start the safe-reference MP4 at the corresponding post-wait frame.
+        if capture_video and args.video_match_wait_steps:
+            obs, step, failure = _hold(
+                env,
+                obs,
+                oracle,
+                recorder,
+                -1.0,
+                args.video_match_wait_steps,
+                step,
+            )
+        recorder.capture_initial(obs)
+
+        # Probe both commands away from objects so the script remains correct
+        # across robosuite gripper-sign conventions.
+        if failure is None:
+            obs, step, close_sign, open_sign, aperture_minus, aperture_plus, failure = (
+                _calibrate_gripper_sign(env, obs, oracle, recorder, step, args)
+            )
+        if failure is None:
+            obs, step, failure = _hold(
+                env, obs, oracle, recorder, open_sign, args.wait_steps, step
+            )
+        above_source = source.copy()
+        above_source[2] += args.approach_height
+        grasp_eef = source.copy()
+        grasp_eef[2] += grasp_height
+        above_source[:2] += grasp_xy_offset
+        grasp_eef[:2] += grasp_xy_offset
+
+        stages = []
+        detour_x = getattr(args, "pregrasp_detour_x", None)
+        detour_y = getattr(args, "pregrasp_detour_y", None)
+        if detour_x is not None or detour_y is not None:
+            detour = _eef_pos(obs).copy()
+            pregrasp_clearance = getattr(args, "pregrasp_clearance", 0.0)
+            if pregrasp_clearance > 0:
+                raised = detour.copy()
+                raised[2] += pregrasp_clearance
+                stages.append(
+                    (
+                        "pregrasp_vertical_clearance",
+                        raised,
+                        open_sign,
+                        args.position_tolerance,
+                        False,
+                    )
+                )
+                detour = raised
+            if detour_x is not None:
+                detour[0] = detour_x
+            if detour_y is not None:
+                detour[1] = detour_y
+            stages.append(
+                ("pregrasp_lateral_detour", detour, open_sign, args.position_tolerance, False)
+            )
+        stages.extend(
+            [
+                ("approach_source", above_source, open_sign, args.position_tolerance, False),
+                ("descend_to_grasp", grasp_eef, open_sign, args.precise_position_tolerance, True),
+            ]
+        )
+        for stage, target, grip, tolerance, accept_contact in stages:
+            if failure is None:
+                obs, step, failure = _move_to(
+                    env,
+                    obs,
+                    oracle,
+                    recorder,
+                    target,
+                    grip,
+                    step,
+                    args,
+                    stage,
+                    tolerance,
+                    accept_contact,
+                )
+                if failure is not None:
+                    print(
+                        f"  waypoint_failure stage={stage} step={step} "
+                        f"reason={getattr(failure, 'reason', failure)}"
+                    )
+        if failure is None:
+            obs, step, failure = _seat_grasp(
+                env, obs, oracle, recorder, grasp_eef, close_sign, step, args
+            )
+
+        grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
+        lifted_bowl = _body_pos(env, TARGET).copy()
+        lifted_bowl[2] += args.lift_height
         if failure is None:
             obs, step, failure = _move_to(
                 env,
                 obs,
                 oracle,
                 recorder,
-                target,
-                grip,
+                lifted_bowl + grasped_offset,
+                close_sign,
                 step,
                 args,
-                stage,
-                tolerance,
-                accept_contact,
+                "lift_grasped_bowl",
             )
-            if failure is not None:
-                print(
-                    f"  waypoint_failure stage={stage} step={step} "
-                    f"reason={getattr(failure, 'reason', failure)}"
-                )
-    if failure is None:
-        obs, step, failure = _seat_grasp(
-            env, obs, oracle, recorder, grasp_eef, close_sign, step, args
-        )
 
     grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
-    lifted_bowl = _body_pos(env, TARGET).copy()
-    lifted_bowl[2] += args.lift_height
-    if failure is None:
-        obs, step, failure = _move_to(
-            env,
-            obs,
-            oracle,
-            recorder,
-            lifted_bowl + grasped_offset,
-            close_sign,
-            step,
-            args,
-            "lift_grasped_bowl",
-        )
     grasp_lift_m = float(_body_pos(env, TARGET)[2] - source[2])
     grasp_verified = bool(failure is None and grasp_lift_m >= args.min_grasp_lift)
     if failure is None and not grasp_verified:
@@ -697,6 +743,17 @@ def run(args):
         for idx, state in enumerate(states):
             env.reset()
             env.set_init_state(state)
+            grasp_prefix_dir = getattr(args, "grasp_action_trajectories", "")
+            if grasp_prefix_dir:
+                args.grasp_action_path = str(
+                    Path(grasp_prefix_dir) / f"task{args.task_id}_ep{idx:03d}.npz"
+                )
+                if not Path(args.grasp_action_path).is_file():
+                    raise FileNotFoundError(
+                        f"Missing paired grasp-action trajectory: {args.grasp_action_path}"
+                    )
+            else:
+                args.grasp_action_path = ""
             bowl_lo, bowl_hi = _world_aabb(env, TARGET)
             # Guard against mesh geom_size conventions that report a coarse
             # bounding radius rather than the visible bowl footprint.
@@ -728,6 +785,10 @@ def run(args):
             grasp_candidates = [
                 (height, offset) for offset in candidates for height in heights
             ]
+            if grasp_prefix_dir:
+                # The paired policy prefix defines the grasp; scripted grasp
+                # height/offset enumeration would only replay the same prefix.
+                grasp_candidates = [(args.grasp_height, np.zeros(2))]
             if selected_grasp is not None:
                 selected_height, selected_offset = selected_grasp
                 grasp_candidates = [selected_grasp] + [
