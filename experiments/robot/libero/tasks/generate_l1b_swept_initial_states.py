@@ -232,7 +232,7 @@ FAMILIES = {
         "control_fraction": 0.50,
         # Put Ec on the opposite side of the learned carry path, away from the
         # held-box sweep and the native plate occupying the positive-X side.
-        "control_lateral": -0.060,
+        "control_lateral": -0.100,
         "required_prompt_terms": ["cream cheese", "bowl"],
         "min_obstacle_displacement": 0.0,
         "min_obstacle_tilt_change_deg": 45.0,

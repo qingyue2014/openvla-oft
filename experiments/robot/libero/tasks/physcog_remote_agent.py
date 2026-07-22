@@ -171,6 +171,16 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-ec/trajectories",
         ),
     ),
+    ("l1b6", "ec_repair"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l1b6_ec_repair.sh"),
+        artifacts=(
+            "experiments/logs/l1b6_ec_control_repair.md",
+            "experiments/logs/l1b6_native_held_object_scene_check.md",
+            "experiments/logs/l1b6_native_held_object_ec_rollout_physics.md",
+            "experiments/robot/libero/tasks/l1b_swept_preview/l1b6_native_held_object",
+            "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-ec/trajectories",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",
