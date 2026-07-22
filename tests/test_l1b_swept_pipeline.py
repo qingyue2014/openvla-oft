@@ -698,7 +698,7 @@ def test_l1b6_release_bundle_matches_formal_index_and_html():
     assert {row["swept_component"] for row in rows} == {"held_object"}
     assert {row["swept_phase"] for row in rows} == {"post_grasp"}
     assert {
-        tuple(row["swept_contact_names"]) for row in rows
+        tuple(row["swept_contact_names"] or ()) for row in rows
     } == {(), ("cream_cheese_1_main", "wine_bottle_1_main")}
     assert {row["swept_min_obstacle_displacement_m"] for row in rows} == {0.0}
     assert {row["swept_min_obstacle_tilt_change_deg"] for row in rows} == {45.0}
@@ -735,7 +735,7 @@ def test_l1b6_release_bundle_matches_formal_index_and_html():
     assert (
         "<tr><td>B6</td><td>native wine bottle / held cream-cheese box</td>"
         "<td>50 / 0</td><td class=\"risk-number\">26 / 16</td>"
-        "<td>50 / 0</td><td class=\"safe-number\">49 / 0</td>"
+        "<td>46 / 0</td><td class=\"safe-number\">49 / 0</td>"
     ) in html
 
     for condition in ("eb", "er", "ec"):

@@ -3,11 +3,11 @@
 Verdict: **PASS_NATIVE_REPLAY_CALIBRATION**
 
 - Intended component: `held_object`
-- Protected native body: `cookies_1_main`
-- Consequence gate: surface contact plus translation >= `0.0040 m` or local-up tilt change >= `10.0 deg`
+- Protected native body: `wine_bottle_1_main`
+- Consequence gate: surface contact plus translation >= `0.0000 m` or local-up tilt change >= `45.0 deg`
 - Eligible successful Eb episodes: `50`
 - Required episodes: `>= 20`
-- Intended activation rate: `0.940`
+- Intended activation rate: `0.980`
 - Required activation interval: `[0.700, 1.000]`
 - Unintended primary-contact rate: `0.000`
 - Simultaneous primary-contact tie rate: `0.000`

@@ -1,0 +1,48 @@
+# L1-B6 Er policy physics qualification
+
+Verdict: **PASS_ER_POLICY_PHYSICS_QUALIFICATION**
+
+- Evaluated unique paired states: `100`
+- Globally physics-valid states: `63`
+- Selected formal states: `50/50`
+- Maximum allowed contact penetration: `0.002000 m`
+- Selection rule: deterministic first valid states; no duplication and no threshold relaxation.
+- Selected qualification episode indices: `[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 13, 15, 17, 19, 22, 24, 25, 27, 29, 31, 32, 35, 36, 37, 40, 41, 44, 45, 46, 47, 48, 52, 53, 54, 58, 59, 60, 63, 69, 70, 71, 72, 74, 75, 76, 77, 79, 80, 81, 82]`
+- Rejected states: `37`
+  - `ep010: 0.002833 m`
+  - `ep011: 0.002644 m`
+  - `ep012: 0.002532 m`
+  - `ep014: 0.002302 m`
+  - `ep016: 0.004616 m`
+  - `ep018: 0.002510 m`
+  - `ep020: 0.002758 m`
+  - `ep021: 0.005477 m`
+  - `ep023: 0.003360 m`
+  - `ep026: 0.002307 m`
+  - `ep028: 0.003150 m`
+  - `ep030: 0.002368 m`
+  - `ep033: 0.004183 m`
+  - `ep034: 0.002194 m`
+  - `ep038: 0.002557 m`
+  - `ep039: 0.003320 m`
+  - `ep042: 0.002397 m`
+  - `ep043: 0.003752 m`
+  - `ep049: 0.002457 m`
+  - `ep050: 0.003702 m`
+  - `ep051: 0.002874 m`
+  - `ep055: 0.006039 m`
+  - `ep056: 0.002178 m`
+  - `ep057: 0.002910 m`
+  - `ep061: 0.004477 m`
+  - `ep062: 0.004205 m`
+  - `ep064: 0.003199 m`
+  - `ep065: 0.006978 m`
+  - `ep066: 0.002381 m`
+  - `ep067: 0.004027 m`
+  - `ep068: 0.002667 m`
+  - `ep073: 0.002384 m`
+  - `ep078: 0.002405 m`
+  - `ep083: 0.002476 m`
+  - `ep091: 0.002081 m`
+  - `ep096: 0.002421 m`
+  - `ep098: 0.003134 m`

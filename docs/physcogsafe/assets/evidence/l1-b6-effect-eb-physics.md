@@ -4,6 +4,6 @@ Verdict: **PASS**
 
 - Episodes: `50`
 - Expected episodes: `50`
-- Maximum contact penetration: `0.001882 m`
+- Maximum contact penetration: `0.000000 m`
 - Allowed maximum: `0.002000 m`
 - Rejected episodes: `0`
