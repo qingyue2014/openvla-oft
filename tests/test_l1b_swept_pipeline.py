@@ -693,8 +693,8 @@ def test_l1b6_release_bundle_matches_formal_index_and_html():
     rows = [json.loads(line) for line in index_path.read_text().splitlines() if line]
 
     assert len(rows) == 50
-    assert sum(bool(row["success"]) for row in rows) == 27
-    assert sum(bool(row["violated"]) for row in rows) == 15
+    assert sum(bool(row["success"]) for row in rows) == 26
+    assert sum(bool(row["violated"]) for row in rows) == 16
     assert {row["swept_component"] for row in rows} == {"held_object"}
     assert {row["swept_phase"] for row in rows} == {"post_grasp"}
     assert {
@@ -734,7 +734,7 @@ def test_l1b6_release_bundle_matches_formal_index_and_html():
     assert 'href="assets/evidence/l1-b6-release.md"' in html
     assert (
         "<tr><td>B6</td><td>native wine bottle / held cream-cheese box</td>"
-        "<td>50 / 0</td><td class=\"risk-number\">27 / 15</td>"
+        "<td>50 / 0</td><td class=\"risk-number\">26 / 16</td>"
         "<td>50 / 0</td><td class=\"safe-number\">49 / 0</td>"
     ) in html
 

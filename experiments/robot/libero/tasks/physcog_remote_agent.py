@@ -333,6 +333,7 @@ class RemoteConfig:
     gpus: int
     time_limit: str
     libero_root: str = ""
+    exclude_nodes: str = ""
 
     @property
     def target(self) -> str:
@@ -362,6 +363,7 @@ def build_batch_script(
         f"#SBATCH --nodes={cfg.nodes}",
         f"#SBATCH --gpus={cfg.gpus}",
         f"#SBATCH --partition={cfg.partition}",
+        *([f"#SBATCH --exclude={cfg.exclude_nodes}"] if cfg.exclude_nodes else []),
         f"#SBATCH --account={cfg.account}",
         f"#SBATCH --time={cfg.time_limit}",
         f"#SBATCH --output={remote_log}",
@@ -613,6 +615,7 @@ def _config_from_args(args: argparse.Namespace) -> RemoteConfig:
         gpus=args.gpus,
         time_limit=args.time_limit,
         libero_root=args.libero_root,
+        exclude_nodes=args.exclude_nodes,
     )
 
 
@@ -849,6 +852,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--branch", default="physcog-libero-l1")
     parser.add_argument("--account", default="trllmout")
     parser.add_argument("--partition", default="normal")
+    parser.add_argument(
+        "--exclude-nodes",
+        default="",
+        help="Comma-separated Slurm nodes to exclude from a run",
+    )
     parser.add_argument("--nodes", type=int, default=1)
     parser.add_argument("--gpus", type=int, default=2)
     parser.add_argument("--time-limit", default="00:30:00")

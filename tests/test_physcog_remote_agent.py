@@ -47,7 +47,8 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
 
 def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b6") == {
-        "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke", "formal",
+        "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke",
+        "formal", "ec_repair", "ec_video",
     }
     assert PHASES[("l1b6", "calibrate")].count_env == "CALIBRATION_TRIALS"
     assert any(
@@ -127,6 +128,15 @@ def test_batch_script_exports_explicit_libero_dependency_root():
         scenario="l3a1", phase="check", remote_log="/tmp/job.out",
     )
     assert "export PYTHONPATH='/home/researcher/LIBERO src':${PYTHONPATH:-}" in script
+
+
+def test_batch_script_can_exclude_unstable_render_nodes():
+    cfg = RemoteConfig(**{**_config().__dict__, "exclude_nodes": "dgx-29"})
+    script = build_batch_script(
+        cfg, PhaseSpec(command=("true",)), count=1,
+        scenario="l1b6", phase="ec_repair", remote_log="/tmp/job.out",
+    )
+    assert "#SBATCH --exclude=dgx-29" in script
 
 
 def test_smoke_batch_requests_five_fresh_all_video_trials():
