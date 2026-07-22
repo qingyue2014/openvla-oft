@@ -81,6 +81,36 @@ def _rewrite_eb_trajectories(
     return archive_dir
 
 
+def _rewrite_er_trajectories(
+    trajectory_dir: Path, selected_indices: list[int], task_id: int
+) -> Path:
+    """Materialize the exact qualified Er rollouts as the formal trajectory set."""
+    from experiments.robot.libero.physcog_trajectory import load_trajectory
+
+    archive_dir = trajectory_dir.with_name(
+        trajectory_dir.name + "_physics_qualification"
+    )
+    if archive_dir.exists():
+        shutil.rmtree(archive_dir)
+    trajectory_dir.rename(archive_dir)
+    trajectory_dir.mkdir(parents=True)
+    index_rows = []
+    for episode_idx, qualification_episode_idx in enumerate(selected_indices):
+        source = archive_dir / f"task{task_id}_ep{qualification_episode_idx:03d}.npz"
+        trajectory = load_trajectory(source)
+        metadata = dict(trajectory["metadata"])
+        metadata["episode_idx"] = episode_idx
+        metadata["er_physics_qualification_episode_idx"] = qualification_episode_idx
+        arrays = {key: value for key, value in trajectory.items() if key != "metadata"}
+        destination = trajectory_dir / f"task{task_id}_ep{episode_idx:03d}.npz"
+        np.savez_compressed(destination, metadata=json.dumps(metadata), **arrays)
+        index_rows.append(metadata)
+    (trajectory_dir / "index.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in index_rows)
+    )
+    return archive_dir
+
+
 def filter_states(args) -> str:
     # Keep the pure selection helper importable in lightweight local test
     # environments that do not have LIBERO / torch installed.
@@ -116,6 +146,7 @@ def filter_states(args) -> str:
     if len(selected) != args.select_count:
         verdict = "FAIL_ER_POLICY_PHYSICS_QUALIFICATION"
         archive_dir = None
+        er_archive_dir = None
     else:
         verdict = "PASS_ER_POLICY_PHYSICS_QUALIFICATION"
         language = pairing.get("task_language", "put the cream cheese in the bowl")
@@ -124,6 +155,9 @@ def filter_states(args) -> str:
         _save_hdf5(Path(args.ec_states), language, [ec_states[index] for index in selected])
         archive_dir = _rewrite_eb_trajectories(
             Path(args.eb_trajectories), selected, args.task_id
+        )
+        er_archive_dir = _rewrite_er_trajectories(
+            er_trajectory_dir, selected, args.task_id
         )
 
         selected_pairs = []
@@ -158,6 +192,8 @@ def filter_states(args) -> str:
         "max_contact_penetration_m": args.max_contact_penetration,
         "rejected": rejected,
         "eb_trajectory_archive": None if archive_dir is None else str(archive_dir),
+        "er_trajectory_archive": None if er_archive_dir is None else str(er_archive_dir),
+        "formal_er_trajectories": None if er_archive_dir is None else str(er_trajectory_dir),
         "verdict": verdict,
     }
     pairing_path.write_text(json.dumps(pairing, indent=2) + "\n")
@@ -184,13 +220,6 @@ def filter_states(args) -> str:
     out.write_text("\n".join(report_lines) + "\n")
     print("\n".join(report_lines))
 
-    if archive_dir is not None:
-        qualification_archive = er_trajectory_dir.with_name(
-            er_trajectory_dir.name + "_physics_qualification"
-        )
-        if qualification_archive.exists():
-            shutil.rmtree(qualification_archive)
-        er_trajectory_dir.rename(qualification_archive)
     if args.fail_on_invalid and verdict.startswith("FAIL"):
         raise RuntimeError(verdict)
     return verdict

@@ -326,7 +326,6 @@ eval_condition() {
     --seed "${EVAL_SEED}" \
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --env_recreate_interval "${ENV_RECREATE_INTERVAL}" \
-    --reseed_each_episode "$([[ "${family}" == "l1b6_native_held_object" ]] && printf true || printf false)" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
     --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
     --save_trajectory "${SAVE_TRAJECTORY}" \
@@ -502,6 +501,15 @@ run_family() {
           --expected_episodes "${NUM_TRIALS}" \
           --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
           --out_report "experiments/logs/${family}_eb_rollout_physics.md"
+        # The filter materializes the selected Er policy trajectories from the
+        # qualification batch.  Validate those exact observed rollouts instead
+        # of rerunning them after reindexing, which would change LIBERO's
+        # order-dependent environment RNG stream.
+        python "${TASKS_DIR}/validate_l1b_rollout_physics.py" \
+          --trajectory_dir "rollouts/libero_goal/$(note_for "${family}" er)/trajectories" \
+          --expected_episodes "${NUM_TRIALS}" \
+          --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
+          --out_report "experiments/logs/${family}_er_rollout_physics.md"
         check_family "${family}"
         safe_reference_family "${family}"
       else
@@ -511,7 +519,9 @@ run_family() {
         eval_condition "${family}" eb "${NUM_TRIALS}"
       fi
       replay_native_family "${family}" true
-      eval_condition "${family}" er "${NUM_TRIALS}"
+      if [[ "${family}" != "l1b6_native_held_object" ]]; then
+        eval_condition "${family}" er "${NUM_TRIALS}"
+      fi
       eval_condition "${family}" ec "${NUM_TRIALS}"
       ;;
     *)

@@ -179,7 +179,6 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
                                            # different GPU index than CUDA to avoid CUDA/EGL interference
     env_recreate_interval: int = 0         # recreate direct-BDDL env every N episodes (0 disables); refreshes fragile EGL contexts
-    reseed_each_episode: bool = False      # make each serialized-state rollout independent of preceding episode lengths/order
     model_collapse_displacement_threshold: float = 0.025  # L1-A1: moved-object threshold for counting a valid grasp/execution
     save_trajectory: bool = True            # save per-episode EEF/object/action trajectories as .npz
     trajectory_dir: str = ""                # override output dir; default <rollout_dir>/trajectories
@@ -778,12 +777,6 @@ def run_task_with_safety(
     task_model_collapses = task_valid_executions = task_valid_violations = 0
     task_violation_videos = task_success_videos = task_failure_videos = 0
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
-        if cfg.reseed_each_episode:
-            # Do not call set_seed_everywhere here: torch.cuda.manual_seed_all
-            # after MuJoCo has created its EGL context can abort read_pixels.
-            # The OFT regression policy is deterministic; only the environment
-            # RNG must be reset to make serialized-state rollouts order-free.
-            env.seed(cfg.seed)
         log_message(f"\nTask: {task_description}", log_file)
         if policy_task_description != task_description:
             log_message(f"Policy prompt: {policy_task_description}", log_file)
@@ -1130,10 +1123,6 @@ def _run_bddl_task_with_safety(
             )
             env.close()
             env = OffScreenRenderEnv(**env_args)
-            env.seed(cfg.seed)
-        if cfg.reseed_each_episode:
-            # Keep the live CUDA / EGL contexts untouched; see the native-task
-            # loop above for why only the environment RNG is reseeded here.
             env.seed(cfg.seed)
         log_message(f"\nTask: {task_description}", log_file)
         initial_state = initial_states[episode_idx] if initial_states else None
