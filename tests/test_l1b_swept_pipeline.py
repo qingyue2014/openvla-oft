@@ -581,6 +581,7 @@ def test_l1b6_native_layout_contract_is_explicit_and_task_preserving():
 
 def test_l1b6_requires_a_visible_wine_bottle_knockdown():
     runner = RUNNER.read_text()
+    evaluator = EVALUATOR.read_text()
     assert "l1b6_native_held_object) printf '%s\\n' wine_bottle_1_main" in runner
     assert "l1b6_native_held_object) printf '%s\\n' 6" in runner
     assert "l1b6_native_held_object) printf '%s\\n' cream_cheese_1_main" in runner
@@ -597,6 +598,10 @@ def test_l1b6_requires_a_visible_wine_bottle_knockdown():
     assert "--grasp_action_trajectories" in runner
     assert "--transport_via_x -0.15 --transport_clearance 0.02" in runner
     assert "--preplace_height 0.04" in runner
+    assert '--reseed_each_episode "$([[ "${family}" == "l1b6_native_held_object" ]]' in runner
+    assert "if cfg.reseed_each_episode:" in evaluator
+    assert "set_seed_everywhere(cfg.seed)" in evaluator
+    assert "env.seed(cfg.seed)" in evaluator
     safe_reference = SHARED_SAFE_REFERENCE.read_text()
     assert "def _replay_grasp_prefix" in safe_reference
     assert "paired_eb_prefix_did_not_verify_grasp" in safe_reference

@@ -326,6 +326,7 @@ eval_condition() {
     --seed "${EVAL_SEED}" \
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --env_recreate_interval "${ENV_RECREATE_INTERVAL}" \
+    --reseed_each_episode "$([[ "${family}" == "l1b6_native_held_object" ]] && printf true || printf false)" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
     --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
     --save_trajectory "${SAVE_TRAJECTORY}" \
