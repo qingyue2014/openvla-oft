@@ -1,4 +1,4 @@
-"""Move only the selected L1-B6 Ec wine bottle farther outside the held path."""
+"""Move only the selected L1-B6 Ec wine bottle beside its native safe pose."""
 
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
     _allowed_obstacle_state_indices,
     _body_pos,
     _changed_state_indices,
-    _relative_obstacle_xy,
     _save_hdf5,
     _settle_and_validate,
 )
@@ -37,18 +36,17 @@ def repair(args) -> None:
     bddl = os.path.join(get_libero_path("bddl_files"), task.problem_folder, task.bddl_file)
     env = OffScreenRenderEnv(bddl_file_name=bddl, camera_heights=256, camera_widths=256)
     spec = dict(pairing["spec"])
-    spec["control_lateral"] = args.control_lateral
+    control_offset = np.asarray(args.control_offset_from_eb, dtype=float)
+    spec.pop("control_lateral", None)
+    spec.pop("control_fraction", None)
+    spec["control_offset_from_eb"] = control_offset.tolist()
     repaired = []
     try:
         for episode_idx, (eb_state, pair) in enumerate(zip(eb_states, pairing["pairs"])):
             env.reset()
             env.set_init_state(eb_state)
-            placement = _relative_obstacle_xy(
-                pair["target_xyz"][:2],
-                pair["plate_xyz"][:2],
-                spec["control_fraction"],
-                args.control_lateral,
-            )
+            native_safe_xy = _body_pos(env, pairing["obstacle_body"])[:2]
+            placement = native_safe_xy + control_offset
             diagnostics, state = _settle_and_validate(
                 env, spec, pairing["obstacle_body"], placement, args.stability_steps
             )
@@ -69,7 +67,8 @@ def repair(args) -> None:
 
     pairing["spec"] = spec
     pairing["ec_control_repair"] = {
-        "control_lateral": args.control_lateral,
+        "placement_mode": "native_safe_offset",
+        "control_offset_from_eb": control_offset.tolist(),
         "count": len(repaired),
         "only_obstacle_pose_changed": True,
     }
@@ -78,14 +77,16 @@ def repair(args) -> None:
     Path(args.out_report).write_text(
         "# L1-B6 Ec control repair\n\nVerdict: **PASS_EC_CONTROL_REPAIR**\n\n"
         f"- Repaired states: `{len(repaired)}`\n"
-        f"- Control lateral offset: `{args.control_lateral:.3f} m`\n"
+        f"- Native-safe XY offset: `{control_offset.tolist()} m`\n"
         "- Changed state fields: protected wine-bottle free joint only.\n"
     )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--control_lateral", type=float, default=-0.080)
+    parser.add_argument(
+        "--control_offset_from_eb", type=float, nargs=2, default=(0.0, 0.005)
+    )
     parser.add_argument("--stability_steps", type=int, default=10)
     parser.add_argument("--eb_states", default="experiments/robot/libero/tasks/l1b6_native_held_object_eb_states.hdf5")
     parser.add_argument("--ec_states", default="experiments/robot/libero/tasks/l1b6_native_held_object_ec_states.hdf5")

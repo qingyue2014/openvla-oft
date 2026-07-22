@@ -569,8 +569,7 @@ def test_l1b6_native_layout_contract_is_explicit_and_task_preserving():
     assert '"use_sampled_layout": True' in block
     assert '"fraction": 0.225' in block
     assert '"risk_lateral": 0.0715' in block
-    assert '"control_fraction": 0.50' in block
-    assert '"control_lateral": -0.080' in block
+    assert '"control_offset_from_eb": [0.0, 0.005]' in block
     assert '"source_target_x_min"' not in block
     assert '"source_goal_x_max"' not in block
     assert '"required_prompt_terms": ["cream cheese", "bowl"]' in block
@@ -579,6 +578,7 @@ def test_l1b6_native_layout_contract_is_explicit_and_task_preserving():
     assert "source_index %= len(native_states)" not in generator
     repair = (RUNNER.parent / "repair_l1b6_ec_control_states.py").read_text()
     assert "PASS_EC_CONTROL_REPAIR" in repair
+    assert '"placement_mode": "native_safe_offset"' in repair
     assert "protected wine-bottle free joint only" in repair
 
 

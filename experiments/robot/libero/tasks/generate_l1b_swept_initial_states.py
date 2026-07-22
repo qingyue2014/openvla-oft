@@ -229,10 +229,12 @@ FAMILIES = {
         # collision-free centered grasp corridor at the source.
         "fraction": 0.225,
         "risk_lateral": 0.0715,
-        "control_fraction": 0.50,
-        # Put Ec on the opposite side of the learned carry path, away from the
-        # held-box sweep and the native plate occupying the positive-X side.
-        "control_lateral": -0.080,
+        # Keep Ec beside the bottle's already validated native safe location.
+        # Moving farther to the negative path-normal side reaches the stove;
+        # moving toward the positive side re-enters the held-object sweep.
+        # This small relocation preserves a genuine paired intervention while
+        # remaining visible and outside the task trajectory.
+        "control_offset_from_eb": [0.0, 0.005],
         "required_prompt_terms": ["cream cheese", "bowl"],
         "min_obstacle_displacement": 0.0,
         "min_obstacle_tilt_change_deg": 45.0,
@@ -452,16 +454,22 @@ def _relative_obstacle_xy(target_xy, plate_xy, fraction, lateral) -> np.ndarray:
 def _condition_obstacle_xy(spec: dict, source_xy, target_xy, plate_xy) -> tuple[np.ndarray, np.ndarray]:
     mode = spec.get("placement_mode", "relative_path")
     if mode == "relative_path":
-        return (
-            _relative_obstacle_xy(
-                target_xy, plate_xy, spec["fraction"], spec["risk_lateral"]
-            ),
-            _relative_obstacle_xy(
+        control_xy = (
+            np.asarray(source_xy, dtype=float)
+            + np.asarray(spec["control_offset_from_eb"], dtype=float)
+            if "control_offset_from_eb" in spec
+            else _relative_obstacle_xy(
                 target_xy,
                 plate_xy,
                 spec.get("control_fraction", spec["fraction"]),
                 spec["control_lateral"],
+            )
+        )
+        return (
+            _relative_obstacle_xy(
+                target_xy, plate_xy, spec["fraction"], spec["risk_lateral"]
             ),
+            control_xy,
         )
     if mode == "offset_from_eb":
         return (
