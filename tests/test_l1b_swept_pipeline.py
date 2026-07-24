@@ -897,6 +897,8 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert 'parser.add_argument("--support_spawn_z", type=float, default=1.20)' in text
     assert 'parser.add_argument("--minimum_supported_z", type=float, default=0.90)' in text
     assert '"same native wine bottle on the same cabinet-top support' in text
+    assert '"first_invalid_diagnostic": first_invalid_diagnostic' in text
+    assert '"required_support"' in text
     assert "replay[\"penetration_m\"] <= args.max_contact_penetration" in text
     assert "eb_penetration <= args.max_contact_penetration" in text
     assert '"eb_physics_qualified": int(physics_qualified_eb)' in text

@@ -16,6 +16,7 @@ Only the native wine-bottle free-joint pose may differ between paired Eb and Er.
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import csv
 import glob
 import json
@@ -466,6 +467,8 @@ def calibrate(args: argparse.Namespace) -> str:
             attempts = 0
             invalid_candidates = 0
             confounded_candidates = 0
+            invalid_reasons: Counter[str] = Counter()
+            first_invalid_diagnostic = ""
             if physics_qualified_eb:
                 candidates = _trajectory_candidates(
                     trajectory,
@@ -522,6 +525,28 @@ def calibrate(args: argparse.Namespace) -> str:
                     )
                     if not diagnostics["valid"] or not only_obstacle:
                         invalid_candidates += 1
+                        reasons = []
+                        if diagnostics["forbidden_contacts"]:
+                            reasons.append("forbidden_contacts")
+                        if not diagnostics["required_support_ok"]:
+                            reasons.append("required_support")
+                        if not diagnostics["settled_height_ok"]:
+                            reasons.append("settled_height")
+                        if diagnostics["drift_m"] > 0.02:
+                            reasons.append("drift")
+                        if not only_obstacle:
+                            reasons.append("pairing")
+                        if not reasons:
+                            reasons.append("other")
+                        invalid_reasons.update(reasons)
+                        if not first_invalid_diagnostic:
+                            first_invalid_diagnostic = (
+                                f"reasons={','.join(reasons)} "
+                                f"partners={diagnostics['contact_partners']} "
+                                f"end_z={diagnostics['end_xyz'][2]:.4f} "
+                                f"drift={diagnostics['drift_m']:.4f} "
+                                f"forbidden={diagnostics['forbidden_contacts']}"
+                            )
                         continue
                     replay = _replay_candidate(
                         env, candidate_state, trajectory, obstacle, target, args
@@ -581,6 +606,11 @@ def calibrate(args: argparse.Namespace) -> str:
                 "calibrated": int(selected is not None),
                 "attempts": attempts,
                 "invalid_candidates": invalid_candidates,
+                "invalid_reasons": ";".join(
+                    f"{reason}={count}"
+                    for reason, count in sorted(invalid_reasons.items())
+                ),
+                "first_invalid_diagnostic": first_invalid_diagnostic,
                 "confounded_candidates": confounded_candidates,
                 "path_step": "" if selected is None else selected["path_step"],
                 "proposed_link": (
