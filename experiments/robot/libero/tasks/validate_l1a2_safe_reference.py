@@ -197,6 +197,44 @@ def _body_pos(env, name):
     return np.asarray(env.sim.data.body_xpos[env.sim.model.body_name2id(name)], dtype=float).copy()
 
 
+def _eef_local_body_offset(env, obs, body):
+    """Express the EEF-to-body offset in the EEF frame.
+
+    A retained object's world-frame offset rotates when the wrist rotates even
+    if the grasp is perfectly rigid. Measuring the offset in the EEF frame
+    keeps the grasp-slip gate invariant to that commanded wrist motion.
+    """
+    world_offset = _eef_pos(obs) - _body_pos(env, body)
+    quat = np.asarray(
+        obs.get("robot0_eef_quat", [0.0, 0.0, 0.0, 1.0]), dtype=float
+    )
+    norm = float(np.linalg.norm(quat))
+    if quat.shape != (4,) or norm < 1e-12:
+        return world_offset
+    x, y, z, w = quat / norm
+    rotation = np.asarray(
+        [
+            [
+                1.0 - 2.0 * (y * y + z * z),
+                2.0 * (x * y - z * w),
+                2.0 * (x * z + y * w),
+            ],
+            [
+                2.0 * (x * y + z * w),
+                1.0 - 2.0 * (x * x + z * z),
+                2.0 * (y * z - x * w),
+            ],
+            [
+                2.0 * (x * z - y * w),
+                2.0 * (y * z + x * w),
+                1.0 - 2.0 * (x * x + y * y),
+            ],
+        ],
+        dtype=float,
+    )
+    return rotation.T @ world_offset
+
+
 def _body_linear_speed(env, name):
     body_id = env.sim.model.body_name2id(name)
     try:
@@ -267,6 +305,11 @@ def _move_to(
     )
     initial_error = float(np.linalg.norm(_eef_pos(obs) - target))
     best_error = initial_error
+    retained_local_offset = (
+        _eef_local_body_offset(env, obs, retained_body)
+        if retained_body is not None
+        else None
+    )
     for _ in range(max_steps):
         error = float(np.linalg.norm(_eef_pos(obs) - target))
         rotation_error = (
@@ -300,8 +343,10 @@ def _move_to(
         if status.violated:
             return obs, step, status
         if retained_body is not None:
-            current_offset = _eef_pos(obs) - _body_pos(env, retained_body)
-            offset_drift = float(np.linalg.norm(current_offset - retained_offset))
+            current_offset = _eef_local_body_offset(env, obs, retained_body)
+            offset_drift = float(
+                np.linalg.norm(current_offset - retained_local_offset)
+            )
             if offset_drift > args.max_grasp_offset_drift:
                 return obs, step, MotionFailure(
                     reason="grasp_slipped",
@@ -340,6 +385,7 @@ def _descend_until_support_contact(
 ):
     """Lower the held target until real target-support contact is observed."""
     start_eef = _eef_pos(obs).copy()
+    retained_local_offset = _eef_local_body_offset(env, obs, TARGET)
     target_eef = start_eef.copy()
     target_eef[2] -= args.support_contact_max_descent
     best_descent = 0.0
@@ -358,8 +404,11 @@ def _descend_until_support_contact(
         step += 1
         if status.violated:
             return obs, step, status
-        current_offset = _eef_pos(obs) - _body_pos(env, TARGET)
-        if np.linalg.norm(current_offset - retained_offset) > args.max_grasp_offset_drift:
+        current_offset = _eef_local_body_offset(env, obs, TARGET)
+        if (
+            np.linalg.norm(current_offset - retained_local_offset)
+            > args.max_grasp_offset_drift
+        ):
             return obs, step, MotionFailure(
                 reason="grasp_slipped",
                 stage="descend_to_support_contact",

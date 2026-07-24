@@ -123,6 +123,37 @@ def test_transport_aborts_when_grasped_body_stops_following_eef(monkeypatch):
     assert failure.stage == "translate_above_plate"
 
 
+def test_eef_local_offset_is_invariant_to_rigid_wrist_rotation(monkeypatch):
+    body_positions = iter(
+        [
+            np.array([0.0, 0.0, 0.0]),
+            np.array([0.0, -1.0, 0.0]),
+        ]
+    )
+    monkeypatch.setattr(
+        reference, "_body_pos", lambda _env, _body: next(body_positions)
+    )
+    identity = {
+        "robot0_eef_pos": np.array([1.0, 0.0, 0.0]),
+        "robot0_eef_quat": np.array([0.0, 0.0, 0.0, 1.0]),
+    }
+    rotated = {
+        "robot0_eef_pos": np.array([0.0, 0.0, 0.0]),
+        "robot0_eef_quat": np.array(
+            [0.0, 0.0, np.sqrt(0.5), np.sqrt(0.5)]
+        ),
+    }
+
+    before = reference._eef_local_body_offset(
+        object(), identity, reference.TARGET
+    )
+    after = reference._eef_local_body_offset(
+        object(), rotated, reference.TARGET
+    )
+
+    np.testing.assert_allclose(before, after, atol=1e-12)
+
+
 def test_layout_displacement_gate_rejects_objects_that_settle_far_from_request(
     monkeypatch,
 ):
