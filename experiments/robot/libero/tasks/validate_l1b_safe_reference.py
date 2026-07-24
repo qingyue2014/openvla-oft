@@ -175,6 +175,12 @@ def main() -> None:
     parser.add_argument(
         "--postorientation_min_center_clearance", type=float, default=0.0
     )
+    parser.add_argument(
+        "--postorientation_advance_lateral_bias", type=float, default=0.0
+    )
+    parser.add_argument(
+        "--postorientation_min_path_progress", type=float, default=0.0
+    )
     parser.add_argument("--orientation_tolerance_deg", type=float, default=5.0)
     parser.add_argument("--orientation_max_steps", type=int, default=200)
     parser.add_argument("--rotation_scale", type=float, default=0.5)
