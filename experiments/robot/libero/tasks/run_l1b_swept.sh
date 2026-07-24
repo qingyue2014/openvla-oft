@@ -20,6 +20,7 @@ NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 L1B7_SMOKE_POOL_SIZE="${L1B7_SMOKE_POOL_SIZE:-12}"
 L1B7_CALIBRATION_POOL_SIZE="${L1B7_CALIBRATION_POOL_SIZE:-180}"
+L1B7_MAX_CANDIDATES_PER_EPISODE="${L1B7_MAX_CANDIDATES_PER_EPISODE:-200}"
 SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
@@ -451,6 +452,7 @@ calibrate_l1b7_trajectory_states() {
     --min_obstacle_displacement "${L1B7_DISPLACEMENT_THRESHOLD:-0.010}" \
     --min_obstacle_tilt_change_deg "${L1B7_TILT_THRESHOLD_DEG:-30.0}" \
     --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
+    --max_candidates_per_episode "${L1B7_MAX_CANDIDATES_PER_EPISODE}" \
     --min_successful_eb "${REPLAY_MIN_EPISODES:-20}" \
     --fail_on_invalid \
     "${extra_args[@]}"

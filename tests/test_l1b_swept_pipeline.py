@@ -739,6 +739,7 @@ def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "--select_count" in text
     assert "_rewrite_selected_trajectories" in text
     assert 'calibrate_l1b7_trajectory_states "${family}" "${count}"' in RUNNER.read_text()
+    assert "L1B7_MAX_CANDIDATES_PER_EPISODE" in RUNNER.read_text()
 
 
 def test_l1b6_reruns_all_gates_after_trajectory_conditioning():
