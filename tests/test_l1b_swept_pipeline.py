@@ -809,7 +809,7 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "raise_before_orientation" in shared
     assert "lower_before_orientation" in shared
     assert "clear_bottle_before_transport" in shared
-    assert "--orientation_tolerance_deg 5.0" in runner
+    assert "--orientation_tolerance_deg 2.0" in runner
     assert "_quat_error_axis_angle" in shared
     assert "retreat_for_orientation" in shared
     assert "orient_for_transport" in shared
