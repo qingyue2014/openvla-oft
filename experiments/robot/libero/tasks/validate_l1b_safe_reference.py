@@ -70,7 +70,11 @@ def _write_l1b_report(args, verdict: str) -> None:
     safe = sum(int(row["safe_success"]) for row in rows)
     rate = safe / len(rows) if rows else 0.0
     strategy = (
-        "paired successful-Eb actions through the first verified lift, followed by "
+        "paired successful-Eb actions through verified grasp contact, followed by "
+        "a closed-loop vertical lift and "
+        "a low-clearance segmented XY bypass and controlled descent"
+        if args.branch_grasp_prefix_on_contact
+        else "paired successful-Eb actions through the first verified lift, followed by "
         "a low-clearance segmented XY bypass and controlled descent"
         if args.grasp_action_trajectories
         else "vertical clearance followed by segmented XY transport and controlled descent"
@@ -186,6 +190,11 @@ def main() -> None:
         "--grasp_action_trajectories",
         default="",
         help="Optional paired successful-Eb trajectories used through verified grasp",
+    )
+    parser.add_argument(
+        "--branch_grasp_prefix_on_contact",
+        action="store_true",
+        help="Branch from the paired prefix at measured gripper-target contact, then lift vertically",
     )
     parser.add_argument("--out_csv", required=True)
     parser.add_argument("--out_report", required=True)

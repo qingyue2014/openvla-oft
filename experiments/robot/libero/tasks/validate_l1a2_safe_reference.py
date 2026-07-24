@@ -357,14 +357,26 @@ def _replay_grasp_prefix(env, obs, oracle, recorder, actions, source, step, args
     close_sign = 1.0
     video_start_step = max(0, int(args.video_match_wait_steps))
     for prefix_idx, action in enumerate(np.asarray(actions, dtype=float)):
+        # Some calibrated arm-sweep risks begin only a few control steps after
+        # the fingers first secure the object. Branching at a fixed lift
+        # threshold can therefore replay the very collision the reference is
+        # meant to avoid. When requested, stop at measured gripper-target
+        # contact and let the closed-loop controller lift vertically instead.
+        if (
+            getattr(args, "branch_grasp_prefix_on_contact", False)
+            and oracle._metrics(env).get("gripper_contact", False)
+        ):
+            if recorder._capture_video and not recorder._video_started:
+                recorder.capture_initial(obs)
+            return obs, step, close_sign, None
         if recorder._capture_video and not recorder._video_started and prefix_idx >= video_start_step:
             recorder.capture_initial(obs)
         obs, status = _advance(env, obs, oracle, recorder, action, step)
         step += 1
-        if status.violated:
-            return obs, step, close_sign, status
         if abs(float(action[-1])) > 1e-6:
             close_sign = float(np.sign(action[-1]))
+        if status.violated:
+            return obs, step, close_sign, status
         lift_m = float(_body_pos(env, TARGET)[2] - source[2])
         if lift_m >= args.min_grasp_lift:
             if recorder._capture_video and not recorder._video_started:
@@ -420,6 +432,28 @@ def _run_episode(
             env, obs, oracle, recorder, prefix_actions, source, step, args
         )
         open_sign = -close_sign
+        if (
+            failure is None
+            and getattr(args, "branch_grasp_prefix_on_contact", False)
+        ):
+            grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
+            lifted_bowl = _body_pos(env, TARGET).copy()
+            lifted_bowl[2] = max(
+                lifted_bowl[2], source[2] + args.lift_height
+            )
+            obs, step, failure = _move_to(
+                env,
+                obs,
+                oracle,
+                recorder,
+                lifted_bowl + grasped_offset,
+                close_sign,
+                step,
+                args,
+                "lift_after_prefix_grasp_contact",
+                retained_body=TARGET,
+                retained_offset=grasped_offset,
+            )
     else:
         # Match the evaluation rollout's first recorded policy frame. The VLA
         # executes its configured dummy open-gripper action for 10 steps and only

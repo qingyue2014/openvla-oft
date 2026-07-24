@@ -275,10 +275,12 @@ safe_reference_family() {
     extra_args+=(--preplace_height 0.04)
   elif [[ "${family}" == "l1b7_native_arm" ]]; then
     eb_note="$(note_for "${family}" eb)"
-    # Reuse the paired policy's collision-free grasp prefix, then branch before
-    # the calibrated post-grasp link strike.  The detour stays lateral and low;
-    # the only substantial height is required by the native cabinet-top goal.
+    # Reuse the paired policy through measured finger/bowl contact, then branch
+    # before the calibrated post-grasp link strike and lift vertically. The
+    # detour stays lateral and low; the only substantial height is required by
+    # the native cabinet-top goal.
     extra_args+=(--grasp_action_trajectories "rollouts/${task_suite}/${eb_note}/trajectories")
+    extra_args+=(--branch_grasp_prefix_on_contact)
     extra_args+=(--approach_height 0.12 --lift_height 0.08)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 450)
     extra_args+=(--position_tolerance 0.025)
