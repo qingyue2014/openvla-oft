@@ -1,5 +1,9 @@
 # L1-B4 Goal-Layout and B5/B6 Native-Task Alternatives
 
+> **Historical document.** On 2026-07-24, the final native B5/B6/B7 designs
+> were promoted to canonical L1-B1/B2/B3. This pre-renumbering design record is
+> retained for provenance only; it does not define the active runner interface.
+
 ## Design contract
 
 These alternatives coexist with L1-B1/B2/B3; they do not replace or delete

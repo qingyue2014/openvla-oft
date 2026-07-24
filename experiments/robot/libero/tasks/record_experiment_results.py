@@ -27,44 +27,44 @@ RUN_METADATA = {
     "L1-A2-cookie-visual-matched-safe": ("L1", "L1-A2", "Ec Matched-Safe"),
     "L1-A2-drawer-occlusion": ("L1", "L1-A2", "Er Drawer Occlusion"),
     "L1-A2-drawer-matched-safe": ("L1", "L1-A2", "Ec Drawer Matched-Safe"),
-    "L1-B1-task6-cookies": ("L1", "L1-B1", "Er Contact"),
-    "L1-B1-task6-matched-safe": ("L1", "L1-B1", "Ec Matched-Safe"),
-    "L1-B2-task6-cookie-ramekin": ("L1", "L1-B2", "Er Corridor"),
-    "L1-B2-task6-matched-safe": ("L1", "L1-B2", "Ec Open Corridor"),
-    "L1-B1-task6-arm-sweep-eb": ("L1", "L1-B1", "Eb Matched Benign"),
-    "L1-B1-task6-arm-sweep-er": ("L1", "L1-B1", "Er Arm/Link Sweep"),
-    "L1-B1-task6-arm-sweep-ec": ("L1", "L1-B1", "Ec Off-Sweep Post"),
-    "L1-B2-task6-gripper-sweep-eb": ("L1", "L1-B2", "Eb Matched Benign"),
-    "L1-B2-task6-gripper-sweep-er": ("L1", "L1-B2", "Er Wrist/Gripper Sweep"),
-    "L1-B2-task6-gripper-sweep-ec": ("L1", "L1-B2", "Ec Off-Sweep Bollard"),
-    "L1-B3-task6-held-object-sweep-eb": ("L1", "L1-B3", "Eb Matched Benign"),
-    "L1-B3-task6-held-object-sweep-er": ("L1", "L1-B3", "Er Held-Object Sweep"),
-    "L1-B3-task6-held-object-sweep-ec": ("L1", "L1-B3", "Ec Off-Sweep Bollard"),
-    "L1-B4-goal-bottle-arm-sweep-eb": ("L1", "L1-B4", "Eb Native Goal Layout"),
-    "L1-B4-goal-bottle-arm-sweep-er": ("L1", "L1-B4", "Er Goal-Layout Arm Sweep"),
-    "L1-B4-goal-bottle-arm-sweep-ec": ("L1", "L1-B4", "Ec Off-Sweep Post"),
-    # Legacy B4 drawer-arm identifiers retained for earlier pilot logs.
-    "L1-B4-task6-native-cabinet-arm-sweep-eb": ("L1", "L1-B4", "Eb Native Layout"),
-    "L1-B4-task6-native-cabinet-arm-sweep-er": ("L1", "L1-B4", "Er Native Cabinet Arm Sweep"),
-    "L1-B4-task6-native-cabinet-arm-sweep-ec": ("L1", "L1-B4", "Ec Native Cabinet Control"),
-    "L1-B5-task6-native-ramekin-gripper-sweep-eb": ("L1", "L1-B5", "Eb Native Layout"),
-    "L1-B5-task6-native-ramekin-gripper-sweep-er": ("L1", "L1-B5", "Er Native Ramekin Gripper Sweep"),
-    "L1-B5-task6-native-ramekin-gripper-sweep-ec": ("L1", "L1-B5", "Ec Native Ramekin Control"),
-    "L1-B6-task6-native-cookie-held-object-sweep-eb": ("L1", "L1-B6", "Eb Native Layout"),
-    "L1-B6-task6-native-cookie-held-object-sweep-er": ("L1", "L1-B6", "Er Native Cookie Held-Object Sweep"),
-    "L1-B6-task6-native-cookie-held-object-sweep-ec": ("L1", "L1-B6", "Ec Native Cookie Control"),
-    "L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-eb": (
-        "L1", "L1-B7", "Eb Native Wine-Bottle Layout"
+    "L1-B1-task6-native-ramekin-gripper-sweep-eb": (
+        "L1", "L1-B1", "Eb Native Ramekin Layout"
     ),
-    "L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-er": (
-        "L1", "L1-B7", "Er Post-Grasp Link/Wine-Bottle Knockdown"
+    "L1-B1-task6-native-ramekin-gripper-sweep-er": (
+        "L1", "L1-B1", "Er Native Ramekin Gripper Sweep"
     ),
-    "L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-ec": (
-        "L1", "L1-B7", "Ec Visible Off-Sweep Wine Bottle"
+    "L1-B1-task6-native-ramekin-gripper-sweep-ec": (
+        "L1", "L1-B1", "Ec Native Ramekin Control"
     ),
-    "L1-B4-task6-ramekin-retraction": ("L1", "L1-B4", "Er Retraction"),
-    "L1-B4-task6-no-insertion": ("L1", "L1-B4", "Eb No Insertion"),
-    "L1-B4-task6-out-of-path-bystander": ("L1", "L1-B4", "Ec Out-of-Path"),
+    "L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-eb": (
+        "L1", "L1-B2", "Eb Native Wine-Bottle Layout"
+    ),
+    "L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-er": (
+        "L1", "L1-B2", "Er Held-Object/Wine-Bottle Knockdown"
+    ),
+    "L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-ec": (
+        "L1", "L1-B2", "Ec Visible Off-Sweep Wine Bottle"
+    ),
+    "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-eb": (
+        "L1", "L1-B3", "Eb Native Wine-Bottle Layout"
+    ),
+    "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-er": (
+        "L1", "L1-B3", "Er Post-Grasp Link/Wine-Bottle Knockdown"
+    ),
+    "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-ec": (
+        "L1", "L1-B3", "Ec Visible Off-Sweep Wine Bottle"
+    ),
+    # Historical run IDs remain readable after the B5/B6/B7 -> B1/B2/B3
+    # renumbering. They are aliases, not active scenario definitions.
+    "L1-B5-task6-native-ramekin-gripper-sweep": (
+        "L1", "L1-B1", "Historical ID: Native Ramekin/Gripper"
+    ),
+    "L1-B6-goal-cream-cheese-native-wine-bottle-knockdown": (
+        "L1", "L1-B2", "Historical ID: Held Object/Wine Bottle"
+    ),
+    "L1-B7-goal-bowl-cabinet-native-wine-link-knockdown": (
+        "L1", "L1-B3", "Historical ID: Link/Wine Bottle"
+    ),
     "L1-C-implicit-stack-native-task-baseline": ("L1", "L1-C1", "Eb Native Gate"),
     "L1-C-implicit-stack-risk": ("L1", "L1-C1", "Er Eccentric Support"),
     "L1-C-implicit-stack-control": ("L1", "L1-C1", "Ec Centered Support"),
@@ -101,7 +101,8 @@ RUN_METADATA = {
 ATTRIBUTION_FILE_METADATA = {
     "l1a1_attribution": ("L1", "L1-A1"),
     "l1a2_attribution": ("L1", "L1-A2"),
-    "l1b7_attribution": ("L1", "L1-B7"),
+    "l1b3_attribution": ("L1", "L1-B3"),
+    "l1b7_attribution": ("L1", "L1-B3"),  # historical filename
     "l1c1_attribution": ("L1", "L1-C1"),
     "l1c2_attribution": ("L1", "L1-C2"),
     "l1c3_attribution": ("L1", "L1-C3"),

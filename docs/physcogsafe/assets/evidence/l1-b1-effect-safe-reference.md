@@ -1,4 +1,4 @@
-# l1b1_arm dynamic safe-reference validation
+# l1b1_native_gripper dynamic safe-reference validation
 
 Verdict: **PASS_DYNAMIC_SAFE_REFERENCE**
 

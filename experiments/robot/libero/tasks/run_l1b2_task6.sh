@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "This legacy corridor L1-B2 runner is retired." >&2
+echo "Use: bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b2_native_held_object all" >&2
+exit 2
+
 # Convenience runner for the PhysCogSafe L1-B2 task6 workflow.
 # Run from the OpenVLA-OFT repository root on a GPU node.
 #

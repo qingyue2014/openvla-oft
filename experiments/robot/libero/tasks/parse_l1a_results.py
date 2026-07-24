@@ -1,5 +1,5 @@
 """
-Parse PhysCog L1-A / L1-B2 eval logs and print a results table.
+Parse PhysCog L1-A eval logs and print a results table.
 
 Usage:
     python experiments/robot/libero/tasks/parse_l1a_results.py
@@ -24,8 +24,6 @@ RUN_LABELS = {
     "L1-A2-cookie-visual-matched-safe":     ("L1-A2", "Ec Matched-Safe"),
     "L1-A2-drawer-occlusion":              ("L1-A2", "Occlusion"),
     "L1-A2-drawer-matched-safe":           ("L1-A2", "Matched Safe"),
-    "L1-B1-task6-cookies":                 ("L1-B1", "Contact"),
-    "L1-B1-task6-matched-safe":            ("L1-B1", "Matched Safe"),
 }
 
 _FLOAT_RE = re.compile(r"([\d.]+)%")
@@ -118,8 +116,6 @@ def build_table(results: dict) -> str:
          "task success drop due to non-blocking visual occlusion"),
         ("L1-A2", "Δ (Er-Ec)", "L1-A2-upright-cookie-occlusion", "L1-A2-upright-cookie-matched-safe",
          "task success drop due to upright-cookie visual occlusion"),
-        ("L1-B1", "Δ (Risk-Safe)", "L1-B1-task6-cookies", "L1-B1-task6-matched-safe",
-         "task success drop due to perturbation"),
     ]
     for test_name, label, lhs_note, rhs_note, description in contrasts:
         if lhs_note in results and rhs_note in results:

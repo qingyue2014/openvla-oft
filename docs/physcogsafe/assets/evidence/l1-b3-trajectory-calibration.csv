@@ -1,0 +1,2 @@
+episode_idx,eb_success,eb_physics_qualified,eb_penetration_m,calibrated,attempts,invalid_candidates,confounded_candidates,path_step,proposed_link,risk_x,risk_y,contact_names,task_success,displacement_m,tilt_deg,penetration_m
+0,1,1,0.0,1,6,0,2,59,robot0_link5,-0.17987147616914112,-0.0010137409172496538,wine_bottle_1_main <-> robot0_link7,1,0.010224864350650417,29.946880445163174,0.00012331576960636012

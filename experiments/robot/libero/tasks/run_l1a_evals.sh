@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run L1-A1, L1-A2, L1-B1 PhysCog evals (generate initial states + eval).
+# Run L1-A1 and L1-A2 PhysCog evals (generate initial states + eval).
 #
 # Usage (from repo root):
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh            # all
@@ -17,7 +17,6 @@
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_safe_reference
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_smoke # SMOKE_TRIALS episodes per condition
 #   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1a2_attribution
-#   bash experiments/robot/libero/tasks/run_l1a_evals.sh l1b1       # L1-B1 eval (uses default states)
 #
 # Override any variable via environment:
 #   CHECKPOINT=<path> NUM_TRIALS=10 bash run_l1a_evals.sh l1a1
@@ -169,38 +168,9 @@ maybe_eval_with_traj() {
 }
 
 eval_l1b1() {
-    local risk_run_id safe_run_id
-    risk_run_id="$(with_suffix L1-B1-task6-cookies "${L1B1_RUN_SUFFIX}")"
-    safe_run_id="$(with_suffix L1-B1-task6-matched-safe "${L1B1_RUN_SUFFIX}")"
-
-    log "L1-B1 eval: task6 cookie contact  (oracle=contact, default states)"
-    maybe_eval "${risk_run_id}" \
-        python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-            --pretrained_checkpoint "${CHECKPOINT}" \
-            --task_suite_name libero_spatial --task_ids 6 \
-            --safety_oracle contact \
-            --distractor_body cookies_1_main \
-            --held_object_body akita_black_bowl_1_main \
-            --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
-            --num_trials_per_task "${NUM_TRIALS}" \
-            --seed "${EVAL_SEED}" \
-            --save_video_mode "${SAVE_VIDEO_MODE}" \
-            "${VIDEO_ARGS[@]}" \
-            --run_id_note "${risk_run_id}"
-
-    log "L1-B1 eval: task6 matched safe control  (oracle=none, default states)"
-    maybe_eval "${safe_run_id}" \
-        python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-            --pretrained_checkpoint "${CHECKPOINT}" \
-            --task_suite_name libero_spatial --task_ids 6 \
-            --safety_oracle none \
-            --held_object_body akita_black_bowl_1_main \
-            --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
-            --num_trials_per_task "${NUM_TRIALS}" \
-            --seed "${EVAL_SEED}" \
-            --save_video_mode "${SAVE_VIDEO_MODE}" \
-            "${VIDEO_ARGS[@]}" \
-            --run_id_note "${safe_run_id}"
+    echo "The legacy cookie-contact L1-B1 is retired." >&2
+    echo "Use: bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b1_native_gripper all" >&2
+    return 2
 }
 
 parse_results() {
@@ -529,14 +499,13 @@ case "${MODE}" in
     all)
         gen_l1a1; eval_l1a1
         gen_l1a2; eval_l1a2
-        eval_l1b1
         parse_results
         ;;
     generate)
         gen_l1a1; gen_l1a2
         ;;
     eval)
-        eval_l1a1; eval_l1a2; eval_l1b1
+        eval_l1a1; eval_l1a2
         parse_results
         ;;
     l1a1)
@@ -586,7 +555,7 @@ case "${MODE}" in
         ;;
     *)
         echo "Unknown mode: ${MODE}" >&2
-        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_eval|l1a_native_eb|l1a1_preview|l1a1_attribution|record|l1a2|l1a2_check|l1a2_preview|l1a2_safe_reference|l1a2_smoke|l1a2_attribution|l1b1]" >&2
+        echo "Usage: $0 [all|generate|eval|l1a1|l1a1_eval|l1a_native_eb|l1a1_preview|l1a1_attribution|record|l1a2|l1a2_check|l1a2_preview|l1a2_safe_reference|l1a2_smoke|l1a2_attribution]" >&2
         exit 1
         ;;
 esac

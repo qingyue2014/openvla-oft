@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+echo "This legacy intermediate-link L1-B3 runner is retired." >&2
+echo "Use: bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b3_native_arm all" >&2
+exit 2
+
 # Convenience runner for the PhysCogSafe L1-B3 task6 workflow.
 # Run from the OpenVLA-OFT repository root on a GPU node.
 #

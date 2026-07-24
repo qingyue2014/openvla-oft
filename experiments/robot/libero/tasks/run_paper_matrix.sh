@@ -24,7 +24,7 @@
 #                         SEEDS="$(seq -s' ' 42 91)" (~10x compute, CI ~±2pp).
 #   NUM_TRIALS=50         episodes per condition per seed (L2-C2 uses L2C2_TRIALS=20)
 #   SCENE_SEED=42         fixed initial-state generation seed; do not vary per repeat
-#   FAMILIES="l1a1 l1a2 l1b1 l1b2 l1b4 l2b2 l2c2"   subset selection
+#   FAMILIES="l1a1 l1a2 l1b1 l1b2 l1b3 l2b2 l2c2"   subset selection
 #   CHECKPOINT=...        forwarded to the per-family runners
 #
 # Notes:
@@ -43,7 +43,7 @@ NUM_TRIALS="${NUM_TRIALS:-50}"
 L2C2_TRIALS="${L2C2_TRIALS:-20}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 SCENE_SEED="${SCENE_SEED:-42}"
-FAMILIES="${FAMILIES:-l1a1 l1a2 l1b1 l1b2 l1b4 l2b2 l2c2 l3a1}"
+FAMILIES="${FAMILIES:-l1a1 l1a2 l1b1 l1b2 l1b3 l2b2 l2c2 l3a1}"
 L2B2_VARIANTS="${L2B2_VARIANTS:-basket basket_off basket_far}"
 POOL_SINCE="${POOL_SINCE:-}"
 
@@ -75,22 +75,19 @@ run_family() {
                 bash "${TASKS_DIR}/run_l1a_evals.sh" l1a2
             ;;
         l1b1)
-            SEED="${SCENE_SEED}" EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" \
-                NUM_TRIALS="${trials}" RECORD_RESULTS=False \
-                bash "${TASKS_DIR}/run_l1a_evals.sh" l1b1
+            SCENE_SEED="${SCENE_SEED}" EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" \
+                NUM_TRIALS="${trials}" \
+                bash "${TASKS_DIR}/run_l1b_swept.sh" l1b1_native_gripper eval
             ;;
         l1b2)
-            EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" NUM_TRIALS="${trials}" \
-                bash "${TASKS_DIR}/run_l1b2_task6.sh" eval
-            EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" NUM_TRIALS="${trials}" \
-                bash "${TASKS_DIR}/run_l1b2_task6.sh" eval_safe
+            SCENE_SEED="${SCENE_SEED}" EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" \
+                NUM_TRIALS="${trials}" \
+                bash "${TASKS_DIR}/run_l1b_swept.sh" l1b2_native_held_object eval
             ;;
-        l1b4)
-            local l1b4_mode
-            for l1b4_mode in eval eval_no_insert eval_out_of_path; do
-                EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" NUM_TRIALS="${trials}" \
-                    bash "${TASKS_DIR}/run_l1b4_task6.sh" "${l1b4_mode}"
-            done
+        l1b3)
+            SCENE_SEED="${SCENE_SEED}" EVAL_SEED="${seed}" RUN_ID_SUFFIX="${suffix}" \
+                NUM_TRIALS="${trials}" \
+                bash "${TASKS_DIR}/run_l1b_swept.sh" l1b3_native_arm eval
             ;;
         l2b2)
             local variant
@@ -125,11 +122,9 @@ do_prepare() {
         bash "${TASKS_DIR}/run_l1a_evals.sh" generate
     SEED="${SCENE_SEED}" NUM_TRIALS="${NUM_TRIALS}" \
         bash "${TASKS_DIR}/run_l1a_evals.sh" l1a2_check
-    # L1-B2 risk layout check + matched-safe state generation.
-    NUM_TRIALS="${NUM_TRIALS}" bash "${TASKS_DIR}/run_l1b2_task6.sh" check
-    NUM_TRIALS="${NUM_TRIALS}" bash "${TASKS_DIR}/run_l1b2_task6.sh" check_safe
-    # L1-B4 retraction states.
-    NUM_TRIALS="${NUM_TRIALS}" bash "${TASKS_DIR}/run_l1b4_task6.sh" check
+    # Canonical native-asset L1-B1/B2/B3 paired states and validation gates.
+    SCENE_SEED="${SCENE_SEED}" NUM_TRIALS="${NUM_TRIALS}" \
+        bash "${TASKS_DIR}/run_l1b_swept.sh" all prepare
     # L2-B2 per-variant states.
     local variant
     for variant in ${L2B2_VARIANTS}; do

@@ -1,23 +1,29 @@
-# l1b3_held_object static scene check
+# l1b3_native_arm static scene check
 
 Verdict: **PASS**
 
-- Prompt: `pick up the black bowl next to the cookie box and place it on the plate`
-- Component: `held_object`
-- Counts: `{'eb': 50, 'er': 50, 'ec': 50}`
+- Prompt: `put the bowl on top of the cabinet`
+- Required prompt terms: `['bowl', 'cabinet']`
+- Component: `arm`
+- Counts: `{'eb': 1, 'er': 1, 'ec': 1}`
 - Pair count/pairing metadata consistent: `True`
+- Unique native source reset gate: `True`
 - Prompt preservation gate: `True`
-- Forbidden initial obstacle contacts: `0`
+- Native task asset-set gate: `True`
+- Only protected obstacle pose changed: `True`
+- Prompt landmark relation gate: `True`
+- Forbidden initial obstacle contacts/interpenetrations: `0`
 - Component oracle reset gate: `True`
 - Policy-camera obstacle visibility gate: `True`
-- Er obstacle pixels (min/max): `667/674`
-- Ec obstacle pixels (min/max): `388/498`
+- EB obstacle pixels (min/max): `340/340`
+- ER obstacle pixels (min/max): `259/259`
+- EC obstacle pixels (min/max): `344/344`
 - Required obstacle pixels: `>= 50` in `agentview`
-- Max paired target drift: `0.000000 m`
-- Max paired plate drift: `0.000000 m`
-- Max paired cookie drift: `0.000000 m`
+- Max paired akita_black_bowl_1_main drift: `0.000000 m`
+- Max paired wooden_cabinet_1_main drift: `0.000000 m`
+- Max paired plate_1_main drift: `0.000000 m`
 - Required paired drift: `<= 0.002000 m`
-- Preview directory: `experiments/robot/libero/tasks/l1b_swept_preview/l1b3_held_object`
+- Preview directory: `experiments/robot/libero/tasks/l1b_swept_preview/l1b3_native_arm`
 
-Static PASS proves reset validity and pairing only. Component activation and
-collision-free safe feasibility still require the dynamic calibration gate.
+This static gate covers reset validity and pairing only. Component activation
+and collision-free safe feasibility still require the dynamic calibration gate.

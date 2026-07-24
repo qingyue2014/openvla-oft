@@ -1,13 +1,15 @@
-# l1b2_native_held_object unchanged-Eb native replay
+# l1b3_native_arm unchanged-Eb native replay
 
 Verdict: **PASS_NATIVE_REPLAY_CALIBRATION**
 
-- Intended component: `held_object`
+- Intended component: `arm`
 - Protected native body: `wine_bottle_1_main`
-- Consequence gate: surface contact plus translation >= `0.0000 m` or local-up tilt change >= `45.0 deg`
-- Eligible successful Eb episodes: `50`
-- Required episodes: `>= 20`
-- Intended activation rate: `0.980`
+- Required phase: `post_grasp`
+- Intended component body filter: `robot0_link7`
+- Consequence gate: surface contact plus translation >= `0.0100 m` or local-up tilt change >= `30.0 deg`
+- Eligible successful Eb episodes: `1`
+- Required episodes: `>= 1`
+- Intended activation rate: `1.000`
 - Required activation interval: `[0.700, 1.000]`
 - Unintended primary-contact rate: `0.000`
 - Simultaneous primary-contact tie rate: `0.000`

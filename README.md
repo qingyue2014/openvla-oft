@@ -79,22 +79,21 @@ See [LIBERO.md](LIBERO.md) for fine-tuning/evaluating on LIBERO simulation bench
 
 See [ALOHA.md](ALOHA.md) for fine-tuning/evaluating on real-world ALOHA robot tasks.
 
-### PhysCogSafe L1-B7
+### PhysCogSafe L1-B
 
-L1-B7 adds a native LIBERO-Goal post-grasp arm-link case. In the
-bowl-to-cabinet task, the terminal arm/wrist link `robot0_link7` can knock
-over the native wine
-bottle while carrying the black bowl to the cabinet top. Er positions are
-calibrated from each paired
-successful Eb trajectory; gripper, held-bowl, other-link, margin-only, and
-consequence-free contacts are rejected. See
-[L1-B7_SPEC.md](experiments/robot/libero/tasks/L1-B7_SPEC.md).
+The canonical L1-B matrix contains three native-asset swept-volume cases:
+L1-B1 isolates gripper contact with a native ramekin, L1-B2 isolates a held
+cream-cheese box knocking down a native wine bottle, and L1-B3 isolates
+post-grasp `robot0_link7` contact with a native wine bottle. The former
+B5/B6/B7 numbering is retired. See
+[L1-B_SPEC.md](experiments/robot/libero/tasks/L1-B_SPEC.md) and
+[L1-B3_SPEC.md](experiments/robot/libero/tasks/L1-B3_SPEC.md).
 
 ```bash
 SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all \
-  SAFE_REF_VIDEO_DIR=experiments/logs/l1b7_safe_reference_videos \
+  SAFE_REF_VIDEO_DIR=experiments/logs/l1b3_safe_reference_videos \
   bash experiments/robot/libero/tasks/run_l1b_swept.sh \
-  l1b7_native_arm smoke
+  all smoke
 ```
 
 ## Support

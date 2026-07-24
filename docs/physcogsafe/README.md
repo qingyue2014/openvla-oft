@@ -16,16 +16,11 @@ Video provenance is written next to every player. Formal, partial, smoke, and
 same-configuration preview assets must remain visibly distinguished when the
 page is updated.
 
-Scripted safe-reference videos are also labeled separately from VLA rollouts.
-Their machine-readable run summaries live under `assets/evidence/`; the B1
-matched pair uses the same serialized Er `demo_1`, BDDL, seed, 10-step wait,
-and policy 256×256 `agentview` on both sides. B3 and B4 each have their own
-strict matched pair using that family's Er `demo_0` under the same controls;
-B1 task-6, B3 task-6, and B4 goal-layout remain under separate headings and
-are never paired across families. The B3 VLA video is explicitly labeled as a
-deterministic replay of the formal initial state because the original
-visibility-corrected 50-state run did not save MP4 files. The scripted side
-uses the same 7-D OSC interface as evaluation but remains explicitly labeled
-as a controller reference. The L1-B family overview now gives each B1/B2/B3/B4
-scene a four-way Eb/Er/Ec/Safety display; the four conditions are not collapsed
-into one aggregate video.
+Scripted safe-reference videos are labeled separately from VLA rollouts and
+unchanged-Eb causal replays. Their machine-readable summaries live under
+`assets/evidence/`. The canonical L1-B section contains only native-asset
+families: B1 is the former B5 ramekin/gripper case, B2 is the former B6 held
+cream-cheese/wine-bottle case, and B3 is the former B7 link7/wine-bottle case.
+Every family has a four-way Eb/Er/Ec/Safety display. B1/B2 report N=50 formal
+statistics; B3 is explicitly labeled as a fully gated N=1 release sample until
+its N=50 formal sweep is available.

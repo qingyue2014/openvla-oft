@@ -3,9 +3,9 @@ set -euo pipefail
 
 # Run the selected minimal L1 pilot matrix:
 #   L1-A1: depth/occlusion spatial ambiguity
-#   L1-B1: protected-object contact
-#   L1-B2: carried-object corridor extent + matched safe control
-#   L1-B4: post-grasp retraction bystander + controls
+#   L1-B1: native ramekin / gripper swept-volume contact
+#   L1-B2: held cream-cheese box / native wine-bottle collision
+#   L1-B3: post-grasp arm-link / native wine-bottle collision
 #
 # Usage:
 #   bash experiments/robot/libero/tasks/run_l1_pilot.sh all
@@ -13,7 +13,7 @@ set -euo pipefail
 #   bash experiments/robot/libero/tasks/run_l1_pilot.sh l1a1
 #   bash experiments/robot/libero/tasks/run_l1_pilot.sh l1b1
 #   bash experiments/robot/libero/tasks/run_l1_pilot.sh l1b2
-#   bash experiments/robot/libero/tasks/run_l1_pilot.sh l1b4
+#   bash experiments/robot/libero/tasks/run_l1_pilot.sh l1b3
 #   bash experiments/robot/libero/tasks/run_l1_pilot.sh parse
 
 MODE="${1:-all}"
@@ -25,15 +25,15 @@ run_l1a1() {
 }
 
 run_l1b1() {
-  bash "${TASKS_DIR}/run_l1a_evals.sh" l1b1
+  bash "${TASKS_DIR}/run_l1b_swept.sh" l1b1_native_gripper all
 }
 
 run_l1b2() {
-  bash "${TASKS_DIR}/run_l1b2_task6.sh" all
+  bash "${TASKS_DIR}/run_l1b_swept.sh" l1b2_native_held_object all
 }
 
-run_l1b4() {
-  bash "${TASKS_DIR}/run_l1b4_task6.sh" all
+run_l1b3() {
+  bash "${TASKS_DIR}/run_l1b_swept.sh" l1b3_native_arm all
 }
 
 parse_results() {
@@ -45,14 +45,14 @@ case "${MODE}" in
     run_l1a1
     run_l1b1
     run_l1b2
-    run_l1b4
+    run_l1b3
     parse_results
     ;;
   sanity)
     NUM_TRIALS="${NUM_TRIALS:-5}" run_l1a1
     NUM_TRIALS="${NUM_TRIALS:-5}" run_l1b1
     NUM_TRIALS="${NUM_TRIALS:-5}" run_l1b2
-    NUM_TRIALS="${NUM_TRIALS:-5}" run_l1b4
+    NUM_TRIALS="${NUM_TRIALS:-5}" run_l1b3
     parse_results
     ;;
   l1a1)
@@ -67,8 +67,8 @@ case "${MODE}" in
     run_l1b2
     parse_results
     ;;
-  l1b4)
-    run_l1b4
+  l1b3)
+    run_l1b3
     parse_results
     ;;
   parse)
@@ -76,7 +76,7 @@ case "${MODE}" in
     ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Usage: $0 [all|sanity|l1a1|l1b1|l1b2|l1b4|parse]" >&2
+    echo "Usage: $0 [all|sanity|l1a1|l1b1|l1b2|l1b3|parse]" >&2
     exit 2
     ;;
 esac

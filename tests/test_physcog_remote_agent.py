@@ -45,43 +45,47 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
     assert "SEEDS=42" in formal.command
 
 
-def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
-    assert set(phase for scenario, phase in PHASES if scenario == "l1b6") == {
+def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
+    assert set(phase for scenario, phase in PHASES if scenario == "l1b2") == {
         "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke",
         "formal", "ec_repair", "ec_video",
     }
-    assert PHASES[("l1b6", "calibrate")].count_env == "CALIBRATION_TRIALS"
+    assert PHASES[("l1b2", "calibrate")].count_env == "CALIBRATION_TRIALS"
     assert any(
-        value.endswith("calibrate_l1b6_wine_bottle.sh")
-        for value in PHASES[("l1b6", "calibrate")].command
+        value.endswith("calibrate_l1b2_wine_bottle.sh")
+        for value in PHASES[("l1b2", "calibrate")].command
     )
-    assert PHASES[("l1b6", "prepare")].count_env == "NUM_TRIALS"
-    search = PHASES[("l1b6", "search")]
+    assert PHASES[("l1b2", "prepare")].count_env == "NUM_TRIALS"
+    search = PHASES[("l1b2", "search")]
     assert "--laterals=0.055,0.060,0.065,0.070,0.075" in search.command
     assert "--max_episodes" in search.command
     assert "50" in search.command
     assert "--min_obstacle_tilt_change_deg" in search.command
-    assert "--fail_on_invalid" in PHASES[("l1b6", "path_calibrate")].command
-    assert "SAFE_REF_VIDEO_DIR=experiments/logs/l1b6_safe_reference_videos" in (
-        PHASES[("l1b6", "smoke")].command
+    assert "--fail_on_invalid" in PHASES[("l1b2", "path_calibrate")].command
+    assert "SAFE_REF_VIDEO_DIR=experiments/logs/l1b2_safe_reference_videos" in (
+        PHASES[("l1b2", "smoke")].command
     )
-    assert PHASES[("l1b6", "smoke")].count_env == "SMOKE_TRIALS"
-    assert PHASES[("l1b6", "pool_smoke")].count_env == "NUM_TRIALS"
-    assert "L1B6_CALIBRATION_POOL_SIZE=10" in PHASES[("l1b6", "pool_smoke")].command
-    assert "L1B6_ER_PHYSICS_QUALIFICATION_SIZE=5" in PHASES[("l1b6", "pool_smoke")].command
-    assert "REPLAY_MIN_EPISODES=2" in PHASES[("l1b6", "pool_smoke")].command
-    assert "experiments/logs/l1b6_trajectory_conditioned_calibration.md" in (
-        PHASES[("l1b6", "smoke")].artifacts
+    assert PHASES[("l1b2", "smoke")].count_env == "SMOKE_TRIALS"
+    assert PHASES[("l1b2", "pool_smoke")].count_env == "NUM_TRIALS"
+    assert "L1B2_CALIBRATION_POOL_SIZE=10" in PHASES[("l1b2", "pool_smoke")].command
+    assert "L1B2_ER_PHYSICS_QUALIFICATION_SIZE=5" in PHASES[("l1b2", "pool_smoke")].command
+    assert "REPLAY_MIN_EPISODES=2" in PHASES[("l1b2", "pool_smoke")].command
+    assert "experiments/logs/l1b2_trajectory_conditioned_calibration.md" in (
+        PHASES[("l1b2", "smoke")].artifacts
     )
-    formal = PHASES[("l1b6", "formal")]
+    formal = PHASES[("l1b2", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
     assert "SAVE_VIDEO_MODE=none" in formal.command
-    assert "experiments/logs/l1b6_trajectory_conditioned_calibration.csv" in (
+    assert "experiments/logs/l1b2_trajectory_conditioned_calibration.csv" in (
         formal.artifacts
     )
-    assert "experiments/logs/l1b6_er_physics_qualification.md" in formal.artifacts
-    assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1b6", "ec_repair")].command
+    assert "experiments/logs/l1b2_er_physics_qualification.md" in formal.artifacts
+    assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1b2", "ec_repair")].command
+    assert (
+        "experiments/robot/libero/tasks/run_l1b2_native_ec_repair.sh"
+        in PHASES[("l1b2", "ec_repair")].command
+    )
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
@@ -136,7 +140,7 @@ def test_batch_script_can_exclude_unstable_render_nodes():
     cfg = RemoteConfig(**{**_config().__dict__, "exclude_nodes": "dgx-29"})
     script = build_batch_script(
         cfg, PhaseSpec(command=("true",)), count=1,
-        scenario="l1b6", phase="ec_repair", remote_log="/tmp/job.out",
+        scenario="l1b2", phase="ec_repair", remote_log="/tmp/job.out",
     )
     assert "#SBATCH --exclude=dgx-29" in script
 

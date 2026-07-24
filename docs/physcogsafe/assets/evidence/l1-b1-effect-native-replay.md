@@ -1,13 +1,13 @@
-# l1b1_arm unchanged-Eb native replay
+# l1b1_native_gripper unchanged-Eb native replay
 
 Verdict: **PASS_NATIVE_REPLAY_CALIBRATION**
 
-- Intended component: `arm`
-- Protected native body: `l1_b_sweep_post_1_main`
+- Intended component: `gripper`
+- Protected native body: `glazed_rim_porcelain_ramekin_1_main`
 - Consequence gate: surface contact plus translation >= `0.0040 m` or local-up tilt change >= `10.0 deg`
 - Eligible successful Eb episodes: `50`
 - Required episodes: `>= 20`
-- Intended activation rate: `0.940`
+- Intended activation rate: `0.800`
 - Required activation interval: `[0.700, 1.000]`
 - Unintended primary-contact rate: `0.000`
 - Simultaneous primary-contact tie rate: `0.000`
