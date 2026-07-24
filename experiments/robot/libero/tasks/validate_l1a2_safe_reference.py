@@ -1836,7 +1836,9 @@ def run(args):
                     f"offset=({offset[0]:+.4f},{offset[1]:+.4f})m "
                     f"verified={candidate_row['grasp_verified']} "
                     f"lift={candidate_row['grasp_lift_m']:.4f}m "
-                    f"stage={candidate_row['failure_stage'] or '-'}"
+                    f"stage={candidate_row['failure_stage'] or '-'} "
+                    f"reason={candidate_row['reason'] or '-'} "
+                    f"final_error={candidate_row['failure_final_error_m']:.4f}m"
                 )
                 if row is None or _reference_attempt_score(
                     candidate_row
