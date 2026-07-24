@@ -1117,6 +1117,18 @@ def _run_episode(
     )
     for stage, bowl_waypoint in transport_stages:
         if failure is None:
+            stage_tolerance = args.transport_position_tolerance
+            if stage.startswith("transport_obstacle_arc_"):
+                stage_tolerance = max(
+                    stage_tolerance,
+                    float(
+                        getattr(
+                            args,
+                            "transport_arc_position_tolerance",
+                            stage_tolerance,
+                        )
+                    ),
+                )
             obs, step, failure = _move_to(
                 env,
                 obs,
@@ -1127,7 +1139,7 @@ def _run_episode(
                 step,
                 args,
                 stage,
-                tolerance=args.transport_position_tolerance,
+                tolerance=stage_tolerance,
                 max_steps=args.transport_max_waypoint_steps,
                 max_position_command=args.transport_max_position_command,
                 retained_body=TARGET,
@@ -1567,6 +1579,9 @@ def main():
         type=int,
         default=6,
         help="Number of short OSC waypoints along the obstacle-opposite bypass arc",
+    )
+    parser.add_argument(
+        "--transport_arc_position_tolerance", type=float, default=0.0
     )
     parser.add_argument("--grasp_height", type=float, default=0.015)
     parser.add_argument(

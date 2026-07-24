@@ -279,6 +279,7 @@ safe_reference_family() {
     # then smoothly return to the centered plate target.
     extra_args+=(--transport_obstacle_clearance 0.04)
     extra_args+=(--transport_obstacle_segments 8)
+    extra_args+=(--transport_arc_position_tolerance 0.024)
     extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
     extra_args+=(--place_offset_x 0.00 --place_offset_y 0.015)
     extra_args+=(--require_support_contact_before_release)

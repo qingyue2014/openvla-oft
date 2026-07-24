@@ -782,6 +782,7 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--transport_via_x 0.10" in runner
     assert "--transport_obstacle_clearance 0.04" in runner
     assert "--transport_obstacle_segments 8" in runner
+    assert "--transport_arc_position_tolerance 0.024" in runner
     assert "--grasp_offset_fractions 0.40,0.60,0.80" in runner
     assert "--grasp_height_candidates 0.015,0.018" in runner
     assert "--min_grasp_lift 0.02" in runner

@@ -187,6 +187,7 @@ def main() -> None:
     parser.add_argument("--transport_via_x", type=float, default=None)
     parser.add_argument("--transport_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--transport_obstacle_segments", type=int, default=6)
+    parser.add_argument("--transport_arc_position_tolerance", type=float, default=0.0)
     parser.add_argument("--grasp_height", type=float, default=0.015)
     parser.add_argument(
         "--grasp_height_candidates",
