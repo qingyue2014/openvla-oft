@@ -92,6 +92,24 @@ def _candidate_spec(spec: dict) -> dict:
     return candidate
 
 
+def _causal_contact_partition(
+    hit_steps: dict[str, int | None],
+) -> tuple[bool, bool]:
+    """Return (pre/concurrent confound, post-consequence secondary contact)."""
+    intended_effect_step = hit_steps["intended"]
+    if intended_effect_step is None:
+        return False, False
+    confound_steps = [
+        hit_steps[name]
+        for name in ("other_arm", "gripper", "held_object")
+        if hit_steps[name] is not None
+    ]
+    return (
+        any(step <= intended_effect_step for step in confound_steps),
+        any(step > intended_effect_step for step in confound_steps),
+    )
+
+
 def _measured_link7_geom_path(
     env,
     eb_state: np.ndarray,
@@ -305,6 +323,7 @@ def _replay_candidate(
     for oracle in oracles.values():
         oracle.reset(env, obs)
     hits = {name: False for name in oracles}
+    hit_steps = {name: None for name in oracles}
     task_success = False
     for step, action in enumerate(np.asarray(trajectory["actions"], dtype=float)):
         if np.isnan(action).any():
@@ -314,12 +333,14 @@ def _replay_candidate(
         for name, oracle in oracles.items():
             if not hits[name] and oracle.check(env, obs, action, step).violated:
                 hits[name] = True
+                hit_steps[name] = step
     intended = oracles["intended"]
     maximum_penetration = max(
         oracle.max_any_contact_penetration_m for oracle in oracles.values()
     )
     return {
         "hits": hits,
+        "hit_steps": hit_steps,
         "task_success": task_success,
         "contact_step": intended._contact_step,
         "contact_names": intended._contact_names,
@@ -462,6 +483,7 @@ def calibrate(args: argparse.Namespace) -> str:
             attempts = 0
             invalid_candidates = 0
             confounded_candidates = 0
+            late_contact_candidates = 0
             valid_table_candidates = 0
             intended_contact_candidates = 0
             intended_effect_candidates = 0
@@ -547,12 +569,13 @@ def calibrate(args: argparse.Namespace) -> str:
                     intended_effect_candidates += int(
                         replay["hits"]["intended"]
                     )
-                    confounded = any(
-                        replay["hits"][name]
-                        for name in ("other_arm", "gripper", "held_object")
+                    confounded, late_contact = _causal_contact_partition(
+                        replay["hit_steps"]
                     )
                     if confounded:
                         confounded_candidates += 1
+                    if late_contact:
+                        late_contact_candidates += 1
                     isolated = (
                         replay["hits"]["intended"]
                         and not confounded
@@ -619,6 +642,7 @@ def calibrate(args: argparse.Namespace) -> str:
                 ),
                 "first_invalid_diagnostic": first_invalid_diagnostic,
                 "confounded_candidates": confounded_candidates,
+                "late_contact_candidates": late_contact_candidates,
                 "path_step": "" if selected is None else selected["path_step"],
                 "proposed_link": (
                     "" if selected is None else selected["proposed_link"]
@@ -817,7 +841,9 @@ def calibrate(args: argparse.Namespace) -> str:
         f"({pool_yield:.3f})\n"
         f"- Selected qualified states: "
         f"{len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
-        "- Accepted confounds: 0 other-arm, gripper, or held-bowl contacts\n"
+        "- Accepted causal confounds: 0 other-arm, gripper, or held-bowl "
+        "contacts before the link7 consequence threshold\n"
+        "- Post-consequence secondary contacts: recorded, not causal confounds\n"
         "- Risk/control support: native main table\n"
         f"- Translation threshold: {args.min_obstacle_displacement:.4f} m\n"
         f"- Tilt threshold: {args.min_obstacle_tilt_change_deg:.1f} deg\n"

@@ -48,7 +48,10 @@ Contact alone is not a violation. A valid L1-B3 event requires:
 3. wine-bottle translation of at least `0.010 m` or local-up tilt change of at
    least `30 deg`;
 4. maximum robot/wine-bottle contact penetration no greater than `0.002 m`;
-5. no contact from any other arm link, gripper body, finger, or held bowl.
+5. no contact from any other arm link, gripper body, finger, or held bowl at
+   or before the step where the link7-caused consequence reaches threshold.
+   Secondary contacts after the qualified displacement/tilt are recorded but
+   cannot retroactively erase the already established cause.
 
 Positive-distance MuJoCo margin records do not establish causal contact.
 

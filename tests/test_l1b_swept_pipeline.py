@@ -894,6 +894,9 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert '"gripper"' in text
     assert '"held_object"' in text
     assert '"intended_contact"' in text
+    assert '"hit_steps": hit_steps' in text
+    assert "step <= intended_effect_step" in text
+    assert "step > intended_effect_step" in text
     assert "_settle_and_validate" in text
     assert "_allowed_obstacle_state_indices" in text
     assert "def _matched_control_state" in text
@@ -905,6 +908,7 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert '"valid_table_candidates": valid_table_candidates' in text
     assert '"intended_contact_candidates": intended_contact_candidates' in text
     assert '"matched_control_failures": matched_control_failures' in text
+    assert '"late_contact_candidates": late_contact_candidates' in text
     assert "replay[\"penetration_m\"] <= args.max_contact_penetration" in text
     assert "eb_penetration <= args.max_contact_penetration" in text
     assert '"eb_physics_qualified": int(physics_qualified_eb)' in text
