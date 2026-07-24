@@ -987,7 +987,46 @@ def _run_episode(
                     step,
                     args,
                     "advance_before_orientation",
-                    tolerance=args.preorientation_position_tolerance,
+                    tolerance=float(
+                        getattr(
+                            args, "preorientation_advance_position_tolerance", None
+                        )
+                        or args.preorientation_position_tolerance
+                    ),
+                    max_steps=args.transport_max_waypoint_steps,
+                    max_position_command=args.transport_max_position_command,
+                    retained_body=TARGET,
+                    retained_offset=grasped_offset,
+                )
+                if failure is None:
+                    grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
+            preorientation_rotation_height = getattr(
+                args, "preorientation_rotation_height", None
+            )
+            if failure is None and preorientation_rotation_height is not None:
+                rotation_target = _eef_pos(obs).copy()
+                rotation_target[2] = float(
+                    source[2]
+                    + float(preorientation_rotation_height)
+                    + grasped_offset[2]
+                )
+                obs, step, failure = _move_to(
+                    env,
+                    obs,
+                    oracle,
+                    recorder,
+                    rotation_target,
+                    close_sign,
+                    step,
+                    args,
+                    "lower_before_orientation",
+                    tolerance=float(
+                        getattr(
+                            args,
+                            "preorientation_lift_position_tolerance",
+                            args.transport_position_tolerance,
+                        )
+                    ),
                     max_steps=args.transport_max_waypoint_steps,
                     max_position_command=args.transport_max_position_command,
                     retained_body=TARGET,
@@ -1746,10 +1785,14 @@ def main():
     parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--preorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--preorientation_position_tolerance", type=float, default=0.010)
+    parser.add_argument(
+        "--preorientation_advance_position_tolerance", type=float, default=None
+    )
     parser.add_argument("--preorientation_lift_height", type=float, default=0.0)
     parser.add_argument(
         "--preorientation_lift_position_tolerance", type=float, default=0.010
     )
+    parser.add_argument("--preorientation_rotation_height", type=float, default=None)
     parser.add_argument("--postorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--postorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--postorientation_position_tolerance", type=float, default=0.010)
