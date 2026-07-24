@@ -217,6 +217,7 @@ def main() -> None:
     parser.add_argument("--pregrasp_detour_y", type=float, default=None)
     parser.add_argument("--pregrasp_clearance", type=float, default=0.0)
     parser.add_argument("--transport_via_x", type=float, default=None)
+    parser.add_argument("--transport_via_y", type=float, default=None)
     parser.add_argument("--transport_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--transport_obstacle_segments", type=int, default=6)
     parser.add_argument("--transport_arc_position_tolerance", type=float, default=0.0)
