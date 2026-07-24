@@ -26,6 +26,10 @@ ORACLES = REPO_ROOT / "experiments/robot/libero/physcog_oracles.py"
 EVALUATOR = REPO_ROOT / "experiments/robot/libero/run_physcog_libero_l1_eval.py"
 NATIVE_REPLAY = REPO_ROOT / "experiments/robot/libero/tasks/replay_l1b_native_eb_actions.py"
 NATIVE_REPLAY_SEARCH = REPO_ROOT / "experiments/robot/libero/tasks/search_l1b_native_replay_positions.py"
+L1B1_SEPARATION_FILTER = (
+    REPO_ROOT
+    / "experiments/robot/libero/tasks/filter_l1b1_action_separated_states.py"
+)
 TRAJECTORY_CALIBRATION = REPO_ROOT / "experiments/robot/libero/tasks/calibrate_l1b2_trajectory_conditioned_states.py"
 L1B3_TRAJECTORY_CALIBRATION = (
     REPO_ROOT
@@ -576,6 +580,27 @@ def test_native_replay_grid_reuses_eb_actions_and_rejects_invalid_poses():
     assert "min_obstacle_tilt_change_deg" in text
 
 
+def test_l1b1_selects_action_separated_pool_before_formal_er_ec():
+    runner = RUNNER.read_text()
+    filter_text = L1B1_SEPARATION_FILTER.read_text()
+    assert 'L1B1_CALIBRATION_POOL_SIZE="${L1B1_CALIBRATION_POOL_SIZE:-100}"' in runner
+    formal_block = runner.split("    all)", 1)[1].split("    *)", 1)[0]
+    l1b1_block = formal_block.split(
+        'if [[ "${family}" == "l1b1_native_gripper" ]]; then', 1
+    )[1].split(
+        'elif [[ "${family}" == "l1b2_native_held_object" ]]', 1
+    )[0]
+    assert 'eval_condition "${family}" eb "${pool_count}" false' in l1b1_block
+    assert "filter_l1b1_action_separated_states" in l1b1_block
+    assert l1b1_block.index("filter_l1b1_action_separated_states") < formal_block.index(
+        'eval_condition "${family}" er "${NUM_TRIALS}"'
+    )
+    assert '"action_separated"' in filter_text
+    assert '"unintended_contact"' in filter_text
+    assert '"primary_tie"' in filter_text
+    assert "no post-formal outcome filtering" in filter_text
+
+
 def test_policy_previews_are_rendered_after_final_settle():
     text = STATIC_VALIDATOR.read_text()
     settle = text.index("for settle_step in range(args.settle_steps)")
@@ -888,10 +913,15 @@ def test_l1b2_reruns_all_gates_after_trajectory_conditioning():
     runner = RUNNER.read_text()
     calibration = TRAJECTORY_CALIBRATION.read_text()
     formal_block = runner.split("    all)", 1)[1].split("    *)", 1)[0]
-    assert formal_block.index('eval_condition "${family}" eb') < formal_block.index(
+    l1b2_block = formal_block.split(
+        'elif [[ "${family}" == "l1b2_native_held_object" ]]; then', 1
+    )[1].split(
+        'elif [[ "${family}" == "l1b3_native_arm" ]]', 1
+    )[0]
+    assert l1b2_block.index('eval_condition "${family}" eb') < l1b2_block.index(
         'calibrate_l1b2_trajectory_states "${family}"'
     )
-    assert formal_block.index('calibrate_l1b2_trajectory_states "${family}"') < formal_block.index(
+    assert l1b2_block.index('calibrate_l1b2_trajectory_states "${family}"') < l1b2_block.index(
         'check_family "${family}"'
     )
     assert formal_block.index('check_family "${family}"') < formal_block.index(

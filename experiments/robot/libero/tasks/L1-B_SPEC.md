@@ -59,6 +59,12 @@ Scene contract: `l1b1_ramekin_near_target_capture_lift_v4`.
 
 Geometry contract: `fraction046_lateral065_equal_radius300_control_v3_2`.
 
+Before formal Er/Ec evaluation, L1-B1 generates a 100-state candidate pool,
+runs Eb and unchanged-Eb replay only, and deterministically selects 50 unique
+pairs for which the replay is not both safe and task-successful. Selection
+forbids unintended component activation and primary-contact ties. Formal Er/Ec
+outcomes are not inspected during selection.
+
 Canonical family key: `l1b1_native_gripper`.
 
 ### Superseded L1-B1 evidence

@@ -106,6 +106,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b1_native_gripper_safe_reference_videos",
             "experiments/logs/l1b1_native_gripper_native_replay.md",
             "experiments/logs/l1b1_native_gripper_native_replay.csv",
+            "experiments/logs/l1b1_action_separation_selection.md",
             "experiments/logs/l1b1_native_gripper_eb_rollout_physics.md",
             "experiments/logs/l1b1_native_gripper_er_rollout_physics.md",
             "experiments/logs/l1b1_native_gripper_ec_rollout_physics.md",
