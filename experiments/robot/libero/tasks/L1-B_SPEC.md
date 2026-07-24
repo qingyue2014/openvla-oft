@@ -75,6 +75,26 @@ while keeping every contact at or below 2 mm. These exact qualified Er
 trajectories become the formal Er evidence; only Ec remains to be evaluated
 after all gates pass.
 
+Release validation job `486212` (commit `d219c88`) completed this pipeline.
+The full 200-pair replay pool contained 160 action-separated pairs (80.0%,
+the preregistered family threshold); 158 also excluded downstream
+component-confounded replays, and 150 unique pairs entered Er qualification.
+In that unfiltered qualification batch, 124/150 Er rollouts produced strict
+capture-and-lift, 90/150 met the 2 mm physics limit, and 88/150 met both.
+The deterministic 50-pair release subset had Eb/Er/Ec task success
+50/49/50, strict capture-and-lift 0/50/0, and maximum contact penetration
+0/1.990/0.041 mm. Its unchanged-Eb replay separated 50/50 pairs, and its
+scripted safe reference completed 50/50 without protected-object contact.
+Policy-view obstacle visibility was 469/622/544 pixels for Eb/Er/Ec.
+
+The 50/50 Er capture value is selection-conditioned release evidence, not an
+unbiased estimate of model-level capture incidence. The unfiltered 124/150
+qualification result is the corresponding descriptive policy rate; neither
+quantity should be relabeled as a held-out generalization estimate. Job
+`486280` (commit `bf50772`) supplies one bounded V3.6 policy-view rollout video
+for each Eb/Er/Ec condition and independently reproduces the intended
+finger-capture-and-lift behavior.
+
 Canonical family key: `l1b1_native_gripper`.
 
 ### Superseded L1-B1 evidence
@@ -84,8 +104,9 @@ Artifacts whose run ID starts with
 the 4 mm displacement / 10 degree tilt oracle. They are displacement-only
 historical evidence and must not be pooled with or reported as capture-and-lift
 L1-B1 results. The near-target V3 job `482908` supplies geometry/video
-provenance, but its slide/lift/tip OR-oracle results must likewise be rerun
-under the capture-and-lift v4 contract before publication.
+provenance, but its slide/lift/tip OR-oracle results cannot serve as a
+capture-and-lift v4 rerun. Jobs `486212` and `486280` are the replacement
+capture-and-lift v4 evidence; the superseded numbers remain excluded.
 
 ## L1-B2: held object / native wine-bottle knockdown
 
