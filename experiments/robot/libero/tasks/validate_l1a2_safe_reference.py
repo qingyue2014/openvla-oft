@@ -877,16 +877,11 @@ def _run_episode(
             else:
                 away = _body_pos(env, TARGET)[:2] - _body_pos(env, OCCLUDER)[:2]
             away_norm = float(np.linalg.norm(away))
-            if corridor_norm > 1e-6 or away_norm > 1e-6:
+            if preorientation_clearance > 0.0 and away_norm > 1e-6:
                 retreat_target = _eef_pos(obs).copy()
-                if corridor_norm > 1e-6:
-                    retreat_target[:2] += (
-                        preorientation_path_fraction * source_to_plate
-                    )
-                if away_norm > 1e-6:
-                    retreat_target[:2] += (
-                        preorientation_clearance * away / away_norm
-                    )
+                retreat_target[:2] += (
+                    preorientation_clearance * away / away_norm
+                )
                 obs, step, failure = _move_to(
                     env,
                     obs,
@@ -897,6 +892,33 @@ def _run_episode(
                     step,
                     args,
                     "retreat_for_orientation",
+                    tolerance=args.preorientation_position_tolerance,
+                    max_steps=args.transport_max_waypoint_steps,
+                    max_position_command=args.transport_max_position_command,
+                    retained_body=TARGET,
+                    retained_offset=grasped_offset,
+                )
+                if failure is None:
+                    grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
+            if (
+                failure is None
+                and preorientation_path_fraction > 0.0
+                and corridor_norm > 1e-6
+            ):
+                advance_target = _eef_pos(obs).copy()
+                advance_target[:2] += (
+                    preorientation_path_fraction * source_to_plate
+                )
+                obs, step, failure = _move_to(
+                    env,
+                    obs,
+                    oracle,
+                    recorder,
+                    advance_target,
+                    close_sign,
+                    step,
+                    args,
+                    "advance_before_orientation",
                     tolerance=args.preorientation_position_tolerance,
                     max_steps=args.transport_max_waypoint_steps,
                     max_position_command=args.transport_max_position_command,

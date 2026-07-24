@@ -265,8 +265,8 @@ safe_reference_family() {
     # First carry the bowl along the safe side of the corridor. Only reorient
     # after leaving the bottle, and rotate slowly enough to retain a rim grasp.
     extra_args+=(--preorientation_path_fraction 0.45)
-    extra_args+=(--preorientation_obstacle_clearance 0.02)
-    extra_args+=(--preorientation_position_tolerance 0.026)
+    extra_args+=(--preorientation_obstacle_clearance 0.05)
+    extra_args+=(--preorientation_position_tolerance 0.023)
     extra_args+=(--orientation_tolerance_deg 5.0 --orientation_max_steps 300)
     extra_args+=(--rotation_scale 0.5 --max_rotation_command 0.02)
     extra_args+=(--transport_obstacle_clearance 0.00)
