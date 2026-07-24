@@ -651,6 +651,20 @@ def _run_episode(
     source = _body_pos(env, TARGET)
     grasp_prefix_path = getattr(args, "grasp_action_path", "")
     use_grasp_prefix = bool(grasp_prefix_path)
+    transport_target_quat = np.asarray(
+        [
+            float(value)
+            for value in str(
+                getattr(args, "transport_target_eef_quat", "")
+            ).split(",")
+            if value.strip()
+        ],
+        dtype=float,
+    )
+    orient_before_grasp = bool(
+        getattr(args, "orient_before_grasp", False)
+        and transport_target_quat.size == 4
+    )
 
     close_sign, open_sign = 1.0, -1.0
     aperture_minus = aperture_plus = float("nan")
@@ -726,6 +740,26 @@ def _run_episode(
         if failure is None:
             obs, step, failure = _hold(
                 env, obs, oracle, recorder, open_sign, args.wait_steps, step
+            )
+        if failure is None and orient_before_grasp:
+            obs, step, failure = _move_to(
+                env,
+                obs,
+                oracle,
+                recorder,
+                _eef_pos(obs).copy(),
+                open_sign,
+                step,
+                args,
+                "orient_before_grasp",
+                tolerance=args.precise_position_tolerance,
+                max_steps=args.orientation_max_steps,
+                target_quat=transport_target_quat,
+                orientation_tolerance_rad=np.deg2rad(
+                    args.orientation_tolerance_deg
+                ),
+                rotation_scale=args.rotation_scale,
+                max_rotation_command=args.max_rotation_command,
             )
         above_source = source.copy()
         above_source[2] += args.approach_height
@@ -813,15 +847,11 @@ def _run_episode(
     if failure is None and not grasp_verified:
         failure = MotionFailure(reason="grasp_failed", stage="verify_grasp")
 
-    transport_target_quat = np.asarray(
-        [
-            float(value)
-            for value in str(getattr(args, "transport_target_eef_quat", "")).split(",")
-            if value.strip()
-        ],
-        dtype=float,
-    )
-    if failure is None and transport_target_quat.size == 4:
+    if (
+        failure is None
+        and transport_target_quat.size == 4
+        and not orient_before_grasp
+    ):
         preorientation_clearance = float(
             getattr(args, "preorientation_obstacle_clearance", 0.0)
         )
@@ -867,7 +897,11 @@ def _run_episode(
                 )
                 if failure is None:
                     grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
-    if failure is None and transport_target_quat.size == 4:
+    if (
+        failure is None
+        and transport_target_quat.size == 4
+        and not orient_before_grasp
+    ):
         obs, step, failure = _move_to(
             env,
             obs,
@@ -1394,6 +1428,7 @@ def main():
     parser.add_argument("--transport_max_position_command", type=float, default=0.15)
     parser.add_argument("--transport_position_tolerance", type=float, default=0.025)
     parser.add_argument("--transport_target_eef_quat", default="")
+    parser.add_argument("--orient_before_grasp", action="store_true")
     parser.add_argument("--preorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--preorientation_position_tolerance", type=float, default=0.010)
     parser.add_argument("--orientation_tolerance_deg", type=float, default=5.0)

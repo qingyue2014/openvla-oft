@@ -262,6 +262,9 @@ safe_reference_family() {
     extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.026)
     extra_args+=(--transport_clearance 0.01)
     extra_args+=(--transport_target_eef_quat 0.9941969,-0.0504397,-0.0834422,0.0454506)
+    # Reorient the empty wrist before approaching the bowl. Rotating after the
+    # rim grasp can eject the shallow bowl even when the translation is safe.
+    extra_args+=(--orient_before_grasp)
     extra_args+=(--preorientation_obstacle_clearance 0.05)
     extra_args+=(--preorientation_position_tolerance 0.023)
     extra_args+=(--orientation_tolerance_deg 5.0 --orientation_max_steps 200)
