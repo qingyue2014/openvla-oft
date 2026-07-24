@@ -788,7 +788,7 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--transport_position_tolerance 0.026" in runner
     assert "--transport_clearance 0.01" in runner
     assert "--transport_target_eef_quat" in runner
-    assert "--preorientation_obstacle_clearance 0.03" in runner
+    assert "--preorientation_obstacle_clearance 0.06" in runner
     assert "--orientation_tolerance_deg 5.0" in runner
     assert "_quat_error_axis_angle" in shared
     assert "retreat_for_orientation" in shared
