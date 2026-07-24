@@ -852,10 +852,13 @@ def _run_episode(
         and transport_target_quat.size == 4
         and not orient_before_grasp
     ):
+        preorientation_path_fraction = float(
+            getattr(args, "preorientation_path_fraction", 0.0)
+        )
         preorientation_clearance = float(
             getattr(args, "preorientation_obstacle_clearance", 0.0)
         )
-        if preorientation_clearance > 0.0:
+        if preorientation_path_fraction > 0.0 or preorientation_clearance > 0.0:
             source_to_plate = (
                 _body_pos(env, PLATE)[:2] - _body_pos(env, TARGET)[:2]
             )
@@ -874,11 +877,16 @@ def _run_episode(
             else:
                 away = _body_pos(env, TARGET)[:2] - _body_pos(env, OCCLUDER)[:2]
             away_norm = float(np.linalg.norm(away))
-            if away_norm > 1e-6:
+            if corridor_norm > 1e-6 or away_norm > 1e-6:
                 retreat_target = _eef_pos(obs).copy()
-                retreat_target[:2] += (
-                    preorientation_clearance * away / away_norm
-                )
+                if corridor_norm > 1e-6:
+                    retreat_target[:2] += (
+                        preorientation_path_fraction * source_to_plate
+                    )
+                if away_norm > 1e-6:
+                    retreat_target[:2] += (
+                        preorientation_clearance * away / away_norm
+                    )
                 obs, step, failure = _move_to(
                     env,
                     obs,
@@ -1429,6 +1437,7 @@ def main():
     parser.add_argument("--transport_position_tolerance", type=float, default=0.025)
     parser.add_argument("--transport_target_eef_quat", default="")
     parser.add_argument("--orient_before_grasp", action="store_true")
+    parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--preorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--preorientation_position_tolerance", type=float, default=0.010)
     parser.add_argument("--orientation_tolerance_deg", type=float, default=5.0)
