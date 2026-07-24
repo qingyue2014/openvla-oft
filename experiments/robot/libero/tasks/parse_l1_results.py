@@ -24,9 +24,9 @@ RUN_LABELS = {
     "L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-eb": ("L1-B2", "Eb: Native Bottle"),
     "L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-er": ("L1-B2", "Er: Held-Object Knockdown"),
     "L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-ec": ("L1-B2", "Ec: Off-Sweep Bottle"),
-    "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-eb": ("L1-B3", "Eb: Native Bottle"),
-    "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-er": ("L1-B3", "Er: Link7 Knockdown"),
-    "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-ec": ("L1-B3", "Ec: Off-Sweep Bottle"),
+    "L1-B3-goal-bowl-plate-native-wine-link-knockdown-eb": ("L1-B3", "Eb: Native Bottle"),
+    "L1-B3-goal-bowl-plate-native-wine-link-knockdown-er": ("L1-B3", "Er: Link7 Knockdown"),
+    "L1-B3-goal-bowl-plate-native-wine-link-knockdown-ec": ("L1-B3", "Ec: Off-Sweep Bottle"),
 }
 
 RUN_ORDER = list(RUN_LABELS)

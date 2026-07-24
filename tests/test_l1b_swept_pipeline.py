@@ -327,7 +327,7 @@ def test_new_run_ids_map_to_three_distinct_l1b_families():
         "L1", "L1-B2", "Ec Visible Off-Sweep Wine Bottle"
     )
     assert _metadata_for_run(
-        "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-er-seed42"
+        "L1-B3-goal-bowl-plate-native-wine-link-knockdown-er-seed42"
     ) == (
         "L1", "L1-B3", "Er Post-Grasp Link/Wine-Bottle Knockdown"
     )
@@ -347,7 +347,7 @@ def test_historical_b5_b6_b7_run_ids_map_to_new_b1_b2_b3():
 
 def test_l1b3_run_ids_map_to_native_link_knockdown():
     assert _metadata_for_run(
-        "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-er-seed42"
+        "L1-B3-goal-bowl-plate-native-wine-link-knockdown-er-seed42"
     ) == ("L1", "L1-B3", "Er Post-Grasp Link/Wine-Bottle Knockdown")
 
 
@@ -852,33 +852,16 @@ def test_l1b3_native_layout_and_runner_contract_are_explicit():
     assert '"component": "arm"' in block
     assert '"obstacle_body": WINE_BOTTLE_BODY' in block
     assert '"target_body": TARGET_BODY' in block
-    assert '"goal_support_body": "wooden_cabinet_1_main"' in block
+    assert '"goal_support_body": PLATE_BODY' in block
     assert '"native_assets_only": True' in block
     assert '"preserve_native_layout": True' in block
     assert '"intended_link_bodies": ["robot0_link7"]' in block
     assert '"min_obstacle_displacement": 0.010' in block
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
-    assert (
-        "frozenset((WINE_BOTTLE_BODY, CABINET_TOP_BODY))"
-        in generator
-    )
-    assert '"stabilize_placement_before_capture": True' in (
-        L1B3_TRAJECTORY_CALIBRATION.read_text()
-    )
-    assert '"allow_obstacle_orientation": True' in (
-        L1B3_TRAJECTORY_CALIBRATION.read_text()
-    )
-    assert '"required_support_body": args.support_body' in (
-        L1B3_TRAJECTORY_CALIBRATION.read_text()
-    )
-    assert 'if spec.get("allow_obstacle_orientation")' in generator
-    support_contact_block = generator.split(
-        "def _contact_partner_names", 1
-    )[1].split("def _initial_contact_audit_bodies", 1)[0]
-    assert "float(contact.dist)" not in support_contact_block
+    assert '"placement_mode": "offset_from_eb"' in block
     assert "l1b3_native_arm) printf '%s\\n' wine_bottle_1_main" in runner
     assert "l1b2_native_held_object|l1b3_native_arm) printf '%s\\n' libero_goal" in runner
-    assert "l1b3_native_arm) printf '%s\\n' 4" in runner
+    assert "l1b3_native_arm) printf '%s\\n' 8" in runner
     assert "arm_postgrasp_sweep" in runner
     assert '--swept_volume_component_bodies "robot0_link7"' in runner
     assert "l1b2_native_held_object|l1b3_native_arm) printf '%s\\n' \"${GOAL_CHECKPOINT}\"" in runner
@@ -916,15 +899,12 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "def _matched_control_state" in text
     assert "not any(replay[\"hits\"].values())" in text
     assert "output_ec_states[episode] = selected[\"control\"][\"state\"]" in text
-    assert 'parser.add_argument("--support_body", default=CABINET_TOP_BODY)' in text
-    assert 'parser.add_argument("--support_spawn_z", type=float, default=1.20)' in text
-    assert 'parser.add_argument("--minimum_supported_z", type=float, default=0.90)' in text
-    assert '"same native wine bottle on the same cabinet-top support' in text
+    assert 'parser.add_argument("--task_id", type=int, default=8)' in text
+    assert '"same native wine bottle on the same table support' in text
     assert '"first_invalid_diagnostic": first_invalid_diagnostic' in text
-    assert '"valid_supported_candidates": valid_supported_candidates' in text
+    assert '"valid_table_candidates": valid_table_candidates' in text
     assert '"intended_contact_candidates": intended_contact_candidates' in text
     assert '"matched_control_failures": matched_control_failures' in text
-    assert '"required_support"' in text
     assert "replay[\"penetration_m\"] <= args.max_contact_penetration" in text
     assert "eb_penetration <= args.max_contact_penetration" in text
     assert '"eb_physics_qualified": int(physics_qualified_eb)' in text

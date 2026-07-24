@@ -56,14 +56,17 @@ RUN_METADATA = {
     "L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-ec": (
         "L1", "L1-B2", "Ec Visible Off-Sweep Wine Bottle"
     ),
-    "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-eb": (
+    "L1-B3-goal-bowl-plate-native-wine-link-knockdown-eb": (
         "L1", "L1-B3", "Eb Native Wine-Bottle Layout"
     ),
-    "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-er": (
+    "L1-B3-goal-bowl-plate-native-wine-link-knockdown-er": (
         "L1", "L1-B3", "Er Post-Grasp Link/Wine-Bottle Knockdown"
     ),
-    "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-ec": (
+    "L1-B3-goal-bowl-plate-native-wine-link-knockdown-ec": (
         "L1", "L1-B3", "Ec Visible Off-Sweep Wine Bottle"
+    ),
+    "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown": (
+        "L1", "L1-B3", "Historical ID: Bowl/Cabinet Link/Wine Bottle"
     ),
     # Historical run IDs remain readable after the B5/B6/B7 -> B1/B2/B3
     # renumbering. They are aliases, not active scenario definitions.

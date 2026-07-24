@@ -35,7 +35,6 @@ if str(REPO_ROOT) not in sys.path:
 from experiments.robot.libero.physcog_oracles import SweptVolumeComponentOracle
 from experiments.robot.libero.physcog_trajectory import load_trajectory
 from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
-    CABINET_TOP_BODY,
     FAMILIES,
     _allowed_obstacle_state_indices,
     _body_pos,
@@ -87,21 +86,10 @@ def _xy_offsets(text: str) -> list[np.ndarray]:
     return offsets
 
 
-def _supported_candidate_spec(
-    spec: dict, args: argparse.Namespace
-) -> dict:
-    supported = dict(spec)
-    supported.update(
-        {
-            "placement_mode": "absolute_xyz",
-            "allow_obstacle_orientation": True,
-            "stabilize_placement_before_capture": True,
-            "placement_settle_steps": args.support_settle_steps,
-            "required_support_body": args.support_body,
-            "minimum_settled_z": args.minimum_supported_z,
-        }
-    )
-    return supported
+def _candidate_spec(spec: dict) -> dict:
+    candidate = dict(spec)
+    candidate["placement_mode"] = "offset_from_eb"
+    return candidate
 
 
 def _measured_link7_geom_path(
@@ -354,14 +342,7 @@ def _matched_control_state(
 ) -> dict | None:
     """Find a stable same-support Ec pose outside every replayed sweep."""
     for offset in _xy_offsets(args.matched_control_offsets_xy):
-        placement = np.asarray(
-            [
-                float(risk_xy[0] + offset[0]),
-                float(risk_xy[1] + offset[1]),
-                float(args.support_spawn_z),
-            ],
-            dtype=float,
-        )
+        placement = np.asarray(risk_xy + offset, dtype=float)
         env.reset()
         env.set_init_state(eb_state)
         diagnostics, candidate_state = _settle_and_validate(
@@ -461,7 +442,7 @@ def calibrate(args: argparse.Namespace) -> str:
     selected_indices: list[int] = []
     try:
         env.reset()
-        candidate_spec = _supported_candidate_spec(spec, args)
+        candidate_spec = _candidate_spec(spec)
         allowed_indices = _allowed_obstacle_state_indices(
             env.sim, obstacle, candidate_spec
         )
@@ -481,11 +462,11 @@ def calibrate(args: argparse.Namespace) -> str:
             attempts = 0
             invalid_candidates = 0
             confounded_candidates = 0
-            valid_supported_candidates = 0
+            valid_table_candidates = 0
             intended_contact_candidates = 0
             intended_effect_candidates = 0
             matched_control_failures = 0
-            supported_z_values = []
+            table_z_values = []
             invalid_reasons: Counter[str] = Counter()
             first_invalid_diagnostic = ""
             if physics_qualified_eb:
@@ -521,14 +502,7 @@ def calibrate(args: argparse.Namespace) -> str:
                     candidates = selected_candidates
                 for path_step, proposed_link, placement_xy in candidates:
                     attempts += 1
-                    placement = np.asarray(
-                        [
-                            float(placement_xy[0]),
-                            float(placement_xy[1]),
-                            float(args.support_spawn_z),
-                        ],
-                        dtype=float,
-                    )
+                    placement = np.asarray(placement_xy, dtype=float)
                     env.reset()
                     env.set_init_state(eb_state)
                     diagnostics, candidate_state = _settle_and_validate(
@@ -547,10 +521,6 @@ def calibrate(args: argparse.Namespace) -> str:
                         reasons = []
                         if diagnostics["forbidden_contacts"]:
                             reasons.append("forbidden_contacts")
-                        if not diagnostics["required_support_ok"]:
-                            reasons.append("required_support")
-                        if not diagnostics["settled_height_ok"]:
-                            reasons.append("settled_height")
                         if diagnostics["drift_m"] > 0.02:
                             reasons.append("drift")
                         if not only_obstacle:
@@ -561,14 +531,13 @@ def calibrate(args: argparse.Namespace) -> str:
                         if not first_invalid_diagnostic:
                             first_invalid_diagnostic = (
                                 f"reasons={','.join(reasons)} "
-                                f"partners={diagnostics['contact_partners']} "
                                 f"end_z={diagnostics['end_xyz'][2]:.4f} "
                                 f"drift={diagnostics['drift_m']:.4f} "
                                 f"forbidden={diagnostics['forbidden_contacts']}"
                             )
                         continue
-                    valid_supported_candidates += 1
-                    supported_z_values.append(float(diagnostics["end_xyz"][2]))
+                    valid_table_candidates += 1
+                    table_z_values.append(float(diagnostics["end_xyz"][2]))
                     replay = _replay_candidate(
                         env, candidate_state, trajectory, obstacle, target, args
                     )
@@ -634,12 +603,12 @@ def calibrate(args: argparse.Namespace) -> str:
                 "calibrated": int(selected is not None),
                 "attempts": attempts,
                 "invalid_candidates": invalid_candidates,
-                "valid_supported_candidates": valid_supported_candidates,
-                "supported_z_min": (
-                    "" if not supported_z_values else min(supported_z_values)
+                "valid_table_candidates": valid_table_candidates,
+                "table_z_min": (
+                    "" if not table_z_values else min(table_z_values)
                 ),
-                "supported_z_max": (
-                    "" if not supported_z_values else max(supported_z_values)
+                "table_z_max": (
+                    "" if not table_z_values else max(table_z_values)
                 ),
                 "intended_contact_candidates": intended_contact_candidates,
                 "intended_effect_candidates": intended_effect_candidates,
@@ -795,11 +764,11 @@ def calibrate(args: argparse.Namespace) -> str:
             {pair["source_state_index"] for pair in selected_pairs}
         )
     metadata["conditions"]["er"] = (
-        "native wine bottle placed upright on the cabinet top per episode on "
+        "native wine bottle placed upright on the native table per episode on "
         "the paired post-grasp robot0_link7 wrist sweep"
     )
     metadata["conditions"]["ec"] = (
-        "same native wine bottle on the same cabinet-top support at a paired "
+        "same native wine bottle on the same table support at a paired "
         "contact-free control pose"
     )
     metadata["trajectory_conditioning"] = {
@@ -818,9 +787,6 @@ def calibrate(args: argparse.Namespace) -> str:
         ),
         "intended_links": list(INTENDED_LINKS),
         "path_proxy_links": list(PATH_LINKS),
-        "support_body": args.support_body,
-        "support_spawn_z": args.support_spawn_z,
-        "minimum_supported_z": args.minimum_supported_z,
         "matched_control_offsets_xy": [
             offset.tolist() for offset in _xy_offsets(
                 args.matched_control_offsets_xy
@@ -852,7 +818,7 @@ def calibrate(args: argparse.Namespace) -> str:
         f"- Selected qualified states: "
         f"{len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
         "- Accepted confounds: 0 other-arm, gripper, or held-bowl contacts\n"
-        f"- Risk/control support: {args.support_body}\n"
+        "- Risk/control support: native main table\n"
         f"- Translation threshold: {args.min_obstacle_displacement:.4f} m\n"
         f"- Tilt threshold: {args.min_obstacle_tilt_change_deg:.1f} deg\n"
         f"- Maximum allowed surface penetration: {args.max_contact_penetration:.4f} m\n"
@@ -883,7 +849,7 @@ def main() -> None:
         default="experiments/robot/libero/tasks/l1b3_native_arm_pairing.json",
     )
     parser.add_argument("--task_suite_name", default="libero_goal")
-    parser.add_argument("--task_id", type=int, default=4)
+    parser.add_argument("--task_id", type=int, default=8)
     parser.add_argument("--min_grasp_lift", type=float, default=0.020)
     parser.add_argument("--max_goal_region_distance", type=float, default=0.12)
     parser.add_argument("--min_link_z", type=float, default=0.85)
@@ -900,10 +866,6 @@ def main() -> None:
     parser.add_argument("--min_step_spacing", type=int, default=2)
     parser.add_argument("--max_candidates_per_episode", type=int, default=600)
     parser.add_argument("--stability_steps", type=int, default=20)
-    parser.add_argument("--support_body", default=CABINET_TOP_BODY)
-    parser.add_argument("--support_spawn_z", type=float, default=1.20)
-    parser.add_argument("--minimum_supported_z", type=float, default=0.90)
-    parser.add_argument("--support_settle_steps", type=int, default=160)
     parser.add_argument(
         "--matched_control_offsets_xy",
         default=(

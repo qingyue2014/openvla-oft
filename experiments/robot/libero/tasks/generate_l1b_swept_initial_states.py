@@ -71,11 +71,6 @@ MAX_SUPPORT_PENETRATION_M = 0.002
 # cannot mask contacts involving any protected L1-B obstacle.
 EXPECTED_NATIVE_SUPPORT_PAIRS = {
     frozenset(("akita_black_bowl_2_main", "flat_stove_1_burner")),
-    # L1-B3 may place the native wine bottle upright on the native cabinet
-    # top. This is a deliberate shallow support contact, not an initial
-    # obstacle overlap. Contacts with the cabinet side / main body remain
-    # forbidden.
-    frozenset((WINE_BOTTLE_BODY, CABINET_TOP_BODY)),
 }
 
 # Pose = target + fraction * (plate-target) + lateral * left_normal.
@@ -153,13 +148,15 @@ FAMILIES = {
     },
     "l1b3_native_arm": {
         "component": "arm",
-        # Native LIBERO-Goal task 4: "put the bowl on top of the cabinet".
+        # Native LIBERO-Goal task 8: "put the bowl on the plate". Keeping the
+        # destination at table height makes the terminal wrist sweep
+        # geometrically observable with the native upright wine bottle.
         # The wine bottle is a prompt-irrelevant native bystander. Formal Er
         # poses are calibrated per episode from paired successful Eb link
         # trajectories; these offsets are only stable, visible bootstraps.
         "obstacle_body": WINE_BOTTLE_BODY,
         "target_body": TARGET_BODY,
-        "goal_support_body": "wooden_cabinet_1_main",
+        "goal_support_body": PLATE_BODY,
         "bddl_file": None,
         "native_assets_only": True,
         "preserve_native_layout": True,
@@ -241,8 +238,6 @@ def _allowed_obstacle_state_indices(sim, body_name: str, spec: dict) -> set[int]
     qpos_indices = {qpos_start + qadr, qpos_start + qadr + 1}
     if spec.get("placement_mode") == "absolute_xyz":
         qpos_indices.add(qpos_start + qadr + 2)
-    if spec.get("allow_obstacle_orientation"):
-        qpos_indices.update(qpos_start + qadr + index for index in range(3, 7))
     return {
         *qpos_indices,
         *(qvel_start + vadr + index for index in range(6)),
@@ -349,31 +344,6 @@ def _forbidden_contact_names(env, obstacle_body: str) -> list[str]:
             continue
         contacts.add(other_name)
     return sorted(contacts)
-
-
-def _contact_partner_names(env, body_name: str) -> list[str]:
-    """Return active MuJoCo contact partners for one body subtree.
-
-    Support contacts can have zero or slightly positive distance because
-    MuJoCo activates the contact margin before visible penetration. This
-    helper is only used to confirm an exact required support body; forbidden
-    overlap auditing remains restricted to negative-distance contacts.
-    """
-    model = env.sim.model
-    root_ids = _body_subtree_ids(env, body_name)
-    partners = set()
-    for index in range(env.sim.data.ncon):
-        contact = env.sim.data.contact[index]
-        body_1 = int(model.geom_bodyid[contact.geom1])
-        body_2 = int(model.geom_bodyid[contact.geom2])
-        if body_1 in root_ids and body_2 not in root_ids:
-            other_id = body_2
-        elif body_2 in root_ids and body_1 not in root_ids:
-            other_id = body_1
-        else:
-            continue
-        partners.add(model.body_id2name(other_id) or f"body_id_{other_id}")
-    return sorted(partners)
 
 
 def _initial_contact_audit_bodies(env, obstacle_body: str) -> list[str]:
@@ -491,23 +461,7 @@ def _settle_and_validate(
     stability_steps: int,
     audit_all_movable: bool = True,
 ) -> tuple[dict, np.ndarray]:
-    base_state = env.sim.get_state().flatten().copy()
     _apply_condition_placement(env, spec, obstacle_body, placement)
-    if spec.get("stabilize_placement_before_capture"):
-        qadr = _find_free_joint_qadr(env.sim, obstacle_body)
-        if qadr < 0:
-            raise ValueError(f"Free joint not found for {obstacle_body!r}")
-        for _ in range(int(spec.get("placement_settle_steps", 120))):
-            env.sim.step()
-        settled_qpos = env.sim.data.qpos[qadr:qadr + 7].copy()
-        env.set_init_state(base_state)
-        env.sim.data.qpos[qadr:qadr + 7] = settled_qpos
-        for joint_id in range(env.sim.model.njnt):
-            if int(env.sim.model.jnt_qposadr[joint_id]) == int(qadr):
-                vadr = int(env.sim.model.jnt_dofadr[joint_id])
-                env.sim.data.qvel[vadr:vadr + 6] = 0.0
-                break
-        env.sim.forward()
     placed = _body_pos(env, obstacle_body)
     # Save the paired condition before advancing the validation copy.  The
     # common source state is already fully settled, so the only serialized
@@ -528,31 +482,13 @@ def _settle_and_validate(
         forbidden_contacts.update(contact_scan())
     end = _body_pos(env, obstacle_body)
     drift = float(np.linalg.norm(end - start))
-    contact_partners = _contact_partner_names(env, obstacle_body)
-    required_support_body = spec.get("required_support_body")
-    required_support_ok = bool(
-        required_support_body is None
-        or required_support_body in contact_partners
-    )
-    minimum_settled_z = float(spec.get("minimum_settled_z", -np.inf))
-    settled_height_ok = bool(end[2] >= minimum_settled_z)
     diagnostics = {
         "placed_xyz": placed,
         "settled_start_xyz": start,
         "end_xyz": end,
         "drift_m": drift,
-        "contact_partners": contact_partners,
-        "required_support_body": required_support_body,
-        "required_support_ok": required_support_ok,
-        "minimum_settled_z": minimum_settled_z,
-        "settled_height_ok": settled_height_ok,
         "forbidden_contacts": sorted(forbidden_contacts),
-        "valid": bool(
-            drift <= 0.02
-            and not forbidden_contacts
-            and required_support_ok
-            and settled_height_ok
-        ),
+        "valid": bool(drift <= 0.02 and not forbidden_contacts),
     }
     return diagnostics, candidate_state
 

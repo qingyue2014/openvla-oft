@@ -117,7 +117,7 @@ note_for() {
   case "${family}" in
     l1b1_native_gripper) base="L1-B1-task6-native-ramekin-capture-lift-v4" ;;
     l1b2_native_held_object) base="L1-B2-goal-cream-cheese-native-wine-bottle-knockdown" ;;
-    l1b3_native_arm) base="L1-B3-goal-bowl-cabinet-native-wine-link-knockdown" ;;
+    l1b3_native_arm) base="L1-B3-goal-bowl-plate-native-wine-link-knockdown" ;;
   esac
   base="${base}-${condition}"
   if [[ -n "${RUN_ID_SUFFIX}" ]]; then
@@ -136,7 +136,7 @@ task_suite_for() {
 task_id_for() {
   case "$1" in
     l1b2_native_held_object) printf '%s\n' 6 ;;
-    l1b3_native_arm) printf '%s\n' 4 ;;
+    l1b3_native_arm) printf '%s\n' 8 ;;
     *) printf '%s\n' 6 ;;
   esac
 }
@@ -250,7 +250,7 @@ safe_reference_family() {
     # A paired-policy prefix reaches the calibrated link7 strike too soon after
     # first finger contact to establish a stable grasp. Use the independently
     # verified closed-loop grasp search instead: its positive-Y rim grasp lifts
-    # vertically clear of the bottle before direct cabinet-top transport.
+    # vertically clear of the bottle before a table-height plate transport.
     extra_args+=(--approach_height 0.12 --lift_height 0.08)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
     extra_args+=(--position_tolerance 0.025)

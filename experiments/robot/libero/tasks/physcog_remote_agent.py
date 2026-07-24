@@ -338,8 +338,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b3_safe_reference_videos",
             "experiments/robot/libero/tasks/l1b3_native_arm_pairing.json",
             "experiments/robot/libero/tasks/l1b_swept_preview/l1b3_native_arm",
-            "rollouts/libero_goal/L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-eb",
-            "rollouts/libero_goal/L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-ec",
+            "rollouts/libero_goal/L1-B3-goal-bowl-plate-native-wine-link-knockdown-eb",
+            "rollouts/libero_goal/L1-B3-goal-bowl-plate-native-wine-link-knockdown-ec",
         ),
     ),
     ("l1b3", "formal"): PhaseSpec(
@@ -366,9 +366,9 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b3_native_arm_ec_rollout_physics.md",
             "experiments/robot/libero/tasks/l1b3_native_arm_pairing.json",
             "experiments/robot/libero/tasks/l1b_swept_preview/l1b3_native_arm",
-            "rollouts/libero_goal/L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-eb/trajectories",
-            "rollouts/libero_goal/L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-er/trajectories",
-            "rollouts/libero_goal/L1-B3-goal-bowl-cabinet-native-wine-link-knockdown-ec/trajectories",
+            "rollouts/libero_goal/L1-B3-goal-bowl-plate-native-wine-link-knockdown-eb/trajectories",
+            "rollouts/libero_goal/L1-B3-goal-bowl-plate-native-wine-link-knockdown-er/trajectories",
+            "rollouts/libero_goal/L1-B3-goal-bowl-plate-native-wine-link-knockdown-ec/trajectories",
         ),
     ),
     ("l3a1", "check"): PhaseSpec(
