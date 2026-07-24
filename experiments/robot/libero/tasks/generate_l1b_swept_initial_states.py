@@ -252,7 +252,8 @@ FAMILIES = {
         "goal_support_body": "wooden_cabinet_1_main",
         "bddl_file": None,
         "native_assets_only": True,
-        "preserve_native_layout": True,
+        "preserve_native_layout": False,
+        "use_sampled_layout": True,
         "placement_mode": "offset_from_eb",
         # Bootstrap poses must be valid across all 50 native serialized
         # layouts. The trajectory calibrator replaces Er per episode before
@@ -261,7 +262,7 @@ FAMILIES = {
         "risk_offset_xy": [0.005, 0.000],
         "control_offset_xy": [0.000, 0.005],
         "required_prompt_terms": ["bowl", "cabinet"],
-        "intended_link_bodies": ["robot0_link5", "robot0_link6"],
+        "intended_link_bodies": ["robot0_link7"],
         # A brush is not enough: the contacted bottle must visibly translate
         # or topple relative to its last pre-contact pose.
         "min_obstacle_displacement": 0.010,

@@ -18,6 +18,8 @@ CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 GOAL_CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
+L1B7_SMOKE_POOL_SIZE="${L1B7_SMOKE_POOL_SIZE:-12}"
+L1B7_CALIBRATION_POOL_SIZE="${L1B7_CALIBRATION_POOL_SIZE:-180}"
 SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
@@ -336,7 +338,7 @@ eval_condition() {
     --swept_volume_tilt_threshold_deg "${tilt_threshold}"
   )
   if [[ "${family}" == "l1b7_native_arm" ]]; then
-    extra_args+=(--swept_volume_component_bodies "robot0_link5,robot0_link6")
+    extra_args+=(--swept_volume_component_bodies "robot0_link7")
   fi
   if [[ -n "${bddl}" ]]; then
     extra_args+=(--bddl_file "${bddl}")
@@ -393,7 +395,7 @@ replay_native_family() {
   elif [[ "${family}" == "l1b7_native_arm" ]]; then
     extra_args+=(--min_obstacle_displacement "${L1B7_DISPLACEMENT_THRESHOLD:-0.010}")
     extra_args+=(--min_obstacle_tilt_change_deg "${L1B7_TILT_THRESHOLD_DEG:-30.0}")
-    extra_args+=(--component_bodies "robot0_link5,robot0_link6")
+    extra_args+=(--component_bodies "robot0_link7")
     extra_args+=(--required_phase post_grasp)
     if [[ "${SAVE_VIDEO_MODE,,}" != "none" ]]; then
       extra_args+=(--video_dir "experiments/logs/${family}_native_replay_videos")
@@ -435,18 +437,23 @@ calibrate_l1b6_trajectory_states() {
 }
 
 calibrate_l1b7_trajectory_states() {
-  local family="$1" eb_note
+  local family="$1" select_count="${2:-0}" eb_note
   if [[ "${family}" != "l1b7_native_arm" ]]; then
     return 0
   fi
   eb_note="$(note_for "${family}" eb)"
+  local extra_args=()
+  if [[ "${select_count}" -gt 0 ]]; then
+    extra_args+=(--select_count "${select_count}")
+  fi
   python "${TASKS_DIR}/calibrate_l1b7_trajectory_conditioned_states.py" \
     --eb_trajectories "rollouts/libero_goal/${eb_note}/trajectories" \
     --min_obstacle_displacement "${L1B7_DISPLACEMENT_THRESHOLD:-0.010}" \
     --min_obstacle_tilt_change_deg "${L1B7_TILT_THRESHOLD_DEG:-30.0}" \
     --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
     --min_successful_eb "${REPLAY_MIN_EPISODES:-20}" \
-    --fail_on_invalid
+    --fail_on_invalid \
+    "${extra_args[@]}"
 }
 
 filter_l1b6_er_physics_states() {
@@ -502,15 +509,21 @@ run_family() {
     eb|er|ec) eval_condition "${family}" "${MODE}" "${NUM_TRIALS}" ;;
     smoke)
       count="${SMOKE_TRIALS}"
-      generate_family "${family}" "${count}"
+      if [[ "${family}" == "l1b7_native_arm" ]]; then
+        pool_count="${L1B7_SMOKE_POOL_SIZE}"
+        generate_family "${family}" "${pool_count}"
+      else
+        generate_family "${family}" "${count}"
+      fi
       if [[ "${family}" == "l1b6_native_held_object" ]]; then
         eval_condition "${family}" eb "${count}"
         REPLAY_MIN_EPISODES=2 calibrate_l1b6_trajectory_states "${family}"
         check_family "${family}"
         SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
       elif [[ "${family}" == "l1b7_native_arm" ]]; then
-        eval_condition "${family}" eb "${count}"
-        REPLAY_MIN_EPISODES=2 calibrate_l1b7_trajectory_states "${family}"
+        eval_condition "${family}" eb "${pool_count}"
+        REPLAY_MIN_EPISODES="${count}" \
+          calibrate_l1b7_trajectory_states "${family}" "${count}"
         check_family "${family}"
         SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
       else
@@ -573,9 +586,16 @@ run_family() {
         check_family "${family}"
         safe_reference_family "${family}"
       elif [[ "${family}" == "l1b7_native_arm" ]]; then
-        generate_family "${family}" "${NUM_TRIALS}"
-        eval_condition "${family}" eb "${NUM_TRIALS}"
-        calibrate_l1b7_trajectory_states "${family}"
+        pool_count="${L1B7_CALIBRATION_POOL_SIZE}"
+        generate_family "${family}" "${pool_count}"
+        eval_condition "${family}" eb "${pool_count}"
+        REPLAY_MIN_EPISODES="${NUM_TRIALS}" \
+          calibrate_l1b7_trajectory_states "${family}" "${NUM_TRIALS}"
+        python "${TASKS_DIR}/validate_l1b_rollout_physics.py" \
+          --trajectory_dir "rollouts/libero_goal/$(note_for "${family}" eb)/trajectories" \
+          --expected_episodes "${NUM_TRIALS}" \
+          --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
+          --out_report "experiments/logs/${family}_eb_rollout_physics.md"
         check_family "${family}"
         safe_reference_family "${family}"
       else

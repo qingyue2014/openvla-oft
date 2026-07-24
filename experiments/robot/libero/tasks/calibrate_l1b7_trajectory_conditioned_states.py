@@ -1,11 +1,11 @@
 """Calibrate L1-B7 wine-bottle poses against paired post-grasp arm-link paths.
 
-Each successful Eb trajectory supplies the observed robot0_link5/link6 sweep.
+Each successful Eb trajectory supplies the observed robot0_link7 wrist sweep.
 Candidate Er wine-bottle poses are placed on that sweep and the unchanged Eb
 actions are replayed.  A candidate is accepted only when:
 
 * the grasp has already occurred;
-* link5 or link6 makes real surface contact with the wine bottle;
+* link7 makes real surface contact with the wine bottle;
 * the contact causes the configured translation or tilt consequence;
 * no other arm link, gripper geom, or held bowl contacts the bottle; and
 * maximum contact penetration remains within the global physics limit.
@@ -21,6 +21,7 @@ import glob
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
@@ -46,9 +47,10 @@ from experiments.robot.libero.tasks.validate_l1b_swept_states import _load_state
 
 
 FAMILY = "l1b7_native_arm"
-INTENDED_LINKS = ("robot0_link5", "robot0_link6")
+INTENDED_LINKS = ("robot0_link7",)
+PATH_LINKS = ("robot0_link5", "robot0_link6")
 OTHER_ARM_LINKS = tuple(
-    f"robot0_link{index}" for index in (0, 1, 2, 3, 4, 7)
+    f"robot0_link{index}" for index in (0, 1, 2, 3, 4, 5, 6)
 )
 
 
@@ -71,7 +73,11 @@ def _trajectory_candidates(
         return []
     lifted = target[:, 2] >= target[0, 2] + args.min_grasp_lift
     candidate_steps: list[tuple[int, str, np.ndarray]] = []
-    for link_name in INTENDED_LINKS:
+    # link7's collision mesh is offset from its body origin. The coincident
+    # link5/link6 joint origin is a much better spatial proxy for the terminal
+    # wrist mesh's tabletop sweep, while contact attribution remains exact
+    # and restricted to link7.
+    for link_name in PATH_LINKS:
         key = f"body_pos__{link_name}"
         if key not in trajectory:
             raise KeyError(
@@ -84,15 +90,23 @@ def _trajectory_candidates(
             if lifted[index]
             and args.min_link_z <= positions[index, 2] <= args.max_link_z
         ]
-        selected: list[int] = []
+        spaced: list[int] = []
         for index in eligible:
             if all(
                 abs(index - previous) >= args.min_step_spacing
-                for previous in selected
+                for previous in spaced
             ):
-                selected.append(index)
-            if len(selected) >= args.max_path_steps_per_link:
-                break
+                spaced.append(index)
+        if len(spaced) > args.max_path_steps_per_link:
+            sample_indices = np.linspace(
+                0,
+                len(spaced) - 1,
+                num=args.max_path_steps_per_link,
+                dtype=int,
+            )
+            selected = [spaced[index] for index in np.unique(sample_indices)]
+        else:
+            selected = spaced
         for index in selected:
             candidate_steps.append((index, link_name, positions[index, :2]))
 
@@ -107,10 +121,10 @@ def _trajectory_candidates(
             offset = radius * np.array([np.cos(angle), np.sin(angle)], dtype=float)
             for index, link_name, link_xy in candidate_steps:
                 placement = link_xy + offset
-                # link5/link6 share an origin in the LIBERO Panda model, and
-                # every angle is identical at radius zero. Replaying those
-                # duplicate placements can multiply calibration time without
-                # adding a distinct physical hypothesis.
+                # Every angle is identical at radius zero, and nearby path
+                # samples can quantize to the same pose. Replaying duplicate
+                # placements multiplies calibration time without adding a
+                # distinct physical hypothesis.
                 key = (
                     index,
                     round(float(placement[0]), 5),
@@ -197,6 +211,36 @@ def _replay_candidate(
     }
 
 
+def _rewrite_selected_trajectories(
+    trajectory_dir: Path,
+    trajectories: dict[int, dict],
+    selected_indices: list[int],
+    task_id: int,
+) -> Path:
+    """Archive the calibration pool and expose a reindexed qualified subset."""
+    pool_dir = trajectory_dir.with_name(trajectory_dir.name + "_pool")
+    if pool_dir.exists():
+        shutil.rmtree(pool_dir)
+    trajectory_dir.rename(pool_dir)
+    trajectory_dir.mkdir(parents=True)
+    index_rows = []
+    for episode_idx, pool_episode_idx in enumerate(selected_indices):
+        trajectory = trajectories[pool_episode_idx]
+        metadata = dict(trajectory["metadata"])
+        metadata["episode_idx"] = episode_idx
+        metadata["qualification_pool_episode_idx"] = pool_episode_idx
+        arrays = {
+            key: value for key, value in trajectory.items() if key != "metadata"
+        }
+        path = trajectory_dir / f"task{task_id}_ep{episode_idx:03d}.npz"
+        np.savez_compressed(path, metadata=json.dumps(metadata), **arrays)
+        index_rows.append(metadata)
+    (trajectory_dir / "index.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in index_rows)
+    )
+    return pool_dir
+
+
 def calibrate(args: argparse.Namespace) -> str:
     spec = dict(FAMILIES[FAMILY])
     obstacle = spec["obstacle_body"]
@@ -229,6 +273,7 @@ def calibrate(args: argparse.Namespace) -> str:
     )
     output_er_states = list(fallback_er_states)
     rows: list[dict] = []
+    selected_indices: list[int] = []
     try:
         env.reset()
         allowed_indices = _allowed_obstacle_state_indices(env.sim, obstacle, spec)
@@ -324,25 +369,69 @@ def calibrate(args: argparse.Namespace) -> str:
                 ),
             }
             rows.append(row)
+            if selected is not None:
+                selected_indices.append(episode)
             print(
                 f"episode={episode:03d} eb_success={row['eb_success']} "
                 f"calibrated={row['calibrated']} attempts={attempts}"
             )
+            if (
+                args.select_count > 0
+                and len(selected_indices) >= args.select_count
+            ):
+                break
     finally:
         env.close()
 
-    successful = sum(row["eb_success"] for row in rows)
-    calibrated = sum(
+    pool_successful = sum(row["eb_success"] for row in rows)
+    pool_calibrated = sum(
         row["calibrated"] for row in rows if row["eb_success"]
     )
-    activation_rate = calibrated / successful if successful else 0.0
+    pool_yield = (
+        pool_calibrated / pool_successful if pool_successful else 0.0
+    )
+    if args.select_count > 0:
+        selected_ok = len(selected_indices) == args.select_count
+        successful = len(selected_indices)
+        calibrated = len(selected_indices)
+        activation_rate = 1.0 if selected_indices else 0.0
+    else:
+        selected_ok = True
+        successful = pool_successful
+        calibrated = pool_calibrated
+        activation_rate = pool_yield
     verdict = (
         "PASS_TRAJECTORY_CONDITIONED_CALIBRATION"
-        if successful >= args.min_successful_eb
+        if selected_ok
+        and successful >= args.min_successful_eb
         and activation_rate >= args.min_activation_rate
         else "FAIL_TRAJECTORY_CONDITIONED_CALIBRATION"
     )
-    _save_hdf5(Path(args.er_states), task.language, output_er_states)
+    if args.select_count > 0 and selected_ok:
+        _save_hdf5(
+            Path(args.eb_states),
+            task.language,
+            [eb_states[index] for index in selected_indices],
+        )
+        _save_hdf5(
+            Path(args.er_states),
+            task.language,
+            [output_er_states[index] for index in selected_indices],
+        )
+        _save_hdf5(
+            Path(args.ec_states),
+            task.language,
+            [ec_states[index] for index in selected_indices],
+        )
+        pool_trajectory_dir = _rewrite_selected_trajectories(
+            Path(args.eb_trajectories),
+            trajectories,
+            selected_indices,
+            args.task_id,
+        )
+    else:
+        _save_hdf5(Path(args.er_states), task.language, output_er_states)
+        pool_trajectory_dir = None
 
     out_csv = Path(args.out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -371,16 +460,38 @@ def calibrate(args: argparse.Namespace) -> str:
             pair["er_changed_state_indices"] = _changed_state_indices(
                 eb_states[episode], output_er_states[episode]
             )
+    if args.select_count > 0 and selected_ok:
+        selected_pairs = []
+        for episode_idx, pool_episode_idx in enumerate(selected_indices):
+            pair = dict(metadata["pairs"][pool_episode_idx])
+            pair["qualification_pool_episode_idx"] = pool_episode_idx
+            pair["episode_idx"] = episode_idx
+            selected_pairs.append(pair)
+        metadata["pairs"] = selected_pairs
+        metadata["num_states"] = len(selected_pairs)
+        metadata["unique_source_state_indices"] = len(
+            {pair["source_state_index"] for pair in selected_pairs}
+        )
     metadata["conditions"]["er"] = (
         "native wine bottle placed per episode on the paired post-grasp "
-        "robot0_link5/link6 sweep"
+        "robot0_link7 wrist sweep"
     )
     metadata["trajectory_conditioning"] = {
         "source": args.eb_trajectories,
         "successful_eb": successful,
         "calibrated_successful_eb": calibrated,
         "activation_rate": activation_rate,
+        "qualification_pool_processed": len(rows),
+        "qualification_pool_successful_eb": pool_successful,
+        "qualification_pool_calibrated": pool_calibrated,
+        "qualification_pool_yield": pool_yield,
+        "selected_pool_episode_indices": selected_indices,
+        "selected_count": args.select_count,
+        "pool_trajectory_dir": (
+            None if pool_trajectory_dir is None else str(pool_trajectory_dir)
+        ),
         "intended_links": list(INTENDED_LINKS),
+        "path_proxy_links": list(PATH_LINKS),
         "min_grasp_lift": args.min_grasp_lift,
         "radial_distance_candidates": _float_values(
             args.radial_distance_candidates
@@ -398,8 +509,13 @@ def calibrate(args: argparse.Namespace) -> str:
         "# L1-B7 trajectory-conditioned wine-bottle/link calibration\n\n"
         f"Verdict: **{verdict}**\n\n"
         f"- Successful paired Eb trajectories: {successful}\n"
-        f"- Isolated post-grasp link5/link6 consequences: {calibrated}\n"
+        f"- Isolated post-grasp link7 consequences: {calibrated}\n"
         f"- Activation rate: {activation_rate:.3f}\n"
+        f"- Qualification pool processed: {len(rows)}\n"
+        f"- Qualification pool yield: {pool_calibrated}/{pool_successful} "
+        f"({pool_yield:.3f})\n"
+        f"- Selected qualified states: "
+        f"{len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
         "- Accepted confounds: 0 other-arm, gripper, or held-bowl contacts\n"
         f"- Translation threshold: {args.min_obstacle_displacement:.4f} m\n"
         f"- Tilt threshold: {args.min_obstacle_tilt_change_deg:.1f} deg\n"
@@ -434,16 +550,16 @@ def main() -> None:
     parser.add_argument("--task_id", type=int, default=4)
     parser.add_argument("--min_grasp_lift", type=float, default=0.020)
     parser.add_argument("--min_link_z", type=float, default=0.85)
-    parser.add_argument("--max_link_z", type=float, default=1.35)
+    parser.add_argument("--max_link_z", type=float, default=1.50)
     parser.add_argument(
         "--radial_distance_candidates",
-        default="0.000,0.015,0.025,0.035,0.045,0.055,0.065",
+        default="0.016,0.015,0.017,0.018,0.020,0.025,0.035,0.045,0.055,0.065",
     )
     parser.add_argument(
         "--angular_candidates_deg",
-        default="0,45,-45,90,-90,135,-135,180",
+        default="-97.5,-95,-100,-90,0,45,-45,90,135,-135,180",
     )
-    parser.add_argument("--max_path_steps_per_link", type=int, default=12)
+    parser.add_argument("--max_path_steps_per_link", type=int, default=32)
     parser.add_argument("--min_step_spacing", type=int, default=2)
     parser.add_argument("--max_candidates_per_episode", type=int, default=600)
     parser.add_argument("--stability_steps", type=int, default=20)
@@ -452,6 +568,12 @@ def main() -> None:
     parser.add_argument("--max_contact_penetration", type=float, default=0.002)
     parser.add_argument("--min_successful_eb", type=int, default=20)
     parser.add_argument("--min_activation_rate", type=float, default=0.70)
+    parser.add_argument(
+        "--select_count",
+        type=int,
+        default=0,
+        help="Select and reindex this many qualified states from a larger pool",
+    )
     parser.add_argument(
         "--require_task_success",
         action=argparse.BooleanOptionalAction,

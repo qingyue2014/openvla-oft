@@ -703,15 +703,16 @@ def test_l1b7_native_layout_and_runner_contract_are_explicit():
     assert '"target_body": TARGET_BODY' in block
     assert '"goal_support_body": "wooden_cabinet_1_main"' in block
     assert '"native_assets_only": True' in block
-    assert '"preserve_native_layout": True' in block
-    assert '"intended_link_bodies": ["robot0_link5", "robot0_link6"]' in block
+    assert '"preserve_native_layout": False' in block
+    assert '"use_sampled_layout": True' in block
+    assert '"intended_link_bodies": ["robot0_link7"]' in block
     assert '"min_obstacle_displacement": 0.010' in block
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert "l1b7_native_arm) printf '%s\\n' wine_bottle_1_main" in runner
     assert "l1b4_native_arm|l1b6_native_held_object|l1b7_native_arm) printf '%s\\n' libero_goal" in runner
     assert "l1b7_native_arm) printf '%s\\n' 4" in runner
     assert "arm_postgrasp_sweep" in runner
-    assert '--swept_volume_component_bodies "robot0_link5,robot0_link6"' in runner
+    assert '--swept_volume_component_bodies "robot0_link7"' in runner
     assert "l1b4_native_arm|l1b6_native_held_object|l1b7_native_arm) printf '%s\\n' \"${GOAL_CHECKPOINT}\"" in runner
 
 
@@ -719,7 +720,13 @@ def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
     text = L1B7_TRAJECTORY_CALIBRATION.read_text()
     assert 'trajectory["body_pos__akita_black_bowl_1_main"]' in text
     assert 'f"body_pos__{link_name}"' in text
-    assert 'INTENDED_LINKS = ("robot0_link5", "robot0_link6")' in text
+    assert 'INTENDED_LINKS = ("robot0_link7",)' in text
+    assert 'PATH_LINKS = ("robot0_link5", "robot0_link6")' in text
+    assert "sample_indices = np.linspace(" in text
+    assert 'parser.add_argument("--max_path_steps_per_link", type=int, default=32)' in text
+    assert 'parser.add_argument("--max_link_z", type=float, default=1.50)' in text
+    assert 'default="0.016,0.015,0.017,0.018,0.020' in text
+    assert 'default="-97.5,-95,-100,-90,0,45,-45,90,135,-135,180"' in text
     assert "if key not in seen:" in text
     assert 'phase="post_grasp"' in text
     assert '"other_arm"' in text
@@ -729,6 +736,9 @@ def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "_allowed_obstacle_state_indices" in text
     assert "replay[\"penetration_m\"] <= args.max_contact_penetration" in text
     assert "only the native wine-bottle free-joint pose changes" in text.lower()
+    assert "--select_count" in text
+    assert "_rewrite_selected_trajectories" in text
+    assert 'calibrate_l1b7_trajectory_states "${family}" "${count}"' in RUNNER.read_text()
 
 
 def test_l1b6_reruns_all_gates_after_trajectory_conditioning():
