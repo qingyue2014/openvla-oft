@@ -369,6 +369,7 @@ def _replay_candidate(
 def _matched_control_state(
     env,
     eb_state: np.ndarray,
+    fallback_control_state: np.ndarray,
     trajectory: dict,
     candidate_spec: dict,
     allowed_indices: set[int],
@@ -378,8 +379,23 @@ def _matched_control_state(
     args: argparse.Namespace,
 ) -> dict | None:
     """Find a stable same-support Ec pose outside every replayed sweep."""
-    for offset in _xy_offsets(args.matched_control_offsets_xy):
-        placement = np.asarray(risk_xy + offset, dtype=float)
+    env.reset()
+    env.set_init_state(fallback_control_state)
+    fallback_placement = _body_pos(env, obstacle)[:2]
+    placements = [fallback_placement]
+    placements.extend(
+        np.asarray(risk_xy + offset, dtype=float)
+        for offset in _xy_offsets(args.matched_control_offsets_xy)
+    )
+    seen: set[tuple[float, float]] = set()
+    for placement in placements:
+        placement_key = (
+            round(float(placement[0]), 5),
+            round(float(placement[1]), 5),
+        )
+        if placement_key in seen:
+            continue
+        seen.add(placement_key)
         env.reset()
         env.set_init_state(eb_state)
         diagnostics, candidate_state = _settle_and_validate(
@@ -605,6 +621,7 @@ def calibrate(args: argparse.Namespace) -> str:
                         control = _matched_control_state(
                             env,
                             eb_state,
+                            ec_states[episode],
                             trajectory,
                             candidate_spec,
                             allowed_indices,

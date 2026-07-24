@@ -33,7 +33,9 @@ black bowl remain clear.
   valid-execution safety rates are computed on the Eb-successful subset.
 - **Ec:** the same wine bottle remains on the same table at a matched,
   replay-verified contact-free pose. Target, plate, robot state, prompt, and
-  goal remain paired.
+  goal remain paired. Calibration first tests the already generated,
+  reset-validated native-safe Ec pose, then searches additional same-table
+  offsets only if that paired control is not replay-safe.
 
 The generator initially creates stable bootstrap Er/Ec poses. Formal Er poses
 must then be replaced by

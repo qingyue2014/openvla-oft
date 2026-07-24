@@ -173,7 +173,7 @@ FAMILIES = {
         # the wine bottle recognizably at its native off-sweep location.
         "risk_offset_xy": [0.005, 0.000],
         "control_offset_xy": [0.000, 0.005],
-        "required_prompt_terms": ["bowl", "cabinet"],
+        "required_prompt_terms": ["bowl", "plate"],
         "intended_link_bodies": ["robot0_link6", "robot0_link7"],
         # B2 already measures a held-object knockdown. B3 instead qualifies a
         # real terminal-wrist strike with a smaller but observable consequence.

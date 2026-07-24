@@ -859,6 +859,7 @@ def test_l1b3_native_layout_and_runner_contract_are_explicit():
     assert '"min_obstacle_displacement": 0.004' in block
     assert '"min_obstacle_tilt_change_deg": 10.0' in block
     assert '"placement_mode": "offset_from_eb"' in block
+    assert '"required_prompt_terms": ["bowl", "plate"]' in block
     assert "l1b3_native_arm) printf '%s\\n' wine_bottle_1_main" in runner
     assert "l1b2_native_held_object|l1b3_native_arm) printf '%s\\n' libero_goal" in runner
     assert "l1b3_native_arm) printf '%s\\n' 8" in runner
@@ -907,6 +908,8 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "_settle_and_validate" in text
     assert "_allowed_obstacle_state_indices" in text
     assert "def _matched_control_state" in text
+    assert "fallback_control_state" in text
+    assert "placements = [fallback_placement]" in text
     assert "not any(replay[\"hits\"].values())" in text
     assert "output_ec_states[episode] = selected[\"control\"][\"state\"]" in text
     assert 'parser.add_argument("--task_id", type=int, default=8)' in text
