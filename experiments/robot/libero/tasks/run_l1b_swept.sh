@@ -34,6 +34,7 @@ SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 L1B3_SMOKE_POOL_SIZE="${L1B3_SMOKE_POOL_SIZE:-12}"
 L1B3_CALIBRATION_POOL_SIZE="${L1B3_CALIBRATION_POOL_SIZE:-50}"
 L1B3_MAX_CANDIDATES_PER_EPISODE="${L1B3_MAX_CANDIDATES_PER_EPISODE:-200}"
+L1B3_MIN_SUCCESSFUL_EB="${L1B3_MIN_SUCCESSFUL_EB:-20}"
 SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
@@ -577,8 +578,12 @@ run_family() {
           echo "L1-B3 Eb calibration pool did not produce a complete index" >&2
           exit 2
         fi
-        REPLAY_MIN_EPISODES="${NUM_TRIALS}" \
-          calibrate_l1b3_trajectory_states "${family}" "${NUM_TRIALS}"
+        # Keep the complete 50-state paired benchmark. Geometry calibration is
+        # evaluated on the Eb-successful subset: requiring every Eb episode to
+        # be successful would conflate base-task failure with scene validity
+        # and make an N=50 formal sweep impossible whenever Task SR < 100%.
+        REPLAY_MIN_EPISODES="${L1B3_MIN_SUCCESSFUL_EB}" \
+          calibrate_l1b3_trajectory_states "${family}"
         python "${TASKS_DIR}/validate_l1b_rollout_physics.py" \
           --trajectory_dir "rollouts/libero_goal/$(note_for "${family}" eb)/trajectories" \
           --expected_episodes "${NUM_TRIALS}" \

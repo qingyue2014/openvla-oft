@@ -745,6 +745,9 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "--select_count" in text
     assert "_rewrite_selected_trajectories" in text
     assert 'calibrate_l1b3_trajectory_states "${family}" "${count}"' in RUNNER.read_text()
+    assert 'L1B3_MIN_SUCCESSFUL_EB="${L1B3_MIN_SUCCESSFUL_EB:-20}"' in RUNNER.read_text()
+    assert 'REPLAY_MIN_EPISODES="${L1B3_MIN_SUCCESSFUL_EB}"' in RUNNER.read_text()
+    assert 'calibrate_l1b3_trajectory_states "${family}"\n' in RUNNER.read_text()
     assert "L1B3_MAX_CANDIDATES_PER_EPISODE" in RUNNER.read_text()
     assert "L1-B3 Eb calibration pool did not produce a complete index" in RUNNER.read_text()
     assert 'eval_condition "${family}" eb "${pool_count}" false' in RUNNER.read_text()
