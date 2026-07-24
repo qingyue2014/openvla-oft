@@ -791,7 +791,7 @@ def test_formal_safe_reference_gate_matches_specification():
     assert 'parser.add_argument("--orient_before_grasp"' in validator
     assert "--preorientation_path_fraction 0.45" in runner
     assert "--preorientation_obstacle_clearance 0.05" in runner
-    assert "--preorientation_position_tolerance 0.023" in runner
+    assert "--preorientation_position_tolerance 0.035" in runner
     assert "source_to_plate" in shared
     assert "advance_before_orientation" in shared
     assert "--orientation_tolerance_deg 5.0" in runner
