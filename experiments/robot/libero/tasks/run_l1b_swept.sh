@@ -259,13 +259,12 @@ safe_reference_family() {
     extra_args+=(--min_grasp_lift 0.02)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
     extra_args+=(--transport_max_position_command 0.12)
-    extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.012)
-    extra_args+=(--transport_clearance 0.04)
-    extra_args+=(--transport_end_height_drop 0.04)
+    extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.026)
+    extra_args+=(--transport_clearance 0.01)
     extra_args+=(--transport_target_eef_quat 0.9941969,-0.0504397,-0.0834422,0.0454506)
     # First carry the bowl along the safe side of the corridor. Only reorient
     # after leaving the bottle, and rotate slowly enough to retain a rim grasp.
-    extra_args+=(--preorientation_path_fraction 0.00)
+    extra_args+=(--preorientation_path_fraction 0.45)
     extra_args+=(--preorientation_obstacle_clearance 0.05)
     # The negative-Y OSC boundary permits about 17--27 mm of this requested
     # retreat across the paired states. That measured clearance is sufficient
@@ -273,18 +272,13 @@ safe_reference_family() {
     extra_args+=(--preorientation_position_tolerance 0.035)
     extra_args+=(--orientation_tolerance_deg 5.0 --orientation_max_steps 300)
     extra_args+=(--rotation_scale 0.5 --max_rotation_command 0.02)
-    extra_args+=(--postorientation_obstacle_clearance 0.08)
-    extra_args+=(--postorientation_path_fraction 0.35)
-    extra_args+=(--postorientation_position_tolerance 0.010)
-    extra_args+=(--postorientation_min_center_clearance 0.105)
-    extra_args+=(--postorientation_advance_lateral_bias 0.04)
-    extra_args+=(--postorientation_min_path_progress 0.048)
-    extra_args+=(--transport_bypass_path_fraction 0.80)
-    extra_args+=(--transport_bypass_lateral_bias 0.01)
-    extra_args+=(--transport_bypass_min_path_progress 0.10)
     extra_args+=(--transport_obstacle_clearance 0.00)
-    extra_args+=(--preplace_height 0.02 --max_safe_lift_height 0.09)
-    extra_args+=(--place_offset_x 0.00 --place_offset_y 0.015)
+    extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
+    # Preserve the safe transit endpoint that completed without a violation,
+    # then center over the plate only after the bottle is behind the wrist.
+    extra_args+=(--transport_place_offset_x 0.00 --transport_place_offset_y 0.03)
+    extra_args+=(--place_offset_x 0.00 --place_offset_y 0.00)
+    extra_args+=(--final_center_position_tolerance 0.010)
     extra_args+=(--require_support_contact_before_release)
     extra_args+=(--support_contact_hold_steps 10)
     extra_args+=(--post_release_support_hold_steps 10)

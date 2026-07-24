@@ -1090,6 +1090,17 @@ def _run_episode(
     desired_bowl = _body_pos(env, PLATE).copy()
     desired_bowl[0] += getattr(args, "place_offset_x", 0.0)
     desired_bowl[1] += getattr(args, "place_offset_y", 0.0)
+    transport_desired_bowl = desired_bowl.copy()
+    transport_place_offset_x = getattr(args, "transport_place_offset_x", None)
+    transport_place_offset_y = getattr(args, "transport_place_offset_y", None)
+    if transport_place_offset_x is not None:
+        transport_desired_bowl[0] = (
+            _body_pos(env, PLATE)[0] + transport_place_offset_x
+        )
+    if transport_place_offset_y is not None:
+        transport_desired_bowl[1] = (
+            _body_pos(env, PLATE)[1] + transport_place_offset_y
+        )
     require_support_contact = bool(
         getattr(args, "require_support_contact_before_release", False)
     )
@@ -1103,6 +1114,8 @@ def _run_episode(
         )
     preplace_bowl = desired_bowl.copy()
     preplace_bowl[2] += args.preplace_height
+    transport_preplace_bowl = transport_desired_bowl.copy()
+    transport_preplace_bowl[2] += args.preplace_height
 
     # Carry in three conservative segments. A direct diagonal move can sweep a
     # weak rim grasp through the upright cookie and also commands all Cartesian
@@ -1111,12 +1124,15 @@ def _run_episode(
     # segments, reject the attempt as soon as the measured bowl/EEF transform
     # stops being rigid so another grasp candidate can be tried.
     transit_source_bowl = _body_pos(env, TARGET).copy()
-    transit_z = max(transit_source_bowl[2], preplace_bowl[2]) + args.transport_clearance
+    transit_z = (
+        max(transit_source_bowl[2], transport_preplace_bowl[2])
+        + args.transport_clearance
+    )
     transport_end_height_drop = max(
         0.0, float(getattr(args, "transport_end_height_drop", 0.0))
     )
     transit_source_bowl[2] = transit_z
-    transit_plate_bowl = preplace_bowl.copy()
+    transit_plate_bowl = transport_preplace_bowl.copy()
     transit_plate_bowl[2] = transit_z - transport_end_height_drop
     transport_stages = [("raise_for_transport", transit_source_bowl)]
     transport_bypass_path_fraction = float(
@@ -1202,7 +1218,10 @@ def _run_episode(
                     )
                 )
     transport_stages.extend(
-        [("translate_above_plate", transit_plate_bowl), ("move_above_plate", preplace_bowl)]
+        [
+            ("translate_above_plate", transit_plate_bowl),
+            ("move_above_plate", transport_preplace_bowl),
+        ]
     )
     for stage, bowl_waypoint in transport_stages:
         if failure is None:
@@ -1249,6 +1268,40 @@ def _run_episode(
                     else 0.0
                 ),
             )
+    if (
+        failure is None
+        and not np.allclose(
+            transport_preplace_bowl[:2],
+            preplace_bowl[:2],
+            atol=1e-9,
+            rtol=0.0,
+        )
+    ):
+        # Keep the empirically safe bottle-bypass destination for the long
+        # transport, then center only after the bowl is already over the plate.
+        # This short final move changes no obstacle placement or risk semantics.
+        obs, step, failure = _move_to(
+            env,
+            obs,
+            oracle,
+            recorder,
+            preplace_bowl + grasped_offset,
+            close_sign,
+            step,
+            args,
+            "center_above_plate",
+            tolerance=float(
+                getattr(
+                    args,
+                    "final_center_position_tolerance",
+                    args.transport_position_tolerance,
+                )
+            ),
+            max_steps=args.transport_max_waypoint_steps,
+            max_position_command=args.transport_max_position_command,
+            retained_body=TARGET,
+            retained_offset=grasped_offset,
+        )
     pre_release_support_contact = False
     pre_release_support_stable_steps = 0
     pre_release_linear_speed_m_s = float("nan")
@@ -1720,6 +1773,9 @@ def main():
     parser.add_argument("--preplace_height", type=float, default=0.08)
     parser.add_argument("--place_offset_x", type=float, default=0.0)
     parser.add_argument("--place_offset_y", type=float, default=0.0)
+    parser.add_argument("--transport_place_offset_x", type=float, default=None)
+    parser.add_argument("--transport_place_offset_y", type=float, default=None)
+    parser.add_argument("--final_center_position_tolerance", type=float, default=0.010)
     parser.add_argument("--release_clearance", type=float, default=0.002)
     parser.add_argument("--contact_hold_steps", type=int, default=5)
     parser.add_argument("--require_support_contact_before_release", action="store_true")

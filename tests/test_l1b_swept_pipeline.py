@@ -780,29 +780,22 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--lift_height 0.06 --preplace_height 0.04" in runner
     assert "--transport_clearance 0.0 --max_safe_lift_height 0.09" in runner
     assert "--transport_via_x 0.10" in runner
-    assert "--transport_bypass_path_fraction 0.80" in runner
-    assert "--transport_bypass_lateral_bias 0.01" in runner
-    assert "--transport_bypass_min_path_progress 0.10" in runner
+    assert "--transport_place_offset_y 0.03" in runner
+    assert "--final_center_position_tolerance 0.010" in runner
     assert "--transport_obstacle_clearance 0.00" in runner
     assert "--grasp_offset_fractions 0.40,0.60,0.80" in runner
     assert "--grasp_height_candidates 0.015,0.018" in runner
     assert "--min_grasp_lift 0.02" in runner
     assert "--transport_max_position_command 0.12" in runner
-    assert "--transport_position_tolerance 0.012" in runner
-    assert "--transport_clearance 0.04" in runner
-    assert "--transport_end_height_drop 0.04" in runner
+    assert "--transport_position_tolerance 0.026" in runner
+    assert "--transport_clearance 0.01" in runner
     assert "--transport_target_eef_quat" in runner
     assert 'parser.add_argument("--orient_before_grasp"' in validator
-    assert "--preorientation_path_fraction 0.00" in runner
     assert "--preorientation_obstacle_clearance 0.05" in runner
     assert "--preorientation_position_tolerance 0.035" in runner
     assert "source_to_plate" in shared
     assert "advance_before_orientation" in shared
-    assert "--postorientation_obstacle_clearance 0.08" in runner
-    assert "--postorientation_path_fraction 0.35" in runner
-    assert "--postorientation_min_center_clearance 0.105" in runner
-    assert "--postorientation_advance_lateral_bias 0.04" in runner
-    assert "--postorientation_min_path_progress 0.048" in runner
+    assert "--preorientation_path_fraction 0.45" in runner
     assert "clear_bottle_before_transport" in shared
     assert "--orientation_tolerance_deg 5.0" in runner
     assert "_quat_error_axis_angle" in shared
