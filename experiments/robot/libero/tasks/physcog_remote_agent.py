@@ -135,6 +135,16 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_spatial/L1-B1-task6-native-ramekin-capture-lift-v4-ec",
         ),
     ),
+    ("l1b1", "ec_static_search"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/search_l1b1_ec_static_angles.py",
+        ),
+        artifacts=(
+            "experiments/logs/l1b1_ec_static_angle_search.md",
+            "experiments/logs/l1b1_ec_static_angle_search.csv",
+        ),
+    ),
     ("l1b2", "calibrate"): PhaseSpec(
         command=(
             "bash",

@@ -48,6 +48,7 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
 def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b1") == {
         "ec_calibrate",
+        "ec_static_search",
         "prepare",
         "smoke",
         "formal",
@@ -90,6 +91,13 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
     assert any(
         artifact.endswith("ec_rollout_physics.md")
         for artifact in ec_calibrate.artifacts
+    )
+
+    ec_search = PHASES[("l1b1", "ec_static_search")]
+    assert ec_search.count_env is None
+    assert any(
+        part.endswith("search_l1b1_ec_static_angles.py")
+        for part in ec_search.command
     )
 
 
