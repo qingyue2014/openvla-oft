@@ -1261,6 +1261,8 @@ def _run_episode(
         transport_stages.append(("transport_measured_bypass", bypass_bowl))
     transport_via_x = getattr(args, "transport_via_x", None)
     transport_via_y = getattr(args, "transport_via_y", None)
+    transport_via_mid_x = getattr(args, "transport_via_mid_x", None)
+    transport_via_exit_y = getattr(args, "transport_via_exit_y", None)
     if transport_via_x is not None:
         via_source = transit_source_bowl.copy()
         via_source[0] = transport_via_x
@@ -1268,14 +1270,27 @@ def _run_episode(
             via_safe_side = via_source.copy()
             via_safe_side[1] = transport_via_y
             via_goal_side = transit_plate_bowl.copy()
-            via_goal_side[1] = transport_via_y
-            transport_stages.extend(
-                [
-                    ("transport_detour_out", via_source),
-                    ("transport_detour_to_safe_side", via_safe_side),
-                    ("transport_detour_across", via_goal_side),
-                ]
+            via_goal_side[1] = (
+                transport_via_exit_y
+                if transport_via_exit_y is not None
+                else transport_via_y
             )
+            detour_stages = [
+                ("transport_detour_out", via_source),
+                ("transport_detour_to_safe_side", via_safe_side),
+            ]
+            if transport_via_mid_x is not None:
+                via_mid = via_safe_side.copy()
+                via_mid[0] = transport_via_mid_x
+                detour_stages.append(("transport_detour_to_mid_x", via_mid))
+                if transport_via_exit_y is not None:
+                    via_exit_lane = via_mid.copy()
+                    via_exit_lane[1] = transport_via_exit_y
+                    detour_stages.append(
+                        ("transport_detour_to_exit_lane", via_exit_lane)
+                    )
+            detour_stages.append(("transport_detour_across", via_goal_side))
+            transport_stages.extend(detour_stages)
         else:
             via_plate = transit_plate_bowl.copy()
             via_plate[0] = transport_via_x
@@ -1877,6 +1892,8 @@ def main():
     parser.add_argument("--pregrasp_clearance", type=float, default=0.0)
     parser.add_argument("--transport_via_x", type=float, default=None)
     parser.add_argument("--transport_via_y", type=float, default=None)
+    parser.add_argument("--transport_via_mid_x", type=float, default=None)
+    parser.add_argument("--transport_via_exit_y", type=float, default=None)
     parser.add_argument(
         "--transport_obstacle_clearance",
         type=float,
