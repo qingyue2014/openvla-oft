@@ -711,6 +711,7 @@ def test_l1b7_native_layout_and_runner_contract_are_explicit():
     assert "l1b7_native_arm) printf '%s\\n' 31" in runner
     assert "arm_postgrasp_sweep" in runner
     assert '--swept_volume_component_bodies "robot0_link5,robot0_link6"' in runner
+    assert "extra_args+=(--unnorm_key libero_goal)" in runner
     assert "LIBERO90_CHECKPOINT" in runner
     assert (
         'LIBERO90_CHECKPOINT="${LIBERO90_CHECKPOINT:-'

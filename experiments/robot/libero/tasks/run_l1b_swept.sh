@@ -340,6 +340,10 @@ eval_condition() {
   )
   if [[ "${family}" == "l1b7_native_arm" ]]; then
     extra_args+=(--swept_volume_component_bodies "robot0_link5,robot0_link6")
+    # The joint OFT checkpoint has normalization statistics for its four
+    # training suites, not a separate LIBERO-90 key.  This task is the
+    # LIBERO-90 rendering of the matching LIBERO-Goal bowl-to-cabinet skill.
+    extra_args+=(--unnorm_key libero_goal)
   fi
   if [[ -n "${bddl}" ]]; then
     extra_args+=(--bddl_file "${bddl}")
