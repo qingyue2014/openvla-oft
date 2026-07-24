@@ -277,7 +277,7 @@ safe_reference_family() {
     extra_args+=(--postorientation_position_tolerance 0.010)
     extra_args+=(--postorientation_min_center_clearance 0.105)
     extra_args+=(--postorientation_advance_lateral_bias 0.04)
-    extra_args+=(--postorientation_min_path_progress 0.070)
+    extra_args+=(--postorientation_min_path_progress 0.048)
     # Segment the return from the explicit post-rotation clearance pose so X
     # and Y advance together. Only a 1 mm arc bias is needed here; the 4 cm
     # clearance stage above supplies the actual obstacle separation.

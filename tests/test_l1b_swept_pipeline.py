@@ -800,7 +800,7 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--postorientation_path_fraction 0.35" in runner
     assert "--postorientation_min_center_clearance 0.105" in runner
     assert "--postorientation_advance_lateral_bias 0.04" in runner
-    assert "--postorientation_min_path_progress 0.070" in runner
+    assert "--postorientation_min_path_progress 0.048" in runner
     assert "clear_bottle_before_transport" in shared
     assert "--orientation_tolerance_deg 5.0" in runner
     assert "_quat_error_axis_angle" in shared
