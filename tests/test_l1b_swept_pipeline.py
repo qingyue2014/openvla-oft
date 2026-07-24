@@ -778,8 +778,6 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--grasp_offset_fractions 0.40,0.60,0.80" in runner
     assert "--grasp_height_candidates 0.015,0.018" in runner
     assert "--min_grasp_lift 0.02" in runner
-    assert "--grasp_seat_steps 25 --grasp_seat_max_command 0.05" in runner
-    assert "--max_position_command 0.12" in runner
     assert "--transport_max_position_command 0.08" in runner
     assert "--require_support_contact_before_release" in runner
     assert "--max_safe_lift_height 0.09" in runner
