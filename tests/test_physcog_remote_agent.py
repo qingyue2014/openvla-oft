@@ -73,7 +73,10 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
 
     formal = PHASES[("l1b1", "formal")]
     assert formal.count_env == "NUM_TRIALS"
-    assert "SAVE_VIDEO_MODE=none" in formal.command
+    assert "SAVE_VIDEO_MODE=all" in formal.command
+    assert "MAX_VIOLATION_VIDEOS=1" in formal.command
+    assert "MAX_SUCCESS_VIDEOS=1" in formal.command
+    assert "MAX_FAILURE_VIDEOS=1" in formal.command
     assert "all" in formal.command
     for suffix in (
         "scene_check.md",

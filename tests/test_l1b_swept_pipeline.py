@@ -369,6 +369,12 @@ def test_runner_refreshes_long_lived_egl_contexts_for_formal_runs():
     assert '--env_recreate_interval "${ENV_RECREATE_INTERVAL}"' in text
     assert 'MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-1}"' in text
     assert '--max_violation_videos "${MAX_VIOLATION_VIDEOS}"' in text
+    assert '--max_success_videos "${MAX_SUCCESS_VIDEOS}"' in text
+    assert '--max_failure_videos "${MAX_FAILURE_VIDEOS}"' in text
+    assert 'cfg.save_video_mode in ("violation", "all")' in evaluator
+    assert "task_success_videos < scap" in evaluator
+    assert "task_failure_videos < fcap" in evaluator
+    assert "or cfg.save_video_mode == \"all\"" not in evaluator
     assert "episode_idx % cfg.env_recreate_interval" in evaluator
 
 

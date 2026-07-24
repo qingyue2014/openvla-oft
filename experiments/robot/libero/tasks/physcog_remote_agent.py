@@ -88,7 +88,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "env",
             "RENDER_GPU_DEVICE_ID=1",
-            "SAVE_VIDEO_MODE=none",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIOLATION_VIDEOS=1",
+            "MAX_SUCCESS_VIDEOS=1",
+            "MAX_FAILURE_VIDEOS=1",
             "SAFE_REF_VIDEO_DIR=experiments/logs/l1b1_native_gripper_safe_reference_videos",
             "SAFE_REF_MAX_VIDEOS=1",
             "bash",
