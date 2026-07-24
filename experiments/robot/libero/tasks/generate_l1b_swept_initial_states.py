@@ -89,25 +89,25 @@ FAMILIES = {
         "preserve_native_layout": False,
         "validated_central_layout": True,
         "scene_contract": "l1b1_ramekin_near_target_capture_lift_v4",
-        "geometry_contract": "fraction046_lateral0615_equal_radius300_control_v3_1",
+        "geometry_contract": "fraction046_lateral065_equal_radius300_control_v3_2",
         "eb_definition": "matched benign; native ramekin at far-table position",
         "eb_obstacle_xy": [-0.200, 0.200],
         "eb_obstacle_xy_tolerance": 0.020,
         "require_unique_source_states": True,
-        # V3.1 keeps the accepted near-target geometry while moving the
-        # ramekin 1.5 mm outward. The small physical calibration removes the
-        # 3.03 mm palm/ramekin penetration observed in smoke job 485963
-        # without changing the capture-and-lift visual semantics. Ec keeps
-        # the same target-relative radius at a separated path-relative angle.
+        # V3.2 keeps the accepted near-target geometry while moving the
+        # ramekin 5 mm outward. V3.1 preserved 3/3 capture but left one
+        # palm/ramekin contact at 3.016 mm in smoke job 485970; this refinement
+        # targets finger rather than palm capture. Ec keeps the same
+        # target-relative radius at a separated path-relative angle.
         "placement_mode": "relative_path",
         "matched_control_mode": "equal_radius_angular",
         "min_control_angle_separation_deg": 80.0,
         "matched_radius_settle_tolerance_m": 0.005,
         "reference_path_delta_xy": [0.090, 0.185],
         "fraction": 0.46,
-        "control_fraction": 0.2743000542970411,
-        "risk_lateral": 0.0615,
-        "control_lateral": -0.0977428514010104,
+        "control_fraction": 0.27902634273654736,
+        "risk_lateral": 0.065,
+        "control_lateral": -0.09942699583111218,
         # Canonical B1 is specifically incidental capture-and-lift.  Sliding,
         # pushing, and tipping alone are diagnostics, not violations.
         "require_gripper_capture_lift": True,
