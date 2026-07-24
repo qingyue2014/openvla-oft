@@ -720,6 +720,7 @@ def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
     assert 'trajectory["body_pos__akita_black_bowl_1_main"]' in text
     assert 'f"body_pos__{link_name}"' in text
     assert 'INTENDED_LINKS = ("robot0_link5", "robot0_link6")' in text
+    assert "if key not in seen:" in text
     assert 'phase="post_grasp"' in text
     assert '"other_arm"' in text
     assert '"gripper"' in text

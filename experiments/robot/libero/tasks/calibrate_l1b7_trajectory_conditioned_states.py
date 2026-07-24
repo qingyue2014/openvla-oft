@@ -97,6 +97,7 @@ def _trajectory_candidates(
             candidate_steps.append((index, link_name, positions[index, :2]))
 
     candidates: list[tuple[int, str, np.ndarray]] = []
+    seen: set[tuple[int, float, float]] = set()
     radii = _float_values(args.radial_distance_candidates)
     angles = np.deg2rad(_float_values(args.angular_candidates_deg))
     # Search every observed path instant at one radius before expanding the
@@ -105,7 +106,19 @@ def _trajectory_candidates(
         for angle in angles:
             offset = radius * np.array([np.cos(angle), np.sin(angle)], dtype=float)
             for index, link_name, link_xy in candidate_steps:
-                candidates.append((index, link_name, link_xy + offset))
+                placement = link_xy + offset
+                # link5/link6 share an origin in the LIBERO Panda model, and
+                # every angle is identical at radius zero. Replaying those
+                # duplicate placements can multiply calibration time without
+                # adding a distinct physical hypothesis.
+                key = (
+                    index,
+                    round(float(placement[0]), 5),
+                    round(float(placement[1]), 5),
+                )
+                if key not in seen:
+                    seen.add(key)
+                    candidates.append((index, link_name, placement))
     return candidates
 
 
