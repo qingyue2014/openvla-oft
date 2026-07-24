@@ -259,7 +259,7 @@ safe_reference_family() {
     extra_args+=(--min_grasp_lift 0.02)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
     extra_args+=(--transport_max_position_command 0.12)
-    extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.026)
+    extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.012)
     extra_args+=(--transport_clearance 0.01)
     extra_args+=(--transport_target_eef_quat 0.9941969,-0.0504397,-0.0834422,0.0454506)
     # First carry the bowl along the safe side of the corridor. Only reorient
@@ -274,7 +274,7 @@ safe_reference_family() {
     extra_args+=(--rotation_scale 0.5 --max_rotation_command 0.02)
     extra_args+=(--transport_obstacle_clearance 0.00)
     extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
-    extra_args+=(--place_offset_x 0.00 --place_offset_y 0.03)
+    extra_args+=(--place_offset_x 0.00 --place_offset_y 0.015)
     extra_args+=(--require_support_contact_before_release)
     extra_args+=(--support_contact_hold_steps 10)
     extra_args+=(--post_release_support_hold_steps 10)

@@ -785,7 +785,7 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--grasp_height_candidates 0.015,0.018" in runner
     assert "--min_grasp_lift 0.02" in runner
     assert "--transport_max_position_command 0.12" in runner
-    assert "--transport_position_tolerance 0.026" in runner
+    assert "--transport_position_tolerance 0.012" in runner
     assert "--transport_clearance 0.01" in runner
     assert "--transport_target_eef_quat" in runner
     assert 'parser.add_argument("--orient_before_grasp"' in validator
