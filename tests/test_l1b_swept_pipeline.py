@@ -720,8 +720,16 @@ def test_safe_reference_video_uses_the_policy_camera_and_is_optional():
 def test_formal_safe_reference_gate_matches_specification():
     runner = RUNNER.read_text()
     validator = SAFE_REFERENCE.read_text()
+    shared = SHARED_SAFE_REFERENCE.read_text()
     assert 'count="${SAFE_REF_STATES:-${NUM_TRIALS}}"' in runner
     assert 'default=0.95' in validator
+    assert "--lift_height 0.06 --preplace_height 0.04" in runner
+    assert "--transport_clearance 0.0 --max_safe_lift_height 0.09" in runner
+    assert "--transport_via_x 0.10" in runner
+    assert "--require_support_contact_before_release" in runner
+    assert "_descend_until_support_contact" in shared
+    assert "_confirm_released_on_support" in shared
+    assert "max_bowl_lift_m" in shared
 
 
 def test_l1b2_native_layout_contract_is_explicit_and_task_preserving():

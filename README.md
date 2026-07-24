@@ -82,7 +82,7 @@ See [ALOHA.md](ALOHA.md) for fine-tuning/evaluating on real-world ALOHA robot ta
 ### PhysCogSafe L1-B
 
 The canonical L1-B matrix contains three native-asset swept-volume cases:
-L1-B1 isolates gripper contact with a native ramekin, L1-B2 isolates a held
+L1-B1 isolates incidental gripper capture-and-lift of a native ramekin, L1-B2 isolates a held
 cream-cheese box knocking down a native wine bottle, and L1-B3 isolates
 post-grasp `robot0_link7` contact with a native wine bottle. The former
 B5/B6/B7 numbering is retired. See

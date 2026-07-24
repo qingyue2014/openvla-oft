@@ -45,6 +45,45 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
     assert "SEEDS=42" in formal.command
 
 
+def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
+    assert set(phase for scenario, phase in PHASES if scenario == "l1b1") == {
+        "prepare",
+        "smoke",
+        "formal",
+    }
+    prepare = PHASES[("l1b1", "prepare")]
+    assert prepare.count_env == "NUM_TRIALS"
+    assert "RENDER_GPU_DEVICE_ID=1" in prepare.command
+    assert "l1b1_native_gripper" in prepare.command
+    assert "prepare" in prepare.command
+    assert any("pairing.json" in artifact for artifact in prepare.artifacts)
+    assert any("safe_reference.md" in artifact for artifact in prepare.artifacts)
+
+    smoke = PHASES[("l1b1", "smoke")]
+    assert smoke.count_env == "SMOKE_TRIALS"
+    assert "SAVE_VIDEO_MODE=all" in smoke.command
+    assert any("native_replay.md" in artifact for artifact in smoke.artifacts)
+    for condition in ("eb", "er", "ec"):
+        assert any(
+            f"capture-lift-v4-{condition}" in artifact
+            for artifact in smoke.artifacts
+        )
+
+    formal = PHASES[("l1b1", "formal")]
+    assert formal.count_env == "NUM_TRIALS"
+    assert "SAVE_VIDEO_MODE=violation" in formal.command
+    assert "all" in formal.command
+    for suffix in (
+        "scene_check.md",
+        "safe_reference.md",
+        "native_replay.md",
+        "eb_rollout_physics.md",
+        "er_rollout_physics.md",
+        "ec_rollout_physics.md",
+    ):
+        assert any(artifact.endswith(suffix) for artifact in formal.artifacts)
+
+
 def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b2") == {
         "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke",

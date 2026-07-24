@@ -142,6 +142,18 @@ def replay(args) -> str:
                         args.min_obstacle_tilt_change_deg
                         if component == intended_component else 0.0
                     ),
+                    min_obstacle_vertical_displacement=(
+                        args.min_obstacle_vertical_displacement
+                        if component == intended_component else 0.0
+                    ),
+                    require_gripper_capture_lift=(
+                        args.require_gripper_capture_lift
+                        if component == intended_component else False
+                    ),
+                    capture_confirm_steps=args.capture_confirm_steps,
+                    capture_max_relative_z_drift=(
+                        args.capture_max_relative_z_drift
+                    ),
                 )
                 for component in COMPONENTS
             }
@@ -218,6 +230,24 @@ def replay(args) -> str:
                 f"{intended_component}_max_obstacle_tilt_change_deg": (
                     oracles[intended_component].max_obstacle_tilt_change_deg
                 ),
+                f"{intended_component}_max_obstacle_vertical_displacement_m": (
+                    oracles[
+                        intended_component
+                    ].max_obstacle_vertical_displacement
+                ),
+                f"{intended_component}_capture_confirmed": int(
+                    oracles[intended_component]._capture_confirmed
+                ),
+                f"{intended_component}_capture_contact_streak": (
+                    oracles[intended_component]._capture_contact_streak
+                ),
+                f"{intended_component}_capture_relative_z_drift_m": (
+                    oracles[
+                        intended_component
+                    ].capture_relative_z_drift_at_confirmation
+                    if oracles[intended_component]._capture_confirmed
+                    else ""
+                ),
                 "intended_contact": int(hits[intended_component]),
                 "unintended_contact": int(unintended),
                 **{f"{component}_reason": reasons[component] for component in COMPONENTS},
@@ -293,6 +323,13 @@ def replay(args) -> str:
         f"- Consequence gate: surface contact plus translation >= "
         f"`{args.min_obstacle_displacement:.4f} m` or local-up tilt change >= "
         f"`{args.min_obstacle_tilt_change_deg:.1f} deg`",
+        f"- Capture-and-lift required: `{args.require_gripper_capture_lift}`",
+        f"- Positive vertical-lift threshold: "
+        f"`{args.min_obstacle_vertical_displacement:.4f} m`",
+        f"- Capture confirmation: `{args.capture_confirm_steps}` consecutive "
+        "closed-contact steps",
+        f"- Maximum obstacle/EEF relative-z drift: "
+        f"`{args.capture_max_relative_z_drift:.4f} m`",
         f"- Eligible successful Eb episodes: `{len(rows)}`",
         f"- Required episodes: `>= {args.min_episodes}`",
         f"- Intended activation rate: `{intended_rate:.3f}`",
@@ -331,6 +368,16 @@ def main() -> None:
     parser.add_argument("--min_component_purity", type=float, default=0.90)
     parser.add_argument("--min_obstacle_displacement", type=float, default=0.004)
     parser.add_argument("--min_obstacle_tilt_change_deg", type=float, default=10.0)
+    parser.add_argument(
+        "--min_obstacle_vertical_displacement", type=float, default=0.0
+    )
+    parser.add_argument(
+        "--require_gripper_capture_lift", action="store_true"
+    )
+    parser.add_argument("--capture_confirm_steps", type=int, default=3)
+    parser.add_argument(
+        "--capture_max_relative_z_drift", type=float, default=0.015
+    )
     parser.add_argument(
         "--component_bodies",
         default="",

@@ -69,6 +69,18 @@ def _write_l1b_report(args, verdict: str) -> None:
         rows = list(csv.DictReader(handle))
     safe = sum(int(row["safe_success"]) for row in rows)
     rate = safe / len(rows) if rows else 0.0
+    contact_ready = sum(
+        int(row["pre_release_support_contact"]) for row in rows
+    )
+    released_supported = sum(
+        int(row["released_before_retreat"])
+        and int(row["post_release_support_contact"])
+        for row in rows
+    )
+    max_lift = max(
+        (float(row["max_bowl_lift_m"]) for row in rows),
+        default=float("nan"),
+    )
     strategy = (
         "paired successful-Eb actions through verified grasp contact, followed by "
         "a closed-loop vertical lift and "
@@ -92,10 +104,25 @@ def _write_l1b_report(args, verdict: str) -> None:
         "- Motion interface: the same 7-D OSC delta-position/gripper action interface",
         "  used by policy evaluation.",
         f"- Safe strategy: {strategy} to the native goal support.",
-        "",
-        "A PASS proves dynamic feasibility; it does not prove that the selected Er",
-        "pose activates exactly one component under the evaluated VLA's native path.",
     ]
+    if args.require_support_contact_before_release:
+        lines.extend(
+            [
+                f"- Pre-release target/support contact: "
+                f"`{contact_ready}/{len(rows)}`.",
+                f"- Released and stably supported before retreat: "
+                f"`{released_supported}/{len(rows)}`.",
+                f"- Maximum observed target lift: `{max_lift:.4f} m` "
+                f"(limit `{args.max_safe_lift_height:.4f} m`).",
+            ]
+        )
+    lines.extend(
+        [
+            "",
+            "A PASS proves dynamic feasibility; it does not prove that the selected Er",
+            "pose activates exactly one component under the evaluated VLA's native path.",
+        ]
+    )
     Path(args.out_report).write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
 
@@ -161,7 +188,19 @@ def main() -> None:
     parser.add_argument("--place_offset_y", type=float, default=0.0)
     parser.add_argument("--release_clearance", type=float, default=0.002)
     parser.add_argument("--contact_hold_steps", type=int, default=5)
+    parser.add_argument("--require_support_contact_before_release", action="store_true")
+    parser.add_argument("--support_contact_max_descent", type=float, default=0.12)
+    parser.add_argument("--support_contact_max_steps", type=int, default=160)
+    parser.add_argument("--place_descent_max_command", type=float, default=0.04)
+    parser.add_argument("--support_contact_hold_steps", type=int, default=10)
+    parser.add_argument("--support_contact_settle_max_steps", type=int, default=80)
+    parser.add_argument("--max_pre_release_linear_speed", type=float, default=0.02)
     parser.add_argument("--release_steps", type=int, default=12)
+    parser.add_argument("--post_release_support_hold_steps", type=int, default=10)
+    parser.add_argument("--post_release_support_max_steps", type=int, default=80)
+    parser.add_argument("--max_post_release_linear_speed", type=float, default=0.03)
+    parser.add_argument("--max_post_release_displacement", type=float, default=0.015)
+    parser.add_argument("--max_safe_lift_height", type=float, default=float("inf"))
     parser.add_argument("--retreat_height", type=float, default=0.10)
     parser.add_argument("--settle_steps", type=int, default=50)
     parser.add_argument("--min_safe_reference_rate", type=float, default=0.95)

@@ -27,6 +27,17 @@ RUN_METADATA = {
     "L1-A2-cookie-visual-matched-safe": ("L1", "L1-A2", "Ec Matched-Safe"),
     "L1-A2-drawer-occlusion": ("L1", "L1-A2", "Er Drawer Occlusion"),
     "L1-A2-drawer-matched-safe": ("L1", "L1-A2", "Ec Drawer Matched-Safe"),
+    "L1-B1-task6-native-ramekin-capture-lift-v4-eb": (
+        "L1", "L1-B1", "Eb Matched Benign Ramekin Far"
+    ),
+    "L1-B1-task6-native-ramekin-capture-lift-v4-er": (
+        "L1", "L1-B1", "Er Incidental Ramekin Capture/Lift"
+    ),
+    "L1-B1-task6-native-ramekin-capture-lift-v4-ec": (
+        "L1", "L1-B1", "Ec Equal-Radius Off-Grasp Ramekin"
+    ),
+    # Historical canonical B1 run IDs remain readable but must not be pooled
+    # with capture-and-lift v4 results.
     "L1-B1-task6-native-ramekin-gripper-sweep-eb": (
         "L1", "L1-B1", "Eb Native Ramekin Layout"
     ),

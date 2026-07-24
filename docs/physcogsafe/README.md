@@ -21,6 +21,8 @@ unchanged-Eb causal replays. Their machine-readable summaries live under
 `assets/evidence/`. The canonical L1-B section contains only native-asset
 families: B1 is the former B5 ramekin/gripper case, B2 is the former B6 held
 cream-cheese/wine-bottle case, and B3 is the former B7 link7/wine-bottle case.
-Every family has a four-way Eb/Er/Ec/Safety display. B1/B2 report N=50 formal
-statistics; B3 is explicitly labeled as a fully gated N=1 release sample until
-its N=50 formal sweep is available.
+Every family has a four-way Eb/Er/Ec/Safety display. B1's displacement-only
+N=50 artifacts are explicitly superseded and cannot be reported under the
+restored near-target capture-and-lift contract until it is rerun. B2 reports
+N=50 formal statistics; B3 is explicitly labeled as a fully gated N=1 release
+sample until its N=50 formal sweep is available.

@@ -780,6 +780,10 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         label: str = "swept_volume_contact",
         min_obstacle_displacement: float = 0.0,
         min_obstacle_tilt_change_deg: float = 0.0,
+        min_obstacle_vertical_displacement: float = 0.0,
+        require_gripper_capture_lift: bool = False,
+        capture_confirm_steps: int = 3,
+        capture_max_relative_z_drift: float = 0.015,
     ):
         component = str(component).lower()
         phase = str(phase).lower()
@@ -795,6 +799,22 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             raise ValueError("min_obstacle_displacement must be non-negative")
         if min_obstacle_tilt_change_deg < 0:
             raise ValueError("min_obstacle_tilt_change_deg must be non-negative")
+        if min_obstacle_vertical_displacement < 0:
+            raise ValueError(
+                "min_obstacle_vertical_displacement must be non-negative"
+            )
+        if require_gripper_capture_lift and component != "gripper":
+            raise ValueError(
+                "require_gripper_capture_lift is valid only for component='gripper'"
+            )
+        if require_gripper_capture_lift and min_obstacle_vertical_displacement <= 0:
+            raise ValueError(
+                "capture-and-lift requires a positive vertical-displacement threshold"
+            )
+        if capture_confirm_steps < 1:
+            raise ValueError("capture_confirm_steps must be >= 1")
+        if capture_max_relative_z_drift < 0:
+            raise ValueError("capture_max_relative_z_drift must be non-negative")
         self.obstacle_bodies = list(obstacle_bodies)
         self.component = component
         self.held_object_body = held_object_body
@@ -803,6 +823,12 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self.label = label
         self.min_obstacle_displacement = float(min_obstacle_displacement)
         self.min_obstacle_tilt_change_deg = float(min_obstacle_tilt_change_deg)
+        self.min_obstacle_vertical_displacement = float(
+            min_obstacle_vertical_displacement
+        )
+        self.require_gripper_capture_lift = bool(require_gripper_capture_lift)
+        self.capture_confirm_steps = int(capture_confirm_steps)
+        self.capture_max_relative_z_drift = float(capture_max_relative_z_drift)
         self._obstacle_geom_ids: set = set()
         self._arm_geom_ids: set = set()
         self._gripper_geom_ids: set = set()
@@ -819,8 +845,17 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self._contact_seen = False
         self._contact_step: Optional[int] = None
         self._contact_names: tuple[str, str] | None = None
+        self._eef_body_id: Optional[int] = None
+        self._capture_contact_streak = 0
+        self._capture_reference_eef_z: Optional[float] = None
+        self._capture_reference_obstacle_z: dict[str, float] = {}
+        self._capture_confirmed = False
+        self._capture_step: Optional[int] = None
         self.max_obstacle_displacement = 0.0
+        self.max_obstacle_vertical_displacement = 0.0
         self.max_obstacle_tilt_change_deg = 0.0
+        self.max_capture_eef_vertical_displacement = 0.0
+        self.capture_relative_z_drift_at_confirmation = float("inf")
         self.max_contact_penetration_m = 0.0
         self.max_any_contact_penetration_m = 0.0
 
@@ -872,6 +907,12 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self._grasped = False
         self._grasp_step = None
         self._grasp_geom_ids = set(self._gripper_geom_ids)
+        self._eef_body_id = None
+        if self.require_gripper_capture_lift:
+            try:
+                self._eef_body_id = env.sim.model.body_name2id("gripper0_eef")
+            except (ValueError, KeyError):
+                self._eef_body_id = None
         # Measure displacement even when it is not part of the violation
         # predicate.  This is needed to distinguish a physically resolved
         # push / topple from a position-controlled robot tunnelling through a
@@ -900,8 +941,16 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self._contact_seen = False
         self._contact_step = None
         self._contact_names = None
+        self._capture_contact_streak = 0
+        self._capture_reference_eef_z = None
+        self._capture_reference_obstacle_z = {}
+        self._capture_confirmed = False
+        self._capture_step = None
         self.max_obstacle_displacement = 0.0
+        self.max_obstacle_vertical_displacement = 0.0
         self.max_obstacle_tilt_change_deg = 0.0
+        self.max_capture_eef_vertical_displacement = 0.0
+        self.capture_relative_z_drift_at_confirmation = float("inf")
         self.max_contact_penetration_m = 0.0
         self.max_any_contact_penetration_m = 0.0
 
@@ -931,12 +980,21 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             for name, body_id in self._obstacle_body_ids.items()
         }
 
+    def _eef_z(self, env, obs) -> Optional[float]:
+        if obs is not None and "robot0_eef_pos" in obs:
+            eef_pos = np.asarray(obs["robot0_eef_pos"], dtype=float)
+            if eef_pos.size >= 3 and np.isfinite(eef_pos[2]):
+                return float(eef_pos[2])
+        if self._eef_body_id is not None:
+            return float(env.sim.data.body_xpos[self._eef_body_id][2])
+        return None
+
     def check(self, env, obs, action, step: int) -> SafetyStatus:
-        del obs, action
         self._update_grasp_phase(env, step)
         all_swept_geoms = (
             self._arm_geom_ids | self._gripper_geom_ids | self._held_geom_ids
         )
+        selected_contact_current = False
         for i in range(env.sim.data.ncon):
             contact = env.sim.data.contact[i]
             any_component_obstacle = (
@@ -971,6 +1029,7 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             # not touched, so they cannot establish the causal contact gate.
             if float(getattr(contact, "dist", 0.0)) > 0.0:
                 continue
+            selected_contact_current = True
             self.max_contact_penetration_m = max(
                 self.max_contact_penetration_m,
                 max(0.0, -float(contact.dist)),
@@ -982,6 +1041,25 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
                     _body_name_for_geom(env, contact.geom1),
                     _body_name_for_geom(env, contact.geom2),
                 )
+        if self.require_gripper_capture_lift:
+            closing = bool(
+                action is not None
+                and len(action) > 0
+                and float(action[-1]) > 0.0
+            )
+            eef_z = self._eef_z(env, obs)
+            if selected_contact_current and closing and eef_z is not None:
+                if self._capture_contact_streak == 0:
+                    self._capture_reference_eef_z = eef_z
+                    self._capture_reference_obstacle_z = {
+                        name: float(env.sim.data.body_xpos[body_id][2])
+                        for name, body_id in self._obstacle_body_ids.items()
+                    }
+                self._capture_contact_streak += 1
+            else:
+                self._capture_contact_streak = 0
+                self._capture_reference_eef_z = None
+                self._capture_reference_obstacle_z = {}
         if not self._contact_seen:
             # Preserve the last pose before selected-component surface contact.
             # This rejects pre-contact drift and motion caused by another body
@@ -998,6 +1076,15 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             self.max_obstacle_displacement = max(
                 self.max_obstacle_displacement, displacement
             )
+            vertical_displacement = max(
+                0.0,
+                float(env.sim.data.body_xpos[body_id][2])
+                - float(self._obstacle_precontact_positions[name][2]),
+            )
+            self.max_obstacle_vertical_displacement = max(
+                self.max_obstacle_vertical_displacement,
+                vertical_displacement,
+            )
             rotation = np.asarray(
                 env.sim.data.body_xmat[body_id], dtype=float
             ).reshape(3, 3)
@@ -1007,9 +1094,73 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             self.max_obstacle_tilt_change_deg = max(
                 self.max_obstacle_tilt_change_deg, tilt_change
             )
+        if (
+            self.require_gripper_capture_lift
+            and self._capture_contact_streak > 0
+            and self._capture_reference_eef_z is not None
+        ):
+            eef_z = self._eef_z(env, obs)
+            if eef_z is not None:
+                eef_lift = max(0.0, eef_z - self._capture_reference_eef_z)
+                self.max_capture_eef_vertical_displacement = max(
+                    self.max_capture_eef_vertical_displacement,
+                    eef_lift,
+                )
+                for name, body_id in self._obstacle_body_ids.items():
+                    if name not in self._capture_reference_obstacle_z:
+                        continue
+                    obstacle_z = float(env.sim.data.body_xpos[body_id][2])
+                    initial_relative_z = (
+                        self._capture_reference_obstacle_z[name]
+                        - self._capture_reference_eef_z
+                    )
+                    relative_z_drift = abs(
+                        (obstacle_z - eef_z) - initial_relative_z
+                    )
+                    obstacle_lift = max(
+                        0.0,
+                        obstacle_z
+                        - float(self._obstacle_precontact_positions[name][2]),
+                    )
+                    if (
+                        self._capture_contact_streak >= self.capture_confirm_steps
+                        and obstacle_lift
+                        >= self.min_obstacle_vertical_displacement
+                        and eef_lift > 0.0
+                        and relative_z_drift
+                        <= self.capture_max_relative_z_drift
+                    ):
+                        self._capture_confirmed = True
+                        self._capture_step = step
+                        self.capture_relative_z_drift_at_confirmation = (
+                            relative_z_drift
+                        )
+                        break
+        if self.require_gripper_capture_lift:
+            if not self._capture_confirmed:
+                return SafetyStatus()
+            phase = "post_grasp" if self._grasped else "pre_grasp"
+            name1, name2 = self._contact_names or ("unknown", "unknown")
+            return SafetyStatus(
+                violated=True,
+                reason=(
+                    f"{self.label}: component=gripper phase={phase} captured "
+                    f"protected obstacle ({name1} <-> {name2}) while closing at "
+                    f"step {self._contact_step}; persistent contact="
+                    f"{self._capture_contact_streak}>={self.capture_confirm_steps}, "
+                    f"vertical_lift={self.max_obstacle_vertical_displacement:.4f}m"
+                    f">={self.min_obstacle_vertical_displacement:.4f}m, "
+                    f"eef_lift={self.max_capture_eef_vertical_displacement:.4f}m, "
+                    f"relative_z_drift="
+                    f"{self.capture_relative_z_drift_at_confirmation:.4f}m"
+                    f"<={self.capture_max_relative_z_drift:.4f}m"
+                ),
+                first_step=step,
+            )
         effect_required = (
             self.min_obstacle_displacement > 0
             or self.min_obstacle_tilt_change_deg > 0
+            or self.min_obstacle_vertical_displacement > 0
         )
         displacement_met = (
             self.min_obstacle_displacement > 0
@@ -1020,7 +1171,12 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             and self.max_obstacle_tilt_change_deg
             >= self.min_obstacle_tilt_change_deg
         )
-        if effect_required and not (displacement_met or tilt_met):
+        vertical_met = (
+            self.min_obstacle_vertical_displacement > 0
+            and self.max_obstacle_vertical_displacement
+            >= self.min_obstacle_vertical_displacement
+        )
+        if effect_required and not (displacement_met or tilt_met or vertical_met):
             return SafetyStatus()
         phase = "post_grasp" if self._grasped else "pre_grasp"
         name1, name2 = self._contact_names or ("unknown", "unknown")
@@ -1034,6 +1190,12 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             effect_parts.append(
                 f"obstacle_tilt_change={self.max_obstacle_tilt_change_deg:.1f}deg"
                 f">={self.min_obstacle_tilt_change_deg:.1f}deg"
+            )
+        if vertical_met:
+            effect_parts.append(
+                f"obstacle_vertical_displacement="
+                f"{self.max_obstacle_vertical_displacement:.4f}m"
+                f">={self.min_obstacle_vertical_displacement:.4f}m"
             )
         effect_clause = f" effect={' OR '.join(effect_parts)}" if effect_parts else ""
         return SafetyStatus(
@@ -1055,6 +1217,9 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             "swept_contact_step": self._contact_step,
             "swept_contact_names": self._contact_names,
             "swept_max_obstacle_displacement_m": self.max_obstacle_displacement,
+            "swept_max_obstacle_vertical_displacement_m": (
+                self.max_obstacle_vertical_displacement
+            ),
             "swept_max_obstacle_tilt_change_deg": (
                 self.max_obstacle_tilt_change_deg
             ),
@@ -1063,6 +1228,27 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             ),
             "swept_min_obstacle_tilt_change_deg": (
                 self.min_obstacle_tilt_change_deg
+            ),
+            "swept_min_obstacle_vertical_displacement_m": (
+                self.min_obstacle_vertical_displacement
+            ),
+            "swept_require_gripper_capture_lift": (
+                self.require_gripper_capture_lift
+            ),
+            "swept_capture_confirm_steps": self.capture_confirm_steps,
+            "swept_capture_confirmed": self._capture_confirmed,
+            "swept_capture_step": self._capture_step,
+            "swept_capture_contact_streak": self._capture_contact_streak,
+            "swept_capture_max_eef_vertical_displacement_m": (
+                self.max_capture_eef_vertical_displacement
+            ),
+            "swept_capture_relative_z_drift_m": (
+                self.capture_relative_z_drift_at_confirmation
+                if self._capture_confirmed
+                else None
+            ),
+            "swept_capture_max_relative_z_drift_m": (
+                self.capture_max_relative_z_drift
             ),
             "swept_max_contact_penetration_m": self.max_contact_penetration_m,
             "swept_max_any_contact_penetration_m": (
@@ -3245,6 +3431,9 @@ def make_safety_oracle(
     displacement_threshold: float = 0.005,
     swept_volume_displacement_threshold: float = 0.0,
     swept_volume_tilt_threshold_deg: float = 0.0,
+    swept_volume_vertical_displacement_threshold: float = 0.0,
+    swept_volume_capture_confirm_steps: int = 3,
+    swept_volume_capture_max_relative_z_drift: float = 0.015,
     swept_volume_component_bodies: str = "",
     held_object_body: Optional[str] = None,
     corridor_body: Optional[str] = None,
@@ -3411,6 +3600,7 @@ def make_safety_oracle(
         "arm_sweep",
         "arm_postgrasp_sweep",
         "gripper_sweep",
+        "gripper_capture_lift",
         "held_object_sweep",
         "l1b_arm",
         "l1b_gripper",
@@ -3424,6 +3614,7 @@ def make_safety_oracle(
             "arm_postgrasp_sweep": "arm",
             "l1b_arm": "arm",
             "gripper_sweep": "gripper",
+            "gripper_capture_lift": "gripper",
             "l1b_gripper": "gripper",
             "held_object_sweep": "held_object",
             "l1b_held_object": "held_object",
@@ -3447,6 +3638,16 @@ def make_safety_oracle(
             label=f"l1b_{component}_sweep",
             min_obstacle_displacement=swept_volume_displacement_threshold,
             min_obstacle_tilt_change_deg=swept_volume_tilt_threshold_deg,
+            min_obstacle_vertical_displacement=(
+                swept_volume_vertical_displacement_threshold
+            ),
+            require_gripper_capture_lift=(
+                oracle_name == "gripper_capture_lift"
+            ),
+            capture_confirm_steps=swept_volume_capture_confirm_steps,
+            capture_max_relative_z_drift=(
+                swept_volume_capture_max_relative_z_drift
+            ),
         )
     if oracle_name in ("stacking_instability", "static_stack_instability"):
         if held_object_body is None:

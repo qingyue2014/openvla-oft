@@ -61,6 +61,11 @@ class _TrajectoryAndPolicyVideoRecorder:
 
     def __init__(self, env, body_names, capture_video=False, video_stride=1):
         self._trajectory = TrajectoryRecorder(env, body_names)
+        self._env = env
+        self._body_names = tuple(body_names)
+        self._max_body_z = {
+            name: float(_body_pos(env, name)[2]) for name in self._body_names
+        }
         self._capture_video = bool(capture_video)
         self._video_started = False
         self._video_stride = max(1, int(video_stride))
@@ -73,6 +78,10 @@ class _TrajectoryAndPolicyVideoRecorder:
 
     def record(self, obs, action, step, phase):
         self._trajectory.record(obs, action, step, phase=phase)
+        for name in self._body_names:
+            self._max_body_z[name] = max(
+                self._max_body_z[name], float(_body_pos(self._env, name)[2])
+            )
         if (
             self._capture_video
             and self._video_started
@@ -82,6 +91,9 @@ class _TrajectoryAndPolicyVideoRecorder:
 
     def save(self, path, metadata):
         self._trajectory.save(path, metadata)
+
+    def max_body_z(self, name):
+        return self._max_body_z[name]
 
     @staticmethod
     def _policy_camera_image(obs):
@@ -154,6 +166,23 @@ def _position_action(
 
 def _body_pos(env, name):
     return np.asarray(env.sim.data.body_xpos[env.sim.model.body_name2id(name)], dtype=float).copy()
+
+
+def _body_linear_speed(env, name):
+    body_id = env.sim.model.body_name2id(name)
+    try:
+        velocity = np.asarray(env.sim.data.body_xvelp[body_id], dtype=float)
+    except AttributeError:
+        velocity = np.asarray(env.sim.data.cvel[body_id][3:6], dtype=float)
+    return float(np.linalg.norm(velocity))
+
+
+def _target_support_contact(env):
+    from experiments.robot.libero.tasks.generate_l1a2_initial_states import (
+        _contact_between_bodies,
+    )
+
+    return bool(_contact_between_bodies(env, TARGET, PLATE))
 
 
 def _eef_pos(obs):
@@ -257,6 +286,114 @@ def _hold(env, obs, oracle, recorder, gripper, count, step):
         if status.violated:
             return obs, step, status
     return obs, step, None
+
+
+def _descend_until_support_contact(
+    env, obs, oracle, recorder, gripper, step, args, retained_offset
+):
+    """Lower the held target until real target-support contact is observed."""
+    start_eef = _eef_pos(obs).copy()
+    target_eef = start_eef.copy()
+    target_eef[2] -= args.support_contact_max_descent
+    best_descent = 0.0
+    for _ in range(args.support_contact_max_steps):
+        if _target_support_contact(env):
+            return obs, step, None
+        best_descent = max(best_descent, float(start_eef[2] - _eef_pos(obs)[2]))
+        action = _position_action(
+            _eef_pos(obs),
+            target_eef,
+            gripper,
+            args.position_scale,
+            args.place_descent_max_command,
+        )
+        obs, status = _advance(env, obs, oracle, recorder, action, step)
+        step += 1
+        if status.violated:
+            return obs, step, status
+        current_offset = _eef_pos(obs) - _body_pos(env, TARGET)
+        if np.linalg.norm(current_offset - retained_offset) > args.max_grasp_offset_drift:
+            return obs, step, MotionFailure(
+                reason="grasp_slipped",
+                stage="descend_to_support_contact",
+            )
+    return obs, step, MotionFailure(
+        reason="support_contact_not_reached",
+        stage="descend_to_support_contact",
+        initial_error_m=args.support_contact_max_descent,
+        best_error_m=max(0.0, args.support_contact_max_descent - best_descent),
+        final_error_m=max(0.0, args.support_contact_max_descent - best_descent),
+    )
+
+
+def _hold_until_stable_support_contact(
+    env, obs, oracle, recorder, gripper, step, args
+):
+    """Require persistent plate support and low target speed before opening."""
+    stable_steps = 0
+    last_speed = float("nan")
+    for _ in range(args.support_contact_settle_max_steps):
+        action = np.zeros(7, dtype=float)
+        action[-1] = gripper
+        obs, status = _advance(env, obs, oracle, recorder, action, step)
+        step += 1
+        if status.violated:
+            return obs, step, stable_steps, last_speed, status
+        last_speed = _body_linear_speed(env, TARGET)
+        if (
+            _target_support_contact(env)
+            and last_speed <= args.max_pre_release_linear_speed
+        ):
+            stable_steps += 1
+        else:
+            stable_steps = 0
+        if stable_steps >= args.support_contact_hold_steps:
+            return obs, step, stable_steps, last_speed, None
+    return obs, step, stable_steps, last_speed, MotionFailure(
+        reason="support_contact_not_stable",
+        stage="stabilize_on_support_before_release",
+    )
+
+
+def _confirm_released_on_support(
+    env, obs, oracle, recorder, open_sign, step, args, release_target_pos
+):
+    """Keep the EEF still until the released target is stably supported."""
+    stable_steps = 0
+    max_displacement = 0.0
+    released = False
+    for _ in range(args.post_release_support_max_steps):
+        action = np.zeros(7, dtype=float)
+        action[-1] = open_sign
+        obs, status = _advance(env, obs, oracle, recorder, action, step)
+        step += 1
+        if status.violated:
+            return obs, step, stable_steps, released, max_displacement, status
+        displacement = float(
+            np.linalg.norm(_body_pos(env, TARGET) - release_target_pos)
+        )
+        max_displacement = max(max_displacement, displacement)
+        released = not bool(oracle._metrics(env)["gripper_contact"])
+        supported = _target_support_contact(env)
+        slow = (
+            _body_linear_speed(env, TARGET)
+            <= args.max_post_release_linear_speed
+        )
+        if (
+            released
+            and supported
+            and slow
+            and displacement <= args.max_post_release_displacement
+        ):
+            stable_steps += 1
+        else:
+            stable_steps = 0
+        if stable_steps >= args.post_release_support_hold_steps:
+            return obs, step, stable_steps, released, max_displacement, None
+    return obs, step, stable_steps, released, max_displacement, MotionFailure(
+        reason="released_target_not_stable_on_support",
+        stage="confirm_support_after_release",
+    )
 
 
 def _calibrate_gripper_sign(env, obs, oracle, recorder, step, args):
@@ -588,7 +725,17 @@ def _run_episode(
     desired_bowl = _body_pos(env, PLATE).copy()
     desired_bowl[0] += getattr(args, "place_offset_x", 0.0)
     desired_bowl[1] += getattr(args, "place_offset_y", 0.0)
-    desired_bowl[2] = float(plate_hi[2] + bowl_origin_to_bottom + args.release_clearance)
+    require_support_contact = bool(
+        getattr(args, "require_support_contact_before_release", False)
+    )
+    if require_support_contact:
+        # Concave bowl / rimmed-plate AABBs are too coarse for the final
+        # release height. Stage above the support, then descend to real contact.
+        desired_bowl[2] = max(float(source[2]), float(_body_pos(env, PLATE)[2]))
+    else:
+        desired_bowl[2] = float(
+            plate_hi[2] + bowl_origin_to_bottom + args.release_clearance
+        )
     preplace_bowl = desired_bowl.copy()
     preplace_bowl[2] += args.preplace_height
 
@@ -633,7 +780,28 @@ def _run_episode(
                 retained_body=TARGET,
                 retained_offset=grasped_offset,
             )
-    if failure is None:
+    pre_release_support_contact = False
+    pre_release_support_stable_steps = 0
+    pre_release_linear_speed_m_s = float("nan")
+    released_before_retreat = False
+    post_release_support_contact = False
+    post_release_support_stable_steps = 0
+    post_release_max_displacement_m = float("nan")
+    if failure is None and require_support_contact:
+        obs, step, failure = _descend_until_support_contact(
+            env,
+            obs,
+            oracle,
+            recorder,
+            close_sign,
+            step,
+            args,
+            grasped_offset,
+        )
+        pre_release_support_contact = bool(
+            failure is None and _target_support_contact(env)
+        )
+    elif failure is None:
         obs, step, failure = _move_to(
             env,
             obs,
@@ -646,13 +814,45 @@ def _run_episode(
             "descend_to_place",
             args.place_position_tolerance,
         )
-    if failure is None:
+    if failure is None and require_support_contact:
+        (
+            obs,
+            step,
+            pre_release_support_stable_steps,
+            pre_release_linear_speed_m_s,
+            failure,
+        ) = _hold_until_stable_support_contact(
+            env, obs, oracle, recorder, close_sign, step, args
+        )
+    elif failure is None:
         obs, step, failure = _hold(
             env, obs, oracle, recorder, close_sign, args.contact_hold_steps, step
         )
+    release_target_pos = _body_pos(env, TARGET)
     if failure is None:
         obs, step, failure = _hold(
             env, obs, oracle, recorder, open_sign, args.release_steps, step
+        )
+    if failure is None and require_support_contact:
+        (
+            obs,
+            step,
+            post_release_support_stable_steps,
+            released_before_retreat,
+            post_release_max_displacement_m,
+            failure,
+        ) = _confirm_released_on_support(
+            env,
+            obs,
+            oracle,
+            recorder,
+            open_sign,
+            step,
+            args,
+            release_target_pos,
+        )
+        post_release_support_contact = bool(
+            failure is None and _target_support_contact(env)
         )
     if failure is None:
         retreat = _eef_pos(obs).copy()
@@ -674,6 +874,15 @@ def _run_episode(
         )
 
     placement = _bowl_on_plate(env, args)
+    max_bowl_lift_m = float(recorder.max_body_z(TARGET) - source[2])
+    if failure is None and max_bowl_lift_m > args.max_safe_lift_height:
+        failure = MotionFailure(
+            reason=(
+                f"max_bowl_lift={max_bowl_lift_m:.4f}m>"
+                f"{args.max_safe_lift_height:.4f}m"
+            ),
+            stage="transport_height_gate",
+        )
     occluder_displacement_m = float(np.linalg.norm(_body_pos(env, OCCLUDER) - occluder_start))
     occluder_stable = bool(
         occluder_displacement_m <= args.max_occluder_displacement
@@ -713,6 +922,14 @@ def _run_episode(
             "grasp_height_m": float(grasp_height),
             "grasp_verified": grasp_verified,
             "grasp_lift_m": grasp_lift_m,
+            "max_bowl_lift_m": max_bowl_lift_m,
+            "pre_release_support_contact": pre_release_support_contact,
+            "pre_release_support_stable_steps": pre_release_support_stable_steps,
+            "pre_release_linear_speed_m_s": pre_release_linear_speed_m_s,
+            "released_before_retreat": released_before_retreat,
+            "post_release_support_contact": post_release_support_contact,
+            "post_release_support_stable_steps": post_release_support_stable_steps,
+            "post_release_max_displacement_m": post_release_max_displacement_m,
             "success": safe_success,
             "violated": not occluder_stable,
             "violation_reason": reason,
@@ -738,6 +955,14 @@ def _run_episode(
         "grasp_height_m": float(grasp_height),
         "grasp_verified": int(grasp_verified),
         "grasp_lift_m": grasp_lift_m,
+        "max_bowl_lift_m": max_bowl_lift_m,
+        "pre_release_support_contact": int(pre_release_support_contact),
+        "pre_release_support_stable_steps": pre_release_support_stable_steps,
+        "pre_release_linear_speed_m_s": pre_release_linear_speed_m_s,
+        "released_before_retreat": int(released_before_retreat),
+        "post_release_support_contact": int(post_release_support_contact),
+        "post_release_support_stable_steps": post_release_support_stable_steps,
+        "post_release_max_displacement_m": post_release_max_displacement_m,
         "safe_success": int(safe_success),
         # Keep the row schema synchronized with trajectory metadata and future
         # placement diagnostics instead of copying selected keys by hand.
@@ -985,7 +1210,19 @@ def main():
     parser.add_argument("--place_offset_y", type=float, default=0.0)
     parser.add_argument("--release_clearance", type=float, default=0.002)
     parser.add_argument("--contact_hold_steps", type=int, default=5)
+    parser.add_argument("--require_support_contact_before_release", action="store_true")
+    parser.add_argument("--support_contact_max_descent", type=float, default=0.12)
+    parser.add_argument("--support_contact_max_steps", type=int, default=160)
+    parser.add_argument("--place_descent_max_command", type=float, default=0.04)
+    parser.add_argument("--support_contact_hold_steps", type=int, default=10)
+    parser.add_argument("--support_contact_settle_max_steps", type=int, default=80)
+    parser.add_argument("--max_pre_release_linear_speed", type=float, default=0.02)
     parser.add_argument("--release_steps", type=int, default=12)
+    parser.add_argument("--post_release_support_hold_steps", type=int, default=10)
+    parser.add_argument("--post_release_support_max_steps", type=int, default=80)
+    parser.add_argument("--max_post_release_linear_speed", type=float, default=0.03)
+    parser.add_argument("--max_post_release_displacement", type=float, default=0.015)
+    parser.add_argument("--max_safe_lift_height", type=float, default=float("inf"))
     parser.add_argument("--retreat_height", type=float, default=0.08)
     parser.add_argument("--settle_steps", type=int, default=50)
     parser.add_argument("--min_safe_reference_rate", type=float, default=0.9)
