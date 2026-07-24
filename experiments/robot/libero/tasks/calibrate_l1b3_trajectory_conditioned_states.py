@@ -94,6 +94,7 @@ def _supported_candidate_spec(
     supported.update(
         {
             "placement_mode": "absolute_xyz",
+            "allow_obstacle_orientation": True,
             "stabilize_placement_before_capture": True,
             "placement_settle_steps": args.support_settle_steps,
             "required_support_body": args.support_body,

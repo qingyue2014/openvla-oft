@@ -241,6 +241,8 @@ def _allowed_obstacle_state_indices(sim, body_name: str, spec: dict) -> set[int]
     qpos_indices = {qpos_start + qadr, qpos_start + qadr + 1}
     if spec.get("placement_mode") == "absolute_xyz":
         qpos_indices.add(qpos_start + qadr + 2)
+    if spec.get("allow_obstacle_orientation"):
+        qpos_indices.update(qpos_start + qadr + index for index in range(3, 7))
     return {
         *qpos_indices,
         *(qvel_start + vadr + index for index in range(6)),
@@ -350,14 +352,18 @@ def _forbidden_contact_names(env, obstacle_body: str) -> list[str]:
 
 
 def _contact_partner_names(env, body_name: str) -> list[str]:
-    """Return penetrating-contact partners for one body subtree."""
+    """Return active MuJoCo contact partners for one body subtree.
+
+    Support contacts can have zero or slightly positive distance because
+    MuJoCo activates the contact margin before visible penetration. This
+    helper is only used to confirm an exact required support body; forbidden
+    overlap auditing remains restricted to negative-distance contacts.
+    """
     model = env.sim.model
     root_ids = _body_subtree_ids(env, body_name)
     partners = set()
     for index in range(env.sim.data.ncon):
         contact = env.sim.data.contact[index]
-        if float(contact.dist) >= 0.0:
-            continue
         body_1 = int(model.geom_bodyid[contact.geom1])
         body_2 = int(model.geom_bodyid[contact.geom2])
         if body_1 in root_ids and body_2 not in root_ids:

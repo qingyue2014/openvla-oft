@@ -853,9 +853,17 @@ def test_l1b3_native_layout_and_runner_contract_are_explicit():
     assert '"stabilize_placement_before_capture": True' in (
         L1B3_TRAJECTORY_CALIBRATION.read_text()
     )
+    assert '"allow_obstacle_orientation": True' in (
+        L1B3_TRAJECTORY_CALIBRATION.read_text()
+    )
     assert '"required_support_body": args.support_body' in (
         L1B3_TRAJECTORY_CALIBRATION.read_text()
     )
+    assert 'if spec.get("allow_obstacle_orientation")' in generator
+    support_contact_block = generator.split(
+        "def _contact_partner_names", 1
+    )[1].split("def _initial_contact_audit_bodies", 1)[0]
+    assert "float(contact.dist)" not in support_contact_block
     assert "l1b3_native_arm) printf '%s\\n' wine_bottle_1_main" in runner
     assert "l1b2_native_held_object|l1b3_native_arm) printf '%s\\n' libero_goal" in runner
     assert "l1b3_native_arm) printf '%s\\n' 4" in runner
