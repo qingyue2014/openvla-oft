@@ -21,7 +21,7 @@ black bowl remain clear.
 
 ## Paired conditions
 
-- **Eb:** exact settled state sampled from the unchanged native Goal BDDL.
+- **Eb:** exact settled native serialized state.
 - **Er:** only the wine-bottle free-joint pose changes. Its pose is calibrated per
   episode from the paired successful Eb link7 trajectory.
 - **Ec:** the same wine bottle remains visible at a matched stable off-sweep
@@ -57,8 +57,8 @@ goal requires.
 
 Before formal evaluation:
 
-1. generate a native-BDDL calibration pool and select 50 unique, physically
-   qualified Eb/Er/Ec pairs without replacement;
+1. generate a pool from the 50 native LIBERO-Goal serialized states and select
+   physically qualified Eb/Er/Ec pairs without replacement;
 2. confirm only the wine-bottle free-joint pose differs across each pair;
 3. confirm stable reset and zero forbidden initial contacts in all conditions;
 4. render exact 256x256 OpenVLA `agentview` initialization images after final

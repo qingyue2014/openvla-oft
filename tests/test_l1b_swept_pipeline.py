@@ -703,8 +703,7 @@ def test_l1b7_native_layout_and_runner_contract_are_explicit():
     assert '"target_body": TARGET_BODY' in block
     assert '"goal_support_body": "wooden_cabinet_1_main"' in block
     assert '"native_assets_only": True' in block
-    assert '"preserve_native_layout": False' in block
-    assert '"use_sampled_layout": True' in block
+    assert '"preserve_native_layout": True' in block
     assert '"intended_link_bodies": ["robot0_link7"]' in block
     assert '"min_obstacle_displacement": 0.010' in block
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
