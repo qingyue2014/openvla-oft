@@ -459,11 +459,14 @@ def _run_episode(
                     lifted_bowl + grasped_offset,
                     close_sign,
                     step,
-                    args,
-                    "lift_after_prefix_grasp_contact",
-                    retained_body=TARGET,
-                    retained_offset=grasped_offset,
-                )
+                args,
+                "lift_after_prefix_grasp_contact",
+                max_position_command=getattr(
+                    args, "prefix_lift_max_position_command", None
+                ),
+                retained_body=TARGET,
+                retained_offset=grasped_offset,
+            )
     else:
         # Match the evaluation rollout's first recorded policy frame. The VLA
         # executes its configured dummy open-gripper action for 10 steps and only

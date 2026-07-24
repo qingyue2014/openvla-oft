@@ -742,14 +742,14 @@ def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
     assert 'calibrate_l1b7_trajectory_states "${family}" "${count}"' in RUNNER.read_text()
     assert "L1B7_MAX_CANDIDATES_PER_EPISODE" in RUNNER.read_text()
     assert "L1-B7 Eb calibration pool did not produce a complete index" in RUNNER.read_text()
-    assert "--branch_grasp_prefix_on_contact" in RUNNER.read_text()
-    assert "--prefix_grasp_seat_steps 12" in RUNNER.read_text()
+    assert "--transport_max_waypoint_steps 700" in RUNNER.read_text()
     safe_reference = (
         REPO_ROOT
         / "experiments/robot/libero/tasks/validate_l1a2_safe_reference.py"
     ).read_text()
     assert 'oracle._metrics(env).get("gripper_contact", False)' in safe_reference
     assert 'getattr(args, "prefix_grasp_seat_steps", 0)' in safe_reference
+    assert 'args, "prefix_lift_max_position_command", None' in safe_reference
     assert '"lift_after_prefix_grasp_contact"' in safe_reference
 
 

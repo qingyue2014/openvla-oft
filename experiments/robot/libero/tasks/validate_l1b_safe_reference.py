@@ -202,6 +202,12 @@ def main() -> None:
         default=0,
         help="Closed-gripper hold steps after branching at grasp contact",
     )
+    parser.add_argument(
+        "--prefix_lift_max_position_command",
+        type=float,
+        default=None,
+        help="Optional slow-lift OSC command cap after branching at grasp contact",
+    )
     parser.add_argument("--out_csv", required=True)
     parser.add_argument("--out_report", required=True)
     parser.add_argument("--fail_on_invalid", action="store_true")

@@ -274,18 +274,14 @@ safe_reference_family() {
     extra_args+=(--transport_via_x -0.15 --transport_clearance 0.02)
     extra_args+=(--preplace_height 0.04)
   elif [[ "${family}" == "l1b7_native_arm" ]]; then
-    eb_note="$(note_for "${family}" eb)"
-    # Reuse the paired policy through measured finger/bowl contact, then branch
-    # before the calibrated post-grasp link strike and lift vertically. The
-    # detour stays lateral and low; the only substantial height is required by
-    # the native cabinet-top goal.
-    extra_args+=(--grasp_action_trajectories "rollouts/${task_suite}/${eb_note}/trajectories")
-    extra_args+=(--branch_grasp_prefix_on_contact)
-    extra_args+=(--prefix_grasp_seat_steps 12)
+    # A paired-policy prefix reaches the calibrated link7 strike too soon after
+    # first finger contact to establish a stable grasp. Use the independently
+    # verified closed-loop grasp search instead: its positive-Y rim grasp lifts
+    # vertically clear of the bottle before direct cabinet-top transport.
     extra_args+=(--approach_height 0.12 --lift_height 0.08)
-    extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 450)
+    extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
     extra_args+=(--position_tolerance 0.025)
-    extra_args+=(--transport_via_x 0.18 --transport_clearance 0.04)
+    extra_args+=(--transport_clearance 0.04)
     extra_args+=(--preplace_height 0.06)
     extra_args+=(--place_offset_x 0.00 --place_offset_y 0.00)
   fi
