@@ -383,8 +383,22 @@ def calibrate(args: argparse.Namespace) -> str:
                     env=env,
                     eb_state=eb_state,
                 )
-                if args.max_candidates_per_episode > 0:
-                    candidates = candidates[: args.max_candidates_per_episode]
+                if (
+                    args.max_candidates_per_episode > 0
+                    and len(candidates) > args.max_candidates_per_episode
+                ):
+                    # A prefix contains almost exclusively the first radius
+                    # and angle. Stratified indices preserve coverage of the
+                    # complete radius × angle × path-time hypothesis space.
+                    sample_indices = np.linspace(
+                        0,
+                        len(candidates) - 1,
+                        num=args.max_candidates_per_episode,
+                        dtype=int,
+                    )
+                    candidates = [
+                        candidates[index] for index in np.unique(sample_indices)
+                    ]
                 for path_step, proposed_link, placement in candidates:
                     attempts += 1
                     env.reset()

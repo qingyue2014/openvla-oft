@@ -836,6 +836,8 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert 'INTENDED_LINKS = ("robot0_link7",)' in text
     assert 'PATH_LINKS = ("robot0_link5", "robot0_link6")' in text
     assert "sample_indices = np.linspace(" in text
+    assert "radius × angle × path-time hypothesis space" in text
+    assert "len(candidates) > args.max_candidates_per_episode" in text
     assert 'parser.add_argument("--max_path_steps_per_link", type=int, default=32)' in text
     assert 'parser.add_argument("--max_link_z", type=float, default=1.50)' in text
     assert 'default="0.016,0.015,0.017,0.018,0.020' in text
