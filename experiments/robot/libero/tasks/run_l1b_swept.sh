@@ -262,6 +262,7 @@ safe_reference_family() {
     extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.026)
     extra_args+=(--transport_clearance 0.01)
     extra_args+=(--transport_target_eef_quat 0.9941969,-0.0504397,-0.0834422,0.0454506)
+    extra_args+=(--skip_transport_orientation)
     # First carry the bowl along the safe side of the corridor. Only reorient
     # after leaving the bottle, and rotate slowly enough to retain a rim grasp.
     # Raise only after reaching the safe lateral equilibrium, then use the

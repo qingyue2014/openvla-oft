@@ -1038,6 +1038,7 @@ def _run_episode(
         failure is None
         and transport_target_quat.size == 4
         and not orient_before_grasp
+        and not bool(getattr(args, "skip_transport_orientation", False))
     ):
         obs, step, failure = _move_to(
             env,
@@ -1782,6 +1783,7 @@ def main():
     parser.add_argument("--transport_position_tolerance", type=float, default=0.025)
     parser.add_argument("--transport_target_eef_quat", default="")
     parser.add_argument("--orient_before_grasp", action="store_true")
+    parser.add_argument("--skip_transport_orientation", action="store_true")
     parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--preorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--preorientation_position_tolerance", type=float, default=0.010)
