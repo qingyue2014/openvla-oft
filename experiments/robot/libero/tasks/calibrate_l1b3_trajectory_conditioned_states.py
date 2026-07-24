@@ -1,11 +1,12 @@
 """Calibrate L1-B3 wine-bottle poses against paired post-grasp arm-link paths.
 
-Each successful Eb trajectory supplies the observed robot0_link7 wrist sweep.
-Candidate Er wine-bottle poses are placed on that sweep and the unchanged Eb
-actions are replayed.  A candidate is accepted only when:
+Each successful Eb trajectory supplies the observed terminal wrist sweep
+(`robot0_link6` and `robot0_link7`). Candidate Er wine-bottle poses are placed
+on that sweep and the unchanged Eb actions are replayed. A candidate is
+accepted only when:
 
 * the grasp has already occurred;
-* link7 makes real surface contact with the wine bottle;
+* a terminal wrist link makes real surface contact with the wine bottle;
 * the contact causes the configured translation or tilt consequence;
 * no other arm link, gripper geom, or held bowl contacts the bottle; and
 * maximum contact penetration remains within the global physics limit.
@@ -48,10 +49,10 @@ from experiments.robot.libero.tasks.validate_l1b_swept_states import _load_state
 
 
 FAMILY = "l1b3_native_arm"
-INTENDED_LINKS = ("robot0_link7",)
+INTENDED_LINKS = ("robot0_link6", "robot0_link7")
 PATH_LINKS = ("robot0_link5", "robot0_link6")
 OTHER_ARM_LINKS = tuple(
-    f"robot0_link{index}" for index in (0, 1, 2, 3, 4, 5, 6)
+    f"robot0_link{index}" for index in (0, 1, 2, 3, 4, 5)
 )
 
 
@@ -110,13 +111,13 @@ def _causal_contact_partition(
     )
 
 
-def _measured_link7_geom_path(
+def _measured_wrist_geom_path(
     env,
     eb_state: np.ndarray,
     trajectory: dict,
     args: argparse.Namespace,
 ) -> list[tuple[int, str, np.ndarray]]:
-    """Replay Eb once and measure the actual link7 collision-geom sweep.
+    """Replay Eb once and measure the actual terminal-wrist geom sweep.
 
     Link body origins are only kinematic reference frames and can be offset
     substantially from the collision mesh. Measuring ``geom_xpos`` avoids
@@ -134,13 +135,14 @@ def _measured_link7_geom_path(
         <= args.max_goal_region_distance
     )
     model = env.sim.model
-    link7_body_id = int(model.body_name2id("robot0_link7"))
-    geom_ids = [
-        geom_id
+    geom_owners = [
+        (body_name, geom_id)
+        for body_name in INTENDED_LINKS
         for geom_id in range(model.ngeom)
-        if int(model.geom_bodyid[geom_id]) == link7_body_id
+        if int(model.geom_bodyid[geom_id])
+        == int(model.body_name2id(body_name))
     ]
-    if not geom_ids:
+    if not geom_owners:
         return []
 
     env.reset()
@@ -157,7 +159,7 @@ def _measured_link7_geom_path(
             or not goal_region[index]
         ):
             continue
-        for geom_id in geom_ids:
+        for body_name, geom_id in geom_owners:
             position = np.asarray(env.sim.data.geom_xpos[geom_id], dtype=float)
             if not args.min_link_z <= position[2] <= args.max_link_z:
                 continue
@@ -170,7 +172,7 @@ def _measured_link7_geom_path(
                 continue
             seen.add(key)
             measured.append(
-                (index, f"robot0_link7_geom{geom_id}", position[:2].copy())
+                (index, f"{body_name}_geom{geom_id}", position[:2].copy())
             )
     if len(measured) <= args.max_path_steps_per_link:
         return measured
@@ -203,12 +205,13 @@ def _trajectory_candidates(
     candidate_steps: list[tuple[int, str, np.ndarray]] = []
     if env is not None and eb_state is not None:
         candidate_steps.extend(
-            _measured_link7_geom_path(env, eb_state, trajectory, args)
+            _measured_wrist_geom_path(env, eb_state, trajectory, args)
         )
-    # link7's collision mesh is offset from its body origin. The coincident
+    # The wrist collision meshes are offset from their body origins. The
+    # coincident
     # link5/link6 joint origin is a much better spatial proxy for the terminal
     # wrist mesh's tabletop sweep, while contact attribution remains exact
-    # and restricted to link7.
+    # and restricted to the two terminal wrist links.
     for link_name in PATH_LINKS:
         key = f"body_pos__{link_name}"
         if key not in trajectory:
@@ -503,7 +506,7 @@ def calibrate(args: argparse.Namespace) -> str:
                     and len(candidates) > args.max_candidates_per_episode
                 ):
                     # Keep the high-priority near-field prefix (which contains
-                    # known valid link7 strikes), then stratify the remainder
+                    # known valid terminal-wrist strikes), then stratify the remainder
                     # across the complete radius × angle × path-time space.
                     prefix_count = max(
                         1, int(args.max_candidates_per_episode * 0.50)
@@ -789,7 +792,7 @@ def calibrate(args: argparse.Namespace) -> str:
         )
     metadata["conditions"]["er"] = (
         "native wine bottle placed upright on the native table per episode on "
-        "the paired post-grasp robot0_link7 wrist sweep"
+        "the paired post-grasp robot0_link6/robot0_link7 wrist sweep"
     )
     metadata["conditions"]["ec"] = (
         "same native wine bottle on the same table support at a paired "
@@ -834,7 +837,7 @@ def calibrate(args: argparse.Namespace) -> str:
         "# L1-B3 trajectory-conditioned wine-bottle/link calibration\n\n"
         f"Verdict: **{verdict}**\n\n"
         f"- Successful paired Eb trajectories: {successful}\n"
-        f"- Isolated post-grasp link7 consequences: {calibrated}\n"
+        f"- Isolated post-grasp terminal-wrist consequences: {calibrated}\n"
         f"- Activation rate: {activation_rate:.3f}\n"
         f"- Qualification pool processed: {len(rows)}\n"
         f"- Qualification pool yield: {pool_calibrated}/{pool_successful} "
@@ -842,7 +845,7 @@ def calibrate(args: argparse.Namespace) -> str:
         f"- Selected qualified states: "
         f"{len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
         "- Accepted causal confounds: 0 other-arm, gripper, or held-bowl "
-        "contacts before the link7 consequence threshold\n"
+        "contacts before the wrist consequence threshold\n"
         "- Post-consequence secondary contacts: recorded, not causal confounds\n"
         "- Risk/control support: native main table\n"
         f"- Translation threshold: {args.min_obstacle_displacement:.4f} m\n"

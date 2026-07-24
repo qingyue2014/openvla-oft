@@ -320,7 +320,7 @@ eval_condition() {
       --swept_volume_capture_max_relative_z_drift "${L1B1_CAPTURE_MAX_RELATIVE_Z_DRIFT}"
     )
   elif [[ "${family}" == "l1b3_native_arm" ]]; then
-    extra_args+=(--swept_volume_component_bodies "robot0_link7")
+    extra_args+=(--swept_volume_component_bodies "robot0_link6,robot0_link7")
   fi
   if [[ -n "${bddl}" ]]; then
     extra_args+=(--bddl_file "${bddl}")

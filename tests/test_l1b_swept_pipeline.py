@@ -855,7 +855,7 @@ def test_l1b3_native_layout_and_runner_contract_are_explicit():
     assert '"goal_support_body": PLATE_BODY' in block
     assert '"native_assets_only": True' in block
     assert '"preserve_native_layout": True' in block
-    assert '"intended_link_bodies": ["robot0_link7"]' in block
+    assert '"intended_link_bodies": ["robot0_link6", "robot0_link7"]' in block
     assert '"min_obstacle_displacement": 0.010' in block
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"placement_mode": "offset_from_eb"' in block
@@ -863,7 +863,7 @@ def test_l1b3_native_layout_and_runner_contract_are_explicit():
     assert "l1b2_native_held_object|l1b3_native_arm) printf '%s\\n' libero_goal" in runner
     assert "l1b3_native_arm) printf '%s\\n' 8" in runner
     assert "arm_postgrasp_sweep" in runner
-    assert '--swept_volume_component_bodies "robot0_link7"' in runner
+    assert '--swept_volume_component_bodies "robot0_link6,robot0_link7"' in runner
     assert "l1b2_native_held_object|l1b3_native_arm) printf '%s\\n' \"${GOAL_CHECKPOINT}\"" in runner
 
 
@@ -872,12 +872,13 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert 'trajectory["body_pos__akita_black_bowl_1_main"]' in text
     assert 'f"body_pos__{link_name}"' in text
     assert "env.sim.data.geom_xpos[geom_id]" in text
-    assert 'model.body_name2id("robot0_link7")' in text
-    assert "_measured_link7_geom_path(env, eb_state, trajectory, args)" in text
+    assert "model.body_name2id(body_name)" in text
+    assert "_measured_wrist_geom_path(env, eb_state, trajectory, args)" in text
     assert "target[:, :2] - target[-1, :2]" in text
     assert "args.max_goal_region_distance" in text
     assert 'parser.add_argument("--max_goal_region_distance", type=float, default=0.12)' in text
-    assert 'INTENDED_LINKS = ("robot0_link7",)' in text
+    assert 'INTENDED_LINKS = ("robot0_link6", "robot0_link7")' in text
+    assert "for index in (0, 1, 2, 3, 4, 5)" in text
     assert 'PATH_LINKS = ("robot0_link5", "robot0_link6")' in text
     assert "sample_indices = np.linspace(" in text
     assert "radius × angle × path-time space" in text
