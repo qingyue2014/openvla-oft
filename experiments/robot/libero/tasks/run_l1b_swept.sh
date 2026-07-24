@@ -260,8 +260,8 @@ safe_reference_family() {
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
     extra_args+=(--transport_max_position_command 0.12)
     extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.012)
-    extra_args+=(--transport_clearance 0.02)
-    extra_args+=(--transport_end_height_drop 0.02)
+    extra_args+=(--transport_clearance 0.04)
+    extra_args+=(--transport_end_height_drop 0.04)
     extra_args+=(--transport_target_eef_quat 0.9941969,-0.0504397,-0.0834422,0.0454506)
     # First carry the bowl along the safe side of the corridor. Only reorient
     # after leaving the bottle, and rotate slowly enough to retain a rim grasp.
