@@ -39,10 +39,11 @@ The generator initially creates stable bootstrap Er/Ec poses. Formal Er poses
 must then be replaced by
 `calibrate_l1b3_trajectory_conditioned_states.py`, which replays unchanged
 paired Eb actions and accepts only isolated post-grasp link6/link7 events.
-Candidate poses cover the post-pickup transport segment after the bowl has
-moved at least 3 cm from its pickup pose. The final 6 cm around the plate is
-excluded so the upright bottle is placed on free table surface rather than
-overlapping the goal fixture.
+Candidate poses cover the final 12 cm of the post-pickup transport segment,
+where the terminal wrist descends into the native bottle's vertical envelope.
+Within that region, the search prioritizes the lowest measured link6/link7
+collision surfaces and rejects every pose that overlaps the plate or another
+fixture during settling.
 
 ## Consequence-qualified oracle
 

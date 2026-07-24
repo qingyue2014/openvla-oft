@@ -130,17 +130,10 @@ def _measured_wrist_geom_path(
     if len(target) == 0:
         return []
     lifted = target[:, 2] >= target[0, 2] + args.min_grasp_lift
-    distance_from_start = np.linalg.norm(
-        target[:, :2] - target[0, :2], axis=1
-    )
     distance_from_goal = np.linalg.norm(
         target[:, :2] - target[-1, :2], axis=1
     )
-    transport_region = (
-        (distance_from_start >= args.min_transport_distance)
-        & (distance_from_goal >= args.min_goal_clearance)
-        & (distance_from_goal <= args.max_goal_region_distance)
-    )
+    goal_region = distance_from_goal <= args.max_goal_region_distance
     model = env.sim.model
     geom_owners = [
         (body_name, geom_id)
@@ -154,7 +147,7 @@ def _measured_wrist_geom_path(
 
     env.reset()
     env.set_init_state(eb_state)
-    measured: list[tuple[int, str, np.ndarray]] = []
+    measured: list[tuple[int, str, np.ndarray, float]] = []
     seen: set[tuple[int, float, float]] = set()
     for index, action in enumerate(np.asarray(trajectory["actions"], dtype=float)):
         if np.isnan(action).any():
@@ -163,13 +156,19 @@ def _measured_wrist_geom_path(
         if (
             index >= len(lifted)
             or not lifted[index]
-            or not transport_region[index]
+            or not goal_region[index]
         ):
             continue
+        step_geoms: list[tuple[str, int, np.ndarray]] = []
         for body_name, geom_id in geom_owners:
             position = np.asarray(env.sim.data.geom_xpos[geom_id], dtype=float)
             if not args.min_link_z <= position[2] <= args.max_link_z:
                 continue
+            step_geoms.append((body_name, geom_id, position))
+        step_geoms.sort(key=lambda item: float(item[2][2]))
+        for body_name, geom_id, position in step_geoms[
+            : args.max_measured_geoms_per_step
+        ]:
             key = (
                 index,
                 round(float(position[0]), 5),
@@ -179,17 +178,23 @@ def _measured_wrist_geom_path(
                 continue
             seen.add(key)
             measured.append(
-                (index, f"{body_name}_geom{geom_id}", position[:2].copy())
+                (
+                    index,
+                    f"{body_name}_geom{geom_id}",
+                    position[:2].copy(),
+                    float(position[2]),
+                )
             )
+    # A native bottle can only contact the lowest wrist surfaces while the
+    # wrist descends toward the plate. Search those measured surfaces first;
+    # this avoids spending most of the replay budget on high, non-contacting
+    # transport poses.
+    measured.sort(key=lambda item: (item[3], -item[0]))
     if len(measured) <= args.max_path_steps_per_link:
-        return measured
-    sample_indices = np.linspace(
-        0,
-        len(measured) - 1,
-        num=args.max_path_steps_per_link,
-        dtype=int,
-    )
-    return [measured[index] for index in np.unique(sample_indices)]
+        selected = measured
+    else:
+        selected = measured[: args.max_path_steps_per_link]
+    return [(index, name, xy) for index, name, xy, _ in selected]
 
 
 def _trajectory_candidates(
@@ -205,16 +210,9 @@ def _trajectory_candidates(
     if len(target) == 0:
         return []
     lifted = target[:, 2] >= target[0, 2] + args.min_grasp_lift
-    distance_from_start = np.linalg.norm(
-        target[:, :2] - target[0, :2], axis=1
-    )
-    distance_from_goal = np.linalg.norm(
-        target[:, :2] - target[-1, :2], axis=1
-    )
-    transport_region = (
-        (distance_from_start >= args.min_transport_distance)
-        & (distance_from_goal >= args.min_goal_clearance)
-        & (distance_from_goal <= args.max_goal_region_distance)
+    goal_region = (
+        np.linalg.norm(target[:, :2] - target[-1, :2], axis=1)
+        <= args.max_goal_region_distance
     )
     candidate_steps: list[tuple[int, str, np.ndarray]] = []
     if env is not None and eb_state is not None:
@@ -237,9 +235,10 @@ def _trajectory_candidates(
             index
             for index in range(min(len(target), len(positions)))
             if lifted[index]
-            and transport_region[index]
+            and goal_region[index]
             and args.min_link_z <= positions[index, 2] <= args.max_link_z
         ]
+        eligible.sort(key=lambda index: (positions[index, 2], -index))
         spaced: list[int] = []
         for index in eligible:
             if all(
@@ -835,8 +834,6 @@ def calibrate(args: argparse.Namespace) -> str:
         ],
         "min_grasp_lift": args.min_grasp_lift,
         "max_goal_region_distance": args.max_goal_region_distance,
-        "min_goal_clearance": args.min_goal_clearance,
-        "min_transport_distance": args.min_transport_distance,
         "radial_distance_candidates": _float_values(
             args.radial_distance_candidates
         ),
@@ -899,20 +896,8 @@ def main() -> None:
     parser.add_argument(
         "--max_goal_region_distance",
         type=float,
-        default=1.0,
-        help="Outer radius around the goal covered by the transport sweep",
-    )
-    parser.add_argument(
-        "--min_goal_clearance",
-        type=float,
-        default=0.06,
-        help="Exclude the crowded final placement region around the plate",
-    )
-    parser.add_argument(
-        "--min_transport_distance",
-        type=float,
-        default=0.03,
-        help="Require the grasped bowl to have left its pickup neighborhood",
+        default=0.12,
+        help="Radius around the goal used to search the descending wrist sweep",
     )
     parser.add_argument("--min_link_z", type=float, default=0.85)
     parser.add_argument("--max_link_z", type=float, default=1.50)
@@ -925,6 +910,7 @@ def main() -> None:
         default="-97.5,-95,-100,-90,0,45,-45,90,135,-135,180",
     )
     parser.add_argument("--max_path_steps_per_link", type=int, default=32)
+    parser.add_argument("--max_measured_geoms_per_step", type=int, default=4)
     parser.add_argument("--min_step_spacing", type=int, default=2)
     parser.add_argument("--max_candidates_per_episode", type=int, default=600)
     parser.add_argument("--stability_steps", type=int, default=20)

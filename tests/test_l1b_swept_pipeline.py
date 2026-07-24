@@ -880,11 +880,9 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "target[:, :2] - target[-1, :2]" in text
     assert "args.max_goal_region_distance" in text
     assert '"--max_goal_region_distance"' in text
-    assert "default=1.0" in text
-    assert '"--min_goal_clearance"' in text
-    assert "args.min_goal_clearance" in text
-    assert '"--min_transport_distance"' in text
-    assert "args.min_transport_distance" in text
+    assert "default=0.12" in text
+    assert '"--max_measured_geoms_per_step"' in text
+    assert "args.max_measured_geoms_per_step" in text
     assert 'INTENDED_LINKS = ("robot0_link6", "robot0_link7")' in text
     assert "for index in (0, 1, 2, 3, 4, 5)" in text
     assert 'PATH_LINKS = ("robot0_link5", "robot0_link6")' in text
@@ -892,7 +890,7 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "radius × angle × path-time space" in text
     assert "len(candidates) > args.max_candidates_per_episode" in text
     assert "args.max_candidates_per_episode * 0.50" in text
-    assert 'L1B3_MAX_CANDIDATES_PER_EPISODE="${L1B3_MAX_CANDIDATES_PER_EPISODE:-400}"' in RUNNER.read_text()
+    assert 'L1B3_MAX_CANDIDATES_PER_EPISODE="${L1B3_MAX_CANDIDATES_PER_EPISODE:-1200}"' in RUNNER.read_text()
     assert 'parser.add_argument("--max_path_steps_per_link", type=int, default=32)' in text
     assert 'parser.add_argument("--max_link_z", type=float, default=1.50)' in text
     assert 'default="0.016,0.015,0.017,0.018,0.020' in text
