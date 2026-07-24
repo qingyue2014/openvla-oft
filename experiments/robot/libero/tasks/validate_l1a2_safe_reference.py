@@ -1082,6 +1082,13 @@ def _run_episode(
                 args.transport_position_tolerance,
             )
         )
+        postorientation_max_position_command = float(
+            getattr(
+                args,
+                "postorientation_max_position_command",
+                args.transport_max_position_command,
+            )
+        )
         postorientation_min_center_clearance = float(
             getattr(args, "postorientation_min_center_clearance", 0.0)
         )
@@ -1122,7 +1129,7 @@ def _run_episode(
                 "clear_after_orientation",
                 tolerance=postorientation_tolerance,
                 max_steps=args.transport_max_waypoint_steps,
-                max_position_command=args.transport_max_position_command,
+                max_position_command=postorientation_max_position_command,
                 retained_body=TARGET,
                 retained_offset=grasped_offset,
                 clearance_body=OCCLUDER,
@@ -1155,7 +1162,7 @@ def _run_episode(
                 "clear_bottle_before_transport",
                 tolerance=postorientation_tolerance,
                 max_steps=args.transport_max_waypoint_steps,
-                max_position_command=args.transport_max_position_command,
+                max_position_command=postorientation_max_position_command,
                 retained_body=TARGET,
                 retained_offset=grasped_offset,
                 progress_origin_xy=source[:2],
@@ -1804,6 +1811,9 @@ def main():
     parser.add_argument("--postorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--postorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--postorientation_position_tolerance", type=float, default=0.010)
+    parser.add_argument(
+        "--postorientation_max_position_command", type=float, default=0.15
+    )
     parser.add_argument(
         "--postorientation_min_center_clearance", type=float, default=0.0
     )

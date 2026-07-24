@@ -182,6 +182,9 @@ def main() -> None:
     parser.add_argument("--postorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--postorientation_position_tolerance", type=float, default=0.010)
     parser.add_argument(
+        "--postorientation_max_position_command", type=float, default=0.15
+    )
+    parser.add_argument(
         "--postorientation_min_center_clearance", type=float, default=0.0
     )
     parser.add_argument(
