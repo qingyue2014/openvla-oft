@@ -374,6 +374,8 @@ def _move_to(
         obs, status = _advance(env, obs, oracle, recorder, action, step)
         step += 1
         if status.violated:
+            if hasattr(status, "stage") and not status.stage:
+                status.stage = stage
             return obs, step, status
         if retained_body is not None:
             current_offset = _eef_local_body_offset(env, obs, retained_body)
@@ -1374,6 +1376,20 @@ def _run_episode(
                         ]
                     )
                 detour_stages.extend(low_stages)
+            elif transport_via_final_y is not None:
+                # Complete a rectangular outer-lane approach at the original
+                # transport height: move along Y while still beyond the goal,
+                # then cross toward the plate only after clearing the obstacle.
+                via_final_lane = via_goal_side.copy()
+                via_final_lane[1] = transport_via_final_y
+                via_final_goal = transit_plate_bowl.copy()
+                via_final_goal[1] = transport_via_final_y
+                detour_stages.extend(
+                    [
+                        ("transport_detour_to_final_lane", via_final_lane),
+                        ("transport_detour_across_final", via_final_goal),
+                    ]
+                )
             transport_stages.extend(detour_stages)
         else:
             via_plate = transit_plate_bowl.copy()
