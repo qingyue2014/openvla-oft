@@ -88,6 +88,14 @@ def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
     )
 
 
+def test_l1b3_registry_fetches_machine_readable_gate_evidence():
+    for phase in ("smoke", "formal"):
+        artifacts = PHASES[("l1b3", phase)].artifacts
+        assert "experiments/logs/l1b3_trajectory_conditioned_calibration.csv" in artifacts
+        assert "experiments/logs/l1b3_native_arm_native_replay.csv" in artifacts
+        assert "experiments/logs/l1b3_native_arm_safe_reference.csv" in artifacts
+
+
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
         "check", "geometry_sweep", "safe_reference", "smoke", "formal",

@@ -73,8 +73,77 @@ def _float_values(text: str) -> list[float]:
     return [float(value.strip()) for value in text.split(",") if value.strip()]
 
 
+def _measured_link7_geom_path(
+    env,
+    eb_state: np.ndarray,
+    trajectory: dict,
+    args: argparse.Namespace,
+) -> list[tuple[int, str, np.ndarray]]:
+    """Replay Eb once and measure the actual link7 collision-geom sweep.
+
+    Link body origins are only kinematic reference frames and can be offset
+    substantially from the collision mesh. Measuring ``geom_xpos`` avoids
+    making a scene-specific proxy assumption that works for one trajectory but
+    misses the terminal wrist surface in another.
+    """
+    target = np.asarray(
+        trajectory["body_pos__akita_black_bowl_1_main"], dtype=float
+    )
+    if len(target) == 0:
+        return []
+    lifted = target[:, 2] >= target[0, 2] + args.min_grasp_lift
+    model = env.sim.model
+    link7_body_id = int(model.body_name2id("robot0_link7"))
+    geom_ids = [
+        geom_id
+        for geom_id in range(model.ngeom)
+        if int(model.geom_bodyid[geom_id]) == link7_body_id
+    ]
+    if not geom_ids:
+        return []
+
+    env.reset()
+    env.set_init_state(eb_state)
+    measured: list[tuple[int, str, np.ndarray]] = []
+    seen: set[tuple[int, float, float]] = set()
+    for index, action in enumerate(np.asarray(trajectory["actions"], dtype=float)):
+        if np.isnan(action).any():
+            continue
+        env.step(action.tolist())
+        if index >= len(lifted) or not lifted[index]:
+            continue
+        for geom_id in geom_ids:
+            position = np.asarray(env.sim.data.geom_xpos[geom_id], dtype=float)
+            if not args.min_link_z <= position[2] <= args.max_link_z:
+                continue
+            key = (
+                index,
+                round(float(position[0]), 5),
+                round(float(position[1]), 5),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            measured.append(
+                (index, f"robot0_link7_geom{geom_id}", position[:2].copy())
+            )
+    if len(measured) <= args.max_path_steps_per_link:
+        return measured
+    sample_indices = np.linspace(
+        0,
+        len(measured) - 1,
+        num=args.max_path_steps_per_link,
+        dtype=int,
+    )
+    return [measured[index] for index in np.unique(sample_indices)]
+
+
 def _trajectory_candidates(
-    trajectory: dict, args: argparse.Namespace
+    trajectory: dict,
+    args: argparse.Namespace,
+    *,
+    env=None,
+    eb_state: np.ndarray | None = None,
 ) -> list[tuple[int, str, np.ndarray]]:
     target = np.asarray(
         trajectory["body_pos__akita_black_bowl_1_main"], dtype=float
@@ -83,6 +152,10 @@ def _trajectory_candidates(
         return []
     lifted = target[:, 2] >= target[0, 2] + args.min_grasp_lift
     candidate_steps: list[tuple[int, str, np.ndarray]] = []
+    if env is not None and eb_state is not None:
+        candidate_steps.extend(
+            _measured_link7_geom_path(env, eb_state, trajectory, args)
+        )
     # link7's collision mesh is offset from its body origin. The coincident
     # link5/link6 joint origin is a much better spatial proxy for the terminal
     # wrist mesh's tabletop sweep, while contact attribution remains exact
@@ -304,7 +377,12 @@ def calibrate(args: argparse.Namespace) -> str:
             invalid_candidates = 0
             confounded_candidates = 0
             if physics_qualified_eb:
-                candidates = _trajectory_candidates(trajectory, args)
+                candidates = _trajectory_candidates(
+                    trajectory,
+                    args,
+                    env=env,
+                    eb_state=eb_state,
+                )
                 if args.max_candidates_per_episode > 0:
                     candidates = candidates[: args.max_candidates_per_episode]
                 for path_step, proposed_link, placement in candidates:
