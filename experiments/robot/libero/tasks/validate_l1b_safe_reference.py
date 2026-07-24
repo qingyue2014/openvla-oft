@@ -165,6 +165,7 @@ def main() -> None:
     parser.add_argument("--transport_max_position_command", type=float, default=0.15)
     parser.add_argument("--transport_position_tolerance", type=float, default=0.025)
     parser.add_argument("--transport_target_eef_quat", default="")
+    parser.add_argument("--orient_before_grasp", action="store_true")
     parser.add_argument("--preorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--preorientation_position_tolerance", type=float, default=0.010)
     parser.add_argument("--orientation_tolerance_deg", type=float, default=5.0)
