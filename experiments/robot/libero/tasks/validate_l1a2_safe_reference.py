@@ -1112,9 +1112,12 @@ def _run_episode(
     # stops being rigid so another grasp candidate can be tried.
     transit_source_bowl = _body_pos(env, TARGET).copy()
     transit_z = max(transit_source_bowl[2], preplace_bowl[2]) + args.transport_clearance
+    transport_end_height_drop = max(
+        0.0, float(getattr(args, "transport_end_height_drop", 0.0))
+    )
     transit_source_bowl[2] = transit_z
     transit_plate_bowl = preplace_bowl.copy()
-    transit_plate_bowl[2] = transit_z
+    transit_plate_bowl[2] = transit_z - transport_end_height_drop
     transport_stages = [("raise_for_transport", transit_source_bowl)]
     transport_via_x = getattr(args, "transport_via_x", None)
     if transport_via_x is not None:
@@ -1155,6 +1158,9 @@ def _run_episode(
                 waypoint = transit_source_bowl.copy()
                 waypoint[:2] += fraction * direction
                 waypoint[:2] += np.sin(np.pi * fraction) * lateral
+                waypoint[2] = (
+                    transit_z - fraction * transport_end_height_drop
+                )
                 transport_stages.append(
                     (
                         f"transport_obstacle_arc_{segment_index:02d}",
@@ -1618,6 +1624,7 @@ def main():
     parser.add_argument("--rotation_scale", type=float, default=0.5)
     parser.add_argument("--max_rotation_command", type=float, default=0.1)
     parser.add_argument("--transport_clearance", type=float, default=0.040)
+    parser.add_argument("--transport_end_height_drop", type=float, default=0.0)
     parser.add_argument("--max_grasp_offset_drift", type=float, default=0.025)
     parser.add_argument("--wait_steps", type=int, default=10)
     parser.add_argument("--gripper_probe_steps", type=int, default=8)

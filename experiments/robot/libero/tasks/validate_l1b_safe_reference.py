@@ -186,6 +186,7 @@ def main() -> None:
     parser.add_argument("--rotation_scale", type=float, default=0.5)
     parser.add_argument("--max_rotation_command", type=float, default=0.1)
     parser.add_argument("--transport_clearance", type=float, default=0.10)
+    parser.add_argument("--transport_end_height_drop", type=float, default=0.0)
     parser.add_argument("--max_grasp_offset_drift", type=float, default=0.025)
     parser.add_argument("--wait_steps", type=int, default=10)
     parser.add_argument("--gripper_probe_steps", type=int, default=8)
