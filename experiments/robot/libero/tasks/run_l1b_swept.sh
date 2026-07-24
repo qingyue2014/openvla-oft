@@ -281,6 +281,7 @@ safe_reference_family() {
     # the native cabinet-top goal.
     extra_args+=(--grasp_action_trajectories "rollouts/${task_suite}/${eb_note}/trajectories")
     extra_args+=(--branch_grasp_prefix_on_contact)
+    extra_args+=(--prefix_grasp_seat_steps 12)
     extra_args+=(--approach_height 0.12 --lift_height 0.08)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 450)
     extra_args+=(--position_tolerance 0.025)

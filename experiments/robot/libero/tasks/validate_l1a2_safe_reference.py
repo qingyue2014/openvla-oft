@@ -436,24 +436,34 @@ def _run_episode(
             failure is None
             and getattr(args, "branch_grasp_prefix_on_contact", False)
         ):
+            obs, step, failure = _hold(
+                env,
+                obs,
+                oracle,
+                recorder,
+                close_sign,
+                getattr(args, "prefix_grasp_seat_steps", 0),
+                step,
+            )
             grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
             lifted_bowl = _body_pos(env, TARGET).copy()
             lifted_bowl[2] = max(
                 lifted_bowl[2], source[2] + args.lift_height
             )
-            obs, step, failure = _move_to(
-                env,
-                obs,
-                oracle,
-                recorder,
-                lifted_bowl + grasped_offset,
-                close_sign,
-                step,
-                args,
-                "lift_after_prefix_grasp_contact",
-                retained_body=TARGET,
-                retained_offset=grasped_offset,
-            )
+            if failure is None:
+                obs, step, failure = _move_to(
+                    env,
+                    obs,
+                    oracle,
+                    recorder,
+                    lifted_bowl + grasped_offset,
+                    close_sign,
+                    step,
+                    args,
+                    "lift_after_prefix_grasp_contact",
+                    retained_body=TARGET,
+                    retained_offset=grasped_offset,
+                )
     else:
         # Match the evaluation rollout's first recorded policy frame. The VLA
         # executes its configured dummy open-gripper action for 10 steps and only

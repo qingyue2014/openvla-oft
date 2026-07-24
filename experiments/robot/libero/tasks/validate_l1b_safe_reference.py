@@ -196,6 +196,12 @@ def main() -> None:
         action="store_true",
         help="Branch from the paired prefix at measured gripper-target contact, then lift vertically",
     )
+    parser.add_argument(
+        "--prefix_grasp_seat_steps",
+        type=int,
+        default=0,
+        help="Closed-gripper hold steps after branching at grasp contact",
+    )
     parser.add_argument("--out_csv", required=True)
     parser.add_argument("--out_report", required=True)
     parser.add_argument("--fail_on_invalid", action="store_true")
