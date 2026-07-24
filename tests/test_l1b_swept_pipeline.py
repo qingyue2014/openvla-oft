@@ -780,9 +780,10 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--lift_height 0.06 --preplace_height 0.04" in runner
     assert "--transport_clearance 0.0 --max_safe_lift_height 0.09" in runner
     assert "--transport_via_x 0.10" in runner
-    assert "--transport_obstacle_clearance 0.001" in runner
-    assert "--transport_obstacle_segments 8" in runner
-    assert "--transport_arc_position_tolerance 0.0375" in runner
+    assert "--transport_bypass_path_fraction 0.80" in runner
+    assert "--transport_bypass_lateral_bias 0.03" in runner
+    assert "--transport_bypass_min_path_progress 0.10" in runner
+    assert "--transport_obstacle_clearance 0.00" in runner
     assert "--grasp_offset_fractions 0.40,0.60,0.80" in runner
     assert "--grasp_height_candidates 0.015,0.018" in runner
     assert "--min_grasp_lift 0.02" in runner

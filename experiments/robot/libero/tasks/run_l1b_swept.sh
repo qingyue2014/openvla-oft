@@ -279,12 +279,10 @@ safe_reference_family() {
     extra_args+=(--postorientation_min_center_clearance 0.105)
     extra_args+=(--postorientation_advance_lateral_bias 0.04)
     extra_args+=(--postorientation_min_path_progress 0.048)
-    # Segment the return from the explicit post-rotation clearance pose so X
-    # and Y advance together. Only a 1 mm arc bias is needed here; the 4 cm
-    # clearance stage above supplies the actual obstacle separation.
-    extra_args+=(--transport_obstacle_clearance 0.001)
-    extra_args+=(--transport_obstacle_segments 8)
-    extra_args+=(--transport_arc_position_tolerance 0.0375)
+    extra_args+=(--transport_bypass_path_fraction 0.80)
+    extra_args+=(--transport_bypass_lateral_bias 0.03)
+    extra_args+=(--transport_bypass_min_path_progress 0.10)
+    extra_args+=(--transport_obstacle_clearance 0.00)
     extra_args+=(--preplace_height 0.02 --max_safe_lift_height 0.09)
     extra_args+=(--place_offset_x 0.00 --place_offset_y 0.015)
     extra_args+=(--require_support_contact_before_release)

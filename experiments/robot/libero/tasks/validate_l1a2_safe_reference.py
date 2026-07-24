@@ -1119,6 +1119,40 @@ def _run_episode(
     transit_plate_bowl = preplace_bowl.copy()
     transit_plate_bowl[2] = transit_z - transport_end_height_drop
     transport_stages = [("raise_for_transport", transit_source_bowl)]
+    transport_bypass_path_fraction = float(
+        getattr(args, "transport_bypass_path_fraction", 0.0)
+    )
+    transport_bypass_lateral_bias = float(
+        getattr(args, "transport_bypass_lateral_bias", 0.0)
+    )
+    transport_bypass_min_path_progress = float(
+        getattr(args, "transport_bypass_min_path_progress", 0.0)
+    )
+    transport_direction = transit_plate_bowl[:2] - transit_source_bowl[:2]
+    transport_direction_norm = float(np.linalg.norm(transport_direction))
+    if transport_bypass_path_fraction > 0.0 and transport_direction_norm > 1e-6:
+        transport_normal = np.asarray(
+            [-transport_direction[1], transport_direction[0]], dtype=float
+        ) / transport_direction_norm
+        transport_midpoint = 0.5 * (
+            transit_source_bowl[:2] + transit_plate_bowl[:2]
+        )
+        transport_obstacle_side = float(
+            np.dot(
+                _body_pos(env, OCCLUDER)[:2] - transport_midpoint,
+                transport_normal,
+            )
+        )
+        transport_away = (
+            -1.0 if transport_obstacle_side >= 0.0 else 1.0
+        ) * transport_normal
+        bypass_bowl = transit_source_bowl.copy()
+        bypass_bowl[:2] += (
+            transport_bypass_path_fraction * transport_direction
+            + transport_bypass_lateral_bias * transport_away
+        )
+        bypass_bowl[2] = transit_plate_bowl[2]
+        transport_stages.append(("transport_measured_bypass", bypass_bowl))
     transport_via_x = getattr(args, "transport_via_x", None)
     if transport_via_x is not None:
         via_source = transit_source_bowl.copy()
@@ -1199,6 +1233,21 @@ def _run_episode(
                 max_position_command=args.transport_max_position_command,
                 retained_body=TARGET,
                 retained_offset=grasped_offset,
+                progress_origin_xy=(
+                    source[:2]
+                    if stage == "transport_measured_bypass"
+                    else None
+                ),
+                progress_direction_xy=(
+                    transport_direction
+                    if stage == "transport_measured_bypass"
+                    else None
+                ),
+                min_body_path_progress=(
+                    transport_bypass_min_path_progress
+                    if stage == "transport_measured_bypass"
+                    else 0.0
+                ),
             )
     pre_release_support_contact = False
     pre_release_support_stable_steps = 0
@@ -1625,6 +1674,11 @@ def main():
     parser.add_argument("--max_rotation_command", type=float, default=0.1)
     parser.add_argument("--transport_clearance", type=float, default=0.040)
     parser.add_argument("--transport_end_height_drop", type=float, default=0.0)
+    parser.add_argument("--transport_bypass_path_fraction", type=float, default=0.0)
+    parser.add_argument("--transport_bypass_lateral_bias", type=float, default=0.0)
+    parser.add_argument(
+        "--transport_bypass_min_path_progress", type=float, default=0.0
+    )
     parser.add_argument("--max_grasp_offset_drift", type=float, default=0.025)
     parser.add_argument("--wait_steps", type=int, default=10)
     parser.add_argument("--gripper_probe_steps", type=int, default=8)
