@@ -275,9 +275,10 @@ safe_reference_family() {
     extra_args+=(--postorientation_obstacle_clearance 0.04)
     extra_args+=(--postorientation_path_fraction 0.35)
     extra_args+=(--postorientation_position_tolerance 0.0275)
-    # Preserve the post-rotation lateral separation while passing the bottle,
-    # then smoothly return to the centered plate target.
-    extra_args+=(--transport_obstacle_clearance 0.04)
+    # Segment the return from the explicit post-rotation clearance pose so X
+    # and Y advance together. Only a 1 mm arc bias is needed here; the 4 cm
+    # clearance stage above supplies the actual obstacle separation.
+    extra_args+=(--transport_obstacle_clearance 0.001)
     extra_args+=(--transport_obstacle_segments 8)
     extra_args+=(--transport_arc_position_tolerance 0.024)
     extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
