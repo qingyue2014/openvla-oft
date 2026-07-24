@@ -284,7 +284,7 @@ safe_reference_family() {
     # clearance stage above supplies the actual obstacle separation.
     extra_args+=(--transport_obstacle_clearance 0.001)
     extra_args+=(--transport_obstacle_segments 8)
-    extra_args+=(--transport_arc_position_tolerance 0.032)
+    extra_args+=(--transport_arc_position_tolerance 0.0375)
     extra_args+=(--preplace_height 0.02 --max_safe_lift_height 0.09)
     extra_args+=(--place_offset_x 0.00 --place_offset_y 0.015)
     extra_args+=(--require_support_contact_before_release)
