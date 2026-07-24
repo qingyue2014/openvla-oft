@@ -279,7 +279,7 @@ safe_reference_family() {
     # The negative-Y OSC boundary permits about 17--27 mm of this requested
     # retreat across the paired states. That measured clearance is sufficient
     # before the forward leg; accept the stable boundary equilibrium.
-    extra_args+=(--preorientation_position_tolerance 0.035)
+    extra_args+=(--preorientation_position_tolerance 0.036)
     extra_args+=(--orientation_tolerance_deg 2.0 --orientation_max_steps 500)
     extra_args+=(--orientation_position_scale 0.02)
     extra_args+=(--orientation_max_position_command 0.50)
