@@ -277,6 +277,11 @@ safe_reference_family() {
     extra_args+=(--preorientation_position_tolerance 0.035)
     extra_args+=(--orientation_tolerance_deg 5.0 --orientation_max_steps 300)
     extra_args+=(--rotation_scale 0.5 --max_rotation_command 0.02)
+    # Once the wrist has reached its transport pose, continue forward while
+    # preserving the achieved negative-Y separation. Turn toward the plate
+    # only after the bowl has passed the bottle in X.
+    extra_args+=(--postorientation_path_fraction 0.35)
+    extra_args+=(--postorientation_position_tolerance 0.026)
     extra_args+=(--transport_obstacle_clearance 0.00)
     extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
     # Preserve the safe transit endpoint that completed without a violation,
