@@ -123,6 +123,10 @@ def _measured_link7_geom_path(
     if len(target) == 0:
         return []
     lifted = target[:, 2] >= target[0, 2] + args.min_grasp_lift
+    goal_region = (
+        np.linalg.norm(target[:, :2] - target[-1, :2], axis=1)
+        <= args.max_goal_region_distance
+    )
     model = env.sim.model
     link7_body_id = int(model.body_name2id("robot0_link7"))
     geom_ids = [
@@ -141,7 +145,11 @@ def _measured_link7_geom_path(
         if np.isnan(action).any():
             continue
         env.step(action.tolist())
-        if index >= len(lifted) or not lifted[index]:
+        if (
+            index >= len(lifted)
+            or not lifted[index]
+            or not goal_region[index]
+        ):
             continue
         for geom_id in geom_ids:
             position = np.asarray(env.sim.data.geom_xpos[geom_id], dtype=float)
@@ -182,6 +190,10 @@ def _trajectory_candidates(
     if len(target) == 0:
         return []
     lifted = target[:, 2] >= target[0, 2] + args.min_grasp_lift
+    goal_region = (
+        np.linalg.norm(target[:, :2] - target[-1, :2], axis=1)
+        <= args.max_goal_region_distance
+    )
     candidate_steps: list[tuple[int, str, np.ndarray]] = []
     if env is not None and eb_state is not None:
         candidate_steps.extend(
@@ -202,6 +214,7 @@ def _trajectory_candidates(
             index
             for index in range(min(len(target), len(positions)))
             if lifted[index]
+            and goal_region[index]
             and args.min_link_z <= positions[index, 2] <= args.max_link_z
         ]
         spaced: list[int] = []
@@ -468,6 +481,11 @@ def calibrate(args: argparse.Namespace) -> str:
             attempts = 0
             invalid_candidates = 0
             confounded_candidates = 0
+            valid_supported_candidates = 0
+            intended_contact_candidates = 0
+            intended_effect_candidates = 0
+            matched_control_failures = 0
+            supported_z_values = []
             invalid_reasons: Counter[str] = Counter()
             first_invalid_diagnostic = ""
             if physics_qualified_eb:
@@ -549,8 +567,16 @@ def calibrate(args: argparse.Namespace) -> str:
                                 f"forbidden={diagnostics['forbidden_contacts']}"
                             )
                         continue
+                    valid_supported_candidates += 1
+                    supported_z_values.append(float(diagnostics["end_xyz"][2]))
                     replay = _replay_candidate(
                         env, candidate_state, trajectory, obstacle, target, args
+                    )
+                    intended_contact_candidates += int(
+                        replay["hits"]["intended_contact"]
+                    )
+                    intended_effect_candidates += int(
+                        replay["hits"]["intended"]
                     )
                     confounded = any(
                         replay["hits"][name]
@@ -580,6 +606,7 @@ def calibrate(args: argparse.Namespace) -> str:
                             args,
                         )
                         if control is None:
+                            matched_control_failures += 1
                             continue
                         env.reset()
                         env.set_init_state(candidate_state)
@@ -607,6 +634,16 @@ def calibrate(args: argparse.Namespace) -> str:
                 "calibrated": int(selected is not None),
                 "attempts": attempts,
                 "invalid_candidates": invalid_candidates,
+                "valid_supported_candidates": valid_supported_candidates,
+                "supported_z_min": (
+                    "" if not supported_z_values else min(supported_z_values)
+                ),
+                "supported_z_max": (
+                    "" if not supported_z_values else max(supported_z_values)
+                ),
+                "intended_contact_candidates": intended_contact_candidates,
+                "intended_effect_candidates": intended_effect_candidates,
+                "matched_control_failures": matched_control_failures,
                 "invalid_reasons": ";".join(
                     f"{reason}={count}"
                     for reason, count in sorted(invalid_reasons.items())
@@ -790,6 +827,7 @@ def calibrate(args: argparse.Namespace) -> str:
             )
         ],
         "min_grasp_lift": args.min_grasp_lift,
+        "max_goal_region_distance": args.max_goal_region_distance,
         "radial_distance_candidates": _float_values(
             args.radial_distance_candidates
         ),
@@ -847,6 +885,7 @@ def main() -> None:
     parser.add_argument("--task_suite_name", default="libero_goal")
     parser.add_argument("--task_id", type=int, default=4)
     parser.add_argument("--min_grasp_lift", type=float, default=0.020)
+    parser.add_argument("--max_goal_region_distance", type=float, default=0.12)
     parser.add_argument("--min_link_z", type=float, default=0.85)
     parser.add_argument("--max_link_z", type=float, default=1.50)
     parser.add_argument(

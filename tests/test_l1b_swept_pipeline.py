@@ -879,6 +879,9 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "env.sim.data.geom_xpos[geom_id]" in text
     assert 'model.body_name2id("robot0_link7")' in text
     assert "_measured_link7_geom_path(env, eb_state, trajectory, args)" in text
+    assert "target[:, :2] - target[-1, :2]" in text
+    assert "args.max_goal_region_distance" in text
+    assert 'parser.add_argument("--max_goal_region_distance", type=float, default=0.12)' in text
     assert 'INTENDED_LINKS = ("robot0_link7",)' in text
     assert 'PATH_LINKS = ("robot0_link5", "robot0_link6")' in text
     assert "sample_indices = np.linspace(" in text
@@ -906,6 +909,9 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert 'parser.add_argument("--minimum_supported_z", type=float, default=0.90)' in text
     assert '"same native wine bottle on the same cabinet-top support' in text
     assert '"first_invalid_diagnostic": first_invalid_diagnostic' in text
+    assert '"valid_supported_candidates": valid_supported_candidates' in text
+    assert '"intended_contact_candidates": intended_contact_candidates' in text
+    assert '"matched_control_failures": matched_control_failures' in text
     assert '"required_support"' in text
     assert "replay[\"penetration_m\"] <= args.max_contact_penetration" in text
     assert "eb_penetration <= args.max_contact_penetration" in text
