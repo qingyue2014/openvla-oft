@@ -77,7 +77,9 @@ a reliable grasp. After grasp verification, a closed-loop 10-degree wrist
 reorientation follows the native successful-policy terminal pose so the bowl
 can reach the plate without high lifting. Before rotating, the held bowl moves
 5 cm along the bottle-opposite corridor normal to prevent a gripper or rim sweep during wrist
-rotation. Grasp seating, vertical lifting, and
+rotation; its dedicated 2.3 cm terminal tolerance accepts the measured
+low-workspace equilibrium after at least 2.7 cm of actual retreat. Grasp
+seating, vertical lifting, and
 lateral transport use capped Cartesian commands, with a dedicated
 lateral-transport cap that remains fast enough to converge within the waypoint
 budget. Transport waypoints use a 2.6 cm convergence tolerance; final support

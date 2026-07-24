@@ -810,7 +810,7 @@ def _run_episode(
                     step,
                     args,
                     "retreat_for_orientation",
-                    tolerance=args.precise_position_tolerance,
+                    tolerance=args.preorientation_position_tolerance,
                     max_steps=args.transport_max_waypoint_steps,
                     max_position_command=args.transport_max_position_command,
                     retained_body=TARGET,
@@ -1346,6 +1346,7 @@ def main():
     parser.add_argument("--transport_position_tolerance", type=float, default=0.025)
     parser.add_argument("--transport_target_eef_quat", default="")
     parser.add_argument("--preorientation_obstacle_clearance", type=float, default=0.0)
+    parser.add_argument("--preorientation_position_tolerance", type=float, default=0.010)
     parser.add_argument("--orientation_tolerance_deg", type=float, default=5.0)
     parser.add_argument("--orientation_max_steps", type=int, default=200)
     parser.add_argument("--rotation_scale", type=float, default=0.5)
