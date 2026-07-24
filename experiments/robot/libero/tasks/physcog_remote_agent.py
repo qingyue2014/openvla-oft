@@ -139,6 +139,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "python",
             "experiments/robot/libero/tasks/search_l1b1_ec_static_angles.py",
+            "--states_per_angle",
+            "50",
         ),
         artifacts=(
             "experiments/logs/l1b1_ec_static_angle_search.md",
