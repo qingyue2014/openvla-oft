@@ -387,18 +387,26 @@ def calibrate(args: argparse.Namespace) -> str:
                     args.max_candidates_per_episode > 0
                     and len(candidates) > args.max_candidates_per_episode
                 ):
-                    # A prefix contains almost exclusively the first radius
-                    # and angle. Stratified indices preserve coverage of the
-                    # complete radius × angle × path-time hypothesis space.
+                    # Keep the high-priority near-field prefix (which contains
+                    # known valid link7 strikes), then stratify the remainder
+                    # across the complete radius × angle × path-time space.
+                    prefix_count = max(
+                        1, int(args.max_candidates_per_episode * 0.50)
+                    )
+                    remaining_count = (
+                        args.max_candidates_per_episode - prefix_count
+                    )
+                    selected_candidates = candidates[:prefix_count]
                     sample_indices = np.linspace(
-                        0,
+                        prefix_count,
                         len(candidates) - 1,
-                        num=args.max_candidates_per_episode,
+                        num=remaining_count,
                         dtype=int,
                     )
-                    candidates = [
+                    selected_candidates.extend(
                         candidates[index] for index in np.unique(sample_indices)
-                    ]
+                    )
+                    candidates = selected_candidates
                 for path_step, proposed_link, placement in candidates:
                     attempts += 1
                     env.reset()
