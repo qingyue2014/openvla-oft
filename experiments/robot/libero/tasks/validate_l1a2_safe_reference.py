@@ -954,6 +954,84 @@ def _run_episode(
         )
         if failure is None:
             grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
+    if failure is None and transport_target_quat.size == 4:
+        postorientation_clearance = float(
+            getattr(args, "postorientation_obstacle_clearance", 0.0)
+        )
+        postorientation_path_fraction = float(
+            getattr(args, "postorientation_path_fraction", 0.0)
+        )
+        postorientation_tolerance = float(
+            getattr(
+                args,
+                "postorientation_position_tolerance",
+                args.transport_position_tolerance,
+            )
+        )
+        source_to_plate = _body_pos(env, PLATE)[:2] - source[:2]
+        corridor_norm = float(np.linalg.norm(source_to_plate))
+        if corridor_norm > 1e-6:
+            normal = np.asarray(
+                [-source_to_plate[1], source_to_plate[0]], dtype=float
+            ) / corridor_norm
+            midpoint = 0.5 * (source[:2] + _body_pos(env, PLATE)[:2])
+            obstacle_side = float(
+                np.dot(_body_pos(env, OCCLUDER)[:2] - midpoint, normal)
+            )
+            away = (-1.0 if obstacle_side >= 0.0 else 1.0) * normal
+        else:
+            away = source[:2] - _body_pos(env, OCCLUDER)[:2]
+        away_norm = float(np.linalg.norm(away))
+        if postorientation_clearance > 0.0 and away_norm > 1e-6:
+            clearance_target = _eef_pos(obs).copy()
+            clearance_target[:2] += (
+                postorientation_clearance * away / away_norm
+            )
+            obs, step, failure = _move_to(
+                env,
+                obs,
+                oracle,
+                recorder,
+                clearance_target,
+                close_sign,
+                step,
+                args,
+                "clear_after_orientation",
+                tolerance=postorientation_tolerance,
+                max_steps=args.transport_max_waypoint_steps,
+                max_position_command=args.transport_max_position_command,
+                retained_body=TARGET,
+                retained_offset=grasped_offset,
+            )
+            if failure is None:
+                grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
+        if (
+            failure is None
+            and postorientation_path_fraction > 0.0
+            and corridor_norm > 1e-6
+        ):
+            advance_target = _eef_pos(obs).copy()
+            advance_target[:2] += (
+                postorientation_path_fraction * source_to_plate
+            )
+            obs, step, failure = _move_to(
+                env,
+                obs,
+                oracle,
+                recorder,
+                advance_target,
+                close_sign,
+                step,
+                args,
+                "clear_bottle_before_transport",
+                tolerance=postorientation_tolerance,
+                max_steps=args.transport_max_waypoint_steps,
+                max_position_command=args.transport_max_position_command,
+                retained_body=TARGET,
+                retained_offset=grasped_offset,
+            )
+            if failure is None:
+                grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
 
     # Convert the desired bowl pose into an EEF waypoint using the measured
     # rigid grasp offset, avoiding hard-coded asset dimensions.
@@ -1462,6 +1540,9 @@ def main():
     parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--preorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--preorientation_position_tolerance", type=float, default=0.010)
+    parser.add_argument("--postorientation_path_fraction", type=float, default=0.0)
+    parser.add_argument("--postorientation_obstacle_clearance", type=float, default=0.0)
+    parser.add_argument("--postorientation_position_tolerance", type=float, default=0.010)
     parser.add_argument("--orientation_tolerance_deg", type=float, default=5.0)
     parser.add_argument("--orientation_max_steps", type=int, default=200)
     parser.add_argument("--rotation_scale", type=float, default=0.5)
