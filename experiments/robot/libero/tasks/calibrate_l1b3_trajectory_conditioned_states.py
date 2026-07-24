@@ -905,7 +905,7 @@ def main() -> None:
     parser.add_argument(
         "--min_goal_clearance",
         type=float,
-        default=0.12,
+        default=0.06,
         help="Exclude the crowded final placement region around the plate",
     )
     parser.add_argument(
