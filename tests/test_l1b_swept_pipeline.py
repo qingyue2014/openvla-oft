@@ -822,7 +822,7 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "transport_obstacle_arc_" in shared
     assert "np.sin(np.pi * fraction) * lateral" in shared
     assert "_descend_until_support_contact" in shared
-    assert "support_eef_xy=desired_bowl[:2] + grasped_offset[:2]" in shared
+    assert "support_eef_xy = desired_bowl[:2] + grasped_offset[:2]" in shared
     assert "_confirm_released_on_support" in shared
     assert "max_bowl_lift_m" in shared
 

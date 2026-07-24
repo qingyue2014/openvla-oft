@@ -1553,6 +1553,14 @@ def _run_episode(
     post_release_support_stable_steps = 0
     post_release_max_displacement_m = float("nan")
     if failure is None and require_support_contact:
+        support_eef_xy = None
+        if (
+            np.linalg.norm(
+                _body_pos(env, TARGET)[:2] - _body_pos(env, PLATE)[:2]
+            )
+            > 0.022
+        ):
+            support_eef_xy = desired_bowl[:2] + grasped_offset[:2]
         obs, step, failure = _descend_until_support_contact(
             env,
             obs,
@@ -1562,7 +1570,7 @@ def _run_episode(
             step,
             args,
             grasped_offset,
-            support_eef_xy=desired_bowl[:2] + grasped_offset[:2],
+            support_eef_xy=support_eef_xy,
         )
         pre_release_support_contact = bool(
             failure is None and _target_support_contact(env)
