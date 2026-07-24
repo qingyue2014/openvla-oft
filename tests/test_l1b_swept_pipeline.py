@@ -790,7 +790,8 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--transport_position_tolerance 0.026" in runner
     assert "--transport_clearance 0.01" in runner
     assert "--transport_target_eef_quat" in runner
-    assert "--skip_transport_orientation" in runner
+    assert "--orientation_position_scale 0.02" in runner
+    assert "--orientation_max_position_command 0.50" in runner
     assert 'parser.add_argument("--orient_before_grasp"' in validator
     assert "--preorientation_obstacle_clearance 0.05" in runner
     assert "--preorientation_position_tolerance 0.035" in runner

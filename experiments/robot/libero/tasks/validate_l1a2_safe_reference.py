@@ -300,6 +300,7 @@ def _move_to(
     orientation_tolerance_rad=0.0,
     rotation_scale=0.5,
     max_rotation_command=0.1,
+    position_scale=None,
 ):
     tolerance = args.position_tolerance if tolerance is None else tolerance
     max_steps = args.max_waypoint_steps if max_steps is None else max_steps
@@ -308,6 +309,7 @@ def _move_to(
         if max_position_command is None
         else max_position_command
     )
+    position_scale = args.position_scale if position_scale is None else position_scale
     initial_error = float(np.linalg.norm(_eef_pos(obs) - target))
     best_error = initial_error
     retained_local_offset = (
@@ -360,7 +362,7 @@ def _move_to(
             _eef_pos(obs),
             target,
             gripper,
-            args.position_scale,
+            position_scale,
             max_position_command,
         )
         if target_quat is not None:
@@ -1052,13 +1054,17 @@ def _run_episode(
             "orient_for_transport",
             tolerance=args.precise_position_tolerance,
             max_steps=args.orientation_max_steps,
-            max_position_command=args.transport_max_position_command,
+            max_position_command=(
+                args.orientation_max_position_command
+                or args.transport_max_position_command
+            ),
             retained_body=TARGET,
             retained_offset=grasped_offset,
             target_quat=transport_target_quat,
             orientation_tolerance_rad=np.deg2rad(args.orientation_tolerance_deg),
             rotation_scale=args.rotation_scale,
             max_rotation_command=args.max_rotation_command,
+            position_scale=args.orientation_position_scale,
         )
         if failure is None:
             grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
@@ -1809,6 +1815,8 @@ def main():
     )
     parser.add_argument("--orientation_tolerance_deg", type=float, default=5.0)
     parser.add_argument("--orientation_max_steps", type=int, default=200)
+    parser.add_argument("--orientation_position_scale", type=float, default=0.08)
+    parser.add_argument("--orientation_max_position_command", type=float, default=None)
     parser.add_argument("--rotation_scale", type=float, default=0.5)
     parser.add_argument("--max_rotation_command", type=float, default=0.1)
     parser.add_argument("--transport_clearance", type=float, default=0.040)

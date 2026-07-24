@@ -192,6 +192,8 @@ def main() -> None:
     )
     parser.add_argument("--orientation_tolerance_deg", type=float, default=5.0)
     parser.add_argument("--orientation_max_steps", type=int, default=200)
+    parser.add_argument("--orientation_position_scale", type=float, default=0.08)
+    parser.add_argument("--orientation_max_position_command", type=float, default=None)
     parser.add_argument("--rotation_scale", type=float, default=0.5)
     parser.add_argument("--max_rotation_command", type=float, default=0.1)
     parser.add_argument("--transport_clearance", type=float, default=0.10)

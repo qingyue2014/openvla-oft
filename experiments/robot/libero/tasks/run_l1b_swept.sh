@@ -262,7 +262,6 @@ safe_reference_family() {
     extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.026)
     extra_args+=(--transport_clearance 0.01)
     extra_args+=(--transport_target_eef_quat 0.9941969,-0.0504397,-0.0834422,0.0454506)
-    extra_args+=(--skip_transport_orientation)
     # First carry the bowl along the safe side of the corridor. Only reorient
     # after leaving the bottle, and rotate slowly enough to retain a rim grasp.
     # Raise only after reaching the safe lateral equilibrium, then use the
@@ -281,7 +280,9 @@ safe_reference_family() {
     # before the forward leg; accept the stable boundary equilibrium.
     extra_args+=(--preorientation_position_tolerance 0.035)
     extra_args+=(--orientation_tolerance_deg 5.0 --orientation_max_steps 300)
-    extra_args+=(--rotation_scale 0.5 --max_rotation_command 0.02)
+    extra_args+=(--orientation_position_scale 0.02)
+    extra_args+=(--orientation_max_position_command 0.50)
+    extra_args+=(--rotation_scale 0.5 --max_rotation_command 0.01)
     # With transport rotation intentionally skipped, this stage is a pure
     # straight-ahead clearance move at the stable grasp orientation.
     extra_args+=(--postorientation_path_fraction 0.35)
