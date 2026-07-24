@@ -116,6 +116,25 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_spatial/L1-B1-task6-native-ramekin-capture-lift-v4-ec",
         ),
     ),
+    ("l1b1", "ec_calibrate"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=none",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1b1_native_gripper",
+            "ec_calibrate",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l1b1_native_gripper_pairing.json",
+            "experiments/robot/libero/tasks/l1b_swept_preview/l1b1_native_gripper",
+            "experiments/logs/l1b1_native_gripper_scene_check.md",
+            "experiments/logs/l1b1_native_gripper_ec_rollout_physics.md",
+            "rollouts/libero_spatial/L1-B1-task6-native-ramekin-capture-lift-v4-ec",
+        ),
+    ),
     ("l1b2", "calibrate"): PhaseSpec(
         command=(
             "bash",

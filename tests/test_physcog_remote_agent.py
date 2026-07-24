@@ -47,6 +47,7 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
 
 def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b1") == {
+        "ec_calibrate",
         "prepare",
         "smoke",
         "formal",
@@ -82,6 +83,14 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
         "ec_rollout_physics.md",
     ):
         assert any(artifact.endswith(suffix) for artifact in formal.artifacts)
+
+    ec_calibrate = PHASES[("l1b1", "ec_calibrate")]
+    assert ec_calibrate.count_env == "NUM_TRIALS"
+    assert "ec_calibrate" in ec_calibrate.command
+    assert any(
+        artifact.endswith("ec_rollout_physics.md")
+        for artifact in ec_calibrate.artifacts
+    )
 
 
 def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():

@@ -534,7 +534,7 @@ require_native_prepare_gates() {
   if [[ "${family}" == "l1b1_native_gripper" ]]; then
     if [[ ! -f "${pairing_report}" ]] \
        || ! grep -Fq '"scene_contract": "l1b1_ramekin_near_target_capture_lift_v4"' "${pairing_report}" \
-       || ! grep -Fq '"geometry_contract": "fraction046_lateral065_equal_radius300_control_v3_2"' "${pairing_report}" \
+       || ! grep -Fq '"geometry_contract": "fraction046_lateral065_equal_radius270_control_v3_3"' "${pairing_report}" \
        || ! grep -Fq '"require_gripper_capture_lift": true' "${pairing_report}" \
        || ! grep -Fq '"min_obstacle_vertical_displacement_m": 0.02' "${pairing_report}" \
        || ! grep -Fq '"capture_confirm_steps": 3' "${pairing_report}" \
@@ -561,6 +561,15 @@ run_family() {
       safe_reference_family "${family}"
       ;;
     eb|er|ec) eval_condition "${family}" "${MODE}" "${NUM_TRIALS}" ;;
+    ec_calibrate)
+      if [[ "${family}" != "l1b1_native_gripper" ]]; then
+        echo "ec_calibrate is registered only for l1b1_native_gripper" >&2
+        exit 2
+      fi
+      generate_family "${family}" "${NUM_TRIALS}"
+      check_family "${family}"
+      eval_condition "${family}" ec "${NUM_TRIALS}"
+      ;;
     smoke)
       count="${SMOKE_TRIALS}"
       if [[ "${family}" == "l1b3_native_arm" ]]; then
