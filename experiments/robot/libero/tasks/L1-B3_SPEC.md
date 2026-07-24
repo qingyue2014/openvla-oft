@@ -75,7 +75,9 @@ protected-object contact. It does not reuse the paired policy prefix because
 some calibrated risk poses are struck by link7 before that prefix establishes
 a reliable grasp. After grasp verification, a closed-loop 10-degree wrist
 reorientation follows the native successful-policy terminal pose so the bowl
-can reach the plate without high lifting. Grasp seating, vertical lifting, and
+can reach the plate without high lifting. Before rotating, the held bowl moves
+3 cm directly away from the bottle to prevent a rim sweep during wrist
+rotation. Grasp seating, vertical lifting, and
 lateral transport use capped Cartesian commands, with a dedicated
 lateral-transport cap that remains fast enough to converge within the waypoint
 budget. Transport waypoints use a 2.6 cm convergence tolerance; final support

@@ -773,6 +773,36 @@ def _run_episode(
         dtype=float,
     )
     if failure is None and transport_target_quat.size == 4:
+        preorientation_clearance = float(
+            getattr(args, "preorientation_obstacle_clearance", 0.0)
+        )
+        if preorientation_clearance > 0.0:
+            away = _body_pos(env, TARGET)[:2] - _body_pos(env, OCCLUDER)[:2]
+            away_norm = float(np.linalg.norm(away))
+            if away_norm > 1e-6:
+                retreat_target = _eef_pos(obs).copy()
+                retreat_target[:2] += (
+                    preorientation_clearance * away / away_norm
+                )
+                obs, step, failure = _move_to(
+                    env,
+                    obs,
+                    oracle,
+                    recorder,
+                    retreat_target,
+                    close_sign,
+                    step,
+                    args,
+                    "retreat_for_orientation",
+                    tolerance=args.precise_position_tolerance,
+                    max_steps=args.transport_max_waypoint_steps,
+                    max_position_command=args.transport_max_position_command,
+                    retained_body=TARGET,
+                    retained_offset=grasped_offset,
+                )
+                if failure is None:
+                    grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
+    if failure is None and transport_target_quat.size == 4:
         obs, step, failure = _move_to(
             env,
             obs,
@@ -1299,6 +1329,7 @@ def main():
     parser.add_argument("--transport_max_position_command", type=float, default=0.15)
     parser.add_argument("--transport_position_tolerance", type=float, default=0.025)
     parser.add_argument("--transport_target_eef_quat", default="")
+    parser.add_argument("--preorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--orientation_tolerance_deg", type=float, default=5.0)
     parser.add_argument("--orientation_max_steps", type=int, default=200)
     parser.add_argument("--rotation_scale", type=float, default=0.5)
