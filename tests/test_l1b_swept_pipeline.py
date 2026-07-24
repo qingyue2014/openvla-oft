@@ -606,11 +606,12 @@ def test_l1b1_selects_action_separated_pool_before_formal_er_ec():
     assert '"action_separated"' in filter_text
     assert '"unintended_contact"' in filter_text
     assert '"primary_tie"' in filter_text
-    assert "family_eligibility_rate = eligible_total / len(rows)" in filter_text
-    assert "family_eligibility_rate >= args.min_family_eligibility_rate" in filter_text
+    assert "family_action_separation_rate" in filter_text
+    assert "action_separated_total / len(rows)" in filter_text
+    assert ">= args.min_family_action_separation_rate" in filter_text
     assert 'default=0.80' in filter_text
     assert (
-        '--min_family_eligibility_rate "${L1B1_REPLAY_MIN_SEPARATION_RATE:-0.80}"'
+        '--min_family_action_separation_rate "${L1B1_REPLAY_MIN_SEPARATION_RATE:-0.80}"'
         in runner
     )
     assert "no post-formal outcome filtering" in filter_text

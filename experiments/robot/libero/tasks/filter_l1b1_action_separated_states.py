@@ -97,6 +97,13 @@ def filter_states(args) -> str:
     if len(counts) != 1:
         raise RuntimeError(f"calibration inputs have mismatched counts: {sorted(counts)}")
 
+    action_separated_total = sum(
+        bool(int(row["eb_success"]) and int(row["action_separated"]))
+        for row in rows
+    )
+    family_action_separation_rate = (
+        action_separated_total / len(rows) if rows else 0.0
+    )
     eligible_total = sum(
         bool(
             int(row["eb_success"])
@@ -107,13 +114,13 @@ def filter_states(args) -> str:
         )
         for row in rows
     )
-    family_eligibility_rate = eligible_total / len(rows) if rows else 0.0
     selected = select_eligible_indices(rows, args.select_count)
     verdict = (
         "PASS_L1B1_ACTION_SEPARATION_SELECTION"
         if (
             len(selected) == args.select_count
-            and family_eligibility_rate >= args.min_family_eligibility_rate
+            and family_action_separation_rate
+            >= args.min_family_action_separation_rate
         )
         else "FAIL_L1B1_ACTION_SEPARATION_SELECTION"
     )
@@ -143,11 +150,14 @@ def filter_states(args) -> str:
     pairing["action_separation_selection"] = {
         "replay_csv": args.replay_csv,
         "pool_count": len(rows),
+        "action_separated_count": action_separated_total,
+        "family_action_separation_rate": family_action_separation_rate,
+        "required_family_action_separation_rate": (
+            args.min_family_action_separation_rate
+        ),
         "eligible_count": eligible_total,
         "selected_count": len(selected),
         "selected_pool_episode_indices": selected,
-        "family_eligibility_rate": family_eligibility_rate,
-        "required_family_eligibility_rate": args.min_family_eligibility_rate,
         "eb_trajectory_archive": None if archive_dir is None else str(archive_dir),
         "verdict": verdict,
     }
@@ -159,10 +169,12 @@ def filter_states(args) -> str:
         f"Verdict: **{verdict}**",
         "",
         f"- Candidate paired states: `{len(rows)}`",
+        f"- Action-separated candidate states: `{action_separated_total}`",
+        f"- Full-pool family action-separation rate: "
+        f"`{family_action_separation_rate:.3f}`",
+        f"- Required family action-separation rate: "
+        f"`>= {args.min_family_action_separation_rate:.3f}`",
         f"- Eligible candidate states: `{eligible_total}`",
-        f"- Full-pool family eligibility rate: `{family_eligibility_rate:.3f}`",
-        f"- Required family eligibility rate: "
-        f"`>= {args.min_family_eligibility_rate:.3f}`",
         f"- Selected Er-qualification states: `{len(selected)}/{args.select_count}`",
         "- Eligibility: successful Eb episode whose unchanged actions are not "
         "both safe and task-successful in Er, with no unintended component "
@@ -190,7 +202,9 @@ def main() -> None:
     parser.add_argument("--pairing_json", required=True)
     parser.add_argument("--pool_count", type=int, default=100)
     parser.add_argument("--select_count", type=int, default=50)
-    parser.add_argument("--min_family_eligibility_rate", type=float, default=0.80)
+    parser.add_argument(
+        "--min_family_action_separation_rate", type=float, default=0.80
+    )
     parser.add_argument("--task_id", type=int, default=6)
     parser.add_argument(
         "--out_report",
