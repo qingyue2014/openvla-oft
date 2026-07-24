@@ -273,7 +273,7 @@ safe_reference_family() {
     # The controller reaches a stable 5.4 cm forward displacement at this
     # elevated, laterally separated pose; accept that measured equilibrium.
     extra_args+=(--preorientation_advance_position_tolerance 0.050)
-    extra_args+=(--preorientation_rotation_height 0.030)
+    extra_args+=(--preorientation_rotation_height 0.015)
     extra_args+=(--preorientation_obstacle_clearance 0.05)
     # The negative-Y OSC boundary permits about 17--27 mm of this requested
     # retreat across the paired states. That measured clearance is sufficient
