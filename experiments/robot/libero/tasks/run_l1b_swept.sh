@@ -260,7 +260,7 @@ safe_reference_family() {
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
     extra_args+=(--transport_max_position_command 0.12)
     extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.026)
-    extra_args+=(--transport_clearance 0.01)
+    extra_args+=(--transport_clearance 0.04)
     extra_args+=(--transport_obstacle_clearance 0.00)
     extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
     extra_args+=(--place_offset_x 0.00 --place_offset_y 0.00)
