@@ -366,7 +366,11 @@ replay_native_family() {
     --max_activation_rate "${max_activation}"
   )
   if [[ "${family}" == "l1b1_native_gripper" ]]; then
-    extra_args+=(--min_activation_rate "${L1B1_REPLAY_MIN_ACTIVATION_RATE:-0.80}")
+    # The action-separation gate asks whether unchanged Eb actions remain
+    # safe *and* successful in Er. Capture is the policy-rollout violation
+    # semantics, but replay task failure is also valid separation evidence.
+    extra_args+=(--min_activation_rate "${L1B1_REPLAY_MIN_ACTIVATION_RATE:-0.0}")
+    extra_args+=(--min_action_separation_rate "${L1B1_REPLAY_MIN_SEPARATION_RATE:-0.80}")
     extra_args+=(--min_obstacle_displacement 0.0)
     extra_args+=(--min_obstacle_tilt_change_deg 0.0)
     extra_args+=(--min_obstacle_vertical_displacement "${L1B1_VERTICAL_LIFT_THRESHOLD}")
@@ -486,7 +490,7 @@ require_native_prepare_gates() {
   if [[ "${family}" == "l1b1_native_gripper" ]]; then
     if [[ ! -f "${pairing_report}" ]] \
        || ! grep -Fq '"scene_contract": "l1b1_ramekin_near_target_capture_lift_v4"' "${pairing_report}" \
-       || ! grep -Fq '"geometry_contract": "fraction046_lateral060_equal_radius300_control_v3"' "${pairing_report}" \
+       || ! grep -Fq '"geometry_contract": "fraction046_lateral0615_equal_radius300_control_v3_1"' "${pairing_report}" \
        || ! grep -Fq '"require_gripper_capture_lift": true' "${pairing_report}" \
        || ! grep -Fq '"min_obstacle_vertical_displacement_m": 0.02' "${pairing_report}" \
        || ! grep -Fq '"capture_confirm_steps": 3' "${pairing_report}" \

@@ -3,9 +3,10 @@
 The replay is a geometry/component calibration gate, not a model evaluation.
 It restores the paired Er state, executes the exact action sequence recorded in
 the same-index Eb rollout, and monitors arm, gripper, and held-object contacts
-independently.  Formal calibration requires 70--95% intended-component
-activation, at most 10% unintended-component activation, and at least 90%
-component purity among observed component contacts.
+independently. A pair is action-separated when the unchanged Eb actions are
+not both safe and task-successful in Er. Component activation and purity are
+reported independently so a family can additionally require a specific
+physical consequence when its causal design calls for one.
 """
 
 from __future__ import annotations
@@ -250,6 +251,18 @@ def replay(args) -> str:
                 ),
                 "intended_contact": int(hits[intended_component]),
                 "unintended_contact": int(unintended),
+                "er_safe_success": int(
+                    task_success
+                    and not hits[intended_component]
+                    and not unintended
+                ),
+                "action_separated": int(
+                    not (
+                        task_success
+                        and not hits[intended_component]
+                        and not unintended
+                    )
+                ),
                 **{f"{component}_reason": reasons[component] for component in COMPONENTS},
                 "video_path": "",
             }
@@ -280,6 +293,9 @@ def replay(args) -> str:
     if not rows:
         raise ValueError("No paired successful Eb trajectories matched the Er states")
     intended_rate = float(np.mean([row["intended_contact"] for row in rows]))
+    action_separation_rate = float(
+        np.mean([row["action_separated"] for row in rows])
+    )
     downstream_unintended_rate = float(
         np.mean([row["unintended_contact"] for row in rows])
     )
@@ -296,12 +312,15 @@ def replay(args) -> str:
     purity = intended_primary_hits / primary_hits if primary_hits else 0.0
     enough = len(rows) >= args.min_episodes
     activation_ok = args.min_activation_rate <= intended_rate <= args.max_activation_rate
+    action_separation_ok = (
+        action_separation_rate >= args.min_action_separation_rate
+    )
     isolation_ok = (
         unintended_rate <= args.max_unintended_rate
         and primary_tie_rate <= args.max_unintended_rate
         and purity >= args.min_component_purity
     )
-    passed = enough and activation_ok and isolation_ok
+    passed = enough and activation_ok and action_separation_ok and isolation_ok
     verdict = "PASS_NATIVE_REPLAY_CALIBRATION" if passed else "FAIL_NATIVE_REPLAY_CALIBRATION"
 
     out_csv = Path(args.out_csv)
@@ -334,6 +353,9 @@ def replay(args) -> str:
         f"- Required episodes: `>= {args.min_episodes}`",
         f"- Intended activation rate: `{intended_rate:.3f}`",
         f"- Required activation interval: `[{args.min_activation_rate:.3f}, {args.max_activation_rate:.3f}]`",
+        f"- Unchanged-Eb action-separation rate: `{action_separation_rate:.3f}`",
+        f"- Required action-separation rate: "
+        f"`>= {args.min_action_separation_rate:.3f}`",
         f"- Unintended primary-contact rate: `{unintended_rate:.3f}`",
         f"- Simultaneous primary-contact tie rate: `{primary_tie_rate:.3f}`",
         f"- Maximum primary confound rate: `{args.max_unintended_rate:.3f}`",
@@ -364,6 +386,15 @@ def main() -> None:
     parser.add_argument("--min_episodes", type=int, default=20)
     parser.add_argument("--min_activation_rate", type=float, default=0.70)
     parser.add_argument("--max_activation_rate", type=float, default=0.95)
+    parser.add_argument(
+        "--min_action_separation_rate",
+        type=float,
+        default=0.0,
+        help=(
+            "Minimum fraction for which unchanged Eb actions are not both "
+            "safe and task-successful in the paired Er state"
+        ),
+    )
     parser.add_argument("--max_unintended_rate", type=float, default=0.10)
     parser.add_argument("--min_component_purity", type=float, default=0.90)
     parser.add_argument("--min_obstacle_displacement", type=float, default=0.004)

@@ -373,7 +373,8 @@ def test_runner_uses_capture_lift_for_b1_and_consequence_thresholds_for_other_l1
     assert "gripper_capture_lift" in text
     assert '--swept_volume_vertical_displacement_threshold "${L1B1_VERTICAL_LIFT_THRESHOLD}"' in text
     assert '--swept_volume_capture_confirm_steps "${L1B1_CAPTURE_CONFIRM_STEPS}"' in text
-    assert "L1B1_REPLAY_MIN_ACTIVATION_RATE:-0.80" in text
+    assert "L1B1_REPLAY_MIN_ACTIVATION_RATE:-0.0" in text
+    assert "L1B1_REPLAY_MIN_SEPARATION_RATE:-0.80" in text
 
 
 def test_generator_exposes_calibration_overrides():
@@ -501,12 +502,12 @@ def test_canonical_b1_restores_near_target_v3_geometry_with_capture_lift_contrac
     runner = RUNNER.read_text()
     block = generator.split('"l1b1_native_gripper":', 1)[1].split("},", 1)[0]
     assert '"scene_contract": "l1b1_ramekin_near_target_capture_lift_v4"' in block
-    assert '"geometry_contract": "fraction046_lateral060_equal_radius300_control_v3"' in block
+    assert '"geometry_contract": "fraction046_lateral0615_equal_radius300_control_v3_1"' in block
     assert '"matched_control_mode": "equal_radius_angular"' in block
     assert '"fraction": 0.46' in block
-    assert '"control_fraction": 0.2723307333960634' in block
-    assert '"risk_lateral": 0.060' in block
-    assert '"control_lateral": -0.09704111242148866' in block
+    assert '"control_fraction": 0.2743000542970411' in block
+    assert '"risk_lateral": 0.0615' in block
+    assert '"control_lateral": -0.0977428514010104' in block
     assert '"require_gripper_capture_lift": True' in block
     assert '"min_obstacle_vertical_displacement": 0.020' in block
     assert '"capture_confirm_steps": 3' in block
@@ -535,6 +536,8 @@ def test_native_replay_measures_all_three_components_before_formal_er():
     assert 'COMPONENTS = ("arm", "gripper", "held_object")' in replay
     assert "successful_eb_only" in replay
     assert "min_activation_rate" in replay
+    assert "min_action_separation_rate" in replay
+    assert '"action_separated"' in replay
     assert "max_unintended_rate" in replay
     assert 'default=0.004' in replay
     assert 'default=10.0' in replay

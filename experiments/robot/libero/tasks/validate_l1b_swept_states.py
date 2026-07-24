@@ -170,7 +170,7 @@ def _policy_camera_image(env, camera: str, resolution: int) -> np.ndarray:
 
 
 def validate(args) -> bool:
-    spec = FAMILIES[args.family]
+    spec = dict(FAMILIES[args.family])
     obstacle_body = spec["obstacle_body"]
     target_body = spec.get("target_body", TARGET_BODY)
     goal_support_body = spec.get("goal_support_body", PLATE_BODY)
@@ -185,6 +185,10 @@ def validate(args) -> bool:
         raise FileNotFoundError("Missing paired L1-B artifacts: " + ", ".join(missing))
     states = {condition: _load_states(path) for condition, path in paths.items()}
     pairing = json.loads(pairing_path.read_text())
+    # Calibration runs may intentionally override the canonical path-relative
+    # coordinates. Validate the exact serialized spec that generated the
+    # states rather than silently comparing them with module defaults.
+    spec = dict(pairing.get("spec", spec))
     counts = {condition: len(value) for condition, value in states.items()}
     count_ok = len(set(counts.values())) == 1 and counts["eb"] == pairing["num_states"]
     source_indices = [
