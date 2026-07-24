@@ -766,7 +766,13 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--lift_height 0.06 --preplace_height 0.04" in runner
     assert "--transport_clearance 0.0 --max_safe_lift_height 0.09" in runner
     assert "--transport_via_x 0.10" in runner
+    assert "--transport_obstacle_clearance 0.08" in runner
+    assert "--branch_grasp_prefix_on_contact" in runner
+    assert "--prefix_grasp_seat_steps 4" in runner
     assert "--require_support_contact_before_release" in runner
+    assert "--max_safe_lift_height 0.09" in runner
+    assert "transport_obstacle_detour_out" in shared
+    assert "transport_obstacle_detour_across" in shared
     assert "_descend_until_support_contact" in shared
     assert "_confirm_released_on_support" in shared
     assert "max_bowl_lift_m" in shared

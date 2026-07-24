@@ -247,16 +247,24 @@ safe_reference_family() {
     extra_args+=(--transport_via_x -0.15 --transport_clearance 0.02)
     extra_args+=(--preplace_height 0.04)
   elif [[ "${family}" == "l1b3_native_arm" ]]; then
-    # A paired-policy prefix reaches the calibrated link7 strike too soon after
-    # first finger contact to establish a stable grasp. Use the independently
-    # verified closed-loop grasp search instead: its positive-Y rim grasp lifts
-    # vertically clear of the bottle before a table-height plate transport.
-    extra_args+=(--approach_height 0.12 --lift_height 0.08)
+    eb_note="$(note_for "${family}" eb)"
+    # Reuse the paired successful-Eb approach, but branch at the first measured
+    # gripper/bowl contact before the calibrated wrist strike. Seat briefly,
+    # lift vertically, then take the side of the corridor opposite the bottle.
+    extra_args+=(--grasp_action_trajectories "rollouts/${task_suite}/${eb_note}/trajectories")
+    extra_args+=(--branch_grasp_prefix_on_contact)
+    extra_args+=(--prefix_grasp_seat_steps 4)
+    extra_args+=(--prefix_lift_max_position_command 0.05)
+    extra_args+=(--approach_height 0.10 --lift_height 0.06)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
     extra_args+=(--position_tolerance 0.025)
-    extra_args+=(--transport_clearance 0.04)
-    extra_args+=(--preplace_height 0.06)
+    extra_args+=(--transport_clearance 0.01)
+    extra_args+=(--transport_obstacle_clearance 0.08)
+    extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
     extra_args+=(--place_offset_x 0.00 --place_offset_y 0.00)
+    extra_args+=(--require_support_contact_before_release)
+    extra_args+=(--support_contact_hold_steps 10)
+    extra_args+=(--post_release_support_hold_steps 10)
   fi
   if [[ -n "${SAFE_REF_VIDEO_DIR:-}" ]]; then
     extra_args+=(--video_dir "${SAFE_REF_VIDEO_DIR}")

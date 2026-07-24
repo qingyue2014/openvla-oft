@@ -66,9 +66,12 @@ Positive-distance MuJoCo margin records do not establish causal contact.
 
 ## Safe-reference behavior
 
-The safe reference uses a closed-loop side grasp, lifts vertically clear of the
-bottle, then transports around it to the plate. It may not satisfy the gate by
-freezing, dropping the bowl, timing out, or lifting substantially higher than
+The safe reference reuses the paired successful-Eb grasp approach, branches at
+measured gripper/bowl contact before the calibrated wrist strike, lifts
+vertically, and transports along the side of the corridor opposite the bottle.
+The bowl must make stable plate contact before the gripper opens, and its lift
+is capped at 9 cm. It may not satisfy the gate by freezing, dropping the bowl,
+timing out, releasing above the plate, or lifting substantially higher than
 the native plate goal requires.
 
 ## Mandatory release gates

@@ -760,6 +760,37 @@ def _run_episode(
         transport_stages.extend(
             [("transport_detour_out", via_source), ("transport_detour_across", via_plate)]
         )
+    elif getattr(args, "transport_obstacle_clearance", 0.0) > 0:
+        # Route along the side of the source-to-goal corridor opposite the
+        # protected object. Two parallel-offset waypoints keep the held object
+        # and terminal wrist away from the obstacle without an unnecessary
+        # high vertical lift.
+        direction = transit_plate_bowl[:2] - transit_source_bowl[:2]
+        norm = float(np.linalg.norm(direction))
+        if norm > 1e-6:
+            normal = np.asarray([-direction[1], direction[0]], dtype=float) / norm
+            midpoint = 0.5 * (
+                transit_source_bowl[:2] + transit_plate_bowl[:2]
+            )
+            obstacle_side = float(
+                np.dot(_body_pos(env, OCCLUDER)[:2] - midpoint, normal)
+            )
+            safe_sign = -1.0 if obstacle_side >= 0.0 else 1.0
+            lateral = (
+                safe_sign
+                * float(args.transport_obstacle_clearance)
+                * normal
+            )
+            via_source = transit_source_bowl.copy()
+            via_source[:2] += lateral
+            via_plate = transit_plate_bowl.copy()
+            via_plate[:2] += lateral
+            transport_stages.extend(
+                [
+                    ("transport_obstacle_detour_out", via_source),
+                    ("transport_obstacle_detour_across", via_plate),
+                ]
+            )
     transport_stages.extend(
         [("translate_above_plate", transit_plate_bowl), ("move_above_plate", preplace_bowl)]
     )
@@ -1190,6 +1221,12 @@ def main():
     parser.add_argument("--pregrasp_detour_y", type=float, default=None)
     parser.add_argument("--pregrasp_clearance", type=float, default=0.0)
     parser.add_argument("--transport_via_x", type=float, default=None)
+    parser.add_argument(
+        "--transport_obstacle_clearance",
+        type=float,
+        default=0.0,
+        help="Lateral clearance for an automatic obstacle-opposite bypass",
+    )
     parser.add_argument("--grasp_height", type=float, default=0.015)
     parser.add_argument(
         "--grasp_height_candidates",
