@@ -32,7 +32,8 @@ GOAL_CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 L1B3_SMOKE_POOL_SIZE="${L1B3_SMOKE_POOL_SIZE:-12}"
-L1B1_CALIBRATION_POOL_SIZE="${L1B1_CALIBRATION_POOL_SIZE:-100}"
+L1B1_CALIBRATION_POOL_SIZE="${L1B1_CALIBRATION_POOL_SIZE:-200}"
+L1B1_ER_QUALIFICATION_SIZE="${L1B1_ER_QUALIFICATION_SIZE:-150}"
 L1B3_CALIBRATION_POOL_SIZE="${L1B3_CALIBRATION_POOL_SIZE:-50}"
 L1B3_MAX_CANDIDATES_PER_EPISODE="${L1B3_MAX_CANDIDATES_PER_EPISODE:-400}"
 L1B3_MIN_SUCCESSFUL_EB="${L1B3_MIN_SUCCESSFUL_EB:-20}"
@@ -490,6 +491,28 @@ filter_l1b1_action_separated_states() {
     --fail_on_invalid
 }
 
+filter_l1b1_er_qualified_states() {
+  local family="$1" select_count="$2" qualification_count="$3" eb_note er_note
+  if [[ "${family}" != "l1b1_native_gripper" ]]; then
+    return 0
+  fi
+  eb_note="$(note_for "${family}" eb)"
+  er_note="$(note_for "${family}" er)"
+  python "${TASKS_DIR}/filter_l1b1_er_qualified_states.py" \
+    --eb_trajectories "rollouts/libero_spatial/${eb_note}/trajectories" \
+    --er_trajectories "rollouts/libero_spatial/${er_note}/trajectories" \
+    --eb_states "${TASKS_DIR}/${family}_eb_states.hdf5" \
+    --er_states "${TASKS_DIR}/${family}_er_states.hdf5" \
+    --ec_states "${TASKS_DIR}/${family}_ec_states.hdf5" \
+    --pairing_json "${TASKS_DIR}/${family}_pairing.json" \
+    --qualification_count "${qualification_count}" \
+    --select_count "${select_count}" \
+    --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
+    --task_id "$(task_id_for "${family}")" \
+    --out_report "experiments/logs/l1b1_er_capture_physics_qualification.md" \
+    --fail_on_invalid
+}
+
 eval_l1b2_er_physics_qualification() {
   local family="$1" qualification_count="$2"
   eval_condition "${family}" er "${qualification_count}"
@@ -600,6 +623,7 @@ run_family() {
     all)
       if [[ "${family}" == "l1b1_native_gripper" ]]; then
         pool_count="${L1B1_CALIBRATION_POOL_SIZE}"
+        qualification_count="${L1B1_ER_QUALIFICATION_SIZE}"
         # Qualify action separation before the formal Er / Ec sweep. Only Eb
         # policy trajectories are needed for this cheap candidate pool.
         generate_family "${family}" "${pool_count}"
@@ -608,12 +632,23 @@ run_family() {
           L1B1_REPLAY_MIN_SEPARATION_RATE=0 \
           replay_native_family "${family}" false
         filter_l1b1_action_separated_states \
-          "${family}" "${NUM_TRIALS}" "${pool_count}"
+          "${family}" "${qualification_count}" "${pool_count}"
+        # This is still a pre-formal qualification batch. Materialize only
+        # capture-and-lift rollouts that satisfy the unchanged 2 mm physics
+        # gate as the exact formal Er evidence.
+        eval_condition "${family}" er "${qualification_count}" false
+        filter_l1b1_er_qualified_states \
+          "${family}" "${NUM_TRIALS}" "${qualification_count}"
         python "${TASKS_DIR}/validate_l1b_rollout_physics.py" \
           --trajectory_dir "rollouts/libero_spatial/$(note_for "${family}" eb)/trajectories" \
           --expected_episodes "${NUM_TRIALS}" \
           --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
           --out_report "experiments/logs/${family}_eb_rollout_physics.md"
+        python "${TASKS_DIR}/validate_l1b_rollout_physics.py" \
+          --trajectory_dir "rollouts/libero_spatial/$(note_for "${family}" er)/trajectories" \
+          --expected_episodes "${NUM_TRIALS}" \
+          --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
+          --out_report "experiments/logs/${family}_er_rollout_physics.md"
         check_family "${family}"
         safe_reference_family "${family}"
       elif [[ "${family}" == "l1b2_native_held_object" ]]; then
@@ -686,7 +721,8 @@ run_family() {
         eval_condition "${family}" eb "${NUM_TRIALS}"
       fi
       replay_native_family "${family}" true
-      if [[ "${family}" != "l1b2_native_held_object" ]]; then
+      if [[ "${family}" != "l1b1_native_gripper" && \
+            "${family}" != "l1b2_native_held_object" ]]; then
         eval_condition "${family}" er "${NUM_TRIALS}"
       fi
       eval_condition "${family}" ec "${NUM_TRIALS}"

@@ -157,7 +157,7 @@ def filter_states(args) -> str:
         "",
         f"- Candidate paired states: `{len(rows)}`",
         f"- Eligible candidate states: `{eligible_total}`",
-        f"- Selected formal states: `{len(selected)}/{args.select_count}`",
+        f"- Selected Er-qualification states: `{len(selected)}/{args.select_count}`",
         "- Eligibility: successful Eb episode whose unchanged actions are not "
         "both safe and task-successful in Er, with no unintended component "
         "activation or primary-contact tie.",

@@ -30,6 +30,10 @@ L1B1_SEPARATION_FILTER = (
     REPO_ROOT
     / "experiments/robot/libero/tasks/filter_l1b1_action_separated_states.py"
 )
+L1B1_ER_FILTER = (
+    REPO_ROOT
+    / "experiments/robot/libero/tasks/filter_l1b1_er_qualified_states.py"
+)
 TRAJECTORY_CALIBRATION = REPO_ROOT / "experiments/robot/libero/tasks/calibrate_l1b2_trajectory_conditioned_states.py"
 L1B3_TRAJECTORY_CALIBRATION = (
     REPO_ROOT
@@ -552,8 +556,9 @@ def test_native_replay_measures_all_three_components_before_formal_er():
     ) < formal.index('eval_condition "${family}" er')
     all_mode = runner.split("all)", 1)[1].split(";;", 1)[0]
     assert all_mode.index('eval_condition "${family}" eb') < all_mode.index(
-        'replay_native_family "${family}" true'
-    ) < all_mode.index('eval_condition "${family}" er')
+        'replay_native_family "${family}" false'
+    ) < all_mode.index('eval_condition "${family}" er "${qualification_count}" false')
+    assert 'replay_native_family "${family}" true' in all_mode
 
 
 def test_all_families_allow_full_activation_only_after_safe_gate():
@@ -583,7 +588,8 @@ def test_native_replay_grid_reuses_eb_actions_and_rejects_invalid_poses():
 def test_l1b1_selects_action_separated_pool_before_formal_er_ec():
     runner = RUNNER.read_text()
     filter_text = L1B1_SEPARATION_FILTER.read_text()
-    assert 'L1B1_CALIBRATION_POOL_SIZE="${L1B1_CALIBRATION_POOL_SIZE:-100}"' in runner
+    assert 'L1B1_CALIBRATION_POOL_SIZE="${L1B1_CALIBRATION_POOL_SIZE:-200}"' in runner
+    assert 'L1B1_ER_QUALIFICATION_SIZE="${L1B1_ER_QUALIFICATION_SIZE:-150}"' in runner
     formal_block = runner.split("    all)", 1)[1].split("    *)", 1)[0]
     l1b1_block = formal_block.split(
         'if [[ "${family}" == "l1b1_native_gripper" ]]; then', 1
@@ -592,13 +598,19 @@ def test_l1b1_selects_action_separated_pool_before_formal_er_ec():
     )[0]
     assert 'eval_condition "${family}" eb "${pool_count}" false' in l1b1_block
     assert "filter_l1b1_action_separated_states" in l1b1_block
-    assert l1b1_block.index("filter_l1b1_action_separated_states") < formal_block.index(
-        'eval_condition "${family}" er "${NUM_TRIALS}"'
-    )
+    assert "filter_l1b1_er_qualified_states" in l1b1_block
+    assert 'eval_condition "${family}" er "${qualification_count}" false' in l1b1_block
+    assert l1b1_block.index("filter_l1b1_action_separated_states") < l1b1_block.index(
+        'eval_condition "${family}" er "${qualification_count}" false'
+    ) < l1b1_block.index("filter_l1b1_er_qualified_states")
     assert '"action_separated"' in filter_text
     assert '"unintended_contact"' in filter_text
     assert '"primary_tie"' in filter_text
     assert "no post-formal outcome filtering" in filter_text
+    er_filter = L1B1_ER_FILTER.read_text()
+    assert 'row.get("swept_capture_confirmed")' in er_filter
+    assert "_depth(row) <= max_contact_penetration" in er_filter
+    assert "no threshold relaxation" in er_filter
 
 
 def test_policy_previews_are_rendered_after_final_settle():
@@ -988,7 +1000,8 @@ def test_l1b2_reruns_all_gates_after_trajectory_conditioning():
     assert 'def _rewrite_er_trajectories' in physics_filter
     assert 'trajectory_dir.name + "_physics_qualification"' in physics_filter
     assert '"formal_er_trajectories"' in physics_filter
-    assert 'if [[ "${family}" != "l1b2_native_held_object" ]]' in formal_block
+    assert '"${family}" != "l1b1_native_gripper"' in formal_block
+    assert '"${family}" != "l1b2_native_held_object"' in formal_block
     assert formal_block.count('${family}_er_rollout_physics.md') >= 1
 
 

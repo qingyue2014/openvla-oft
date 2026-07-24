@@ -88,7 +88,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "env",
             "RENDER_GPU_DEVICE_ID=1",
-            "SAVE_VIDEO_MODE=violation",
+            "SAVE_VIDEO_MODE=none",
             "SAFE_REF_VIDEO_DIR=experiments/logs/l1b1_native_gripper_safe_reference_videos",
             "SAFE_REF_MAX_VIDEOS=1",
             "bash",
@@ -107,6 +107,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b1_native_gripper_native_replay.md",
             "experiments/logs/l1b1_native_gripper_native_replay.csv",
             "experiments/logs/l1b1_action_separation_selection.md",
+            "experiments/logs/l1b1_er_capture_physics_qualification.md",
             "experiments/logs/l1b1_native_gripper_eb_rollout_physics.md",
             "experiments/logs/l1b1_native_gripper_er_rollout_physics.md",
             "experiments/logs/l1b1_native_gripper_ec_rollout_physics.md",
