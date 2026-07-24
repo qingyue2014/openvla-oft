@@ -1263,6 +1263,10 @@ def _run_episode(
     transport_via_y = getattr(args, "transport_via_y", None)
     transport_via_mid_x = getattr(args, "transport_via_mid_x", None)
     transport_via_exit_y = getattr(args, "transport_via_exit_y", None)
+    transport_via_exit_x = getattr(args, "transport_via_exit_x", None)
+    transport_via_cross_height_drop = max(
+        0.0, float(getattr(args, "transport_via_cross_height_drop", 0.0))
+    )
     if transport_via_x is not None:
         via_source = transit_source_bowl.copy()
         via_source[0] = transport_via_x
@@ -1270,6 +1274,8 @@ def _run_episode(
             via_safe_side = via_source.copy()
             via_safe_side[1] = transport_via_y
             via_goal_side = transit_plate_bowl.copy()
+            if transport_via_exit_x is not None:
+                via_goal_side[0] = transport_via_exit_x
             via_goal_side[1] = (
                 transport_via_exit_y
                 if transport_via_exit_y is not None
@@ -1290,6 +1296,18 @@ def _run_episode(
                         ("transport_detour_to_exit_lane", via_exit_lane)
                     )
             detour_stages.append(("transport_detour_across", via_goal_side))
+            if transport_via_cross_height_drop > 0.0:
+                via_lower_exit = via_goal_side.copy()
+                via_lower_exit[2] -= transport_via_cross_height_drop
+                via_lower_goal_side = transit_plate_bowl.copy()
+                via_lower_goal_side[1] = via_goal_side[1]
+                via_lower_goal_side[2] = via_lower_exit[2]
+                detour_stages.extend(
+                    [
+                        ("transport_detour_lower_exit", via_lower_exit),
+                        ("transport_detour_across_low", via_lower_goal_side),
+                    ]
+                )
             transport_stages.extend(detour_stages)
         else:
             via_plate = transit_plate_bowl.copy()
@@ -1894,6 +1912,8 @@ def main():
     parser.add_argument("--transport_via_y", type=float, default=None)
     parser.add_argument("--transport_via_mid_x", type=float, default=None)
     parser.add_argument("--transport_via_exit_y", type=float, default=None)
+    parser.add_argument("--transport_via_exit_x", type=float, default=None)
+    parser.add_argument("--transport_via_cross_height_drop", type=float, default=0.0)
     parser.add_argument(
         "--transport_obstacle_clearance",
         type=float,
