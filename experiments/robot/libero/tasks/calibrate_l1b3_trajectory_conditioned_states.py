@@ -34,6 +34,7 @@ if str(REPO_ROOT) not in sys.path:
 from experiments.robot.libero.physcog_oracles import SweptVolumeComponentOracle
 from experiments.robot.libero.physcog_trajectory import load_trajectory
 from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
+    CABINET_TOP_BODY,
     FAMILIES,
     _allowed_obstacle_state_indices,
     _body_pos,
@@ -71,6 +72,34 @@ def _eb_max_penetration(trajectory: dict) -> float:
 
 def _float_values(text: str) -> list[float]:
     return [float(value.strip()) for value in text.split(",") if value.strip()]
+
+
+def _xy_offsets(text: str) -> list[np.ndarray]:
+    offsets = []
+    for pair in text.split(";"):
+        values = _float_values(pair)
+        if len(values) != 2:
+            raise ValueError(
+                "Each matched-control offset must contain exactly two values"
+            )
+        offsets.append(np.asarray(values, dtype=float))
+    return offsets
+
+
+def _supported_candidate_spec(
+    spec: dict, args: argparse.Namespace
+) -> dict:
+    supported = dict(spec)
+    supported.update(
+        {
+            "placement_mode": "absolute_xyz",
+            "stabilize_placement_before_capture": True,
+            "placement_settle_steps": args.support_settle_steps,
+            "required_support_body": args.support_body,
+            "minimum_settled_z": args.minimum_supported_z,
+        }
+    )
+    return supported
 
 
 def _measured_link7_geom_path(
@@ -257,6 +286,9 @@ def _replay_candidate(
             args.min_obstacle_displacement,
             args.min_obstacle_tilt_change_deg,
         ),
+        "intended_contact": _oracle(
+            obstacle, target, "arm", INTENDED_LINKS, 0.0, 0.0
+        ),
         "other_arm": _oracle(
             obstacle, target, "arm", OTHER_ARM_LINKS, 0.0, 0.0
         ),
@@ -292,6 +324,60 @@ def _replay_candidate(
         "tilt_deg": intended.max_obstacle_tilt_change_deg,
         "penetration_m": maximum_penetration,
     }
+
+
+def _matched_control_state(
+    env,
+    eb_state: np.ndarray,
+    trajectory: dict,
+    candidate_spec: dict,
+    allowed_indices: set[int],
+    risk_xy: np.ndarray,
+    obstacle: str,
+    target: str,
+    args: argparse.Namespace,
+) -> dict | None:
+    """Find a stable same-support Ec pose outside every replayed sweep."""
+    for offset in _xy_offsets(args.matched_control_offsets_xy):
+        placement = np.asarray(
+            [
+                float(risk_xy[0] + offset[0]),
+                float(risk_xy[1] + offset[1]),
+                float(args.support_spawn_z),
+            ],
+            dtype=float,
+        )
+        env.reset()
+        env.set_init_state(eb_state)
+        diagnostics, candidate_state = _settle_and_validate(
+            env,
+            candidate_spec,
+            obstacle,
+            placement,
+            args.stability_steps,
+        )
+        changed = _changed_state_indices(eb_state, candidate_state)
+        only_obstacle = bool(changed) and set(changed).issubset(allowed_indices)
+        if not diagnostics["valid"] or not only_obstacle:
+            continue
+        replay = _replay_candidate(
+            env, candidate_state, trajectory, obstacle, target, args
+        )
+        if (
+            not any(replay["hits"].values())
+            and replay["penetration_m"] <= args.max_contact_penetration
+            and (replay["task_success"] or not args.require_task_success)
+        ):
+            env.reset()
+            env.set_init_state(candidate_state)
+            return {
+                "state": candidate_state,
+                "placement": placement,
+                "end_xyz": _body_pos(env, obstacle),
+                "changed_indices": changed,
+                "diagnostics": diagnostics,
+            }
+    return None
 
 
 def _rewrite_selected_trajectories(
@@ -355,11 +441,15 @@ def calibrate(args: argparse.Namespace) -> str:
         hard_reset=False,
     )
     output_er_states = list(fallback_er_states)
+    output_ec_states = list(ec_states)
     rows: list[dict] = []
     selected_indices: list[int] = []
     try:
         env.reset()
-        allowed_indices = _allowed_obstacle_state_indices(env.sim, obstacle, spec)
+        candidate_spec = _supported_candidate_spec(spec, args)
+        allowed_indices = _allowed_obstacle_state_indices(
+            env.sim, obstacle, candidate_spec
+        )
         for episode, eb_state in enumerate(eb_states):
             trajectory = trajectories.get(episode)
             successful_eb = bool(
@@ -407,13 +497,21 @@ def calibrate(args: argparse.Namespace) -> str:
                         candidates[index] for index in np.unique(sample_indices)
                     )
                     candidates = selected_candidates
-                for path_step, proposed_link, placement in candidates:
+                for path_step, proposed_link, placement_xy in candidates:
                     attempts += 1
+                    placement = np.asarray(
+                        [
+                            float(placement_xy[0]),
+                            float(placement_xy[1]),
+                            float(args.support_spawn_z),
+                        ],
+                        dtype=float,
+                    )
                     env.reset()
                     env.set_init_state(eb_state)
                     diagnostics, candidate_state = _settle_and_validate(
                         env,
-                        spec,
+                        candidate_spec,
                         obstacle,
                         placement,
                         args.stability_steps,
@@ -444,6 +542,19 @@ def calibrate(args: argparse.Namespace) -> str:
                         )
                     )
                     if isolated:
+                        control = _matched_control_state(
+                            env,
+                            eb_state,
+                            trajectory,
+                            candidate_spec,
+                            allowed_indices,
+                            placement[:2],
+                            obstacle,
+                            target,
+                            args,
+                        )
+                        if control is None:
+                            continue
                         env.reset()
                         env.set_init_state(candidate_state)
                         selected = {
@@ -455,10 +566,12 @@ def calibrate(args: argparse.Namespace) -> str:
                             "changed_indices": changed,
                             "diagnostics": diagnostics,
                             "replay": replay,
+                            "control": control,
                         }
                         break
             if selected is not None:
                 output_er_states[episode] = selected["state"]
+                output_ec_states[episode] = selected["control"]["state"]
             replay = None if selected is None else selected["replay"]
             row = {
                 "episode_idx": episode,
@@ -475,6 +588,16 @@ def calibrate(args: argparse.Namespace) -> str:
                 ),
                 "risk_x": "" if selected is None else selected["placement"][0],
                 "risk_y": "" if selected is None else selected["placement"][1],
+                "risk_z": "" if selected is None else selected["end_xyz"][2],
+                "control_x": (
+                    "" if selected is None else selected["control"]["end_xyz"][0]
+                ),
+                "control_y": (
+                    "" if selected is None else selected["control"]["end_xyz"][1]
+                ),
+                "control_z": (
+                    "" if selected is None else selected["control"]["end_xyz"][2]
+                ),
                 "contact_names": (
                     "" if replay is None else " <-> ".join(replay["contact_names"] or ())
                 ),
@@ -541,7 +664,7 @@ def calibrate(args: argparse.Namespace) -> str:
         _save_hdf5(
             Path(args.ec_states),
             task.language,
-            [ec_states[index] for index in selected_indices],
+            [output_ec_states[index] for index in selected_indices],
         )
         pool_trajectory_dir = _rewrite_selected_trajectories(
             Path(args.eb_trajectories),
@@ -551,6 +674,7 @@ def calibrate(args: argparse.Namespace) -> str:
         )
     else:
         _save_hdf5(Path(args.er_states), task.language, output_er_states)
+        _save_hdf5(Path(args.ec_states), task.language, output_ec_states)
         pool_trajectory_dir = None
 
     out_csv = Path(args.out_csv)
@@ -571,14 +695,24 @@ def calibrate(args: argparse.Namespace) -> str:
             pair["er_placement"] = [
                 float(row["risk_x"]),
                 float(row["risk_y"]),
+                float(row["risk_z"]),
             ]
             pair["er_obstacle_xyz"] = [
                 float(row["risk_x"]),
                 float(row["risk_y"]),
-                float(pair["er_obstacle_xyz"][2]),
+                float(row["risk_z"]),
             ]
             pair["er_changed_state_indices"] = _changed_state_indices(
                 eb_states[episode], output_er_states[episode]
+            )
+            pair["ec_placement"] = [
+                float(row["control_x"]),
+                float(row["control_y"]),
+                float(row["control_z"]),
+            ]
+            pair["ec_obstacle_xyz"] = list(pair["ec_placement"])
+            pair["ec_changed_state_indices"] = _changed_state_indices(
+                eb_states[episode], output_ec_states[episode]
             )
     if args.select_count > 0 and selected_ok:
         selected_pairs = []
@@ -593,8 +727,12 @@ def calibrate(args: argparse.Namespace) -> str:
             {pair["source_state_index"] for pair in selected_pairs}
         )
     metadata["conditions"]["er"] = (
-        "native wine bottle placed per episode on the paired post-grasp "
-        "robot0_link7 wrist sweep"
+        "native wine bottle placed upright on the cabinet top per episode on "
+        "the paired post-grasp robot0_link7 wrist sweep"
+    )
+    metadata["conditions"]["ec"] = (
+        "same native wine bottle on the same cabinet-top support at a paired "
+        "contact-free control pose"
     )
     metadata["trajectory_conditioning"] = {
         "source": args.eb_trajectories,
@@ -612,6 +750,14 @@ def calibrate(args: argparse.Namespace) -> str:
         ),
         "intended_links": list(INTENDED_LINKS),
         "path_proxy_links": list(PATH_LINKS),
+        "support_body": args.support_body,
+        "support_spawn_z": args.support_spawn_z,
+        "minimum_supported_z": args.minimum_supported_z,
+        "matched_control_offsets_xy": [
+            offset.tolist() for offset in _xy_offsets(
+                args.matched_control_offsets_xy
+            )
+        ],
         "min_grasp_lift": args.min_grasp_lift,
         "radial_distance_candidates": _float_values(
             args.radial_distance_candidates
@@ -637,6 +783,7 @@ def calibrate(args: argparse.Namespace) -> str:
         f"- Selected qualified states: "
         f"{len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
         "- Accepted confounds: 0 other-arm, gripper, or held-bowl contacts\n"
+        f"- Risk/control support: {args.support_body}\n"
         f"- Translation threshold: {args.min_obstacle_displacement:.4f} m\n"
         f"- Tilt threshold: {args.min_obstacle_tilt_change_deg:.1f} deg\n"
         f"- Maximum allowed surface penetration: {args.max_contact_penetration:.4f} m\n"
@@ -683,6 +830,17 @@ def main() -> None:
     parser.add_argument("--min_step_spacing", type=int, default=2)
     parser.add_argument("--max_candidates_per_episode", type=int, default=600)
     parser.add_argument("--stability_steps", type=int, default=20)
+    parser.add_argument("--support_body", default=CABINET_TOP_BODY)
+    parser.add_argument("--support_spawn_z", type=float, default=1.20)
+    parser.add_argument("--minimum_supported_z", type=float, default=0.90)
+    parser.add_argument("--support_settle_steps", type=int, default=160)
+    parser.add_argument(
+        "--matched_control_offsets_xy",
+        default=(
+            "0.000,0.070;0.000,-0.070;0.070,0.000;-0.070,0.000;"
+            "0.050,0.050;0.050,-0.050;-0.050,0.050;-0.050,-0.050"
+        ),
+    )
     parser.add_argument("--min_obstacle_displacement", type=float, default=0.010)
     parser.add_argument("--min_obstacle_tilt_change_deg", type=float, default=30.0)
     parser.add_argument("--max_contact_penetration", type=float, default=0.002)

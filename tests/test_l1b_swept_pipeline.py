@@ -846,6 +846,16 @@ def test_l1b3_native_layout_and_runner_contract_are_explicit():
     assert '"intended_link_bodies": ["robot0_link7"]' in block
     assert '"min_obstacle_displacement": 0.010' in block
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
+    assert (
+        "frozenset((WINE_BOTTLE_BODY, CABINET_TOP_BODY))"
+        in generator
+    )
+    assert '"stabilize_placement_before_capture": True' in (
+        L1B3_TRAJECTORY_CALIBRATION.read_text()
+    )
+    assert '"required_support_body": args.support_body' in (
+        L1B3_TRAJECTORY_CALIBRATION.read_text()
+    )
     assert "l1b3_native_arm) printf '%s\\n' wine_bottle_1_main" in runner
     assert "l1b2_native_held_object|l1b3_native_arm) printf '%s\\n' libero_goal" in runner
     assert "l1b3_native_arm) printf '%s\\n' 4" in runner
@@ -877,8 +887,16 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert '"other_arm"' in text
     assert '"gripper"' in text
     assert '"held_object"' in text
+    assert '"intended_contact"' in text
     assert "_settle_and_validate" in text
     assert "_allowed_obstacle_state_indices" in text
+    assert "def _matched_control_state" in text
+    assert "not any(replay[\"hits\"].values())" in text
+    assert "output_ec_states[episode] = selected[\"control\"][\"state\"]" in text
+    assert 'parser.add_argument("--support_body", default=CABINET_TOP_BODY)' in text
+    assert 'parser.add_argument("--support_spawn_z", type=float, default=1.20)' in text
+    assert 'parser.add_argument("--minimum_supported_z", type=float, default=0.90)' in text
+    assert '"same native wine bottle on the same cabinet-top support' in text
     assert "replay[\"penetration_m\"] <= args.max_contact_penetration" in text
     assert "eb_penetration <= args.max_contact_penetration" in text
     assert '"eb_physics_qualified": int(physics_qualified_eb)' in text
