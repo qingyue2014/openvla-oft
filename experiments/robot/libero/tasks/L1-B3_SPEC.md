@@ -76,7 +76,7 @@ some calibrated risk poses are struck by link7 before that prefix establishes
 a reliable grasp. After grasp verification, a closed-loop 10-degree wrist
 reorientation follows the native successful-policy terminal pose so the bowl
 can reach the plate without high lifting. Before rotating, the held bowl moves
-6 cm directly away from the bottle to prevent a gripper or rim sweep during wrist
+5 cm along the bottle-opposite corridor normal to prevent a gripper or rim sweep during wrist
 rotation. Grasp seating, vertical lifting, and
 lateral transport use capped Cartesian commands, with a dedicated
 lateral-transport cap that remains fast enough to converge within the waypoint

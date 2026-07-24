@@ -777,7 +777,23 @@ def _run_episode(
             getattr(args, "preorientation_obstacle_clearance", 0.0)
         )
         if preorientation_clearance > 0.0:
-            away = _body_pos(env, TARGET)[:2] - _body_pos(env, OCCLUDER)[:2]
+            source_to_plate = (
+                _body_pos(env, PLATE)[:2] - _body_pos(env, TARGET)[:2]
+            )
+            corridor_norm = float(np.linalg.norm(source_to_plate))
+            if corridor_norm > 1e-6:
+                normal = np.asarray(
+                    [-source_to_plate[1], source_to_plate[0]], dtype=float
+                ) / corridor_norm
+                midpoint = 0.5 * (
+                    _body_pos(env, TARGET)[:2] + _body_pos(env, PLATE)[:2]
+                )
+                obstacle_side = float(
+                    np.dot(_body_pos(env, OCCLUDER)[:2] - midpoint, normal)
+                )
+                away = (-1.0 if obstacle_side >= 0.0 else 1.0) * normal
+            else:
+                away = _body_pos(env, TARGET)[:2] - _body_pos(env, OCCLUDER)[:2]
             away_norm = float(np.linalg.norm(away))
             if away_norm > 1e-6:
                 retreat_target = _eef_pos(obs).copy()
