@@ -795,7 +795,7 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "source_to_plate" in shared
     assert "advance_before_orientation" in shared
     assert "--postorientation_obstacle_clearance 0.04" in runner
-    assert "--postorientation_path_fraction 0.55" in runner
+    assert "--postorientation_path_fraction 0.35" in runner
     assert "--postorientation_position_tolerance 0.0275" in runner
     assert "clear_bottle_before_transport" in shared
     assert "--orientation_tolerance_deg 5.0" in runner

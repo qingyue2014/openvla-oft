@@ -273,7 +273,7 @@ safe_reference_family() {
     extra_args+=(--orientation_tolerance_deg 5.0 --orientation_max_steps 300)
     extra_args+=(--rotation_scale 0.5 --max_rotation_command 0.02)
     extra_args+=(--postorientation_obstacle_clearance 0.04)
-    extra_args+=(--postorientation_path_fraction 0.55)
+    extra_args+=(--postorientation_path_fraction 0.35)
     extra_args+=(--postorientation_position_tolerance 0.0275)
     extra_args+=(--transport_obstacle_clearance 0.00)
     extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
