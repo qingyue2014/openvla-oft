@@ -169,6 +169,10 @@ def main() -> None:
     parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--preorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--preorientation_position_tolerance", type=float, default=0.010)
+    parser.add_argument("--preorientation_lift_height", type=float, default=0.0)
+    parser.add_argument(
+        "--preorientation_lift_position_tolerance", type=float, default=0.010
+    )
     parser.add_argument("--postorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--postorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--postorientation_position_tolerance", type=float, default=0.010)

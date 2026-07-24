@@ -931,6 +931,43 @@ def _run_episode(
                 )
                 if failure is None:
                     grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
+            preorientation_lift_height = float(
+                getattr(args, "preorientation_lift_height", 0.0)
+            )
+            if failure is None and preorientation_lift_height > 0.0:
+                lift_target = _eef_pos(obs).copy()
+                lift_target[2] = max(
+                    float(lift_target[2]),
+                    float(
+                        source[2]
+                        + preorientation_lift_height
+                        + grasped_offset[2]
+                    ),
+                )
+                obs, step, failure = _move_to(
+                    env,
+                    obs,
+                    oracle,
+                    recorder,
+                    lift_target,
+                    close_sign,
+                    step,
+                    args,
+                    "raise_before_orientation",
+                    tolerance=float(
+                        getattr(
+                            args,
+                            "preorientation_lift_position_tolerance",
+                            args.transport_position_tolerance,
+                        )
+                    ),
+                    max_steps=args.transport_max_waypoint_steps,
+                    max_position_command=args.transport_max_position_command,
+                    retained_body=TARGET,
+                    retained_offset=grasped_offset,
+                )
+                if failure is None:
+                    grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
             if (
                 failure is None
                 and preorientation_path_fraction > 0.0
@@ -1709,6 +1746,10 @@ def main():
     parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--preorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--preorientation_position_tolerance", type=float, default=0.010)
+    parser.add_argument("--preorientation_lift_height", type=float, default=0.0)
+    parser.add_argument(
+        "--preorientation_lift_position_tolerance", type=float, default=0.010
+    )
     parser.add_argument("--postorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--postorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--postorientation_position_tolerance", type=float, default=0.010)

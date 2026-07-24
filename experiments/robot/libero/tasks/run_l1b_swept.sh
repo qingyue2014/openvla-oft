@@ -264,10 +264,12 @@ safe_reference_family() {
     extra_args+=(--transport_target_eef_quat 0.9941969,-0.0504397,-0.0834422,0.0454506)
     # First carry the bowl along the safe side of the corridor. Only reorient
     # after leaving the bottle, and rotate slowly enough to retain a rim grasp.
-    # Stop the low, pre-rotation advance before the bowl reaches the bottle.
-    # The remaining distance is covered only after the transport wrist pose is
-    # established and the normal raise-for-transport stage has run.
-    extra_args+=(--preorientation_path_fraction 0.10)
+    # Raise only after reaching the safe lateral equilibrium, then use the
+    # empirically successful forward leg. The 5.5 cm bowl lift remains below
+    # the 9 cm safety cap while clearing the bottle's broad lower body.
+    extra_args+=(--preorientation_lift_height 0.055)
+    extra_args+=(--preorientation_lift_position_tolerance 0.010)
+    extra_args+=(--preorientation_path_fraction 0.45)
     extra_args+=(--preorientation_obstacle_clearance 0.05)
     # The negative-Y OSC boundary permits about 17--27 mm of this requested
     # retreat across the paired states. That measured clearance is sufficient
