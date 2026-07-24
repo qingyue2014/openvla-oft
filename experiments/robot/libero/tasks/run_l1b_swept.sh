@@ -543,7 +543,12 @@ run_family() {
       fi
       # A five-episode smoke cannot satisfy the formal 20-trajectory count;
       # keep all other replay purity / consequence-activation checks unchanged.
-      REPLAY_MIN_EPISODES=2 replay_native_family "${family}" false
+      replay_min_episodes=2
+      if [[ "${count}" -lt "${replay_min_episodes}" ]]; then
+        replay_min_episodes="${count}"
+      fi
+      REPLAY_MIN_EPISODES="${replay_min_episodes}" \
+        replay_native_family "${family}" false
       eval_condition "${family}" er "${count}"
       eval_condition "${family}" ec "${count}"
       ;;
