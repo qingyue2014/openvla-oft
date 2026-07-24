@@ -902,8 +902,8 @@ def main() -> None:
             "0.050,0.050;0.050,-0.050;-0.050,0.050;-0.050,-0.050"
         ),
     )
-    parser.add_argument("--min_obstacle_displacement", type=float, default=0.010)
-    parser.add_argument("--min_obstacle_tilt_change_deg", type=float, default=30.0)
+    parser.add_argument("--min_obstacle_displacement", type=float, default=0.004)
+    parser.add_argument("--min_obstacle_tilt_change_deg", type=float, default=10.0)
     parser.add_argument("--max_contact_penetration", type=float, default=0.002)
     parser.add_argument("--min_successful_eb", type=int, default=20)
     parser.add_argument("--min_activation_rate", type=float, default=0.70)

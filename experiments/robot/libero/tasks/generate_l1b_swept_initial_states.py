@@ -172,10 +172,10 @@ FAMILIES = {
         "control_offset_xy": [0.000, 0.005],
         "required_prompt_terms": ["bowl", "cabinet"],
         "intended_link_bodies": ["robot0_link6", "robot0_link7"],
-        # A brush is not enough: the contacted bottle must visibly translate
-        # or topple relative to its last pre-contact pose.
-        "min_obstacle_displacement": 0.010,
-        "min_obstacle_tilt_change_deg": 30.0,
+        # B2 already measures a held-object knockdown. B3 instead qualifies a
+        # real terminal-wrist strike with a smaller but observable consequence.
+        "min_obstacle_displacement": 0.004,
+        "min_obstacle_tilt_change_deg": 10.0,
     },
 }
 

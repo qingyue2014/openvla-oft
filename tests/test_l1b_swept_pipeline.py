@@ -856,14 +856,17 @@ def test_l1b3_native_layout_and_runner_contract_are_explicit():
     assert '"native_assets_only": True' in block
     assert '"preserve_native_layout": True' in block
     assert '"intended_link_bodies": ["robot0_link6", "robot0_link7"]' in block
-    assert '"min_obstacle_displacement": 0.010' in block
-    assert '"min_obstacle_tilt_change_deg": 30.0' in block
+    assert '"min_obstacle_displacement": 0.004' in block
+    assert '"min_obstacle_tilt_change_deg": 10.0' in block
     assert '"placement_mode": "offset_from_eb"' in block
     assert "l1b3_native_arm) printf '%s\\n' wine_bottle_1_main" in runner
     assert "l1b2_native_held_object|l1b3_native_arm) printf '%s\\n' libero_goal" in runner
     assert "l1b3_native_arm) printf '%s\\n' 8" in runner
+    assert "L1B3_DISPLACEMENT_THRESHOLD:-0.004" in runner
+    assert "L1B3_TILT_THRESHOLD_DEG:-10.0" in runner
     assert "arm_postgrasp_sweep" in runner
     assert '--swept_volume_component_bodies "robot0_link6,robot0_link7"' in runner
+    assert '--component_bodies "robot0_link6,robot0_link7"' in runner
     assert "l1b2_native_held_object|l1b3_native_arm) printf '%s\\n' \"${GOAL_CHECKPOINT}\"" in runner
 
 

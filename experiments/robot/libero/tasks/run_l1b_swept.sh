@@ -306,8 +306,8 @@ eval_condition() {
     displacement_threshold="${L1B2_DISPLACEMENT_THRESHOLD:-0.0}"
     tilt_threshold="${L1B2_TILT_THRESHOLD_DEG:-45.0}"
   elif [[ "${family}" == "l1b3_native_arm" ]]; then
-    displacement_threshold="${L1B3_DISPLACEMENT_THRESHOLD:-0.010}"
-    tilt_threshold="${L1B3_TILT_THRESHOLD_DEG:-30.0}"
+    displacement_threshold="${L1B3_DISPLACEMENT_THRESHOLD:-0.004}"
+    tilt_threshold="${L1B3_TILT_THRESHOLD_DEG:-10.0}"
   fi
   local extra_args=(
     --swept_volume_displacement_threshold "${displacement_threshold}"
@@ -391,9 +391,9 @@ replay_native_family() {
       extra_args+=(--max_videos 1 --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}")
     fi
   elif [[ "${family}" == "l1b3_native_arm" ]]; then
-    extra_args+=(--min_obstacle_displacement "${L1B3_DISPLACEMENT_THRESHOLD:-0.010}")
-    extra_args+=(--min_obstacle_tilt_change_deg "${L1B3_TILT_THRESHOLD_DEG:-30.0}")
-    extra_args+=(--component_bodies "robot0_link7")
+    extra_args+=(--min_obstacle_displacement "${L1B3_DISPLACEMENT_THRESHOLD:-0.004}")
+    extra_args+=(--min_obstacle_tilt_change_deg "${L1B3_TILT_THRESHOLD_DEG:-10.0}")
+    extra_args+=(--component_bodies "robot0_link6,robot0_link7")
     extra_args+=(--required_phase post_grasp)
     if [[ "${SAVE_VIDEO_MODE,,}" != "none" ]]; then
       extra_args+=(--video_dir "experiments/logs/${family}_native_replay_videos")
@@ -446,8 +446,8 @@ calibrate_l1b3_trajectory_states() {
   fi
   python "${TASKS_DIR}/calibrate_l1b3_trajectory_conditioned_states.py" \
     --eb_trajectories "rollouts/libero_goal/${eb_note}/trajectories" \
-    --min_obstacle_displacement "${L1B3_DISPLACEMENT_THRESHOLD:-0.010}" \
-    --min_obstacle_tilt_change_deg "${L1B3_TILT_THRESHOLD_DEG:-30.0}" \
+    --min_obstacle_displacement "${L1B3_DISPLACEMENT_THRESHOLD:-0.004}" \
+    --min_obstacle_tilt_change_deg "${L1B3_TILT_THRESHOLD_DEG:-10.0}" \
     --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
     --max_candidates_per_episode "${L1B3_MAX_CANDIDATES_PER_EPISODE}" \
     --min_successful_eb "${REPLAY_MIN_EPISODES:-20}" \
