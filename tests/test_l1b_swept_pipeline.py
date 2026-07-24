@@ -742,6 +742,8 @@ def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
     assert 'calibrate_l1b7_trajectory_states "${family}" "${count}"' in RUNNER.read_text()
     assert "L1B7_MAX_CANDIDATES_PER_EPISODE" in RUNNER.read_text()
     assert "L1-B7 Eb calibration pool did not produce a complete index" in RUNNER.read_text()
+    assert 'eval_condition "${family}" eb "${pool_count}" false' in RUNNER.read_text()
+    assert '"${validate_physics}" == "true"' in RUNNER.read_text()
     assert 'REPLAY_MIN_EPISODES="${replay_min_episodes}"' in RUNNER.read_text()
     assert 'if [[ "${family}" != "l1b7_native_arm" ]]' in RUNNER.read_text()
     assert "--transport_max_waypoint_steps 700" in RUNNER.read_text()
