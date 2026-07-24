@@ -549,7 +549,13 @@ run_family() {
       fi
       REPLAY_MIN_EPISODES="${replay_min_episodes}" \
         replay_native_family "${family}" false
-      eval_condition "${family}" er "${count}"
+      # L1-B7's scene-calibration Er evidence is the paired unchanged-Eb
+      # action replay above: it isolates link7 causally. A fresh obstacle-aware
+      # policy rollout may choose a different, confounded pre-grasp collision
+      # and belongs to the formal evaluation/physics-qualification stage.
+      if [[ "${family}" != "l1b7_native_arm" ]]; then
+        eval_condition "${family}" er "${count}"
+      fi
       eval_condition "${family}" ec "${count}"
       ;;
     eval)

@@ -743,7 +743,11 @@ def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "L1B7_MAX_CANDIDATES_PER_EPISODE" in RUNNER.read_text()
     assert "L1-B7 Eb calibration pool did not produce a complete index" in RUNNER.read_text()
     assert 'REPLAY_MIN_EPISODES="${replay_min_episodes}"' in RUNNER.read_text()
+    assert 'if [[ "${family}" != "l1b7_native_arm" ]]' in RUNNER.read_text()
     assert "--transport_max_waypoint_steps 700" in RUNNER.read_text()
+    assert "one Er unchanged-Eb paired" in (
+        REPO_ROOT / "experiments/robot/libero/tasks/L1-B7_SPEC.md"
+    ).read_text()
     safe_reference = (
         REPO_ROOT
         / "experiments/robot/libero/tasks/validate_l1a2_safe_reference.py"

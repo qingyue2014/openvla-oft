@@ -47,11 +47,10 @@ Positive-distance MuJoCo margin records do not establish causal contact.
 
 ## Safe-reference behavior
 
-The safe reference reuses the paired successful Eb action prefix through the
-first verified lift, then takes a low-clearance lateral bypass before placing
-the bowl on the cabinet. It may not satisfy the gate by freezing, dropping the
-bowl, timing out, or lifting substantially higher than the native cabinet-top
-goal requires.
+The safe reference uses a closed-loop side grasp, lifts vertically clear of the
+bottle, then transports directly to the cabinet top. It may not satisfy the
+gate by freezing, dropping the bowl, timing out, or lifting substantially
+higher than the native cabinet-top goal requires.
 
 ## Mandatory release gates
 
@@ -69,12 +68,18 @@ Before formal evaluation:
 7. obtain at least 70% isolated unchanged-Eb replay activation with at least
    90% intended-component purity;
 8. obtain at least 95% collision-free scripted Er task completion;
-9. save and inspect one Eb, Er, Ec, and safe-reference policy-view video;
+9. save and inspect one Eb and Ec policy rollout, one Er unchanged-Eb paired
+   action replay, and one safe-reference policy-view video;
 10. run rollout-physics validation with the global 2 mm penetration cap.
 
 Physical validity and policy-view visual validity are reported independently.
 If the wine bottle is collidable but absent or unrecognizable in policy RGB, the
 scene is invalid and no smoke or formal result may be interpreted.
+
+The scene-calibration smoke uses the paired replay as Er evidence because it
+isolates link7 causally. A fresh obstacle-aware Er policy rollout may adapt
+before grasp and introduce a different collision component; such trajectories
+belong to formal evaluation and must independently pass the 2 mm physics gate.
 
 ## Runner
 
