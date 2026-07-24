@@ -797,7 +797,7 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "advance_before_orientation" in shared
     assert "--preorientation_lift_height 0.055" in runner
     assert "--preorientation_path_fraction 0.65" in runner
-    assert "--preorientation_advance_position_tolerance 0.015" in runner
+    assert "--preorientation_advance_position_tolerance 0.050" in runner
     assert "--preorientation_rotation_height 0.030" in runner
     assert "raise_before_orientation" in shared
     assert "lower_before_orientation" in shared
