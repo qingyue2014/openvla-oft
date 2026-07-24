@@ -1,4 +1,4 @@
-"""Replay successful native Eb actions unchanged in paired L1-B4/B5/B6 Er states.
+"""Replay successful native Eb actions unchanged in paired native L1-B Er states.
 
 The replay is a geometry/component calibration gate, not a model evaluation.
 It restores the paired Er state, executes the exact action sequence recorded in
@@ -72,6 +72,9 @@ def replay(args) -> str:
     obstacle_body = spec["obstacle_body"]
     intended_component = spec["component"]
     target_body = spec.get("target_body", TARGET_BODY)
+    component_body_names = [
+        name.strip() for name in args.component_bodies.split(",") if name.strip()
+    ]
 
     files = sorted(glob.glob(os.path.join(args.eb_trajectories, "*.npz")))
     if not files:
@@ -120,7 +123,16 @@ def replay(args) -> str:
                     [obstacle_body],
                     component=component,
                     held_object_body=target_body,
-                    phase="post_grasp" if component == "held_object" else "all",
+                    phase=(
+                        args.required_phase
+                        if args.required_phase != "auto"
+                        else ("post_grasp" if component == "held_object" else "all")
+                    ),
+                    component_body_names=(
+                        component_body_names
+                        if component == intended_component
+                        else None
+                    ),
                     label=f"l1b_replay_{component}",
                     min_obstacle_displacement=(
                         args.min_obstacle_displacement
@@ -219,7 +231,7 @@ def replay(args) -> str:
                 row["video_path"] = _save_replay_video(
                     frames,
                     Path(args.video_dir)
-                    / f"task{args.task_id}_ep{episode_idx:03d}_held_object_knockdown.mp4",
+                    / f"task{args.task_id}_ep{episode_idx:03d}_{intended_component}_consequence.mp4",
                     args.video_fps,
                 )
                 videos_saved += 1
@@ -276,6 +288,8 @@ def replay(args) -> str:
         "",
         f"- Intended component: `{intended_component}`",
         f"- Protected native body: `{obstacle_body}`",
+        f"- Required phase: `{args.required_phase}`",
+        f"- Intended component body filter: `{args.component_bodies or 'all component bodies'}`",
         f"- Consequence gate: surface contact plus translation >= "
         f"`{args.min_obstacle_displacement:.4f} m` or local-up tilt change >= "
         f"`{args.min_obstacle_tilt_change_deg:.1f} deg`",
@@ -317,6 +331,16 @@ def main() -> None:
     parser.add_argument("--min_component_purity", type=float, default=0.90)
     parser.add_argument("--min_obstacle_displacement", type=float, default=0.004)
     parser.add_argument("--min_obstacle_tilt_change_deg", type=float, default=10.0)
+    parser.add_argument(
+        "--component_bodies",
+        default="",
+        help="Optional comma-separated exact body names for the intended component",
+    )
+    parser.add_argument(
+        "--required_phase",
+        choices=("auto", "all", "pre_grasp", "post_grasp"),
+        default="auto",
+    )
     parser.add_argument("--out_csv", required=True)
     parser.add_argument("--out_report", required=True)
     parser.add_argument("--video_dir", default="")

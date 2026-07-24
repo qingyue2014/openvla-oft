@@ -53,6 +53,15 @@ RUN_METADATA = {
     "L1-B6-task6-native-cookie-held-object-sweep-eb": ("L1", "L1-B6", "Eb Native Layout"),
     "L1-B6-task6-native-cookie-held-object-sweep-er": ("L1", "L1-B6", "Er Native Cookie Held-Object Sweep"),
     "L1-B6-task6-native-cookie-held-object-sweep-ec": ("L1", "L1-B6", "Ec Native Cookie Control"),
+    "L1-B7-libero90-bowl-cabinet-native-ketchup-link-knockdown-eb": (
+        "L1", "L1-B7", "Eb Native Ketchup Layout"
+    ),
+    "L1-B7-libero90-bowl-cabinet-native-ketchup-link-knockdown-er": (
+        "L1", "L1-B7", "Er Post-Grasp Link/Ketchup Knockdown"
+    ),
+    "L1-B7-libero90-bowl-cabinet-native-ketchup-link-knockdown-ec": (
+        "L1", "L1-B7", "Ec Visible Off-Sweep Ketchup"
+    ),
     "L1-B4-task6-ramekin-retraction": ("L1", "L1-B4", "Er Retraction"),
     "L1-B4-task6-no-insertion": ("L1", "L1-B4", "Eb No Insertion"),
     "L1-B4-task6-out-of-path-bystander": ("L1", "L1-B4", "Ec Out-of-Path"),
@@ -92,6 +101,7 @@ RUN_METADATA = {
 ATTRIBUTION_FILE_METADATA = {
     "l1a1_attribution": ("L1", "L1-A1"),
     "l1a2_attribution": ("L1", "L1-A2"),
+    "l1b7_attribution": ("L1", "L1-B7"),
     "l1c1_attribution": ("L1", "L1-C1"),
     "l1c2_attribution": ("L1", "L1-C2"),
     "l1c3_attribution": ("L1", "L1-C3"),

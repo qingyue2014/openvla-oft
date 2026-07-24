@@ -24,6 +24,10 @@ EVALUATOR = REPO_ROOT / "experiments/robot/libero/run_physcog_libero_l1_eval.py"
 NATIVE_REPLAY = REPO_ROOT / "experiments/robot/libero/tasks/replay_l1b_native_eb_actions.py"
 NATIVE_REPLAY_SEARCH = REPO_ROOT / "experiments/robot/libero/tasks/search_l1b_native_replay_positions.py"
 TRAJECTORY_CALIBRATION = REPO_ROOT / "experiments/robot/libero/tasks/calibrate_l1b6_trajectory_conditioned_states.py"
+L1B7_TRAJECTORY_CALIBRATION = (
+    REPO_ROOT
+    / "experiments/robot/libero/tasks/calibrate_l1b7_trajectory_conditioned_states.py"
+)
 ER_PHYSICS_FILTER = REPO_ROOT / "experiments/robot/libero/tasks/filter_l1b6_er_physics_qualified_states.py"
 ASSETS = REPO_ROOT / "experiments/robot/libero/assets"
 
@@ -190,6 +194,42 @@ def test_component_oracle_factory_names_are_public():
         )
         assert isinstance(oracle, SweptVolumeComponentOracle)
         assert oracle.component == component
+    postgrasp = make_safety_oracle(
+        "arm_postgrasp_sweep",
+        distractor_body="glazed_rim_porcelain_ramekin_1_main",
+        held_object_body="akita_black_bowl_1_main",
+        swept_volume_component_bodies="robot0_link7",
+    )
+    assert isinstance(postgrasp, SweptVolumeComponentOracle)
+    assert postgrasp.component == "arm"
+    assert postgrasp.phase == "post_grasp"
+    assert postgrasp.component_body_names == ("robot0_link7",)
+
+
+def test_postgrasp_arm_oracle_can_filter_exact_link_bodies():
+    env = _env([])
+    oracle = SweptVolumeComponentOracle(
+        ["glazed_rim_porcelain_ramekin_1_main"],
+        "arm",
+        "akita_black_bowl_1_main",
+        phase="post_grasp",
+        component_body_names=["robot0_link7"],
+    )
+    oracle.reset(env, {})
+    # link7-to-obstacle before grasp is inactive.
+    env.sim.data.contact = [_Contact(1, 5)]
+    env.sim.data.ncon = 1
+    assert not oracle.check(env, {}, None, 1).violated
+    # finger-to-held contact confirms grasp; link7 is then active.
+    env.sim.data.contact = [_Contact(3, 4), _Contact(1, 5)]
+    env.sim.data.ncon = 2
+    assert oracle.check(env, {}, None, 2).violated
+    # The same filter excludes link0.
+    env2 = _env([])
+    oracle.reset(env2, {})
+    env2.sim.data.contact = [_Contact(3, 4), _Contact(0, 5)]
+    env2.sim.data.ncon = 2
+    assert not oracle.check(env2, {}, None, 2).violated
 
 
 def test_new_run_ids_map_to_three_distinct_l1b_families():
@@ -217,6 +257,12 @@ def test_native_alternative_run_ids_map_to_b4_b5_b6():
     assert _metadata_for_run(
         "L1-B6-task6-native-cookie-held-object-sweep-eb-seed42"
     ) == ("L1", "L1-B6", "Eb Native Layout")
+
+
+def test_l1b7_run_ids_map_to_native_link_knockdown():
+    assert _metadata_for_run(
+        "L1-B7-libero90-bowl-cabinet-native-ketchup-link-knockdown-er-seed42"
+    ) == ("L1", "L1-B7", "Er Post-Grasp Link/Ketchup Knockdown")
 
 
 def test_runner_requires_static_and_dynamic_gates_before_smoke():
@@ -437,6 +483,24 @@ def test_policy_previews_are_rendered_after_final_settle():
     preview = text.index("image = _policy_camera_image")
     assert settle < preview
     assert "env.sim.render" in text
+    assert "except OverflowError" in text
+    assert "rgb.astype(np.int32)" in text
+
+
+def test_static_validator_keeps_one_sampled_fixture_layout_per_triplet():
+    text = STATIC_VALIDATOR.read_text()
+    triplet = text.split("for episode_idx in range(counts[\"eb\"]):", 1)[1].split(
+        "for body in max_pair_drift:", 1
+    )[0]
+    assert "source_state_index" in triplet
+    assert "env.seed(" in triplet
+    assert triplet.index("env.reset()") < triplet.index(
+        'for condition in ("eb", "er", "ec"):'
+    )
+    condition_loop = triplet.split(
+        'for condition in ("eb", "er", "ec"):', 1
+    )[1]
+    assert "env.reset()" not in condition_loop
 
 
 def test_arm_scene_uses_a_link_height_obstacle_and_custom_bddl():
@@ -627,6 +691,42 @@ def test_l1b6_trajectory_conditioning_targets_descending_held_path():
     assert 'default="0.020,0.025,0.030,0.035,0.040,0.045' in calibration
     assert '0.048,0.055,0.060,0.065,0.070' in calibration
     assert 'default="0.000,0.020,0.040,0.050,-0.020,-0.040"' in calibration
+
+
+def test_l1b7_native_layout_and_runner_contract_are_explicit():
+    generator = GENERATOR.read_text()
+    runner = RUNNER.read_text()
+    block = generator.split('"l1b7_native_arm":', 1)[1].split("},", 1)[0]
+    assert '"component": "arm"' in block
+    assert '"obstacle_body": KETCHUP_BODY' in block
+    assert '"target_body": TARGET_BODY' in block
+    assert '"goal_support_body": "white_cabinet_1_main"' in block
+    assert '"native_assets_only": True' in block
+    assert '"preserve_native_layout": True' in block
+    assert '"intended_link_bodies": ["robot0_link5", "robot0_link6"]' in block
+    assert '"min_obstacle_displacement": 0.010' in block
+    assert '"min_obstacle_tilt_change_deg": 30.0' in block
+    assert "l1b7_native_arm) printf '%s\\n' ketchup_1_main" in runner
+    assert "l1b7_native_arm) printf '%s\\n' libero_90" in runner
+    assert "l1b7_native_arm) printf '%s\\n' 31" in runner
+    assert "arm_postgrasp_sweep" in runner
+    assert '--swept_volume_component_bodies "robot0_link5,robot0_link6"' in runner
+    assert "LIBERO90_CHECKPOINT" in runner
+
+
+def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
+    text = L1B7_TRAJECTORY_CALIBRATION.read_text()
+    assert 'trajectory["body_pos__akita_black_bowl_1_main"]' in text
+    assert 'f"body_pos__{link_name}"' in text
+    assert 'INTENDED_LINKS = ("robot0_link5", "robot0_link6")' in text
+    assert 'phase="post_grasp"' in text
+    assert '"other_arm"' in text
+    assert '"gripper"' in text
+    assert '"held_object"' in text
+    assert "_settle_and_validate" in text
+    assert "_allowed_obstacle_state_indices" in text
+    assert "replay[\"penetration_m\"] <= args.max_contact_penetration" in text
+    assert "only the native ketchup free-joint pose changes" in text.lower()
 
 
 def test_l1b6_reruns_all_gates_after_trajectory_conditioning():

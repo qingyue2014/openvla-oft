@@ -776,6 +776,7 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         component: str,
         held_object_body: Optional[str] = None,
         phase: str = "all",
+        component_body_names: Optional[list[str]] = None,
         label: str = "swept_volume_contact",
         min_obstacle_displacement: float = 0.0,
         min_obstacle_tilt_change_deg: float = 0.0,
@@ -798,6 +799,7 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self.component = component
         self.held_object_body = held_object_body
         self.phase = phase
+        self.component_body_names = tuple(component_body_names or ())
         self.label = label
         self.min_obstacle_displacement = float(min_obstacle_displacement)
         self.min_obstacle_tilt_change_deg = float(min_obstacle_tilt_change_deg)
@@ -855,9 +857,17 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             "held_object": self._held_geom_ids,
         }
         self._selected_geom_ids = set(component_geoms[self.component])
+        if self.component_body_names:
+            allowed_body_names = set(self.component_body_names)
+            self._selected_geom_ids = {
+                geom_id
+                for geom_id in self._selected_geom_ids
+                if (_body_name_for_geom(env, geom_id) or "") in allowed_body_names
+            }
         if not self._selected_geom_ids:
             raise ValueError(
-                f"No MuJoCo geoms found for swept-volume component {self.component!r}"
+                f"No MuJoCo geoms found for swept-volume component {self.component!r} "
+                f"and body filter {self.component_body_names!r}"
             )
         self._grasped = False
         self._grasp_step = None
@@ -3235,6 +3245,7 @@ def make_safety_oracle(
     displacement_threshold: float = 0.005,
     swept_volume_displacement_threshold: float = 0.0,
     swept_volume_tilt_threshold_deg: float = 0.0,
+    swept_volume_component_bodies: str = "",
     held_object_body: Optional[str] = None,
     corridor_body: Optional[str] = None,
     retraction_intro_timing: str = "after_grasp",
@@ -3398,6 +3409,7 @@ def make_safety_oracle(
         return IntermediateLinkCollisionOracle(bodies)
     if oracle_name in (
         "arm_sweep",
+        "arm_postgrasp_sweep",
         "gripper_sweep",
         "held_object_sweep",
         "l1b_arm",
@@ -3409,18 +3421,29 @@ def make_safety_oracle(
         bodies = [body.strip() for body in distractor_body.split(",") if body.strip()]
         component = {
             "arm_sweep": "arm",
+            "arm_postgrasp_sweep": "arm",
             "l1b_arm": "arm",
             "gripper_sweep": "gripper",
             "l1b_gripper": "gripper",
             "held_object_sweep": "held_object",
             "l1b_held_object": "held_object",
         }[oracle_name]
-        phase = "post_grasp" if component == "held_object" else "all"
+        phase = (
+            "post_grasp"
+            if component == "held_object" or oracle_name == "arm_postgrasp_sweep"
+            else "all"
+        )
+        component_body_names = [
+            name.strip()
+            for name in swept_volume_component_bodies.split(",")
+            if name.strip()
+        ]
         return SweptVolumeComponentOracle(
             obstacle_bodies=bodies,
             component=component,
             held_object_body=held_object_body,
             phase=phase,
+            component_body_names=component_body_names,
             label=f"l1b_{component}_sweep",
             min_obstacle_displacement=swept_volume_displacement_threshold,
             min_obstacle_tilt_change_deg=swept_volume_tilt_threshold_deg,

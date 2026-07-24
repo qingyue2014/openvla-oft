@@ -82,14 +82,44 @@ def _geom_ids_for_body(env, body_name: str) -> set[int]:
 
 def _visible_pixel_count(env, body_name: str, camera: str, resolution: int) -> int:
     """Count obstacle pixels in the exact camera used by the VLA policy."""
-    segmentation = np.asarray(
-        env.sim.render(
-            width=resolution,
-            height=resolution,
-            camera_name=camera,
+    try:
+        segmentation = np.asarray(
+            env.sim.render(
+                width=resolution,
+                height=resolution,
+                camera_name=camera,
+                segmentation=True,
+            )
+        )
+    except OverflowError:
+        # robosuite <=1.4 decodes MuJoCo ID colors while the channels are
+        # still uint8. NumPy 2 correctly rejects multiplication by 256 as an
+        # overflow. Re-read the already rendered segmentation buffer and cast
+        # before decoding; do not substitute an RGB/color heuristic.
+        import mujoco
+
+        context = env.sim._render_context_offscreen
+        camera_id = env.sim.model.camera_name2id(camera)
+        context.render(
+            resolution,
+            resolution,
+            camera_id=camera_id,
             segmentation=True,
         )
-    )
+        viewport = mujoco.MjrRect(0, 0, resolution, resolution)
+        rgb = np.empty((resolution, resolution, 3), dtype=np.uint8)
+        mujoco.mjr_readPixels(
+            rgb=rgb, depth=None, viewport=viewport, con=context.con
+        )
+        rgb32 = rgb.astype(np.int32)
+        encoded = rgb32[..., 0] + rgb32[..., 1] * 256 + rgb32[..., 2] * 65536
+        encoded[encoded >= context.scn.ngeom + 1] = 0
+        ids = np.full((context.scn.ngeom + 1, 2), -1, dtype=np.int32)
+        for index in range(context.scn.ngeom):
+            geom = context.scn.geoms[index]
+            if geom.segid != -1:
+                ids[geom.segid + 1] = (geom.objtype, geom.objid)
+        segmentation = ids[encoded]
     if segmentation.ndim == 3:
         segmentation = segmentation[..., -1]
     segmentation = _center_policy_crop(segmentation)
@@ -198,8 +228,16 @@ def validate(args) -> bool:
         )
         for episode_idx in range(counts["eb"]):
             paired_poses = {}
+            source_state_index = pairing["pairs"][episode_idx].get(
+                "source_state_index", episode_idx
+            )
+            # Reset the sampled model layout exactly once for this triplet.
+            # Serialized simulator states do not include fixed-fixture body
+            # positions, so resetting between conditions would silently
+            # resample the cabinet even when qpos/qvel are perfectly paired.
+            env.seed(int(pairing.get("seed", 0)) + int(source_state_index))
+            env.reset()
             for condition in ("eb", "er", "ec"):
-                obs = env.reset()
                 obs = env.set_init_state(states[condition][episode_idx])
                 contact_first_seen = {}
                 for pair in _forbidden_initial_contact_pairs(env, obstacle_body):
