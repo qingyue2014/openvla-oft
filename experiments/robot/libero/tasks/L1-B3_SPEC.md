@@ -67,10 +67,10 @@ Positive-distance MuJoCo margin records do not establish causal contact.
 ## Safe-reference behavior
 
 The safe reference uses a collision-monitored closed-loop rim-grasp search,
-lifts vertically, and transports along a six-segment, 3 cm lateral arc on the
-side of the corridor opposite the bottle. The arc returns smoothly to the unshifted
-plate goal instead of commanding one long parallel-offset waypoint. It does
-not reuse the paired policy prefix because some calibrated
+lifts vertically, and transports directly at low height. The selected rim
+grasp naturally keeps the terminal wrist on the bottle-opposite side of the
+corridor; every controller step is still rejected on any protected-object
+contact. It does not reuse the paired policy prefix because some calibrated
 risk poses are struck by link7 before that prefix establishes a reliable
 grasp. Grasp seating, vertical lifting, and lateral transport use capped
 Cartesian commands, with the strongest speed cap applied only to lateral
