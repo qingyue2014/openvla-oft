@@ -891,7 +891,14 @@ def _run_episode(
         preorientation_clearance = float(
             getattr(args, "preorientation_obstacle_clearance", 0.0)
         )
-        if preorientation_path_fraction > 0.0 or preorientation_clearance > 0.0:
+        preorientation_via_x = getattr(args, "preorientation_via_x", None)
+        preorientation_via_y = getattr(args, "preorientation_via_y", None)
+        if (
+            preorientation_path_fraction > 0.0
+            or preorientation_clearance > 0.0
+            or preorientation_via_x is not None
+            or preorientation_via_y is not None
+        ):
             source_to_plate = (
                 _body_pos(env, PLATE)[:2] - _body_pos(env, TARGET)[:2]
             )
@@ -963,6 +970,50 @@ def _run_episode(
                     args,
                     "retreat_for_orientation",
                     tolerance=args.preorientation_position_tolerance,
+                    max_steps=args.transport_max_waypoint_steps,
+                    max_position_command=args.transport_max_position_command,
+                    retained_body=TARGET,
+                    retained_offset=grasped_offset,
+                )
+                if failure is None:
+                    grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
+            if failure is None and preorientation_via_x is not None:
+                backoff_target = _eef_pos(obs).copy()
+                backoff_target[0] = float(preorientation_via_x) + grasped_offset[0]
+                obs, step, failure = _move_to(
+                    env,
+                    obs,
+                    oracle,
+                    recorder,
+                    backoff_target,
+                    close_sign,
+                    step,
+                    args,
+                    "backoff_before_orientation",
+                    tolerance=args.transport_position_tolerance,
+                    max_steps=args.transport_max_waypoint_steps,
+                    max_position_command=args.transport_max_position_command,
+                    retained_body=TARGET,
+                    retained_offset=grasped_offset,
+                )
+                if failure is None:
+                    grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
+            if failure is None and preorientation_via_y is not None:
+                outer_lane_target = _eef_pos(obs).copy()
+                outer_lane_target[1] = (
+                    float(preorientation_via_y) + grasped_offset[1]
+                )
+                obs, step, failure = _move_to(
+                    env,
+                    obs,
+                    oracle,
+                    recorder,
+                    outer_lane_target,
+                    close_sign,
+                    step,
+                    args,
+                    "outer_lane_before_orientation",
+                    tolerance=args.transport_position_tolerance,
                     max_steps=args.transport_max_waypoint_steps,
                     max_position_command=args.transport_max_position_command,
                     retained_body=TARGET,
@@ -1887,6 +1938,8 @@ def main():
     parser.add_argument(
         "--preorientation_lift_position_tolerance", type=float, default=0.010
     )
+    parser.add_argument("--preorientation_via_x", type=float, default=None)
+    parser.add_argument("--preorientation_via_y", type=float, default=None)
     parser.add_argument("--preorientation_rotation_height", type=float, default=None)
     parser.add_argument("--postorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--postorientation_obstacle_clearance", type=float, default=0.0)

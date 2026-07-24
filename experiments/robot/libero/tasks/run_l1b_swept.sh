@@ -263,17 +263,13 @@ safe_reference_family() {
     extra_args+=(--raise_transport_position_tolerance 0.050)
     extra_args+=(--transport_clearance 0.01)
     extra_args+=(--transport_target_eef_quat 0.9941969,-0.0504397,-0.0834422,0.0454506)
-    # First carry the bowl along the safe side of the corridor. Only reorient
-    # after leaving the bottle, and rotate slowly enough to retain a rim grasp.
-    # Raise only after reaching the safe lateral equilibrium, then use the
-    # empirically successful forward leg. The 5.5 cm bowl lift remains below
-    # the 9 cm safety cap while clearing the bottle's broad lower body.
+    # Leave the bottle behind before any forward motion or wrist rotation:
+    # first back away in X, then enter the positive-Y outer lane. The 5.5 cm
+    # bowl lift remains below the 9 cm cap.
     extra_args+=(--preorientation_lift_height 0.055)
     extra_args+=(--preorientation_lift_position_tolerance 0.010)
-    extra_args+=(--preorientation_path_fraction 0.65)
-    # The controller reaches a stable 5.4 cm forward displacement at this
-    # elevated, laterally separated pose; accept that measured equilibrium.
-    extra_args+=(--preorientation_advance_position_tolerance 0.050)
+    extra_args+=(--preorientation_path_fraction 0.00)
+    extra_args+=(--preorientation_via_x -0.16 --preorientation_via_y 0.23)
     extra_args+=(--preorientation_rotation_height 0.015)
     extra_args+=(--preorientation_obstacle_clearance 0.05)
     # The negative-Y OSC boundary permits about 17--27 mm of this requested
@@ -284,11 +280,6 @@ safe_reference_family() {
     extra_args+=(--orientation_position_scale 0.02)
     extra_args+=(--orientation_max_position_command 0.50)
     extra_args+=(--rotation_scale 0.5 --max_rotation_command 0.01)
-    extra_args+=(--postorientation_path_fraction 0.35)
-    extra_args+=(--postorientation_position_tolerance 0.026)
-    extra_args+=(--postorientation_max_position_command 0.12)
-    extra_args+=(--postorientation_advance_lateral_bias 0.04)
-    extra_args+=(--postorientation_min_path_progress 0.06)
     extra_args+=(--transport_via_x -0.16 --transport_via_y 0.23)
     extra_args+=(--transport_obstacle_clearance 0.00)
     extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)

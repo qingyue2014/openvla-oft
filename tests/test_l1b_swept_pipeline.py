@@ -793,10 +793,7 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--transport_target_eef_quat" in runner
     assert "--orientation_position_scale 0.02" in runner
     assert "--orientation_max_position_command 0.50" in runner
-    assert "--postorientation_path_fraction 0.35" in runner
-    assert "--postorientation_max_position_command 0.12" in runner
-    assert "--postorientation_advance_lateral_bias 0.04" in runner
-    assert "--postorientation_min_path_progress 0.06" in runner
+    assert "--postorientation_path_fraction 0.35" not in runner
     assert "--transport_via_x -0.16 --transport_via_y 0.23" in runner
     assert 'parser.add_argument("--orient_before_grasp"' in validator
     assert "--preorientation_obstacle_clearance 0.05" in runner
@@ -804,10 +801,12 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "source_to_plate" in shared
     assert "advance_before_orientation" in shared
     assert "--preorientation_lift_height 0.055" in runner
-    assert "--preorientation_path_fraction 0.65" in runner
-    assert "--preorientation_advance_position_tolerance 0.050" in runner
+    assert "--preorientation_path_fraction 0.00" in runner
+    assert "--preorientation_via_x -0.16 --preorientation_via_y 0.23" in runner
     assert "--preorientation_rotation_height 0.015" in runner
     assert "raise_before_orientation" in shared
+    assert "backoff_before_orientation" in shared
+    assert "outer_lane_before_orientation" in shared
     assert "lower_before_orientation" in shared
     assert "clear_bottle_before_transport" in shared
     assert "--orientation_tolerance_deg 2.0" in runner
