@@ -786,7 +786,11 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--min_grasp_lift 0.02" in runner
     assert "--transport_max_position_command 0.12" in runner
     assert "--transport_position_tolerance 0.026" in runner
-    assert "--transport_clearance 0.04" in runner
+    assert "--transport_clearance 0.01" in runner
+    assert "--transport_target_eef_quat" in runner
+    assert "--orientation_tolerance_deg 5.0" in runner
+    assert "_quat_error_axis_angle" in shared
+    assert "orient_for_transport" in shared
     assert "--require_support_contact_before_release" in runner
     assert "--max_safe_lift_height 0.09" in runner
     assert "transport_obstacle_arc_" in shared

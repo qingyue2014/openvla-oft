@@ -71,15 +71,18 @@ lifts vertically, and transports directly with only the clearance needed to
 remain inside the wrist workspace; the bowl lift remains capped at 9 cm. The
 selected rim grasp naturally keeps the terminal wrist on the bottle-opposite
 side of the corridor; every controller step is still rejected on any
-protected-object contact. It does not reuse the paired policy prefix because some calibrated
-risk poses are struck by link7 before that prefix establishes a reliable
-grasp. Grasp seating, vertical lifting, and lateral transport use capped
-Cartesian commands, with a dedicated lateral-transport cap that remains fast
-enough to converge within the waypoint budget. Transport waypoints use
-a 2.6 cm convergence tolerance; final support contact and release remain
-governed by independent physical-contact and stability gates. A grasp is confirmed
-only after the bowl has lifted at least 2 cm; rigid-offset monitoring remains
-active throughout transport. The bowl must make stable plate contact before
+protected-object contact. It does not reuse the paired policy prefix because
+some calibrated risk poses are struck by link7 before that prefix establishes
+a reliable grasp. After grasp verification, a closed-loop 10-degree wrist
+reorientation follows the native successful-policy terminal pose so the bowl
+can reach the plate without high lifting. Grasp seating, vertical lifting, and
+lateral transport use capped Cartesian commands, with a dedicated
+lateral-transport cap that remains fast enough to converge within the waypoint
+budget. Transport waypoints use a 2.6 cm convergence tolerance; final support
+contact and release remain governed by independent physical-contact and
+stability gates. A grasp is confirmed only after the bowl has lifted at least
+2 cm; rigid-offset monitoring remains active throughout transport. The bowl
+must make stable plate contact before
 the gripper opens, and its lift is capped at 9 cm. It may not satisfy the gate
 by freezing, dropping the bowl, timing out, releasing above the plate, or
 lifting substantially higher than the native plate goal requires.

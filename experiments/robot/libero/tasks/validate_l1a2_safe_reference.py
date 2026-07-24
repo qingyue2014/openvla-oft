@@ -164,6 +164,35 @@ def _position_action(
     return action
 
 
+def _quat_error_axis_angle(current, target):
+    """Return the shortest target * inverse(current) rotation for xyzw quats."""
+    current = np.asarray(current, dtype=float)
+    target = np.asarray(target, dtype=float)
+    current /= np.linalg.norm(current)
+    target /= np.linalg.norm(target)
+    cx, cy, cz, cw = current
+    tx, ty, tz, tw = target
+    # Hamilton product target * conjugate(current), preserving robosuite's
+    # xyzw observation convention.
+    error = np.asarray(
+        [
+            -tw * cx + tx * cw - ty * cz + tz * cy,
+            -tw * cy + tx * cz + ty * cw - tz * cx,
+            -tw * cz - tx * cy + ty * cx + tz * cw,
+            tw * cw + tx * cx + ty * cy + tz * cz,
+        ],
+        dtype=float,
+    )
+    error /= np.linalg.norm(error)
+    if error[3] < 0.0:
+        error = -error
+    vector_norm = float(np.linalg.norm(error[:3]))
+    if vector_norm < 1e-9:
+        return np.zeros(3, dtype=float)
+    angle = 2.0 * np.arctan2(vector_norm, float(error[3]))
+    return error[:3] * (angle / vector_norm)
+
+
 def _body_pos(env, name):
     return np.asarray(env.sim.data.body_xpos[env.sim.model.body_name2id(name)], dtype=float).copy()
 
@@ -224,6 +253,10 @@ def _move_to(
     max_position_command=None,
     retained_body=None,
     retained_offset=None,
+    target_quat=None,
+    orientation_tolerance_rad=0.0,
+    rotation_scale=0.5,
+    max_rotation_command=0.1,
 ):
     tolerance = args.position_tolerance if tolerance is None else tolerance
     max_steps = args.max_waypoint_steps if max_steps is None else max_steps
@@ -236,8 +269,16 @@ def _move_to(
     best_error = initial_error
     for _ in range(max_steps):
         error = float(np.linalg.norm(_eef_pos(obs) - target))
+        rotation_error = (
+            _quat_error_axis_angle(obs["robot0_eef_quat"], target_quat)
+            if target_quat is not None
+            else np.zeros(3, dtype=float)
+        )
         best_error = min(best_error, error)
-        if error <= tolerance:
+        if error <= tolerance and (
+            target_quat is None
+            or float(np.linalg.norm(rotation_error)) <= orientation_tolerance_rad
+        ):
             return obs, step, None
         if accept_gripper_target_contact and oracle._metrics(env)["gripper_contact"]:
             return obs, step, None
@@ -248,6 +289,12 @@ def _move_to(
             args.position_scale,
             max_position_command,
         )
+        if target_quat is not None:
+            action[3:6] = np.clip(
+                rotation_error / rotation_scale,
+                -max_rotation_command,
+                max_rotation_command,
+            )
         obs, status = _advance(env, obs, oracle, recorder, action, step)
         step += 1
         if status.violated:
@@ -716,6 +763,38 @@ def _run_episode(
     grasp_verified = bool(failure is None and grasp_lift_m >= args.min_grasp_lift)
     if failure is None and not grasp_verified:
         failure = MotionFailure(reason="grasp_failed", stage="verify_grasp")
+
+    transport_target_quat = np.asarray(
+        [
+            float(value)
+            for value in str(getattr(args, "transport_target_eef_quat", "")).split(",")
+            if value.strip()
+        ],
+        dtype=float,
+    )
+    if failure is None and transport_target_quat.size == 4:
+        obs, step, failure = _move_to(
+            env,
+            obs,
+            oracle,
+            recorder,
+            _eef_pos(obs).copy(),
+            close_sign,
+            step,
+            args,
+            "orient_for_transport",
+            tolerance=args.precise_position_tolerance,
+            max_steps=args.orientation_max_steps,
+            max_position_command=args.transport_max_position_command,
+            retained_body=TARGET,
+            retained_offset=grasped_offset,
+            target_quat=transport_target_quat,
+            orientation_tolerance_rad=np.deg2rad(args.orientation_tolerance_deg),
+            rotation_scale=args.rotation_scale,
+            max_rotation_command=args.max_rotation_command,
+        )
+        if failure is None:
+            grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
 
     # Convert the desired bowl pose into an EEF waypoint using the measured
     # rigid grasp offset, avoiding hard-coded asset dimensions.
@@ -1219,6 +1298,11 @@ def main():
     parser.add_argument("--transport_max_waypoint_steps", type=int, default=220)
     parser.add_argument("--transport_max_position_command", type=float, default=0.15)
     parser.add_argument("--transport_position_tolerance", type=float, default=0.025)
+    parser.add_argument("--transport_target_eef_quat", default="")
+    parser.add_argument("--orientation_tolerance_deg", type=float, default=5.0)
+    parser.add_argument("--orientation_max_steps", type=int, default=200)
+    parser.add_argument("--rotation_scale", type=float, default=0.5)
+    parser.add_argument("--max_rotation_command", type=float, default=0.1)
     parser.add_argument("--transport_clearance", type=float, default=0.040)
     parser.add_argument("--max_grasp_offset_drift", type=float, default=0.025)
     parser.add_argument("--wait_steps", type=int, default=10)
