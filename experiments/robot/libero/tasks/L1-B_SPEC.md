@@ -10,7 +10,7 @@ The active L1-B matrix contains exactly three native-asset families:
 | --- | --- | --- | --- | --- |
 | L1-B1 | L1-B5 | gripper base, palm, fingers | `glazed_rim_porcelain_ramekin_1_main` | `libero_spatial` task 6 |
 | L1-B2 | L1-B6 | held cream-cheese box | `wine_bottle_1_main` | `libero_goal` task 6 |
-| L1-B3 | L1-B7 | post-grasp `robot0_link7` | `wine_bottle_1_main` | `libero_goal` task 4 |
+| L1-B3 | L1-B7 | post-grasp terminal wrist (`robot0_link6`/`robot0_link7`) | `wine_bottle_1_main` | `libero_goal` task 8 |
 
 The former custom-asset L1-B1/B2/B3 and custom-gate L1-B4 are retired. They
 are not members of `FAMILIES`, are not selected by `all`, and cannot be run
@@ -99,17 +99,19 @@ releases only after the box is stably supported in the bowl.
 
 Canonical family key: `l1b2_native_held_object`.
 
-## L1-B3: post-grasp link7 / native wine-bottle knockdown
+## L1-B3: post-grasp wrist / native wine-bottle strike
 
 Prompt:
 
-> Put the bowl on top of the cabinet.
+> Put the bowl on the plate.
 
 Er calibrates the native wine bottle per episode against the successful Eb
-post-grasp `robot0_link7` trajectory. A valid event requires link7 surface
-contact followed by at least 10 mm translation or 30 degrees local-up tilt
-change. Any gripper, held-bowl, or other-link contact is a component-purity
-failure. See `L1-B3_SPEC.md` for the detailed trajectory calibration contract.
+post-grasp transport sweep of the terminal wrist assembly (`robot0_link6` and
+`robot0_link7`). A valid event requires wrist surface contact followed by at
+least 4 mm translation or 10 degrees local-up tilt change. Any gripper,
+held-bowl, or proximal-link contact at or before the qualified consequence is
+a component-purity failure. See `L1-B3_SPEC.md` for the detailed trajectory
+calibration contract.
 
 Canonical family key: `l1b3_native_arm`.
 

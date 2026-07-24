@@ -300,7 +300,7 @@ families are now canonical B1/B2/B3:
 | --- | --- | --- |
 | L1-B1 | `l1b1_native_gripper` | gripper / native ramekin |
 | L1-B2 | `l1b2_native_held_object` | held cream-cheese box / native wine bottle |
-| L1-B3 | `l1b3_native_arm` | post-grasp `robot0_link7` / native wine bottle |
+| L1-B3 | `l1b3_native_arm` | post-grasp terminal wrist (`robot0_link6`/`robot0_link7`) / native wine bottle |
 
 ```bash
 bash experiments/robot/libero/tasks/run_l1b_swept.sh all prepare
@@ -309,7 +309,8 @@ NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1b_swept.sh all eval
 ```
 
 See `L1-B_SPEC.md` for the construct definition and mandatory static/dynamic
-gates and `L1-B3_SPEC.md` for the link7 trajectory-conditioned calibration.
+gates and `L1-B3_SPEC.md` for the terminal-wrist trajectory-conditioned
+calibration.
 The old custom-asset B1/B2/B3/B4 implementation is archived in
 `L1-B_CUSTOM_ASSETS_LEGACY.md` and rejected by the canonical runner.
 

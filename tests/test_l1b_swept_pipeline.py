@@ -879,7 +879,12 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "_measured_wrist_geom_path(env, eb_state, trajectory, args)" in text
     assert "target[:, :2] - target[-1, :2]" in text
     assert "args.max_goal_region_distance" in text
-    assert 'parser.add_argument("--max_goal_region_distance", type=float, default=0.12)' in text
+    assert '"--max_goal_region_distance"' in text
+    assert "default=1.0" in text
+    assert '"--min_goal_clearance"' in text
+    assert "args.min_goal_clearance" in text
+    assert '"--min_transport_distance"' in text
+    assert "args.min_transport_distance" in text
     assert 'INTENDED_LINKS = ("robot0_link6", "robot0_link7")' in text
     assert "for index in (0, 1, 2, 3, 4, 5)" in text
     assert 'PATH_LINKS = ("robot0_link5", "robot0_link6")' in text

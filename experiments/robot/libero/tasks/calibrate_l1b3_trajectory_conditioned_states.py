@@ -130,9 +130,16 @@ def _measured_wrist_geom_path(
     if len(target) == 0:
         return []
     lifted = target[:, 2] >= target[0, 2] + args.min_grasp_lift
-    goal_region = (
-        np.linalg.norm(target[:, :2] - target[-1, :2], axis=1)
-        <= args.max_goal_region_distance
+    distance_from_start = np.linalg.norm(
+        target[:, :2] - target[0, :2], axis=1
+    )
+    distance_from_goal = np.linalg.norm(
+        target[:, :2] - target[-1, :2], axis=1
+    )
+    transport_region = (
+        (distance_from_start >= args.min_transport_distance)
+        & (distance_from_goal >= args.min_goal_clearance)
+        & (distance_from_goal <= args.max_goal_region_distance)
     )
     model = env.sim.model
     geom_owners = [
@@ -156,7 +163,7 @@ def _measured_wrist_geom_path(
         if (
             index >= len(lifted)
             or not lifted[index]
-            or not goal_region[index]
+            or not transport_region[index]
         ):
             continue
         for body_name, geom_id in geom_owners:
@@ -198,9 +205,16 @@ def _trajectory_candidates(
     if len(target) == 0:
         return []
     lifted = target[:, 2] >= target[0, 2] + args.min_grasp_lift
-    goal_region = (
-        np.linalg.norm(target[:, :2] - target[-1, :2], axis=1)
-        <= args.max_goal_region_distance
+    distance_from_start = np.linalg.norm(
+        target[:, :2] - target[0, :2], axis=1
+    )
+    distance_from_goal = np.linalg.norm(
+        target[:, :2] - target[-1, :2], axis=1
+    )
+    transport_region = (
+        (distance_from_start >= args.min_transport_distance)
+        & (distance_from_goal >= args.min_goal_clearance)
+        & (distance_from_goal <= args.max_goal_region_distance)
     )
     candidate_steps: list[tuple[int, str, np.ndarray]] = []
     if env is not None and eb_state is not None:
@@ -223,7 +237,7 @@ def _trajectory_candidates(
             index
             for index in range(min(len(target), len(positions)))
             if lifted[index]
-            and goal_region[index]
+            and transport_region[index]
             and args.min_link_z <= positions[index, 2] <= args.max_link_z
         ]
         spaced: list[int] = []
@@ -821,6 +835,8 @@ def calibrate(args: argparse.Namespace) -> str:
         ],
         "min_grasp_lift": args.min_grasp_lift,
         "max_goal_region_distance": args.max_goal_region_distance,
+        "min_goal_clearance": args.min_goal_clearance,
+        "min_transport_distance": args.min_transport_distance,
         "radial_distance_candidates": _float_values(
             args.radial_distance_candidates
         ),
@@ -880,7 +896,24 @@ def main() -> None:
     parser.add_argument("--task_suite_name", default="libero_goal")
     parser.add_argument("--task_id", type=int, default=8)
     parser.add_argument("--min_grasp_lift", type=float, default=0.020)
-    parser.add_argument("--max_goal_region_distance", type=float, default=0.12)
+    parser.add_argument(
+        "--max_goal_region_distance",
+        type=float,
+        default=1.0,
+        help="Outer radius around the goal covered by the transport sweep",
+    )
+    parser.add_argument(
+        "--min_goal_clearance",
+        type=float,
+        default=0.12,
+        help="Exclude the crowded final placement region around the plate",
+    )
+    parser.add_argument(
+        "--min_transport_distance",
+        type=float,
+        default=0.03,
+        help="Require the grasped bowl to have left its pickup neighborhood",
+    )
     parser.add_argument("--min_link_z", type=float, default=0.85)
     parser.add_argument("--max_link_z", type=float, default=1.50)
     parser.add_argument(
