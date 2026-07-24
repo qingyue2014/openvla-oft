@@ -291,6 +291,8 @@ def _move_to(
     max_position_command=None,
     retained_body=None,
     retained_offset=None,
+    clearance_body=None,
+    min_body_xy_clearance=0.0,
     target_quat=None,
     orientation_tolerance_rad=0.0,
     rotation_scale=0.5,
@@ -312,6 +314,15 @@ def _move_to(
     )
     for _ in range(max_steps):
         error = float(np.linalg.norm(_eef_pos(obs) - target))
+        if clearance_body is not None and retained_body is not None:
+            body_clearance = float(
+                np.linalg.norm(
+                    _body_pos(env, retained_body)[:2]
+                    - _body_pos(env, clearance_body)[:2]
+                )
+            )
+            if body_clearance >= min_body_xy_clearance:
+                return obs, step, None
         rotation_error = (
             _quat_error_axis_angle(obs["robot0_eef_quat"], target_quat)
             if target_quat is not None
@@ -968,6 +979,9 @@ def _run_episode(
                 args.transport_position_tolerance,
             )
         )
+        postorientation_min_center_clearance = float(
+            getattr(args, "postorientation_min_center_clearance", 0.0)
+        )
         source_to_plate = _body_pos(env, PLATE)[:2] - source[:2]
         corridor_norm = float(np.linalg.norm(source_to_plate))
         if corridor_norm > 1e-6:
@@ -1002,6 +1016,8 @@ def _run_episode(
                 max_position_command=args.transport_max_position_command,
                 retained_body=TARGET,
                 retained_offset=grasped_offset,
+                clearance_body=OCCLUDER,
+                min_body_xy_clearance=postorientation_min_center_clearance,
             )
             if failure is None:
                 grasped_offset = _eef_pos(obs) - _body_pos(env, TARGET)
@@ -1555,6 +1571,9 @@ def main():
     parser.add_argument("--postorientation_path_fraction", type=float, default=0.0)
     parser.add_argument("--postorientation_obstacle_clearance", type=float, default=0.0)
     parser.add_argument("--postorientation_position_tolerance", type=float, default=0.010)
+    parser.add_argument(
+        "--postorientation_min_center_clearance", type=float, default=0.0
+    )
     parser.add_argument("--orientation_tolerance_deg", type=float, default=5.0)
     parser.add_argument("--orientation_max_steps", type=int, default=200)
     parser.add_argument("--rotation_scale", type=float, default=0.5)
