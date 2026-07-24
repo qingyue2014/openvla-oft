@@ -54,7 +54,6 @@ CREAM_CHEESE_BODY = "cream_cheese_1_main"
 PLATE_BODY = "plate_1_main"
 LANDMARK_BODY = "cookies_1_main"
 WINE_BOTTLE_BODY = "wine_bottle_1_main"
-KETCHUP_BODY = "ketchup_1_main"
 OBSTACLE_BODY = "glazed_rim_porcelain_ramekin_1_main"
 ARM_OBSTACLE_BODY = "l1_b_sweep_post_1_main"
 GRIPPER_OBSTACLE_BODY = "l1_b_gripper_pin_1_main"
@@ -244,14 +243,13 @@ FAMILIES = {
     },
     "l1b7_native_arm": {
         "component": "arm",
-        # Native LIBERO-90 Kitchen Scene 5:
-        # "put the black bowl on top of the cabinet".  The ketchup bottle is a
-        # prompt-irrelevant native bystander.  Formal Er poses are calibrated
-        # per episode from the paired successful Eb link trajectories; these
-        # offsets are only stable, visible bootstrap placements.
-        "obstacle_body": KETCHUP_BODY,
+        # Native LIBERO-Goal task 4: "put the bowl on top of the cabinet".
+        # The wine bottle is a prompt-irrelevant native bystander. Formal Er
+        # poses are calibrated per episode from paired successful Eb link
+        # trajectories; these offsets are only stable, visible bootstraps.
+        "obstacle_body": WINE_BOTTLE_BODY,
         "target_body": TARGET_BODY,
-        "goal_support_body": "white_cabinet_1_main",
+        "goal_support_body": "wooden_cabinet_1_main",
         "bddl_file": None,
         "native_assets_only": True,
         "preserve_native_layout": True,
@@ -259,10 +257,10 @@ FAMILIES = {
         # Bootstrap poses must be valid across all 50 native serialized
         # layouts. The trajectory calibrator replaces Er per episode before
         # any smoke/formal interpretation; the small orthogonal Ec move keeps
-        # the bottle recognizably at its native off-sweep location.
+        # the wine bottle recognizably at its native off-sweep location.
         "risk_offset_xy": [0.005, 0.000],
         "control_offset_xy": [0.000, 0.005],
-        "required_prompt_terms": ["black bowl", "cabinet"],
+        "required_prompt_terms": ["bowl", "cabinet"],
         "intended_link_bodies": ["robot0_link5", "robot0_link6"],
         # A brush is not enough: the contacted bottle must visibly translate
         # or topple relative to its last pre-contact pose.

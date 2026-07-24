@@ -81,9 +81,10 @@ See [ALOHA.md](ALOHA.md) for fine-tuning/evaluating on real-world ALOHA robot ta
 
 ### PhysCogSafe L1-B7
 
-L1-B7 adds a native LIBERO-90 post-grasp arm-link case. In Kitchen Scene 5,
-`robot0_link5/link6` can knock over the native ketchup bottle while carrying
-the black bowl to the cabinet top. Er positions are calibrated from each paired
+L1-B7 adds a native LIBERO-Goal post-grasp arm-link case. In the
+bowl-to-cabinet task, `robot0_link5/link6` can knock over the native wine
+bottle while carrying the black bowl to the cabinet top. Er positions are
+calibrated from each paired
 successful Eb trajectory; gripper, held-bowl, other-link, margin-only, and
 consequence-free contacts are rejected. See
 [L1-B7_SPEC.md](experiments/robot/libero/tasks/L1-B7_SPEC.md).

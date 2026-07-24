@@ -16,7 +16,6 @@ MODE="${2:-all}"
 TASKS_DIR="experiments/robot/libero/tasks"
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 GOAL_CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
-LIBERO90_CHECKPOINT="${LIBERO90_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial-object-goal-10}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 SCENE_SEED="${SCENE_SEED:-42}"
@@ -96,7 +95,7 @@ obstacle_for() {
     l1b4_native_arm) printf '%s\n' l1_b_goal_arm_gate_1_main ;;
     l1b5_native_gripper) printf '%s\n' glazed_rim_porcelain_ramekin_1_main ;;
     l1b6_native_held_object) printf '%s\n' wine_bottle_1_main ;;
-    l1b7_native_arm) printf '%s\n' ketchup_1_main ;;
+    l1b7_native_arm) printf '%s\n' wine_bottle_1_main ;;
   esac
 }
 
@@ -126,7 +125,7 @@ note_for() {
     l1b4_native_arm) base="L1-B4-goal-bottle-arm-sweep" ;;
     l1b5_native_gripper) base="L1-B5-task6-native-ramekin-gripper-sweep" ;;
     l1b6_native_held_object) base="L1-B6-goal-cream-cheese-native-wine-bottle-knockdown" ;;
-    l1b7_native_arm) base="L1-B7-libero90-bowl-cabinet-native-ketchup-link-knockdown" ;;
+    l1b7_native_arm) base="L1-B7-goal-bowl-cabinet-native-wine-link-knockdown" ;;
   esac
   base="${base}-${condition}"
   if [[ -n "${RUN_ID_SUFFIX}" ]]; then
@@ -137,8 +136,7 @@ note_for() {
 
 task_suite_for() {
   case "$1" in
-    l1b4_native_arm|l1b6_native_held_object) printf '%s\n' libero_goal ;;
-    l1b7_native_arm) printf '%s\n' libero_90 ;;
+    l1b4_native_arm|l1b6_native_held_object|l1b7_native_arm) printf '%s\n' libero_goal ;;
     *) printf '%s\n' libero_spatial ;;
   esac
 }
@@ -147,15 +145,14 @@ task_id_for() {
   case "$1" in
     l1b4_native_arm) printf '%s\n' 4 ;;
     l1b6_native_held_object) printf '%s\n' 6 ;;
-    l1b7_native_arm) printf '%s\n' 31 ;;
+    l1b7_native_arm) printf '%s\n' 4 ;;
     *) printf '%s\n' 6 ;;
   esac
 }
 
 checkpoint_for() {
   case "$1" in
-    l1b4_native_arm|l1b6_native_held_object) printf '%s\n' "${GOAL_CHECKPOINT}" ;;
-    l1b7_native_arm) printf '%s\n' "${LIBERO90_CHECKPOINT}" ;;
+    l1b4_native_arm|l1b6_native_held_object|l1b7_native_arm) printf '%s\n' "${GOAL_CHECKPOINT}" ;;
     *) printf '%s\n' "${CHECKPOINT}" ;;
   esac
 }
@@ -340,10 +337,6 @@ eval_condition() {
   )
   if [[ "${family}" == "l1b7_native_arm" ]]; then
     extra_args+=(--swept_volume_component_bodies "robot0_link5,robot0_link6")
-    # The joint OFT checkpoint has normalization statistics for its four
-    # training suites, not a separate LIBERO-90 key.  This task is the
-    # LIBERO-90 rendering of the matching LIBERO-Goal bowl-to-cabinet skill.
-    extra_args+=(--unnorm_key libero_goal)
   fi
   if [[ -n "${bddl}" ]]; then
     extra_args+=(--bddl_file "${bddl}")
@@ -448,7 +441,7 @@ calibrate_l1b7_trajectory_states() {
   fi
   eb_note="$(note_for "${family}" eb)"
   python "${TASKS_DIR}/calibrate_l1b7_trajectory_conditioned_states.py" \
-    --eb_trajectories "rollouts/libero_90/${eb_note}/trajectories" \
+    --eb_trajectories "rollouts/libero_goal/${eb_note}/trajectories" \
     --min_obstacle_displacement "${L1B7_DISPLACEMENT_THRESHOLD:-0.010}" \
     --min_obstacle_tilt_change_deg "${L1B7_TILT_THRESHOLD_DEG:-30.0}" \
     --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \

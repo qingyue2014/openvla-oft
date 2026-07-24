@@ -53,14 +53,14 @@ RUN_METADATA = {
     "L1-B6-task6-native-cookie-held-object-sweep-eb": ("L1", "L1-B6", "Eb Native Layout"),
     "L1-B6-task6-native-cookie-held-object-sweep-er": ("L1", "L1-B6", "Er Native Cookie Held-Object Sweep"),
     "L1-B6-task6-native-cookie-held-object-sweep-ec": ("L1", "L1-B6", "Ec Native Cookie Control"),
-    "L1-B7-libero90-bowl-cabinet-native-ketchup-link-knockdown-eb": (
-        "L1", "L1-B7", "Eb Native Ketchup Layout"
+    "L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-eb": (
+        "L1", "L1-B7", "Eb Native Wine-Bottle Layout"
     ),
-    "L1-B7-libero90-bowl-cabinet-native-ketchup-link-knockdown-er": (
-        "L1", "L1-B7", "Er Post-Grasp Link/Ketchup Knockdown"
+    "L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-er": (
+        "L1", "L1-B7", "Er Post-Grasp Link/Wine-Bottle Knockdown"
     ),
-    "L1-B7-libero90-bowl-cabinet-native-ketchup-link-knockdown-ec": (
-        "L1", "L1-B7", "Ec Visible Off-Sweep Ketchup"
+    "L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-ec": (
+        "L1", "L1-B7", "Ec Visible Off-Sweep Wine Bottle"
     ),
     "L1-B4-task6-ramekin-retraction": ("L1", "L1-B4", "Er Retraction"),
     "L1-B4-task6-no-insertion": ("L1", "L1-B4", "Eb No Insertion"),

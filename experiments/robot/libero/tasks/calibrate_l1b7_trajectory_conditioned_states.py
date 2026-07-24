@@ -1,16 +1,16 @@
-"""Calibrate L1-B7 ketchup poses against paired post-grasp arm-link paths.
+"""Calibrate L1-B7 wine-bottle poses against paired post-grasp arm-link paths.
 
 Each successful Eb trajectory supplies the observed robot0_link5/link6 sweep.
-Candidate Er ketchup poses are placed on that sweep and the unchanged Eb
+Candidate Er wine-bottle poses are placed on that sweep and the unchanged Eb
 actions are replayed.  A candidate is accepted only when:
 
 * the grasp has already occurred;
-* link5 or link6 makes real surface contact with the ketchup bottle;
+* link5 or link6 makes real surface contact with the wine bottle;
 * the contact causes the configured translation or tilt consequence;
 * no other arm link, gripper geom, or held bowl contacts the bottle; and
 * maximum contact penetration remains within the global physics limit.
 
-Only the native ketchup free-joint pose may differ between paired Eb and Er.
+Only the native wine-bottle free-joint pose may differ between paired Eb and Er.
 """
 
 from __future__ import annotations
@@ -359,7 +359,7 @@ def calibrate(args: argparse.Namespace) -> str:
                 eb_states[episode], output_er_states[episode]
             )
     metadata["conditions"]["er"] = (
-        "native ketchup placed per episode on the paired post-grasp "
+        "native wine bottle placed per episode on the paired post-grasp "
         "robot0_link5/link6 sweep"
     )
     metadata["trajectory_conditioning"] = {
@@ -382,7 +382,7 @@ def calibrate(args: argparse.Namespace) -> str:
     report = Path(args.out_report)
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(
-        "# L1-B7 trajectory-conditioned ketchup/link calibration\n\n"
+        "# L1-B7 trajectory-conditioned wine-bottle/link calibration\n\n"
         f"Verdict: **{verdict}**\n\n"
         f"- Successful paired Eb trajectories: {successful}\n"
         f"- Isolated post-grasp link5/link6 consequences: {calibrated}\n"
@@ -391,7 +391,7 @@ def calibrate(args: argparse.Namespace) -> str:
         f"- Translation threshold: {args.min_obstacle_displacement:.4f} m\n"
         f"- Tilt threshold: {args.min_obstacle_tilt_change_deg:.1f} deg\n"
         f"- Maximum allowed surface penetration: {args.max_contact_penetration:.4f} m\n"
-        "- Pairing invariant: only the native ketchup free-joint pose changes.\n"
+        "- Pairing invariant: only the native wine-bottle free-joint pose changes.\n"
     )
     if args.fail_on_invalid and verdict.startswith("FAIL"):
         raise RuntimeError(verdict)
@@ -417,8 +417,8 @@ def main() -> None:
         "--pairing_json",
         default="experiments/robot/libero/tasks/l1b7_native_arm_pairing.json",
     )
-    parser.add_argument("--task_suite_name", default="libero_90")
-    parser.add_argument("--task_id", type=int, default=31)
+    parser.add_argument("--task_suite_name", default="libero_goal")
+    parser.add_argument("--task_id", type=int, default=4)
     parser.add_argument("--min_grasp_lift", type=float, default=0.020)
     parser.add_argument("--min_link_z", type=float, default=0.85)
     parser.add_argument("--max_link_z", type=float, default=1.35)

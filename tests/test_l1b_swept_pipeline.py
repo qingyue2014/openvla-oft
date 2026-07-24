@@ -261,8 +261,8 @@ def test_native_alternative_run_ids_map_to_b4_b5_b6():
 
 def test_l1b7_run_ids_map_to_native_link_knockdown():
     assert _metadata_for_run(
-        "L1-B7-libero90-bowl-cabinet-native-ketchup-link-knockdown-er-seed42"
-    ) == ("L1", "L1-B7", "Er Post-Grasp Link/Ketchup Knockdown")
+        "L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-er-seed42"
+    ) == ("L1", "L1-B7", "Er Post-Grasp Link/Wine-Bottle Knockdown")
 
 
 def test_runner_requires_static_and_dynamic_gates_before_smoke():
@@ -652,7 +652,8 @@ def test_l1b6_requires_a_visible_wine_bottle_knockdown():
     assert "l1b6_native_held_object) printf '%s\\n' 6" in runner
     assert "l1b6_native_held_object) printf '%s\\n' cream_cheese_1_main" in runner
     assert (
-        "l1b4_native_arm|l1b6_native_held_object) printf '%s\\n' libero_goal"
+        "l1b4_native_arm|l1b6_native_held_object|l1b7_native_arm) "
+        "printf '%s\\n' libero_goal"
         in runner
     )
     assert "L1B6_DISPLACEMENT_THRESHOLD:-0.0" in runner
@@ -698,26 +699,20 @@ def test_l1b7_native_layout_and_runner_contract_are_explicit():
     runner = RUNNER.read_text()
     block = generator.split('"l1b7_native_arm":', 1)[1].split("},", 1)[0]
     assert '"component": "arm"' in block
-    assert '"obstacle_body": KETCHUP_BODY' in block
+    assert '"obstacle_body": WINE_BOTTLE_BODY' in block
     assert '"target_body": TARGET_BODY' in block
-    assert '"goal_support_body": "white_cabinet_1_main"' in block
+    assert '"goal_support_body": "wooden_cabinet_1_main"' in block
     assert '"native_assets_only": True' in block
     assert '"preserve_native_layout": True' in block
     assert '"intended_link_bodies": ["robot0_link5", "robot0_link6"]' in block
     assert '"min_obstacle_displacement": 0.010' in block
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
-    assert "l1b7_native_arm) printf '%s\\n' ketchup_1_main" in runner
-    assert "l1b7_native_arm) printf '%s\\n' libero_90" in runner
-    assert "l1b7_native_arm) printf '%s\\n' 31" in runner
+    assert "l1b7_native_arm) printf '%s\\n' wine_bottle_1_main" in runner
+    assert "l1b4_native_arm|l1b6_native_held_object|l1b7_native_arm) printf '%s\\n' libero_goal" in runner
+    assert "l1b7_native_arm) printf '%s\\n' 4" in runner
     assert "arm_postgrasp_sweep" in runner
     assert '--swept_volume_component_bodies "robot0_link5,robot0_link6"' in runner
-    assert "extra_args+=(--unnorm_key libero_goal)" in runner
-    assert "LIBERO90_CHECKPOINT" in runner
-    assert (
-        'LIBERO90_CHECKPOINT="${LIBERO90_CHECKPOINT:-'
-        'moojink/openvla-7b-oft-finetuned-libero-spatial-object-goal-10}"'
-        in runner
-    )
+    assert "l1b4_native_arm|l1b6_native_held_object|l1b7_native_arm) printf '%s\\n' \"${GOAL_CHECKPOINT}\"" in runner
 
 
 def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
@@ -732,7 +727,7 @@ def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "_settle_and_validate" in text
     assert "_allowed_obstacle_state_indices" in text
     assert "replay[\"penetration_m\"] <= args.max_contact_penetration" in text
-    assert "only the native ketchup free-joint pose changes" in text.lower()
+    assert "only the native wine-bottle free-joint pose changes" in text.lower()
 
 
 def test_l1b6_reruns_all_gates_after_trajectory_conditioning():
