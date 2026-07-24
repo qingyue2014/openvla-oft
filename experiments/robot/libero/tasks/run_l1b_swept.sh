@@ -283,7 +283,7 @@ safe_reference_family() {
     extra_args+=(--transport_via_x -0.16 --transport_via_y 0.23)
     extra_args+=(--transport_via_exit_x 0.07 --transport_via_final_y -0.02)
     extra_args+=(--transport_obstacle_clearance 0.00)
-    extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
+    extra_args+=(--preplace_height 0.055 --max_safe_lift_height 0.09)
     # Preserve the safe transit endpoint that completed without a violation,
     # then center over the plate only after the bottle is behind the wrist.
     extra_args+=(--transport_place_offset_x 0.00 --transport_place_offset_y 0.03)

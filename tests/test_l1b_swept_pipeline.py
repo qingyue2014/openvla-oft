@@ -818,6 +818,7 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "orient_for_transport" in shared
     assert "--require_support_contact_before_release" in runner
     assert "--max_safe_lift_height 0.09" in runner
+    assert "--preplace_height 0.055" in runner
     assert "--environment_horizon 2000" in runner
     assert "transport_obstacle_arc_" in shared
     assert "np.sin(np.pi * fraction) * lateral" in shared
