@@ -163,6 +163,7 @@ def main() -> None:
     parser.add_argument("--max_waypoint_steps", type=int, default=180)
     parser.add_argument("--transport_max_waypoint_steps", type=int, default=220)
     parser.add_argument("--transport_max_position_command", type=float, default=0.15)
+    parser.add_argument("--transport_position_tolerance", type=float, default=0.025)
     parser.add_argument("--transport_clearance", type=float, default=0.10)
     parser.add_argument("--max_grasp_offset_drift", type=float, default=0.025)
     parser.add_argument("--wait_steps", type=int, default=10)

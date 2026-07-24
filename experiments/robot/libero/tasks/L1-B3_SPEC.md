@@ -74,7 +74,9 @@ not reuse the paired policy prefix because some calibrated
 risk poses are struck by link7 before that prefix establishes a reliable
 grasp. Grasp seating, vertical lifting, and lateral transport use capped
 Cartesian commands, with the strongest speed cap applied only to lateral
-transport so vertical grasp acquisition can converge. A grasp is confirmed
+transport so vertical grasp acquisition can converge. Transport waypoints use
+a 2.6 cm convergence tolerance; final support contact and release remain
+governed by independent physical-contact and stability gates. A grasp is confirmed
 only after the bowl has lifted at least 2 cm; rigid-offset monitoring remains
 active throughout transport. The bowl must make stable plate contact before
 the gripper opens, and its lift is capped at 9 cm. It may not satisfy the gate
