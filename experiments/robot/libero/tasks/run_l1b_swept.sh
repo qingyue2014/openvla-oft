@@ -523,7 +523,16 @@ run_family() {
         check_family "${family}"
         SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
       elif [[ "${family}" == "l1b7_native_arm" ]]; then
+        set +e
         eval_condition "${family}" eb "${pool_count}"
+        pool_eval_status=$?
+        set -e
+        pool_index="rollouts/libero_goal/$(note_for "${family}" eb)/trajectories/index.jsonl"
+        if [[ ! -f "${pool_index}" ]] || \
+          [[ "$(wc -l < "${pool_index}")" -ne "${pool_count}" ]]; then
+          echo "L1-B7 Eb calibration pool did not produce a complete index" >&2
+          exit "${pool_eval_status:-2}"
+        fi
         REPLAY_MIN_EPISODES="${count}" \
           calibrate_l1b7_trajectory_states "${family}" "${count}"
         check_family "${family}"
@@ -590,7 +599,16 @@ run_family() {
       elif [[ "${family}" == "l1b7_native_arm" ]]; then
         pool_count="${L1B7_CALIBRATION_POOL_SIZE}"
         generate_family "${family}" "${pool_count}"
+        set +e
         eval_condition "${family}" eb "${pool_count}"
+        pool_eval_status=$?
+        set -e
+        pool_index="rollouts/libero_goal/$(note_for "${family}" eb)/trajectories/index.jsonl"
+        if [[ ! -f "${pool_index}" ]] || \
+          [[ "$(wc -l < "${pool_index}")" -ne "${pool_count}" ]]; then
+          echo "L1-B7 Eb calibration pool did not produce a complete index" >&2
+          exit "${pool_eval_status:-2}"
+        fi
         REPLAY_MIN_EPISODES="${NUM_TRIALS}" \
           calibrate_l1b7_trajectory_states "${family}" "${NUM_TRIALS}"
         python "${TASKS_DIR}/validate_l1b_rollout_physics.py" \

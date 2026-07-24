@@ -734,11 +734,14 @@ def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "_settle_and_validate" in text
     assert "_allowed_obstacle_state_indices" in text
     assert "replay[\"penetration_m\"] <= args.max_contact_penetration" in text
+    assert "eb_penetration <= args.max_contact_penetration" in text
+    assert '"eb_physics_qualified": int(physics_qualified_eb)' in text
     assert "only the native wine-bottle free-joint pose changes" in text.lower()
     assert "--select_count" in text
     assert "_rewrite_selected_trajectories" in text
     assert 'calibrate_l1b7_trajectory_states "${family}" "${count}"' in RUNNER.read_text()
     assert "L1B7_MAX_CANDIDATES_PER_EPISODE" in RUNNER.read_text()
+    assert "L1-B7 Eb calibration pool did not produce a complete index" in RUNNER.read_text()
 
 
 def test_l1b6_reruns_all_gates_after_trajectory_conditioning():

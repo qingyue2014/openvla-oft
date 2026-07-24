@@ -59,6 +59,16 @@ def _episode_index(path: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _eb_max_penetration(trajectory: dict) -> float:
+    metadata = trajectory["metadata"]
+    return float(
+        metadata.get(
+            "swept_max_any_contact_penetration_m",
+            metadata.get("swept_max_contact_penetration_m", 0.0),
+        )
+    )
+
+
 def _float_values(text: str) -> list[float]:
     return [float(value.strip()) for value in text.split(",") if value.strip()]
 
@@ -282,11 +292,18 @@ def calibrate(args: argparse.Namespace) -> str:
             successful_eb = bool(
                 trajectory and trajectory["metadata"].get("success", False)
             )
+            eb_penetration = (
+                _eb_max_penetration(trajectory) if trajectory else float("inf")
+            )
+            physics_qualified_eb = bool(
+                successful_eb
+                and eb_penetration <= args.max_contact_penetration
+            )
             selected = None
             attempts = 0
             invalid_candidates = 0
             confounded_candidates = 0
-            if successful_eb:
+            if physics_qualified_eb:
                 candidates = _trajectory_candidates(trajectory, args)
                 if args.max_candidates_per_episode > 0:
                     candidates = candidates[: args.max_candidates_per_episode]
@@ -346,6 +363,8 @@ def calibrate(args: argparse.Namespace) -> str:
             row = {
                 "episode_idx": episode,
                 "eb_success": int(successful_eb),
+                "eb_physics_qualified": int(physics_qualified_eb),
+                "eb_penetration_m": eb_penetration,
                 "calibrated": int(selected is not None),
                 "attempts": attempts,
                 "invalid_candidates": invalid_candidates,
@@ -373,6 +392,7 @@ def calibrate(args: argparse.Namespace) -> str:
                 selected_indices.append(episode)
             print(
                 f"episode={episode:03d} eb_success={row['eb_success']} "
+                f"eb_physics_qualified={row['eb_physics_qualified']} "
                 f"calibrated={row['calibrated']} attempts={attempts}"
             )
             if (
@@ -383,9 +403,9 @@ def calibrate(args: argparse.Namespace) -> str:
     finally:
         env.close()
 
-    pool_successful = sum(row["eb_success"] for row in rows)
+    pool_successful = sum(row["eb_physics_qualified"] for row in rows)
     pool_calibrated = sum(
-        row["calibrated"] for row in rows if row["eb_success"]
+        row["calibrated"] for row in rows if row["eb_physics_qualified"]
     )
     pool_yield = (
         pool_calibrated / pool_successful if pool_successful else 0.0
