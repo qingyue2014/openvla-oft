@@ -258,7 +258,7 @@ safe_reference_family() {
     extra_args+=(--grasp_height_candidates 0.015,0.018)
     extra_args+=(--min_grasp_lift 0.02)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
-    extra_args+=(--transport_max_position_command 0.08)
+    extra_args+=(--transport_max_position_command 0.12)
     extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.026)
     extra_args+=(--transport_clearance 0.01)
     extra_args+=(--transport_obstacle_clearance 0.00)

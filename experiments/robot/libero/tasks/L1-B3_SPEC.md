@@ -73,8 +73,8 @@ corridor; every controller step is still rejected on any protected-object
 contact. It does not reuse the paired policy prefix because some calibrated
 risk poses are struck by link7 before that prefix establishes a reliable
 grasp. Grasp seating, vertical lifting, and lateral transport use capped
-Cartesian commands, with the strongest speed cap applied only to lateral
-transport so vertical grasp acquisition can converge. Transport waypoints use
+Cartesian commands, with a dedicated lateral-transport cap that remains fast
+enough to converge within the waypoint budget. Transport waypoints use
 a 2.6 cm convergence tolerance; final support contact and release remain
 governed by independent physical-contact and stability gates. A grasp is confirmed
 only after the bowl has lifted at least 2 cm; rigid-offset monitoring remains
