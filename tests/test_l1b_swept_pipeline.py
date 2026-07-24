@@ -712,6 +712,11 @@ def test_l1b7_native_layout_and_runner_contract_are_explicit():
     assert "arm_postgrasp_sweep" in runner
     assert '--swept_volume_component_bodies "robot0_link5,robot0_link6"' in runner
     assert "LIBERO90_CHECKPOINT" in runner
+    assert (
+        'LIBERO90_CHECKPOINT="${LIBERO90_CHECKPOINT:-'
+        'moojink/openvla-7b-oft-finetuned-libero-spatial-object-goal-10}"'
+        in runner
+    )
 
 
 def test_l1b7_calibration_replays_real_link_paths_and_rejects_confounds():
