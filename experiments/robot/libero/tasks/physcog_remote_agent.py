@@ -119,7 +119,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1b1", "ec_calibrate"): PhaseSpec(
         command=(
             "env",
-            "RENDER_GPU_DEVICE_ID=1",
+            "RENDER_GPU_DEVICE_ID=0",
             "SAVE_VIDEO_MODE=none",
             "bash",
             "experiments/robot/libero/tasks/run_l1b_swept.sh",

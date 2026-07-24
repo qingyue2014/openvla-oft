@@ -87,6 +87,7 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
 
     ec_calibrate = PHASES[("l1b1", "ec_calibrate")]
     assert ec_calibrate.count_env == "NUM_TRIALS"
+    assert "RENDER_GPU_DEVICE_ID=0" in ec_calibrate.command
     assert "ec_calibrate" in ec_calibrate.command
     assert any(
         artifact.endswith("ec_rollout_physics.md")
