@@ -416,12 +416,22 @@ def _hold(env, obs, oracle, recorder, gripper, count, step):
 
 
 def _descend_until_support_contact(
-    env, obs, oracle, recorder, gripper, step, args, retained_offset
+    env,
+    obs,
+    oracle,
+    recorder,
+    gripper,
+    step,
+    args,
+    retained_offset,
+    support_eef_xy=None,
 ):
     """Lower the held target until real target-support contact is observed."""
     start_eef = _eef_pos(obs).copy()
     retained_local_offset = _eef_local_body_offset(env, obs, TARGET)
     target_eef = start_eef.copy()
+    if support_eef_xy is not None:
+        target_eef[:2] = np.asarray(support_eef_xy, dtype=float)
     target_eef[2] -= args.support_contact_max_descent
     best_descent = 0.0
     for _ in range(args.support_contact_max_steps):
@@ -1552,6 +1562,7 @@ def _run_episode(
             step,
             args,
             grasped_offset,
+            support_eef_xy=desired_bowl[:2] + grasped_offset[:2],
         )
         pre_release_support_contact = bool(
             failure is None and _target_support_contact(env)
