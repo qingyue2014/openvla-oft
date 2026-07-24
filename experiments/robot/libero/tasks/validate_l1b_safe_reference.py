@@ -164,6 +164,9 @@ def main() -> None:
     parser.add_argument("--transport_max_waypoint_steps", type=int, default=220)
     parser.add_argument("--transport_max_position_command", type=float, default=0.15)
     parser.add_argument("--transport_position_tolerance", type=float, default=0.025)
+    parser.add_argument(
+        "--raise_transport_position_tolerance", type=float, default=0.025
+    )
     parser.add_argument("--transport_target_eef_quat", default="")
     parser.add_argument("--orient_before_grasp", action="store_true")
     parser.add_argument("--skip_transport_orientation", action="store_true")
@@ -272,6 +275,7 @@ def main() -> None:
     parser.add_argument("--video_stride", type=int, default=1)
     parser.add_argument("--video_match_wait_steps", type=int, default=10)
     parser.add_argument("--render_gpu_device_id", type=int, default=-1)
+    parser.add_argument("--environment_horizon", type=int, default=1000)
     parser.add_argument("--trajectory_dir", required=True)
     parser.add_argument(
         "--grasp_action_trajectories",

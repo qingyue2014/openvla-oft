@@ -260,6 +260,7 @@ safe_reference_family() {
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
     extra_args+=(--transport_max_position_command 0.12)
     extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.026)
+    extra_args+=(--raise_transport_position_tolerance 0.035)
     extra_args+=(--transport_clearance 0.01)
     extra_args+=(--transport_target_eef_quat 0.9941969,-0.0504397,-0.0834422,0.0454506)
     # First carry the bowl along the safe side of the corridor. Only reorient
@@ -298,6 +299,7 @@ safe_reference_family() {
     extra_args+=(--require_support_contact_before_release)
     extra_args+=(--support_contact_hold_steps 10)
     extra_args+=(--post_release_support_hold_steps 10)
+    extra_args+=(--environment_horizon 2000)
   fi
   if [[ -n "${SAFE_REF_VIDEO_DIR:-}" ]]; then
     extra_args+=(--video_dir "${SAFE_REF_VIDEO_DIR}")
