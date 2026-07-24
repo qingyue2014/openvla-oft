@@ -283,10 +283,6 @@ safe_reference_family() {
     extra_args+=(--orientation_position_scale 0.02)
     extra_args+=(--orientation_max_position_command 0.50)
     extra_args+=(--rotation_scale 0.5 --max_rotation_command 0.01)
-    # With transport rotation intentionally skipped, this stage is a pure
-    # straight-ahead clearance move at the stable grasp orientation.
-    extra_args+=(--postorientation_path_fraction 0.35)
-    extra_args+=(--postorientation_position_tolerance 0.026)
     extra_args+=(--transport_obstacle_clearance 0.00)
     extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
     # Preserve the safe transit endpoint that completed without a violation,
