@@ -252,12 +252,15 @@ safe_reference_family() {
     # finer rim offsets and heights, then take the side of the corridor
     # opposite the bottle.
     extra_args+=(--approach_height 0.10 --lift_height 0.06)
-    extra_args+=(--grasp_offset_fractions 0.40,0.60,0.80,1.00)
-    extra_args+=(--grasp_height_candidates 0.012,0.015,0.018)
+    extra_args+=(--grasp_offset_fractions 0.40,0.60,0.80)
+    extra_args+=(--grasp_height_candidates 0.015,0.018)
+    extra_args+=(--grasp_seat_steps 25 --grasp_seat_max_command 0.05)
+    extra_args+=(--max_position_command 0.12)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
+    extra_args+=(--transport_max_position_command 0.08)
     extra_args+=(--position_tolerance 0.025)
     extra_args+=(--transport_clearance 0.01)
-    extra_args+=(--transport_obstacle_clearance 0.08)
+    extra_args+=(--transport_obstacle_clearance 0.06)
     extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
     extra_args+=(--place_offset_x 0.00 --place_offset_y 0.00)
     extra_args+=(--require_support_contact_before_release)

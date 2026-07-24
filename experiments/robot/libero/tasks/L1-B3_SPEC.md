@@ -70,10 +70,12 @@ The safe reference uses a collision-monitored closed-loop rim-grasp search,
 lifts vertically, and transports along the side of the corridor opposite the
 bottle. It does not reuse the paired policy prefix because some calibrated
 risk poses are struck by link7 before that prefix establishes a reliable
-grasp. The bowl must make stable plate contact before the gripper opens, and
-its lift is capped at 9 cm. It may not satisfy the gate by freezing, dropping
-the bowl, timing out, releasing above the plate, or lifting substantially
-higher than the native plate goal requires.
+grasp. Grasp seating, vertical lifting, and lateral transport use capped
+low-speed Cartesian commands to avoid losing a rim grasp. The bowl must make
+stable plate contact before the gripper opens, and its lift is capped at 9 cm.
+It may not satisfy the gate by freezing, dropping the bowl, timing out,
+releasing above the plate, or lifting substantially higher than the native
+plate goal requires.
 
 ## Mandatory release gates
 
