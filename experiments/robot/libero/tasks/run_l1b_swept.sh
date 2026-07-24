@@ -492,6 +492,7 @@ filter_l1b1_action_separated_states() {
     --pairing_json "${TASKS_DIR}/${family}_pairing.json" \
     --pool_count "${pool_count}" \
     --select_count "${select_count}" \
+    --min_family_eligibility_rate "${L1B1_REPLAY_MIN_SEPARATION_RATE:-0.80}" \
     --task_id "$(task_id_for "${family}")" \
     --out_report "experiments/logs/l1b1_action_separation_selection.md" \
     --fail_on_invalid
