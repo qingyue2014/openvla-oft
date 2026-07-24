@@ -280,7 +280,7 @@ safe_reference_family() {
     extra_args+=(--postorientation_advance_lateral_bias 0.04)
     extra_args+=(--postorientation_min_path_progress 0.048)
     extra_args+=(--transport_bypass_path_fraction 0.80)
-    extra_args+=(--transport_bypass_lateral_bias 0.03)
+    extra_args+=(--transport_bypass_lateral_bias 0.01)
     extra_args+=(--transport_bypass_min_path_progress 0.10)
     extra_args+=(--transport_obstacle_clearance 0.00)
     extra_args+=(--preplace_height 0.02 --max_safe_lift_height 0.09)
