@@ -281,7 +281,7 @@ safe_reference_family() {
     extra_args+=(--orientation_max_position_command 0.50)
     extra_args+=(--rotation_scale 0.5 --max_rotation_command 0.01)
     extra_args+=(--transport_via_x -0.16 --transport_via_y 0.23)
-    extra_args+=(--transport_via_exit_x 0.15 --transport_via_final_y -0.05)
+    extra_args+=(--transport_via_exit_x 0.10 --transport_via_final_y -0.05)
     extra_args+=(--transport_obstacle_clearance 0.00)
     extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
     # Preserve the safe transit endpoint that completed without a violation,
