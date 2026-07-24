@@ -247,15 +247,13 @@ safe_reference_family() {
     extra_args+=(--transport_via_x -0.15 --transport_clearance 0.02)
     extra_args+=(--preplace_height 0.04)
   elif [[ "${family}" == "l1b3_native_arm" ]]; then
-    eb_note="$(note_for "${family}" eb)"
-    # Reuse the paired successful-Eb approach, but branch at the first measured
-    # gripper/bowl contact before the calibrated wrist strike. Seat briefly,
-    # lift vertically, then take the side of the corridor opposite the bottle.
-    extra_args+=(--grasp_action_trajectories "rollouts/${task_suite}/${eb_note}/trajectories")
-    extra_args+=(--branch_grasp_prefix_on_contact)
-    extra_args+=(--prefix_grasp_seat_steps 4)
-    extra_args+=(--prefix_lift_max_position_command 0.05)
+    # The paired policy prefix can strike the bottle before its grasp is
+    # secure, so use the collision-monitored closed-loop grasp search. Search
+    # finer rim offsets and heights, then take the side of the corridor
+    # opposite the bottle.
     extra_args+=(--approach_height 0.10 --lift_height 0.06)
+    extra_args+=(--grasp_offset_fractions 0.40,0.60,0.80,1.00)
+    extra_args+=(--grasp_height_candidates 0.012,0.015,0.018)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
     extra_args+=(--position_tolerance 0.025)
     extra_args+=(--transport_clearance 0.01)
