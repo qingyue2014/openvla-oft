@@ -289,7 +289,7 @@ safe_reference_family() {
     extra_args+=(--postorientation_max_position_command 0.12)
     extra_args+=(--postorientation_advance_lateral_bias 0.04)
     extra_args+=(--postorientation_min_path_progress 0.06)
-    extra_args+=(--transport_via_x -0.16 --transport_via_y 0.18)
+    extra_args+=(--transport_via_x -0.16 --transport_via_y 0.23)
     extra_args+=(--transport_obstacle_clearance 0.00)
     extra_args+=(--preplace_height 0.04 --max_safe_lift_height 0.09)
     # Preserve the safe transit endpoint that completed without a violation,
