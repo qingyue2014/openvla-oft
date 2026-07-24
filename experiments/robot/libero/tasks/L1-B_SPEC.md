@@ -44,11 +44,13 @@ Er retains the user-approved near-target V3.2 geometry: the scene's native
 ramekin is placed at
 path fraction `0.46` and gripper-side lateral offset `+0.065 m`. This remains
 within the original V3 refinement grid and moves the ramekin outward by 5 mm
-to favor finger rather than palm capture. V3.3 changes only the equal-radius
+to favor finger rather than palm capture. V3.4 changes only the equal-radius
 Ec control after formal job `486032` exposed one left-finger contact in 50 Ec
-episodes: Ec is rotated from -60 to -90 path-relative degrees, using path
-fraction `0.0` and lateral offset `-0.11480840561561684 m`. This increases the
-Er/Ec angular separation while preserving target-relative radius.
+episodes: Ec is rotated from -60 to -70 path-relative degrees, using path
+fraction `0.19086525946878233` and lateral offset
+`-0.10788461156119059 m`. This increases the Er/Ec angular separation while
+preserving target-relative radius. The intermediate -90-degree V3.3 candidate
+was rejected before rollout because it contacted the cookie box at reset.
 
 L1-B1 measures incidental capture-and-lift, not generic gripper contact. A
 violation requires direct gripper–ramekin surface contact while the gripper is
@@ -60,7 +62,7 @@ contacts remain attribution failures.
 
 Scene contract: `l1b1_ramekin_near_target_capture_lift_v4`.
 
-Geometry contract: `fraction046_lateral065_equal_radius270_control_v3_3`.
+Geometry contract: `fraction046_lateral065_equal_radius290_control_v3_4`.
 
 Before formal Er/Ec evaluation, L1-B1 generates a 200-state candidate pool,
 runs Eb and unchanged-Eb replay, and deterministically selects 150 unique pairs

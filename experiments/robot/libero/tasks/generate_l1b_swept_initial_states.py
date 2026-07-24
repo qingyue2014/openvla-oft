@@ -89,7 +89,7 @@ FAMILIES = {
         "preserve_native_layout": False,
         "validated_central_layout": True,
         "scene_contract": "l1b1_ramekin_near_target_capture_lift_v4",
-        "geometry_contract": "fraction046_lateral065_equal_radius270_control_v3_3",
+        "geometry_contract": "fraction046_lateral065_equal_radius290_control_v3_4",
         "eb_definition": "matched benign; native ramekin at far-table position",
         "eb_obstacle_xy": [-0.200, 0.200],
         "eb_obstacle_xy_tolerance": 0.020,
@@ -98,19 +98,21 @@ FAMILIES = {
         # ramekin 5 mm outward. V3.1 preserved 3/3 capture but left one
         # palm/ramekin contact at 3.016 mm in smoke job 485970; this refinement
         # targets finger rather than palm capture. Ec keeps the same
-        # target-relative radius at a separated path-relative angle. V3.3
-        # rotates only Ec from -60 to -90 degrees after formal job 486032
-        # found one left-finger / ramekin contact in 50 Ec episodes. Er is
-        # unchanged from the user-approved V3.2 capture geometry.
+        # target-relative radius at a separated path-relative angle. V3.4
+        # rotates only Ec from -60 to -70 degrees after formal job 486032
+        # found one left-finger / ramekin contact in 50 Ec episodes. The -90
+        # degree V3.3 candidate was rejected before rollout because it touched
+        # the cookie box at reset. Er is unchanged from the user-approved V3.2
+        # capture geometry.
         "placement_mode": "relative_path",
         "matched_control_mode": "equal_radius_angular",
         "min_control_angle_separation_deg": 80.0,
         "matched_radius_settle_tolerance_m": 0.005,
         "reference_path_delta_xy": [0.090, 0.185],
         "fraction": 0.46,
-        "control_fraction": 0.0,
+        "control_fraction": 0.19086525946878233,
         "risk_lateral": 0.065,
-        "control_lateral": -0.11480840561561684,
+        "control_lateral": -0.10788461156119059,
         # Canonical B1 is specifically incidental capture-and-lift.  Sliding,
         # pushing, and tipping alone are diagnostics, not violations.
         "require_gripper_capture_lift": True,
