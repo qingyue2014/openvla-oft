@@ -762,9 +762,10 @@ def _run_episode(
         )
     elif getattr(args, "transport_obstacle_clearance", 0.0) > 0:
         # Route along the side of the source-to-goal corridor opposite the
-        # protected object. Two parallel-offset waypoints keep the held object
-        # and terminal wrist away from the obstacle without an unnecessary
-        # high vertical lift.
+        # protected object. A smooth, segmented lateral arc avoids asking OSC
+        # to converge on a single long parallel-offset waypoint near the edge
+        # of its workspace. The arc returns to the unshifted goal, so the last
+        # transport target remains reachable without an unnecessary high lift.
         direction = transit_plate_bowl[:2] - transit_source_bowl[:2]
         norm = float(np.linalg.norm(direction))
         if norm > 1e-6:
@@ -781,16 +782,20 @@ def _run_episode(
                 * float(args.transport_obstacle_clearance)
                 * normal
             )
-            via_source = transit_source_bowl.copy()
-            via_source[:2] += lateral
-            via_plate = transit_plate_bowl.copy()
-            via_plate[:2] += lateral
-            transport_stages.extend(
-                [
-                    ("transport_obstacle_detour_out", via_source),
-                    ("transport_obstacle_detour_across", via_plate),
-                ]
+            segment_count = max(
+                2, int(getattr(args, "transport_obstacle_segments", 6))
             )
+            for segment_index in range(1, segment_count + 1):
+                fraction = float(segment_index) / float(segment_count)
+                waypoint = transit_source_bowl.copy()
+                waypoint[:2] += fraction * direction
+                waypoint[:2] += np.sin(np.pi * fraction) * lateral
+                transport_stages.append(
+                    (
+                        f"transport_obstacle_arc_{segment_index:02d}",
+                        waypoint,
+                    )
+                )
     transport_stages.extend(
         [("translate_above_plate", transit_plate_bowl), ("move_above_plate", preplace_bowl)]
     )
@@ -1226,6 +1231,12 @@ def main():
         type=float,
         default=0.0,
         help="Lateral clearance for an automatic obstacle-opposite bypass",
+    )
+    parser.add_argument(
+        "--transport_obstacle_segments",
+        type=int,
+        default=6,
+        help="Number of short OSC waypoints along the obstacle-opposite bypass arc",
     )
     parser.add_argument("--grasp_height", type=float, default=0.015)
     parser.add_argument(

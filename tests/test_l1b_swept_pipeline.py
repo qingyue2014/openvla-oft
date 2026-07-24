@@ -780,15 +780,15 @@ def test_formal_safe_reference_gate_matches_specification():
     assert "--lift_height 0.06 --preplace_height 0.04" in runner
     assert "--transport_clearance 0.0 --max_safe_lift_height 0.09" in runner
     assert "--transport_via_x 0.10" in runner
-    assert "--transport_obstacle_clearance 0.06" in runner
+    assert "--transport_obstacle_clearance 0.06 --transport_obstacle_segments 6" in runner
     assert "--grasp_offset_fractions 0.40,0.60,0.80" in runner
     assert "--grasp_height_candidates 0.015,0.018" in runner
     assert "--min_grasp_lift 0.02" in runner
     assert "--transport_max_position_command 0.08" in runner
     assert "--require_support_contact_before_release" in runner
     assert "--max_safe_lift_height 0.09" in runner
-    assert "transport_obstacle_detour_out" in shared
-    assert "transport_obstacle_detour_across" in shared
+    assert "transport_obstacle_arc_" in shared
+    assert "np.sin(np.pi * fraction) * lateral" in shared
     assert "_descend_until_support_contact" in shared
     assert "_confirm_released_on_support" in shared
     assert "max_bowl_lift_m" in shared
