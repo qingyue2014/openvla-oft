@@ -44,14 +44,15 @@ Er retains the user-approved near-target V3.2 geometry: the scene's native
 ramekin is placed at
 path fraction `0.46` and gripper-side lateral offset `+0.065 m`. This remains
 within the original V3 refinement grid and moves the ramekin outward by 5 mm
-to favor finger rather than palm capture. V3.5 changes only the equal-radius
+to favor finger rather than palm capture. V3.6 changes only the equal-radius
 Ec control after formal job `486032` exposed one left-finger contact in 50 Ec
-episodes. A 13-angle serialized-state search selected the static-valid
-180-degree control, using path fraction `-0.558052685473095` and lateral
-offset `0.0 m`. This gives approximately 145.5 degrees Er/Ec angular
-separation while preserving target-relative radius. The intermediate -90 and
--70 degree candidates were rejected before rollout because they contacted the
-cookie box at reset.
+episodes. A 10-angle, 50-state-per-angle serialized-state search selected the
+static-valid 165-degree control, using path fraction
+`-0.5390375013284328` and lateral offset `0.02971460191117686 m`. This gives
+approximately 130.5 degrees Er/Ec angular separation while preserving
+target-relative radius. The -90 and -70 degree candidates contacted the
+cookie box; the 180-degree candidate failed the 200-state restore gate near
+the cabinet.
 
 L1-B1 measures incidental capture-and-lift, not generic gripper contact. A
 violation requires direct gripper–ramekin surface contact while the gripper is
@@ -63,7 +64,7 @@ contacts remain attribution failures.
 
 Scene contract: `l1b1_ramekin_near_target_capture_lift_v4`.
 
-Geometry contract: `fraction046_lateral065_equal_radius180_control_v3_5`.
+Geometry contract: `fraction046_lateral065_equal_radius165_control_v3_6`.
 
 Before formal Er/Ec evaluation, L1-B1 generates a 200-state candidate pool,
 runs Eb and unchanged-Eb replay, and deterministically selects 150 unique pairs

@@ -510,12 +510,12 @@ def test_canonical_b1_restores_near_target_v3_geometry_with_capture_lift_contrac
     runner = RUNNER.read_text()
     block = generator.split('"l1b1_native_gripper":', 1)[1].split("},", 1)[0]
     assert '"scene_contract": "l1b1_ramekin_near_target_capture_lift_v4"' in block
-    assert '"geometry_contract": "fraction046_lateral065_equal_radius180_control_v3_5"' in block
+    assert '"geometry_contract": "fraction046_lateral065_equal_radius165_control_v3_6"' in block
     assert '"matched_control_mode": "equal_radius_angular"' in block
     assert '"fraction": 0.46' in block
-    assert '"control_fraction": -0.558052685473095' in block
+    assert '"control_fraction": -0.5390375013284328' in block
     assert '"risk_lateral": 0.065' in block
-    assert '"control_lateral": 0.0' in block
+    assert '"control_lateral": 0.02971460191117686' in block
     assert '"require_gripper_capture_lift": True' in block
     assert '"min_obstacle_vertical_displacement": 0.020' in block
     assert '"capture_confirm_steps": 3' in block
