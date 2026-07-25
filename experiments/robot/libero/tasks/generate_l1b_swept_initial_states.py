@@ -382,6 +382,57 @@ def _forbidden_initial_contact_pairs(env, obstacle_body: str) -> list[str]:
     )
 
 
+def _deepest_contact_penetration(env, body_a: str, body_b: str) -> float:
+    """Return the deepest interpenetration in metres between two body subtrees.
+
+    Reported as a positive depth (0.0 when the two never interpenetrate), so a
+    native convex-proxy artifact can be told apart from a real overlap without
+    re-deriving MuJoCo's negative-distance convention at each call site.
+    """
+    model = env.sim.model
+    ids_a = _body_subtree_ids(env, body_a)
+    ids_b = _body_subtree_ids(env, body_b)
+    deepest = 0.0
+    for index in range(env.sim.data.ncon):
+        contact = env.sim.data.contact[index]
+        if float(contact.dist) >= 0.0:
+            continue
+        body_1 = int(model.geom_bodyid[contact.geom1])
+        body_2 = int(model.geom_bodyid[contact.geom2])
+        if (body_1 in ids_a and body_2 in ids_b) or (
+            body_1 in ids_b and body_2 in ids_a
+        ):
+            deepest = max(deepest, -float(contact.dist))
+    return deepest
+
+
+def _native_reject_diagnostics(env, pairs: list[str]) -> str:
+    """Describe why an audited native state was rejected.
+
+    A native source state that starts with the target already interpenetrating
+    the goal is not the same defect as one that merely reports a convex-proxy
+    support overlap, and the two call for opposite responses, so report the
+    depth and whether the native goal predicate is already satisfied.
+    """
+    details = []
+    for pair in pairs:
+        if " <-> " not in pair:
+            continue
+        left, right = pair.split(" <-> ", 1)
+        try:
+            depth = _deepest_contact_penetration(env, left, right)
+        except Exception:  # pragma: no cover - diagnostics must never mask reject
+            continue
+        details.append(f"{pair} depth={depth * 1000.0:.3f}mm")
+    try:
+        already_solved = bool(env.check_success())
+    except Exception:  # pragma: no cover
+        already_solved = None
+    return (
+        f"depths=[{'; '.join(details)}] native_goal_already_satisfied={already_solved}"
+    )
+
+
 def _relative_obstacle_xy(target_xy, plate_xy, fraction, lateral) -> np.ndarray:
     delta = np.asarray(plate_xy, dtype=float) - np.asarray(target_xy, dtype=float)
     distance = float(np.linalg.norm(delta))
@@ -496,6 +547,13 @@ def _settle_and_validate(
         "forbidden_contacts": sorted(forbidden_contacts),
         "valid": bool(drift <= 0.02 and not forbidden_contacts),
     }
+    if forbidden_contacts:
+        # This scan spans post-settling steps, where a concave mesh resting on
+        # its support reports a deepening convex-proxy overlap. Record the depth
+        # so that artifact can be told apart from a real initial interpenetration.
+        diagnostics["forbidden_contact_depths"] = _native_reject_diagnostics(
+            env, sorted(forbidden_contacts)
+        )
     return diagnostics, candidate_state
 
 
@@ -634,7 +692,8 @@ def generate(args) -> dict:
             if eb_forbidden_contacts:
                 print(
                     f"[reject source={source_index}] "
-                    f"Eb forbidden contacts={eb_forbidden_contacts}"
+                    f"Eb forbidden contacts={eb_forbidden_contacts} "
+                    f"{_native_reject_diagnostics(env, eb_forbidden_contacts)}"
                 )
                 source_index += 1
                 continue
