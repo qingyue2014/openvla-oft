@@ -1480,6 +1480,24 @@ def _run_episode(
                         )
                     ),
                 )
+            if stage.startswith("transport_detour_"):
+                # Outer-lane detour waypoints sit near the OSC workspace
+                # boundary, where the controller settles at a measured
+                # equilibrium instead of converging to the commanded pose.
+                # These are via poses, not the placement: protected-object
+                # contact, grasp-retention, and the native goal/support gates
+                # are enforced independently at every step regardless of how
+                # closely a via waypoint is reached.
+                stage_tolerance = max(
+                    stage_tolerance,
+                    float(
+                        getattr(
+                            args,
+                            "transport_detour_position_tolerance",
+                            stage_tolerance,
+                        )
+                    ),
+                )
             obs, step, failure = _move_to(
                 env,
                 obs,
@@ -1820,6 +1838,23 @@ def run(args):
                         np.array([0.0, -fraction * half_xy[1]]),
                     ]
                 )
+            if getattr(args, "grasp_include_diagonal_offsets", False):
+                # Axis-aligned rim grasps can all be blocked when the protected
+                # object sits beside the target: every approach lane then runs
+                # through it. Diagonal rim points, at the same rim fraction, can
+                # thread between the two. Enumerated last so families that
+                # already find an axis-aligned grasp break before reaching them.
+                diagonal_scale = 2.0 ** -0.5
+                for fraction in fractions:
+                    reach = fraction * diagonal_scale * half_xy
+                    candidates.extend(
+                        [
+                            np.array([reach[0], reach[1]]),
+                            np.array([reach[0], -reach[1]]),
+                            np.array([-reach[0], reach[1]]),
+                            np.array([-reach[0], -reach[1]]),
+                        ]
+                    )
             height_values = getattr(args, "grasp_height_candidates", "")
             heights = [
                 float(value.strip())
@@ -1962,7 +1997,11 @@ def main():
     parser.add_argument(
         "--raise_transport_position_tolerance", type=float, default=0.025
     )
+    parser.add_argument(
+        "--transport_detour_position_tolerance", type=float, default=0.025
+    )
     parser.add_argument("--transport_target_eef_quat", default="")
+    parser.add_argument("--grasp_include_diagonal_offsets", action="store_true")
     parser.add_argument("--orient_before_grasp", action="store_true")
     parser.add_argument("--skip_transport_orientation", action="store_true")
     parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)

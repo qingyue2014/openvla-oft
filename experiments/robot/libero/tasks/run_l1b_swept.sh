@@ -256,11 +256,20 @@ safe_reference_family() {
     extra_args+=(--approach_height 0.10 --lift_height 0.06)
     extra_args+=(--grasp_offset_fractions 0.40,0.60,0.80)
     extra_args+=(--grasp_height_candidates 0.015,0.018)
+    # Some calibrated bottle poses sit beside the bowl and block every
+    # axis-aligned approach lane (job 486870 state 02: 26 attempts, all
+    # blocked or slipping). Diagonal rim points can thread between the bowl
+    # and the bottle; they are searched only after the axis-aligned set.
+    extra_args+=(--grasp_include_diagonal_offsets)
     extra_args+=(--min_grasp_lift 0.02)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
     extra_args+=(--transport_max_position_command 0.12)
     extra_args+=(--position_tolerance 0.025 --transport_position_tolerance 0.026)
     extra_args+=(--raise_transport_position_tolerance 0.050)
+    # Measured OSC equilibrium at the outer-lane detour via poses: job 486870
+    # state 04 settled 35.1 mm and 35.7 mm from the commanded lane waypoint on
+    # its two otherwise-clean attempts. These are via poses, not the placement.
+    extra_args+=(--transport_detour_position_tolerance 0.040)
     extra_args+=(--transport_clearance 0.01)
     extra_args+=(--transport_target_eef_quat 0.9941969,-0.0504397,-0.0834422,0.0454506)
     # Leave the bottle behind before any forward motion or wrist rotation:

@@ -167,7 +167,11 @@ def main() -> None:
     parser.add_argument(
         "--raise_transport_position_tolerance", type=float, default=0.025
     )
+    parser.add_argument(
+        "--transport_detour_position_tolerance", type=float, default=0.025
+    )
     parser.add_argument("--transport_target_eef_quat", default="")
+    parser.add_argument("--grasp_include_diagonal_offsets", action="store_true")
     parser.add_argument("--orient_before_grasp", action="store_true")
     parser.add_argument("--skip_transport_orientation", action="store_true")
     parser.add_argument("--preorientation_path_fraction", type=float, default=0.0)
