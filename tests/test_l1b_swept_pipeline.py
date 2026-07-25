@@ -448,6 +448,35 @@ def test_static_gate_checks_all_contact_partners_including_eb():
     assert 'if condition != "eb":\n                    for pair' not in contact_scan
 
 
+def test_native_bowl_plate_noise_exemption_is_pair_exact_and_depth_guarded():
+    generator = GENERATOR.read_text()
+    # Pair-exact: the exemption may not name anything but the target bowl and
+    # the goal plate, so it cannot mask a protected-obstacle contact.
+    shallow = generator.split("EXPECTED_NATIVE_SHALLOW_SUPPORT_PAIRS = {", 1)[1]
+    shallow = shallow.split("}", 1)[0]
+    assert '"akita_black_bowl_1_main", "plate_1_main"' in shallow
+    assert "wine_bottle" not in shallow
+    assert shallow.count("frozenset") == 1
+    # Depth-guarded: unlike EXPECTED_NATIVE_SUPPORT_PAIRS, this exemption is
+    # only honoured while the overlap stays inside MAX_SUPPORT_PENETRATION_M,
+    # so a real bowl/plate interpenetration is still rejected.
+    allowed = generator.split("allowed_support = bool(", 1)[1].split("\n        )", 1)[0]
+    assert "EXPECTED_NATIVE_SHALLOW_SUPPORT_PAIRS" in allowed
+    guarded = allowed.split("EXPECTED_NATIVE_SHALLOW_SUPPORT_PAIRS", 1)[1]
+    assert "float(contact.dist) >= -MAX_SUPPORT_PENETRATION_M" in guarded
+
+
+def test_native_reject_reports_penetration_depth_and_goal_predicate():
+    generator = GENERATOR.read_text()
+    assert "_deepest_contact_penetration" in generator
+    assert "_native_reject_diagnostics" in generator
+    # Both audit paths must report it: the instantaneous Eb scan and the
+    # post-settling condition scan reject different source states.
+    assert "_native_reject_diagnostics(env, eb_forbidden_contacts)" in generator
+    assert '"forbidden_contact_depths"' in generator
+    assert "native_goal_already_satisfied" in generator
+
+
 def test_static_gate_requires_policy_visibility_in_all_three_conditions():
     text = STATIC_VALIDATOR.read_text()
     assert 'visible_pixels = {condition: [] for condition in ("eb", "er", "ec")}' in text

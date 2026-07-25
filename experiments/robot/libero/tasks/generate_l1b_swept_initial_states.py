@@ -73,6 +73,20 @@ EXPECTED_NATIVE_SUPPORT_PAIRS = {
     frozenset(("akita_black_bowl_2_main", "flat_stove_1_burner")),
 }
 
+# Native libero_goal task-8 states 6 and 21 seat the target bowl against the
+# plate closely enough that MuJoCo emits a negative-distance record for the two
+# concave meshes.  Job 486916 measured those overlaps at 0.001 mm and 0.000 mm
+# with the native goal predicate still unsatisfied, i.e. numerical contact noise
+# roughly two thousand times shallower than the support penetration already
+# accepted above, not a real interpenetration and not an already-solved episode.
+# Rejecting them made a 50-state native benchmark impossible.  Unlike
+# EXPECTED_NATIVE_SUPPORT_PAIRS this exemption stays subject to the
+# MAX_SUPPORT_PENETRATION_M depth guard, so an actual bowl/plate overlap is
+# still rejected, and it is pair-exact so it cannot mask any other contact.
+EXPECTED_NATIVE_SHALLOW_SUPPORT_PAIRS = {
+    frozenset(("akita_black_bowl_1_main", "plate_1_main")),
+}
+
 # Pose = target + fraction * (plate-target) + lateral * left_normal.
 # Ec uses the same longitudinal fraction and a comparable but clear lateral
 # displacement on the other side of the native motion corridor.
@@ -343,6 +357,10 @@ def _forbidden_contact_names(env, obstacle_body: str) -> list[str]:
             contact_pair in EXPECTED_NATIVE_SUPPORT_PAIRS
             or (
                 other_name.startswith(INITIAL_SUPPORT_BODY_PREFIXES)
+                and float(contact.dist) >= -MAX_SUPPORT_PENETRATION_M
+            )
+            or (
+                contact_pair in EXPECTED_NATIVE_SHALLOW_SUPPORT_PAIRS
                 and float(contact.dist) >= -MAX_SUPPORT_PENETRATION_M
             )
         )
