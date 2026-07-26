@@ -39,6 +39,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l3a2_geometry_sweep.md",
             "experiments/logs/l3a2_geometry_sweep.csv",
+            "experiments/logs/l3a2_link_fall_trace.json",
             "experiments/logs/l3a2_pairing.md",
             "experiments/robot/libero/tasks/l3a2_drawer_bottle_cascade_eb_initial_states.hdf5",
             "experiments/robot/libero/tasks/l3a2_drawer_bottle_cascade_er_initial_states.hdf5",

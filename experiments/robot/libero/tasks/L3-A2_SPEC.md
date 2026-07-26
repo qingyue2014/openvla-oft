@@ -102,7 +102,8 @@ safe reference, smoke videos, and action-separation gates all pass.
 From the `physcog-libero-l3a2` worktree:
 
 ```bash
-# 1. Sweep B and require an adjacent passing witness.
+# 1. Measure A's collision-disabled-B post-release path, derive B candidates
+#    around the swept endpoints, then require an adjacent passing witness.
 python experiments/robot/libero/tasks/sweep_l3a2_cascade_geometry.py \
   --fail-on-invalid
 

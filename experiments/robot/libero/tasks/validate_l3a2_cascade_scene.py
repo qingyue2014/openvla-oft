@@ -82,6 +82,22 @@ def _contacts(env: Any, first: set[int], second: set[int]) -> bool:
     return False
 
 
+def _contact_body_names(env: Any, geoms: set[int]) -> set[str]:
+    names = set()
+    model = env.sim.model
+    for index in range(int(env.sim.data.ncon)):
+        contact = env.sim.data.contact[index]
+        geom1, geom2 = int(contact.geom1), int(contact.geom2)
+        if geom1 in geoms:
+            body_id = int(model.geom_bodyid[geom2])
+        elif geom2 in geoms:
+            body_id = int(model.geom_bodyid[geom1])
+        else:
+            continue
+        names.add(model.body_id2name(body_id) or f"body_{body_id}")
+    return names
+
+
 def _axis(env: Any, body_name: str) -> np.ndarray:
     return _body_rotation(env, body_name)[:, 2].copy()
 
@@ -105,6 +121,7 @@ def _scripted_close(
     *,
     steps: int,
     disable_link_after_release: bool = False,
+    disable_terminal_collision: bool = False,
 ) -> dict[str, Any]:
     _restore(env, state)
     model = env.sim.model
@@ -131,10 +148,25 @@ def _scripted_close(
     terminal_initial = _body_pos(env, TERMINAL_BODY).copy()
     terminal_axis = _axis(env, TERMINAL_BODY)
     initial_link_terminal = _contacts(env, link_geoms, terminal_geoms)
+    initial_terminal_contacts = _contact_body_names(env, terminal_geoms)
+    initial_center_distance = float(np.linalg.norm(
+        link_initial - terminal_initial
+    ))
     original_contype = np.asarray(model.geom_contype[list(link_geoms)]).copy()
     original_conaffinity = np.asarray(
         model.geom_conaffinity[list(link_geoms)]
     ).copy()
+    original_terminal_contype = np.asarray(
+        model.geom_contype[list(terminal_geoms)]
+    ).copy()
+    original_terminal_conaffinity = np.asarray(
+        model.geom_conaffinity[list(terminal_geoms)]
+    ).copy()
+    if disable_terminal_collision:
+        indices = list(terminal_geoms)
+        model.geom_contype[indices] = 0
+        model.geom_conaffinity[indices] = 0
+        env.sim.forward()
     disabled = False
     seen_component = _contacts(env, link_geoms, component_geoms)
     rows = []
@@ -159,6 +191,8 @@ def _scripted_close(
                 env.sim.forward()
             seen_component |= component_contact
             env.sim.step()
+            link_pos = _body_pos(env, LINK_BODY)
+            terminal_pos = _body_pos(env, TERMINAL_BODY)
             rows.append({
                 "step": step,
                 "component_contact": _contacts(
@@ -174,24 +208,38 @@ def _scripted_close(
                     env, terminal_geoms, interference_geoms
                 ),
                 "link_displacement_m": float(np.linalg.norm(
-                    _body_pos(env, LINK_BODY) - link_initial
+                    link_pos - link_initial
                 )),
                 "terminal_displacement_m": float(np.linalg.norm(
-                    _body_pos(env, TERMINAL_BODY) - terminal_initial
+                    terminal_pos - terminal_initial
                 )),
                 "terminal_tilt_change_deg": _angle(
                     terminal_axis, _axis(env, TERMINAL_BODY)
+                ),
+                "link_xyz_m": link_pos.tolist(),
+                "link_axis": _axis(env, LINK_BODY).tolist(),
+                "terminal_xyz_m": terminal_pos.tolist(),
+                "link_terminal_center_distance_m": float(np.linalg.norm(
+                    link_pos - terminal_pos
+                )),
+                "terminal_contact_bodies": sorted(
+                    _contact_body_names(env, terminal_geoms)
                 ),
             })
     finally:
         indices = list(link_geoms)
         model.geom_contype[indices] = original_contype
         model.geom_conaffinity[indices] = original_conaffinity
+        indices = list(terminal_geoms)
+        model.geom_contype[indices] = original_terminal_contype
+        model.geom_conaffinity[indices] = original_terminal_conaffinity
         env.sim.forward()
     classified = classify_cascade_timeline(rows)
     return {
         **classified,
         "initial_link_terminal_contact": initial_link_terminal,
+        "initial_terminal_contacts": sorted(initial_terminal_contacts),
+        "initial_link_terminal_center_distance_m": initial_center_distance,
         "terminal_robot_contact": any(
             row["terminal_robot_contact"] for row in rows
         ),
@@ -212,9 +260,80 @@ def _scripted_close(
     }
 
 
-def validate_episode(
-    env: Any, eb: np.ndarray, er: np.ndarray, ec: np.ndarray, steps: int
+def passive_terminal_gate(
+    env: Any,
+    state: np.ndarray,
+    *,
+    steps: int = 220,
+    max_displacement: float = 0.003,
+    max_tilt_change_deg: float = 3.0,
 ) -> dict[str, Any]:
+    """Reject candidate B poses that are not table-only stable before closure."""
+    _restore(env, state)
+    geoms = _descendant_geoms(env.sim.model, TERMINAL_BODY)
+    link_geoms = _descendant_geoms(env.sim.model, LINK_BODY)
+    initial_pos = _body_pos(env, TERMINAL_BODY).copy()
+    initial_axis = _axis(env, TERMINAL_BODY)
+    initial_contacts = _contact_body_names(env, geoms)
+    initial_link_contact = _contacts(env, link_geoms, geoms)
+    initial_link_distance = float(np.linalg.norm(
+        _body_pos(env, LINK_BODY) - initial_pos
+    ))
+    max_motion = 0.0
+    max_tilt = 0.0
+    contact_bodies = set(initial_contacts)
+    for _ in range(steps):
+        env.sim.step()
+        max_motion = max(
+            max_motion,
+            float(np.linalg.norm(_body_pos(env, TERMINAL_BODY) - initial_pos)),
+        )
+        max_tilt = max(
+            max_tilt,
+            _angle(initial_axis, _axis(env, TERMINAL_BODY)),
+        )
+        contact_bodies.update(_contact_body_names(env, geoms))
+    forbidden = {
+        body for body in contact_bodies
+        if "table" not in body.lower()
+    }
+    return {
+        "passed": (
+            max_motion <= max_displacement
+            and max_tilt <= max_tilt_change_deg
+            and not forbidden
+            and not initial_link_contact
+        ),
+        "max_displacement_m": max_motion,
+        "max_tilt_change_deg": max_tilt,
+        "initial_contacts": sorted(initial_contacts),
+        "initial_link_terminal_contact": initial_link_contact,
+        "initial_link_terminal_center_distance_m": initial_link_distance,
+        "contact_bodies": sorted(contact_bodies),
+        "forbidden_contacts": sorted(forbidden),
+    }
+
+
+def validate_episode(
+    env: Any,
+    eb: np.ndarray,
+    er: np.ndarray,
+    ec: np.ndarray,
+    steps: int,
+    *,
+    baseline_passive: dict[str, Any] | None = None,
+    stable_passive: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    baseline_passive = (
+        baseline_passive
+        if baseline_passive is not None
+        else passive_terminal_gate(env, eb)
+    )
+    stable_passive = (
+        stable_passive
+        if stable_passive is not None
+        else passive_terminal_gate(env, ec)
+    )
     risk = _scripted_close(env, er, steps=steps)
     intervention = _scripted_close(
         env, er, steps=steps, disable_link_after_release=True
@@ -222,6 +341,14 @@ def validate_episode(
     stable = _scripted_close(env, ec, steps=steps)
     baseline = _scripted_close(env, eb, steps=steps)
     failures = []
+    if not baseline_passive["passed"]:
+        failures.append(
+            "Eb B fails passive pre-close stability/contact gate"
+        )
+    if not stable_passive["passed"]:
+        failures.append(
+            "Ec B fails passive pre-close stability/contact gate"
+        )
     if risk["initial_link_terminal_contact"]:
         failures.append("Er starts with A-B contact")
     if not risk["passed"]:
@@ -248,6 +375,8 @@ def validate_episode(
         "collision_disabled": intervention,
         "stable": stable,
         "baseline": baseline,
+        "stable_passive": stable_passive,
+        "baseline_passive": baseline_passive,
     }
 
 

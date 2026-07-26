@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import json
 import os
 import shutil
 import subprocess
@@ -36,8 +37,13 @@ from experiments.robot.libero.tasks.l3a2_cascade_artifacts import (
 from experiments.robot.libero.tasks.l3a1_replay import (
     clear_mujoco_replay_transients,
 )
+from experiments.robot.libero.tasks.l3a2_cascade_logic import (
+    trajectory_candidates,
+)
 from experiments.robot.libero.tasks.validate_l3a2_cascade_scene import (
     TERMINAL_BODY,
+    _scripted_close,
+    passive_terminal_gate,
     validate_episode,
 )
 
@@ -225,53 +231,173 @@ def run(args: argparse.Namespace) -> str:
         )
         for state in eb_states
     ]
+    diagnostic_responses = []
+    for state, equilibrium in zip(er_states, terminal_equilibria):
+        staged = _patch_state(
+            state,
+            qpos_flat,
+            qvel_flat,
+            float(equilibrium[0][0]),
+            float(equilibrium[0][1]),
+            equilibrium,
+        )
+        diagnostic_responses.append(_scripted_close(
+            sim_env,
+            staged,
+            steps=args.close_steps,
+            disable_terminal_collision=True,
+        ))
+    if args.x is not None or args.y is not None:
+        if args.x is None or args.y is None:
+            raise ValueError("--x and --y must be supplied together")
+        candidates = [(x, y) for x in args.x for y in args.y]
+        trace_rows = []
+        candidate_source = "explicit_xy_grid"
+    else:
+        candidates, trace_rows = trajectory_candidates(
+            diagnostic_responses,
+            half_length=args.link_half_length,
+            offset=args.path_offset,
+            quantization=args.path_quantization,
+            limit=args.max_candidates,
+        )
+        candidate_source = "measured_post_release_link_endpoint_sweep"
+    if not candidates:
+        raise RuntimeError("no terminal-B candidates were derived")
+    trace_path = Path(args.trace_json)
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+    trace_payload = {
+        "candidate_source": candidate_source,
+        "candidates": [{"x": x, "y": y} for x, y in candidates],
+        "link_endpoint_trace": trace_rows,
+        "diagnostic_responses": [{
+            key: value for key, value in response.items()
+            if key != "timeline"
+        } for response in diagnostic_responses],
+    }
     rows = []
+    episode_evidence = []
     try:
-        for x in args.x:
-            for y in args.y:
-                passed = 0
-                reasons = []
-                max_b_disp = 0.0
-                for episode, (eb, er, ec) in enumerate(
-                    zip(eb_states, er_states, ec_states)
-                ):
-                    patched = [
-                        _patch_state(
-                            state,
-                            qpos_flat,
-                            qvel_flat,
-                            x,
-                            y,
-                            terminal_equilibria[episode],
-                        )
-                        for state in (eb, er, ec)
-                    ]
-                    result = validate_episode(
-                        sim_env, *patched, args.close_steps
+        for x, y in candidates:
+            passed = 0
+            passive_passed = 0
+            reasons = []
+            max_b_disp = 0.0
+            min_initial_center_distance = float("inf")
+            reset_contacts = set()
+            for episode, (eb, er, ec) in enumerate(
+                zip(eb_states, er_states, ec_states)
+            ):
+                patched = [
+                    _patch_state(
+                        state,
+                        qpos_flat,
+                        qvel_flat,
+                        x,
+                        y,
+                        terminal_equilibria[episode],
                     )
-                    passed += int(result["passed"])
-                    reasons.extend(result["failures"])
-                    max_b_disp = max(
-                        max_b_disp,
-                        result["risk"]["max_terminal_displacement_m"],
-                    )
-                rate = passed / len(er_states)
-                row = {
+                    for state in (eb, er, ec)
+                ]
+                passive = [
+                    passive_terminal_gate(sim_env, state)
+                    for state in (patched[0], patched[2])
+                ]
+                min_initial_center_distance = min(
+                    min_initial_center_distance,
+                    *(row["initial_link_terminal_center_distance_m"]
+                      for row in passive),
+                )
+                for row in passive:
+                    reset_contacts.update(row["initial_contacts"])
+                if not all(row["passed"] for row in passive):
+                    reasons.append("PRE_FILTER_NULL_PASSIVE_OR_CONTACT_FAIL")
+                    episode_evidence.append({
+                        "x": x,
+                        "y": y,
+                        "episode": episode,
+                        "prefilter_passed": False,
+                        "baseline_passive": passive[0],
+                        "stable_passive": passive[1],
+                    })
+                    continue
+                passive_passed += 1
+                result = validate_episode(
+                    sim_env,
+                    *patched,
+                    args.close_steps,
+                    baseline_passive=passive[0],
+                    stable_passive=passive[1],
+                )
+                risk_timeline = result["risk"]["timeline"]
+                episode_evidence.append({
                     "x": x,
                     "y": y,
-                    "passed": passed,
-                    "episodes": len(er_states),
-                    "pass_rate": rate,
-                    "max_terminal_displacement_m": max_b_disp,
-                    "failures": " | ".join(sorted(set(reasons))),
-                }
-                rows.append(row)
-                print(
-                    f"x={x:+.3f} y={y:+.3f} pass={passed}/{len(er_states)} "
-                    f"B_disp_max={max_b_disp:.4f}"
+                    "episode": episode,
+                    "prefilter_passed": True,
+                    "cascade_passed": result["passed"],
+                    "failures": result["failures"],
+                    "initial_link_terminal_center_distance_m": result[
+                        "risk"
+                    ]["initial_link_terminal_center_distance_m"],
+                    "min_link_terminal_center_distance_m": min(
+                        event["link_terminal_center_distance_m"]
+                        for event in risk_timeline
+                    ),
+                    "terminal_contact_bodies": sorted({
+                        body
+                        for event in risk_timeline
+                        for body in event["terminal_contact_bodies"]
+                    }),
+                    "support_release_step": result["risk"].get(
+                        "support_release_step"
+                    ),
+                    "impact_step": result["risk"].get("impact_step"),
+                    "terminal_hazard_step": result["risk"].get(
+                        "terminal_hazard_step"
+                    ),
+                })
+                passed += int(result["passed"])
+                reasons.extend(result["failures"])
+                max_b_disp = max(
+                    max_b_disp,
+                    result["risk"]["max_terminal_displacement_m"],
                 )
+            rate = passed / len(er_states)
+            passive_rate = passive_passed / len(er_states)
+            row = {
+                "x": x,
+                "y": y,
+                "passed": passed,
+                "passive_passed": passive_passed,
+                "episodes": len(er_states),
+                "pass_rate": rate,
+                "passive_pass_rate": passive_rate,
+                "min_initial_link_terminal_center_distance_m": (
+                    min_initial_center_distance
+                ),
+                "initial_terminal_contacts": ",".join(
+                    sorted(reset_contacts)
+                ),
+                "max_terminal_displacement_m": max_b_disp,
+                "failures": " | ".join(sorted(set(reasons))),
+            }
+            rows.append(row)
+            print(
+                f"x={x:+.3f} y={y:+.3f} "
+                f"passive={passive_passed}/{len(er_states)} "
+                f"cascade={passed}/{len(er_states)} "
+                f"min_AB={min_initial_center_distance:.4f} "
+                f"contacts={row['initial_terminal_contacts'] or '-'} "
+                f"failure={row['failures'] or '-'}"
+            )
     finally:
         sim_env.close()
+    trace_payload["candidate_evaluations"] = episode_evidence
+    trace_path.write_text(
+        json.dumps(trace_payload, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     cluster = _cluster(rows, args.adjacent_radius)
     verdict = (
         "PASS_L3A2_CASCADE_GEOMETRY_SWEEP"
@@ -307,6 +433,9 @@ def run(args: argparse.Namespace) -> str:
         "",
         f"- Verdict: **{verdict}**",
         f"- Episodes per candidate: {args.num_states}",
+        f"- Candidate source: `{candidate_source}` ({len(candidates)} poses).",
+        "- Every pose was prefiltered for Eb/Ec passive stability, table-only "
+        "contact, and no initial A-B contact.",
         "- Candidate acceptance: physical cascade family pass rate ≥0.80.",
         f"- Robustness witness radius: {args.adjacent_radius:.3f} m.",
         "- No formal evaluation is authorized by this sweep alone.",
@@ -331,22 +460,16 @@ def main() -> None:
         default="experiments/robot/libero/tasks/"
         "PHYSCOG_L3A2_drawer_bottle_cascade.bddl",
     )
-    parser.add_argument(
-        "--x",
-        nargs="+",
-        type=float,
-        default=[0.10, 0.115, 0.13, 0.145, 0.16, 0.175],
-    )
-    parser.add_argument(
-        "--y",
-        nargs="+",
-        type=float,
-        default=[0.035, 0.040, 0.045, 0.050, 0.055],
-    )
+    parser.add_argument("--x", nargs="+", type=float)
+    parser.add_argument("--y", nargs="+", type=float)
     parser.add_argument("--num-states", type=int, default=5)
     parser.add_argument("--max-attempts", type=int, default=500)
     parser.add_argument("--close-steps", type=int, default=120)
     parser.add_argument("--terminal-settle-steps", type=int, default=800)
+    parser.add_argument("--link-half-length", type=float, default=0.075)
+    parser.add_argument("--path-offset", type=float, default=0.012)
+    parser.add_argument("--path-quantization", type=float, default=0.005)
+    parser.add_argument("--max-candidates", type=int, default=48)
     parser.add_argument("--adjacent-radius", type=float, default=0.021)
     parser.add_argument(
         "--work-dir", default="experiments/logs/l3a2_geometry_work"
@@ -362,6 +485,9 @@ def main() -> None:
     )
     parser.add_argument(
         "--out-csv", default="experiments/logs/l3a2_geometry_sweep.csv"
+    )
+    parser.add_argument(
+        "--trace-json", default="experiments/logs/l3a2_link_fall_trace.json"
     )
     parser.add_argument("--fail-on-invalid", action="store_true")
     args = parser.parse_args()

@@ -14,6 +14,7 @@ from experiments.robot.libero.tasks.l3a2_cascade_artifacts import (
 from experiments.robot.libero.tasks.physcog_remote_agent import PHASES
 from experiments.robot.libero.tasks.l3a2_cascade_logic import (
     classify_cascade_timeline,
+    trajectory_candidates,
 )
 
 
@@ -49,6 +50,44 @@ def test_terminal_motion_before_impact_is_not_a_cascade():
     result = classify_cascade_timeline(rows)
     assert not result["passed"]
     assert result["reason"] == "B moves before A-B impact"
+
+
+def test_candidates_follow_measured_post_release_link_endpoints():
+    rows = []
+    for step in range(7):
+        rows.append({
+            "step": step,
+            "component_contact": step <= 1,
+            "link_displacement_m": 0.0 if step < 3 else 0.010,
+            "link_xyz_m": [0.10 + 0.01 * step, 0.20, 0.30],
+            "link_axis": [1.0, 0.0, 0.0],
+        })
+    candidates, trace = trajectory_candidates(
+        [{"timeline": rows}],
+        half_length=0.05,
+        offset=0.01,
+        quantization=0.01,
+        limit=100,
+    )
+    assert trace
+    assert {row["step"] for row in trace} == {3, 6}
+    assert (0.18, 0.20) in candidates
+    assert (0.21, 0.20) in candidates
+
+
+def test_trajectory_candidate_parameters_must_be_positive():
+    try:
+        trajectory_candidates(
+            [],
+            half_length=0.0,
+            offset=0.01,
+            quantization=0.01,
+            limit=10,
+        )
+    except ValueError as error:
+        assert "positive" in str(error)
+    else:
+        raise AssertionError("zero half-length must be rejected")
 
 
 def test_factory_requires_exactly_link_and_terminal_bodies():
