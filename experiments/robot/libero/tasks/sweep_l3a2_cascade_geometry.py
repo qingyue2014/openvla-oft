@@ -331,8 +331,18 @@ def main() -> None:
         default="experiments/robot/libero/tasks/"
         "PHYSCOG_L3A2_drawer_bottle_cascade.bddl",
     )
-    parser.add_argument("--x", nargs="+", type=float, default=[0.04, 0.055, 0.07, 0.085, 0.10])
-    parser.add_argument("--y", nargs="+", type=float, default=[0.04, 0.06, 0.08, 0.10])
+    parser.add_argument(
+        "--x",
+        nargs="+",
+        type=float,
+        default=[0.10, 0.115, 0.13, 0.145, 0.16, 0.175],
+    )
+    parser.add_argument(
+        "--y",
+        nargs="+",
+        type=float,
+        default=[0.035, 0.040, 0.045, 0.050, 0.055],
+    )
     parser.add_argument("--num-states", type=int, default=5)
     parser.add_argument("--max-attempts", type=int, default=500)
     parser.add_argument("--close-steps", type=int, default=120)
