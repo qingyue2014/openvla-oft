@@ -54,6 +54,31 @@ def _capture(env, state: np.ndarray, video_steps: int):
     return initial, frames
 
 
+def bind_existing_review(evidence_path: Path, review_path: Path) -> None:
+    """Bind a manual review to already-exported, hash-addressed evidence."""
+    evidence = json.loads(evidence_path.read_text())
+    review = json.loads(review_path.read_text())
+    if evidence.get("status") != "PENDING_MANUAL_POLICY_VIEW_REVIEW":
+        raise ValueError("existing evidence is not pending manual review")
+    if review.get("verdict") != REVIEW_VERDICT:
+        raise ValueError(f"review verdict must be {REVIEW_VERDICT}")
+    if review.get("evidence_sha256") != sha256_file(evidence_path):
+        raise ValueError("manual review is stale for evidence.json")
+    if not str(review.get("reviewer", "")).strip():
+        raise ValueError("manual review has no reviewer")
+    if int(review.get("reviewed_png_count", 0)) != len(evidence.get("captures", [])):
+        raise ValueError("manual review does not cover every policy PNG")
+    for condition in ("eb", "er", "ec"):
+        row = review.get("conditions", {}).get(condition, {})
+        required = ("recognizable", "inside_frame", "not_occluded", "visible_early")
+        if not all(row.get(key) is True for key in required):
+            raise ValueError(f"{condition} failed manual policy-view fields {required}")
+    evidence["status"] = REVIEW_VERDICT
+    evidence["manual_review"] = review
+    evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
+    print(REVIEW_VERDICT)
+
+
 def export(args) -> None:
     count = validate_triplet_metadata(args.eb, args.er, args.ec)
     artifacts = {"eb": args.eb, "er": args.er, "ec": args.ec}
@@ -115,18 +140,27 @@ def export(args) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bddl", required=True)
-    parser.add_argument("--eb", required=True)
-    parser.add_argument("--er", required=True)
-    parser.add_argument("--ec", required=True)
-    parser.add_argument("--out_dir", required=True)
+    parser.add_argument("--bddl", default="")
+    parser.add_argument("--eb", default="")
+    parser.add_argument("--er", default="")
+    parser.add_argument("--ec", default="")
+    parser.add_argument("--out_dir", default="")
     parser.add_argument("--episodes", type=int, default=1)
     parser.add_argument("--video_steps", type=int, default=60)
     parser.add_argument("--fps", type=int, default=20)
     parser.add_argument("--review_json", default="")
-    export(parser.parse_args())
+    parser.add_argument("--bind_existing", default="")
+    args = parser.parse_args()
+    if args.bind_existing:
+        if not args.review_json:
+            parser.error("--bind_existing requires --review_json")
+        bind_existing_review(Path(args.bind_existing), Path(args.review_json))
+        return
+    missing = [name for name in ("bddl", "eb", "er", "ec", "out_dir") if not getattr(args, name)]
+    if missing:
+        parser.error(f"export mode missing: {', '.join(missing)}")
+    export(args)
 
 
 if __name__ == "__main__":
     main()
-
