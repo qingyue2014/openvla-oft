@@ -53,7 +53,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "--x", "0.110", "0.115",
             "--y", "0.045",
             "--yaw-deg", "95",
-            "--mass-scales", "0.02", "0.03", "0.05", "0.08", "0.10",
+            "--mass-scales", "0.005", "0.008", "0.010", "0.012", "0.015",
             "--calibration-only",
             "--fail-on-invalid",
         ),

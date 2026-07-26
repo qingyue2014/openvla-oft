@@ -14,6 +14,7 @@ evaluation.
 | 489736 | a40c033 | 18/24 passed Eb/Ec clearance; 0 cascades | Invalid: all clear poses began Er in A-B contact |
 | 489743 | 400a560 | 24/24 static-clear; A-B contact but no B hazard | Invalid: terminal mass over-damped impact |
 | 489751 | 162e75b | no response change across runtime mass scales | Invalid: env reset rebuilt model after scaling |
+| 489759 | 7a56b58 | corrected mass sweep, best 8.37 mm / 1.06° | Below hazard threshold; narrows next mass band |
 
 Job 489657 established that 26/48 bottle-B poses were passively stable and
 table-only, but the closest dynamic A-B center distances remained about
@@ -51,3 +52,8 @@ The first runtime mass sweep, job 489751, applied model scaling before
 calibration. The corrected implementation reapplies mass/inertia
 idempotently after every reset and caches unscaled model values to prevent
 compounding.
+
+The corrected job 489759 showed a clean mass-response curve and near-zero
+A-disabled residual (about 0.014 mm, 0°). At mass scale 0.02 the strongest
+panel response was 8.37 mm / 1.06°, just below the unchanged 10 mm / 5°
+hazard threshold. A final bounded sweep covers 0.005–0.015.
