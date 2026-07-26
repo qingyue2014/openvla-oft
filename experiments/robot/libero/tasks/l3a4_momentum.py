@@ -17,7 +17,7 @@ import numpy as np
 
 
 SCHEMA_VERSION = 1
-TOPOLOGY_ID = "native_opening_drawer_edge_A_block_B_puck_C_domino_v6"
+TOPOLOGY_ID = "native_opening_drawer_edge_A_block_B_puck_C_domino_v7"
 TASK_DESCRIPTION = "open the bottom drawer of the cabinet"
 DEFAULT_BDDL = (
     "experiments/robot/libero/tasks/PHYSCOG_L3A4_drawer_momentum_chain.bddl"
@@ -50,11 +50,11 @@ RISK_OFFSETS_XY = {
 # final x=0.128 m remains wholly beyond the drawer's compiled x_max=0.106 m.
 EC_SENTINEL_PARK_DXY = np.asarray([-0.030, 0.080], dtype=float)
 EB_PARK_OFFSETS_XY = {
-    # All centers are at world y=+0.12 m, beyond the drawer's final swept
-    # front, and arranged vertically in the actual policy view.
-    A_BODY: np.asarray([0.030, 0.420], dtype=float),
-    B_BODY: np.asarray([0.090, 0.420], dtype=float),
-    C_BODY: np.asarray([0.150, 0.420], dtype=float),
+    # The diagonal world-space row projects to separated objects in the actual
+    # 256px agentview. Every center remains beyond the final drawer swept front.
+    A_BODY: np.asarray([0.030, 0.460], dtype=float),
+    B_BODY: np.asarray([0.090, 0.400], dtype=float),
+    C_BODY: np.asarray([0.150, 0.340], dtype=float),
 }
 
 DRAWER_TARGET_QPOS = -0.160
