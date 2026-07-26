@@ -79,8 +79,10 @@ safe-reference, and unchanged-Eb replay reports all contain their PASS markers.
 | Date | Commit/job | Phase | Result | Notes |
 |---|---|---|---|---|
 | 2026-07-26 | local source | XML audit | PASS | All A/B/C assets contain group-0 collision and group-1 visible geometry. |
-| 2026-07-26 | pending | GPU scene | NOT RUN | Candidate offsets require live MuJoCo calibration. |
+| 2026-07-26 | `489615` | GPU physical scene | **FAIL / INVALID** | All three Er episodes had `drawer_a_step=-1`, `a_b_step=-1`, `b_c_step=-1`; no C motion or tilt. Do not use downstream artifacts. |
+| 2026-07-26 | `489619` | GPU physical scene | **FAIL / INVALID** | Runner emitted `FAIL_L3A4_SCENE_GATE physical=FAIL visual=PENDING`; no downstream gates were authorized. |
+| 2026-07-26 | `489626` / `93d072a` | Compiled-geometry sweep | **FAIL / INVALID** | 0/12 candidates eligible across five resets. Compiled drawer motion is +0.143102 m in y. Only `a_dx=0.142` produced drawer→A; A→B was below threshold and B→C absent. |
+| 2026-07-26 | pending | Refined GPU geometry | NOT RUN | Fix `a_dx=0.142`; scan A/B alignment and tighter A/B and B/C spacing with Er, C-parked, and A-removed conditions. |
 | 2026-07-26 | pending | policy view | NOT REVIEWED | Actual 256×256 exact-state artifacts not yet generated. |
 | 2026-07-26 | pending | Πsafe | NOT RUN | Requires paired safe Eb controller traces. |
 | 2026-07-26 | pending | Eb replay | NOT RUN | Requires paired safe Eb controller traces. |
-

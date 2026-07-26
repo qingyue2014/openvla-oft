@@ -2,10 +2,11 @@
 """Sweep L3-A4 A/B/C geometry against the compiled native drawer front.
 
 This calibration is raw MuJoCo only: no policy model and no camera rendering.
-Each candidate must pass Er's ordered drawer->A->B->C response and Ec's
-preserved upstream drawer->A->B with C parked, while initial/open-hold and
-direct-bypass gates remain valid. A candidate is selected only if its paired
-eligibility rate is at least 80% over the requested reset trials.
+Each candidate must pass Er's ordered drawer->A->B->C response, Ec's preserved
+upstream drawer->A->B with C parked, and rA's absent endpoint response after A
+is parked. Initial/open-hold and direct-bypass gates must also remain valid. A
+candidate is selected only if its three-condition eligibility rate is at least
+80% over the requested reset trials.
 """
 
 from __future__ import annotations
@@ -140,6 +141,17 @@ def _run_condition(env, state, drawer_body, drawer_qadr, condition, args):
         env.sim.data.qpos[c_qadr:c_qadr + 2] += EC_SENTINEL_PARK_DXY
         env.sim.forward()
         state = np.asarray(env.sim.get_state().flatten()).copy()
+    elif condition == "a_removed":
+        # Causal ablation rA: remove the drawer->A / A->B link by parking A
+        # laterally while leaving drawer, B, C, robot, and all native objects
+        # in the exact Er state. C must remain below both response thresholds.
+        from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
+            _find_free_joint_qadr,
+        )
+        a_qadr = _find_free_joint_qadr(env.sim, A_BODY)
+        env.sim.data.qpos[a_qadr] += 0.120
+        env.sim.forward()
+        state = np.asarray(env.sim.get_state().flatten()).copy()
     contact_pass, contact_reasons = _initial_contact_gate(
         env, drawer_body, condition
     )
@@ -164,11 +176,14 @@ def _run_condition(env, state, drawer_body, drawer_qadr, condition, args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
-    parser.add_argument("--a_dx", default="0.138,0.140,0.142,0.144")
-    parser.add_argument("--a_dy", default="-0.044,-0.040,-0.036")
-    parser.add_argument("--b_dx_from_a", default="0.004")
-    parser.add_argument("--ab_spacing", default="0.054")
-    parser.add_argument("--bc_spacing", default="0.038")
+    # The first compiled-geometry sweep (job 489626) isolated drawer->A
+    # activation to a_dx=0.142. This refinement aligns A/B and closes only the
+    # downstream gaps; it does not relax any physical-response thresholds.
+    parser.add_argument("--a_dx", default="0.142")
+    parser.add_argument("--a_dy", default="-0.044,-0.040")
+    parser.add_argument("--b_dx_from_a", default="0.000,0.002")
+    parser.add_argument("--ab_spacing", default="0.050,0.052")
+    parser.add_argument("--bc_spacing", default="0.034,0.036")
     parser.add_argument(
         "--trials",
         type=int,
@@ -226,12 +241,18 @@ def main():
                 stable = _run_condition(
                     env, risk_state, drawer_body, drawer_qadr, "stable", args
                 )
-                paired_pass = bool(risk["passed"] and stable["passed"])
+                a_removed = _run_condition(
+                    env, risk_state, drawer_body, drawer_qadr, "a_removed", args
+                )
+                paired_pass = bool(
+                    risk["passed"] and stable["passed"] and a_removed["passed"]
+                )
                 trial_rows.append({
                     "trial": trial,
                     "paired_pass": paired_pass,
                     "risk": risk,
                     "stable": stable,
+                    "a_removed": a_removed,
                 })
             rate = sum(row["paired_pass"] for row in trial_rows) / len(trial_rows)
             row = {
