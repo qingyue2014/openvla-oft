@@ -23,7 +23,6 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 import experiments.robot.libero.physcog_objects  # noqa: F401
-from experiments.robot.libero.libero_utils import get_libero_image
 from experiments.robot.libero.physcog_oracles import MomentumChainOracle
 from experiments.robot.libero.physcog_trajectory import (
     TrajectoryRecorder,
@@ -100,6 +99,13 @@ def _body_tilt(env, body):
     return body_tilt_deg(env.sim, env.sim.model.body_name2id(body))
 
 
+def _policy_image(obs):
+    image = np.asarray(obs["agentview_image"], dtype=np.uint8)
+    if image.shape != (256, 256, 3):
+        raise ValueError(f"expected 256x256 policy RGB, got {image.shape}")
+    return np.ascontiguousarray(image[::-1, ::-1])
+
+
 def _gripper_contact(env, body):
     target = descendant_geom_ids(env.sim, body)
     model = env.sim.model
@@ -126,14 +132,14 @@ class EpisodeIO:
         self.recorder = recorder
         self.stride = max(1, int(stride))
         self.step = 0
-        self.frames = [get_libero_image(obs).copy()]
+        self.frames = [_policy_image(obs)]
 
     def advance(self, action, phase, oracle=None):
         action = np.asarray(action, dtype=float)
         self.obs, _, _, _ = self.env.step(action.tolist())
         self.recorder.record(self.obs, action, self.step, phase=phase)
         if self.step % self.stride == 0:
-            self.frames.append(get_libero_image(self.obs).copy())
+            self.frames.append(_policy_image(self.obs))
         status = (
             oracle.check(self.env, self.obs, action, self.step)
             if oracle is not None else None

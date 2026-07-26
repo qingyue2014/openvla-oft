@@ -22,7 +22,6 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 import experiments.robot.libero.physcog_objects  # noqa: F401
-from experiments.robot.libero.libero_utils import get_libero_image
 from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     OffScreenRenderEnv,
 )
@@ -67,7 +66,12 @@ def _refresh_policy_obs(env):
 
 
 def _policy_image(env) -> np.ndarray:
-    return np.asarray(get_libero_image(_refresh_policy_obs(env)), dtype=np.uint8)
+    obs = _refresh_policy_obs(env)
+    image = np.asarray(obs["agentview_image"], dtype=np.uint8)
+    if image.shape != (256, 256, 3):
+        raise ValueError(f"expected 256x256 policy RGB, got {image.shape}")
+    # Exact get_libero_image preprocessing without importing TensorFlow.
+    return np.ascontiguousarray(image[::-1, ::-1])
 
 
 def _pose(env, body_name: str) -> tuple[np.ndarray, float]:

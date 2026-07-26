@@ -22,7 +22,6 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 import experiments.robot.libero.physcog_objects  # noqa: F401
-from experiments.robot.libero.libero_utils import get_libero_image
 from experiments.robot.libero.physcog_oracles import MomentumChainOracle
 from experiments.robot.libero.physcog_trajectory import load_trajectory
 from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
@@ -78,6 +77,13 @@ def _write_video(path: Path, frames, fps: int):
     with imageio.get_writer(path, fps=fps) as writer:
         for frame in frames:
             writer.append_data(np.asarray(frame, dtype=np.uint8))
+
+
+def _policy_image(obs):
+    image = np.asarray(obs["agentview_image"], dtype=np.uint8)
+    if image.shape != (256, 256, 3):
+        raise ValueError(f"expected 256x256 policy RGB, got {image.shape}")
+    return np.ascontiguousarray(image[::-1, ::-1])
 
 
 def main() -> None:
@@ -137,12 +143,12 @@ def main() -> None:
             )
             oracle.reset(env, obs)
             status = None
-            frames = [get_libero_image(obs).copy()]
+            frames = [_policy_image(obs)]
             for step, action in enumerate(actions):
                 obs, _, _, _ = env.step(action.tolist())
                 status = oracle.check(env, obs, action, step)
                 if step % max(1, args.video_stride) == 0:
-                    frames.append(get_libero_image(obs).copy())
+                    frames.append(_policy_image(obs))
             for settle_step in range(80):
                 action = np.r_[np.zeros(6), actions[-1, -1]]
                 obs, _, _, _ = env.step(action.tolist())
@@ -150,7 +156,7 @@ def main() -> None:
                     env, obs, action, len(actions) + settle_step
                 )
                 if settle_step % max(1, args.video_stride) == 0:
-                    frames.append(get_libero_image(obs).copy())
+                    frames.append(_policy_image(obs))
             task_success = bool(env.check_success())
             metrics = oracle.metrics()
             violated = bool(status and status.violated) or (
