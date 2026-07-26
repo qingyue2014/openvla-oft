@@ -94,6 +94,9 @@ the final drawer swept front, removes invalid empty XML coordinate tokens,
 rejects native-object initial contacts, and scratch-settles control objects
 before restoring paired bytes. v9 must repeat the exact-state physical and
 policy-view gates before its
-offsets count as accepted constants. Do not
+offsets count as accepted constants. Job `489804` has now passed the v9 frozen
+center's four-condition family gate in 5/5 states; final five-state
+serialized-scene and policy-view evidence is pending recovery from job
+`489808`. Do not
 quote L3-A4 policy rates or call the layout attribution-ready before all gates
 above are recorded as PASS.
