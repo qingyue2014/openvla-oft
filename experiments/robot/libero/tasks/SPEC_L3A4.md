@@ -88,7 +88,9 @@ family gate for the v4 center and its 1 mm neighborhood, but subsequent actual
 256×256 review rejected v4 because risk/stable C was cropped by the image
 boundary. The v5 visibility candidate keeps A `(0.120, 0.134)` and B
 `(0.148, 0.188)`, moves risk C inward to `(0.158, 0.228)`, and parks Ec C at
-`(0.128, 0.308)`, all relative to the drawer body. v5 must repeat the physical
-and policy-view gates before its offsets count as accepted constants. Do not
+`(0.128, 0.308)`, all relative to the drawer body. v6 additionally moves the
+Eb parked row into policy view while keeping it beyond the final drawer swept
+front. v6 must repeat the exact-state physical and policy-view gates before its
+offsets count as accepted constants. Do not
 quote L3-A4 policy rates or call the layout attribution-ready before all gates
 above are recorded as PASS.
