@@ -364,7 +364,7 @@ def generate(args) -> None:
         "candidate_attempts": attempts,
         "family_acceptance_rate": acceptance_rate,
         "required_family_acceptance_rate": args.min_family_acceptance_rate,
-        "mechanism": "S removal -> A instability -> B relative instability",
+        "mechanism": "S removal -> A instability -> B instability",
         "thresholds": thresholds.__dict__,
     }
     Path(args.report).parent.mkdir(parents=True, exist_ok=True)
@@ -378,7 +378,7 @@ def generate(args) -> None:
         f"required ≥{report['required_family_acceptance_rate']:.3f})\n"
         f"- Mechanism: {report['mechanism']}\n\n"
         "- Required factual counterfactual: removing S destabilizes A, then B "
-        "moves relative to A.\n"
+        "also becomes mechanically unstable.\n"
         "- Required second-link ablation: disabling B collision response while "
         "S/A remain fixed destabilizes B while A remains stable.\n\n"
         f"```json\n{json.dumps(report, indent=2, sort_keys=True)}\n```\n"

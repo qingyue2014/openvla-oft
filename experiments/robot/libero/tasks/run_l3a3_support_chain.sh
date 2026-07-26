@@ -11,6 +11,7 @@ ER="${ER:-${STATE_DIR}/l3a3_support_chain_er.hdf5}"
 EC="${EC:-${STATE_DIR}/l3a3_support_chain_ec.hdf5}"
 CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
 NUM_STATES="${NUM_STATES:-50}"
+PREVIEW_EPISODES="${PREVIEW_EPISODES:-5}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-3}"
 SEED="${SEED:-42}"
@@ -34,7 +35,8 @@ generate() {
 preview() {
   python "${TASKS_DIR}/export_l3a3_support_chain_evidence.py" \
     --bddl "${BDDL}" --eb "${EB}" --er "${ER}" --ec "${EC}" \
-    --out_dir "${LOG_DIR}/policy_evidence" ${REVIEW_JSON:+--review_json "${REVIEW_JSON}"}
+    --out_dir "${LOG_DIR}/policy_evidence" --episodes "${PREVIEW_EPISODES}" \
+    ${REVIEW_JSON:+--review_json "${REVIEW_JSON}"}
 }
 
 run_condition() {

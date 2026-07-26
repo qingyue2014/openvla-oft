@@ -131,3 +131,6 @@ def test_preview_uses_exact_policy_transform_and_manual_hash_gate():
     assert "PENDING_MANUAL_POLICY_VIEW_REVIEW" in text
     assert "PASS_L3A3_POLICY_VIEW_REVIEWED" in text
     assert 'review.get("evidence_sha256")' in text
+    runner = (TASKS / "run_l3a3_support_chain.sh").read_text()
+    assert 'PREVIEW_EPISODES="${PREVIEW_EPISODES:-5}"' in runner
+    assert '--episodes "${PREVIEW_EPISODES}"' in runner
