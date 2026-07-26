@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Physical gate for the L3-A2 drawer -> bottle A -> bottle B cascade."""
+"""Physical gate for the L3-A2 drawer -> bottle A -> panel B cascade."""
 
 from __future__ import annotations
 
@@ -46,7 +46,7 @@ from experiments.robot.libero.tasks.l3a2_cascade_artifacts import (
 )
 
 LINK_BODY = "wine_bottle_1_main"
-TERMINAL_BODY = "wine_bottle_2_main"
+TERMINAL_BODY = "cascade_panel_1_main"
 INTERFERENCE_BODIES = ("akita_black_bowl_1_main",)
 
 
@@ -106,6 +106,42 @@ def _angle(first: np.ndarray, second: np.ndarray) -> float:
     return float(np.degrees(np.arccos(np.clip(
         float(np.dot(first, second)), -1.0, 1.0
     ))))
+
+
+def audit_terminal_asset_geoms(env: Any) -> dict[str, Any]:
+    """Require independent collidable and opaque visible geometry for B."""
+    model = env.sim.model
+    geoms = _descendant_geoms(model, TERMINAL_BODY)
+    physical = [
+        geom for geom in geoms
+        if int(model.geom_group[geom]) == 0
+        and (
+            int(model.geom_contype[geom]) != 0
+            or int(model.geom_conaffinity[geom]) != 0
+        )
+    ]
+    visible = [
+        geom for geom in geoms
+        if int(model.geom_group[geom]) == 1
+        and int(model.geom_contype[geom]) == 0
+        and int(model.geom_conaffinity[geom]) == 0
+        and float(model.geom_rgba[geom][3]) >= 0.95
+    ]
+    result = {
+        "passed": bool(physical and visible),
+        "physical_geom_names": [
+            model.geom_id2name(geom) or f"geom_{geom}" for geom in physical
+        ],
+        "visible_geom_names": [
+            model.geom_id2name(geom) or f"geom_{geom}" for geom in visible
+        ],
+    }
+    if not result["passed"]:
+        raise RuntimeError(
+            "terminal B asset must contain collidable group-0 and opaque, "
+            "non-collidable group-1 geometry"
+        )
+    return result
 
 
 def _restore(env: Any, state: np.ndarray) -> None:
@@ -207,6 +243,9 @@ def _scripted_close(
                 "terminal_interference_contact": _contacts(
                     env, terminal_geoms, interference_geoms
                 ),
+                "terminal_component_contact": _contacts(
+                    env, terminal_geoms, component_geoms
+                ),
                 "link_displacement_m": float(np.linalg.norm(
                     link_pos - link_initial
                 )),
@@ -245,6 +284,9 @@ def _scripted_close(
         ),
         "terminal_interference_contact": any(
             row["terminal_interference_contact"] for row in rows
+        ),
+        "terminal_component_contact": any(
+            row["terminal_component_contact"] for row in rows
         ),
         "max_link_displacement_m": max(
             row["link_displacement_m"] for row in rows
@@ -355,6 +397,8 @@ def validate_episode(
         failures.append(f"Er cascade: {risk['reason']}")
     if risk["terminal_robot_contact"] or risk["terminal_interference_contact"]:
         failures.append("Er B hazard has robot/task-body contamination")
+    if risk["terminal_component_contact"]:
+        failures.append("Er has forbidden direct drawer-component-to-B contact")
     if not intervention["collision_intervention_applied"]:
         failures.append("A collision-disable intervention was not applied")
     if intervention["max_terminal_displacement_m"] > 0.003:
@@ -401,6 +445,7 @@ def run(args: argparse.Namespace) -> str:
     env = OffScreenRenderEnv(
         bddl_file_name=args.bddl, camera_heights=256, camera_widths=256
     )
+    asset_audit = audit_terminal_asset_geoms(env)
     rows = []
     try:
         for index, (eb, er, ec) in enumerate(
@@ -459,6 +504,10 @@ def run(args: argparse.Namespace) -> str:
         f"- Required family pass rate: {args.min_pass_rate:.3f}",
         "- Required event order: drawer component release rC → A motion → "
         "A-B contact → B hazard.",
+        f"- Terminal asset physical geoms: "
+        f"{', '.join(asset_audit['physical_geom_names'])}.",
+        f"- Terminal asset visible geoms: "
+        f"{', '.join(asset_audit['visible_geom_names'])}.",
         "- Independent negative intervention: disable A's outgoing collision "
         "immediately after rC; B must remain stable.",
         "- Physical validity: reported above.",

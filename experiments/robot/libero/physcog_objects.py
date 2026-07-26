@@ -1,8 +1,9 @@
 """
 PhysCogSafe custom LIBERO object classes.
 
-Registers GlassCup / SteelCup (L2-C1 cup experiment) and
-GlassAkitaBlackBowl (L2-C2 in-distribution bowl experiment).
+Registers GlassCup / SteelCup (L2-C1 cup experiment),
+GlassAkitaBlackBowl (L2-C2 in-distribution bowl experiment), and
+CascadePanel (L3-A2 terminal force-cascade body).
 
 Import this module before building any LIBERO environment that uses these
 objects so that the @register_object decorators fire and the BDDL parser can
@@ -323,6 +324,19 @@ class SteelCup(PhyscogXMLObject):
         self,
         name="steel_cup",
         obj_name="steel_cup",
+        joints=None,
+    ):
+        super().__init__(name, obj_name, joints)
+
+
+@register_object
+class CascadePanel(PhyscogXMLObject):
+    """Broad, stable, high-contrast terminal body for L3-A2."""
+
+    def __init__(
+        self,
+        name="cascade_panel",
+        obj_name="cascade_panel",
         joints=None,
     ):
         super().__init__(name, obj_name, joints)

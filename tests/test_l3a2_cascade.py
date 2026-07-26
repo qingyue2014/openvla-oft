@@ -1,4 +1,5 @@
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 import h5py
 import numpy as np
@@ -64,24 +65,30 @@ def test_candidates_follow_measured_post_release_link_endpoints():
         })
     candidates, trace = trajectory_candidates(
         [{"timeline": rows}],
-        half_length=0.05,
-        offset=0.01,
+        axial_stations=(0.05,),
+        normal_offsets=(0.0, 0.01),
+        tangent_offset=0.01,
+        yaw_offsets_deg=(0.0,),
         quantization=0.01,
+        yaw_quantization_deg=5.0,
         limit=100,
     )
     assert trace
     assert {row["step"] for row in trace} == {3, 6}
-    assert (0.18, 0.20) in candidates
-    assert (0.21, 0.20) in candidates
+    assert all(len(pose) == 3 for pose in candidates)
+    assert any(pose[0] >= 0.21 for pose in candidates)
 
 
 def test_trajectory_candidate_parameters_must_be_positive():
     try:
         trajectory_candidates(
             [],
-            half_length=0.0,
-            offset=0.01,
+            axial_stations=(0.0,),
+            normal_offsets=(0.0,),
+            tangent_offset=0.01,
+            yaw_offsets_deg=(0.0,),
             quantization=0.01,
+            yaw_quantization_deg=5.0,
             limit=10,
         )
     except ValueError as error:
@@ -135,7 +142,7 @@ def test_pairing_allows_only_link_a_free_joint(tmp_path):
     assert "outside bottle A" in result["failures"][0]
 
 
-def test_bddl_preserves_distinct_native_task_and_uses_native_objects_only():
+def test_bddl_preserves_distinct_native_task_and_uses_registered_panel():
     text = (
         ROOT
         / "experiments/robot/libero/tasks/"
@@ -147,8 +154,48 @@ def test_bddl_preserves_distinct_native_task_and_uses_native_objects_only():
     )
     assert "(Close white_cabinet_1_bottom_region)" in text
     assert "(Open white_cabinet_1_top_region)" in text
-    assert "wine_bottle_1 wine_bottle_2 - wine_bottle" in text
-    assert "physcog_" not in text.lower().split("(:objects", 1)[1]
+    assert "wine_bottle_1 - wine_bottle" in text
+    assert "cascade_panel_1 - cascade_panel" in text
+
+
+def test_cascade_panel_has_separate_collision_and_opaque_visual_geoms():
+    xml_path = (
+        ROOT
+        / "experiments/robot/libero/assets/cascade_panel/cascade_panel.xml"
+    )
+    geoms = ET.parse(xml_path).getroot().findall(".//geom")
+    physical = [
+        geom for geom in geoms
+        if geom.attrib.get("group") == "0"
+        and geom.attrib.get("contype", "1") != "0"
+    ]
+    visible = [
+        geom for geom in geoms
+        if geom.attrib.get("group") == "1"
+        and geom.attrib.get("contype") == "0"
+        and geom.attrib.get("conaffinity") == "0"
+    ]
+    assert {geom.attrib["name"] for geom in physical} == {
+        "panel_collision", "foot_collision"
+    }
+    assert {geom.attrib["name"] for geom in visible} >= {
+        "panel_visual", "foot_visual"
+    }
+    assert all(
+        geom.attrib.get("material") in {
+            "cascade_panel_orange", "cascade_panel_dark"
+        }
+        for geom in visible
+    )
+    materials = {
+        material.attrib["name"]: material
+        for material in ET.parse(xml_path).getroot().findall(".//material")
+    }
+    assert all(
+        float(materials[geom.attrib["material"]].attrib["rgba"].split()[-1])
+        == 1.0
+        for geom in visible
+    )
 
 
 def test_remote_registry_has_every_preformal_l3a2_gate():

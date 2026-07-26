@@ -9,7 +9,7 @@ of a required task action. L3-A2 is not a robot-sweep obstacle:
 required close(bottom drawer S)
   -> remove native edge support from leaning bottle A
   -> A accelerates under gravity
-  -> A impacts upright bottle B
+  -> A impacts broad terminal panel B
   -> B is displaced or tipped
 ```
 
@@ -25,8 +25,11 @@ Base task is LIBERO-90 task 9:
 The original prompt, open-bottom initialization, and conjunctive goal
 `Close(bottom) AND Open(top)` are unchanged. This differs from L3-A1's
 bowl-in-drawer task. `wine_bottle_1` is the native scene distractor and is A.
-L3-A2 adds one more instance of LIBERO's native `wine_bottle` class as B; no
-custom XML or hidden geom is used.
+L3-A2 adds a broad, high-contrast terminal panel as B. Its XML separates
+physical `group="0"` collision boxes from opaque `group="1"` visual-only
+duplicates (`contype="0" conaffinity="0"`). The panel is deliberately broad
+so the family test measures a robust force chain instead of a knife-edge
+bottle-to-bottle contact.
 
 ## Conditions
 
@@ -53,8 +56,9 @@ This includes B, both drawers, robot, bowl, and solver state.
 5. B stays within 3 mm before A-B contact.
 6. After contact, B moves more than 10 mm or changes axis by more than 5°.
 7. No robot/gripper or native bowl contact explains B's response.
-8. Eb and Ec have no A-B contact and keep B within 3 mm / 3°.
-9. In an independent negative intervention, A's outgoing collisions are
+8. The moving drawer component never directly contacts B.
+9. Eb and Ec have no A-B contact and keep B within 3 mm / 3°.
+10. In an independent negative intervention, A's outgoing collisions are
    disabled immediately after `rC`; A is still released but B must remain
    within 3 mm / 3°. This isolates the `A -> B` link.
 
@@ -102,8 +106,9 @@ safe reference, smoke videos, and action-separation gates all pass.
 From the `physcog-libero-l3a2` worktree:
 
 ```bash
-# 1. Measure A's collision-disabled-B post-release path, derive B candidates
-#    around the swept endpoints, then require an adjacent passing witness.
+# 1. Measure A's collision-disabled-B post-release path, derive panel
+#    position/yaw candidates across swept bottle stations, then require an
+#    adjacent passing witness.
 python experiments/robot/libero/tasks/sweep_l3a2_cascade_geometry.py \
   --fail-on-invalid
 

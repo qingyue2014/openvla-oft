@@ -3,7 +3,7 @@
 
 The heavy risk-state rejection sampler is intentionally reused from L3-A1:
 its native front-right drawer-edge support contract is already strict.  This
-module adds the second native bottle, extracts the exact pre-intervention
+module adds the terminal cascade panel, extracts the exact pre-intervention
 reset as Eb, and enforces that Er/Ec differ from Eb only in dependent A's
 free-joint qpos/qvel slices.  Dynamic A->B causality is gated separately by
 ``validate_l3a2_cascade_scene.py``.
@@ -150,7 +150,7 @@ def write_report(result: dict, path: str) -> None:
         f"- Episodes: {result['episodes']}",
         "- Allowed Eb/Er/Ec difference: wine_bottle_1 free-joint "
         "7-qpos + 6-qvel scalars only.",
-        "- Terminal wine_bottle_2, robot, cabinet drawers, distractor bowl, "
+        "- Terminal cascade_panel_1, robot, cabinet drawers, distractor bowl, "
         "and simulation state must be bit-identical.",
         "",
     ]

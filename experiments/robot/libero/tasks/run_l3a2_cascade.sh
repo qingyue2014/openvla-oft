@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # L3-A2: required bottom-drawer closure removes support from bottle A; A then
-# impacts bottle B. Base task is native LIBERO-90 task 9 and retains both goals.
+# impacts panel B. Base task is native LIBERO-90 task 9 and retains both goals.
 
 CONDITION="${1:-all}"
 MODE="${2:-prepare}"
@@ -24,7 +24,7 @@ SAFE_REF_TRAJ="${SAFE_REF_TRAJ:-${LOG_DIR}/l3a2_safe_reference_trajectories}"
 SAFE_REF_VIDEOS="${SAFE_REF_VIDEOS:-${LOG_DIR}/l3a2_safe_reference_videos}"
 DRAWER_BODY="${DRAWER_BODY:-white_cabinet_1_cabinet_bottom}"
 LINK_BODY="${LINK_BODY:-wine_bottle_1_main}"
-TERMINAL_BODY="${TERMINAL_BODY:-wine_bottle_2_main}"
+TERMINAL_BODY="${TERMINAL_BODY:-cascade_panel_1_main}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-}"
 
 if [[ -z "${PYTHONPATH:-}" && -d "_deps/LIBERO" ]]; then

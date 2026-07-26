@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Calibrate terminal bottle B for a robust L3-A2 A->B cascade."""
+"""Calibrate terminal panel B for a robust L3-A2 A->B cascade."""
 
 from __future__ import annotations
 
@@ -43,6 +43,7 @@ from experiments.robot.libero.tasks.l3a2_cascade_logic import (
 from experiments.robot.libero.tasks.validate_l3a2_cascade_scene import (
     TERMINAL_BODY,
     _scripted_close,
+    audit_terminal_asset_geoms,
     passive_terminal_gate,
     validate_episode,
 )
@@ -64,6 +65,7 @@ def _patch_state(
     qvel_flat: int,
     x: float,
     y: float,
+    yaw_deg: float,
     equilibrium_slices: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> np.ndarray:
     result = np.asarray(state).copy()
@@ -71,6 +73,10 @@ def _patch_state(
         result[qpos_flat:qpos_flat + 7] = equilibrium_slices[0]
         result[qvel_flat:qvel_flat + 6] = equilibrium_slices[1]
     result[qpos_flat:qpos_flat + 2] = (x, y)
+    yaw = np.radians(yaw_deg)
+    result[qpos_flat + 3:qpos_flat + 7] = (
+        np.cos(yaw / 2.0), 0.0, 0.0, np.sin(yaw / 2.0)
+    )
     result[qvel_flat:qvel_flat + 6] = 0.0
     return result
 
@@ -122,6 +128,7 @@ def _write_candidate(
     qvel_flat: int,
     x: float,
     y: float,
+    yaw_deg: float,
     equilibrium_slices: list[tuple[np.ndarray, np.ndarray]],
 ) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -130,6 +137,7 @@ def _write_candidate(
         group = handle[TASK_KEY]
         group.attrs["l3a2_terminal_x_m"] = x
         group.attrs["l3a2_terminal_y_m"] = y
+        group.attrs["l3a2_terminal_yaw_deg"] = yaw_deg
         group.attrs["l3a2_topology"] = (
             "drawer_S_supports_A_then_A_impacts_terminal_B"
         )
@@ -151,6 +159,7 @@ def _write_candidate(
                     qvel_flat,
                     x,
                     y,
+                    yaw_deg,
                     equilibrium_slices[index],
                 )
                 demo[dataset][...] = updated
@@ -160,14 +169,24 @@ def _write_candidate(
                     ).hexdigest()
 
 
-def _cluster(rows: list[dict], radius: float) -> list[dict]:
+def _yaw_distance(first: float, second: float) -> float:
+    return abs((first - second + 90.0) % 180.0 - 90.0)
+
+
+def _cluster(
+    rows: list[dict], radius: float, max_yaw_distance_deg: float
+) -> list[dict]:
     passed = [row for row in rows if row["pass_rate"] >= 0.8]
     for row in passed:
         witnesses = [
             other for other in passed
             if other is not row
             and np.hypot(row["x"] - other["x"], row["y"] - other["y"])
+            > 1e-6
+            and np.hypot(row["x"] - other["x"], row["y"] - other["y"])
             <= radius
+            and _yaw_distance(row["yaw_deg"], other["yaw_deg"])
+            <= max_yaw_distance_deg
         ]
         if witnesses:
             return [row, min(
@@ -218,7 +237,8 @@ def run(args: argparse.Namespace) -> str:
     qadr = _find_free_joint_qadr(sim_env.sim, TERMINAL_BODY)
     vadr = _find_free_joint_vadr(sim_env.sim, TERMINAL_BODY)
     if qadr < 0 or vadr < 0:
-        raise RuntimeError("terminal bottle free joint not found")
+        raise RuntimeError("terminal panel free joint not found")
+    audit_terminal_asset_geoms(sim_env)
     qpos_flat = 1 + qadr
     qvel_flat = 1 + int(sim_env.sim.model.nq) + vadr
     terminal_equilibria = [
@@ -239,6 +259,7 @@ def run(args: argparse.Namespace) -> str:
             qvel_flat,
             float(equilibrium[0][0]),
             float(equilibrium[0][1]),
+            0.0,
             equilibrium,
         )
         diagnostic_responses.append(_scripted_close(
@@ -250,25 +271,35 @@ def run(args: argparse.Namespace) -> str:
     if args.x is not None or args.y is not None:
         if args.x is None or args.y is None:
             raise ValueError("--x and --y must be supplied together")
-        candidates = [(x, y) for x in args.x for y in args.y]
+        yaw_values = args.yaw_deg if args.yaw_deg is not None else [0.0]
+        candidates = [
+            (x, y, yaw)
+            for x in args.x for y in args.y for yaw in yaw_values
+        ]
         trace_rows = []
         candidate_source = "explicit_xy_grid"
     else:
         candidates, trace_rows = trajectory_candidates(
             diagnostic_responses,
-            half_length=args.link_half_length,
-            offset=args.path_offset,
+            axial_stations=tuple(args.link_axial_stations),
+            normal_offsets=tuple(args.path_normal_offsets),
+            tangent_offset=args.path_tangent_offset,
+            yaw_offsets_deg=tuple(args.yaw_offsets_deg),
             quantization=args.path_quantization,
+            yaw_quantization_deg=args.yaw_quantization_deg,
             limit=args.max_candidates,
         )
-        candidate_source = "measured_post_release_link_endpoint_sweep"
+        candidate_source = "measured_post_release_panel_pose_sweep"
     if not candidates:
         raise RuntimeError("no terminal-B candidates were derived")
     trace_path = Path(args.trace_json)
     trace_path.parent.mkdir(parents=True, exist_ok=True)
     trace_payload = {
         "candidate_source": candidate_source,
-        "candidates": [{"x": x, "y": y} for x, y in candidates],
+        "candidates": [
+            {"x": x, "y": y, "yaw_deg": yaw}
+            for x, y, yaw in candidates
+        ],
         "link_endpoint_trace": trace_rows,
         "diagnostic_responses": [{
             key: value for key, value in response.items()
@@ -278,7 +309,7 @@ def run(args: argparse.Namespace) -> str:
     rows = []
     episode_evidence = []
     try:
-        for x, y in candidates:
+        for x, y, yaw_deg in candidates:
             passed = 0
             passive_passed = 0
             reasons = []
@@ -295,6 +326,7 @@ def run(args: argparse.Namespace) -> str:
                         qvel_flat,
                         x,
                         y,
+                        yaw_deg,
                         terminal_equilibria[episode],
                     )
                     for state in (eb, er, ec)
@@ -315,6 +347,7 @@ def run(args: argparse.Namespace) -> str:
                     episode_evidence.append({
                         "x": x,
                         "y": y,
+                        "yaw_deg": yaw_deg,
                         "episode": episode,
                         "prefilter_passed": False,
                         "baseline_passive": passive[0],
@@ -333,6 +366,7 @@ def run(args: argparse.Namespace) -> str:
                 episode_evidence.append({
                     "x": x,
                     "y": y,
+                    "yaw_deg": yaw_deg,
                     "episode": episode,
                     "prefilter_passed": True,
                     "cascade_passed": result["passed"],
@@ -368,6 +402,7 @@ def run(args: argparse.Namespace) -> str:
             row = {
                 "x": x,
                 "y": y,
+                "yaw_deg": yaw_deg,
                 "passed": passed,
                 "passive_passed": passive_passed,
                 "episodes": len(er_states),
@@ -384,7 +419,7 @@ def run(args: argparse.Namespace) -> str:
             }
             rows.append(row)
             print(
-                f"x={x:+.3f} y={y:+.3f} "
+                f"x={x:+.3f} y={y:+.3f} yaw={yaw_deg:+.1f} "
                 f"passive={passive_passed}/{len(er_states)} "
                 f"cascade={passed}/{len(er_states)} "
                 f"min_AB={min_initial_center_distance:.4f} "
@@ -398,7 +433,9 @@ def run(args: argparse.Namespace) -> str:
         json.dumps(trace_payload, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    cluster = _cluster(rows, args.adjacent_radius)
+    cluster = _cluster(
+        rows, args.adjacent_radius, args.adjacent_yaw_distance_deg
+    )
     verdict = (
         "PASS_L3A2_CASCADE_GEOMETRY_SWEEP"
         if cluster else "FAIL_L3A2_CASCADE_GEOMETRY_SWEEP"
@@ -412,11 +449,13 @@ def run(args: argparse.Namespace) -> str:
         )
         _write_candidate(
             base_er, Path(args.er), qpos_flat, qvel_flat,
-            selected["x"], selected["y"], terminal_equilibria,
+            selected["x"], selected["y"], selected["yaw_deg"],
+            terminal_equilibria,
         )
         _write_candidate(
             base_ec, Path(args.ec), qpos_flat, qvel_flat,
-            selected["x"], selected["y"], terminal_equilibria,
+            selected["x"], selected["y"], selected["yaw_deg"],
+            terminal_equilibria,
         )
         extract_eb(args.er, args.eb)
         pairing = validate_pairing(args.eb, args.er, args.ec)
@@ -444,9 +483,12 @@ def run(args: argparse.Namespace) -> str:
     if cluster:
         report += [
             f"- Selected B xy: ({selected['x']:+.4f}, {selected['y']:+.4f}) m",
+            f"- Selected B yaw: {selected['yaw_deg']:+.1f}°",
             f"- Selected pass rate: {selected['pass_rate']:.3f}",
             f"- Adjacent witness: ({cluster[1]['x']:+.4f}, "
-            f"{cluster[1]['y']:+.4f}) m; rate={cluster[1]['pass_rate']:.3f}",
+            f"{cluster[1]['y']:+.4f}) m, yaw="
+            f"{cluster[1]['yaw_deg']:+.1f}°; "
+            f"rate={cluster[1]['pass_rate']:.3f}",
         ]
     Path(args.out_report).write_text("\n".join(report) + "\n", encoding="utf-8")
     print(verdict)
@@ -462,15 +504,32 @@ def main() -> None:
     )
     parser.add_argument("--x", nargs="+", type=float)
     parser.add_argument("--y", nargs="+", type=float)
+    parser.add_argument("--yaw-deg", nargs="+", type=float)
     parser.add_argument("--num-states", type=int, default=5)
     parser.add_argument("--max-attempts", type=int, default=500)
     parser.add_argument("--close-steps", type=int, default=120)
     parser.add_argument("--terminal-settle-steps", type=int, default=800)
-    parser.add_argument("--link-half-length", type=float, default=0.075)
-    parser.add_argument("--path-offset", type=float, default=0.012)
+    parser.add_argument(
+        "--link-axial-stations",
+        nargs="+",
+        type=float,
+        default=[0.040, 0.065, 0.090],
+    )
+    parser.add_argument(
+        "--path-normal-offsets",
+        nargs="+",
+        type=float,
+        default=[0.000, 0.008, 0.016],
+    )
+    parser.add_argument("--path-tangent-offset", type=float, default=0.020)
+    parser.add_argument(
+        "--yaw-offsets-deg", nargs="+", type=float, default=[-15, 0, 15]
+    )
     parser.add_argument("--path-quantization", type=float, default=0.005)
-    parser.add_argument("--max-candidates", type=int, default=48)
+    parser.add_argument("--yaw-quantization-deg", type=float, default=5.0)
+    parser.add_argument("--max-candidates", type=int, default=24)
     parser.add_argument("--adjacent-radius", type=float, default=0.021)
+    parser.add_argument("--adjacent-yaw-distance-deg", type=float, default=15.0)
     parser.add_argument(
         "--work-dir", default="experiments/logs/l3a2_geometry_work"
     )

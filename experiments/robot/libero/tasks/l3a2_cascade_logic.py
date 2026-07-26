@@ -100,21 +100,29 @@ def classify_cascade_timeline(
 def trajectory_candidates(
     responses: list[dict[str, Any]],
     *,
-    half_length: float,
-    offset: float,
+    axial_stations: tuple[float, ...],
+    normal_offsets: tuple[float, ...],
+    tangent_offset: float,
+    yaw_offsets_deg: tuple[float, ...],
     quantization: float,
+    yaw_quantization_deg: float,
     limit: int,
-) -> tuple[list[tuple[float, float]], list[dict[str, Any]]]:
-    """Generate B centers around A's measured post-release swept endpoints."""
-    if half_length <= 0 or offset <= 0 or quantization <= 0 or limit <= 0:
+) -> tuple[list[tuple[float, float, float]], list[dict[str, Any]]]:
+    """Generate panel poses across A's measured post-release swept stations."""
+    if (
+        not axial_stations
+        or not normal_offsets
+        or not yaw_offsets_deg
+        or min(axial_stations) <= 0
+        or min(normal_offsets) < 0
+        or tangent_offset <= 0
+        or quantization <= 0
+        or yaw_quantization_deg <= 0
+        or limit <= 0
+    ):
         raise ValueError("trajectory candidate parameters must be positive")
     trace_rows: list[dict[str, Any]] = []
-    candidates: set[tuple[float, float]] = set()
-    offsets = (
-        (-offset, -offset), (-offset, 0.0), (-offset, offset),
-        (0.0, -offset), (0.0, 0.0), (0.0, offset),
-        (offset, -offset), (offset, 0.0), (offset, offset),
-    )
+    candidates: set[tuple[float, float, float]] = set()
     for episode, response in enumerate(responses):
         timeline = response.get("timeline", [])
         release = response.get("support_release_step")
@@ -127,6 +135,7 @@ def trajectory_candidates(
                 release = max(component_steps) + 1
         if release is None:
             continue
+        initial = timeline[0]
         for row in timeline:
             if (
                 row["step"] < release
@@ -134,38 +143,75 @@ def trajectory_candidates(
                 or row["step"] % 3
             ):
                 continue
-            center = row["link_xyz_m"]
+            origin = row["link_xyz_m"]
             axis = row["link_axis"]
-            for sign in (-1.0, 1.0):
-                endpoint_x = center[0] + sign * half_length * axis[0]
-                endpoint_y = center[1] + sign * half_length * axis[1]
+            initial_origin = initial["link_xyz_m"]
+            initial_axis = initial["link_axis"]
+            for station in axial_stations:
+                point_x = origin[0] + station * axis[0]
+                point_y = origin[1] + station * axis[1]
+                initial_x = initial_origin[0] + station * initial_axis[0]
+                initial_y = initial_origin[1] + station * initial_axis[1]
+                motion_x = point_x - initial_x
+                motion_y = point_y - initial_y
+                motion_norm = math.hypot(motion_x, motion_y)
+                if motion_norm <= 0.003:
+                    continue
+                normal_x = motion_x / motion_norm
+                normal_y = motion_y / motion_norm
+                tangent_x, tangent_y = -normal_y, normal_x
+                yaw_deg = math.degrees(math.atan2(normal_y, normal_x))
                 trace_rows.append({
                     "episode": episode,
                     "step": row["step"],
-                    "endpoint_sign": int(sign),
-                    "center_x": float(center[0]),
-                    "center_y": float(center[1]),
-                    "endpoint_x": float(endpoint_x),
-                    "endpoint_y": float(endpoint_y),
+                    "axial_station_m": station,
+                    "origin_x": float(origin[0]),
+                    "origin_y": float(origin[1]),
+                    "point_x": float(point_x),
+                    "point_y": float(point_y),
+                    "motion_x": float(motion_x),
+                    "motion_y": float(motion_y),
+                    "motion_yaw_deg": float(yaw_deg),
                 })
-                for dx, dy in offsets:
-                    x = round(
-                        float(endpoint_x + dx) / quantization
-                    ) * quantization
-                    y = round(
-                        float(endpoint_y + dy) / quantization
-                    ) * quantization
-                    candidates.add((round(x, 6), round(y, 6)))
-    counts: dict[tuple[float, float], int] = {}
+                for normal_offset in normal_offsets:
+                    for tangent_shift in (
+                        -tangent_offset, 0.0, tangent_offset
+                    ):
+                        x = (
+                            point_x
+                            + normal_offset * normal_x
+                            + tangent_shift * tangent_x
+                        )
+                        y = (
+                            point_y
+                            + normal_offset * normal_y
+                            + tangent_shift * tangent_y
+                        )
+                        x = round(x / quantization) * quantization
+                        y = round(y / quantization) * quantization
+                        for yaw_offset in yaw_offsets_deg:
+                            yaw = round(
+                                (yaw_deg + yaw_offset)
+                                / yaw_quantization_deg
+                            ) * yaw_quantization_deg
+                            yaw = (yaw + 180.0) % 180.0
+                            candidates.add((
+                                round(x, 6),
+                                round(y, 6),
+                                round(yaw, 6),
+                            ))
+    counts: dict[tuple[float, float, float], int] = {}
     for row in trace_rows:
         for candidate in candidates:
             if math.hypot(
-                candidate[0] - row["endpoint_x"],
-                candidate[1] - row["endpoint_y"],
-            ) <= offset * 1.5:
+                candidate[0] - row["point_x"],
+                candidate[1] - row["point_y"],
+            ) <= max(normal_offsets) + tangent_offset:
                 counts[candidate] = counts.get(candidate, 0) + 1
     ordered = sorted(
         candidates,
-        key=lambda xy: (-counts.get(xy, 0), xy[0], xy[1]),
+        key=lambda pose: (
+            -counts.get(pose, 0), pose[0], pose[1], pose[2]
+        ),
     )
     return ordered[:limit], trace_rows

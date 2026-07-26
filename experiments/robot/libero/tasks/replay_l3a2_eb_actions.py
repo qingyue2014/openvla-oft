@@ -166,7 +166,7 @@ def main() -> None:
         "--drawer-body", default="white_cabinet_1_cabinet_bottom"
     )
     parser.add_argument("--link-body", default="wine_bottle_1_main")
-    parser.add_argument("--terminal-body", default="wine_bottle_2_main")
+    parser.add_argument("--terminal-body", default="cascade_panel_1_main")
     parser.add_argument(
         "--interference-body", default="akita_black_bowl_1_main"
     )
