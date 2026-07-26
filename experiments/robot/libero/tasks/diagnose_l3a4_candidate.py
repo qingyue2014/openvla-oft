@@ -60,14 +60,14 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
     parser.add_argument("--a_dx", type=float, default=0.0)
-    parser.add_argument("--a_dy", type=float, default=0.038)
+    parser.add_argument("--a_dy", type=float, default=0.142)
     parser.add_argument("--b_dx_from_a", type=float, default=0.0)
-    parser.add_argument("--ab_spacing", type=float, default=-0.065)
-    parser.add_argument("--bc_spacing", type=float, default=-0.042)
+    parser.add_argument("--ab_spacing", type=float, default=0.056)
+    parser.add_argument("--bc_spacing", type=float, default=0.038)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--settle_steps", type=int, default=400)
     parser.add_argument("--open_hold_steps", type=int, default=120)
-    parser.add_argument("--motion_steps", type=int, default=120)
+    parser.add_argument("--motion_steps", type=int, default=240)
     parser.add_argument(
         "--out_json", default="experiments/logs/l3a4_candidate_trace.json"
     )
