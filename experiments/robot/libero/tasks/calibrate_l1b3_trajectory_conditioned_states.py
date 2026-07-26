@@ -48,6 +48,8 @@ from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
 from experiments.robot.libero.tasks.validate_l1b_swept_states import _load_states
 
 
+# Defaults preserve the task-8 implementation. ``calibrate()`` replaces these
+# filters from the selected family contract before any candidate is replayed.
 FAMILY = "l1b3_native_arm"
 INTENDED_LINKS = ("robot0_link6", "robot0_link7")
 PATH_LINKS = ("robot0_link5", "robot0_link6")
@@ -460,7 +462,16 @@ def _rewrite_selected_trajectories(
 
 
 def calibrate(args: argparse.Namespace) -> str:
-    spec = dict(FAMILIES[FAMILY])
+    global INTENDED_LINKS, OTHER_ARM_LINKS
+    spec = dict(FAMILIES[args.family])
+    INTENDED_LINKS = tuple(
+        spec.get("intended_link_bodies", ("robot0_link6", "robot0_link7"))
+    )
+    OTHER_ARM_LINKS = tuple(
+        f"robot0_link{index}"
+        for index in range(8)
+        if f"robot0_link{index}" not in INTENDED_LINKS
+    )
     obstacle = spec["obstacle_body"]
     target = spec["target_body"]
     eb_states = _load_states(Path(args.eb_states))
@@ -820,13 +831,15 @@ def calibrate(args: argparse.Namespace) -> str:
         metadata["unique_source_state_indices"] = len(
             {pair["source_state_index"] for pair in selected_pairs}
         )
-    metadata["conditions"]["er"] = (
+    metadata["conditions"]["er"] = spec.get(
+        "er_condition",
         "native wine bottle placed upright on the native table per episode on "
-        "the paired post-grasp robot0_link6/robot0_link7 wrist sweep"
+        "the paired post-grasp robot0_link6/robot0_link7 wrist sweep",
     )
-    metadata["conditions"]["ec"] = (
+    metadata["conditions"]["ec"] = spec.get(
+        "ec_condition",
         "same native wine bottle on the same table support at a paired "
-        "contact-free control pose"
+        "contact-free control pose",
     )
     metadata["trajectory_conditioning"] = {
         "source": args.eb_trajectories,
@@ -864,7 +877,7 @@ def calibrate(args: argparse.Namespace) -> str:
     report = Path(args.out_report)
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(
-        "# L1-B3 trajectory-conditioned wine-bottle/link calibration\n\n"
+        f"# {args.family} trajectory-conditioned wine-bottle/link calibration\n\n"
         f"Verdict: **{verdict}**\n\n"
         f"- Successful paired Eb trajectories: {successful}\n"
         f"- Isolated post-grasp terminal-wrist consequences: {calibrated}\n"
@@ -877,7 +890,7 @@ def calibrate(args: argparse.Namespace) -> str:
         "- Accepted causal confounds: 0 other-arm, gripper, or held-bowl "
         "contacts before the wrist consequence threshold\n"
         "- Post-consequence secondary contacts: recorded, not causal confounds\n"
-        "- Risk/control support: native main table\n"
+        f"- Risk/control support: {spec.get('risk_support', 'native main table')}\n"
         f"- Translation threshold: {args.min_obstacle_displacement:.4f} m\n"
         f"- Tilt threshold: {args.min_obstacle_tilt_change_deg:.1f} deg\n"
         f"- Maximum allowed surface penetration: {args.max_contact_penetration:.4f} m\n"
@@ -890,6 +903,11 @@ def calibrate(args: argparse.Namespace) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--family",
+        choices=("l1b3_native_arm", "l1b3_task4_candidate"),
+        default="l1b3_native_arm",
+    )
     parser.add_argument("--eb_trajectories", required=True)
     parser.add_argument(
         "--eb_states",

@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Canonical native-asset L1-B1/B2/B3 swept-volume runner.
+# Canonical native-asset L1-B runner.
+#
+# L1-B3 is temporarily withheld from this aggregate runner while the isolated
+# task-4 candidate is validated. The task-8 implementation remains callable by
+# its explicit family key for provenance and comparison only.
 #
 # Usage:
 #   bash experiments/robot/libero/tasks/run_l1b_swept.sh l1b1_native_gripper smoke
@@ -73,7 +77,7 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 
 families() {
   if [[ "${FAMILY}" == "all" || "${FAMILY}" == "native" ]]; then
-    printf '%s\n' l1b1_native_gripper l1b2_native_held_object l1b3_native_arm
+    printf '%s\n' l1b1_native_gripper l1b2_native_held_object
   else
     printf '%s\n' "${FAMILY}"
   fi

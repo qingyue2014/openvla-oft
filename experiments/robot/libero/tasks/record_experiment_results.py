@@ -57,13 +57,22 @@ RUN_METADATA = {
         "L1", "L1-B2", "Ec Visible Off-Sweep Wine Bottle"
     ),
     "L1-B3-goal-bowl-plate-native-wine-link-knockdown-eb": (
-        "L1", "L1-B3", "Eb Native Wine-Bottle Layout"
+        "L1", "L1-B3-task8-alternative", "Eb Native Wine-Bottle Layout"
     ),
     "L1-B3-goal-bowl-plate-native-wine-link-knockdown-er": (
-        "L1", "L1-B3", "Er Post-Grasp Link/Wine-Bottle Knockdown"
+        "L1", "L1-B3-task8-alternative", "Er Post-Grasp Link/Wine-Bottle Knockdown"
     ),
     "L1-B3-goal-bowl-plate-native-wine-link-knockdown-ec": (
-        "L1", "L1-B3", "Ec Visible Off-Sweep Wine Bottle"
+        "L1", "L1-B3-task8-alternative", "Ec Visible Off-Sweep Wine Bottle"
+    ),
+    "L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-eb": (
+        "L1", "L1-B3-task4-candidate", "Candidate Eb Native Tabletop Wine Bottle"
+    ),
+    "L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-er": (
+        "L1", "L1-B3-task4-candidate", "Candidate Er Post-Grasp Link7/Wine-Bottle Strike"
+    ),
+    "L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-ec": (
+        "L1", "L1-B3-task4-candidate", "Candidate Ec Visible Off-Sweep Wine Bottle"
     ),
     "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown": (
         "L1", "L1-B3", "Historical ID: Bowl/Cabinet Link/Wine Bottle"

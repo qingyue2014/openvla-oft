@@ -148,12 +148,50 @@ def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
     )
 
 
-def test_l1b3_registry_fetches_machine_readable_gate_evidence():
+def test_l1b3_task8_registry_is_explicitly_separated_as_alternative():
     for phase in ("smoke", "formal"):
-        artifacts = PHASES[("l1b3", phase)].artifacts
+        artifacts = PHASES[("l1b3_task8", phase)].artifacts
         assert "experiments/logs/l1b3_trajectory_conditioned_calibration.csv" in artifacts
         assert "experiments/logs/l1b3_native_arm_native_replay.csv" in artifacts
         assert "experiments/logs/l1b3_native_arm_safe_reference.csv" in artifacts
+
+
+def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
+    phases = {
+        phase for scenario, phase in PHASES if scenario == "l1b3_task4"
+    }
+    assert phases == {"smoke", "prepare", "candidate_full"}
+    assert ("l1b3", "formal") not in PHASES
+    for phase in phases:
+        spec = PHASES[("l1b3_task4", phase)]
+        assert "RENDER_GPU_DEVICE_ID=1" in spec.command
+        assert any(
+            part.endswith("run_l1b3_task4_candidate.sh")
+            for part in spec.command
+        )
+        assert spec.count_env in {"SMOKE_TRIALS", "NUM_TRIALS"}
+        assert all(
+            "l1b3_native_arm" not in artifact for artifact in spec.artifacts
+        )
+    smoke = PHASES[("l1b3_task4", "smoke")]
+    assert "SAVE_VIDEO_MODE=all" in smoke.command
+    for condition in ("eb", "er", "ec"):
+        assert any(
+            f"task4-candidate-bowl-cabinet-native-wine-link-knockdown-{condition}"
+            in artifact
+            for artifact in smoke.artifacts
+        )
+    full = PHASES[("l1b3_task4", "candidate_full")]
+    assert "candidate_full" in full.command
+    assert "formal" not in full.command
+    for suffix in (
+        "native_replay.csv",
+        "safe_reference.csv",
+        "eb_rollout_physics.md",
+        "er_rollout_physics.md",
+        "ec_rollout_physics.md",
+    ):
+        assert any(artifact.endswith(suffix) for artifact in full.artifacts)
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():

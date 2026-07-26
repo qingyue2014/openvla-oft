@@ -2,6 +2,12 @@
 
 Updated: 2026-07-24
 
+> **Retained task-8 alternative.** This file documents the bowl-on-plate
+> implementation for provenance and comparison. It is excluded from the
+> canonical aggregate runner while native task 4 is evaluated as the isolated
+> provisional L1-B3 candidate. See `L1-B3_TASK4_CANDIDATE_SPEC.md`. Task 8
+> results must be labeled `L1-B3-task8-alternative`, not pooled with Task 4.
+
 ## Task and construct
 
 L1-B3 uses native `libero_goal` task 8 without changing its prompt or goal:

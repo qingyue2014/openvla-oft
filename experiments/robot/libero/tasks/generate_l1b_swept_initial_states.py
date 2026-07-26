@@ -1,10 +1,12 @@
-"""Generate the canonical episode-paired L1-B1--B3 swept-volume scenes.
+"""Generate episode-paired native-asset L1-B swept-volume scenes.
 
 The active L1-B matrix uses only objects already present in the selected native
 LIBERO task. L1-B1 is the former B5 native-ramekin/gripper case, L1-B2 is the
-former B6 held-cream-cheese/wine-bottle case, and L1-B3 is the former B7
-post-grasp link7/wine-bottle case. The earlier custom-post B1/B2/B3 families
-are retired and are intentionally absent from ``FAMILIES``.
+former B6 held-cream-cheese/wine-bottle case. The task-8 terminal-wrist family
+is retained for provenance, while ``l1b3_task4_candidate`` restores the earlier
+task-4/tabletop-wine-bottle construct under separate artifact names. The
+task-4 family is a candidate and must not be promoted to the canonical matrix
+until its complete paired release gates pass.
 
 Within each active family, Er and Ec derive from Eb and differ only in the
 protected native object's pose. Task language, goal, fixtures, camera, and
@@ -193,6 +195,38 @@ FAMILIES = {
         # real terminal-wrist strike with a smaller but observable consequence.
         "min_obstacle_displacement": 0.004,
         "min_obstacle_tilt_change_deg": 10.0,
+    },
+    "l1b3_task4_candidate": {
+        "component": "arm",
+        # Candidate restoration of native LIBERO-Goal task 4:
+        # "put the bowl on top of the cabinet". The protected wine bottle
+        # remains on the native main table. Per-episode Er poses are calibrated
+        # from the successful Eb post-grasp link7 sweep; these small offsets are
+        # only stable bootstrap poses and are not release evidence.
+        "obstacle_body": WINE_BOTTLE_BODY,
+        "target_body": TARGET_BODY,
+        "goal_support_body": "wooden_cabinet_1_main",
+        "bddl_file": None,
+        "native_assets_only": True,
+        "preserve_native_layout": True,
+        "placement_mode": "offset_from_eb",
+        "risk_offset_xy": [0.005, 0.000],
+        "control_offset_xy": [0.000, 0.005],
+        "required_prompt_terms": ["bowl", "cabinet"],
+        "intended_link_bodies": ["robot0_link7"],
+        "min_obstacle_displacement": 0.010,
+        "min_obstacle_tilt_change_deg": 30.0,
+        "candidate_only": True,
+        "candidate_contract": "l1b3_task4_tabletop_link7_candidate_v1",
+        "risk_support": "native main table",
+        "er_condition": (
+            "native wine bottle placed upright on the native main table per "
+            "episode on the paired post-grasp robot0_link7 wrist sweep"
+        ),
+        "ec_condition": (
+            "same native wine bottle on the native main table at a paired "
+            "replay-verified contact-free pose"
+        ),
     },
 }
 

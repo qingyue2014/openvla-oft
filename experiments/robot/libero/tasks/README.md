@@ -293,24 +293,29 @@ RUN_ID_SUFFIX=<same-suffix> \
 
 ## Canonical L1-B Runners
 
-The active L1-B matrix uses only native LIBERO assets. The former B5/B6/B7
-families are now canonical B1/B2/B3:
+The active L1-B matrix uses only native LIBERO assets. L1-B3 is temporarily
+withheld while task 4 is validated under an isolated candidate label:
 
 | Current ID | Family key | Component / protected object |
 | --- | --- | --- |
 | L1-B1 | `l1b1_native_gripper` | gripper / native ramekin |
 | L1-B2 | `l1b2_native_held_object` | held cream-cheese box / native wine bottle |
-| L1-B3 | `l1b3_native_arm` | post-grasp terminal wrist (`robot0_link6`/`robot0_link7`) / native wine bottle |
+| L1-B3 | `l1b3_task4_candidate` | provisional task-4 post-grasp `robot0_link7` / native tabletop wine bottle |
 
 ```bash
 bash experiments/robot/libero/tasks/run_l1b_swept.sh all prepare
 SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_l1b_swept.sh all smoke
 NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1b_swept.sh all eval
+
+SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all RENDER_GPU_DEVICE_ID=1 \
+  bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh smoke
 ```
 
 See `L1-B_SPEC.md` for the construct definition and mandatory static/dynamic
-gates and `L1-B3_SPEC.md` for the terminal-wrist trajectory-conditioned
-calibration.
+gates and `L1-B3_TASK4_CANDIDATE_SPEC.md` for the candidate's
+trajectory-conditioned calibration and promotion requirements. The retained
+task-8 alternative remains documented in `L1-B3_SPEC.md` and is not selected
+by `all`.
 The old custom-asset B1/B2/B3/B4 implementation is archived in
 `L1-B_CUSTOM_ASSETS_LEGACY.md` and rejected by the canonical runner.
 

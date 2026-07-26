@@ -329,7 +329,7 @@ def test_new_run_ids_map_to_three_distinct_l1b_families():
     assert _metadata_for_run(
         "L1-B3-goal-bowl-plate-native-wine-link-knockdown-er-seed42"
     ) == (
-        "L1", "L1-B3", "Er Post-Grasp Link/Wine-Bottle Knockdown"
+        "L1", "L1-B3-task8-alternative", "Er Post-Grasp Link/Wine-Bottle Knockdown"
     )
 
 
@@ -348,7 +348,11 @@ def test_historical_b5_b6_b7_run_ids_map_to_new_b1_b2_b3():
 def test_l1b3_run_ids_map_to_native_link_knockdown():
     assert _metadata_for_run(
         "L1-B3-goal-bowl-plate-native-wine-link-knockdown-er-seed42"
-    ) == ("L1", "L1-B3", "Er Post-Grasp Link/Wine-Bottle Knockdown")
+    ) == (
+        "L1",
+        "L1-B3-task8-alternative",
+        "Er Post-Grasp Link/Wine-Bottle Knockdown",
+    )
 
 
 def test_runner_requires_static_and_dynamic_gates_before_smoke():
@@ -427,8 +431,9 @@ def test_active_families_do_not_reference_custom_obstacles_or_bddl():
         "l1_b_goal_arm_gate_1_main",
     ):
         assert retired_name not in text
-    assert text.count('"native_assets_only": True') == 3
-    assert text.count('"bddl_file": None') == 3
+    assert text.count('"native_assets_only": True') == 4
+    assert text.count('"candidate_only": True') == 1
+    assert text.count('"bddl_file": None') == 4
 
 
 def test_static_gate_checks_all_contact_partners_including_eb():
@@ -524,7 +529,9 @@ def test_canonical_b1_b2_b3_use_native_assets_and_expected_suites():
         assert obstacle in block or obstacle in generator
         assert family_name in runner
     assert 'if [[ "${FAMILY}" == "all" || "${FAMILY}" == "native" ]]' in runner
-    assert "l1b1_native_gripper l1b2_native_held_object l1b3_native_arm" in runner
+    aggregate = runner.split("families() {", 1)[1].split("component_for()", 1)[0]
+    assert "l1b1_native_gripper l1b2_native_held_object" in aggregate
+    assert "l1b3_native_arm" not in aggregate
     assert "l1b2_native_held_object|l1b3_native_arm) printf '%s\\n' libero_goal" in runner
 
 
@@ -707,13 +714,15 @@ def test_retired_family_failure_propagates_out_of_runner():
     assert "Deprecated custom-asset L1-B family" in completed.stderr
 
 
-def test_pilot_and_paper_entrypoints_use_only_canonical_l1b_families():
+def test_pilot_and_paper_entrypoints_withhold_l1b3_until_candidate_promotion():
     for path in (PILOT_RUNNER, PAPER_RUNNER):
         text = path.read_text()
         assert "run_l1b_swept.sh" in text
         assert "l1b1_native_gripper" in text
         assert "l1b2_native_held_object" in text
-        assert "l1b3_native_arm" in text
+        assert "L1-B3" in text
+        assert "candidate" in text
+        assert "l1b3_native_arm" not in text
         assert "run_l1b2_task6.sh" not in text
         assert "run_l1b3_task6.sh" not in text
         assert "run_l1b4_task6.sh" not in text
