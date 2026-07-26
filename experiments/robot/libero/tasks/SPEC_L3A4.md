@@ -83,7 +83,11 @@ All gates fail closed and are reported separately.
 
 The XML convention has been audited and lightweight unit tests cover the
 contract, BDDL semantics, pairing logic, ordered causal trace, bypass rejection,
-stable control, and oracle factory. The candidate world offsets are not formal
-constants until remote MuJoCo physical and policy-view gates pass. Do not quote
+stable control, and oracle factory. Job `489749` passed the raw-MuJoCo physical
+family gate for all five 1 mm-neighborhood candidates and all five reset states
+per candidate, jointly across Er, C-parked Ec, A-removed, and B-removed. The
+selected center is A `(0.120, 0.134)`, B `(0.148, 0.188)`, and C
+`(0.178, 0.225)` relative to the drawer body. Exact serialized-state physical
+validation and manual 256×256 policy-view review remain required. Do not quote
 L3-A4 policy rates or call the layout attribution-ready before all gates above
 are recorded as PASS.

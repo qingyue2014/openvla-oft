@@ -17,7 +17,7 @@ import numpy as np
 
 
 SCHEMA_VERSION = 1
-TOPOLOGY_ID = "native_opening_drawer_front_A_block_B_puck_C_domino_v3"
+TOPOLOGY_ID = "native_opening_drawer_edge_A_block_B_puck_C_domino_v4"
 TASK_DESCRIPTION = "open the bottom drawer of the cabinet"
 DEFAULT_BDDL = (
     "experiments/robot/libero/tasks/PHYSCOG_L3A4_drawer_momentum_chain.bddl"
@@ -38,13 +38,13 @@ B_BODY = "momentum_relay_1_main"
 C_BODY = "momentum_sentinel_1_main"
 CHAIN_BODIES = (A_BODY, B_BODY, C_BODY)
 
-# Positions are relative to the moving bottom-drawer body's origin. They are
-# calibration candidates, not accepted formal constants until the GPU gates
-# in SPEC_L3A4.md pass.
+# Positions are relative to the moving bottom-drawer body's origin. The exact
+# edge-diagonal center passed the five-candidate x five-state four-condition
+# physical family gate in job 489749.
 RISK_OFFSETS_XY = {
-    A_BODY: np.asarray([0.000, 0.134], dtype=float),
-    B_BODY: np.asarray([0.000, 0.182], dtype=float),
-    C_BODY: np.asarray([0.000, 0.220], dtype=float),
+    A_BODY: np.asarray([0.120, 0.134], dtype=float),
+    B_BODY: np.asarray([0.148, 0.188], dtype=float),
+    C_BODY: np.asarray([0.178, 0.225], dtype=float),
 }
 EC_SENTINEL_PARK_DXY = np.asarray([0.105, 0.000], dtype=float)
 EB_PARK_OFFSETS_XY = {
