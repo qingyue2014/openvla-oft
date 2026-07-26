@@ -89,6 +89,18 @@ def _xy_offsets(text: str) -> list[np.ndarray]:
     return offsets
 
 
+def _refinement_offsets(
+    radial_distances: str, angular_candidates_deg: str
+) -> list[np.ndarray]:
+    radii = _float_values(radial_distances)
+    angles = np.deg2rad(_float_values(angular_candidates_deg))
+    return [
+        radius * np.array([np.cos(angle), np.sin(angle)], dtype=float)
+        for radius in radii
+        for angle in angles
+    ]
+
+
 def _candidate_spec(spec: dict) -> dict:
     candidate = dict(spec)
     candidate["placement_mode"] = "offset_from_eb"
@@ -530,10 +542,13 @@ def calibrate(args: argparse.Namespace) -> str:
             valid_table_candidates = 0
             intended_contact_candidates = 0
             intended_effect_candidates = 0
+            refinement_attempts = 0
+            refinement_seeds = 0
             matched_control_failures = 0
             table_z_values = []
             invalid_reasons: Counter[str] = Counter()
             first_invalid_diagnostic = ""
+            first_effect_diagnostic = ""
             if physics_qualified_eb:
                 candidates = _trajectory_candidates(
                     trajectory,
@@ -565,8 +580,28 @@ def calibrate(args: argparse.Namespace) -> str:
                         candidates[index] for index in np.unique(sample_indices)
                     )
                     candidates = selected_candidates
-                for path_step, proposed_link, placement_xy in candidates:
+                coarse_candidate_count = len(candidates)
+                scheduled_refinement_candidates = 0
+                refinement_offsets = _refinement_offsets(
+                    args.refinement_radial_distances,
+                    args.refinement_angular_candidates_deg,
+                )
+                seen_placements = {
+                    (
+                        round(float(candidate_xy[0]), 5),
+                        round(float(candidate_xy[1]), 5),
+                    )
+                    for _, _, candidate_xy in candidates
+                }
+                candidate_index = 0
+                while candidate_index < len(candidates):
+                    path_step, proposed_link, placement_xy = candidates[
+                        candidate_index
+                    ]
+                    is_refinement = candidate_index >= coarse_candidate_count
+                    candidate_index += 1
                     attempts += 1
+                    refinement_attempts += int(is_refinement)
                     placement = np.asarray(placement_xy, dtype=float)
                     env.reset()
                     env.set_init_state(eb_state)
@@ -615,6 +650,15 @@ def calibrate(args: argparse.Namespace) -> str:
                     confounded, late_contact = _causal_contact_partition(
                         replay["hit_steps"]
                     )
+                    if replay["hits"]["intended"] and not first_effect_diagnostic:
+                        first_effect_diagnostic = (
+                            f"placement=({placement[0]:.5f},{placement[1]:.5f}) "
+                            f"path_step={path_step} proposed_link={proposed_link} "
+                            f"hit_steps={replay['hit_steps']} "
+                            f"displacement={replay['displacement_m']:.5f} "
+                            f"tilt={replay['tilt_deg']:.2f} "
+                            f"penetration={replay['penetration_m']:.6f}"
+                        )
                     if confounded:
                         confounded_candidates += 1
                     if late_contact:
@@ -658,6 +702,40 @@ def calibrate(args: argparse.Namespace) -> str:
                             "control": control,
                         }
                         break
+                    should_refine = (
+                        not is_refinement
+                        and replay["hits"]["intended_contact"]
+                        and refinement_seeds < args.max_refinement_seeds
+                        and scheduled_refinement_candidates
+                        < args.max_refinement_candidates
+                    )
+                    if should_refine:
+                        additions = 0
+                        for offset in refinement_offsets:
+                            if (
+                                scheduled_refinement_candidates + additions
+                                >= args.max_refinement_candidates
+                            ):
+                                break
+                            refined = placement + offset
+                            key = (
+                                round(float(refined[0]), 5),
+                                round(float(refined[1]), 5),
+                            )
+                            if key in seen_placements:
+                                continue
+                            seen_placements.add(key)
+                            candidates.append(
+                                (
+                                    path_step,
+                                    f"{proposed_link}_local_refinement",
+                                    refined,
+                                )
+                            )
+                            additions += 1
+                        if additions:
+                            refinement_seeds += 1
+                            scheduled_refinement_candidates += additions
             if selected is not None:
                 output_er_states[episode] = selected["state"]
                 output_ec_states[episode] = selected["control"]["state"]
@@ -679,12 +757,15 @@ def calibrate(args: argparse.Namespace) -> str:
                 ),
                 "intended_contact_candidates": intended_contact_candidates,
                 "intended_effect_candidates": intended_effect_candidates,
+                "refinement_attempts": refinement_attempts,
+                "refinement_seeds": refinement_seeds,
                 "matched_control_failures": matched_control_failures,
                 "invalid_reasons": ";".join(
                     f"{reason}={count}"
                     for reason, count in sorted(invalid_reasons.items())
                 ),
                 "first_invalid_diagnostic": first_invalid_diagnostic,
+                "first_effect_diagnostic": first_effect_diagnostic,
                 "confounded_candidates": confounded_candidates,
                 "late_contact_candidates": late_contact_candidates,
                 "path_step": "" if selected is None else selected["path_step"],
@@ -862,6 +943,14 @@ def calibrate(args: argparse.Namespace) -> str:
                 args.matched_control_offsets_xy
             )
         ],
+        "refinement_radial_distances": _float_values(
+            args.refinement_radial_distances
+        ),
+        "refinement_angular_candidates_deg": _float_values(
+            args.refinement_angular_candidates_deg
+        ),
+        "max_refinement_seeds": args.max_refinement_seeds,
+        "max_refinement_candidates": args.max_refinement_candidates,
         "min_grasp_lift": args.min_grasp_lift,
         "max_goal_region_distance": args.max_goal_region_distance,
         "radial_distance_candidates": _float_values(
@@ -948,6 +1037,20 @@ def main() -> None:
     parser.add_argument("--max_measured_geoms_per_step", type=int, default=4)
     parser.add_argument("--min_step_spacing", type=int, default=2)
     parser.add_argument("--max_candidates_per_episode", type=int, default=600)
+    parser.add_argument(
+        "--refinement_radial_distances",
+        default="0.001,0.002,0.003,0.004,0.006,0.008",
+        help=(
+            "Millimetre-scale radial offsets searched around coarse candidates "
+            "that produce real intended contact"
+        ),
+    )
+    parser.add_argument(
+        "--refinement_angular_candidates_deg",
+        default="0,45,90,135,180,225,270,315",
+    )
+    parser.add_argument("--max_refinement_seeds", type=int, default=8)
+    parser.add_argument("--max_refinement_candidates", type=int, default=256)
     parser.add_argument("--stability_steps", type=int, default=20)
     parser.add_argument(
         "--matched_control_offsets_xy",

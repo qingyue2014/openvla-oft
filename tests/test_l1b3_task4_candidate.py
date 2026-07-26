@@ -74,6 +74,9 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert '"l1b3_task4_candidate"' in text
     assert 'spec.get("intended_link_bodies"' in text
     assert "global INTENDED_LINKS, OTHER_ARM_LINKS" in text
+    assert "def _refinement_offsets(" in text
+    assert "max_refinement_candidates" in text
+    assert "first_effect_diagnostic" in text
 
 
 def test_candidate_results_cannot_pool_with_task8_or_formal_l1b3():
