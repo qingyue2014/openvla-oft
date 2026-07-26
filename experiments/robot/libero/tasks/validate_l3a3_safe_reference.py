@@ -294,6 +294,62 @@ def _shelf_target(env, start_z: float, args) -> np.ndarray:
     return target
 
 
+def _stage_target_pusher(
+    io,
+    body: str,
+    released: np.ndarray,
+    x_offset: float,
+    open_sign: float,
+    close_sign: float,
+    args,
+    oracle,
+    stage: str,
+):
+    """Stage one finger behind the flat book and require measured contact."""
+    behind = released + np.array(
+        [x_offset, -args.target_push_start_clearance, args.target_push_height]
+    )
+    above_behind = behind + np.array(
+        [0.0, 0.0, args.target_push_approach_height]
+    )
+    failure = _move(
+        io, above_behind, open_sign, args, f"{stage}:approach", oracle=oracle
+    )
+    if failure is None:
+        failure = _move(
+            io, behind, close_sign, args, f"{stage}:descend", oracle=oracle
+        )
+        if (
+            failure is not None
+            and failure.reason == "waypoint_timeout"
+            and _eef_pos(io.obs)[2] - _body_pos(io.env, body)[2]
+            <= args.target_push_max_eef_body_z
+        ):
+            failure = None
+    if failure is not None:
+        return failure, False
+    contact_goal = _eef_pos(io.obs) + np.array(
+        [0.0, args.target_contact_probe_distance, 0.0]
+    )
+    contact_seen = _gripper_contacts_body(io.env, body)
+    for _ in range(args.max_target_contact_probe_steps):
+        if contact_seen:
+            break
+        action = _position_action(
+            _eef_pos(io.obs), contact_goal, close_sign, args
+        )
+        action[:3] = np.clip(
+            action[:3],
+            -args.target_contact_probe_command,
+            args.target_contact_probe_command,
+        )
+        status = io.advance(action, "task", oracle)
+        if status is not None and status.violated:
+            return MotionFailure(status.reason, f"{stage}:contact_probe"), False
+        contact_seen = _gripper_contacts_body(io.env, body)
+    return None, contact_seen
+
+
 def _place_target_under_shelf(
     io, open_sign: float, close_sign: float, args, oracle=None
 ):
@@ -361,69 +417,27 @@ def _place_target_under_shelf(
             if io.env.check_success():
                 break
             released = _body_pos(io.env, body)
-            behind = released + np.array(
-                [
+            contact_seen = False
+            for attempt, x_offset in enumerate(
+                (
                     args.target_push_x_offset,
-                    -args.target_push_start_clearance,
-                    args.target_push_height,
-                ]
-            )
-            above_behind = behind + np.array(
-                [0.0, 0.0, args.target_push_approach_height]
-            )
-            failure = _move(
-                io,
-                above_behind,
-                open_sign,
-                args,
-                f"{body}:stroke{stroke}:approach",
-                oracle=oracle,
-            )
-            if failure is None:
-                failure = _move(
+                    -args.target_push_x_offset,
+                    0.0,
+                )
+            ):
+                failure, contact_seen = _stage_target_pusher(
                     io,
-                    behind,
+                    body,
+                    released,
+                    x_offset,
+                    open_sign,
                     close_sign,
                     args,
-                    f"{body}:stroke{stroke}:descend",
-                    oracle=oracle,
+                    oracle,
+                    f"{body}:stroke{stroke}:contact_attempt{attempt}",
                 )
-                if (
-                    failure is not None
-                    and failure.reason == "waypoint_timeout"
-                    and _eef_pos(io.obs)[2] - _body_pos(io.env, body)[2]
-                    <= args.target_push_max_eef_body_z
-                ):
-                    # A low tool pose is collision-limited by the table.  It is
-                    # usable only as a staging pose; the next gate still
-                    # requires measured gripper↔book contact.
-                    failure = None
-            if failure is not None:
-                break
-            contact_goal = _eef_pos(io.obs) + np.array(
-                [0.0, args.target_contact_probe_distance, 0.0]
-            )
-            contact_seen = _gripper_contacts_body(io.env, body)
-            for _ in range(args.max_target_contact_probe_steps):
-                if contact_seen:
+                if failure is not None or contact_seen:
                     break
-                action = _position_action(
-                    _eef_pos(io.obs), contact_goal, close_sign, args
-                )
-                action[:3] = np.clip(
-                    action[:3],
-                    -args.target_contact_probe_command,
-                    args.target_contact_probe_command,
-                )
-                status = io.advance(action, "task", oracle)
-                if status is not None and status.violated:
-                    failure = MotionFailure(
-                        status.reason, f"{body}:stroke{stroke}:contact_probe"
-                    )
-                    break
-                contact_seen = _gripper_contacts_body(io.env, body)
-            if failure is not None:
-                break
             if not contact_seen:
                 failure = MotionFailure(
                     "no_gripper_object_contact",
