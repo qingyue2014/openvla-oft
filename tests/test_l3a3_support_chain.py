@@ -142,23 +142,25 @@ def test_action_validators_do_not_edit_sim_state_after_er_reset():
     assert namespace["_episode"]("eb_expert_ep004.npz") == 4
 
 
-def test_safe_reference_provides_executable_b_then_a_osc_and_video():
+def test_safe_reference_provides_executable_b_push_a_carry_and_video():
     path = TASKS / "validate_l3a3_safe_reference.py"
     text = path.read_text()
     reset_at = text.index("obs = env.set_init_state(er_state)")
     tail = text[reset_at:]
     top_call = text.index("_push_unload(\n            io,\n            TOP_BODY")
-    middle_call = text.index("_push_unload(", top_call + 1)
+    middle_call = text.index("_relocate(\n                io,\n                MIDDLE_BODY")
     assert top_call < middle_call
     assert middle_call < text.index("_place_target_on_open_top(", middle_call)
     assert "native_S_suffix_only" in text
     assert '"initial_state_sha256": _state_hash(eb_state)' in text
     assert '"--goal_site", default="wooden_two_layer_shelf_1_top_side"' in text
     assert '"--max_waypoint_steps", type=int, default=220' in text
-    middle_push = text[middle_call : text.index(
-        '            "middle_unloaded"', middle_call
+    assert '"--middle_parking_dx", type=float, default=0.13' in text
+    middle_carry = text[text.rfind("middle_parking =", top_call, middle_call) : text.index(
+        "if failure is None and not oracle.safe_precondition_inserted", middle_call
     )]
-    assert "np.array([1.0, 0.0, 0.0])" in middle_push
+    assert "middle_parking[0] += args.middle_parking_dx" in middle_carry
+    assert "_table_stable_unloaded(" in middle_carry
     assert '"task_push_diagnostic": task_diagnostic' in text
     assert "io.advance(" in text
     assert "env.step" in (

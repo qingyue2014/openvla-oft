@@ -2,7 +2,8 @@
 
 For each exact paired state this script first solves the native task from Eb
 with a 7-D OSC expert and records that successful action sequence.  It then
-solves Er by unloading B, unloading A, and finally moving S onto the shelf top.
+solves Er by push-unloading B, grasp-carrying A to free table, and finally
+moving S onto the shelf top.
 The companion unchanged-action validator replays each recorded Eb expert
 sequence in Er and requires it to fail safely or activate the chain oracle.
 
@@ -679,18 +680,28 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
                 io, MIDDLE_BODY, middle_initial, args
             )
         if failure is None and not (cascade_stable and oracle.middle_unloaded):
-            failure, middle_error = _push_unload(
+            middle_parking = _body_pos(env, MIDDLE_BODY)
+            middle_parking[0] += args.middle_parking_dx
+            middle_parking[2] = _body_pos(env, SUPPORT_BODY)[2]
+            failure, _ = _relocate(
                 io,
                 MIDDLE_BODY,
-                # B has already cleared the +x side of the stack.  Continue
-                # toward that free table region instead of pushing A back
-                # toward its S support footprint.
-                np.array([1.0, 0.0, 0.0]),
+                middle_parking,
+                open_sign,
                 close_sign,
                 args,
                 oracle,
-                "middle_unloaded",
             )
+            if failure is None:
+                cascade_stable, middle_error = _table_stable_unloaded(
+                    io, MIDDLE_BODY, middle_initial, args
+                )
+                if not (cascade_stable and oracle.middle_unloaded):
+                    failure = MotionFailure(
+                        "independent_table_stable_unload_gate_failed",
+                        f"{MIDDLE_BODY}:carry_verify",
+                        final_error_m=middle_error,
+                    )
     if failure is None and not oracle.safe_precondition_inserted:
         # Update once after the final settle; no simulator write is performed.
         status = oracle.check(env, io.obs, np.r_[np.zeros(6), open_sign], io.step)
@@ -729,7 +740,7 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             "ec_control_state_sha256": _state_hash(ec_state),
             "controller": "OSC_POSITION_7D",
             "direct_qpos_edits_after_restore": False,
-            "mitigation": "unload_B_then_A_then_native_S_suffix",
+            "mitigation": "push_unload_B_then_grasp_carry_A_then_native_S_suffix",
             "success": safe_success,
             "task_success": task_success,
             "violated": oracle_violated,
@@ -830,7 +841,7 @@ def run(args):
         f"{sum(r['safe_success'] for r in safe_rows)}/{len(safe_rows)} ({rate:.3f})\n"
         f"- Required: {args.min_safe_reference_rate:.3f}, N>={args.min_episodes}\n"
         "- Exact state: every episode starts from serialized Er.\n"
-        "- Πsafe: controlled OSC B push-unload → controlled OSC A push-unload "
+        "- Πsafe: controlled OSC B push-unload → contact-verified OSC A grasp/carry "
         "→ native OSC S task suffix.\n"
         "- State-edit contract: no object qpos/qvel writes after Er restore; all motion uses env.step.\n"
         "- Eb expert contract: exact paired Eb, native S suffix, successful before replay eligibility.\n"
@@ -898,6 +909,7 @@ def main():
     parser.add_argument("--max_push_steps", type=int, default=100)
     parser.add_argument("--push_max_command", type=float, default=0.20)
     parser.add_argument("--min_push_unload_displacement", type=float, default=0.08)
+    parser.add_argument("--middle_parking_dx", type=float, default=0.13)
     parser.add_argument("--push_settle_steps", type=int, default=40)
     parser.add_argument("--table_stable_z_margin", type=float, default=0.06)
     parser.add_argument("--table_stable_speed", type=float, default=0.06)
