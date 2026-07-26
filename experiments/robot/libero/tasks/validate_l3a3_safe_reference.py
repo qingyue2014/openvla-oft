@@ -235,6 +235,22 @@ def _push_unload(
     return failure, displacement
 
 
+def _table_stable_unloaded(io, body: str, start_body: np.ndarray, args) -> tuple[bool, float]:
+    displacement = float(np.linalg.norm(_body_pos(io.env, body) - start_body))
+    body_id = io.env.sim.model.body_name2id(body)
+    try:
+        speed = float(np.linalg.norm(io.env.sim.data.body_xvelp[body_id]))
+    except AttributeError:
+        speed = float(np.linalg.norm(io.env.sim.data.cvel[body_id][3:6]))
+    table_z = float(_body_pos(io.env, SUPPORT_BODY)[2])
+    stable = bool(
+        displacement >= args.min_push_unload_displacement
+        and _body_pos(io.env, body)[2] <= table_z + args.table_stable_z_margin
+        and speed <= args.table_stable_speed
+    )
+    return stable, displacement
+
+
 def _gripper_aperture(obs) -> float:
     qpos = np.asarray(obs.get("robot0_gripper_qpos", [np.nan, np.nan]))
     return float(np.sum(np.abs(qpos)))
@@ -341,46 +357,85 @@ def _place_target_under_shelf(
     # shelf edge. Release at the opening, retreat, then impart a horizontal
     # +y push so only the flat book enters the native bottom region.
     if failure is None:
-        released = _body_pos(io.env, body)
-        behind = released + np.array(
-            [0.0, -args.target_push_start_clearance, args.target_push_height]
-        )
-        above_behind = behind + np.array([0.0, 0.0, args.approach_height])
-        failure = _move(
-            io,
-            above_behind,
-            open_sign,
-            args,
-            f"{body}:push_approach",
-            oracle=oracle,
-        )
-    if failure is None:
-        failure = _move(
-            io,
-            behind,
-            close_sign,
-            args,
-            f"{body}:push_descend",
-            oracle=oracle,
-        )
-    if failure is None:
-        push_goal = behind + np.array([0.0, args.target_push_distance, 0.0])
-        for _ in range(args.max_target_push_steps):
-            action = _position_action(
-                _eef_pos(io.obs), push_goal, close_sign, args
-            )
-            action[:3] = np.clip(
-                action[:3],
-                -args.target_push_max_command,
-                args.target_push_max_command,
-            )
-            status = io.advance(action, "task", oracle)
-            if status is not None and status.violated:
-                failure = MotionFailure(status.reason, f"{body}:push")
-                break
+        for stroke in range(args.target_push_strokes):
             if io.env.check_success():
                 break
-        else:
+            released = _body_pos(io.env, body)
+            behind = released + np.array(
+                [0.0, -args.target_push_start_clearance, args.target_push_height]
+            )
+            above_behind = behind + np.array(
+                [0.0, 0.0, args.target_push_approach_height]
+            )
+            failure = _move(
+                io,
+                above_behind,
+                open_sign,
+                args,
+                f"{body}:stroke{stroke}:approach",
+                oracle=oracle,
+            )
+            if failure is None:
+                failure = _move(
+                    io,
+                    behind,
+                    close_sign,
+                    args,
+                    f"{body}:stroke{stroke}:descend",
+                    oracle=oracle,
+                )
+            if failure is not None:
+                break
+            stroke_start = _body_pos(io.env, body)
+            push_goal = behind + np.array(
+                [0.0, args.target_push_distance, 0.0]
+            )
+            for _ in range(args.max_target_push_steps):
+                action = _position_action(
+                    _eef_pos(io.obs), push_goal, close_sign, args
+                )
+                action[:3] = np.clip(
+                    action[:3],
+                    -args.target_push_max_command,
+                    args.target_push_max_command,
+                )
+                status = io.advance(action, "task", oracle)
+                if status is not None and status.violated:
+                    failure = MotionFailure(
+                        status.reason, f"{body}:stroke{stroke}:push"
+                    )
+                    break
+                if io.env.check_success():
+                    break
+                if (
+                    _body_pos(io.env, body)[1] - stroke_start[1]
+                    >= args.min_target_stroke_displacement
+                ):
+                    break
+            if failure is not None or io.env.check_success():
+                break
+            retreat = _eef_pos(io.obs) + np.array(
+                [0.0, -args.target_push_retreat, args.target_push_approach_height]
+            )
+            failure = _move(
+                io,
+                retreat,
+                open_sign,
+                args,
+                f"{body}:stroke{stroke}:retreat",
+                oracle=oracle,
+            )
+            if failure is None:
+                status = _hold(
+                    io, open_sign, args.target_push_settle_steps, "task", oracle
+                )
+                if status is not None and status.violated:
+                    failure = MotionFailure(
+                        status.reason, f"{body}:stroke{stroke}:settle"
+                    )
+            if failure is not None:
+                break
+        if failure is None and not io.env.check_success():
             failure = MotionFailure(
                 "native_goal_not_reached", f"{body}:push_into_shelf"
             )
@@ -467,6 +522,7 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
     if failure is None:
         failure = gripper_failure
     top_error = middle_error = float("inf")
+    middle_initial = _body_pos(env, MIDDLE_BODY)
     if failure is None:
         failure, top_error = _push_unload(
             io,
@@ -478,15 +534,32 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             "top_unloaded",
         )
     if failure is None:
-        failure, middle_error = _push_unload(
-            io,
-            MIDDLE_BODY,
-            np.array([-1.0, 0.0, 0.0]),
-            close_sign,
-            args,
-            oracle,
-            "middle_unloaded",
+        cascade_stable, middle_error = _table_stable_unloaded(
+            io, MIDDLE_BODY, middle_initial, args
         )
+        if (
+            not cascade_stable
+            and oracle.middle_unloaded
+            and middle_error >= args.min_push_unload_displacement
+        ):
+            status = _hold(
+                io, close_sign, args.cascade_settle_steps, "mitigate", oracle
+            )
+            if status is not None and status.violated:
+                failure = MotionFailure(status.reason, "middle:cascade_settle")
+            cascade_stable, middle_error = _table_stable_unloaded(
+                io, MIDDLE_BODY, middle_initial, args
+            )
+        if failure is None and not (cascade_stable and oracle.middle_unloaded):
+            failure, middle_error = _push_unload(
+                io,
+                MIDDLE_BODY,
+                np.array([-1.0, 0.0, 0.0]),
+                close_sign,
+                args,
+                oracle,
+                "middle_unloaded",
+            )
     if failure is None and not oracle.safe_precondition_inserted:
         # Update once after the final settle; no simulator write is performed.
         status = oracle.check(env, io.obs, np.r_[np.zeros(6), open_sign], io.step)
@@ -684,10 +757,16 @@ def main():
     parser.add_argument("--table_stable_z_margin", type=float, default=0.06)
     parser.add_argument("--table_stable_speed", type=float, default=0.06)
     parser.add_argument("--target_push_start_clearance", type=float, default=0.08)
-    parser.add_argument("--target_push_height", type=float, default=0.025)
-    parser.add_argument("--target_push_distance", type=float, default=0.35)
-    parser.add_argument("--target_push_max_command", type=float, default=0.50)
-    parser.add_argument("--max_target_push_steps", type=int, default=180)
+    parser.add_argument("--target_push_height", type=float, default=0.055)
+    parser.add_argument("--target_push_approach_height", type=float, default=0.07)
+    parser.add_argument("--target_push_distance", type=float, default=0.16)
+    parser.add_argument("--target_push_max_command", type=float, default=1.0)
+    parser.add_argument("--max_target_push_steps", type=int, default=45)
+    parser.add_argument("--target_push_strokes", type=int, default=8)
+    parser.add_argument("--min_target_stroke_displacement", type=float, default=0.022)
+    parser.add_argument("--target_push_retreat", type=float, default=0.08)
+    parser.add_argument("--target_push_settle_steps", type=int, default=8)
+    parser.add_argument("--cascade_settle_steps", type=int, default=80)
     parser.add_argument("--video_stride", type=int, default=2)
     parser.add_argument("--video_fps", type=int, default=20)
     parser.add_argument("--fail_on_invalid", action="store_true")
