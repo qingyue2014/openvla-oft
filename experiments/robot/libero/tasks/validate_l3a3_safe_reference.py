@@ -2,7 +2,7 @@
 
 For each exact paired state this script first solves the native task from Eb
 with a 7-D OSC expert and records that successful action sequence.  It then
-solves Er by unloading B, unloading A, and finally moving S under the shelf.
+solves Er by unloading B, unloading A, and finally moving S onto the shelf top.
 The companion unchanged-action validator replays each recorded Eb expert
 sequence in Er and requires it to fail safely or activate the chain oracle.
 
@@ -682,7 +682,10 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             failure, middle_error = _push_unload(
                 io,
                 MIDDLE_BODY,
-                np.array([-1.0, 0.0, 0.0]),
+                # B has already cleared the +x side of the stack.  Continue
+                # toward that free table region instead of pushing A back
+                # toward its S support footprint.
+                np.array([1.0, 0.0, 0.0]),
                 close_sign,
                 args,
                 oracle,
@@ -860,7 +863,10 @@ def main():
     parser.add_argument("--position_scale", type=float, default=0.05)
     parser.add_argument("--max_position_command", type=float, default=0.35)
     parser.add_argument("--position_tolerance", type=float, default=0.012)
-    parser.add_argument("--max_waypoint_steps", type=int, default=100)
+    # Task 87 transports the left book roughly 0.55 m to the shelf.  The
+    # native feasibility probe needs about 200 controller steps for this leg;
+    # 100 stops with ~0.105 m still to travel despite monotonic convergence.
+    parser.add_argument("--max_waypoint_steps", type=int, default=220)
     parser.add_argument("--max_pose_steps", type=int, default=120)
     parser.add_argument("--orientation_tolerance_deg", type=float, default=10.0)
     parser.add_argument("--rotation_scale", type=float, default=0.20)

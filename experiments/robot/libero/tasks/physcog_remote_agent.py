@@ -74,6 +74,22 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a3_support_chain/eb_replay.csv",
         ),
     ),
+    ("l3a3", "safe_reference_pilot"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a3_support_chain.sh",
+            "safe_reference_pilot",
+        ),
+        artifacts=(
+            "experiments/logs/l3a3_support_chain/safe_reference.md",
+            "experiments/logs/l3a3_support_chain/safe_reference.csv",
+            "experiments/logs/l3a3_support_chain/safe_reference_trajectories",
+            "experiments/logs/l3a3_support_chain/safe_reference_videos",
+            "experiments/logs/l3a3_support_chain/eb_expert.csv",
+            "experiments/logs/l3a3_support_chain/eb_expert_trajectories",
+            "experiments/logs/l3a3_support_chain/eb_expert_videos",
+        ),
+    ),
     ("l3a3", "eb_replay"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a3_support_chain.sh", "replay"),
         count_env="NUM_TRIALS",

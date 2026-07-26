@@ -154,6 +154,11 @@ def test_safe_reference_provides_executable_b_then_a_osc_and_video():
     assert "native_S_suffix_only" in text
     assert '"initial_state_sha256": _state_hash(eb_state)' in text
     assert '"--goal_site", default="wooden_two_layer_shelf_1_top_side"' in text
+    assert '"--max_waypoint_steps", type=int, default=220' in text
+    middle_push = text[middle_call : text.index(
+        '            "middle_unloaded"', middle_call
+    )]
+    assert "np.array([1.0, 0.0, 0.0])" in middle_push
     assert '"task_push_diagnostic": task_diagnostic' in text
     assert "io.advance(" in text
     assert "env.step" in (
@@ -166,6 +171,9 @@ def test_safe_reference_provides_executable_b_then_a_osc_and_video():
     assert "TrajectoryRecorder" in text
     assert '"direct_qpos_edits_after_restore": False' in text
     assert "ec_trajectory_dir" not in text
+    runner = (TASKS / "run_l3a3_support_chain.sh").read_text()
+    assert "safe_reference_pilot()" in runner
+    assert "run_safe_reference_validation 1 1" in runner
 
 
 def test_generator_requires_second_link_collision_ablation():

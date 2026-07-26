@@ -94,6 +94,17 @@ replay_gate() {
 }
 
 safe_reference_gate() {
+  run_safe_reference_validation "${NUM_TRIALS}" 5
+  local eb_source="${EB_TRAJECTORY_DIR:-${LOG_DIR}/eb_expert_trajectories}"
+  python "${TASKS_DIR}/validate_l3a3_action_sequence.py" eb_replay \
+    --bddl "${BDDL}" --eb_states "${EB}" --er_states "${ER}" \
+    --trajectory_dir "${eb_source}" \
+    --out_csv "${LOG_DIR}/eb_replay.csv" --out_report "${LOG_DIR}/eb_replay.md" \
+    --min_episodes 5 --min_eligibility_rate 0.80 --fail_on_invalid
+}
+
+run_safe_reference_validation() {
+  local episode_count="$1" minimum_episodes="$2"
   prepare_reviewed_states
   local eb_source="${EB_TRAJECTORY_DIR:-${LOG_DIR}/eb_expert_trajectories}"
   python "${TASKS_DIR}/validate_l3a3_safe_reference.py" \
@@ -105,12 +116,12 @@ safe_reference_gate() {
     --video_dir "${LOG_DIR}/safe_reference_videos" \
     --out_csv "${LOG_DIR}/safe_reference.csv" \
     --out_report "${LOG_DIR}/safe_reference.md" \
-    --num_states "${NUM_TRIALS}" --fail_on_invalid
-  python "${TASKS_DIR}/validate_l3a3_action_sequence.py" eb_replay \
-    --bddl "${BDDL}" --eb_states "${EB}" --er_states "${ER}" \
-    --trajectory_dir "${eb_source}" \
-    --out_csv "${LOG_DIR}/eb_replay.csv" --out_report "${LOG_DIR}/eb_replay.md" \
-    --min_episodes 5 --min_eligibility_rate 0.80 --fail_on_invalid
+    --num_states "${episode_count}" --min_episodes "${minimum_episodes}" \
+    --fail_on_invalid
+}
+
+safe_reference_pilot() {
+  run_safe_reference_validation 1 1
 }
 
 ec_source() {
@@ -150,6 +161,7 @@ case "${MODE}" in
   eb_source) eb_source ;;
   replay) replay_gate ;;
   safe_reference) safe_reference_gate ;;
+  safe_reference_pilot) safe_reference_pilot ;;
   smoke) smoke ;;
   formal) formal ;;
   status)
@@ -159,5 +171,5 @@ case "${MODE}" in
     [[ -f "${LOG_DIR}/policy_evidence/evidence.json" ]] &&
       rg -n '"status"' "${LOG_DIR}/policy_evidence/evidence.json" || true
     ;;
-  *) echo "Expected generate|prepare_reviewed_states|preview|calibrate|ec_source|eb_source|replay|safe_reference|smoke|formal|status" >&2; exit 2 ;;
+  *) echo "Expected generate|prepare_reviewed_states|preview|calibrate|ec_source|eb_source|replay|safe_reference|safe_reference_pilot|smoke|formal|status" >&2; exit 2 ;;
 esac
