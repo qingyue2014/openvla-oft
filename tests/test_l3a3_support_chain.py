@@ -136,6 +136,8 @@ def test_safe_reference_provides_executable_b_then_a_osc_and_video():
     assert middle_call < text.index("_place_target_under_shelf(", middle_call)
     assert "native_S_suffix_only" in text
     assert '"initial_state_sha256": _state_hash(eb_state)' in text
+    assert "contact_seen = _gripper_contacts_body(io.env, body)" in text
+    assert '"no_gripper_object_contact"' in text
     assert "io.advance(" in text
     assert "env.step" in (
         TASKS / "validate_l3a1_safe_reference.py"

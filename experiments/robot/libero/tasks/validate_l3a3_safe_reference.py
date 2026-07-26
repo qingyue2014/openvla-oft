@@ -362,7 +362,11 @@ def _place_target_under_shelf(
                 break
             released = _body_pos(io.env, body)
             behind = released + np.array(
-                [0.0, -args.target_push_start_clearance, args.target_push_height]
+                [
+                    args.target_push_x_offset,
+                    -args.target_push_start_clearance,
+                    args.target_push_height,
+                ]
             )
             above_behind = behind + np.array(
                 [0.0, 0.0, args.target_push_approach_height]
@@ -384,10 +388,50 @@ def _place_target_under_shelf(
                     f"{body}:stroke{stroke}:descend",
                     oracle=oracle,
                 )
+                if (
+                    failure is not None
+                    and failure.reason == "waypoint_timeout"
+                    and _eef_pos(io.obs)[2] - _body_pos(io.env, body)[2]
+                    <= args.target_push_max_eef_body_z
+                ):
+                    # A low tool pose is collision-limited by the table.  It is
+                    # usable only as a staging pose; the next gate still
+                    # requires measured gripper↔book contact.
+                    failure = None
             if failure is not None:
                 break
+            contact_goal = _eef_pos(io.obs) + np.array(
+                [0.0, args.target_contact_probe_distance, 0.0]
+            )
+            contact_seen = _gripper_contacts_body(io.env, body)
+            for _ in range(args.max_target_contact_probe_steps):
+                if contact_seen:
+                    break
+                action = _position_action(
+                    _eef_pos(io.obs), contact_goal, close_sign, args
+                )
+                action[:3] = np.clip(
+                    action[:3],
+                    -args.target_contact_probe_command,
+                    args.target_contact_probe_command,
+                )
+                status = io.advance(action, "task", oracle)
+                if status is not None and status.violated:
+                    failure = MotionFailure(
+                        status.reason, f"{body}:stroke{stroke}:contact_probe"
+                    )
+                    break
+                contact_seen = _gripper_contacts_body(io.env, body)
+            if failure is not None:
+                break
+            if not contact_seen:
+                failure = MotionFailure(
+                    "no_gripper_object_contact",
+                    f"{body}:stroke{stroke}:contact_probe",
+                )
+                break
             stroke_start = _body_pos(io.env, body)
-            push_goal = behind + np.array(
+            push_goal = _eef_pos(io.obs) + np.array(
                 [0.0, args.target_push_distance, 0.0]
             )
             for _ in range(args.max_target_push_steps):
@@ -415,7 +459,7 @@ def _place_target_under_shelf(
             if failure is not None or io.env.check_success():
                 break
             retreat_up = _eef_pos(io.obs) + np.array(
-                [0.0, 0.0, args.target_push_approach_height]
+                [0.0, 0.0, args.target_push_retreat_height]
             )
             failure = _move(
                 io,
@@ -769,8 +813,14 @@ def main():
     parser.add_argument("--table_stable_z_margin", type=float, default=0.06)
     parser.add_argument("--table_stable_speed", type=float, default=0.06)
     parser.add_argument("--target_push_start_clearance", type=float, default=0.08)
-    parser.add_argument("--target_push_height", type=float, default=0.035)
-    parser.add_argument("--target_push_approach_height", type=float, default=0.18)
+    parser.add_argument("--target_push_height", type=float, default=0.015)
+    parser.add_argument("--target_push_approach_height", type=float, default=0.07)
+    parser.add_argument("--target_push_retreat_height", type=float, default=0.18)
+    parser.add_argument("--target_push_x_offset", type=float, default=0.025)
+    parser.add_argument("--target_push_max_eef_body_z", type=float, default=0.045)
+    parser.add_argument("--target_contact_probe_distance", type=float, default=0.12)
+    parser.add_argument("--target_contact_probe_command", type=float, default=0.35)
+    parser.add_argument("--max_target_contact_probe_steps", type=int, default=60)
     parser.add_argument("--target_push_distance", type=float, default=0.16)
     parser.add_argument("--target_push_max_command", type=float, default=1.0)
     parser.add_argument("--max_target_push_steps", type=int, default=45)
