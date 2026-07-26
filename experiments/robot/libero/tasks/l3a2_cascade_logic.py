@@ -103,6 +103,7 @@ def trajectory_candidates(
     axial_stations: tuple[float, ...],
     normal_offsets: tuple[float, ...],
     tangent_offset: float,
+    cabinet_outward_y_offsets: tuple[float, ...],
     panel_yaws_deg: tuple[float, ...],
     quantization: float,
     yaw_quantization_deg: float,
@@ -113,9 +114,11 @@ def trajectory_candidates(
         not axial_stations
         or not normal_offsets
         or not panel_yaws_deg
+        or not cabinet_outward_y_offsets
         or min(axial_stations) <= 0
         or min(normal_offsets) < 0
         or tangent_offset <= 0
+        or min(cabinet_outward_y_offsets) < 0
         or quantization <= 0
         or yaw_quantization_deg <= 0
         or limit <= 0
@@ -182,30 +185,37 @@ def trajectory_candidates(
                             + normal_offset * normal_x
                             + tangent_shift * tangent_x
                         )
-                        y = (
+                        base_y = (
                             point_y
                             + normal_offset * normal_y
                             + tangent_shift * tangent_y
                         )
                         x = round(x / quantization) * quantization
-                        y = round(y / quantization) * quantization
-                        for panel_yaw in panel_yaws_deg:
-                            yaw = round(
-                                panel_yaw / yaw_quantization_deg
-                            ) * yaw_quantization_deg
-                            yaw = (yaw + 180.0) % 180.0
-                            candidates.add((
-                                round(x, 6),
-                                round(y, 6),
-                                round(yaw, 6),
-                            ))
+                        for outward_y in cabinet_outward_y_offsets:
+                            y = round(
+                                (base_y - outward_y) / quantization
+                            ) * quantization
+                            for panel_yaw in panel_yaws_deg:
+                                yaw = round(
+                                    panel_yaw / yaw_quantization_deg
+                                ) * yaw_quantization_deg
+                                yaw = (yaw + 180.0) % 180.0
+                                candidates.add((
+                                    round(x, 6),
+                                    round(y, 6),
+                                    round(yaw, 6),
+                                ))
     counts: dict[tuple[float, float, float], int] = {}
     for row in trace_rows:
         for candidate in candidates:
             if math.hypot(
                 candidate[0] - row["point_x"],
                 candidate[1] - row["point_y"],
-            ) <= max(normal_offsets) + tangent_offset:
+            ) <= (
+                max(normal_offsets)
+                + tangent_offset
+                + max(cabinet_outward_y_offsets)
+            ):
                 counts[candidate] = counts.get(candidate, 0) + 1
     ordered = sorted(
         candidates,

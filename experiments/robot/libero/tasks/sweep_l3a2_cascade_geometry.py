@@ -284,6 +284,9 @@ def run(args: argparse.Namespace) -> str:
             axial_stations=tuple(args.link_axial_stations),
             normal_offsets=tuple(args.path_normal_offsets),
             tangent_offset=args.path_tangent_offset,
+            cabinet_outward_y_offsets=tuple(
+                args.cabinet_outward_y_offsets
+            ),
             panel_yaws_deg=tuple(args.panel_yaws_deg),
             quantization=args.path_quantization,
             yaw_quantization_deg=args.yaw_quantization_deg,
@@ -567,9 +570,15 @@ def main() -> None:
         type=float,
         default=[0.000, 0.008, 0.016],
     )
-    parser.add_argument("--path-tangent-offset", type=float, default=0.020)
+    parser.add_argument("--path-tangent-offset", type=float, default=0.010)
     parser.add_argument(
-        "--panel-yaws-deg", nargs="+", type=float, default=[75, 90, 105]
+        "--cabinet-outward-y-offsets",
+        nargs="+",
+        type=float,
+        default=[0.015, 0.025, 0.035],
+    )
+    parser.add_argument(
+        "--panel-yaws-deg", nargs="+", type=float, default=[85, 90, 95]
     )
     parser.add_argument("--path-quantization", type=float, default=0.005)
     parser.add_argument("--yaw-quantization-deg", type=float, default=5.0)
