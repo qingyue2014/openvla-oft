@@ -28,7 +28,7 @@ from experiments.robot.libero.tasks.l3a3_support_chain_common import (
 
 
 def _episode(path: str) -> int | None:
-    match = re.search(r"_ep(\\d+)\\.npz$", os.path.basename(path))
+    match = re.search(r"_ep(\d+)\.npz$", os.path.basename(path))
     return int(match.group(1)) if match else None
 
 

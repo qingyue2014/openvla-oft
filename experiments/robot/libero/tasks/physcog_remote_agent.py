@@ -60,7 +60,11 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a3_support_chain/safe_reference.csv",
             "experiments/logs/l3a3_support_chain/safe_reference_trajectories",
             "experiments/logs/l3a3_support_chain/safe_reference_videos",
-            "rollouts/libero_90/L3-A3-support-chain-ec-source",
+            "experiments/logs/l3a3_support_chain/eb_expert.csv",
+            "experiments/logs/l3a3_support_chain/eb_expert_trajectories",
+            "experiments/logs/l3a3_support_chain/eb_expert_videos",
+            "experiments/logs/l3a3_support_chain/eb_replay.md",
+            "experiments/logs/l3a3_support_chain/eb_replay.csv",
         ),
     ),
     ("l3a3", "eb_replay"): PhaseSpec(

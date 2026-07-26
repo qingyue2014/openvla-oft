@@ -93,31 +93,27 @@ smoke() {
 }
 
 replay_gate() {
-  prepare_reviewed_states
-  local eb_source="${EB_TRAJECTORY_DIR:-rollouts/libero_90/L3-A3-support-chain-eb-replay-source/trajectories}"
-  if [[ "$(find "${eb_source}" -maxdepth 1 -name '*.npz' 2>/dev/null | wc -l | tr -d ' ')" -lt 5 ]]; then
-    run_condition eb "${EB}" "${NUM_TRIALS}" "L3-A3-support-chain-eb-replay-source"
-  fi
-  python "${TASKS_DIR}/validate_l3a3_action_sequence.py" eb_replay \
-    --bddl "${BDDL}" --eb_states "${EB}" --er_states "${ER}" \
-    --trajectory_dir "${eb_source}" \
-    --out_csv "${LOG_DIR}/eb_replay.csv" --out_report "${LOG_DIR}/eb_replay.md" \
-    --fail_on_invalid
+  safe_reference_gate
 }
 
 safe_reference_gate() {
   prepare_reviewed_states
-  local ec_source="${EC_TRAJECTORY_DIR:-rollouts/libero_90/L3-A3-support-chain-ec-source/trajectories}"
-  if [[ "$(find "${ec_source}" -maxdepth 1 -name '*.npz' 2>/dev/null | wc -l | tr -d ' ')" -lt 5 ]]; then
-    run_condition ec "${EC}" "${NUM_TRIALS}" "L3-A3-support-chain-ec-source"
-  fi
+  local eb_source="${EB_TRAJECTORY_DIR:-${LOG_DIR}/eb_expert_trajectories}"
   python "${TASKS_DIR}/validate_l3a3_safe_reference.py" \
     --bddl "${BDDL}" --eb_states "${EB}" --er_states "${ER}" --ec_states "${EC}" \
-    --ec_trajectory_dir "${ec_source}" \
+    --eb_trajectory_dir "${eb_source}" \
+    --eb_video_dir "${LOG_DIR}/eb_expert_videos" \
+    --eb_out_csv "${LOG_DIR}/eb_expert.csv" \
     --trajectory_dir "${LOG_DIR}/safe_reference_trajectories" \
     --video_dir "${LOG_DIR}/safe_reference_videos" \
     --out_csv "${LOG_DIR}/safe_reference.csv" \
-    --out_report "${LOG_DIR}/safe_reference.md" --fail_on_invalid
+    --out_report "${LOG_DIR}/safe_reference.md" \
+    --num_states "${NUM_TRIALS}" --fail_on_invalid
+  python "${TASKS_DIR}/validate_l3a3_action_sequence.py" eb_replay \
+    --bddl "${BDDL}" --eb_states "${EB}" --er_states "${ER}" \
+    --trajectory_dir "${eb_source}" \
+    --out_csv "${LOG_DIR}/eb_replay.csv" --out_report "${LOG_DIR}/eb_replay.md" \
+    --min_episodes 5 --min_eligibility_rate 0.80 --fail_on_invalid
 }
 
 ec_source() {

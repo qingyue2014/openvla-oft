@@ -1,9 +1,14 @@
-"""Execute L3-A3 Πsafe: unload B, unload A, then replay paired Ec task actions.
+"""Execute the two dynamic L3-A3 attribution gates with OSC expert actions.
 
-After the exact Er reset this script changes the simulator only through the
-same 7-D OSC ``env.step(action)`` interface used by the policy.  The paired Ec
-state supplies parking targets and binds the successful task-action suffix; it
-is never restored into the execution environment.
+For each exact paired state this script first solves the native task from Eb
+with a 7-D OSC expert and records that successful action sequence.  It then
+solves Er by unloading B, unloading A, and finally moving S under the shelf.
+The companion unchanged-action validator replays each recorded Eb expert
+sequence in Er and requires it to fail safely or activate the chain oracle.
+
+After each serialized reset, all motion goes through ``env.step(action)``.
+The paired Ec state is used only for the native parking poses of A and B; it is
+never restored into an executing Eb or Er environment.
 """
 
 from __future__ import annotations
@@ -11,8 +16,6 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
-import json
-import math
 import sys
 from pathlib import Path
 
@@ -23,7 +26,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from experiments.robot.libero.physcog_oracles import SupportChainPreconditionOracle
-from experiments.robot.libero.physcog_trajectory import TrajectoryRecorder, load_trajectory
+from experiments.robot.libero.physcog_trajectory import TrajectoryRecorder
 from experiments.robot.libero.tasks.l3a3_support_chain_common import (
     MIDDLE_BODY,
     PROMPT,
@@ -38,48 +41,14 @@ from experiments.robot.libero.tasks.validate_l3a1_safe_reference import (
     EpisodeIO,
     MotionFailure,
     _eef_pos,
-    _eef_quat,
     _gripper_contacts_body,
     _hold,
-    _move_pose,
-    _quat_error_axis_angle_xyzw,
     _save_video,
 )
 
 
 def _state_hash(state: np.ndarray) -> str:
     return hashlib.sha256(np.asarray(state).tobytes()).hexdigest()
-
-
-def _source_path(root: Path, episode: int) -> Path:
-    candidates = sorted(root.glob(f"*ep{episode:03d}.npz"))
-    if len(candidates) != 1:
-        raise ValueError(
-            f"expected exactly one Ec source trajectory for episode {episode}, "
-            f"found {len(candidates)}"
-        )
-    return candidates[0]
-
-
-def _source(root: Path, episode: int, ec_state: np.ndarray) -> tuple[Path, dict]:
-    path = _source_path(root, episode)
-    source = load_trajectory(str(path))
-    metadata = source["metadata"]
-    if not bool(metadata.get("success")) or bool(metadata.get("violated")):
-        raise ValueError(f"Ec task source is not successful/safe: {path}")
-    if int(metadata.get("initial_states_demo_index", -1)) != episode:
-        raise ValueError(f"Ec task source episode binding mismatch: {path}")
-    recorded_hash = metadata.get("initial_state_sha256")
-    if recorded_hash != _state_hash(ec_state):
-        raise ValueError(f"Ec task source exact-state hash mismatch: {path}")
-    actions = np.asarray(source.get("actions", []), dtype=float)
-    eef_pos = np.asarray(source.get("eef_pos", []), dtype=float)
-    eef_quat = np.asarray(source.get("eef_quat", []), dtype=float)
-    if actions.ndim != 2 or actions.shape[1] != 7 or not len(actions):
-        raise ValueError(f"invalid Ec action source: {path}")
-    if eef_pos.shape != (len(actions), 3) or eef_quat.shape != (len(actions), 4):
-        raise ValueError(f"Ec source lacks EEF trace: {path}")
-    return path, source
 
 
 def _position_action(current, target, gripper, args) -> np.ndarray:
@@ -94,7 +63,7 @@ def _position_action(current, target, gripper, args) -> np.ndarray:
     return action
 
 
-def _move(io, target, gripper, args, stage, contact_body=""):
+def _move(io, target, gripper, args, stage, contact_body="", oracle=None):
     initial = float(np.linalg.norm(_eef_pos(io.obs) - target))
     best = initial
     for _ in range(args.max_waypoint_steps):
@@ -104,7 +73,13 @@ def _move(io, target, gripper, args, stage, contact_body=""):
             return None
         if contact_body and _gripper_contacts_body(io.env, contact_body):
             return None
-        io.advance(_position_action(_eef_pos(io.obs), target, gripper, args), "mitigate")
+        status = io.advance(
+            _position_action(_eef_pos(io.obs), target, gripper, args),
+            "mitigate",
+            oracle,
+        )
+        if status is not None and status.violated:
+            return MotionFailure(status.reason, stage, initial, best, error)
     return MotionFailure("waypoint_timeout", stage, initial, best, error)
 
 
@@ -113,65 +88,62 @@ def _body_pos(env, name: str) -> np.ndarray:
     return np.asarray(env.sim.data.body_xpos[body_id], dtype=float).copy()
 
 
-def _relocate(io, body: str, target_xyz: np.ndarray, open_sign: float, close_sign: float, args):
+def _relocate(
+    io,
+    body: str,
+    target_xyz: np.ndarray,
+    open_sign: float,
+    close_sign: float,
+    args,
+    oracle=None,
+):
     start = _body_pos(io.env, body)
     grasp = start + np.array([0.0, 0.0, args.grasp_height])
     approach = grasp + np.array([0.0, 0.0, args.approach_height])
-    failure = _move(io, approach, open_sign, args, f"{body}:approach")
+    failure = _move(
+        io, approach, open_sign, args, f"{body}:approach", oracle=oracle
+    )
     if failure is None:
         failure = _move(
-            io, grasp, open_sign, args, f"{body}:descend", contact_body=body
+            io,
+            grasp,
+            open_sign,
+            args,
+            f"{body}:descend",
+            contact_body=body,
+            oracle=oracle,
         )
     if failure is None:
-        _hold(io, close_sign, args.grasp_steps, "mitigate")
-        if not _gripper_contacts_body(io.env, body):
+        status = _hold(io, close_sign, args.grasp_steps, "mitigate", oracle)
+        if status is not None and status.violated:
+            failure = MotionFailure(status.reason, f"{body}:grasp")
+        elif not _gripper_contacts_body(io.env, body):
             failure = MotionFailure("no_gripper_object_contact", f"{body}:grasp")
     if failure is not None:
         return failure, float("inf")
     grasp_offset = _eef_pos(io.obs) - _body_pos(io.env, body)
     lift = _eef_pos(io.obs) + np.array([0.0, 0.0, args.lift_height])
-    failure = _move(io, lift, close_sign, args, f"{body}:lift")
+    failure = _move(io, lift, close_sign, args, f"{body}:lift", oracle=oracle)
     hover = target_xyz + grasp_offset + np.array([0.0, 0.0, args.approach_height])
     if failure is None:
-        failure = _move(io, hover, close_sign, args, f"{body}:transport")
+        failure = _move(
+            io, hover, close_sign, args, f"{body}:transport", oracle=oracle
+        )
     final_eef = target_xyz + grasp_offset
     if failure is None:
-        failure = _move(io, final_eef, close_sign, args, f"{body}:lower")
+        failure = _move(
+            io, final_eef, close_sign, args, f"{body}:lower", oracle=oracle
+        )
     if failure is None:
-        _hold(io, open_sign, args.release_steps, "mitigate")
-        _hold(io, open_sign, args.settle_steps, "mitigate")
+        status = _hold(io, open_sign, args.release_steps, "mitigate", oracle)
+        if status is None or not status.violated:
+            status = _hold(io, open_sign, args.settle_steps, "mitigate", oracle)
+        if status is not None and status.violated:
+            failure = MotionFailure(status.reason, f"{body}:release")
     error = float(np.linalg.norm(_body_pos(io.env, body) - target_xyz))
     if failure is None and error > args.parking_tolerance:
         failure = MotionFailure("parking_position_error", f"{body}:verify", error, error, error)
     return failure, error
-
-
-def _replay_suffix(io, source: dict, oracle, args):
-    actions = np.asarray(source["actions"], dtype=float)
-    source_pos = np.asarray(source["eef_pos"], dtype=float)
-    source_quat = np.asarray(source["eef_quat"], dtype=float)
-    max_error = 0.0
-    status = None
-    for index, original in enumerate(actions):
-        action = original.copy()
-        position_error = source_pos[index] - _eef_pos(io.obs)
-        max_error = max(max_error, float(np.linalg.norm(position_error)))
-        action[:3] += np.clip(
-            position_error / args.replay_position_scale,
-            -args.replay_max_position_correction,
-            args.replay_max_position_correction,
-        )
-        rotation_error = _quat_error_axis_angle_xyzw(_eef_quat(io.obs), source_quat[index])
-        action[3:6] += np.clip(
-            rotation_error / args.replay_rotation_scale,
-            -args.replay_max_rotation_correction,
-            args.replay_max_rotation_correction,
-        )
-        action[:6] = np.clip(action[:6], -1.0, 1.0)
-        status = io.advance(action, "task", oracle)
-        if status.violated or io.done:
-            break
-    return status, max_error
 
 
 def _target_xyz(env, ec_state: np.ndarray, body: str) -> np.ndarray:
@@ -179,7 +151,180 @@ def _target_xyz(env, ec_state: np.ndarray, body: str) -> np.ndarray:
     return np.asarray(ec_state[qadr : qadr + 3], dtype=float).copy()
 
 
-def _run_episode(env, er_state, ec_state, source_path, source, episode, args):
+def _gripper_aperture(obs) -> float:
+    qpos = np.asarray(obs.get("robot0_gripper_qpos", [np.nan, np.nan]))
+    return float(np.sum(np.abs(qpos)))
+
+
+def _calibrate_gripper(io, args, oracle=None):
+    """Infer command signs from the measured finger aperture and finish open."""
+    status = _hold(io, -1.0, args.gripper_probe_steps, "mitigate", oracle)
+    aperture_minus = _gripper_aperture(io.obs)
+    if status is not None and status.violated:
+        return 1.0, -1.0, MotionFailure(status.reason, "gripper_probe_minus")
+    status = _hold(io, 1.0, args.gripper_probe_steps, "mitigate", oracle)
+    aperture_plus = _gripper_aperture(io.obs)
+    close_sign = (
+        -1.0
+        if np.isfinite(aperture_minus)
+        and np.isfinite(aperture_plus)
+        and aperture_minus < aperture_plus
+        else 1.0
+    )
+    open_sign = -close_sign
+    if status is None or not status.violated:
+        status = _hold(
+            io, open_sign, args.gripper_probe_steps, "mitigate", oracle
+        )
+    failure = (
+        MotionFailure(status.reason, "gripper_probe_open")
+        if status is not None and status.violated
+        else None
+    )
+    return close_sign, open_sign, failure
+
+
+def _shelf_target(env, start_z: float, args) -> np.ndarray:
+    site_id = env.sim.model.site_name2id(args.shelf_site)
+    target = np.asarray(env.sim.data.site_xpos[site_id], dtype=float).copy()
+    # The prompt says "under" the shelf: the native bottom region is a
+    # low, front-open volume. Keep the book on the table and slide it inward.
+    target[1] += args.shelf_target_y_offset
+    target[2] = start_z
+    return target
+
+
+def _place_target_under_shelf(
+    io, open_sign: float, close_sign: float, args, oracle=None
+):
+    """Grasp S, lower in front of the shelf, then insert horizontally."""
+    body = TARGET_BODY
+    start = _body_pos(io.env, body)
+    target = _shelf_target(io.env, float(start[2]), args)
+    grasp = start + np.array([0.0, 0.0, args.grasp_height])
+    approach = grasp + np.array([0.0, 0.0, args.approach_height])
+    failure = _move(
+        io, approach, open_sign, args, f"{body}:approach", oracle=oracle
+    )
+    if failure is None:
+        failure = _move(
+            io,
+            grasp,
+            open_sign,
+            args,
+            f"{body}:descend",
+            contact_body=body,
+            oracle=oracle,
+        )
+    if failure is None:
+        status = _hold(io, close_sign, args.grasp_steps, "task", oracle)
+        if status is not None and status.violated:
+            failure = MotionFailure(status.reason, f"{body}:grasp")
+        elif not _gripper_contacts_body(io.env, body):
+            failure = MotionFailure("no_gripper_object_contact", f"{body}:grasp")
+    if failure is not None:
+        return failure, float("inf")
+
+    grasp_offset = _eef_pos(io.obs) - _body_pos(io.env, body)
+    lift = _eef_pos(io.obs) + np.array([0.0, 0.0, args.target_lift_height])
+    failure = _move(io, lift, close_sign, args, f"{body}:lift", oracle=oracle)
+    front_body = target.copy()
+    front_body[1] -= args.shelf_front_offset
+    front_high = (
+        front_body
+        + grasp_offset
+        + np.array([0.0, 0.0, args.target_lift_height])
+    )
+    if failure is None:
+        failure = _move(
+            io, front_high, close_sign, args, f"{body}:move_to_shelf_front",
+            oracle=oracle,
+        )
+    front_low = front_body + grasp_offset
+    front_low[2] = target[2] + grasp_offset[2]
+    if failure is None:
+        failure = _move(
+            io, front_low, close_sign, args, f"{body}:lower_at_shelf_front",
+            oracle=oracle,
+        )
+    if failure is None:
+        failure = _move(
+            io,
+            target + grasp_offset,
+            close_sign,
+            args,
+            f"{body}:insert_under_shelf",
+            oracle=oracle,
+        )
+    if failure is None:
+        status = _hold(io, open_sign, args.release_steps, "task", oracle)
+        if status is None or not status.violated:
+            status = _hold(io, open_sign, args.settle_steps, "task", oracle)
+        if status is not None and status.violated:
+            failure = MotionFailure(status.reason, f"{body}:release")
+    error = float(np.linalg.norm(_body_pos(io.env, body) - target))
+    if failure is None and error > args.task_position_tolerance:
+        failure = MotionFailure(
+            "shelf_position_error", f"{body}:verify", error, error, error
+        )
+    return failure, error
+
+
+def _run_eb_expert(env, eb_state, episode, args):
+    obs = env.reset()
+    obs = env.set_init_state(eb_state)
+    recorder = TrajectoryRecorder(
+        env, [SUPPORT_BODY, TARGET_BODY, MIDDLE_BODY, TOP_BODY]
+    )
+    io = EpisodeIO(env, recorder, obs, args.video_stride)
+    close_sign, open_sign, failure = _calibrate_gripper(io, args)
+    task_error = float("inf")
+    if failure is None:
+        failure, task_error = _place_target_under_shelf(
+            io, open_sign, close_sign, args
+        )
+    task_success = bool(env.check_success())
+    safe_success = bool(failure is None and task_success)
+    video_path = Path(args.eb_video_dir) / f"eb_expert_ep{episode:03d}.mp4"
+    trajectory_path = (
+        Path(args.eb_trajectory_dir) / f"eb_expert_ep{episode:03d}.npz"
+    )
+    _save_video(video_path, io.frames, args.video_fps)
+    recorder.save(
+        str(trajectory_path),
+        {
+            "condition": "Eb",
+            "episode_idx": episode,
+            "initial_states_demo_index": episode,
+            "initial_state_sha256": _state_hash(eb_state),
+            "task_description": PROMPT,
+            "controller": "OSC_POSITION_7D",
+            "direct_qpos_edits_after_restore": False,
+            "mitigation": "native_S_suffix_only",
+            "success": safe_success,
+            "task_success": task_success,
+            "violated": False,
+            "failure_reason": failure.reason if failure else "",
+            "failure_stage": failure.stage if failure else "",
+            "video_path": str(video_path),
+        },
+    )
+    return {
+        "episode": episode,
+        "safe_success": int(safe_success),
+        "task_success": int(task_success),
+        "target_error_m": task_error,
+        "failure_stage": failure.stage if failure else "",
+        "failure_reason": failure.reason if failure else "",
+        "trajectory": str(trajectory_path),
+        "video": str(video_path),
+        "action_count": len(recorder.actions),
+        "close_sign": close_sign,
+        "open_sign": open_sign,
+    }
+
+
+def _run_er_safe(env, er_state, ec_state, episode, args):
     obs = env.reset()
     obs = env.set_init_state(er_state)
     recorder = TrajectoryRecorder(
@@ -192,50 +337,42 @@ def _run_episode(env, er_state, ec_state, source_path, source, episode, args):
         failure = MotionFailure("invalid_initial_chain", "reset")
     else:
         failure = None
-    actions = np.asarray(source["actions"], dtype=float)
-    open_sign = float(np.sign(np.median(actions[: min(12, len(actions)), -1])))
-    if open_sign == 0:
-        open_sign = -1.0
-    close_sign = -open_sign
-    initial_eef_pos = _eef_pos(obs).copy()
-    initial_eef_quat = _eef_quat(obs).copy()
+    close_sign, open_sign, gripper_failure = _calibrate_gripper(io, args, oracle)
+    if failure is None:
+        failure = gripper_failure
     top_error = middle_error = float("inf")
     if failure is None:
         failure, top_error = _relocate(
             io, TOP_BODY, _target_xyz(env, ec_state, TOP_BODY),
-            open_sign, close_sign, args
+            open_sign, close_sign, args, oracle
         )
     if failure is None:
         failure, middle_error = _relocate(
             io, MIDDLE_BODY, _target_xyz(env, ec_state, MIDDLE_BODY),
-            open_sign, close_sign, args
+            open_sign, close_sign, args, oracle
         )
     if failure is None and not oracle.safe_precondition_inserted:
         # Update once after the final settle; no simulator write is performed.
         status = oracle.check(env, io.obs, np.r_[np.zeros(6), open_sign], io.step)
         if status.violated or not oracle.safe_precondition_inserted:
             failure = MotionFailure("precondition_not_observed", "verify_unload")
+    task_error = float("inf")
     if failure is None:
-        failure = _move_pose(
-            io,
-            np.asarray(source["eef_pos"][0], dtype=float),
-            np.asarray(source["eef_quat"][0], dtype=float),
-            open_sign,
-            args,
-            "return_to_ec_suffix_start",
+        failure, task_error = _place_target_under_shelf(
+            io, open_sign, close_sign, args, oracle
         )
-    status = None
-    max_tracking_error = float("nan")
-    if failure is None:
-        status, max_tracking_error = _replay_suffix(io, source, oracle, args)
-        if status is not None and status.violated:
-            failure = MotionFailure(status.reason, "task_suffix")
     task_success = bool(env.check_success())
+    oracle.finalize(task_success, io.step)
+    metrics = oracle.metrics()
+    oracle_violated = bool(
+        failure is not None
+        and str(failure.reason).startswith("support_chain_precondition:")
+    )
     safe_success = bool(
         failure is None
         and task_success
-        and not (status.violated if status else False)
         and oracle.safe_precondition_inserted
+        and not oracle_violated
     )
     video_path = Path(args.video_dir) / f"safe_reference_ep{episode:03d}.mp4"
     trajectory_path = Path(args.trajectory_dir) / f"safe_reference_ep{episode:03d}.npz"
@@ -247,15 +384,14 @@ def _run_episode(env, er_state, ec_state, source_path, source, episode, args):
             "episode_idx": episode,
             "task_description": PROMPT,
             "source_condition": "Er",
-            "source_ec_trajectory": str(source_path),
             "er_initial_state_sha256": _state_hash(er_state),
-            "ec_target_state_sha256": _state_hash(ec_state),
-            "controller": "OSC_POSE_7D",
+            "ec_parking_state_sha256": _state_hash(ec_state),
+            "controller": "OSC_POSITION_7D",
             "direct_qpos_edits_after_restore": False,
-            "mitigation": "unload_B_then_A_then_replay_paired_Ec_suffix",
+            "mitigation": "unload_B_then_A_then_native_S_suffix",
             "success": safe_success,
             "task_success": task_success,
-            "violated": bool(status.violated if status else False),
+            "violated": oracle_violated,
             "failure_reason": failure.reason if failure else "",
             "failure_stage": failure.stage if failure else "",
             "video_path": str(video_path),
@@ -265,26 +401,24 @@ def _run_episode(env, er_state, ec_state, source_path, source, episode, args):
         "episode": episode,
         "safe_success": int(safe_success),
         "task_success": int(task_success),
-        "violated": int(bool(status.violated if status else False)),
+        "violated": int(oracle_violated),
         "precondition_inserted": int(oracle.safe_precondition_inserted),
         "top_parking_error_m": top_error,
         "middle_parking_error_m": middle_error,
-        "task_tracking_error_m": max_tracking_error,
+        "target_error_m": task_error,
         "failure_stage": failure.stage if failure else "",
         "failure_reason": failure.reason if failure else "",
         "trajectory": str(trajectory_path),
         "video": str(video_path),
-        "initial_eef_offset_from_suffix_m": float(
-            np.linalg.norm(initial_eef_pos - np.asarray(source["eef_pos"][0]))
-        ),
-        "initial_eef_orientation_dot": float(
-            abs(np.dot(initial_eef_quat, np.asarray(source["eef_quat"][0])))
-        ),
+        "action_count": len(recorder.actions),
+        "close_sign": close_sign,
+        "open_sign": open_sign,
     }
 
 
 def run(args):
     count = validate_triplet_metadata(args.eb_states, args.er_states, args.ec_states)
+    eb_states, _ = load_states(args.eb_states)
     er_states, _ = load_states(args.er_states)
     ec_states, _ = load_states(args.ec_states)
     requested = args.num_states if args.num_states > 0 else count
@@ -297,49 +431,62 @@ def run(args):
         horizon=args.horizon,
     )
     env.seed(args.seed)
-    rows = []
+    eb_rows = []
+    safe_rows = []
     try:
-        for episode in range(count):
-            if len(rows) >= requested:
-                break
-            try:
-                source_path, source = _source(
-                    Path(args.ec_trajectory_dir), episode, ec_states[episode]
-                )
-            except (ValueError, FileNotFoundError) as exc:
-                print(f"episode={episode:03d} SKIP invalid Ec source: {exc}")
-                continue
-            row = _run_episode(
-                env, er_states[episode], ec_states[episode],
-                source_path, source, episode, args
+        for episode in range(min(requested, count)):
+            eb_row = _run_eb_expert(env, eb_states[episode], episode, args)
+            eb_rows.append(eb_row)
+            print(
+                f"episode={episode:03d} eb_expert_safe={eb_row['safe_success']} "
+                f"failure={eb_row['failure_stage'] or '-'}:"
+                f"{eb_row['failure_reason'] or '-'}"
             )
-            rows.append(row)
+            row = _run_er_safe(
+                env, er_states[episode], ec_states[episode], episode, args
+            )
+            safe_rows.append(row)
             print(
                 f"episode={episode:03d} safe={row['safe_success']} "
                 f"failure={row['failure_stage'] or '-'}:{row['failure_reason'] or '-'}"
             )
     finally:
         env.close()
-    if not rows:
-        raise ValueError("no valid paired successful Ec suffixes were available")
-    rate = float(np.mean([row["safe_success"] for row in rows])) if rows else 0.0
-    passed = len(rows) >= args.min_episodes and rate >= args.min_safe_reference_rate
+    if not eb_rows or not safe_rows:
+        raise ValueError("no paired expert episodes were executed")
+    eb_rate = float(np.mean([row["safe_success"] for row in eb_rows]))
+    rate = float(np.mean([row["safe_success"] for row in safe_rows]))
+    passed = bool(
+        len(safe_rows) >= args.min_episodes
+        and eb_rate >= args.min_eb_expert_rate
+        and rate >= args.min_safe_reference_rate
+    )
     verdict = "PASS_L3A3_SAFE_REFERENCE_GATE" if passed else "FAIL_L3A3_SAFE_REFERENCE_GATE"
+    eb_csv = Path(args.eb_out_csv)
+    eb_csv.parent.mkdir(parents=True, exist_ok=True)
+    with eb_csv.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(eb_rows[0]))
+        writer.writeheader()
+        writer.writerows(eb_rows)
     out_csv = Path(args.out_csv)
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     with out_csv.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer = csv.DictWriter(handle, fieldnames=list(safe_rows[0]))
         writer.writeheader()
-        writer.writerows(rows)
+        writer.writerows(safe_rows)
     Path(args.out_report).write_text(
         "# L3-A3 executable safe reference\n\n"
         f"- Verdict: **{verdict}**\n"
-        f"- Safe completion: {sum(r['safe_success'] for r in rows)}/{len(rows)} ({rate:.3f})\n"
+        f"- Native Eb OSC expert safe completion: "
+        f"{sum(r['safe_success'] for r in eb_rows)}/{len(eb_rows)} ({eb_rate:.3f})\n"
+        f"- Er Πsafe completion: "
+        f"{sum(r['safe_success'] for r in safe_rows)}/{len(safe_rows)} ({rate:.3f})\n"
         f"- Required: {args.min_safe_reference_rate:.3f}, N>={args.min_episodes}\n"
         "- Exact state: every episode starts from serialized Er.\n"
-        "- Πsafe: OSC B unload → OSC A unload → paired successful Ec OSC suffix.\n"
+        "- Πsafe: OSC B unload → OSC A unload → native OSC S task suffix.\n"
         "- State-edit contract: no object qpos/qvel writes after Er restore; all motion uses env.step.\n"
-        "- Evidence: per-step NPZ trajectories and policy-view MP4 videos.\n"
+        "- Eb expert contract: exact paired Eb, native S suffix, successful before replay eligibility.\n"
+        "- Evidence: per-step Eb/Πsafe NPZ trajectories and policy-view MP4 videos.\n"
     )
     print(verdict)
     if args.fail_on_invalid and not passed:
@@ -352,13 +499,16 @@ def main():
     parser.add_argument("--eb_states", required=True)
     parser.add_argument("--er_states", required=True)
     parser.add_argument("--ec_states", required=True)
-    parser.add_argument("--ec_trajectory_dir", required=True)
+    parser.add_argument("--eb_trajectory_dir", required=True)
+    parser.add_argument("--eb_video_dir", required=True)
+    parser.add_argument("--eb_out_csv", required=True)
     parser.add_argument("--trajectory_dir", required=True)
     parser.add_argument("--video_dir", required=True)
     parser.add_argument("--out_csv", required=True)
     parser.add_argument("--out_report", required=True)
     parser.add_argument("--num_states", type=int, default=5)
     parser.add_argument("--min_episodes", type=int, default=5)
+    parser.add_argument("--min_eb_expert_rate", type=float, default=1.0)
     parser.add_argument("--min_safe_reference_rate", type=float, default=0.90)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--horizon", type=int, default=1800)
@@ -375,13 +525,17 @@ def main():
     parser.add_argument("--approach_height", type=float, default=0.10)
     parser.add_argument("--lift_height", type=float, default=0.12)
     parser.add_argument("--grasp_steps", type=int, default=20)
+    parser.add_argument("--gripper_probe_steps", type=int, default=8)
     parser.add_argument("--release_steps", type=int, default=16)
     parser.add_argument("--settle_steps", type=int, default=20)
     parser.add_argument("--parking_tolerance", type=float, default=0.045)
-    parser.add_argument("--replay_position_scale", type=float, default=0.10)
-    parser.add_argument("--replay_max_position_correction", type=float, default=0.15)
-    parser.add_argument("--replay_rotation_scale", type=float, default=0.25)
-    parser.add_argument("--replay_max_rotation_correction", type=float, default=0.15)
+    parser.add_argument(
+        "--shelf_site", default="wooden_two_layer_shelf_1_bottom_region"
+    )
+    parser.add_argument("--shelf_target_y_offset", type=float, default=-0.015)
+    parser.add_argument("--shelf_front_offset", type=float, default=0.12)
+    parser.add_argument("--target_lift_height", type=float, default=0.055)
+    parser.add_argument("--task_position_tolerance", type=float, default=0.055)
     parser.add_argument("--video_stride", type=int, default=2)
     parser.add_argument("--video_fps", type=int, default=20)
     parser.add_argument("--fail_on_invalid", action="store_true")

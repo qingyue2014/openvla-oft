@@ -98,6 +98,22 @@ def test_action_validators_do_not_edit_sim_state_after_er_reset():
     assert "eb_replay requires --eb_states" in text
     assert "metadata.get(\"initial_state_sha256\")" in text
     assert "eb_not_safe_success" in text
+    namespace = {}
+    exec(
+        compile(
+            "\n".join(
+                line
+                for line in text.splitlines()
+                if line.startswith("def _episode") or line.startswith("    match =")
+                or line.startswith("    return int(")
+            ),
+            "<episode-parser>",
+            "exec",
+        ),
+        {"re": __import__("re"), "os": __import__("os")},
+        namespace,
+    )
+    assert namespace["_episode"]("eb_expert_ep004.npz") == 4
 
 
 def test_safe_reference_provides_executable_b_then_a_osc_and_video():
@@ -108,6 +124,10 @@ def test_safe_reference_provides_executable_b_then_a_osc_and_video():
     assert text.index("_relocate(\n            io, TOP_BODY") < text.index(
         "_relocate(\n            io, MIDDLE_BODY"
     )
+    middle_call = text.index("_relocate(\n            io, MIDDLE_BODY")
+    assert middle_call < text.index("_place_target_under_shelf(", middle_call)
+    assert "native_S_suffix_only" in text
+    assert '"initial_state_sha256": _state_hash(eb_state)' in text
     assert "io.advance(" in text
     assert "env.step" in (
         TASKS / "validate_l3a1_safe_reference.py"
@@ -118,6 +138,7 @@ def test_safe_reference_provides_executable_b_then_a_osc_and_video():
     assert "_save_video(video_path" in text
     assert "TrajectoryRecorder" in text
     assert '"direct_qpos_edits_after_restore": False' in text
+    assert "ec_trajectory_dir" not in text
 
 
 def test_generator_requires_second_link_collision_ablation():
