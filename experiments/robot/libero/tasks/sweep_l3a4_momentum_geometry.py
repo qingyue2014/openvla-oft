@@ -252,16 +252,15 @@ def _run_condition(env, state, drawer_body, drawer_qadr, condition, args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
-    # The compiled closed leading face is +0.10931 m from the drawer-body
-    # origin along +y. A's 30 mm radius plus a 2-5 mm clearance gives the
-    # physically derived center band below. Tight, non-overlapping downstream
-    # gaps test whether the opening impulse transfers before the drawer can
-    # directly reach B/C.
+    # A is now a stable box with 22 mm y half-extent, replacing the sphere
+    # that was pinched under the drawer. The compiled closed leading face is
+    # +0.10931 m from the drawer-body origin, so these A centers add 2-5 mm
+    # clearance. AB and BC use their exact horizontal half-extents plus 1-3 mm.
     parser.add_argument("--a_dx", default="0.000")
-    parser.add_argument("--a_dy", default="0.142,0.144")
+    parser.add_argument("--a_dy", default="0.133,0.134,0.136")
     parser.add_argument("--b_dx_from_a", default="0.000")
-    parser.add_argument("--ab_spacing", default="0.056,0.058,0.060")
-    parser.add_argument("--bc_spacing", default="0.038,0.040,0.042")
+    parser.add_argument("--ab_spacing", default="0.047,0.048,0.049")
+    parser.add_argument("--bc_spacing", default="0.037,0.038,0.039")
     parser.add_argument(
         "--trials",
         type=int,

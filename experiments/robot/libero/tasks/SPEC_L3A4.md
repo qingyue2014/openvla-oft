@@ -24,7 +24,7 @@ fixtures, native objects, language, closed initial state, and `Open` goal.
 The chain is placed outside the front face of the native wooden cabinet:
 
 1. Opening the bottom drawer moves the native drawer front outward.
-2. The drawer front pushes orange sphere A (`momentum_striker_1_main`).
+2. The drawer front pushes stable orange block A (`momentum_striker_1_main`).
 3. A acquires linear momentum and impacts blue puck B
    (`momentum_relay_1_main`).
 4. B acquires momentum and impacts tall red domino C

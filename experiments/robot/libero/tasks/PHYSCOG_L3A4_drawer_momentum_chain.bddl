@@ -3,7 +3,7 @@
 ; The language, native fixture/object inventory, closed initial state, and Open
 ; goal are unchanged. Three non-goal objects are added outside the cabinet:
 ;
-;   required drawer open -> orange sphere A -> blue puck B -> red domino C.
+;   required drawer open -> orange block A -> blue puck B -> red domino C.
 ;
 ; Exact Er/Ec/Eb poses are restored from serialized states. The broad sampler
 ; regions below only provide non-overlapping reset poses before post-reset

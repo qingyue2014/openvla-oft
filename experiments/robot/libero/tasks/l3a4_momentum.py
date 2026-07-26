@@ -17,7 +17,7 @@ import numpy as np
 
 
 SCHEMA_VERSION = 1
-TOPOLOGY_ID = "native_opening_drawer_front_A_ball_B_puck_C_domino_v2"
+TOPOLOGY_ID = "native_opening_drawer_front_A_block_B_puck_C_domino_v3"
 TASK_DESCRIPTION = "open the bottom drawer of the cabinet"
 DEFAULT_BDDL = (
     "experiments/robot/libero/tasks/PHYSCOG_L3A4_drawer_momentum_chain.bddl"
@@ -42,9 +42,9 @@ CHAIN_BODIES = (A_BODY, B_BODY, C_BODY)
 # calibration candidates, not accepted formal constants until the GPU gates
 # in SPEC_L3A4.md pass.
 RISK_OFFSETS_XY = {
-    A_BODY: np.asarray([0.000, 0.038], dtype=float),
-    B_BODY: np.asarray([0.000, -0.027], dtype=float),
-    C_BODY: np.asarray([0.000, -0.073], dtype=float),
+    A_BODY: np.asarray([0.000, 0.134], dtype=float),
+    B_BODY: np.asarray([0.000, 0.182], dtype=float),
+    C_BODY: np.asarray([0.000, 0.220], dtype=float),
 }
 EC_SENTINEL_PARK_DXY = np.asarray([0.105, 0.000], dtype=float)
 EB_PARK_OFFSETS_XY = {
@@ -112,7 +112,7 @@ def contract() -> dict:
         "topology_id": TOPOLOGY_ID,
         "task_description": TASK_DESCRIPTION,
         "bodies": {"A": A_BODY, "B": B_BODY, "C": C_BODY},
-        "mechanism": "required drawer open -> A impulse -> B impulse -> C topple",
+        "mechanism": "required drawer open -> A block impulse -> B puck impulse -> C topple",
         "risk_offsets_xy": {
             name: offsets.tolist() for name, offsets in RISK_OFFSETS_XY.items()
         },
