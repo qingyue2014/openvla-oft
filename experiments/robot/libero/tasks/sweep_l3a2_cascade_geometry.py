@@ -174,40 +174,6 @@ def _yaw_distance(first: float, second: float) -> float:
     return abs((first - second + 90.0) % 180.0 - 90.0)
 
 
-def _terminal_mass_arrays(env) -> tuple[list[int], np.ndarray, np.ndarray]:
-    model = env.sim.model
-    root = int(model.body_name2id(TERMINAL_BODY))
-    bodies = {root}
-    changed = True
-    while changed:
-        changed = False
-        for body in range(int(model.nbody)):
-            if (
-                body not in bodies
-                and int(model.body_parentid[body]) in bodies
-            ):
-                bodies.add(body)
-                changed = True
-    indices = sorted(bodies)
-    return (
-        indices,
-        np.asarray(model.body_mass[indices]).copy(),
-        np.asarray(model.body_inertia[indices]).copy(),
-    )
-
-
-def _set_terminal_mass_scale(
-    env,
-    bodies: list[int],
-    base_mass: np.ndarray,
-    base_inertia: np.ndarray,
-    scale: float,
-) -> None:
-    env.sim.model.body_mass[bodies] = base_mass * scale
-    env.sim.model.body_inertia[bodies] = base_inertia * scale
-    env.sim.forward()
-
-
 def _cluster(
     rows: list[dict], radius: float, max_yaw_distance_deg: float
 ) -> list[dict]:
@@ -287,9 +253,6 @@ def run(args: argparse.Namespace) -> str:
         )
         for state in eb_states
     ]
-    terminal_bodies, base_body_mass, base_body_inertia = (
-        _terminal_mass_arrays(sim_env)
-    )
     diagnostic_responses = []
     for state, equilibrium in zip(er_states, terminal_equilibria):
         staged = _patch_state(
@@ -360,13 +323,6 @@ def run(args: argparse.Namespace) -> str:
     episode_evidence = []
     try:
         for x, y, yaw_deg, mass_scale in candidates:
-            _set_terminal_mass_scale(
-                sim_env,
-                terminal_bodies,
-                base_body_mass,
-                base_body_inertia,
-                mass_scale,
-            )
             passed = 0
             passive_passed = 0
             reasons = []
@@ -392,11 +348,17 @@ def run(args: argparse.Namespace) -> str:
                     for state in (eb, er, ec)
                 ]
                 passive = [
-                    passive_terminal_gate(sim_env, state)
+                    passive_terminal_gate(
+                        sim_env,
+                        state,
+                        terminal_mass_scale=mass_scale,
+                    )
                     for state in (patched[0], patched[2])
                 ]
                 risk_reset = initial_terminal_clearance_gate(
-                    sim_env, patched[1]
+                    sim_env,
+                    patched[1],
+                    terminal_mass_scale=mass_scale,
                 )
                 min_initial_center_distance = min(
                     min_initial_center_distance,
@@ -431,6 +393,7 @@ def run(args: argparse.Namespace) -> str:
                     args.close_steps,
                     baseline_passive=passive[0],
                     stable_passive=passive[1],
+                    terminal_mass_scale=mass_scale,
                 )
                 risk_timeline = result["risk"]["timeline"]
                 collision_disabled = result["collision_disabled"]
@@ -540,13 +503,6 @@ def run(args: argparse.Namespace) -> str:
                 f"failure={row['failures'] or '-'}"
             )
     finally:
-        _set_terminal_mass_scale(
-            sim_env,
-            terminal_bodies,
-            base_body_mass,
-            base_body_inertia,
-            1.0,
-        )
         sim_env.close()
     trace_payload["candidate_evaluations"] = episode_evidence
     trace_path.write_text(

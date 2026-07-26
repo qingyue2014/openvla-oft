@@ -13,6 +13,7 @@ evaluation.
 | 489727 | 71b00ab | 1/24 panel poses passed passive clearance; 0 cascades | Invalid: sole clear pose began Er in A-B contact |
 | 489736 | a40c033 | 18/24 passed Eb/Ec clearance; 0 cascades | Invalid: all clear poses began Er in A-B contact |
 | 489743 | 400a560 | 24/24 static-clear; A-B contact but no B hazard | Invalid: terminal mass over-damped impact |
+| 489751 | 162e75b | no response change across runtime mass scales | Invalid: env reset rebuilt model after scaling |
 
 Job 489657 established that 26/48 bottle-B poses were passively stable and
 table-only, but the closest dynamic A-B center distances remained about
@@ -44,3 +45,9 @@ occurred, and the A-disabled residual was zero. The strongest B response was
 is therefore over-massed, not geometrically blocked. A calibration-only mass
 sweep scales the compiled terminal mass/inertia at paired poses before any XML
 density is selected; thresholds remain unchanged.
+
+The first runtime mass sweep, job 489751, applied model scaling before
+`env.reset()`, which rebuilt or restored the MuJoCo model and erased the
+calibration. The corrected implementation reapplies mass/inertia
+idempotently after every reset and caches unscaled model values to prevent
+compounding.

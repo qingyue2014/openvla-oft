@@ -144,8 +144,60 @@ def audit_terminal_asset_geoms(env: Any) -> dict[str, Any]:
     return result
 
 
-def _restore(env: Any, state: np.ndarray) -> None:
+def _apply_terminal_dynamics(
+    env: Any,
+    *,
+    mass_scale: float,
+    sliding_friction: float | None,
+) -> None:
+    """Apply idempotent runtime calibration after every environment reset."""
+    model = env.sim.model
+    model_id = id(model)
+    cached = getattr(env, "_l3a2_terminal_dynamics_base", None)
+    if cached is None or cached["model_id"] != model_id:
+        root = int(model.body_name2id(TERMINAL_BODY))
+        bodies = {root}
+        changed = True
+        while changed:
+            changed = False
+            for body in range(int(model.nbody)):
+                if (
+                    body not in bodies
+                    and int(model.body_parentid[body]) in bodies
+                ):
+                    bodies.add(body)
+                    changed = True
+        body_ids = sorted(bodies)
+        geom_ids = sorted(_descendant_geoms(model, TERMINAL_BODY))
+        cached = {
+            "model_id": model_id,
+            "body_ids": body_ids,
+            "geom_ids": geom_ids,
+            "mass": np.asarray(model.body_mass[body_ids]).copy(),
+            "inertia": np.asarray(model.body_inertia[body_ids]).copy(),
+            "friction": np.asarray(model.geom_friction[geom_ids]).copy(),
+        }
+        env._l3a2_terminal_dynamics_base = cached
+    model.body_mass[cached["body_ids"]] = cached["mass"] * mass_scale
+    model.body_inertia[cached["body_ids"]] = cached["inertia"] * mass_scale
+    model.geom_friction[cached["geom_ids"]] = cached["friction"]
+    if sliding_friction is not None:
+        model.geom_friction[cached["geom_ids"], 0] = sliding_friction
+
+
+def _restore(
+    env: Any,
+    state: np.ndarray,
+    *,
+    terminal_mass_scale: float = 1.0,
+    terminal_sliding_friction: float | None = None,
+) -> None:
     env.reset()
+    _apply_terminal_dynamics(
+        env,
+        mass_scale=terminal_mass_scale,
+        sliding_friction=terminal_sliding_friction,
+    )
     env.sim.set_state_from_flattened(np.asarray(state))
     clear_mujoco_replay_transients(env)
     env.sim.forward()
@@ -158,8 +210,15 @@ def _scripted_close(
     steps: int,
     disable_link_after_release: bool = False,
     disable_terminal_collision: bool = False,
+    terminal_mass_scale: float = 1.0,
+    terminal_sliding_friction: float | None = None,
 ) -> dict[str, Any]:
-    _restore(env, state)
+    _restore(
+        env,
+        state,
+        terminal_mass_scale=terminal_mass_scale,
+        terminal_sliding_friction=terminal_sliding_friction,
+    )
     model = env.sim.model
     support = _find_body(env, *DRAWER_BODY_CANDIDATES)
     topology = _resolve_native_component_topology(env, support)
@@ -309,9 +368,16 @@ def passive_terminal_gate(
     steps: int = 220,
     max_displacement: float = 0.003,
     max_tilt_change_deg: float = 3.0,
+    terminal_mass_scale: float = 1.0,
+    terminal_sliding_friction: float | None = None,
 ) -> dict[str, Any]:
     """Reject candidate B poses that are not table-only stable before closure."""
-    _restore(env, state)
+    _restore(
+        env,
+        state,
+        terminal_mass_scale=terminal_mass_scale,
+        terminal_sliding_friction=terminal_sliding_friction,
+    )
     geoms = _descendant_geoms(env.sim.model, TERMINAL_BODY)
     link_geoms = _descendant_geoms(env.sim.model, LINK_BODY)
     initial_pos = _body_pos(env, TERMINAL_BODY).copy()
@@ -359,9 +425,17 @@ def passive_terminal_gate(
 def initial_terminal_clearance_gate(
     env: Any,
     state: np.ndarray,
+    *,
+    terminal_mass_scale: float = 1.0,
+    terminal_sliding_friction: float | None = None,
 ) -> dict[str, Any]:
     """Check Er reset contacts without allowing the intended A fall to begin."""
-    _restore(env, state)
+    _restore(
+        env,
+        state,
+        terminal_mass_scale=terminal_mass_scale,
+        terminal_sliding_friction=terminal_sliding_friction,
+    )
     model = env.sim.model
     terminal_geoms = _descendant_geoms(model, TERMINAL_BODY)
     link_geoms = _descendant_geoms(model, LINK_BODY)
@@ -397,23 +471,43 @@ def validate_episode(
     *,
     baseline_passive: dict[str, Any] | None = None,
     stable_passive: dict[str, Any] | None = None,
+    terminal_mass_scale: float = 1.0,
+    terminal_sliding_friction: float | None = None,
 ) -> dict[str, Any]:
     baseline_passive = (
         baseline_passive
         if baseline_passive is not None
-        else passive_terminal_gate(env, eb)
+        else passive_terminal_gate(
+            env,
+            eb,
+            terminal_mass_scale=terminal_mass_scale,
+            terminal_sliding_friction=terminal_sliding_friction,
+        )
     )
     stable_passive = (
         stable_passive
         if stable_passive is not None
-        else passive_terminal_gate(env, ec)
+        else passive_terminal_gate(
+            env,
+            ec,
+            terminal_mass_scale=terminal_mass_scale,
+            terminal_sliding_friction=terminal_sliding_friction,
+        )
     )
-    risk = _scripted_close(env, er, steps=steps)
+    dynamics = {
+        "terminal_mass_scale": terminal_mass_scale,
+        "terminal_sliding_friction": terminal_sliding_friction,
+    }
+    risk = _scripted_close(env, er, steps=steps, **dynamics)
     intervention = _scripted_close(
-        env, er, steps=steps, disable_link_after_release=True
+        env,
+        er,
+        steps=steps,
+        disable_link_after_release=True,
+        **dynamics,
     )
-    stable = _scripted_close(env, ec, steps=steps)
-    baseline = _scripted_close(env, eb, steps=steps)
+    stable = _scripted_close(env, ec, steps=steps, **dynamics)
+    baseline = _scripted_close(env, eb, steps=steps, **dynamics)
     failures = []
     if not baseline_passive["passed"]:
         failures.append(
