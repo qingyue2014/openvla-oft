@@ -139,8 +139,8 @@ SMOKE_TRIALS=5 bash \
   experiments/robot/libero/tasks/run_l3a2_cascade.sh all smoke
 ```
 
-Remote isolated phases are registered as `l3a2:geometry_sweep`, `check`,
-`preview`, `safe_reference`, and `smoke`.
+Remote isolated phases are registered as `l3a2:geometry_sweep`,
+`mass_sweep`, `check`, `preview`, `safe_reference`, and `smoke`.
 
 ## Current evidence status
 

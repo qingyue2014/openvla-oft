@@ -204,6 +204,7 @@ def test_remote_registry_has_every_preformal_l3a2_gate():
     phases = {phase for scenario, phase in PHASES if scenario == "l3a2"}
     assert phases == {
         "geometry_sweep",
+        "mass_sweep",
         "check",
         "preview",
         "safe_reference",

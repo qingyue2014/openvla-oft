@@ -174,6 +174,40 @@ def _yaw_distance(first: float, second: float) -> float:
     return abs((first - second + 90.0) % 180.0 - 90.0)
 
 
+def _terminal_mass_arrays(env) -> tuple[list[int], np.ndarray, np.ndarray]:
+    model = env.sim.model
+    root = int(model.body_name2id(TERMINAL_BODY))
+    bodies = {root}
+    changed = True
+    while changed:
+        changed = False
+        for body in range(int(model.nbody)):
+            if (
+                body not in bodies
+                and int(model.body_parentid[body]) in bodies
+            ):
+                bodies.add(body)
+                changed = True
+    indices = sorted(bodies)
+    return (
+        indices,
+        np.asarray(model.body_mass[indices]).copy(),
+        np.asarray(model.body_inertia[indices]).copy(),
+    )
+
+
+def _set_terminal_mass_scale(
+    env,
+    bodies: list[int],
+    base_mass: np.ndarray,
+    base_inertia: np.ndarray,
+    scale: float,
+) -> None:
+    env.sim.model.body_mass[bodies] = base_mass * scale
+    env.sim.model.body_inertia[bodies] = base_inertia * scale
+    env.sim.forward()
+
+
 def _cluster(
     rows: list[dict], radius: float, max_yaw_distance_deg: float
 ) -> list[dict]:
@@ -188,6 +222,7 @@ def _cluster(
             <= radius
             and _yaw_distance(row["yaw_deg"], other["yaw_deg"])
             <= max_yaw_distance_deg
+            and abs(row["mass_scale"] - other["mass_scale"]) <= 1e-9
         ]
         if witnesses:
             return [row, min(
@@ -252,6 +287,9 @@ def run(args: argparse.Namespace) -> str:
         )
         for state in eb_states
     ]
+    terminal_bodies, base_body_mass, base_body_inertia = (
+        _terminal_mass_arrays(sim_env)
+    )
     diagnostic_responses = []
     for state, equilibrium in zip(er_states, terminal_equilibria):
         staged = _patch_state(
@@ -274,13 +312,16 @@ def run(args: argparse.Namespace) -> str:
             raise ValueError("--x and --y must be supplied together")
         yaw_values = args.yaw_deg if args.yaw_deg is not None else [0.0]
         candidates = [
-            (x, y, yaw)
-            for x in args.x for y in args.y for yaw in yaw_values
+            (x, y, yaw, mass_scale)
+            for x in args.x
+            for y in args.y
+            for yaw in yaw_values
+            for mass_scale in args.mass_scales
         ]
         trace_rows = []
         candidate_source = "explicit_xy_grid"
     else:
-        candidates, trace_rows = trajectory_candidates(
+        panel_poses, trace_rows = trajectory_candidates(
             diagnostic_responses,
             axial_stations=tuple(args.link_axial_stations),
             normal_offsets=tuple(args.path_normal_offsets),
@@ -293,6 +334,11 @@ def run(args: argparse.Namespace) -> str:
             yaw_quantization_deg=args.yaw_quantization_deg,
             limit=args.max_candidates,
         )
+        candidates = [
+            (*pose, mass_scale)
+            for pose in panel_poses
+            for mass_scale in args.mass_scales
+        ]
         candidate_source = "measured_post_release_panel_pose_sweep"
     if not candidates:
         raise RuntimeError("no terminal-B candidates were derived")
@@ -301,8 +347,8 @@ def run(args: argparse.Namespace) -> str:
     trace_payload = {
         "candidate_source": candidate_source,
         "candidates": [
-            {"x": x, "y": y, "yaw_deg": yaw}
-            for x, y, yaw in candidates
+            {"x": x, "y": y, "yaw_deg": yaw, "mass_scale": mass_scale}
+            for x, y, yaw, mass_scale in candidates
         ],
         "link_endpoint_trace": trace_rows,
         "diagnostic_responses": [{
@@ -313,7 +359,14 @@ def run(args: argparse.Namespace) -> str:
     rows = []
     episode_evidence = []
     try:
-        for x, y, yaw_deg in candidates:
+        for x, y, yaw_deg, mass_scale in candidates:
+            _set_terminal_mass_scale(
+                sim_env,
+                terminal_bodies,
+                base_body_mass,
+                base_body_inertia,
+                mass_scale,
+            )
             passed = 0
             passive_passed = 0
             reasons = []
@@ -363,6 +416,7 @@ def run(args: argparse.Namespace) -> str:
                         "x": x,
                         "y": y,
                         "yaw_deg": yaw_deg,
+                        "mass_scale": mass_scale,
                         "episode": episode,
                         "prefilter_passed": False,
                         "baseline_passive": passive[0],
@@ -384,6 +438,7 @@ def run(args: argparse.Namespace) -> str:
                     "x": x,
                     "y": y,
                     "yaw_deg": yaw_deg,
+                    "mass_scale": mass_scale,
                     "episode": episode,
                     "prefilter_passed": True,
                     "risk_reset_clearance": risk_reset,
@@ -450,6 +505,7 @@ def run(args: argparse.Namespace) -> str:
                 "x": x,
                 "y": y,
                 "yaw_deg": yaw_deg,
+                "mass_scale": mass_scale,
                 "passed": passed,
                 "passive_passed": passive_passed,
                 "episodes": len(er_states),
@@ -476,6 +532,7 @@ def run(args: argparse.Namespace) -> str:
             rows.append(row)
             print(
                 f"x={x:+.3f} y={y:+.3f} yaw={yaw_deg:+.1f} "
+                f"mass_scale={mass_scale:.3f} "
                 f"passive={passive_passed}/{len(er_states)} "
                 f"cascade={passed}/{len(er_states)} "
                 f"min_AB={min_initial_center_distance:.4f} "
@@ -483,6 +540,13 @@ def run(args: argparse.Namespace) -> str:
                 f"failure={row['failures'] or '-'}"
             )
     finally:
+        _set_terminal_mass_scale(
+            sim_env,
+            terminal_bodies,
+            base_body_mass,
+            base_body_inertia,
+            1.0,
+        )
         sim_env.close()
     trace_payload["candidate_evaluations"] = episode_evidence
     trace_path.write_text(
@@ -492,17 +556,32 @@ def run(args: argparse.Namespace) -> str:
     cluster = _cluster(
         rows, args.adjacent_radius, args.adjacent_yaw_distance_deg
     )
-    verdict = (
-        "PASS_L3A2_CASCADE_GEOMETRY_SWEEP"
-        if cluster else "FAIL_L3A2_CASCADE_GEOMETRY_SWEEP"
-    )
-    if cluster:
-        selected = max(
+    selected = (
+        max(
             cluster,
             key=lambda row: (
                 row["pass_rate"], row["max_terminal_displacement_m"]
             ),
         )
+        if cluster else None
+    )
+    if args.calibration_only:
+        verdict = (
+            "PASS_L3A2_PANEL_MASS_SWEEP"
+            if cluster else "FAIL_L3A2_PANEL_MASS_SWEEP"
+        )
+    else:
+        verdict = (
+            "PASS_L3A2_CASCADE_GEOMETRY_SWEEP"
+            if cluster else "FAIL_L3A2_CASCADE_GEOMETRY_SWEEP"
+        )
+    if cluster and not args.calibration_only:
+        assert selected is not None
+        if abs(selected["mass_scale"] - 1.0) > 1e-9:
+            raise RuntimeError(
+                "non-unit mass calibration must be committed to XML and "
+                "revalidated before writing paired artifacts"
+            )
         _write_candidate(
             base_er, Path(args.er), qpos_flat, qvel_flat,
             selected["x"], selected["y"], selected["yaw_deg"],
@@ -540,6 +619,7 @@ def run(args: argparse.Namespace) -> str:
         report += [
             f"- Selected B xy: ({selected['x']:+.4f}, {selected['y']:+.4f}) m",
             f"- Selected B yaw: {selected['yaw_deg']:+.1f}°",
+            f"- Selected terminal mass scale: {selected['mass_scale']:.4f}",
             f"- Selected pass rate: {selected['pass_rate']:.3f}",
             f"- Adjacent witness: ({cluster[1]['x']:+.4f}, "
             f"{cluster[1]['y']:+.4f}) m, yaw="
@@ -561,6 +641,9 @@ def main() -> None:
     parser.add_argument("--x", nargs="+", type=float)
     parser.add_argument("--y", nargs="+", type=float)
     parser.add_argument("--yaw-deg", nargs="+", type=float)
+    parser.add_argument(
+        "--mass-scales", nargs="+", type=float, default=[1.0]
+    )
     parser.add_argument(
         "--num-states",
         type=int,
@@ -615,7 +698,10 @@ def main() -> None:
         "--trace-json", default="experiments/logs/l3a2_link_fall_trace.json"
     )
     parser.add_argument("--fail-on-invalid", action="store_true")
+    parser.add_argument("--calibration-only", action="store_true")
     args = parser.parse_args()
+    if any(scale <= 0 for scale in args.mass_scales):
+        parser.error("--mass-scales must all be positive")
     verdict = run(args)
     if args.fail_on_invalid and verdict.startswith("FAIL"):
         raise SystemExit(2)

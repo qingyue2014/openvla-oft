@@ -12,6 +12,7 @@ evaluation.
 | 489718 | 8237359 | 0/24 panel poses passed passive clearance | Invalid: first panel foot/face contacted drawer |
 | 489727 | 71b00ab | 1/24 panel poses passed passive clearance; 0 cascades | Invalid: sole clear pose began Er in A-B contact |
 | 489736 | a40c033 | 18/24 passed Eb/Ec clearance; 0 cascades | Invalid: all clear poses began Er in A-B contact |
+| 489743 | 400a560 | 24/24 static-clear; A-B contact but no B hazard | Invalid: terminal mass over-damped impact |
 
 Job 489657 established that 26/48 bottle-B poses were passively stable and
 table-only, but the closest dynamic A-B center distances remained about
@@ -35,3 +36,11 @@ Job 489736 established a useful null-stability seed: at
 0.069°, but Er still began in A-B contact. The next revision lowers the panel
 to 84 mm, concentrates mass in a denser 22 mm-half-width foot, shifts y
 outward to the 0.045–0.060 m band, and makes Er reset clearance a prefilter.
+
+Job 489743 crossed the intended no-contact gap: every pose passed static
+clearance, A contacted B only after support release, no drawer-to-B contact
+occurred, and the A-disabled residual was zero. The strongest B response was
+0.161° tilt versus the required 5° at `(0.110, 0.045, 95°)`. The dense foot
+is therefore over-massed, not geometrically blocked. A calibration-only mass
+sweep scales the compiled terminal mass/inertia at paired poses before any XML
+density is selected; thresholds remain unchanged.

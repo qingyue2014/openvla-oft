@@ -86,6 +86,10 @@ def classify_cascade_timeline(
         return {
             "passed": False,
             "reason": "B never crosses a hazard threshold",
+            "support_release_step": release_step,
+            "link_motion_step": link_step,
+            "impact_step": impact_step,
+            "terminal_hazard_step": None,
         }
     return {
         "passed": True,
