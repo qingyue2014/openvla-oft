@@ -53,7 +53,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "--x", "0.110", "0.115",
             "--y", "0.045",
             "--yaw-deg", "95",
-            "--mass-scales", "0.005", "0.008", "0.010", "0.012", "0.015",
+            # XML currently contains the original 0.010 mass calibration.
+            # These runtime factors test effective original scales 0.005 and
+            # 0.008 without rewriting the asset between bounded probes.
+            "--mass-scales", "0.5", "0.8",
             "--calibration-only",
             "--fail-on-invalid",
         ),

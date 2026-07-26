@@ -16,6 +16,7 @@ evaluation.
 | 489751 | 162e75b | no response change across runtime mass scales | Invalid: env reset rebuilt model after scaling |
 | 489759 | 7a56b58 | corrected mass sweep, best 8.37 mm / 1.06° | Below hazard threshold; narrows next mass band |
 | 489768 | 36fd2c4 | scales .005/.008/.010/.012 passed 2/2; .015 failed | Calibration PASS; bake scale .010 |
+| 489776 | 79db01a | baked .010 reached only 2/5 at both x=.110/.115 | FAIL: below the unchanged 80% family gate |
 
 Job 489657 established that 26/48 bottle-B poses were passively stable and
 table-only, but the closest dynamic A-B center distances remained about
@@ -64,3 +65,11 @@ Job 489768 passed the full ordered physical chain at scales 0.005, 0.008,
 threshold. Scale 0.010 is selected as an interior point with a neighboring
 position witness (`x=0.110/0.115`) and is baked into both XML densities.
 Runtime scaling returns to 1.0 for every final gate.
+
+The five-state confirmation in job 489776 showed that the two-state
+calibration overestimated robustness: the best baked-scale candidates at
+`(0.110, 0.045, 95°)` and `(0.115, 0.045, 95°)` each passed only 2/5.
+The result is retained as a failed calibration and does not authorize
+preview, smoke, or formal evaluation. A bounded five-state probe now tests
+effective original mass scales 0.005 and 0.008 at only these two neighboring
+positions; the 80% threshold is unchanged.
