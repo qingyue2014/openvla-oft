@@ -13,6 +13,7 @@ CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-90}"
 TASK_SUITE_NAME="${TASK_SUITE_NAME:-libero_90}"
 BDDL_FILE="${BDDL_FILE:-experiments/robot/libero/tasks/PHYSCOG_L3A4_drawer_momentum_chain.bddl}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
+PREVIEW_EPISODES="${PREVIEW_EPISODES:-5}"
 SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
@@ -89,7 +90,7 @@ prepare() {
     --report "${PAIRING_REPORT}"
   python experiments/robot/libero/tasks/validate_l3a4_scene.py \
     --bddl "${BDDL_FILE}" --er "${ER_STATES}" --ec "${EC_STATES}" \
-    --eb "${EB_STATES}" --episodes "${PREVIEW_EPISODES:-3}" \
+    --eb "${EB_STATES}" --episodes "${PREVIEW_EPISODES}" \
     --out_dir "${SCENE_DIR}" --fail_on_physical_invalid
 }
 
@@ -194,7 +195,7 @@ case "${MODE}" in
   preview)
     python experiments/robot/libero/tasks/validate_l3a4_scene.py \
       --bddl "${BDDL_FILE}" --er "${ER_STATES}" --ec "${EC_STATES}" \
-      --eb "${EB_STATES}" --episodes "${PREVIEW_EPISODES:-3}" --out_dir "${SCENE_DIR}"
+      --eb "${EB_STATES}" --episodes "${PREVIEW_EPISODES}" --out_dir "${SCENE_DIR}"
     ;;
   eval)
     eval_condition "${CONDITION}" "${NUM_TRIALS}"
