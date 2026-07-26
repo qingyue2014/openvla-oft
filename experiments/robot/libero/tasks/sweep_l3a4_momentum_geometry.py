@@ -209,15 +209,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
     # Jobs 489626/489636 showed that a_dx≈0.142 targets the drawer's right
-    # side/corner and ejects A laterally, missing the +y A/B/C chain. The
-    # compiled front-face center is x≈0.00334 and its open y offset from the
-    # drawer body is -0.07524. These candidates therefore center A on the
-    # front face with its radius just ahead of that face.
+    # side/corner and ejects A laterally, missing the +y A/B/C chain. Job
+    # 489649 then showed that exact radii-sum spacing is metastable after state
+    # restore. The compiled front-face center is x≈0.00334 and its open y
+    # offset from the drawer body is -0.07524. These candidates add explicit
+    # passive gaps at every link before the scripted close.
     parser.add_argument("--a_dx", default="-0.015,0.000,0.015")
-    parser.add_argument("--a_dy", default="-0.045,-0.043,-0.041")
+    parser.add_argument("--a_dy", default="-0.041,-0.038,-0.035")
     parser.add_argument("--b_dx_from_a", default="0.000")
-    parser.add_argument("--ab_spacing", default="0.054,0.056")
-    parser.add_argument("--bc_spacing", default="0.036,0.038")
+    parser.add_argument("--ab_spacing", default="0.060,0.065,0.070")
+    parser.add_argument("--bc_spacing", default="0.042,0.046,0.050")
     parser.add_argument(
         "--trials",
         type=int,
@@ -272,12 +273,24 @@ def main():
                 risk = _run_condition(
                     env, risk_state, drawer_body, drawer_qadr, "risk", args
                 )
-                stable = _run_condition(
-                    env, risk_state, drawer_body, drawer_qadr, "stable", args
+                passive_valid = bool(
+                    risk["contact_pass"] and risk["hold"]["passed"]
                 )
-                a_removed = _run_condition(
-                    env, risk_state, drawer_body, drawer_qadr, "a_removed", args
-                )
+                if passive_valid:
+                    stable = _run_condition(
+                        env, risk_state, drawer_body, drawer_qadr, "stable", args
+                    )
+                    a_removed = _run_condition(
+                        env, risk_state, drawer_body, drawer_qadr, "a_removed", args
+                    )
+                else:
+                    skipped = {
+                        "passed": False,
+                        "skipped": True,
+                        "reason": "risk_passive_contact_or_open_hold_gate_failed",
+                    }
+                    stable = dict(skipped)
+                    a_removed = dict(skipped)
                 paired_pass = bool(
                     risk["passed"] and stable["passed"] and a_removed["passed"]
                 )
@@ -302,7 +315,15 @@ def main():
             print(
                 "L3A4_SWEEP "
                 f"candidate={candidate_index} rate={rate:.3f} "
-                f"eligible={row['eligible']} geometry={candidate}"
+                f"eligible={row['eligible']} "
+                f"risk_contact={trial_rows[0]['risk']['contact_pass']} "
+                f"risk_hold={trial_rows[0]['risk']['hold']['passed']} "
+                f"risk_steps="
+                f"{trial_rows[0]['risk']['assessment']['drawer_a_step']},"
+                f"{trial_rows[0]['risk']['assessment']['a_b_step']},"
+                f"{trial_rows[0]['risk']['assessment']['b_c_step']},"
+                f"{trial_rows[0]['risk']['assessment']['c_response_step']} "
+                f"geometry={candidate}"
             )
     finally:
         env.close()
