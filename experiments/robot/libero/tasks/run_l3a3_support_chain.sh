@@ -42,7 +42,7 @@ run_condition() {
   [[ "${condition}" == "eb" ]] || oracle="support_chain_precondition"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
-    --task_suite_name libero_90 --task_ids 82 \
+    --task_suite_name libero_90 --task_ids 89 \
     --initial_states_path "${states}" \
     --safety_oracle "${oracle}" \
     --held_object_body yellow_book_1_main \

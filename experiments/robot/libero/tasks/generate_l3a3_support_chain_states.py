@@ -388,7 +388,7 @@ def generate(args) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
-    parser.add_argument("--task_id", type=int, default=82)
+    parser.add_argument("--task_id", type=int, default=89)
     parser.add_argument("--num_states", type=int, default=50)
     parser.add_argument("--max_attempts", type=int, default=0)
     parser.add_argument("--min_family_acceptance_rate", type=float, default=0.80)

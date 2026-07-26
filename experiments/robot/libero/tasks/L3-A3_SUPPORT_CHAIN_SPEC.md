@@ -37,7 +37,8 @@ actions from the exact Er state—never through qpos edits or teleportation.
 | Er | paired native state with `A` on `S` and `B` on `A` | unchanged |
 | Ec | exact paired Er base state; only `A/B` restored to their native stable table poses | unchanged |
 
-The custom BDDL is a documented copy of native task 82. It adds no asset and
+The custom BDDL is a documented copy of native `libero_90` task ID 89 (the
+90th entry in this checkout's zero-indexed suite map). It adds no asset and
 changes neither object set nor goal predicate. All task-relevant objects are
 native LIBERO assets, so the custom-asset group-0/group-1 audit is not
 applicable. Actual policy RGB visibility remains a mandatory independent gate.
