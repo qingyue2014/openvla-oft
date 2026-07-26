@@ -99,7 +99,7 @@ is a hard stop. The affected run is invalid rather than partially reportable.
 SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all RENDER_GPU_DEVICE_ID=0 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh smoke
 
-# Generate and run pre-evaluation gates for 50 pairs.
+# Generate and run static/visibility/safe-feasibility gates for 50 pairs.
 NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=0 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh prepare
 
