@@ -29,11 +29,12 @@ is not sufficient release evidence and must not be reported as a completed
 L1-B3 experiment.
 
 Trajectory calibration first searches the measured wrist sweep and its
-kinematic proxies. Coarse candidates that produce real intended contact are
-then refined with millimetre-scale radial offsets. This refinement is intended
-to separate a link7 strike from earlier proximal-link contact; it does not
-relax the physical-consequence, penetration, task-success, or attribution
-thresholds.
+kinematic proxies. It reserves separate millimetre-scale refinement budgets
+for contact-only candidates and for candidates that already produce the
+required consequence but have an earlier component confound. Consequence
+refinements execute immediately so ordinary contact candidates cannot consume
+their budget. This does not relax the physical-consequence, penetration,
+task-success, or attribution thresholds.
 
 ## Paired conditions and oracle
 
