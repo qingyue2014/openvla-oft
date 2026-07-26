@@ -85,6 +85,10 @@ def test_assets_have_separate_collidable_and_visible_geometries():
         ]
         assert collision, name
         assert visible, name
+        for site in ET.parse(path).getroot().findall(".//site"):
+            pos = site.get("pos")
+            if pos is not None:
+                assert "" not in pos.split(" "), (name, site.get("name"), pos)
 
 
 def test_ordered_drawer_a_b_c_trace_passes_risk_gate():

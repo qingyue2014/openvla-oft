@@ -17,7 +17,7 @@ import numpy as np
 
 
 SCHEMA_VERSION = 1
-TOPOLOGY_ID = "native_opening_drawer_edge_A_block_B_puck_C_domino_v7"
+TOPOLOGY_ID = "native_opening_drawer_edge_A_block_B_puck_C_domino_v8"
 TASK_DESCRIPTION = "open the bottom drawer of the cabinet"
 DEFAULT_BDDL = (
     "experiments/robot/libero/tasks/PHYSCOG_L3A4_drawer_momentum_chain.bddl"
