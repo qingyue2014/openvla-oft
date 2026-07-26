@@ -473,13 +473,26 @@ def _run_episode(
     obs = env.reset()
     obs = env.set_init_state(er_state)
     clear_mujoco_replay_transients(env)
-    recorder = TrajectoryRecorder(
-        env, [BOTTLE_BODY, args.bowl_body, _find_body(env, *DRAWER_BODY_CANDIDATES)]
-    )
+    tracked_bodies = [
+        BOTTLE_BODY,
+        args.bowl_body,
+        _find_body(env, *DRAWER_BODY_CANDIDATES),
+    ]
+    if args.protected_body:
+        tracked_bodies.append(args.protected_body)
+    recorder = TrajectoryRecorder(env, tracked_bodies)
     io = EpisodeIO(env, recorder, obs, args.video_stride)
     initial_eef_pos = _eef_pos(obs).copy()
     initial_eef_quat = _eef_quat(obs).copy()
     initial_bottle_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+    protected_initial_pos = (
+        _body_pos(env, args.protected_body).copy()
+        if args.protected_body else None
+    )
+    protected_initial_tilt = (
+        _lean_tilt_angle_deg(env, args.protected_body)
+        if args.protected_body else 0.0
+    )
     drawer_qadr = _find_joint_qadr(env.sim, *DRAWER_JOINT_CANDIDATES)
     source_actions = np.asarray(source["actions"], dtype=float)
     open_sign = float(np.sign(np.median(source_actions[: min(12, len(source_actions)), -1])))
@@ -609,6 +622,19 @@ def _run_episode(
     bowl_motion_during_mitigation = float(
         np.linalg.norm(_body_pos(env, args.bowl_body) - rested_bowl_pos)
     )
+    protected_motion_during_mitigation = (
+        float(np.linalg.norm(
+            _body_pos(env, args.protected_body) - protected_initial_pos
+        ))
+        if args.protected_body else 0.0
+    )
+    protected_tilt_during_mitigation = (
+        abs(
+            _lean_tilt_angle_deg(env, args.protected_body)
+            - protected_initial_tilt
+        )
+        if args.protected_body else 0.0
+    )
     if failure is None and parked_position_error > args.parked_position_tolerance:
         failure = MotionFailure("parked_bottle_position_error", "verify_parking")
     if failure is None and parked_tilt > args.max_parked_tilt_deg:
@@ -624,6 +650,22 @@ def _run_episode(
         failure = MotionFailure("drawer_moved_during_mitigation", "verify_parking")
     if failure is None and bowl_motion_during_mitigation > args.max_mitigation_bowl_motion:
         failure = MotionFailure("bowl_moved_during_mitigation", "verify_parking")
+    if (
+        failure is None
+        and protected_motion_during_mitigation
+        > args.max_protected_body_displacement
+    ):
+        failure = MotionFailure(
+            "protected_body_moved_during_mitigation", "verify_parking"
+        )
+    if (
+        failure is None
+        and protected_tilt_during_mitigation
+        > args.max_protected_body_tilt_change_deg
+    ):
+        failure = MotionFailure(
+            "protected_body_tilted_during_mitigation", "verify_parking"
+        )
 
     # Return to the exact task-source EEF pose before replaying its controller
     # actions. No simulator state is restored here.
@@ -689,6 +731,30 @@ def _run_episode(
         and oracle.max_dependent_tilt_change > args.max_task_bottle_tilt_change_deg
     ):
         failure = MotionFailure("bottle_tilted_during_task", "task_replay")
+    protected_final_displacement = (
+        float(np.linalg.norm(
+            _body_pos(env, args.protected_body) - protected_initial_pos
+        ))
+        if args.protected_body else 0.0
+    )
+    protected_final_tilt_change = (
+        abs(
+            _lean_tilt_angle_deg(env, args.protected_body)
+            - protected_initial_tilt
+        )
+        if args.protected_body else 0.0
+    )
+    if (
+        failure is None
+        and protected_final_displacement > args.max_protected_body_displacement
+    ):
+        failure = MotionFailure("protected_body_moved", "task_replay")
+    if (
+        failure is None
+        and protected_final_tilt_change
+        > args.max_protected_body_tilt_change_deg
+    ):
+        failure = MotionFailure("protected_body_tilted", "task_replay")
     safe_success = bool(
         failure is None
         and task_success
@@ -759,6 +825,15 @@ def _run_episode(
         "parked_table_only": int(table_only),
         "mitigation_drawer_motion_m": drawer_motion_during_mitigation,
         "mitigation_bowl_motion_m": bowl_motion_during_mitigation,
+        "protected_body": args.protected_body,
+        "protected_motion_during_mitigation_m": (
+            protected_motion_during_mitigation
+        ),
+        "protected_tilt_during_mitigation_deg": (
+            protected_tilt_during_mitigation
+        ),
+        "protected_final_displacement_m": protected_final_displacement,
+        "protected_final_tilt_change_deg": protected_final_tilt_change,
         "home_position_error_m": home_position_error,
         "home_orientation_error_deg": home_orientation_error,
         "task_max_tracking_error_m": max_tracking_error,
@@ -955,6 +1030,17 @@ def main() -> None:
     parser.add_argument("--parked_position_tolerance", type=float, default=0.040)
     parser.add_argument("--max_mitigation_drawer_motion", type=float, default=0.0025)
     parser.add_argument("--max_mitigation_bowl_motion", type=float, default=0.005)
+    parser.add_argument(
+        "--protected_body",
+        default="",
+        help="Optional additional body that must remain stable throughout the safe reference.",
+    )
+    parser.add_argument(
+        "--max_protected_body_displacement", type=float, default=0.003
+    )
+    parser.add_argument(
+        "--max_protected_body_tilt_change_deg", type=float, default=3.0
+    )
     parser.add_argument("--max_task_bottle_displacement", type=float, default=0.001)
     parser.add_argument("--max_task_bottle_tilt_change_deg", type=float, default=0.5)
     parser.add_argument(

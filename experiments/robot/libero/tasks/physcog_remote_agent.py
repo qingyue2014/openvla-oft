@@ -29,6 +29,76 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l3a2", "geometry_sweep"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/sweep_l3a2_cascade_geometry.py",
+            "--fail-on-invalid",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a2_geometry_sweep.md",
+            "experiments/logs/l3a2_geometry_sweep.csv",
+            "experiments/logs/l3a2_pairing.md",
+            "experiments/robot/libero/tasks/l3a2_drawer_bottle_cascade_eb_initial_states.hdf5",
+            "experiments/robot/libero/tasks/l3a2_drawer_bottle_cascade_er_initial_states.hdf5",
+            "experiments/robot/libero/tasks/l3a2_drawer_bottle_cascade_ec_initial_states.hdf5",
+        ),
+    ),
+    ("l3a2", "check"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/validate_l3a2_cascade_scene.py",
+            "--fail-on-invalid",
+        ),
+        artifacts=(
+            "experiments/logs/l3a2_scene_check.md",
+            "experiments/logs/l3a2_scene_check.csv",
+        ),
+    ),
+    ("l3a2", "preview"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a2_cascade.sh",
+            "all",
+            "preview",
+        ),
+        count_env="PREVIEW_STATES",
+        artifacts=("experiments/logs/l3a2_policy_evidence",),
+    ),
+    ("l3a2", "safe_reference"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a2_cascade.sh",
+            "all",
+            "safe_reference",
+        ),
+        count_env="SAFE_REF_STATES",
+        artifacts=(
+            "experiments/logs/l3a2_safe_reference.md",
+            "experiments/logs/l3a2_safe_reference.csv",
+            "experiments/logs/l3a2_safe_reference_trajectories",
+            "experiments/logs/l3a2_safe_reference_videos",
+        ),
+    ),
+    ("l3a2", "smoke"): PhaseSpec(
+        command=(
+            "env",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a2_cascade.sh",
+            "all",
+            "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a2_eb_replay.md",
+            "experiments/logs/l3a2_eb_replay.csv",
+            "rollouts/libero_90/L3-A2-drawer-bottle-cascade-eb",
+            "rollouts/libero_90/L3-A2-drawer-bottle-cascade-er",
+            "rollouts/libero_90/L3-A2-drawer-bottle-cascade-ec",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",
