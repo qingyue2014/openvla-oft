@@ -97,35 +97,63 @@ def _script_required_motion_raw(env, drawer_qadr, motion_steps):
 
 def _compiled_drawer_report(env, drawer_body, drawer_qadr):
     model, data = env.sim.model, env.sim.data
-    role_geoms = physcog_objects.resolve_l3a1_native_corner_edge_geoms(
-        env, drawer_body
-    )
-    front_name = role_geoms["edge/front_outer"]
-    front_id = int(model.geom_name2id(front_name))
     start_qpos = float(data.qpos[drawer_qadr])
-    open_body = _body_pos(env, drawer_body)
-    open_geom = np.asarray(data.geom_xpos[front_id], dtype=float).copy()
+    start_body = _body_pos(env, drawer_body)
     data.qpos[drawer_qadr] = DRAWER_TARGET_QPOS
     env.sim.forward()
     target_body = _body_pos(env, drawer_body)
+    data.qpos[drawer_qadr] = start_qpos
+    env.sim.forward()
+    motion = target_body - start_body
+    motion_norm = float(np.linalg.norm(motion))
+    if motion_norm <= 1e-9:
+        raise RuntimeError("native drawer target qpos produces no body motion")
+    direction = motion / motion_norm
+    drawer_body_id = int(model.body_name2id(drawer_body))
+    candidates = []
+    for geom_id in range(int(model.ngeom)):
+        if (
+            int(model.geom_bodyid[geom_id]) != drawer_body_id
+            or int(model.geom_group[geom_id]) != 0
+            or int(model.geom_contype[geom_id]) == 0
+            or int(model.geom_conaffinity[geom_id]) == 0
+            or int(model.geom_type[geom_id]) != 6  # mjGEOM_BOX
+        ):
+            continue
+        rotation = np.asarray(data.geom_xmat[geom_id], dtype=float).reshape(3, 3)
+        half_extent = float(
+            np.sum(np.abs(rotation.T @ direction) * model.geom_size[geom_id])
+        )
+        center_projection = float(
+            np.dot(np.asarray(data.geom_xpos[geom_id]) - start_body, direction)
+        )
+        candidates.append((center_projection + half_extent, geom_id))
+    if not candidates:
+        raise RuntimeError(f"no collidable box geoms found on {drawer_body}")
+    _, front_id = max(candidates)
+    front_name = str(model.geom_id2name(front_id))
+    start_geom = np.asarray(data.geom_xpos[front_id], dtype=float).copy()
+    start_xmat = np.asarray(data.geom_xmat[front_id], dtype=float).reshape(3, 3)
+    data.qpos[drawer_qadr] = DRAWER_TARGET_QPOS
+    env.sim.forward()
     target_geom = np.asarray(data.geom_xpos[front_id], dtype=float).copy()
     data.qpos[drawer_qadr] = start_qpos
     env.sim.forward()
     return {
         "drawer_body": drawer_body,
-        "drawer_qpos_open": start_qpos,
+        "drawer_qpos_start": start_qpos,
         "drawer_qpos_target": DRAWER_TARGET_QPOS,
-        "drawer_body_start_xyz": open_body.tolist(),
+        "drawer_body_start_xyz": start_body.tolist(),
         "drawer_body_target_xyz": target_body.tolist(),
-        "drawer_motion_xyz": (target_body - open_body).tolist(),
-        "drawer_motion_m": float(np.linalg.norm(target_body - open_body)),
+        "drawer_motion_xyz": motion.tolist(),
+        "drawer_motion_m": motion_norm,
         "front_geom": front_name,
-        "front_geom_start_xyz": open_geom.tolist(),
+        "front_geom_start_xyz": start_geom.tolist(),
         "front_geom_target_xyz": target_geom.tolist(),
-        "front_geom_motion_xyz": (target_geom - open_geom).tolist(),
+        "front_geom_motion_xyz": (target_geom - start_geom).tolist(),
         "front_geom_size": np.asarray(model.geom_size[front_id]).tolist(),
         "front_geom_rbound": float(model.geom_rbound[front_id]),
-        "front_geom_xmat": np.asarray(data.geom_xmat[front_id]).reshape(3, 3).tolist(),
+        "front_geom_xmat": start_xmat.tolist(),
     }
 
 
