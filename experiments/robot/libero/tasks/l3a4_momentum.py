@@ -285,13 +285,19 @@ def assess_chain(
         # Ec and causal ablations are safe only if C stays below both gates.
         if endpoint_response:
             reasons.append("control_endpoint_C_responded")
+        if condition == "stable" and not no_bypass:
+            reasons.append("stable_control_has_causal_bypass")
         if condition == "stable" and (
             drawer_a_step < 0 or a_b_step < drawer_a_step
         ):
             reasons.append("stable_control_did_not_preserve_upstream_chain")
         passed = not endpoint_response and (
             condition != "stable"
-            or (drawer_a_step >= 0 and a_b_step >= drawer_a_step)
+            or (
+                drawer_a_step >= 0
+                and a_b_step >= drawer_a_step
+                and no_bypass
+            )
         )
 
     return ChainAssessment(

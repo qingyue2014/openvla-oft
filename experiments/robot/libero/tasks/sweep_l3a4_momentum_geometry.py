@@ -3,10 +3,10 @@
 
 This calibration is raw MuJoCo only: no policy model and no camera rendering.
 Each candidate must pass Er's ordered drawer->A->B->C response, Ec's preserved
-upstream drawer->A->B with C parked, and rA's absent endpoint response after A
-is parked. Initial/open-hold and direct-bypass gates must also remain valid. A
-candidate is selected only if its three-condition eligibility rate is at least
-80% over the requested reset trials.
+upstream drawer->A->B with C parked, and both rA/rB causal ablations' absent
+endpoint response after A or B is parked. Initial/open-hold and direct-bypass
+gates must also remain valid. A candidate is selected only if its four-condition
+eligibility rate is at least 80% over the requested reset trials.
 """
 
 from __future__ import annotations
@@ -227,6 +227,16 @@ def _run_condition(env, state, drawer_body, drawer_qadr, condition, args):
         env.sim.data.qpos[a_qadr] += 0.120
         env.sim.forward()
         state = np.asarray(env.sim.get_state().flatten()).copy()
+    elif condition == "b_removed":
+        # Independent causal ablation rB: break A->B / B->C while preserving
+        # drawer->A and every other coordinate from the exact Er state.
+        from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
+            _find_free_joint_qadr,
+        )
+        b_qadr = _find_free_joint_qadr(env.sim, B_BODY)
+        env.sim.data.qpos[b_qadr] += 0.120
+        env.sim.forward()
+        state = np.asarray(env.sim.get_state().flatten()).copy()
     contact_pass, contact_reasons = _initial_contact_gate(
         env, drawer_body, condition
     )
@@ -257,10 +267,19 @@ def main():
     # +0.10931 m from the drawer-body origin, so these A centers add 2-5 mm
     # clearance. AB and BC use their exact horizontal half-extents plus 1-3 mm.
     parser.add_argument("--a_dx", default="0.000")
-    parser.add_argument("--a_dy", default="0.133,0.134,0.136")
+    parser.add_argument("--a_dy", default="0.134")
     parser.add_argument("--b_dx_from_a", default="0.000")
-    parser.add_argument("--ab_spacing", default="0.047,0.048,0.049")
-    parser.add_argument("--bc_spacing", default="0.037,0.038,0.039")
+    parser.add_argument("--ab_spacing", default="0.048")
+    parser.add_argument("--bc_spacing", default="0.038")
+    parser.add_argument(
+        "--candidate_mode",
+        choices=("five_state_neighborhood", "grid"),
+        default="five_state_neighborhood",
+        help=(
+            "default: center plus four symmetric 1 mm perturbations around "
+            "A dy=.134, AB=.048, BC=.038; grid uses the comma-separated axes"
+        ),
+    )
     parser.add_argument(
         "--trials",
         type=int,
@@ -285,22 +304,55 @@ def main():
     drawer_joint, drawer_qadr = find_joint_qadr(env.sim, DRAWER_JOINT_CANDIDATES)
     compiled = _compiled_drawer_report(env, drawer_body, drawer_qadr)
 
-    candidates = [
-        {
-            "a_dx": a_dx,
-            "a_dy": a_dy,
-            "b_dx_from_a": b_dx,
-            "ab_spacing": ab,
-            "bc_spacing": bc,
-        }
-        for a_dx, a_dy, b_dx, ab, bc in itertools.product(
-            _floats(args.a_dx),
-            _floats(args.a_dy),
-            _floats(args.b_dx_from_a),
-            _floats(args.ab_spacing),
-            _floats(args.bc_spacing),
-        )
-    ]
+    if args.candidate_mode == "five_state_neighborhood":
+        if (
+            len(_floats(args.a_dx)) != 1
+            or len(_floats(args.b_dx_from_a)) != 1
+            or len(_floats(args.a_dy)) != 1
+            or len(_floats(args.ab_spacing)) != 1
+            or len(_floats(args.bc_spacing)) != 1
+        ):
+            raise ValueError(
+                "five_state_neighborhood requires one center value per axis"
+            )
+        a_dx = _floats(args.a_dx)[0]
+        b_dx = _floats(args.b_dx_from_a)[0]
+        center_a_dy = _floats(args.a_dy)[0]
+        center_ab = _floats(args.ab_spacing)[0]
+        center_bc = _floats(args.bc_spacing)[0]
+        candidates = [
+            {
+                "a_dx": a_dx,
+                "a_dy": a_dy,
+                "b_dx_from_a": b_dx,
+                "ab_spacing": ab,
+                "bc_spacing": bc,
+            }
+            for a_dy, ab, bc in (
+                (center_a_dy, center_ab, center_bc),
+                (center_a_dy - 0.001, center_ab, center_bc),
+                (center_a_dy + 0.001, center_ab, center_bc),
+                (center_a_dy, center_ab - 0.001, center_bc - 0.001),
+                (center_a_dy, center_ab + 0.001, center_bc + 0.001),
+            )
+        ]
+    else:
+        candidates = [
+            {
+                "a_dx": a_dx,
+                "a_dy": a_dy,
+                "b_dx_from_a": b_dx,
+                "ab_spacing": ab,
+                "bc_spacing": bc,
+            }
+            for a_dx, a_dy, b_dx, ab, bc in itertools.product(
+                _floats(args.a_dx),
+                _floats(args.a_dy),
+                _floats(args.b_dx_from_a),
+                _floats(args.ab_spacing),
+                _floats(args.bc_spacing),
+            )
+        ]
     rows = []
     try:
         for candidate_index, candidate in enumerate(candidates):
@@ -325,6 +377,9 @@ def main():
                     a_removed = _run_condition(
                         env, risk_state, drawer_body, drawer_qadr, "a_removed", args
                     )
+                    b_removed = _run_condition(
+                        env, risk_state, drawer_body, drawer_qadr, "b_removed", args
+                    )
                 else:
                     skipped = {
                         "passed": False,
@@ -333,8 +388,12 @@ def main():
                     }
                     stable = dict(skipped)
                     a_removed = dict(skipped)
+                    b_removed = dict(skipped)
                 paired_pass = bool(
-                    risk["passed"] and stable["passed"] and a_removed["passed"]
+                    risk["passed"]
+                    and stable["passed"]
+                    and a_removed["passed"]
+                    and b_removed["passed"]
                 )
                 trial_rows.append({
                     "trial": trial,
@@ -342,6 +401,7 @@ def main():
                     "risk": risk,
                     "stable": stable,
                     "a_removed": a_removed,
+                    "b_removed": b_removed,
                 })
             rate = sum(row["paired_pass"] for row in trial_rows) / len(trial_rows)
             row = {

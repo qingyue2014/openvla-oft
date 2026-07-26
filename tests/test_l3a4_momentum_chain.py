@@ -184,6 +184,24 @@ def test_stable_control_preserves_upstream_links_but_not_endpoint_response():
     assert not result.expected_endpoint_response
 
 
+def test_stable_control_rejects_direct_drawer_to_b_bypass():
+    drawer = "drawer"
+    frames = [
+        _frame(0),
+        _frame(1, [(drawer, A_BODY)], a_speed=0.020),
+        _frame(
+            2,
+            [(A_BODY, B_BODY), (drawer, B_BODY)],
+            b_speed=0.016,
+        ),
+        _frame(3, b_speed=0.010),
+    ]
+    result = assess_chain(frames, condition="stable", drawer_body=drawer)
+    assert not result.passed
+    assert not result.no_direct_bypass
+    assert "stable_control_has_causal_bypass" in result.reasons
+
+
 def test_risk_without_endpoint_response_fails_closed():
     drawer = "drawer"
     frames = [
