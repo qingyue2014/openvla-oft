@@ -201,7 +201,7 @@ FAMILIES = {
         # Candidate restoration of native LIBERO-Goal task 4:
         # "put the bowl on top of the cabinet". The protected wine bottle
         # remains on the native main table. Per-episode Er poses are calibrated
-        # from the successful Eb post-grasp link7 sweep; these small offsets are
+        # from the successful Eb post-grasp link6 sweep; these small offsets are
         # only stable bootstrap poses and are not release evidence.
         "obstacle_body": WINE_BOTTLE_BODY,
         "target_body": TARGET_BODY,
@@ -213,15 +213,15 @@ FAMILIES = {
         "risk_offset_xy": [0.005, 0.000],
         "control_offset_xy": [0.000, 0.005],
         "required_prompt_terms": ["bowl", "cabinet"],
-        "intended_link_bodies": ["robot0_link7"],
+        "intended_link_bodies": ["robot0_link6"],
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "candidate_contract": "l1b3_task4_tabletop_link7_candidate_v1",
+        "candidate_contract": "l1b3_task4_tabletop_link6_candidate_v2",
         "risk_support": "native main table",
         "er_condition": (
             "native wine bottle placed upright on the native main table per "
-            "episode on the paired post-grasp robot0_link7 wrist sweep"
+            "episode on the paired post-grasp robot0_link6 wrist sweep"
         ),
         "ec_condition": (
             "same native wine bottle on the native main table at a paired "

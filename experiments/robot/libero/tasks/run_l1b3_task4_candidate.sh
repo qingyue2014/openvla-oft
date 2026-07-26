@@ -120,7 +120,7 @@ eval_condition() {
     --safety_oracle arm_postgrasp_sweep \
     --held_object_body akita_black_bowl_1_main \
     --distractor_body wine_bottle_1_main \
-    --swept_volume_component_bodies robot0_link7 \
+    --swept_volume_component_bodies robot0_link6 \
     --swept_volume_displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --swept_volume_tilt_threshold_deg "${TILT_THRESHOLD_DEG}" \
     --num_trials_per_task "${count}" \
@@ -238,7 +238,7 @@ replay_gate() {
     --risk_states "$(state_for er)" \
     --task_suite_name "${TASK_SUITE}" \
     --task_id "${TASK_ID}" \
-    --component_bodies robot0_link7 \
+    --component_bodies robot0_link6 \
     --required_phase post_grasp \
     --min_episodes "${min_episodes}" \
     --min_activation_rate "${MIN_ACTIVATION_RATE}" \

@@ -69,7 +69,7 @@ RUN_METADATA = {
         "L1", "L1-B3-task4-candidate", "Candidate Eb Native Tabletop Wine Bottle"
     ),
     "L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-er": (
-        "L1", "L1-B3-task4-candidate", "Candidate Er Post-Grasp Link7/Wine-Bottle Strike"
+        "L1", "L1-B3-task4-candidate", "Candidate Er Post-Grasp Link6/Wine-Bottle Strike"
     ),
     "L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-ec": (
         "L1", "L1-B3-task4-candidate", "Candidate Ec Visible Off-Sweep Wine Bottle"

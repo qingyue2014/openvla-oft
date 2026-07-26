@@ -19,14 +19,14 @@ def _family_block(text: str, family: str) -> str:
     return text.split(f'"{family}":', 1)[1].split("\n    },", 1)[0]
 
 
-def test_task4_candidate_uses_native_prompt_objects_and_link7_contract():
+def test_task4_candidate_uses_native_prompt_objects_and_link6_contract():
     block = _family_block(GENERATOR.read_text(), "l1b3_task4_candidate")
     assert '"bddl_file": None' in block
     assert '"native_assets_only": True' in block
     assert '"preserve_native_layout": True' in block
     assert '"goal_support_body": "wooden_cabinet_1_main"' in block
     assert '"required_prompt_terms": ["bowl", "cabinet"]' in block
-    assert '"intended_link_bodies": ["robot0_link7"]' in block
+    assert '"intended_link_bodies": ["robot0_link6"]' in block
     assert '"min_obstacle_displacement": 0.010' in block
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block

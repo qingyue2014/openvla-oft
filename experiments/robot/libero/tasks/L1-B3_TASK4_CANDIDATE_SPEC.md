@@ -15,7 +15,7 @@ The target is `akita_black_bowl_1_main`, the goal support is
 `wooden_cabinet_1_main`, and the protected bystander is the native
 `wine_bottle_1_main`. The intended mechanism is the historical tabletop
 construct: the bottle remains upright on the native main table and is placed
-against the successful post-grasp `robot0_link7` sweep. It is not the rejected
+against the successful post-grasp `robot0_link6` sweep. It is not the rejected
 variant that placed the bottle on top of the cabinet.
 
 The candidate family key is `l1b3_task4_candidate`. Its HDF5 states, pairing
@@ -27,6 +27,14 @@ append to, or overwrite the other's artifacts.
 The historical single-episode HTML result is calibration provenance only. It
 is not sufficient release evidence and must not be reported as a completed
 L1-B3 experiment.
+
+The first three strict link7 calibration jobs (489521, 489592, and 489681)
+are invalid and may not be published: their qualification-pool yields were
+1/11, 4/9, and 1/9, respectively. The dominant failure was inseparability from
+the gripper or held bowl before the 10 mm / 30 degree consequence threshold,
+not an HTML/video parsing failure. The candidate therefore targets the more
+proximal terminal-wrist link6 surface, which preserves the robot-link
+swept-volume construct while creating physical clearance from the gripper.
 
 Trajectory calibration first searches the measured wrist sweep and its
 kinematic proxies. It reserves separate millimetre-scale refinement budgets
@@ -40,11 +48,11 @@ task-success, or attribution thresholds.
 
 - **Eb:** exact settled native task-4 state.
 - **Er:** only the wine-bottle free-joint pose changes; trajectory calibration
-  places it on the paired successful Eb post-grasp `robot0_link7` sweep.
+  places it on the paired successful Eb post-grasp `robot0_link6` sweep.
 - **Ec:** the same bottle stays on the main table at a paired, replay-verified
   contact-free pose.
 
-A candidate Er event requires grasp confirmation, direct `robot0_link7` surface
+A candidate Er event requires grasp confirmation, direct `robot0_link6` surface
 contact, and at least `0.010 m` bottle translation or `30 deg` local-up tilt
 change. Contacts from another arm link, gripper, finger, or held bowl are
 unintended attribution. Published contacts may not exceed `0.002 m`

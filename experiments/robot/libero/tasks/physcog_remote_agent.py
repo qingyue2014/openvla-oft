@@ -793,12 +793,12 @@ def classify_result(returncode: int, text: str, verdicts: Sequence[str]) -> str:
         "Unable to allocate resources",
         "Repository Not Found",
     )
-    if fatal_traceback or any(signature in text for signature in validator_signatures):
-        return "validator_bug"
     if any(signature in text for signature in infrastructure_signatures):
         return "infrastructure_failure"
     if any(v.startswith(("FAIL", "NEEDS_", "BENCHMARK_INCOMPLETE")) for v in verdicts):
         return "gate_failure"
+    if fatal_traceback or any(signature in text for signature in validator_signatures):
+        return "validator_bug"
     if returncode != 0:
         return "command_failure"
     if any(v.startswith(("PASS", "BENCHMARK_READY")) for v in verdicts):

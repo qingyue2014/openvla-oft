@@ -310,6 +310,15 @@ def test_classification_prioritizes_crashes_over_stale_pass_reports():
     assert classify_result(1, "srun: error: allocation failed", []) == "infrastructure_failure"
 
 
+def test_classification_recognizes_fail_fast_gate_traceback():
+    text = """Verdict: **FAIL_TRAJECTORY_CONDITIONED_CALIBRATION**
+Traceback (most recent call last):
+  File "calibrate.py", line 1, in <module>
+RuntimeError: FAIL_TRAJECTORY_CONDITIONED_CALIBRATION
+"""
+    assert classify_result(1, text, extract_verdicts(text)) == "gate_failure"
+
+
 def test_classification_ignores_egl_destructor_traceback_after_success():
     text = """verdict=PASS_L1A2_SMOKE
 Exception ignored in: <function EGLGLContext.__del__ at 0x123>
