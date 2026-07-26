@@ -86,3 +86,8 @@ known impact pose using each episode's measured collision-disabled A fall
 trace, tests a small pose/yaw neighborhood, and requires both a passing pose
 and adjacent passing witness in at least 4/5 episodes. No threshold changes or
 further mass reduction are allowed.
+
+The first adaptive submission directory
+`20260726T163628Z-l3a2-adaptive_sweep` contains no `run.json` and no Slurm
+job ID: the shared SSH control connection closed during key exchange. This is
+an infrastructure-invalid no-job attempt, not scene evidence.
