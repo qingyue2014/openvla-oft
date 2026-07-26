@@ -96,10 +96,37 @@ def test_action_validators_do_not_edit_sim_state_after_er_reset():
     assert "env.step(action.tolist())" in text[replay_loop:]
 
 
+def test_safe_reference_provides_executable_b_then_a_osc_and_video():
+    path = TASKS / "validate_l3a3_safe_reference.py"
+    text = path.read_text()
+    reset_at = text.index("obs = env.set_init_state(er_state)")
+    tail = text[reset_at:]
+    assert text.index("_relocate(\n            io, TOP_BODY") < text.index(
+        "_relocate(\n            io, MIDDLE_BODY"
+    )
+    assert "io.advance(" in text
+    assert "env.step" in (
+        TASKS / "validate_l3a1_safe_reference.py"
+    ).read_text()  # EpisodeIO implementation used by L3-A3
+    assert "sim.data.qpos" not in tail
+    assert "sim.data.qvel" not in tail
+    assert "set_free_pose" not in tail
+    assert "_save_video(video_path" in text
+    assert "TrajectoryRecorder" in text
+    assert '"direct_qpos_edits_after_restore": False' in text
+
+
+def test_generator_requires_second_link_collision_ablation():
+    text = (TASKS / "generate_l3a3_support_chain_states.py").read_text()
+    assert "_second_link_ablation_gate" in text
+    assert "geom_contype[geom_ids] = 0" in text
+    assert "geom_conaffinity[geom_ids] = 0" in text
+    assert "hold_ok and removal_ok and ablation_ok" in text
+
+
 def test_preview_uses_exact_policy_transform_and_manual_hash_gate():
     text = (TASKS / "export_l3a3_support_chain_evidence.py").read_text()
     assert "image[::-1, ::-1]" in text
     assert "PENDING_MANUAL_POLICY_VIEW_REVIEW" in text
     assert "PASS_L3A3_POLICY_VIEW_REVIEWED" in text
     assert 'review.get("evidence_sha256")' in text
-

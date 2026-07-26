@@ -148,6 +148,84 @@ def _removal_gate(sim, state: np.ndarray, thresholds: GateThresholds) -> tuple[b
     return passed, {"a_event_step": a_step, "b_event_step": b_step, "lag_steps": lag, **final}
 
 
+def _descendant_geoms(sim, body_name: str) -> list[int]:
+    root = int(sim.model.body_name2id(body_name))
+    bodies = {root}
+    changed = True
+    while changed:
+        changed = False
+        for candidate in range(int(sim.model.nbody)):
+            if (
+                candidate not in bodies
+                and int(sim.model.body_parentid[candidate]) in bodies
+            ):
+                bodies.add(candidate)
+                changed = True
+    return [
+        geom_id
+        for geom_id in range(int(sim.model.ngeom))
+        if int(sim.model.geom_bodyid[geom_id]) in bodies
+    ]
+
+
+def _second_link_ablation_gate(
+    sim, state: np.ndarray, thresholds: GateThresholds
+) -> tuple[bool, dict]:
+    """Disable B's collision response while S/A remain fixed.
+
+    The exact Er state initially has A-B contact and explicitly forbids S-B
+    contact. If disabling B's collision geoms makes B move relative to a stable
+    A, the second causal edge is physical rather than a coordinate inference.
+    Model collision masks are restored before returning.
+    """
+    sim.set_state_from_flattened(state)
+    sim.forward()
+    starts = {name: body_pose(sim, name) for name in (MIDDLE_BODY, TOP_BODY)}
+    geom_ids = _descendant_geoms(sim, TOP_BODY)
+    old_contype = np.asarray(sim.model.geom_contype[geom_ids]).copy()
+    old_conaffinity = np.asarray(sim.model.geom_conaffinity[geom_ids]).copy()
+    b_step = None
+    max_a = {"xy_m": 0.0, "drop_m": 0.0, "distance_m": 0.0}
+    max_b_relative = {"xy_m": 0.0, "drop_m": 0.0, "distance_m": 0.0}
+    try:
+        sim.model.geom_contype[geom_ids] = 0
+        sim.model.geom_conaffinity[geom_ids] = 0
+        sim.forward()
+        for step in range(thresholds.max_event_lag_steps):
+            sim.step()
+            a_delta = pose_delta(starts[MIDDLE_BODY], body_pose(sim, MIDDLE_BODY))
+            b_relative_start = starts[TOP_BODY][0] - starts[MIDDLE_BODY][0]
+            b_relative_now = body_pose(sim, TOP_BODY)[0] - body_pose(sim, MIDDLE_BODY)[0]
+            b_delta = {
+                "xy_m": float(np.linalg.norm((b_relative_now - b_relative_start)[:2])),
+                "drop_m": float(b_relative_start[2] - b_relative_now[2]),
+                "distance_m": float(np.linalg.norm(b_relative_now - b_relative_start)),
+            }
+            for metric in max_a:
+                max_a[metric] = max(max_a[metric], a_delta[metric])
+                max_b_relative[metric] = max(max_b_relative[metric], b_delta[metric])
+            if b_step is None and event_triggered(b_delta, thresholds):
+                b_step = step
+    finally:
+        sim.model.geom_contype[geom_ids] = old_contype
+        sim.model.geom_conaffinity[geom_ids] = old_conaffinity
+        sim.set_state_from_flattened(state)
+        sim.forward()
+    a_stable = (
+        max_a["xy_m"] <= thresholds.max_hold_xy_m
+        and max_a["drop_m"] <= thresholds.max_hold_drop_m
+    )
+    passed = b_step is not None and a_stable
+    return passed, {
+        "counterfactual": "disable_top_B_collision_response_with_S_A_held",
+        "b_relative_event_step": b_step,
+        "a_remained_stable": a_stable,
+        "max_a_delta": max_a,
+        "max_b_relative_delta": max_b_relative,
+        "top_collision_geom_count": len(geom_ids),
+    }
+
+
 def generate(args) -> None:
     thresholds = GateThresholds()
     native = _native_states(args.task_id)
@@ -174,10 +252,14 @@ def generate(args) -> None:
             if hold_ok:
                 stable_candidate = env.sim.get_state().flatten().copy()
                 removal_ok, removal = _removal_gate(env.sim, stable_candidate, thresholds)
+                ablation_ok, ablation = _second_link_ablation_gate(
+                    env.sim, stable_candidate, thresholds
+                )
             else:
                 stable_candidate = candidate
                 removal_ok, removal = False, {}
-            if not (hold_ok and removal_ok):
+                ablation_ok, ablation = False, {}
+            if not (hold_ok and removal_ok and ablation_ok):
                 rejected += 1
                 source_index += 1
                 continue
@@ -199,7 +281,13 @@ def generate(args) -> None:
             er_states.append(stable_candidate)
             ec_states.append(ec_state)
             eb_meta.append({**common, "condition": "eb"})
-            er_meta.append({**common, "condition": "er", "hold_gate": hold, "removal_gate": removal})
+            er_meta.append({
+                **common,
+                "condition": "er",
+                "hold_gate": hold,
+                "removal_gate": removal,
+                "second_link_ablation_gate": ablation,
+            })
             ec_meta.append({**common, "condition": "ec", "restored_native_A_B": True})
             print(f"pair={pair:03d} source={source_index:03d} PASS chain-removal")
             source_index += 1
@@ -227,6 +315,10 @@ def generate(args) -> None:
         f"- Accepted paired episodes: {report['pairs']}\n"
         f"- Rejected candidates: {report['rejected']}\n"
         f"- Mechanism: {report['mechanism']}\n\n"
+        "- Required factual counterfactual: removing S destabilizes A, then B "
+        "moves relative to A.\n"
+        "- Required second-link ablation: disabling B collision response while "
+        "S/A remain fixed destabilizes B while A remains stable.\n\n"
         f"```json\n{json.dumps(report, indent=2, sort_keys=True)}\n```\n"
     )
 
@@ -247,4 +339,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

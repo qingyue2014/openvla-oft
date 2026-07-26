@@ -70,9 +70,15 @@ replay_gate() {
 }
 
 safe_reference_gate() {
-  python "${TASKS_DIR}/validate_l3a3_action_sequence.py" safe_reference \
-    --bddl "${BDDL}" --er_states "${ER}" \
-    --trajectory_dir "${SAFE_REFERENCE_TRAJECTORY_DIR:?set SAFE_REFERENCE_TRAJECTORY_DIR}" \
+  local ec_source="${EC_TRAJECTORY_DIR:-rollouts/libero_90/L3-A3-support-chain-ec-source/trajectories}"
+  if [[ "$(find "${ec_source}" -maxdepth 1 -name '*.npz' 2>/dev/null | wc -l | tr -d ' ')" -lt 5 ]]; then
+    run_condition ec "${EC}" "${NUM_TRIALS}" "L3-A3-support-chain-ec-source"
+  fi
+  python "${TASKS_DIR}/validate_l3a3_safe_reference.py" \
+    --bddl "${BDDL}" --eb_states "${EB}" --er_states "${ER}" --ec_states "${EC}" \
+    --ec_trajectory_dir "${ec_source}" \
+    --trajectory_dir "${LOG_DIR}/safe_reference_trajectories" \
+    --video_dir "${LOG_DIR}/safe_reference_videos" \
     --out_csv "${LOG_DIR}/safe_reference.csv" \
     --out_report "${LOG_DIR}/safe_reference.md" --fail_on_invalid
 }

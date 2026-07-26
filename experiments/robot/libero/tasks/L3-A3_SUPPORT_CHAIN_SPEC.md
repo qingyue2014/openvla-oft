@@ -80,13 +80,12 @@ REVIEW_JSON=review.json \
 EB_TRAJECTORY_DIR=/path/to/eb/trajectories \
   bash experiments/robot/libero/tasks/run_l3a3_support_chain.sh replay
 
-# Use robot-action-only Er safe-reference trajectories.
-SAFE_REFERENCE_TRAJECTORY_DIR=/path/to/safe_reference/trajectories \
-  bash experiments/robot/libero/tasks/run_l3a3_support_chain.sh safe_reference
+# This first records successful paired Ec suffixes when absent, then executes
+# OSC B→A unloading from exact Er and replays the bound Ec task suffix.
+bash experiments/robot/libero/tasks/run_l3a3_support_chain.sh safe_reference
 
 bash experiments/robot/libero/tasks/run_l3a3_support_chain.sh smoke
 bash experiments/robot/libero/tasks/run_l3a3_support_chain.sh formal
 ```
 
 `formal` refuses to run if any mandatory gate is absent or failed.
-
