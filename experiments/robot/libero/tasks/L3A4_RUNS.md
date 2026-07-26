@@ -82,7 +82,8 @@ safe-reference, and unchanged-Eb replay reports all contain their PASS markers.
 | 2026-07-26 | `489615` | GPU physical scene | **FAIL / INVALID** | All three Er episodes had `drawer_a_step=-1`, `a_b_step=-1`, `b_c_step=-1`; no C motion or tilt. Do not use downstream artifacts. |
 | 2026-07-26 | `489619` | GPU physical scene | **FAIL / INVALID** | Runner emitted `FAIL_L3A4_SCENE_GATE physical=FAIL visual=PENDING`; no downstream gates were authorized. |
 | 2026-07-26 | `489626` / `93d072a` | Compiled-geometry sweep | **FAIL / INVALID** | 0/12 candidates eligible across five resets. Compiled drawer motion is +0.143102 m in y. Only `a_dx=0.142` produced drawer→A; A→B was below threshold and B→C absent. |
-| 2026-07-26 | pending | Refined GPU geometry | NOT RUN | Fix `a_dx=0.142`; scan A/B alignment and tighter A/B and B/C spacing with Er, C-parked, and A-removed conditions. |
+| 2026-07-26 | `489636` / `57ee1f9` | Side/corner-chain refinement | **FAIL / INVALID** | 0/16 candidates eligible across three resets. A reached 0.08–0.13 m/s but A→B remained absent: `a_dx=0.142` targets the native drawer side/corner and ejects A laterally away from the +y chain. Candidate 6 also failed open-hold stability. |
+| 2026-07-26 | pending | Front-face GPU geometry | NOT RUN | Center A near the compiled front face (`a_dx≈0`) and align A/B/C along +y; retain Er, C-parked, and A-removed gates and report vector displacement diagnostics. |
 | 2026-07-26 | pending | policy view | NOT REVIEWED | Actual 256×256 exact-state artifacts not yet generated. |
 | 2026-07-26 | pending | Πsafe | NOT RUN | Requires paired safe Eb controller traces. |
 | 2026-07-26 | pending | Eb replay | NOT RUN | Requires paired safe Eb controller traces. |

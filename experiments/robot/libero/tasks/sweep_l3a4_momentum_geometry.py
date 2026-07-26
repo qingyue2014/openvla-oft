@@ -129,6 +129,37 @@ def _compiled_drawer_report(env, drawer_body, drawer_qadr):
     }
 
 
+def _trajectory_diagnostics(trace):
+    """Summarize directions without weakening the contact-based causal gate."""
+    initial = trace[0]
+    result = {}
+    for body in CHAIN_BODIES:
+        p0 = np.asarray(initial.positions[body], dtype=float)
+        displacements = [
+            np.asarray(frame.positions[body], dtype=float) - p0 for frame in trace
+        ]
+        max_displacement_index = int(
+            np.argmax([np.linalg.norm(delta) for delta in displacements])
+        )
+        max_speed_index = int(
+            np.argmax([float(frame.speeds_m_s[body]) for frame in trace])
+        )
+        result[body] = {
+            "max_displacement_step": int(trace[max_displacement_index].step),
+            "max_displacement_xyz": displacements[
+                max_displacement_index
+            ].tolist(),
+            "max_speed_step": int(trace[max_speed_index].step),
+            "position_at_max_speed_xyz": np.asarray(
+                trace[max_speed_index].positions[body], dtype=float
+            ).tolist(),
+            "displacement_at_max_speed_xyz": displacements[
+                max_speed_index
+            ].tolist(),
+        }
+    return result
+
+
 def _run_condition(env, state, drawer_body, drawer_qadr, condition, args):
     env.reset()
     env.set_init_state(state)
@@ -170,20 +201,23 @@ def _run_condition(env, state, drawer_body, drawer_qadr, condition, args):
         "contact_reasons": contact_reasons,
         "hold": hold,
         "assessment": assessment.to_dict(),
+        "trajectory": _trajectory_diagnostics(trace),
     }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
-    # The first compiled-geometry sweep (job 489626) isolated drawer->A
-    # activation to a_dx=0.142. This refinement aligns A/B and closes only the
-    # downstream gaps; it does not relax any physical-response thresholds.
-    parser.add_argument("--a_dx", default="0.142")
-    parser.add_argument("--a_dy", default="-0.044,-0.040")
-    parser.add_argument("--b_dx_from_a", default="0.000,0.002")
-    parser.add_argument("--ab_spacing", default="0.050,0.052")
-    parser.add_argument("--bc_spacing", default="0.034,0.036")
+    # Jobs 489626/489636 showed that a_dx≈0.142 targets the drawer's right
+    # side/corner and ejects A laterally, missing the +y A/B/C chain. The
+    # compiled front-face center is x≈0.00334 and its open y offset from the
+    # drawer body is -0.07524. These candidates therefore center A on the
+    # front face with its radius just ahead of that face.
+    parser.add_argument("--a_dx", default="-0.015,0.000,0.015")
+    parser.add_argument("--a_dy", default="-0.045,-0.043,-0.041")
+    parser.add_argument("--b_dx_from_a", default="0.000")
+    parser.add_argument("--ab_spacing", default="0.054,0.056")
+    parser.add_argument("--bc_spacing", default="0.036,0.038")
     parser.add_argument(
         "--trials",
         type=int,
