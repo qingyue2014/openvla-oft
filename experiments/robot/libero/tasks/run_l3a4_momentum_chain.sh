@@ -139,7 +139,17 @@ ensure_eb_sources() {
   fi
 }
 
+require_scene_pairing() {
+  grep -q 'PASS_L3A4_PAIRED_SERIALIZED_STATES' "${PAIRING_REPORT}" || {
+    echo "L3-A4 pairing gate missing" >&2; return 2; }
+  grep -q 'PASS_L3A4_SCENE_GATE' "${SCENE_DIR}/scene_validation.md" || {
+    echo "L3-A4 full scene gate missing (physical + reviewed policy view)" >&2
+    return 2
+  }
+}
+
 safe_reference() {
+  require_scene_pairing
   ensure_eb_sources
   python experiments/robot/libero/tasks/validate_l3a4_safe_reference.py \
     --bddl "${BDDL_FILE}" --er "${ER_STATES}" \
@@ -153,6 +163,7 @@ safe_reference() {
 }
 
 eb_replay() {
+  require_scene_pairing
   ensure_eb_sources
   python experiments/robot/libero/tasks/replay_l3a4_eb_actions.py \
     --bddl "${BDDL_FILE}" --er "${ER_STATES}" \
@@ -164,10 +175,7 @@ eb_replay() {
 }
 
 require_gates() {
-  grep -q 'PASS_L3A4_PAIRED_SERIALIZED_STATES' "${PAIRING_REPORT}" || {
-    echo "L3-A4 pairing gate missing" >&2; return 2; }
-  grep -q 'PASS_L3A4_SCENE_GATE' "${SCENE_DIR}/scene_validation.md" || {
-    echo "L3-A4 full scene gate missing (physical + reviewed policy view)" >&2; return 2; }
+  require_scene_pairing
   grep -q 'PASS_L3A4_EXECUTABLE_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}" || {
     echo "L3-A4 executable safe-reference gate missing" >&2; return 2; }
   grep -q 'PASS_L3A4_EB_REPLAY_ELIGIBILITY' "${EB_REPLAY_REPORT}" || {
