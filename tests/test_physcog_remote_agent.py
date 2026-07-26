@@ -82,6 +82,22 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert "SAVE_VIDEO_MODE=none" in formal.command
 
 
+def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
+    phases = {phase for scenario, phase in PHASES if scenario == "l3a4"}
+    assert {
+        "geometry_sweep",
+        "geometry_trace",
+        "check",
+        "preview",
+        "safe_reference",
+        "eb_replay",
+        "smoke",
+    } <= phases
+    assert PHASES[("l3a4", "geometry_sweep")].count_env == "L3A4_SWEEP_TRIALS"
+    assert PHASES[("l3a4", "check")].count_env == "NUM_TRIALS"
+    assert "experiments/logs/l3a4_scene" in PHASES[("l3a4", "check")].artifacts
+
+
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     spec = PhaseSpec(command=("bash", "path with space/runner.sh", "phase"), count_env="N")
     script = build_batch_script(

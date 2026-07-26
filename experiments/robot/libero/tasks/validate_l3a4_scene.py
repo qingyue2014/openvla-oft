@@ -257,6 +257,14 @@ def main() -> None:
     parser.add_argument("--fps", type=int, default=20)
     parser.add_argument("--out_dir", default="experiments/logs/l3a4_scene")
     parser.add_argument("--fail_on_invalid", action="store_true")
+    parser.add_argument(
+        "--fail_on_physical_invalid",
+        action="store_true",
+        help=(
+            "exit nonzero only when the physical gate fails; an otherwise valid "
+            "scene may remain pending explicit policy-view review"
+        ),
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.out_dir)
@@ -406,6 +414,8 @@ def main() -> None:
         f"visual={payload['visual_verdict']} report={out_dir / 'scene_validation.json'}"
     )
     if args.fail_on_invalid and not overall_pass:
+        raise SystemExit(2)
+    if args.fail_on_physical_invalid and not physical_pass:
         raise SystemExit(2)
 
 

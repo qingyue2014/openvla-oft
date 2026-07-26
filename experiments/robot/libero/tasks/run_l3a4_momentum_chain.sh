@@ -90,7 +90,7 @@ prepare() {
   python experiments/robot/libero/tasks/validate_l3a4_scene.py \
     --bddl "${BDDL_FILE}" --er "${ER_STATES}" --ec "${EC_STATES}" \
     --eb "${EB_STATES}" --episodes "${PREVIEW_EPISODES:-3}" \
-    --out_dir "${SCENE_DIR}" --fail_on_invalid
+    --out_dir "${SCENE_DIR}" --fail_on_physical_invalid
 }
 
 eval_condition() {
