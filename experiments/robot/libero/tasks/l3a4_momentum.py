@@ -7,7 +7,7 @@ LIBERO environment exposing ``env.sim``.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 import hashlib
 import json
 from pathlib import Path
@@ -77,6 +77,7 @@ class ChainFrame:
     tilts_deg: Mapping[str, float]
     speeds_m_s: Mapping[str, float]
     contacts: Sequence[Sequence[str]]
+    velocities_m_s: Mapping[str, Sequence[float]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -191,25 +192,33 @@ def assess_chain(
     drawer_c = frozenset((drawer_body, C_BODY))
     a_c = frozenset((A_BODY, C_BODY))
 
+    def projected_y_speed(frame: ChainFrame, body: str) -> float:
+        velocity = frame.velocities_m_s.get(body)
+        return (
+            float(velocity[1])
+            if velocity is not None and len(velocity) >= 2
+            else float(frame.speeds_m_s[body])
+        )
+
     drawer_a_step = _first_step(
         frames,
         lambda frame: (
             drawer_a in _normalise_contacts(frame.contacts)
-            and float(frame.speeds_m_s[A_BODY]) >= MIN_A_SPEED_M_S
+            and projected_y_speed(frame, A_BODY) >= MIN_A_SPEED_M_S
         ),
     )
     a_b_step = _first_step(
         frames,
         lambda frame: (
             a_b in _normalise_contacts(frame.contacts)
-            and float(frame.speeds_m_s[B_BODY]) >= MIN_B_SPEED_M_S
+            and projected_y_speed(frame, B_BODY) >= MIN_B_SPEED_M_S
         ),
     )
     b_c_step = _first_step(
         frames,
         lambda frame: (
             b_c in _normalise_contacts(frame.contacts)
-            and float(frame.speeds_m_s[C_BODY]) >= MIN_C_SPEED_M_S
+            and projected_y_speed(frame, C_BODY) >= MIN_C_SPEED_M_S
         ),
     )
 
@@ -248,6 +257,17 @@ def assess_chain(
         pairs = _normalise_contacts(frame.contacts)
         if drawer_b in pairs or drawer_c in pairs or a_c in pairs:
             bypass = True
+            break
+        for pair in pairs:
+            chain_members = pair.intersection(CHAIN_BODIES)
+            cabinet_members = {
+                body for body in pair
+                if "cabinet" in body.lower() and body not in CHAIN_BODIES
+            }
+            if chain_members and cabinet_members and pair != drawer_a:
+                bypass = True
+                break
+        if bypass:
             break
     no_bypass = not bypass
     endpoint_response = c_response_step >= 0
@@ -394,6 +414,7 @@ def capture_frame(env, step: int, drawer_qadr: int) -> ChainFrame:
     positions = {}
     tilts = {}
     speeds = {}
+    velocities = {}
     for body_name in CHAIN_BODIES:
         body_id = int(env.sim.model.body_name2id(body_name))
         positions[body_name] = np.asarray(
@@ -404,6 +425,7 @@ def capture_frame(env, step: int, drawer_qadr: int) -> ChainFrame:
             velocity = np.asarray(env.sim.data.body_xvelp[body_id], dtype=float)
         except AttributeError:
             velocity = np.asarray(env.sim.data.cvel[body_id][3:6], dtype=float)
+        velocities[body_name] = velocity.tolist()
         speeds[body_name] = float(np.linalg.norm(velocity))
     return ChainFrame(
         step=int(step),
@@ -412,6 +434,7 @@ def capture_frame(env, step: int, drawer_qadr: int) -> ChainFrame:
         tilts_deg=tilts,
         speeds_m_s=speeds,
         contacts=contact_body_pairs(env),
+        velocities_m_s=velocities,
     )
 
 

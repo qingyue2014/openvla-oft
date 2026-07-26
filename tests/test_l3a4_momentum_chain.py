@@ -1,4 +1,5 @@
 import xml.etree.ElementTree as ET
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -123,6 +124,47 @@ def test_direct_a_to_c_contact_fails_risk_attribution():
             c_speed=0.010,
             c_y=0.013,
         ),
+    ]
+    result = assess_chain(frames, condition="risk", drawer_body=drawer)
+    assert not result.passed
+    assert not result.no_direct_bypass
+
+
+def test_negative_y_motion_cannot_count_as_opening_momentum_transfer():
+    drawer = "drawer"
+    frames = [
+        _frame(0),
+        _frame(1, [(drawer, A_BODY)], a_speed=0.020),
+        _frame(2, [(A_BODY, B_BODY)], b_speed=0.016),
+        _frame(3, [(B_BODY, C_BODY)], c_speed=0.010, c_y=0.013),
+    ]
+    frames = [
+        replace(
+            frame,
+            velocities_m_s={
+                A_BODY: [0.0, -frame.speeds_m_s[A_BODY], 0.0],
+                B_BODY: [0.0, -frame.speeds_m_s[B_BODY], 0.0],
+                C_BODY: [0.0, -frame.speeds_m_s[C_BODY], 0.0],
+            },
+        )
+        for frame in frames
+    ]
+    result = assess_chain(frames, condition="risk", drawer_body=drawer)
+    assert not result.passed
+    assert not result.ordered_links
+
+
+def test_chain_contact_with_static_cabinet_is_a_causal_bypass():
+    drawer = "wooden_cabinet_1_cabinet_bottom"
+    frames = [
+        _frame(0),
+        _frame(
+            1,
+            [(drawer, A_BODY), ("wooden_cabinet_1_base", C_BODY)],
+            a_speed=0.020,
+        ),
+        _frame(2, [(A_BODY, B_BODY)], b_speed=0.016),
+        _frame(3, [(B_BODY, C_BODY)], c_speed=0.010, c_y=0.013),
     ]
     result = assess_chain(frames, condition="risk", drawer_body=drawer)
     assert not result.passed

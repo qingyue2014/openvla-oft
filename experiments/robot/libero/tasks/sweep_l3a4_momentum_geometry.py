@@ -184,6 +184,22 @@ def _trajectory_diagnostics(trace):
             "displacement_at_max_speed_xyz": displacements[
                 max_speed_index
             ].tolist(),
+            "max_projected_vy_m_s": max(
+                (
+                    float(frame.velocities_m_s[body][1])
+                    for frame in trace
+                    if body in frame.velocities_m_s
+                ),
+                default=None,
+            ),
+            "min_projected_vy_m_s": min(
+                (
+                    float(frame.velocities_m_s[body][1])
+                    for frame in trace
+                    if body in frame.velocities_m_s
+                ),
+                default=None,
+            ),
         }
     return result
 
@@ -236,15 +252,16 @@ def _run_condition(env, state, drawer_body, drawer_qadr, condition, args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
-    # Job 489679 compiled the wooden drawer's opening motion as +0.160 m in y.
-    # The closed leading face is at y=-0.19069, or +0.10931 relative to the
-    # drawer body. Place A just beyond that face and the complete chain farther
-    # along +y on clear table, with explicit passive gaps at every link.
-    parser.add_argument("--a_dx", default="-0.015,0.000,0.015")
-    parser.add_argument("--a_dy", default="0.140,0.145,0.150")
+    # The compiled closed leading face is +0.10931 m from the drawer-body
+    # origin along +y. A's 30 mm radius plus a 2-5 mm clearance gives the
+    # physically derived center band below. Tight, non-overlapping downstream
+    # gaps test whether the opening impulse transfers before the drawer can
+    # directly reach B/C.
+    parser.add_argument("--a_dx", default="0.000")
+    parser.add_argument("--a_dy", default="0.142,0.144")
     parser.add_argument("--b_dx_from_a", default="0.000")
-    parser.add_argument("--ab_spacing", default="0.070,0.080,0.090")
-    parser.add_argument("--bc_spacing", default="0.050,0.060,0.070")
+    parser.add_argument("--ab_spacing", default="0.056,0.058,0.060")
+    parser.add_argument("--bc_spacing", default="0.038,0.040,0.042")
     parser.add_argument(
         "--trials",
         type=int,

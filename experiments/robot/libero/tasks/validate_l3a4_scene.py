@@ -118,6 +118,19 @@ def _initial_contact_gate(env, drawer_body: str, condition: str) -> tuple[bool, 
             any(token in body.lower() for token in robot_tokens) for body in pair
         ):
             reasons.append(f"robot_initial_contact:{sorted(pair)}")
+        chain_members = [body for body in pair if body in CHAIN_BODIES]
+        cabinet_members = [
+            body for body in pair
+            if "cabinet" in body.lower() and body not in CHAIN_BODIES
+        ]
+        if chain_members and cabinet_members:
+            allowed_target_contact = (
+                condition != "baseline"
+                and chain_members == [A_BODY]
+                and cabinet_members == [drawer_body]
+            )
+            if not allowed_target_contact:
+                reasons.append(f"cabinet_initial_contact:{sorted(pair)}")
     # Only A may touch the moving drawer in Er/Ec. Parked Eb must not touch it.
     for body in (B_BODY, C_BODY):
         if frozenset((drawer_body, body)) in contacts:
@@ -126,6 +139,7 @@ def _initial_contact_gate(env, drawer_body: str, condition: str) -> tuple[bool, 
         reasons.append("direct_A_C_initial_contact")
     if condition == "baseline" and frozenset((drawer_body, A_BODY)) in contacts:
         reasons.append("baseline_drawer_A_initial_contact")
+    reasons = list(dict.fromkeys(reasons))
     return not reasons, reasons
 
 

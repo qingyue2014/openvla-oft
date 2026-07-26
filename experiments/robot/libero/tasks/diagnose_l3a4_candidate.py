@@ -139,6 +139,10 @@ def main():
                         name: float(speed)
                         for name, speed in frame.speeds_m_s.items()
                     },
+                    "velocities_m_s": {
+                        name: list(map(float, velocity))
+                        for name, velocity in frame.velocities_m_s.items()
+                    },
                     "tilts_deg": {
                         name: float(tilt)
                         for name, tilt in frame.tilts_deg.items()
