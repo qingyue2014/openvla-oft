@@ -17,7 +17,7 @@ import numpy as np
 
 
 SCHEMA_VERSION = 1
-TOPOLOGY_ID = "native_opening_drawer_edge_A_block_B_puck_C_domino_v4"
+TOPOLOGY_ID = "native_opening_drawer_edge_A_block_B_puck_C_domino_v5"
 TASK_DESCRIPTION = "open the bottom drawer of the cabinet"
 DEFAULT_BDDL = (
     "experiments/robot/libero/tasks/PHYSCOG_L3A4_drawer_momentum_chain.bddl"
@@ -44,9 +44,11 @@ CHAIN_BODIES = (A_BODY, B_BODY, C_BODY)
 RISK_OFFSETS_XY = {
     A_BODY: np.asarray([0.120, 0.134], dtype=float),
     B_BODY: np.asarray([0.148, 0.188], dtype=float),
-    C_BODY: np.asarray([0.178, 0.225], dtype=float),
+    C_BODY: np.asarray([0.158, 0.228], dtype=float),
 }
-EC_SENTINEL_PARK_DXY = np.asarray([0.105, 0.000], dtype=float)
+# Park C farther along +y while moving it inward in policy-view depth. Its
+# final x=0.128 m remains wholly beyond the drawer's compiled x_max=0.106 m.
+EC_SENTINEL_PARK_DXY = np.asarray([-0.030, 0.080], dtype=float)
 EB_PARK_OFFSETS_XY = {
     A_BODY: np.asarray([-0.260, -0.170], dtype=float),
     B_BODY: np.asarray([-0.190, -0.170], dtype=float),

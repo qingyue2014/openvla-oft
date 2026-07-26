@@ -329,9 +329,9 @@ def main():
     parser.add_argument("--a_dx", default="0.120")
     parser.add_argument("--a_dy", default="0.134")
     parser.add_argument("--b_dx_from_a", default="0.028")
-    parser.add_argument("--c_dx_from_b", default="0.030")
+    parser.add_argument("--c_dx_from_b", default="0.010")
     parser.add_argument("--ab_spacing", default="0.054")
-    parser.add_argument("--bc_spacing", default="0.037")
+    parser.add_argument("--bc_spacing", default="0.040")
     parser.add_argument(
         "--candidate_mode",
         choices=("five_state_neighborhood", "grid"),

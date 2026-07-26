@@ -84,10 +84,11 @@ All gates fail closed and are reported separately.
 The XML convention has been audited and lightweight unit tests cover the
 contract, BDDL semantics, pairing logic, ordered causal trace, bypass rejection,
 stable control, and oracle factory. Job `489749` passed the raw-MuJoCo physical
-family gate for all five 1 mm-neighborhood candidates and all five reset states
-per candidate, jointly across Er, C-parked Ec, A-removed, and B-removed. The
-selected center is A `(0.120, 0.134)`, B `(0.148, 0.188)`, and C
-`(0.178, 0.225)` relative to the drawer body. Exact serialized-state physical
-validation and manual 256×256 policy-view review remain required. Do not quote
-L3-A4 policy rates or call the layout attribution-ready before all gates above
-are recorded as PASS.
+family gate for the v4 center and its 1 mm neighborhood, but subsequent actual
+256×256 review rejected v4 because risk/stable C was cropped by the image
+boundary. The v5 visibility candidate keeps A `(0.120, 0.134)` and B
+`(0.148, 0.188)`, moves risk C inward to `(0.158, 0.228)`, and parks Ec C at
+`(0.128, 0.308)`, all relative to the drawer body. v5 must repeat the physical
+and policy-view gates before its offsets count as accepted constants. Do not
+quote L3-A4 policy rates or call the layout attribution-ready before all gates
+above are recorded as PASS.
