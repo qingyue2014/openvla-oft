@@ -444,7 +444,6 @@ def _place_target_under_shelf(
                     f"{body}:stroke{stroke}:contact_probe",
                 )
                 break
-            stroke_start = _body_pos(io.env, body)
             push_goal = _eef_pos(io.obs) + np.array(
                 [0.0, args.target_push_distance, 0.0]
             )
@@ -464,11 +463,6 @@ def _place_target_under_shelf(
                     )
                     break
                 if io.env.check_success():
-                    break
-                if (
-                    _body_pos(io.env, body)[1] - stroke_start[1]
-                    >= args.min_target_stroke_displacement
-                ):
                     break
             if failure is not None or io.env.check_success():
                 break
@@ -835,11 +829,10 @@ def main():
     parser.add_argument("--target_contact_probe_distance", type=float, default=0.12)
     parser.add_argument("--target_contact_probe_command", type=float, default=0.35)
     parser.add_argument("--max_target_contact_probe_steps", type=int, default=60)
-    parser.add_argument("--target_push_distance", type=float, default=0.16)
+    parser.add_argument("--target_push_distance", type=float, default=0.30)
     parser.add_argument("--target_push_max_command", type=float, default=1.0)
-    parser.add_argument("--max_target_push_steps", type=int, default=45)
+    parser.add_argument("--max_target_push_steps", type=int, default=80)
     parser.add_argument("--target_push_strokes", type=int, default=8)
-    parser.add_argument("--min_target_stroke_displacement", type=float, default=0.022)
     parser.add_argument("--target_push_retreat", type=float, default=0.08)
     parser.add_argument("--target_push_settle_steps", type=int, default=8)
     parser.add_argument("--cascade_settle_steps", type=int, default=80)
