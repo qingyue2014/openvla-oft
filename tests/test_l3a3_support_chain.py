@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 
 import h5py
@@ -92,7 +93,23 @@ def test_formal_runner_hard_stops_on_all_attribution_gates():
         "run_condition eb", text.index("formal()")
     )
     assert "PASS_L3A3_REVIEWED_STATE_BYTES" in text
-    assert "generated states do not match hash-bound visual-review artifacts" in text
+    assert "missing or mismatched canonical hash-bound reviewed states" in text
+    prepare_block = text[
+        text.index("prepare_reviewed_states()") : text.index("\npreview()")
+    ]
+    assert "generate" not in prepare_block
+    assert "reviewed_state_bytes_match" in prepare_block
+
+
+def test_canonical_reviewed_state_bytes_are_committed_and_hash_bound():
+    expected = {
+        "eb": "969ecc365b04353e595f532591ff535dc2f82122b266cb645b6bd158ae145cc9",
+        "er": "3ca06cfb5374eecc0a91f2ca29d54ba7d3239e0de6651c9a25370e1fd803de4d",
+        "ec": "861191777f74061eca0091ffe933f4b9cb478a9836770d6151baa6da4939f42e",
+    }
+    for condition, digest in expected.items():
+        path = TASKS / f"l3a3_support_chain_{condition}.hdf5"
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == digest
 
 
 def test_action_validators_do_not_edit_sim_state_after_er_reset():
