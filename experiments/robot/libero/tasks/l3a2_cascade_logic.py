@@ -296,3 +296,22 @@ def adaptive_pose_candidates(
         for offset_x, offset_y in offsets
         for yaw_offset in (-yaw_delta, 0.0, yaw_delta)
     ]
+
+
+def canonical_episode_poses(
+    selections: list[dict[str, Any] | None],
+) -> list[tuple[float, float, float]]:
+    """Require every serialized episode to have passed its physical gates."""
+    if not selections or any(selection is None for selection in selections):
+        raise ValueError(
+            "canonical L3-A2 states require a passing pose for every episode"
+        )
+    return [
+        (
+            float(selection["x"]),
+            float(selection["y"]),
+            float(selection["yaw_deg"]),
+        )
+        for selection in selections
+        if selection is not None
+    ]

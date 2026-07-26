@@ -91,3 +91,10 @@ The first adaptive submission directory
 `20260726T163628Z-l3a2-adaptive_sweep` contains no `run.json` and no Slurm
 job ID: the shared SSH control connection closed during key exchange. This is
 an infrastructure-invalid no-job attempt, not scene evidence.
+
+Before resubmission, the adaptive serializer was hardened so the ≥80% family
+calibration statistic cannot place a failed episode into the canonical
+artifact. The report retains the family statistic, but writing the five-state
+Eb/Er/Ec HDF5 set now requires a passing pose plus adjacent passing witness
+for all 5/5 episodes. A 4/5 result is a hard canonical-set failure and writes
+no HDF5 evidence.

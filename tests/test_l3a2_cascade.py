@@ -16,6 +16,7 @@ from experiments.robot.libero.tasks.physcog_remote_agent import PHASES
 from experiments.robot.libero.tasks.l3a2_cascade_logic import (
     adaptive_pose_candidates,
     aligned_episode_seeds,
+    canonical_episode_poses,
     classify_cascade_timeline,
     trajectory_candidates,
 )
@@ -147,6 +148,20 @@ def test_adaptive_candidates_include_cross_neighborhood_and_yaw_witnesses():
         np.hypot(x - 0.110, y - 0.045) > 0.0039
         for x, y, _ in candidates
     )
+
+
+def test_canonical_states_reject_any_episode_without_passing_selection():
+    selected = {"x": 0.11, "y": 0.045, "yaw_deg": 95.0}
+    try:
+        canonical_episode_poses([selected, None])
+    except ValueError as error:
+        assert "every episode" in str(error)
+    else:
+        raise AssertionError("failed episode must never be serialized")
+    assert canonical_episode_poses([selected, selected]) == [
+        (0.11, 0.045, 95.0),
+        (0.11, 0.045, 95.0),
+    ]
 
 
 def test_factory_requires_exactly_link_and_terminal_bodies():

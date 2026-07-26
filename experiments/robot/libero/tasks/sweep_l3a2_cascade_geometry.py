@@ -40,6 +40,7 @@ from experiments.robot.libero.tasks.l3a1_replay import (
 from experiments.robot.libero.tasks.l3a2_cascade_logic import (
     adaptive_pose_candidates,
     aligned_episode_seeds,
+    canonical_episode_poses,
     trajectory_candidates,
 )
 from experiments.robot.libero.tasks.validate_l3a2_cascade_scene import (
@@ -497,10 +498,12 @@ def run(args: argparse.Namespace) -> str:
             witnesses.append(pair[1] if pair else None)
         passed = sum(selection is not None for selection in selections)
         pass_rate = passed / len(selections)
+        family_gate_passed = pass_rate >= 0.8
+        canonical_ready = passed == len(selections)
         verdict = (
             "PASS_L3A2_ADAPTIVE_CASCADE_GEOMETRY_SWEEP"
-            if pass_rate >= 0.8
-            else "FAIL_L3A2_ADAPTIVE_CASCADE_GEOMETRY_SWEEP"
+            if canonical_ready
+            else "FAIL_L3A2_CANONICAL_STATE_SET"
         )
         trace_payload = {
             "candidate_source": (
@@ -535,6 +538,10 @@ def run(args: argparse.Namespace) -> str:
             f"- Verdict: **{verdict}**",
             f"- Episodes with a passing pose plus adjacent witness: "
             f"{passed}/{len(selections)} ({pass_rate:.3f}).",
+            f"- Family ≥80% calibration gate: "
+            f"{'PASS' if family_gate_passed else 'FAIL'}.",
+            f"- Canonical five-state serialization gate (5/5 required): "
+            f"{'PASS' if canonical_ready else 'FAIL'}.",
             "- Pose source: each episode's collision-disabled measured A fall "
             "trace, transported from one fixed physical anchor.",
             "- Eb/Er/Ec in an episode receive the same B pose; only A differs "
@@ -563,16 +570,8 @@ def run(args: argparse.Namespace) -> str:
         Path(args.out_report).write_text(
             "\n".join(report) + "\n", encoding="utf-8"
         )
-        if pass_rate >= 0.8:
-            final_poses = [
-                (
-                    selection["x"],
-                    selection["y"],
-                    selection["yaw_deg"],
-                )
-                if selection is not None else seeds[index]
-                for index, selection in enumerate(selections)
-            ]
+        if canonical_ready:
+            final_poses = canonical_episode_poses(selections)
             _write_episode_candidates(
                 base_er,
                 Path(args.er),
