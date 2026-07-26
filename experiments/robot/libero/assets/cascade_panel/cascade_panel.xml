@@ -18,12 +18,12 @@
         <!-- group 0: physical panel and wide stabilizing foot -->
         <geom name="panel_collision" type="box"
               size="0.005 0.055 0.042" pos="0 0 0.054"
-              density="80" friction="0.60 0.20 0.05"
+              density="0.8" friction="0.60 0.20 0.05"
               group="0" rgba="0.8 0.8 0.8 0.25"
               solimp="0.998 0.998 0.001" solref="0.001 1"/>
         <geom name="foot_collision" type="box"
               size="0.022 0.060 0.007" pos="0 0 0.007"
-              density="1200" friction="0.75 0.25 0.05"
+              density="12" friction="0.75 0.25 0.05"
               group="0" rgba="0.8 0.8 0.8 0.25"
               solimp="0.998 0.998 0.001" solref="0.001 1"/>
 

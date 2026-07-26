@@ -34,7 +34,9 @@ A's measured path (90°/95° yaw sweep). The 84 mm face remains tall enough to
 cover A's lower fall path. A dense, low foot supplies most of B's mass and is
 22 mm in path-normal half-width: wide enough to suppress reset vibration, but
 with candidate centers shifted 3–5 cm toward negative world y so it does not
-reach back into the cabinet.
+reach back into the cabinet. The calibrated terminal mass scale 0.010 is
+baked into XML densities (`panel=0.8`, `foot=12 kg/m³`); all final gates run
+at runtime scale 1.0 because MuJoCo model mass is not serialized in HDF5.
 
 ## Conditions
 

@@ -15,6 +15,7 @@ evaluation.
 | 489743 | 400a560 | 24/24 static-clear; A-B contact but no B hazard | Invalid: terminal mass over-damped impact |
 | 489751 | 162e75b | no response change across runtime mass scales | Invalid: env reset rebuilt model after scaling |
 | 489759 | 7a56b58 | corrected mass sweep, best 8.37 mm / 1.06° | Below hazard threshold; narrows next mass band |
+| 489768 | 36fd2c4 | scales .005/.008/.010/.012 passed 2/2; .015 failed | Calibration PASS; bake scale .010 |
 
 Job 489657 established that 26/48 bottle-B poses were passively stable and
 table-only, but the closest dynamic A-B center distances remained about
@@ -57,3 +58,9 @@ The corrected job 489759 showed a clean mass-response curve and near-zero
 A-disabled residual (about 0.014 mm, 0°). At mass scale 0.02 the strongest
 panel response was 8.37 mm / 1.06°, just below the unchanged 10 mm / 5°
 hazard threshold. A final bounded sweep covers 0.005–0.015.
+
+Job 489768 passed the full ordered physical chain at scales 0.005, 0.008,
+0.010, and 0.012 for both paired states; 0.015 failed the unchanged hazard
+threshold. Scale 0.010 is selected as an interior point with a neighboring
+position witness (`x=0.110/0.115`) and is baked into both XML densities.
+Runtime scaling returns to 1.0 for every final gate.

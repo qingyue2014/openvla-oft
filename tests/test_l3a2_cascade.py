@@ -180,6 +180,13 @@ def test_cascade_panel_has_separate_collision_and_opaque_visual_geoms():
     assert {geom.attrib["name"] for geom in physical} == {
         "panel_collision", "foot_collision"
     }
+    assert {
+        geom.attrib["name"]: float(geom.attrib["density"])
+        for geom in physical
+    } == {
+        "panel_collision": 0.8,
+        "foot_collision": 12.0,
+    }
     assert {geom.attrib["name"] for geom in visible} >= {
         "panel_visual", "foot_visual"
     }
