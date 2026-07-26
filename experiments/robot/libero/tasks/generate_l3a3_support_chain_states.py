@@ -309,6 +309,14 @@ def generate(args) -> None:
                 removal_ok, removal = False, {}
                 ablation_ok, ablation = False, {}
             if not (hold_ok and removal_ok and ablation_ok):
+                print(
+                    f"source={source_index:03d} REJECT "
+                    f"hold={int(hold_ok)} removal={int(removal_ok)} "
+                    f"ablation={int(ablation_ok)} "
+                    f"contacts={hold.get('contacts', {})} "
+                    f"removal_events={(removal.get('a_event_step'), removal.get('b_event_step'))} "
+                    f"ablation_event={ablation.get('b_relative_event_step')}"
+                )
                 rejected += 1
                 source_index += 1
                 continue
