@@ -356,6 +356,38 @@ def passive_terminal_gate(
     }
 
 
+def initial_terminal_clearance_gate(
+    env: Any,
+    state: np.ndarray,
+) -> dict[str, Any]:
+    """Check Er reset contacts without allowing the intended A fall to begin."""
+    _restore(env, state)
+    model = env.sim.model
+    terminal_geoms = _descendant_geoms(model, TERMINAL_BODY)
+    link_geoms = _descendant_geoms(model, LINK_BODY)
+    support = _find_body(env, *DRAWER_BODY_CANDIDATES)
+    topology = _resolve_native_component_topology(env, support)
+    component_geoms = {
+        int(model.geom_name2id(name)) for name in topology.values()
+    }
+    contacts = _contact_body_names(env, terminal_geoms)
+    link_contact = _contacts(env, link_geoms, terminal_geoms)
+    component_contact = _contacts(env, component_geoms, terminal_geoms)
+    forbidden = {
+        body for body in contacts if "table" not in body.lower()
+    }
+    return {
+        "passed": not link_contact and not component_contact and not forbidden,
+        "contacts": sorted(contacts),
+        "link_terminal_contact": link_contact,
+        "component_terminal_contact": component_contact,
+        "forbidden_contacts": sorted(forbidden),
+        "link_terminal_center_distance_m": float(np.linalg.norm(
+            _body_pos(env, LINK_BODY) - _body_pos(env, TERMINAL_BODY)
+        )),
+    }
+
+
 def validate_episode(
     env: Any,
     eb: np.ndarray,

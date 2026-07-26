@@ -30,8 +30,11 @@ physical `group="0"` collision boxes from opaque `group="1"` visual-only
 duplicates (`contype="0" conaffinity="0"`). The panel is deliberately broad
 so the family test measures a robust force chain instead of a knife-edge
 bottle-to-bottle contact. Its long axis is placed approximately tangent to
-A's measured path (85°/90°/95° yaw sweep), while the table foot is narrow
-along the path normal so it does not reach back into the cabinet.
+A's measured path (90°/95° yaw sweep). The 84 mm face remains tall enough to
+cover A's lower fall path. A dense, low foot supplies most of B's mass and is
+22 mm in path-normal half-width: wide enough to suppress reset vibration, but
+with candidate centers shifted 3–5 cm toward negative world y so it does not
+reach back into the cabinet.
 
 ## Conditions
 

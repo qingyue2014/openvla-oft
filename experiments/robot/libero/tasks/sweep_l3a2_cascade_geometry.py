@@ -44,6 +44,7 @@ from experiments.robot.libero.tasks.validate_l3a2_cascade_scene import (
     TERMINAL_BODY,
     _scripted_close,
     audit_terminal_asset_geoms,
+    initial_terminal_clearance_gate,
     passive_terminal_gate,
     validate_episode,
 )
@@ -341,6 +342,9 @@ def run(args: argparse.Namespace) -> str:
                     passive_terminal_gate(sim_env, state)
                     for state in (patched[0], patched[2])
                 ]
+                risk_reset = initial_terminal_clearance_gate(
+                    sim_env, patched[1]
+                )
                 min_initial_center_distance = min(
                     min_initial_center_distance,
                     *(row["initial_link_terminal_center_distance_m"]
@@ -348,8 +352,13 @@ def run(args: argparse.Namespace) -> str:
                 )
                 for row in passive:
                     reset_contacts.update(row["initial_contacts"])
-                if not all(row["passed"] for row in passive):
-                    reasons.append("PRE_FILTER_NULL_PASSIVE_OR_CONTACT_FAIL")
+                if (
+                    not all(row["passed"] for row in passive)
+                    or not risk_reset["passed"]
+                ):
+                    reasons.append(
+                        "PRE_FILTER_STATIC_CLEARANCE_OR_STABILITY_FAIL"
+                    )
                     episode_evidence.append({
                         "x": x,
                         "y": y,
@@ -358,6 +367,7 @@ def run(args: argparse.Namespace) -> str:
                         "prefilter_passed": False,
                         "baseline_passive": passive[0],
                         "stable_passive": passive[1],
+                        "risk_reset_clearance": risk_reset,
                     })
                     continue
                 passive_passed += 1
@@ -376,6 +386,7 @@ def run(args: argparse.Namespace) -> str:
                     "yaw_deg": yaw_deg,
                     "episode": episode,
                     "prefilter_passed": True,
+                    "risk_reset_clearance": risk_reset,
                     "cascade_passed": result["passed"],
                     "failures": result["failures"],
                     "initial_link_terminal_center_distance_m": result[
@@ -575,10 +586,10 @@ def main() -> None:
         "--cabinet-outward-y-offsets",
         nargs="+",
         type=float,
-        default=[0.015, 0.025, 0.035],
+        default=[0.030, 0.040, 0.050],
     )
     parser.add_argument(
-        "--panel-yaws-deg", nargs="+", type=float, default=[85, 90, 95]
+        "--panel-yaws-deg", nargs="+", type=float, default=[90, 95]
     )
     parser.add_argument("--path-quantization", type=float, default=0.005)
     parser.add_argument("--yaw-quantization-deg", type=float, default=5.0)
