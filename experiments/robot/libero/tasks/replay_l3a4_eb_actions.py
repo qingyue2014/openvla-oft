@@ -73,12 +73,6 @@ def _trajectory(root: Path, episode: int):
     return candidates[0], actions
 
 
-def _refresh(env):
-    env._post_process()
-    env._update_observables(force=True)
-    return env._get_observations()
-
-
 def _write_video(path: Path, frames, fps: int):
     path.parent.mkdir(parents=True, exist_ok=True)
     with imageio.get_writer(path, fps=fps) as writer:

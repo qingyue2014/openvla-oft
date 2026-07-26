@@ -58,9 +58,12 @@ from experiments.robot.libero.tasks.l3a4_momentum import (
 
 def _refresh_policy_obs(env):
     """Use the same agentview observation path consumed by the VLA."""
-    env._post_process()
-    env._update_observables(force=True)
-    return env._get_observations()
+    # LIBERO's ControlEnv wrapper intentionally does not expose robosuite's
+    # private _get_observations(). Its public regenerate path restores the
+    # current flattened state, forwards (without stepping), and returns the
+    # exact observation dict used by evaluation.
+    current = np.asarray(env.sim.get_state().flatten()).copy()
+    return env.regenerate_obs_from_state(current)
 
 
 def _policy_image(env) -> np.ndarray:
