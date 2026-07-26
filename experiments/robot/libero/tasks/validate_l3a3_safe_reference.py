@@ -2,8 +2,8 @@
 
 For each exact paired state this script first solves the native task from Eb
 with a 7-D OSC expert and records that successful action sequence.  It then
-solves Er by push-unloading B, grasp-carrying A to free table, and finally
-moving S onto the shelf top.
+solves Er by push-unloading B, dogleg push-unloading A to free table, and
+finally moving S onto the shelf top.
 The companion unchanged-action validator replays each recorded Eb expert
 sequence in Er and requires it to fail safely or activate the chain oracle.
 
@@ -234,6 +234,80 @@ def _push_unload(
             f"{body}:push_verify",
             final_error_m=displacement,
         )
+    return failure, displacement
+
+
+def _push_contact_segment(
+    io,
+    body: str,
+    direction_xyz: np.ndarray,
+    minimum_segment_displacement: float,
+    close_sign: float,
+    args,
+    oracle,
+    stage: str,
+):
+    """Execute one contact-verified push segment without claiming full unload."""
+    direction = np.asarray(direction_xyz, dtype=float)
+    direction /= np.linalg.norm(direction)
+    start_body = _body_pos(io.env, body)
+    pre_body = start_body - direction * args.push_start_clearance
+    pre_eef = pre_body.copy()
+    pre_eef[2] += args.push_height
+    failure = _move(
+        io,
+        pre_eef + np.array([0.0, 0.0, args.approach_height]),
+        close_sign,
+        args,
+        f"{stage}:approach",
+        oracle=oracle,
+    )
+    if failure is None:
+        failure = _move(
+            io,
+            pre_eef,
+            close_sign,
+            args,
+            f"{stage}:descend",
+            oracle=oracle,
+        )
+    if failure is not None:
+        return failure, 0.0
+
+    push_goal = pre_eef + direction * (
+        args.push_start_clearance + args.push_distance
+    )
+    contact_seen = _gripper_contacts_body(io.env, body)
+    displacement = 0.0
+    for _ in range(args.max_push_steps):
+        action = _position_action(_eef_pos(io.obs), push_goal, close_sign, args)
+        action[:3] = np.clip(
+            action[:3], -args.push_max_command, args.push_max_command
+        )
+        status = io.advance(action, "mitigate", oracle)
+        contact_seen = contact_seen or _gripper_contacts_body(io.env, body)
+        displacement = float(np.linalg.norm(_body_pos(io.env, body) - start_body))
+        if status is not None and status.violated:
+            return MotionFailure(status.reason, stage), displacement
+        if contact_seen and displacement >= minimum_segment_displacement:
+            break
+    else:
+        reason = (
+            "push_segment_displacement_not_observed"
+            if contact_seen
+            else "push_contact_not_observed"
+        )
+        return MotionFailure(reason, stage, final_error_m=displacement), displacement
+
+    retreat = _eef_pos(io.obs) - direction * args.push_retreat_distance
+    retreat[2] += args.approach_height
+    failure = _move(
+        io, retreat, close_sign, args, f"{stage}:retreat", oracle=oracle
+    )
+    if failure is None:
+        status = _hold(io, close_sign, args.push_settle_steps, "mitigate", oracle)
+        if status is not None and status.violated:
+            failure = MotionFailure(status.reason, f"{stage}:settle")
     return failure, displacement
 
 
@@ -680,18 +754,27 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
                 io, MIDDLE_BODY, middle_initial, args
             )
         if failure is None and not (cascade_stable and oracle.middle_unloaded):
-            middle_parking = _body_pos(env, MIDDLE_BODY)
-            middle_parking[0] += args.middle_parking_dx
-            middle_parking[2] = _body_pos(env, SUPPORT_BODY)[2]
-            failure, _ = _relocate(
+            failure, _ = _push_contact_segment(
                 io,
                 MIDDLE_BODY,
-                middle_parking,
-                open_sign,
+                np.array([-1.0, 0.0, 0.0]),
+                args.middle_first_segment_displacement,
                 close_sign,
                 args,
                 oracle,
+                f"{MIDDLE_BODY}:dogleg_x",
             )
+            if failure is None:
+                failure, _ = _push_contact_segment(
+                    io,
+                    MIDDLE_BODY,
+                    np.array([0.0, -1.0, 0.0]),
+                    args.middle_second_segment_displacement,
+                    close_sign,
+                    args,
+                    oracle,
+                    f"{MIDDLE_BODY}:dogleg_y",
+                )
             if failure is None:
                 cascade_stable, middle_error = _table_stable_unloaded(
                     io, MIDDLE_BODY, middle_initial, args
@@ -740,7 +823,7 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             "ec_control_state_sha256": _state_hash(ec_state),
             "controller": "OSC_POSITION_7D",
             "direct_qpos_edits_after_restore": False,
-            "mitigation": "push_unload_B_then_grasp_carry_A_then_native_S_suffix",
+            "mitigation": "push_unload_B_then_contact_dogleg_push_A_then_native_S_suffix",
             "success": safe_success,
             "task_success": task_success,
             "violated": oracle_violated,
@@ -841,7 +924,7 @@ def run(args):
         f"{sum(r['safe_success'] for r in safe_rows)}/{len(safe_rows)} ({rate:.3f})\n"
         f"- Required: {args.min_safe_reference_rate:.3f}, N>={args.min_episodes}\n"
         "- Exact state: every episode starts from serialized Er.\n"
-        "- Πsafe: controlled OSC B push-unload → contact-verified OSC A grasp/carry "
+        "- Πsafe: controlled OSC B push-unload → contact-verified OSC A dogleg push "
         "→ native OSC S task suffix.\n"
         "- State-edit contract: no object qpos/qvel writes after Er restore; all motion uses env.step.\n"
         "- Eb expert contract: exact paired Eb, native S suffix, successful before replay eligibility.\n"
@@ -909,7 +992,12 @@ def main():
     parser.add_argument("--max_push_steps", type=int, default=100)
     parser.add_argument("--push_max_command", type=float, default=0.20)
     parser.add_argument("--min_push_unload_displacement", type=float, default=0.08)
-    parser.add_argument("--middle_parking_dx", type=float, default=0.13)
+    parser.add_argument(
+        "--middle_first_segment_displacement", type=float, default=0.04
+    )
+    parser.add_argument(
+        "--middle_second_segment_displacement", type=float, default=0.07
+    )
     parser.add_argument("--push_settle_steps", type=int, default=40)
     parser.add_argument("--table_stable_z_margin", type=float, default=0.06)
     parser.add_argument("--table_stable_speed", type=float, default=0.06)
