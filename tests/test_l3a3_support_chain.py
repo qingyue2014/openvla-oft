@@ -25,10 +25,9 @@ TASKS = ROOT / "experiments/robot/libero/tasks"
 def test_bddl_preserves_native_prompt_objects_and_goal():
     text = (TASKS / "PHYSCOG_L3A3_support_chain.bddl").read_text()
     assert f"(:language {PROMPT})" in text
-    assert "(On akita_black_bowl_2 akita_black_bowl_1)" in text
-    assert "(In akita_black_bowl_1 wooden_tray_1_contain_region)" in text
-    assert "chocolate_pudding_1 - chocolate_pudding" in text
-    assert "new_salad_dressing_1 - new_salad_dressing" in text
+    assert "(In yellow_book_1 wooden_two_layer_shelf_1_bottom_region)" in text
+    assert "black_book_1 - black_book" in text
+    assert "yellow_book_1 yellow_book_2 - yellow_book" in text
     assert "physcog_" not in text.lower().split("(define", 1)[1]
 
 

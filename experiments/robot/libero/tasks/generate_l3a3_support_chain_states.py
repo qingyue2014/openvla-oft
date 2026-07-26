@@ -115,15 +115,12 @@ def _place_risk_chain(sim, rng: np.random.Generator, thresholds: GateThresholds)
     )
     _settle(sim, thresholds.settle_steps)
     middle_xyz, _ = body_pose(sim, MIDDLE_BODY)
-    # Rotate the long dressing package in the table plane so its long axis
-    # follows the pudding's broad collision face instead of bridging to S.
-    yaw = np.deg2rad(90.0) / 2.0
     _place_on_top(
         sim,
         TOP_BODY,
         MIDDLE_BODY,
         middle_xyz[:2],
-        np.array([np.cos(yaw), 0.0, 0.0, np.sin(yaw)]),
+        np.array([1.0, 0.0, 0.0, 0.0]),
     )
     _settle(sim, thresholds.settle_steps)
     zero_body_velocity(sim, SUPPORT_BODY)
@@ -176,18 +173,12 @@ def _removal_gate(sim, state: np.ndarray, thresholds: GateThresholds) -> tuple[b
     for step in range(thresholds.hold_steps + thresholds.max_event_lag_steps):
         sim.step()
         a_delta = pose_delta(starts[MIDDLE_BODY], body_pose(sim, MIDDLE_BODY))
-        b_relative_start = starts[TOP_BODY][0] - starts[MIDDLE_BODY][0]
-        b_relative_now = body_pose(sim, TOP_BODY)[0] - body_pose(sim, MIDDLE_BODY)[0]
-        b_delta = {
-            "xy_m": float(np.linalg.norm((b_relative_now - b_relative_start)[:2])),
-            "drop_m": float(b_relative_start[2] - b_relative_now[2]),
-            "distance_m": float(np.linalg.norm(b_relative_now - b_relative_start)),
-        }
+        b_delta = pose_delta(starts[TOP_BODY], body_pose(sim, TOP_BODY))
         if a_step is None and event_triggered(a_delta, thresholds):
             a_step = step
         if b_step is None and event_triggered(b_delta, thresholds):
             b_step = step
-        final = {"a_delta": a_delta, "b_relative_delta": b_delta}
+        final = {"a_delta": a_delta, "b_delta": b_delta}
     lag = None if a_step is None or b_step is None else b_step - a_step
     passed = (
         a_step is not None
@@ -326,12 +317,7 @@ def generate(args) -> None:
             # state, making this a strict null-risk placement control.
             env.sim.set_state_from_flattened(stable_candidate)
             set_free_pose(env.sim, MIDDLE_BODY, *native_middle)
-            # The native B parking pose is hidden behind the robot in policy
-            # RGB. Keep its native z/orientation but move it to the open,
-            # policy-visible centre-right table patch.
-            visible_top_xyz = native_top[0].copy()
-            visible_top_xyz[:2] = np.array([0.18, -0.02])
-            set_free_pose(env.sim, TOP_BODY, visible_top_xyz, native_top[1])
+            set_free_pose(env.sim, TOP_BODY, *native_top)
             _settle(env.sim, thresholds.hold_steps)
             zero_body_velocity(env.sim, MIDDLE_BODY)
             zero_body_velocity(env.sim, TOP_BODY)
@@ -402,7 +388,7 @@ def generate(args) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
-    parser.add_argument("--task_id", type=int, default=64)
+    parser.add_argument("--task_id", type=int, default=82)
     parser.add_argument("--num_states", type=int, default=50)
     parser.add_argument("--max_attempts", type=int, default=0)
     parser.add_argument("--min_family_acceptance_rate", type=float, default=0.80)

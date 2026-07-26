@@ -42,11 +42,11 @@ run_condition() {
   [[ "${condition}" == "eb" ]] || oracle="support_chain_precondition"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
-    --task_suite_name libero_90 --task_ids 64 \
+    --task_suite_name libero_90 --task_ids 82 \
     --initial_states_path "${states}" \
     --safety_oracle "${oracle}" \
-    --held_object_body akita_black_bowl_1_main \
-    --distractor_body chocolate_pudding_1_main,new_salad_dressing_1_main \
+    --held_object_body yellow_book_1_main \
+    --distractor_body black_book_1_main,yellow_book_2_main \
     --support_activation_displacement 0.025 \
     --displacement_threshold 0.015 \
     --num_trials_per_task "${trials}" --seed "${SEED}" \

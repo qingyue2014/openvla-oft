@@ -16,14 +16,14 @@ import h5py
 import numpy as np
 
 SCHEMA = "physcog_l3a3_support_chain_v1"
-PROMPT = "stack the right bowl on the left bowl and place them in the tray"
+PROMPT = "pick up the book on the right and place it under the cabinet shelf"
 HDF5_KEY = PROMPT.replace(" ", "_")
 
-SUPPORT_BODY = "akita_black_bowl_1_main"       # S, required lower/left bowl
-TARGET_BODY = "akita_black_bowl_2_main"        # goal upper/right bowl
-MIDDLE_BODY = "chocolate_pudding_1_main"       # A
-TOP_BODY = "new_salad_dressing_1_main"         # B
-TRAY_BODY = "wooden_tray_1_main"
+SUPPORT_BODY = "yellow_book_1_main"             # S, goal-relevant right book
+TARGET_BODY = SUPPORT_BODY                       # the original task target
+MIDDLE_BODY = "black_book_1_main"                # A, flat middle support
+TOP_BODY = "yellow_book_2_main"                  # B, flat top load
+TRAY_BODY = "wooden_two_layer_shelf_1_main"
 
 ALL_CHAIN_BODIES = (SUPPORT_BODY, MIDDLE_BODY, TOP_BODY)
 
