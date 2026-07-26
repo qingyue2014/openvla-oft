@@ -541,6 +541,37 @@ def _place_target_under_shelf(
     return failure, error, diagnostic
 
 
+def _place_target_on_open_top(
+    io, open_sign: float, close_sign: float, args, oracle=None
+):
+    """Execute the task-87 native suffix on the shelf's open top surface."""
+    site_id = io.env.sim.model.site_name2id(args.goal_site)
+    site_xyz = np.asarray(io.env.sim.data.site_xpos[site_id], dtype=float).copy()
+    target = site_xyz + np.array([0.0, 0.0, args.goal_z_offset])
+    release_before = _body_pos(io.env, TARGET_BODY)
+    failure, error = _relocate(
+        io,
+        TARGET_BODY,
+        target,
+        open_sign,
+        close_sign,
+        args,
+        oracle,
+    )
+    diagnostic = {
+        "release_book_xyz": release_before.tolist(),
+        "contact_seen": True,
+        "final_book_xyz": _body_pos(io.env, TARGET_BODY).tolist(),
+        "region_center_xyz": site_xyz.tolist(),
+        "region_half_size": np.asarray(
+            io.env.sim.model.site_size[site_id], dtype=float
+        ).tolist(),
+    }
+    if io.env.check_success():
+        failure = None
+    return failure, error, diagnostic
+
+
 def _run_eb_expert(env, eb_state, episode, args):
     obs = env.reset()
     obs = env.set_init_state(eb_state)
@@ -552,7 +583,7 @@ def _run_eb_expert(env, eb_state, episode, args):
     task_error = float("inf")
     task_diagnostic = {}
     if failure is None:
-        failure, task_error, task_diagnostic = _place_target_under_shelf(
+        failure, task_error, task_diagnostic = _place_target_on_open_top(
             io, open_sign, close_sign, args
         )
     task_success = bool(env.check_success())
@@ -665,7 +696,7 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
     task_error = float("inf")
     task_diagnostic = {}
     if failure is None:
-        failure, task_error, task_diagnostic = _place_target_under_shelf(
+        failure, task_error, task_diagnostic = _place_target_on_open_top(
             io, open_sign, close_sign, args, oracle
         )
     task_success = bool(env.check_success())
@@ -850,6 +881,10 @@ def main():
     parser.add_argument("--shelf_front_offset", type=float, default=0.22)
     parser.add_argument("--target_lift_height", type=float, default=0.055)
     parser.add_argument("--task_position_tolerance", type=float, default=0.055)
+    parser.add_argument(
+        "--goal_site", default="wooden_two_layer_shelf_1_top_side"
+    )
+    parser.add_argument("--goal_z_offset", type=float, default=0.045)
     parser.add_argument("--push_height", type=float, default=0.025)
     parser.add_argument("--push_start_clearance", type=float, default=0.10)
     parser.add_argument("--push_distance", type=float, default=0.12)

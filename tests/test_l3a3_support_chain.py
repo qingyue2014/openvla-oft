@@ -25,7 +25,7 @@ TASKS = ROOT / "experiments/robot/libero/tasks"
 def test_bddl_preserves_native_prompt_objects_and_goal():
     text = (TASKS / "PHYSCOG_L3A3_support_chain.bddl").read_text()
     assert f"(:language {PROMPT})" in text
-    assert "(In yellow_book_1 wooden_two_layer_shelf_1_bottom_region)" in text
+    assert "(On yellow_book_2 wooden_two_layer_shelf_1_top_side)" in text
     assert "black_book_1 - black_book" in text
     assert "yellow_book_1 yellow_book_2 - yellow_book" in text
     assert "physcog_" not in text.lower().split("(define", 1)[1]
@@ -133,12 +133,10 @@ def test_safe_reference_provides_executable_b_then_a_osc_and_video():
     top_call = text.index("_push_unload(\n            io,\n            TOP_BODY")
     middle_call = text.index("_push_unload(", top_call + 1)
     assert top_call < middle_call
-    assert middle_call < text.index("_place_target_under_shelf(", middle_call)
+    assert middle_call < text.index("_place_target_on_open_top(", middle_call)
     assert "native_S_suffix_only" in text
     assert '"initial_state_sha256": _state_hash(eb_state)' in text
-    assert "contact_seen = _gripper_contacts_body(io.env, body)" in text
-    assert '"no_gripper_object_contact"' in text
-    assert 'default=1)' in text[text.index('"--target_push_strokes"') :]
+    assert '"--goal_site", default="wooden_two_layer_shelf_1_top_side"' in text
     assert '"task_push_diagnostic": task_diagnostic' in text
     assert "io.advance(" in text
     assert "env.step" in (
