@@ -17,7 +17,7 @@ import numpy as np
 
 
 SCHEMA_VERSION = 1
-TOPOLOGY_ID = "native_opening_drawer_edge_A_block_B_puck_C_domino_v8"
+TOPOLOGY_ID = "native_opening_drawer_edge_A_block_B_puck_C_domino_v9"
 TASK_DESCRIPTION = "open the bottom drawer of the cabinet"
 DEFAULT_BDDL = (
     "experiments/robot/libero/tasks/PHYSCOG_L3A4_drawer_momentum_chain.bddl"
@@ -52,9 +52,9 @@ EC_SENTINEL_PARK_DXY = np.asarray([-0.030, 0.080], dtype=float)
 EB_PARK_OFFSETS_XY = {
     # The diagonal world-space row projects to separated objects in the actual
     # 256px agentview. Every center remains beyond the final drawer swept front.
-    A_BODY: np.asarray([0.030, 0.460], dtype=float),
-    B_BODY: np.asarray([0.090, 0.400], dtype=float),
-    C_BODY: np.asarray([0.150, 0.340], dtype=float),
+    A_BODY: np.asarray([0.110, 0.460], dtype=float),
+    B_BODY: np.asarray([0.170, 0.400], dtype=float),
+    C_BODY: np.asarray([0.230, 0.340], dtype=float),
 }
 
 DRAWER_TARGET_QPOS = -0.160
@@ -161,6 +161,67 @@ def _normalise_contacts(contacts: Iterable[Sequence[str]]) -> set[frozenset[str]
         for pair in contacts
         if len(pair) == 2 and pair[0] and pair[1] and pair[0] != pair[1]
     }
+
+
+def initial_contact_reasons(
+    contacts: Iterable[Sequence[str]],
+    *,
+    drawer_body: str,
+    condition: str,
+) -> list[str]:
+    pairs = _normalise_contacts(contacts)
+    reasons = []
+    robot_tokens = ("robot", "gripper", "finger", "hand")
+    for pair in pairs:
+        chain_members = [body for body in pair if body in CHAIN_BODIES]
+        if not chain_members:
+            continue
+        if any(
+            any(token in body.lower() for token in robot_tokens) for body in pair
+        ):
+            reasons.append(f"robot_initial_contact:{sorted(pair)}")
+        if len(chain_members) > 1:
+            reasons.append(f"chain_chain_initial_contact:{sorted(pair)}")
+        cabinet_members = [
+            body for body in pair
+            if "cabinet" in body.lower() and body not in CHAIN_BODIES
+        ]
+        allowed_target_contact = (
+            condition != "baseline"
+            and chain_members == [A_BODY]
+            and cabinet_members == [drawer_body]
+        )
+        if cabinet_members and not allowed_target_contact:
+            reasons.append(f"cabinet_initial_contact:{sorted(pair)}")
+        for other in pair.difference(CHAIN_BODIES):
+            other_lower = other.lower()
+            allowed_table = "table" in other_lower
+            allowed_drawer = (
+                condition != "baseline"
+                and chain_members == [A_BODY]
+                and other == drawer_body
+            )
+            if (
+                not allowed_table
+                and not allowed_drawer
+                and "cabinet" not in other_lower
+                and not any(token in other_lower for token in robot_tokens)
+            ):
+                reasons.append(
+                    f"native_object_initial_contact:{sorted(pair)}"
+                )
+
+    for body in (B_BODY, C_BODY):
+        if frozenset((drawer_body, body)) in pairs:
+            reasons.append(f"direct_drawer_{'B' if body == B_BODY else 'C'}_initial_contact")
+    if frozenset((A_BODY, C_BODY)) in pairs:
+        reasons.append("direct_A_C_initial_contact")
+    if (
+        condition == "baseline"
+        and frozenset((drawer_body, A_BODY)) in pairs
+    ):
+        reasons.append("baseline_drawer_A_initial_contact")
+    return list(dict.fromkeys(reasons))
 
 
 def _first_step(

@@ -50,6 +50,7 @@ from experiments.robot.libero.tasks.l3a4_momentum import (
     contact_body_pairs,
     find_body,
     find_joint_qadr,
+    initial_contact_reasons,
     runtime_visibility_audit,
     write_trace_json,
 )
@@ -110,36 +111,11 @@ def _body_role(name: str) -> str:
 
 
 def _initial_contact_gate(env, drawer_body: str, condition: str) -> tuple[bool, list[str]]:
-    contacts = {frozenset(pair) for pair in contact_body_pairs(env)}
-    reasons = []
-    robot_tokens = ("robot", "gripper", "finger", "hand")
-    for pair in contacts:
-        if any(body in CHAIN_BODIES for body in pair) and any(
-            any(token in body.lower() for token in robot_tokens) for body in pair
-        ):
-            reasons.append(f"robot_initial_contact:{sorted(pair)}")
-        chain_members = [body for body in pair if body in CHAIN_BODIES]
-        cabinet_members = [
-            body for body in pair
-            if "cabinet" in body.lower() and body not in CHAIN_BODIES
-        ]
-        if chain_members and cabinet_members:
-            allowed_target_contact = (
-                condition != "baseline"
-                and chain_members == [A_BODY]
-                and cabinet_members == [drawer_body]
-            )
-            if not allowed_target_contact:
-                reasons.append(f"cabinet_initial_contact:{sorted(pair)}")
-    # Only A may touch the moving drawer in Er/Ec. Parked Eb must not touch it.
-    for body in (B_BODY, C_BODY):
-        if frozenset((drawer_body, body)) in contacts:
-            reasons.append(f"direct_drawer_{_body_role(body)}_initial_contact")
-    if frozenset((A_BODY, C_BODY)) in contacts:
-        reasons.append("direct_A_C_initial_contact")
-    if condition == "baseline" and frozenset((drawer_body, A_BODY)) in contacts:
-        reasons.append("baseline_drawer_A_initial_contact")
-    reasons = list(dict.fromkeys(reasons))
+    reasons = initial_contact_reasons(
+        contact_body_pairs(env),
+        drawer_body=drawer_body,
+        condition=condition,
+    )
     return not reasons, reasons
 
 

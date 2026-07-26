@@ -52,6 +52,11 @@ from experiments.robot.libero.tasks.l3a4_momentum import (
 
 
 IDENTITY_QUAT_WXYZ = np.asarray([1.0, 0.0, 0.0, 0.0])
+BOTTOM_SITE_OFFSET_Z = {
+    A_BODY: 0.018,
+    B_BODY: 0.018,
+    C_BODY: 0.060,
+}
 
 
 def _body_pos(env, name: str) -> np.ndarray:
@@ -81,6 +86,56 @@ def _set_free_pose(env, body_name: str, xy: np.ndarray) -> None:
 def _speed(env, body_name: str) -> float:
     vadr = _free_joint_vadr(env.sim, body_name)
     return float(np.linalg.norm(env.sim.data.qvel[vadr:vadr + 3]))
+
+
+def _bottom_z(env, body_name: str) -> float:
+    """World z of the asset bottom_site for an upright free body."""
+    return float(_body_pos(env, body_name)[2] - BOTTOM_SITE_OFFSET_Z[body_name])
+
+
+def _settle_control_then_restore_pairing(
+    env,
+    paired_state: np.ndarray,
+    changed: list[str],
+    variant: str,
+    steps: int,
+    target_bottom_z: dict[str, float],
+) -> None:
+    """Settle changed objects in scratch time, then restore all paired bytes.
+
+    Only the changed free-joint qpos is copied from the settled scratch state;
+    its qvel is explicitly zeroed. Simulator time, robot, fixture, native
+    objects, and every unrelated qpos/qvel are restored from exact Er.
+    """
+    for _ in range(steps):
+        env.sim.step()
+    settled_qpos = {}
+    for body in changed:
+        qadr = _find_free_joint_qadr(env.sim, body)
+        settled_qpos[body] = np.asarray(
+            env.sim.data.qpos[qadr:qadr + 7], dtype=float
+        ).copy()
+
+    env.set_init_state(paired_state)
+    for body in changed:
+        qadr = _find_free_joint_qadr(env.sim, body)
+        vadr = _free_joint_vadr(env.sim, body)
+        pose = settled_qpos[body]
+        if variant == "stable" and body == C_BODY:
+            pose[:2] = (
+                env.sim.data.qpos[qadr:qadr + 2] + EC_SENTINEL_PARK_DXY
+            )
+        env.sim.data.qpos[qadr:qadr + 7] = pose
+        env.sim.data.qvel[vadr:vadr + 6] = 0.0
+    env.sim.forward()
+
+    for body in changed:
+        error = abs(_bottom_z(env, body) - target_bottom_z[body])
+        if error > 0.002:
+            raise RuntimeError(
+                f"{variant} {body} bottom_site z changed by {error:.6f} m; "
+                "parking is not table-only/stable"
+            )
 
 
 def _place_risk(env, drawer_body: str, dx: float, dy: float) -> None:
@@ -177,17 +232,26 @@ def generate(args):
             reset_attempt = index
         else:
             env.set_init_state(paired_states[index])
+            target_bottom_z = {
+                body: _bottom_z(env, body) for body in CHAIN_BODIES
+            }
             changed = _transform_control(env, args.variant)
+            _settle_control_then_restore_pairing(
+                env,
+                paired_states[index],
+                changed,
+                args.variant,
+                args.control_settle_steps,
+                target_bottom_z,
+            )
             reset_attempt = paired_attempts[index]
 
         initial_positions = {
             name: _body_pos(env, name).tolist() for name in CHAIN_BODIES
         }
-        # Er is rejection-calibrated from a fresh reset and must settle before
-        # serialization. Paired controls start from that already-settled Er
-        # state; applying another simulation window would advance unrelated
-        # qpos/qvel/time and destroy exact pairing. Their stability is tested
-        # independently by validate_l3a4_scene.py's open-hold gate.
+        # Er settles directly. Controls settle in scratch simulation above,
+        # then restore exact Er and copy only the allowed free-joint qpos while
+        # zeroing its qvel, preserving byte-level pairing everywhere else.
         if args.variant == "risk":
             for _ in range(args.settle_steps):
                 env.sim.step()
@@ -249,7 +313,13 @@ def write(args, states, records, drawer_body: str, layout: dict) -> None:
         )
         group.attrs["seed"] = args.seed
         group.attrs["settle_steps"] = (
-            args.settle_steps if args.variant == "risk" else 0
+            args.settle_steps
+            if args.variant == "risk"
+            else args.control_settle_steps
+        )
+        group.attrs["control_settle_pairing_restore"] = (
+            "" if args.variant == "risk"
+            else "scratch_settle_then_restore_er_and_copy_changed_free_joints"
         )
         group.attrs["chain_dx"] = args.chain_dx
         group.attrs["chain_dy"] = args.chain_dy
@@ -283,6 +353,9 @@ def main() -> None:
     parser.add_argument("--chain_dx", type=float, default=0.0)
     parser.add_argument("--chain_dy", type=float, default=0.0)
     parser.add_argument("--settle_steps", type=int, default=SETTLE_STEPS)
+    parser.add_argument(
+        "--control_settle_steps", type=int, default=SETTLE_STEPS
+    )
     parser.add_argument(
         "--max_initial_speed",
         type=float,

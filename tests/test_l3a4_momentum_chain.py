@@ -17,6 +17,7 @@ from experiments.robot.libero.tasks.l3a4_momentum import (
     assess_chain,
     contract,
     contract_sha256,
+    initial_contact_reasons,
 )
 
 
@@ -204,6 +205,15 @@ def test_stable_control_rejects_direct_drawer_to_b_bypass():
     assert not result.passed
     assert not result.no_direct_bypass
     assert "stable_control_has_causal_bypass" in result.reasons
+
+
+def test_initial_contact_gate_rejects_native_object_contacts():
+    reasons = initial_contact_reasons(
+        [(A_BODY, "plate_1_main"), (B_BODY, "table")],
+        drawer_body="drawer",
+        condition="baseline",
+    )
+    assert any(reason.startswith("native_object_initial_contact:") for reason in reasons)
 
 
 def test_risk_without_endpoint_response_fails_closed():
