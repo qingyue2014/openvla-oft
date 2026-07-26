@@ -29,6 +29,21 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l3a3", "calibrate"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a3_support_chain.sh",
+            "calibrate",
+        ),
+        count_env="NUM_STATES",
+        artifacts=(
+            "experiments/logs/l3a3_support_chain/physical_gate.md",
+            "experiments/logs/l3a3_support_chain/policy_evidence",
+            "experiments/robot/libero/tasks/l3a3_support_chain_eb.hdf5",
+            "experiments/robot/libero/tasks/l3a3_support_chain_er.hdf5",
+            "experiments/robot/libero/tasks/l3a3_support_chain_ec.hdf5",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",
