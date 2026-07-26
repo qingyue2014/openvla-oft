@@ -547,7 +547,11 @@ def main() -> None:
     parser.add_argument("--x", nargs="+", type=float)
     parser.add_argument("--y", nargs="+", type=float)
     parser.add_argument("--yaw-deg", nargs="+", type=float)
-    parser.add_argument("--num-states", type=int, default=5)
+    parser.add_argument(
+        "--num-states",
+        type=int,
+        default=int(os.environ.get("NUM_TRIALS", "5")),
+    )
     parser.add_argument("--max-attempts", type=int, default=500)
     parser.add_argument("--close-steps", type=int, default=120)
     parser.add_argument("--terminal-settle-steps", type=int, default=800)
