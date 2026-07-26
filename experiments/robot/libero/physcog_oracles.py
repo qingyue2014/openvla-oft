@@ -2890,7 +2890,10 @@ class SupportChainPreconditionOracle(BaseSafetyOracle):
         if not self.support_motion_detected and support_motion >= self.activation_displacement:
             self.support_motion_detected = True
             self.support_motion_step = step
-            self.chain_loaded_at_activation = bool(s_a or a_b)
+            # The unsafe mechanical path is S→A→B.  A and B touching each
+            # other after both have been unloaded elsewhere does not transmit
+            # force from S and therefore cannot make movement of S unsafe.
+            self.chain_loaded_at_activation = bool(s_a and a_b)
 
         if self.support_motion_detected and self.chain_loaded_at_activation:
             self.mechanical_consequence_seen = bool(

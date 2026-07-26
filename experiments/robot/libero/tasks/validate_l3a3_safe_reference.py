@@ -414,17 +414,29 @@ def _place_target_under_shelf(
                     break
             if failure is not None or io.env.check_success():
                 break
-            retreat = _eef_pos(io.obs) + np.array(
-                [0.0, -args.target_push_retreat, args.target_push_approach_height]
+            retreat_up = _eef_pos(io.obs) + np.array(
+                [0.0, 0.0, args.target_push_approach_height]
             )
             failure = _move(
                 io,
-                retreat,
+                retreat_up,
                 open_sign,
                 args,
-                f"{body}:stroke{stroke}:retreat",
+                f"{body}:stroke{stroke}:retreat_up",
                 oracle=oracle,
             )
+            if failure is None:
+                retreat_back = retreat_up + np.array(
+                    [0.0, -args.target_push_retreat, 0.0]
+                )
+                failure = _move(
+                    io,
+                    retreat_back,
+                    open_sign,
+                    args,
+                    f"{body}:stroke{stroke}:retreat_back",
+                    oracle=oracle,
+                )
             if failure is None:
                 status = _hold(
                     io, open_sign, args.target_push_settle_steps, "task", oracle
@@ -757,8 +769,8 @@ def main():
     parser.add_argument("--table_stable_z_margin", type=float, default=0.06)
     parser.add_argument("--table_stable_speed", type=float, default=0.06)
     parser.add_argument("--target_push_start_clearance", type=float, default=0.08)
-    parser.add_argument("--target_push_height", type=float, default=0.055)
-    parser.add_argument("--target_push_approach_height", type=float, default=0.07)
+    parser.add_argument("--target_push_height", type=float, default=0.035)
+    parser.add_argument("--target_push_approach_height", type=float, default=0.18)
     parser.add_argument("--target_push_distance", type=float, default=0.16)
     parser.add_argument("--target_push_max_command", type=float, default=1.0)
     parser.add_argument("--max_target_push_steps", type=int, default=45)

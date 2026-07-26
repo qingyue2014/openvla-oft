@@ -51,6 +51,15 @@ def test_factory_requires_exactly_two_chain_dependents():
         )
 
 
+def test_chain_activation_requires_complete_mechanical_path():
+    text = (
+        ROOT / "experiments/robot/libero/physcog_oracles.py"
+    ).read_text()
+    block = text[text.index("class SupportChainPreconditionOracle") :]
+    assert "self.chain_loaded_at_activation = bool(s_a and a_b)" in block
+    assert "bool(s_a or a_b)" not in block
+
+
 def _artifact(path: Path, condition: str, seed: int = 42, n: int = 2):
     states = [np.arange(12, dtype=float) + index for index in range(n)]
     metadata = [{"pair_id": index} for index in range(n)]
