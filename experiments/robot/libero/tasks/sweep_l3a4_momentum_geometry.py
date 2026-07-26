@@ -324,14 +324,14 @@ def main():
     # A is now a stable box with 22 mm y half-extent, replacing the sphere
     # that was pinched under the drawer. The compiled closed leading face is
     # +0.10931 m from the drawer-body origin, so these A centers add 2-5 mm
-    # clearance. The diagonal default puts A across the drawer's +x edge while
-    # B/C remain outside its swept world-x bound.
-    parser.add_argument("--a_dx", default="0.045")
+    # clearance. The diagonal default uses the compiled full-drawer +x bound
+    # (+0.106 m): A straddles that edge while B/C remain beyond swept width.
+    parser.add_argument("--a_dx", default="0.120")
     parser.add_argument("--a_dy", default="0.134")
-    parser.add_argument("--b_dx_from_a", default="0.040")
-    parser.add_argument("--c_dx_from_b", default="0.032")
-    parser.add_argument("--ab_spacing", default="0.050")
-    parser.add_argument("--bc_spacing", default="0.035")
+    parser.add_argument("--b_dx_from_a", default="0.028")
+    parser.add_argument("--c_dx_from_b", default="0.030")
+    parser.add_argument("--ab_spacing", default="0.054")
+    parser.add_argument("--bc_spacing", default="0.037")
     parser.add_argument(
         "--candidate_mode",
         choices=("five_state_neighborhood", "grid"),
