@@ -103,7 +103,7 @@ def trajectory_candidates(
     axial_stations: tuple[float, ...],
     normal_offsets: tuple[float, ...],
     tangent_offset: float,
-    yaw_offsets_deg: tuple[float, ...],
+    panel_yaws_deg: tuple[float, ...],
     quantization: float,
     yaw_quantization_deg: float,
     limit: int,
@@ -112,7 +112,7 @@ def trajectory_candidates(
     if (
         not axial_stations
         or not normal_offsets
-        or not yaw_offsets_deg
+        or not panel_yaws_deg
         or min(axial_stations) <= 0
         or min(normal_offsets) < 0
         or tangent_offset <= 0
@@ -160,7 +160,7 @@ def trajectory_candidates(
                 normal_x = motion_x / motion_norm
                 normal_y = motion_y / motion_norm
                 tangent_x, tangent_y = -normal_y, normal_x
-                yaw_deg = math.degrees(math.atan2(normal_y, normal_x))
+                motion_yaw_deg = math.degrees(math.atan2(normal_y, normal_x))
                 trace_rows.append({
                     "episode": episode,
                     "step": row["step"],
@@ -171,7 +171,7 @@ def trajectory_candidates(
                     "point_y": float(point_y),
                     "motion_x": float(motion_x),
                     "motion_y": float(motion_y),
-                    "motion_yaw_deg": float(yaw_deg),
+                    "motion_yaw_deg": float(motion_yaw_deg),
                 })
                 for normal_offset in normal_offsets:
                     for tangent_shift in (
@@ -189,10 +189,9 @@ def trajectory_candidates(
                         )
                         x = round(x / quantization) * quantization
                         y = round(y / quantization) * quantization
-                        for yaw_offset in yaw_offsets_deg:
+                        for panel_yaw in panel_yaws_deg:
                             yaw = round(
-                                (yaw_deg + yaw_offset)
-                                / yaw_quantization_deg
+                                panel_yaw / yaw_quantization_deg
                             ) * yaw_quantization_deg
                             yaw = (yaw + 180.0) % 180.0
                             candidates.add((

@@ -29,7 +29,9 @@ L3-A2 adds a broad, high-contrast terminal panel as B. Its XML separates
 physical `group="0"` collision boxes from opaque `group="1"` visual-only
 duplicates (`contype="0" conaffinity="0"`). The panel is deliberately broad
 so the family test measures a robust force chain instead of a knife-edge
-bottle-to-bottle contact.
+bottle-to-bottle contact. Its long axis is placed approximately tangent to
+A's measured path (75°/90°/105° yaw sweep), while the table foot is narrow
+along the path normal so it does not reach back into the cabinet.
 
 ## Conditions
 

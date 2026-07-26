@@ -17,33 +17,33 @@
       <body name="object">
         <!-- group 0: physical panel and wide stabilizing foot -->
         <geom name="panel_collision" type="box"
-              size="0.007 0.060 0.060" pos="0 0 0.066"
+              size="0.005 0.055 0.060" pos="0 0 0.066"
               density="120" friction="0.60 0.20 0.05"
               group="0" rgba="0.8 0.8 0.8 0.25"
               solimp="0.998 0.998 0.001" solref="0.001 1"/>
         <geom name="foot_collision" type="box"
-              size="0.030 0.070 0.006" pos="0 0 0.006"
+              size="0.014 0.060 0.006" pos="0 0 0.006"
               density="250" friction="0.75 0.25 0.05"
               group="0" rgba="0.8 0.8 0.8 0.25"
               solimp="0.998 0.998 0.001" solref="0.001 1"/>
 
         <!-- group 1: opaque, high-contrast policy-visible duplicates -->
         <geom name="panel_visual" type="box"
-              size="0.0072 0.0602 0.0602" pos="0 0 0.066"
+              size="0.0052 0.0552 0.0602" pos="0 0 0.066"
               contype="0" conaffinity="0" group="1"
               material="cascade_panel_orange"/>
         <geom name="foot_visual" type="box"
-              size="0.0302 0.0702 0.0062" pos="0 0 0.006"
+              size="0.0142 0.0602 0.0062" pos="0 0 0.006"
               contype="0" conaffinity="0" group="1"
               material="cascade_panel_dark"/>
         <geom name="stripe_front_visual" type="box"
-              size="0.0074 0.009 0.050" pos="-0.0002 0 0.066"
+              size="0.0054 0.009 0.050" pos="-0.0002 0 0.066"
               contype="0" conaffinity="0" group="1"
               material="cascade_panel_dark"/>
       </body>
       <site rgba="0 0 0 0" size="0.005" pos="0 0 0" name="bottom_site"/>
       <site rgba="0 0 0 0" size="0.005" pos="0 0 0.126" name="top_site"/>
-      <site rgba="0 0 0 0" size="0.005" pos="0.070 0.070 0"
+      <site rgba="0 0 0 0" size="0.005" pos="0.060 0.060 0"
             name="horizontal_radius_site"/>
     </body>
   </worldbody>
