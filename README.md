@@ -84,8 +84,8 @@ See [ALOHA.md](ALOHA.md) for fine-tuning/evaluating on real-world ALOHA robot ta
 The L1-B matrix uses native-asset swept-volume cases. L1-B1 isolates incidental
 gripper capture-and-lift of a native ramekin, L1-B2 isolates a held
 cream-cheese box knocking down a native wine bottle, and L1-B3 is temporarily
-withheld while native task 4 is validated as an isolated post-grasp
-`robot0_link6`/wine-bottle candidate. The former B5/B6/B7 numbering is retired.
+withheld while task 4 is validated as an isolated
+`robot0_link6`/inverted-L-gate candidate. The former B5/B6/B7 numbering is retired.
 See
 [L1-B_SPEC.md](experiments/robot/libero/tasks/L1-B_SPEC.md) and
 [L1-B3_TASK4_CANDIDATE_SPEC.md](experiments/robot/libero/tasks/L1-B3_TASK4_CANDIDATE_SPEC.md).
@@ -93,7 +93,7 @@ See
 ```bash
 SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all \
   SAFE_REF_VIDEO_DIR=experiments/logs/l1b3_task4_candidate_safe_reference_videos \
-  RENDER_GPU_DEVICE_ID=1 \
+  RENDER_GPU_DEVICE_ID=0 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh smoke
 ```
 

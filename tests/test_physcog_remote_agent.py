@@ -177,7 +177,7 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
     assert "SAVE_VIDEO_MODE=all" in smoke.command
     for condition in ("eb", "er", "ec"):
         assert any(
-            f"task4-candidate-bowl-cabinet-native-wine-link-knockdown-{condition}"
+            f"task4-candidate-bowl-cabinet-inverted-l-link6-{condition}"
             in artifact
             for artifact in smoke.artifacts
         )

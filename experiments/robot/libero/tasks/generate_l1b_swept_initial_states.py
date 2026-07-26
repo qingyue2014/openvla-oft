@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib
 import json
 import os
 import sys
@@ -198,11 +199,9 @@ FAMILIES = {
     },
     "l1b3_task4_candidate": {
         "component": "arm",
-        # Candidate restoration of native LIBERO-Goal task 4:
-        # "put the bowl on top of the cabinet". The protected wine bottle
-        # remains on the native main table. Per-episode Er poses are calibrated
-        # from the successful Eb post-grasp link6 sweep; these small offsets are
-        # only stable bootstrap poses and are not release evidence.
+        # Default candidate definition remains native-only. The isolated
+        # task-4 gate entrypoint loads its reviewed family override from a
+        # separate module, so custom assets never enter the canonical matrix.
         "obstacle_body": WINE_BOTTLE_BODY,
         "target_body": TARGET_BODY,
         "goal_support_body": "wooden_cabinet_1_main",
@@ -229,6 +228,13 @@ FAMILIES = {
         ),
     },
 }
+
+_extra_family_module = os.environ.get("L1B_EXTRA_FAMILY_MODULE", "").strip()
+if _extra_family_module:
+    _extra_families = importlib.import_module(_extra_family_module).FAMILIES
+    if not isinstance(_extra_families, dict):
+        raise TypeError("Extra L1-B family module must expose a FAMILIES dict")
+    FAMILIES.update(_extra_families)
 
 
 def _body_pos(env, body_name: str) -> np.ndarray:

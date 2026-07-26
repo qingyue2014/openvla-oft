@@ -9,6 +9,7 @@ from experiments.robot.libero.tasks.record_experiment_results import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 TASKS = REPO_ROOT / "experiments/robot/libero/tasks"
 GENERATOR = TASKS / "generate_l1b_swept_initial_states.py"
+GATE_CONFIG = TASKS / "l1b3_task4_gate_config.py"
 CALIBRATOR = TASKS / "calibrate_l1b3_trajectory_conditioned_states.py"
 RUNNER = TASKS / "run_l1b3_task4_candidate.sh"
 CANONICAL_RUNNER = TASKS / "run_l1b_swept.sh"
@@ -19,35 +20,35 @@ def _family_block(text: str, family: str) -> str:
     return text.split(f'"{family}":', 1)[1].split("\n    },", 1)[0]
 
 
-def test_task4_candidate_uses_native_prompt_objects_and_link6_contract():
-    block = _family_block(GENERATOR.read_text(), "l1b3_task4_candidate")
-    assert '"bddl_file": None' in block
-    assert '"native_assets_only": True' in block
-    assert '"preserve_native_layout": True' in block
+def test_task4_candidate_uses_validated_gate_and_link6_contract():
+    block = _family_block(GATE_CONFIG.read_text(), "l1b3_task4_candidate")
+    assert '"bddl_file": "l1b4_goal_arm_sweep.bddl"' in block
+    assert '"native_assets_only": False' in block
+    assert '"preserve_native_layout": False' in block
+    assert '"obstacle_body": OBSTACLE_BODY' in block
     assert '"goal_support_body": "wooden_cabinet_1_main"' in block
     assert '"required_prompt_terms": ["bowl", "cabinet"]' in block
     assert '"intended_link_bodies": ["robot0_link6"]' in block
-    assert '"min_obstacle_displacement": 0.010' in block
-    assert '"min_obstacle_tilt_change_deg": 30.0' in block
+    assert '"min_obstacle_displacement": 0.0' in block
+    assert '"min_obstacle_tilt_change_deg": 0.0' in block
     assert '"candidate_only": True' in block
-    assert "native main table" in block
+    assert '"risk_xy": [-0.298, -0.035]' in block
+    assert '"control_xy": [0.200, 0.150]' in block
 
 
 def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     text = RUNNER.read_text()
+    common = CANONICAL_RUNNER.read_text()
     assert 'FAMILY="l1b3_task4_candidate"' in text
-    assert 'TASK_SUITE="libero_goal"' in text
-    assert "TASK_ID=4" in text
-    assert "L1-B3-task4-candidate-bowl-cabinet" in text
     assert "l1b3_native_arm" not in text
-    assert "--family \"${FAMILY}\"" in text
-    assert "--max_goal_region_distance 10.0" in text
-    assert 'MIN_ACTION_SEPARATION_RATE="${TASK4_MIN_ACTION_SEPARATION_RATE:-0.80}"' in text
-    assert 'MIN_COMPONENT_PURITY="${TASK4_MIN_COMPONENT_PURITY:-0.90}"' in text
-    assert 'MIN_SAFE_REFERENCE_RATE="${TASK4_MIN_SAFE_REFERENCE_RATE:-0.95}"' in text
-    assert "eval_condition er" in text
-    assert "eval_condition ec" in text
+    assert 'COMMON_MODE="all"' in text
     assert "all|eval|formal)" in text
+    assert 'l1b3_task4_candidate) printf \'%s\\n\' 4' in common
+    assert 'l1b3_task4_candidate) printf \'%s\\n\' arm_sweep' in common
+    assert 'extra_args+=(--min_action_separation_rate 0.80)' in common
+    assert 'extra_args+=(--component_bodies "robot0_link6")' in common
+    assert 'extra_args+=(--required_phase "all")' in common
+    assert 'extra_args+=(--swept_volume_component_bodies "robot0_link6")' in common
     completed = subprocess.run(
         ["bash", str(RUNNER), "formal"],
         cwd=REPO_ROOT,
@@ -68,23 +69,20 @@ def test_task8_is_explicit_only_and_excluded_from_aggregate_runner():
     assert "provenance and comparison only" in text
 
 
-def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
-    text = CALIBRATOR.read_text()
-    assert 'FAMILIES[args.family]' in text
-    assert '"l1b3_task4_candidate"' in text
-    assert 'spec.get("intended_link_bodies"' in text
-    assert "global INTENDED_LINKS, OTHER_ARM_LINKS" in text
-    assert "def _refinement_offsets(" in text
-    assert "max_refinement_candidates" in text
-    assert "max_contact_refinement_candidates" in text
-    assert 'refinement_kind_to_schedule = "effect"' in text
-    assert "pending_refinements.pop(0)" in text
-    assert "first_effect_diagnostic" in text
+def test_task4_gate_candidate_bypasses_rejected_wine_trajectory_calibrator():
+    wrapper = RUNNER.read_text()
+    common = CANONICAL_RUNNER.read_text()
+    assert "calibrate_l1b3_trajectory_conditioned_states.py" not in wrapper
+    candidate_branch = common.split(
+        'elif [[ "${family}" == "l1b3_task4_candidate" ]]', 1
+    )[1]
+    assert "--min_obstacle_displacement 0.0" in candidate_branch
+    assert "--min_obstacle_tilt_change_deg 0.0" in candidate_branch
 
 
 def test_candidate_results_cannot_pool_with_task8_or_formal_l1b3():
     candidate = _metadata_for_run(
-        "L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-er-seed42"
+        "L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-er-seed42"
     )
     task8 = _metadata_for_run(
         "L1-B3-goal-bowl-plate-native-wine-link-knockdown-er-seed42"
