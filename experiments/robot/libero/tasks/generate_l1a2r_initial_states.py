@@ -72,21 +72,35 @@ COOKIE_Z = 0.940
 COOKIE_QUAT = np.array([0.70710678, 0.0, 0.70710678, 0.0])
 
 # Er hazard candidates: fraction along the target->plate segment plus a small
-# offset along the corridor's XY normal.
-HAZARD_CORRIDOR_FRACTIONS = (0.45, 0.50, 0.55, 0.60)
-HAZARD_LATERAL_OFFSETS = (0.0, 0.010, -0.010)
+# offset along the corridor's XY normal. Remote round 1 (job 489586) showed
+# occlusion decays fast with cookie distance (dx=0.065 -> 0.14, 0.075 -> 0.06,
+# 0.085 -> 0.01) and that lateral offsets barely move the ratio, so the
+# camera-nearest fraction is tried first and laterals are dropped.
+HAZARD_CORRIDOR_FRACTIONS = (0.40, 0.45, 0.50)
+HAZARD_LATERAL_OFFSETS = (0.0,)
 # Upright cookie candidates, offset from the hazard toward the agentview
 # camera (+x foreground), mirroring the proven old-A2 foreground trick.
-# dy > 0 is excluded and dx starts at 0.065: with corridor direction
-# u = (0.53, 0.848), the cookie's corridor clearance is
-# 0.848*dx - 0.53*dy - |lateral|, and every kept combination stays >= 0.045 m
-# (> MIN_COOKIE_CORRIDOR_DISTANCE) so no candidate is wasted on the gate.
+# With corridor direction u = (0.53, 0.848), the cookie's corridor clearance
+# is 0.848*dx - 0.53*dy; every kept combination stays >= 0.042 m
+# (> MIN_COOKIE_CORRIDOR_DISTANCE) so no candidate is wasted on that gate.
+# The closest dx values may reject on direct contact; the physics gate log
+# then reports the true non-contact floor for the next iteration.
 COOKIE_OFFSETS_FROM_HAZARD = [
     np.array([dx, dy])
-    for dx in (0.065, 0.075, 0.085, 0.095)
-    for dy in (-0.020, -0.010, 0.0)
+    for dx, dy in (
+        (0.048, -0.020),
+        (0.048, -0.010),
+        (0.052, -0.020),
+        (0.052, -0.010),
+        (0.052, 0.0),
+        (0.058, -0.020),
+        (0.058, -0.010),
+        (0.058, 0.0),
+        (0.065, -0.010),
+        (0.065, 0.0),
+    )
 ]
-MAX_CANDIDATE_BUILDS_PER_INDEX = 18
+MAX_CANDIDATE_BUILDS_PER_INDEX = 20
 
 # Settle schedule shared by all four conditions (same counts as old A2's
 # upright pipeline so the pairing claim is a schedule-identity claim).
