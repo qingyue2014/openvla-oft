@@ -33,6 +33,9 @@ from experiments.robot.libero.tasks.l3a2_cascade_artifacts import (
     validate_pairing,
     write_report,
 )
+from experiments.robot.libero.tasks.l3a1_replay import (
+    clear_mujoco_replay_transients,
+)
 from experiments.robot.libero.tasks.validate_l3a2_cascade_scene import (
     TERMINAL_BODY,
     validate_episode,
@@ -55,12 +58,49 @@ def _patch_state(
     qvel_flat: int,
     x: float,
     y: float,
+    equilibrium_slices: tuple[np.ndarray, np.ndarray] | None = None,
 ) -> np.ndarray:
     result = np.asarray(state).copy()
+    if equilibrium_slices is not None:
+        result[qpos_flat:qpos_flat + 7] = equilibrium_slices[0]
+        result[qvel_flat:qvel_flat + 6] = equilibrium_slices[1]
     result[qpos_flat:qpos_flat + 2] = (x, y)
-    result[qpos_flat + 3:qpos_flat + 7] = (1.0, 0.0, 0.0, 0.0)
     result[qvel_flat:qvel_flat + 6] = 0.0
     return result
+
+
+def _settle_terminal_slices(
+    env,
+    state: np.ndarray,
+    qpos_flat: int,
+    qvel_flat: int,
+    steps: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Settle B once at a safe staging pose before transplanting it."""
+    env.reset()
+    env.sim.set_state_from_flattened(np.asarray(state))
+    clear_mujoco_replay_transients(env)
+    env.sim.forward()
+    initial = np.asarray(env.sim.get_state().flatten()).copy()
+    for _ in range(steps):
+        env.sim.step()
+    settled = np.asarray(env.sim.get_state().flatten()).copy()
+    qpos = settled[qpos_flat:qpos_flat + 7].copy()
+    qvel = settled[qvel_flat:qvel_flat + 6].copy()
+    displacement = float(np.linalg.norm(
+        qpos[:3] - initial[qpos_flat:qpos_flat + 3]
+    ))
+    _, qx, qy, _ = qpos[3:7]
+    up_z = float(np.clip(1.0 - 2.0 * (qx * qx + qy * qy), -1.0, 1.0))
+    tilt = float(np.degrees(np.arccos(up_z)))
+    speed = float(np.linalg.norm(qvel))
+    if displacement > 0.010 or tilt > 3.0 or speed > 0.01:
+        raise RuntimeError(
+            "terminal B staging equilibrium is invalid: "
+            f"displacement={displacement:.4f}m tilt={tilt:.2f}deg "
+            f"speed={speed:.4f}"
+        )
+    return qpos, qvel
 
 
 def _write_candidate(
@@ -70,6 +110,7 @@ def _write_candidate(
     qvel_flat: int,
     x: float,
     y: float,
+    equilibrium_slices: list[tuple[np.ndarray, np.ndarray]],
 ) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
@@ -80,17 +121,25 @@ def _write_candidate(
         group.attrs["l3a2_topology"] = (
             "drawer_S_supports_A_then_A_impacts_terminal_B"
         )
-        for name in sorted(
+        names = sorted(
             (key for key in group if key.startswith("demo_")),
             key=lambda key: int(key.split("_")[-1]),
-        ):
+        )
+        if len(names) != len(equilibrium_slices):
+            raise ValueError("terminal equilibrium count does not match demos")
+        for index, name in enumerate(names):
             demo = group[name]
             for dataset in ("initial_state", "base_reset_state"):
                 if dataset not in demo:
                     continue
                 original = np.asarray(demo[dataset][:])
                 updated = _patch_state(
-                    original, qpos_flat, qvel_flat, x, y
+                    original,
+                    qpos_flat,
+                    qvel_flat,
+                    x,
+                    y,
+                    equilibrium_slices[index],
                 )
                 demo[dataset][...] = updated
                 if dataset == "base_reset_state":
@@ -160,6 +209,16 @@ def run(args: argparse.Namespace) -> str:
         raise RuntimeError("terminal bottle free joint not found")
     qpos_flat = 1 + qadr
     qvel_flat = 1 + int(sim_env.sim.model.nq) + vadr
+    terminal_equilibria = [
+        _settle_terminal_slices(
+            sim_env,
+            state,
+            qpos_flat,
+            qvel_flat,
+            args.terminal_settle_steps,
+        )
+        for state in eb_states
+    ]
     rows = []
     try:
         for x in args.x:
@@ -167,9 +226,18 @@ def run(args: argparse.Namespace) -> str:
                 passed = 0
                 reasons = []
                 max_b_disp = 0.0
-                for eb, er, ec in zip(eb_states, er_states, ec_states):
+                for episode, (eb, er, ec) in enumerate(
+                    zip(eb_states, er_states, ec_states)
+                ):
                     patched = [
-                        _patch_state(state, qpos_flat, qvel_flat, x, y)
+                        _patch_state(
+                            state,
+                            qpos_flat,
+                            qvel_flat,
+                            x,
+                            y,
+                            terminal_equilibria[episode],
+                        )
                         for state in (eb, er, ec)
                     ]
                     result = validate_episode(
@@ -212,11 +280,11 @@ def run(args: argparse.Namespace) -> str:
         )
         _write_candidate(
             base_er, Path(args.er), qpos_flat, qvel_flat,
-            selected["x"], selected["y"],
+            selected["x"], selected["y"], terminal_equilibria,
         )
         _write_candidate(
             base_ec, Path(args.ec), qpos_flat, qvel_flat,
-            selected["x"], selected["y"],
+            selected["x"], selected["y"], terminal_equilibria,
         )
         extract_eb(args.er, args.eb)
         pairing = validate_pairing(args.eb, args.er, args.ec)
@@ -262,6 +330,7 @@ def main() -> None:
     parser.add_argument("--num-states", type=int, default=5)
     parser.add_argument("--max-attempts", type=int, default=500)
     parser.add_argument("--close-steps", type=int, default=120)
+    parser.add_argument("--terminal-settle-steps", type=int, default=800)
     parser.add_argument("--adjacent-radius", type=float, default=0.021)
     parser.add_argument(
         "--work-dir", default="experiments/logs/l3a2_geometry_work"
