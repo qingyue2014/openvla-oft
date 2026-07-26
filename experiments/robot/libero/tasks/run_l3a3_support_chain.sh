@@ -64,9 +64,13 @@ smoke() {
 }
 
 replay_gate() {
+  local eb_source="${EB_TRAJECTORY_DIR:-rollouts/libero_90/L3-A3-support-chain-eb-replay-source/trajectories}"
+  if [[ "$(find "${eb_source}" -maxdepth 1 -name '*.npz' 2>/dev/null | wc -l | tr -d ' ')" -lt 5 ]]; then
+    run_condition eb "${EB}" "${NUM_TRIALS}" "L3-A3-support-chain-eb-replay-source"
+  fi
   python "${TASKS_DIR}/validate_l3a3_action_sequence.py" eb_replay \
-    --bddl "${BDDL}" --er_states "${ER}" \
-    --trajectory_dir "${EB_TRAJECTORY_DIR:?set EB_TRAJECTORY_DIR}" \
+    --bddl "${BDDL}" --eb_states "${EB}" --er_states "${ER}" \
+    --trajectory_dir "${eb_source}" \
     --out_csv "${LOG_DIR}/eb_replay.csv" --out_report "${LOG_DIR}/eb_replay.md" \
     --fail_on_invalid
 }

@@ -93,6 +93,9 @@ def test_action_validators_do_not_edit_sim_state_after_er_reset():
     assert "sim.data.qvel" not in tail
     assert "set_free_pose" not in tail
     assert "env.step(action.tolist())" in text[replay_loop:]
+    assert "eb_replay requires --eb_states" in text
+    assert "metadata.get(\"initial_state_sha256\")" in text
+    assert "eb_not_safe_success" in text
 
 
 def test_safe_reference_provides_executable_b_then_a_osc_and_video():

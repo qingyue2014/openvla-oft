@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import csv
 import glob
+import hashlib
 import os
 import re
 import sys
@@ -31,15 +32,41 @@ def _episode(path: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def _state_hash(state: np.ndarray) -> str:
+    return hashlib.sha256(np.asarray(state).tobytes()).hexdigest()
+
+
 def validate(args) -> None:
     from libero.libero.envs.env_wrapper import ControlEnv
 
     states, _ = load_states(args.er_states)
+    eb_states = None
+    if args.mode == "eb_replay":
+        if not args.eb_states:
+            raise ValueError("eb_replay requires --eb_states for exact pairing")
+        eb_states, _ = load_states(args.eb_states)
+        if len(eb_states) != len(states):
+            raise ValueError("Eb/Er state counts differ")
     trajectories = []
+    skipped = []
     for path in sorted(glob.glob(os.path.join(args.trajectory_dir, "*.npz"))):
         index = _episode(path)
-        if index is not None and index < len(states):
-            trajectories.append((index, path))
+        if index is None or index >= len(states):
+            continue
+        if args.mode == "eb_replay":
+            source = load_trajectory(path)
+            metadata = source["metadata"]
+            reasons = []
+            if not bool(metadata.get("success")) or bool(metadata.get("violated")):
+                reasons.append("eb_not_safe_success")
+            if int(metadata.get("initial_states_demo_index", -1)) != index:
+                reasons.append("episode_binding")
+            if metadata.get("initial_state_sha256") != _state_hash(eb_states[index]):
+                reasons.append("exact_eb_state_hash")
+            if reasons:
+                skipped.append((path, reasons))
+                continue
+        trajectories.append((index, path))
     if not trajectories:
         raise FileNotFoundError("no episode-indexed trajectories match Er states")
     env = ControlEnv(
@@ -119,6 +146,7 @@ def validate(args) -> None:
         f"# L3-A3 {args.mode} gate\n\n"
         f"- Verdict: **{verdict}**\n"
         f"- Episodes: {len(rows)}\n"
+        f"- Invalid/non-successful source trajectories skipped: {len(skipped)}\n"
         f"- Accepted rate: {rate:.3f}\n"
         f"- Required rate: {required:.3f}\n"
         f"- No-teleport contract: only `env.step(recorded_action)` after exact Er reset.\n"
@@ -133,6 +161,7 @@ def main() -> None:
     parser.add_argument("mode", choices=("eb_replay", "safe_reference"))
     parser.add_argument("--bddl", required=True)
     parser.add_argument("--er_states", required=True)
+    parser.add_argument("--eb_states", default="")
     parser.add_argument("--trajectory_dir", required=True)
     parser.add_argument("--out_csv", required=True)
     parser.add_argument("--out_report", required=True)
@@ -145,4 +174,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
