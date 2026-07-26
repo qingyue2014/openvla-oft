@@ -314,6 +314,9 @@ def run(args: argparse.Namespace) -> str:
             passive_passed = 0
             reasons = []
             max_b_disp = 0.0
+            max_disabled_b_disp = 0.0
+            max_disabled_b_tilt = 0.0
+            direct_component_contact = False
             min_initial_center_distance = float("inf")
             reset_contacts = set()
             for episode, (eb, er, ec) in enumerate(
@@ -363,6 +366,7 @@ def run(args: argparse.Namespace) -> str:
                     stable_passive=passive[1],
                 )
                 risk_timeline = result["risk"]["timeline"]
+                collision_disabled = result["collision_disabled"]
                 episode_evidence.append({
                     "x": x,
                     "y": y,
@@ -383,6 +387,24 @@ def run(args: argparse.Namespace) -> str:
                         for event in risk_timeline
                         for body in event["terminal_contact_bodies"]
                     }),
+                    "forbidden_direct_component_contact": result[
+                        "risk"
+                    ]["terminal_component_contact"],
+                    "risk_terminal_displacement_m": result[
+                        "risk"
+                    ]["max_terminal_displacement_m"],
+                    "risk_terminal_tilt_change_deg": result[
+                        "risk"
+                    ]["max_terminal_tilt_change_deg"],
+                    "collision_disable_applied": collision_disabled[
+                        "collision_intervention_applied"
+                    ],
+                    "collision_disabled_terminal_displacement_m": (
+                        collision_disabled["max_terminal_displacement_m"]
+                    ),
+                    "collision_disabled_terminal_tilt_change_deg": (
+                        collision_disabled["max_terminal_tilt_change_deg"]
+                    ),
                     "support_release_step": result["risk"].get(
                         "support_release_step"
                     ),
@@ -397,6 +419,17 @@ def run(args: argparse.Namespace) -> str:
                     max_b_disp,
                     result["risk"]["max_terminal_displacement_m"],
                 )
+                max_disabled_b_disp = max(
+                    max_disabled_b_disp,
+                    collision_disabled["max_terminal_displacement_m"],
+                )
+                max_disabled_b_tilt = max(
+                    max_disabled_b_tilt,
+                    collision_disabled["max_terminal_tilt_change_deg"],
+                )
+                direct_component_contact |= result[
+                    "risk"
+                ]["terminal_component_contact"]
             rate = passed / len(er_states)
             passive_rate = passive_passed / len(er_states)
             row = {
@@ -415,6 +448,15 @@ def run(args: argparse.Namespace) -> str:
                     sorted(reset_contacts)
                 ),
                 "max_terminal_displacement_m": max_b_disp,
+                "max_collision_disabled_terminal_displacement_m": (
+                    max_disabled_b_disp
+                ),
+                "max_collision_disabled_terminal_tilt_change_deg": (
+                    max_disabled_b_tilt
+                ),
+                "forbidden_direct_component_contact": int(
+                    direct_component_contact
+                ),
                 "failures": " | ".join(sorted(set(reasons))),
             }
             rows.append(row)
