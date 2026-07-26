@@ -9,6 +9,9 @@ BDDL="${BDDL:-${TASKS_DIR}/PHYSCOG_L3A3_support_chain.bddl}"
 EB="${EB:-${STATE_DIR}/l3a3_support_chain_eb.hdf5}"
 ER="${ER:-${STATE_DIR}/l3a3_support_chain_er.hdf5}"
 EC="${EC:-${STATE_DIR}/l3a3_support_chain_ec.hdf5}"
+EXPECTED_EB_SHA256="${EXPECTED_EB_SHA256:-417717118bf69804ccdaf0d3c54b0bded7643346ae52c95009f2b4919dbe6495}"
+EXPECTED_ER_SHA256="${EXPECTED_ER_SHA256:-8af0be7e259ee23aac46f6ee691d0d01a7be0e45245e56fe05cd8fa33d9a16d2}"
+EXPECTED_EC_SHA256="${EXPECTED_EC_SHA256:-5b01f14222ff68f4334122d1d4f3f2c5729be61c134c8f255e047bc77694551c}"
 CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
 NUM_STATES="${NUM_STATES:-50}"
 PREVIEW_EPISODES="${PREVIEW_EPISODES:-5}"
@@ -30,6 +33,32 @@ generate() {
     --bddl "${BDDL}" --num_states "${NUM_STATES}" --seed "${SEED}" \
     --eb_out "${EB}" --er_out "${ER}" --ec_out "${EC}" \
     --report "${LOG_DIR}/physical_gate.md"
+}
+
+file_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | awk '{print $1}'
+  else
+    shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+reviewed_state_bytes_match() {
+  [[ -f "${EB}" && -f "${ER}" && -f "${EC}" ]] &&
+    [[ "$(file_sha256 "${EB}")" == "${EXPECTED_EB_SHA256}" ]] &&
+    [[ "$(file_sha256 "${ER}")" == "${EXPECTED_ER_SHA256}" ]] &&
+    [[ "$(file_sha256 "${EC}")" == "${EXPECTED_EC_SHA256}" ]]
+}
+
+prepare_reviewed_states() {
+  if ! reviewed_state_bytes_match; then
+    generate
+  fi
+  reviewed_state_bytes_match || {
+    echo "generated states do not match hash-bound visual-review artifacts" >&2
+    return 2
+  }
+  echo "PASS_L3A3_REVIEWED_STATE_BYTES"
 }
 
 preview() {
@@ -64,6 +93,7 @@ smoke() {
 }
 
 replay_gate() {
+  prepare_reviewed_states
   local eb_source="${EB_TRAJECTORY_DIR:-rollouts/libero_90/L3-A3-support-chain-eb-replay-source/trajectories}"
   if [[ "$(find "${eb_source}" -maxdepth 1 -name '*.npz' 2>/dev/null | wc -l | tr -d ' ')" -lt 5 ]]; then
     run_condition eb "${EB}" "${NUM_TRIALS}" "L3-A3-support-chain-eb-replay-source"
@@ -76,6 +106,7 @@ replay_gate() {
 }
 
 safe_reference_gate() {
+  prepare_reviewed_states
   local ec_source="${EC_TRAJECTORY_DIR:-rollouts/libero_90/L3-A3-support-chain-ec-source/trajectories}"
   if [[ "$(find "${ec_source}" -maxdepth 1 -name '*.npz' 2>/dev/null | wc -l | tr -d ' ')" -lt 5 ]]; then
     run_condition ec "${EC}" "${NUM_TRIALS}" "L3-A3-support-chain-ec-source"
@@ -87,6 +118,16 @@ safe_reference_gate() {
     --video_dir "${LOG_DIR}/safe_reference_videos" \
     --out_csv "${LOG_DIR}/safe_reference.csv" \
     --out_report "${LOG_DIR}/safe_reference.md" --fail_on_invalid
+}
+
+ec_source() {
+  prepare_reviewed_states
+  run_condition ec "${EC}" "${NUM_TRIALS}" "L3-A3-support-chain-ec-source"
+}
+
+eb_source() {
+  prepare_reviewed_states
+  run_condition eb "${EB}" "${NUM_TRIALS}" "L3-A3-support-chain-eb-replay-source"
 }
 
 require_gates() {
@@ -109,8 +150,11 @@ formal() {
 
 case "${MODE}" in
   generate) generate ;;
+  prepare_reviewed_states) prepare_reviewed_states ;;
   preview) preview ;;
   calibrate) generate; preview ;;
+  ec_source) ec_source ;;
+  eb_source) eb_source ;;
   replay) replay_gate ;;
   safe_reference) safe_reference_gate ;;
   smoke) smoke ;;
@@ -122,5 +166,5 @@ case "${MODE}" in
     [[ -f "${LOG_DIR}/policy_evidence/evidence.json" ]] &&
       rg -n '"status"' "${LOG_DIR}/policy_evidence/evidence.json" || true
     ;;
-  *) echo "Expected generate|preview|calibrate|replay|safe_reference|smoke|formal|status" >&2; exit 2 ;;
+  *) echo "Expected generate|prepare_reviewed_states|preview|calibrate|ec_source|eb_source|replay|safe_reference|smoke|formal|status" >&2; exit 2 ;;
 esac

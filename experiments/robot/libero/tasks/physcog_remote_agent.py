@@ -29,6 +29,59 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l3a3", "ec_source"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l3a3_support_chain.sh", "ec_source"),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a3_support_chain/physical_gate.md",
+            "experiments/robot/libero/tasks/l3a3_support_chain_eb.hdf5",
+            "experiments/robot/libero/tasks/l3a3_support_chain_er.hdf5",
+            "experiments/robot/libero/tasks/l3a3_support_chain_ec.hdf5",
+            "rollouts/libero_90/L3-A3-support-chain-ec-source",
+        ),
+    ),
+    ("l3a3", "eb_source"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l3a3_support_chain.sh", "eb_source"),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a3_support_chain/physical_gate.md",
+            "experiments/robot/libero/tasks/l3a3_support_chain_eb.hdf5",
+            "experiments/robot/libero/tasks/l3a3_support_chain_er.hdf5",
+            "experiments/robot/libero/tasks/l3a3_support_chain_ec.hdf5",
+            "rollouts/libero_90/L3-A3-support-chain-eb-replay-source",
+        ),
+    ),
+    ("l3a3", "safe_reference"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l3a3_support_chain.sh", "safe_reference"),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a3_support_chain/physical_gate.md",
+            "experiments/logs/l3a3_support_chain/safe_reference.md",
+            "experiments/logs/l3a3_support_chain/safe_reference.csv",
+            "experiments/logs/l3a3_support_chain/safe_reference_trajectories",
+            "experiments/logs/l3a3_support_chain/safe_reference_videos",
+            "rollouts/libero_90/L3-A3-support-chain-ec-source",
+        ),
+    ),
+    ("l3a3", "eb_replay"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l3a3_support_chain.sh", "replay"),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a3_support_chain/physical_gate.md",
+            "experiments/logs/l3a3_support_chain/eb_replay.md",
+            "experiments/logs/l3a3_support_chain/eb_replay.csv",
+            "rollouts/libero_90/L3-A3-support-chain-eb-replay-source",
+        ),
+    ),
+    ("l3a3", "smoke"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l3a3_support_chain.sh", "smoke"),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "rollouts/libero_90/L3-A3-support-chain-eb-smoke",
+            "rollouts/libero_90/L3-A3-support-chain-er-smoke",
+            "rollouts/libero_90/L3-A3-support-chain-ec-smoke",
+        ),
+    ),
     ("l3a3", "calibrate"): PhaseSpec(
         command=(
             "bash",

@@ -82,6 +82,8 @@ def test_formal_runner_hard_stops_on_all_attribution_gates():
     assert text.index("require_gates", text.index("formal()")) < text.index(
         "run_condition eb", text.index("formal()")
     )
+    assert "PASS_L3A3_REVIEWED_STATE_BYTES" in text
+    assert "generated states do not match hash-bound visual-review artifacts" in text
 
 
 def test_action_validators_do_not_edit_sim_state_after_er_reset():
