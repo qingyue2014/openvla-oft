@@ -178,13 +178,19 @@ def _push_unload(
     displacement = 0.0
     for _ in range(args.max_push_steps):
         action = _position_action(_eef_pos(io.obs), push_goal, close_sign, args)
+        action[:3] = np.clip(
+            action[:3], -args.push_max_command, args.push_max_command
+        )
         status = io.advance(action, "mitigate", oracle)
         displacement = float(
             np.linalg.norm(_body_pos(io.env, body) - start_body)
         )
         if status is not None and status.violated:
             return MotionFailure(status.reason, f"{body}:push"), displacement
-        if bool(getattr(oracle, unloaded_attribute)):
+        if (
+            bool(getattr(oracle, unloaded_attribute))
+            and displacement >= args.min_push_unload_displacement
+        ):
             break
     else:
         return (
@@ -201,6 +207,31 @@ def _push_unload(
     failure = _move(
         io, retreat, close_sign, args, f"{body}:push_retreat", oracle=oracle
     )
+    if failure is None:
+        status = _hold(io, close_sign, args.push_settle_steps, "mitigate", oracle)
+        if status is not None and status.violated:
+            failure = MotionFailure(status.reason, f"{body}:push_settle")
+    displacement = float(np.linalg.norm(_body_pos(io.env, body) - start_body))
+    body_id = io.env.sim.model.body_name2id(body)
+    try:
+        speed = float(np.linalg.norm(io.env.sim.data.body_xvelp[body_id]))
+    except AttributeError:
+        speed = float(np.linalg.norm(io.env.sim.data.cvel[body_id][3:6]))
+    table_z = float(_body_pos(io.env, SUPPORT_BODY)[2])
+    table_stable = bool(
+        _body_pos(io.env, body)[2] <= table_z + args.table_stable_z_margin
+        and speed <= args.table_stable_speed
+    )
+    if failure is None and not (
+        bool(getattr(oracle, unloaded_attribute))
+        and displacement >= args.min_push_unload_displacement
+        and table_stable
+    ):
+        failure = MotionFailure(
+            "independent_table_stable_unload_gate_failed",
+            f"{body}:push_verify",
+            final_error_m=displacement,
+        )
     return failure, displacement
 
 
@@ -301,24 +332,66 @@ def _place_target_under_shelf(
             oracle=oracle,
         )
     if failure is None:
-        failure = _move(
-            io,
-            target + grasp_offset,
-            close_sign,
-            args,
-            f"{body}:insert_under_shelf",
-            oracle=oracle,
-        )
-    if failure is None:
         status = _hold(io, open_sign, args.release_steps, "task", oracle)
         if status is None or not status.violated:
             status = _hold(io, open_sign, args.settle_steps, "task", oracle)
         if status is not None and status.violated:
             failure = MotionFailure(status.reason, f"{body}:release")
+    # Carrying the book into the low shelf makes the gripper collide with the
+    # shelf edge. Release at the opening, retreat, then impart a horizontal
+    # +y push so only the flat book enters the native bottom region.
+    if failure is None:
+        released = _body_pos(io.env, body)
+        behind = released + np.array(
+            [0.0, -args.target_push_start_clearance, args.target_push_height]
+        )
+        above_behind = behind + np.array([0.0, 0.0, args.approach_height])
+        failure = _move(
+            io,
+            above_behind,
+            open_sign,
+            args,
+            f"{body}:push_approach",
+            oracle=oracle,
+        )
+    if failure is None:
+        failure = _move(
+            io,
+            behind,
+            close_sign,
+            args,
+            f"{body}:push_descend",
+            oracle=oracle,
+        )
+    if failure is None:
+        push_goal = behind + np.array([0.0, args.target_push_distance, 0.0])
+        for _ in range(args.max_target_push_steps):
+            action = _position_action(
+                _eef_pos(io.obs), push_goal, close_sign, args
+            )
+            action[:3] = np.clip(
+                action[:3],
+                -args.target_push_max_command,
+                args.target_push_max_command,
+            )
+            status = io.advance(action, "task", oracle)
+            if status is not None and status.violated:
+                failure = MotionFailure(status.reason, f"{body}:push")
+                break
+            if io.env.check_success():
+                break
+        else:
+            failure = MotionFailure(
+                "native_goal_not_reached", f"{body}:push_into_shelf"
+            )
+    if failure is None:
+        status = _hold(io, open_sign, args.release_steps, "task", oracle)
+        if status is not None and status.violated:
+            failure = MotionFailure(status.reason, f"{body}:push_release")
     error = float(np.linalg.norm(_body_pos(io.env, body) - target))
-    if failure is None and error > args.task_position_tolerance:
+    if failure is None and not io.env.check_success():
         failure = MotionFailure(
-            "shelf_position_error", f"{body}:verify", error, error, error
+            "native_goal_not_stable", f"{body}:verify", error, error, error
         )
     return failure, error
 
@@ -605,6 +678,16 @@ def main():
     parser.add_argument("--push_distance", type=float, default=0.12)
     parser.add_argument("--push_retreat_distance", type=float, default=0.08)
     parser.add_argument("--max_push_steps", type=int, default=100)
+    parser.add_argument("--push_max_command", type=float, default=0.20)
+    parser.add_argument("--min_push_unload_displacement", type=float, default=0.08)
+    parser.add_argument("--push_settle_steps", type=int, default=40)
+    parser.add_argument("--table_stable_z_margin", type=float, default=0.06)
+    parser.add_argument("--table_stable_speed", type=float, default=0.06)
+    parser.add_argument("--target_push_start_clearance", type=float, default=0.08)
+    parser.add_argument("--target_push_height", type=float, default=0.025)
+    parser.add_argument("--target_push_distance", type=float, default=0.35)
+    parser.add_argument("--target_push_max_command", type=float, default=0.50)
+    parser.add_argument("--max_target_push_steps", type=int, default=180)
     parser.add_argument("--video_stride", type=int, default=2)
     parser.add_argument("--video_fps", type=int, default=20)
     parser.add_argument("--fail_on_invalid", action="store_true")
