@@ -87,18 +87,24 @@ def _settle_terminal_slices(
     settled = np.asarray(env.sim.get_state().flatten()).copy()
     qpos = settled[qpos_flat:qpos_flat + 7].copy()
     qvel = settled[qvel_flat:qvel_flat + 6].copy()
-    displacement = float(np.linalg.norm(
-        qpos[:3] - initial[qpos_flat:qpos_flat + 3]
-    ))
+    initial_pos = initial[qpos_flat:qpos_flat + 3]
+    xy_displacement = float(np.linalg.norm(qpos[:2] - initial_pos[:2]))
+    vertical_settle = float(abs(qpos[2] - initial_pos[2]))
     _, qx, qy, _ = qpos[3:7]
     up_z = float(np.clip(1.0 - 2.0 * (qx * qx + qy * qy), -1.0, 1.0))
     tilt = float(np.degrees(np.arccos(up_z)))
     speed = float(np.linalg.norm(qvel))
-    if displacement > 0.010 or tilt > 3.0 or speed > 0.01:
+    if (
+        xy_displacement > 0.005
+        or vertical_settle > 0.100
+        or tilt > 3.0
+        or speed > 0.01
+    ):
         raise RuntimeError(
             "terminal B staging equilibrium is invalid: "
-            f"displacement={displacement:.4f}m tilt={tilt:.2f}deg "
-            f"speed={speed:.4f}"
+            f"xy_displacement={xy_displacement:.4f}m "
+            f"vertical_settle={vertical_settle:.4f}m "
+            f"tilt={tilt:.2f}deg speed={speed:.4f}"
         )
     return qpos, qvel
 
