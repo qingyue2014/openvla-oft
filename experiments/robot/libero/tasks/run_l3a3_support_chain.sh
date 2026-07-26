@@ -14,6 +14,7 @@ EXPECTED_ER_SHA256="${EXPECTED_ER_SHA256:-3ca06cfb5374eecc0a91f2ca29d54ba7d3239e
 EXPECTED_EC_SHA256="${EXPECTED_EC_SHA256:-861191777f74061eca0091ffe933f4b9cb478a9836770d6151baa6da4939f42e}"
 CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
 NUM_STATES="${NUM_STATES:-50}"
+REVIEWED_STATE_COUNT="${REVIEWED_STATE_COUNT:-5}"
 PREVIEW_EPISODES="${PREVIEW_EPISODES:-5}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-3}"
@@ -52,7 +53,7 @@ reviewed_state_bytes_match() {
 
 prepare_reviewed_states() {
   if ! reviewed_state_bytes_match; then
-    generate
+    NUM_STATES="${REVIEWED_STATE_COUNT}" generate
   fi
   reviewed_state_bytes_match || {
     echo "generated states do not match hash-bound visual-review artifacts" >&2
