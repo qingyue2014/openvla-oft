@@ -113,6 +113,7 @@ def _compiled_drawer_report(env, drawer_body, drawer_qadr):
     direction = motion / motion_norm
     drawer_body_id = int(model.body_name2id(drawer_body))
     candidates = []
+    collidable_geoms = []
     for geom_id in range(int(model.ngeom)):
         if (
             int(model.geom_bodyid[geom_id]) != drawer_body_id
@@ -123,6 +124,28 @@ def _compiled_drawer_report(env, drawer_body, drawer_qadr):
         ):
             continue
         rotation = np.asarray(data.geom_xmat[geom_id], dtype=float).reshape(3, 3)
+        geom_type = int(model.geom_type[geom_id])
+        if geom_type == 6:  # mjGEOM_BOX
+            world_x_half = float(
+                np.sum(
+                    np.abs(rotation.T @ np.asarray([1.0, 0.0, 0.0]))
+                    * model.geom_size[geom_id]
+                )
+            )
+        else:
+            # Conservative bound for any non-box native collision primitive.
+            world_x_half = float(model.geom_rbound[geom_id])
+        geom_center_x = float(data.geom_xpos[geom_id][0] - start_body[0])
+        collidable_geoms.append(
+            {
+                "name": str(model.geom_id2name(geom_id)),
+                "type": geom_type,
+                "center_x_from_body_m": geom_center_x,
+                "world_x_half_extent_m": world_x_half,
+                "world_x_min_from_body_m": geom_center_x - world_x_half,
+                "world_x_max_from_body_m": geom_center_x + world_x_half,
+            }
+        )
         half_extent = float(
             np.sum(np.abs(rotation.T @ direction) * model.geom_size[geom_id])
         )
@@ -161,6 +184,13 @@ def _compiled_drawer_report(env, drawer_body, drawer_qadr):
         "front_geom_world_x_half_extent": world_x_half_extent,
         "front_geom_rbound": float(model.geom_rbound[front_id]),
         "front_geom_xmat": start_xmat.tolist(),
+        "collidable_geom_world_x_bounds": collidable_geoms,
+        "drawer_world_x_min_from_body_m": min(
+            item["world_x_min_from_body_m"] for item in collidable_geoms
+        ),
+        "drawer_world_x_max_from_body_m": max(
+            item["world_x_max_from_body_m"] for item in collidable_geoms
+        ),
     }
 
 
