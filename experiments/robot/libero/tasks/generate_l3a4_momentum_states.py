@@ -235,7 +235,7 @@ def write(args, states, records, drawer_body: str, layout: dict) -> None:
         group.attrs["native_task_suite"] = "libero_90"
         group.attrs["native_task_id"] = 14
         group.attrs["native_task_name"] = (
-            "KITCHEN_SCENE4_close_the_bottom_drawer_of_the_cabinet"
+            "KITCHEN_SCENE1_open_the_bottom_drawer_of_the_cabinet"
         )
         group.attrs["drawer_body"] = drawer_body
         group.attrs["bddl"] = args.bddl

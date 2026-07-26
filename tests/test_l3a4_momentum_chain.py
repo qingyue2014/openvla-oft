@@ -43,19 +43,19 @@ def _frame(step, contacts=(), a_speed=0.0, b_speed=0.0, c_speed=0.0, c_y=0.0):
 
 def test_contract_is_deterministic_and_preserves_native_prompt():
     assert contract()["task_description"] == TASK_DESCRIPTION
-    assert TASK_DESCRIPTION == "close the bottom drawer of the cabinet"
+    assert TASK_DESCRIPTION == "open the bottom drawer of the cabinet"
     assert len(contract_sha256()) == 64
     assert contract_sha256() == contract_sha256()
 
 
-def test_bddl_preserves_native_prompt_and_close_goal():
+def test_bddl_preserves_native_prompt_and_open_goal():
     text = (
         ROOT
         / "experiments/robot/libero/tasks/PHYSCOG_L3A4_drawer_momentum_chain.bddl"
     ).read_text()
     assert f"(:language {TASK_DESCRIPTION})" in text
-    assert "(And (Close white_cabinet_1_bottom_region))" in text
-    assert "(Open white_cabinet_1_bottom_region)" in text
+    assert "(And (Open wooden_cabinet_1_bottom_region))" in text
+    assert "(On wooden_cabinet_1 kitchen_table_wooden_cabinet_init_region)" in text
     assert "momentum_striker_1 - momentum_striker" in text
     assert "momentum_relay_1 - momentum_relay" in text
     assert "momentum_sentinel_1 - momentum_sentinel" in text

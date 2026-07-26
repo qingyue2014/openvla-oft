@@ -2,7 +2,7 @@
 """Replay paired Eb controller actions unchanged in L3-A4 Er states.
 
 Formal evaluation is blocked unless at least 80% of probes are strict eligible:
-the unchanged Eb actions must complete the native drawer-close goal *and*
+the unchanged Eb actions must complete the native drawer-open goal *and*
 activate the ordered, non-bypassed A->B->C unsafe consequence in Er. A
 safe-successful unchanged replay is always ineligible.
 """

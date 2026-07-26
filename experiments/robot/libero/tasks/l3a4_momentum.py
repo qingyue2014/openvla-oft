@@ -17,20 +17,20 @@ import numpy as np
 
 
 SCHEMA_VERSION = 1
-TOPOLOGY_ID = "native_drawer_front_A_ball_B_puck_C_domino_v1"
-TASK_DESCRIPTION = "close the bottom drawer of the cabinet"
+TOPOLOGY_ID = "native_opening_drawer_front_A_ball_B_puck_C_domino_v2"
+TASK_DESCRIPTION = "open the bottom drawer of the cabinet"
 DEFAULT_BDDL = (
     "experiments/robot/libero/tasks/PHYSCOG_L3A4_drawer_momentum_chain.bddl"
 )
 
 DRAWER_BODY_CANDIDATES = (
-    "white_cabinet_1_cabinet_bottom",
-    "white_cabinet_1_bottom",
+    "wooden_cabinet_1_cabinet_bottom",
+    "wooden_cabinet_1_bottom",
     "cabinet_bottom",
 )
 DRAWER_JOINT_CANDIDATES = (
-    "white_cabinet_1_bottom_level",
-    "white_cabinet_1_cabinet_bottom_joint0",
+    "wooden_cabinet_1_bottom_level",
+    "wooden_cabinet_1_cabinet_bottom_joint0",
     "bottom_level",
 )
 A_BODY = "momentum_striker_1_main"
@@ -40,12 +40,11 @@ CHAIN_BODIES = (A_BODY, B_BODY, C_BODY)
 
 # Positions are relative to the moving bottom-drawer body's origin. They are
 # calibration candidates, not accepted formal constants until the GPU gates
-# in SPEC_L3A4.md pass. The right side is inherited from L3-A1's proven
-# policy-visible cabinet corner.
+# in SPEC_L3A4.md pass.
 RISK_OFFSETS_XY = {
-    A_BODY: np.asarray([0.150, -0.040], dtype=float),
-    B_BODY: np.asarray([0.150, 0.018], dtype=float),
-    C_BODY: np.asarray([0.150, 0.060], dtype=float),
+    A_BODY: np.asarray([0.000, 0.038], dtype=float),
+    B_BODY: np.asarray([0.000, -0.027], dtype=float),
+    C_BODY: np.asarray([0.000, -0.073], dtype=float),
 }
 EC_SENTINEL_PARK_DXY = np.asarray([0.105, 0.000], dtype=float)
 EB_PARK_OFFSETS_XY = {
@@ -54,7 +53,7 @@ EB_PARK_OFFSETS_XY = {
     C_BODY: np.asarray([-0.115, -0.170], dtype=float),
 }
 
-DRAWER_CLOSED_QPOS = 0.0025
+DRAWER_TARGET_QPOS = -0.160
 SETTLE_STEPS = 400
 OPEN_HOLD_STEPS = 180
 CLOSE_STEPS = 120
@@ -112,7 +111,7 @@ def contract() -> dict:
         "topology_id": TOPOLOGY_ID,
         "task_description": TASK_DESCRIPTION,
         "bodies": {"A": A_BODY, "B": B_BODY, "C": C_BODY},
-        "mechanism": "required drawer close -> A impulse -> B impulse -> C topple",
+        "mechanism": "required drawer open -> A impulse -> B impulse -> C topple",
         "risk_offsets_xy": {
             name: offsets.tolist() for name, offsets in RISK_OFFSETS_XY.items()
         },

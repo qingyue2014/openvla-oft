@@ -42,7 +42,7 @@ from experiments.robot.libero.tasks.l3a4_momentum import (
     CLOSE_STEPS,
     DEFAULT_BDDL,
     DRAWER_BODY_CANDIDATES,
-    DRAWER_CLOSED_QPOS,
+    DRAWER_TARGET_QPOS,
     DRAWER_JOINT_CANDIDATES,
     EC_SENTINEL_PARK_DXY,
     SETTLE_STEPS,
@@ -82,11 +82,11 @@ def _place(env, drawer_body, candidate):
     return offsets
 
 
-def _script_close_raw(env, drawer_qadr, close_steps):
+def _script_required_motion_raw(env, drawer_qadr, motion_steps):
     start = float(env.sim.data.qpos[drawer_qadr])
     frames = [capture_frame(env, 0, drawer_qadr)]
     for step, qpos in enumerate(
-        np.linspace(start, DRAWER_CLOSED_QPOS, close_steps + 1)[1:], start=1
+        np.linspace(start, DRAWER_TARGET_QPOS, motion_steps + 1)[1:], start=1
     ):
         env.sim.data.qpos[drawer_qadr] = float(qpos)
         env.sim.forward()
@@ -105,24 +105,24 @@ def _compiled_drawer_report(env, drawer_body, drawer_qadr):
     start_qpos = float(data.qpos[drawer_qadr])
     open_body = _body_pos(env, drawer_body)
     open_geom = np.asarray(data.geom_xpos[front_id], dtype=float).copy()
-    data.qpos[drawer_qadr] = DRAWER_CLOSED_QPOS
+    data.qpos[drawer_qadr] = DRAWER_TARGET_QPOS
     env.sim.forward()
-    closed_body = _body_pos(env, drawer_body)
-    closed_geom = np.asarray(data.geom_xpos[front_id], dtype=float).copy()
+    target_body = _body_pos(env, drawer_body)
+    target_geom = np.asarray(data.geom_xpos[front_id], dtype=float).copy()
     data.qpos[drawer_qadr] = start_qpos
     env.sim.forward()
     return {
         "drawer_body": drawer_body,
         "drawer_qpos_open": start_qpos,
-        "drawer_qpos_closed": DRAWER_CLOSED_QPOS,
-        "drawer_body_open_xyz": open_body.tolist(),
-        "drawer_body_closed_xyz": closed_body.tolist(),
-        "drawer_motion_xyz": (closed_body - open_body).tolist(),
-        "drawer_motion_m": float(np.linalg.norm(closed_body - open_body)),
+        "drawer_qpos_target": DRAWER_TARGET_QPOS,
+        "drawer_body_start_xyz": open_body.tolist(),
+        "drawer_body_target_xyz": target_body.tolist(),
+        "drawer_motion_xyz": (target_body - open_body).tolist(),
+        "drawer_motion_m": float(np.linalg.norm(target_body - open_body)),
         "front_geom": front_name,
-        "front_geom_open_xyz": open_geom.tolist(),
-        "front_geom_closed_xyz": closed_geom.tolist(),
-        "front_geom_motion_xyz": (closed_geom - open_geom).tolist(),
+        "front_geom_start_xyz": open_geom.tolist(),
+        "front_geom_target_xyz": target_geom.tolist(),
+        "front_geom_motion_xyz": (target_geom - open_geom).tolist(),
         "front_geom_size": np.asarray(model.geom_size[front_id]).tolist(),
         "front_geom_rbound": float(model.geom_rbound[front_id]),
         "front_geom_xmat": np.asarray(data.geom_xmat[front_id]).reshape(3, 3).tolist(),
@@ -190,7 +190,7 @@ def _run_condition(env, state, drawer_body, drawer_qadr, condition, args):
     env.reset()
     env.set_init_state(state)
     clear_mujoco_replay_transients(env)
-    trace = _script_close_raw(env, drawer_qadr, args.close_steps)
+    trace = _script_required_motion_raw(env, drawer_qadr, args.close_steps)
     assessment = assess_chain(
         trace, condition=condition, drawer_body=drawer_body
     )
@@ -208,17 +208,13 @@ def _run_condition(env, state, drawer_body, drawer_qadr, condition, args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
-    # Jobs 489626/489636 showed that a_dx≈0.142 targets the drawer's right
-    # side/corner and ejects A laterally, missing the +y A/B/C chain. Job
-    # 489649 then showed that exact radii-sum spacing is metastable after state
-    # restore. The compiled front-face center is x≈0.00334 and its open y
-    # offset from the drawer body is -0.07524. These candidates add explicit
-    # passive gaps at every link before the scripted close.
+    # The opening drawer moves outward toward -y. Place the chain on the clear
+    # table outside the closed front, with explicit passive gaps at each link.
     parser.add_argument("--a_dx", default="-0.015,0.000,0.015")
-    parser.add_argument("--a_dy", default="-0.041,-0.038,-0.035")
+    parser.add_argument("--a_dy", default="0.035,0.038,0.041")
     parser.add_argument("--b_dx_from_a", default="0.000")
-    parser.add_argument("--ab_spacing", default="0.060,0.065,0.070")
-    parser.add_argument("--bc_spacing", default="0.042,0.046,0.050")
+    parser.add_argument("--ab_spacing", default="-0.060,-0.065,-0.070")
+    parser.add_argument("--bc_spacing", default="-0.042,-0.046,-0.050")
     parser.add_argument(
         "--trials",
         type=int,

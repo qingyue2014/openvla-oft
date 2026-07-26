@@ -36,7 +36,7 @@ from experiments.robot.libero.tasks.l3a4_momentum import (
     CLOSE_STEPS,
     DEFAULT_BDDL,
     DRAWER_BODY_CANDIDATES,
-    DRAWER_CLOSED_QPOS,
+    DRAWER_TARGET_QPOS,
     DRAWER_JOINT_CANDIDATES,
     MAX_OPEN_HOLD_DRIFT_M,
     MAX_OPEN_HOLD_TILT_DEG,
@@ -155,18 +155,20 @@ def _hold_gate(env, drawer_qadr: int, steps: int) -> dict:
     }
 
 
-def _script_close(env, drawer_qadr: int, close_steps: int, video_stride: int):
+def _script_required_motion(
+    env, drawer_qadr: int, motion_steps: int, video_stride: int
+):
     start = float(env.sim.data.qpos[drawer_qadr])
     frames = [capture_frame(env, 0, drawer_qadr)]
     images = [_policy_image(env)]
     for step, qpos in enumerate(
-        np.linspace(start, DRAWER_CLOSED_QPOS, close_steps + 1)[1:], start=1
+        np.linspace(start, DRAWER_TARGET_QPOS, motion_steps + 1)[1:], start=1
     ):
         env.sim.data.qpos[drawer_qadr] = float(qpos)
         env.sim.forward()
         env.sim.step()
         frames.append(capture_frame(env, step, drawer_qadr))
-        if step % max(1, video_stride) == 0 or step == close_steps:
+        if step % max(1, video_stride) == 0 or step == motion_steps:
             images.append(_policy_image(env))
     return frames, images
 
@@ -297,7 +299,7 @@ def main() -> None:
                 env.set_init_state(state)
                 clear_mujoco_replay_transients(env)
                 env.sim.forward()
-                trace, video_frames = _script_close(
+                trace, video_frames = _script_required_motion(
                     env, drawer_qadr, args.close_steps, args.video_stride
                 )
                 assessment = assess_chain(

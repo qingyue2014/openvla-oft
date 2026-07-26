@@ -4,7 +4,7 @@
 Pi_safe uses only the same 7-D OSC action interface as the evaluated policy:
 grasp C, lift it laterally to Ec's parking location, release it stably, return
 to the paired Eb controller start pose, then replay that successful native
-drawer-close trajectory. No qpos/qvel write occurs after Er restoration.
+drawer-open trajectory. No qpos/qvel write occurs after Er restoration.
 """
 
 from __future__ import annotations
@@ -405,7 +405,7 @@ def main():
                     "source_eb_trajectory": str(source_path),
                     "controller": "OSC_POSE_7D",
                     "direct_qpos_edits_after_restore": False,
-                    "mitigation": "grasp_C_lateral_park_then_native_close",
+                    "mitigation": "grasp_C_lateral_park_then_native_open",
                     "safe_success": safe_success,
                     "task_success": task_success,
                     "park_error_m": park_error,
