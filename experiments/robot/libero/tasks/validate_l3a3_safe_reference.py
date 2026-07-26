@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -300,7 +301,7 @@ def _stage_target_pusher(
     released: np.ndarray,
     x_offset: float,
     open_sign: float,
-    close_sign: float,
+    pusher_sign: float,
     args,
     oracle,
     stage: str,
@@ -317,7 +318,7 @@ def _stage_target_pusher(
     )
     if failure is None:
         failure = _move(
-            io, behind, close_sign, args, f"{stage}:descend", oracle=oracle
+            io, behind, pusher_sign, args, f"{stage}:descend", oracle=oracle
         )
         if (
             failure is not None
@@ -336,7 +337,7 @@ def _stage_target_pusher(
         if contact_seen:
             break
         action = _position_action(
-            _eef_pos(io.obs), contact_goal, close_sign, args
+            _eef_pos(io.obs), contact_goal, pusher_sign, args
         )
         action[:3] = np.clip(
             action[:3],
@@ -357,6 +358,21 @@ def _place_target_under_shelf(
     body = TARGET_BODY
     start = _body_pos(io.env, body)
     target = _shelf_target(io.env, float(start[2]), args)
+    site_id = io.env.sim.model.site_name2id(args.shelf_site)
+    diagnostic = {
+        "release_book_xyz": [],
+        "contact_seen": False,
+        "final_book_xyz": [],
+        "region_center_xyz": np.asarray(
+            io.env.sim.data.site_xpos[site_id], dtype=float
+        ).tolist(),
+        "region_half_size": np.asarray(
+            io.env.sim.model.site_size[site_id], dtype=float
+        ).tolist(),
+        "region_xmat": np.asarray(
+            io.env.sim.data.site_xmat[site_id], dtype=float
+        ).reshape(3, 3).tolist(),
+    }
     grasp = start + np.array([0.0, 0.0, args.grasp_height])
     approach = grasp + np.array([0.0, 0.0, args.approach_height])
     failure = _move(
@@ -379,7 +395,8 @@ def _place_target_under_shelf(
         elif not _gripper_contacts_body(io.env, body):
             failure = MotionFailure("no_gripper_object_contact", f"{body}:grasp")
     if failure is not None:
-        return failure, float("inf")
+        diagnostic["final_book_xyz"] = _body_pos(io.env, body).tolist()
+        return failure, float("inf"), diagnostic
 
     grasp_offset = _eef_pos(io.obs) - _body_pos(io.env, body)
     lift = _eef_pos(io.obs) + np.array([0.0, 0.0, args.target_lift_height])
@@ -413,16 +430,20 @@ def _place_target_under_shelf(
     # shelf edge. Release at the opening, retreat, then impart a horizontal
     # +y push so only the flat book enters the native bottom region.
     if failure is None:
+        diagnostic["release_book_xyz"] = _body_pos(io.env, body).tolist()
         for stroke in range(args.target_push_strokes):
             if io.env.check_success():
                 break
             released = _body_pos(io.env, body)
             contact_seen = False
-            for attempt, x_offset in enumerate(
+            active_push_sign = close_sign
+            for attempt, (x_offset, pusher_sign) in enumerate(
                 (
-                    args.target_push_x_offset,
-                    -args.target_push_x_offset,
-                    0.0,
+                    (args.target_push_x_offset, close_sign),
+                    (-args.target_push_x_offset, close_sign),
+                    (args.target_push_open_x_offset, open_sign),
+                    (-args.target_push_open_x_offset, open_sign),
+                    (0.0, open_sign),
                 )
             ):
                 failure, contact_seen = _stage_target_pusher(
@@ -431,12 +452,16 @@ def _place_target_under_shelf(
                     released,
                     x_offset,
                     open_sign,
-                    close_sign,
+                    pusher_sign,
                     args,
                     oracle,
                     f"{body}:stroke{stroke}:contact_attempt{attempt}",
                 )
-                if failure is not None or contact_seen:
+                if contact_seen:
+                    active_push_sign = pusher_sign
+                    diagnostic["contact_seen"] = True
+                    break
+                if failure is not None:
                     break
             if not contact_seen:
                 failure = MotionFailure(
@@ -449,7 +474,7 @@ def _place_target_under_shelf(
             )
             for _ in range(args.max_target_push_steps):
                 action = _position_action(
-                    _eef_pos(io.obs), push_goal, close_sign, args
+                    _eef_pos(io.obs), push_goal, active_push_sign, args
                 )
                 action[:3] = np.clip(
                     action[:3],
@@ -508,11 +533,12 @@ def _place_target_under_shelf(
         if status is not None and status.violated:
             failure = MotionFailure(status.reason, f"{body}:push_release")
     error = float(np.linalg.norm(_body_pos(io.env, body) - target))
+    diagnostic["final_book_xyz"] = _body_pos(io.env, body).tolist()
     if failure is None and not io.env.check_success():
         failure = MotionFailure(
             "native_goal_not_stable", f"{body}:verify", error, error, error
         )
-    return failure, error
+    return failure, error, diagnostic
 
 
 def _run_eb_expert(env, eb_state, episode, args):
@@ -524,8 +550,9 @@ def _run_eb_expert(env, eb_state, episode, args):
     io = EpisodeIO(env, recorder, obs, args.video_stride)
     close_sign, open_sign, failure = _calibrate_gripper(io, args)
     task_error = float("inf")
+    task_diagnostic = {}
     if failure is None:
-        failure, task_error = _place_target_under_shelf(
+        failure, task_error, task_diagnostic = _place_target_under_shelf(
             io, open_sign, close_sign, args
         )
     task_success = bool(env.check_success())
@@ -552,6 +579,7 @@ def _run_eb_expert(env, eb_state, episode, args):
             "failure_reason": failure.reason if failure else "",
             "failure_stage": failure.stage if failure else "",
             "video_path": str(video_path),
+            "task_push_diagnostic": task_diagnostic,
         },
     )
     return {
@@ -566,6 +594,11 @@ def _run_eb_expert(env, eb_state, episode, args):
         "action_count": len(recorder.actions),
         "close_sign": close_sign,
         "open_sign": open_sign,
+        "release_book_xyz": json.dumps(task_diagnostic.get("release_book_xyz", [])),
+        "push_contact_seen": int(bool(task_diagnostic.get("contact_seen"))),
+        "final_book_xyz": json.dumps(task_diagnostic.get("final_book_xyz", [])),
+        "region_center_xyz": json.dumps(task_diagnostic.get("region_center_xyz", [])),
+        "region_half_size": json.dumps(task_diagnostic.get("region_half_size", [])),
     }
 
 
@@ -630,8 +663,9 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
         if status.violated or not oracle.safe_precondition_inserted:
             failure = MotionFailure("precondition_not_observed", "verify_unload")
     task_error = float("inf")
+    task_diagnostic = {}
     if failure is None:
-        failure, task_error = _place_target_under_shelf(
+        failure, task_error, task_diagnostic = _place_target_under_shelf(
             io, open_sign, close_sign, args, oracle
         )
     task_success = bool(env.check_success())
@@ -668,6 +702,7 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             "failure_reason": failure.reason if failure else "",
             "failure_stage": failure.stage if failure else "",
             "video_path": str(video_path),
+            "task_push_diagnostic": task_diagnostic,
         },
     )
     return {
@@ -686,6 +721,11 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
         "action_count": len(recorder.actions),
         "close_sign": close_sign,
         "open_sign": open_sign,
+        "release_book_xyz": json.dumps(task_diagnostic.get("release_book_xyz", [])),
+        "push_contact_seen": int(bool(task_diagnostic.get("contact_seen"))),
+        "final_book_xyz": json.dumps(task_diagnostic.get("final_book_xyz", [])),
+        "region_center_xyz": json.dumps(task_diagnostic.get("region_center_xyz", [])),
+        "region_half_size": json.dumps(task_diagnostic.get("region_half_size", [])),
     }
 
 
@@ -825,6 +865,7 @@ def main():
     parser.add_argument("--target_push_approach_height", type=float, default=0.07)
     parser.add_argument("--target_push_retreat_height", type=float, default=0.18)
     parser.add_argument("--target_push_x_offset", type=float, default=0.025)
+    parser.add_argument("--target_push_open_x_offset", type=float, default=0.018)
     parser.add_argument("--target_push_max_eef_body_z", type=float, default=0.045)
     parser.add_argument("--target_contact_probe_distance", type=float, default=0.12)
     parser.add_argument("--target_contact_probe_command", type=float, default=0.35)
@@ -832,7 +873,7 @@ def main():
     parser.add_argument("--target_push_distance", type=float, default=0.30)
     parser.add_argument("--target_push_max_command", type=float, default=1.0)
     parser.add_argument("--max_target_push_steps", type=int, default=80)
-    parser.add_argument("--target_push_strokes", type=int, default=8)
+    parser.add_argument("--target_push_strokes", type=int, default=1)
     parser.add_argument("--target_push_retreat", type=float, default=0.08)
     parser.add_argument("--target_push_settle_steps", type=int, default=8)
     parser.add_argument("--cascade_settle_steps", type=int, default=80)
