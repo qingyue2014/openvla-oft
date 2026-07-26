@@ -192,7 +192,179 @@ def _l1a34_phases(scenario: str) -> dict[tuple[str, str], PhaseSpec]:
     }
 
 
-PHASES = {**PHASES, **_l1a34_phases("l1a3"), **_l1a34_phases("l1a4")}
+def _l3c2_phases() -> dict[tuple[str, str], PhaseSpec]:
+    """Registry entries for the L3-C2 frying-pan shared-space-conflict pipeline.
+
+    L3-C2 lives on branch `physcog-libero-l3-c`, not the `physcog-libero-l1`
+    default, so every invocation of these phases must pass
+    `--branch physcog-libero-l3-c` explicitly. The obstacle was switched from
+    the native moka pot to an added ketchup bottle on 2026-07-25 (see
+    `experiments/robot/libero/tasks/L3-C2_SPEC.md`); that change is currently
+    uncommitted in the local `openvla-oft-l3-c` worktree, so a non-dry-run
+    call will only exercise the new ketchup obstacle once it is committed and
+    pushed to `origin/physcog-libero-l3-c`.
+    """
+    calibration_dir = "experiments/robot/libero/tasks/l3c2_calibration_v2"
+    output_root = "rollouts/l3c2_frypan_shared_space_v2"
+    safe_reference_dir = "experiments/logs/l3c2_safe_reference_v2"
+    checkpoint = "RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora"
+    shared_env = (
+        f"CALIBRATION_DIR={calibration_dir}",
+        f"OUTPUT_ROOT={output_root}",
+        f"SAFE_REFERENCE_DIR={safe_reference_dir}",
+    )
+    return {
+        ("l3c2", "check"): PhaseSpec(
+            command=("python", "-m", "pytest", "-q", "tests/test_l3c_libero_integration.py"),
+        ),
+        ("l3c2", "calibrate"): PhaseSpec(
+            command=(
+                "env",
+                *shared_env,
+                "bash",
+                "experiments/robot/libero/tasks/run_l3c2_frypan_shared_space.sh",
+                "calibrate",
+            ),
+            count_env="NUM_STATES",
+            artifacts=(
+                f"{calibration_dir}/calibration_report.json",
+                f"{calibration_dir}/paired_initial_states.npz",
+            ),
+        ),
+        ("l3c2", "safe_reference"): PhaseSpec(
+            command=(
+                "env",
+                *shared_env,
+                "bash",
+                "experiments/robot/libero/tasks/run_l3c2_frypan_shared_space.sh",
+                "safe_reference",
+            ),
+            artifacts=(f"{safe_reference_dir}/result.json",),
+        ),
+        ("l3c2", "smoke"): PhaseSpec(
+            command=(
+                "env",
+                f"CHECKPOINT={checkpoint}",
+                *shared_env,
+                "bash",
+                "experiments/robot/libero/tasks/run_l3c2_frypan_shared_space.sh",
+                "smoke",
+            ),
+            count_env="SMOKE_TRIALS",
+            artifacts=(f"{output_root}/smoke",),
+        ),
+        ("l3c2", "probe"): PhaseSpec(
+            command=(
+                "env",
+                f"CHECKPOINT={checkpoint}",
+                *shared_env,
+                "bash",
+                "experiments/robot/libero/tasks/run_l3c2_frypan_shared_space.sh",
+                "probe",
+            ),
+            count_env="PROBE_TRIALS",
+            artifacts=(
+                f"{output_root}/probe",
+                f"{output_root}/action_separation_report.json",
+            ),
+        ),
+        ("l3c2", "formal"): PhaseSpec(
+            command=(
+                "env",
+                f"CHECKPOINT={checkpoint}",
+                *shared_env,
+                "bash",
+                "experiments/robot/libero/tasks/run_l3c2_frypan_shared_space.sh",
+                "formal",
+            ),
+            count_env="TRIALS",
+            artifacts=(
+                f"{output_root}/formal",
+                "experiments/logs/l3c2_frypan_shared_space_v2.json",
+            ),
+        ),
+    }
+
+
+def _l1a2r_phases() -> dict[tuple[str, str], PhaseSpec]:
+    """Registry entries for the L1-A2R occluded-corridor-hazard pipeline.
+
+    Candidate replacement for L1-A2 (see L1-A2R_SPEC.md): four-way paired
+    Eb/Er_occ/Er_vis/Ec generation, scripted calibration + safe reference,
+    unchanged-Eb causal replay gate, then the gated four-condition eval.
+    """
+    runner = "experiments/robot/libero/tasks/run_l1a2r_corridor_hazard.sh"
+    return {
+        ("l1a2r", "check"): PhaseSpec(
+            command=("bash", runner, "check"),
+            count_env="NUM_TRIALS",
+            artifacts=(
+                "experiments/robot/libero/tasks/l1a2r_task1_corridor_hazard_pairing.json",
+            ),
+        ),
+        ("l1a2r", "preview"): PhaseSpec(
+            command=("bash", runner, "preview"),
+            artifacts=("experiments/robot/libero/tasks/l1a2r_preview",),
+        ),
+        ("l1a2r", "calibrate"): PhaseSpec(
+            command=("bash", runner, "calibrate"),
+            count_env="CALIBRATION_NUM_STATES",
+            artifacts=(
+                "experiments/logs/l1a2r_calibration.md",
+                "experiments/logs/l1a2r_calibration.csv",
+            ),
+        ),
+        ("l1a2r", "safe_reference"): PhaseSpec(
+            command=("bash", runner, "safe_reference"),
+            count_env="SAFE_REF_STATES",
+            artifacts=(
+                "experiments/logs/l1a2r_safe_reference.md",
+                "experiments/logs/l1a2r_safe_reference.csv",
+            ),
+        ),
+        ("l1a2r", "smoke"): PhaseSpec(
+            command=("env", "SAVE_VIDEO_MODE=all", "bash", runner, "smoke"),
+            count_env="SMOKE_TRIALS",
+        ),
+        ("l1a2r", "eb"): PhaseSpec(
+            command=("bash", runner, "eb"),
+            count_env="NUM_TRIALS",
+        ),
+        ("l1a2r", "replay_gate"): PhaseSpec(
+            command=("bash", runner, "replay_gate"),
+            artifacts=(
+                "experiments/logs/l1a2r_eb_replay_er_occ.md",
+                "experiments/logs/l1a2r_eb_replay_er_occ.csv",
+                "experiments/logs/l1a2r_eb_replay_er_vis.md",
+                "experiments/logs/l1a2r_eb_replay_er_vis.csv",
+            ),
+        ),
+        ("l1a2r", "eval"): PhaseSpec(
+            command=("env", "SAVE_VIDEO_MODE=violation", "bash", runner, "eval"),
+            count_env="NUM_TRIALS",
+            artifacts=(
+                "experiments/logs/experiment_records.csv",
+                "experiments/logs/experiment_records.md",
+                "experiments/logs/result_tables.md",
+            ),
+        ),
+        ("l1a2r", "attribution"): PhaseSpec(
+            command=("bash", runner, "attribution"),
+            artifacts=(
+                "experiments/logs/l1a2r_attribution.md",
+                "experiments/logs/l1a2r_visibility_attribution.md",
+            ),
+        ),
+    }
+
+
+PHASES = {
+    **PHASES,
+    **_l1a34_phases("l1a3"),
+    **_l1a34_phases("l1a4"),
+    **_l3c2_phases(),
+    **_l1a2r_phases(),
+}
 
 
 VERDICT_RE = re.compile(

@@ -81,6 +81,78 @@ def test_l1a34_registry_exposes_boundary_pipeline_phases():
     )
 
 
+def test_l3c2_registry_exposes_shared_space_pipeline_phases():
+    assert set(phase for scenario, phase in PHASES if scenario == "l3c2") == {
+        "check", "calibrate", "safe_reference", "smoke", "probe", "formal",
+    }
+    calibration_dir = "experiments/robot/libero/tasks/l3c2_calibration_v2"
+    output_root = "rollouts/l3c2_frypan_shared_space_v2"
+    safe_reference_dir = "experiments/logs/l3c2_safe_reference_v2"
+
+    check = PHASES[("l3c2", "check")]
+    assert check.command == ("python", "-m", "pytest", "-q", "tests/test_l3c_libero_integration.py")
+
+    calibrate = PHASES[("l3c2", "calibrate")]
+    assert calibrate.count_env == "NUM_STATES"
+    assert f"CALIBRATION_DIR={calibration_dir}" in calibrate.command
+    assert f"{calibration_dir}/calibration_report.json" in calibrate.artifacts
+    assert f"{calibration_dir}/paired_initial_states.npz" in calibrate.artifacts
+
+    safe_reference = PHASES[("l3c2", "safe_reference")]
+    assert safe_reference.count_env is None
+    assert f"{safe_reference_dir}/result.json" in safe_reference.artifacts
+
+    for phase in ("smoke", "probe", "formal"):
+        spec = PHASES[("l3c2", phase)]
+        assert "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora" in spec.command
+        assert f"CALIBRATION_DIR={calibration_dir}" in spec.command
+        assert f"OUTPUT_ROOT={output_root}" in spec.command
+        assert f"SAFE_REFERENCE_DIR={safe_reference_dir}" in spec.command
+    assert PHASES[("l3c2", "smoke")].count_env == "SMOKE_TRIALS"
+    assert PHASES[("l3c2", "probe")].count_env == "PROBE_TRIALS"
+    assert PHASES[("l3c2", "formal")].count_env == "TRIALS"
+    assert f"{output_root}/action_separation_report.json" in PHASES[("l3c2", "probe")].artifacts
+    assert "experiments/logs/l3c2_frypan_shared_space_v2.json" in PHASES[("l3c2", "formal")].artifacts
+
+
+def test_l1a2r_registry_exposes_gated_four_way_pipeline_phases():
+    assert set(phase for scenario, phase in PHASES if scenario == "l1a2r") == {
+        "check",
+        "preview",
+        "calibrate",
+        "safe_reference",
+        "smoke",
+        "eb",
+        "replay_gate",
+        "eval",
+        "attribution",
+    }
+    runner = "experiments/robot/libero/tasks/run_l1a2r_corridor_hazard.sh"
+    for phase in ("check", "preview", "calibrate", "safe_reference", "eb",
+                  "replay_gate", "attribution"):
+        assert PHASES[("l1a2r", phase)].command[-2:] == (runner, phase)
+    assert PHASES[("l1a2r", "check")].count_env == "NUM_TRIALS"
+    assert PHASES[("l1a2r", "calibrate")].count_env == "CALIBRATION_NUM_STATES"
+    assert PHASES[("l1a2r", "safe_reference")].count_env == "SAFE_REF_STATES"
+    assert PHASES[("l1a2r", "smoke")].count_env == "SMOKE_TRIALS"
+    assert PHASES[("l1a2r", "eb")].count_env == "NUM_TRIALS"
+    assert PHASES[("l1a2r", "eval")].count_env == "NUM_TRIALS"
+    assert (
+        "experiments/robot/libero/tasks/l1a2r_task1_corridor_hazard_pairing.json"
+        in PHASES[("l1a2r", "check")].artifacts
+    )
+    assert (
+        "experiments/logs/l1a2r_eb_replay_er_occ.md"
+        in PHASES[("l1a2r", "replay_gate")].artifacts
+    )
+    assert (
+        "experiments/logs/l1a2r_eb_replay_er_vis.md"
+        in PHASES[("l1a2r", "replay_gate")].artifacts
+    )
+    assert "SAVE_VIDEO_MODE=all" in PHASES[("l1a2r", "smoke")].command
+    assert "SAVE_VIDEO_MODE=violation" in PHASES[("l1a2r", "eval")].command
+
+
 def test_verdict_extraction_understands_boundary_gate_manifest():
     assert extract_verdicts('{"boundary_gate": "PASS"}') == ["PASS"]
 
