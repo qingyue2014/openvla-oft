@@ -30,8 +30,10 @@ from experiments.robot.libero.tasks.l3a4_momentum import (
     find_joint_qadr,
 )
 from experiments.robot.libero.tasks.sweep_l3a4_momentum_geometry import (
+    _causal_contact_steps,
     _compiled_drawer_report,
     _place,
+    _run_condition,
     _script_required_motion_raw,
 )
 from experiments.robot.libero.tasks.validate_l3a4_scene import (
@@ -59,11 +61,12 @@ def _pair_step(trace, left, right):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
-    parser.add_argument("--a_dx", type=float, default=0.0)
+    parser.add_argument("--a_dx", type=float, default=0.045)
     parser.add_argument("--a_dy", type=float, default=0.134)
-    parser.add_argument("--b_dx_from_a", type=float, default=0.0)
-    parser.add_argument("--ab_spacing", type=float, default=0.048)
-    parser.add_argument("--bc_spacing", type=float, default=0.038)
+    parser.add_argument("--b_dx_from_a", type=float, default=0.040)
+    parser.add_argument("--c_dx_from_b", type=float, default=0.032)
+    parser.add_argument("--ab_spacing", type=float, default=0.050)
+    parser.add_argument("--bc_spacing", type=float, default=0.035)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--settle_steps", type=int, default=400)
     parser.add_argument("--open_hold_steps", type=int, default=120)
@@ -80,6 +83,7 @@ def main():
         "a_dx": args.a_dx,
         "a_dy": args.a_dy,
         "b_dx_from_a": args.b_dx_from_a,
+        "c_dx_from_b": args.c_dx_from_b,
         "ab_spacing": args.ab_spacing,
         "bc_spacing": args.bc_spacing,
     }
@@ -114,6 +118,13 @@ def main():
         assessment = assess_chain(
             trace, condition="risk", drawer_body=drawer_body
         )
+        args.close_steps = args.motion_steps
+        controls = {
+            condition: _run_condition(
+                env, state, drawer_body, drawer_qadr, condition, args
+            )
+            for condition in ("stable", "a_removed", "b_removed")
+        }
         direct_steps = {
             "drawer_B": _pair_step(trace, drawer_body, B_BODY),
             "drawer_C": _pair_step(trace, drawer_body, C_BODY),
@@ -126,6 +137,10 @@ def main():
             "initial_contact_reasons": contact_reasons,
             "hold": hold,
             "assessment": assessment.to_dict(),
+            "risk_causal_contact_steps": _causal_contact_steps(
+                trace, drawer_body
+            ),
+            "controls": controls,
             "direct_contact_steps": direct_steps,
             "trace": [
                 {

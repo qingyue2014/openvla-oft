@@ -70,7 +70,9 @@ def _place(env, drawer_body, candidate):
             candidate["a_dy"] + candidate["ab_spacing"],
         ]),
         C_BODY: np.asarray([
-            candidate["a_dx"] + candidate["b_dx_from_a"],
+            candidate["a_dx"]
+            + candidate["b_dx_from_a"]
+            + candidate.get("c_dx_from_b", 0.0),
             candidate["a_dy"]
             + candidate["ab_spacing"]
             + candidate["bc_spacing"],
@@ -134,6 +136,10 @@ def _compiled_drawer_report(env, drawer_body, drawer_qadr):
     front_name = str(model.geom_id2name(front_id))
     start_geom = np.asarray(data.geom_xpos[front_id], dtype=float).copy()
     start_xmat = np.asarray(data.geom_xmat[front_id], dtype=float).reshape(3, 3)
+    world_x_half_extent = float(
+        np.sum(np.abs(start_xmat.T @ np.asarray([1.0, 0.0, 0.0]))
+               * model.geom_size[front_id])
+    )
     data.qpos[drawer_qadr] = DRAWER_TARGET_QPOS
     env.sim.forward()
     target_geom = np.asarray(data.geom_xpos[front_id], dtype=float).copy()
@@ -152,6 +158,7 @@ def _compiled_drawer_report(env, drawer_body, drawer_qadr):
         "front_geom_target_xyz": target_geom.tolist(),
         "front_geom_motion_xyz": (target_geom - start_geom).tolist(),
         "front_geom_size": np.asarray(model.geom_size[front_id]).tolist(),
+        "front_geom_world_x_half_extent": world_x_half_extent,
         "front_geom_rbound": float(model.geom_rbound[front_id]),
         "front_geom_xmat": start_xmat.tolist(),
     }
@@ -201,6 +208,27 @@ def _trajectory_diagnostics(trace):
                 default=None,
             ),
         }
+    return result
+
+
+def _causal_contact_steps(trace, drawer_body):
+    """Record first relevant contact pairs so failed controls stay auditable."""
+    result = {}
+    for frame in trace:
+        for left, right in frame.contacts:
+            pair = frozenset((str(left), str(right)))
+            chain_members = pair.intersection(CHAIN_BODIES)
+            relevant = (
+                len(chain_members) >= 2
+                or drawer_body in pair
+                or (
+                    chain_members
+                    and any("cabinet" in body.lower() for body in pair)
+                )
+            )
+            if relevant:
+                key = " <-> ".join(sorted(pair))
+                result.setdefault(key, int(frame.step))
     return result
 
 
@@ -255,6 +283,7 @@ def _run_condition(env, state, drawer_body, drawer_qadr, condition, args):
         "contact_reasons": contact_reasons,
         "hold": hold,
         "assessment": assessment.to_dict(),
+        "causal_contact_steps": _causal_contact_steps(trace, drawer_body),
         "trajectory": _trajectory_diagnostics(trace),
     }
 
@@ -265,19 +294,21 @@ def main():
     # A is now a stable box with 22 mm y half-extent, replacing the sphere
     # that was pinched under the drawer. The compiled closed leading face is
     # +0.10931 m from the drawer-body origin, so these A centers add 2-5 mm
-    # clearance. AB and BC use their exact horizontal half-extents plus 1-3 mm.
-    parser.add_argument("--a_dx", default="0.000")
+    # clearance. The diagonal default puts A across the drawer's +x edge while
+    # B/C remain outside its swept world-x bound.
+    parser.add_argument("--a_dx", default="0.045")
     parser.add_argument("--a_dy", default="0.134")
-    parser.add_argument("--b_dx_from_a", default="0.000")
-    parser.add_argument("--ab_spacing", default="0.048")
-    parser.add_argument("--bc_spacing", default="0.038")
+    parser.add_argument("--b_dx_from_a", default="0.040")
+    parser.add_argument("--c_dx_from_b", default="0.032")
+    parser.add_argument("--ab_spacing", default="0.050")
+    parser.add_argument("--bc_spacing", default="0.035")
     parser.add_argument(
         "--candidate_mode",
         choices=("five_state_neighborhood", "grid"),
         default="five_state_neighborhood",
         help=(
             "default: center plus four symmetric 1 mm perturbations around "
-            "A dy=.134, AB=.048, BC=.038; grid uses the comma-separated axes"
+            "the supplied edge-chain center; grid uses comma-separated axes"
         ),
     )
     parser.add_argument(
@@ -308,6 +339,7 @@ def main():
         if (
             len(_floats(args.a_dx)) != 1
             or len(_floats(args.b_dx_from_a)) != 1
+            or len(_floats(args.c_dx_from_b)) != 1
             or len(_floats(args.a_dy)) != 1
             or len(_floats(args.ab_spacing)) != 1
             or len(_floats(args.bc_spacing)) != 1
@@ -317,6 +349,7 @@ def main():
             )
         a_dx = _floats(args.a_dx)[0]
         b_dx = _floats(args.b_dx_from_a)[0]
+        c_dx = _floats(args.c_dx_from_b)[0]
         center_a_dy = _floats(args.a_dy)[0]
         center_ab = _floats(args.ab_spacing)[0]
         center_bc = _floats(args.bc_spacing)[0]
@@ -325,6 +358,7 @@ def main():
                 "a_dx": a_dx,
                 "a_dy": a_dy,
                 "b_dx_from_a": b_dx,
+                "c_dx_from_b": c_dx,
                 "ab_spacing": ab,
                 "bc_spacing": bc,
             }
@@ -342,13 +376,15 @@ def main():
                 "a_dx": a_dx,
                 "a_dy": a_dy,
                 "b_dx_from_a": b_dx,
+                "c_dx_from_b": c_dx,
                 "ab_spacing": ab,
                 "bc_spacing": bc,
             }
-            for a_dx, a_dy, b_dx, ab, bc in itertools.product(
+            for a_dx, a_dy, b_dx, c_dx, ab, bc in itertools.product(
                 _floats(args.a_dx),
                 _floats(args.a_dy),
                 _floats(args.b_dx_from_a),
+                _floats(args.c_dx_from_b),
                 _floats(args.ab_spacing),
                 _floats(args.bc_spacing),
             )
