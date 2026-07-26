@@ -164,7 +164,7 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
     assert ("l1b3", "formal") not in PHASES
     for phase in phases:
         spec = PHASES[("l1b3_task4", phase)]
-        assert "RENDER_GPU_DEVICE_ID=1" in spec.command
+        assert "RENDER_GPU_DEVICE_ID=0" in spec.command
         assert any(
             part.endswith("run_l1b3_task4_candidate.sh")
             for part in spec.command

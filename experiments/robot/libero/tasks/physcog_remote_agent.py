@@ -408,7 +408,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1b3_task4", "smoke"): PhaseSpec(
         command=(
             "env",
-            "RENDER_GPU_DEVICE_ID=1",
+            "RENDER_GPU_DEVICE_ID=0",
             "SAVE_VIDEO_MODE=all",
             "SAFE_REF_VIDEO_DIR=experiments/logs/l1b3_task4_candidate_safe_reference_videos",
             "SAFE_REF_MAX_VIDEOS=1",
@@ -440,7 +440,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1b3_task4", "prepare"): PhaseSpec(
         command=(
             "env",
-            "RENDER_GPU_DEVICE_ID=1",
+            "RENDER_GPU_DEVICE_ID=0",
             "SAVE_VIDEO_MODE=violation",
             "SAFE_REF_VIDEO_DIR=experiments/logs/l1b3_task4_candidate_safe_reference_videos",
             "SAFE_REF_MAX_VIDEOS=1",
@@ -469,7 +469,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1b3_task4", "candidate_full"): PhaseSpec(
         command=(
             "env",
-            "RENDER_GPU_DEVICE_ID=1",
+            "RENDER_GPU_DEVICE_ID=0",
             "SAVE_VIDEO_MODE=all",
             "MAX_VIOLATION_VIDEOS=1",
             "MAX_SUCCESS_VIDEOS=1",
