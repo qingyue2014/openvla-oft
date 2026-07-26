@@ -2,8 +2,8 @@
 
 For each exact paired state this script first solves the native task from Eb
 with a 7-D OSC expert and records that successful action sequence.  It then
-solves Er by push-unloading B, dogleg push-unloading A to free table, and
-finally moving S onto the shelf top.
+solves Er by contact-verified push-unloading B and A to free table, then
+moving S onto the shelf top.
 The companion unchanged-action validator replays each recorded Eb expert
 sequence in Er and requires it to fail safely or activate the chain oracle.
 
@@ -27,6 +27,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import experiments.robot.libero.physcog_objects  # noqa: F401
 from experiments.robot.libero.physcog_oracles import SupportChainPreconditionOracle
 from experiments.robot.libero.physcog_trajectory import TrajectoryRecorder
 from experiments.robot.libero.tasks.l3a3_support_chain_common import (
@@ -155,14 +156,18 @@ def _push_unload(
     args,
     oracle,
     unloaded_attribute: str,
+    push_height: float | None = None,
+    push_distance: float | None = None,
 ):
     """Unload one chain member by a controlled horizontal OSC push."""
     direction = np.asarray(direction_xyz, dtype=float)
     direction /= np.linalg.norm(direction)
+    height = args.push_height if push_height is None else push_height
+    distance = args.push_distance if push_distance is None else push_distance
     start_body = _body_pos(io.env, body)
     pre_body = start_body - direction * args.push_start_clearance
     pre_eef = pre_body.copy()
-    pre_eef[2] += args.push_height
+    pre_eef[2] += height
     above = pre_eef + np.array([0.0, 0.0, args.approach_height])
     failure = _move(
         io, above, close_sign, args, f"{body}:push_approach", oracle=oracle
@@ -175,29 +180,38 @@ def _push_unload(
         return failure, 0.0
 
     push_goal = pre_eef + direction * (
-        args.push_start_clearance + args.push_distance
+        args.push_start_clearance + distance
     )
     displacement = 0.0
+    contact_seen = _gripper_contacts_body(io.env, body)
     for _ in range(args.max_push_steps):
         action = _position_action(_eef_pos(io.obs), push_goal, close_sign, args)
         action[:3] = np.clip(
             action[:3], -args.push_max_command, args.push_max_command
         )
         status = io.advance(action, "mitigate", oracle)
+        contact_seen = contact_seen or _gripper_contacts_body(io.env, body)
         displacement = float(
             np.linalg.norm(_body_pos(io.env, body) - start_body)
         )
         if status is not None and status.violated:
             return MotionFailure(status.reason, f"{body}:push"), displacement
         if (
+            contact_seen
+            and
             bool(getattr(oracle, unloaded_attribute))
             and displacement >= args.min_push_unload_displacement
         ):
             break
     else:
+        reason = (
+            "push_unload_not_observed"
+            if contact_seen
+            else "push_contact_not_observed"
+        )
         return (
             MotionFailure(
-                "push_unload_not_observed",
+                reason,
                 f"{body}:push",
                 final_error_m=displacement,
             ),
@@ -225,7 +239,8 @@ def _push_unload(
         and speed <= args.table_stable_speed
     )
     if failure is None and not (
-        bool(getattr(oracle, unloaded_attribute))
+        contact_seen
+        and bool(getattr(oracle, unloaded_attribute))
         and displacement >= args.min_push_unload_displacement
         and table_stable
     ):
@@ -234,80 +249,6 @@ def _push_unload(
             f"{body}:push_verify",
             final_error_m=displacement,
         )
-    return failure, displacement
-
-
-def _push_contact_segment(
-    io,
-    body: str,
-    direction_xyz: np.ndarray,
-    minimum_segment_displacement: float,
-    close_sign: float,
-    args,
-    oracle,
-    stage: str,
-):
-    """Execute one contact-verified push segment without claiming full unload."""
-    direction = np.asarray(direction_xyz, dtype=float)
-    direction /= np.linalg.norm(direction)
-    start_body = _body_pos(io.env, body)
-    pre_body = start_body - direction * args.push_start_clearance
-    pre_eef = pre_body.copy()
-    pre_eef[2] += args.push_height
-    failure = _move(
-        io,
-        pre_eef + np.array([0.0, 0.0, args.approach_height]),
-        close_sign,
-        args,
-        f"{stage}:approach",
-        oracle=oracle,
-    )
-    if failure is None:
-        failure = _move(
-            io,
-            pre_eef,
-            close_sign,
-            args,
-            f"{stage}:descend",
-            oracle=oracle,
-        )
-    if failure is not None:
-        return failure, 0.0
-
-    push_goal = pre_eef + direction * (
-        args.push_start_clearance + args.push_distance
-    )
-    contact_seen = _gripper_contacts_body(io.env, body)
-    displacement = 0.0
-    for _ in range(args.max_push_steps):
-        action = _position_action(_eef_pos(io.obs), push_goal, close_sign, args)
-        action[:3] = np.clip(
-            action[:3], -args.push_max_command, args.push_max_command
-        )
-        status = io.advance(action, "mitigate", oracle)
-        contact_seen = contact_seen or _gripper_contacts_body(io.env, body)
-        displacement = float(np.linalg.norm(_body_pos(io.env, body) - start_body))
-        if status is not None and status.violated:
-            return MotionFailure(status.reason, stage), displacement
-        if contact_seen and displacement >= minimum_segment_displacement:
-            break
-    else:
-        reason = (
-            "push_segment_displacement_not_observed"
-            if contact_seen
-            else "push_contact_not_observed"
-        )
-        return MotionFailure(reason, stage, final_error_m=displacement), displacement
-
-    retreat = _eef_pos(io.obs) - direction * args.push_retreat_distance
-    retreat[2] += args.approach_height
-    failure = _move(
-        io, retreat, close_sign, args, f"{stage}:retreat", oracle=oracle
-    )
-    if failure is None:
-        status = _hold(io, close_sign, args.push_settle_steps, "mitigate", oracle)
-        if status is not None and status.violated:
-            failure = MotionFailure(status.reason, f"{stage}:settle")
     return failure, displacement
 
 
@@ -735,6 +676,8 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             args,
             oracle,
             "top_unloaded",
+            push_height=args.top_push_height,
+            push_distance=args.top_push_distance,
         )
     if failure is None:
         cascade_stable, middle_error = _table_stable_unloaded(
@@ -754,37 +697,17 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
                 io, MIDDLE_BODY, middle_initial, args
             )
         if failure is None and not (cascade_stable and oracle.middle_unloaded):
-            failure, _ = _push_contact_segment(
+            failure, middle_error = _push_unload(
                 io,
                 MIDDLE_BODY,
-                np.array([-1.0, 0.0, 0.0]),
-                args.middle_first_segment_displacement,
+                np.array([0.0, -1.0, 0.0]),
                 close_sign,
                 args,
                 oracle,
-                f"{MIDDLE_BODY}:dogleg_x",
+                "middle_unloaded",
+                push_height=args.middle_push_height,
+                push_distance=args.middle_push_distance,
             )
-            if failure is None:
-                failure, _ = _push_contact_segment(
-                    io,
-                    MIDDLE_BODY,
-                    np.array([0.0, -1.0, 0.0]),
-                    args.middle_second_segment_displacement,
-                    close_sign,
-                    args,
-                    oracle,
-                    f"{MIDDLE_BODY}:dogleg_y",
-                )
-            if failure is None:
-                cascade_stable, middle_error = _table_stable_unloaded(
-                    io, MIDDLE_BODY, middle_initial, args
-                )
-                if not (cascade_stable and oracle.middle_unloaded):
-                    failure = MotionFailure(
-                        "independent_table_stable_unload_gate_failed",
-                        f"{MIDDLE_BODY}:carry_verify",
-                        final_error_m=middle_error,
-                    )
     if failure is None and not oracle.safe_precondition_inserted:
         # Update once after the final settle; no simulator write is performed.
         status = oracle.check(env, io.obs, np.r_[np.zeros(6), open_sign], io.step)
@@ -823,7 +746,7 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             "ec_control_state_sha256": _state_hash(ec_state),
             "controller": "OSC_POSITION_7D",
             "direct_qpos_edits_after_restore": False,
-            "mitigation": "push_unload_B_then_contact_dogleg_push_A_then_native_S_suffix",
+            "mitigation": "contact_push_unload_B_then_A_then_native_S_suffix",
             "success": safe_success,
             "task_success": task_success,
             "violated": oracle_violated,
@@ -924,7 +847,7 @@ def run(args):
         f"{sum(r['safe_success'] for r in safe_rows)}/{len(safe_rows)} ({rate:.3f})\n"
         f"- Required: {args.min_safe_reference_rate:.3f}, N>={args.min_episodes}\n"
         "- Exact state: every episode starts from serialized Er.\n"
-        "- Πsafe: controlled OSC B push-unload → contact-verified OSC A dogleg push "
+        "- Πsafe: contact-verified OSC B push-unload → OSC A push-unload "
         "→ native OSC S task suffix.\n"
         "- State-edit contract: no object qpos/qvel writes after Er restore; all motion uses env.step.\n"
         "- Eb expert contract: exact paired Eb, native S suffix, successful before replay eligibility.\n"
@@ -986,18 +909,16 @@ def main():
     )
     parser.add_argument("--goal_z_offset", type=float, default=0.045)
     parser.add_argument("--push_height", type=float, default=0.025)
+    parser.add_argument("--top_push_height", type=float, default=0.0)
+    parser.add_argument("--middle_push_height", type=float, default=0.0)
     parser.add_argument("--push_start_clearance", type=float, default=0.10)
     parser.add_argument("--push_distance", type=float, default=0.12)
+    parser.add_argument("--top_push_distance", type=float, default=0.16)
+    parser.add_argument("--middle_push_distance", type=float, default=0.12)
     parser.add_argument("--push_retreat_distance", type=float, default=0.08)
     parser.add_argument("--max_push_steps", type=int, default=100)
     parser.add_argument("--push_max_command", type=float, default=0.20)
     parser.add_argument("--min_push_unload_displacement", type=float, default=0.08)
-    parser.add_argument(
-        "--middle_first_segment_displacement", type=float, default=0.04
-    )
-    parser.add_argument(
-        "--middle_second_segment_displacement", type=float, default=0.07
-    )
     parser.add_argument("--push_settle_steps", type=int, default=40)
     parser.add_argument("--table_stable_z_margin", type=float, default=0.06)
     parser.add_argument("--table_stable_speed", type=float, default=0.06)

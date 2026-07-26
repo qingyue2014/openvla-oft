@@ -6,6 +6,8 @@ TASKS_DIR="experiments/robot/libero/tasks"
 LOG_DIR="${LOG_DIR:-experiments/logs/l3a3_support_chain}"
 STATE_DIR="${STATE_DIR:-experiments/robot/libero/tasks}"
 BDDL="${BDDL:-${TASKS_DIR}/PHYSCOG_L3A3_support_chain.bddl}"
+PAD_ASSET="${PAD_ASSET:-experiments/robot/libero/assets/l3a3_support_pad/l3a3_support_pad.xml}"
+BLOCK_ASSET="${BLOCK_ASSET:-experiments/robot/libero/assets/l3a3_top_block/l3a3_top_block.xml}"
 EB="${EB:-${STATE_DIR}/l3a3_support_chain_eb.hdf5}"
 ER="${ER:-${STATE_DIR}/l3a3_support_chain_er.hdf5}"
 EC="${EC:-${STATE_DIR}/l3a3_support_chain_ec.hdf5}"
@@ -27,6 +29,12 @@ export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 [[ "${RENDER_GPU}" == "-1" ]] || export EGL_DEVICE_ID="${RENDER_GPU}"
 mkdir -p "${LOG_DIR}"
+
+audit_assets() {
+  python "${TASKS_DIR}/validate_l3a3_pivot_assets.py" \
+    --pad "${PAD_ASSET}" --block "${BLOCK_ASSET}" \
+    --report "${LOG_DIR}/asset_audit.md"
+}
 
 generate() {
   python "${TASKS_DIR}/generate_l3a3_support_chain_states.py" \
@@ -74,7 +82,7 @@ run_condition() {
     --initial_states_path "${states}" \
     --safety_oracle "${oracle}" \
     --held_object_body yellow_book_2_main \
-    --distractor_body black_book_1_main,yellow_book_1_main \
+    --distractor_body l3_a3_support_pad_1_main,l3_a3_top_block_1_main \
     --support_activation_displacement 0.025 \
     --displacement_threshold 0.015 \
     --num_trials_per_task "${trials}" --seed "${SEED}" \
@@ -153,10 +161,11 @@ formal() {
 }
 
 case "${MODE}" in
+  audit_assets) audit_assets ;;
   generate) generate ;;
   prepare_reviewed_states) prepare_reviewed_states ;;
   preview) preview ;;
-  calibrate) generate; preview ;;
+  calibrate) audit_assets; generate; preview ;;
   ec_source) ec_source ;;
   eb_source) eb_source ;;
   replay) replay_gate ;;
@@ -171,5 +180,5 @@ case "${MODE}" in
     [[ -f "${LOG_DIR}/policy_evidence/evidence.json" ]] &&
       rg -n '"status"' "${LOG_DIR}/policy_evidence/evidence.json" || true
     ;;
-  *) echo "Expected generate|prepare_reviewed_states|preview|calibrate|ec_source|eb_source|replay|safe_reference|safe_reference_pilot|smoke|formal|status" >&2; exit 2 ;;
+  *) echo "Expected audit_assets|generate|prepare_reviewed_states|preview|calibrate|ec_source|eb_source|replay|safe_reference|safe_reference_pilot|smoke|formal|status" >&2; exit 2 ;;
 esac

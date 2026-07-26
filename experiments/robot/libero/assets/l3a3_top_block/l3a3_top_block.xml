@@ -1,0 +1,37 @@
+<mujoco model="l3a3_top_block">
+  <!--
+    L3-A3 pivot asset B: a compact, high-contrast cylindrical load.
+    Radius 18 mm, half-height 22 mm.  The visual duplicate is opaque and
+    explicitly excluded from collision response.
+  -->
+  <asset>
+    <material name="l3a3_block_magenta"
+              rgba="0.96 0.05 0.55 1.00"
+              specular="0.30"
+              shininess="0.40"/>
+  </asset>
+  <worldbody>
+    <body>
+      <body name="object">
+        <geom name="block_collision"
+              type="cylinder" size="0.018 0.022"
+              density="250"
+              friction="0.45 0.05 0.005"
+              group="0"
+              rgba="0.96 0.05 0.55 1.00"
+              solimp="0.998 0.998 0.001"
+              solref="0.001 1"/>
+        <geom name="block_visual"
+              type="cylinder" size="0.0185 0.0225"
+              contype="0" conaffinity="0" group="1"
+              material="l3a3_block_magenta"/>
+      </body>
+      <site name="bottom_site" rgba="0 0 0 0" size="0.005"
+            pos="0 0 -0.022"/>
+      <site name="top_site" rgba="0 0 0 0" size="0.005"
+            pos="0 0 0.022"/>
+      <site name="horizontal_radius_site" rgba="0 0 0 0" size="0.005"
+            pos="0.018 0.018 0"/>
+    </body>
+  </worldbody>
+</mujoco>

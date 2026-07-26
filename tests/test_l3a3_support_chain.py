@@ -1,5 +1,5 @@
-import hashlib
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 import h5py
 import numpy as np
@@ -23,12 +23,15 @@ ROOT = Path(__file__).resolve().parents[1]
 TASKS = ROOT / "experiments/robot/libero/tasks"
 
 
-def test_bddl_preserves_native_prompt_objects_and_goal():
+def test_bddl_preserves_native_prompt_goal_and_uses_pivot_chain_objects():
     text = (TASKS / "PHYSCOG_L3A3_support_chain.bddl").read_text()
     assert f"(:language {PROMPT})" in text
     assert "(On yellow_book_2 wooden_two_layer_shelf_1_top_side)" in text
-    assert "black_book_1 - black_book" in text
-    assert "yellow_book_1 yellow_book_2 - yellow_book" in text
+    assert "l3_a3_support_pad_1 - l3_a3_support_pad" in text
+    assert "l3_a3_top_block_1 - l3_a3_top_block" in text
+    assert "yellow_book_2 - yellow_book" in text
+    assert "black_book_1" not in text
+    assert "yellow_book_1" not in text
     assert "physcog_" not in text.lower().split("(define", 1)[1]
 
 
@@ -101,15 +104,43 @@ def test_formal_runner_hard_stops_on_all_attribution_gates():
     assert "reviewed_state_bytes_match" in prepare_block
 
 
-def test_canonical_reviewed_state_bytes_are_committed_and_hash_bound():
-    expected = {
-        "eb": "969ecc365b04353e595f532591ff535dc2f82122b266cb645b6bd158ae145cc9",
-        "er": "3ca06cfb5374eecc0a91f2ca29d54ba7d3239e0de6651c9a25370e1fd803de4d",
-        "ec": "861191777f74061eca0091ffe933f4b9cb478a9836770d6151baa6da4939f42e",
-    }
-    for condition, digest in expected.items():
-        path = TASKS / f"l3a3_support_chain_{condition}.hdf5"
-        assert hashlib.sha256(path.read_bytes()).hexdigest() == digest
+def test_pivot_assets_have_separate_collidable_and_opaque_visual_geoms():
+    assets = ROOT / "experiments/robot/libero/assets"
+    for relative in (
+        "l3a3_support_pad/l3a3_support_pad.xml",
+        "l3a3_top_block/l3a3_top_block.xml",
+    ):
+        root = ET.parse(assets / relative).getroot()
+        collision = [g for g in root.iter("geom") if g.get("group") == "0"]
+        visual = [g for g in root.iter("geom") if g.get("group") == "1"]
+        assert len(collision) == 1
+        assert len(visual) == 1
+        assert collision[0].get("contype", "1") != "0"
+        assert collision[0].get("conaffinity", "1") != "0"
+        assert visual[0].get("contype") == "0"
+        assert visual[0].get("conaffinity") == "0"
+        material_name = visual[0].get("material")
+        materials = {
+            material.get("name"): material
+            for material in root.iter("material")
+        }
+        rgba = [float(value) for value in materials[material_name].get("rgba").split()]
+        assert rgba[-1] == 1.0
+    pad = ET.parse(
+        assets / "l3a3_support_pad/l3a3_support_pad.xml"
+    ).getroot()
+    pad_collision = next(
+        geom for geom in pad.iter("geom") if geom.get("name") == "pad_collision"
+    )
+    assert float(pad_collision.get("friction").split()[0]) <= 0.15
+
+
+def test_pivot_custom_object_classes_are_registered():
+    text = (ROOT / "experiments/robot/libero/physcog_objects.py").read_text()
+    assert "@register_object\nclass L3A3SupportPad" in text
+    assert 'obj_name="l3a3_support_pad"' in text
+    assert "@register_object\nclass L3A3TopBlock" in text
+    assert 'obj_name="l3a3_top_block"' in text
 
 
 def test_action_validators_do_not_edit_sim_state_after_er_reset():
@@ -142,33 +173,29 @@ def test_action_validators_do_not_edit_sim_state_after_er_reset():
     assert namespace["_episode"]("eb_expert_ep004.npz") == 4
 
 
-def test_safe_reference_provides_executable_b_push_a_dogleg_and_video():
+def test_safe_reference_provides_contact_verified_b_then_a_push_and_video():
     path = TASKS / "validate_l3a3_safe_reference.py"
     text = path.read_text()
     reset_at = text.index("obs = env.set_init_state(er_state)")
     tail = text[reset_at:]
     top_call = text.index("_push_unload(\n            io,\n            TOP_BODY")
-    middle_call = text.index("_push_contact_segment(\n                io,\n                MIDDLE_BODY")
+    middle_call = text.index("_push_unload(\n                io,\n                MIDDLE_BODY")
     assert top_call < middle_call
     assert middle_call < text.index("_place_target_on_open_top(", middle_call)
     assert "native_S_suffix_only" in text
     assert '"initial_state_sha256": _state_hash(eb_state)' in text
     assert '"--goal_site", default="wooden_two_layer_shelf_1_top_side"' in text
     assert '"--max_waypoint_steps", type=int, default=220' in text
-    assert (
-        '"--middle_first_segment_displacement", type=float, default=0.04'
-        in text
-    )
-    assert (
-        '"--middle_second_segment_displacement", type=float, default=0.07'
-        in text
-    )
-    middle_dogleg = text[middle_call : text.index(
+    assert '"--top_push_distance", type=float, default=0.16' in text
+    assert '"--middle_push_distance", type=float, default=0.12' in text
+    middle_push = text[middle_call : text.index(
         "if failure is None and not oracle.safe_precondition_inserted", middle_call
     )]
-    assert "np.array([-1.0, 0.0, 0.0])" in middle_dogleg
-    assert "np.array([0.0, -1.0, 0.0])" in middle_dogleg
-    assert "_table_stable_unloaded(" in middle_dogleg
+    assert "np.array([0.0, -1.0, 0.0])" in middle_push
+    push_function = text[text.index("def _push_unload(") : text.index(
+        "def _table_stable_unloaded("
+    )]
+    assert "contact_seen = contact_seen or _gripper_contacts_body" in push_function
     assert "push_contact_not_observed" in text
     assert '"task_push_diagnostic": task_diagnostic' in text
     assert "io.advance(" in text
@@ -189,10 +216,11 @@ def test_safe_reference_provides_executable_b_push_a_dogleg_and_video():
 
 def test_generator_requires_second_link_collision_ablation():
     text = (TASKS / "generate_l3a3_support_chain_states.py").read_text()
+    assert "_first_link_ablation_gate" in text
     assert "_second_link_ablation_gate" in text
     assert "geom_contype[geom_ids] = 0" in text
     assert "geom_conaffinity[geom_ids] = 0" in text
-    assert "hold_ok and removal_ok and ablation_ok" in text
+    assert "hold_ok and removal_ok and first_ablation_ok and ablation_ok" in text
     assert "min_family_acceptance_rate" in text
     assert "_collision_z_bounds" in text
 

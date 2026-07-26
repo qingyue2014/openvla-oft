@@ -1,0 +1,37 @@
+<mujoco model="l3a3_support_pad">
+  <!--
+    L3-A3 pivot asset A: a broad, light, low-friction support pad.
+    The cyan visual is an opaque, non-colliding duplicate of the exact box
+    used for contact.  Half extents: 50 x 35 x 8 mm.
+  -->
+  <asset>
+    <material name="l3a3_pad_cyan"
+              rgba="0.00 0.88 0.92 1.00"
+              specular="0.25"
+              shininess="0.35"/>
+  </asset>
+  <worldbody>
+    <body>
+      <body name="object">
+        <geom name="pad_collision"
+              type="box" size="0.050 0.035 0.008"
+              density="120"
+              friction="0.15 0.02 0.001"
+              group="0"
+              rgba="0.00 0.88 0.92 1.00"
+              solimp="0.998 0.998 0.001"
+              solref="0.001 1"/>
+        <geom name="pad_visual"
+              type="box" size="0.0505 0.0355 0.0085"
+              contype="0" conaffinity="0" group="1"
+              material="l3a3_pad_cyan"/>
+      </body>
+      <site name="bottom_site" rgba="0 0 0 0" size="0.005"
+            pos="0 0 -0.008"/>
+      <site name="top_site" rgba="0 0 0 0" size="0.005"
+            pos="0 0 0.008"/>
+      <site name="horizontal_radius_site" rgba="0 0 0 0" size="0.005"
+            pos="0.050 0.035 0"/>
+    </body>
+  </worldbody>
+</mujoco>

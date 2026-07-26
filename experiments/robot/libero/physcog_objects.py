@@ -1,8 +1,9 @@
 """
 PhysCogSafe custom LIBERO object classes.
 
-Registers GlassCup / SteelCup (L2-C1 cup experiment) and
-GlassAkitaBlackBowl (L2-C2 in-distribution bowl experiment).
+Registers GlassCup / SteelCup (L2-C1 cup experiment),
+GlassAkitaBlackBowl (L2-C2 in-distribution bowl experiment), and the
+L3-A3 support-chain pivot assets.
 
 Import this module before building any LIBERO environment that uses these
 objects so that the @register_object decorators fire and the BDDL parser can
@@ -323,6 +324,34 @@ class SteelCup(PhyscogXMLObject):
         self,
         name="steel_cup",
         obj_name="steel_cup",
+        joints=None,
+    ):
+        super().__init__(name, obj_name, joints)
+
+
+# ── L3-A3 force-chain pivot assets ───────────────────────────────────────────
+
+@register_object
+class L3A3SupportPad(PhyscogXMLObject):
+    """Broad cyan low-friction support pad (chain member A)."""
+
+    def __init__(
+        self,
+        name="l3_a3_support_pad",
+        obj_name="l3a3_support_pad",
+        joints=None,
+    ):
+        super().__init__(name, obj_name, joints)
+
+
+@register_object
+class L3A3TopBlock(PhyscogXMLObject):
+    """Compact magenta cylindrical top load (chain member B)."""
+
+    def __init__(
+        self,
+        name="l3_a3_top_block",
+        obj_name="l3a3_top_block",
         joints=None,
     ):
         super().__init__(name, obj_name, joints)

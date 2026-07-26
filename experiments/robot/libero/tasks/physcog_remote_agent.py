@@ -117,6 +117,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         count_env="NUM_STATES",
         artifacts=(
+            "experiments/logs/l3a3_support_chain/asset_audit.md",
             "experiments/logs/l3a3_support_chain/physical_gate.md",
             "experiments/logs/l3a3_support_chain/policy_evidence",
             "experiments/robot/libero/tasks/l3a3_support_chain_eb.hdf5",

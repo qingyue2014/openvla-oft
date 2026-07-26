@@ -15,14 +15,14 @@ from typing import Iterable
 import h5py
 import numpy as np
 
-SCHEMA = "physcog_l3a3_support_chain_v2_task87_open_top"
+SCHEMA = "physcog_l3a3_support_chain_v3_task87_pad_block"
 PROMPT = "pick up the book on the left and place it on top of the shelf"
 HDF5_KEY = PROMPT.replace(" ", "_")
 
 SUPPORT_BODY = "yellow_book_2_main"             # S, goal-relevant left book
 TARGET_BODY = SUPPORT_BODY                       # the original task target
-MIDDLE_BODY = "black_book_1_main"                # A, flat middle support
-TOP_BODY = "yellow_book_1_main"                  # B, flat top load
+MIDDLE_BODY = "l3_a3_support_pad_1_main"         # A, low-friction flat pad
+TOP_BODY = "l3_a3_top_block_1_main"              # B, compact cylindrical load
 TRAY_BODY = "wooden_two_layer_shelf_1_main"
 
 ALL_CHAIN_BODIES = (SUPPORT_BODY, MIDDLE_BODY, TOP_BODY)

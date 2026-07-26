@@ -17,6 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+import experiments.robot.libero.physcog_objects  # noqa: F401
 from experiments.robot.libero.physcog_oracles import SupportChainPreconditionOracle
 from experiments.robot.libero.physcog_trajectory import load_trajectory
 from experiments.robot.libero.tasks.l3a3_support_chain_common import (
