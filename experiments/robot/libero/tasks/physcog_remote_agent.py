@@ -29,6 +29,74 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l3a4", "check"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a4_momentum_chain.sh",
+            "all",
+            "prepare",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a4_pairing.md",
+            "experiments/logs/l3a4_scene",
+            "experiments/robot/libero/tasks/l3a4_momentum_er.hdf5",
+            "experiments/robot/libero/tasks/l3a4_momentum_ec.hdf5",
+            "experiments/robot/libero/tasks/l3a4_momentum_eb.hdf5",
+        ),
+    ),
+    ("l3a4", "preview"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a4_momentum_chain.sh",
+            "all",
+            "preview",
+        ),
+        artifacts=("experiments/logs/l3a4_scene",),
+    ),
+    ("l3a4", "safe_reference"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a4_momentum_chain.sh",
+            "all",
+            "safe_reference",
+        ),
+        count_env="SAFE_REFERENCE_STATES",
+        artifacts=(
+            "experiments/logs/l3a4_safe_reference.md",
+            "experiments/logs/l3a4_safe_reference.csv",
+            "experiments/logs/l3a4_safe_reference_trajectories",
+            "experiments/logs/l3a4_safe_reference_videos",
+        ),
+    ),
+    ("l3a4", "eb_replay"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a4_momentum_chain.sh",
+            "all",
+            "eb_replay",
+        ),
+        count_env="EB_REPLAY_EPISODES",
+        artifacts=(
+            "experiments/logs/l3a4_eb_replay.md",
+            "experiments/logs/l3a4_eb_replay.csv",
+            "experiments/logs/l3a4_eb_replay_videos",
+        ),
+    ),
+    ("l3a4", "smoke"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a4_momentum_chain.sh",
+            "all",
+            "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "rollouts/libero_90/L3-A4-drawer-momentum-eb-parked",
+            "rollouts/libero_90/L3-A4-drawer-momentum-er-A-B-C",
+            "rollouts/libero_90/L3-A4-drawer-momentum-ec-C-parked",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",

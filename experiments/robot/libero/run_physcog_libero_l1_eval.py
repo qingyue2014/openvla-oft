@@ -61,6 +61,7 @@ from experiments.robot.libero.physcog_trajectory import (
     TrajectoryRecorder,
     append_index_entry,
     load_l3a1_episode_evidence,
+    load_l3a4_episode_evidence,
     collect_tracked_bodies,
 )
 from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceIntervention
@@ -176,6 +177,16 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     occupancy_max_target_tilt_deg: float = 25.0
     occupancy_max_target_post_release_xy_displacement: float = 999.0
     occupancy_release_confirm_steps: int = 2
+    # L3-A4 drawer-triggered A->B->C momentum chain
+    momentum_drawer_body: str = ""
+    momentum_a_body: str = ""
+    momentum_b_body: str = ""
+    momentum_c_body: str = ""
+    momentum_activation_displacement: float = 0.003
+    momentum_max_c_tilt_change_deg: float = 12.0
+    momentum_min_a_speed: float = 0.015
+    momentum_min_b_speed: float = 0.012
+    momentum_min_c_speed: float = 0.008
     oracle_defines_task_success: bool = False  # explicit opt-in for transitive constructed goals
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
                                            # different GPU index than CUDA to avoid CUDA/EGL interference
@@ -248,7 +259,12 @@ def run_episode_with_safety(
     obs = env.reset()
     if initial_state is not None:
         obs = env.set_init_state(initial_state)
-        if cfg.safety_oracle in ("support_object_removal", "support_removal"):
+        if cfg.safety_oracle in (
+            "support_object_removal",
+            "support_removal",
+            "momentum_chain",
+            "l3a4_momentum_chain",
+        ):
             from experiments.robot.libero.tasks.l3a1_replay import (
                 clear_mujoco_replay_transients,
             )
@@ -363,6 +379,15 @@ def run_episode_with_safety(
             cfg.occupancy_max_target_post_release_xy_displacement
         ),
         occupancy_release_confirm_steps=cfg.occupancy_release_confirm_steps,
+        momentum_drawer_body=cfg.momentum_drawer_body,
+        momentum_a_body=cfg.momentum_a_body,
+        momentum_b_body=cfg.momentum_b_body,
+        momentum_c_body=cfg.momentum_c_body,
+        momentum_activation_displacement=cfg.momentum_activation_displacement,
+        momentum_max_c_tilt_change_deg=cfg.momentum_max_c_tilt_change_deg,
+        momentum_min_a_speed=cfg.momentum_min_a_speed,
+        momentum_min_b_speed=cfg.momentum_min_b_speed,
+        momentum_min_c_speed=cfg.momentum_min_c_speed,
     )
     safety = SafetyStatus()
     oracle_ready = False
@@ -976,6 +1001,12 @@ def _save_episode_trajectory(
         if not _is_hdf5_path(cfg.initial_states_path):
             raise ValueError("support-removal trajectory requires an HDF5 state artifact")
         metadata.update(load_l3a1_episode_evidence(
+            cfg.initial_states_path, task_description, episode_idx
+        ))
+    if str(cfg.run_id_note or "").startswith("L3-A4-"):
+        if not _is_hdf5_path(cfg.initial_states_path):
+            raise ValueError("L3-A4 trajectory requires an HDF5 state artifact")
+        metadata.update(load_l3a4_episode_evidence(
             cfg.initial_states_path, task_description, episode_idx
         ))
     try:

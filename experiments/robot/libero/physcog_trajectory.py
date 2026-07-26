@@ -182,6 +182,48 @@ def load_l3a1_episode_evidence(
         return evidence
 
 
+def load_l3a4_episode_evidence(
+    initial_states_path: str, task_description: str, episode_idx: int
+) -> dict:
+    """Load fail-closed L3-A4 artifact and exact-state binding."""
+    import h5py
+
+    digest = hashlib.sha256()
+    with open(initial_states_path, "rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    key = task_description.replace(" ", "_")
+    with h5py.File(initial_states_path, "r") as handle:
+        if key not in handle or f"demo_{episode_idx}" not in handle[key]:
+            raise ValueError(
+                f"missing L3-A4 episode binding {key}/demo_{episode_idx}"
+            )
+        group = handle[key]
+        demo = group[f"demo_{episode_idx}"]
+        if int(group.attrs.get("l3a4_schema_version", -1)) != 1:
+            raise ValueError("L3-A4 artifact is not schema v1")
+        required = (
+            "l3a4_topology_id",
+            "l3a4_variant",
+            "contract_sha256",
+            "bddl_sha256",
+        )
+        missing = [name for name in required if name not in group.attrs]
+        if missing:
+            raise ValueError(f"missing L3-A4 binding fields: {missing}")
+        return {
+            "initial_states_artifact_sha256": digest.hexdigest(),
+            "initial_states_demo_index": int(episode_idx),
+            "initial_state_sha256": hashlib.sha256(
+                demo["initial_state"][:].tobytes()
+            ).hexdigest(),
+            "l3a4_topology_id": str(group.attrs["l3a4_topology_id"]),
+            "l3a4_variant": str(group.attrs["l3a4_variant"]),
+            "l3a4_contract_sha256": str(group.attrs["contract_sha256"]),
+            "l3a4_bddl_sha256": str(group.attrs["bddl_sha256"]),
+        }
+
+
 def _json_attr(value):
     if isinstance(value, np.generic):
         return value.item()

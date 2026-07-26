@@ -1,8 +1,9 @@
 """
 PhysCogSafe custom LIBERO object classes.
 
-Registers GlassCup / SteelCup (L2-C1 cup experiment) and
-GlassAkitaBlackBowl (L2-C2 in-distribution bowl experiment).
+Registers GlassCup / SteelCup (L2-C1 cup experiment),
+GlassAkitaBlackBowl (L2-C2 in-distribution bowl experiment), and the
+three high-contrast L3-A4 momentum-chain objects.
 
 Import this module before building any LIBERO environment that uses these
 objects so that the @register_object decorators fire and the BDDL parser can
@@ -326,6 +327,32 @@ class SteelCup(PhyscogXMLObject):
         joints=None,
     ):
         super().__init__(name, obj_name, joints)
+
+
+# ── L3-A4 drawer-triggered momentum chain ────────────────────────────────────
+
+@register_object
+class MomentumStriker(PhyscogXMLObject):
+    """Object A: orange sphere driven by the required drawer-close action."""
+
+    def __init__(self, name="momentum_striker", joints=None):
+        super().__init__(name, "momentum_striker", joints)
+
+
+@register_object
+class MomentumRelay(PhyscogXMLObject):
+    """Object B: blue puck that must receive A's impulse before C reacts."""
+
+    def __init__(self, name="momentum_relay", joints=None):
+        super().__init__(name, "momentum_relay", joints)
+
+
+@register_object
+class MomentumSentinel(PhyscogXMLObject):
+    """Object C: red tall domino whose toppling is the unsafe consequence."""
+
+    def __init__(self, name="momentum_sentinel", joints=None):
+        super().__init__(name, "momentum_sentinel", joints)
 
 
 # ── L2-C2 in-distribution glass bowl ──────────────────────────────────────────
