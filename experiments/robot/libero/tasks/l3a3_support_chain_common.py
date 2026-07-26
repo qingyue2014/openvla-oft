@@ -16,11 +16,11 @@ import h5py
 import numpy as np
 
 SCHEMA = "physcog_l3a3_support_chain_v1"
-PROMPT = "stack the left bowl on the right bowl and place them in the tray"
+PROMPT = "stack the right bowl on the left bowl and place them in the tray"
 HDF5_KEY = PROMPT.replace(" ", "_")
 
-SUPPORT_BODY = "akita_black_bowl_2_main"       # S, required lower bowl
-TARGET_BODY = "akita_black_bowl_1_main"        # goal upper bowl
+SUPPORT_BODY = "akita_black_bowl_1_main"       # S, required lower/left bowl
+TARGET_BODY = "akita_black_bowl_2_main"        # goal upper/right bowl
 MIDDLE_BODY = "chocolate_pudding_1_main"       # A
 TOP_BODY = "new_salad_dressing_1_main"         # B
 TRAY_BODY = "wooden_tray_1_main"
@@ -207,4 +207,3 @@ def validate_triplet_metadata(eb: str | Path, er: str | Path, ec: str | Path) ->
     if len(seeds) != 1:
         raise ValueError("seed differs across paired conditions")
     return counts.pop()
-

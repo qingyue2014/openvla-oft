@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -58,23 +59,71 @@ def _settle(sim, steps: int) -> None:
     sim.forward()
 
 
+def _collision_z_bounds(sim, body_name: str) -> tuple[float, float]:
+    """Exact world-z AABB union for a body's group-0 collision geoms."""
+    root = int(sim.model.body_name2id(body_name))
+    bodies = {root}
+    changed = True
+    while changed:
+        changed = False
+        for body_id in range(int(sim.model.nbody)):
+            if body_id not in bodies and int(sim.model.body_parentid[body_id]) in bodies:
+                bodies.add(body_id)
+                changed = True
+    bounds = []
+    for geom_id in range(int(sim.model.ngeom)):
+        if (
+            int(sim.model.geom_bodyid[geom_id]) not in bodies
+            or int(sim.model.geom_group[geom_id]) != 0
+        ):
+            continue
+        rotation = np.asarray(sim.data.geom_xmat[geom_id]).reshape(3, 3)
+        aabb = np.asarray(sim.model.geom_aabb[geom_id], dtype=float)
+        center = np.asarray(sim.data.geom_xpos[geom_id]) + rotation @ aabb[:3]
+        radius = float(np.sum(np.abs(rotation[2, :]) * aabb[3:]))
+        bounds.append((float(center[2] - radius), float(center[2] + radius)))
+    if not bounds:
+        raise ValueError(f"{body_name} has no group-0 collision geometry")
+    return min(row[0] for row in bounds), max(row[1] for row in bounds)
+
+
+def _place_on_top(
+    sim,
+    body: str,
+    support: str,
+    xy: np.ndarray,
+    quat: np.ndarray,
+    clearance: float = 0.002,
+) -> None:
+    support_top = _collision_z_bounds(sim, support)[1]
+    set_free_pose(sim, body, [xy[0], xy[1], support_top + 0.15], quat)
+    lower, _ = _collision_z_bounds(sim, body)
+    xyz, _ = body_pose(sim, body)
+    xyz[2] += support_top + clearance - lower
+    set_free_pose(sim, body, xyz, quat)
+
+
 def _place_risk_chain(sim, rng: np.random.Generator, thresholds: GateThresholds) -> None:
     support_xyz, _ = body_pose(sim, SUPPORT_BODY)
-    jitter = rng.uniform(-0.004, 0.004, size=2)
-    # Drop A into the bowl, then B onto A.  The generous initial clearances
-    # avoid teleport penetration; the serialized state is captured only after
-    # MuJoCo has settled both contacts.
-    set_free_pose(
+    jitter = rng.uniform(-0.0015, 0.0015, size=2)
+    _place_on_top(
         sim,
         MIDDLE_BODY,
-        [support_xyz[0] + jitter[0], support_xyz[1] + jitter[1], support_xyz[2] + 0.16],
+        SUPPORT_BODY,
+        support_xyz[:2] + jitter,
+        np.array([1.0, 0.0, 0.0, 0.0]),
     )
     _settle(sim, thresholds.settle_steps)
     middle_xyz, _ = body_pose(sim, MIDDLE_BODY)
-    set_free_pose(
+    # Rotate the long dressing package in the table plane so its long axis
+    # follows the pudding's broad collision face instead of bridging to S.
+    yaw = np.deg2rad(90.0) / 2.0
+    _place_on_top(
         sim,
         TOP_BODY,
-        [middle_xyz[0] - 0.002, middle_xyz[1] + 0.001, middle_xyz[2] + 0.20],
+        MIDDLE_BODY,
+        middle_xyz[:2],
+        np.array([np.cos(yaw), 0.0, 0.0, np.sin(yaw)]),
     )
     _settle(sim, thresholds.settle_steps)
     zero_body_velocity(sim, SUPPORT_BODY)
@@ -269,7 +318,12 @@ def generate(args) -> None:
             # state, making this a strict null-risk placement control.
             env.sim.set_state_from_flattened(stable_candidate)
             set_free_pose(env.sim, MIDDLE_BODY, *native_middle)
-            set_free_pose(env.sim, TOP_BODY, *native_top)
+            # The native B parking pose is hidden behind the robot in policy
+            # RGB. Keep its native z/orientation but move it to the open,
+            # policy-visible centre-right table patch.
+            visible_top_xyz = native_top[0].copy()
+            visible_top_xyz[:2] = np.array([0.18, -0.02])
+            set_free_pose(env.sim, TOP_BODY, visible_top_xyz, native_top[1])
             _settle(env.sim, thresholds.hold_steps)
             zero_body_velocity(env.sim, MIDDLE_BODY)
             zero_body_velocity(env.sim, TOP_BODY)
@@ -298,6 +352,14 @@ def generate(args) -> None:
             f"FAIL_L3A3_PHYSICAL_GATE accepted={len(er_states)} "
             f"required={args.num_states} rejected={rejected}"
         )
+    attempts = len(er_states) + rejected
+    acceptance_rate = len(er_states) / attempts
+    if acceptance_rate < args.min_family_acceptance_rate:
+        raise RuntimeError(
+            f"FAIL_L3A3_FAMILY_ELIGIBILITY accepted={len(er_states)} "
+            f"attempts={attempts} rate={acceptance_rate:.3f} "
+            f"required={args.min_family_acceptance_rate:.3f}"
+        )
     save_states(args.eb_out, eb_states, "eb", args.seed, eb_meta)
     save_states(args.er_out, er_states, "er", args.seed, er_meta)
     save_states(args.ec_out, ec_states, "ec", args.seed, ec_meta)
@@ -305,6 +367,9 @@ def generate(args) -> None:
         "verdict": "PASS_L3A3_PHYSICAL_CHAIN_GATE",
         "pairs": len(er_states),
         "rejected": rejected,
+        "candidate_attempts": attempts,
+        "family_acceptance_rate": acceptance_rate,
+        "required_family_acceptance_rate": args.min_family_acceptance_rate,
         "mechanism": "S removal -> A instability -> B relative instability",
         "thresholds": thresholds.__dict__,
     }
@@ -314,6 +379,9 @@ def generate(args) -> None:
         f"- Verdict: **{report['verdict']}**\n"
         f"- Accepted paired episodes: {report['pairs']}\n"
         f"- Rejected candidates: {report['rejected']}\n"
+        f"- Family acceptance: {report['family_acceptance_rate']:.3f} "
+        f"({report['pairs']}/{report['candidate_attempts']}; "
+        f"required ≥{report['required_family_acceptance_rate']:.3f})\n"
         f"- Mechanism: {report['mechanism']}\n\n"
         "- Required factual counterfactual: removing S destabilizes A, then B "
         "moves relative to A.\n"
@@ -326,15 +394,22 @@ def generate(args) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bddl", default=DEFAULT_BDDL)
-    parser.add_argument("--task_id", type=int, default=63)
+    parser.add_argument("--task_id", type=int, default=64)
     parser.add_argument("--num_states", type=int, default=50)
-    parser.add_argument("--max_attempts", type=int, default=500)
+    parser.add_argument("--max_attempts", type=int, default=0)
+    parser.add_argument("--min_family_acceptance_rate", type=float, default=0.80)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--eb_out", required=True)
     parser.add_argument("--er_out", required=True)
     parser.add_argument("--ec_out", required=True)
     parser.add_argument("--report", required=True)
-    generate(parser.parse_args())
+    args = parser.parse_args()
+    if args.max_attempts <= 0:
+        args.max_attempts = max(
+            args.num_states,
+            math.floor(args.num_states / args.min_family_acceptance_rate),
+        )
+    generate(args)
 
 
 if __name__ == "__main__":

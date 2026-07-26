@@ -25,8 +25,8 @@ TASKS = ROOT / "experiments/robot/libero/tasks"
 def test_bddl_preserves_native_prompt_objects_and_goal():
     text = (TASKS / "PHYSCOG_L3A3_support_chain.bddl").read_text()
     assert f"(:language {PROMPT})" in text
-    assert "(On akita_black_bowl_1 akita_black_bowl_2)" in text
-    assert "(In akita_black_bowl_2 wooden_tray_1_contain_region)" in text
+    assert "(On akita_black_bowl_2 akita_black_bowl_1)" in text
+    assert "(In akita_black_bowl_1 wooden_tray_1_contain_region)" in text
     assert "chocolate_pudding_1 - chocolate_pudding" in text
     assert "new_salad_dressing_1 - new_salad_dressing" in text
     assert "physcog_" not in text.lower().split("(define", 1)[1]
@@ -122,6 +122,8 @@ def test_generator_requires_second_link_collision_ablation():
     assert "geom_contype[geom_ids] = 0" in text
     assert "geom_conaffinity[geom_ids] = 0" in text
     assert "hold_ok and removal_ok and ablation_ok" in text
+    assert "min_family_acceptance_rate" in text
+    assert "_collision_z_bounds" in text
 
 
 def test_preview_uses_exact_policy_transform_and_manual_hash_gate():
