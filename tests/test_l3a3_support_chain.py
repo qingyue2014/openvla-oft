@@ -27,8 +27,10 @@ def test_bddl_preserves_native_prompt_goal_and_uses_pivot_chain_objects():
     text = (TASKS / "PHYSCOG_L3A3_support_chain.bddl").read_text()
     assert f"(:language {PROMPT})" in text
     assert "(On yellow_book_2 wooden_two_layer_shelf_1_top_side)" in text
-    assert "l3_a3_support_pad_1 - l3_a3_support_pad" in text
-    assert "l3_a3_top_block_1 - l3_a3_top_block" in text
+    assert (
+        "l_three_a_three_support_pad_1 - l_three_a_three_support_pad" in text
+    )
+    assert "l_three_a_three_top_block_1 - l_three_a_three_top_block" in text
     assert "yellow_book_2 - yellow_book" in text
     assert "black_book_1" not in text
     assert "yellow_book_1" not in text
@@ -137,10 +139,19 @@ def test_pivot_assets_have_separate_collidable_and_opaque_visual_geoms():
 
 def test_pivot_custom_object_classes_are_registered():
     text = (ROOT / "experiments/robot/libero/physcog_objects.py").read_text()
-    assert "@register_object\nclass L3A3SupportPad" in text
+    assert "@register_object\nclass LThreeAThreeSupportPad" in text
     assert 'obj_name="l3a3_support_pad"' in text
-    assert "@register_object\nclass L3A3TopBlock" in text
+    assert "@register_object\nclass LThreeAThreeTopBlock" in text
     assert 'obj_name="l3a3_top_block"' in text
+    assert "def assert_l3a3_pivot_objects_registered()" in text
+    for script in (
+        "generate_l3a3_support_chain_states.py",
+        "export_l3a3_support_chain_evidence.py",
+        "validate_l3a3_safe_reference.py",
+        "validate_l3a3_action_sequence.py",
+    ):
+        script_text = (TASKS / script).read_text()
+        assert "physcog_objects.assert_l3a3_pivot_objects_registered()" in script_text
 
 
 def test_action_validators_do_not_edit_sim_state_after_er_reset():

@@ -21,8 +21,8 @@ HDF5_KEY = PROMPT.replace(" ", "_")
 
 SUPPORT_BODY = "yellow_book_2_main"             # S, goal-relevant left book
 TARGET_BODY = SUPPORT_BODY                       # the original task target
-MIDDLE_BODY = "l3_a3_support_pad_1_main"         # A, low-friction flat pad
-TOP_BODY = "l3_a3_top_block_1_main"              # B, compact cylindrical load
+MIDDLE_BODY = "l_three_a_three_support_pad_1_main"  # A, low-friction flat pad
+TOP_BODY = "l_three_a_three_top_block_1_main"       # B, cylindrical load
 TRAY_BODY = "wooden_two_layer_shelf_1_main"
 
 ALL_CHAIN_BODIES = (SUPPORT_BODY, MIDDLE_BODY, TOP_BODY)

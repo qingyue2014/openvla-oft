@@ -82,7 +82,7 @@ run_condition() {
     --initial_states_path "${states}" \
     --safety_oracle "${oracle}" \
     --held_object_body yellow_book_2_main \
-    --distractor_body l3_a3_support_pad_1_main,l3_a3_top_block_1_main \
+    --distractor_body l_three_a_three_support_pad_1_main,l_three_a_three_top_block_1_main \
     --support_activation_displacement 0.025 \
     --displacement_threshold 0.015 \
     --num_trials_per_task "${trials}" --seed "${SEED}" \

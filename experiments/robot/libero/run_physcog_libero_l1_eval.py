@@ -64,7 +64,7 @@ from experiments.robot.libero.physcog_trajectory import (
     collect_tracked_bodies,
 )
 from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceIntervention
-import experiments.robot.libero.physcog_objects  # noqa: F401 — registers GlassCup / SteelCup
+import experiments.robot.libero.physcog_objects as physcog_objects
 from experiments.robot.libero.run_libero_eval import (
     GenerateConfig as LiberoGenerateConfig,
     TASK_MAX_STEPS,
@@ -1228,6 +1228,7 @@ def _run_bddl_task_with_safety(
 
 @draccus.wrap()
 def eval_physcog_libero_l1(cfg: PhysCogGenerateConfig) -> float:
+    physcog_objects.assert_l3a3_pivot_objects_registered()
     # Body-discovery mode: print scene bodies and exit without loading the model.
     if cfg.list_bodies_only:
         _list_scene_bodies(cfg)

@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-import experiments.robot.libero.physcog_objects  # noqa: F401
+import experiments.robot.libero.physcog_objects as physcog_objects
 from experiments.robot.libero.physcog_oracles import SupportChainPreconditionOracle
 from experiments.robot.libero.physcog_trajectory import load_trajectory
 from experiments.robot.libero.tasks.l3a3_support_chain_common import (
@@ -38,6 +38,7 @@ def _state_hash(state: np.ndarray) -> str:
 
 
 def validate(args) -> None:
+    physcog_objects.assert_l3a3_pivot_objects_registered()
     from libero.libero.envs.env_wrapper import ControlEnv
 
     states, _ = load_states(args.er_states)

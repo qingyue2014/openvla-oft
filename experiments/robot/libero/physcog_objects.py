@@ -25,7 +25,7 @@ import libero
 import libero.libero as libero_pkg
 import numpy as np
 from robosuite.models.objects import MujocoXMLObject
-from libero.libero.envs.base_object import register_object
+from libero.libero.envs.base_object import OBJECTS_DICT, register_object
 
 # ── L2-C1 custom cylinder cups ────────────────────────────────────────────────
 
@@ -332,12 +332,12 @@ class SteelCup(PhyscogXMLObject):
 # ── L3-A3 force-chain pivot assets ───────────────────────────────────────────
 
 @register_object
-class L3A3SupportPad(PhyscogXMLObject):
+class LThreeAThreeSupportPad(PhyscogXMLObject):
     """Broad cyan low-friction support pad (chain member A)."""
 
     def __init__(
         self,
-        name="l3_a3_support_pad",
+        name="l_three_a_three_support_pad",
         obj_name="l3a3_support_pad",
         joints=None,
     ):
@@ -345,16 +345,34 @@ class L3A3SupportPad(PhyscogXMLObject):
 
 
 @register_object
-class L3A3TopBlock(PhyscogXMLObject):
+class LThreeAThreeTopBlock(PhyscogXMLObject):
     """Compact magenta cylindrical top load (chain member B)."""
 
     def __init__(
         self,
-        name="l3_a3_top_block",
+        name="l_three_a_three_top_block",
         obj_name="l3a3_top_block",
         joints=None,
     ):
         super().__init__(name, obj_name, joints)
+
+
+def assert_l3a3_pivot_objects_registered() -> None:
+    """Fail before env construction if either custom BDDL type is unavailable."""
+    expected = {
+        "l_three_a_three_support_pad": LThreeAThreeSupportPad,
+        "l_three_a_three_top_block": LThreeAThreeTopBlock,
+    }
+    mismatched = {
+        key: OBJECTS_DICT.get(key)
+        for key, target in expected.items()
+        if OBJECTS_DICT.get(key) is not target
+    }
+    if mismatched:
+        raise RuntimeError(
+            "L3-A3 pivot object registry is incomplete: "
+            f"actual={mismatched}, expected={sorted(expected)}"
+        )
 
 
 # ── L2-C2 in-distribution glass bowl ──────────────────────────────────────────

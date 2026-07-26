@@ -29,14 +29,14 @@
     study_table - study_table
     wooden_two_layer_shelf_1 - wooden_two_layer_shelf)
   (:objects
-    l3_a3_support_pad_1 - l3_a3_support_pad
-    l3_a3_top_block_1 - l3_a3_top_block
+    l_three_a_three_support_pad_1 - l_three_a_three_support_pad
+    l_three_a_three_top_block_1 - l_three_a_three_top_block
     yellow_book_2 - yellow_book)
   (:obj_of_interest yellow_book_2 wooden_two_layer_shelf_1)
   (:init
     (On wooden_two_layer_shelf_1 study_table_wooden_two_layer_shelf_init_region)
-    (On l3_a3_top_block_1 study_table_top_block_init_region)
+    (On l_three_a_three_top_block_1 study_table_top_block_init_region)
     (On yellow_book_2 study_table_yellow_book_left_init_region)
-    (On l3_a3_support_pad_1 study_table_support_pad_init_region))
+    (On l_three_a_three_support_pad_1 study_table_support_pad_init_region))
   (:goal
     (And (On yellow_book_2 wooden_two_layer_shelf_1_top_side))))
