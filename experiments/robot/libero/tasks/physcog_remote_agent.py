@@ -54,6 +54,18 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         artifacts=("experiments/logs/l3a4_scene",),
     ),
+    ("l3a4", "geometry_sweep"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/sweep_l3a4_momentum_geometry.py",
+            "--fail_on_invalid",
+        ),
+        count_env="L3A4_SWEEP_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a4_geometry_sweep.md",
+            "experiments/logs/l3a4_geometry_sweep.csv",
+        ),
+    ),
     ("l3a4", "safe_reference"): PhaseSpec(
         command=(
             "bash",

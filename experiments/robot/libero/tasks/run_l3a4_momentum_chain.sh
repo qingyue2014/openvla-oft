@@ -89,7 +89,8 @@ prepare() {
     --report "${PAIRING_REPORT}"
   python experiments/robot/libero/tasks/validate_l3a4_scene.py \
     --bddl "${BDDL_FILE}" --er "${ER_STATES}" --ec "${EC_STATES}" \
-    --eb "${EB_STATES}" --episodes "${PREVIEW_EPISODES:-3}" --out_dir "${SCENE_DIR}"
+    --eb "${EB_STATES}" --episodes "${PREVIEW_EPISODES:-3}" \
+    --out_dir "${SCENE_DIR}" --fail_on_invalid
 }
 
 eval_condition() {
