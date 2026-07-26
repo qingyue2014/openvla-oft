@@ -17,6 +17,7 @@ evaluation.
 | 489759 | 7a56b58 | corrected mass sweep, best 8.37 mm / 1.06° | Below hazard threshold; narrows next mass band |
 | 489768 | 36fd2c4 | scales .005/.008/.010/.012 passed 2/2; .015 failed | Calibration PASS; bake scale .010 |
 | 489776 | 79db01a | baked .010 reached only 2/5 at both x=.110/.115 | FAIL: below the unchanged 80% family gate |
+| 489794 | 6a0dbcc | effective .005/.008 also reached only 2/5 | FAIL: three low-impulse glancing contacts |
 
 Job 489657 established that 26/48 bottle-B poses were passively stable and
 table-only, but the closest dynamic A-B center distances remained about
@@ -73,3 +74,15 @@ The result is retained as a failed calibration and does not authorize
 preview, smoke, or formal evaluation. A bounded five-state probe now tests
 effective original mass scales 0.005 and 0.008 at only these two neighboring
 positions; the 80% threshold is unchanged.
+
+Job 489794 showed the same 2/5 result at both lighter effective masses and
+both neighboring positions. All five episodes preserved the ordered release
+and A-B impact (steps 76–79), but episodes 2–4 moved B only 0.3–2.5 mm,
+whereas episodes 0–1 crossed 10 mm. A-disabled residual motion stayed below
+0.008 mm with zero tilt, and every passive gate remained table-only 5/5.
+The failure is therefore a per-episode glancing/low-impulse contact, not
+missing causality or excess B mass. The next bounded calibration transports a
+known impact pose using each episode's measured collision-disabled A fall
+trace, tests a small pose/yaw neighborhood, and requires both a passing pose
+and adjacent passing witness in at least 4/5 episodes. No threshold changes or
+further mass reduction are allowed.

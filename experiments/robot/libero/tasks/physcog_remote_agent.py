@@ -67,6 +67,28 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a2_link_fall_trace.json",
         ),
     ),
+    ("l3a2", "adaptive_sweep"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/"
+            "sweep_l3a2_cascade_geometry.py",
+            "--adaptive-episode-poses",
+            "--fail-on-invalid",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a2_geometry_sweep.md",
+            "experiments/logs/l3a2_geometry_sweep.csv",
+            "experiments/logs/l3a2_link_fall_trace.json",
+            "experiments/logs/l3a2_pairing.md",
+            "experiments/robot/libero/tasks/"
+            "l3a2_drawer_bottle_cascade_eb_initial_states.hdf5",
+            "experiments/robot/libero/tasks/"
+            "l3a2_drawer_bottle_cascade_er_initial_states.hdf5",
+            "experiments/robot/libero/tasks/"
+            "l3a2_drawer_bottle_cascade_ec_initial_states.hdf5",
+        ),
+    ),
     ("l3a2", "check"): PhaseSpec(
         command=(
             "python",

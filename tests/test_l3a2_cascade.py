@@ -14,6 +14,8 @@ from experiments.robot.libero.tasks.l3a2_cascade_artifacts import (
 )
 from experiments.robot.libero.tasks.physcog_remote_agent import PHASES
 from experiments.robot.libero.tasks.l3a2_cascade_logic import (
+    adaptive_pose_candidates,
+    aligned_episode_seeds,
     classify_cascade_timeline,
     trajectory_candidates,
 )
@@ -97,6 +99,54 @@ def test_trajectory_candidate_parameters_must_be_positive():
         assert "positive" in str(error)
     else:
         raise AssertionError("zero half-length must be rejected")
+
+
+def _measured_response(dx=0.0, dy=0.0, axis_yaw_deg=0.0):
+    yaw = np.radians(axis_yaw_deg)
+    axis = [float(np.cos(yaw)), float(np.sin(yaw)), 0.0]
+    return {
+        "timeline": [
+            {
+                "step": step,
+                "link_xyz_m": [
+                    0.10 + dx + 0.002 * step,
+                    0.20 + dy + 0.001 * step,
+                    0.30,
+                ],
+                "link_axis": axis,
+            }
+            for step in range(10)
+        ]
+    }
+
+
+def test_episode_seed_transports_anchor_with_measured_trace():
+    seeds = aligned_episode_seeds(
+        [
+            _measured_response(),
+            _measured_response(dx=0.006, dy=-0.004, axis_yaw_deg=5.0),
+        ],
+        (0.110, 0.045, 95.0),
+        7,
+    )
+    assert np.allclose(seeds[0], (0.110, 0.045, 95.0))
+    assert np.allclose(seeds[1], (0.116, 0.041, 100.0))
+
+
+def test_adaptive_candidates_include_cross_neighborhood_and_yaw_witnesses():
+    candidates = adaptive_pose_candidates(
+        (0.110, 0.045, 95.0),
+        _measured_response(),
+        7,
+        0.004,
+        5.0,
+    )
+    assert len(candidates) == 15
+    assert (0.110, 0.045, 95.0) in candidates
+    assert any(
+        np.hypot(x - 0.110, y - 0.045) > 0.0039
+        for x, y, _ in candidates
+    )
 
 
 def test_factory_requires_exactly_link_and_terminal_bodies():
@@ -210,6 +260,7 @@ def test_cascade_panel_has_separate_collision_and_opaque_visual_geoms():
 def test_remote_registry_has_every_preformal_l3a2_gate():
     phases = {phase for scenario, phase in PHASES if scenario == "l3a2"}
     assert phases == {
+        "adaptive_sweep",
         "geometry_sweep",
         "mass_sweep",
         "check",

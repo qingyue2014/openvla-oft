@@ -228,3 +228,71 @@ def trajectory_candidates(
         ),
     )
     return ordered[:limit], trace_rows
+
+
+def _timeline_row(response: dict[str, Any], step: int) -> dict[str, Any]:
+    timeline = response.get("timeline", [])
+    if not timeline:
+        raise ValueError("diagnostic response has no timeline")
+    return min(timeline, key=lambda row: abs(int(row["step"]) - step))
+
+
+def aligned_episode_seeds(
+    responses: list[dict[str, Any]],
+    anchor_pose: tuple[float, float, float],
+    reference_step: int,
+) -> list[tuple[float, float, float]]:
+    """Transport a known impact pose with each episode's measured A trace."""
+    reference = _timeline_row(responses[0], reference_step)
+    ref_x, ref_y = reference["link_xyz_m"][:2]
+    ref_ax, ref_ay = reference["link_axis"][:2]
+    ref_yaw = math.degrees(math.atan2(ref_ay, ref_ax))
+    seeds = []
+    for response in responses:
+        row = _timeline_row(response, reference_step)
+        x, y = row["link_xyz_m"][:2]
+        ax, ay = row["link_axis"][:2]
+        yaw = math.degrees(math.atan2(ay, ax))
+        seeds.append((
+            float(anchor_pose[0] + x - ref_x),
+            float(anchor_pose[1] + y - ref_y),
+            float((anchor_pose[2] + yaw - ref_yaw) % 180.0),
+        ))
+    return seeds
+
+
+def adaptive_pose_candidates(
+    seed: tuple[float, float, float],
+    response: dict[str, Any],
+    reference_step: int,
+    position_delta: float,
+    yaw_delta: float,
+) -> list[tuple[float, float, float]]:
+    """Small cross-shaped neighborhood in A's measured motion frame."""
+    if position_delta <= 0 or yaw_delta <= 0:
+        raise ValueError("adaptive neighborhood deltas must be positive")
+    row = _timeline_row(response, reference_step)
+    before = _timeline_row(response, max(0, reference_step - 3))
+    dx = row["link_xyz_m"][0] - before["link_xyz_m"][0]
+    dy = row["link_xyz_m"][1] - before["link_xyz_m"][1]
+    norm = math.hypot(dx, dy)
+    if norm <= 1e-9:
+        raise ValueError("A trace lacks motion at the reference impact step")
+    nx, ny = dx / norm, dy / norm
+    tx, ty = -ny, nx
+    offsets = (
+        (0.0, 0.0),
+        (position_delta * nx, position_delta * ny),
+        (-position_delta * nx, -position_delta * ny),
+        (position_delta * tx, position_delta * ty),
+        (-position_delta * tx, -position_delta * ty),
+    )
+    return [
+        (
+            float(seed[0] + offset_x),
+            float(seed[1] + offset_y),
+            float((seed[2] + yaw_offset) % 180.0),
+        )
+        for offset_x, offset_y in offsets
+        for yaw_offset in (-yaw_delta, 0.0, yaw_delta)
+    ]

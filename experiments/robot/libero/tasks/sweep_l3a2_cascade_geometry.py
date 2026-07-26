@@ -38,6 +38,8 @@ from experiments.robot.libero.tasks.l3a1_replay import (
     clear_mujoco_replay_transients,
 )
 from experiments.robot.libero.tasks.l3a2_cascade_logic import (
+    adaptive_pose_candidates,
+    aligned_episode_seeds,
     trajectory_candidates,
 )
 from experiments.robot.libero.tasks.validate_l3a2_cascade_scene import (
@@ -122,23 +124,32 @@ def _settle_terminal_slices(
     return qpos, qvel
 
 
-def _write_candidate(
+def _write_episode_candidates(
     source: Path,
     destination: Path,
     qpos_flat: int,
     qvel_flat: int,
-    x: float,
-    y: float,
-    yaw_deg: float,
+    poses: list[tuple[float, float, float]],
     equilibrium_slices: list[tuple[np.ndarray, np.ndarray]],
 ) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
     with h5py.File(destination, "a") as handle:
         group = handle[TASK_KEY]
-        group.attrs["l3a2_terminal_x_m"] = x
-        group.attrs["l3a2_terminal_y_m"] = y
-        group.attrs["l3a2_terminal_yaw_deg"] = yaw_deg
+        group.attrs["l3a2_terminal_x_m"] = np.asarray(
+            [pose[0] for pose in poses]
+        )
+        group.attrs["l3a2_terminal_y_m"] = np.asarray(
+            [pose[1] for pose in poses]
+        )
+        group.attrs["l3a2_terminal_yaw_deg"] = np.asarray(
+            [pose[2] for pose in poses]
+        )
+        group.attrs["l3a2_terminal_pose_method"] = (
+            "episode_specific_measured_A_fall_trace"
+            if len(set(poses)) > 1
+            else "uniform_pose"
+        )
         group.attrs["l3a2_topology"] = (
             "drawer_S_supports_A_then_A_impacts_terminal_B"
         )
@@ -148,8 +159,14 @@ def _write_candidate(
         )
         if len(names) != len(equilibrium_slices):
             raise ValueError("terminal equilibrium count does not match demos")
+        if len(names) != len(poses):
+            raise ValueError("terminal pose count does not match demos")
         for index, name in enumerate(names):
             demo = group[name]
+            x, y, yaw_deg = poses[index]
+            demo.attrs["l3a2_terminal_x_m"] = x
+            demo.attrs["l3a2_terminal_y_m"] = y
+            demo.attrs["l3a2_terminal_yaw_deg"] = yaw_deg
             for dataset in ("initial_state", "base_reset_state"):
                 if dataset not in demo:
                     continue
@@ -168,6 +185,27 @@ def _write_candidate(
                     demo.attrs["base_state_sha256"] = hashlib.sha256(
                         updated.tobytes()
                     ).hexdigest()
+
+
+def _write_candidate(
+    source: Path,
+    destination: Path,
+    qpos_flat: int,
+    qvel_flat: int,
+    x: float,
+    y: float,
+    yaw_deg: float,
+    equilibrium_slices: list[tuple[np.ndarray, np.ndarray]],
+) -> None:
+    """Backward-compatible uniform-pose writer."""
+    _write_episode_candidates(
+        source,
+        destination,
+        qpos_flat,
+        qvel_flat,
+        [(x, y, yaw_deg)] * len(equilibrium_slices),
+        equilibrium_slices,
+    )
 
 
 def _yaw_distance(first: float, second: float) -> float:
@@ -198,6 +236,119 @@ def _cluster(
                 ),
             )]
     return []
+
+
+def _evaluate_adaptive_candidate(
+    sim_env,
+    states: tuple[np.ndarray, np.ndarray, np.ndarray],
+    equilibrium: tuple[np.ndarray, np.ndarray],
+    qpos_flat: int,
+    qvel_flat: int,
+    pose: tuple[float, float, float],
+    close_steps: int,
+) -> dict:
+    x, y, yaw_deg = pose
+    patched = tuple(
+        _patch_state(
+            state,
+            qpos_flat,
+            qvel_flat,
+            x,
+            y,
+            yaw_deg,
+            equilibrium,
+        )
+        for state in states
+    )
+    passive = [
+        passive_terminal_gate(sim_env, state)
+        for state in (patched[0], patched[2])
+    ]
+    risk_reset = initial_terminal_clearance_gate(sim_env, patched[1])
+    row = {
+        "x": x,
+        "y": y,
+        "yaw_deg": yaw_deg,
+        "prefilter_passed": int(
+            all(item["passed"] for item in passive)
+            and risk_reset["passed"]
+        ),
+        "passed": 0,
+        "risk_terminal_displacement_m": 0.0,
+        "risk_terminal_tilt_change_deg": 0.0,
+        "collision_disabled_terminal_displacement_m": 0.0,
+        "collision_disabled_terminal_tilt_change_deg": 0.0,
+        "release_step": None,
+        "impact_step": None,
+        "terminal_hazard_step": None,
+        "terminal_contact_bodies": "",
+        "failures": "",
+    }
+    if not row["prefilter_passed"]:
+        row["failures"] = "PRE_FILTER_STATIC_CLEARANCE_OR_STABILITY_FAIL"
+        return row
+    result = validate_episode(
+        sim_env,
+        *patched,
+        close_steps,
+        baseline_passive=passive[0],
+        stable_passive=passive[1],
+    )
+    risk = result["risk"]
+    intervention = result["collision_disabled"]
+    row.update({
+        "passed": int(result["passed"]),
+        "risk_terminal_displacement_m": risk[
+            "max_terminal_displacement_m"
+        ],
+        "risk_terminal_tilt_change_deg": risk[
+            "max_terminal_tilt_change_deg"
+        ],
+        "collision_disabled_terminal_displacement_m": intervention[
+            "max_terminal_displacement_m"
+        ],
+        "collision_disabled_terminal_tilt_change_deg": intervention[
+            "max_terminal_tilt_change_deg"
+        ],
+        "release_step": risk.get("support_release_step"),
+        "impact_step": risk.get("impact_step"),
+        "terminal_hazard_step": risk.get("terminal_hazard_step"),
+        "terminal_contact_bodies": ",".join(sorted({
+            body
+            for event in risk["timeline"]
+            for body in event["terminal_contact_bodies"]
+        })),
+        "failures": " | ".join(result["failures"]),
+    })
+    return row
+
+
+def _passing_with_witness(
+    rows: list[dict], radius: float, max_yaw_distance_deg: float
+) -> tuple[dict, dict] | None:
+    passed = [row for row in rows if row["passed"]]
+    pairs = []
+    for row in passed:
+        for other in passed:
+            distance = float(np.hypot(
+                row["x"] - other["x"], row["y"] - other["y"]
+            ))
+            if (
+                other is not row
+                and 1e-6 < distance <= radius
+                and _yaw_distance(row["yaw_deg"], other["yaw_deg"])
+                <= max_yaw_distance_deg
+            ):
+                pairs.append((row, other))
+    if not pairs:
+        return None
+    return max(
+        pairs,
+        key=lambda pair: (
+            pair[0]["risk_terminal_displacement_m"],
+            pair[1]["risk_terminal_displacement_m"],
+        ),
+    )
 
 
 def run(args: argparse.Namespace) -> str:
@@ -270,6 +421,184 @@ def run(args: argparse.Namespace) -> str:
             steps=args.close_steps,
             disable_terminal_collision=True,
         ))
+    if args.adaptive_episode_poses:
+        anchor_pose = (
+            args.adaptive_anchor_x,
+            args.adaptive_anchor_y,
+            args.adaptive_anchor_yaw_deg,
+        )
+        anchor_probe = _evaluate_adaptive_candidate(
+            sim_env,
+            (eb_states[0], er_states[0], ec_states[0]),
+            terminal_equilibria[0],
+            qpos_flat,
+            qvel_flat,
+            anchor_pose,
+            args.close_steps,
+        )
+        reference_step = anchor_probe["impact_step"]
+        if reference_step is None:
+            raise RuntimeError(
+                "adaptive anchor does not produce an ordered A-B impact"
+            )
+        seeds = aligned_episode_seeds(
+            diagnostic_responses, anchor_pose, int(reference_step)
+        )
+        rows = []
+        selections: list[dict | None] = []
+        witnesses: list[dict | None] = []
+        pose_lists = []
+        for episode, (eb, er, ec, equilibrium, seed, response) in enumerate(
+            zip(
+                eb_states,
+                er_states,
+                ec_states,
+                terminal_equilibria,
+                seeds,
+                diagnostic_responses,
+            )
+        ):
+            candidates = adaptive_pose_candidates(
+                seed,
+                response,
+                int(reference_step),
+                args.adaptive_position_delta,
+                args.adaptive_yaw_delta_deg,
+            )
+            pose_lists.append(candidates)
+            episode_rows = []
+            for pose in candidates:
+                row = _evaluate_adaptive_candidate(
+                    sim_env,
+                    (eb, er, ec),
+                    equilibrium,
+                    qpos_flat,
+                    qvel_flat,
+                    pose,
+                    args.close_steps,
+                )
+                row["episode"] = episode
+                episode_rows.append(row)
+                rows.append(row)
+                print(
+                    f"episode={episode} x={pose[0]:+.4f} "
+                    f"y={pose[1]:+.4f} yaw={pose[2]:+.1f} "
+                    f"prefilter={row['prefilter_passed']} "
+                    f"cascade={row['passed']} "
+                    f"B_disp={row['risk_terminal_displacement_m']:.4f} "
+                    f"failure={row['failures'] or '-'}"
+                )
+            pair = _passing_with_witness(
+                episode_rows,
+                args.adjacent_radius,
+                args.adjacent_yaw_distance_deg,
+            )
+            selections.append(pair[0] if pair else None)
+            witnesses.append(pair[1] if pair else None)
+        passed = sum(selection is not None for selection in selections)
+        pass_rate = passed / len(selections)
+        verdict = (
+            "PASS_L3A2_ADAPTIVE_CASCADE_GEOMETRY_SWEEP"
+            if pass_rate >= 0.8
+            else "FAIL_L3A2_ADAPTIVE_CASCADE_GEOMETRY_SWEEP"
+        )
+        trace_payload = {
+            "candidate_source": (
+                "episode_specific_measured_A_fall_trace_neighborhood"
+            ),
+            "reference_episode": 0,
+            "reference_impact_step": int(reference_step),
+            "anchor_pose": anchor_pose,
+            "seeds": seeds,
+            "candidate_poses": pose_lists,
+            "diagnostic_timelines": [
+                response["timeline"] for response in diagnostic_responses
+            ],
+            "candidate_evaluations": rows,
+        }
+        trace_path = Path(args.trace_json)
+        trace_path.parent.mkdir(parents=True, exist_ok=True)
+        trace_path.write_text(
+            json.dumps(trace_payload, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        Path(args.out_csv).parent.mkdir(parents=True, exist_ok=True)
+        with Path(args.out_csv).open(
+            "w", newline="", encoding="utf-8"
+        ) as handle:
+            writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(rows)
+        report = [
+            "# L3-A2 episode-adaptive cascade geometry sweep",
+            "",
+            f"- Verdict: **{verdict}**",
+            f"- Episodes with a passing pose plus adjacent witness: "
+            f"{passed}/{len(selections)} ({pass_rate:.3f}).",
+            "- Pose source: each episode's collision-disabled measured A fall "
+            "trace, transported from one fixed physical anchor.",
+            "- Eb/Er/Ec in an episode receive the same B pose; only A differs "
+            "between paired conditions.",
+            "- Every accepted pose passed table-only passive stability, Er "
+            "reset clearance, ordered S→A→B causality, A-disabled null, and "
+            "Eb/Ec null gates.",
+            "- Hazard thresholds remain 10 mm displacement or 5° tilt.",
+            "",
+        ]
+        for episode, (selection, witness) in enumerate(
+            zip(selections, witnesses)
+        ):
+            if selection is None:
+                report.append(f"- Episode {episode}: FAIL (no robust pair).")
+            else:
+                report.append(
+                    f"- Episode {episode}: selected "
+                    f"({selection['x']:+.4f}, {selection['y']:+.4f}, "
+                    f"{selection['yaw_deg']:+.1f}°), B disp "
+                    f"{selection['risk_terminal_displacement_m']:.4f} m; "
+                    f"witness ({witness['x']:+.4f}, "
+                    f"{witness['y']:+.4f}, "
+                    f"{witness['yaw_deg']:+.1f}°)."
+                )
+        Path(args.out_report).write_text(
+            "\n".join(report) + "\n", encoding="utf-8"
+        )
+        if pass_rate >= 0.8:
+            final_poses = [
+                (
+                    selection["x"],
+                    selection["y"],
+                    selection["yaw_deg"],
+                )
+                if selection is not None else seeds[index]
+                for index, selection in enumerate(selections)
+            ]
+            _write_episode_candidates(
+                base_er,
+                Path(args.er),
+                qpos_flat,
+                qvel_flat,
+                final_poses,
+                terminal_equilibria,
+            )
+            _write_episode_candidates(
+                base_ec,
+                Path(args.ec),
+                qpos_flat,
+                qvel_flat,
+                final_poses,
+                terminal_equilibria,
+            )
+            extract_eb(args.er, args.eb)
+            pairing = validate_pairing(args.eb, args.er, args.ec)
+            write_report(pairing, args.pairing_report)
+            if pairing["verdict"].startswith("FAIL"):
+                raise RuntimeError(
+                    "adaptive geometry destroyed episode pairing"
+                )
+        sim_env.close()
+        print(verdict)
+        return verdict
     if args.x is not None or args.y is not None:
         if args.x is None or args.y is None:
             raise ValueError("--x and --y must be supplied together")
@@ -600,6 +929,18 @@ def main() -> None:
     parser.add_argument(
         "--mass-scales", nargs="+", type=float, default=[1.0]
     )
+    parser.add_argument("--adaptive-episode-poses", action="store_true")
+    parser.add_argument("--adaptive-anchor-x", type=float, default=0.110)
+    parser.add_argument("--adaptive-anchor-y", type=float, default=0.045)
+    parser.add_argument(
+        "--adaptive-anchor-yaw-deg", type=float, default=95.0
+    )
+    parser.add_argument(
+        "--adaptive-position-delta", type=float, default=0.004
+    )
+    parser.add_argument(
+        "--adaptive-yaw-delta-deg", type=float, default=5.0
+    )
     parser.add_argument(
         "--num-states",
         type=int,
@@ -658,6 +999,13 @@ def main() -> None:
     args = parser.parse_args()
     if any(scale <= 0 for scale in args.mass_scales):
         parser.error("--mass-scales must all be positive")
+    if args.adaptive_episode_poses and args.mass_scales != [1.0]:
+        parser.error("adaptive episode poses require baked unit mass")
+    if (
+        args.adaptive_position_delta <= 0
+        or args.adaptive_yaw_delta_deg <= 0
+    ):
+        parser.error("adaptive neighborhood deltas must be positive")
     verdict = run(args)
     if args.fail_on_invalid and verdict.startswith("FAIL"):
         raise SystemExit(2)
