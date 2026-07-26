@@ -7,7 +7,7 @@ The companion unchanged-action validator replays each recorded Eb expert
 sequence in Er and requires it to fail safely or activate the chain oracle.
 
 After each serialized reset, all motion goes through ``env.step(action)``.
-The paired Ec state is used only for the native parking poses of A and B; it is
+The paired Ec state remains hash-bound as the matched stable control and is
 never restored into an executing Eb or Er environment.
 """
 
@@ -33,7 +33,6 @@ from experiments.robot.libero.tasks.l3a3_support_chain_common import (
     SUPPORT_BODY,
     TARGET_BODY,
     TOP_BODY,
-    find_free_joint,
     load_states,
     validate_triplet_metadata,
 )
@@ -146,9 +145,63 @@ def _relocate(
     return failure, error
 
 
-def _target_xyz(env, ec_state: np.ndarray, body: str) -> np.ndarray:
-    qadr, _ = find_free_joint(env.sim, body)
-    return np.asarray(ec_state[qadr : qadr + 3], dtype=float).copy()
+def _push_unload(
+    io,
+    body: str,
+    direction_xyz: np.ndarray,
+    close_sign: float,
+    args,
+    oracle,
+    unloaded_attribute: str,
+):
+    """Unload one chain member by a controlled horizontal OSC push."""
+    direction = np.asarray(direction_xyz, dtype=float)
+    direction /= np.linalg.norm(direction)
+    start_body = _body_pos(io.env, body)
+    pre_body = start_body - direction * args.push_start_clearance
+    pre_eef = pre_body.copy()
+    pre_eef[2] += args.push_height
+    above = pre_eef + np.array([0.0, 0.0, args.approach_height])
+    failure = _move(
+        io, above, close_sign, args, f"{body}:push_approach", oracle=oracle
+    )
+    if failure is None:
+        failure = _move(
+            io, pre_eef, close_sign, args, f"{body}:push_descend", oracle=oracle
+        )
+    if failure is not None:
+        return failure, 0.0
+
+    push_goal = pre_eef + direction * (
+        args.push_start_clearance + args.push_distance
+    )
+    displacement = 0.0
+    for _ in range(args.max_push_steps):
+        action = _position_action(_eef_pos(io.obs), push_goal, close_sign, args)
+        status = io.advance(action, "mitigate", oracle)
+        displacement = float(
+            np.linalg.norm(_body_pos(io.env, body) - start_body)
+        )
+        if status is not None and status.violated:
+            return MotionFailure(status.reason, f"{body}:push"), displacement
+        if bool(getattr(oracle, unloaded_attribute)):
+            break
+    else:
+        return (
+            MotionFailure(
+                "push_unload_not_observed",
+                f"{body}:push",
+                final_error_m=displacement,
+            ),
+            displacement,
+        )
+
+    retreat = _eef_pos(io.obs) - direction * args.push_retreat_distance
+    retreat[2] += args.approach_height
+    failure = _move(
+        io, retreat, close_sign, args, f"{body}:push_retreat", oracle=oracle
+    )
+    return failure, displacement
 
 
 def _gripper_aperture(obs) -> float:
@@ -342,14 +395,24 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
         failure = gripper_failure
     top_error = middle_error = float("inf")
     if failure is None:
-        failure, top_error = _relocate(
-            io, TOP_BODY, _target_xyz(env, ec_state, TOP_BODY),
-            open_sign, close_sign, args, oracle
+        failure, top_error = _push_unload(
+            io,
+            TOP_BODY,
+            np.array([1.0, 0.0, 0.0]),
+            close_sign,
+            args,
+            oracle,
+            "top_unloaded",
         )
     if failure is None:
-        failure, middle_error = _relocate(
-            io, MIDDLE_BODY, _target_xyz(env, ec_state, MIDDLE_BODY),
-            open_sign, close_sign, args, oracle
+        failure, middle_error = _push_unload(
+            io,
+            MIDDLE_BODY,
+            np.array([-1.0, 0.0, 0.0]),
+            close_sign,
+            args,
+            oracle,
+            "middle_unloaded",
         )
     if failure is None and not oracle.safe_precondition_inserted:
         # Update once after the final settle; no simulator write is performed.
@@ -385,7 +448,7 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             "task_description": PROMPT,
             "source_condition": "Er",
             "er_initial_state_sha256": _state_hash(er_state),
-            "ec_parking_state_sha256": _state_hash(ec_state),
+            "ec_control_state_sha256": _state_hash(ec_state),
             "controller": "OSC_POSITION_7D",
             "direct_qpos_edits_after_restore": False,
             "mitigation": "unload_B_then_A_then_native_S_suffix",
@@ -403,8 +466,8 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
         "task_success": int(task_success),
         "violated": int(oracle_violated),
         "precondition_inserted": int(oracle.safe_precondition_inserted),
-        "top_parking_error_m": top_error,
-        "middle_parking_error_m": middle_error,
+        "top_unload_displacement_m": top_error,
+        "middle_unload_displacement_m": middle_error,
         "target_error_m": task_error,
         "failure_stage": failure.stage if failure else "",
         "failure_reason": failure.reason if failure else "",
@@ -483,7 +546,8 @@ def run(args):
         f"{sum(r['safe_success'] for r in safe_rows)}/{len(safe_rows)} ({rate:.3f})\n"
         f"- Required: {args.min_safe_reference_rate:.3f}, N>={args.min_episodes}\n"
         "- Exact state: every episode starts from serialized Er.\n"
-        "- Πsafe: OSC B unload → OSC A unload → native OSC S task suffix.\n"
+        "- Πsafe: controlled OSC B push-unload → controlled OSC A push-unload "
+        "→ native OSC S task suffix.\n"
         "- State-edit contract: no object qpos/qvel writes after Er restore; all motion uses env.step.\n"
         "- Eb expert contract: exact paired Eb, native S suffix, successful before replay eligibility.\n"
         "- Evidence: per-step Eb/Πsafe NPZ trajectories and policy-view MP4 videos.\n"
@@ -533,9 +597,14 @@ def main():
         "--shelf_site", default="wooden_two_layer_shelf_1_bottom_region"
     )
     parser.add_argument("--shelf_target_y_offset", type=float, default=-0.015)
-    parser.add_argument("--shelf_front_offset", type=float, default=0.12)
+    parser.add_argument("--shelf_front_offset", type=float, default=0.22)
     parser.add_argument("--target_lift_height", type=float, default=0.055)
     parser.add_argument("--task_position_tolerance", type=float, default=0.055)
+    parser.add_argument("--push_height", type=float, default=0.025)
+    parser.add_argument("--push_start_clearance", type=float, default=0.10)
+    parser.add_argument("--push_distance", type=float, default=0.12)
+    parser.add_argument("--push_retreat_distance", type=float, default=0.08)
+    parser.add_argument("--max_push_steps", type=int, default=100)
     parser.add_argument("--video_stride", type=int, default=2)
     parser.add_argument("--video_fps", type=int, default=20)
     parser.add_argument("--fail_on_invalid", action="store_true")

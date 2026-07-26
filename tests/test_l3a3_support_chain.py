@@ -121,10 +121,10 @@ def test_safe_reference_provides_executable_b_then_a_osc_and_video():
     text = path.read_text()
     reset_at = text.index("obs = env.set_init_state(er_state)")
     tail = text[reset_at:]
-    assert text.index("_relocate(\n            io, TOP_BODY") < text.index(
-        "_relocate(\n            io, MIDDLE_BODY"
+    assert text.index("_push_unload(\n            io,\n            TOP_BODY") < text.index(
+        "_push_unload(\n            io,\n            MIDDLE_BODY"
     )
-    middle_call = text.index("_relocate(\n            io, MIDDLE_BODY")
+    middle_call = text.index("_push_unload(\n            io,\n            MIDDLE_BODY")
     assert middle_call < text.index("_place_target_under_shelf(", middle_call)
     assert "native_S_suffix_only" in text
     assert '"initial_state_sha256": _state_hash(eb_state)' in text
