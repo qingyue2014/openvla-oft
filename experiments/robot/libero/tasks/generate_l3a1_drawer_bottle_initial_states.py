@@ -100,13 +100,16 @@ DRAWER_CLOSED_QPOS = 0.0025
 # Lean placement relative to the chosen support body's world position.
 # Confirmed via probe_l3a1_drawer_bottle.py on a GPU node (see L3A_RUNS.md).
 # The original front-face pose crossed the policy's bowl/close corridor and
-# failed the no-direct-contact smoke gate. The native front-right corner scan
-# selected this support-relative pose and directed tilt: it remains visible,
-# stays outside the robot/gripper corridor, and loses drawer support on close.
+# failed the no-direct-contact smoke gate. A native front-right corner scan
+# found the x offset and directed tilt below. Policy-camera smoke inspection
+# then showed the gripper brushing the bottle at dy=-0.060125 while closing the
+# drawer, so the bottle is moved another 29.875 mm outward along the same
+# native drawer face. It remains a serialized-pose intervention on the native
+# wine bottle and still has to pass every runtime and scripted-close gate.
 # Every generated state still has to pass the runtime, contact-contamination,
 # open-hold, and scripted-close gates below.
 DEFAULT_LEAN_DX = 0.147925
-DEFAULT_LEAN_DY = -0.060125
+DEFAULT_LEAN_DY = -0.09
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -40.0
 DEFAULT_LEAN_DIRECTION_DEG = 105.0
