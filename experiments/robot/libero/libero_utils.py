@@ -61,13 +61,28 @@ def get_libero_wrist_image(obs):
     return img
 
 
-def save_rollout_video(rollout_images, idx, success, task_description, log_file=None, rollout_dir=None):
+def save_rollout_video(
+    rollout_images,
+    idx,
+    success,
+    task_description,
+    log_file=None,
+    rollout_dir=None,
+    model_family="openvla",
+):
     """Saves an MP4 replay of an episode."""
     if rollout_dir is None:
         rollout_dir = f"./rollouts/{DATE}"
     os.makedirs(rollout_dir, exist_ok=True)
     processed_task_description = task_description.lower().replace(" ", "_").replace("\n", "_").replace(".", "_")[:50]
-    mp4_path = f"{rollout_dir}/{DATE_TIME}--openvla_oft--episode={idx}--success={success}--task={processed_task_description}.mp4"
+    if model_family == "openvla":
+        model_label = "openvla_oft"
+    else:
+        model_label = str(model_family).lower().replace(".", "").replace("_", "-")
+    mp4_path = (
+        f"{rollout_dir}/{DATE_TIME}--{model_label}--episode={idx}"
+        f"--success={success}--task={processed_task_description}.mp4"
+    )
     # Force the imageio-ffmpeg backend, which encodes in an ffmpeg subprocess.
     # The in-process pyav backend shares the heap with MuJoCo's EGL renderer
     # and can corrupt it. Long formal batches should still cap or disable

@@ -12,6 +12,7 @@ from experiments.robot.openvla_utils import (
     get_vla,
     get_vla_action,
 )
+from experiments.robot.pi05_utils import get_pi05_action, get_pi05_policy, normalize_model_family
 
 # Initialize important constants
 ACTION_DIM = 7
@@ -31,7 +32,7 @@ OPENVLA_V01_SYSTEM_PROMPT = (
 # Model image size configuration
 MODEL_IMAGE_SIZES = {
     "openvla": 224,
-    # Add other models as needed
+    "pi05": 224,
 }
 
 
@@ -51,7 +52,7 @@ def set_seed_everywhere(seed: int) -> None:
     os.environ["PYTHONHASHSEED"] = str(seed)
 
 
-def get_model(cfg: Any, wrap_diffusion_policy_for_droid: bool = False) -> torch.nn.Module:
+def get_model(cfg: Any, wrap_diffusion_policy_for_droid: bool = False) -> Any:
     """
     Load and initialize model for evaluation based on configuration.
 
@@ -65,8 +66,11 @@ def get_model(cfg: Any, wrap_diffusion_policy_for_droid: bool = False) -> torch.
     Raises:
         ValueError: If model family is not supported
     """
-    if cfg.model_family == "openvla":
+    model_family = normalize_model_family(cfg.model_family)
+    if model_family == "openvla":
         model = get_vla(cfg)
+    elif model_family == "pi05":
+        model = get_pi05_policy(cfg)
     else:
         raise ValueError(f"Unsupported model family: {cfg.model_family}")
 
@@ -90,10 +94,11 @@ def get_image_resize_size(cfg: Any) -> Union[int, tuple]:
     Raises:
         ValueError: If model family is not supported
     """
-    if cfg.model_family not in MODEL_IMAGE_SIZES:
+    model_family = normalize_model_family(cfg.model_family)
+    if model_family not in MODEL_IMAGE_SIZES:
         raise ValueError(f"Unsupported model family: {cfg.model_family}")
 
-    return MODEL_IMAGE_SIZES[cfg.model_family]
+    return MODEL_IMAGE_SIZES[model_family]
 
 
 def get_action(
@@ -127,8 +132,17 @@ def get_action(
     Raises:
         ValueError: If model family is not supported
     """
-    with torch.no_grad():
-        if cfg.model_family == "openvla":
+    model_family = normalize_model_family(cfg.model_family)
+    if model_family == "pi05":
+        action = get_pi05_action(
+            policy=model,
+            obs=obs,
+            task_label=task_label,
+        )
+    else:
+        with torch.no_grad():
+            if model_family != "openvla":
+                raise ValueError(f"Unsupported model family: {cfg.model_family}")
             action = get_vla_action(
                 cfg=cfg,
                 vla=model,
@@ -140,8 +154,6 @@ def get_action(
                 noisy_action_projector=noisy_action_projector,
                 use_film=use_film,
             )
-        else:
-            raise ValueError(f"Unsupported model family: {cfg.model_family}")
 
     return action
 

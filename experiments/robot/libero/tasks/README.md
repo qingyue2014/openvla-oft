@@ -12,6 +12,10 @@ otherwise.
 The runners assume a working OpenVLA-OFT / LIBERO environment with MuJoCo EGL
 rendering available on the evaluation machine.
 
+The evaluator also supports the official OpenPI `pi05_libero` policy through a
+separate policy server. Setup and commands are documented in
+[`../PI05_EVAL.md`](../PI05_EVAL.md).
+
 Most scripts set these automatically:
 
 ```bash
