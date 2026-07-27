@@ -17,6 +17,8 @@ COSMOS_LIBERO_REPO_ID = "nvidia/Cosmos-Policy-LIBERO-Predict2-2B"
 COSMOS_DEFAULT_CHECKPOINT = Path("/project/trllmout/models/Cosmos-Policy-LIBERO-Predict2-2B")
 COSMOS_ACTION_DIM = 7
 COSMOS_CHUNK_SIZE = 16
+COSMOS_CONFIG_MODULE_PATH = "cosmos_policy/config/config.py"
+COSMOS_CHECKPOINT_FILENAME = "Cosmos-Policy-LIBERO-Predict2-2B.pt"
 
 
 def is_cosmos_model_family(model_family: str) -> bool:
@@ -115,7 +117,7 @@ class CosmosPolicy:
             )
 
         required_files = (
-            "Cosmos-Policy-LIBERO-Predict2-2B.pt",
+            COSMOS_CHECKPOINT_FILENAME,
             "config.json",
             "libero_dataset_statistics.json",
             "libero_t5_embeddings.pkl",
@@ -124,11 +126,13 @@ class CosmosPolicy:
         if missing:
             raise FileNotFoundError(f"Incomplete Cosmos Policy checkpoint at {checkpoint}; missing: {missing}")
 
-        package_root = resolve_cosmos_package_root(cosmos_policy)
+        # Resolve the namespace package to validate this exact source install,
+        # but pass the module-style path expected by Cosmos' config loader.
+        resolve_cosmos_package_root(cosmos_policy)
         cosmos_cfg = PolicyEvalConfig(
             config="cosmos_predict2_2b_480p_libero__inference_only",
-            ckpt_path=str(checkpoint),
-            config_file=str(package_root / "config" / "config.py"),
+            ckpt_path=str(checkpoint / COSMOS_CHECKPOINT_FILENAME),
+            config_file=COSMOS_CONFIG_MODULE_PATH,
             dataset_stats_path=str(checkpoint / "libero_dataset_statistics.json"),
             t5_text_embeddings_path=str(checkpoint / "libero_t5_embeddings.pkl"),
             use_wrist_image=True,
