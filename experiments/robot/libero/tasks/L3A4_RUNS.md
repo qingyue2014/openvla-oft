@@ -561,3 +561,59 @@ candidate passed the physical hold, no candidate RGB or segmentation image
 was exported. Release, dynamic, VLA, and HDF5 execution were all false. This
 candidate hard-stops at the static gate and must not be reported as a valid
 L3-A4 scene.
+
+### Exact-native LIBERO-Goal task-4 support-chain candidate
+
+The single isolated Superpod job `490277`, source commit `47e31d7`, ran a
+combined contract, frozen static, and first-frame-only audit on official
+zero-based `libero_goal` task 4. The policy prompt came directly from
+`task.language` and exactly matched `put the bowl on top of the cabinet`.
+The untouched official BDDL SHA-256 was
+`2ffba859a154f50c3c99ffb3420743fa5aa65c70bf7d4cd26f5bc81d07be5713`
+and the goal remained
+`(On akita_black_bowl_1 wooden_cabinet_1_top_side)`. The BDDL's stale
+internal `drawer` language string was recorded only as a non-policy field.
+No L1-B4 BDDL, gate asset, or serialized state was used.
+
+The exact policy-entry base used evaluator seed 0, official native state 0,
+and ten OpenVLA dummy actions exactly once. Its SHA-256 was
+`93f35fe43d2a955274004a71332d41b83fb25508472f4f2b307f5b3bc80bfe9e`;
+future evaluator wait is zero. The suite-specific checkpoint binding is
+`moojink/openvla-7b-oft-finetuned-libero-goal` with
+`action_head--50000_checkpoint.pt`; no model was loaded and no inference ran.
+The historical L1-B4 49/50 result is recorded only as a custom-benign
+competence prior.
+
+Verdict:
+**PASS_L3A4_GOAL_TASK4_EXACT_NATIVE_STATIC_PENDING_MANUAL_RGB** from the
+automated job, followed by **PASS_MANUAL_POLICY_RGB_REVIEW** on the exact
+selected wait-0 frame.
+
+- frozen grid: 36 points; 15 passed the 240-step settle, independent 80-step
+  hold, side-grasp, and cabinet-reachability gates;
+- selected point: direction `+y`, centered A, 2 mm A/B-path clearance;
+- only A=`cream_cheese_1_main` and B=`wine_bottle_1_main` free-joint qpos
+  bytes changed; S, plate, fixtures, robot, and all other state bytes matched
+  the evaluator base;
+- S/A and B/table contact occupancy were both 100% in both gates; peak S/A
+  normal force was 18.135 N;
+- A contacted neither table, fixture, plate, nor B; initial A/B and S/B were
+  false and every forbidden contact remained false;
+- maximum A drift/tilt was 0.126 mm/0.116 degrees in the 240-step gate and
+  0.0524 mm/0.0504 degrees in the independent hold;
+- the official goal was initially false and never became true;
+- two S side-grasp channels passed; the native S-to-cabinet-goal distance was
+  0.372 m and the goal-approach clearance proxy was 0.169 m;
+- native group-0/group-1 geometry passed separately for S, A, B, plate,
+  cabinet, stove, and rack;
+- exact 256x256 policy-camera segmentation pixels were S/A/B/plate/cabinet =
+  472/233/396/1347/9285.
+
+Manual inspection of the exact post-restore policy frame and masks confirmed
+that the black target bowl remains recognizable around the cream-cheese
+carton, the carton is visible as a distinct supported object, the upright
+wine bottle is clearly visible and initially separate, the cabinet and its
+top-side placement surface are in frame, and none is hidden by the robot or
+image boundary. The scene is therefore valid only for the authorized
+contract/static/first-frame milestone. Release, dynamics, VLA, HDF5, and
+formal evaluation remain unrun and unauthorized.
