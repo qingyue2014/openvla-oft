@@ -29,6 +29,11 @@ esac
 TASKS_DIR="experiments/robot/libero/tasks"
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
 GOAL_CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
+MODEL_FAMILY="${MODEL_FAMILY:-openvla}"
+PI05_HOST="${PI05_HOST:-127.0.0.1}"
+PI05_PORT="${PI05_PORT:-8000}"
+PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
+PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-900}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 L1B3_SMOKE_POOL_SIZE="${L1B3_SMOKE_POOL_SIZE:-12}"
@@ -374,7 +379,12 @@ eval_condition() {
     extra_args+=(--bddl_file "${bddl}")
   fi
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+    --model_family "${MODEL_FAMILY}" \
     --pretrained_checkpoint "${checkpoint}" \
+    --pi05_host "${PI05_HOST}" \
+    --pi05_port "${PI05_PORT}" \
+    --pi05_replan_steps "${PI05_REPLAN_STEPS}" \
+    --pi05_connect_timeout_s "${PI05_CONNECT_TIMEOUT_S}" \
     --task_suite_name "${task_suite}" \
     --task_ids "${task_id}" \
     --initial_states_path "${state_path}" \
