@@ -286,6 +286,74 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     # Er_occ poses are trajectory-conditioned like l1b7 but must additionally
     # pass the cabinet-shadow occlusion band; Eb/Er_vis/Ec are shared with the
     # l1b7 runs, so ("l1b7", "formal") must complete first in the same tree.
+    # L1-A2R (v5) on the validated l1b6 held-object carrier. Requires
+    # ("l1b6","formal") in the same worktree first: Eb/Er_vis/Ec come from
+    # those runs, and this family only adds the least-visible Er_occ arm.
+    ("l1a2rh", "prepare"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAFE_REF_VIDEO_DIR=experiments/logs/l1a2r_held_safe_reference_videos",
+            "bash", "experiments/robot/libero/tasks/run_l1b_swept.sh", "l1a2r_occluded_held", "prepare",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a2r_occluded_held_scene_check.md",
+            "experiments/logs/l1a2r_occluded_held_safe_reference.md",
+            "experiments/logs/l1a2r_occluded_held_safe_reference.csv",
+            "experiments/logs/l1a2r_occluded_held_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1a2r_occluded_held_trajectory_conditioned_calibration.csv",
+            "experiments/logs/l1a2r_occluded_held_native_replay.md",
+            "experiments/robot/libero/tasks/l1a2r_occluded_held_pairing.json",
+            "experiments/robot/libero/tasks/l1b_swept_preview/l1a2r_occluded_held",
+        ),
+    ),
+    ("l1a2rh", "smoke"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "SAFE_REF_VIDEO_DIR=experiments/logs/l1a2r_held_safe_reference_videos",
+            "bash", "experiments/robot/libero/tasks/run_l1b_swept.sh", "l1a2r_occluded_held", "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a2r_occluded_held_scene_check.md",
+            "experiments/logs/l1a2r_occluded_held_safe_reference.md",
+            "experiments/logs/l1a2r_occluded_held_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1a2r_occluded_held_native_replay.md",
+            "rollouts/libero_goal/L1-A2R-goal-cream-cheese-occluded-wine-bottle-knockdown-er",
+        ),
+    ),
+    ("l1a2rh", "formal"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIOLATION_VIDEOS=10",
+            "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10",
+            "bash", "experiments/robot/libero/tasks/run_l1b_swept.sh", "l1a2r_occluded_held", "all",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a2r_occluded_held_scene_check.md",
+            "experiments/logs/l1a2r_occluded_held_safe_reference.md",
+            "experiments/logs/l1a2r_occluded_held_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1a2r_occluded_held_trajectory_conditioned_calibration.csv",
+            "experiments/logs/l1a2r_occluded_held_native_replay.md",
+            "experiments/logs/l1a2r_occluded_held_er_rollout_physics.md",
+            "experiments/robot/libero/tasks/l1a2r_occluded_held_pairing.json",
+            "rollouts/libero_goal/L1-A2R-goal-cream-cheese-occluded-wine-bottle-knockdown-er/trajectories",
+        ),
+    ),
+    ("l1a2rh", "attribution"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l1b_swept.sh", "l1a2r_occluded_held", "attribution"),
+        artifacts=(
+            "experiments/logs/l1a2r_held_attribution.md",
+            "experiments/logs/l1a2r_held_visibility_attribution.md",
+        ),
+    ),
     ("l1a2r", "prepare"): PhaseSpec(
         command=(
             "env",
@@ -364,6 +432,39 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l1a2r_attribution.md",
             "experiments/logs/l1a2r_visibility_attribution.md",
+        ),
+    ),
+    # L3-B1 capability probe. This gates the whole L3-B1 scene: if the policy
+    # cannot move the bottle out of the drawer when the prompt explicitly tells
+    # it to, a failure in the risk condition cannot be attributed to missing
+    # safety cognition, and the scene must be redesigned before anything else
+    # is generated. No risk phase is registered until this one passes.
+    ("l3b1", "bodies"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l3b1_capability_probe.sh", "bodies"),
+        artifacts=(),
+    ),
+    ("l3b1", "check"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l3b1_capability_probe.sh", "check"),
+        count_env="NUM_STATES",
+        artifacts=("experiments/robot/libero/tasks/l3b1_capability_states.hdf5",),
+    ),
+    ("l3b1", "preview"): PhaseSpec(
+        command=("bash", "experiments/robot/libero/tasks/run_l3b1_capability_probe.sh", "preview"),
+        artifacts=("experiments/robot/libero/tasks/l3b1_preview",),
+    ),
+    ("l3b1", "probe"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3b1_capability_probe.sh",
+            "probe",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l3b1_preview",
+            "rollouts/libero_90/L3-B1-bottle-in-drawer-capability",
         ),
     ),
     ("l3a1", "check"): PhaseSpec(

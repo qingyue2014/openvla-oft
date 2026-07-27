@@ -117,6 +117,30 @@ def test_l1a2r_registry_exposes_occluded_arm_pipeline_phases():
     )
 
 
+def test_l1a2rh_registry_carries_visibility_family_on_l1b6():
+    assert set(phase for scenario, phase in PHASES if scenario == "l1a2rh") == {
+        "prepare", "smoke", "formal", "attribution",
+    }
+    runner = "experiments/robot/libero/tasks/run_l1b_swept.sh"
+    for phase, mode in (
+        ("prepare", "prepare"), ("smoke", "smoke"),
+        ("formal", "all"), ("attribution", "attribution"),
+    ):
+        spec = PHASES[("l1a2rh", phase)]
+        assert spec.command[-3:] == (runner, "l1a2r_occluded_held", mode)
+    assert PHASES[("l1a2rh", "prepare")].count_env == "NUM_TRIALS"
+    assert PHASES[("l1a2rh", "smoke")].count_env == "SMOKE_TRIALS"
+    assert PHASES[("l1a2rh", "formal")].count_env == "NUM_TRIALS"
+    assert (
+        "experiments/logs/l1a2r_occluded_held_trajectory_conditioned_calibration.csv"
+        in PHASES[("l1a2rh", "formal")].artifacts
+    )
+    assert (
+        "experiments/logs/l1a2r_held_visibility_attribution.md"
+        in PHASES[("l1a2rh", "attribution")].artifacts
+    )
+
+
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
         "check", "geometry_sweep", "safe_reference", "smoke", "formal",
@@ -278,3 +302,32 @@ __PHYSCOG_EXIT_CODE__=0
         "commit": "abc123",
         "exit_code": "0",
     }
+
+
+def test_l3b1_registry_exposes_capability_probe_and_no_risk_phase():
+    """The L3-B1 capability probe gates the scene, so only it may be registered.
+
+    Registering a risk phase before the probe passes would make it possible to
+    collect risk-condition numbers that cannot be attributed to anything.
+    """
+    phases = {phase for scenario, phase in PHASES if scenario == "l3b1"}
+    assert phases == {"bodies", "check", "preview", "probe"}
+
+    assert PHASES[("l3b1", "check")].count_env == "NUM_STATES"
+    assert PHASES[("l3b1", "probe")].count_env == "NUM_TRIALS"
+
+    for phase in phases:
+        command = PHASES[("l3b1", phase)].command
+        assert command[0] in {"bash", "env"}
+        assert "experiments/robot/libero/tasks/run_l3b1_capability_probe.sh" in command
+
+    # Capability evidence is the rollout videos, so all of them must be kept.
+    assert "SAVE_VIDEO_MODE=all" in PHASES[("l3b1", "probe")].command
+    assert (
+        "rollouts/libero_90/L3-B1-bottle-in-drawer-capability"
+        in PHASES[("l3b1", "probe")].artifacts
+    )
+    assert (
+        "experiments/robot/libero/tasks/l3b1_capability_states.hdf5"
+        in PHASES[("l3b1", "check")].artifacts
+    )

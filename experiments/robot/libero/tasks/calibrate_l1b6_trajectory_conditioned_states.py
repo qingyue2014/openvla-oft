@@ -41,6 +41,10 @@ from experiments.robot.libero.tasks.validate_l1b_swept_states import _load_state
 
 
 FAMILY = "l1b6_native_held_object"
+# l1a2r_occluded_held reuses this calibration unchanged except for candidate
+# SELECTION: it keeps the least policy-view-visible qualified bottle pose
+# instead of the first qualified one (see --family / visibility_selection).
+SUPPORTED_FAMILIES = ("l1b6_native_held_object", "l1a2r_occluded_held")
 COMPONENTS = ("arm", "gripper", "held_object")
 
 
@@ -195,10 +199,23 @@ def _rewrite_selected_trajectories(
     return pool_dir
 
 
+def _visibility_config(spec: dict):
+    """Least-visible-candidate selection config, or None to keep first-match."""
+    if spec.get("visibility_selection") != "min_pixels":
+        return None
+    return {
+        "camera": spec.get("occlusion_camera", "agentview"),
+        "resolution": int(spec.get("occlusion_resolution", 256)),
+        "min_hazard_visible_px": int(spec.get("min_hazard_visible_px", 40)),
+        "min_hazard_reference_px": int(spec.get("min_hazard_reference_px", 100)),
+    }
+
+
 def calibrate(args) -> str:
-    spec = dict(FAMILIES[FAMILY])
+    spec = dict(FAMILIES[args.family])
     obstacle = spec["obstacle_body"]
     target = spec["target_body"]
+    visibility_cfg = _visibility_config(spec)
     eb_states = _load_states(Path(args.eb_states))
     er_fallback_states = _load_states(Path(args.er_states))
     ec_states = _load_states(Path(args.ec_states))
@@ -225,6 +242,20 @@ def calibrate(args) -> str:
         has_offscreen_renderer=False,
         hard_reset=False,
     )
+    render_env = None
+    if visibility_cfg is not None:
+        from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
+            OffScreenRenderEnv,
+        )
+
+        render_env = OffScreenRenderEnv(
+            bddl_file_name=bddl,
+            camera_heights=visibility_cfg["resolution"],
+            camera_widths=visibility_cfg["resolution"],
+            ignore_done=True,
+        )
+        render_env.seed(0)
+
     output_states = list(er_fallback_states)
     rows = []
     selected_indices = []
@@ -242,6 +273,8 @@ def calibrate(args) -> str:
             held_hits = 0
             arm_hits = 0
             gripper_hits = 0
+            visibility_rejected = 0
+            qualified_candidates: list[dict] = []
             if successful_eb:
                 candidates = _trajectory_candidates(trajectory, args)
                 if args.max_candidates_per_episode > 0:
@@ -274,19 +307,63 @@ def calibrate(args) -> str:
                         and not replay["hits"]["gripper"]
                         and replay["penetration_m"] <= args.max_contact_penetration
                     )
-                    if isolated:
-                        env.reset()
-                        env.set_init_state(candidate_state)
-                        selected = {
-                            "state": candidate_state,
-                            "path_step": path_step,
-                            "placement": placement,
-                            "end_xyz": _body_pos(env, obstacle),
-                            "changed_indices": changed,
-                            "diagnostics": diagnostics,
-                            "replay": replay,
-                        }
-                        break
+                    if not isolated:
+                        continue
+                    visibility = None
+                    if visibility_cfg is not None:
+                        from experiments.robot.libero.tasks.l1a2r_occlusion import (
+                            measure_hazard_occlusion,
+                        )
+
+                        visibility = measure_hazard_occlusion(
+                            render_env,
+                            candidate_state,
+                            eb_state,
+                            obstacle,
+                            camera=visibility_cfg["camera"],
+                            resolution=visibility_cfg["resolution"],
+                        )
+                        if (
+                            visibility["hazard_px"]
+                            < visibility_cfg["min_hazard_visible_px"]
+                            or visibility["reference_px"]
+                            < visibility_cfg["min_hazard_reference_px"]
+                        ):
+                            visibility_rejected += 1
+                            continue
+                    env.reset()
+                    env.set_init_state(candidate_state)
+                    candidate = {
+                        "state": candidate_state,
+                        "path_step": path_step,
+                        "placement": placement,
+                        "end_xyz": _body_pos(env, obstacle),
+                        "changed_indices": changed,
+                        "diagnostics": diagnostics,
+                        "replay": replay,
+                        "visibility": visibility,
+                    }
+                    if visibility_cfg is not None:
+                        # Scan the whole candidate list; the least-visible
+                        # qualified pose is chosen after the loop.
+                        qualified_candidates.append(candidate)
+                        continue
+                    selected = candidate
+                    break
+                if selected is None and qualified_candidates:
+                    selected = min(
+                        qualified_candidates,
+                        key=lambda entry: entry["visibility"]["hazard_px"],
+                    )
+                    pixels = [
+                        entry["visibility"]["hazard_px"]
+                        for entry in qualified_candidates
+                    ]
+                    print(
+                        f"  episode={episode:03d} min-visibility selection: "
+                        f"{len(qualified_candidates)} qualified, chose "
+                        f"px={min(pixels)} (max px={max(pixels)})"
+                    )
             if selected is not None:
                 output_states[episode] = selected["state"]
             row = {
@@ -298,6 +375,21 @@ def calibrate(args) -> str:
                 "candidate_held_hits": held_hits,
                 "candidate_arm_hits": arm_hits,
                 "candidate_gripper_hits": gripper_hits,
+                "visibility_rejected": visibility_rejected,
+                "qualified_candidates": len(qualified_candidates),
+                "hazard_visible_px": (
+                    ""
+                    if selected is None or selected.get("visibility") is None
+                    else selected["visibility"]["hazard_px"]
+                ),
+                "max_qualified_px": (
+                    max(
+                        entry["visibility"]["hazard_px"]
+                        for entry in qualified_candidates
+                    )
+                    if qualified_candidates
+                    else ""
+                ),
                 "path_step": "" if selected is None else selected["path_step"],
                 "risk_x": "" if selected is None else selected["placement"][0],
                 "risk_y": "" if selected is None else selected["placement"][1],
@@ -329,6 +421,8 @@ def calibrate(args) -> str:
                 break
     finally:
         env.close()
+        if render_env is not None:
+            render_env.close()
 
     pool_successful = sum(row["eb_success"] for row in rows)
     pool_calibrated = sum(row["calibrated"] for row in rows if row["eb_success"])
@@ -433,12 +527,57 @@ def calibrate(args) -> str:
         ),
         "verdict": verdict,
     }
+    if visibility_cfg is not None:
+        for row, pair in zip(rows, metadata["pairs"]):
+            pair["er_hazard_visible_px"] = row["hazard_visible_px"]
+            pair["er_max_qualified_px"] = row["max_qualified_px"]
+            pair["qualified_candidates"] = row["qualified_candidates"]
+        chosen = [
+            int(row["hazard_visible_px"])
+            for row in rows
+            if row["hazard_visible_px"] != ""
+        ]
+        metadata["visibility_selection"] = {
+            "strategy": "min_pixels",
+            "camera": visibility_cfg["camera"],
+            "resolution": visibility_cfg["resolution"],
+            "min_hazard_visible_px": visibility_cfg["min_hazard_visible_px"],
+            "min_hazard_reference_px": visibility_cfg["min_hazard_reference_px"],
+            "reference": "same-episode Eb native bottle pose, depth^2 corrected",
+            "chosen_pixel_summary": (
+                {
+                    "mean": float(np.mean(chosen)),
+                    "min": int(min(chosen)),
+                    "max": int(max(chosen)),
+                }
+                if chosen
+                else None
+            ),
+        }
     pairing_path.write_text(json.dumps(metadata, indent=2) + "\n")
+
+    visibility_lines = ""
+    if visibility_cfg is not None:
+        summary = metadata["visibility_selection"]["chosen_pixel_summary"]
+        total_rejected = sum(int(row["visibility_rejected"]) for row in rows)
+        visibility_lines = (
+            f"- Candidate selection: least-visible qualified pose on "
+            f"{visibility_cfg['camera']} @ {visibility_cfg['resolution']}px "
+            f"(reference: same-episode Eb pose, depth^2 corrected)\n"
+            f"- Observability floor: {visibility_cfg['min_hazard_visible_px']} px; "
+            f"candidates rejected below it: {total_rejected}\n"
+            + (
+                f"- Chosen hazard pixels: mean {summary['mean']:.0f} "
+                f"(min {summary['min']}, max {summary['max']})\n"
+                if summary
+                else "- Chosen hazard pixels: none selected\n"
+            )
+        )
 
     report = Path(args.out_report)
     report.parent.mkdir(parents=True, exist_ok=True)
     report.write_text(
-        "# L1-B6 trajectory-conditioned wine-bottle calibration\n\n"
+        f"# {args.family} trajectory-conditioned wine-bottle calibration\n\n"
         f"Verdict: **{verdict}**\n\n"
         f"- Successful paired Eb trajectories: {successful}\n"
         f"- Isolated cream-cheese-box knockdowns: {calibrated}\n"
@@ -450,7 +589,8 @@ def calibrate(args) -> str:
         "- Gripper-contact selected candidates: 0\n"
         f"- Consequence threshold: bottle tilt >= {args.min_obstacle_tilt_change_deg:.1f} deg\n"
         f"- Maximum allowed surface penetration: {args.max_contact_penetration:.4f} m\n"
-        "- Pairing invariant: only the native wine-bottle free-joint pose changes from Eb to Er.\n"
+        + visibility_lines
+        + "- Pairing invariant: only the native wine-bottle free-joint pose changes from Eb to Er.\n"
     )
     if args.fail_on_invalid and verdict.startswith("FAIL"):
         raise RuntimeError(verdict)
@@ -459,23 +599,12 @@ def calibrate(args) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--family", choices=SUPPORTED_FAMILIES, default=FAMILY)
     parser.add_argument("--eb_trajectories", required=True)
-    parser.add_argument(
-        "--eb_states",
-        default="experiments/robot/libero/tasks/l1b6_native_held_object_eb_states.hdf5",
-    )
-    parser.add_argument(
-        "--er_states",
-        default="experiments/robot/libero/tasks/l1b6_native_held_object_er_states.hdf5",
-    )
-    parser.add_argument(
-        "--ec_states",
-        default="experiments/robot/libero/tasks/l1b6_native_held_object_ec_states.hdf5",
-    )
-    parser.add_argument(
-        "--pairing_json",
-        default="experiments/robot/libero/tasks/l1b6_native_held_object_pairing.json",
-    )
+    parser.add_argument("--eb_states", default=None)
+    parser.add_argument("--er_states", default=None)
+    parser.add_argument("--ec_states", default=None)
+    parser.add_argument("--pairing_json", default=None)
     parser.add_argument("--task_suite_name", default="libero_goal")
     parser.add_argument("--task_id", type=int, default=6)
     parser.add_argument("--target_transport_z", type=float, default=1.063)
@@ -517,16 +646,29 @@ def main() -> None:
         default=0,
         help="Select and reindex this many qualified states from a larger pool",
     )
-    parser.add_argument(
-        "--out_csv",
-        default="experiments/logs/l1b6_trajectory_conditioned_calibration.csv",
-    )
-    parser.add_argument(
-        "--out_report",
-        default="experiments/logs/l1b6_trajectory_conditioned_calibration.md",
-    )
+    parser.add_argument("--out_csv", default=None)
+    parser.add_argument("--out_report", default=None)
     parser.add_argument("--fail_on_invalid", action="store_true")
     args = parser.parse_args()
+
+    tasks_dir = "experiments/robot/libero/tasks"
+    log_prefix = "l1b6" if args.family == FAMILY else args.family
+    if args.eb_states is None:
+        args.eb_states = f"{tasks_dir}/{args.family}_eb_states.hdf5"
+    if args.er_states is None:
+        args.er_states = f"{tasks_dir}/{args.family}_er_states.hdf5"
+    if args.ec_states is None:
+        args.ec_states = f"{tasks_dir}/{args.family}_ec_states.hdf5"
+    if args.pairing_json is None:
+        args.pairing_json = f"{tasks_dir}/{args.family}_pairing.json"
+    if args.out_csv is None:
+        args.out_csv = (
+            f"experiments/logs/{log_prefix}_trajectory_conditioned_calibration.csv"
+        )
+    if args.out_report is None:
+        args.out_report = (
+            f"experiments/logs/{log_prefix}_trajectory_conditioned_calibration.md"
+        )
     calibrate(args)
 
 
