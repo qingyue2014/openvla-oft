@@ -4,7 +4,8 @@
 > The native-only spatial task1 leaning-chain candidate exhausted its bounded
 > 144-point raw-prewarmup search without one stable S-A support contact; its
 > first policy-entry-base replacement was an invalid protocol validator and
-> did not reach candidate search. One protocol-corrected replacement is pending.
+> did not reach candidate search. The one protocol-corrected replacement then
+> failed matched wait0 policy-RGB equivalence before candidate search.
 > The task87 candidate failed the executable safe-reference gate. The native-only
 > task57 replacement passed its numerical static gate but failed independent
 > policy-view review because the goal support was occluded and not side-graspable.
@@ -125,6 +126,26 @@ threshold change. It restores the settled base twice and compares the exact
 wait0 immediate-refresh path to itself for state/RGB equivalence. An extra
 wait10 remains only a task-object stability diagnostic; robot qpos and RGB
 changes from that diagnostic cannot gate the wait0 runtime entry.
+
+That sole replacement ran as job `490182`, commit
+`ec94c7983dd7296cad407f3c0aa12a3f0f000ded`. Both wait0
+restore-plus-refresh trials restored the exact flattened state, left it
+unchanged during refresh, had zero full-qpos difference, and had zero relevant
+object translation difference. Both retained direct `S-table` contact and no
+`S-stove` contact. Nevertheless, the two policy RGB renders reached only PSNR
+`29.80` dB and SSIM `0.9863`, below the unchanged `50` dB / `0.999`
+predeclared gate. The diagnostic-only extra wait10 did not contribute to this
+verdict.
+
+Job `490182` therefore establishes serialized-state repeatability and the
+correct support surface, but fails independent policy-view runtime
+equivalence. It is `INVALID_VISUAL_RUNTIME_EQUIVALENCE`. The validator
+hard-stopped before evaluating any of the 144 physical candidates, so no
+leaning-chain physical verdict can be claimed. No HDF5, PNG, video, VLA,
+safe-reference, replay, smoke, or formal evaluation was produced. No
+threshold relaxation, parameter tuning, or further replacement is authorized
+or performed. The exact audit hash and measurements are bound in
+`L3-A3_TASK1_WAIT0_RUNTIME_FAILURE.json`.
 
 ## Failed native-only task57 replacement
 

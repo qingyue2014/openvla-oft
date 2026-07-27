@@ -1,0 +1,86 @@
+{
+  "status": "INVALID_VISUAL_RUNTIME_EQUIVALENCE",
+  "job": {
+    "job_id": "490182",
+    "commit": "ec94c7983dd7296cad407f3c0aa12a3f0f000ded",
+    "compute_node": "dgx-26",
+    "intentional_fail_closed_exit_code": 1,
+    "runner_classification": "validator_bug",
+    "runner_classification_interpretation": "The broad runner label reflects the validator's intentional nonzero hard stop. The corrected matched-runtime validator completed and failed the predeclared policy-RGB equivalence threshold."
+  },
+  "scope": {
+    "suite": "libero_spatial",
+    "task_id_zero_based": 1,
+    "policy_prompt": "pick up the black bowl next to the ramekin and place it on the plate",
+    "bddl_language_is_policy_prompt": false,
+    "prompt_override": null,
+    "vla_loaded": false,
+    "candidate_grid_unchanged": true,
+    "candidate_grid_limit": 144,
+    "candidate_rows_evaluated": 0
+  },
+  "policy_entry_capture": {
+    "capture_wait_steps": 10,
+    "S_compiled_support_body": "table",
+    "S_table_contact_count": 20,
+    "S_stove_contact_count": 0,
+    "support_surface_gate_passed": true
+  },
+  "repeated_wait0_runtime_entry_equivalence": {
+    "passed": false,
+    "runtime_path": "restore settled state, num_steps_wait=0, immediate refresh",
+    "first_exact_restore": true,
+    "first_refresh_state_unchanged": true,
+    "second_exact_restore": true,
+    "second_refresh_state_unchanged": true,
+    "first_S_table": true,
+    "second_S_table": true,
+    "first_S_stove": false,
+    "second_S_stove": false,
+    "repeat_relevant_object_translation_max_m": 0.0,
+    "repeat_relevant_object_orientation_max_deg": 4.182619578303745e-06,
+    "repeat_qpos_max_abs_drift": 0.0,
+    "repeat_wait0_rgb_similarity": {
+      "psnr_db": 29.802151111050208,
+      "global_ssim": 0.9863224428212565
+    },
+    "predeclared_thresholds": {
+      "relevant_object_translation_max_m": 0.0001,
+      "relevant_object_orientation_max_deg": 0.05,
+      "qpos_max_abs": 0.0001,
+      "rgb_psnr_min_db": 50.0,
+      "rgb_global_ssim_min": 0.999
+    }
+  },
+  "extra_wait10_diagnostic_only": {
+    "gates_wait0_runtime_entry": false,
+    "persistent_S_table": true,
+    "S_stove_seen": false,
+    "relevant_object_translation_max_m": 4.3387517688885053e-13,
+    "relevant_object_orientation_max_deg": 4.182619578303745e-06,
+    "qpos_max_abs_drift_not_gated": 0.006691572896350306,
+    "wait0_vs_postwait_rgb_not_gated": {
+      "psnr_db": 34.56303880955105,
+      "global_ssim": 0.9953756762935156
+    }
+  },
+  "conclusions": {
+    "physical_support_surface": "PASS_S_ON_COMPILED_TABLE_NOT_STOVE",
+    "serialized_state_repeatability": "PASS",
+    "visual_validity": "FAIL_MATCHED_WAIT0_POLICY_RGB_EQUIVALENCE",
+    "leaning_chain_physical_verdict": "NOT_ESTABLISHED_SEARCH_NOT_RUN",
+    "candidate_hdf5": "NOT_EXPORTED",
+    "policy_png_or_video": "NOT_EXPORTED",
+    "vla_status": "NOT_RUN",
+    "safe_reference_status": "NOT_RUN",
+    "action_separation_status": "NOT_RUN",
+    "smoke_status": "NOT_RUN",
+    "formal_status": "NOT_RUN",
+    "replacement_or_parameter_tuning": "NOT_AUTHORIZED_AND_NOT_PERFORMED"
+  },
+  "evidence": {
+    "fetched_policy_entry_base_audit_sha256": "776a17fd603bec4e0370b771d45f77285d524f54b0ba6304e04166b6940f885b",
+    "fetched_policy_entry_base_audit_bytes": 15765,
+    "local_run_ledger": ".physcog-agent/runs/20260727T042907Z-l3a3-task1_leaning_chain_one"
+  }
+}

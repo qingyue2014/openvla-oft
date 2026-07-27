@@ -559,6 +559,36 @@ def test_task1_job490171_is_bound_as_invalid_protocol_not_scene_failure():
     )
 
 
+def test_task1_job490182_hard_stops_on_matched_wait0_rgb_equivalence():
+    failure = json.loads(
+        (TASKS / "L3-A3_TASK1_WAIT0_RUNTIME_FAILURE.json").read_text()
+    )
+    assert failure["status"] == "INVALID_VISUAL_RUNTIME_EQUIVALENCE"
+    assert failure["job"]["job_id"] == "490182"
+    assert failure["scope"]["candidate_rows_evaluated"] == 0
+    runtime = failure["repeated_wait0_runtime_entry_equivalence"]
+    assert runtime["first_exact_restore"] is True
+    assert runtime["second_exact_restore"] is True
+    assert runtime["repeat_qpos_max_abs_drift"] == 0
+    assert runtime["repeat_wait0_rgb_similarity"]["psnr_db"] < (
+        runtime["predeclared_thresholds"]["rgb_psnr_min_db"]
+    )
+    assert runtime["repeat_wait0_rgb_similarity"]["global_ssim"] < (
+        runtime["predeclared_thresholds"]["rgb_global_ssim_min"]
+    )
+    assert failure["extra_wait10_diagnostic_only"][
+        "gates_wait0_runtime_entry"
+    ] is False
+    conclusions = failure["conclusions"]
+    assert conclusions["serialized_state_repeatability"] == "PASS"
+    assert conclusions["leaning_chain_physical_verdict"] == (
+        "NOT_ESTABLISHED_SEARCH_NOT_RUN"
+    )
+    assert conclusions["replacement_or_parameter_tuning"] == (
+        "NOT_AUTHORIZED_AND_NOT_PERFORMED"
+    )
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text
