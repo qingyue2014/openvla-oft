@@ -682,7 +682,10 @@ def build_isolated_sync_script(
     lines = [
         "set -euo pipefail",
         f"cd {shlex.quote(base_cfg.remote_repo)}",
-        shell_join(("git", "fetch", "origin", base_cfg.branch)),
+        (
+            "flock .git/physcog-agent-fetch.lock "
+            + shell_join(("git", "fetch", "origin", base_cfg.branch))
+        ),
         shell_join(("mkdir", "-p", worktree_parent)),
         (
             f"if [ ! -e {shlex.quote(execution_repo + '/.git')} ]; then "
