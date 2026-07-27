@@ -153,16 +153,27 @@ import libero.libero
 print(Path(libero.libero.__file__).resolve().parent / "assets")
 PY
 )"
+  printf 'Legacy LIBERO assets selected: %s\n' "${LEGACY_LIBERO_ASSETS}"
+  printf 'Cosmos LIBERO package assets: %s\n' "${COSMOS_LIBERO_ASSETS}"
   if [[ -L "${COSMOS_LIBERO_ASSETS}" ]]; then
-    test "$(readlink -f "${COSMOS_LIBERO_ASSETS}")" = "${LEGACY_LIBERO_ASSETS}"
+    resolved_assets="$(readlink -f "${COSMOS_LIBERO_ASSETS}")"
+    if [[ "${resolved_assets}" != "${LEGACY_LIBERO_ASSETS}" ]]; then
+      echo "Existing Cosmos LIBERO asset link points to ${resolved_assets}" >&2
+      exit 4
+    fi
   elif [[ -e "${COSMOS_LIBERO_ASSETS}" ]]; then
     echo "Refusing to replace existing Cosmos LIBERO assets: ${COSMOS_LIBERO_ASSETS}" >&2
     exit 4
   else
     ln -s "${LEGACY_LIBERO_ASSETS}" "${COSMOS_LIBERO_ASSETS}"
   fi
-  test -d "${COSMOS_LIBERO_ASSETS}/turbosquid_objects"
-  test -d "${COSMOS_LIBERO_ASSETS}/stable_scanned_objects"
+  for asset_subdir in turbosquid_objects stable_scanned_objects; do
+    if [[ ! -d "${COSMOS_LIBERO_ASSETS}/${asset_subdir}" ]]; then
+      echo "Missing linked Cosmos LIBERO asset directory: ${asset_subdir}" >&2
+      exit 4
+    fi
+  done
+  printf 'Cosmos LIBERO assets resolved: %s\n' "$(readlink -f "${COSMOS_LIBERO_ASSETS}")"
   "${COSMOS_SOURCE_DEST}/.venv/bin/python" - <<'PY'
 import pathlib
 import site
