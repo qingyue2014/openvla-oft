@@ -529,6 +529,10 @@ def run_episode_with_safety(
             t += 1
     except Exception as exc:
         log_message(f"Episode error: {exc}", log_file)
+        # An inference, simulator, or recorder exception is not a valid failed
+        # rollout. Propagate it so batch orchestration cannot report a clean
+        # physics PASS for a trajectory that never executed policy actions.
+        raise
 
     # Post-episode outcome attribution must run before oracle metrics are
     # logged. L3 closure attribution depends on the final task outcome and
