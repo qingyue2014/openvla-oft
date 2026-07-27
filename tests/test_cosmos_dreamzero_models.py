@@ -76,7 +76,7 @@ def test_checkpoint_identities_and_superpod_paths_are_explicit():
     assert DREAMZERO_DEFAULT_CHECKPOINT == Path("/project/trllmout/models/DreamZero-DROID")
 
 
-def test_remote_agent_registers_download_only_model_phases():
+def test_remote_agent_registers_model_setup_phases():
     expected = {
         ("models", "setup_cosmos"): "cosmos",
         ("models", "setup_dreamzero"): "dreamzero",
@@ -89,7 +89,12 @@ def test_remote_agent_registers_download_only_model_phases():
             "experiments/robot/libero/tasks/setup_cosmos_dreamzero_models.sh",
             model,
         )
-        assert spec.artifacts == ()
+        if model == "cosmos":
+            assert spec.artifacts == (
+                "experiments/logs/cosmos_superpod_setup.json",
+            )
+        else:
+            assert spec.artifacts == ()
 
 
 def test_setup_script_pins_official_model_revisions():
