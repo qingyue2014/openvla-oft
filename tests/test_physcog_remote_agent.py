@@ -122,7 +122,8 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
 def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b2") == {
         "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke",
-        "formal", "ec_repair", "ec_video", "pi05_formal", "pi05_smoke",
+        "formal", "ec_repair", "ec_video", "pi05_formal", "pi05_pose_audit",
+        "pi05_smoke",
     }
     assert PHASES[("l1b2", "calibrate")].count_env == "CALIBRATION_TRIALS"
     assert any(
@@ -160,6 +161,11 @@ def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
     assert "formal" in pi05_formal.command
     assert any("pi05-formal_results.json" in value for value in pi05_formal.artifacts)
     assert any("pi05-formal_videos" in value for value in pi05_formal.artifacts)
+    assert PHASES[("l1b2", "pi05_pose_audit")].count_env is None
+    assert any(
+        "retrospective_pose_audit" in value
+        for value in PHASES[("l1b2", "pi05_pose_audit")].artifacts
+    )
     assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1b2", "ec_repair")].command
     assert (
         "experiments/robot/libero/tasks/run_l1b2_native_ec_repair.sh"

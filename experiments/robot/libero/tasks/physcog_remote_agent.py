@@ -158,6 +158,24 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/l1b_swept_preview/l1b2_native_held_object",
         ),
     ),
+    ("l1b2", "pi05_pose_audit"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/audit_l1b2_obstacle_consequences.py",
+            "--run_root",
+            "/home/drwqyhappy/04-mycode/openvla-oft/.physcog-agent/worktrees/"
+            "152ab13dafc56f56f81720e2abd4b5a0eb734d13/rollouts/libero_goal",
+            "--run_base",
+            "L1-B2-goal-cream-cheese-native-wine-bottle-knockdown",
+            "--expected_episodes",
+            "50",
+            "--out_dir",
+            "experiments/logs/l1b2_pi05_retrospective_pose_audit",
+        ),
+        artifacts=(
+            "experiments/logs/l1b2_pi05_retrospective_pose_audit",
+        ),
+    ),
     ("models", "setup_cosmos"): PhaseSpec(
         command=(
             "bash",
