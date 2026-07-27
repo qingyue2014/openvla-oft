@@ -66,6 +66,18 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a3_task6_plate_support_static",
         ),
     ),
+    ("l3a3", "task6_plate_support_visibility_repair_static"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/"
+            "probe_l3a3_task6_plate_support_static.py",
+            "--visibility_repair",
+        ),
+        artifacts=(
+            "experiments/logs/"
+            "l3a3_task6_plate_support_visibility_repair_static",
+        ),
+    ),
     ("l3a3", "task59_native_probe"): PhaseSpec(
         command=(
             "python",

@@ -82,6 +82,14 @@ A_RIM_EMBED_M = (-0.002, -0.001, 0.0)
 MAX_CANDIDATES = (
     len(B_OFFSET_X_M) * len(B_OFFSET_Y_M) * len(A_RIM_EMBED_M)
 )
+REPAIR_RADIAL_OFFSET_M = (0.012, 0.018, 0.024)
+REPAIR_LATERAL_OFFSET_M = (-0.003, 0.0, 0.003)
+REPAIR_A_RIM_EMBED_M = -0.001
+REPAIR_EXPOSURE_DIRECTION_XY = np.array([1.0, -1.0]) / np.sqrt(2.0)
+REPAIR_LATERAL_DIRECTION_XY = np.array([1.0, 1.0]) / np.sqrt(2.0)
+REPAIR_MAX_CANDIDATES = (
+    len(REPAIR_RADIAL_OFFSET_M) * len(REPAIR_LATERAL_OFFSET_M)
+)
 SETTLE_STEPS = 240
 HOLD_STEPS = 80
 MIN_AB_NORMAL_FORCE_N = 0.005
@@ -472,13 +480,53 @@ def reachability_gate(env, candidate: np.ndarray) -> dict:
     }
 
 
-def candidate_key(row: dict) -> tuple:
+def candidate_specs(visibility_repair: bool) -> list[dict]:
+    if not visibility_repair:
+        return [
+            {
+                "B_offset_x_m": b_dx,
+                "B_offset_y_m": b_dy,
+                "A_rim_embed_m": embed,
+            }
+            for b_dx in B_OFFSET_X_M
+            for b_dy in B_OFFSET_Y_M
+            for embed in A_RIM_EMBED_M
+        ]
+    specs = []
+    for radial in REPAIR_RADIAL_OFFSET_M:
+        for lateral in REPAIR_LATERAL_OFFSET_M:
+            offset = (
+                radial * REPAIR_EXPOSURE_DIRECTION_XY
+                + lateral * REPAIR_LATERAL_DIRECTION_XY
+            )
+            specs.append(
+                {
+                    "B_offset_x_m": float(offset[0]),
+                    "B_offset_y_m": float(offset[1]),
+                    "A_rim_embed_m": REPAIR_A_RIM_EMBED_M,
+                    "repair_radial_offset_m": radial,
+                    "repair_lateral_offset_m": lateral,
+                }
+            )
+    return specs
+
+
+def candidate_key(row: dict, visibility_repair: bool = False) -> tuple:
+    if visibility_repair:
+        return (
+            row["repair_radial_offset_m"],
+            row["repair_lateral_offset_m"],
+        )
     return (row["B_offset_x_m"], row["B_offset_y_m"], row["A_rim_embed_m"])
 
 
-def neighbor_keys(row: dict) -> set[tuple]:
-    grids = [list(B_OFFSET_X_M), list(B_OFFSET_Y_M), list(A_RIM_EMBED_M)]
-    current = list(candidate_key(row))
+def neighbor_keys(row: dict, visibility_repair: bool = False) -> set[tuple]:
+    grids = (
+        [list(REPAIR_RADIAL_OFFSET_M), list(REPAIR_LATERAL_OFFSET_M)]
+        if visibility_repair
+        else [list(B_OFFSET_X_M), list(B_OFFSET_Y_M), list(A_RIM_EMBED_M)]
+    )
+    current = list(candidate_key(row, visibility_repair))
     result = set()
     for dimension, grid in enumerate(grids):
         index = grid.index(current[dimension])
@@ -496,6 +544,7 @@ def save_selected_evidence(
     rgb: np.ndarray,
     mask: np.ndarray,
     segmentation: np.ndarray,
+    visibility_repair: bool,
 ) -> dict:
     rgb_path = output / "selected_policy.png"
     mask_path = output / "selected_role_mask.png"
@@ -505,7 +554,7 @@ def save_selected_evidence(
     np.save(segmentation_path, segmentation, allow_pickle=False)
     return {
         "candidate_hdf5": "NOT_EXPORTED_BY_STATIC_ONLY_CONTRACT",
-        "selected_parameters": list(candidate_key(row)),
+        "selected_parameters": list(candidate_key(row, visibility_repair)),
         "policy_png": rgb_path.name,
         "policy_png_sha256": sha256(rgb_path.read_bytes()),
         "role_mask_png": mask_path.name,
@@ -518,17 +567,36 @@ def save_selected_evidence(
     }
 
 
+def save_pass_policy(
+    output: Path,
+    candidate_index: int,
+    rgb: np.ndarray,
+) -> dict:
+    path = output / f"candidate_{candidate_index:02d}_policy.png"
+    imageio.imwrite(path, rgb)
+    return {
+        "policy_png": path.name,
+        "policy_png_sha256": sha256(path.read_bytes()),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--out_dir",
-        default="experiments/logs/l3a3_task6_plate_support_static",
-    )
+    parser.add_argument("--out_dir")
+    parser.add_argument("--visibility_repair", action="store_true")
     args = parser.parse_args()
-    if MAX_CANDIDATES != 27:
+    if not args.visibility_repair and MAX_CANDIDATES != 27:
         raise RuntimeError("task6 plate-support candidate grid drift")
+    if args.visibility_repair and REPAIR_MAX_CANDIDATES != 9:
+        raise RuntimeError("task6 visibility-repair candidate grid drift")
     if SETTLE_STEPS != 240 or HOLD_STEPS != 80:
         raise RuntimeError("task6 plate-support settle/hold contract drift")
+    specs = candidate_specs(args.visibility_repair)
+    expected_count = (
+        REPAIR_MAX_CANDIDATES if args.visibility_repair else MAX_CANDIDATES
+    )
+    if len(specs) != expected_count:
+        raise RuntimeError("task6 active candidate count drift")
 
     from libero.libero import benchmark, get_libero_path
     from libero.libero.envs import OffScreenRenderEnv
@@ -550,7 +618,15 @@ def main() -> None:
     if sha256(balanced_form(bddl_text, "goal").encode()) != GOAL_SHA256:
         raise RuntimeError("task6 native goal drift")
 
-    output = Path(args.out_dir)
+    output = Path(
+        args.out_dir
+        or (
+            "experiments/logs/"
+            "l3a3_task6_plate_support_visibility_repair_static"
+            if args.visibility_repair
+            else "experiments/logs/l3a3_task6_plate_support_static"
+        )
+    )
     output.mkdir(parents=True, exist_ok=True)
     binding_path = (
         Path(__file__).parent / "L3-A3_TASK6_EB_BINDING.json"
@@ -586,96 +662,100 @@ def main() -> None:
             np.linalg.norm(base_s[0][:2] - base_cookies[0][:2])
         )
 
-        for b_dx in B_OFFSET_X_M:
-            for b_dy in B_OFFSET_Y_M:
-                for a_embed in A_RIM_EMBED_M:
-                    placement = place_geometry(
-                        env.sim, base, b_dx, b_dy, a_embed, surface_z
+        for candidate_index, spec in enumerate(specs):
+            placement = place_geometry(
+                env.sim,
+                base,
+                spec["B_offset_x_m"],
+                spec["B_offset_y_m"],
+                spec["A_rim_embed_m"],
+                surface_z,
+            )
+            raw_placement = np.asarray(
+                env.sim.get_state().flatten()
+            ).copy()
+            env.reset()
+            env.set_init_state(raw_placement)
+            for _ in range(SETTLE_STEPS):
+                env.step(POLICY_ENTRY_DUMMY_ACTION)
+            candidate, pairing = paired_ab_only(env.sim, base)
+            static_ok, static = static_gate(env, candidate, surface_z)
+            visibility, rgb, mask, segmentation = visibility_metrics(
+                env, candidate
+            )
+            reachability = reachability_gate(env, candidate)
+            env.set_init_state(candidate)
+            env.sim.forward()
+            candidate_s = body_pose(env.sim, S)
+            candidate_cookies = body_pose(env.sim, COOKIES)
+            semantic = {
+                "S_and_cookies_bit_identical_to_base": pairing[
+                    "outside_A_B_bit_identical"
+                ],
+                "native_S_cookies_center_distance_m": (
+                    native_s_cookies_distance
+                ),
+                "candidate_S_cookies_center_distance_m": float(
+                    np.linalg.norm(
+                        candidate_s[0][:2] - candidate_cookies[0][:2]
                     )
-                    raw_placement = np.asarray(
-                        env.sim.get_state().flatten()
-                    ).copy()
-                    env.reset()
-                    env.set_init_state(raw_placement)
-                    for _ in range(SETTLE_STEPS):
-                        env.step(POLICY_ENTRY_DUMMY_ACTION)
-                    candidate, pairing = paired_ab_only(env.sim, base)
-                    static_ok, static = static_gate(
-                        env, candidate, surface_z
-                    )
-                    visibility, rgb, mask, segmentation = visibility_metrics(
-                        env, candidate
-                    )
-                    reachability = reachability_gate(env, candidate)
-                    env.set_init_state(candidate)
-                    env.sim.forward()
-                    candidate_s = body_pose(env.sim, S)
-                    candidate_cookies = body_pose(env.sim, COOKIES)
-                    semantic = {
-                        "S_and_cookies_bit_identical_to_base": pairing[
-                            "outside_A_B_bit_identical"
-                        ],
-                        "native_S_cookies_center_distance_m": (
-                            native_s_cookies_distance
-                        ),
-                        "candidate_S_cookies_center_distance_m": float(
-                            np.linalg.norm(
-                                candidate_s[0][:2]
-                                - candidate_cookies[0][:2]
-                            )
-                        ),
-                        "S_pose_exactly_preserved": bool(
-                            np.array_equal(base_s[0], candidate_s[0])
-                            and np.array_equal(base_s[1], candidate_s[1])
-                        ),
-                        "cookies_pose_exactly_preserved": bool(
-                            np.array_equal(
-                                base_cookies[0], candidate_cookies[0]
-                            )
-                            and np.array_equal(
-                                base_cookies[1], candidate_cookies[1]
-                            )
-                        ),
-                    }
-                    passed = bool(
-                        static_ok
-                        and visibility[
-                            "passed_automated_presence_and_boundary"
-                        ]
-                        and reachability["passed"]
-                        and semantic["S_pose_exactly_preserved"]
-                        and semantic["cookies_pose_exactly_preserved"]
-                    )
-                    rows.append(
-                        {
-                            "B_offset_x_m": b_dx,
-                            "B_offset_y_m": b_dy,
-                            "A_rim_embed_m": a_embed,
-                            "passed": passed,
-                            "static_passed": static_ok,
-                            "visibility_passed": visibility[
-                                "passed_automated_presence_and_boundary"
-                            ],
-                            "reachability_passed": reachability["passed"],
-                            "placement": placement,
-                            "pairing": pairing,
-                            "semantic_next_to_audit": semantic,
-                            "static": static,
-                            "visibility": visibility,
-                            "reachability": reachability,
-                            "_rgb": rgb,
-                            "_mask": mask,
-                            "_segmentation": segmentation,
-                        }
-                    )
+                ),
+                "S_pose_exactly_preserved": bool(
+                    np.array_equal(base_s[0], candidate_s[0])
+                    and np.array_equal(base_s[1], candidate_s[1])
+                ),
+                "cookies_pose_exactly_preserved": bool(
+                    np.array_equal(base_cookies[0], candidate_cookies[0])
+                    and np.array_equal(base_cookies[1], candidate_cookies[1])
+                ),
+            }
+            passed = bool(
+                static_ok
+                and visibility["passed_automated_presence_and_boundary"]
+                and reachability["passed"]
+                and semantic["S_pose_exactly_preserved"]
+                and semantic["cookies_pose_exactly_preserved"]
+            )
+            pass_policy_artifact = (
+                save_pass_policy(output, candidate_index, rgb)
+                if args.visibility_repair and static_ok
+                else None
+            )
+            rows.append(
+                {
+                    "candidate_index": candidate_index,
+                    **spec,
+                    "passed": passed,
+                    "static_passed": static_ok,
+                    "visibility_passed": visibility[
+                        "passed_automated_presence_and_boundary"
+                    ],
+                    "reachability_passed": reachability["passed"],
+                    "placement": placement,
+                    "pairing": pairing,
+                    "semantic_next_to_audit": semantic,
+                    "static": static,
+                    "visibility": visibility,
+                    "reachability": reachability,
+                    "physical_pass_policy_artifact": pass_policy_artifact,
+                    "_rgb": rgb,
+                    "_mask": mask,
+                    "_segmentation": segmentation,
+                }
+            )
 
         passed_by_key = {
-            candidate_key(row): row for row in rows if row["passed"]
+            candidate_key(row, args.visibility_repair): row
+            for row in rows
+            if row["passed"]
         }
         robust = []
         for row in passed_by_key.values():
             witnesses = sorted(
-                neighbor_keys(row).intersection(passed_by_key), key=str
+                neighbor_keys(row, args.visibility_repair).intersection(
+                    passed_by_key
+                ),
+                key=str,
             )
             row["adjacent_witnesses"] = [list(key) for key in witnesses]
             if witnesses:
@@ -683,6 +763,11 @@ def main() -> None:
         if robust:
             robust.sort(
                 key=lambda row: (
+                    (
+                        row["visibility"]["roles"]["B"]["visible_pixels"]
+                        if args.visibility_repair
+                        else 0
+                    ),
                     len(row["adjacent_witnesses"]),
                     row["static"]["A_B_min_normal_force_N"],
                 ),
@@ -694,9 +779,44 @@ def main() -> None:
             selected_segmentation = np.asarray(
                 selected["_segmentation"]
             ).copy()
-            verdict = "PASS_L3A3_TASK6_PLATE_SUPPORT_STATIC"
+            verdict = (
+                "PASS_L3A3_TASK6_PLATE_SUPPORT_VISIBILITY_REPAIR_STATIC"
+                if args.visibility_repair
+                else "PASS_L3A3_TASK6_PLATE_SUPPORT_STATIC"
+            )
         else:
-            verdict = "FAIL_L3A3_TASK6_PLATE_SUPPORT_STATIC"
+            verdict = (
+                "FAIL_L3A3_TASK6_PLATE_SUPPORT_VISIBILITY_REPAIR_STATIC"
+                if args.visibility_repair
+                else "FAIL_L3A3_TASK6_PLATE_SUPPORT_STATIC"
+            )
+        top_b_visibility = sorted(
+            [row for row in rows if row["static_passed"]],
+            key=lambda row: row["visibility"]["roles"]["B"][
+                "visible_pixels"
+            ],
+            reverse=True,
+        )[:3]
+        top_b_visibility_index = [
+            {
+                "candidate_index": row["candidate_index"],
+                "candidate_key": list(
+                    candidate_key(row, args.visibility_repair)
+                ),
+                "B_offset_x_m": row["B_offset_x_m"],
+                "B_offset_y_m": row["B_offset_y_m"],
+                "B_visible_pixels": row["visibility"]["roles"]["B"][
+                    "visible_pixels"
+                ],
+                "B_bbox_xyxy": row["visibility"]["roles"]["B"][
+                    "policy_bbox_xyxy"
+                ],
+                "policy_artifact": row[
+                    "physical_pass_policy_artifact"
+                ],
+            }
+            for row in top_b_visibility
+        ]
         artifacts = (
             save_selected_evidence(
                 output,
@@ -704,6 +824,7 @@ def main() -> None:
                 selected_rgb,
                 selected_mask,
                 selected_segmentation,
+                args.visibility_repair,
             )
             if selected is not None
             else {
@@ -730,8 +851,41 @@ def main() -> None:
     report = {
         "verdict": verdict,
         "scope": (
-            "frozen_static_only_no_loading_no_release_no_causal_dynamic_"
-            "no_hdf5_no_vla"
+            (
+                "one_authorized_frozen_9_point_visibility_repair_"
+                "static_only_no_loading_no_dynamic_no_hdf5_no_vla"
+            )
+            if args.visibility_repair
+            else (
+                "frozen_static_only_no_loading_no_release_no_causal_dynamic_"
+                "no_hdf5_no_vla"
+            )
+        ),
+        "visibility_repair_contract": (
+            {
+                "prior_job_id": "490268",
+                "prior_effective_verdict": (
+                    "INVALID_L3A3_TASK6_PLATE_SUPPORT_POLICY_VIEW"
+                ),
+                "only_geometry_change": (
+                    "B_offset_from_A_along_camera_exposure_direction"
+                ),
+                "exposure_direction_xy": (
+                    REPAIR_EXPOSURE_DIRECTION_XY.tolist()
+                ),
+                "lateral_direction_xy": (
+                    REPAIR_LATERAL_DIRECTION_XY.tolist()
+                ),
+                "A_rim_embed_m_fixed": REPAIR_A_RIM_EMBED_M,
+                "settle_hold_thresholds_prompt_task_assets_base_unchanged": True,
+                "manual_gate": (
+                    "B recognizable as a complete or mostly complete bowl, "
+                    "not only a thin arc"
+                ),
+                "one_authorized_repair": True,
+            }
+            if args.visibility_repair
+            else None
         ),
         "contract": {
             "suite": SUITE,
@@ -757,7 +911,7 @@ def main() -> None:
         "base_capture": base_capture,
         "native_asset_gate": asset_gate,
         "search": {
-            "candidate_limit": MAX_CANDIDATES,
+            "candidate_limit": expected_count,
             "candidate_count": len(rows),
             "static_pass_count": sum(row["static_passed"] for row in rows),
             "full_static_visibility_reachability_pass_count": sum(
@@ -765,14 +919,37 @@ def main() -> None:
             ),
             "robust_adjacent_witness_count": len(robust),
             "parameters": {
-                "B_offset_x_m": list(B_OFFSET_X_M),
-                "B_offset_y_m": list(B_OFFSET_Y_M),
-                "A_rim_embed_m": list(A_RIM_EMBED_M),
+                **(
+                    {
+                        "repair_radial_offset_m": list(
+                            REPAIR_RADIAL_OFFSET_M
+                        ),
+                        "repair_lateral_offset_m": list(
+                            REPAIR_LATERAL_OFFSET_M
+                        ),
+                        "exposure_direction_xy": (
+                            REPAIR_EXPOSURE_DIRECTION_XY.tolist()
+                        ),
+                        "lateral_direction_xy": (
+                            REPAIR_LATERAL_DIRECTION_XY.tolist()
+                        ),
+                        "A_rim_embed_m": REPAIR_A_RIM_EMBED_M,
+                    }
+                    if args.visibility_repair
+                    else {
+                        "B_offset_x_m": list(B_OFFSET_X_M),
+                        "B_offset_y_m": list(B_OFFSET_Y_M),
+                        "A_rim_embed_m": list(A_RIM_EMBED_M),
+                    }
+                ),
                 "settle_steps": SETTLE_STEPS,
                 "hold_steps": HOLD_STEPS,
             },
             "rows": rows,
             "selected": selected_public,
+            "top_three_B_visibility_physical_pass_candidates": (
+                top_b_visibility_index
+            ),
         },
         "artifacts": artifacts,
         "manual_policy_view_status": (

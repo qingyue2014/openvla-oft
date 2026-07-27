@@ -912,6 +912,27 @@ def test_task6_job490268_is_physical_pass_but_visual_failure():
     )
 
 
+def test_task6_visibility_repair_is_one_frozen_nine_point_static_grid():
+    text = (
+        TASKS / "probe_l3a3_task6_plate_support_static.py"
+    ).read_text()
+    assert "REPAIR_RADIAL_OFFSET_M = (0.012, 0.018, 0.024)" in text
+    assert "REPAIR_LATERAL_OFFSET_M = (-0.003, 0.0, 0.003)" in text
+    assert "REPAIR_A_RIM_EMBED_M = -0.001" in text
+    assert "REPAIR_EXPOSURE_DIRECTION_XY = np.array([1.0, -1.0])" in text
+    assert "REPAIR_MAX_CANDIDATES != 9" in text
+    assert '"--visibility_repair"' in text
+    assert "candidate_{candidate_index:02d}_policy.png" in text
+    assert '"top_three_B_visibility_physical_pass_candidates"' in text
+    assert "complete or mostly complete bowl" in text
+    assert '"candidate_hdf5_status": "NOT_EXPORTED"' in text
+    assert '"loading_target_onto_plate_status": "NOT_RUN"' in text
+    assert '"release_dynamics_status": "NOT_RUN"' in text
+    assert '"vla_status": "NOT_RUN"' in text
+    assert "sim.step()" not in text
+    assert "pretrained_checkpoint" not in text
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text
