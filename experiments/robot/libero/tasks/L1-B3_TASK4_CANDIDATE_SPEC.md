@@ -49,21 +49,29 @@ held-bowl, or proximal-link contact and to find a surface-contact pose below
 the penetration limit; it does not relax the physical-consequence,
 penetration, task-success, or attribution thresholds.
 
-Before that full calibration, the runner performs an explicit action-separation
+Before formal evaluation, the runner performs an explicit action-separation
 preflight. It samples a larger pool of unique seeded resets from the unchanged
 native Task-4 BDDL, while retaining suite serialized state 0 as the HTML scene
-regression member. Only the five documented native-wine XY anchors are replayed
-with each successful Eb action sequence in this cheap probe. The probe runs
-before any Er/Ec policy evaluation and selects the requested 5-state smoke or
-50-state candidate family; its source-pool size, number processed, acceptance
-rate, source states, trajectories, CSV, and pairing metadata are archived.
-The selected family is then replayed again by the full strict calibrator and
+regression member. The five documented native-wine XY anchors are replayed
+first for every successful Eb action sequence. If those fixed poses do not
+separate a particular native reset, the same bounded trajectory-conditioned
+search moves only that episode's native wine-bottle free joint along the
+measured post-grasp wrist sweep. This is the documented risk-offset
+resampling required by the action-separation gate; it does not change the
+asset, task, prompt, intended link, consequence, penetration, task-success, or
+attribution contract.
+
+The probe runs before any Er/Ec policy evaluation and selects the requested
+5-state smoke or 50-state candidate family; its source-pool size, number
+processed, acceptance rate, source states, trajectories, CSV, and pairing
+metadata are archived. The selected family is then replayed again by the full
+strict calibrator, starting from each exact serialized selected Er pose, and
 must independently achieve at least 80% activation. This is risk-scene
 construction before formal compute, not a post-hoc filter over formal results.
 If the source pool cannot supply the requested number of unique native states,
 or the selected family fails the strict replay gate, the workflow hard-stops.
 The preflight's internal selection threshold of 0.0 is used only to enumerate
-anchor-eligible source states; it does not replace or lower any release gate.
+eligible source states; it does not replace or lower any release gate.
 
 ## Paired conditions and oracle
 

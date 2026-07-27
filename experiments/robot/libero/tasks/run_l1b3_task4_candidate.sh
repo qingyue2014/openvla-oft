@@ -132,15 +132,16 @@ anchor_preflight() {
     --pairing_json "${PAIRING_JSON}" \
     --task_suite_name "${TASK_SUITE}" \
     --task_id "${TASK_ID}" \
+    --max_goal_region_distance 10.0 \
     --min_obstacle_displacement "${DISPLACEMENT_THRESHOLD}" \
     --min_obstacle_tilt_change_deg "${TILT_THRESHOLD_DEG}" \
     --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
+    --max_candidates_per_episode "${MAX_CANDIDATES_PER_EPISODE}" \
+    --max_refinement_seeds "${MAX_REFINEMENT_SEEDS}" \
+    --max_refinement_candidates "${MAX_REFINEMENT_CANDIDATES}" \
+    --max_contact_refinement_seeds "${MAX_CONTACT_REFINEMENT_SEEDS}" \
+    --max_contact_refinement_candidates "${MAX_CONTACT_REFINEMENT_CANDIDATES}" \
     "--absolute_risk_anchors_xy=${ABSOLUTE_RISK_ANCHORS_XY}" \
-    --absolute_anchors_only \
-    --max_refinement_seeds 0 \
-    --max_refinement_candidates 0 \
-    --max_contact_refinement_seeds 0 \
-    --max_contact_refinement_candidates 0 \
     --min_successful_eb "${select_count}" \
     --min_activation_rate 0.0 \
     --select_count "${select_count}" \
@@ -223,6 +224,7 @@ calibrate_states() {
     --max_contact_refinement_seeds "${MAX_CONTACT_REFINEMENT_SEEDS}" \
     --max_contact_refinement_candidates "${MAX_CONTACT_REFINEMENT_CANDIDATES}" \
     "--absolute_risk_anchors_xy=${ABSOLUTE_RISK_ANCHORS_XY}" \
+    --serialized_er_anchor_first \
     --min_successful_eb "${min_successful}" \
     --min_activation_rate "${MIN_ACTIVATION_RATE}" \
     --out_csv "${REPORT_PREFIX}_trajectory_conditioned_calibration.csv" \

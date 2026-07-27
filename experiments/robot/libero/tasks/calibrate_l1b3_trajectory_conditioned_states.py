@@ -117,6 +117,39 @@ def _prepend_absolute_anchors(
     return unique
 
 
+def _prepend_serialized_er_anchor(
+    candidates: list[tuple[int, str, np.ndarray]],
+    placement_xy: np.ndarray,
+) -> list[tuple[int, str, np.ndarray]]:
+    """Replay the already-calibrated paired Er pose before rediscovering it.
+
+    The qualification preflight writes its accepted native wine-bottle pose
+    into the selected Er state.  The subsequent strict family replay should
+    validate that exact pose first rather than spend hundreds of proposals
+    searching for a pose that is already serialized and auditable.
+    """
+    placement = np.asarray(placement_xy, dtype=float)
+    merged = [(-2, "serialized_er_anchor", placement), *candidates]
+    unique: list[tuple[int, str, np.ndarray]] = []
+    seen: set[tuple[float, float]] = set()
+    for path_step, proposed_link, candidate_xy in merged:
+        key = (
+            round(float(candidate_xy[0]), 5),
+            round(float(candidate_xy[1]), 5),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(
+            (
+                path_step,
+                proposed_link,
+                np.asarray(candidate_xy, dtype=float),
+            )
+        )
+    return unique
+
+
 def _refinement_offsets(
     radial_distances: str, angular_candidates_deg: str
 ) -> list[np.ndarray]:
@@ -1006,6 +1039,12 @@ def calibrate(args: argparse.Namespace) -> str:
                     candidates = _prepend_absolute_anchors(
                         candidates, args.absolute_risk_anchors_xy
                     )
+                    if args.serialized_er_anchor_first:
+                        env.reset()
+                        env.set_init_state(fallback_er_states[episode])
+                        candidates = _prepend_serialized_er_anchor(
+                            candidates, _body_pos(env, obstacle)[:2]
+                        )
                 if (
                     args.max_candidates_per_episode > 0
                     and len(candidates) > args.max_candidates_per_episode
@@ -1615,6 +1654,9 @@ def calibrate(args: argparse.Namespace) -> str:
             for anchor in _xy_offsets(args.absolute_risk_anchors_xy)
         ],
         "absolute_anchors_only": bool(args.absolute_anchors_only),
+        "serialized_er_anchor_first": bool(
+            args.serialized_er_anchor_first
+        ),
         "refinement_radial_distances": _float_values(
             args.refinement_radial_distances
         ),
@@ -1805,6 +1847,15 @@ def main() -> None:
         help=(
             "Preflight mode: replay only the supplied native Task-4 anchor "
             "poses and do not construct the broader trajectory search"
+        ),
+    )
+    parser.add_argument(
+        "--serialized_er_anchor_first",
+        action="store_true",
+        help=(
+            "Replay the native wine-bottle XY already serialized in the paired "
+            "Er state before other trajectory proposals. This is intended for "
+            "the strict replay of a family selected by an earlier preflight."
         ),
     )
     parser.add_argument(

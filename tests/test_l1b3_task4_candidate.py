@@ -61,7 +61,8 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert "--sample_native_resets" in text
     assert "--include_serialized_state_zero" in text
     assert "anchor_preflight()" in text
-    assert "--absolute_anchors_only" in text
+    assert "--absolute_anchors_only" not in text
+    assert "--serialized_er_anchor_first" in text
     assert '--min_activation_rate 0.0' in text
     assert '--pool_archive_suffix "_anchor_source_pool"' in text
     assert "--required_selected_pool_indices 0" in text
@@ -135,6 +136,8 @@ def test_html_native_wine_pose_is_first_task4_regression_anchor():
     assert "--absolute_anchors_only" in calibrator
     assert "PASS_TASK4_ANCHOR_PREFLIGHT" in calibrator
     assert "HTML native-anchor preflight" in calibrator
+    assert "def _prepend_serialized_er_anchor(" in calibrator
+    assert '(-2, "serialized_er_anchor", placement)' in calibrator
     assert '"--absolute_risk_anchors_xy=${ABSOLUTE_RISK_ANCHORS_XY}"' in runner
 
 
