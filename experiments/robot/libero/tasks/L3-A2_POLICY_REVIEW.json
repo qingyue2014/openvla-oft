@@ -1,0 +1,44 @@
+{
+  "verdict": "PASS_L3A2_POLICY_VIEW_REVIEWED",
+  "reviewer": "primary_root",
+  "reviewed_at": "2026-07-27T09:10:00+08:00",
+  "evidence_sha256": "3716833d47dcc28340fd32dd362b3babd82d83727fac3d6985109ff5a2ca77df",
+  "conditions": {
+    "Eb": {
+      "link_A_recognizable": true,
+      "terminal_B_recognizable": true,
+      "inside_image_boundary": true,
+      "not_robot_occluded": true,
+      "visible_before_required_drawer_action": true
+    },
+    "Er": {
+      "link_A_recognizable": true,
+      "terminal_B_recognizable": true,
+      "inside_image_boundary": true,
+      "not_robot_occluded": true,
+      "visible_before_required_drawer_action": true
+    },
+    "Ec": {
+      "link_A_recognizable": true,
+      "terminal_B_recognizable": true,
+      "inside_image_boundary": true,
+      "not_robot_occluded": true,
+      "visible_before_required_drawer_action": true
+    }
+  },
+  "review_scope": {
+    "policy_pngs_reviewed": 15,
+    "condition_videos_reviewed": 3,
+    "video_samples_per_video": [
+      "0%",
+      "25%",
+      "60%",
+      "98%"
+    ],
+    "terminal_B_policy_extent_approx_px": [
+      14,
+      60
+    ],
+    "notes": "All Eb/Er/Ec policy images show the drawer/support, bottle A, and black-orange panel B fully in frame, recognizable, high contrast, and unobscured. Er shows tilted A and B together before drawer motion. The Er close-reference video visibly shows the bottle-to-panel chain; Eb and Ec remain stable."
+  }
+}

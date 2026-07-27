@@ -1,0 +1,194 @@
+{
+  "captures": [
+    {
+      "condition": "Eb",
+      "episode": 0,
+      "image": "experiments/logs/l3a2_policy_evidence/eb_ep000_policy.png",
+      "image_sha256": "8bc25235fa062d83d4025d9d523f0ad9c8c0291ba60230d49ea560338386242a",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Eb",
+      "episode": 1,
+      "image": "experiments/logs/l3a2_policy_evidence/eb_ep001_policy.png",
+      "image_sha256": "3b4e7da29200e46d1d306e033b66818419282c131fe8a14f7ba80e1cd10a8e7d",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Eb",
+      "episode": 2,
+      "image": "experiments/logs/l3a2_policy_evidence/eb_ep002_policy.png",
+      "image_sha256": "0aba7497df4bd27581ab2fde716218c19d76ee17347d1a2ab1796562f3a0b6c6",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Eb",
+      "episode": 3,
+      "image": "experiments/logs/l3a2_policy_evidence/eb_ep003_policy.png",
+      "image_sha256": "e95a139ea64d673aba837d11df73aed664c769356f2559b23f203a8d508ec3b4",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Eb",
+      "episode": 4,
+      "image": "experiments/logs/l3a2_policy_evidence/eb_ep004_policy.png",
+      "image_sha256": "e6dcc9639b6b04a01d117f505d607da2b3e1eb2f568ce85872d0ac5db7b40757",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Eb",
+      "episode": 0,
+      "note": "scripted physical close reference; policy smoke video is a separate gate",
+      "video": "experiments/logs/l3a2_policy_evidence/eb_ep000_close_reference.mp4",
+      "video_sha256": "fe73924ff43706ee7e8b1d914e8f0d520401a929e22b8b20bbf8ba3a6dea5088"
+    },
+    {
+      "condition": "Er",
+      "episode": 0,
+      "image": "experiments/logs/l3a2_policy_evidence/er_ep000_policy.png",
+      "image_sha256": "a5f651cf48aee657bd9f628e9c22351789d8530631109f94aee23c263ca54b06",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Er",
+      "episode": 1,
+      "image": "experiments/logs/l3a2_policy_evidence/er_ep001_policy.png",
+      "image_sha256": "f200d5992749761b2622be22834f38fc19ae3ccbe1a8ca36d81ef312d49b38be",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Er",
+      "episode": 2,
+      "image": "experiments/logs/l3a2_policy_evidence/er_ep002_policy.png",
+      "image_sha256": "bcfc4019dfcc1610cff6b42bc154191d443c30fff15768f345b7c3e079c9e663",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Er",
+      "episode": 3,
+      "image": "experiments/logs/l3a2_policy_evidence/er_ep003_policy.png",
+      "image_sha256": "5331971f17ff5abdeb4512bc3f8b4b94d2bfc561008975f161f43c96f3befb53",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Er",
+      "episode": 4,
+      "image": "experiments/logs/l3a2_policy_evidence/er_ep004_policy.png",
+      "image_sha256": "5beb490c34faf05cf8fcc737669eb4b1a539ce0a74a5121ec74472547ad7a32a",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Er",
+      "episode": 0,
+      "note": "scripted physical close reference; policy smoke video is a separate gate",
+      "video": "experiments/logs/l3a2_policy_evidence/er_ep000_close_reference.mp4",
+      "video_sha256": "86863cd51e0a04688aae8ffda88a9948eef176b575ea293bdc199e6ec08f5efe"
+    },
+    {
+      "condition": "Ec",
+      "episode": 0,
+      "image": "experiments/logs/l3a2_policy_evidence/ec_ep000_policy.png",
+      "image_sha256": "a507c92b39d2ebc5e6e1b41796095c2dbe68b81279fa8e93570a8415ee9d4bb6",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Ec",
+      "episode": 1,
+      "image": "experiments/logs/l3a2_policy_evidence/ec_ep001_policy.png",
+      "image_sha256": "1333fca499c39316671be5810bd0632d24e5549a082f4e571ca480e44965d82c",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Ec",
+      "episode": 2,
+      "image": "experiments/logs/l3a2_policy_evidence/ec_ep002_policy.png",
+      "image_sha256": "a46ed34ec8635e4e85e9dcc7c0dac8d28db3abac78395a6b05b545ffcf5ae5e3",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Ec",
+      "episode": 3,
+      "image": "experiments/logs/l3a2_policy_evidence/ec_ep003_policy.png",
+      "image_sha256": "ebef82a5b2bff81581c274408bb051cc5fae51c3232e60964ce5449e037103ca",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Ec",
+      "episode": 4,
+      "image": "experiments/logs/l3a2_policy_evidence/ec_ep004_policy.png",
+      "image_sha256": "1e7bc6b5ebec81104bbadfe86b2fcabda990876514f5af1f51e7419d244ce1f4",
+      "shape": [
+        256,
+        256,
+        3
+      ]
+    },
+    {
+      "condition": "Ec",
+      "episode": 0,
+      "note": "scripted physical close reference; policy smoke video is a separate gate",
+      "video": "experiments/logs/l3a2_policy_evidence/ec_ep000_close_reference.mp4",
+      "video_sha256": "e96ea11a05474b9f6b70aa79faffa40ed8f8404b844f76c21ad935037ccae582"
+    }
+  ],
+  "manual_visibility_verdict": "PENDING_REVIEW",
+  "policy_rgb": "agentview_image[::-1, ::-1], 256x256 RGB",
+  "restoration": "exact serialized state, zero sim steps before image",
+  "verdict": "PASS_L3A2_POLICY_EVIDENCE_GENERATED"
+}

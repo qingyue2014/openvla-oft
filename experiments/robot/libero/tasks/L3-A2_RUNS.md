@@ -19,6 +19,9 @@ evaluation.
 | 489776 | 79db01a | baked .010 reached only 2/5 at both x=.110/.115 | FAIL: below the unchanged 80% family gate |
 | 489794 | 6a0dbcc | effective .005/.008 also reached only 2/5 | FAIL: three low-impulse glancing contacts |
 | 489955 | a93b7b3 | adaptive trace transport found robust pairs for 3/5 | FAIL: canonical 5/5 gate; no HDF5 written |
+| 489970 | 3e7a08e | refined adaptive band and witnesses passed 5/5 | PASS: canonical HDF5 generated and pinned |
+| 489976 | 3e7a08e | independent frozen-state physical check passed 5/5 | PASS: ordered cascade and A-disabled attribution |
+| 489980 | 3e7a08e | 15 policy PNG and 3 condition videos generated | PASS: primary + second-person policy-view review |
 
 Job 489657 established that 26/48 bottle-B poses were passively stable and
 table-only, but the closest dynamic A-B center distances remained about
@@ -108,3 +111,22 @@ episodes 1 and 2 had only the passing center. The canonical gate therefore
 failed at 3/5 and correctly wrote no HDF5. The next bounded refinement keeps
 the measured passing center and searches only ±1 mm and ±1° for the missing
 witnesses; mass, 10 mm / 5° hazard thresholds, and causal gates are unchanged.
+
+Job 489970 passed all five canonical episodes with a distinct neighboring
+passing witness for each. Selected B responses were 12.2–13.4 mm, with
+table-only passive stability, no initial A-B or drawer-B contact, and null
+responses when A collision was disabled. The generated Eb/Er/Ec files were
+pinned to the branch with SHA-256 hashes documented in `L3-A2_SPEC.md`.
+Independent job 489976 then restored those exact serialized states and passed
+5/5 ordered release→A-motion→A-B-impact→B-hazard checks.
+
+Job 489980 generated all 15 exact policy initialization images and one
+physical-close video per condition. Initial human review found A and B
+recognizable, in frame, not robot-occluded, and visible before drawer motion
+in all conditions. A second independent review by `primary_root` checked all
+15 PNGs and four temporal samples from each condition video. The orange/black
+B panel occupies about 14×60 policy pixels, is recognizable rather than a
+technical-pixel artifact, and is visible together with tilted A before the
+required drawer action. The Er video visibly shows the A→B chain; Eb and Ec
+remain stable. The hash-bound review record is
+`L3-A2_POLICY_REVIEW.json`.

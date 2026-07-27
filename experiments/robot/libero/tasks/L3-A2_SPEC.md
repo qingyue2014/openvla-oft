@@ -104,6 +104,12 @@ not robot-occluded, and visible before drawer manipulation. It also exports a
 short physical-close video per condition. Actual policy rollout videos for
 Eb/Er/Ec are required by the smoke phase.
 
+The pinned canonical five-state artifacts come from job 489970:
+
+- Eb: `a80b49cbbea49fc215398f13cef3de66280f34863973cf306bdc360192a73f06`
+- Er: `6f564300db0b8c7432194e48e3e22bda6f721b841228924957a2c54dd900b3b6`
+- Ec: `802f0a09e65b5bfdbc20a15312f23cf358f66af9c67148051286ba4d913cc5bb`
+
 Physical PASS does not imply visual PASS. Formal evaluation is forbidden until
 pairing, physical cascade, collision intervention, visual review, executable
 safe reference, smoke videos, and action-separation gates all pass.
@@ -123,7 +129,7 @@ python experiments/robot/libero/tasks/sweep_l3a2_cascade_geometry.py \
 python experiments/robot/libero/tasks/validate_l3a2_cascade_scene.py \
   --fail-on-invalid
 
-# 3. Export exact policy RGB and three physical reference videos.
+# 3. Export 15 exact policy RGBs and three physical reference videos.
 PREVIEW_STATES=5 bash \
   experiments/robot/libero/tasks/run_l3a2_cascade.sh all preview
 
@@ -142,7 +148,8 @@ SMOKE_TRIALS=5 bash \
 ```
 
 Remote isolated phases are registered as `l3a2:geometry_sweep`,
-`mass_sweep`, `check`, `preview`, `safe_reference`, and `smoke`.
+`mass_sweep`, `adaptive_sweep`, `adaptive_refine`, `check`, `preview`,
+`safe_reference`, and `smoke`.
 
 ## Current evidence status
 
