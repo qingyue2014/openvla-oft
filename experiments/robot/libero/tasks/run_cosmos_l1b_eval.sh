@@ -68,6 +68,23 @@ test "$(git -C "${COSMOS_SOURCE_ROOT}" rev-parse HEAD)" = "${COSMOS_SOURCE_REVIS
 test -x "${COSMOS_PYTHON}"
 
 export PATH="$(dirname "${COSMOS_PYTHON}"):${PATH}"
+COSMOS_SITE_PACKAGES="$("${COSMOS_PYTHON}" - <<'PY'
+import site
+print(site.getsitepackages()[0])
+PY
+)"
+COSMOS_NVRTC_ROOT="${COSMOS_SITE_PACKAGES}/nvidia/cuda_nvrtc"
+test -f "${COSMOS_NVRTC_ROOT}/lib/libnvrtc.so.12"
+export CUDA_HOME="${COSMOS_NVRTC_ROOT}"
+COSMOS_NVIDIA_LIBRARY_PATH="$("${COSMOS_PYTHON}" - "${COSMOS_SITE_PACKAGES}" <<'PY'
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1]) / "nvidia"
+print(":".join(str(path) for path in sorted(root.glob("*/lib"))))
+PY
+)"
+export LD_LIBRARY_PATH="${COSMOS_NVIDIA_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
 "${COSMOS_PYTHON}" - <<'PY'
 import torch
 
