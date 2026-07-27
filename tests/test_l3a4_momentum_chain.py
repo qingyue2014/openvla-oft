@@ -63,6 +63,17 @@ def test_bddl_preserves_native_prompt_and_open_goal():
     assert "momentum_sentinel_1 - momentum_sentinel" in text
 
 
+def test_runner_defaults_to_available_libero90_checkpoint():
+    text = (
+        ROOT
+        / "experiments/robot/libero/tasks/run_l3a4_momentum_chain.sh"
+    ).read_text()
+    assert (
+        'CHECKPOINT="${CHECKPOINT:-'
+        'RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"'
+    ) in text
+
+
 def test_assets_have_separate_collidable_and_visible_geometries():
     for name in ("momentum_striker", "momentum_relay", "momentum_sentinel"):
         path = (

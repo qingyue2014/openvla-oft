@@ -1,4 +1,5 @@
 from experiments.robot.libero.tasks.physcog_remote_agent import (
+    L3A4_CHECKPOINT,
     PHASES,
     PhaseSpec,
     RemoteConfig,
@@ -100,6 +101,15 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
     assert PHASES[("l3a4", "safe_reference")].count_env == "SAFE_REFERENCE_STATES"
     assert PHASES[("l3a4", "safe_reference")].additional_count_envs == (
         "EB_REPLAY_EPISODES",
+    )
+    assert PHASES[("l3a4", "safe_reference")].environment == (
+        ("CHECKPOINT", L3A4_CHECKPOINT),
+    )
+    assert PHASES[("l3a4", "eb_replay")].environment == (
+        ("CHECKPOINT", L3A4_CHECKPOINT),
+    )
+    assert PHASES[("l3a4", "smoke")].environment == (
+        ("CHECKPOINT", L3A4_CHECKPOINT),
     )
 
 

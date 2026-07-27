@@ -26,8 +26,12 @@ class PhaseSpec:
     command: tuple[str, ...]
     count_env: str | None = None
     additional_count_envs: tuple[str, ...] = ()
+    environment: tuple[tuple[str, str], ...] = ()
     artifacts: tuple[str, ...] = ()
     clean_artifacts_before_run: bool = True
+
+
+L3A4_CHECKPOINT = "RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora"
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
@@ -94,6 +98,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         # pilot and the final five-state family.
         count_env="SAFE_REFERENCE_STATES",
         additional_count_envs=("EB_REPLAY_EPISODES",),
+        environment=(("CHECKPOINT", L3A4_CHECKPOINT),),
         artifacts=(
             "experiments/logs/l3a4_safe_reference.md",
             "experiments/logs/l3a4_safe_reference.csv",
@@ -109,6 +114,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "eb_replay",
         ),
         count_env="EB_REPLAY_EPISODES",
+        environment=(("CHECKPOINT", L3A4_CHECKPOINT),),
         artifacts=(
             "experiments/logs/l3a4_eb_replay.md",
             "experiments/logs/l3a4_eb_replay.csv",
@@ -123,6 +129,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "smoke",
         ),
         count_env="SMOKE_TRIALS",
+        environment=(("CHECKPOINT", L3A4_CHECKPOINT),),
         artifacts=(
             "rollouts/libero_90/L3-A4-drawer-momentum-eb-parked",
             "rollouts/libero_90/L3-A4-drawer-momentum-er-A-B-C",
@@ -346,6 +353,10 @@ def build_batch_script(
     env.extend(
         f"export {name}={shlex.quote(str(count))}"
         for name in spec.additional_count_envs
+    )
+    env.extend(
+        f"export {name}={shlex.quote(value)}"
+        for name, value in spec.environment
     )
     cleanup = (
         [shell_join(("rm", "-rf", artifact)) for artifact in spec.artifacts]
@@ -733,6 +744,7 @@ def command_run(args: argparse.Namespace) -> int:
         "registered_command": list(spec.command),
         "count_env": spec.count_env,
         "additional_count_envs": list(spec.additional_count_envs),
+        "environment": dict(spec.environment),
     }
     (run_dir / "run.json").write_text(
         json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"

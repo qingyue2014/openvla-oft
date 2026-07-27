@@ -9,7 +9,7 @@ set -euo pipefail
 CONDITION="${1:-all}"
 MODE="${2:-prepare}"
 
-CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-90}"
+CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
 TASK_SUITE_NAME="${TASK_SUITE_NAME:-libero_90}"
 BDDL_FILE="${BDDL_FILE:-experiments/robot/libero/tasks/PHYSCOG_L3A4_drawer_momentum_chain.bddl}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
