@@ -292,6 +292,45 @@ exact report hash and diagnostics are bound in
 authorized settle-duration review: further tuning or execution of this
 36-point vertical mechanism is forbidden.
 
+### Pending native task6 plate-support replacement
+
+After permanently stopping the task1 vertical mechanism, a new independent
+static-only construction uses zero-based `libero_spatial` task 6 and its exact
+suite prompt, without an override:
+
+> pick up the black bowl next to the cookie box and place it on the plate
+
+The native goal remains `(On akita_black_bowl_1 plate_1)`. The roles are
+`S=akita_black_bowl_1_main` (prompt target),
+`A=plate_1_main` (native goal plate), `B=akita_black_bowl_2_main` (support),
+and `cookies_1_main` (the native next-to landmark). Existing native-default
+task6 evidence records 50/50 task success and zero model collapses with the
+spatial checkpoint; its exact prompt, hashes, roles, and log binding are in
+`L3-A3_TASK6_EB_BINDING.json`.
+
+The proposed later causal mechanism is that placing S onto A loads the A-B
+support relation and can cause A/B to respond. This first stage does **not**
+perform that loading or claim a causal chain. It searches one frozen 27-point
+grid: B offsets `{−0.006, 0, +0.006}` m along each table axis relative to A's
+native XY, crossed with A rim embeddings `{−0.002, −0.001, 0}` m. A/B settle
+for 240 controller-aware no-op steps and undergo an 80-step static hold.
+
+The static gate requires persistent A-B rim contact and load force, A clear of
+the table, B/S/cookies supported by the table, no S-A/S-B or other
+object/fixture/robot bypass contact, original goal false, bounded motion and
+orientation, and an adjacent passing grid witness. S and cookies remain
+bit-identical to the task6 policy-entry base, preserving the native next-to
+semantics. S, A, B, and cookies must all have nonzero unclipped segmentation
+pixels in the exact 256×256 policy observation, and exact-collision-AABB top
+approaches to both S and A must remain clear. The base is newly captured after
+the evaluator's ten dummy actions; any later consumer must restore it with
+`num_steps_wait=0`.
+
+This stage may export a selected policy PNG, role mask, segmentation plane, and
+report for review, but explicitly exports no HDF5. Target loading, release
+dynamics, causal ablation, safe reference, action replay, VLA, smoke, and
+formal evaluation remain forbidden regardless of the static verdict.
+
 ## Failed native-only task57 replacement
 
 The replacement preserved zero-indexed LIBERO-90 task ID 57 exactly:

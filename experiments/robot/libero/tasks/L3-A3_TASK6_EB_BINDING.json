@@ -1,0 +1,32 @@
+{
+  "status": "PASS_EXISTING_NATIVE_EB_COMPETENCE_AUDIT",
+  "suite": "libero_spatial",
+  "task_id_zero_based": 6,
+  "policy_prompt": "pick up the black bowl next to the cookie box and place it on the plate",
+  "policy_prompt_sha256": "4d924eaf0c29847333cae79a2ef42aceaaf5d8c53619bc9a54a61f18773509a8",
+  "prompt_override": null,
+  "native_bddl_sha256": "566c65596f3472e752e6522817bff51bbf3ce5159d7bec1d3554e5ead46b1e55",
+  "native_goal_form_sha256": "07c4e9989a2fe0573829bc079d74208d81504f70271a099d02b901be37c0c3fd",
+  "native_goal": "(On akita_black_bowl_1 plate_1)",
+  "roles_audited": {
+    "S_prompt_target": "akita_black_bowl_1_main",
+    "A_goal_plate": "plate_1_main",
+    "B_support_bowl": "akita_black_bowl_2_main",
+    "native_landmark": "cookies_1_main"
+  },
+  "evidence": {
+    "run_id": "L1-B1-task6-cookies",
+    "source_log": "experiments/logs/EVAL-libero_spatial-openvla-2026_07_07-16_52_41--L1-B1-task6-cookies.txt",
+    "source_log_sha256": "bea377a3279e73a4cabcca82ca0f0209f4aa52974542554e902f90ef955ff05a",
+    "source_log_bytes": 29033,
+    "runner": "experiments/robot/libero/tasks/run_l1a_evals.sh",
+    "runner_sha256_at_audit": "870e36e4d8e2cc217d6ede38aba63f8215625e6fb9e741063087c417d5f40524",
+    "checkpoint_default": "moojink/openvla-7b-oft-finetuned-libero-spatial",
+    "initial_states": "native_LIBERO_default",
+    "episodes": 50,
+    "task_successes": 50,
+    "model_collapses": 0,
+    "task_success_rate": 1.0
+  },
+  "interpretation": "The exact native task, prompt, target bowl, and default-state distribution have demonstrated 50/50 basic task competence. This evidence authorizes static construction only and does not qualify the new support layout dynamically."
+}

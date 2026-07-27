@@ -829,6 +829,59 @@ def test_task1_vertical_settle240_review_is_final_physical_hard_stop():
     )
 
 
+def test_task6_plate_support_probe_is_frozen_native_static_only():
+    text = (
+        TASKS / "probe_l3a3_task6_plate_support_static.py"
+    ).read_text()
+    assert 'SUITE = "libero_spatial"' in text
+    assert "TASK_ID = 6" in text
+    assert 'S = "akita_black_bowl_1_main"' in text
+    assert 'A = "plate_1_main"' in text
+    assert 'B = "akita_black_bowl_2_main"' in text
+    assert 'COOKIES = "cookies_1_main"' in text
+    assert "B_OFFSET_X_M = (-0.006, 0.0, 0.006)" in text
+    assert "B_OFFSET_Y_M = (-0.006, 0.0, 0.006)" in text
+    assert "A_RIM_EMBED_M = (-0.002, -0.001, 0.0)" in text
+    assert "MAX_CANDIDATES != 27" in text
+    assert "SETTLE_STEPS = 240" in text
+    assert "HOLD_STEPS = 80" in text
+    assert "env.step(POLICY_ENTRY_DUMMY_ACTION)" in text
+    assert "outside_A_B_bit_identical" in text
+    assert '"S_pose_exactly_preserved"' in text
+    assert '"cookies_pose_exactly_preserved"' in text
+    assert '"goal_initial_false"' in text
+    assert '"goal_final_false"' in text
+    assert "render_segmentation_ids" in text
+    assert "segmentation[::-1, ::-1]" in text
+    assert "top_approach_clearance" in text
+    assert '"robust_adjacent_witness_count"' in text
+    assert '"candidate_hdf5_status": "NOT_EXPORTED"' in text
+    assert '"loading_target_onto_plate_status": "NOT_RUN"' in text
+    assert '"release_dynamics_status": "NOT_RUN"' in text
+    assert '"causal_ablation_status": "NOT_RUN"' in text
+    assert '"vla_status": "NOT_RUN"' in text
+    assert "sim.step()" not in text
+    assert "pretrained_checkpoint" not in text
+    assert "task_description_override" not in text
+
+
+def test_task6_existing_native_competence_binding_is_exact():
+    binding = json.loads(
+        (TASKS / "L3-A3_TASK6_EB_BINDING.json").read_text()
+    )
+    assert binding["status"] == "PASS_EXISTING_NATIVE_EB_COMPETENCE_AUDIT"
+    assert binding["suite"] == "libero_spatial"
+    assert binding["task_id_zero_based"] == 6
+    assert binding["prompt_override"] is None
+    assert binding["evidence"]["initial_states"] == "native_LIBERO_default"
+    assert binding["evidence"]["episodes"] == 50
+    assert binding["evidence"]["task_successes"] == 50
+    assert binding["evidence"]["model_collapses"] == 0
+    assert binding["evidence"]["source_log_sha256"] == (
+        "bea377a3279e73a4cabcca82ca0f0209f4aa52974542554e902f90ef955ff05a"
+    )
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text

@@ -106,6 +106,14 @@ def test_l3a3_registry_separates_task1_export_from_physical_grid():
     assert vertical.command != PHASES[
         ("l3a3", "task1_leaning_chain_one")
     ].command
+    task6 = PHASES[("l3a3", "task6_plate_support_static")]
+    assert task6.command[-1].endswith(
+        "probe_l3a3_task6_plate_support_static.py"
+    )
+    assert task6.artifacts == (
+        "experiments/logs/l3a3_task6_plate_support_static",
+    )
+    assert task6.command != vertical.command
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
