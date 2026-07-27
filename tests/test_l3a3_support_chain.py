@@ -343,6 +343,12 @@ def test_task57_candidate_is_native_only_one_state_and_fail_closed():
     assert "top_ablation_relative_gate" in text
     assert "s_b_bypass" in text
     assert "robot_relevant" in text
+    assert "failed_report.json" in text
+    assert "differing_flat_indices" in text
+    assert "allowed_A_B_flat_indices" in text
+    assert "orientation_change_deg" in text
+    assert "initial_contacts" in text
+    assert "final_contacts" in text
     assert "PENDING_MANUAL_POLICY_VIEW_REVIEW" in text
     assert '"eb_source_status": "NOT_RUN"' in text
     assert '"safe_reference_status": "NOT_RUN"' in text

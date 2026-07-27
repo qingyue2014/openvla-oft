@@ -68,14 +68,17 @@ def allowed_flat_indices(sim) -> set[int]:
 
 
 def assert_pairing(sim, first: np.ndarray, second: np.ndarray) -> dict:
+    allowed = allowed_flat_indices(sim)
     differing = set(np.flatnonzero(first != second).tolist())
-    forbidden = sorted(differing - allowed_flat_indices(sim))
+    forbidden = sorted(differing - allowed)
     if forbidden:
         raise RuntimeError(
             f"paired task57 states differ outside A/B qpos/qvel: {forbidden[:20]}"
         )
     return {
         "differing_scalar_count": len(differing),
+        "differing_flat_indices": sorted(differing),
+        "allowed_A_B_flat_indices": sorted(allowed),
         "forbidden_differing_scalar_count": len(forbidden),
         "outside_A_B_bit_identical": True,
     }
@@ -132,7 +135,10 @@ def condition_hold(
     initial = forbidden_contacts(sim, risk)
     required_all = dict(initial["required"])
     forbidden_seen = dict(initial["forbidden"])
-    maxima = {body: {"xy_m": 0.0, "drop_m": 0.0} for body in RELEVANT}
+    maxima = {
+        body: {"xy_m": 0.0, "drop_m": 0.0, "orientation_change_deg": 0.0}
+        for body in RELEVANT
+    }
     for _ in range(steps):
         sim.step()
         contacts = forbidden_contacts(sim, risk)
@@ -141,9 +147,19 @@ def condition_hold(
         for key in forbidden_seen:
             forbidden_seen[key] |= contacts["forbidden"][key]
         for body in RELEVANT:
-            delta = pose_delta(starts[body], body_pose(sim, body))
+            current = body_pose(sim, body)
+            delta = pose_delta(starts[body], current)
             maxima[body]["xy_m"] = max(maxima[body]["xy_m"], delta["xy_m"])
             maxima[body]["drop_m"] = max(maxima[body]["drop_m"], delta["drop_m"])
+            start_quat = np.asarray(starts[body][1], dtype=float)
+            current_quat = np.asarray(current[1], dtype=float)
+            cosine = float(
+                np.clip(abs(np.dot(start_quat, current_quat)), 0.0, 1.0)
+            )
+            angle = float(np.degrees(2.0 * np.arccos(cosine)))
+            maxima[body]["orientation_change_deg"] = max(
+                maxima[body]["orientation_change_deg"], angle
+            )
     required_ok = (
         required_all["s_a"] and required_all["a_b"]
         if risk
@@ -159,8 +175,10 @@ def condition_hold(
     )
     return passed, {
         "condition": condition,
+        "initial_contacts": initial,
         "required_contacts": required_all,
         "forbidden_contacts_seen": forbidden_seen,
+        "final_contacts": forbidden_contacts(sim, risk),
         "max_delta": maxima,
     }
 
@@ -398,7 +416,49 @@ def main() -> None:
         b_ok, b_gate = top_ablation_relative_gate(
             env.sim, er, args.hold_steps
         )
-        if not all((eb_ok, ec_ok, er_ok, s_ok, a_ok, b_ok)):
+        precheck_passed = all((eb_ok, ec_ok, er_ok, s_ok, a_ok, b_ok))
+        if not precheck_passed:
+            failed_report = {
+                "verdict": "FAIL_L3A3_TASK57_ONE_STATE_STATIC_GATE",
+                "scope": "one_state_static_only_no_vla_no_safe_no_replay",
+                "task_id": TASK_ID,
+                "prompt": PROMPT,
+                "prompt_sha256": PROMPT_SHA256,
+                "native_bddl_sha256": NATIVE_BDDL_SHA256,
+                "goal_form": goal_form,
+                "goal_form_sha256": GOAL_SHA256,
+                "asset_gate": asset_gate,
+                "pairing": pairing,
+                "physical": {
+                    "eb_passed": eb_ok,
+                    "ec_passed": ec_ok,
+                    "er_passed": er_ok,
+                    "S_intervention_passed": s_ok,
+                    "A_ablation_passed": a_ok,
+                    "B_ablation_passed": b_ok,
+                    "eb_hold": eb_hold,
+                    "ec_hold": ec_hold,
+                    "er_hold": er_hold,
+                    "S_intervention": s_gate,
+                    "A_ablation": a_gate,
+                    "B_ablation": b_gate,
+                },
+                "policy_view_status": "NOT_EXPORTED_DUE_STATIC_FAILURE",
+                "eb_source_status": "NOT_RUN",
+                "safe_reference_status": "NOT_RUN",
+                "action_separation_status": "NOT_RUN",
+            }
+            (output / "failed_report.json").write_text(
+                json.dumps(failed_report, indent=2, sort_keys=True) + "\n"
+            )
+            (output / "failed_report.md").write_text(
+                "# L3-A3 task57 one-state static failure\n\n"
+                "- Verdict: **FAIL_L3A3_TASK57_ONE_STATE_STATIC_GATE**\n"
+                f"- EB/EC/ER: {eb_ok}/{ec_ok}/{er_ok}\n"
+                f"- S/A/B interventions: {s_ok}/{a_ok}/{b_ok}\n"
+                "- VLA, safe reference, and replay were not run.\n"
+            )
+            print("FAIL_L3A3_TASK57_ONE_STATE_STATIC_GATE")
             raise RuntimeError(
                 "FAIL_L3A3_TASK57_ONE_STATE_STATIC_GATE "
                 f"eb={eb_ok} ec={ec_ok} er={er_ok} "
