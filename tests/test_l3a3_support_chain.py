@@ -690,6 +690,35 @@ def test_task1_manual_review_is_hash_bound_before_frozen_physical_grid():
     assert "task1 independent policy review failed role" in text
 
 
+def test_task1_job490195_is_genuine_frozen_grid_physical_failure():
+    failure = json.loads(
+        (TASKS / "L3-A3_TASK1_POLICY_ENTRY_GRID_FAILURE.json").read_text()
+    )
+    assert failure["status"] == "INVALID_PHYSICAL_GATE"
+    assert failure["verdict"] == (
+        "FAIL_L3A3_TASK1_LEANING_CHAIN_ONE_STATE_PHYSICAL"
+    )
+    assert failure["job"]["job_id"] == "490195"
+    assert failure["preflight"]["independent_policy_view_verdict"] == (
+        "PASS_L3A3_TASK1_POLICY_VIEW_REVIEWED"
+    )
+    search = failure["frozen_search"]
+    assert search["candidate_count"] == search["candidate_limit"] == 144
+    assert search["parameters_unchanged"] is True
+    assert search["static_pass_count"] == 0
+    assert search["full_pass_count"] == 0
+    diagnostics = failure["physical_diagnostics"]
+    assert diagnostics["initial_S_A_contact_count"] == 0
+    assert diagnostics["persistent_S_A_count"] == 0
+    assert diagnostics["persistent_S_table_count"] == 144
+    assert diagnostics["S_stove_seen_count"] == 0
+    assert diagnostics["persistent_A_table_count"] == 111
+    assert diagnostics["A_initial_collision_z_lower_above_1m_count"] == 33
+    assert diagnostics["causal_trace_run_count"] == 0
+    assert failure["downstream"]["further_run_of_this_144_grid"] == "FORBIDDEN"
+    assert failure["downstream"]["vla"] == "NOT_RUN"
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text

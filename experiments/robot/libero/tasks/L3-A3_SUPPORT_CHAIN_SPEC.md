@@ -5,8 +5,9 @@
 > 144-point raw-prewarmup search without one stable S-A support contact; its
 > first policy-entry-base replacement was an invalid protocol validator and
 > did not reach candidate search. The protocol-corrected replacement then hit
-> an overstrict repeat-render gate before candidate search; export-only
-> independent visibility review is pending.
+> an overstrict repeat-render gate before candidate search. Independent
+> visibility review subsequently passed, but the one authorized frozen-grid
+> run still produced zero stable S-A candidates and a genuine physical FAIL.
 > The task87 candidate failed the executable safe-reference gate. The native-only
 > task57 replacement passed its numerical static gate but failed independent
 > policy-view review because the goal support was occluded and not side-graspable.
@@ -185,6 +186,34 @@ After this independent visibility pass, exactly one run of the previously
 frozen 144-point physical grid is authorized. Repeat-render PSNR/SSIM remains
 recorded under its unchanged thresholds as a diagnostic and cannot replace
 the hash-bound manual visibility gate. No VLA is authorized.
+
+That one frozen-grid run completed as job `490195`, commit
+`7d6f58245b20eb29d98786970655ff6dd94a5562`, with genuine verdict
+`FAIL_L3A3_TASK1_LEANING_CHAIN_ONE_STATE_PHYSICAL`. It evaluated all 144
+predeclared candidates without changing any parameter:
+
+- static pass `0/144`, complete causal pass `0/144`, robust neighbor `0`;
+- initial S-A contact `0/144` and persistent S-A contact `0/144`;
+- S remained supported by `table` in `144/144`, with no S-stove contact;
+- A retained table support in `111/144`;
+- in the other 33 candidates, A's post-settle collision lower bound exceeded
+  1 m and reached as high as 8.99 m, exposing a placement/settle construction
+  inconsistent with the separately demonstrated robust L1-A2 cookie state;
+- 24 candidates had forbidden S-B contact and 36 had B-ramekin contact;
+- no candidate reached removal dynamics or either causal ablation.
+
+The runner's generic `validator_bug` classification again reflects the
+intentional nonzero fail-closed exit; the report itself is a valid physical
+failure. No HDF5, policy image, passive video, VLA, safe-reference, replay,
+smoke, or formal output was produced. This frozen grid must not be run again.
+The exact counts and report hashes are bound in
+`L3-A3_TASK1_POLICY_ENTRY_GRID_FAILURE.json`.
+
+Further L3-A3 physical design is paused pending the hash-bound three-seed real
+swept-path result from L1-A2 job `490200`. A future candidate must reproduce
+one robust A state from that evidence and then design a distinct B placement
+and reaction direction; this is a new design input, not permission to tune or
+rerun the failed 144-point grid.
 
 ## Failed native-only task57 replacement
 

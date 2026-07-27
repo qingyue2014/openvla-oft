@@ -1,0 +1,108 @@
+{
+  "status": "INVALID_PHYSICAL_GATE",
+  "verdict": "FAIL_L3A3_TASK1_LEANING_CHAIN_ONE_STATE_PHYSICAL",
+  "job": {
+    "job_id": "490195",
+    "commit": "7d6f58245b20eb29d98786970655ff6dd94a5562",
+    "compute_node": "dgx-21",
+    "intentional_fail_closed_exit_code": 1,
+    "runner_classification": "validator_bug",
+    "runner_classification_interpretation": "The broad runner label reflects the intentional nonzero exit on the report's genuine physical FAIL verdict."
+  },
+  "preflight": {
+    "policy_entry_state_sha256": "06a341f78cf0399ee253967e645d88d0538bd5a27c83de3f3d487a92fbfbeee6",
+    "required_future_evaluator_num_steps_wait": 0,
+    "S_compiled_support_body": "table",
+    "S_stove_contact_count": 0,
+    "serialized_state_repeatability": "PASS",
+    "independent_policy_view_verdict": "PASS_L3A3_TASK1_POLICY_VIEW_REVIEWED",
+    "independent_reviewer": "primary_root",
+    "reviewed_evidence_json_sha256": "c3bff2689123a5c09720769c1dd519a0716f49e259a70b568f7af77fd266f571"
+  },
+  "frozen_search": {
+    "candidate_limit": 144,
+    "candidate_count": 144,
+    "parameters_unchanged": true,
+    "directions": [
+      "px",
+      "nx",
+      "py",
+      "ny"
+    ],
+    "tilt_deg": [
+      10.0,
+      15.0,
+      20.0,
+      25.0
+    ],
+    "contact_offset_m": [
+      -0.004,
+      -0.002,
+      0.0
+    ],
+    "B_gap_m": [
+      0.002,
+      0.004,
+      0.006
+    ],
+    "static_pass_count": 0,
+    "full_pass_count": 0,
+    "robust_adjacent_witness_count": 0,
+    "selected_candidate": null
+  },
+  "physical_diagnostics": {
+    "initial_S_A_contact_count": 0,
+    "persistent_S_A_count": 0,
+    "initial_support_topology_pass_count": 0,
+    "final_support_topology_pass_count": 0,
+    "persistent_A_table_count": 111,
+    "persistent_S_table_count": 144,
+    "S_stove_seen_count": 0,
+    "A_initial_collision_z_lower_above_1m_count": 33,
+    "A_initial_collision_z_lower_m": {
+      "min": 0.89979563503695,
+      "max": 8.98541503343934
+    },
+    "A_final_collision_z_lower_m": {
+      "min": 0.8999854773669675,
+      "max": 8.710541656169092
+    },
+    "hold_motion_m": {
+      "S_min": 4.3387515891129186e-13,
+      "S_max": 0.00018397148956980354,
+      "A_min": 0.0,
+      "A_max": 0.27720267173417645,
+      "B_min": 0.0,
+      "B_max": 0.0009153835418900254
+    },
+    "forbidden_contact_candidate_counts": {
+      "A_B": 0,
+      "S_B": 24,
+      "A_plate": 0,
+      "A_ramekin": 0,
+      "B_plate": 0,
+      "B_ramekin": 36,
+      "robot": 0
+    },
+    "causal_trace_run_count": 0,
+    "failure_interpretation": "No frozen-grid placement retained even an initial S-A contact after the A/B settle phase. Thirty-three placements also launched or displaced A above the table by more than one metre. The layout/settle construction therefore does not reproduce the robust cookie state established by the separate L1-A2 work."
+  },
+  "artifacts": {
+    "candidate_hdf5": "NOT_EXPORTED_DUE_PHYSICAL_FAILURE",
+    "policy_png_or_video": "NOT_EXPORTED_DUE_PHYSICAL_FAILURE",
+    "report_json_sha256": "d0fae76df09c7bc45cd4099096de8cf2f1e15aace3a048db0ad744eeb33ddfab",
+    "report_json_bytes": 4146890,
+    "report_md_sha256": "bc5439d92b5ce6346d2f449ed805787eb736b5096392cca935d98ec0221f1313",
+    "policy_entry_base_audit_sha256": "2d17862c1ed61bb0569867e23a7271aeabfe438875af8d03f7a5a5315f85fb08",
+    "local_run_ledger": ".physcog-agent/runs/20260727T044020Z-l3a3-task1_leaning_chain_one"
+  },
+  "downstream": {
+    "safe_reference": "NOT_RUN",
+    "action_separation": "NOT_RUN",
+    "vla": "NOT_RUN",
+    "smoke": "NOT_RUN",
+    "formal": "NOT_RUN",
+    "further_run_of_this_144_grid": "FORBIDDEN",
+    "next_design_input": "WAIT_FOR_HASH_BOUND_THREE_SEED_REAL_SWEPT_PATH_FROM_L1_A2_JOB_490200"
+  }
+}
