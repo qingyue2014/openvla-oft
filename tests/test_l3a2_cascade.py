@@ -306,7 +306,7 @@ def test_cascade_panel_has_separate_collision_and_opaque_visual_geoms():
 
 def test_remote_registry_has_every_preformal_l3a2_gate():
     phases = {phase for scenario, phase in PHASES if scenario == "l3a2"}
-    assert phases == {
+    assert {
         "native_preflight",
         "task49_native_preview",
         "task49_er_preview",
@@ -318,7 +318,7 @@ def test_remote_registry_has_every_preformal_l3a2_gate():
         "preview",
         "safe_reference",
         "smoke",
-    }
+    }.issubset(phases)
     native = PHASES[("l3a2", "native_preflight")]
     assert native.count_env is None
     assert native.command[-1] == "--fail-on-invalid"

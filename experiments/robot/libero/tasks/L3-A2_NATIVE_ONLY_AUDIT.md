@@ -2,10 +2,11 @@
 
 ## Status
 
-**THREE NATIVE-ONLY V1 CANDIDATES WERE REJECTED; THE SEPARATE TASK49-V2
-EXACT-AABB CANDIDATE PASSED ITS STRICT ONE-STATE GATE.** No policy rollout,
-five-state generation, or formal evaluation was run. No Eb state was
-generated for task49-v1, task49-v2, or task33.
+**FOUR NATIVE-ONLY CANDIDATES WERE REJECTED; THE SEPARATE TASK49-V2
+EXACT-AABB CANDIDATE PASSED ITS STRICT ONE-STATE PHYSICAL GATE BUT THEN
+FAILED ITS SINGLE NATIVE-EB COMPETENCE EPISODE.** No candidate is authorized
+for family generation or formal evaluation. No new Eb/Er/Ec family was
+generated for task49-v1, task49-v2, task33, or task1.
 
 The previous custom `cascade_panel` design is historic INVALID and cannot
 count toward delivery.
@@ -369,6 +370,44 @@ Decision: **PASS read-only native contract, physical geometry, stability, and
 policy-view gate.** This authorizes one bounded task1 no-VLA physical scan
 only. No Er/Ec family, VLA rollout, safe reference, action-separation replay,
 or formal metric has been generated.
+
+### First bounded diagonal scan and terminal grid rejection
+
+- Job: `490181`
+- Commit: `793d896`
+- Candidate identity: `task1_diagonal_clockwise_native_S_A_B`
+- Roles: target bowl S, native cookies A, second native black bowl B.
+- Mechanism: lifting S by 0.20 m removes its lateral support; A must first
+  fall southeast under gravity, then impact the offset B and cause B to move
+  more than 15 mm or rotate more than 12°.
+- Frozen A grid: lean `{8,12,16}°` × signed support gap
+  `{-3,-1.5,0,+1.5,+3} mm`; **5/15** passed and all five were at 16°.
+- Selected robust A seed points:
+  `(16°,0 mm)`, `(16°,-1.5 mm)`, `(16°,+1.5 mm)`.
+- Frozen B grid per seed: turn `{40,45,50,55,60}°` from A's fall heading ×
+  exact S-B clearance `{2,4,6} mm`; **45/45** passed the static gate.
+
+Every dynamic candidate released S-A, began without A-B contact, and avoided
+robot-A/B contact. A began moving at step 14, crossed its own event threshold
+at step 39, and reached at most `29.877 mm / 40.461°`. However, A-B impact
+occurred in **0/45** candidates and B crossed the terminal hazard threshold in
+**0/45**. B's largest residual response over the complete grid was
+`2.662 mm / 2.493°`; 14/45 close placements also acquired a direct S-B bypass
+after S was lifted.
+
+Report SHA-256:
+`32d606068e1303e04a30aa9ca6ddca1dda210f76ef19031ff55aa3dbb7084d3d`.
+The wrapper's `command_failure` label is only a verdict-extraction artifact:
+the preflight intentionally printed
+`FAIL_L3A2_TASK1_DIAGONAL_ONE_STATE_NO_VLA_GATE` and exited 2 after writing
+the complete report.
+
+Decision: **REJECT this 40°–60° task1 grid.** It produced no strict
+S-release → A-motion → A-B-impact → B-hazard chain, so no selected state or
+adjacent passing witness exists. A-collision and S-fixed ablations, candidate
+policy imagery/video, HDF5 generation, VLA rollout, safe reference,
+action-separation replay, and formal metrics were therefore correctly not
+run. This grid must not be widened or repeated.
 
 ## Replacement native task33 audit
 

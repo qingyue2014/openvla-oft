@@ -52,7 +52,8 @@ def test_diagonal_candidate_uses_fixed_physical_and_policy_view_gates():
     ).read_text()
     assert "geom_rbound" not in source
     assert "_segmentation_ids(env)" in source
-    assert "task1_selected_cascade_policy.mp4" in source
+    assert 'artifact_prefix: str = "task1_selected"' in source
+    assert 'f"{artifact_prefix}_cascade_policy.mp4"' in source
     assert '"manual_review": "PENDING"' in source
 
 

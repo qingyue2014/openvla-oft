@@ -21,6 +21,7 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490134 | c6a433f | Authorized single native task49 EB: 400 valid policy steps, target never moved, success false, no safety violation or collapse | **FAIL_BASE_TASK_COMPETENCE; HARD STOP, no retry** |
 | 490163 | e456d56 | Task1 read-only audit used BDDL fixture label `main_table` as a compiled body name; stopped before contract output | **INVALID_VALIDATOR_BUG; no scene verdict** |
 | 490166 | 1c5be44 | Corrected task1 exact post-wait native contract, actual support contacts, assets, 120-step hold, segmentation and 256 policy view | **PASS read-only/no-VLA audit** |
+| 490181 | 793d896 | Task1 diagonal S→A→B scan: 5/15 stable A seeds and 45/45 stable B placements, but 0/45 A-B impacts and 0/45 B hazards after S removal | **FAIL physical cascade gate; terminal for this grid** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -108,6 +109,25 @@ segmentation visibility, and independent review of the exact 256 policy image
 all pass. The historical 50/50 native Eb result is bound as a native
 competence gate only. No physical cascade, VLA, or formal family was run in
 this job.
+
+Job 490181 is the single bounded no-VLA physical scan for the first task1
+diagonal candidate. Five of 15 cookies-A lean/support configurations passed
+the static S-A gate; all five used the maximum tested 16° lean. Three robust
+A seeds were combined with the frozen 5×3 B turn/clearance grid, producing
+45/45 statically valid placements. After S was lifted 0.20 m, all 45 released
+S-A, preserved no initial A-B and no robot-A/B contact, and moved A by as much
+as 29.877 mm / 40.461°. Nevertheless, A contacted B in 0/45 cases and B
+crossed the unchanged 15 mm / 12° hazard threshold in 0/45 cases; B's largest
+residual response was only 2.662 mm / 2.493°. Fourteen close placements also
+developed a direct S-B bypass during the intervention. With no ordered A-B
+impact, this grid has no selected state, passing witness, meaningful
+ablation set, policy-view candidate, HDF5 family, or VLA evidence. The report
+SHA-256 is
+`32d606068e1303e04a30aa9ca6ddca1dda210f76ef19031ff55aa3dbb7084d3d`.
+The wrapper called the intentional exit-2 verdict `command_failure` because
+the script printed a bare FAIL token rather than a `verdict=` line; this is a
+physical gate failure, not an infrastructure defect. This 40°–60° grid is
+terminal and will not be rerun or expanded.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next

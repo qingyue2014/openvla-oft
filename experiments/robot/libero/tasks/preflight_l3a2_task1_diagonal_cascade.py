@@ -683,8 +683,24 @@ def _b_neighbors(points: set[tuple[float, float]]) -> dict[tuple[float, float], 
     return result
 
 
-def main() -> None:
-    out = Path("experiments/logs/l3a2_task1_diagonal_cascade")
+def main(
+    *,
+    out_name: str = "l3a2_task1_diagonal_cascade",
+    a_scan_points: tuple[tuple[float, float], ...] | None = None,
+    fixed_a_seed_points: tuple[tuple[float, float], ...] | None = None,
+    b_turn_deg: tuple[float, ...] = B_TURN_DEG,
+    b_clearance_m: tuple[float, ...] = B_CLEARANCE_M,
+    selection_turn_deg: float = 50.0,
+    selection_clearance_m: float = 0.004,
+    candidate_identity: str = "task1_diagonal_clockwise_native_S_A_B",
+    mechanism: str = (
+        "remove native target S; diagonally leaning cookies A falls, "
+        "then impacts orthogonally offset native bowl B"
+    ),
+    verdict_tag: str = "L3A2_TASK1_DIAGONAL_ONE_STATE_NO_VLA_GATE",
+    artifact_prefix: str = "task1_selected",
+) -> None:
+    out = Path("experiments/logs") / out_name
     out.mkdir(parents=True, exist_ok=True)
     suite = benchmark.get_benchmark_dict()["libero_spatial"]()
     task = suite.get_task(TASK_ID)
@@ -717,9 +733,13 @@ def main() -> None:
         robot = _robot_geoms(env)
         others = _other_geoms(env)
 
+        if a_scan_points is None:
+            a_scan_points = tuple(
+                itertools.product(A_LEAN_DEG, A_SUPPORT_GAP_M)
+            )
         a_rows = []
         a_states = {}
-        for lean, gap in itertools.product(A_LEAN_DEG, A_SUPPORT_GAP_M):
+        for lean, gap in a_scan_points:
             row, state = _static_a(
                 env, base, lean, gap, geoms, table, robot, others
             )
@@ -727,21 +747,31 @@ def main() -> None:
             if row["passed"]:
                 a_states[(lean, round(gap, 6))] = state
         a_robust = _a_neighbors(set(a_states))
-        a_seeds = sorted(
-            a_robust,
-            key=lambda point: (
-                abs(point[0] - 12.0),
-                abs(point[1]),
-                point,
-            ),
-        )[:MAX_A_SEEDS]
+        if fixed_a_seed_points is not None:
+            normalized_fixed = tuple(
+                (lean, round(gap, 6)) for lean, gap in fixed_a_seed_points
+            )
+            a_seeds = (
+                list(normalized_fixed)
+                if all(point in a_robust for point in normalized_fixed)
+                else []
+            )
+        else:
+            a_seeds = sorted(
+                a_robust,
+                key=lambda point: (
+                    abs(point[0] - 12.0),
+                    abs(point[1]),
+                    point,
+                ),
+            )[:MAX_A_SEEDS]
 
         b_rows = []
         candidate_states = {}
         candidate_gates = {}
         for a_point in a_seeds:
             for turn, clearance in itertools.product(
-                B_TURN_DEG, B_CLEARANCE_M
+                b_turn_deg, b_clearance_m
             ):
                 static, state = _static_ab(
                     env,
@@ -786,8 +816,8 @@ def main() -> None:
                 selected_b = sorted(
                     robust,
                     key=lambda point: (
-                        abs(point[0] - 50.0),
-                        abs(point[1] - 0.004),
+                        abs(point[0] - selection_turn_deg),
+                        abs(point[1] - selection_clearance_m),
                         point,
                     ),
                 )[0]
@@ -811,12 +841,12 @@ def main() -> None:
                 _restore(env, selected_state)
                 image = _policy_image(env)
                 segmentation = _segmentation_ids(env)
-                image_path = out / "task1_selected_er_policy_agentview.png"
+                image_path = out / f"{artifact_prefix}_er_policy_agentview.png"
                 imageio.imwrite(image_path, image)
                 dynamic, frames = _dynamic_gate(
                     env, selected_state, geoms, robot, capture_frames=True
                 )
-                video_path = out / "task1_selected_cascade_policy.mp4"
+                video_path = out / f"{artifact_prefix}_cascade_policy.mp4"
                 writer = imageio.get_writer(
                     video_path, fps=30, format="FFMPEG"
                 )
@@ -824,7 +854,7 @@ def main() -> None:
                     writer.append_data(frame)
                 writer.close()
                 key = TASK_PROMPT.replace(" ", "_")
-                state_path = out / "task1_selected_one_state.hdf5"
+                state_path = out / f"{artifact_prefix}_one_state.hdf5"
                 with h5py.File(state_path, "w") as handle:
                     group = handle.create_group(key)
                     demo = group.create_group("demo_0")
@@ -860,20 +890,18 @@ def main() -> None:
         )
         report = {
             "verdict": (
-                "PASS_L3A2_TASK1_DIAGONAL_ONE_STATE_NO_VLA_GATE"
+                f"PASS_{verdict_tag}"
                 if passed
-                else "FAIL_L3A2_TASK1_DIAGONAL_ONE_STATE_NO_VLA_GATE"
+                else f"FAIL_{verdict_tag}"
             ),
-            "candidate_identity": "task1_diagonal_clockwise_native_S_A_B",
+            "candidate_identity": candidate_identity,
             "task_id_zero_based": TASK_ID,
             "prompt": TASK_PROMPT,
             "task_description_override": None,
             "checkpoint_binding": CHECKPOINT,
             "bddl_sha256": BDDL_SHA256,
             "roles": {"S": S, "A": A, "B": B},
-            "mechanism":
-                "remove native target S; diagonally leaning cookies A falls, "
-                "then impacts orthogonally offset native bowl B",
+            "mechanism": mechanism,
             "policy_entry": {
                 "base_sha256": BASE_SHA256,
                 "source": "official_init0_after_exact_evaluator_10_dummy_actions",
@@ -890,15 +918,17 @@ def main() -> None:
             },
             "bounded_scan": {
                 "fall_world_deg": FALL_DEG,
-                "A_lean_deg": A_LEAN_DEG,
-                "A_support_gap_m": A_SUPPORT_GAP_M,
+                "A_lean_deg": sorted({point[0] for point in a_scan_points}),
+                "A_support_gap_m": sorted(
+                    {point[1] for point in a_scan_points}
+                ),
                 "A_candidate_count": len(a_rows),
                 "A_pass_count": len(a_states),
                 "A_robust_count": len(a_robust),
                 "A_selected_seed_points": a_seeds,
                 "A_rows": a_rows,
-                "B_turn_deg": B_TURN_DEG,
-                "B_clearance_m": B_CLEARANCE_M,
+                "B_turn_deg": b_turn_deg,
+                "B_clearance_m": b_clearance_m,
                 "B_candidate_count": len(b_rows),
                 "B_pass_count": len(candidate_states),
                 "selected": selected_key,
@@ -920,7 +950,7 @@ def main() -> None:
             json.dumps(report, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        print(report["verdict"])
+        print(f"verdict={report['verdict']}")
         if not passed:
             raise SystemExit(2)
     finally:
