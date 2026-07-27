@@ -386,7 +386,8 @@ def test_task1_leaning_chain_is_bounded_native_only_and_fail_closed():
     assert 'A = "cookies_1_main"' in text
     assert 'B = "akita_black_bowl_2_main"' in text
     assert 'TABLE = "table"' in text
-    assert "for required_body in (*RELEVANT, TABLE)" in text
+    assert 'STOVE = "flat_stove_1_main"' in text
+    assert "for required_body in (*RELEVANT, TABLE, STOVE)" in text
     assert "required compiled task1 body missing" in text
     assert "MAX_CANDIDATES" in text and "MAX_CANDIDATES != 144" in text
     assert "geom_world_aabb" in text
@@ -403,6 +404,59 @@ def test_task1_leaning_chain_is_bounded_native_only_and_fail_closed():
     assert '"vla_status": "NOT_RUN"' in text
     assert "pretrained_checkpoint" not in text
     assert "task_description_override" not in text
+
+
+def test_task1_corrected_probe_uses_policy_entry_base_and_wait0_export_contract():
+    text = (
+        TASKS / "generate_l3a3_task1_leaning_chain_candidate.py"
+    ).read_text()
+    assert "POLICY_ENTRY_WAIT_STEPS = 10" in text
+    capture = text[
+        text.index("def capture_policy_entry_base(") :
+        text.index("def validate_policy_entry_base(")
+    ]
+    assert "range(POLICY_ENTRY_WAIT_STEPS)" in capture
+    assert "env.step(POLICY_ENTRY_DUMMY_ACTION)" in capture
+    validation = text[
+        text.index("def validate_policy_entry_base(") :
+        text.index("def capture(env")
+    ]
+    assert "validation_only_not_an_additional_policy_entry_wait" in validation
+    assert "range(POLICY_ENTRY_WAIT_STEPS)" in validation
+    assert "ENTRY_BODY_DRIFT_MAX_M" in validation
+    assert "ENTRY_RGB_PSNR_MIN_DB" in validation
+    assert 'group.attrs["policy_entry_base"] = True' in text
+    assert 'group.attrs["base_capture_wait_steps"] = POLICY_ENTRY_WAIT_STEPS' in text
+    assert 'group.attrs["required_evaluator_num_steps_wait"] = 0' in text
+    assert '"required_future_evaluator_num_steps_wait": 0' in text
+    assert "Any evaluator consuming exported " in text
+    assert "must use num_steps_wait=0" in text
+
+
+def test_task1_corrected_probe_audits_table_support_and_leaning_contact_heights():
+    text = (
+        TASKS / "generate_l3a3_task1_leaning_chain_candidate.py"
+    ).read_text()
+    topology = text[
+        text.index("def support_surface_topology(") :
+        text.index("def orientation_delta_deg(")
+    ]
+    assert "contact_rows(sim, S, TABLE, right_exact_body=True)" in topology
+    assert "contact_rows(sim, S, STOVE, right_exact_body=True)" in topology
+    assert "contact_rows(sim, A, TABLE, right_exact_body=True)" in topology
+    assert "contact_rows(sim, S, A)" in topology
+    assert '"geom1_compiled_body"' in text
+    assert '"geom2_compiled_body"' in text
+    assert "A_TABLE_MAX_NORMALIZED_HEIGHT = 0.20" in text
+    assert "S_A_MIN_NORMALIZED_HEIGHT = 0.35" in text
+    assert "CONTACT_VERTICAL_SEPARATION_MIN_M = 0.015" in text
+    static_gate = text[
+        text.index("def static_gate(") : text.index("def pair_contact_force(")
+    ]
+    assert "persistent_s_table" in static_gate
+    assert "s_stove_seen" in static_gate
+    assert 'topology_initial["passed"]' in static_gate
+    assert 'topology_final["passed"]' in static_gate
 
 
 def test_task1_eb_binding_distinguishes_suite_prompt_from_bddl_language():

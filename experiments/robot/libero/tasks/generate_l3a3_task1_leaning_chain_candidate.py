@@ -65,7 +65,19 @@ B = "akita_black_bowl_2_main"
 PLATE = "plate_1_main"
 RAMEKIN = "glazed_rim_porcelain_ramekin_1_main"
 TABLE = "table"
+STOVE = "flat_stove_1_main"
 RELEVANT = (S, A, B, PLATE, RAMEKIN)
+
+POLICY_ENTRY_WAIT_STEPS = 10
+POLICY_ENTRY_DUMMY_ACTION = np.array([0, 0, 0, 0, 0, 0, -1], dtype=float)
+ENTRY_BODY_DRIFT_MAX_M = 1.0e-4
+ENTRY_ORIENTATION_DRIFT_MAX_DEG = 0.05
+ENTRY_QPOS_DRIFT_MAX = 1.0e-4
+ENTRY_RGB_PSNR_MIN_DB = 50.0
+ENTRY_RGB_SSIM_MIN = 0.999
+A_TABLE_MAX_NORMALIZED_HEIGHT = 0.20
+S_A_MIN_NORMALIZED_HEIGHT = 0.35
+CONTACT_VERTICAL_SEPARATION_MIN_M = 0.015
 
 DIRECTIONS = (
     ("px", np.array([1.0, 0.0])),
@@ -267,6 +279,120 @@ def robot_contact(sim, bodies: tuple[str, ...]) -> bool:
     return False
 
 
+def contact_rows(
+    sim,
+    left: str,
+    right: str,
+    *,
+    right_exact_body: bool = False,
+) -> list[dict]:
+    """Return exact compiled contacts between two body subtrees."""
+    left_geoms = set(descendants_geoms(sim, left))
+    if right_exact_body:
+        right_id = int(sim.model.body_name2id(right))
+        right_geoms = {
+            geom_id
+            for geom_id in range(int(sim.model.ngeom))
+            if int(sim.model.geom_bodyid[geom_id]) == right_id
+        }
+    else:
+        right_geoms = set(descendants_geoms(sim, right))
+    rows = []
+    for index in range(int(sim.data.ncon)):
+        contact = sim.data.contact[index]
+        geom1 = int(contact.geom1)
+        geom2 = int(contact.geom2)
+        if not (
+            (geom1 in left_geoms and geom2 in right_geoms)
+            or (geom2 in left_geoms and geom1 in right_geoms)
+        ):
+            continue
+        address = int(getattr(contact, "efc_address", -1))
+        force = None
+        if 0 <= address < len(sim.data.efc_force):
+            force = float(sim.data.efc_force[address])
+        rows.append(
+            {
+                "contact_index": index,
+                "geom1": sim.model.geom_id2name(geom1) or f"geom_{geom1}",
+                "geom2": sim.model.geom_id2name(geom2) or f"geom_{geom2}",
+                "geom1_compiled_body": sim.model.body_id2name(
+                    int(sim.model.geom_bodyid[geom1])
+                ),
+                "geom2_compiled_body": sim.model.body_id2name(
+                    int(sim.model.geom_bodyid[geom2])
+                ),
+                "position_xyz": np.asarray(contact.pos, dtype=float).tolist(),
+                "distance_m": float(contact.dist),
+                "efc_force": force,
+            }
+        )
+    return rows
+
+
+def support_surface_topology(sim) -> dict:
+    """Audit the intended low table contact and higher S-A leaning contact."""
+    a_lower, a_upper, _ = body_collision_aabb(sim, A)
+    a_height = float(a_upper[2] - a_lower[2])
+    if a_height <= 0:
+        raise RuntimeError("A compiled collision AABB has non-positive height")
+    s_table = contact_rows(sim, S, TABLE, right_exact_body=True)
+    s_stove = contact_rows(sim, S, STOVE, right_exact_body=True)
+    a_table = contact_rows(sim, A, TABLE, right_exact_body=True)
+    s_a = contact_rows(sim, S, A)
+    a_table_heights = [
+        float(row["position_xyz"][2]) for row in a_table
+    ]
+    s_a_heights = [float(row["position_xyz"][2]) for row in s_a]
+    a_table_max_normalized = (
+        (max(a_table_heights) - float(a_lower[2])) / a_height
+        if a_table_heights
+        else None
+    )
+    s_a_max_normalized = (
+        (max(s_a_heights) - float(a_lower[2])) / a_height
+        if s_a_heights
+        else None
+    )
+    vertical_separation = (
+        max(s_a_heights) - max(a_table_heights)
+        if s_a_heights and a_table_heights
+        else None
+    )
+    passed = bool(
+        s_table
+        and not s_stove
+        and a_table
+        and s_a
+        and a_table_max_normalized is not None
+        and a_table_max_normalized <= A_TABLE_MAX_NORMALIZED_HEIGHT
+        and s_a_max_normalized is not None
+        and s_a_max_normalized >= S_A_MIN_NORMALIZED_HEIGHT
+        and vertical_separation is not None
+        and vertical_separation >= CONTACT_VERTICAL_SEPARATION_MIN_M
+    )
+    return {
+        "passed": passed,
+        "compiled_support_body_expected": TABLE,
+        "compiled_stove_body_excluded": STOVE,
+        "S_table_contacts": s_table,
+        "S_stove_contacts": s_stove,
+        "A_table_contacts": a_table,
+        "S_A_contacts": s_a,
+        "A_collision_z_lower": float(a_lower[2]),
+        "A_collision_z_upper": float(a_upper[2]),
+        "A_collision_height_m": a_height,
+        "A_table_max_normalized_height": a_table_max_normalized,
+        "S_A_max_normalized_height": s_a_max_normalized,
+        "S_A_minus_A_table_max_height_m": vertical_separation,
+        "thresholds": {
+            "A_table_max_normalized_height": A_TABLE_MAX_NORMALIZED_HEIGHT,
+            "S_A_min_normalized_height": S_A_MIN_NORMALIZED_HEIGHT,
+            "S_A_minus_A_table_min_height_m": CONTACT_VERTICAL_SEPARATION_MIN_M,
+        },
+    }
+
+
 def orientation_delta_deg(start_quat: np.ndarray, now_quat: np.ndarray) -> float:
     cosine = float(
         np.clip(abs(np.dot(start_quat, now_quat)), 0.0, 1.0)
@@ -282,8 +408,17 @@ def static_gate(sim, state: np.ndarray, steps: int) -> tuple[bool, dict]:
     sim.set_state_from_flattened(state)
     sim.forward()
     starts = {body: body_pose(sim, body) for body in (S, A, B)}
+    topology_initial = support_surface_topology(sim)
     persistent_sa = bodies_in_contact(sim, S, A)
-    persistent_a_table = bodies_in_contact(sim, A, TABLE)
+    persistent_a_table = bool(
+        contact_rows(sim, A, TABLE, right_exact_body=True)
+    )
+    persistent_s_table = bool(
+        contact_rows(sim, S, TABLE, right_exact_body=True)
+    )
+    s_stove_seen = bool(
+        contact_rows(sim, S, STOVE, right_exact_body=True)
+    )
     forbidden = {
         "A_B": bodies_in_contact(sim, A, B),
         "S_B": bodies_in_contact(sim, S, B),
@@ -300,7 +435,15 @@ def static_gate(sim, state: np.ndarray, steps: int) -> tuple[bool, dict]:
     for _ in range(steps):
         sim.step()
         persistent_sa &= bodies_in_contact(sim, S, A)
-        persistent_a_table &= bodies_in_contact(sim, A, TABLE)
+        persistent_a_table &= bool(
+            contact_rows(sim, A, TABLE, right_exact_body=True)
+        )
+        persistent_s_table &= bool(
+            contact_rows(sim, S, TABLE, right_exact_body=True)
+        )
+        s_stove_seen |= bool(
+            contact_rows(sim, S, STOVE, right_exact_body=True)
+        )
         forbidden["A_B"] |= bodies_in_contact(sim, A, B)
         forbidden["S_B"] |= bodies_in_contact(sim, S, B)
         forbidden["A_plate"] |= bodies_in_contact(sim, A, PLATE)
@@ -317,9 +460,14 @@ def static_gate(sim, state: np.ndarray, steps: int) -> tuple[bool, dict]:
                 maxima[body]["orientation_deg"],
                 orientation_delta_deg(starts[body][1], now[1]),
             )
+    topology_final = support_surface_topology(sim)
     passed = bool(
         persistent_sa
         and persistent_a_table
+        and persistent_s_table
+        and not s_stove_seen
+        and topology_initial["passed"]
+        and topology_final["passed"]
         and not any(forbidden.values())
         and maxima[S]["motion_m"] <= 0.001
         and maxima[A]["motion_m"] <= 0.002
@@ -330,6 +478,10 @@ def static_gate(sim, state: np.ndarray, steps: int) -> tuple[bool, dict]:
     return passed, {
         "persistent_S_A": persistent_sa,
         "persistent_A_table": persistent_a_table,
+        "persistent_S_table": persistent_s_table,
+        "S_stove_seen": s_stove_seen,
+        "support_surface_topology_initial": topology_initial,
+        "support_surface_topology_final": topology_final,
         "forbidden_seen": forbidden,
         "maxima": maxima,
     }
@@ -514,6 +666,157 @@ def assert_pairing(sim, base: np.ndarray, er: np.ndarray) -> dict:
     }
 
 
+def rgb_similarity(left: np.ndarray, right: np.ndarray) -> dict:
+    left_f = np.asarray(left, dtype=np.float64)
+    right_f = np.asarray(right, dtype=np.float64)
+    mse = float(np.mean((left_f - right_f) ** 2))
+    psnr = 999.0 if mse == 0.0 else float(20.0 * np.log10(255.0 / np.sqrt(mse)))
+    c1 = (0.01 * 255.0) ** 2
+    c2 = (0.03 * 255.0) ** 2
+    per_channel = []
+    for channel in range(left_f.shape[-1]):
+        x = left_f[..., channel]
+        y = right_f[..., channel]
+        mean_x = float(np.mean(x))
+        mean_y = float(np.mean(y))
+        var_x = float(np.mean((x - mean_x) ** 2))
+        var_y = float(np.mean((y - mean_y) ** 2))
+        covariance = float(np.mean((x - mean_x) * (y - mean_y)))
+        numerator = (2.0 * mean_x * mean_y + c1) * (2.0 * covariance + c2)
+        denominator = (mean_x**2 + mean_y**2 + c1) * (var_x + var_y + c2)
+        per_channel.append(float(numerator / denominator))
+    return {
+        "mse": mse,
+        "psnr_db": psnr,
+        "global_ssim": float(np.mean(per_channel)),
+        "global_ssim_per_channel": per_channel,
+    }
+
+
+def capture_policy_entry_base(env, raw_source: np.ndarray) -> tuple[np.ndarray, np.ndarray, dict]:
+    """Apply the evaluator's sole wait10 and capture its actual policy entry."""
+    env.reset()
+    obs = env.set_init_state(raw_source)
+    raw_restored = np.asarray(env.sim.get_state().flatten()).copy()
+    if not np.array_equal(raw_source, raw_restored):
+        raise RuntimeError("task1 raw official state did not restore exactly")
+    raw_poses = {
+        body: {
+            "xyz": body_pose(env.sim, body)[0].tolist(),
+            "quat_wxyz": body_pose(env.sim, body)[1].tolist(),
+        }
+        for body in RELEVANT
+    }
+    for _ in range(POLICY_ENTRY_WAIT_STEPS):
+        obs, _, _, _ = env.step(POLICY_ENTRY_DUMMY_ACTION)
+    base = np.asarray(env.sim.get_state().flatten()).copy()
+    entry_rgb = policy_image(obs)
+    base_poses = {
+        body: {
+            "xyz": body_pose(env.sim, body)[0].tolist(),
+            "quat_wxyz": body_pose(env.sim, body)[1].tolist(),
+        }
+        for body in RELEVANT
+    }
+    s_table = contact_rows(
+        env.sim, S, TABLE, right_exact_body=True
+    )
+    s_stove = contact_rows(
+        env.sim, S, STOVE, right_exact_body=True
+    )
+    passed = bool(s_table and not s_stove)
+    return base, entry_rgb, {
+        "passed": passed,
+        "source": "official_serialized_state_index_0",
+        "capture_wait_steps": POLICY_ENTRY_WAIT_STEPS,
+        "capture_dummy_action": POLICY_ENTRY_DUMMY_ACTION.tolist(),
+        "raw_state_sha256": sha256(raw_source.tobytes()),
+        "policy_entry_state_sha256": sha256(base.tobytes()),
+        "raw_body_poses": raw_poses,
+        "policy_entry_body_poses": base_poses,
+        "S_policy_entry_support_body": TABLE if s_table else None,
+        "S_table_contacts": s_table,
+        "S_stove_contacts": s_stove,
+        "required_future_evaluator_num_steps_wait": 0,
+    }
+
+
+def validate_policy_entry_base(
+    env,
+    base: np.ndarray,
+    captured_entry_rgb: np.ndarray,
+) -> dict:
+    """Run a second wait10 only to prove settled-entry pose/RGB equivalence."""
+    env.reset()
+    env.set_init_state(base)
+    env.sim.forward()
+    restored = np.asarray(env.sim.get_state().flatten()).copy()
+    if not np.array_equal(base, restored):
+        raise RuntimeError("settled policy-entry base did not restore exactly")
+    obs = refresh(env, restored)
+    restored_rgb = policy_image(obs)
+    starts = {body: body_pose(env.sim, body) for body in RELEVANT}
+    qpos_start = np.asarray(env.sim.data.qpos).copy()
+    persistent_s_table = bool(
+        contact_rows(env.sim, S, TABLE, right_exact_body=True)
+    )
+    s_stove_seen = bool(
+        contact_rows(env.sim, S, STOVE, right_exact_body=True)
+    )
+    for _ in range(POLICY_ENTRY_WAIT_STEPS):
+        obs, _, _, _ = env.step(POLICY_ENTRY_DUMMY_ACTION)
+        persistent_s_table &= bool(
+            contact_rows(env.sim, S, TABLE, right_exact_body=True)
+        )
+        s_stove_seen |= bool(
+            contact_rows(env.sim, S, STOVE, right_exact_body=True)
+        )
+    postwait_rgb = policy_image(obs)
+    body_drift = {}
+    for body, start in starts.items():
+        now = body_pose(env.sim, body)
+        body_drift[body] = {
+            "translation_m": motion_m(start, now),
+            "orientation_deg": orientation_delta_deg(start[1], now[1]),
+        }
+    qpos_max_abs = float(
+        np.max(np.abs(np.asarray(env.sim.data.qpos) - qpos_start))
+    )
+    restored_rgb_similarity = rgb_similarity(captured_entry_rgb, restored_rgb)
+    postwait_rgb_similarity = rgb_similarity(captured_entry_rgb, postwait_rgb)
+    passed = bool(
+        persistent_s_table
+        and not s_stove_seen
+        and max(row["translation_m"] for row in body_drift.values())
+        <= ENTRY_BODY_DRIFT_MAX_M
+        and max(row["orientation_deg"] for row in body_drift.values())
+        <= ENTRY_ORIENTATION_DRIFT_MAX_DEG
+        and qpos_max_abs <= ENTRY_QPOS_DRIFT_MAX
+        and postwait_rgb_similarity["psnr_db"] >= ENTRY_RGB_PSNR_MIN_DB
+        and postwait_rgb_similarity["global_ssim"] >= ENTRY_RGB_SSIM_MIN
+    )
+    return {
+        "passed": passed,
+        "purpose": "validation_only_not_an_additional_policy_entry_wait",
+        "validation_wait_steps": POLICY_ENTRY_WAIT_STEPS,
+        "validation_dummy_action": POLICY_ENTRY_DUMMY_ACTION.tolist(),
+        "future_evaluator_num_steps_wait": 0,
+        "persistent_S_table": persistent_s_table,
+        "S_stove_seen": s_stove_seen,
+        "body_drift": body_drift,
+        "qpos_max_abs_drift": qpos_max_abs,
+        "captured_entry_vs_immediate_restore_rgb": restored_rgb_similarity,
+        "captured_entry_vs_post_validation_wait_rgb": postwait_rgb_similarity,
+        "thresholds": {
+            "body_translation_max_m": ENTRY_BODY_DRIFT_MAX_M,
+            "body_orientation_max_deg": ENTRY_ORIENTATION_DRIFT_MAX_DEG,
+            "qpos_max_abs": ENTRY_QPOS_DRIFT_MAX,
+            "rgb_psnr_min_db": ENTRY_RGB_PSNR_MIN_DB,
+            "rgb_global_ssim_min": ENTRY_RGB_SSIM_MIN,
+        },
+    }
+
+
 def capture(env, state: np.ndarray, condition: str, output: Path) -> dict:
     env.reset()
     env.set_init_state(state)
@@ -552,6 +855,9 @@ def save_state(path: Path, state: np.ndarray, condition: str) -> dict:
         group.attrs["bddl_language"] = BDDL_LANGUAGE
         group.attrs["prompt_override"] = ""
         group.attrs["native_bddl_sha256"] = NATIVE_BDDL_SHA256
+        group.attrs["policy_entry_base"] = True
+        group.attrs["base_capture_wait_steps"] = POLICY_ENTRY_WAIT_STEPS
+        group.attrs["required_evaluator_num_steps_wait"] = 0
     return {
         "file": path.name,
         "hdf5_sha256": sha256(path.read_bytes()),
@@ -610,19 +916,64 @@ def main() -> None:
     accepted_state = None
     try:
         env.reset()
-        for required_body in (*RELEVANT, TABLE):
+        for required_body in (*RELEVANT, TABLE, STOVE):
             try:
                 env.sim.model.body_name2id(required_body)
             except ValueError as exc:
                 raise RuntimeError(
                     f"required compiled task1 body missing: {required_body}"
                 ) from exc
-        base = np.asarray(suite.get_task_init_states(TASK_ID)[0]).copy()
+        raw_source = np.asarray(suite.get_task_init_states(TASK_ID)[0]).copy()
+        base, captured_entry_rgb, entry_capture = capture_policy_entry_base(
+            env, raw_source
+        )
+        entry_audit_path = output / "policy_entry_base_audit.json"
+        entry_audit_path.write_text(
+            json.dumps(
+                {
+                    "capture": entry_capture,
+                    "restored_base_wait10_stability_equivalence": "NOT_RUN",
+                    "future_evaluator_num_steps_wait": 0,
+                    "vla_status": "NOT_RUN",
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        if not entry_capture["passed"]:
+            raise RuntimeError(
+                "policy-entry base support audit failed: S must contact compiled "
+                f"{TABLE!r} and not {STOVE!r}"
+            )
+        entry_validation = validate_policy_entry_base(
+            env, base, captured_entry_rgb
+        )
+        entry_audit_path.write_text(
+            json.dumps(
+                {
+                    "capture": entry_capture,
+                    "restored_base_wait10_stability_equivalence": entry_validation,
+                    "future_evaluator_num_steps_wait": 0,
+                    "vla_status": "NOT_RUN",
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        if not entry_validation["passed"]:
+            raise RuntimeError(
+                "settled policy-entry base failed evaluator-equivalent wait10 "
+                "pose/RGB stability validation"
+            )
+        # This is the common EB/ER/EC policy-entry base. No second evaluator
+        # pre-roll is part of the state contract or the physical search.
         env.set_init_state(base)
         env.sim.forward()
         restored = np.asarray(env.sim.get_state().flatten()).copy()
         if not np.array_equal(base, restored):
-            raise RuntimeError("task1 native serialized state did not restore exactly")
+            raise RuntimeError("task1 policy-entry base did not restore exactly")
         if env.check_success():
             raise RuntimeError("native task1 source already satisfies goal")
         asset_gate = {
@@ -767,6 +1118,21 @@ def main() -> None:
             "goal_form_sha256": GOAL_SHA256,
             "eb_binding_file": binding_path.name,
             "eb_binding_sha256": sha256(binding_path.read_bytes()),
+            "policy_entry_base": True,
+            "base_capture_wait_steps": POLICY_ENTRY_WAIT_STEPS,
+            "required_future_evaluator_num_steps_wait": 0,
+        },
+        "policy_entry_base_audit": {
+            "file": entry_audit_path.name,
+            "file_sha256": sha256(entry_audit_path.read_bytes()),
+            "capture": entry_capture,
+            "restored_base_wait10_stability_equivalence": entry_validation,
+            "interpretation": (
+                "The official raw state receives the evaluator's wait10 exactly "
+                "once to define the common base. The second wait10 above is only "
+                "a stability-equivalence audit. Any evaluator consuming exported "
+                "HDF5 must use num_steps_wait=0."
+            ),
         },
         "native_roles": {"S": S, "A": A, "B": B, "goal": PLATE, "landmark": RAMEKIN},
         "native_asset_gate": asset_gate,
@@ -802,6 +1168,13 @@ def main() -> None:
         f"- Verdict: **{verdict}**\n"
         f"- Actual policy prompt: `{POLICY_PROMPT}`\n"
         f"- BDDL language (not policy input): `{BDDL_LANGUAGE}`\n"
+        f"- Common base: official raw state after exactly "
+        f"{POLICY_ENTRY_WAIT_STEPS} evaluator dummy actions; "
+        f"stability-equivalence={entry_validation['passed']}.\n"
+        f"- S support at policy entry: compiled `{TABLE}`; "
+        f"`{STOVE}` contacts={len(entry_capture['S_stove_contacts'])}.\n"
+        "- Export contract: evaluators consuming these settled HDF5 states "
+        "must use `num_steps_wait=0`; the second wait10 was validation only.\n"
         f"- Bounded candidates: {len(rows)}/{MAX_CANDIDATES}; "
         f"full-pass={sum(row['passed'] for row in rows)}; "
         f"robust-with-neighbor={len(robust)}.\n"

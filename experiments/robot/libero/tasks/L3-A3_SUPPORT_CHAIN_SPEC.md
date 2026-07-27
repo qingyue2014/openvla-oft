@@ -87,6 +87,23 @@ serialized settled HDF5. No new simulation was run for this audit. Exact
 measurements and the recommended fail-closed sequence are recorded in
 `L3-A3_TASK1_PREWARMUP_AUDIT.json`.
 
+### Authorized corrected policy-entry-base probe
+
+A single corrected physical probe is authorized to resolve the narrow
+raw-prewarmup ambiguity above. It captures the common Eb/Er/Ec base after
+exactly the evaluator's ten dummy actions, then restores that settled base and
+runs another ten dummy actions only as a pose/RGB stability-equivalence audit.
+The latter is not a second policy-entry pre-roll: any evaluator consuming an
+exported settled HDF5 must use `num_steps_wait=0`.
+
+The bounded search remains the exact predeclared 144-point grid from job
+`490155`; no direction, tilt, contact offset, B gap, motion threshold, or
+causal threshold is changed. Before candidate dynamics can pass, the validator
+must separately establish that `S` is supported by compiled body `table`, not
+`flat_stove_1_main`, and that the leaning `A` has low table contact plus a
+higher `S-A` contact with at least 0.015 m vertical separation. No VLA is
+loaded. The corrected remote result remains pending.
+
 ## Failed native-only task57 replacement
 
 The replacement preserved zero-indexed LIBERO-90 task ID 57 exactly:
