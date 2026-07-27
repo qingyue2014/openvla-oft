@@ -29,14 +29,14 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
-    ("l3a2", "task2_native_rebind_static"): PhaseSpec(
+    ("l3a2", "task2_cookie_momentum_static"): PhaseSpec(
         command=(
             "python",
             "experiments/robot/libero/tasks/"
-            "preflight_l3a2_task2_native_rebind_static.py",
+            "preflight_l3a2_task2_cookie_momentum_static.py",
         ),
         artifacts=(
-            "experiments/logs/l3a2_task2_native_rebind_static",
+            "experiments/logs/l3a2_task2_cookie_momentum_static",
         ),
     ),
     ("l3a2", "task1_cantilever_kinematic"): PhaseSpec(

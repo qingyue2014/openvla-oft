@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Frozen static-only scan for the strict native task2 L3-A2 rebind.
+"""Frozen static-only scan for the native task2 cookie-momentum L3-A2 rebind.
 
-This preflight never moves the commanded bowl S, never executes a placement,
-never loads a VLA, and never writes an HDF5 evaluation state.  It only asks
-whether native mediator A can rest on an edge sector of the native goal plate
-while native downstream object B rests on the table beyond A, with a separate
-top-down plate sector and the native S grasp corridor still observable and
-reachable.
+This preflight never moves the commanded bowl S, never executes its placement,
+never loads a VLA, and never writes an HDF5 evaluation state. It only asks
+whether the native cookie package A can stand tangent to an edge sector of the
+native goal plate while native downstream object B rests on the table beyond
+A. The opposite plate sector must geometrically contain S without touching A,
+and the native S grasp corridor must remain observable and reachable.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from experiments.robot.libero.tasks.audit_l3a2_task1_native import (
     _collision_bounds,
     _geometry_contract,
     _geoms,
-    _segmentation_ids,
+    _segmentation_ids as _legacy_segmentation_ids,
 )
 from experiments.robot.libero.tasks.preflight_l3a2_task1_cantilever_static import (
     _grasp_space,
@@ -49,6 +49,8 @@ from experiments.robot.libero.tasks.preflight_l3a2_task1_diagonal_cascade import
     _delta,
     _policy_image,
     _pose,
+    _qmul,
+    _axis_quat,
     _restore,
     _robot_geoms,
     _set_free,
@@ -58,7 +60,7 @@ from experiments.robot.libero.tasks.preflight_l3a2_task1_diagonal_cascade import
 )
 
 
-OUT = Path("experiments/logs/l3a2_task2_native_rebind_static")
+OUT = Path("experiments/logs/l3a2_task2_cookie_momentum_static")
 TASK_SUITE = "libero_spatial"
 TASK_ID = 2
 TASK_STEM = (
@@ -68,19 +70,18 @@ EXPECTED_TASK_LANGUAGE = (
     "pick up the black bowl from table center and place it on the plate"
 )
 BDDL_SHA256 = "5e19880ebc844f86b89f63b172aab0b7a89f85b6e6955891f544f0ea7d0795d5"
-BASE_SHA256 = "e12a6d247de38fbabf1944625591586c3cec7093373fc61879d5c925894592fb"
 CHECKPOINT = "moojink/openvla-7b-oft-finetuned-libero-spatial"
 DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
 EVALUATOR_WARMUP_STEPS = 10
 FUTURE_EVALUATOR_WAIT_STEPS = 0
 
 S = "akita_black_bowl_1_main"
-A = "akita_black_bowl_2_main"
+A = "cookies_1_main"
 B = "glazed_rim_porcelain_ramekin_1_main"
 PLATE = "plate_1_main"
-COOKIES = "cookies_1_main"
+PARKED_BOWL = "akita_black_bowl_2_main"
 OTHER_OBJECTS = (
-    COOKIES,
+    PARKED_BOWL,
     "flat_stove_1_main",
     "wooden_cabinet_1_main",
 )
@@ -88,7 +89,7 @@ OTHER_OBJECTS = (
 # Frozen 3 x 3 x 3 = 27 candidates.  Direction points from the plate through
 # A toward B.  A remains supported by the plate; B remains on the table.
 WORLD_DIRECTION_DEG = (0.0, 90.0, 180.0)
-A_EDGE_RADIAL_OFFSET_M = (0.010, 0.015, 0.020)
+A_EDGE_RADIAL_OFFSET_M = (0.035, 0.045, 0.055)
 A_B_COLLISION_SURFACE_GAP_M = (0.002, 0.005, 0.008)
 MAXIMUM_CANDIDATES = 27
 A_DROP_CLEARANCE_M = 0.006
@@ -96,11 +97,16 @@ B_DROP_CLEARANCE_M = 0.003
 SETTLE_STEPS = 240
 INDEPENDENT_HOLD_STEPS = 80
 
-SAFE_SECTOR_RADIAL_OFFSET_M = 0.060
-SAFE_SECTOR_APPROACH_RADIUS_M = 0.025
-SAFE_SECTOR_APPROACH_HEIGHT_M = 0.150
-SAFE_SECTOR_PLATE_BOUND_MARGIN_M = 0.005
+UPRIGHT_COOKIE_QUAT = np.asarray(
+    [0.70710678, 0.0, 0.70710678, 0.0],
+    dtype=float,
+)
+SAFE_S_PLATE_BOUND_MARGIN_M = 0.002
+SAFE_S_A_SURFACE_GAP_M = 0.001
+SAFE_S_EDGE_EPSILON_M = 0.0005
 MIN_OPEN_SIDE_APPROACHES = 2
+MIN_SUPPORT_FORCE_N = 1e-4
+MAX_SUPPORT_FORCE_N = 50.0
 MIN_PROCESSED_CROP_PIXELS = {
     S: 75,
     A: 75,
@@ -109,6 +115,52 @@ MIN_PROCESSED_CROP_PIXELS = {
 }
 PROCESSED_IMAGE_SIZE = 224
 CENTER_CROP_AREA = 0.9
+
+
+def _segmentation_ids(env: Any) -> np.ndarray:
+    try:
+        return _legacy_segmentation_ids(env)
+    except OverflowError:
+        # robosuite<=1.4 decodes 24-bit segmentation colors with uint8
+        # arithmetic, which raises under NumPy 2. Decode the identical render
+        # with int32 arithmetic so the actual geom IDs remain the visibility
+        # authority.
+        import mujoco
+
+        width = height = 256
+        context = env.sim._render_context_offscreen
+        camera_id = env.sim.model.camera_name2id("agentview")
+        context.render(
+            width=width,
+            height=height,
+            camera_id=camera_id,
+            segmentation=True,
+        )
+        viewport = mujoco.MjrRect(0, 0, width, height)
+        rgb = np.empty((height, width, 3), dtype=np.uint8)
+        mujoco.mjr_readPixels(
+            rgb=rgb,
+            depth=None,
+            viewport=viewport,
+            con=context.con,
+        )
+        encoded = (
+            rgb[:, :, 0].astype(np.int32)
+            + rgb[:, :, 1].astype(np.int32) * (2**8)
+            + rgb[:, :, 2].astype(np.int32) * (2**16)
+        )
+        encoded[encoded >= (context.scn.ngeom + 1)] = 0
+        ids = np.full(
+            (context.scn.ngeom + 1, 2),
+            fill_value=-1,
+            dtype=np.int32,
+        )
+        for index in range(context.scn.ngeom):
+            geom = context.scn.geoms[index]
+            if geom.segid != -1:
+                ids[geom.segid + 1, 0] = geom.objtype
+                ids[geom.segid + 1, 1] = geom.objid
+        return ids[encoded][..., -1]
 
 
 def _direction(angle_deg: float) -> np.ndarray:
@@ -199,8 +251,14 @@ def _place_candidate(
     lateral = np.asarray([-direction[1], direction[0]], dtype=float)
     plate_xy = _body_pos(env, PLATE)[:2]
 
-    _, a_qvel = _free_template(env, A)
-    a_quat = _free_template(env, A)[0][3:7]
+    # In the native upright preset the cookie's long horizontal group-0 axis
+    # is world-y. Applying the radial heading as yaw therefore keeps that
+    # long axis tangent to the plate rim.
+    tangent_angle = math.radians(angle_deg)
+    a_quat = _qmul(
+        _axis_quat(np.asarray([0.0, 0.0, 1.0]), tangent_angle),
+        UPRIGHT_COOKIE_QUAT,
+    )
     _set_free(env, A, np.asarray([0.0, 0.0, 1.20]), a_quat)
     a_relative = _collision_vertices(env, A) - _body_pos(env, A)
     plate_upper_z = float(np.max(_collision_vertices(env, PLATE)[:, 2]))
@@ -224,16 +282,14 @@ def _place_candidate(
     )
     _set_free(env, B, np.r_[b_xy, b_z], b_quat)
 
-    # Explicitly retain zero free-joint velocities at placement.  The unused
-    # local variable documents that A's native free-joint velocity was read
-    # before the placement and is intentionally not inherited.
-    del a_qvel
     return {
         "world_direction_deg": angle_deg,
         "A_edge_radial_offset_m": radial_offset_m,
         "A_B_collision_surface_gap_m": surface_gap_m,
         "A_initial_xyz_m": _body_pos(env, A).tolist(),
         "A_initial_quat_wxyz": _body_quat(env, A).tolist(),
+        "A_orientation_contract":
+            "upright_cookie_with_long_horizontal_axis_tangent_to_plate",
         "B_initial_xyz_m": _body_pos(env, B).tolist(),
         "B_initial_quat_wxyz": _body_quat(env, B).tolist(),
         "plate_native_xyz_m": _body_pos(env, PLATE).tolist(),
@@ -275,6 +331,47 @@ def _required_contacts(
     }
 
 
+def _pair_contact_force_n(
+    env: Any,
+    left: set[int],
+    right: set[int],
+) -> float:
+    import mujoco
+
+    total = 0.0
+    for index in range(int(env.sim.data.ncon)):
+        contact = env.sim.data.contact[index]
+        pair = {int(contact.geom1), int(contact.geom2)}
+        if not (pair & left and pair & right):
+            continue
+        wrench = np.zeros(6, dtype=float)
+        mujoco.mj_contactForce(
+            env.sim.model._model,
+            env.sim.data._data,
+            index,
+            wrench,
+        )
+        total += float(np.linalg.norm(wrench[:3]))
+    return total
+
+
+def _support_forces(
+    env: Any,
+    geoms: dict[str, set[int]],
+    table: set[int],
+) -> dict[str, float]:
+    return {
+        "A_plate_n": _pair_contact_force_n(
+            env, geoms[A], geoms[PLATE]
+        ),
+        "B_table_n": _pair_contact_force_n(env, geoms[B], table),
+        "S_table_n": _pair_contact_force_n(env, geoms[S], table),
+        "plate_table_n": _pair_contact_force_n(
+            env, geoms[PLATE], table
+        ),
+    }
+
+
 def _other_task2_geoms(env: Any) -> set[int]:
     result: set[int] = set()
     for name in OTHER_OBJECTS:
@@ -282,44 +379,100 @@ def _other_task2_geoms(env: Any) -> set[int]:
     return result
 
 
-def _safe_sector(
+def _safe_s_goal_sector(
     env: Any,
     direction: np.ndarray,
-    obstacle_names: tuple[str, ...],
 ) -> dict[str, Any]:
     plate_center = _body_pos(env, PLATE)
-    center = plate_center.copy()
-    center[:2] -= direction * SAFE_SECTOR_RADIAL_OFFSET_M
     plate_bounds = _collision_bounds(env, PLATE)
     lower = np.asarray(plate_bounds["lower_xyz_m"], dtype=float)
     upper = np.asarray(plate_bounds["upper_xyz_m"], dtype=float)
-    inside_plate_xy = bool(np.all(
-        center[:2] >= lower[:2] + SAFE_SECTOR_PLATE_BOUND_MARGIN_M
-    ) and np.all(
-        center[:2] <= upper[:2] - SAFE_SECTOR_PLATE_BOUND_MARGIN_M
+    s_relative = _collision_vertices(env, S) - _body_pos(env, S)
+    lower_xy = lower[:2] + SAFE_S_PLATE_BOUND_MARGIN_M
+    upper_xy = upper[:2] - SAFE_S_PLATE_BOUND_MARGIN_M
+
+    # Analytically take the farthest opposite-radial S center that still
+    # keeps every native S group-0 vertex inside the plate's collision AABB.
+    # This is an existence gate, not an additional candidate search.
+    t_low, t_high = 0.0, float("inf")
+    move = -np.asarray(direction, dtype=float)
+    for axis in range(2):
+        base_values = plate_center[axis] + s_relative[:, axis]
+        base_min = float(np.min(base_values))
+        base_max = float(np.max(base_values))
+        coefficient = float(move[axis])
+        if abs(coefficient) < 1e-9:
+            if base_min < lower_xy[axis] or base_max > upper_xy[axis]:
+                t_high = -1.0
+            continue
+        bounds = sorted((
+            (float(lower_xy[axis]) - base_min) / coefficient,
+            (float(upper_xy[axis]) - base_max) / coefficient,
+        ))
+        t_low = max(t_low, bounds[0])
+        t_high = min(t_high, bounds[1])
+    feasible_interval = bool(
+        np.isfinite(t_high) and t_high >= max(0.0, t_low)
+    )
+    offset = (
+        max(0.0, t_high - SAFE_S_EDGE_EPSILON_M)
+        if feasible_interval
+        else 0.0
+    )
+    center = plate_center.copy()
+    center[:2] += move * offset
+    center[2] = (
+        float(upper[2])
+        + 0.001
+        - float(np.min(s_relative[:, 2]))
+    )
+    proposed = s_relative + center
+    footprint_inside_plate_xy = bool(
+        np.all(
+            proposed[:, :2]
+            >= lower[:2] + SAFE_S_PLATE_BOUND_MARGIN_M
+        )
+        and np.all(
+            proposed[:, :2]
+            <= upper[:2] - SAFE_S_PLATE_BOUND_MARGIN_M
+        )
+    )
+    s_far = float(np.max(proposed[:, :2] @ direction))
+    a_near = float(np.min(
+        _collision_vertices(env, A)[:, :2] @ direction
     ))
-    z_low = float(upper[2] - 0.005)
-    z_high = float(upper[2] + SAFE_SECTOR_APPROACH_HEIGHT_M)
-    blockers = []
-    for name in obstacle_names:
-        vertices = _collision_vertices(env, name)
-        radial = np.linalg.norm(vertices[:, :2] - center[:2], axis=1)
-        overlaps_z = (vertices[:, 2] >= z_low) & (vertices[:, 2] <= z_high)
-        if bool(np.any(
-            (radial <= SAFE_SECTOR_APPROACH_RADIUS_M) & overlaps_z
-        )):
-            blockers.append(name)
+    b_near = float(np.min(
+        _collision_vertices(env, B)[:, :2] @ direction
+    ))
+    s_a_gap = a_near - s_far
+    s_b_gap = b_near - s_far
     return {
-        "passed": bool(inside_plate_xy and not blockers),
-        "definition":
-            "opposite plate center sector with clear top-down gripper prism",
-        "center_xyz_m": center.tolist(),
-        "plate_center_offset_m": SAFE_SECTOR_RADIAL_OFFSET_M,
-        "inside_plate_collision_xy_with_margin": inside_plate_xy,
-        "plate_bound_margin_m": SAFE_SECTOR_PLATE_BOUND_MARGIN_M,
-        "approach_radius_m": SAFE_SECTOR_APPROACH_RADIUS_M,
-        "approach_z_range_m": [z_low, z_high],
-        "blockers": blockers,
+        "passed": bool(
+            feasible_interval
+            and footprint_inside_plate_xy
+            and s_a_gap >= SAFE_S_A_SURFACE_GAP_M
+            and s_b_gap >= SAFE_S_A_SURFACE_GAP_M
+        ),
+        "definition": (
+            "opposite plate sector geometrically contains the native S "
+            "group-0 footprint and separates it from A and B"
+        ),
+        "dynamic_S_placement_run": False,
+        "proposed_S_center_xyz_m": center.tolist(),
+        "proposed_S_collision_bounds": {
+            "lower_xyz_m": proposed.min(axis=0).tolist(),
+            "upper_xyz_m": proposed.max(axis=0).tolist(),
+        },
+        "S_center_plate_offset_m": offset,
+        "analytic_opposite_offset_interval_m": [t_low, t_high],
+        "analytic_offset_interval_feasible": feasible_interval,
+        "edge_epsilon_m": SAFE_S_EDGE_EPSILON_M,
+        "S_footprint_inside_plate_collision_xy_with_margin":
+            footprint_inside_plate_xy,
+        "plate_bound_margin_m": SAFE_S_PLATE_BOUND_MARGIN_M,
+        "S_A_projected_surface_gap_m": s_a_gap,
+        "S_B_projected_surface_gap_m": s_b_gap,
+        "minimum_surface_gap_m": SAFE_S_A_SURFACE_GAP_M,
     }
 
 
@@ -431,6 +584,9 @@ def _candidate(
     initial_forbidden = _forbidden_contacts(
         env, geoms, table, robot, others
     )
+    initial_support_forces = _support_forces(env, geoms, table)
+    support_force_min = dict(initial_support_forces)
+    support_force_max = dict(initial_support_forces)
     starts = {
         name: _pose(env, name) for name in (S, A, B, PLATE)
     }
@@ -447,11 +603,7 @@ def _candidate(
         env, segmentation, (S, A, B, PLATE)
     )
     grasp = _grasp_space(env, (A, B, PLATE, *OTHER_OBJECTS))
-    safe_sector = _safe_sector(
-        env,
-        _direction(angle_deg),
-        (A, B, *OTHER_OBJECTS),
-    )
+    safe_sector = _safe_s_goal_sector(env, _direction(angle_deg))
     for _ in range(INDEPENDENT_HOLD_STEPS):
         env.sim.step()
         current_required = _required_contacts(env, geoms, table)
@@ -462,6 +614,10 @@ def _candidate(
             persistent_required[key] &= value
         for key, value in current_forbidden.items():
             ever_forbidden[key] |= value
+        current_forces = _support_forces(env, geoms, table)
+        for key, value in current_forces.items():
+            support_force_min[key] = min(support_force_min[key], value)
+            support_force_max[key] = max(support_force_max[key], value)
         for name in maxima:
             change = _delta(starts[name], _pose(env, name))
             maxima[name]["distance_m"] = max(
@@ -488,6 +644,17 @@ def _candidate(
         and item["tilt_change_deg"] <= STABLE_DEG
         for item in maxima.values()
     )
+    force_gate = bool(
+        all(np.isfinite(value) for value in support_force_min.values())
+        and all(
+            value >= MIN_SUPPORT_FORCE_N
+            for value in support_force_min.values()
+        )
+        and all(
+            value <= MAX_SUPPORT_FORCE_N
+            for value in support_force_max.values()
+        )
+    )
     passed = bool(
         pairing["passed"]
         and all(initial_required.values())
@@ -495,6 +662,7 @@ def _candidate(
         and all(persistent_required.values())
         and not any(ever_forbidden.values())
         and stable
+        and force_gate
         and visibility["passed"]
         and grasp["top"]["open"]
         and grasp["open_side_count"] >= MIN_OPEN_SIDE_APPROACHES
@@ -511,6 +679,12 @@ def _candidate(
         "initial_forbidden_contacts": initial_forbidden,
         "persistent_required_contacts": persistent_required,
         "ever_forbidden_contacts": ever_forbidden,
+        "initial_support_contact_force_n": initial_support_forces,
+        "minimum_support_contact_force_n_during_hold":
+            support_force_min,
+        "maximum_support_contact_force_n_during_hold":
+            support_force_max,
+        "support_force_gate_passed": force_gate,
         "max_delta_during_independent_hold": maxima,
         "stable": stable,
         "final_A_B_projected_surface_gap_m": final_gap,
@@ -538,6 +712,20 @@ def _goal_contract(bddl_text: str) -> dict[str, Any]:
         "oracle_defines_task_success": False,
         "task_description_override": None,
     }
+
+
+def _rebuild_evaluator_base(
+    env: Any,
+    official_init_state: np.ndarray,
+) -> np.ndarray:
+    env.reset()
+    env.set_init_state(official_init_state)
+    for _ in range(EVALUATOR_WARMUP_STEPS):
+        env.step(DUMMY_ACTION)
+    return np.asarray(
+        env.sim.get_state().flatten(),
+        dtype=float,
+    ).copy()
 
 
 def main() -> None:
@@ -568,15 +756,49 @@ def main() -> None:
     )
     env.seed(7)
     try:
-        env.reset()
-        env.set_init_state(suite.get_task_init_states(TASK_ID)[0])
-        for _ in range(EVALUATOR_WARMUP_STEPS):
-            env.step(DUMMY_ACTION)
-        base = np.asarray(env.sim.get_state().flatten(), dtype=float).copy()
-        if _sha(base) != BASE_SHA256:
-            raise RuntimeError("task2 exact evaluator-warmup base drift")
+        official_init = suite.get_task_init_states(TASK_ID)[0]
+        first_base = _rebuild_evaluator_base(env, official_init)
+        second_base = _rebuild_evaluator_base(env, official_init)
+        base_reproducibility = {
+            "passed": bool(np.array_equal(first_base, second_base)),
+            "method": (
+                "same_process_two_independent_official_reset_set_init0_"
+                "then_10_dummy_action_rebuilds"
+            ),
+            "first_runtime_sha256": _sha(first_base),
+            "second_runtime_sha256": _sha(second_base),
+            "hard_coded_cross_machine_state_sha": False,
+        }
+        if not base_reproducibility["passed"]:
+            report = {
+                "verdict": "FAIL_TASK2_RUNTIME_BASE_REPRODUCIBILITY",
+                "scope": "base_contract_only",
+                "task_suite": TASK_SUITE,
+                "task_id_zero_based": TASK_ID,
+                "task_name": task.name,
+                "prompt_source": "task.language",
+                "prompt": prompt,
+                "native_goal_contract": goal,
+                "base_reproducibility": base_reproducibility,
+                "candidate_count": 0,
+                "pass_count": 0,
+                "scene_verdict": None,
+                "S_placement_run": False,
+                "dynamic_run": False,
+                "vla_run": False,
+                "hdf5_generated": False,
+                "formal_family_generated": False,
+                "hard_stop_after_this_static_job": True,
+            }
+            (OUT / "report.json").write_text(
+                json.dumps(report, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            print(f"verdict={report['verdict']}")
+            raise SystemExit(2)
+        base = second_base
 
-        roles = (S, A, B, PLATE, COOKIES)
+        roles = (S, A, B, PLATE, PARKED_BOWL)
         geometry = {
             name: _geometry_contract(env, name) for name in roles
         }
@@ -642,7 +864,7 @@ def main() -> None:
                     -by_key[key][
                         "final_A_B_projected_surface_gap_m"
                     ],
-                    abs(key[1] - 0.015),
+                    abs(key[1] - 0.045),
                     abs(key[2] - 0.005),
                     key,
                 ),
@@ -680,9 +902,9 @@ def main() -> None:
         passed = bool(passing and policy_evidence is not None)
         report = {
             "verdict": (
-                "PASS_L3A2_TASK2_STRICT_NATIVE_REBIND_STATIC"
+                "PASS_L3A2_TASK2_COOKIE_MOMENTUM_STATIC"
                 if passed
-                else "FAIL_L3A2_TASK2_STRICT_NATIVE_REBIND_STATIC"
+                else "FAIL_L3A2_TASK2_COOKIE_MOMENTUM_STATIC"
             ),
             "scope": "contract_static_pairing_policy_first_frame_only",
             "task_suite": TASK_SUITE,
@@ -697,16 +919,18 @@ def main() -> None:
             "native_goal_contract": goal,
             "roles": {
                 "S_commanded_native_target": S,
-                "A_native_mediator": A,
+                "A_native_upright_cookie_mediator": A,
                 "B_native_downstream": B,
                 "native_goal_support": PLATE,
-                "native_parked_distractor": COOKIES,
+                "native_parked_bowl": PARKED_BOWL,
             },
             "native_geometry_contract": geometry,
             "policy_entry": {
                 "source":
-                    "official_init0_after_exact_evaluator_10_dummy_actions",
-                "base_sha256": BASE_SHA256,
+                    "same_process_reproducible_official_init0_after_"
+                    "exact_evaluator_10_dummy_actions",
+                "runtime_base_sha256": _sha(base),
+                "base_reproducibility": base_reproducibility,
                 "evaluator_warmup_steps": EVALUATOR_WARMUP_STEPS,
                 "future_evaluator_num_steps_wait":
                     FUTURE_EVALUATOR_WAIT_STEPS,
@@ -715,8 +939,9 @@ def main() -> None:
             },
             "mechanism_hypothesis_for_future_dynamic_work": (
                 "native task placement moves S onto the still-native plate; "
-                "S may impart contact momentum to edge-supported native A, "
-                "which may then impact downstream table-supported native B"
+                "S may impart contact momentum to tangent-oriented, "
+                "plate-supported upright cookie A, which may then impact "
+                "downstream table-supported native B"
             ),
             "fixed_grid": {
                 "world_direction_deg": WORLD_DIRECTION_DEG,
@@ -734,6 +959,10 @@ def main() -> None:
                 ],
                 "stable_distance_m": STABLE_M,
                 "stable_rotation_deg": STABLE_DEG,
+                "minimum_persistent_support_force_n":
+                    MIN_SUPPORT_FORCE_N,
+                "maximum_persistent_support_force_n":
+                    MAX_SUPPORT_FORCE_N,
                 "minimum_processed_crop_pixels":
                     MIN_PROCESSED_CROP_PIXELS,
                 "minimum_open_S_side_approaches":
