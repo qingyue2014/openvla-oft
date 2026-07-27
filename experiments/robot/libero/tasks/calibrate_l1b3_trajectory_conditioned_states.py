@@ -250,6 +250,61 @@ def _novel_refinement_candidates(
     return additions
 
 
+def _centered_xy_displacement(
+    positions: np.ndarray, index: int, window: int
+) -> float:
+    """Measure local horizontal path motion without assuming a fixed FPS."""
+    if len(positions) == 0 or not 0 <= index < len(positions):
+        return 0.0
+    window = max(1, int(window))
+    before = max(0, index - window)
+    after = min(len(positions) - 1, index + window)
+    return float(
+        np.linalg.norm(positions[after, :2] - positions[before, :2])
+    )
+
+
+def _balanced_low_and_motion_indices(
+    eligible: list[int],
+    positions: np.ndarray,
+    limit: int,
+    motion_window: int,
+    min_spacing: int,
+) -> list[int]:
+    """Keep both contactable low poses and energetic horizontal sweeps."""
+    low_order = sorted(
+        eligible, key=lambda index: (positions[index, 2], -index)
+    )
+    motion_order = sorted(
+        eligible,
+        key=lambda index: (
+            -_centered_xy_displacement(positions, index, motion_window),
+            positions[index, 2],
+            -index,
+        ),
+    )
+    low_budget = max(1, limit // 2)
+    selected: list[int] = []
+
+    def append_spaced(order: list[int], target: int) -> None:
+        for index in order:
+            if len(selected) >= target:
+                break
+            if any(
+                abs(index - previous) < min_spacing
+                for previous in selected
+            ):
+                continue
+            selected.append(index)
+
+    append_spaced(low_order, min(low_budget, limit))
+    append_spaced(motion_order, limit)
+    # If motion candidates overlap the low set too heavily, fill the remainder
+    # from low poses while retaining the same temporal-spacing invariant.
+    append_spaced(low_order, limit)
+    return selected
+
+
 def _measured_wrist_geom_path(
     env,
     eb_state: np.ndarray,
@@ -324,15 +379,45 @@ def _measured_wrist_geom_path(
                     float(position[2]),
                 )
             )
-    # A native bottle can only contact the lowest wrist surfaces while the
-    # wrist descends toward the plate. Search those measured surfaces first;
-    # this avoids spending most of the replay budget on high, non-contacting
-    # transport poses.
-    measured.sort(key=lambda item: (item[3], -item[0]))
+    # Low wrist surfaces remain the most contactable, but using only the
+    # lowest samples discards the horizontal transport instants that can tip a
+    # bottle without the gripper catching up. Split the bounded path budget
+    # between low geometry and high measured body motion.
+    measured.sort(key=lambda item: (item[3], -item[0], item[1]))
     if len(measured) <= args.max_path_steps_per_link:
         selected = measured
     else:
-        selected = measured[: args.max_path_steps_per_link]
+        low_budget = max(1, args.max_path_steps_per_link // 2)
+        selected = measured[:low_budget]
+        selected_keys = {
+            (index, name) for index, name, _, _ in selected
+        }
+
+        def motion_priority(
+            item: tuple[int, str, np.ndarray, float],
+        ) -> tuple[float, float, int, str]:
+            index, proposed_link, _, z = item
+            owner = proposed_link.split("_geom", 1)[0]
+            positions = np.asarray(
+                trajectory[f"body_pos__{owner}"], dtype=float
+            )
+            return (
+                -_centered_xy_displacement(
+                    positions, index, args.motion_direction_window_steps
+                ),
+                z,
+                -index,
+                proposed_link,
+            )
+
+        for item in sorted(measured, key=motion_priority):
+            if len(selected) >= args.max_path_steps_per_link:
+                break
+            key = (item[0], item[1])
+            if key in selected_keys:
+                continue
+            selected.append(item)
+            selected_keys.add(key)
     return [(index, name, xy) for index, name, xy, _ in selected]
 
 
@@ -445,24 +530,13 @@ def _trajectory_candidates(
             and goal_region[index]
             and args.min_link_z <= positions[index, 2] <= args.max_link_z
         ]
-        eligible.sort(key=lambda index: (positions[index, 2], -index))
-        spaced: list[int] = []
-        for index in eligible:
-            if all(
-                abs(index - previous) >= args.min_step_spacing
-                for previous in spaced
-            ):
-                spaced.append(index)
-        if len(spaced) > args.max_path_steps_per_link:
-            sample_indices = np.linspace(
-                0,
-                len(spaced) - 1,
-                num=args.max_path_steps_per_link,
-                dtype=int,
-            )
-            selected = [spaced[index] for index in np.unique(sample_indices)]
-        else:
-            selected = spaced
+        selected = _balanced_low_and_motion_indices(
+            eligible,
+            positions,
+            args.max_path_steps_per_link,
+            args.motion_direction_window_steps,
+            args.min_step_spacing,
+        )
         for index in selected:
             candidate_steps.append((index, link_name, positions[index, :2]))
 

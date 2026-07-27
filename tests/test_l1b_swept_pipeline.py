@@ -981,7 +981,9 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert 'INTENDED_LINKS = ("robot0_link6", "robot0_link7")' in text
     assert "for index in (0, 1, 2, 3, 4, 5)" in text
     assert 'PATH_LINKS = ("robot0_link5", "robot0_link6")' in text
-    assert "sample_indices = np.linspace(" in text
+    assert "def _balanced_low_and_motion_indices(" in text
+    assert "low_budget = max(1, limit // 2)" in text
+    assert "abs(index - previous) < min_spacing" in text
     assert "radius × angle × path-time space" in text
     assert "len(candidates) > args.max_candidates_per_episode" in text
     assert "args.max_candidates_per_episode * 0.50" in text
