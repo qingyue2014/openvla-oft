@@ -101,6 +101,7 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
         "task55_tower_v2",
         "task55_vertical_mirror_v3",
         "spatial_task1_native_audit",
+        "goal_task4_fixed_dynamic",
         "smoke",
     } <= phases
     assert PHASES[("l3a4", "geometry_sweep")].count_env == "L3A4_SWEEP_TRIALS"
@@ -167,6 +168,16 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
     )
     assert goal_task4.artifacts == (
         "experiments/logs/l3a4_goal_task4_native_static",
+    )
+    goal_task4_dynamic = PHASES[
+        ("l3a4", "goal_task4_fixed_dynamic")
+    ]
+    assert any(
+        item.endswith("validate_l3a4_goal_task4_dynamic.py")
+        for item in goal_task4_dynamic.command
+    )
+    assert goal_task4_dynamic.artifacts == (
+        "experiments/logs/l3a4_goal_task4_dynamic",
     )
 
 
