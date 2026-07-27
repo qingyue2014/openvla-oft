@@ -26,6 +26,8 @@ L1A1_ATTRIBUTION_SHA256 = (
 L1A1_RUNNER_SHA256 = (
     "ced69cbb5281756c2ee425c985d42275638ff983045aa935e461f8678c18144f"
 )
+EVALUATOR_NUM_STEPS_WAIT = 10
+DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
 
 
 def sha(value: bytes) -> str:
@@ -90,6 +92,23 @@ def contact(sim, left: set[int], right: set[int]) -> bool:
         ):
             return True
     return False
+
+
+def contacting_body_names(sim, geoms: set[int]) -> list[str]:
+    names = set()
+    for index in range(int(sim.data.ncon)):
+        item = sim.data.contact[index]
+        if int(item.geom1) in geoms:
+            other = int(item.geom2)
+        elif int(item.geom2) in geoms:
+            other = int(item.geom1)
+        else:
+            continue
+        body_id = int(sim.model.geom_bodyid[other])
+        name = sim.model.body_id2name(body_id)
+        if name:
+            names.add(name)
+    return sorted(names)
 
 
 def main() -> None:
@@ -163,6 +182,38 @@ def main() -> None:
             "A_B": contact(env.sim, geom_sets["A"], geom_sets["B"]),
             "S_B": contact(env.sim, geom_sets["S"], geom_sets["B"]),
         }
+        raw_s_position = np.asarray(
+            env.sim.data.body_xpos[
+                env.sim.model.body_name2id(bodies["S"])
+            ],
+            dtype=float,
+        ).copy()
+        raw_support_contacts = contacting_body_names(
+            env.sim, geom_sets["S"]
+        )
+        for _ in range(EVALUATOR_NUM_STEPS_WAIT):
+            env.step(DUMMY_ACTION)
+        policy_entry_state = np.asarray(
+            env.sim.get_state().flatten()
+        ).copy()
+        policy_entry_s_position = np.asarray(
+            env.sim.data.body_xpos[
+                env.sim.model.body_name2id(bodies["S"])
+            ],
+            dtype=float,
+        ).copy()
+        policy_entry_support_contacts = contacting_body_names(
+            env.sim, geom_sets["S"]
+        )
+        stove_contacts = [
+            name for name in policy_entry_support_contacts
+            if "stove" in name.lower()
+        ]
+        if not stove_contacts:
+            raise RuntimeError(
+                "policy-entry target bowl is not bound to a stove support: "
+                f"{policy_entry_support_contacts}"
+            )
         current = np.asarray(env.sim.get_state().flatten()).copy()
         obs = env.regenerate_obs_from_state(current)
         if not np.array_equal(
@@ -176,6 +227,11 @@ def main() -> None:
             raise RuntimeError(f"unexpected policy RGB {image.shape}")
         png = out / "native_state0_policy_agentview.png"
         imageio.imwrite(png, image)
+        np.savez_compressed(
+            out / "policy_entry_base_state.npz",
+            raw_native_state=state0,
+            policy_entry_base_state=policy_entry_state,
+        )
     finally:
         env.close()
 
@@ -192,6 +248,27 @@ def main() -> None:
         "goal_form": goal_form,
         "goal_form_sha256": sha(goal_form.encode()),
         "native_state0_sha256": sha(state0.tobytes()),
+        "evaluator_policy_entry": {
+            "num_steps_wait": EVALUATOR_NUM_STEPS_WAIT,
+            "dummy_action": DUMMY_ACTION,
+            "policy_entry_state_sha256": sha(
+                policy_entry_state.tobytes()
+            ),
+            "raw_S_position": raw_s_position.tolist(),
+            "policy_entry_S_position": policy_entry_s_position.tolist(),
+            "S_displacement_m": float(
+                np.linalg.norm(
+                    policy_entry_s_position - raw_s_position
+                )
+            ),
+            "raw_S_contact_bodies": raw_support_contacts,
+            "policy_entry_S_contact_bodies": policy_entry_support_contacts,
+            "support_surface": "stove",
+            "stove_contact_bodies": stove_contacts,
+            "base_state_file": str(
+                out / "policy_entry_base_state.npz"
+            ),
+        },
         "roles": bodies,
         "assets": assets,
         "initial_contacts": initial_contacts,
@@ -223,6 +300,7 @@ def main() -> None:
         f"- Verdict: **{report['verdict']}**\n"
         f"- Exact prompt: `{PROMPT}`\n"
         "- Existing unmodified native EB competence: **50/50**.\n"
+        "- Policy-entry base: **10 evaluator dummy actions; stove support bound**.\n"
         "- Custom assets: **none**.\n"
         "- Policy RGB: **256x256; manual review pending**.\n"
         "- VLA run: **no**.\n"
