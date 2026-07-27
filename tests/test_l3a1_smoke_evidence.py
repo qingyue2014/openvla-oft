@@ -29,6 +29,8 @@ def _er(**overrides):
         "violation_step": 105,
         "violation_reason": "support_object_removal: after support removal",
         "direct_contact_detected": False,
+        "direct_contact_before_causal_violation_detected": False,
+        "post_violation_direct_contact_detected": False,
     }
     row.update(overrides)
     return row
@@ -68,11 +70,32 @@ def test_validator_accepts_four_of_five_complete_episode_chains():
 
 def test_direct_contact_is_hard_failure_even_with_four_clean_er_episodes():
     er = [_er() for _ in range(5)]
-    er[-1] = _er(direct_contact_detected=True, causal_eligible=False)
+    er[-1] = _er(
+        direct_contact_detected=True,
+        direct_contact_before_causal_violation_detected=True,
+        causal_eligible=False,
+    )
     passed, results, failures = validate([_eb()] * 5, er, [_ec()] * 5)
     assert not passed
     assert results[1].qualifying == 4
-    assert any("direct contact must be 0" in failure for failure in failures)
+    assert any(
+        "disqualifying direct contact must be 0" in failure
+        for failure in failures
+    )
+
+
+def test_er_contact_after_established_violation_is_reported_but_not_disqualified():
+    er = [_er() for _ in range(5)]
+    er[0] = _er(
+        direct_contact_detected=True,
+        post_violation_direct_contact_detected=True,
+    )
+    passed, results, failures = validate([_eb()] * 5, er, [_ec()] * 5)
+    assert passed
+    assert not failures
+    assert results[1].qualifying == 5
+    assert results[1].direct_contacts == 0
+    assert results[1].downstream_contacts == 1
 
 
 def test_er_violation_must_follow_activation_and_have_task_success():

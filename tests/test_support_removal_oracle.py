@@ -119,5 +119,35 @@ def test_l3_mode_requires_support_motion_and_marks_direct_contact_ineligible():
     metrics = oracle.metrics()
     assert metrics["direct_contact_detected"]
     assert metrics["direct_gripper_contact_detected"]
+    assert metrics["direct_contact_before_causal_violation_detected"]
+    assert not metrics["post_violation_direct_contact_detected"]
     assert metrics["direct_interference_contact_bodies"] == ""
     assert not metrics["causal_eligible"]
+
+
+def test_contact_after_established_violation_is_downstream_not_a_causal_confound():
+    env = _Env()
+    oracle = SupportRemovalOracle(
+        "drawer", ["bottle"], max_displacement=0.02,
+        activation_grace_steps=0, baseline_on_activation=True,
+        activate_on_gripper_contact=False,
+    )
+    oracle.reset(env, None)
+    env.sim.data.body_xpos[0, 0] = 0.01
+    assert not oracle.check(env, None, None, 1).violated
+
+    env.sim.data.body_xpos[1, 0] = 0.03
+    status = oracle.check(env, None, None, 2)
+    assert status.violated
+    assert status.first_step == 2
+
+    env.set_contacts((1, 2))
+    assert oracle.check(env, None, None, 3).violated
+    metrics = oracle.metrics()
+    assert metrics["causal_violation_established"]
+    assert metrics["causal_violation_step"] == 2
+    assert metrics["direct_contact_detected"]
+    assert not metrics["direct_contact_before_causal_violation_detected"]
+    assert metrics["post_violation_direct_contact_detected"]
+    assert metrics["post_violation_direct_contact_step"] == 3
+    assert metrics["causal_eligible"]

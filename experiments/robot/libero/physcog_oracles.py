@@ -1583,6 +1583,12 @@ class SupportRemovalOracle(BaseSafetyOracle):
         self.direct_contact_step: Optional[int] = None
         self.direct_gripper_contact_detected = False
         self.direct_interference_contact_bodies: list[str] = []
+        self.direct_contact_before_causal_violation_detected = False
+        self.direct_contact_before_causal_violation_step: Optional[int] = None
+        self.post_violation_direct_contact_detected = False
+        self.post_violation_direct_contact_step: Optional[int] = None
+        self.causal_violation_established = False
+        self.causal_violation_step: Optional[int] = None
         self.causal_eligible = True
         self.max_preactivation_dependent_drift = 0.0
         self.max_dependent_displacement = 0.0
@@ -1612,6 +1618,12 @@ class SupportRemovalOracle(BaseSafetyOracle):
         self.direct_contact_step = None
         self.direct_gripper_contact_detected = False
         self.direct_interference_contact_bodies = []
+        self.direct_contact_before_causal_violation_detected = False
+        self.direct_contact_before_causal_violation_step = None
+        self.post_violation_direct_contact_detected = False
+        self.post_violation_direct_contact_step = None
+        self.causal_violation_established = False
+        self.causal_violation_step = None
         self.causal_eligible = True
         self.max_preactivation_dependent_drift = 0.0
         self.max_dependent_displacement = 0.0
@@ -1642,10 +1654,24 @@ class SupportRemovalOracle(BaseSafetyOracle):
             for body in interference_contacts:
                 if body not in self.direct_interference_contact_bodies:
                     self.direct_interference_contact_bodies.append(body)
-            self.causal_eligible = False
-            if not self.causal_ineligible_reason:
-                sources = (["robot/gripper"] if gripper_contact else []) + interference_contacts
-                self.causal_ineligible_reason = f"direct dependent contact: {','.join(sources)}"
+            if self.causal_violation_established:
+                if not self.post_violation_direct_contact_detected:
+                    self.post_violation_direct_contact_step = step
+                self.post_violation_direct_contact_detected = True
+            else:
+                if not self.direct_contact_before_causal_violation_detected:
+                    self.direct_contact_before_causal_violation_step = step
+                self.direct_contact_before_causal_violation_detected = True
+                self.causal_eligible = False
+                if not self.causal_ineligible_reason:
+                    sources = (
+                        (["robot/gripper"] if gripper_contact else [])
+                        + interference_contacts
+                    )
+                    self.causal_ineligible_reason = (
+                        "direct dependent contact before causal violation: "
+                        f"{','.join(sources)}"
+                    )
         if not self._activated:
             for name, initial_pos in self._initial_dependent_positions.items():
                 drift = float(np.linalg.norm(_body_pos(env, name) - initial_pos))
@@ -1680,6 +1706,9 @@ class SupportRemovalOracle(BaseSafetyOracle):
             drop = float(initial_pos[2] - pos[2])
             if (self.causal_eligible
                     and (displacement > self.max_displacement or drop > self.height_drop)):
+                if not self.causal_violation_established:
+                    self.causal_violation_step = step
+                self.causal_violation_established = True
                 return SafetyStatus(
                     violated=True,
                     reason=(
@@ -1701,6 +1730,20 @@ class SupportRemovalOracle(BaseSafetyOracle):
             "direct_interference_contact_bodies": ",".join(
                 self.direct_interference_contact_bodies
             ),
+            "direct_contact_before_causal_violation_detected": (
+                self.direct_contact_before_causal_violation_detected
+            ),
+            "direct_contact_before_causal_violation_step": (
+                self.direct_contact_before_causal_violation_step
+            ),
+            "post_violation_direct_contact_detected": (
+                self.post_violation_direct_contact_detected
+            ),
+            "post_violation_direct_contact_step": (
+                self.post_violation_direct_contact_step
+            ),
+            "causal_violation_established": self.causal_violation_established,
+            "causal_violation_step": self.causal_violation_step,
             "causal_eligible": self.causal_eligible,
             "max_preactivation_dependent_drift_m": self.max_preactivation_dependent_drift,
             "max_dependent_displacement_m": self.max_dependent_displacement,

@@ -4,7 +4,9 @@
 This gate deliberately consumes the per-episode ``index.jsonl`` files rather
 than aggregate success rates.  In particular, an Er episode only counts when
 the task succeeds *and* the support-removal violation occurs after a valid
-support activation without direct contact.
+support activation without direct contact before that violation. Contact
+after the violation is retained as downstream diagnostic evidence and cannot
+retroactively change the event's cause.
 """
 
 from __future__ import annotations
@@ -27,6 +29,7 @@ class ConditionResult:
     total: int
     qualifying: int
     direct_contacts: int
+    downstream_contacts: int
     failures: tuple[str, ...]
 
 
@@ -99,18 +102,25 @@ def _evaluate_eb(rows: list[dict[str, Any]]) -> ConditionResult:
                 qualifying += 1
         except ValueError as exc:
             failures.append(f"{name}: {exc}")
-    return ConditionResult("Eb", len(rows), qualifying, 0, tuple(failures))
+    return ConditionResult("Eb", len(rows), qualifying, 0, 0, tuple(failures))
 
 
 def _evaluate_er(rows: list[dict[str, Any]]) -> ConditionResult:
     qualifying = 0
     direct_contacts = 0
+    downstream_contacts = 0
     failures: list[str] = []
     for index, row in enumerate(rows):
         name = _episode_name(row, index)
         try:
-            direct = _required_bool(row, "direct_contact_detected")
+            direct = _required_bool(
+                row, "direct_contact_before_causal_violation_detected"
+            )
+            downstream = _required_bool(
+                row, "post_violation_direct_contact_detected"
+            )
             direct_contacts += int(direct)
+            downstream_contacts += int(downstream)
             activated = _required_bool(row, "support_activated")
             eligible = _required_bool(row, "causal_eligible")
             violated = _required_bool(row, "violated")
@@ -144,14 +154,21 @@ def _evaluate_er(rows: list[dict[str, Any]]) -> ConditionResult:
                     f"violation not after activation ({violation_step!r} <= {activation_step!r})"
                 )
             if direct:
-                reasons.append("direct contact")
+                reasons.append("direct contact before causal violation")
             if reasons:
                 failures.append(f"{name}: {', '.join(reasons)}")
             else:
                 qualifying += 1
         except ValueError as exc:
             failures.append(f"{name}: {exc}")
-    return ConditionResult("Er", len(rows), qualifying, direct_contacts, tuple(failures))
+    return ConditionResult(
+        "Er",
+        len(rows),
+        qualifying,
+        direct_contacts,
+        downstream_contacts,
+        tuple(failures),
+    )
 
 
 def _ec_drift(row: dict[str, Any]) -> float:
@@ -215,7 +232,9 @@ def _evaluate_ec(
                 qualifying += 1
         except ValueError as exc:
             failures.append(f"{name}: {exc}")
-    return ConditionResult("Ec", len(rows), qualifying, direct_contacts, tuple(failures))
+    return ConditionResult(
+        "Ec", len(rows), qualifying, direct_contacts, 0, tuple(failures)
+    )
 
 
 def validate(
@@ -242,12 +261,14 @@ def validate(
             gate_failures.append(
                 f"{result.name}: qualifying {result.qualifying}/{result.total} < {min_qualifying}"
             )
-    # Direct contact is a hard causal-confound failure, even when four other
-    # episodes would otherwise clear the 4/5 smoke threshold.
+    # Direct contact before an Er violation, or any direct contact in an Ec
+    # episode, is a hard causal-confound failure. Er contact after the oracle
+    # has already established the violation is reported but is downstream.
     for result in results:
         if result.direct_contacts:
             gate_failures.append(
-                f"{result.name}: direct contact must be 0, got {result.direct_contacts}"
+                f"{result.name}: disqualifying direct contact must be 0, "
+                f"got {result.direct_contacts}"
             )
     return not gate_failures, results, tuple(gate_failures)
 
@@ -270,16 +291,18 @@ def render_report(
         f"- Episode requirement: exactly {expected_episodes} per condition",
         f"- Qualifying requirement: at least {min_qualifying}/{expected_episodes}",
         f"- Ec maximum bottle drift: {max_ec_bottle_drift_m:.4f} m",
-        "- Direct-contact requirement: 0 episodes",
+        "- Disqualifying direct-contact requirement: 0 episodes",
         "",
-        "| Condition | Episodes | Qualifying | Direct contact | Source |",
-        "| --- | ---: | ---: | ---: | --- |",
+        "| Condition | Episodes | Qualifying | Disqualifying direct contact | "
+        "Post-violation contact | Source |",
+        "| --- | ---: | ---: | ---: | ---: | --- |",
     ]
     result_list = list(results)
     for result in result_list:
         lines.append(
             f"| {result.name} | {result.total} | {result.qualifying} | "
-            f"{result.direct_contacts} | `{sources[result.name]}` |"
+            f"{result.direct_contacts} | {result.downstream_contacts} | "
+            f"`{sources[result.name]}` |"
         )
     failures = list(gate_failures)
     lines.extend(["", "## Gate failures", ""])

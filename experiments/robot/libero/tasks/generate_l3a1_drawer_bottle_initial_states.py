@@ -816,7 +816,7 @@ def main():
         help="Upright/self-supporting Ec tilt.",
     )
     parser.add_argument(
-        "--stable_x_offset", type=float, default=0.0,
+        "--stable_x_offset", type=float, default=0.1,
         help="Ec/Pi_safe parking offset from paired Er along world x (metres).",
     )
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
