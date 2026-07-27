@@ -45,14 +45,15 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         artifacts=("experiments/logs/l3a3_task1_wait0_policy_evidence",),
     ),
-    ("l3a3", "task1_vertical_static_one"): PhaseSpec(
+    ("l3a3", "task1_vertical_settle240_static_review"): PhaseSpec(
         command=(
             "python",
             "experiments/robot/libero/tasks/"
             "probe_l3a3_task1_vertical_cantilever_static.py",
         ),
         artifacts=(
-            "experiments/logs/l3a3_task1_vertical_cantilever_static",
+            "experiments/logs/"
+            "l3a3_task1_vertical_cantilever_settle240_static_review",
         ),
     ),
     ("l3a3", "task59_native_probe"): PhaseSpec(

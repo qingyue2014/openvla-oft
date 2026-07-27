@@ -1,10 +1,12 @@
-"""Bounded static-only L3-A3 task1 vertical support/cantilever probe.
+"""A2-aligned settle-duration review of the static vertical cantilever probe.
 
 No release, causal dynamics, robot rollout, or VLA is run. The native target
 bowl S supports a horizontal/slightly pitched native cookies box A at its rim.
 The native ramekin landmark B remains at its settled next-to pose beneath the
 cantilever side. This probe only searches 36 predeclared exact-geometry
-placements for stable load-bearing support and policy-view feasibility.
+placements for stable load-bearing support and policy-view feasibility. The
+only physical execution change from job 490225 is settle_steps 40 -> 240,
+matching the pre-existing L1-A2 settle duration; hold remains 80.
 """
 
 from __future__ import annotations
@@ -76,7 +78,7 @@ MAX_CANDIDATES = (
     * len(A_DOWN_TILT_DEG)
     * len(RIM_EMBED_M)
 )
-SETTLE_STEPS = 40
+SETTLE_STEPS = 240
 HOLD_STEPS = 80
 MIN_SA_NORMAL_FORCE_N = 0.005
 RIM_CONTACT_BAND_M = 0.012
@@ -522,12 +524,16 @@ def save_selected(
     mask_rgb: np.ndarray,
     segmentation: np.ndarray,
 ) -> dict:
-    state_path = output / "l3a3_task1_vertical_static_candidate.hdf5"
+    state_path = (
+        output / "l3a3_task1_vertical_settle240_static_candidate.hdf5"
+    )
     key = POLICY_PROMPT.replace(" ", "_")
     with h5py.File(state_path, "w") as handle:
         group = handle.create_group(key)
         group.create_dataset("demo_0", data=state)
-        group.attrs["schema"] = "l3a3_task1_vertical_static_candidate_v1"
+        group.attrs["schema"] = (
+            "l3a3_task1_vertical_settle240_static_review_v1"
+        )
         group.attrs["static_only_not_dynamic_qualified"] = True
         group.attrs["required_evaluator_num_steps_wait"] = 0
         group.attrs["prompt_override"] = ""
@@ -561,12 +567,15 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--out_dir",
-        default="experiments/logs/l3a3_task1_vertical_cantilever_static",
+        default=(
+            "experiments/logs/"
+            "l3a3_task1_vertical_cantilever_settle240_static_review"
+        ),
     )
     args = parser.parse_args()
     if MAX_CANDIDATES != 36:
         raise RuntimeError("vertical cantilever candidate count drift")
-    if SETTLE_STEPS != 40 or HOLD_STEPS != 80:
+    if SETTLE_STEPS != 240 or HOLD_STEPS != 80:
         raise RuntimeError("vertical cantilever settle/hold contract drift")
 
     from libero.libero import benchmark, get_libero_path
@@ -736,9 +745,13 @@ def main() -> None:
                 selected_mask,
                 selected_segmentation,
             )
-            verdict = "PASS_L3A3_TASK1_VERTICAL_CANTILEVER_STATIC_FEASIBILITY"
+            verdict = (
+                "PASS_L3A3_TASK1_VERTICAL_CANTILEVER_SETTLE240_STATIC_REVIEW"
+            )
         else:
-            verdict = "FAIL_L3A3_TASK1_VERTICAL_CANTILEVER_STATIC_FEASIBILITY"
+            verdict = (
+                "FAIL_L3A3_TASK1_VERTICAL_CANTILEVER_SETTLE240_STATIC_REVIEW"
+            )
         for row in rows:
             row.pop("_state", None)
             row.pop("_rgb", None)
@@ -754,7 +767,22 @@ def main() -> None:
 
     report = {
         "verdict": verdict,
-        "scope": "static_only_no_release_no_dynamic_chain_no_vla",
+        "scope": (
+            "A2_aligned_settle240_static_review_only_"
+            "no_release_no_dynamic_chain_no_vla"
+        ),
+        "settle_duration_review_contract": {
+            "prior_job_id": "490225",
+            "prior_report_sha256": (
+                "402da55a314278032f284b4429ca7a5ff8b13659208b107e5c7a1bdf6a365a4a"
+            ),
+            "review_basis": "L1-A2 uses 240 settle steps",
+            "only_physical_execution_change": "settle_steps_40_to_240",
+            "candidate_grid_unchanged": True,
+            "thresholds_unchanged": True,
+            "hold_steps_unchanged": True,
+            "prompt_task_assets_state_binding_unchanged": True,
+        },
         "contract": {
             "suite": SUITE,
             "task_id": TASK_ID,

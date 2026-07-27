@@ -730,8 +730,13 @@ def test_task1_vertical_cantilever_probe_is_bounded_static_only_native_mechanism
     assert "A_DOWN_TILT_DEG = (0.0, 3.0, 6.0)" in text
     assert "RIM_EMBED_M = (-0.002, -0.001)" in text
     assert "MAX_CANDIDATES != 36" in text
-    assert "SETTLE_STEPS = 40" in text
+    assert "SETTLE_STEPS = 240" in text
     assert "HOLD_STEPS = 80" in text
+    assert '"prior_job_id": "490225"' in text
+    assert '"only_physical_execution_change": "settle_steps_40_to_240"' in text
+    assert '"candidate_grid_unchanged": True' in text
+    assert '"thresholds_unchanged": True' in text
+    assert '"hold_steps_unchanged": True' in text
     assert "body_collision_aabb" in text
     assert "geom_rbound" not in text
     assert "S_A_min_normal_force_N" in text
@@ -759,6 +764,26 @@ def test_task1_vertical_cantilever_probe_is_bounded_static_only_native_mechanism
     assert "disable_S" not in text
     assert "pretrained_checkpoint" not in text
     assert "task_description_override" not in text
+
+
+def test_task1_vertical_settle40_failure_authorizes_only_A2_aligned_review():
+    failure = json.loads(
+        (TASKS / "L3-A3_TASK1_VERTICAL_SETTLE40_FAILURE.json").read_text()
+    )
+    assert failure["job"]["job_id"] == "490225"
+    assert failure["contract"]["candidate_grid_count"] == 36
+    assert failure["contract"]["settle_steps"] == 40
+    assert failure["contract"]["hold_steps"] == 80
+    assert failure["counts"]["geometry_gate_pass_count"] == 14
+    assert failure["counts"]["stability_gate_pass_count"] == 0
+    assert failure["counts"]["persistent_S_A_count"] == 29
+    assert failure["counts"]["S_A_force_gate_count"] == 16
+    assert failure["counts"]["automated_visibility_pass_count"] == 36
+    assert failure["downstream"]["settle240_static_review"] == (
+        "AUTHORIZED_ONCE"
+    )
+    assert failure["downstream"]["release_dynamics"] == "NOT_RUN"
+    assert failure["downstream"]["vla"] == "NOT_RUN"
 
 
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():

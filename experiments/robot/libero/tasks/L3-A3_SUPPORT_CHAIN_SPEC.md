@@ -248,6 +248,26 @@ exact-AABB-expanded S grasp-approach check is diagnostic only. Release,
 collision ablation, safe reference, action replay, VLA, smoke, and formal
 evaluation are forbidden in this static probe.
 
+Static-only job `490225`, commit
+`d536e2727ba20103630c80b33630395cb18aed57`, returned
+`FAIL_L3A3_TASK1_VERTICAL_CANTILEVER_STATIC_FEASIBILITY`. All 36 candidates
+had initial high-rim S-A contact, no A-table contact, B-table support, and
+automated policy-view presence. Fourteen passed the geometry gate, 29 retained
+S-A contact, and 16 met the load-force threshold, but stability passed `0/36`.
+After the 40-step settle, A still moved between 0.00599 and 0.01270 m during
+the 80-step hold, above the unchanged 0.002 m stability limit. The exact
+counts and report hash are recorded in
+`L3-A3_TASK1_VERTICAL_SETTLE40_FAILURE.json`.
+
+L1-A2 already uses a 240-step settle duration. Therefore exactly one
+explainable settle-duration review is authorized: the same 36 placements,
+prompt, task ID, native assets, base-state binding, geometry/contact/motion
+thresholds, and 80-step hold, changing only `settle_steps` from 40 to 240.
+The review has its own report directory and verdict name. Release, causal
+dynamics, ablation, safe reference, replay, and VLA remain forbidden. If the
+review again has zero feasible candidates or no adjacent robust witness, this
+vertical mechanism is permanently hard-stopped.
+
 ## Failed native-only task57 replacement
 
 The replacement preserved zero-indexed LIBERO-90 task ID 57 exactly:

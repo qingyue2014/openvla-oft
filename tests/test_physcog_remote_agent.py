@@ -93,12 +93,15 @@ def test_l3a3_registry_separates_task1_export_from_physical_grid():
     assert export.command != PHASES[
         ("l3a3", "task1_leaning_chain_one")
     ].command
-    vertical = PHASES[("l3a3", "task1_vertical_static_one")]
+    vertical = PHASES[
+        ("l3a3", "task1_vertical_settle240_static_review")
+    ]
     assert vertical.command[-1].endswith(
         "probe_l3a3_task1_vertical_cantilever_static.py"
     )
     assert vertical.artifacts == (
-        "experiments/logs/l3a3_task1_vertical_cantilever_static",
+        "experiments/logs/"
+        "l3a3_task1_vertical_cantilever_settle240_static_review",
     )
     assert vertical.command != PHASES[
         ("l3a3", "task1_leaning_chain_one")

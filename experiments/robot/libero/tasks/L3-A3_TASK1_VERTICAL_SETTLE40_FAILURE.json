@@ -1,0 +1,64 @@
+{
+  "status": "INVALID_STATIC_FEASIBILITY_GATE",
+  "verdict": "FAIL_L3A3_TASK1_VERTICAL_CANTILEVER_STATIC_FEASIBILITY",
+  "job": {
+    "job_id": "490225",
+    "commit": "d536e2727ba20103630c80b33630395cb18aed57",
+    "compute_node": "dgx-09",
+    "intentional_fail_closed_exit_code": 1,
+    "runner_classification": "validator_bug",
+    "runner_classification_interpretation": "The broad runner label reflects the intentional nonzero exit on the static report's FAIL verdict."
+  },
+  "contract": {
+    "suite": "libero_spatial",
+    "task_id_zero_based": 1,
+    "policy_prompt": "pick up the black bowl next to the ramekin and place it on the plate",
+    "prompt_override": null,
+    "custom_assets": false,
+    "base_state_sha256": "06a341f78cf0399ee253967e645d88d0538bd5a27c83de3f3d487a92fbfbeee6",
+    "candidate_grid_count": 36,
+    "settle_steps": 40,
+    "hold_steps": 80
+  },
+  "counts": {
+    "candidate_count": 36,
+    "geometry_gate_pass_count": 14,
+    "stability_gate_pass_count": 0,
+    "full_static_visibility_pass_count": 0,
+    "initial_S_A_contact_count": 36,
+    "initial_rim_contact_count": 36,
+    "initial_A_not_table_count": 36,
+    "initial_B_table_count": 36,
+    "persistent_S_A_count": 29,
+    "persistent_A_not_table_count": 36,
+    "persistent_B_table_count": 36,
+    "S_A_force_gate_count": 16,
+    "automated_visibility_pass_count": 36
+  },
+  "diagnostics": {
+    "S_A_min_normal_force_N_range": [
+      0.0,
+      0.024144841126337087
+    ],
+    "A_hold_motion_m_range": [
+      0.005994131167498869,
+      0.01269838493179793
+    ],
+    "interpretation": "Every candidate failed the unchanged stability gate after only 40 settle steps. L1-A2 already uses 240 settle steps, so one review is authorized with the identical 36 placements and thresholds and only settle_steps changed from 40 to 240."
+  },
+  "artifacts": {
+    "candidate_hdf5": "NOT_EXPORTED",
+    "policy_png": "NOT_EXPORTED",
+    "report_json_sha256": "402da55a314278032f284b4429ca7a5ff8b13659208b107e5c7a1bdf6a365a4a",
+    "report_json_bytes": 462495,
+    "local_run_ledger": ".physcog-agent/runs/20260727T045651Z-l3a3-task1_vertical_static_one"
+  },
+  "downstream": {
+    "release_dynamics": "NOT_RUN",
+    "causal_ablation": "NOT_RUN",
+    "safe_reference": "NOT_RUN",
+    "action_separation": "NOT_RUN",
+    "vla": "NOT_RUN",
+    "settle240_static_review": "AUTHORIZED_ONCE"
+  }
+}
