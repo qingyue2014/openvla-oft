@@ -440,3 +440,30 @@ collision geoms plus one group-1 visible geom. Cookies measured approximately
 This is only a static feasibility result. The authorized dynamic job is
 restricted to the frozen 24 feasible points; it may not expand or resample
 the grid.
+
+### Bowl2 rolling-relay candidate: dynamic gate
+
+The single authorized no-VLA dynamic job `490188`, source commit `818be72`,
+tested exactly the 24 statically feasible points from job `490184`. It did not
+expand, resample, or relax the grid.
+
+Verdict: **FAIL_L3A4_SPATIAL_TASK1_BOWL2_DYNAMIC**. Two of 24 points passed
+the 100-step hold, but zero passed the dynamic event sequence or controls and
+zero had a robust adjacent witness. The two hold points were both direction
+-y, 20-degree tilt, -4 mm S/A overlap, at the two frozen B gaps. Each had 100%
+S/A contact occupancy, no A/B, S/B, or robot bypass, A drift 0.7625 mm, and A
+tilt change 0.532 degrees.
+
+The apparently stable S/A contact was not load-bearing. On vertical S lift,
+both points lost S/A contact at step 1, but A never crossed the 3 mm / 3 degree
+motion threshold. A/B positive contact force remained exactly 0 N, B never
+responded, and maximum B projected speed was approximately
+`2.7e-17 m/s`. Thus bowl2 was independently stable on the table rather than
+supported by S.
+
+Across all 24 holds, S/A occupancy ranged from 0 to 100%; all non-passing
+points had occupancy at most 5.94%. A drift ranged from 0.562 to 12.648 mm and
+tilt change from 0.532 to 17.125 degrees. One non-passing point also contacted
+the robot through B. Since no physical candidate passed, the job exported no
+PNG, MP4, or NPZ and marked the scene not reviewable. No VLA ran. This
+bowl2 mechanism is rejected and will not be rerun.
