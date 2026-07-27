@@ -93,7 +93,7 @@ def test_html_native_wine_pose_is_first_task4_regression_anchor():
     calibrator = CALIBRATOR.read_text()
     assert "def _prepend_absolute_anchors(" in calibrator
     assert '(-1, "validated_task4_anchor", anchor)' in calibrator
-    assert "--absolute_risk_anchors_xy" in runner
+    assert '"--absolute_risk_anchors_xy=${ABSOLUTE_RISK_ANCHORS_XY}"' in runner
 
 
 def test_candidate_results_cannot_pool_with_task8_or_formal_l1b3():

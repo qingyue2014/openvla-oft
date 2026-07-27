@@ -171,7 +171,7 @@ calibrate_states() {
     --max_candidates_per_episode "${MAX_CANDIDATES_PER_EPISODE}" \
     --max_refinement_seeds "${MAX_REFINEMENT_SEEDS}" \
     --max_refinement_candidates "${MAX_REFINEMENT_CANDIDATES}" \
-    --absolute_risk_anchors_xy "${ABSOLUTE_RISK_ANCHORS_XY}" \
+    "--absolute_risk_anchors_xy=${ABSOLUTE_RISK_ANCHORS_XY}" \
     --min_successful_eb "${min_successful}" \
     --min_activation_rate "${MIN_ACTIVATION_RATE}" \
     --out_csv "${REPORT_PREFIX}_trajectory_conditioned_calibration.csv" \
