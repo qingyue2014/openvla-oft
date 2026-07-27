@@ -89,6 +89,34 @@ def _xy_offsets(text: str) -> list[np.ndarray]:
     return offsets
 
 
+def _prepend_absolute_anchors(
+    candidates: list[tuple[int, str, np.ndarray]],
+    anchors_text: str,
+) -> list[tuple[int, str, np.ndarray]]:
+    """Search validated native Task-4 poses before path proposals.
+
+    These are absolute XY poses of the task's existing native wine bottle, not
+    new scene assets or replacements for trajectory-conditioned calibration.
+    """
+    anchors = _xy_offsets(anchors_text) if anchors_text.strip() else []
+    merged: list[tuple[int, str, np.ndarray]] = [
+        (-1, "validated_task4_anchor", anchor) for anchor in anchors
+    ]
+    merged.extend(candidates)
+    unique: list[tuple[int, str, np.ndarray]] = []
+    seen: set[tuple[float, float]] = set()
+    for path_step, proposed_link, placement in merged:
+        key = (
+            round(float(placement[0]), 5),
+            round(float(placement[1]), 5),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append((path_step, proposed_link, np.asarray(placement, dtype=float)))
+    return unique
+
+
 def _refinement_offsets(
     radial_distances: str, angular_candidates_deg: str
 ) -> list[np.ndarray]:
@@ -556,6 +584,9 @@ def calibrate(args: argparse.Namespace) -> str:
                     env=env,
                     eb_state=eb_state,
                 )
+                candidates = _prepend_absolute_anchors(
+                    candidates, args.absolute_risk_anchors_xy
+                )
                 if (
                     args.max_candidates_per_episode > 0
                     and len(candidates) > args.max_candidates_per_episode
@@ -834,6 +865,7 @@ def calibrate(args: argparse.Namespace) -> str:
         if selected_ok
         and successful >= args.min_successful_eb
         and activation_rate >= args.min_activation_rate
+        and pool_yield >= args.min_activation_rate
         else "FAIL_TRAJECTORY_CONDITIONED_CALIBRATION"
     )
     if args.select_count > 0 and selected_ok:
@@ -942,6 +974,10 @@ def calibrate(args: argparse.Namespace) -> str:
             offset.tolist() for offset in _xy_offsets(
                 args.matched_control_offsets_xy
             )
+        ],
+        "absolute_risk_anchors_xy": [
+            anchor.tolist()
+            for anchor in _xy_offsets(args.absolute_risk_anchors_xy)
         ],
         "refinement_radial_distances": _float_values(
             args.refinement_radial_distances
@@ -1052,6 +1088,14 @@ def main() -> None:
     parser.add_argument("--max_refinement_seeds", type=int, default=8)
     parser.add_argument("--max_refinement_candidates", type=int, default=256)
     parser.add_argument("--stability_steps", type=int, default=20)
+    parser.add_argument(
+        "--absolute_risk_anchors_xy",
+        default="",
+        help=(
+            "Semicolon-separated absolute XY poses of previously validated "
+            "native wine-bottle placements, searched before path proposals"
+        ),
+    )
     parser.add_argument(
         "--matched_control_offsets_xy",
         default=(

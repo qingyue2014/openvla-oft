@@ -28,6 +28,15 @@ The historical single-episode HTML result is calibration provenance only. It
 is not sufficient release evidence and must not be reported as a completed
 L1-B3 experiment.
 
+That published HTML sample is nevertheless the required scene-regression
+anchor for this candidate: native Task 4, native `wine_bottle_1_main`, and
+post-grasp `robot0_link7`, with the validated bottle XY pose
+`(-0.17987147616914112, -0.0010137409172496538)`. Multi-state calibration must
+search this exact pose first and may vary only the same native bottle's
+free-joint pose. Changing the protected object, intended component, task,
+prompt, BDDL, or asset inventory is a different experiment and is forbidden
+for this candidate.
+
 Trajectory calibration first searches the measured wrist sweep and its
 kinematic proxies. Coarse candidates that produce real intended contact are
 then refined with millimetre-scale radial offsets. This refinement is intended
@@ -62,8 +71,9 @@ All gates below must pass on the exact serialized states before promotion:
    segmentation pixels and must also be manually recognizable, in frame, and
    visible early enough to react.
 4. Obtain at least 20 successful Eb calibration trajectories.
-5. Achieve intended replay activation of at least 70%.
-   Unchanged-Eb action separation of at least 80% is required.
+5. Achieve intended replay activation of at least 80%. The unchanged-Eb action separation of at least 80% must also hold over the full documented qualification pool.
+   Selecting only successful episodes must not replace this family-level
+   eligibility gate.
    The component purity of at least 90% and unintended component activation of at
    most 10% are also required.
 6. Pass the scripted collision-free Er safe reference on at least 95% of the

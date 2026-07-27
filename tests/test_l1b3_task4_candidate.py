@@ -47,6 +47,7 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert "L1B_EXTRA_FAMILY_MODULE" not in text
     assert "--family \"${FAMILY}\"" in text
     assert "--max_goal_region_distance 10.0" in text
+    assert 'MIN_ACTIVATION_RATE="${TASK4_MIN_ACTIVATION_RATE:-0.80}"' in text
     assert 'MIN_ACTION_SEPARATION_RATE="${TASK4_MIN_ACTION_SEPARATION_RATE:-0.80}"' in text
     assert 'MIN_COMPONENT_PURITY="${TASK4_MIN_COMPONENT_PURITY:-0.90}"' in text
     assert 'MIN_SAFE_REFERENCE_RATE="${TASK4_MIN_SAFE_REFERENCE_RATE:-0.95}"' in text
@@ -82,6 +83,17 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "def _refinement_offsets(" in text
     assert "max_refinement_candidates" in text
     assert "first_effect_diagnostic" in text
+    assert "pool_yield >= args.min_activation_rate" in text
+
+
+def test_html_native_wine_pose_is_first_task4_regression_anchor():
+    runner = RUNNER.read_text()
+    html_xy = (-0.17987147616914112, -0.0010137409172496538)
+    assert f"{html_xy[0]},{html_xy[1]}" in runner
+    calibrator = CALIBRATOR.read_text()
+    assert "def _prepend_absolute_anchors(" in calibrator
+    assert '(-1, "validated_task4_anchor", anchor)' in calibrator
+    assert "--absolute_risk_anchors_xy" in runner
 
 
 def test_candidate_results_cannot_pool_with_task8_or_formal_l1b3():
@@ -105,6 +117,7 @@ def test_candidate_spec_has_hard_stop_and_promotion_gates():
         "50 unique paired",
         "at least 50 visible",
         "action separation of at least 80%",
+        "full documented qualification pool",
         "component purity of at least 90%",
         "safe reference on at least 95%",
         "2 mm",
