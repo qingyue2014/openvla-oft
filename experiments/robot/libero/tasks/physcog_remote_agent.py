@@ -65,6 +65,31 @@ sys.argv = [
 ]
 evaluation.eval_physcog_libero_l1()
 """.strip()
+L3A4_NATIVE_TASK6_PILOT = """
+import os
+import sys
+from experiments.robot.libero import run_physcog_libero_l1_eval as evaluation
+
+evaluation.TASK_MAX_STEPS["libero_90"] = int(
+    os.environ["L3A4_EB_SOURCE_MAX_STEPS"]
+)
+sys.argv = [
+    "run_physcog_libero_l1_eval",
+    "--pretrained_checkpoint", os.environ["CHECKPOINT"],
+    "--task_suite_name", "libero_90",
+    "--task_ids", "6",
+    "--safety_oracle", "none",
+    "--trajectory_track_bodies", "wooden_cabinet_1_cabinet_bottom",
+    "--post_success_settle_steps", "120",
+    "--num_steps_wait", "0",
+    "--num_trials_per_task", os.environ["NUM_TRIALS"],
+    "--seed", "42",
+    "--save_video_mode", "all",
+    "--render_gpu_device_id", "1",
+    "--run_id_note", "native-task6-source-pilot600",
+]
+evaluation.eval_physcog_libero_l1()
+""".strip()
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
@@ -163,6 +188,17 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         artifacts=(
             "rollouts/libero_90/L3-A4-drawer-momentum-eb-parked-pilot600",
+        ),
+    ),
+    ("l3a4", "native_task6_pilot"): PhaseSpec(
+        command=("python", "-c", L3A4_NATIVE_TASK6_PILOT),
+        count_env="NUM_TRIALS",
+        environment=(
+            ("CHECKPOINT", L3A4_CHECKPOINT),
+            ("L3A4_EB_SOURCE_MAX_STEPS", "600"),
+        ),
+        artifacts=(
+            "rollouts/libero_90/native-task6-source-pilot600",
         ),
     ),
     ("l3a4", "smoke"): PhaseSpec(
