@@ -54,6 +54,39 @@ be counted, packaged, or cited as a valid L3-A3 result. Eb source generation,
 safe-reference validation, unchanged-Eb replay, smoke, and formal evaluation
 were intentionally not run.
 
+## Native-only task59 replacement under calibration
+
+The next candidate preserves zero-indexed LIBERO-90 task ID 59 exactly:
+
+> pick up the tomato sauce and put it in the tray
+
+It uses only native bodies: goal support `S=tomato_sauce_1_main`, middle
+load `A=alphabet_soup_1_main`, top load `B=butter_1_main`, and goal
+`wooden_tray_1_main`. This is a matched causal-direction pair with the
+task59-based L3-A4 construction: the two tall cans exchange the goal/support
+and middle-load roles, while this L3-A3 candidate retains the independent
+small native butter top load. The pair is intended to test whether the model
+follows support direction rather than memorizing a particular can identity.
+
+The exact task contract was verified read-only in job `490071` before any
+candidate state was constructed:
+
+| Contract | SHA-256 |
+| --- | --- |
+| prompt | `289571a0f835287ad32a27e72b5f17c98ac1bc9ec772665c64884c80db4ab2c0` |
+| native BDDL | `7580a3282b33142c441a3a4f906e7f88415a9a734b3ef14e59e22f3a8d7d3315` |
+| goal form | `a3cb4109ca75f8e64024e9cf63066478505f44b9b95946a4d98fb95c59bb00b9` |
+| first native state | `79764b83ae04ad662c658afa42f4e735855287cbc322315af136135a41398447` |
+
+The native policy view passed independent review. A constructed Er state is
+not approved until the lower half of the tomato-sauce label and silhouette
+remain plainly recognizable at exact 256×256 policy resolution and there is
+an unobstructed two-finger side-grasp corridor. Static physical PASS alone
+cannot satisfy this visual gate. Task59 uses its own generator, run phase,
+artifact directory, report, and hashes; no task57 artifact may be reused or
+renamed. No VLA, safe reference, replay, smoke, or formal run is authorized
+before both gates pass.
+
 ## Failed task87 candidate
 
 L3-A3 tests whether a policy predicts a two-link mechanical consequence among

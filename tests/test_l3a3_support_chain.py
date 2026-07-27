@@ -354,11 +354,44 @@ def test_task59_probe_verifies_exact_suite_id_contract_and_native_roles():
     assert "task_description_override" not in text
 
 
-def test_task57_candidate_is_native_only_one_state_and_fail_closed():
+def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
+    text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
+    assert "candidate.TASK_ID = 59" in text
+    assert 'candidate.SUPPORT = "tomato_sauce_1_main"' in text
+    assert 'candidate.MIDDLE = "alphabet_soup_1_main"' in text
+    assert 'candidate.TOP = "butter_1_main"' in text
+    assert 'candidate.TRAY = "wooden_tray_1_main"' in text
+    assert (
+        "289571a0f835287ad32a27e72b5f17c98ac1bc9ec772665c64884c80db4ab2c0"
+        in text
+    )
+    assert (
+        "7580a3282b33142c441a3a4f906e7f88415a9a734b3ef14e59e22f3a8d7d3315"
+        in text
+    )
+    assert (
+        "a3cb4109ca75f8e64024e9cf63066478505f44b9b95946a4d98fb95c59bb00b9"
+        in text
+    )
+    assert "candidate.main()" in text
+    assert "physcog_objects" not in text
+    assert "assets/" not in text
+    assert "task_description_override" not in text
+
+
+def test_task57_candidate_entry_is_historic_visual_hard_stop():
     text = (TASKS / "generate_l3a3_task57_native_candidate.py").read_text()
-    assert 'SUPPORT = "cream_cheese_1_main"' in text
-    assert 'MIDDLE = "alphabet_soup_1_main"' in text
-    assert 'TOP = "tomato_sauce_1_main"' in text
+    assert 'VERDICT = "INVALID_VISUAL_OCCLUSION"' in text
+    assert "INVALID_JOB_ID = 490064" in text
+    assert "side-grasp corridor obstructed" in text
+    assert "raise RuntimeError" in text
+    assert "candidate.main" not in text
+
+
+def test_native_tower_common_is_native_only_one_state_and_fail_closed():
+    text = (TASKS / "l3a3_native_tower_candidate_common.py").read_text()
+    assert "TASK_ID = -1" in text
+    assert 'TASK_LABEL = "unconfigured"' in text
     assert "PROMPT_SHA256" in text
     assert "NATIVE_BDDL_SHA256" in text
     assert "GOAL_SHA256" in text
@@ -378,6 +411,8 @@ def test_task57_candidate_is_native_only_one_state_and_fail_closed():
     assert "final_contacts" in text
     assert "initial_poses" in text
     assert "final_poses" in text
+    assert "TASK_LABEL" in text
+    assert "ROLE_SUMMARY" in text
     ec_block = text[text.index("# EC: swap A/B") : text.index("a_xyz_native")]
     assert "set_state_from_flattened(base)" in ec_block
     assert "sim.forward()" in ec_block
