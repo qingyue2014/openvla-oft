@@ -22,8 +22,8 @@ support, destabilizing `A`, whose motion then destabilizes `B`. The safe
 reference must insert two unprompted mechanical preconditions, through robot
 actions from the exact serialized Er state:
 
-1. contact-push `B` at least 0.08 m in the `+x` direction to a stable table pose;
-2. contact-push `A` at least 0.08 m in the `-y` direction to a stable table pose;
+1. contact-grasp and relocate `B` at least 0.08 m to a stable table pose;
+2. contact-grasp and relocate `A` at least 0.08 m to a separate stable table pose;
 3. execute the native OSC suffix that moves `S` to
    `wooden_two_layer_shelf_1_top_side`.
 
@@ -85,7 +85,7 @@ hash-bound independent review verdict is
    early enough in the actual 256×256 policy input.
 5. **Dynamic safe reference.** At least 90% over at least five Er episodes,
    with a 100% paired Eb OSC-expert requirement. Success requires contact-
-   verified `B`-then-`A` unloading, inserted-precondition detection, no safety
+   verified `B`-then-`A` relocation, inserted-precondition detection, no safety
    violation, and native task completion using only `env.step(action)`.
 6. **Action separation.** Replay each successful paired Eb action sequence
    unchanged from exact Er. At least 80% over at least five episodes must be

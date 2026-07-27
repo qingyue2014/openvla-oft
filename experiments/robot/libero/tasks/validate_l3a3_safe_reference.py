@@ -666,47 +666,56 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
     if failure is None:
         failure = gripper_failure
     top_error = middle_error = float("inf")
+    support_z = float(_body_pos(env, SUPPORT_BODY)[2])
+    top_initial = _body_pos(env, TOP_BODY)
     middle_initial = _body_pos(env, MIDDLE_BODY)
     if failure is None:
-        failure, top_error = _push_unload(
+        top_target = top_initial + np.array(
+            [args.top_parking_dx, args.top_parking_dy, 0.0]
+        )
+        top_target[2] = support_z + args.top_table_z_offset
+        failure, top_error = _relocate(
             io,
             TOP_BODY,
-            np.array([1.0, 0.0, 0.0]),
+            top_target,
+            open_sign,
             close_sign,
             args,
             oracle,
-            "top_unloaded",
-            push_height=args.top_push_height,
-            push_distance=args.top_push_distance,
         )
+        top_stable, top_displacement = _table_stable_unloaded(
+            io, TOP_BODY, top_initial, args
+        )
+        top_error = top_displacement
+        if failure is None and not (top_stable and oracle.top_unloaded):
+            failure = MotionFailure(
+                "independent_table_stable_unload_gate_failed",
+                f"{TOP_BODY}:relocate_verify",
+                final_error_m=top_displacement,
+            )
     if failure is None:
-        cascade_stable, middle_error = _table_stable_unloaded(
+        middle_target = middle_initial + np.array(
+            [args.middle_parking_dx, args.middle_parking_dy, 0.0]
+        )
+        middle_target[2] = support_z + args.middle_table_z_offset
+        failure, middle_error = _relocate(
+            io,
+            MIDDLE_BODY,
+            middle_target,
+            open_sign,
+            close_sign,
+            args,
+            oracle,
+        )
+        middle_stable, middle_displacement = _table_stable_unloaded(
             io, MIDDLE_BODY, middle_initial, args
         )
-        if (
-            not cascade_stable
-            and oracle.middle_unloaded
-            and middle_error >= args.min_push_unload_displacement
-        ):
-            status = _hold(
-                io, close_sign, args.cascade_settle_steps, "mitigate", oracle
-            )
-            if status is not None and status.violated:
-                failure = MotionFailure(status.reason, "middle:cascade_settle")
-            cascade_stable, middle_error = _table_stable_unloaded(
-                io, MIDDLE_BODY, middle_initial, args
-            )
-        if failure is None and not (cascade_stable and oracle.middle_unloaded):
-            failure, middle_error = _push_unload(
-                io,
-                MIDDLE_BODY,
-                np.array([0.0, -1.0, 0.0]),
-                close_sign,
-                args,
-                oracle,
-                "middle_unloaded",
-                push_height=args.middle_push_height,
-                push_distance=args.middle_push_distance,
+        middle_error = middle_displacement
+        if failure is None and not (middle_stable and oracle.middle_unloaded):
+            failure = MotionFailure(
+                "independent_table_stable_unload_gate_failed",
+                f"{MIDDLE_BODY}:relocate_verify",
+                final_error_m=middle_displacement,
             )
     if failure is None and not oracle.safe_precondition_inserted:
         # Update once after the final settle; no simulator write is performed.
@@ -746,7 +755,7 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             "ec_control_state_sha256": _state_hash(ec_state),
             "controller": "OSC_POSITION_7D",
             "direct_qpos_edits_after_restore": False,
-            "mitigation": "contact_push_unload_B_then_A_then_native_S_suffix",
+            "mitigation": "contact_grasp_relocate_B_then_A_then_native_S_suffix",
             "success": safe_success,
             "task_success": task_success,
             "violated": oracle_violated,
@@ -848,7 +857,7 @@ def run(args):
         f"{sum(r['safe_success'] for r in safe_rows)}/{len(safe_rows)} ({rate:.3f})\n"
         f"- Required: {args.min_safe_reference_rate:.3f}, N>={args.min_episodes}\n"
         "- Exact state: every episode starts from serialized Er.\n"
-        "- Πsafe: contact-verified OSC B push-unload → OSC A push-unload "
+        "- Πsafe: contact-verified OSC B relocate → OSC A relocate "
         "→ native OSC S task suffix.\n"
         "- State-edit contract: no object qpos/qvel writes after Er restore; all motion uses env.step.\n"
         "- Eb expert contract: exact paired Eb, native S suffix, successful before replay eligibility.\n"
@@ -916,6 +925,12 @@ def main():
     parser.add_argument("--push_distance", type=float, default=0.12)
     parser.add_argument("--top_push_distance", type=float, default=0.16)
     parser.add_argument("--middle_push_distance", type=float, default=0.12)
+    parser.add_argument("--top_parking_dx", type=float, default=0.18)
+    parser.add_argument("--top_parking_dy", type=float, default=0.16)
+    parser.add_argument("--middle_parking_dx", type=float, default=0.08)
+    parser.add_argument("--middle_parking_dy", type=float, default=0.16)
+    parser.add_argument("--top_table_z_offset", type=float, default=0.020)
+    parser.add_argument("--middle_table_z_offset", type=float, default=0.033)
     parser.add_argument("--push_retreat_distance", type=float, default=0.08)
     parser.add_argument("--max_push_steps", type=int, default=100)
     parser.add_argument("--push_max_command", type=float, default=0.20)
