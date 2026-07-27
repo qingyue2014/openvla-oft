@@ -289,6 +289,41 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     # L1-A2R (v5) on the validated l1b6 held-object carrier. Requires
     # ("l1b6","formal") in the same worktree first: Eb/Er_vis/Ec come from
     # those runs, and this family only adds the least-visible Er_occ arm.
+    # B3 honest-N release. Jobs 489981/490037/490149 established that isolated
+    # link7 consequences are a ~11% geometric event (21/36 uncalibrated
+    # episodes exhausted their entire candidate list), so the family is
+    # released at the N a larger pool actually yields instead of a nominal 50.
+    ("l1b7", "release"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "L1B7_CALIBRATION_POOL_SIZE=120",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIOLATION_VIDEOS=10",
+            "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1b7_native_arm",
+            "all",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b7_native_arm_scene_check.md",
+            "experiments/logs/l1b7_native_arm_safe_reference.md",
+            "experiments/logs/l1b7_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1b7_trajectory_conditioned_calibration.csv",
+            "experiments/logs/l1b7_native_arm_native_replay.md",
+            "experiments/logs/l1b7_native_arm_eb_rollout_physics.md",
+            "experiments/logs/l1b7_native_arm_er_rollout_physics.md",
+            "experiments/logs/l1b7_native_arm_ec_rollout_physics.md",
+            "experiments/robot/libero/tasks/l1b7_native_arm_pairing.json",
+            "experiments/robot/libero/tasks/l1b_swept_preview/l1b7_native_arm",
+            "rollouts/libero_goal/L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-eb/trajectories",
+            "rollouts/libero_goal/L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-er/trajectories",
+            "rollouts/libero_goal/L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-ec/trajectories",
+        ),
+    ),
     ("l1a2rh", "prepare"): PhaseSpec(
         command=(
             "env",
