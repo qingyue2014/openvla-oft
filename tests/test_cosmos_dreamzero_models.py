@@ -8,11 +8,15 @@ from experiments.robot.cosmos_policy_utils import (
     COSMOS_CHECKPOINT_FILENAME,
     COSMOS_CONFIG_MODULE_PATH,
     COSMOS_DEFAULT_CHECKPOINT,
+    COSMOS_DEFAULT_TOKENIZER,
     COSMOS_LIBERO_REPO_ID,
+    COSMOS_TOKENIZER_REPO_ID,
+    COSMOS_TOKENIZER_REVISION,
     defer_unused_cosmos_base_checkpoint_downloads,
     is_cosmos_model_family,
     prepare_cosmos_libero_observation,
     resolve_cosmos_package_root,
+    use_local_cosmos_tokenizer,
     validate_cosmos_actions,
 )
 from experiments.robot.dreamzero_utils import (
@@ -93,6 +97,28 @@ def test_cosmos_defers_only_eager_hf_config_resolution():
     assert cache_clears == [True, True]
 
 
+def test_cosmos_uses_pinned_local_tokenizer(tmp_path):
+    tokenizer = tmp_path / "tokenizer.pth"
+    tokenizer.write_bytes(b"tokenizer")
+    remote_calls = []
+    original = lambda **kwargs: remote_calls.append(kwargs) or "/remote/file"
+    checkpoint_utils = SimpleNamespace(hf_hub_download=original)
+
+    with use_local_cosmos_tokenizer(checkpoint_utils, tokenizer):
+        resolved = checkpoint_utils.hf_hub_download(
+            repo_id=COSMOS_TOKENIZER_REPO_ID,
+            filename="tokenizer/tokenizer.pth",
+        )
+        assert resolved == str(tokenizer)
+        assert checkpoint_utils.hf_hub_download(
+            repo_id="other/repo",
+            filename="weights.pt",
+        ) == "/remote/file"
+
+    assert checkpoint_utils.hf_hub_download is original
+    assert remote_calls == [{"repo_id": "other/repo", "filename": "weights.pt"}]
+
+
 def test_dreamzero_aliases_and_libero_guard(tmp_path):
     assert is_dreamzero_model_family("dreamzero")
     assert is_dreamzero_model_family("dream-zero")
@@ -106,6 +132,11 @@ def test_checkpoint_identities_and_superpod_paths_are_explicit():
     assert COSMOS_DEFAULT_CHECKPOINT == Path("/project/trllmout/models/Cosmos-Policy-LIBERO-Predict2-2B")
     assert COSMOS_CHECKPOINT_FILENAME == "Cosmos-Policy-LIBERO-Predict2-2B.pt"
     assert COSMOS_CONFIG_MODULE_PATH == "cosmos_policy/config/config.py"
+    assert COSMOS_TOKENIZER_REPO_ID == "nvidia/Cosmos-Predict2-2B-Video2World"
+    assert COSMOS_TOKENIZER_REVISION == "f50c09f5d8ab133a90cac3f4886a6471e9ba3f18"
+    assert COSMOS_DEFAULT_TOKENIZER == Path(
+        "/project/trllmout/models/Cosmos-Predict2-2B-Video2World/tokenizer/tokenizer.pth"
+    )
     assert DREAMZERO_DROID_REPO_ID == "GEAR-Dreams/DreamZero-DROID"
     assert DREAMZERO_DEFAULT_CHECKPOINT == Path("/project/trllmout/models/DreamZero-DROID")
 
@@ -135,6 +166,7 @@ def test_setup_script_pins_official_model_revisions():
     script = Path("experiments/robot/libero/tasks/setup_cosmos_dreamzero_models.sh").read_text()
     assert 'MODEL_ROOT="${MODEL_ROOT:-/project/trllmout/models}"' in script
     assert "cb689ec0e3347c13667d70a78a3447388f5c3bb8" in script
+    assert "f50c09f5d8ab133a90cac3f4886a6471e9ba3f18" in script
     assert "96ad344138c66e82536422432ad742f015784942" in script
     assert "nvidia/Cosmos-Policy-LIBERO-Predict2-2B" in script
     assert "GEAR-Dreams/DreamZero-DROID" in script
