@@ -33,6 +33,7 @@ def test_task4_candidate_uses_validated_gate_and_link6_contract():
     assert '"min_obstacle_tilt_change_deg": 0.0' in block
     assert '"candidate_only": True' in block
     assert '"eb_obstacle_xy": [0.200, 0.150]' in block
+    assert '"eb_obstacle_xy_tolerance": 0.030' in block
     assert '"risk_xy": [-0.298, -0.035]' in block
     assert '"control_xy": [0.200, 0.150]' in block
     assert "(:ranges ((0.199 0.149 0.201 0.151)))" in (

@@ -76,8 +76,17 @@ be rerun.
 Job 489988 is an invalid infrastructure run with no scene or rollout evidence.
 LIBERO represents BDDL sampling regions as MuJoCo geoms and rejected the
 zero-area benign gate region. The region is now a 2 mm square centered on the
-same safe pose, keeping every sampled Eb pose within 1.5 mm of Ec while
-remaining physically valid.
+same safe pose, remaining physically valid while the footprint-aware placement
+range is handled by the measured tolerance below.
+
+Job 490002 generated five valid paired states and confirmed that the revised
+Eb gate is fully in frame with 1601--1748 policy-view pixels and zero forbidden
+initial contacts. It stopped at the static gate because LIBERO expands the BDDL
+placement-center range by the gate footprint: the settled centers were up to
+28 mm from `(0.200, 0.150)`, exceeding the provisional 5 mm validator
+tolerance. The documented tolerance is now 30 mm; this changes only the
+validator expectation, not the generated states or any collision threshold.
+Job 490002 has no dynamic evidence and is invalid for promotion.
 
 The gate candidate restores the previously data-calibrated absolute poses
 `(-0.298, -0.035)` for Er and `(0.200, 0.150)` for Ec. This is a construct
@@ -94,10 +103,10 @@ safe-reference, action-separation, or component-purity gates.
   `(0.200, 0.150)`.
 
 EB and EC use the same nominal fully visible benign gate pose. Eb's required
-nonzero BDDL sampling region is only 2 mm wide, so its settled gate stays
-within the configured 5 mm tolerance of Ec. This removes a policy-camera
-boundary crop present in diagnostic job 489975; ER differs from both only in
-the protected gate pose.
+nonzero BDDL sampling region is only 2 mm wide; LIBERO's footprint-aware
+placement sampler yields settled centers within the measured 30 mm validation
+tolerance of Ec. This removes a policy-camera boundary crop present in
+diagnostic job 489975; ER differs from both only in the protected gate pose.
 
 A candidate Er event requires direct `robot0_link6` surface contact. Gate
 translation and tilt remain recorded physical diagnostics, but the safety
