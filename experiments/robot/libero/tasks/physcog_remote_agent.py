@@ -777,6 +777,19 @@ def classify_result(returncode: int, text: str, verdicts: Sequence[str]) -> str:
         and (index == 0 or not lines[index - 1].startswith("Exception ignored in:"))
         for index, line in enumerate(lines)
     )
+    failed_verdicts = [
+        verdict
+        for verdict in verdicts
+        if verdict.startswith(("FAIL", "NEEDS_", "BENCHMARK_INCOMPLETE"))
+    ]
+    # Validators using --fail_on_invalid intentionally raise their freshly
+    # written FAIL verdict so a shell pipeline hard-stops before downstream
+    # evaluation.  That traceback is experimental gate evidence, not a
+    # validator implementation bug.  A different traceback following a stale
+    # report remains a bug and still takes precedence below.
+    expected_gate_traceback = any(
+        f"RuntimeError: {verdict}" in text for verdict in failed_verdicts
+    )
     validator_signatures = (
         "KeyError:",
         "NameError:",
@@ -793,11 +806,14 @@ def classify_result(returncode: int, text: str, verdicts: Sequence[str]) -> str:
         "Unable to allocate resources",
         "Repository Not Found",
     )
-    if fatal_traceback or any(signature in text for signature in validator_signatures):
+    if (
+        fatal_traceback
+        and not expected_gate_traceback
+    ) or any(signature in text for signature in validator_signatures):
         return "validator_bug"
     if any(signature in text for signature in infrastructure_signatures):
         return "infrastructure_failure"
-    if any(v.startswith(("FAIL", "NEEDS_", "BENCHMARK_INCOMPLETE")) for v in verdicts):
+    if failed_verdicts:
         return "gate_failure"
     if returncode != 0:
         return "command_failure"
