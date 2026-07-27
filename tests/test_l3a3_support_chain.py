@@ -372,6 +372,55 @@ def test_task59_probe_verifies_exact_suite_id_contract_and_native_roles():
     assert "task_description_override" not in text
 
 
+def test_task1_leaning_chain_is_bounded_native_only_and_fail_closed():
+    text = (
+        TASKS / "generate_l3a3_task1_leaning_chain_candidate.py"
+    ).read_text()
+    assert 'SUITE = "libero_spatial"' in text
+    assert "TASK_ID = 1" in text
+    assert (
+        '"pick up the black bowl next to the ramekin and place it on the plate"'
+        in text
+    )
+    assert 'S = "akita_black_bowl_1_main"' in text
+    assert 'A = "cookies_1_main"' in text
+    assert 'B = "akita_black_bowl_2_main"' in text
+    assert "MAX_CANDIDATES" in text and "MAX_CANDIDATES != 144" in text
+    assert "geom_world_aabb" in text
+    assert "geom_rbound is never used" in text
+    assert "S_A_release_step" in text
+    assert "A_motion_step" in text
+    assert "A_B_contact_step" in text
+    assert "B_motion_step" in text
+    assert "disable_S" in text
+    assert "disable_A_then_teleport_S" in text
+    assert "adjacent_witnesses" in text
+    assert "outside_A_B_bit_identical" in text
+    assert "PENDING_MANUAL_POLICY_VIEW_REVIEW" in text
+    assert '"vla_status": "NOT_RUN"' in text
+    assert "pretrained_checkpoint" not in text
+    assert "task_description_override" not in text
+
+
+def test_task1_eb_binding_distinguishes_suite_prompt_from_bddl_language():
+    binding = json.loads((TASKS / "L3-A3_TASK1_EB_BINDING.json").read_text())
+    assert binding["task_id"] == 1
+    assert binding["policy_prompt"] == (
+        "pick up the black bowl next to the ramekin and place it on the plate"
+    )
+    assert binding["bddl_language_is_policy_prompt"] is False
+    assert binding["prompt_override"] is None
+    assert binding["formal_result"]["episodes"] == 50
+    assert binding["formal_result"]["successes"] == 50
+    assert binding["formal_result"]["btf"] == 0
+    assert binding["checkpoint"] == (
+        "moojink/openvla-7b-oft-finetuned-libero-spatial"
+    )
+    assert binding["preprocess_contract"]["camera_transform"] == (
+        "image[::-1, ::-1]"
+    )
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text
