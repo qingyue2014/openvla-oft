@@ -28,6 +28,10 @@ L1A1_RUNNER_SHA256 = (
 )
 EVALUATOR_NUM_STEPS_WAIT = 10
 DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
+EXPECTED_S_INIT_PREDICATE = (
+    "(On akita_black_bowl_1 main_table_next_to_ramekin_region)"
+)
+EXPECTED_RUNTIME_SUPPORT_BODY = "table"
 
 
 def sha(value: bytes) -> str:
@@ -128,7 +132,10 @@ def main() -> None:
         raise RuntimeError(f"task1 prompt drift: {task.language!r}")
     bddl = Path(suite.get_task_bddl_file_path(TASK_ID))
     bddl_bytes = bddl.read_bytes()
-    goal_form = balanced_form(bddl_bytes.decode(), "goal")
+    bddl_text = bddl_bytes.decode()
+    if EXPECTED_S_INIT_PREDICATE not in bddl_text:
+        raise RuntimeError("task1 target support-region semantics drift")
+    goal_form = balanced_form(bddl_text, "goal")
     state0 = np.asarray(suite.get_task_init_states(TASK_ID)[0]).copy()
 
     out = Path(args.out_dir)
@@ -205,13 +212,14 @@ def main() -> None:
         policy_entry_support_contacts = contacting_body_names(
             env.sim, geom_sets["S"]
         )
-        stove_contacts = [
+        table_contacts = [
             name for name in policy_entry_support_contacts
-            if "stove" in name.lower()
+            if name == EXPECTED_RUNTIME_SUPPORT_BODY
         ]
-        if not stove_contacts:
+        if not table_contacts:
             raise RuntimeError(
-                "policy-entry target bowl is not bound to a stove support: "
+                "policy-entry target bowl runtime support contradicts "
+                "native main_table region semantics: "
                 f"{policy_entry_support_contacts}"
             )
         current = np.asarray(env.sim.get_state().flatten()).copy()
@@ -263,8 +271,11 @@ def main() -> None:
             ),
             "raw_S_contact_bodies": raw_support_contacts,
             "policy_entry_S_contact_bodies": policy_entry_support_contacts,
-            "support_surface": "stove",
-            "stove_contact_bodies": stove_contacts,
+            "bddl_target_init_predicate": EXPECTED_S_INIT_PREDICATE,
+            "support_region_fixture": "main_table",
+            "runtime_support_body": EXPECTED_RUNTIME_SUPPORT_BODY,
+            "runtime_support_contact_bodies": table_contacts,
+            "bddl_runtime_support_semantics_match": True,
             "base_state_file": str(
                 out / "policy_entry_base_state.npz"
             ),
@@ -300,7 +311,8 @@ def main() -> None:
         f"- Verdict: **{report['verdict']}**\n"
         f"- Exact prompt: `{PROMPT}`\n"
         "- Existing unmodified native EB competence: **50/50**.\n"
-        "- Policy-entry base: **10 evaluator dummy actions; stove support bound**.\n"
+        "- Policy-entry base: **10 evaluator dummy actions; native "
+        "main_table/runtime table support bound**.\n"
         "- Custom assets: **none**.\n"
         "- Policy RGB: **256x256; manual review pending**.\n"
         "- VLA run: **no**.\n"
