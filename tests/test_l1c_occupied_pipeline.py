@@ -24,6 +24,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _csv_rate,
     _collision_aabb_extent,
     _file_sha256,
+    _l1c3_bounded_drop_gate_passes,
     _l1c3_release_gate_passes,
     _matrix_to_wxyz,
     _policy_camera_crop,
@@ -31,6 +32,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _replay_gate_rates,
     _replay_target_tilt_bounds,
     _search_reference_offsets,
+    _typed_bddl_declarations,
     _VideoTrajectoryRecorder,
     _verify_bundle,
     _wxyz_to_matrix,
@@ -431,6 +433,63 @@ def test_l1c3_offsets_and_rotation_axis_follow_drawer_frame():
     assert np.allclose(xy, [0.970, 1.930])
     axis = l1c3_horizontal_rotation_axis(env, spec)
     assert np.allclose(axis, [-1.0, 0.0, 0.0])
+
+
+def test_l1c3_native_bddl_prompt_and_declared_inventory_are_exact():
+    spec = get_spec("l1c3")
+    source = Path(resolve_bddl(spec)).read_text()
+    assert f"(:language {spec.prompt})" in source
+    fixtures = {
+        row["name"]: row["asset_class"]
+        for row in _typed_bddl_declarations(source, "fixtures")
+    }
+    objects = {
+        row["name"]: row["asset_class"]
+        for row in _typed_bddl_declarations(source, "objects")
+    }
+    assert fixtures == {
+        "kitchen_table": "kitchen_table",
+        "white_cabinet_1": "white_cabinet",
+        "wine_rack_1": "wine_rack",
+    }
+    assert objects == {
+        "akita_black_bowl_1": "akita_black_bowl",
+        "wine_bottle_1": "wine_bottle",
+    }
+
+
+def test_l1c3_runner_hard_stops_on_native_only_preflight():
+    runner = Path(
+        "experiments/robot/libero/tasks/run_l1c_occupied.sh"
+    ).read_text()
+    assert "native-preflight" in runner
+    assert "PASS_NATIVE_ONLY_PREFLIGHT" in runner
+    eval_case = runner[runner.index("eval)"):runner.index("*)")]
+    assert "run_native_preflight" in eval_case
+
+
+def test_l1c3_bounded_drop_gate_requires_contained_horizontal_footprint():
+    spec = get_spec("l1c3")
+    args = SimpleNamespace(
+        reference_release_max_drop_height=0.160,
+        reference_release_max_xy_error=0.025,
+    )
+    metrics = {
+        "support_gap_m": 0.155,
+        "xy_error_m": 0.020,
+        "body_horizontal_margin_m": 0.010,
+        "tilt_deg": 81.0,
+    }
+    assert _l1c3_bounded_drop_gate_passes(metrics, spec, args)
+    for key, bad in (
+        ("support_gap_m", 0.161),
+        ("xy_error_m", 0.026),
+        ("body_horizontal_margin_m", 0.002),
+        ("tilt_deg", 64.0),
+    ):
+        changed = dict(metrics)
+        changed[key] = bad
+        assert not _l1c3_bounded_drop_gate_passes(changed, spec, args)
 
 
 def test_exact_state_bundle_verification_rejects_post_preview_mutation(tmp_path):

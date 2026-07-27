@@ -4,7 +4,7 @@ set -euo pipefail
 SCENARIO="${1:-}"
 MODE="${2:-}"
 if [[ ! "${SCENARIO}" =~ ^l1c[234]$ ]] || [[ -z "${MODE}" ]]; then
-  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|preview|verify|validate_layout|screen_occupants|calibrate|competence|policy_probe|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
+  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|native_preflight|preview|verify|validate_layout|screen_occupants|calibrate|competence|policy_probe|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
   exit 2
 fi
 
@@ -100,6 +100,8 @@ ATTRIBUTION_REPORT="${LOG_DIR}/${SCENARIO}_attribution.md"
 RESULT_TABLES_MD="${LOG_DIR}/result_tables.md"
 PREVIEW_CSV="${LOG_DIR}/${SCENARIO}_exact_state_preview.csv"
 PREVIEW_REPORT="${LOG_DIR}/${SCENARIO}_exact_state_preview.md"
+NATIVE_PREFLIGHT_JSON="${LOG_DIR}/${SCENARIO}_native_preflight.json"
+NATIVE_PREFLIGHT_REPORT="${LOG_DIR}/${SCENARIO}_native_preflight.md"
 
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
@@ -126,6 +128,14 @@ run_check() {
   python "${PIPELINE}" generate "${common_state_args[@]}" \
     --source_indices "${SOURCE_INDICES}" \
     --bundle_manifest "${STATE_BUNDLE_MANIFEST}" --num_states "${n}"
+  run_native_preflight
+}
+
+run_native_preflight() {
+  python "${PIPELINE}" native-preflight "${common_state_args[@]}" \
+    --out_json "${NATIVE_PREFLIGHT_JSON}" \
+    --out_report "${NATIVE_PREFLIGHT_REPORT}"
+  grep -q 'PASS_NATIVE_ONLY_PREFLIGHT' "${NATIVE_PREFLIGHT_REPORT}"
 }
 
 run_bodies() {
@@ -258,25 +268,28 @@ run_record() {
 case "${MODE}" in
   bodies) run_bodies ;;
   check) run_check ;;
-  preview) run_preview ;;
-  verify) run_verify ;;
+  native_preflight) run_native_preflight ;;
+  preview) run_native_preflight; run_preview ;;
+  verify) run_native_preflight; run_verify ;;
   validate_layout)
+    run_native_preflight
     run_verify "${NUM_TRIALS}"
     run_calibrate
     grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
     ;;
-  screen_occupants) run_screen_occupants ;;
-  calibrate) run_calibrate ;;
-  competence) run_competence ;;
+  screen_occupants) run_native_preflight; run_screen_occupants ;;
+  calibrate) run_native_preflight; run_calibrate ;;
+  competence) run_native_preflight; run_competence ;;
   policy_probe)
+    run_native_preflight
     run_verify "${NUM_TRIALS}"
     run_condition eb "${NUM_TRIALS}"
     run_competence "${NUM_TRIALS}"
     grep -q 'PASS_EB_COMPETENCE' "${EB_COMPETENCE_REPORT}"
     ;;
-  safe_reference) run_safe_reference ;;
-  eb|er|ec) run_condition "${MODE}" "${NUM_TRIALS}" ;;
-  replay) run_replay ;;
+  safe_reference) run_native_preflight; run_safe_reference ;;
+  eb|er|ec) run_native_preflight; run_condition "${MODE}" "${NUM_TRIALS}" ;;
+  replay) run_native_preflight; run_replay ;;
   smoke)
     run_check "${SMOKE_TRIALS}"
     PREVIEW_NUM_STATES="${SMOKE_TRIALS}" run_preview
@@ -296,9 +309,10 @@ case "${MODE}" in
     run_condition ec "${SMOKE_TRIALS}"
     run_analyze
     ;;
-  analyze) run_analyze ;;
+  analyze) run_native_preflight; run_analyze ;;
   record) run_record ;;
   eval)
+    run_native_preflight
     run_verify "${NUM_TRIALS}"
     run_calibrate
     grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"

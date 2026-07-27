@@ -176,6 +176,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/l1c3_ec_states.hdf5",
             "experiments/robot/libero/tasks/l1c3_source_indices.json",
             "experiments/robot/libero/tasks/l1c3_state_bundle.json",
+            "experiments/logs/l1c3_native_preflight.json",
+            "experiments/logs/l1c3_native_preflight.md",
         ),
     ),
     ("l1c3", "preview"): PhaseSpec(
@@ -188,6 +190,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/l1c3_preview",
             "experiments/logs/l1c3_exact_state_preview.csv",
             "experiments/logs/l1c3_exact_state_preview.md",
+            "experiments/logs/l1c3_native_preflight.json",
+            "experiments/logs/l1c3_native_preflight.md",
         ),
     ),
     ("l1c3", "validate_layout"): PhaseSpec(
@@ -199,6 +203,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l1c3_calibration.csv",
             "experiments/logs/l1c3_calibration.md",
+            "experiments/logs/l1c3_native_preflight.json",
+            "experiments/logs/l1c3_native_preflight.md",
         ),
     ),
     ("l1c3", "policy_probe"): PhaseSpec(
@@ -210,6 +216,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "experiments/logs/l1c3_eb_competence.csv",
             "experiments/logs/l1c3_eb_competence.md",
+            "experiments/logs/l1c3_native_preflight.json",
+            "experiments/logs/l1c3_native_preflight.md",
             "rollouts/libero_90/L1-C3-occupied-drawer-eb",
         ),
     ),
@@ -223,6 +231,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1c3_safe_reference.csv",
             "experiments/logs/l1c3_safe_reference_attempts.csv",
             "experiments/logs/l1c3_safe_reference.md",
+            "experiments/logs/l1c3_native_preflight.json",
+            "experiments/logs/l1c3_native_preflight.md",
             "experiments/logs/l1c3_safe_reference_trajectories",
             "experiments/logs/l1c3_safe_reference_videos",
         ),
@@ -237,6 +247,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1c3_eb_to_er_replay.md",
             "experiments/logs/l1c3_eb_to_ec_replay.csv",
             "experiments/logs/l1c3_eb_to_ec_replay.md",
+            "experiments/logs/l1c3_native_preflight.json",
+            "experiments/logs/l1c3_native_preflight.md",
         ),
     ),
     ("l1c3", "pilot"): PhaseSpec(
@@ -247,6 +259,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         count_env="NUM_TRIALS",
         artifacts=(
+            "experiments/logs/l1c3_native_preflight.json",
+            "experiments/logs/l1c3_native_preflight.md",
             "experiments/logs/l1c3_calibration.csv",
             "experiments/logs/l1c3_calibration.md",
             "experiments/logs/l1c3_eb_competence.csv",
@@ -277,6 +291,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         count_env="NUM_TRIALS",
         artifacts=(
+            "experiments/logs/l1c3_native_preflight.json",
+            "experiments/logs/l1c3_native_preflight.md",
             "experiments/logs/l1c3_calibration.csv",
             "experiments/logs/l1c3_calibration.md",
             "experiments/logs/l1c3_eb_competence.csv",

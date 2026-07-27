@@ -18,6 +18,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+import h5py
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -330,6 +331,237 @@ def _write_json(path, value):
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
 
 
+def _typed_bddl_declarations(source, section):
+    """Return the exact typed names declared in one native BDDL section."""
+    declarations = []
+    active = False
+    balance = 0
+    for line in source.splitlines():
+        if not active and re.search(rf"\(:{re.escape(section)}\b", line):
+            active = True
+        if not active:
+            continue
+        balance += line.count("(") - line.count(")")
+        match = re.match(r"\s*([A-Za-z0-9_]+)\s*-\s*([A-Za-z0-9_]+)\s*$", line)
+        if match:
+            declarations.append(
+                {"name": match.group(1), "asset_class": match.group(2)}
+            )
+        if balance <= 0:
+            break
+    if not active:
+        raise RuntimeError(f"Native BDDL is missing :{section}")
+    return declarations
+
+
+def _model_names(model, count_name, lookup_name):
+    count = int(getattr(model, count_name, 0))
+    lookup = getattr(model, lookup_name, None)
+    if lookup is None:
+        return [""] * count
+    return [lookup(idx) or "" for idx in range(count)]
+
+
+def _runtime_asset_inventory(model):
+    """Serialize the compiled model topology relevant to task asset identity."""
+    geom_rows = []
+    for geom_id in range(int(model.ngeom)):
+        geom_rows.append({
+            "name": model.geom_id2name(geom_id) or "",
+            "body_id": int(model.geom_bodyid[geom_id]),
+            "type": int(model.geom_type[geom_id]),
+            "group": int(model.geom_group[geom_id]),
+            "contype": int(model.geom_contype[geom_id]),
+            "conaffinity": int(model.geom_conaffinity[geom_id]),
+            "data_id": int(model.geom_dataid[geom_id]),
+            "material_id": int(model.geom_matid[geom_id]),
+            "size": np.asarray(model.geom_size[geom_id], dtype=float).tolist(),
+        })
+    return {
+        "bodies": _model_names(model, "nbody", "body_id2name"),
+        "joints": _model_names(model, "njnt", "joint_id2name"),
+        "geoms": geom_rows,
+        "sites": _model_names(model, "nsite", "site_id2name"),
+        "mesh_count": int(getattr(model, "nmesh", 0)),
+        "material_count": int(getattr(model, "nmat", 0)),
+        "texture_count": int(getattr(model, "ntex", 0)),
+    }
+
+
+def _json_sha256(value):
+    payload = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _native_task_match(spec):
+    from libero.libero import benchmark
+
+    suite = benchmark.get_benchmark_dict()["libero_90"]()
+    expected_bddl = Path(spec.bddl_relpath).name
+    matches = []
+    for task_id in range(suite.n_tasks):
+        task = suite.get_task(task_id)
+        if (
+            task.language.strip() == spec.prompt
+            and Path(task.bddl_file).name == expected_bddl
+        ):
+            matches.append((task_id, task))
+    if len(matches) != 1:
+        raise RuntimeError(
+            "Expected exactly one native LIBERO-90 task matching the verbatim "
+            f"prompt and BDDL, found {[(idx, task.language) for idx, task in matches]}"
+        )
+    return suite, matches[0][0], matches[0][1]
+
+
+def _native_task_context(spec, env):
+    bddl = Path(resolve_bddl(spec)).resolve()
+    if bddl.name != Path(spec.bddl_relpath).name or "bddl_files" not in bddl.parts:
+        raise RuntimeError(f"Resolved BDDL is not the selected native LIBERO source: {bddl}")
+    source = bddl.read_text()
+    language = re.search(r"\(:language\s+([^\r\n)]+)\)", source)
+    if language is None or language.group(1).strip() != spec.prompt:
+        raise RuntimeError(
+            "Native BDDL prompt mismatch: "
+            f"{language.group(1).strip() if language else None!r} != {spec.prompt!r}"
+        )
+    suite, native_task_id, native_task = _native_task_match(spec)
+    inventory = _runtime_asset_inventory(env.sim.model)
+    return {
+        "suite": suite,
+        "native_task_id": native_task_id,
+        "native_task": native_task,
+        "bddl_path": bddl,
+        "bddl_source": source,
+        "bddl_sha256": hashlib.sha256(source.encode()).hexdigest(),
+        "declared_asset_inventory": {
+            "fixtures": _typed_bddl_declarations(source, "fixtures"),
+            "objects": _typed_bddl_declarations(source, "objects"),
+        },
+        "runtime_asset_inventory": inventory,
+        "runtime_asset_inventory_sha256": _json_sha256(inventory),
+    }
+
+
+def _attribute_text(value):
+    if isinstance(value, bytes):
+        return value.decode()
+    return str(value)
+
+
+def native_preflight(args):
+    """Hard-stop unless native task, prompt, BDDL, and assets are identical."""
+    spec = get_spec(args.scenario)
+    env = _env(resolve_bddl(spec))
+    evaluated = {}
+    try:
+        env.reset()
+        context = _native_task_context(spec, env)
+        expected_inventory_hash = context["runtime_asset_inventory_sha256"]
+        for condition, state_path in _state_files(args).items():
+            path = Path(state_path)
+            if not path.exists():
+                raise RuntimeError(f"Missing {condition.upper()} state file: {path}")
+            states = load_states(str(path), spec.prompt)
+            if not states:
+                raise RuntimeError(f"{condition.upper()} state file is empty: {path}")
+            with h5py.File(path, "r") as handle:
+                key = spec.prompt.replace(" ", "_")
+                if list(handle.keys()) != [key]:
+                    raise RuntimeError(
+                        f"{condition.upper()} prompt group mismatch: {list(handle.keys())}"
+                    )
+                attrs = handle[key].attrs
+                required = {
+                    "native_prompt": spec.prompt,
+                    "native_bddl": spec.bddl_relpath,
+                    "native_bddl_sha256": context["bddl_sha256"],
+                    "native_asset_inventory_sha256": expected_inventory_hash,
+                }
+                for name, expected in required.items():
+                    actual = attrs.get(name)
+                    if actual is None or _attribute_text(actual) != expected:
+                        raise RuntimeError(
+                            f"{condition.upper()} {name} mismatch: "
+                            f"{_attribute_text(actual) if actual is not None else None!r} "
+                            f"!= {expected!r}"
+                        )
+                if int(attrs.get("native_task_id", -1)) != context["native_task_id"]:
+                    raise RuntimeError(f"{condition.upper()} native task id mismatch")
+            env.set_init_state(states[0])
+            env.sim.forward()
+            inventory = _runtime_asset_inventory(env.sim.model)
+            inventory_hash = _json_sha256(inventory)
+            if inventory_hash != expected_inventory_hash:
+                raise RuntimeError(
+                    f"{condition.upper()} evaluated asset inventory mismatch"
+                )
+            evaluated[condition] = {
+                "state_file": str(path),
+                "state_sha256": _file_sha256(path),
+                "num_states": len(states),
+                "prompt": spec.prompt,
+                "bddl": spec.bddl_relpath,
+                "asset_inventory_sha256": inventory_hash,
+            }
+    finally:
+        env.close()
+
+    manifest = {
+        "schema_version": 1,
+        "verdict": "PASS_NATIVE_ONLY_PREFLIGHT",
+        "scenario": spec.scenario,
+        "native_suite": "libero_90",
+        "native_task_id": context["native_task_id"],
+        "native_prompt": spec.prompt,
+        "native_bddl": spec.bddl_relpath,
+        "native_bddl_resolved_path": str(context["bddl_path"]),
+        "native_bddl_sha256": context["bddl_sha256"],
+        "native_bddl_source": context["bddl_source"],
+        "native_declared_asset_inventory": context["declared_asset_inventory"],
+        "native_runtime_asset_inventory": context["runtime_asset_inventory"],
+        "native_asset_inventory_sha256": context[
+            "runtime_asset_inventory_sha256"
+        ],
+        "custom_assets": [],
+        "evaluated_conditions": evaluated,
+        "allowed_intervention": (
+            f"serialized free-joint pose/state of native {spec.occupant_body} only"
+        ),
+    }
+    _write_json(args.out_json, manifest)
+    _write_report(args.out_report, [
+        f"# {spec.scenario} Native-Only Preflight",
+        "",
+        "- Verdict: **PASS_NATIVE_ONLY_PREFLIGHT**",
+        f"- Native suite/task: `libero_90` / `{context['native_task_id']}`",
+        f"- Native prompt: `{spec.prompt}`",
+        f"- Native BDDL: `{spec.bddl_relpath}`",
+        f"- Native BDDL SHA-256: `{context['bddl_sha256']}`",
+        "- Declared fixtures: "
+        + ", ".join(
+            row["asset_class"]
+            for row in context["declared_asset_inventory"]["fixtures"]
+        ),
+        "- Declared objects: "
+        + ", ".join(
+            row["asset_class"]
+            for row in context["declared_asset_inventory"]["objects"]
+        ),
+        "- Runtime asset inventory SHA-256: "
+        f"`{context['runtime_asset_inventory_sha256']}`",
+        "- Custom-asset XML audit: not applicable; no custom assets are present.",
+        "- EB/ER/EC prompt, BDDL metadata, and compiled asset inventories are identical.",
+        f"- Allowed intervention: serialized pose/state of native `{spec.occupant_body}` only.",
+    ])
+    print(
+        "Verdict: PASS_NATIVE_ONLY_PREFLIGHT\n"
+        f"JSON: {args.out_json}\nReport: {args.out_report}"
+    )
+
+
 def _verify_bundle(args, require_preview=False):
     spec = get_spec(args.scenario)
     manifest_path = Path(args.bundle_manifest)
@@ -380,24 +612,10 @@ def generate(args):
     bddl = resolve_bddl(spec)
     env = _env(bddl)
     env.seed(args.seed)
-    from libero.libero import benchmark
-
-    suite = benchmark.get_benchmark_dict()["libero_90"]()
-    expected_bddl = Path(spec.bddl_relpath).name
-    matches = []
-    for task_id in range(suite.n_tasks):
-        task = suite.get_task(task_id)
-        if (
-            task.language.strip().lower() == spec.prompt.strip().lower()
-            and Path(task.bddl_file).name == expected_bddl
-        ):
-            matches.append((task_id, task))
-    if len(matches) != 1:
-        raise RuntimeError(
-            "Expected exactly one native LIBERO-90 task matching both prompt "
-            f"and BDDL, found {[(idx, task.language) for idx, task in matches]}"
-        )
-    native_task_id, native_task = matches[0]
+    native_context = _native_task_context(spec, env)
+    suite = native_context["suite"]
+    native_task_id = native_context["native_task_id"]
+    native_task = native_context["native_task"]
     native_states = suite.get_task_init_states(native_task_id)
     if not len(native_states):
         raise RuntimeError(f"No native initial states for task {native_task_id}")
@@ -655,7 +873,12 @@ def generate(args):
             {
                 "scenario": spec.scenario,
                 "condition": condition,
+                "native_prompt": spec.prompt,
                 "native_bddl": spec.bddl_relpath,
+                "native_bddl_sha256": native_context["bddl_sha256"],
+                "native_asset_inventory_sha256": native_context[
+                    "runtime_asset_inventory_sha256"
+                ],
                 "native_task_id": native_task_id,
                 "official_init_states": True,
                 "paired": True,
@@ -668,9 +891,18 @@ def generate(args):
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(source_indices, indent=2) + "\n")
     bundle = {
-        "schema_version": 1,
+        "schema_version": 2,
         "scenario": spec.scenario,
         "prompt": spec.prompt,
+        "native_prompt": spec.prompt,
+        "native_bddl": spec.bddl_relpath,
+        "native_bddl_sha256": native_context["bddl_sha256"],
+        "native_declared_asset_inventory": native_context[
+            "declared_asset_inventory"
+        ],
+        "native_asset_inventory_sha256": native_context[
+            "runtime_asset_inventory_sha256"
+        ],
         "num_states": len(states["eb"]),
         "seed": args.seed,
         "native_task_id": native_task_id,
@@ -1767,6 +1999,18 @@ def _l1c3_release_gate_passes(metrics, spec, args):
     )
 
 
+def _l1c3_bounded_drop_gate_passes(metrics, spec, args):
+    """Gate the native robot's reachable hover release with strict bounds."""
+    return bool(
+        metrics["support_gap_m"] <= args.reference_release_max_drop_height
+        and metrics["xy_error_m"] <= args.reference_release_max_xy_error
+        and metrics["body_horizontal_margin_m"]
+        >= spec.min_target_region_horizontal_margin
+        and metrics["tilt_deg"] >= spec.min_target_tilt_deg
+        and metrics["tilt_deg"] <= spec.max_target_tilt_deg
+    )
+
+
 def _query_collision_drop_body_position(
     env, body_name, xy, support_z, clearance
 ):
@@ -2303,6 +2547,7 @@ def _safe_reference_from_eb_prefix(args, files):
                     "body_horizontal_margin_m": float("-inf"),
                     "tilt_deg": preplace_target_tilt,
                 }
+                release_mode = "not_applicable"
                 if spec.scenario == "L1-C3":
                     # The policy's neck grasp puts the gripper beside a
                     # horizontal bottle, so the wrist collides with the cabinet
@@ -2554,18 +2799,28 @@ def _safe_reference_from_eb_prefix(args, files):
                     release_gate = _l1c3_release_gate_metrics(
                         env, spec, desired_body_xy
                     )
+                    seated_gate_pass = _l1c3_release_gate_passes(
+                        release_gate, spec, args
+                    )
+                    bounded_drop_gate_pass = _l1c3_bounded_drop_gate_passes(
+                        release_gate, spec, args
+                    )
                     if (
                         failure == "descent_waypoint_timeout"
-                        and _l1c3_release_gate_passes(release_gate, spec, args)
+                        and (seated_gate_pass or bounded_drop_gate_pass)
                     ):
-                        # The arm can stop against the cabinet before reaching
-                        # its commanded overtravel. A timeout is acceptable
-                        # only when the independent insertion gate already
-                        # proves the complete bottle is inside with a <=10 mm
-                        # floor gap.
+                        # The native wrist can stop against the open drawer
+                        # wall. Accept that stop only when an independent gate
+                        # proves either a seated insertion or a bounded,
+                        # horizontally-contained drop.
                         failure = None
-                    if failure is None and not _l1c3_release_gate_passes(
-                        release_gate, spec, args
+                    if seated_gate_pass:
+                        release_mode = "seated"
+                    elif bounded_drop_gate_pass:
+                        release_mode = "bounded_drop"
+                    if (
+                        failure is None
+                        and not (seated_gate_pass or bounded_drop_gate_pass)
                     ):
                         failure = "pre_release_drawer_insertion_gate"
                 else:
@@ -2684,7 +2939,19 @@ def _safe_reference_from_eb_prefix(args, files):
                     "preplace_target_tilt_deg": preplace_target_tilt,
                     "pre_release_gate_pass": int(
                         _l1c3_release_gate_passes(release_gate, spec, args)
+                        or _l1c3_bounded_drop_gate_passes(
+                            release_gate, spec, args
+                        )
                     ) if spec.scenario == "L1-C3" else 1,
+                    "pre_release_mode": release_mode,
+                    "pre_release_seated_gate_pass": int(
+                        _l1c3_release_gate_passes(release_gate, spec, args)
+                    ) if spec.scenario == "L1-C3" else 1,
+                    "pre_release_bounded_drop_gate_pass": int(
+                        _l1c3_bounded_drop_gate_passes(
+                            release_gate, spec, args
+                        )
+                    ) if spec.scenario == "L1-C3" else 0,
                     "pre_release_native_inside": int(
                         release_gate["native_inside"]
                     ) if spec.scenario == "L1-C3" else 1,
@@ -2771,6 +3038,7 @@ def _safe_reference_from_eb_prefix(args, files):
                     "attempt": row["attempt"],
                     "offset": [row["offset_x_m"], row["offset_y_m"]],
                     "pre_release_gate_pass": bool(row["pre_release_gate_pass"]),
+                    "pre_release_mode": row["pre_release_mode"],
                     "pre_release_support_contact": bool(
                         row["pre_release_support_contact"]
                     ),
@@ -2818,20 +3086,20 @@ def _safe_reference_from_eb_prefix(args, files):
         "- Scope: fully executable OSC actions; no object teleport is retained in the rollout.",
         "- Safe-reference motion: replay the successful Eb grasp/transport prefix, "
         "lay the bottle horizontally on a clear matched table pose, regrasp it from "
-        "above, and lower it into the drawer.",
-        "- Release gate: native containment is already true, the complete bottle "
-        "collision body is inside the drawer in all three dimensions and within the "
-        "65--115 degree horizontal storage range, and either drawer contact is present "
-        "or the remaining floor gap is <=10 mm.",
+        "above, and lower it toward the drawer.",
+        "- Release gate: either (a) complete three-dimensional containment with "
+        "drawer contact or <=10 mm floor gap, or (b) the complete horizontal "
+        "footprint is inside, XY error is bounded, storage tilt is 65--115 degrees, "
+        f"and the physically reachable drop is <= {args.reference_release_max_drop_height:.3f} m.",
         "- Final gate: after settling, the complete collision body must remain inside "
         "the drawer in all three dimensions.",
         f"- Videos: `{args.video_dir or 'disabled'}`",
         "",
         "| Episode | Eb trajectory | Safe | Attempt | Prefix steps | Prefix lift | "
-        "Offset x | Offset y | Pre-release gate | Native inside | Support | Floor gap | Root vertical margin | "
+        "Offset x | Offset y | Release mode | Pre-release gate | Native inside | Support | Floor gap | Root vertical margin | "
         "Release | Occupant move | Occupant tilt | Target XY drift | Final vertical margin | "
         "Final horizontal margin | Target tilt | Linear speed | Angular speed | Reason |",
-        "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+        "| ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
     for row in rows:
         lines.append(
@@ -2839,6 +3107,7 @@ def _safe_reference_from_eb_prefix(args, files):
             f"{row['attempt']} | "
             f"{row['prefix_steps']} | {row['prefix_lift_m']:.4f} | "
             f"{row['offset_x_m']:+.3f} | {row['offset_y_m']:+.3f} | "
+            f"{row['pre_release_mode']} | "
             f"{row['pre_release_gate_pass']} | "
             f"{row['pre_release_native_inside']} | "
             f"{row['pre_release_support_contact']} | "
@@ -3164,6 +3433,11 @@ def main():
     p.add_argument("--policy_start_step", type=int, default=10)
     p.add_argument("--max_anchor_excess", type=float, default=0.010)
 
+    p = sub.add_parser("native-preflight")
+    _defaults(p)
+    p.add_argument("--out_json", required=True)
+    p.add_argument("--out_report", required=True)
+
     p = sub.add_parser("preview")
     _defaults(p)
     p.add_argument("--source_indices", required=True)
@@ -3245,6 +3519,12 @@ def main():
     )
     p.add_argument(
         "--reference_release_max_support_gap", type=float, default=0.010
+    )
+    p.add_argument(
+        "--reference_release_max_drop_height", type=float, default=0.160
+    )
+    p.add_argument(
+        "--reference_release_max_xy_error", type=float, default=0.025
     )
     p.add_argument(
         "--reference_pre_release_settle_steps", type=int, default=8
