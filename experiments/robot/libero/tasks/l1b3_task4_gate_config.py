@@ -15,6 +15,8 @@ FAMILIES = {
         "preserve_native_layout": False,
         "use_sampled_layout": True,
         "placement_mode": "absolute",
+        "eb_obstacle_xy": [0.200, 0.150],
+        "eb_obstacle_xy_tolerance": 0.005,
         "risk_xy": [-0.298, -0.035],
         "control_xy": [0.200, 0.150],
         "required_prompt_terms": ["bowl", "cabinet"],

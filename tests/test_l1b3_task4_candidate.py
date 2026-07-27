@@ -32,8 +32,12 @@ def test_task4_candidate_uses_validated_gate_and_link6_contract():
     assert '"min_obstacle_displacement": 0.0' in block
     assert '"min_obstacle_tilt_change_deg": 0.0' in block
     assert '"candidate_only": True' in block
+    assert '"eb_obstacle_xy": [0.200, 0.150]' in block
     assert '"risk_xy": [-0.298, -0.035]' in block
     assert '"control_xy": [0.200, 0.150]' in block
+    assert "(:ranges ((0.20 0.15 0.20 0.15)))" in (
+        TASKS / "l1b4_goal_arm_sweep.bddl"
+    ).read_text()
 
 
 def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
@@ -108,5 +112,6 @@ def test_candidate_spec_has_hard_stop_and_promotion_gates():
         "every condition",
         "do not copy results into canonical L1-B3",
         "hard stop",
+        "EB and EC use the same fully visible benign gate pose",
     ):
         assert phrase in text
