@@ -382,6 +382,14 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=("python", "-c", L3A4_TASK55_CONTRACT_AUDIT),
         artifacts=("experiments/logs/l3a4_task55_native_contract.json",),
     ),
+    ("l3a4", "task55_static_probe"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/probe_l3a4_task55_native_chain.py",
+            "--fail_on_invalid",
+        ),
+        artifacts=("experiments/logs/l3a4_task55_static_probe",),
+    ),
     ("l3a4", "task64_competence"): PhaseSpec(
         command=(
             "python",

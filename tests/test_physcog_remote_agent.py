@@ -97,6 +97,7 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
         "task64_contract_audit",
         "task64_competence",
         "task55_contract_audit",
+        "task55_static_probe",
         "smoke",
     } <= phases
     assert PHASES[("l3a4", "geometry_sweep")].count_env == "L3A4_SWEEP_TRIALS"
@@ -138,6 +139,12 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
     assert "PASS_L3A4_TASK55_NATIVE_ONLY_CONTRACT" in task55_contract.command[-1]
     assert '"custom_assets": False' in task55_contract.command[-1]
     assert '"serialized_pose_changes_only": True' in task55_contract.command[-1]
+    task55_probe = PHASES[("l3a4", "task55_static_probe")]
+    assert any(
+        item.endswith("probe_l3a4_task55_native_chain.py")
+        for item in task55_probe.command
+    )
+    assert "--fail_on_invalid" in task55_probe.command
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
