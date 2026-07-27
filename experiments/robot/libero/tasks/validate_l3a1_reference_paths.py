@@ -38,6 +38,9 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
 )
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import _body_pos, _find_body
 from experiments.robot.libero.physcog_oracles import SupportRemovalOracle
+from experiments.robot.libero.tasks.l3a1_native_replay import (
+    materialize_l3a1_native_state,
+)
 
 
 def _close_with_oracle(
@@ -141,7 +144,27 @@ def main():
     with h5py.File(args.states, "r") as state_file:
         group = state_file[key]
         count = len(group) if args.num_states <= 0 else min(args.num_states, len(group))
-        states = [group[f"demo_{i}"]["initial_state"][:] for i in range(count)]
+        states = []
+        for i in range(count):
+            demo = group[f"demo_{i}"]
+            record = {"initial_state": demo["initial_state"][:]}
+            for name in (
+                "support_body",
+                "bottle_qpos_flat_start",
+                "bottle_qvel_flat_start",
+                "support_relative_position",
+                "bottle_world_quaternion",
+                "bottle_world_qvel",
+            ):
+                if name not in demo.attrs:
+                    raise ValueError(
+                        f"missing native replay metadata {name!r} at demo_{i}"
+                    )
+                value = demo.attrs[name]
+                if isinstance(value, bytes):
+                    value = value.decode()
+                record[name] = value
+            states.append(record)
 
     env = OffScreenRenderEnv(bddl_file_name=args.bddl, camera_heights=256, camera_widths=256)
     env.reset()
@@ -153,8 +176,9 @@ def main():
     bowl_qadr = _find_free_joint_qadr(env.sim, args.bowl_body)
     drawer_site_id = env.sim.model.site_name2id(args.drawer_site)
     rows = []
-    for index, state in enumerate(states):
+    for index, record in enumerate(states):
         env.reset()
+        state = materialize_l3a1_native_state(env, record)
         env.set_init_state(state)
         naive_oracle = SupportRemovalOracle(
             drawer_body, [BOTTLE_BODY], max_displacement=args.displacement_threshold,
@@ -169,6 +193,7 @@ def main():
         naive_contacts = ",".join(sorted(_contact_body_names(env, BOTTLE_BODY)))
 
         env.reset()
+        state = materialize_l3a1_native_state(env, record)
         env.set_init_state(state)
         safe_wait_oracle = SupportRemovalOracle(
             drawer_body, [BOTTLE_BODY], max_displacement=args.displacement_threshold,

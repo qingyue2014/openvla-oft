@@ -97,6 +97,7 @@ def validate_base_preservation(path: str, task_description: str) -> int:
     key = task_description.replace(" ", "_")
     with h5py.File(path, "r") as handle:
         group = handle[key]
+        variant = str(group.attrs.get("l3a1_variant", ""))
         count = len(group)
         for index in range(len(group)):
             demo = group[f"demo_{index}"]
@@ -117,6 +118,72 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 raise ValueError(f"initial EEF drift is nonzero at demo_{index}")
             if float(demo.attrs.get("runtime_wait_displacement_m", np.inf)) > 0.005:
                 raise ValueError(f"runtime wait drift exceeds 5 mm at demo_{index}")
+            if variant in {"risk", "stable"}:
+                required = (
+                    "support_body",
+                    "bottle_body",
+                    "support_relative_position",
+                    "bottle_world_quaternion",
+                    "bottle_world_qvel",
+                )
+                missing = [name for name in required if name not in demo.attrs]
+                if missing:
+                    raise ValueError(
+                        f"missing native replay metadata at demo_{index}: {missing}"
+                    )
+                for name, size in (
+                    ("support_relative_position", 3),
+                    ("bottle_world_quaternion", 4),
+                    ("bottle_world_qvel", 6),
+                ):
+                    value = np.asarray(demo.attrs[name], dtype=float)
+                    if value.shape != (size,) or not np.all(np.isfinite(value)):
+                        raise ValueError(
+                            f"invalid {name} metadata at demo_{index}: {value!r}"
+                        )
+    return count
+
+
+def validate_baseline_pairing(
+    eb_path: str, er_path: str, task_description: str
+) -> int:
+    """Require Eb to be the exact pre-intervention native base for every Er demo."""
+    validate_base_preservation(eb_path, task_description)
+    validate_base_preservation(er_path, task_description)
+    key = task_description.replace(" ", "_")
+    with h5py.File(eb_path, "r") as eb_handle, h5py.File(er_path, "r") as er_handle:
+        eb_group, er_group = eb_handle[key], er_handle[key]
+        if str(eb_group.attrs.get("l3a1_variant", "")) != "baseline":
+            raise ValueError("Eb artifact is not marked l3a1_variant=baseline")
+        for field in ("seed", "bddl", "source_task_key"):
+            eb_value = eb_group.attrs.get(field, "")
+            er_value = (
+                key if field == "source_task_key"
+                else er_group.attrs.get(field, "")
+            )
+            if str(eb_value) != str(er_value):
+                raise ValueError(
+                    f"Eb/Er metadata mismatch for {field}: "
+                    f"{eb_value!r} != {er_value!r}"
+                )
+        if len(eb_group) == 0 or len(eb_group) != len(er_group):
+            raise ValueError(
+                f"Eb/Er state count mismatch: Eb={len(eb_group)}, Er={len(er_group)}"
+            )
+        for index in range(len(er_group)):
+            eb_demo = eb_group[f"demo_{index}"]
+            er_demo = er_group[f"demo_{index}"]
+            if int(eb_demo.attrs.get("reset_attempt", -1)) != int(
+                er_demo.attrs.get("reset_attempt", -2)
+            ):
+                raise ValueError(f"Eb/Er reset_attempt mismatch at demo_{index}")
+            if not np.array_equal(
+                eb_demo["initial_state"][:], er_demo["base_reset_state"][:]
+            ):
+                raise ValueError(
+                    f"Eb is not the exact Er base_reset_state at demo_{index}"
+                )
+        count = len(er_group)
     return count
 
 
@@ -196,6 +263,7 @@ def validate_pairing(er_path: str, ec_path: str, task_description: str) -> list[
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--eb")
     parser.add_argument("--er", required=True)
     parser.add_argument("--ec")
     parser.add_argument("--task_description", required=True)
@@ -225,14 +293,26 @@ def main() -> None:
         validate_base_preservation(args.er, args.task_description)
         print(artifact_binding(args.er, args.task_description))
         return
+    baseline_count = None
+    if args.eb:
+        baseline_count = validate_baseline_pairing(
+            args.eb, args.er, args.task_description
+        )
     if not args.ec:
         count = validate_base_preservation(args.er, args.task_description)
+        if baseline_count is not None:
+            print(f"PASS_L3A1_PAIRED_NATIVE_BASELINE count={baseline_count}")
+            return
         print(f"PASS_L3A1_BASE_STATE_PRESERVED count={count}")
         return
     attempts = validate_pairing(args.er, args.ec, args.task_description)
     print(
         f"PASS_L3A1_PAIRED_SERIALIZED_STATES count={len(attempts)} "
         f"attempts={','.join(map(str, attempts))}"
+        + (
+            f" baseline_count={baseline_count}"
+            if baseline_count is not None else ""
+        )
     )
 
 

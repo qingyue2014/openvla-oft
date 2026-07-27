@@ -64,8 +64,10 @@ from experiments.robot.libero.physcog_trajectory import (
     collect_tracked_bodies,
 )
 from experiments.robot.libero.video_retention import should_save_rollout_video
+from experiments.robot.libero.tasks.l3a1_native_replay import (
+    materialize_l3a1_native_state,
+)
 from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceIntervention
-import experiments.robot.libero.physcog_objects  # noqa: F401 — registers GlassCup / SteelCup
 from experiments.robot.libero.run_libero_eval import (
     GenerateConfig as LiberoGenerateConfig,
     TASK_MAX_STEPS,
@@ -258,6 +260,8 @@ def run_episode_with_safety(
     # set_init_state() both return the robosuite observation dict.
     obs = env.reset()
     if initial_state is not None:
+        if isinstance(initial_state, dict):
+            initial_state = materialize_l3a1_native_state(env, initial_state)
         obs = env.set_init_state(initial_state)
     if cfg.model_family == "pi05":
         model.reset()
@@ -1015,7 +1019,26 @@ def _load_task_initial_states(cfg, task_suite, task_id: int, task_description: s
                 )
             ep = grp[episode_key]
             success = bool(ep.attrs.get("success", True))
-            custom_states.append(ep["initial_state"][:] if success else None)
+            if not success:
+                custom_states.append(None)
+                continue
+            record = {"initial_state": ep["initial_state"][:]}
+            for name in (
+                "support_body",
+                "bottle_body",
+                "bottle_qpos_flat_start",
+                "bottle_qvel_flat_start",
+                "support_relative_position",
+                "bottle_world_quaternion",
+                "bottle_world_qvel",
+            ):
+                if name not in ep.attrs:
+                    continue
+                value = ep.attrs[name]
+                if isinstance(value, bytes):
+                    value = value.decode()
+                record[name] = value
+            custom_states.append(record)
 
     log_message(f"Using HDF5 initial states from {cfg.initial_states_path}", log_file)
     return custom_states, None
@@ -1119,11 +1142,26 @@ def _run_bddl_task_with_safety(
         import h5py
         key = task_description.replace(" ", "_")
         with h5py.File(cfg.initial_states_path, "r") as f:
-            initial_states = [
-                f[key][f"demo_{i}"]["initial_state"][:]
-                for i in range(cfg.num_trials_per_task)
-                if f"demo_{i}" in f[key]
-            ]
+            initial_states = []
+            for i in range(cfg.num_trials_per_task):
+                episode = f[key][f"demo_{i}"]
+                record = {"initial_state": episode["initial_state"][:]}
+                for name in (
+                    "support_body",
+                    "bottle_body",
+                    "bottle_qpos_flat_start",
+                    "bottle_qvel_flat_start",
+                    "support_relative_position",
+                    "bottle_world_quaternion",
+                    "bottle_world_qvel",
+                ):
+                    if name not in episode.attrs:
+                        continue
+                    value = episode.attrs[name]
+                    if isinstance(value, bytes):
+                        value = value.decode()
+                    record[name] = value
+                initial_states.append(record)
 
     task_episodes = task_successes = task_violations = task_safe_successes = 0
     task_model_collapses = task_valid_executions = task_valid_violations = 0

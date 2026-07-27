@@ -68,6 +68,7 @@ SMOKE_EVIDENCE_REPORT="${SMOKE_EVIDENCE_REPORT:-${LOG_DIR}/l3a1_smoke_evidence.m
 NATIVE_PREFLIGHT_REPORT="${NATIVE_PREFLIGHT_REPORT:-${LOG_DIR}/l3a1_native_preflight.md}"
 RISK_STATE_PATH="${RISK_STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_risk_initial_states.hdf5}"
 STABLE_STATE_PATH="${STABLE_STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_stable_initial_states.hdf5}"
+BASELINE_STATE_PATH="${BASELINE_STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_baseline_initial_states.hdf5}"
 
 with_suffix() {
   local run_id="$1"
@@ -198,6 +199,7 @@ run_check() {
   [[ "${GEN_VARIANT}" == "stable" ]] && report="${STABLE_CHECK_REPORT}"
   mkdir -p "${LOG_DIR}"
   local pair_args=()
+  local baseline_args=()
   local attempt_args=()
   [[ -z "${MAX_ATTEMPTS}" ]] || attempt_args=(--max_attempts "${MAX_ATTEMPTS}")
   if [[ "${GEN_VARIANT}" == "stable" ]]; then
@@ -207,6 +209,8 @@ run_check() {
       return 2
     }
     pair_args=(--paired_er_states "${RISK_STATE_PATH}")
+  else
+    baseline_args=(--baseline_output "${BASELINE_STATE_PATH}")
   fi
   python experiments/robot/libero/tasks/generate_l3a1_drawer_bottle_initial_states.py \
     --bddl "${BDDL_FILE}" \
@@ -221,6 +225,7 @@ run_check() {
     --oracle_displacement_threshold "${DISPLACEMENT_THRESHOLD}" \
     --task_description "${TASK_DESCRIPTION}" \
     "${attempt_args[@]}" \
+    "${baseline_args[@]}" \
     "${pair_args[@]}"
   local base_verdict=""
   local config_args=(
@@ -236,7 +241,14 @@ run_check() {
     --er "${STATE_PATH}" --task_description "${TASK_DESCRIPTION}" "${config_args[@]}")"
   [[ "${base_verdict}" == PASS_L3A1_BASE_STATE_PRESERVED* ]] || {
     echo "L3-A1 base-state preservation validation failed" >&2; return 2; }
-  local pairing_verdict=""
+  local pairing_verdict="" baseline_verdict=""
+  if [[ "${GEN_VARIANT}" == "risk" ]]; then
+    baseline_verdict="$(python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
+      --eb "${BASELINE_STATE_PATH}" --er "${STATE_PATH}" \
+      --task_description "${TASK_DESCRIPTION}")"
+    [[ "${baseline_verdict}" == PASS_L3A1_PAIRED_NATIVE_BASELINE* ]] || {
+      echo "L3-A1 Eb/Er native-base pairing validation failed" >&2; return 2; }
+  fi
   if [[ "${GEN_VARIANT}" == "stable" ]]; then
     pairing_verdict="$(python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
       --er "${RISK_STATE_PATH}" --ec "${STATE_PATH}" \
@@ -244,8 +256,11 @@ run_check() {
     [[ "${pairing_verdict}" == PASS_L3A1_PAIRED_SERIALIZED_STATES* ]] || {
       echo "L3-A1 Er/Ec pairing validation failed" >&2; return 2; }
   fi
-  local state_binding paired_er_binding=""
+  local state_binding paired_er_binding="" baseline_binding=""
   state_binding="$(artifact_binding "${STATE_PATH}")"
+  if [[ "${GEN_VARIANT}" == "risk" ]]; then
+    baseline_binding="$(artifact_binding "${BASELINE_STATE_PATH}")"
+  fi
   if [[ "${GEN_VARIANT}" == "stable" ]]; then
     paired_er_binding="$(artifact_binding "${RISK_STATE_PATH}")"
   fi
@@ -257,7 +272,9 @@ run_check() {
     echo "- Scene seed: ${SCENE_SEED}"
     echo "- State file: \`${STATE_PATH}\`"
     echo "- Base state: ${base_verdict}"
+    [[ -z "${baseline_verdict}" ]] || echo "- Native Eb/Er pairing: ${baseline_verdict}"
     echo "- Artifact binding: ${state_binding}"
+    [[ -z "${baseline_binding}" ]] || echo "- Paired Eb binding: ${baseline_binding}"
     [[ -z "${paired_er_binding}" ]] || echo "- Paired Er binding: ${paired_er_binding}"
     [[ -z "${pairing_verdict}" ]] || echo "- Pairing: ${pairing_verdict}"
   } > "${report}"
@@ -270,6 +287,7 @@ run_eval() {
       --pretrained_checkpoint "${CHECKPOINT}" \
       --task_suite_name "${TASK_SUITE_NAME}" \
       --task_ids 3 \
+      --initial_states_path "${BASELINE_STATE_PATH}" \
       --safety_oracle none \
       --num_trials_per_task "${NUM_TRIALS}" \
       --seed "${EVAL_SEED}" \
@@ -285,7 +303,7 @@ run_eval() {
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
     --task_suite_name "${TASK_SUITE_NAME}" \
-    --bddl_file "${BDDL_FILE}" \
+    --task_ids 3 \
     --initial_states_path "${STATE_PATH}" \
     --safety_oracle support_object_removal \
     --support_baseline_on_activation True \
@@ -312,12 +330,14 @@ require_gates() {
     echo "L3-A1 risk scene gate missing/failed: ${RISK_CHECK_REPORT}" >&2; return 2; }
   grep -q 'PASS_L3A1_STABLE_SCENE_GATE' "${STABLE_CHECK_REPORT}" 2>/dev/null || {
     echo "L3-A1 stable scene gate missing/failed: ${STABLE_CHECK_REPORT}" >&2; return 2; }
+  grep -q 'PASS_L3A1_PAIRED_NATIVE_BASELINE' "${RISK_CHECK_REPORT}" 2>/dev/null || {
+    echo "L3-A1 Eb/Er native-base pairing gate missing/failed: ${RISK_CHECK_REPORT}" >&2; return 2; }
   grep -q 'PASS_L3A1_PAIRED_SERIALIZED_STATES' "${STABLE_CHECK_REPORT}" 2>/dev/null || {
     echo "L3-A1 Er/Ec pairing gate missing/failed: ${STABLE_CHECK_REPORT}" >&2; return 2; }
   grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}" 2>/dev/null || {
     echo "L3-A1 dynamic safe-reference gate missing/failed: ${SAFE_REFERENCE_REPORT}" >&2; return 2; }
-  [[ -f "${RISK_STATE_PATH}" && -f "${STABLE_STATE_PATH}" ]] || {
-    echo "L3-A1 Er/Ec artifact missing; rerun prepare" >&2; return 2; }
+  [[ -f "${BASELINE_STATE_PATH}" && -f "${RISK_STATE_PATH}" && -f "${STABLE_STATE_PATH}" ]] || {
+    echo "L3-A1 paired Eb/Er/Ec artifact missing; rerun prepare" >&2; return 2; }
 
   run_native_preflight
 
@@ -337,15 +357,18 @@ require_gates() {
     --minimum_count "${NUM_TRIALS}" \
     --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}" >/dev/null
   python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
+    --eb "${BASELINE_STATE_PATH}" \
     --er "${RISK_STATE_PATH}" --ec "${STABLE_STATE_PATH}" \
     --task_description "${TASK_DESCRIPTION}" \
     --expected_variant risk --expected_seed "${SCENE_SEED}" \
     --expected_bddl "${BDDL_FILE}" \
     --expected_displacement_threshold "${DISPLACEMENT_THRESHOLD}" >/dev/null
 
-  local risk_binding stable_binding
+  local baseline_binding risk_binding stable_binding
+  baseline_binding="$(artifact_binding "${BASELINE_STATE_PATH}")"
   risk_binding="$(artifact_binding "${RISK_STATE_PATH}")"
   stable_binding="$(artifact_binding "${STABLE_STATE_PATH}")"
+  require_bound_report "${RISK_CHECK_REPORT}" "Paired Eb binding" "${baseline_binding}"
   require_bound_report "${RISK_CHECK_REPORT}" "Artifact binding" "${risk_binding}"
   require_bound_report "${STABLE_CHECK_REPORT}" "Artifact binding" "${stable_binding}"
   require_bound_report "${STABLE_CHECK_REPORT}" "Paired Er binding" "${risk_binding}"

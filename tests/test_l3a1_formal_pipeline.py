@@ -2,11 +2,16 @@ import subprocess
 from pathlib import Path
 
 import h5py
+import numpy as np
 import pytest
 
+from experiments.robot.libero.tasks.l3a1_native_replay import (
+    materialize_l3a1_native_state,
+)
 from experiments.robot.libero.tasks.record_experiment_results import _metadata_for_run
 from experiments.robot.libero.tasks.validate_l3a1_pairing import (
     artifact_binding,
+    validate_baseline_pairing,
     validate_base_preservation,
     validate_expected_config,
     validate_pairing,
@@ -74,10 +79,20 @@ def test_paper_matrix_registers_l3a1_prepare_and_formal_paths():
     assert '--divergence_reference_condition ec' in text
 
 
-def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=False):
+def _states(
+    path,
+    attempts,
+    *,
+    source=None,
+    mutate_bottle=False,
+    mutate_other=False,
+    variant=None,
+):
     with h5py.File(path, "w") as handle:
         group = handle.create_group("task")
-        group.attrs["l3a1_variant"] = "stable" if source is not None else "risk"
+        group.attrs["l3a1_variant"] = (
+            variant or ("stable" if source is not None else "risk")
+        )
         group.attrs["seed"] = 42
         group.attrs["bddl"] = "scene.bddl"
         group.attrs["lean_dx"] = -0.04
@@ -92,6 +107,9 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
         group.attrs["oracle_displacement_threshold"] = 0.01
         group.attrs["oracle_height_drop_threshold"] = 0.015
         group.attrs["stable_x_offset"] = -0.10 if source is not None else 0.0
+        if group.attrs["l3a1_variant"] == "baseline":
+            group.attrs["pairing_method"] = "native_base_reset_state"
+            group.attrs["source_task_key"] = "task"
         if source is not None:
             group.attrs["pairing_method"] = "serialized_er_state_bottle_transform"
             group.attrs["paired_er_states"] = str(source)
@@ -103,6 +121,12 @@ def _states(path, attempts, *, source=None, mutate_bottle=False, mutate_other=Fa
             demo.attrs["runtime_wait_displacement_m"] = 0.0
             demo.attrs["bottle_qpos_flat_start"] = 3
             demo.attrs["bottle_qvel_flat_start"] = 20
+            if group.attrs["l3a1_variant"] in {"risk", "stable"}:
+                demo.attrs["support_body"] = "drawer"
+                demo.attrs["bottle_body"] = "bottle"
+                demo.attrs["support_relative_position"] = [0.1, -0.2, 0.3]
+                demo.attrs["bottle_world_quaternion"] = [1.0, 0.0, 0.0, 0.0]
+                demo.attrs["bottle_world_qvel"] = [0.0] * 6
             if source is not None:
                 demo.attrs["source_demo_index"] = index
             state = list(range(30))
@@ -124,6 +148,50 @@ def test_pairing_gate_compares_serialized_non_bottle_state(tmp_path):
         validate_pairing(str(er), str(ec), "task")
 
 
+def test_native_baseline_is_exact_er_preintervention_state(tmp_path):
+    eb, er = tmp_path / "eb.hdf5", tmp_path / "er.hdf5"
+    _states(eb, [2, 5], variant="baseline")
+    _states(er, [2, 5], mutate_bottle=True)
+    assert validate_baseline_pairing(str(eb), str(er), "task") == 2
+    with h5py.File(eb, "a") as handle:
+        handle["task/demo_1/initial_state"][0] = 99
+    with pytest.raises(ValueError, match="base reset|base_reset_state"):
+        validate_baseline_pairing(str(eb), str(er), "task")
+
+
+def test_native_replay_translates_only_the_bottle_onto_current_drawer():
+    class Model:
+        @staticmethod
+        def body_name2id(name):
+            assert name == "drawer"
+            return 0
+
+    class Data:
+        body_xpos = np.asarray([[1.0, 2.0, 3.0]])
+
+    class Sim:
+        model = Model()
+        data = Data()
+
+    class Env:
+        sim = Sim()
+
+    original = np.arange(30, dtype=float)
+    record = {
+        "initial_state": original,
+        "support_body": "drawer",
+        "bottle_qpos_flat_start": 3,
+        "bottle_qvel_flat_start": 20,
+        "support_relative_position": np.asarray([0.1, -0.2, 0.3]),
+        "bottle_world_quaternion": np.asarray([1.0, 0.0, 0.0, 0.0]),
+        "bottle_world_qvel": np.zeros(6),
+    }
+    replay = materialize_l3a1_native_state(Env(), record)
+    assert np.allclose(replay[3:6], [1.1, 1.8, 3.3])
+    assert np.array_equal(replay[10:20], original[10:20])
+    assert np.array_equal(original, np.arange(30, dtype=float))
+
+
 def test_stable_generator_is_explicitly_paired_to_er_artifact():
     text = RUNNER.read_text()
     assert 'pair_args=(--paired_er_states "${RISK_STATE_PATH}")' in text
@@ -132,6 +200,8 @@ def test_stable_generator_is_explicitly_paired_to_er_artifact():
     assert 'close_response["contacts"].intersection(forbidden_contacts)' in GENERATOR.read_text()
     assert "env.step(DUMMY_ACTION)" in GENERATOR.read_text()
     assert '"runtime_wait_displacement_m"' in GENERATOR.read_text()
+    assert "support_relative_equilibrium_template" in GENERATOR.read_text()
+    assert "--baseline_output" in GENERATOR.read_text()
 
 
 def test_generator_runtime_wait_gates_maximum_stepwise_excursion():
@@ -178,6 +248,12 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert "validate_l3a1_native_preflight.py" in text
     assert 'BDDL_FILE="${REQUESTED_BDDL_FILE:-${NATIVE_BDDL_FILE}}"' in text
     assert "PHYSCOG_L3A1_bowl_drawer_bottle.bddl" not in text
+    assert '--task_ids 3' in text
+    # Direct BDDL construction remains only for the read-only body-list probe;
+    # all three evaluated conditions use native task id 3.
+    assert text.count('--bddl_file "${BDDL_FILE}"') == 1
+    assert '--initial_states_path "${BASELINE_STATE_PATH}"' in text
+    assert "PASS_L3A1_PAIRED_NATIVE_BASELINE" in text
     assert "PASS_L3A1_NATIVE_ONLY_PREFLIGHT" not in text
     assert "--support_baseline_on_activation True" in text
     assert "--support_activate_on_gripper_contact False" in text

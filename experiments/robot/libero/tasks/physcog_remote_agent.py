@@ -373,6 +373,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a1_native_preflight.md",
             "experiments/logs/l3a1_risk_check.md",
             "experiments/logs/l3a1_stable_check.md",
+            "experiments/robot/libero/tasks/l3a1_drawer_bottle_baseline_initial_states.hdf5",
             "experiments/robot/libero/tasks/l3a1_drawer_bottle_risk_initial_states.hdf5",
             "experiments/robot/libero/tasks/l3a1_drawer_bottle_stable_initial_states.hdf5",
         ),

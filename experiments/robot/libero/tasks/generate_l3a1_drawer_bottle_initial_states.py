@@ -224,6 +224,7 @@ def generate_states(
     paired_source_states: list[np.ndarray] | None = None,
     paired_source_attempts: list[int] | None = None,
     paired_base_states: list[np.ndarray] | None = None,
+    paired_support_relative_positions: list[np.ndarray] | None = None,
     max_attempts_override: int | None = None,
 ):
     env = OffScreenRenderEnv(bddl_file_name=bddl_path, camera_heights=256, camera_widths=256)
@@ -274,6 +275,16 @@ def generate_states(
     if max_attempts < n:
         raise ValueError(f"max_attempts ({max_attempts}) must be >= num_states ({n})")
     table_bounds = None
+    # A valid near-critical equilibrium has a narrow basin of attraction. Once
+    # one native reset passes every dynamic gate, reuse only the settled bottle
+    # pose relative to the current native drawer. Each later demo still starts
+    # from an independent native reset and reruns every runtime/hold/contact/
+    # scripted-close gate. This changes no asset or fixture and avoids spending
+    # thousands of resets rediscovering the same local equilibrium.
+    risk_template_relative_position = None
+    risk_template_world_quaternion = None
+    risk_template_world_qvel = None
+    risk_template_source_attempt = -1
 
     while len(states) < n:
         attempts += 1
@@ -300,28 +311,55 @@ def generate_states(
 
         support_pos = _body_pos(env, support_body)
         target_xy = support_pos[:2] + np.array([lean_dx, lean_dy])
+        template_applied = False
+        initialization_mode = "sampled_lean"
         if source_state is not None:
             # Safe-precondition Ec: make the bottle upright and park it at the
             # same pose used by Pi_safe while preserving the Er world state.
-            target_xy = _body_pos(env, BOTTLE_BODY)[:2] + np.array([lean_dx, 0.0])
+            if paired_support_relative_positions is None:
+                raise RuntimeError("paired Er support-relative metadata is missing")
+            paired_risk_position = (
+                support_pos
+                + np.asarray(paired_support_relative_positions[len(states)])
+            )
+            target_xy = paired_risk_position[:2] + np.array([lean_dx, 0.0])
+            initialization_mode = "paired_safe_transform"
+        elif risk_template_relative_position is not None:
+            target_position = support_pos + risk_template_relative_position
+            target_xy = target_position[:2]
+            template_applied = True
+            initialization_mode = "support_relative_equilibrium_template"
         bottle_z = (
             native_upright_bottle_z + lean_dz
             if source_state is not None
-            else _body_pos(env, BOTTLE_BODY)[2] + lean_dz
+            else (
+                target_position[2]
+                if template_applied
+                else _body_pos(env, BOTTLE_BODY)[2] + lean_dz
+            )
         )
 
         env.sim.data.qpos[bottle_qadr:bottle_qadr + 2] = target_xy
         env.sim.data.qpos[bottle_qadr + 2] = bottle_z
-        env.sim.data.qpos[bottle_qadr + 3:bottle_qadr + 7] = _tilt_quat(lean_axis, lean_deg)
+        env.sim.data.qpos[bottle_qadr + 3:bottle_qadr + 7] = (
+            risk_template_world_quaternion
+            if template_applied
+            else _tilt_quat(lean_axis, lean_deg)
+        )
         if source_state is None:
             env.sim.data.qvel[:] = 0
+            if template_applied and bottle_vadr >= 0:
+                env.sim.data.qvel[bottle_vadr:bottle_vadr + 6] = (
+                    risk_template_world_qvel
+                )
         elif bottle_vadr >= 0:
             env.sim.data.qvel[bottle_vadr:bottle_vadr + 6] = 0
         env.sim.forward()
 
         pre_settle_xy = _body_pos(env, BOTTLE_BODY)[:2].copy()
-        for _ in range(SETTLE_STEPS):
-            env.sim.step()
+        if not template_applied:
+            for _ in range(SETTLE_STEPS):
+                env.sim.step()
 
         if not _state_is_finite(env):
             print(f"  [skip attempt {attempts}] non-finite simulation state")
@@ -383,13 +421,24 @@ def generate_states(
             raise RuntimeError(
                 f"candidate changed non-bottle robot state: EEF drift={initial_eef_drift:.3e}m"
             )
+        candidate_support_relative_position = (
+            candidate_state[qpos_flat:qpos_flat + 3]
+            - _body_pos(env, support_body)
+        )
 
         # Replay from a fresh controller reset exactly as evaluation does,
         # then require the serialized bottle to survive the full runtime wait.
+        # The native cabinet fixture is not part of flattened qpos/qvel, so
+        # translate only the bottle onto the freshly sampled native drawer
+        # before applying the serialized state.
         runtime_wait_converged = False
         runtime_wait_fixed_point_iters = 0
         for fixed_point_iter in range(RUNTIME_WAIT_MAX_FIXED_POINT_ITERS):
             env.reset()
+            candidate_state[qpos_flat:qpos_flat + 3] = (
+                _body_pos(env, support_body)
+                + candidate_support_relative_position
+            )
             env.sim.set_state_from_flattened(candidate_state)
             env.sim.forward()
             runtime_wait_start = _body_pos(env, BOTTLE_BODY).copy()
@@ -425,6 +474,10 @@ def generate_states(
             )
             candidate_state[qvel_flat:qvel_flat + 6] = (
                 runtime_state[qvel_flat:qvel_flat + 6]
+            )
+            candidate_support_relative_position = (
+                candidate_state[qpos_flat:qpos_flat + 3]
+                - _body_pos(env, support_body)
             )
         if not runtime_wait_converged:
             print(
@@ -531,6 +584,22 @@ def generate_states(
             )
             continue
 
+        # Reload the exact serialized pre-close state before recording the
+        # native-support-relative replay metadata.
+        env.sim.set_state_from_flattened(candidate_state)
+        env.sim.forward()
+        candidate_support_pos = _body_pos(env, support_body)
+        support_relative_position = (
+            candidate_state[qpos_flat:qpos_flat + 3] - candidate_support_pos
+        )
+        bottle_world_quaternion = candidate_state[qpos_flat + 3:qpos_flat + 7].copy()
+        bottle_world_qvel = candidate_state[qvel_flat:qvel_flat + 6].copy()
+        if variant == "risk" and risk_template_relative_position is None:
+            risk_template_relative_position = support_relative_position.copy()
+            risk_template_world_quaternion = bottle_world_quaternion.copy()
+            risk_template_world_qvel = bottle_world_qvel.copy()
+            risk_template_source_attempt = attempts
+
         state_index = len(states)
         if state_index == 0:
             print(f"  support body        : {support_body}  @ xy=({support_pos[0]:+.4f},{support_pos[1]:+.4f})")
@@ -554,8 +623,17 @@ def generate_states(
                     if paired_source_attempts is not None else attempts
                 ),
                 "source_demo_index": state_index if source_state is not None else -1,
+                "initialization_mode": initialization_mode,
+                "template_source_attempt": (
+                    risk_template_source_attempt if variant == "risk" else -1
+                ),
                 "bottle_qpos_flat_start": qpos_flat,
                 "bottle_qvel_flat_start": qvel_flat,
+                "support_body": support_body,
+                "bottle_body": BOTTLE_BODY,
+                "support_relative_position": support_relative_position,
+                "bottle_world_quaternion": bottle_world_quaternion,
+                "bottle_world_qvel": bottle_world_qvel,
                 "initial_eef_drift_m": initial_eef_drift,
                 # Retain the original attribute as the formal gate value for
                 # artifact/validator compatibility; it now means the maximum
@@ -582,10 +660,43 @@ def generate_states(
     return states, validation_records, base_states
 
 
+def save_baseline_hdf5(
+    base_states: list[np.ndarray],
+    validation_records: list[dict],
+    task_description: str,
+    output: str,
+    bddl: str,
+    seed: int,
+) -> None:
+    """Write the paired native Eb states captured before the bottle intervention."""
+    save_hdf5(base_states, task_description, output)
+    key = task_description.replace(" ", "_")
+    with h5py.File(output, "a") as output_file:
+        group = output_file[key]
+        group.attrs["l3a1_variant"] = "baseline"
+        group.attrs["seed"] = seed
+        group.attrs["bddl"] = bddl
+        group.attrs["pairing_method"] = "native_base_reset_state"
+        group.attrs["source_task_key"] = key
+        for index, record in enumerate(validation_records):
+            episode = group[f"demo_{index}"]
+            episode.create_dataset("base_reset_state", data=base_states[index])
+            episode.attrs["reset_attempt"] = record["reset_attempt"]
+            episode.attrs["source_demo_index"] = index
+            episode.attrs["bottle_qpos_flat_start"] = record["bottle_qpos_flat_start"]
+            episode.attrs["bottle_qvel_flat_start"] = record["bottle_qvel_flat_start"]
+            episode.attrs["initial_eef_drift_m"] = 0.0
+            episode.attrs["runtime_wait_displacement_m"] = 0.0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate L3-A1 drawer/bottle initial states")
     parser.add_argument("--bddl", required=True)
     parser.add_argument("--output", required=True)
+    parser.add_argument(
+        "--baseline_output",
+        help="For risk generation, also write the paired native Eb base-reset states.",
+    )
     parser.add_argument("--num_states", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--variant", choices=("risk", "stable"), default="risk")
@@ -644,6 +755,7 @@ def main():
     paired_source_states = None
     paired_source_attempts = None
     paired_base_states = None
+    paired_support_relative_positions = None
     if args.paired_er_states:
         if args.variant != "stable":
             parser.error("--paired_er_states is only valid with --variant stable")
@@ -660,6 +772,12 @@ def main():
             ]
             paired_base_states = [
                 pair_group[f"demo_{index}"]["base_reset_state"][:]
+                for index in range(len(pair_group))
+            ]
+            paired_support_relative_positions = [
+                np.asarray(
+                    pair_group[f"demo_{index}"].attrs["support_relative_position"]
+                )
                 for index in range(len(pair_group))
             ]
         if (len(paired_source_states) != args.num_states
@@ -690,6 +808,7 @@ def main():
         paired_source_states,
         paired_source_attempts,
         paired_base_states,
+        paired_support_relative_positions,
         args.max_attempts,
     )
     save_hdf5(states, args.task_description, args.output)
@@ -724,6 +843,17 @@ def main():
             episode.create_dataset("base_reset_state", data=base_states[index])
             for name, value in record.items():
                 episode.attrs[name] = value
+    if args.baseline_output:
+        if args.variant != "risk":
+            parser.error("--baseline_output is only valid with --variant risk")
+        save_baseline_hdf5(
+            base_states,
+            validation_records,
+            args.task_description,
+            args.baseline_output,
+            args.bddl,
+            args.seed,
+        )
 
 
 if __name__ == "__main__":
