@@ -52,6 +52,8 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
         "prepare",
         "smoke",
         "formal",
+        "cosmos_formal",
+        "cosmos_smoke",
         "pi05_formal",
         "pi05_safe_video",
         "pi05_smoke",
@@ -102,6 +104,11 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
     assert "safe_video" in pi05_safe_video.command
     assert any("pi05-safe-video-ep043" in value for value in pi05_safe_video.artifacts)
 
+    cosmos_formal = PHASES[("l1b1", "cosmos_formal")]
+    assert cosmos_formal.count_env == "COSMOS_FORMAL_TRIALS"
+    assert "formal" in cosmos_formal.command
+    assert any("cosmos-formal_results.json" in value for value in cosmos_formal.artifacts)
+
     ec_calibrate = PHASES[("l1b1", "ec_calibrate")]
     assert ec_calibrate.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=0" in ec_calibrate.command
@@ -122,7 +129,8 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
 def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b2") == {
         "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke",
-        "formal", "ec_repair", "ec_video", "pi05_formal", "pi05_pose_audit",
+        "formal", "ec_repair", "ec_video", "cosmos_formal", "cosmos_smoke",
+        "pi05_formal", "pi05_pose_audit",
         "pi05_safe_video", "pi05_smoke",
     }
     assert PHASES[("l1b2", "calibrate")].count_env == "CALIBRATION_TRIALS"
@@ -167,6 +175,11 @@ def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
         for value in PHASES[("l1b2", "pi05_pose_audit")].artifacts
     )
     assert "PI05_STATE_INDEX=27" in PHASES[("l1b2", "pi05_safe_video")].command
+    assert PHASES[("l1b2", "cosmos_formal")].count_env == "COSMOS_FORMAL_TRIALS"
+    assert any(
+        "cosmos-formal_results.json" in value
+        for value in PHASES[("l1b2", "cosmos_formal")].artifacts
+    )
     assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1b2", "ec_repair")].command
     assert (
         "experiments/robot/libero/tasks/run_l1b2_native_ec_repair.sh"
