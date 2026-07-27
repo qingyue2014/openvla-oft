@@ -399,6 +399,28 @@ def test_task59_can_alignment_is_bounded_exact_and_requires_adjacent_witness():
     assert "task_description_override" not in text
 
 
+def test_task59_eb_source_is_single_exact_prompt_fail_closed():
+    run = (TASKS / "run_l3a3_task59_eb_source.sh").read_text()
+    prepare = (TASKS / "prepare_l3a3_task59_eb_source.py").read_text()
+    validate = (TASKS / "validate_l3a3_task59_eb_source.py").read_text()
+    review = (TASKS / "L3-A3_TASK59_POLICY_REVIEW.json").read_text()
+    assert "--task_ids 59" in run
+    assert "--num_trials_per_task 1" in run
+    assert "--safety_oracle none" in run
+    assert "--task_description_override" not in run
+    assert "validate_l3a3_task59_eb_source.py" in run
+    assert "EXPECTED_HDF5_SHA256" in prepare
+    assert "EXPECTED_STATE_SHA256" in prepare
+    assert "task_description_override" in prepare
+    assert "PASS_L3A3_TASK59_POLICY_VIEW_REVIEWED" in review
+    assert "reviewed_job_id" in review and "490085" in review
+    assert '"success": metadata.get("success") is True' in validate
+    assert '"no_model_collapse": metadata.get("model_collapse") is False' in validate
+    assert '"initial_pose_binding"' in validate
+    assert '"safe_reference_status": "NOT_RUN"' in validate
+    assert '"action_separation_status": "NOT_RUN"' in validate
+
+
 def test_task57_candidate_entry_is_historic_visual_hard_stop():
     text = (TASKS / "generate_l3a3_task57_native_candidate.py").read_text()
     assert 'VERDICT = "INVALID_VISUAL_OCCLUSION"' in text

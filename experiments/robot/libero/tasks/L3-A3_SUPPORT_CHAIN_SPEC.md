@@ -98,6 +98,15 @@ at the center, 240-step hold drift was `2.33e-7 m` laterally and
 `1.06e-9 m` downward. The next full static candidate may use only this
 hash-bound exact-AABB witness; job `490075` remains invalid.
 
+Full one-state static job `490085` passed the asset, pairing, EB/EC hold, ER
+support-chain, S-move, A-ablation, and B-ablation gates. Two reviewers then
+independently passed the exact 256×256 EB/ER/EC policy views and passive-video
+frames 0/30/60. The hash-bound review is
+`L3-A3_TASK59_POLICY_REVIEW.json`. This authorizes only one exact-EB source
+competence episode. It does not authorize safe-reference, unchanged-EB replay,
+smoke, or formal evaluation. The source must use task ID 59's native prompt
+without an override and must hard-stop on any failure or model collapse.
+
 ## Failed task87 candidate
 
 L3-A3 tests whether a policy predicts a two-link mechanical consequence among

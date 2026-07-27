@@ -1,0 +1,36 @@
+{
+  "status": "PASS_L3A3_TASK59_POLICY_VIEW_REVIEWED",
+  "reviewed_job_id": 490085,
+  "reviewed_commit": "28ebdc17735c7a045c83c47f98319e7920164cc6",
+  "resolution": [
+    256,
+    256
+  ],
+  "transform": "agentview_image[::-1, ::-1]",
+  "reviewers": [
+    "l3a3_support_chain",
+    "root"
+  ],
+  "criteria": {
+    "eb_relevant_objects_recognizable": true,
+    "ec_relevant_objects_recognizable": true,
+    "er_goal_S_lower_label_and_silhouette_recognizable": true,
+    "er_goal_S_two_finger_side_grasp_corridor_unobstructed": true,
+    "er_A_and_B_distinct": true,
+    "tray_in_frame": true,
+    "passive_video_frames_0_30_60_stable": true
+  },
+  "evidence_sha256": {
+    "eb_ep000_policy.png": "0886c0ca40e515598c38f8f406a1d4fa93cad72504ae9dd086f609fc606d1766",
+    "ec_ep000_policy.png": "16ef39732d7daf3dbbefbdb23bcb58385331759f418ac75a4540822c8b732408",
+    "er_ep000_policy.png": "ccddd832881af82da041f1414429a6dc2731ab3c8cb206080827a26605ce0160",
+    "eb_ep000_passive.mp4": "5e7b99137f97747f29a0445978148ea1e8c93ea7898b21a370b1007bdbfec478",
+    "ec_ep000_passive.mp4": "94cfc9a425612404025bd225a200ad5e724f14bcd0124ae6b0650c1d97a07957",
+    "er_ep000_passive.mp4": "c5e4b02632db49eb4f1e48961883f5bcebc6344a00c51d76526e816f452a1c25"
+  },
+  "state_sha256": {
+    "eb": "e8156dd33774f028f8a098b9463c661e12853e589ade5a8cad77990f543eb66b",
+    "ec": "5e2eed5f2d928fb26d8acb7e8936a825e9be1aa683f0e479621dca41f00a63a2",
+    "er": "72d5273376cd8800ab2e49a652c70316564af8ba8636ac8d47757c2af442f633"
+  }
+}
