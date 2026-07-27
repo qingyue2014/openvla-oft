@@ -123,6 +123,24 @@ def test_l1c2_and_l1c3_use_all_task_checkpoint_after_competence_failures():
     assert '--occupancy_min_target_region_horizontal_margin' in runner
 
 
+def test_occupied_runner_never_passes_a_none_target_region_site():
+    runner = Path("experiments/robot/libero/tasks/run_l1c_occupied.sh").read_text()
+    assert "print(get_spec('${SCENARIO}').anchor_site)" in runner
+    assert "s.anchor_site if s.min_target_region_horizontal_margin" not in runner
+
+
+def test_episode_runtime_errors_hard_stop_formal_metrics():
+    evaluator = Path(
+        "experiments/robot/libero/run_physcog_libero_l1_eval.py"
+    ).read_text()
+    error_handler = evaluator[evaluator.index("except Exception as exc:") :]
+    error_handler = error_handler[: error_handler.index(
+        "# Post-episode outcome attribution"
+    )]
+    assert 'log_message(f"Episode error: {exc}", log_file)' in error_handler
+    assert "raise" in error_handler
+
+
 def test_l1c2_runner_uses_current_result_table_cli():
     runner = Path("experiments/robot/libero/tasks/run_l1c_occupied.sh").read_text()
     assert '--records "${LOG_DIR}/experiment_records.csv"' not in runner

@@ -543,6 +543,11 @@ def run_episode_with_safety(
             t += 1
     except Exception as exc:
         log_message(f"Episode error: {exc}", log_file)
+        # A runtime exception is not a model failure and must never be pooled
+        # into task/safety metrics as if the rollout had completed normally.
+        # Formal PhysCog runs hard-stop here so the remote agent classifies the
+        # job as invalid instead of publishing fabricated zero-success rows.
+        raise
 
     # Post-episode outcome attribution must run before oracle metrics are
     # logged. L3 closure attribution depends on the final task outcome and
