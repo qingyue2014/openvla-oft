@@ -96,6 +96,7 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
         "native_task6_pilot",
         "task64_contract_audit",
         "task64_competence",
+        "task64_mechanics",
         "smoke",
     } <= phases
     assert PHASES[("l3a4", "geometry_sweep")].count_env == "L3A4_SWEEP_TRIALS"
@@ -133,6 +134,11 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
     assert "--task_description_override" not in competence.command
     assert "--bddl_file" not in competence.command
     assert "--initial_states_path" not in competence.command
+    mechanics = PHASES[("l3a4", "task64_mechanics")]
+    assert "stable_stack_before_transport" in mechanics.command
+    assert "akita_black_bowl_2_main" in mechanics.command
+    assert "akita_black_bowl_1_main" in mechanics.command
+    assert "--task_description_override" not in mechanics.command
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
