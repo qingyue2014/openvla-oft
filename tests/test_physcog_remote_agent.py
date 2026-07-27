@@ -123,7 +123,7 @@ def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b2") == {
         "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke",
         "formal", "ec_repair", "ec_video", "pi05_formal", "pi05_pose_audit",
-        "pi05_smoke",
+        "pi05_safe_video", "pi05_smoke",
     }
     assert PHASES[("l1b2", "calibrate")].count_env == "CALIBRATION_TRIALS"
     assert any(
@@ -166,6 +166,7 @@ def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
         "retrospective_pose_audit" in value
         for value in PHASES[("l1b2", "pi05_pose_audit")].artifacts
     )
+    assert "PI05_STATE_INDEX=2" in PHASES[("l1b2", "pi05_safe_video")].command
     assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1b2", "ec_repair")].command
     assert (
         "experiments/robot/libero/tasks/run_l1b2_native_ec_repair.sh"

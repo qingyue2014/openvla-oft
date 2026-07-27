@@ -176,6 +176,28 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b2_pi05_retrospective_pose_audit",
         ),
     ),
+    ("l1b2", "pi05_safe_video"): PhaseSpec(
+        command=(
+            "env",
+            "PI05_STATE_INDEX=2",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_pi05_l1b_smoke.sh",
+            "l1b2_native_held_object",
+            "safe_video",
+        ),
+        artifacts=(
+            "experiments/logs/l1b2_native_held_object_pi05_server.log",
+            "experiments/logs/l1b2_native_held_object_pi05-safe-video-ep002_manifest.json",
+            "experiments/logs/l1b2_native_held_object_eb_rollout_physics.md",
+            "experiments/logs/l1b2_native_held_object_er_rollout_physics.md",
+            "experiments/logs/l1b2_native_held_object_ec_rollout_physics.md",
+            "rollouts/libero_goal/L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-eb-pi05-safe-video-ep002",
+            "rollouts/libero_goal/L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-er-pi05-safe-video-ep002",
+            "rollouts/libero_goal/L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-ec-pi05-safe-video-ep002",
+        ),
+    ),
     ("models", "setup_cosmos"): PhaseSpec(
         command=(
             "bash",
