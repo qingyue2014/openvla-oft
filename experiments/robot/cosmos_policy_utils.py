@@ -68,14 +68,6 @@ class CosmosPolicy:
     """Thin wrapper around the official ``nvlabs/cosmos-policy`` inference API."""
 
     def __init__(self, cfg: Any):
-        # The existing LIBERO environment uses a PyTorch release where the
-        # device-agnostic alias is not exposed yet. Cosmos only evaluates this
-        # name while importing trainer type annotations; inference continues
-        # to use the equivalent CUDA implementation.
-        import torch
-
-        if not hasattr(torch.amp, "GradScaler"):
-            torch.amp.GradScaler = torch.cuda.amp.GradScaler
         try:
             import cosmos_policy
             from cosmos_policy.experiments.robot.cosmos_utils import (
