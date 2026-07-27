@@ -82,6 +82,10 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "global INTENDED_LINKS, OTHER_ARM_LINKS" in text
     assert "def _refinement_offsets(" in text
     assert "max_refinement_candidates" in text
+    assert "max_contact_refinement_candidates" in text
+    assert "effect_refinement_attempts" in text
+    assert "contact_refinement_attempts" in text
+    assert "0.00025,0.0005,0.00075" in text
     assert "first_effect_diagnostic" in text
     assert "pool_yield >= args.min_activation_rate" in text
 

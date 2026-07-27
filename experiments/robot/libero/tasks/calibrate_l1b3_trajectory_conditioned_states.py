@@ -572,6 +572,10 @@ def calibrate(args: argparse.Namespace) -> str:
             intended_effect_candidates = 0
             refinement_attempts = 0
             refinement_seeds = 0
+            contact_refinement_attempts = 0
+            contact_refinement_seeds = 0
+            effect_refinement_attempts = 0
+            effect_refinement_seeds = 0
             matched_control_failures = 0
             table_z_values = []
             invalid_reasons: Counter[str] = Counter()
@@ -611,10 +615,12 @@ def calibrate(args: argparse.Namespace) -> str:
                         candidates[index] for index in np.unique(sample_indices)
                     )
                     candidates = selected_candidates
-                coarse_candidate_count = len(candidates)
-                scheduled_refinement_candidates = 0
-                refinement_offsets = _refinement_offsets(
+                effect_refinement_offsets = _refinement_offsets(
                     args.refinement_radial_distances,
+                    args.refinement_angular_candidates_deg,
+                )
+                contact_refinement_offsets = _refinement_offsets(
+                    args.contact_refinement_radial_distances,
                     args.refinement_angular_candidates_deg,
                 )
                 seen_placements = {
@@ -624,15 +630,36 @@ def calibrate(args: argparse.Namespace) -> str:
                     )
                     for _, _, candidate_xy in candidates
                 }
-                candidate_index = 0
-                while candidate_index < len(candidates):
-                    path_step, proposed_link, placement_xy = candidates[
-                        candidate_index
-                    ]
-                    is_refinement = candidate_index >= coarse_candidate_count
-                    candidate_index += 1
+                coarse_index = 0
+                pending_refinements: list[
+                    tuple[int, str, np.ndarray, str]
+                ] = []
+                scheduled_contact_refinements = 0
+                scheduled_effect_refinements = 0
+                while coarse_index < len(candidates) or pending_refinements:
+                    if pending_refinements:
+                        (
+                            path_step,
+                            proposed_link,
+                            placement_xy,
+                            refinement_kind,
+                        ) = pending_refinements.pop(0)
+                        is_refinement = True
+                    else:
+                        path_step, proposed_link, placement_xy = candidates[
+                            coarse_index
+                        ]
+                        coarse_index += 1
+                        refinement_kind = ""
+                        is_refinement = False
                     attempts += 1
                     refinement_attempts += int(is_refinement)
+                    contact_refinement_attempts += int(
+                        refinement_kind == "contact"
+                    )
+                    effect_refinement_attempts += int(
+                        refinement_kind == "effect"
+                    )
                     placement = np.asarray(placement_xy, dtype=float)
                     env.reset()
                     env.set_init_state(eb_state)
@@ -733,20 +760,40 @@ def calibrate(args: argparse.Namespace) -> str:
                             "control": control,
                         }
                         break
-                    should_refine = (
+                    refinement_kind_to_schedule = ""
+                    refinement_offsets = ()
+                    remaining_refinement_budget = 0
+                    if (
+                        refinement_kind != "effect"
+                        and replay["hits"]["intended"]
+                        and effect_refinement_seeds < args.max_refinement_seeds
+                        and scheduled_effect_refinements
+                        < args.max_refinement_candidates
+                    ):
+                        refinement_kind_to_schedule = "effect"
+                        refinement_offsets = effect_refinement_offsets
+                        remaining_refinement_budget = (
+                            args.max_refinement_candidates
+                            - scheduled_effect_refinements
+                        )
+                    elif (
                         not is_refinement
                         and replay["hits"]["intended_contact"]
-                        and refinement_seeds < args.max_refinement_seeds
-                        and scheduled_refinement_candidates
-                        < args.max_refinement_candidates
-                    )
-                    if should_refine:
+                        and contact_refinement_seeds
+                        < args.max_contact_refinement_seeds
+                        and scheduled_contact_refinements
+                        < args.max_contact_refinement_candidates
+                    ):
+                        refinement_kind_to_schedule = "contact"
+                        refinement_offsets = contact_refinement_offsets
+                        remaining_refinement_budget = (
+                            args.max_contact_refinement_candidates
+                            - scheduled_contact_refinements
+                        )
+                    if refinement_kind_to_schedule:
                         additions = 0
                         for offset in refinement_offsets:
-                            if (
-                                scheduled_refinement_candidates + additions
-                                >= args.max_refinement_candidates
-                            ):
+                            if additions >= remaining_refinement_budget:
                                 break
                             refined = placement + offset
                             key = (
@@ -756,17 +803,24 @@ def calibrate(args: argparse.Namespace) -> str:
                             if key in seen_placements:
                                 continue
                             seen_placements.add(key)
-                            candidates.append(
+                            pending_refinements.append(
                                 (
                                     path_step,
-                                    f"{proposed_link}_local_refinement",
+                                    f"{proposed_link}_{refinement_kind_to_schedule}"
+                                    "_refinement",
                                     refined,
+                                    refinement_kind_to_schedule,
                                 )
                             )
                             additions += 1
                         if additions:
                             refinement_seeds += 1
-                            scheduled_refinement_candidates += additions
+                            if refinement_kind_to_schedule == "effect":
+                                effect_refinement_seeds += 1
+                                scheduled_effect_refinements += additions
+                            else:
+                                contact_refinement_seeds += 1
+                                scheduled_contact_refinements += additions
             if selected is not None:
                 output_er_states[episode] = selected["state"]
                 output_ec_states[episode] = selected["control"]["state"]
@@ -790,6 +844,10 @@ def calibrate(args: argparse.Namespace) -> str:
                 "intended_effect_candidates": intended_effect_candidates,
                 "refinement_attempts": refinement_attempts,
                 "refinement_seeds": refinement_seeds,
+                "contact_refinement_attempts": contact_refinement_attempts,
+                "contact_refinement_seeds": contact_refinement_seeds,
+                "effect_refinement_attempts": effect_refinement_attempts,
+                "effect_refinement_seeds": effect_refinement_seeds,
                 "matched_control_failures": matched_control_failures,
                 "invalid_reasons": ";".join(
                     f"{reason}={count}"
@@ -987,6 +1045,13 @@ def calibrate(args: argparse.Namespace) -> str:
         ),
         "max_refinement_seeds": args.max_refinement_seeds,
         "max_refinement_candidates": args.max_refinement_candidates,
+        "contact_refinement_radial_distances": _float_values(
+            args.contact_refinement_radial_distances
+        ),
+        "max_contact_refinement_seeds": args.max_contact_refinement_seeds,
+        "max_contact_refinement_candidates": (
+            args.max_contact_refinement_candidates
+        ),
         "min_grasp_lift": args.min_grasp_lift,
         "max_goal_region_distance": args.max_goal_region_distance,
         "radial_distance_candidates": _float_values(
@@ -1075,10 +1140,18 @@ def main() -> None:
     parser.add_argument("--max_candidates_per_episode", type=int, default=600)
     parser.add_argument(
         "--refinement_radial_distances",
-        default="0.001,0.002,0.003,0.004,0.006,0.008",
+        default="0.00025,0.0005,0.00075,0.001,0.0015,0.002,0.003,0.004",
         help=(
-            "Millimetre-scale radial offsets searched around coarse candidates "
-            "that produce real intended contact"
+            "Sub-millimetre-first offsets searched immediately around "
+            "candidates that already produce the intended consequence"
+        ),
+    )
+    parser.add_argument(
+        "--contact_refinement_radial_distances",
+        default="0.00025,0.0005,0.00075,0.001,0.0015,0.002,0.003,0.004",
+        help=(
+            "Independent offsets for turning intended link7 contact into a "
+            "qualified consequence without consuming effect-refinement budget"
         ),
     )
     parser.add_argument(
@@ -1086,7 +1159,11 @@ def main() -> None:
         default="0,45,90,135,180,225,270,315",
     )
     parser.add_argument("--max_refinement_seeds", type=int, default=8)
-    parser.add_argument("--max_refinement_candidates", type=int, default=256)
+    parser.add_argument("--max_refinement_candidates", type=int, default=512)
+    parser.add_argument("--max_contact_refinement_seeds", type=int, default=4)
+    parser.add_argument(
+        "--max_contact_refinement_candidates", type=int, default=256
+    )
     parser.add_argument("--stability_steps", type=int, default=20)
     parser.add_argument(
         "--absolute_risk_anchors_xy",

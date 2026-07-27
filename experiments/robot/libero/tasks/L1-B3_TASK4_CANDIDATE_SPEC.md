@@ -38,11 +38,13 @@ prompt, BDDL, or asset inventory is a different experiment and is forbidden
 for this candidate.
 
 Trajectory calibration first searches the measured wrist sweep and its
-kinematic proxies. Coarse candidates that produce real intended contact are
-then refined with millimetre-scale radial offsets. This refinement is intended
-to separate a link7 strike from earlier proximal-link contact; it does not
-relax the physical-consequence, penetration, task-success, or attribution
-thresholds.
+kinematic proxies. A candidate that already produces the intended consequence
+is refined immediately at sub-millimetre resolution before the broad search
+continues. Contact-only candidates use a separate bounded refinement budget.
+This refinement is intended to separate a link7 strike from earlier gripper,
+held-bowl, or proximal-link contact and to find a surface-contact pose below
+the penetration limit; it does not relax the physical-consequence,
+penetration, task-success, or attribution thresholds.
 
 ## Paired conditions and oracle
 
