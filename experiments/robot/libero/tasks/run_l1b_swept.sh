@@ -477,14 +477,32 @@ calibrate_l1b7_trajectory_states() {
 # (visible, l1b7_native_arm) are conditioned on the same Eb trajectories and
 # stay paired per qualification-pool episode.
 copy_l1b7_pool_for_l1a2r() {
-  local b7_eb own_eb src
+  local b7_eb own_eb src candidate
   b7_eb="rollouts/libero_goal/$(note_for l1b7_native_arm eb)/trajectories"
   own_eb="rollouts/libero_goal/$(note_for l1a2r_occluded_arm eb)/trajectories"
+  src=""
+  # 1. Same worktree (l1b7 all ran here): prefer the full qualification pool.
   if [[ -d "${b7_eb}_pool" ]]; then
     src="${b7_eb}_pool"
   elif [[ -d "${b7_eb}" ]]; then
     src="${b7_eb}"
-  else
+  fi
+  # 2. Explicit override (absolute path).
+  if [[ -z "${src}" && -n "${L1A2R_EB_POOL_SRC:-}" && -d "${L1A2R_EB_POOL_SRC}" ]]; then
+    src="${L1A2R_EB_POOL_SRC}"
+  fi
+  # 3. Sibling per-commit worktrees under the same .physcog-agent tree: the
+  #    l1b7 formal run may have executed at an earlier commit. Pick the
+  #    newest complete pool. Deterministic path family only — no user input.
+  if [[ -z "${src}" ]]; then
+    for candidate in $(ls -dt ../*/"${b7_eb}_pool" ../*/"${b7_eb}" 2>/dev/null); do
+      if [[ -f "${candidate}/index.jsonl" ]]; then
+        src="${candidate}"
+        break
+      fi
+    done
+  fi
+  if [[ -z "${src}" ]]; then
     echo "l1a2r_occluded_arm requires the L1-B7 Eb pool first: ${b7_eb} missing" >&2
     echo "Run: bash ${TASKS_DIR}/run_l1b_swept.sh l1b7_native_arm all" >&2
     exit 2
