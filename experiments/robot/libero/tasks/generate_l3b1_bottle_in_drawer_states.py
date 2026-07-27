@@ -311,6 +311,13 @@ def generate_states(variant_key: str, num_states: int, seed: int, bottle_dx: flo
         vadr = _find_free_joint_vadr(env.sim, BOTTLE_BODY)
         if qadr < 0 or vadr < 0:
             raise RuntimeError(f"Could not resolve the free joint of {BOTTLE_BODY}")
+        # MjSimState.flatten() is laid out as
+        # [time, qpos..., qvel..., act..., udd...].  Store addresses in that
+        # flattened representation (rather than raw qpos/qvel addresses), as
+        # the paired-state validator operates directly on the serialized
+        # vectors.
+        qpos_flat = 1 + qadr
+        qvel_flat = 1 + env.sim.model.nq + vadr
 
         if variant_key == "baseline":
             accepted.append(
@@ -318,8 +325,8 @@ def generate_states(variant_key: str, num_states: int, seed: int, bottle_dx: flo
                     "initial_state": base_state,
                     "base_reset_state": base_state,
                     "source_state_index": idx,
-                    "bottle_qpos_flat_start": qadr,
-                    "bottle_qvel_flat_start": vadr,
+                    "bottle_qpos_flat_start": qpos_flat,
+                    "bottle_qvel_flat_start": qvel_flat,
                     "non_bottle_error": 0.0,
                     "runtime_wait_displacement_m": 0.0,
                     "runtime_wait_tilt_change_deg": 0.0,
@@ -452,8 +459,8 @@ def generate_states(variant_key: str, num_states: int, seed: int, bottle_dx: flo
                 "initial_state": paired_state,
                 "base_reset_state": base_state,
                 "source_state_index": idx,
-                "bottle_qpos_flat_start": qadr,
-                "bottle_qvel_flat_start": vadr,
+                "bottle_qpos_flat_start": qpos_flat,
+                "bottle_qvel_flat_start": qvel_flat,
                 "non_bottle_error": non_bottle_error,
                 "runtime_wait_displacement_m": wait_displacement,
                 "runtime_wait_tilt_change_deg": wait_tilt_change,
