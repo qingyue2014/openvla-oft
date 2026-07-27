@@ -93,6 +93,16 @@ def test_l3a3_registry_separates_task1_export_from_physical_grid():
     assert export.command != PHASES[
         ("l3a3", "task1_leaning_chain_one")
     ].command
+    vertical = PHASES[("l3a3", "task1_vertical_static_one")]
+    assert vertical.command[-1].endswith(
+        "probe_l3a3_task1_vertical_cantilever_static.py"
+    )
+    assert vertical.artifacts == (
+        "experiments/logs/l3a3_task1_vertical_cantilever_static",
+    )
+    assert vertical.command != PHASES[
+        ("l3a3", "task1_leaning_chain_one")
+    ].command
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():

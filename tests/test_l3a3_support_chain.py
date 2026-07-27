@@ -719,6 +719,48 @@ def test_task1_job490195_is_genuine_frozen_grid_physical_failure():
     assert failure["downstream"]["vla"] == "NOT_RUN"
 
 
+def test_task1_vertical_cantilever_probe_is_bounded_static_only_native_mechanism():
+    text = (
+        TASKS / "probe_l3a3_task1_vertical_cantilever_static.py"
+    ).read_text()
+    assert 'RAMEKIN as B' in text
+    assert 'B as OTHER_BOWL' in text
+    assert "YAW_OFFSET_DEG = (-8.0, 0.0, 8.0)" in text
+    assert "A_RADIAL_OFFSET_M = (0.022, 0.030)" in text
+    assert "A_DOWN_TILT_DEG = (0.0, 3.0, 6.0)" in text
+    assert "RIM_EMBED_M = (-0.002, -0.001)" in text
+    assert "MAX_CANDIDATES != 36" in text
+    assert "SETTLE_STEPS = 40" in text
+    assert "HOLD_STEPS = 80" in text
+    assert "body_collision_aabb" in text
+    assert "geom_rbound" not in text
+    assert "S_A_min_normal_force_N" in text
+    assert "S_A_rim_contact" in text
+    assert '"A_table_contact"' in text
+    assert '"B_table_contact"' in text
+    assert '"A_B_contact"' in text
+    assert '"S_B_contact"' in text
+    assert "outside_A_bit_identical" in text
+    assert '"B_native_pose_preserved": True' in text
+    assert "render_segmentation_ids" in text
+    assert "segmentation[::-1, ::-1]" in text
+    assert '"visible_pixels": count' in text
+    assert '"policy_bbox_xyxy": bbox' in text
+    assert "grasp_space_diagnostic" in text
+    assert '"diagnostic_only": True' in text
+    assert "selected_policy.png" in text
+    assert "selected_role_mask.png" in text
+    assert "selected_segmentation_ids.npy" in text
+    assert '"release_dynamics_status": "NOT_RUN"' in text
+    assert '"causal_ablation_status": "NOT_RUN"' in text
+    assert '"vla_status": "NOT_RUN"' in text
+    assert "chain_trace" not in text
+    assert "teleport_S" not in text
+    assert "disable_S" not in text
+    assert "pretrained_checkpoint" not in text
+    assert "task_description_override" not in text
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text

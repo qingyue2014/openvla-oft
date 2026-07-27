@@ -209,11 +209,44 @@ smoke, or formal output was produced. This frozen grid must not be run again.
 The exact counts and report hashes are bound in
 `L3-A3_TASK1_POLICY_ENTRY_GRID_FAILURE.json`.
 
-Further L3-A3 physical design is paused pending the hash-bound three-seed real
-swept-path result from L1-A2 job `490200`. A future candidate must reproduce
-one robust A state from that evidence and then design a distinct B placement
-and reaction direction; this is a new design input, not permission to tune or
-rerun the failed 144-point grid.
+After that failure, further side-lean work was paused pending a new design
+input; it remains forbidden to tune or rerun the failed 144-point grid. The
+separate vertical mechanism below is a new construction, not a continuation
+of that grid.
+
+### New vertical support/cantilever static probe
+
+The old side-lean mechanism and its 144-point grid are permanently stopped.
+The next bounded mechanism retains task1 but changes the external-object
+causal geometry: `S=akita_black_bowl_1_main`,
+`A=cookies_1_main`, and `B=glazed_rim_porcelain_ramekin_1_main`.
+A lies horizontally or with a slight downward pitch on S's rim without table
+support. B remains at its settled native next-to pose on the table, beneath or
+slightly beyond A's cantilever end. Initial A-B and S-B contact are forbidden.
+The hypothesis for a later stage is that removing S lets A fall/rotate into B,
+but this first probe is static-only and cannot test or claim that consequence.
+
+The one authorized static search is frozen at 36 exact-geometry placements:
+
+- A long-axis yaw relative to settled S-to-ramekin direction:
+  `{-8, 0, +8}` degrees;
+- A center offset from S along that direction: `{0.022, 0.030}` m;
+- A outward-end downward pitch: `{0, 3, 6}` degrees;
+- A collision-lower embedding relative to exact S rim top:
+  `{-0.002, -0.001}` m;
+- 40 simulation steps to settle A, then an 80-step static hold.
+
+The static hard gates require persistent high-rim S-A contact with at least
+0.005 N normal force, no A-table contact, persistent B-table and S-table
+contact, no A-B/S-B contact or fixture/object/robot bypass, a positive exact
+AABB gap from A's cantilever end to B, and bounded S/A/B motion and
+orientation. Every candidate records the actual 256x256 agentview
+segmentation pixels, bounding boxes, and image-boundary status for S/A/B/goal.
+Zero pixels or clipping fails automated visibility. A selected candidate must
+still undergo independent recognizability review. An eight-sector,
+exact-AABB-expanded S grasp-approach check is diagnostic only. Release,
+collision ablation, safe reference, action replay, VLA, smoke, and formal
+evaluation are forbidden in this static probe.
 
 ## Failed native-only task57 replacement
 
