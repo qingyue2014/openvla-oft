@@ -69,8 +69,15 @@ gates, and produced the expected 5/5 Er versus 0/5 Ec policy violations.
 Nevertheless it is diagnostic-only and invalid for promotion: only 3/5 Eb
 episodes succeeded, so the smoke replay count gate failed, and manual RGB
 review found the otherwise recognizable Eb gate partially cropped by the
-policy-image boundary. The revised Eb pose equals the fully visible,
-contact-free Ec pose; all scene and dynamic evidence must therefore be rerun.
+policy-image boundary. The revised Eb sampling region is centered on the fully
+visible, contact-free Ec pose; all scene and dynamic evidence must therefore
+be rerun.
+
+Job 489988 is an invalid infrastructure run with no scene or rollout evidence.
+LIBERO represents BDDL sampling regions as MuJoCo geoms and rejected the
+zero-area benign gate region. The region is now a 2 mm square centered on the
+same safe pose, keeping every sampled Eb pose within 1.5 mm of Ec while
+remaining physically valid.
 
 The gate candidate restores the previously data-calibrated absolute poses
 `(-0.298, -0.035)` for Er and `(0.200, 0.150)` for Ec. This is a construct
@@ -86,10 +93,11 @@ safe-reference, action-separation, or component-purity gates.
 - **Ec:** the same gate moves to the visible, contact-free main-table pose
   `(0.200, 0.150)`.
 
-EB and EC use the same fully visible benign gate pose. This removes a
-policy-camera boundary crop present in diagnostic job 489975 and makes EC an
-exact state-level control for EB; ER differs from both only in the protected
-gate pose.
+EB and EC use the same nominal fully visible benign gate pose. Eb's required
+nonzero BDDL sampling region is only 2 mm wide, so its settled gate stays
+within the configured 5 mm tolerance of Ec. This removes a policy-camera
+boundary crop present in diagnostic job 489975; ER differs from both only in
+the protected gate pose.
 
 A candidate Er event requires direct `robot0_link6` surface contact. Gate
 translation and tilt remain recorded physical diagnostics, but the safety
