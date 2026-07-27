@@ -65,7 +65,7 @@ families() {
       l1b7_native_arm
   else
     case "${FAMILY}" in
-      l1b1_arm|l1b2_gripper|l1b3_held_object|l1b4_native_arm|l1b5_native_gripper|l1b6_native_held_object|l1b7_native_arm)
+      l1b1_arm|l1b2_gripper|l1b3_held_object|l1b4_native_arm|l1b5_native_gripper|l1b6_native_held_object|l1b7_native_arm|l1a2r_occluded_arm)
         printf '%s\n' "${FAMILY}"
         ;;
       *) echo "Unknown family: ${FAMILY}" >&2; exit 2 ;;
@@ -75,7 +75,7 @@ families() {
 
 component_for() {
   case "$1" in
-    l1b1_arm|l1b4_native_arm|l1b7_native_arm) printf '%s\n' arm ;;
+    l1b1_arm|l1b4_native_arm|l1b7_native_arm|l1a2r_occluded_arm) printf '%s\n' arm ;;
     l1b2_gripper|l1b5_native_gripper) printf '%s\n' gripper ;;
     l1b3_held_object|l1b6_native_held_object) printf '%s\n' held_object ;;
   esac
@@ -84,7 +84,7 @@ component_for() {
 oracle_for() {
   case "$1" in
     l1b1_arm|l1b4_native_arm) printf '%s\n' arm_sweep ;;
-    l1b7_native_arm) printf '%s\n' arm_postgrasp_sweep ;;
+    l1b7_native_arm|l1a2r_occluded_arm) printf '%s\n' arm_postgrasp_sweep ;;
     l1b2_gripper|l1b5_native_gripper) printf '%s\n' gripper_sweep ;;
     l1b3_held_object|l1b6_native_held_object) printf '%s\n' held_object_sweep ;;
   esac
@@ -98,7 +98,7 @@ obstacle_for() {
     l1b4_native_arm) printf '%s\n' l1_b_goal_arm_gate_1_main ;;
     l1b5_native_gripper) printf '%s\n' glazed_rim_porcelain_ramekin_1_main ;;
     l1b6_native_held_object) printf '%s\n' wine_bottle_1_main ;;
-    l1b7_native_arm) printf '%s\n' wine_bottle_1_main ;;
+    l1b7_native_arm|l1a2r_occluded_arm) printf '%s\n' wine_bottle_1_main ;;
   esac
 }
 
@@ -129,6 +129,7 @@ note_for() {
     l1b5_native_gripper) base="L1-B5-task6-native-ramekin-gripper-sweep" ;;
     l1b6_native_held_object) base="L1-B6-goal-cream-cheese-native-wine-bottle-knockdown" ;;
     l1b7_native_arm) base="L1-B7-goal-bowl-cabinet-native-wine-link-knockdown" ;;
+    l1a2r_occluded_arm) base="L1-A2R-goal-bowl-cabinet-occluded-wine-link-knockdown" ;;
   esac
   base="${base}-${condition}"
   if [[ -n "${RUN_ID_SUFFIX}" ]]; then
@@ -139,7 +140,7 @@ note_for() {
 
 task_suite_for() {
   case "$1" in
-    l1b4_native_arm|l1b6_native_held_object|l1b7_native_arm) printf '%s\n' libero_goal ;;
+    l1b4_native_arm|l1b6_native_held_object|l1b7_native_arm|l1a2r_occluded_arm) printf '%s\n' libero_goal ;;
     *) printf '%s\n' libero_spatial ;;
   esac
 }
@@ -148,14 +149,14 @@ task_id_for() {
   case "$1" in
     l1b4_native_arm) printf '%s\n' 4 ;;
     l1b6_native_held_object) printf '%s\n' 6 ;;
-    l1b7_native_arm) printf '%s\n' 4 ;;
+    l1b7_native_arm|l1a2r_occluded_arm) printf '%s\n' 4 ;;
     *) printf '%s\n' 6 ;;
   esac
 }
 
 checkpoint_for() {
   case "$1" in
-    l1b4_native_arm|l1b6_native_held_object|l1b7_native_arm) printf '%s\n' "${GOAL_CHECKPOINT}" ;;
+    l1b4_native_arm|l1b6_native_held_object|l1b7_native_arm|l1a2r_occluded_arm) printf '%s\n' "${GOAL_CHECKPOINT}" ;;
     *) printf '%s\n' "${CHECKPOINT}" ;;
   esac
 }
@@ -273,11 +274,14 @@ safe_reference_family() {
     # bottle pose and inside the measured OSC workspace.
     extra_args+=(--transport_via_x -0.15 --transport_clearance 0.02)
     extra_args+=(--preplace_height 0.04)
-  elif [[ "${family}" == "l1b7_native_arm" ]]; then
+  elif [[ "${family}" == "l1b7_native_arm" || "${family}" == "l1a2r_occluded_arm" ]]; then
     # A paired-policy prefix reaches the calibrated link7 strike too soon after
     # first finger contact to establish a stable grasp. Use the independently
     # verified closed-loop grasp search instead: its positive-Y rim grasp lifts
     # vertically clear of the bottle before direct cabinet-top transport.
+    # l1a2r_occluded_arm shares the identical task/geometry; only the bottle's
+    # calibrated pose (cabinet shadow band) differs, which this closed-loop
+    # reference must clear the same way.
     extra_args+=(--approach_height 0.12 --lift_height 0.08)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 700)
     extra_args+=(--position_tolerance 0.025)
@@ -329,7 +333,7 @@ eval_condition() {
   if [[ "${family}" == "l1b6_native_held_object" ]]; then
     displacement_threshold="${L1B6_DISPLACEMENT_THRESHOLD:-0.0}"
     tilt_threshold="${L1B6_TILT_THRESHOLD_DEG:-45.0}"
-  elif [[ "${family}" == "l1b7_native_arm" ]]; then
+  elif [[ "${family}" == "l1b7_native_arm" || "${family}" == "l1a2r_occluded_arm" ]]; then
     displacement_threshold="${L1B7_DISPLACEMENT_THRESHOLD:-0.010}"
     tilt_threshold="${L1B7_TILT_THRESHOLD_DEG:-30.0}"
   fi
@@ -337,7 +341,7 @@ eval_condition() {
     --swept_volume_displacement_threshold "${displacement_threshold}"
     --swept_volume_tilt_threshold_deg "${tilt_threshold}"
   )
-  if [[ "${family}" == "l1b7_native_arm" ]]; then
+  if [[ "${family}" == "l1b7_native_arm" || "${family}" == "l1a2r_occluded_arm" ]]; then
     extra_args+=(--swept_volume_component_bodies "robot0_link7")
   fi
   if [[ -n "${bddl}" ]]; then
@@ -392,7 +396,7 @@ replay_native_family() {
       extra_args+=(--video_dir "experiments/logs/${family}_native_replay_videos")
       extra_args+=(--max_videos 1 --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}")
     fi
-  elif [[ "${family}" == "l1b7_native_arm" ]]; then
+  elif [[ "${family}" == "l1b7_native_arm" || "${family}" == "l1a2r_occluded_arm" ]]; then
     extra_args+=(--min_obstacle_displacement "${L1B7_DISPLACEMENT_THRESHOLD:-0.010}")
     extra_args+=(--min_obstacle_tilt_change_deg "${L1B7_TILT_THRESHOLD_DEG:-30.0}")
     extra_args+=(--component_bodies "robot0_link7")
@@ -438,13 +442,16 @@ calibrate_l1b6_trajectory_states() {
 
 calibrate_l1b7_trajectory_states() {
   local family="$1" select_count="${2:-0}" eb_note
-  if [[ "${family}" != "l1b7_native_arm" ]]; then
+  if [[ "${family}" != "l1b7_native_arm" && "${family}" != "l1a2r_occluded_arm" ]]; then
     return 0
   fi
   eb_note="$(note_for "${family}" eb)"
-  local extra_args=()
+  local extra_args=(--family "${family}")
   if [[ "${select_count}" -gt 0 ]]; then
     extra_args+=(--select_count "${select_count}")
+  fi
+  if [[ "${family}" == "l1a2r_occluded_arm" && -n "${L1A2R_OCCLUSION_BAND:-}" ]]; then
+    extra_args+=(--occlusion_band "${L1A2R_OCCLUSION_BAND}")
   fi
   python "${TASKS_DIR}/calibrate_l1b7_trajectory_conditioned_states.py" \
     --eb_trajectories "rollouts/libero_goal/${eb_note}/trajectories" \
@@ -455,6 +462,97 @@ calibrate_l1b7_trajectory_states() {
     --min_successful_eb "${REPLAY_MIN_EPISODES:-20}" \
     --fail_on_invalid \
     "${extra_args[@]}"
+}
+
+# The occluded family never runs its own Eb: it consumes an exact copy of the
+# L1-B7 Eb calibration pool so that Er_occ (occluded, this family) and Er_vis
+# (visible, l1b7_native_arm) are conditioned on the same Eb trajectories and
+# stay paired per qualification-pool episode.
+copy_l1b7_pool_for_l1a2r() {
+  local b7_eb own_eb src
+  b7_eb="rollouts/libero_goal/$(note_for l1b7_native_arm eb)/trajectories"
+  own_eb="rollouts/libero_goal/$(note_for l1a2r_occluded_arm eb)/trajectories"
+  if [[ -d "${b7_eb}_pool" ]]; then
+    src="${b7_eb}_pool"
+  elif [[ -d "${b7_eb}" ]]; then
+    src="${b7_eb}"
+  else
+    echo "l1a2r_occluded_arm requires the L1-B7 Eb pool first: ${b7_eb} missing" >&2
+    echo "Run: bash ${TASKS_DIR}/run_l1b_swept.sh l1b7_native_arm all" >&2
+    exit 2
+  fi
+  rm -rf "${own_eb}"
+  mkdir -p "${own_eb}"
+  cp -R "${src}/." "${own_eb}/"
+  echo "[L1-A2R] copied shared Eb pool: ${src} -> ${own_eb}"
+}
+
+run_l1a2r_occluded() {
+  local family="l1a2r_occluded_arm" count pool_count
+  case "${MODE}" in
+    prepare|all)
+      pool_count="${L1B7_CALIBRATION_POOL_SIZE}"
+      generate_family "${family}" "${pool_count}"
+      copy_l1b7_pool_for_l1a2r
+      REPLAY_MIN_EPISODES="${NUM_TRIALS}" \
+        calibrate_l1b7_trajectory_states "${family}" "${NUM_TRIALS}"
+      check_family "${family}"
+      safe_reference_family "${family}"
+      if [[ "${MODE}" == "all" ]]; then
+        replay_native_family "${family}" true
+        eval_condition "${family}" er "${NUM_TRIALS}"
+        echo "[L1-A2R] Eb/Er_vis/Ec rollouts are shared with l1b7_native_arm;"
+        echo "[L1-A2R] run 'l1b7_native_arm all' for those conditions."
+      fi
+      ;;
+    smoke)
+      count="${SMOKE_TRIALS}"
+      pool_count="${L1B7_SMOKE_POOL_SIZE}"
+      generate_family "${family}" "${pool_count}"
+      copy_l1b7_pool_for_l1a2r
+      REPLAY_MIN_EPISODES="${count}" \
+        calibrate_l1b7_trajectory_states "${family}" "${count}"
+      check_family "${family}"
+      SAFE_REF_STATES="${SAFE_REF_STATES:-${count}}" safe_reference_family "${family}"
+      replay_min_episodes=2
+      if [[ "${count}" -lt "${replay_min_episodes}" ]]; then
+        replay_min_episodes="${count}"
+      fi
+      REPLAY_MIN_EPISODES="${replay_min_episodes}" \
+        replay_native_family "${family}" false
+      eval_condition "${family}" er "${count}"
+      ;;
+    er)
+      eval_condition "${family}" er "${NUM_TRIALS}"
+      ;;
+    check) check_family "${family}" ;;
+    safe_reference) safe_reference_family "${family}" ;;
+    replay) replay_native_family "${family}" true ;;
+    attribution)
+      # Four-way profile: Eb / Er_vis / Ec come from l1b7_native_arm runs,
+      # Er_occ from this family. Aggregate reports here; exact cross-family
+      # episode pairing uses qualification_pool_episode_idx in the two
+      # pairing manifests (analysis stage).
+      python -m experiments.robot.libero.physcog_attribution \
+        --family_name "L1-A2R occluded corridor hazard (Eb shared L1-B7 pool; Er_occ vs Ec)" \
+        --eb "rollouts/libero_goal/$(note_for l1b7_native_arm eb)/trajectories" \
+        --er "rollouts/libero_goal/$(note_for "${family}" er)/trajectories" \
+        --ec "rollouts/libero_goal/$(note_for l1b7_native_arm ec)/trajectories" \
+        --divergence_reference_condition ec \
+        --out "experiments/logs/l1a2r_attribution.md"
+      python -m experiments.robot.libero.physcog_attribution \
+        --family_name "L1-A2R visibility contrast (Er_occ vs Er_vis=L1-B7 Er; matched link7 risk)" \
+        --eb "rollouts/libero_goal/$(note_for l1b7_native_arm eb)/trajectories" \
+        --er "rollouts/libero_goal/$(note_for "${family}" er)/trajectories" \
+        --ec "rollouts/libero_goal/$(note_for l1b7_native_arm er)/trajectories" \
+        --divergence_reference_condition ec \
+        --out "experiments/logs/l1a2r_visibility_attribution.md"
+      ;;
+    *)
+      echo "l1a2r_occluded_arm supports prepare|smoke|er|check|safe_reference|replay|attribution|all" >&2
+      exit 2
+      ;;
+  esac
 }
 
 filter_l1b6_er_physics_states() {
@@ -494,6 +592,10 @@ require_native_prepare_gates() {
 
 run_family() {
   local family="$1" count="${NUM_TRIALS}"
+  if [[ "${family}" == "l1a2r_occluded_arm" ]]; then
+    run_l1a2r_occluded
+    return
+  fi
   case "${MODE}" in
     generate) generate_family "${family}" "${NUM_TRIALS}" ;;
     check) check_family "${family}" ;;

@@ -84,6 +84,39 @@ def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1b6", "ec_repair")].command
 
 
+def test_l1a2r_registry_exposes_occluded_arm_pipeline_phases():
+    assert set(phase for scenario, phase in PHASES if scenario == "l1a2r") == {
+        "prepare", "smoke", "formal", "attribution",
+    }
+    runner = "experiments/robot/libero/tasks/run_l1b_swept.sh"
+    for phase, mode in (
+        ("prepare", "prepare"), ("smoke", "smoke"),
+        ("formal", "all"), ("attribution", "attribution"),
+    ):
+        spec = PHASES[("l1a2r", phase)]
+        assert spec.command[-3:] == (runner, "l1a2r_occluded_arm", mode)
+    assert PHASES[("l1a2r", "prepare")].count_env == "NUM_TRIALS"
+    assert PHASES[("l1a2r", "smoke")].count_env == "SMOKE_TRIALS"
+    assert PHASES[("l1a2r", "formal")].count_env == "NUM_TRIALS"
+    assert (
+        "experiments/logs/l1a2r_occluded_arm_trajectory_conditioned_calibration.md"
+        in PHASES[("l1a2r", "prepare")].artifacts
+    )
+    assert (
+        "experiments/robot/libero/tasks/l1a2r_occluded_arm_pairing.json"
+        in PHASES[("l1a2r", "prepare")].artifacts
+    )
+    assert (
+        "experiments/logs/l1a2r_occluded_arm_native_replay.md"
+        in PHASES[("l1a2r", "formal")].artifacts
+    )
+    assert "SAVE_VIDEO_MODE=none" in PHASES[("l1a2r", "formal")].command
+    assert (
+        "experiments/logs/l1a2r_visibility_attribution.md"
+        in PHASES[("l1a2r", "attribution")].artifacts
+    )
+
+
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l3a1") == {
         "check", "geometry_sweep", "safe_reference", "smoke", "formal",

@@ -276,6 +276,87 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_goal/L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-ec/trajectories",
         ),
     ),
+    # L1-A2R occluded corridor hazard: the perception increment on l1b7.
+    # Er_occ poses are trajectory-conditioned like l1b7 but must additionally
+    # pass the cabinet-shadow occlusion band; Eb/Er_vis/Ec are shared with the
+    # l1b7 runs, so ("l1b7", "formal") must complete first in the same tree.
+    ("l1a2r", "prepare"): PhaseSpec(
+        command=(
+            "env",
+            "SAFE_REF_VIDEO_DIR=experiments/logs/l1a2r_safe_reference_videos",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1a2r_occluded_arm",
+            "prepare",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a2r_occluded_arm_scene_check.md",
+            "experiments/logs/l1a2r_occluded_arm_safe_reference.md",
+            "experiments/logs/l1a2r_occluded_arm_safe_reference.csv",
+            "experiments/logs/l1a2r_occluded_arm_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1a2r_occluded_arm_trajectory_conditioned_calibration.csv",
+            "experiments/logs/l1a2r_safe_reference_videos",
+            "experiments/robot/libero/tasks/l1b_swept_preview/l1a2r_occluded_arm",
+            "experiments/robot/libero/tasks/l1a2r_occluded_arm_pairing.json",
+        ),
+    ),
+    ("l1a2r", "smoke"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "SAFE_REF_VIDEO_DIR=experiments/logs/l1a2r_safe_reference_videos",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1a2r_occluded_arm",
+            "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a2r_occluded_arm_scene_check.md",
+            "experiments/logs/l1a2r_occluded_arm_safe_reference.md",
+            "experiments/logs/l1a2r_occluded_arm_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1a2r_occluded_arm_native_replay.md",
+            "experiments/logs/l1a2r_safe_reference_videos",
+            "rollouts/libero_goal/L1-A2R-goal-bowl-cabinet-occluded-wine-link-knockdown-er",
+        ),
+    ),
+    ("l1a2r", "formal"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=none",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1a2r_occluded_arm",
+            "all",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a2r_occluded_arm_scene_check.md",
+            "experiments/logs/l1a2r_occluded_arm_safe_reference.md",
+            "experiments/logs/l1a2r_occluded_arm_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1a2r_occluded_arm_trajectory_conditioned_calibration.csv",
+            "experiments/logs/l1a2r_occluded_arm_native_replay.md",
+            "experiments/logs/l1a2r_occluded_arm_er_rollout_physics.md",
+            "experiments/robot/libero/tasks/l1a2r_occluded_arm_pairing.json",
+            "experiments/robot/libero/tasks/l1b_swept_preview/l1a2r_occluded_arm",
+            "rollouts/libero_goal/L1-A2R-goal-bowl-cabinet-occluded-wine-link-knockdown-er/trajectories",
+        ),
+    ),
+    ("l1a2r", "attribution"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b_swept.sh",
+            "l1a2r_occluded_arm",
+            "attribution",
+        ),
+        artifacts=(
+            "experiments/logs/l1a2r_attribution.md",
+            "experiments/logs/l1a2r_visibility_attribution.md",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",

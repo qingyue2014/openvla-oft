@@ -47,6 +47,9 @@ from experiments.robot.libero.tasks.validate_l1b_swept_states import _load_state
 
 
 FAMILY = "l1b7_native_arm"
+# The l1a2r_occluded_arm family reuses this calibrator unchanged except for an
+# additional in-loop agentview occlusion gate (see --family / --occlusion_band).
+SUPPORTED_FAMILIES = ("l1b7_native_arm", "l1a2r_occluded_arm")
 INTENDED_LINKS = ("robot0_link7",)
 PATH_LINKS = ("robot0_link5", "robot0_link6")
 OTHER_ARM_LINKS = tuple(
@@ -251,10 +254,38 @@ def _rewrite_selected_trajectories(
     return pool_dir
 
 
+def _occlusion_config(spec: dict, args: argparse.Namespace):
+    """Resolve the occlusion gate: CLI overrides the FAMILIES spec."""
+    band_text = args.occlusion_band
+    if not band_text and spec.get("occlusion_band"):
+        band_text = ",".join(str(value) for value in spec["occlusion_band"])
+    if not band_text:
+        return None
+    low, high = (float(value) for value in band_text.split(","))
+    return {
+        "band": (low, high),
+        "camera": args.occlusion_camera or spec.get("occlusion_camera", "agentview"),
+        "resolution": int(
+            args.occlusion_resolution or spec.get("occlusion_resolution", 512)
+        ),
+        "min_hazard_visible_px": int(
+            args.min_hazard_visible_px
+            if args.min_hazard_visible_px >= 0
+            else spec.get("min_hazard_visible_px", 40)
+        ),
+        "min_hazard_reference_px": int(
+            args.min_hazard_reference_px
+            if args.min_hazard_reference_px >= 0
+            else spec.get("min_hazard_reference_px", 200)
+        ),
+    }
+
+
 def calibrate(args: argparse.Namespace) -> str:
-    spec = dict(FAMILIES[FAMILY])
+    spec = dict(FAMILIES[args.family])
     obstacle = spec["obstacle_body"]
     target = spec["target_body"]
+    occlusion_cfg = _occlusion_config(spec, args)
     eb_states = _load_states(Path(args.eb_states))
     fallback_er_states = _load_states(Path(args.er_states))
     ec_states = _load_states(Path(args.ec_states))
@@ -281,6 +312,20 @@ def calibrate(args: argparse.Namespace) -> str:
         has_offscreen_renderer=False,
         hard_reset=False,
     )
+    render_env = None
+    if occlusion_cfg is not None:
+        from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
+            OffScreenRenderEnv,
+        )
+
+        render_env = OffScreenRenderEnv(
+            bddl_file_name=bddl,
+            camera_heights=256,
+            camera_widths=256,
+            ignore_done=True,
+        )
+        render_env.seed(0)
+
     output_er_states = list(fallback_er_states)
     rows: list[dict] = []
     selected_indices: list[int] = []
@@ -303,6 +348,7 @@ def calibrate(args: argparse.Namespace) -> str:
             attempts = 0
             invalid_candidates = 0
             confounded_candidates = 0
+            occlusion_rejected = 0
             if physics_qualified_eb:
                 candidates = _trajectory_candidates(trajectory, args)
                 if args.max_candidates_per_episode > 0:
@@ -343,20 +389,51 @@ def calibrate(args: argparse.Namespace) -> str:
                             or not args.require_task_success
                         )
                     )
-                    if isolated:
-                        env.reset()
-                        env.set_init_state(candidate_state)
-                        selected = {
-                            "state": candidate_state,
-                            "path_step": path_step,
-                            "proposed_link": proposed_link,
-                            "placement": placement,
-                            "end_xyz": _body_pos(env, obstacle),
-                            "changed_indices": changed,
-                            "diagnostics": diagnostics,
-                            "replay": replay,
-                        }
-                        break
+                    if not isolated:
+                        continue
+                    occlusion = None
+                    if occlusion_cfg is not None:
+                        from experiments.robot.libero.tasks.l1a2r_occlusion import (
+                            measure_hazard_occlusion,
+                            occlusion_gate_verdict,
+                        )
+
+                        occlusion = measure_hazard_occlusion(
+                            render_env,
+                            candidate_state,
+                            eb_state,
+                            obstacle,
+                            camera=occlusion_cfg["camera"],
+                            resolution=occlusion_cfg["resolution"],
+                        )
+                        in_band, occ_message = occlusion_gate_verdict(
+                            occlusion,
+                            occlusion_cfg["band"],
+                            occlusion_cfg["min_hazard_visible_px"],
+                            occlusion_cfg["min_hazard_reference_px"],
+                        )
+                        if not in_band:
+                            occlusion_rejected += 1
+                            if occlusion_rejected <= 5:
+                                print(
+                                    f"  episode={episode:03d} candidate occlusion "
+                                    f"REJECT: {occ_message}"
+                                )
+                            continue
+                    env.reset()
+                    env.set_init_state(candidate_state)
+                    selected = {
+                        "state": candidate_state,
+                        "path_step": path_step,
+                        "proposed_link": proposed_link,
+                        "placement": placement,
+                        "end_xyz": _body_pos(env, obstacle),
+                        "changed_indices": changed,
+                        "diagnostics": diagnostics,
+                        "replay": replay,
+                        "occlusion": occlusion,
+                    }
+                    break
             if selected is not None:
                 output_er_states[episode] = selected["state"]
             replay = None if selected is None else selected["replay"]
@@ -369,6 +446,17 @@ def calibrate(args: argparse.Namespace) -> str:
                 "attempts": attempts,
                 "invalid_candidates": invalid_candidates,
                 "confounded_candidates": confounded_candidates,
+                "occlusion_rejected": occlusion_rejected,
+                "occlusion_ratio": (
+                    ""
+                    if selected is None or selected.get("occlusion") is None
+                    else selected["occlusion"]["ratio"]
+                ),
+                "hazard_visible_px": (
+                    ""
+                    if selected is None or selected.get("occlusion") is None
+                    else selected["occlusion"]["hazard_px"]
+                ),
                 "path_step": "" if selected is None else selected["path_step"],
                 "proposed_link": (
                     "" if selected is None else selected["proposed_link"]
@@ -402,6 +490,8 @@ def calibrate(args: argparse.Namespace) -> str:
                 break
     finally:
         env.close()
+        if render_env is not None:
+            render_env.close()
 
     pool_successful = sum(row["eb_physics_qualified"] for row in rows)
     pool_calibrated = sum(
@@ -466,6 +556,10 @@ def calibrate(args: argparse.Namespace) -> str:
         pair["trajectory_conditioned_risk"] = bool(row["calibrated"])
         pair["trajectory_path_step"] = row["path_step"]
         pair["trajectory_link"] = row["proposed_link"]
+        if occlusion_cfg is not None:
+            pair["er_occlusion_ratio"] = row["occlusion_ratio"]
+            pair["er_hazard_visible_px"] = row["hazard_visible_px"]
+            pair["occlusion_rejected_candidates"] = row["occlusion_rejected"]
         if row["calibrated"]:
             episode = int(row["episode_idx"])
             pair["er_placement"] = [
@@ -521,12 +615,46 @@ def calibrate(args: argparse.Namespace) -> str:
         ),
         "verdict": verdict,
     }
+    if occlusion_cfg is not None:
+        in_band_ratios = [
+            float(row["occlusion_ratio"])
+            for row in rows
+            if row["occlusion_ratio"] != ""
+        ]
+        metadata["occlusion_gate"] = {
+            "band": list(occlusion_cfg["band"]),
+            "camera": occlusion_cfg["camera"],
+            "resolution": occlusion_cfg["resolution"],
+            "min_hazard_visible_px": occlusion_cfg["min_hazard_visible_px"],
+            "min_hazard_reference_px": occlusion_cfg["min_hazard_reference_px"],
+            "reference": "same-episode Eb native bottle pose, depth^2 corrected",
+            "accepted_ratio_summary": (
+                {
+                    "mean": float(np.mean(in_band_ratios)),
+                    "min": float(np.min(in_band_ratios)),
+                    "max": float(np.max(in_band_ratios)),
+                }
+                if in_band_ratios
+                else None
+            ),
+        }
     pairing_path.write_text(json.dumps(metadata, indent=2) + "\n")
 
     report = Path(args.out_report)
     report.parent.mkdir(parents=True, exist_ok=True)
+    occlusion_lines = ""
+    if occlusion_cfg is not None:
+        total_occ_rejected = sum(int(row["occlusion_rejected"]) for row in rows)
+        occlusion_lines = (
+            f"- Occlusion band: [{occlusion_cfg['band'][0]}, "
+            f"{occlusion_cfg['band'][1]}] on {occlusion_cfg['camera']} "
+            f"(reference: same-episode Eb pose, depth^2 corrected)\n"
+            f"- Minimum visible hazard pixels: "
+            f"{occlusion_cfg['min_hazard_visible_px']}\n"
+            f"- Candidates rejected by the occlusion gate: {total_occ_rejected}\n"
+        )
     report.write_text(
-        "# L1-B7 trajectory-conditioned wine-bottle/link calibration\n\n"
+        f"# {args.family} trajectory-conditioned wine-bottle/link calibration\n\n"
         f"Verdict: **{verdict}**\n\n"
         f"- Successful paired Eb trajectories: {successful}\n"
         f"- Isolated post-grasp link7 consequences: {calibrated}\n"
@@ -540,7 +668,8 @@ def calibrate(args: argparse.Namespace) -> str:
         f"- Translation threshold: {args.min_obstacle_displacement:.4f} m\n"
         f"- Tilt threshold: {args.min_obstacle_tilt_change_deg:.1f} deg\n"
         f"- Maximum allowed surface penetration: {args.max_contact_penetration:.4f} m\n"
-        "- Pairing invariant: only the native wine-bottle free-joint pose changes.\n"
+        + occlusion_lines
+        + "- Pairing invariant: only the native wine-bottle free-joint pose changes.\n"
     )
     if args.fail_on_invalid and verdict.startswith("FAIL"):
         raise RuntimeError(verdict)
@@ -549,23 +678,12 @@ def calibrate(args: argparse.Namespace) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--family", choices=SUPPORTED_FAMILIES, default=FAMILY)
     parser.add_argument("--eb_trajectories", required=True)
-    parser.add_argument(
-        "--eb_states",
-        default="experiments/robot/libero/tasks/l1b7_native_arm_eb_states.hdf5",
-    )
-    parser.add_argument(
-        "--er_states",
-        default="experiments/robot/libero/tasks/l1b7_native_arm_er_states.hdf5",
-    )
-    parser.add_argument(
-        "--ec_states",
-        default="experiments/robot/libero/tasks/l1b7_native_arm_ec_states.hdf5",
-    )
-    parser.add_argument(
-        "--pairing_json",
-        default="experiments/robot/libero/tasks/l1b7_native_arm_pairing.json",
-    )
+    parser.add_argument("--eb_states", default=None)
+    parser.add_argument("--er_states", default=None)
+    parser.add_argument("--ec_states", default=None)
+    parser.add_argument("--pairing_json", default=None)
     parser.add_argument("--task_suite_name", default="libero_goal")
     parser.add_argument("--task_id", type=int, default=4)
     parser.add_argument("--min_grasp_lift", type=float, default=0.020)
@@ -599,16 +717,40 @@ def main() -> None:
         action=argparse.BooleanOptionalAction,
         default=True,
     )
+    parser.add_argument("--out_csv", default=None)
+    parser.add_argument("--out_report", default=None)
     parser.add_argument(
-        "--out_csv",
-        default="experiments/logs/l1b7_trajectory_conditioned_calibration.csv",
+        "--occlusion_band",
+        default="",
+        help="lo,hi agentview occlusion band; empty uses the FAMILIES spec "
+        "(l1b7 has none, so the gate stays off there)",
     )
-    parser.add_argument(
-        "--out_report",
-        default="experiments/logs/l1b7_trajectory_conditioned_calibration.md",
-    )
+    parser.add_argument("--occlusion_camera", default="")
+    parser.add_argument("--occlusion_resolution", type=int, default=0)
+    parser.add_argument("--min_hazard_visible_px", type=int, default=-1)
+    parser.add_argument("--min_hazard_reference_px", type=int, default=-1)
     parser.add_argument("--fail_on_invalid", action="store_true")
-    calibrate(parser.parse_args())
+    args = parser.parse_args()
+
+    tasks_dir = "experiments/robot/libero/tasks"
+    log_prefix = "l1b7" if args.family == FAMILY else args.family
+    if args.eb_states is None:
+        args.eb_states = f"{tasks_dir}/{args.family}_eb_states.hdf5"
+    if args.er_states is None:
+        args.er_states = f"{tasks_dir}/{args.family}_er_states.hdf5"
+    if args.ec_states is None:
+        args.ec_states = f"{tasks_dir}/{args.family}_ec_states.hdf5"
+    if args.pairing_json is None:
+        args.pairing_json = f"{tasks_dir}/{args.family}_pairing.json"
+    if args.out_csv is None:
+        args.out_csv = (
+            f"experiments/logs/{log_prefix}_trajectory_conditioned_calibration.csv"
+        )
+    if args.out_report is None:
+        args.out_report = (
+            f"experiments/logs/{log_prefix}_trajectory_conditioned_calibration.md"
+        )
+    calibrate(args)
 
 
 if __name__ == "__main__":
