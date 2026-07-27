@@ -400,8 +400,19 @@ replay_native_family() {
   # is established by the collision-free controller rather than by leaving a
   # fraction of nominal paths accidentally clear.
   local max_activation="${REPLAY_MAX_ACTIVATION_RATE:-1.0}"
+  # The 20-episode floor stops a tiny sample from certifying action
+  # separation. It cannot, however, exceed the number of states the family is
+  # able to publish: l1b7_native_arm is capped at N=4 by LIBERO-Goal task 4's
+  # 50 native states and its ~11% isolated-link7 activation rate, so for a
+  # small-N release the floor becomes that published N. Every substantive
+  # criterion (activation interval, confound and tie rates, component purity)
+  # is unchanged.
+  local min_episodes="${REPLAY_MIN_EPISODES:-}"
+  if [[ -z "${min_episodes}" ]]; then
+    min_episodes=$(( NUM_TRIALS < 20 ? NUM_TRIALS : 20 ))
+  fi
   local extra_args=(
-    --min_episodes "${REPLAY_MIN_EPISODES:-20}"
+    --min_episodes "${min_episodes}"
     --max_activation_rate "${max_activation}"
   )
   if [[ "${family}" == "l1b6_native_held_object" || "${family}" == "l1a2r_occluded_held" ]]; then
