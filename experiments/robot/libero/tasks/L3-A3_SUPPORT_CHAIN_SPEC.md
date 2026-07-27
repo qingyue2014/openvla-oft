@@ -4,8 +4,9 @@
 > The native-only spatial task1 leaning-chain candidate exhausted its bounded
 > 144-point raw-prewarmup search without one stable S-A support contact; its
 > first policy-entry-base replacement was an invalid protocol validator and
-> did not reach candidate search. The one protocol-corrected replacement then
-> failed matched wait0 policy-RGB equivalence before candidate search.
+> did not reach candidate search. The protocol-corrected replacement then hit
+> an overstrict repeat-render gate before candidate search; export-only
+> independent visibility review is pending.
 > The task87 candidate failed the executable safe-reference gate. The native-only
 > task57 replacement passed its numerical static gate but failed independent
 > policy-view review because the goal support was occluded and not side-graspable.
@@ -137,15 +138,25 @@ object translation difference. Both retained direct `S-table` contact and no
 predeclared gate. The diagnostic-only extra wait10 did not contribute to this
 verdict.
 
-Job `490182` therefore establishes serialized-state repeatability and the
-correct support surface, but fails independent policy-view runtime
-equivalence. It is `INVALID_VISUAL_RUNTIME_EQUIVALENCE`. The validator
-hard-stopped before evaluating any of the 144 physical candidates, so no
-leaning-chain physical verdict can be claimed. No HDF5, PNG, video, VLA,
-safe-reference, replay, smoke, or formal evaluation was produced. No
-threshold relaxation, parameter tuning, or further replacement is authorized
-or performed. The exact audit hash and measurements are bound in
-`L3-A3_TASK1_WAIT0_RUNTIME_FAILURE.json`.
+Job `490182` establishes serialized-state repeatability and the correct
+support surface, but repeat-render PSNR/SSIM is a renderer diagnostic, not the
+AGENTS.md recognizability gate. Pixel nondeterminism between two renders of an
+identical state does not establish that a required object is absent,
+unrecognizable, occluded, clipped, or visible too late. The job is therefore
+`INVALID_OVERSTRICT_VISUAL_REPEATABILITY_GATE`, not a scene visual failure.
+The validator hard-stopped before evaluating any of the 144 physical
+candidates, so no leaning-chain physical verdict can be claimed. Exact audit
+hashes and measurements are bound in
+`L3-A3_TASK1_OVERSTRICT_REPEAT_GATE.json`.
+
+One export-only replacement is authorized. It may recreate the settled base
+but must not construct or evaluate a physical candidate. It restores the exact
+wait0 runtime path twice and exports both 256x256 policy RGB images, aligned
+instance-segmentation IDs, per-role visible-pixel counts for `S`, `A`, `B`,
+and the goal, and artifact hashes. Repeat-render PSNR/SSIM remains diagnostic
+only. Independent manual review must verify that every required role is
+complete, recognizable, unoccluded, inside the image, and visible at policy
+entry. The 144-point physical grid remains unrun.
 
 ## Failed native-only task57 replacement
 

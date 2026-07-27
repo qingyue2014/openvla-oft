@@ -1,12 +1,12 @@
 {
-  "status": "INVALID_VISUAL_RUNTIME_EQUIVALENCE",
+  "status": "INVALID_OVERSTRICT_VISUAL_REPEATABILITY_GATE",
   "job": {
     "job_id": "490182",
     "commit": "ec94c7983dd7296cad407f3c0aa12a3f0f000ded",
     "compute_node": "dgx-26",
     "intentional_fail_closed_exit_code": 1,
     "runner_classification": "validator_bug",
-    "runner_classification_interpretation": "The broad runner label reflects the validator's intentional nonzero hard stop. The corrected matched-runtime validator completed and failed the predeclared policy-RGB equivalence threshold."
+    "runner_classification_interpretation": "The broad runner label reflects the validator's intentional nonzero hard stop. The matched-runtime state checks passed, but repeat-render PSNR/SSIM was incorrectly promoted from a renderer diagnostic to a visibility hard-stop. Pixel nondeterminism does not establish that required objects are absent or unrecognizable."
   },
   "scope": {
     "suite": "libero_spatial",
@@ -67,7 +67,7 @@
   "conclusions": {
     "physical_support_surface": "PASS_S_ON_COMPILED_TABLE_NOT_STOVE",
     "serialized_state_repeatability": "PASS",
-    "visual_validity": "FAIL_MATCHED_WAIT0_POLICY_RGB_EQUIVALENCE",
+    "visual_validity": "NOT_EVALUATED_REPEAT_RENDER_NONDETERMINISM_IS_NOT_RECOGNIZABILITY",
     "leaning_chain_physical_verdict": "NOT_ESTABLISHED_SEARCH_NOT_RUN",
     "candidate_hdf5": "NOT_EXPORTED",
     "policy_png_or_video": "NOT_EXPORTED",
@@ -76,7 +76,8 @@
     "action_separation_status": "NOT_RUN",
     "smoke_status": "NOT_RUN",
     "formal_status": "NOT_RUN",
-    "replacement_or_parameter_tuning": "NOT_AUTHORIZED_AND_NOT_PERFORMED"
+    "export_only_replacement": "AUTHORIZED_TWO_WAIT0_POLICY_IMAGES_PLUS_SEGMENTATION",
+    "physical_replacement_or_parameter_tuning": "NOT_AUTHORIZED_AND_NOT_PERFORMED"
   },
   "evidence": {
     "fetched_policy_entry_base_audit_sha256": "776a17fd603bec4e0370b771d45f77285d524f54b0ba6304e04166b6940f885b",

@@ -82,6 +82,19 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     assert "SAVE_VIDEO_MODE=none" in formal.command
 
 
+def test_l3a3_registry_separates_task1_export_from_physical_grid():
+    export = PHASES[("l3a3", "task1_wait0_policy_export")]
+    assert export.command[-1].endswith(
+        "export_l3a3_task1_wait0_policy_evidence.py"
+    )
+    assert export.artifacts == (
+        "experiments/logs/l3a3_task1_wait0_policy_evidence",
+    )
+    assert export.command != PHASES[
+        ("l3a3", "task1_leaning_chain_one")
+    ].command
+
+
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     spec = PhaseSpec(command=("bash", "path with space/runner.sh", "phase"), count_env="N")
     script = build_batch_script(

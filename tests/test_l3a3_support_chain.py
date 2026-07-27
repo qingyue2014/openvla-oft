@@ -559,11 +559,13 @@ def test_task1_job490171_is_bound_as_invalid_protocol_not_scene_failure():
     )
 
 
-def test_task1_job490182_hard_stops_on_matched_wait0_rgb_equivalence():
+def test_task1_job490182_is_overstrict_repeat_gate_not_visibility_failure():
     failure = json.loads(
-        (TASKS / "L3-A3_TASK1_WAIT0_RUNTIME_FAILURE.json").read_text()
+        (TASKS / "L3-A3_TASK1_OVERSTRICT_REPEAT_GATE.json").read_text()
     )
-    assert failure["status"] == "INVALID_VISUAL_RUNTIME_EQUIVALENCE"
+    assert failure["status"] == (
+        "INVALID_OVERSTRICT_VISUAL_REPEATABILITY_GATE"
+    )
     assert failure["job"]["job_id"] == "490182"
     assert failure["scope"]["candidate_rows_evaluated"] == 0
     runtime = failure["repeated_wait0_runtime_entry_equivalence"]
@@ -584,9 +586,46 @@ def test_task1_job490182_hard_stops_on_matched_wait0_rgb_equivalence():
     assert conclusions["leaning_chain_physical_verdict"] == (
         "NOT_ESTABLISHED_SEARCH_NOT_RUN"
     )
-    assert conclusions["replacement_or_parameter_tuning"] == (
+    assert conclusions["visual_validity"] == (
+        "NOT_EVALUATED_REPEAT_RENDER_NONDETERMINISM_IS_NOT_RECOGNIZABILITY"
+    )
+    assert conclusions["export_only_replacement"] == (
+        "AUTHORIZED_TWO_WAIT0_POLICY_IMAGES_PLUS_SEGMENTATION"
+    )
+    assert conclusions["physical_replacement_or_parameter_tuning"] == (
         "NOT_AUTHORIZED_AND_NOT_PERFORMED"
     )
+
+
+def test_task1_wait0_export_is_visibility_only_and_never_runs_physical_grid():
+    text = (
+        TASKS / "export_l3a3_task1_wait0_policy_evidence.py"
+    ).read_text()
+    assert 'ROLES = {"S": S, "A": A, "B": B, "goal": PLATE}' in text
+    assert "for repeat in (1, 2)" in text
+    assert "obs = refresh(env, restored)" in text
+    assert "agentview_image[::-1, ::-1]" in text
+    assert "segmentation=True" in text
+    assert "segmentation[::-1, ::-1]" in text
+    assert '"visible_pixels": pixel_count' in text
+    assert '"policy_bbox_xyxy": bbox' in text
+    assert '"touches_policy_image_boundary": touches_boundary' in text
+    assert '"zero_pixel_hard_stop": pixel_count == 0' in text
+    assert "PENDING_INDEPENDENT_MANUAL_POLICY_VIEW_REVIEW" in text
+    for field in (
+        "complete",
+        "recognizable",
+        "unoccluded",
+        "inside_frame",
+        "visible_at_policy_entry",
+    ):
+        assert f'"{field}"' in text
+    assert "DIAGNOSTIC_ONLY_NOT_A_VISIBILITY_GATE" in text
+    assert '"physical_grid_status": "NOT_RUN"' in text
+    assert '"vla_status": "NOT_RUN"' in text
+    assert "place_candidate_geometry" not in text
+    assert "static_gate" not in text
+    assert "chain_trace" not in text
 
 
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
