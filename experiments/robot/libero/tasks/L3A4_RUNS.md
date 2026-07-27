@@ -655,3 +655,36 @@ authorized validator-only correction binds approval to the exact state plus
 all segmentation hashes/counts/dimensions and retains renderer-dependent RGB
 SHA only as a non-decisive diagnostic. No parameter, state, trajectory,
 threshold, physics value, duration, or distance was changed.
+
+The corrected, single replacement dynamic+safe-reference job `490366`,
+source commit `9a129f8`, passed that deterministic approval gate and then
+ran the frozen protocol without changing any scene or physics value. Its raw
+verdict was **FAIL_L3A4_GOAL_TASK4_FIXED_DYNAMIC_SAFE_REFERENCE**.
+
+- Robot-grasp preflight failed identically for selected and witness states.
+  After seating, the robot contacted A but did not retain robot/S contact.
+  The risk runs therefore used the explicitly labelled
+  `kinematic_object_calibration` fallback; the actual-OSC safe reference
+  hard-failed at grasp and did not execute the transport or official goal
+  check.
+- The witness risk produced the intended strict sequence: A-relative motion
+  at step 1, first A/B contact at step 4, and B response at step 5, with
+  0.0025404 N s integrated A/B normal impulse, a stable precontact B, and no
+  bypass. It still failed because the low-lift carry allowed 67.84 mm and
+  10.69 degrees of A-relative motion, above the frozen 3 mm/3 degree carry
+  gate.
+- The selected risk did not produce any A/B contact or impulse. A motion and
+  B response were both detected at step 1; precontact B displacement/tilt
+  reached 41.99 mm/98.06 degrees, carry A-relative motion reached
+  67.95 mm/10.23 degrees, and the bypass gate failed.
+- The S-fixed and A-collision-disabled controls passed with only
+  0.00453 mm B motion and negligible tilt. The A-world-pose-frozen control
+  failed because B moved 5.434 mm and tilted 3.832 degrees, although it had
+  no A/B contact or bypass.
+
+Job `490366` generated exact 256x256 policy-view videos for both kinematic
+risk calibrations and all three controls. It did not produce a safe-reference
+video because actual grasp failed before transport. No VLA, HDF5, formal
+evaluation, or action replay ran. The exact-native goal-task-4 layout remains
+a static candidate only and must not be counted as a validated dynamic L3-A
+extension. Per the fixed protocol, no tuning or further run was performed.
