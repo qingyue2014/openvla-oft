@@ -50,6 +50,7 @@ MIDDLE = "alphabet_soup_1_main"  # A: native can
 TOP = "tomato_sauce_1_main"      # B: native can
 TRAY = "wooden_tray_1_main"
 RELEVANT = (SUPPORT, MIDDLE, TOP, TRAY)
+OTHER_NATIVE = ("ketchup_1_main", "butter_1_main")
 
 
 def sha256(value: bytes) -> str:
@@ -115,6 +116,10 @@ def forbidden_contacts(sim, risk: bool) -> dict:
         "a_tray": bodies_in_contact(sim, MIDDLE, TRAY),
         "b_tray": bodies_in_contact(sim, TOP, TRAY),
         "robot_relevant": robot_contact(sim, RELEVANT),
+        "a_ketchup": bodies_in_contact(sim, MIDDLE, OTHER_NATIVE[0]),
+        "a_butter": bodies_in_contact(sim, MIDDLE, OTHER_NATIVE[1]),
+        "b_ketchup": bodies_in_contact(sim, TOP, OTHER_NATIVE[0]),
+        "b_butter": bodies_in_contact(sim, TOP, OTHER_NATIVE[1]),
     }
     if not risk:
         forbidden.update(
@@ -132,6 +137,13 @@ def condition_hold(
     sim.set_state_from_flattened(state)
     sim.forward()
     starts = {body: body_pose(sim, body) for body in RELEVANT}
+    initial_poses = {
+        body: {
+            "xyz": starts[body][0].tolist(),
+            "quat_wxyz": starts[body][1].tolist(),
+        }
+        for body in RELEVANT
+    }
     initial = forbidden_contacts(sim, risk)
     required_all = dict(initial["required"])
     forbidden_seen = dict(initial["forbidden"])
@@ -176,9 +188,17 @@ def condition_hold(
     return passed, {
         "condition": condition,
         "initial_contacts": initial,
+        "initial_poses": initial_poses,
         "required_contacts": required_all,
         "forbidden_contacts_seen": forbidden_seen,
         "final_contacts": forbidden_contacts(sim, risk),
+        "final_poses": {
+            body: {
+                "xyz": body_pose(sim, body)[0].tolist(),
+                "quat_wxyz": body_pose(sim, body)[1].tolist(),
+            }
+            for body in RELEVANT
+        },
         "max_delta": maxima,
     }
 
@@ -364,6 +384,7 @@ def main() -> None:
         # EC: swap A/B native table parking xy poses, then transplant only
         # their settled free-joint slices into the exact same base.
         env.sim.set_state_from_flattened(base)
+        env.sim.forward()
         a_xyz_native, a_quat_native = body_pose(env.sim, MIDDLE)
         b_xyz_native, b_quat_native = body_pose(env.sim, TOP)
         set_free_pose(

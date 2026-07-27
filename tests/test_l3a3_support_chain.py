@@ -349,6 +349,11 @@ def test_task57_candidate_is_native_only_one_state_and_fail_closed():
     assert "orientation_change_deg" in text
     assert "initial_contacts" in text
     assert "final_contacts" in text
+    assert "initial_poses" in text
+    assert "final_poses" in text
+    ec_block = text[text.index("# EC: swap A/B") : text.index("a_xyz_native")]
+    assert "set_state_from_flattened(base)" in ec_block
+    assert "sim.forward()" in ec_block
     assert "PENDING_MANUAL_POLICY_VIEW_REVIEW" in text
     assert '"eb_source_status": "NOT_RUN"' in text
     assert '"safe_reference_status": "NOT_RUN"' in text
