@@ -133,19 +133,41 @@ export MAX_FAILURE_VIDEOS=1
 export SAVE_TRAJECTORY=True
 export RUN_ID_SUFFIX=pi05-smoke
 
+declare -A CONDITION_EXIT_CODES
+overall_status=0
 for condition in eb er ec; do
+  set +e
   STATE_PATH_OVERRIDE="${TASKS_DIR}/${FAMILY}_${condition}_states.hdf5" \
     bash "${TASKS_DIR}/run_l1b_swept.sh" "${FAMILY}" "${condition}"
+  condition_status=$?
+  set -e
+  CONDITION_EXIT_CODES["${condition}"]="${condition_status}"
+  if [[ "${condition_status}" -ne 0 ]]; then
+    overall_status="${condition_status}"
+    echo "Condition ${condition} failed with exit code ${condition_status}; continuing paired diagnostic sweep." >&2
+  fi
 done
 
 python - "${MANIFEST_PATH}" "${FAMILY}" "${CHECKPOINT_PATH}" \
-  "${STATE_HASHES[eb]}" "${STATE_HASHES[er]}" "${STATE_HASHES[ec]}" <<'PY'
+  "${STATE_HASHES[eb]}" "${STATE_HASHES[er]}" "${STATE_HASHES[ec]}" \
+  "${CONDITION_EXIT_CODES[eb]}" "${CONDITION_EXIT_CODES[er]}" \
+  "${CONDITION_EXIT_CODES[ec]}" <<'PY'
 import datetime
 import json
 import pathlib
 import sys
 
-manifest_path, family, checkpoint, eb_hash, er_hash, ec_hash = sys.argv[1:]
+(
+    manifest_path,
+    family,
+    checkpoint,
+    eb_hash,
+    er_hash,
+    ec_hash,
+    eb_status,
+    er_status,
+    ec_status,
+) = sys.argv[1:]
 manifest = {
     "created_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     "model_family": "pi05",
@@ -156,6 +178,11 @@ manifest = {
     "episodes_per_condition": 1,
     "replan_steps": 5,
     "state_sha256": {"eb": eb_hash, "er": er_hash, "ec": ec_hash},
+    "condition_exit_codes": {
+        "eb": int(eb_status),
+        "er": int(er_status),
+        "ec": int(ec_status),
+    },
 }
 pathlib.Path(manifest_path).write_text(
     json.dumps(manifest, indent=2, sort_keys=True) + "\n",
@@ -163,3 +190,5 @@ pathlib.Path(manifest_path).write_text(
 )
 print(json.dumps(manifest, indent=2, sort_keys=True))
 PY
+
+exit "${overall_status}"
