@@ -52,6 +52,7 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
         "prepare",
         "smoke",
         "formal",
+        "pi05_formal",
         "pi05_smoke",
     }
     prepare = PHASES[("l1b1", "prepare")]
@@ -89,6 +90,12 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
     ):
         assert any(artifact.endswith(suffix) for artifact in formal.artifacts)
 
+    pi05_formal = PHASES[("l1b1", "pi05_formal")]
+    assert pi05_formal.count_env == "PI05_FORMAL_TRIALS"
+    assert "formal" in pi05_formal.command
+    assert any("pi05-formal_results.json" in value for value in pi05_formal.artifacts)
+    assert any("pi05-formal_videos" in value for value in pi05_formal.artifacts)
+
     ec_calibrate = PHASES[("l1b1", "ec_calibrate")]
     assert ec_calibrate.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=0" in ec_calibrate.command
@@ -109,7 +116,7 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
 def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b2") == {
         "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke",
-        "formal", "ec_repair", "ec_video", "pi05_smoke",
+        "formal", "ec_repair", "ec_video", "pi05_formal", "pi05_smoke",
     }
     assert PHASES[("l1b2", "calibrate")].count_env == "CALIBRATION_TRIALS"
     assert any(
@@ -142,6 +149,11 @@ def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
         formal.artifacts
     )
     assert "experiments/logs/l1b2_er_physics_qualification.md" in formal.artifacts
+    pi05_formal = PHASES[("l1b2", "pi05_formal")]
+    assert pi05_formal.count_env == "PI05_FORMAL_TRIALS"
+    assert "formal" in pi05_formal.command
+    assert any("pi05-formal_results.json" in value for value in pi05_formal.artifacts)
+    assert any("pi05-formal_videos" in value for value in pi05_formal.artifacts)
     assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1b2", "ec_repair")].command
     assert (
         "experiments/robot/libero/tasks/run_l1b2_native_ec_repair.sh"

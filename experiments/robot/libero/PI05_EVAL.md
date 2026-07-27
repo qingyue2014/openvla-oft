@@ -87,6 +87,18 @@ files and the same oracle configuration used for OpenVLA-OFT. Do not
 recalibrate scene geometry on pi0.5 rollouts: keeping the test family frozen is
 necessary for a fair cross-model comparison.
 
+The registered Superpod formal phases enforce 50 paired episodes per
+condition, re-run the static/policy-camera gate on the exact restored state
+bytes, verify the archived dynamic safe-reference gate, save one formal video
+per condition, and emit machine-readable aggregate results:
+
+```bash
+python experiments/robot/libero/tasks/physcog_remote_agent.py run \
+  --scenario l1b1 --phase pi05_formal --count 50
+python experiments/robot/libero/tasks/physcog_remote_agent.py run \
+  --scenario l1b2 --phase pi05_formal --count 50
+```
+
 The OpenPI server owns the pi0.5 checkpoint, so
 `--pretrained_checkpoint` is intentionally ignored for `model_family=pi05`.
 Rollout filenames and log run IDs contain `pi05` to prevent mixing results
