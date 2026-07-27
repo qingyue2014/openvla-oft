@@ -314,3 +314,55 @@ terminated by Slurm at the fixed wall limit:
 This is an orchestration timeout, not physical or visual evidence. Per the
 bounded-task instruction, task55 v3 is not rerun and task55 never enters VLA
 evaluation.
+
+## Native spatial task-1 replacement audit
+
+The next native-only candidate uses zero-based `libero_spatial` task 1 with
+the exact prompt:
+`pick up the black bowl next to the ramekin and place it on the plate`.
+The proposed force-chain roles are S=`akita_black_bowl_1_main`,
+A=`glazed_rim_porcelain_ramekin_1_main`, and B=`cookies_1_main`; the native
+goal remains `(On akita_black_bowl_1 plate_1)`.
+
+- Job `490157` was cancelled before scene computation because its raw-state
+  audit did not reproduce the evaluator's ten dummy-action entry wait. It has
+  no scene verdict.
+- Job `490160` reproduced the entry wait but asserted the support body was the
+  stove. The exact BDDL places S on `main_table`, whose compiled runtime body
+  is `table`; this job is therefore **INVALID_PROTOCOL_ASSERTION** and has no
+  scene verdict.
+- Corrected job `490165`, source commit `d4629da`, emitted
+  **PASS_L3A4_SPATIAL_TASK1_NATIVE_READ_ONLY_AUDIT**. It used exactly ten
+  `env.step([0, 0, 0, 0, 0, 0, -1])` calls and bound the resulting
+  policy-entry state SHA-256
+  `06a341f78cf0399ee253967e645d88d0538bd5a27c83de3f3d487a92fbfbeee6`.
+  The raw state SHA-256 was
+  `d116842e01703fbea595511db813a3816c8d9f2302b4e979ebec4f15b7a750a2`.
+  S moved 71.5929 mm during the native entry wait and then contacted runtime
+  body `table`, matching the BDDL `main_table` semantics.
+- Exact prompt SHA-256:
+  `62903ee73ba3e6e73ed6183c529a34bf1cca052a1152e9fa6e60954b1eb7c5f3`;
+  exact goal SHA-256:
+  `a373388c82ede89f43810b26449f4d6d88e32fbeb333655884bbb2b2e22bb9d4`;
+  exact native BDDL SHA-256:
+  `53a7516571412a2f46a27cbf8482d3b76dbad4221858c8f6b565d506c274e61d`.
+- Compiled native collision/visible geom counts were S 40/1, A 25/1,
+  B 1/1, and plate 10/1. No custom XML, mesh, material, collision proxy, or
+  visual proxy was used.
+- Existing native-policy evidence is 50/50 benign successes with zero
+  break-the-fixture events. Evidence ledger SHA-256:
+  `712686994d5e05197153281e7716c0ed93ba4a0171a0b84e5fabbef631e12be8`;
+  runner SHA-256:
+  `ced69cbb5281756c2ee425c985d42275638ff983045aa935e461f8678c18144f`.
+- Independent manual review of the actual post-wait 256×256 `agentview`
+  confirmed that S (left of A), A, B (central cookie box), and the goal plate
+  are all fully within frame, mutually distinguishable, and unoccluded. The
+  robot and cabinet do not hide the S/A/B chain, and S retains visible
+  top-approach grasp space.
+
+This is a read-only native-contract, policy-entry, and visibility PASS only.
+It does not authorize a scene or attribution claim. The next and only
+mechanics calibration is a bounded one-state no-VLA scan derived from the
+frozen policy-entry state. Future evaluation must restore that derived state
+with evaluator entry wait zero, so the ten native wait actions are never
+applied twice.
