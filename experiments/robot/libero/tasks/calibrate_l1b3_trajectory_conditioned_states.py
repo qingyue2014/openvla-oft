@@ -864,9 +864,14 @@ def _rewrite_selected_trajectories(
     trajectories: dict[int, dict],
     selected_indices: list[int],
     task_id: int,
+    archive_suffix: str,
 ) -> Path:
     """Archive the calibration pool and expose a reindexed qualified subset."""
-    pool_dir = trajectory_dir.with_name(trajectory_dir.name + "_pool")
+    if not archive_suffix or "/" in archive_suffix:
+        raise ValueError("pool archive suffix must be a non-empty filename suffix")
+    pool_dir = trajectory_dir.with_name(
+        trajectory_dir.name + archive_suffix
+    )
     if pool_dir.exists():
         shutil.rmtree(pool_dir)
     trajectory_dir.rename(pool_dir)
@@ -987,15 +992,20 @@ def calibrate(args: argparse.Namespace) -> str:
             best_contact_diagnostic = ""
             best_contact_score = float("-inf")
             if physics_qualified_eb:
-                candidates = _trajectory_candidates(
-                    trajectory,
-                    args,
-                    env=env,
-                    eb_state=eb_state,
-                )
-                candidates = _prepend_absolute_anchors(
-                    candidates, args.absolute_risk_anchors_xy
-                )
+                if args.absolute_anchors_only:
+                    candidates = _prepend_absolute_anchors(
+                        [], args.absolute_risk_anchors_xy
+                    )
+                else:
+                    candidates = _trajectory_candidates(
+                        trajectory,
+                        args,
+                        env=env,
+                        eb_state=eb_state,
+                    )
+                    candidates = _prepend_absolute_anchors(
+                        candidates, args.absolute_risk_anchors_xy
+                    )
                 if (
                     args.max_candidates_per_episode > 0
                     and len(candidates) > args.max_candidates_per_episode
@@ -1458,22 +1468,41 @@ def calibrate(args: argparse.Namespace) -> str:
         pool_calibrated / pool_successful if pool_successful else 0.0
     )
     if args.select_count > 0:
-        selected_ok = len(selected_indices) == args.select_count
+        required_selected_indices = {
+            int(value.strip())
+            for value in args.required_selected_pool_indices.split(",")
+            if value.strip()
+        }
+        selected_ok = (
+            len(selected_indices) == args.select_count
+            and required_selected_indices.issubset(selected_indices)
+        )
         successful = len(selected_indices)
         calibrated = len(selected_indices)
         activation_rate = 1.0 if selected_indices else 0.0
     else:
+        required_selected_indices = set()
         selected_ok = True
         successful = pool_successful
         calibrated = pool_calibrated
         activation_rate = pool_yield
+    pass_verdict = (
+        "PASS_TASK4_ANCHOR_PREFLIGHT"
+        if args.absolute_anchors_only
+        else "PASS_TRAJECTORY_CONDITIONED_CALIBRATION"
+    )
+    fail_verdict = (
+        "FAIL_TASK4_ANCHOR_PREFLIGHT"
+        if args.absolute_anchors_only
+        else "FAIL_TRAJECTORY_CONDITIONED_CALIBRATION"
+    )
     verdict = (
-        "PASS_TRAJECTORY_CONDITIONED_CALIBRATION"
+        pass_verdict
         if selected_ok
         and successful >= args.min_successful_eb
         and activation_rate >= args.min_activation_rate
         and pool_yield >= args.min_activation_rate
-        else "FAIL_TRAJECTORY_CONDITIONED_CALIBRATION"
+        else fail_verdict
     )
     if args.select_count > 0 and selected_ok:
         _save_hdf5(
@@ -1496,6 +1525,7 @@ def calibrate(args: argparse.Namespace) -> str:
             trajectories,
             selected_indices,
             args.task_id,
+            args.pool_archive_suffix,
         )
     else:
         _save_hdf5(Path(args.er_states), task.language, output_er_states)
@@ -1566,6 +1596,9 @@ def calibrate(args: argparse.Namespace) -> str:
         "qualification_pool_calibrated": pool_calibrated,
         "qualification_pool_yield": pool_yield,
         "selected_pool_episode_indices": selected_indices,
+        "required_selected_pool_episode_indices": sorted(
+            required_selected_indices
+        ),
         "selected_count": args.select_count,
         "pool_trajectory_dir": (
             None if pool_trajectory_dir is None else str(pool_trajectory_dir)
@@ -1581,6 +1614,7 @@ def calibrate(args: argparse.Namespace) -> str:
             anchor.tolist()
             for anchor in _xy_offsets(args.absolute_risk_anchors_xy)
         ],
+        "absolute_anchors_only": bool(args.absolute_anchors_only),
         "refinement_radial_distances": _float_values(
             args.refinement_radial_distances
         ),
@@ -1618,8 +1652,12 @@ def calibrate(args: argparse.Namespace) -> str:
         f"- Qualification pool isolated link7 consequences: {pool_calibrated}\n"
         f"- Qualification pool yield: {pool_calibrated}/{pool_successful} "
         f"({pool_yield:.3f})\n"
+        f"- Search mode: "
+        f"{'HTML native-anchor preflight' if args.absolute_anchors_only else 'full trajectory-conditioned calibration'}\n"
         f"- Selected qualified states: "
         f"{len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
+        f"- Required selected source-pool episodes: "
+        f"{sorted(required_selected_indices) or 'none'}\n"
         "- Accepted causal confounds: 0 other-arm, gripper, or held-bowl "
         "contacts before the wrist consequence threshold\n"
         "- Post-consequence secondary contacts: recorded, not causal confounds\n"
@@ -1762,6 +1800,14 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--absolute_anchors_only",
+        action="store_true",
+        help=(
+            "Preflight mode: replay only the supplied native Task-4 anchor "
+            "poses and do not construct the broader trajectory search"
+        ),
+    )
+    parser.add_argument(
         "--matched_control_offsets_xy",
         default=(
             "0.000,0.070;0.000,-0.070;0.070,0.000;-0.070,0.000;"
@@ -1778,6 +1824,22 @@ def main() -> None:
         type=int,
         default=0,
         help="Select and reindex this many qualified states from a larger pool",
+    )
+    parser.add_argument(
+        "--pool_archive_suffix",
+        default="_pool",
+        help=(
+            "Suffix used to preserve the input trajectory pool when a "
+            "qualified subset is reindexed"
+        ),
+    )
+    parser.add_argument(
+        "--required_selected_pool_indices",
+        default="",
+        help=(
+            "Comma-separated source-pool episode indices that must appear in "
+            "a selected subset"
+        ),
     )
     parser.add_argument(
         "--require_task_success",

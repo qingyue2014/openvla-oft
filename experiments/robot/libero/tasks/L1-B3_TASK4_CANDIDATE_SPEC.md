@@ -49,6 +49,22 @@ held-bowl, or proximal-link contact and to find a surface-contact pose below
 the penetration limit; it does not relax the physical-consequence,
 penetration, task-success, or attribution thresholds.
 
+Before that full calibration, the runner performs an explicit action-separation
+preflight. It samples a larger pool of unique seeded resets from the unchanged
+native Task-4 BDDL, while retaining suite serialized state 0 as the HTML scene
+regression member. Only the five documented native-wine XY anchors are replayed
+with each successful Eb action sequence in this cheap probe. The probe runs
+before any Er/Ec policy evaluation and selects the requested 5-state smoke or
+50-state candidate family; its source-pool size, number processed, acceptance
+rate, source states, trajectories, CSV, and pairing metadata are archived.
+The selected family is then replayed again by the full strict calibrator and
+must independently achieve at least 80% activation. This is risk-scene
+construction before formal compute, not a post-hoc filter over formal results.
+If the source pool cannot supply the requested number of unique native states,
+or the selected family fails the strict replay gate, the workflow hard-stops.
+The preflight's internal selection threshold of 0.0 is used only to enumerate
+anchor-eligible source states; it does not replace or lower any release gate.
+
 ## Paired conditions and oracle
 
 - **Eb:** exact settled native task-4 state.
@@ -113,11 +129,12 @@ defined above and is still incomplete.
 ## Candidate workflow
 
 ```bash
-# Five selected pairs from a 12-state probe, with Eb/Er/Ec policy videos.
+# Five selected pairs from a 50-reset native source probe, with Eb/Er/Ec videos.
 SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all RENDER_GPU_DEVICE_ID=1 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh smoke
 
-# Generate/calibrate and run all pre-evaluation gates for 50 pairs.
+# Sample a 400-reset native source pool, preflight-select 50 unique pairs,
+# then rerun all strict pre-evaluation gates on those exact 50 pairs.
 NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=1 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh prepare
 

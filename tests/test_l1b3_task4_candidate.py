@@ -24,6 +24,11 @@ def test_task4_candidate_uses_native_prompt_objects_and_link7_contract():
     assert '"bddl_file": None' in block
     assert '"native_assets_only": True' in block
     assert '"preserve_native_layout": True' in block
+    generator = GENERATOR.read_text()
+    assert "--sample_native_resets" in generator
+    assert "seeded_native_bddl_resets" in generator
+    assert "settled seeded native BDDL reset" in generator
+    assert "Keep the seeded env.reset() result exactly as sampled" in generator
     assert '"goal_support_body": "wooden_cabinet_1_main"' in block
     assert '"required_prompt_terms": ["bowl", "cabinet"]' in block
     assert '"intended_link_bodies": ["robot0_link7"]' in block
@@ -51,6 +56,17 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert 'MIN_ACTION_SEPARATION_RATE="${TASK4_MIN_ACTION_SEPARATION_RATE:-0.80}"' in text
     assert 'MIN_COMPONENT_PURITY="${TASK4_MIN_COMPONENT_PURITY:-0.90}"' in text
     assert 'MIN_SAFE_REFERENCE_RATE="${TASK4_MIN_SAFE_REFERENCE_RATE:-0.95}"' in text
+    assert 'SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-50}"' in text
+    assert 'CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-400}"' in text
+    assert "--sample_native_resets" in text
+    assert "--include_serialized_state_zero" in text
+    assert "anchor_preflight()" in text
+    assert "--absolute_anchors_only" in text
+    assert '--min_activation_rate 0.0' in text
+    assert '--pool_archive_suffix "_anchor_source_pool"' in text
+    assert "--required_selected_pool_indices 0" in text
+    assert 'calibrate_states "${SMOKE_TRIALS}" "${SMOKE_TRIALS}"' in text
+    assert 'calibrate_states "${NUM_TRIALS}" "${MIN_SUCCESSFUL_EB}"' in text
     assert "eval_condition er" in text
     assert "eval_condition ec" in text
     assert "all|eval|formal)" in text
@@ -116,6 +132,9 @@ def test_html_native_wine_pose_is_first_task4_regression_anchor():
     calibrator = CALIBRATOR.read_text()
     assert "def _prepend_absolute_anchors(" in calibrator
     assert '(-1, "validated_task4_anchor", anchor)' in calibrator
+    assert "--absolute_anchors_only" in calibrator
+    assert "PASS_TASK4_ANCHOR_PREFLIGHT" in calibrator
+    assert "HTML native-anchor preflight" in calibrator
     assert '"--absolute_risk_anchors_xy=${ABSOLUTE_RISK_ANCHORS_XY}"' in runner
 
 

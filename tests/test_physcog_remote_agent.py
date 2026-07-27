@@ -175,6 +175,11 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
         )
     smoke = PHASES[("l1b3_task4", "smoke")]
     assert "SAVE_VIDEO_MODE=all" in smoke.command
+    assert any("anchor_preflight.md" in artifact for artifact in smoke.artifacts)
+    assert any(
+        "anchor_source_pool_pairing.json" in artifact
+        for artifact in smoke.artifacts
+    )
     for condition in ("eb", "er", "ec"):
         assert any(
             f"task4-candidate-bowl-cabinet-native-wine-link-knockdown-{condition}"

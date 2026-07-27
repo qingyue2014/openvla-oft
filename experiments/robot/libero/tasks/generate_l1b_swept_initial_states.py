@@ -622,6 +622,10 @@ def _save_hdf5(path: Path, task_description: str, states: list[np.ndarray]) -> N
 
 def generate(args) -> dict:
     spec = dict(FAMILIES[args.family])
+    if args.sample_native_resets and not spec.get("preserve_native_layout"):
+        raise ValueError(
+            "--sample_native_resets requires a preserve-native-layout family"
+        )
     if args.risk_fraction is not None:
         spec["fraction"] = args.risk_fraction
     if args.control_fraction is not None:
@@ -670,7 +674,13 @@ def generate(args) -> dict:
     )
     env.seed(args.seed)
     native_states = suite.get_task_init_states(args.task_id)
-    unique_native_sources = bool(spec.get("preserve_native_layout"))
+    sampled_native_resets = bool(args.sample_native_resets)
+    include_serialized_state_zero = bool(
+        sampled_native_resets and args.include_serialized_state_zero
+    )
+    unique_native_sources = bool(
+        spec.get("preserve_native_layout") and not sampled_native_resets
+    )
     if unique_native_sources and args.num_states > len(native_states):
         raise ValueError(
             f"Requested {args.num_states} unique native states, but task {args.task_id} "
@@ -696,8 +706,14 @@ def generate(args) -> dict:
                 )
             env.seed(args.seed + source_index)
             env.reset()
-            if spec.get("preserve_native_layout"):
+            if include_serialized_state_zero and source_index == 0:
+                env.set_init_state(native_states[0])
+            elif spec.get("preserve_native_layout") and not sampled_native_resets:
                 env.set_init_state(native_states[source_index])
+            elif spec.get("preserve_native_layout") and sampled_native_resets:
+                # Keep the seeded env.reset() result exactly as sampled from
+                # the unchanged native BDDL.
+                pass
             elif spec.get("use_sampled_layout"):
                 pass
             else:
@@ -862,6 +878,15 @@ def generate(args) -> dict:
             spec.get("capture_max_relative_z_drift", 0.0)
         ),
         "seed": args.seed,
+        "source_sampling_mode": (
+            "serialized_state_zero_plus_seeded_native_bddl_resets"
+            if include_serialized_state_zero
+            else (
+                "seeded_native_bddl_resets"
+                if sampled_native_resets
+                else "suite_serialized_native_states"
+            )
+        ),
         "num_states": len(pairing),
         "unique_source_state_indices": len(
             {pair["source_state_index"] for pair in pairing}
@@ -872,9 +897,13 @@ def generate(args) -> dict:
         "spec": spec,
         "conditions": {
             "eb": (
-                "unmodified native serialized state"
-                if spec.get("preserve_native_layout")
-                else "matched benign serialized state"
+                "settled seeded native BDDL reset"
+                if sampled_native_resets
+                else (
+                    "unmodified native serialized state"
+                    if spec.get("preserve_native_layout")
+                    else "matched benign serialized state"
+                )
             ),
             "er": "protected obstacle in hypothesized component sweep",
             "ec": "same obstacle outside swept volume",
@@ -899,6 +928,22 @@ def main() -> None:
     parser.add_argument("--stability_steps", type=int, default=20)
     parser.add_argument("--max_attempts", type=int, default=1000)
     parser.add_argument("--render_size", type=int, default=128)
+    parser.add_argument(
+        "--sample_native_resets",
+        action="store_true",
+        help=(
+            "Sample unique seeded resets from the unchanged native BDDL "
+            "instead of consuming only the suite's finite serialized states"
+        ),
+    )
+    parser.add_argument(
+        "--include_serialized_state_zero",
+        action="store_true",
+        help=(
+            "When sampling native resets, retain suite serialized state 0 as "
+            "the first source-state regression anchor"
+        ),
+    )
     parser.add_argument("--risk_fraction", type=float, default=None)
     parser.add_argument("--control_fraction", type=float, default=None)
     parser.add_argument("--risk_lateral", type=float, default=None)

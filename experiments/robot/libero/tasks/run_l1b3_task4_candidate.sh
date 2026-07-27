@@ -22,8 +22,8 @@ TASK_ID=4
 CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
-SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-12}"
-CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-50}"
+SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-50}"
+CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-400}"
 MIN_SUCCESSFUL_EB="${TASK4_MIN_SUCCESSFUL_EB:-20}"
 MAX_CANDIDATES_PER_EPISODE="${TASK4_MAX_CANDIDATES_PER_EPISODE:-600}"
 MAX_REFINEMENT_SEEDS="${TASK4_MAX_REFINEMENT_SEEDS:-8}"
@@ -59,6 +59,8 @@ STATE_PREFIX="${TASKS_DIR}/${FAMILY}"
 PAIRING_JSON="${STATE_PREFIX}_pairing.json"
 PREVIEW_DIR="${TASKS_DIR}/l1b_swept_preview/${FAMILY}"
 REPORT_PREFIX="experiments/logs/${FAMILY}"
+ANCHOR_PREFLIGHT_REPORT_PREFIX="${REPORT_PREFIX}_anchor_preflight"
+SOURCE_POOL_PREFIX="${TASKS_DIR}/${FAMILY}_anchor_source_pool"
 RUN_NOTE_BASE="L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown"
 
 if [[ -z "${LIBERO_ROOT}" ]]; then
@@ -95,13 +97,58 @@ trajectory_dir_for() {
 }
 
 generate_states() {
-  local count="$1"
+  local count="$1" sample_native="${2:-false}"
+  local extra_args=()
+  if [[ "${sample_native,,}" == "true" ]]; then
+    extra_args+=(--sample_native_resets)
+    extra_args+=(--include_serialized_state_zero)
+  fi
   python "${TASKS_DIR}/generate_l1b_swept_initial_states.py" \
     --family "${FAMILY}" \
     --task_suite_name "${TASK_SUITE}" \
     --task_id "${TASK_ID}" \
     --num_states "${count}" \
-    --seed "${SCENE_SEED}"
+    --seed "${SCENE_SEED}" \
+    "${extra_args[@]}"
+}
+
+archive_anchor_source_pool() {
+  local condition
+  for condition in eb er ec; do
+    cp "$(state_for "${condition}")" \
+      "${SOURCE_POOL_PREFIX}_${condition}_states.hdf5"
+  done
+  cp "${PAIRING_JSON}" "${SOURCE_POOL_PREFIX}_pairing.json"
+}
+
+anchor_preflight() {
+  local select_count="$1"
+  python "${TASKS_DIR}/calibrate_l1b3_trajectory_conditioned_states.py" \
+    --family "${FAMILY}" \
+    --eb_trajectories "$(trajectory_dir_for eb)" \
+    --eb_states "$(state_for eb)" \
+    --er_states "$(state_for er)" \
+    --ec_states "$(state_for ec)" \
+    --pairing_json "${PAIRING_JSON}" \
+    --task_suite_name "${TASK_SUITE}" \
+    --task_id "${TASK_ID}" \
+    --min_obstacle_displacement "${DISPLACEMENT_THRESHOLD}" \
+    --min_obstacle_tilt_change_deg "${TILT_THRESHOLD_DEG}" \
+    --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
+    "--absolute_risk_anchors_xy=${ABSOLUTE_RISK_ANCHORS_XY}" \
+    --absolute_anchors_only \
+    --max_refinement_seeds 0 \
+    --max_refinement_candidates 0 \
+    --max_contact_refinement_seeds 0 \
+    --max_contact_refinement_candidates 0 \
+    --min_successful_eb "${select_count}" \
+    --min_activation_rate 0.0 \
+    --select_count "${select_count}" \
+    --required_selected_pool_indices 0 \
+    --pool_archive_suffix "_anchor_source_pool" \
+    --out_csv "${ANCHOR_PREFLIGHT_REPORT_PREFIX}.csv" \
+    --out_report "${ANCHOR_PREFLIGHT_REPORT_PREFIX}.md" \
+    --fail_on_invalid
 }
 
 check_states() {
@@ -271,9 +318,12 @@ require_complete_index() {
 }
 
 run_smoke() {
-  generate_states "${SMOKE_POOL_SIZE}"
+  generate_states "${SMOKE_POOL_SIZE}" true
   eval_condition eb "${SMOKE_POOL_SIZE}" false
   require_complete_index "${SMOKE_POOL_SIZE}"
+  archive_anchor_source_pool
+  anchor_preflight "${SMOKE_TRIALS}"
+  require_complete_index "${SMOKE_TRIALS}"
   calibrate_states "${SMOKE_TRIALS}" "${SMOKE_TRIALS}"
   validate_eb_physics "${SMOKE_TRIALS}"
   check_states
@@ -286,10 +336,13 @@ run_smoke() {
 }
 
 run_prepare() {
-  generate_states "${CALIBRATION_POOL_SIZE}"
+  generate_states "${CALIBRATION_POOL_SIZE}" true
   eval_condition eb "${CALIBRATION_POOL_SIZE}" false
   require_complete_index "${CALIBRATION_POOL_SIZE}"
-  calibrate_states 0 "${MIN_SUCCESSFUL_EB}"
+  archive_anchor_source_pool
+  anchor_preflight "${NUM_TRIALS}"
+  require_complete_index "${NUM_TRIALS}"
+  calibrate_states "${NUM_TRIALS}" "${MIN_SUCCESSFUL_EB}"
   validate_eb_physics "${NUM_TRIALS}"
   check_states
   safe_reference "${NUM_TRIALS}"
