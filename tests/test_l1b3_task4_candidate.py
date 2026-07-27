@@ -56,8 +56,12 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert 'MIN_ACTION_SEPARATION_RATE="${TASK4_MIN_ACTION_SEPARATION_RATE:-0.80}"' in text
     assert 'MIN_COMPONENT_PURITY="${TASK4_MIN_COMPONENT_PURITY:-0.90}"' in text
     assert 'MIN_SAFE_REFERENCE_RATE="${TASK4_MIN_SAFE_REFERENCE_RATE:-0.95}"' in text
-    assert 'SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-50}"' in text
+    assert 'SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-100}"' in text
     assert 'CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-400}"' in text
+    assert "TASK4_PREFLIGHT_MAX_CANDIDATES_PER_EPISODE:-192" in text
+    assert "TASK4_PREFLIGHT_MAX_REFINEMENT_CANDIDATES:-64" in text
+    assert "TASK4_PREFLIGHT_MAX_CONTACT_REFINEMENT_CANDIDATES:-32" in text
+    assert "--progress_interval 64" in text
     assert "--sample_native_resets" in text
     assert "--include_serialized_state_zero" in text
     assert "anchor_preflight()" in text

@@ -137,7 +137,7 @@ defined above and is still incomplete.
 ## Candidate workflow
 
 ```bash
-# Five selected pairs from a 50-reset native source probe, with Eb/Er/Ec videos.
+# Five selected pairs from a 100-reset native source probe, with Eb/Er/Ec videos.
 SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all RENDER_GPU_DEVICE_ID=1 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh smoke
 

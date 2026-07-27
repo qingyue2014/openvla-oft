@@ -1240,6 +1240,17 @@ def calibrate(args: argparse.Namespace) -> str:
                         refinement_kind = ""
                         is_refinement = False
                     attempts += 1
+                    if (
+                        args.progress_interval > 0
+                        and attempts % args.progress_interval == 0
+                    ):
+                        print(
+                            f"episode={episode:03d} progress_attempts={attempts} "
+                            f"contacts={intended_contact_candidates} "
+                            f"effects={intended_effect_candidates} "
+                            f"confounded={confounded_candidates}",
+                            flush=True,
+                        )
                     refinement_attempts += int(is_refinement)
                     contact_refinement_attempts += int(
                         refinement_kind == "contact"
@@ -1833,6 +1844,15 @@ def main() -> None:
         "--max_contact_refinement_candidates", type=int, default=256
     )
     parser.add_argument("--stability_steps", type=int, default=20)
+    parser.add_argument(
+        "--progress_interval",
+        type=int,
+        default=0,
+        help=(
+            "Emit an in-progress diagnostic every N replay attempts; zero "
+            "disables intermediate logging."
+        ),
+    )
     parser.add_argument(
         "--absolute_risk_anchors_xy",
         default="",
