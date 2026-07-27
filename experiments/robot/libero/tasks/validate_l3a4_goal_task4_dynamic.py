@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Fixed L3-A4 dynamic causality and actual-OSC safe-reference gate.
 
-The program is deliberately split into two ordered stages inside one job:
+The program is deliberately split into two separately submitted stages:
 
-1. reconstruct the frozen adjacent witness, export exact wait-0 policy RGB
-   and segmentation, and wait for a hash-bound human approval file;
-2. only after approval, run the fixed selected+witness chain, three causal
-   controls, and selected-state actual robot/OSC safe reference.
+1. ``witness`` reconstructs the frozen adjacent witness and exports exact
+   wait-0 policy RGB and segmentation with ``dynamic_started=false``;
+2. ``dynamic`` rerenders the same hash-bound witness, verifies a committed
+   human approval file, then runs the fixed selected+witness chain, three
+   causal controls, and selected-state actual robot/OSC safe reference.
 
 Direct S qpos commands are labelled ``kinematic_object_calibration`` and are
 never described as robot grasping. The safe reference may not fall back: it
@@ -22,7 +23,6 @@ import hashlib
 import json
 from pathlib import Path
 import sys
-import time
 
 import imageio.v2 as imageio
 import numpy as np
@@ -303,50 +303,30 @@ def _witness_policy_gate(
     }
 
 
-def _await_witness_approval(
-    out: Path,
+def _load_witness_approval(
+    approval_path: Path,
     gate: dict,
-    timeout_s: int,
 ) -> dict:
-    request = {
-        "status": "AWAITING_L3A4_WITNESS_MANUAL_REVIEW",
-        "required_witness_state_sha256": WITNESS_STATE_SHA256,
-        "required_witness_rgb_sha256": gate["rgb"]["sha256"],
-        "approval_file": str(out / "witness_manual_approval.json"),
-        "timeout_s": timeout_s,
-        "dynamic_started": False,
-    }
-    request_path = out / "witness_manual_review_request.json"
-    request_path.write_text(
-        json.dumps(request, indent=2, sort_keys=True) + "\n"
+    if not approval_path.is_file():
+        raise RuntimeError(
+            f"missing committed witness approval: {approval_path}"
+        )
+    approval = json.loads(approval_path.read_text())
+    valid = bool(
+        approval.get("approved") is True
+        and approval.get("witness_state_sha256")
+        == WITNESS_STATE_SHA256
+        and approval.get("witness_rgb_sha256")
+        == gate["rgb"]["sha256"]
+        and approval.get("verdict")
+        == "PASS_MANUAL_POLICY_RGB_REVIEW"
     )
-    print(
-        "AWAITING_L3A4_WITNESS_MANUAL_REVIEW "
-        f"state={WITNESS_STATE_SHA256} rgb={gate['rgb']['sha256']}",
-        flush=True,
-    )
-    approval_path = out / "witness_manual_approval.json"
-    deadline = time.monotonic() + timeout_s
-    while time.monotonic() < deadline:
-        if approval_path.exists():
-            approval = json.loads(approval_path.read_text())
-            valid = bool(
-                approval.get("approved") is True
-                and approval.get("witness_state_sha256")
-                == WITNESS_STATE_SHA256
-                and approval.get("witness_rgb_sha256")
-                == gate["rgb"]["sha256"]
-                and approval.get("verdict")
-                == "PASS_MANUAL_POLICY_RGB_REVIEW"
-            )
-            if not valid:
-                raise RuntimeError(
-                    f"invalid witness approval payload: {approval}"
-                )
-            print("PASS_L3A4_WITNESS_MANUAL_POLICY_RGB_REVIEW", flush=True)
-            return approval
-        time.sleep(5)
-    raise RuntimeError("witness manual review approval timed out")
+    if not valid:
+        raise RuntimeError(
+            f"invalid witness approval payload: {approval}"
+        )
+    print("PASS_L3A4_WITNESS_MANUAL_POLICY_RGB_REVIEW", flush=True)
+    return approval
 
 
 def _contact_metrics(
@@ -1327,11 +1307,20 @@ def _robot_safe_reference(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--stage",
+        choices=("witness", "dynamic"),
+        required=True,
+    )
+    parser.add_argument(
         "--out_dir",
         default="experiments/logs/l3a4_goal_task4_dynamic",
     )
     parser.add_argument(
-        "--witness_approval_timeout_s", type=int, default=900
+        "--witness_approval_path",
+        default=(
+            "experiments/robot/libero/tasks/"
+            "l3a4_goal_task4_witness_approval.json"
+        ),
     )
     args = parser.parse_args()
 
@@ -1402,14 +1391,38 @@ def main() -> None:
         report["witness_policy_gate"] = witness_gate
         report["asset_group_audit"] = assets
         report["policy_entry_base_sha256"] = _sha(base)
+        request = {
+            "status": "AWAITING_L3A4_WITNESS_MANUAL_REVIEW",
+            "required_witness_state_sha256": WITNESS_STATE_SHA256,
+            "required_witness_rgb_sha256": (
+                witness_gate["rgb"]["sha256"]
+            ),
+            "required_approval_path": args.witness_approval_path,
+            "dynamic_started": False,
+        }
+        (out / "witness_manual_review_request.json").write_text(
+            json.dumps(request, indent=2, sort_keys=True) + "\n"
+        )
         (out / "audit.json").write_text(
             json.dumps(_jsonable(report), indent=2, sort_keys=True) + "\n"
         )
         if not witness_gate["passed"]:
             report["verdict"] = "FAIL_L3A4_WITNESS_POLICY_PIXEL_GATE"
             raise RuntimeError(report["verdict"])
-        approval = _await_witness_approval(
-            out, witness_gate, args.witness_approval_timeout_s
+        if args.stage == "witness":
+            report["verdict"] = (
+                "PASS_L3A4_WITNESS_POLICY_PREFLIGHT_PENDING_MANUAL_RGB"
+            )
+            (out / "audit.json").write_text(
+                json.dumps(
+                    _jsonable(report), indent=2, sort_keys=True
+                )
+                + "\n"
+            )
+            print(report["verdict"])
+            return
+        approval = _load_witness_approval(
+            Path(args.witness_approval_path), witness_gate
         )
         report["witness_policy_gate"]["manual_review"] = approval
         report["dynamic_started"] = True

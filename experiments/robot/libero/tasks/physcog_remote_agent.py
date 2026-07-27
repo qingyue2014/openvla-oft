@@ -476,10 +476,23 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a4_goal_task4_native_static",
         ),
     ),
+    ("l3a4", "goal_task4_witness_preflight"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/validate_l3a4_goal_task4_dynamic.py",
+            "--stage",
+            "witness",
+        ),
+        artifacts=(
+            "experiments/logs/l3a4_goal_task4_dynamic",
+        ),
+    ),
     ("l3a4", "goal_task4_fixed_dynamic"): PhaseSpec(
         command=(
             "python",
             "experiments/robot/libero/tasks/validate_l3a4_goal_task4_dynamic.py",
+            "--stage",
+            "dynamic",
         ),
         artifacts=(
             "experiments/logs/l3a4_goal_task4_dynamic",

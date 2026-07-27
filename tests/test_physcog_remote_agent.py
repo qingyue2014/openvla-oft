@@ -101,6 +101,7 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
         "task55_tower_v2",
         "task55_vertical_mirror_v3",
         "spatial_task1_native_audit",
+        "goal_task4_witness_preflight",
         "goal_task4_fixed_dynamic",
         "smoke",
     } <= phases
@@ -172,6 +173,11 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
     goal_task4_dynamic = PHASES[
         ("l3a4", "goal_task4_fixed_dynamic")
     ]
+    goal_task4_witness = PHASES[
+        ("l3a4", "goal_task4_witness_preflight")
+    ]
+    assert goal_task4_witness.command[-2:] == ("--stage", "witness")
+    assert goal_task4_dynamic.command[-2:] == ("--stage", "dynamic")
     assert any(
         item.endswith("validate_l3a4_goal_task4_dynamic.py")
         for item in goal_task4_dynamic.command

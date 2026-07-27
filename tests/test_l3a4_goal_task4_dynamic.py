@@ -35,9 +35,15 @@ def test_witness_policy_gate_hard_stops_before_any_dynamic_execution():
     assert "WITNESS_MIN_PIXELS" in SOURCE
     assert "witness_wait0_policy_agentview_256.png" in SOURCE
     assert "witness_manual_review_request.json" in SOURCE
-    assert "witness_manual_approval.json" in SOURCE
+    assert "l3a4_goal_task4_witness_approval.json" in SOURCE
     assert '"PASS_MANUAL_POLICY_RGB_REVIEW"' in SOURCE
-    approval = SOURCE.index("approval = _await_witness_approval(")
+    assert 'choices=("witness", "dynamic")' in SOURCE
+    assert 'if args.stage == "witness":' in SOURCE
+    assert (
+        '"PASS_L3A4_WITNESS_POLICY_PREFLIGHT_PENDING_MANUAL_RGB"'
+        in SOURCE
+    )
+    approval = SOURCE.index("approval = _load_witness_approval(")
     dynamic_started = SOURCE.index(
         'report["dynamic_started"] = True', approval
     )
