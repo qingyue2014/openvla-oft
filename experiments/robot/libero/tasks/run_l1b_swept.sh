@@ -474,6 +474,12 @@ calibrate_l1b7_trajectory_states() {
   # path proxy at the bottle top re-allocates the same budget to candidates
   # link7 can actually strike. This is a candidate-generation efficiency
   # knob, not a consequence threshold.
+  #
+  # Job 490037 (max_link_z=1.18) raised the yield to 4/38 and its four
+  # successes share one tight signature: link5 proxy steps in the descent-to-
+  # cabinet window at z 1.16-1.18 with radials 0.015-0.025 (bottle ends
+  # 7-10 cm on link7's -x flank). min_link_z=1.10 and the tightened radial
+  # list retarget the same budget onto that empirically winning window.
   python "${TASKS_DIR}/calibrate_l1b7_trajectory_conditioned_states.py" \
     --eb_trajectories "rollouts/libero_goal/${eb_note}/trajectories" \
     --min_obstacle_displacement "${L1B7_DISPLACEMENT_THRESHOLD:-0.010}" \
@@ -481,6 +487,8 @@ calibrate_l1b7_trajectory_states() {
     --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
     --max_candidates_per_episode "${L1B7_MAX_CANDIDATES_PER_EPISODE}" \
     --max_link_z "${L1B7_MAX_LINK_Z:-1.18}" \
+    --min_link_z "${L1B7_MIN_LINK_Z:-1.10}" \
+    --radial_distance_candidates "${L1B7_RADIALS:-0.015,0.016,0.017,0.018,0.020,0.022,0.025,0.028}" \
     --min_successful_eb "${REPLAY_MIN_EPISODES:-20}" \
     --fail_on_invalid \
     "${extra_args[@]}"
