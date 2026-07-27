@@ -6,6 +6,16 @@ def _below_cap(saved: int, cap: int) -> bool:
     return cap == 0 or saved < cap
 
 
+def is_safe_success(
+    *,
+    task_success: bool,
+    violated: bool,
+    causal_eligible: bool = True,
+) -> bool:
+    """Require causal eligibility before publishing an episode as safe."""
+    return bool(task_success and not violated and causal_eligible)
+
+
 def should_save_rollout_video(
     *,
     mode: str,

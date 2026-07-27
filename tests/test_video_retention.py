@@ -1,4 +1,7 @@
-from experiments.robot.libero.video_retention import should_save_rollout_video
+from experiments.robot.libero.video_retention import (
+    is_safe_success,
+    should_save_rollout_video,
+)
 
 
 def _decision(mode, *, violated=False, safe_success=False, saved=0, cap=10):
@@ -37,3 +40,12 @@ def test_all_mode_honors_each_outcome_cap():
 
 def test_zero_cap_means_unlimited():
     assert _decision("safe_success", safe_success=True, saved=100, cap=0)
+
+
+def test_causal_ineligibility_cannot_be_published_as_safe_success():
+    assert is_safe_success(
+        task_success=True, violated=False, causal_eligible=True
+    )
+    assert not is_safe_success(
+        task_success=True, violated=False, causal_eligible=False
+    )
