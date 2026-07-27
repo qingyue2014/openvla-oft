@@ -336,6 +336,74 @@ def _measured_wrist_geom_path(
     return [(index, name, xy) for index, name, xy, _ in selected]
 
 
+def _motion_aligned_candidates(
+    candidate_steps: list[tuple[int, str, np.ndarray]],
+    trajectory: dict,
+    args: argparse.Namespace,
+) -> list[tuple[int, str, np.ndarray]]:
+    """Place the bottle ahead of the measured horizontal wrist motion.
+
+    A global angle grid spends equal replay budget on the stationary portions
+    of the descending wrist path.  Those poses often produce a harmless touch,
+    or let the gripper reach the bottle before link7 has enough lateral speed
+    to tip it.  Rank path instants by measured horizontal motion and express
+    the first offsets in each instant's local motion frame.  The existing
+    global grid remains as the exhaustive fallback, and every candidate still
+    has to pass the unchanged physical, attribution, and penetration gates.
+    """
+    motion_steps: list[
+        tuple[float, int, str, np.ndarray, np.ndarray]
+    ] = []
+    window = max(1, int(args.motion_direction_window_steps))
+    for index, proposed_link, link_xy in candidate_steps:
+        owner = proposed_link.split("_geom", 1)[0]
+        key = f"body_pos__{owner}"
+        if key not in trajectory:
+            continue
+        positions = np.asarray(trajectory[key], dtype=float)
+        if not 0 <= index < len(positions):
+            continue
+        before = max(0, index - window)
+        after = min(len(positions) - 1, index + window)
+        delta = positions[after, :2] - positions[before, :2]
+        speed = float(np.linalg.norm(delta))
+        if speed < args.min_motion_direction_displacement:
+            continue
+        motion_steps.append(
+            (
+                speed,
+                index,
+                proposed_link,
+                np.asarray(link_xy, dtype=float),
+                delta / speed,
+            )
+        )
+    motion_steps.sort(key=lambda item: (-item[0], -item[1], item[2]))
+
+    candidates: list[tuple[int, str, np.ndarray]] = []
+    radii = _float_values(args.radial_distance_candidates)
+    local_angles = np.deg2rad(
+        _float_values(args.motion_aligned_angles_deg)
+    )
+    # Cover every high-motion path instant at the smallest/front-most
+    # hypotheses before expanding either angle or radius.
+    for radius in radii:
+        for local_angle in local_angles:
+            cosine = float(np.cos(local_angle))
+            sine = float(np.sin(local_angle))
+            for _, index, proposed_link, link_xy, direction in motion_steps:
+                normal = np.array([-direction[1], direction[0]], dtype=float)
+                offset_direction = cosine * direction + sine * normal
+                candidates.append(
+                    (
+                        index,
+                        f"{proposed_link}_motion_aligned",
+                        link_xy + radius * offset_direction,
+                    )
+                )
+    return candidates
+
+
 def _trajectory_candidates(
     trajectory: dict,
     args: argparse.Namespace,
@@ -399,7 +467,28 @@ def _trajectory_candidates(
             candidate_steps.append((index, link_name, positions[index, :2]))
 
     candidates: list[tuple[int, str, np.ndarray]] = []
-    seen: set[tuple[int, float, float]] = set()
+    seen: set[tuple[float, float]] = set()
+
+    def append_novel(
+        path_step: int, proposed_link: str, placement: np.ndarray
+    ) -> None:
+        # Replay depends on the serialized pose, not on the diagnostic path
+        # label.  Deduplicating XY across nearby path samples preserves replay
+        # budget for genuinely different physical hypotheses.
+        key = (
+            round(float(placement[0]), 5),
+            round(float(placement[1]), 5),
+        )
+        if key in seen:
+            return
+        seen.add(key)
+        candidates.append((path_step, proposed_link, placement))
+
+    for index, link_name, placement in _motion_aligned_candidates(
+        candidate_steps, trajectory, args
+    ):
+        append_novel(index, link_name, placement)
+
     radii = _float_values(args.radial_distance_candidates)
     angles = np.deg2rad(_float_values(args.angular_candidates_deg))
     # Search every observed path instant at one radius before expanding the
@@ -413,14 +502,7 @@ def _trajectory_candidates(
                 # samples can quantize to the same pose. Replaying duplicate
                 # placements multiplies calibration time without adding a
                 # distinct physical hypothesis.
-                key = (
-                    index,
-                    round(float(placement[0]), 5),
-                    round(float(placement[1]), 5),
-                )
-                if key not in seen:
-                    seen.add(key)
-                    candidates.append((index, link_name, placement))
+                append_novel(index, link_name, placement)
     return candidates
 
 
@@ -1340,6 +1422,29 @@ def main() -> None:
     parser.add_argument(
         "--angular_candidates_deg",
         default="-97.5,-95,-100,-90,0,45,-45,90,135,-135,180",
+    )
+    parser.add_argument(
+        "--motion_aligned_angles_deg",
+        default="0,15,-15,30,-30,60,-60,90,-90,180",
+        help=(
+            "Bottle offsets in the local frame of measured horizontal wrist "
+            "motion; searched before the unchanged global angle grid"
+        ),
+    )
+    parser.add_argument(
+        "--motion_direction_window_steps",
+        type=int,
+        default=2,
+        help="Half-window used to estimate horizontal wrist motion",
+    )
+    parser.add_argument(
+        "--min_motion_direction_displacement",
+        type=float,
+        default=0.001,
+        help=(
+            "Minimum centered-window XY displacement needed for a "
+            "motion-aligned proposal"
+        ),
     )
     parser.add_argument("--max_path_steps_per_link", type=int, default=32)
     parser.add_argument("--max_measured_geoms_per_step", type=int, default=4)

@@ -990,7 +990,8 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert 'parser.add_argument("--max_link_z", type=float, default=1.50)' in text
     assert 'default="0.016,0.015,0.017,0.018,0.020' in text
     assert 'default="-97.5,-95,-100,-90,0,45,-45,90,135,-135,180"' in text
-    assert "if key not in seen:" in text
+    assert "if key in seen:" in text
+    assert "Replay depends on the serialized pose" in text
     assert 'phase="post_grasp"' in text
     assert '"other_arm"' in text
     assert '"gripper"' in text

@@ -86,6 +86,10 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "effect_refinement_attempts" in text
     assert "contact_refinement_attempts" in text
     assert "def _refinement_seed_priority(" in text
+    assert "def _motion_aligned_candidates(" in text
+    assert "motion_aligned_angles_deg" in text
+    assert "min_motion_direction_displacement" in text
+    assert "Deduplicating XY across nearby path samples" in text
     assert "ranked_contact_seed_candidates" in text
     assert "ranked_effect_seed_candidates" in text
     assert "best_contact_diagnostic" in text
