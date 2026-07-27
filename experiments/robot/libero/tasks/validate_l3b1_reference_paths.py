@@ -47,8 +47,11 @@ def _oracle(condition: str):
 
 
 def _close(env, oracle, close_steps: int):
-    obs = env._get_observations()
-    oracle.reset(env, obs)
+    # LIBERO's OffScreenRenderEnv wrapper exposes observations through
+    # reset()/step(), not robosuite's private _get_observations() method.
+    # This oracle derives its reset baseline from MuJoCo state, so no initial
+    # observation is required.
+    oracle.reset(env, None)
     for step in range(10):
         obs, _, _, _ = env.step(DUMMY_ACTION)
         oracle.check(env, obs, DUMMY_ACTION, step)
