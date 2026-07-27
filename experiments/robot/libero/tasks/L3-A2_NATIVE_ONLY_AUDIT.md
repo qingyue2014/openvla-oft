@@ -2,9 +2,8 @@
 
 ## Status
 
-**APPROVED FOR STRICT ONE-STATE PHYSICAL PREFLIGHT ONLY.** No policy rollout,
-preview, five-state generation, or formal evaluation is authorized before this
-gate passes.
+**REJECTED BY STRICT ONE-STATE PHYSICAL PREFLIGHT.** No policy rollout,
+preview, five-state generation, or formal evaluation was run.
 
 The previous custom `cascade_panel` design is historic INVALID and cannot
 count toward delivery.
@@ -104,3 +103,21 @@ Thresholds, mass, friction, XML, and materials may not be altered. If one
 bounded native-pose sweep cannot produce a robust ordered cascade with a
 neighboring witness, this candidate must be rejected rather than tuned via a
 custom proxy.
+
+## One-state preflight result
+
+- Job: `490069`
+- Commit: `976542c28e20c899d0bf6b4328a461ba77be9b4e`
+- Native task binding: LIBERO-90 zero-based task 23; original BDDL hash,
+  prompt, and conjunctive goal all matched.
+- Bounded risk-state attempts: **0/120** passed the unchanged L3-A1 native
+  drawer-edge support gate.
+- Best observed policy-entry support coverage was 4/6 frames (attempts 116
+  and 117), below the required full edge+table qualification. Other attempts
+  either lost edge support, contacted the forbidden inner/right component, or
+  fell while S remained present.
+- Decision: **REJECT this candidate before B placement.** Since the upstream
+  S→A edge is not valid, no Akita-bowl pose can establish a strict S→A→B
+  cascade, and a downstream B sweep would be uninterpretable.
+- Not run: B pose sweep, policy view, policy rollout, five-state family, safe
+  reference, or formal metrics.

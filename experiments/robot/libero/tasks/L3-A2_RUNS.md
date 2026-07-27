@@ -7,6 +7,9 @@ misinterpretation. None authorizes smoke or formal evaluation.
 
 | Job | Commit | Result | Disposition |
 | --- | --- | --- | --- |
+| 490061 | f9e8cdb | Pending, 0 s runtime | Cancelled before start; replaced two-GPU request with one GPU |
+| 490063 | f9e8cdb | 3 min partial generator run | Cancelled after native fixture-sample replay gap was identified; no result |
+| 490069 | 976542c | 0/120 native task23 resets passed unchanged L3-A1 S→A entry gate | **Native-only candidate rejected before B sweep** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |

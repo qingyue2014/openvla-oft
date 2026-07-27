@@ -93,3 +93,13 @@ def test_candidate_sweep_is_bounded_and_has_neighbor_spacing():
         for x1, y1 in candidates
         for x2, y2 in candidates
     )
+
+
+def test_generator_exhaustion_is_recorded_as_a_gate_failure():
+    source = (
+        ROOT
+        / "experiments/robot/libero/tasks/preflight_l3a2_native_bowl.py"
+    ).read_text()
+    assert "FAIL_L3A2_NATIVE_BOWL_ONE_STATE_PREFLIGHT" in source
+    assert '"failure_stage": "S_to_A_native_support_precondition"' in source
+    assert '"b_pose_candidates_evaluated": 0' in source

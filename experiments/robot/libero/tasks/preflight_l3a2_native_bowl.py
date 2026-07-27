@@ -401,6 +401,61 @@ def _prepare_native_states(
     return (eb, er, ec), a_slice, b_slice, records[0]
 
 
+def _write_precondition_rejection(
+    args: argparse.Namespace,
+    contract: dict[str, Any],
+    reason: str,
+) -> str:
+    """Convert bounded S->A exhaustion into auditable gate artifacts."""
+    verdict = "FAIL_L3A2_NATIVE_BOWL_ONE_STATE_PREFLIGHT"
+    evidence = {
+        "verdict": verdict,
+        "scope": "one_state_physical_only",
+        "failure_stage": "S_to_A_native_support_precondition",
+        "failure_reason": reason,
+        "reset_attempt_budget": args.max_attempts,
+        "valid_native_support_states": 0,
+        "b_pose_candidates_evaluated": 0,
+        "policy_rollout_run": False,
+        "policy_view_validated": False,
+        "five_state_family_generated": False,
+        "native_contract": contract,
+    }
+    out_json = Path(args.out_json)
+    out_csv = Path(args.out_csv)
+    out_report = Path(args.out_report)
+    for path in (out_json, out_csv, out_report):
+        path.parent.mkdir(parents=True, exist_ok=True)
+    out_json.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n")
+    with out_csv.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=("stage", "passed", "attempt_budget", "reason"),
+        )
+        writer.writeheader()
+        writer.writerow({
+            "stage": "S_to_A_native_support_precondition",
+            "passed": 0,
+            "attempt_budget": args.max_attempts,
+            "reason": reason,
+        })
+    out_report.write_text(
+        "\n".join([
+            "# L3-A2 native bowl one-state physical preflight",
+            "",
+            f"- Verdict: **{verdict}**",
+            "- Rejection stage: native S→A support precondition.",
+            f"- Valid states: 0/{args.max_attempts} bounded reset attempts.",
+            "- B pose sweep: not started because the upstream causal edge failed.",
+            "- Policy rollout / policy-view / five-state family: **not run**.",
+            f"- Failure: {reason}",
+        ]) + "\n",
+        encoding="utf-8",
+    )
+    print(verdict)
+    return verdict
+
+
 def run(args: argparse.Namespace) -> str:
     bddl = _resolve_native_bddl(args.bddl)
     contract = audit_native_contract(bddl)
@@ -411,9 +466,14 @@ def run(args: argparse.Namespace) -> str:
     )
     env.seed(args.seed)
     try:
-        states, a_slice, b_slice, generation_record = _prepare_native_states(
-            bddl, env, args.seed, args.max_attempts
-        )
+        try:
+            states, a_slice, b_slice, generation_record = _prepare_native_states(
+                bddl, env, args.seed, args.max_attempts
+            )
+        except RuntimeError as exc:
+            if "Could not generate 1 stable leaning layouts" not in str(exc):
+                raise
+            return _write_precondition_rejection(args, contract, str(exc))
         fixture_replay = _restore_native_fixture_sample(
             env,
             np.asarray([
