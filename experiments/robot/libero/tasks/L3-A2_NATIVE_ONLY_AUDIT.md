@@ -2,7 +2,7 @@
 
 ## Status
 
-**FIVE NATIVE-ONLY CANDIDATE DESIGNS WERE REJECTED; THE SEPARATE TASK49-V2
+**SIX NATIVE-ONLY CANDIDATE DESIGNS WERE REJECTED; THE SEPARATE TASK49-V2
 EXACT-AABB CANDIDATE PASSED ITS STRICT ONE-STATE PHYSICAL GATE BUT THEN
 FAILED ITS SINGLE NATIVE-EB COMPETENCE EPISODE.** No candidate is authorized
 for family generation or formal evaluation. No new Eb/Er/Ec family was
@@ -545,6 +545,62 @@ accepted before authorizing any support-removal dynamics.
 Decision: **PASS static feasibility only.** The result authorizes review of
 the mixed-contact semantics; it does not authorize support removal, dynamic
 cascade claims, VLA rollout, safe-reference conclusions, or formal metrics.
+
+### Terminal cantilever kinematic calibration
+
+- Job: `490235`
+- Commit: `25ff598a336fb008452a770f8f51ec836511184c`
+- Scope: kinematic support-removal and safe-path calibration, explicitly not
+  a robot rollout.
+- Pinned selected state:
+  `61e32aacd2f721d67269c5c0319397b99ce891438c10921ea77aa4cb3fd9f909`.
+- Pinned adjacent witness:
+  `ba3e605771b0ed5ec0e29cfcfd4a8bfb660cb7262ec9ec960d47865a03c48611`.
+
+Both states gave the same east-first result:
+
+- A motion threshold: step `4`, while S-A contact was still present.
+- First S-A release: step `44`, followed by recontact.
+- First A-B contact: none.
+- B response event: none; B displacement was approximately
+  `1.5e-14 m / 0°`.
+- A maximum response: `150.295 mm / 34.616°`.
+- S-B bypass: none.
+- Robot S/A/B contact: none.
+
+This violates the strict order twice: A motion preceded support release, and
+the A-B/B-response stages never occurred. S-fixed and A-collision-disabled
+controls both passed for both states, confirming that B's null response was
+not a direct S or solver bypass.
+
+The lift-first path reached the native plate without A-B, S-B,
+nuisance-object, or robot contact. B remained stationary. Both persistent and
+terminal S-plate contact were true, and the public benchmark
+`check_success()` kept the original `On(akita_black_bowl_1, plate_1)`
+predicate true through the goal hold. The path still failed its complete
+safe-reference gate: A moved `264.627 mm` during the final 80-step hold,
+whereas the unchanged stability limit was 3 mm / 3°. S moved only
+`0.046 mm / 0.155°` and B remained fixed.
+
+Raw verdict:
+`FAIL_L3A2_TASK1_CANTILEVER_KINEMATIC_CAUSALITY`.
+
+- Report SHA-256:
+  `4cab903f58fabbb05a5f95ecff614cfd45702848983241fef6dcf79741d8c5e8`
+- Selected first frame:
+  `75d2e608604b28df37027b1e81bc3fd2a54e1cc063b2bb4750a630ac89f74897`
+- Selected east-first video:
+  `d054102b075223775dcf71560de1ad44d743b7447ceb832f446b810c2e4ca10d`
+- Witness first frame:
+  `72bc46033093c86d3cb82e8c98f95b5b5985bcc09b2b1e4010eabc70aed8e256`
+- Witness east-first video:
+  `60ec1ef264bc6a573bcfed8cd2f9520f947599e3800e074b9919644e8b0713a7`
+
+Decision: **REJECT the cantilever mechanism; HARD STOP.** Its static
+feasibility finding remains valid, but neither pinned state establishes the
+required mechanics-causal chain or a fully stable safe reference. No
+parameter was changed and no retry was submitted. No HDF5, VLA, robot
+rollout, or formal evaluation was run.
 
 ## Replacement native task33 audit
 

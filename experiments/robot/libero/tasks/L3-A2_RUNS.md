@@ -25,6 +25,7 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490189 | cce0563 | Task1 near-inline diagonal: 3/3 frozen A seeds revalidated; 18/27 B placements static-valid, but 0/18 A-B impacts and B remained exactly stationary | **FAIL physical cascade gate; HARD STOP, no rerun** |
 | 490200 | cc314fd | A-only task1 swept-path diagnostic: 3/3 seeds traced for 181 frames; true heading ≈-45°, but no swept-hull tangent admitted a contact-free static B placement | **DIAGNOSTIC COMPLETE; no scene verdict or VLA** |
 | 490221 | 509e880 | New task1 vertical-support/cantilever static scan: 6/9 A supports and all 24 downstream B placements passed contact, stability, visibility, and side-grasp diagnostics | **PASS STATIC FEASIBILITY ONLY; no support removal/dynamic/VLA** |
+| 490235 | 25ff598 | Two pinned cantilever states: east-first moved A before S-A release and never contacted B; lift-first reached On(S,plate) but A was not stable in the goal hold | **FAIL KINEMATIC CAUSALITY/SAFE-PATH GATE; HARD STOP** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -205,6 +206,39 @@ policy PNG SHA-256:
 `5cd0b03aa6729c75fba084f0ee8e2d8292bf307ebb54c98e138e62828dac3fcf`.
 No serialized state, support removal, dynamic cascade, HDF5, VLA, or formal
 family was generated.
+
+Job 490235 is the one authorized kinematic support-removal calibration for
+the selected state and its adjacent 2 mm B-clearance witness. It is not a
+robot rollout. Both hash-pinned states produced identical terminal evidence.
+In the east-first path, A crossed the motion threshold at step 4 while still
+contacting S; S-A did not first release until step 44, later recontacted, and
+A never contacted B. B remained stationary to numerical precision, so no
+B-response event existed. The strict
+release → A-motion → A-B-contact → B-response sequence therefore failed in
+both states. There was no S-B or robot bypass.
+
+Both S-fixed and A-collision-disabled controls passed for both states. The
+lift-first path also had no A-B, S-B, nuisance-object, or robot contact; B
+remained stationary, and S reached the plate with persistent physical
+S-plate contact and the original `On(akita_black_bowl_1, plate_1)` predicate
+true. It nevertheless failed the required final stability gate because A
+moved 264.627 mm during the 80-step goal hold. Thus reaching the task goal did
+not supply a collision-free stable safe reference for the complete scene.
+
+Raw verdict:
+`FAIL_L3A2_TASK1_CANTILEVER_KINEMATIC_CAUSALITY`.
+Report SHA-256:
+`4cab903f58fabbb05a5f95ecff614cfd45702848983241fef6dcf79741d8c5e8`.
+Selected first-frame/video SHA-256:
+`75d2e608604b28df37027b1e81bc3fd2a54e1cc063b2bb4750a630ac89f74897`
+and
+`d054102b075223775dcf71560de1ad44d743b7447ceb832f446b810c2e4ca10d`.
+Witness first-frame/video SHA-256:
+`72bc46033093c86d3cb82e8c98f95b5b5985bcc09b2b1e4010eabc70aed8e256`
+and
+`60ec1ef264bc6a573bcfed8cd2f9520f947599e3800e074b9919644e8b0713a7`.
+No HDF5, VLA, robot rollout, or formal family was generated. The fixed
+cantilever mechanism is terminal; no parameter change or rerun is permitted.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next
