@@ -379,6 +379,20 @@ def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     assert "task_description_override" not in text
 
 
+def test_task59_can_alignment_is_bounded_exact_and_requires_adjacent_witness():
+    text = (TASKS / "diagnose_l3a3_task59_can_alignment.py").read_text()
+    assert "GRID_M = (-0.004, -0.002, 0.0, 0.002, 0.004)" in text
+    assert "geom_world_z_bounds" in text
+    assert "compiled mesh vertices" in text
+    assert "geom_rbound" in text
+    assert "robust_adjacent_witness_count" in text
+    assert "any(neighbor in stable for neighbor in neighbors)" in text
+    assert '"candidate_state_exported": False' in text
+    assert '"vla_status": "NOT_RUN"' in text
+    assert "pretrained_checkpoint" not in text
+    assert "task_description_override" not in text
+
+
 def test_task57_candidate_entry_is_historic_visual_hard_stop():
     text = (TASKS / "generate_l3a3_task57_native_candidate.py").read_text()
     assert 'VERDICT = "INVALID_VISUAL_OCCLUSION"' in text

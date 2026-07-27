@@ -43,6 +43,13 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         artifacts=("experiments/logs/l3a3_task59_native_candidate",),
     ),
+    ("l3a3", "task59_can_alignment"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/diagnose_l3a3_task59_can_alignment.py",
+        ),
+        artifacts=("experiments/logs/l3a3_task59_can_alignment",),
+    ),
     ("l3a3", "task57_native_probe"): PhaseSpec(
         command=(
             "python",
