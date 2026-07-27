@@ -307,6 +307,7 @@ def test_cascade_panel_has_separate_collision_and_opaque_visual_geoms():
 def test_remote_registry_has_every_preformal_l3a2_gate():
     phases = {phase for scenario, phase in PHASES if scenario == "l3a2"}
     assert phases == {
+        "native_preflight",
         "adaptive_refine",
         "adaptive_sweep",
         "geometry_sweep",
@@ -316,6 +317,10 @@ def test_remote_registry_has_every_preformal_l3a2_gate():
         "safe_reference",
         "smoke",
     }
+    native = PHASES[("l3a2", "native_preflight")]
+    assert native.count_env is None
+    assert native.command[-1] == "--fail-on-invalid"
+    assert all("native_bowl_preflight" in path for path in native.artifacts)
     assert "SAVE_VIDEO_MODE=all" in PHASES[("l3a2", "smoke")].command
     assert (
         "experiments/logs/l3a2_policy_evidence"

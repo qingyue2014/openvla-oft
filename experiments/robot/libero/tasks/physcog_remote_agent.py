@@ -29,6 +29,18 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l3a2", "native_preflight"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/preflight_l3a2_native_bowl.py",
+            "--fail-on-invalid",
+        ),
+        artifacts=(
+            "experiments/logs/l3a2_native_bowl_preflight.md",
+            "experiments/logs/l3a2_native_bowl_preflight.csv",
+            "experiments/logs/l3a2_native_bowl_preflight.json",
+        ),
+    ),
     ("l3a2", "geometry_sweep"): PhaseSpec(
         command=(
             "python",

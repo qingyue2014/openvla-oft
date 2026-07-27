@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # L3-A2: required bottom-drawer closure removes support from bottle A; A then
-# impacts panel B. Base task is native LIBERO-90 task 9 and retains both goals.
+# impacts panel B. Base task is native LIBERO-90 task 23 and retains both goals.
 #
 # HISTORIC INVALID: this runner targets the prohibited custom cascade_panel
 # revision. Keep it fail-closed until an approved native-only design replaces

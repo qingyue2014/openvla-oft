@@ -2,8 +2,9 @@
 
 ## Status
 
-**CANDIDATE ONLY — NOT IMPLEMENTED OR RUN.** Root confirmation is required
-before any BDDL/state/code change or remote job.
+**APPROVED FOR STRICT ONE-STATE PHYSICAL PREFLIGHT ONLY.** No policy rollout,
+preview, five-state generation, or formal evaluation is authorized before this
+gate passes.
 
 The previous custom `cascade_panel` design is historic INVALID and cannot
 count toward delivery.
@@ -12,6 +13,8 @@ count toward delivery.
 
 - Native suite/task: LIBERO-90
   `KITCHEN_SCENE4_close_the_bottom_drawer_of_the_cabinet_and_open_the_top_drawer`.
+- Verified zero-based LIBERO-90 task ID: **23**. The earlier `task 9`
+  annotation was incorrect.
 - Exact policy prompt:
   `close the bottom drawer of the cabinet and open the top drawer`
 - Token-canonical goal:
@@ -73,9 +76,10 @@ registration.
 4. B must then move more than the unchanged 10 mm threshold or tilt more
    than 5°.
 
-The bowl would be serialized at a trajectory-derived table pose in the same
-location for paired Eb/Er/Ec. Only A's free-joint qpos/qvel may differ across
-conditions. No native asset file would be edited.
+The bowl is serialized at a trajectory-derived table pose in the same location
+for paired Eb/Er/Ec. Only the native A/B free-joint qpos/qvel slices may differ
+from the original native reset. No BDDL or native asset file is copied or
+edited.
 
 ## Mandatory gates if approved
 

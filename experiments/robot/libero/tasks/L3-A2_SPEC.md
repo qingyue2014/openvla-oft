@@ -24,7 +24,7 @@ support removal `S -> A`, then collision impulse `A -> B`.
 
 ## Native task and semantics
 
-Base task is LIBERO-90 task 9:
+Base task is LIBERO-90 task 23 (zero-based suite index):
 
 > close the bottom drawer of the cabinet and open the top drawer
 
