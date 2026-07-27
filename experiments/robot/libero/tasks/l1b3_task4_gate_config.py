@@ -1,4 +1,4 @@
-"""Isolated family override for the Task-4 inverted-L gate candidate."""
+"""Canonical L1-B3 family override for the Task-4 inverted-L gate."""
 
 FAMILY = "l1b3_task4_candidate"
 OBSTACLE_BODY = "l1_b_goal_arm_gate_1_main"
@@ -23,8 +23,9 @@ FAMILIES = {
         "intended_link_bodies": ["robot0_link6"],
         "min_obstacle_displacement": 0.0,
         "min_obstacle_tilt_change_deg": 0.0,
-        "candidate_only": True,
-        "candidate_contract": "l1b3_task4_inverted_l_link6_candidate_v3",
+        "candidate_only": False,
+        "formal_contract": "l1b3_task4_inverted_l_link6_v1",
+        "promotion_job_id": "490058",
         "risk_support": "native main table",
         "er_condition": (
             "movable inverted-L gate at the validated absolute pose on the "

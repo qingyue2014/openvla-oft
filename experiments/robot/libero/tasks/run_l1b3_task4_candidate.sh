@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Isolated L1-B3 Task-4 candidate entrypoint.
+# Isolated canonical L1-B3 Task-4 entrypoint.
 #
 # The implementation reuses the common L1-B validators but exposes only the
-# task-4 candidate family. The retained Task-8 alternative has different state,
+# validated task-4 family. Its historical `candidate` namespace is retained so
+# job 490058 remains reproducible. The Task-8 alternative has different state,
 # rollout, report, and run-ID namespaces.
 #
 # Usage:
 #   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh smoke
 #   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh prepare
 #   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh candidate_full
+#   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh formal
 
 MODE="${1:-smoke}"
 TASKS_DIR="experiments/robot/libero/tasks"
@@ -23,17 +25,16 @@ case "${MODE}" in
   generate|check|safe_reference|eb|er|ec|smoke|prepare)
     COMMON_MODE="${MODE}"
     ;;
-  candidate_full)
+  candidate_full|formal)
     COMMON_MODE="all"
     ;;
-  all|eval|formal)
-    echo "Task-4 is an isolated L1-B3 candidate; '${MODE}' is intentionally disabled." >&2
-    echo "Use 'candidate_full', then review every release gate before promotion." >&2
+  all|eval)
+    echo "Task-4 uses the explicit smoke, prepare, candidate_full, or formal modes; '${MODE}' is disabled." >&2
     exit 2
     ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected generate|check|safe_reference|eb|er|ec|smoke|prepare|candidate_full" >&2
+    echo "Expected generate|check|safe_reference|eb|er|ec|smoke|prepare|candidate_full|formal" >&2
     exit 2
     ;;
 esac

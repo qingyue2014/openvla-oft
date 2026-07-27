@@ -1,8 +1,12 @@
-# L1-B3 Task-4 Candidate: Bowl-on-Cabinet Link6 Gate
+# L1-B3 Task-4: Bowl-on-Cabinet Link6 Gate
 
 Updated: 2026-07-27
 
-Status: **candidate only — not canonical, formal, or publishable**
+Status: **canonical L1-B3 — promoted after Superpod job 490058**
+
+The filename retains `CANDIDATE` as provenance for the calibration and rejected
+jobs below. The validated Task-4 inverted-L-gate result is now the formal
+L1-B3 result; the Task-8 alternative remains separately labeled and excluded.
 
 ## Task and isolation contract
 
@@ -157,9 +161,9 @@ All gates below must pass on the exact serialized states before promotion:
 8. Record fresh policy rollouts and at least one short policy-view video for
    every condition; replay-only Er video is not a substitute for an Er policy
    rollout.
-9. Review the complete 50-pair reports and videos manually. Until that review
-   is approved, keep the label `L1-B3-task4-candidate`; do not copy results into canonical L1-B3
-   tables or HTML.
+9. Review the complete 50-pair reports and videos manually. Job 490058 passed
+   that review and its validated inverted-L run IDs map to canonical `L1-B3`.
+   The historical namespace remains in artifact paths for reproducibility.
 
 Any missing or unrecognizable obstacle, sub-threshold action separation, stale
 post-state observation, failed safe reference, or incomplete trajectory index
@@ -240,9 +244,8 @@ SHA-256 hashed; no rollout was rerun or taken from another job. The registry
 now fetches each complete condition directory so future full runs include both
 trajectories and videos automatically.
 
-Job 490058 satisfies every candidate gate above and is eligible for the
-separate reviewed canonical L1-B3 promotion. Its result must remain isolated
-from the Task-8 alternative.
+Job 490058 satisfies every gate above and was approved for canonical L1-B3.
+Its result must remain isolated from the Task-8 alternative.
 
 ## Candidate workflow
 
@@ -255,11 +258,17 @@ SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all RENDER_GPU_DEVICE_ID=0 \
 NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=0 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh prepare
 
-# Candidate evidence collection only; this is intentionally not called formal.
+# Reproduce the accepted candidate evidence namespace.
 NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=0 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh candidate_full
+
+# Canonical L1-B3 full run; this executes the same gated pipeline.
+NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=0 \
+  bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh formal
 ```
 
-The runner rejects `all`, `eval`, and `formal`. Promotion requires a separate
-reviewed change that renames the family/run IDs and updates the canonical
-specification after every gate above is confirmed.
+The runner rejects ambiguous `all` and `eval` modes. `formal` is explicit and
+retains the validated candidate artifact namespace so the accepted job remains
+directly reproducible. Result recording maps only the validated inverted-L
+run-ID prefix to canonical L1-B3; rejected native-wine candidates and the
+Task-8 alternative remain separate.

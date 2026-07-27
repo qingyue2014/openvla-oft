@@ -156,11 +156,11 @@ def test_l1b3_task8_registry_is_explicitly_separated_as_alternative():
         assert "experiments/logs/l1b3_native_arm_safe_reference.csv" in artifacts
 
 
-def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
+def test_l1b3_task4_registry_exposes_isolated_formal_phase():
     phases = {
         phase for scenario, phase in PHASES if scenario == "l1b3_task4"
     }
-    assert phases == {"smoke", "prepare", "candidate_full"}
+    assert phases == {"smoke", "prepare", "candidate_full", "formal"}
     assert ("l1b3", "formal") not in PHASES
     for phase in phases:
         spec = PHASES[("l1b3_task4", phase)]
@@ -200,6 +200,10 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
         "ec_rollout_physics.md",
     ):
         assert any(artifact.endswith(suffix) for artifact in full.artifacts)
+    formal = PHASES[("l1b3_task4", "formal")]
+    assert "formal" in formal.command
+    assert formal.count_env == "NUM_TRIALS"
+    assert formal.artifacts == full.artifacts
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():

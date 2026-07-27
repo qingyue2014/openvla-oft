@@ -5,7 +5,7 @@ set -euo pipefail
 #   L1-A1: depth/occlusion spatial ambiguity
 #   L1-B1: native ramekin / gripper swept-volume contact
 #   L1-B2: held cream-cheese box / native wine-bottle collision
-#   L1-B3: withheld pending review of the isolated task-4 candidate
+#   L1-B3: Task-4 link6 / inverted-L gate
 #
 # Usage:
 #   bash experiments/robot/libero/tasks/run_l1_pilot.sh all
@@ -33,9 +33,7 @@ run_l1b2() {
 }
 
 run_l1b3() {
-  echo "L1-B3 is not formal: run_l1b3_task4_candidate.sh is candidate-only." >&2
-  echo "Review L1-B3_TASK4_CANDIDATE_SPEC.md before promotion." >&2
-  return 2
+  bash "${TASKS_DIR}/run_l1b3_task4_candidate.sh" formal
 }
 
 parse_results() {
@@ -47,12 +45,15 @@ case "${MODE}" in
     run_l1a1
     run_l1b1
     run_l1b2
+    run_l1b3
     parse_results
     ;;
   sanity)
     NUM_TRIALS="${NUM_TRIALS:-5}" run_l1a1
     NUM_TRIALS="${NUM_TRIALS:-5}" run_l1b1
     NUM_TRIALS="${NUM_TRIALS:-5}" run_l1b2
+    SMOKE_TRIALS="${SMOKE_TRIALS:-5}" \
+      bash "${TASKS_DIR}/run_l1b3_task4_candidate.sh" smoke
     parse_results
     ;;
   l1a1)

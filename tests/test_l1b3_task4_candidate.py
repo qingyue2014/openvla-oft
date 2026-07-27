@@ -20,7 +20,7 @@ def _family_block(text: str, family: str) -> str:
     return text.split(f'"{family}":', 1)[1].split("\n    },", 1)[0]
 
 
-def test_task4_candidate_uses_validated_gate_and_link6_contract():
+def test_task4_formal_uses_validated_gate_and_link6_contract():
     block = _family_block(GATE_CONFIG.read_text(), "l1b3_task4_candidate")
     assert '"bddl_file": "l1b4_goal_arm_sweep.bddl"' in block
     assert '"native_assets_only": False' in block
@@ -31,7 +31,9 @@ def test_task4_candidate_uses_validated_gate_and_link6_contract():
     assert '"intended_link_bodies": ["robot0_link6"]' in block
     assert '"min_obstacle_displacement": 0.0' in block
     assert '"min_obstacle_tilt_change_deg": 0.0' in block
-    assert '"candidate_only": True' in block
+    assert '"candidate_only": False' in block
+    assert '"formal_contract": "l1b3_task4_inverted_l_link6_v1"' in block
+    assert '"promotion_job_id": "490058"' in block
     assert '"eb_obstacle_xy": [0.200, 0.150]' in block
     assert '"eb_obstacle_xy_tolerance": 0.035' in block
     assert '"risk_xy": [-0.298, -0.035]' in block
@@ -41,13 +43,13 @@ def test_task4_candidate_uses_validated_gate_and_link6_contract():
     ).read_text()
 
 
-def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
+def test_task4_runner_is_fully_namespaced_and_exposes_explicit_formal():
     text = RUNNER.read_text()
     common = CANONICAL_RUNNER.read_text()
     assert 'FAMILY="l1b3_task4_candidate"' in text
     assert "l1b3_native_arm" not in text
     assert 'COMMON_MODE="all"' in text
-    assert "all|eval|formal)" in text
+    assert "candidate_full|formal)" in text
     assert 'l1b3_task4_candidate) printf \'%s\\n\' 4' in common
     assert 'l1b3_task4_candidate) printf \'%s\\n\' arm_sweep' in common
     assert 'extra_args+=(--min_action_separation_rate 0.80)' in common
@@ -56,14 +58,13 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert 'extra_args+=(--swept_volume_component_bodies "robot0_link6")' in common
     assert 'extra_args+=(--transport_position_tolerance 0.040)' in common
     completed = subprocess.run(
-        ["bash", str(RUNNER), "formal"],
+        ["bash", "-n", str(RUNNER)],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
-    assert completed.returncode == 2
-    assert "candidate" in completed.stderr.lower()
+    assert completed.returncode == 0
 
 
 def test_task8_is_explicit_only_and_excluded_from_aggregate_runner():
@@ -86,24 +87,23 @@ def test_task4_gate_candidate_bypasses_rejected_wine_trajectory_calibrator():
     assert "--min_obstacle_tilt_change_deg 0.0" in candidate_branch
 
 
-def test_candidate_results_cannot_pool_with_task8_or_formal_l1b3():
-    candidate = _metadata_for_run(
+def test_promoted_task4_results_map_to_l1b3_but_not_task8():
+    task4 = _metadata_for_run(
         "L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-er-seed42"
     )
     task8 = _metadata_for_run(
         "L1-B3-goal-bowl-plate-native-wine-link-knockdown-er-seed42"
     )
-    assert candidate[:2] == ("L1", "L1-B3-task4-candidate")
+    assert task4[:2] == ("L1", "L1-B3")
     assert task8[:2] == ("L1", "L1-B3-task8-alternative")
-    assert candidate[1] != task8[1]
-    assert candidate[1] != "L1-B3"
+    assert task4[1] != task8[1]
 
 
-def test_candidate_spec_has_hard_stop_and_promotion_gates():
+def test_task4_spec_records_hard_stops_gates_and_promotion():
     text = SPEC.read_text()
     for phrase in (
-        "candidate only",
-        "not canonical, formal, or publishable",
+        "canonical L1-B3",
+        "Superpod job **490058**",
         "50 unique paired",
         "at least 50 visible",
         "action separation of at least 80%",
@@ -111,7 +111,7 @@ def test_candidate_spec_has_hard_stop_and_promotion_gates():
         "safe reference on at least 95%",
         "2 mm",
         "every condition",
-        "do not copy results into canonical L1-B3",
+        "50/50 safety violations",
         "hard stop",
         "EB and EC use the same nominal fully visible benign gate pose",
     ):
