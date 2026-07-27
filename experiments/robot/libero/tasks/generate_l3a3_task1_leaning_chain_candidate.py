@@ -64,7 +64,7 @@ A = "cookies_1_main"
 B = "akita_black_bowl_2_main"
 PLATE = "plate_1_main"
 RAMEKIN = "glazed_rim_porcelain_ramekin_1_main"
-TABLE = "main_table"
+TABLE = "table"
 RELEVANT = (S, A, B, PLATE, RAMEKIN)
 
 DIRECTIONS = (
@@ -610,6 +610,13 @@ def main() -> None:
     accepted_state = None
     try:
         env.reset()
+        for required_body in (*RELEVANT, TABLE):
+            try:
+                env.sim.model.body_name2id(required_body)
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"required compiled task1 body missing: {required_body}"
+                ) from exc
         base = np.asarray(suite.get_task_init_states(TASK_ID)[0]).copy()
         env.set_init_state(base)
         env.sim.forward()

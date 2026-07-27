@@ -385,6 +385,9 @@ def test_task1_leaning_chain_is_bounded_native_only_and_fail_closed():
     assert 'S = "akita_black_bowl_1_main"' in text
     assert 'A = "cookies_1_main"' in text
     assert 'B = "akita_black_bowl_2_main"' in text
+    assert 'TABLE = "table"' in text
+    assert "for required_body in (*RELEVANT, TABLE)" in text
+    assert "required compiled task1 body missing" in text
     assert "MAX_CANDIDATES" in text and "MAX_CANDIDATES != 144" in text
     assert "geom_world_aabb" in text
     assert "geom_rbound is never used" in text
