@@ -6,7 +6,7 @@ COUNT="${PI05_SMOKE_TRIALS:-1}"
 OPENPI_COMMIT="${OPENPI_COMMIT:-15a9616a00943ada6c20a0f158e3adb39df2ccac}"
 OPENPI_ROOT="${OPENPI_ROOT:-/home/drwqyhappy/04-mycode/openpi-${OPENPI_COMMIT:0:7}}"
 OPENPI_DATA_HOME="${OPENPI_DATA_HOME:-/project/trllmout/models}"
-OPENPI_CLIENT_ROOT="${OPENPI_CLIENT_ROOT:-/project/trllmout/models/openpi-client-${OPENPI_COMMIT:0:7}}"
+OPENPI_CLIENT_ROOT="${OPENPI_CLIENT_ROOT:-/project/trllmout/models/openpi-client-${OPENPI_COMMIT:0:7}-minimal}"
 CHECKPOINT_PATH="${OPENPI_DATA_HOME}/openpi-assets/checkpoints/pi05_libero"
 PORT="${PI05_PORT:-8000}"
 TASKS_DIR="experiments/robot/libero/tasks"
@@ -123,4 +123,3 @@ pathlib.Path(manifest_path).write_text(
 )
 print(json.dumps(manifest, indent=2, sort_keys=True))
 PY
-

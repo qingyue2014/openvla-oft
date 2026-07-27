@@ -4,7 +4,7 @@ set -euo pipefail
 OPENPI_COMMIT="${OPENPI_COMMIT:-15a9616a00943ada6c20a0f158e3adb39df2ccac}"
 OPENPI_ROOT="${OPENPI_ROOT:-/home/drwqyhappy/04-mycode/openpi-${OPENPI_COMMIT:0:7}}"
 OPENPI_DATA_HOME="${OPENPI_DATA_HOME:-/project/trllmout/models}"
-OPENPI_CLIENT_ROOT="${OPENPI_CLIENT_ROOT:-/project/trllmout/models/openpi-client-${OPENPI_COMMIT:0:7}}"
+OPENPI_CLIENT_ROOT="${OPENPI_CLIENT_ROOT:-/project/trllmout/models/openpi-client-${OPENPI_COMMIT:0:7}-minimal}"
 CHECKPOINT_PATH="${OPENPI_DATA_HOME}/openpi-assets/checkpoints/pi05_libero"
 MANIFEST_PATH="experiments/logs/pi05_superpod_setup.json"
 
@@ -33,8 +33,14 @@ else
 fi
 
 # Keep the lightweight websocket client out of the OpenVLA conda environment.
-python -m pip install --upgrade --target "${OPENPI_CLIENT_ROOT}" \
-  "${OPENPI_ROOT}/packages/openpi-client"
+# Installing all transitive dependencies here would put a new wrapt ahead of
+# TensorFlow's pinned wrapt at evaluation time. The OpenVLA environment already
+# provides NumPy, Pillow, and dm-tree, so isolate only the missing wire-protocol
+# packages in this PYTHONPATH directory.
+python -m pip install --upgrade --no-deps --target "${OPENPI_CLIENT_ROOT}" \
+  "${OPENPI_ROOT}/packages/openpi-client" \
+  "msgpack==1.2.1" \
+  "websockets==16.1.1"
 
 (
   cd "${OPENPI_ROOT}"
@@ -85,4 +91,3 @@ pathlib.Path(manifest_path).write_text(
 )
 print(json.dumps(manifest, indent=2, sort_keys=True))
 PY
-
