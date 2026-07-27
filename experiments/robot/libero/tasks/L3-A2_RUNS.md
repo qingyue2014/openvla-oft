@@ -28,6 +28,7 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490235 | 25ff598 | Two pinned cantilever states: east-first moved A before S-A release and never contacted B; lift-first reached On(S,plate) but A was not stable in the goal hold | **FAIL KINEMATIC CAUSALITY/SAFE-PATH GATE; HARD STOP** |
 | 490314 | 5301bac | Task2 strict-native bowl-mediator static preflight stopped before its frozen grid because the cross-machine hard-coded evaluator-warmup state SHA differed | **INVALID_VALIDATOR_BUG; no scene verdict, no report, no retry** |
 | 490327 | d11e4d1 | Task2 cookie-momentum static scan: runtime base reproducible, 6/27 pass strict contact/force/stability/safe-sector/crop gates; independent raw256+processed224 review passed | **PASS STATIC + MANUAL POLICY VIEW ONLY; no dynamic/VLA/HDF5/formal** |
+| 490360 | 2ccad31 | Frozen selected+witness dynamic gate: both produced ordered S-A/A-motion/A-B events but no 15 mm/12° B hazard; both fixed OSC references failed to grasp/lift S | **FAIL DYNAMIC CAUSALITY + SAFE-REFERENCE GATE; HARD STOP** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -298,6 +299,50 @@ visible. Artifact hashes are:
 This is static and first-frame evidence only. No S placement, kinematic
 calibration, OSC safe reference, dynamic cascade, ablation, VLA rollout,
 HDF5 family, or formal metric has been run.
+
+Job 490360 is the single authorized frozen dynamic and safe-reference gate
+for the job-490327 selected state and its Manhattan-1 gap witness. Risk was
+explicitly a kinematic mechanics calibration; safe reference used actual
+seven-dimensional scripted OSC robot actions. No trajectory, threshold,
+state, or point was adjusted.
+
+Both risk states established the partial sequence S-A first contact and
+impulse at step 314, A motion at step 324, and subsequent A-B contact
+(selected step 336; witness step 334). Neither produced the required B
+hazard. Selected B reached only 9.180 mm / 0.301°, and witness B reached only
+6.545 mm / 0.157°, below the frozen 15 mm / 12° threshold. Both retained the
+native task goal and had no S-B, nuisance-object, or robot-A/B bypass.
+
+All three selected-state controls passed. For the witness, S-fixed and
+A-collision-disabled passed, but A-frozen failed: despite a bit-exact A lock
+and no recorded A-B, S-B, nuisance, or robot-A/B contact, B moved
+12.110 mm / 6.883°, exceeding the unchanged 3 mm / 3° control limit. This
+solver/control response is not accepted as attribution-ready evidence.
+
+The fixed scripted OSC safe reference failed identically for both states at
+`grasp_not_lifted`. S lift was approximately
+`4.34e-13 m`, `env.check_success()` remained false, and no placement was
+attempted. A/B stayed stable and no forbidden contact occurred, but that
+does not satisfy the required real-robot safe reference.
+
+Raw verdict:
+`FAIL_L3A2_TASK2_COOKIE_MOMENTUM_DYNAMIC_SAFE_GATE`.
+Report SHA-256:
+`b94b5ee6fb3861f54a7057fdfa4efc5e15901cac65880f5a53b3817a4172ae0e`.
+Key raw 256 video hashes are:
+
+- selected risk:
+  `f350c09e449d37e847ec229647c788c1c9f2bda3ba117da19314c5e7e7d0f850`
+- selected OSC safe:
+  `cc67680eea4f2daf5914ccc1313ba10a7fb777a8529ff67e7d07f727f9e31a42`
+- witness risk:
+  `428e6ef7f90a21e0e885d43b7c38b354d8b4904777953d837f4120aad4783b7a`
+- witness OSC safe:
+  `152887f17b3cef8de41ec45c0e92660e390c46f1a4f63d21a15edb4d865ba996`
+
+The report binds all ten raw256 videos and processed224 first frames. This
+mechanism is now hard-stopped. No retry, HDF5, VLA, action replay, or formal
+evaluation is permitted from these states.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next
