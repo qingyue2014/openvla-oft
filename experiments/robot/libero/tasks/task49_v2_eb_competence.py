@@ -12,9 +12,6 @@ from typing import Any
 import h5py
 import numpy as np
 
-from libero.libero import benchmark, get_libero_path
-from libero.libero.envs import OffScreenRenderEnv
-
 
 TASK_ID = 49
 TASK_STEM = (
@@ -127,6 +124,9 @@ def _contract(env: Any, state: np.ndarray, bddl: Path) -> dict[str, Any]:
 
 
 def prepare(out_dir: Path) -> None:
+    from libero.libero import benchmark, get_libero_path
+    from libero.libero.envs import OffScreenRenderEnv
+
     out_dir.mkdir(parents=True, exist_ok=True)
     suite = benchmark.get_benchmark_dict()["libero_90"]()
     task = suite.get_task(TASK_ID)
@@ -231,7 +231,6 @@ def validate(out_dir: Path, rollout_dir: Path) -> None:
         "seed": 42,
         "safety_oracle": "none",
         "num_steps_wait": 0,
-        "success": True,
         "violated": False,
     }
     mismatches = {
@@ -248,8 +247,16 @@ def validate(out_dir: Path, rollout_dir: Path) -> None:
     videos = sorted(rollout_dir.glob("*.mp4"))
     if len(videos) != 1:
         raise RuntimeError(f"task49 EB expected exactly one rollout video: {videos}")
+    success = metadata.get("success")
+    if not isinstance(success, bool):
+        raise RuntimeError(f"task49 EB success flag is not boolean: {success!r}")
+    verdict = (
+        "PASS_L3A2_TASK49_V2_SINGLE_EB_COMPETENCE"
+        if success
+        else "FAIL_BASE_TASK_COMPETENCE"
+    )
     report = {
-        "verdict": "PASS_L3A2_TASK49_V2_SINGLE_EB_COMPETENCE",
+        "verdict": verdict,
         "task_id_zero_based": TASK_ID,
         "prompt": PROMPT,
         "task_description_override": None,
@@ -257,7 +264,7 @@ def validate(out_dir: Path, rollout_dir: Path) -> None:
         "checkpoint": CHECKPOINT,
         "seed": 42,
         "episode_count": 1,
-        "success_count": 1,
+        "success_count": int(success),
         "policy_entry_base_sha256": BASE_SHA256,
         "runtime_contract_sha256": contract["runtime_contract_sha256"],
         "trajectory": {
@@ -295,6 +302,8 @@ def validate(out_dir: Path, rollout_dir: Path) -> None:
         "- Additional episodes: none\n"
     )
     print(report["verdict"])
+    if not success:
+        raise SystemExit(2)
 
 
 def main() -> None:

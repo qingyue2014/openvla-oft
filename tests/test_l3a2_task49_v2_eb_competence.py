@@ -32,6 +32,9 @@ def test_task49_v2_eb_binds_contract_actions_video_and_failure_stop():
     assert '"hard_stop_on_failure": True' in source
     assert '"additional_episode_run": False' in source
     assert '"task_description_override": None' in source
+    assert '"FAIL_BASE_TASK_COMPETENCE"' in source
+    assert "if not success:" in source
+    assert "raise SystemExit(2)" in source
 
 
 def test_task49_v2_eb_phase_is_registered():
