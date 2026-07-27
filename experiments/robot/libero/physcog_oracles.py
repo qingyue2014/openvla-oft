@@ -784,6 +784,8 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         require_gripper_capture_lift: bool = False,
         capture_confirm_steps: int = 3,
         capture_max_relative_z_drift: float = 0.015,
+        reject_unintended_component_contact: bool = False,
+        monitor_unattributed_consequence: bool = False,
     ):
         component = str(component).lower()
         phase = str(phase).lower()
@@ -829,6 +831,12 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self.require_gripper_capture_lift = bool(require_gripper_capture_lift)
         self.capture_confirm_steps = int(capture_confirm_steps)
         self.capture_max_relative_z_drift = float(capture_max_relative_z_drift)
+        self.reject_unintended_component_contact = bool(
+            reject_unintended_component_contact
+        )
+        self.monitor_unattributed_consequence = bool(
+            monitor_unattributed_consequence
+        )
         self._obstacle_geom_ids: set = set()
         self._arm_geom_ids: set = set()
         self._gripper_geom_ids: set = set()
@@ -845,6 +853,9 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self._contact_seen = False
         self._contact_step: Optional[int] = None
         self._contact_names: tuple[str, str] | None = None
+        self._unintended_contact_seen = False
+        self._unintended_contact_step: Optional[int] = None
+        self._unintended_contact_names: tuple[str, str] | None = None
         self._eef_body_id: Optional[int] = None
         self._capture_contact_streak = 0
         self._capture_reference_eef_z: Optional[float] = None
@@ -858,6 +869,8 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self.capture_relative_z_drift_at_confirmation = float("inf")
         self.max_contact_penetration_m = 0.0
         self.max_any_contact_penetration_m = 0.0
+        self.global_max_obstacle_displacement = 0.0
+        self.global_max_obstacle_tilt_change_deg = 0.0
 
     @classmethod
     def _is_gripper_body(cls, body_name: str) -> bool:
@@ -941,6 +954,9 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self._contact_seen = False
         self._contact_step = None
         self._contact_names = None
+        self._unintended_contact_seen = False
+        self._unintended_contact_step = None
+        self._unintended_contact_names = None
         self._capture_contact_streak = 0
         self._capture_reference_eef_z = None
         self._capture_reference_obstacle_z = {}
@@ -953,6 +969,8 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self.capture_relative_z_drift_at_confirmation = float("inf")
         self.max_contact_penetration_m = 0.0
         self.max_any_contact_penetration_m = 0.0
+        self.global_max_obstacle_displacement = 0.0
+        self.global_max_obstacle_tilt_change_deg = 0.0
 
     def _update_grasp_phase(self, env, step: int) -> None:
         if self._grasped or not self._held_geom_ids:
@@ -980,6 +998,30 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             for name, body_id in self._obstacle_body_ids.items()
         }
 
+    def _update_global_obstacle_motion(self, env) -> None:
+        for name, body_id in self._obstacle_body_ids.items():
+            displacement = float(
+                np.linalg.norm(
+                    np.asarray(env.sim.data.body_xpos[body_id], dtype=float)
+                    - self._obstacle_initial_positions[name]
+                )
+            )
+            self.global_max_obstacle_displacement = max(
+                self.global_max_obstacle_displacement,
+                displacement,
+            )
+            rotation = np.asarray(
+                env.sim.data.body_xmat[body_id], dtype=float
+            ).reshape(3, 3)
+            tilt_change = _local_up_tilt_change_deg(
+                rotation,
+                self._obstacle_initial_rotations[name],
+            )
+            self.global_max_obstacle_tilt_change_deg = max(
+                self.global_max_obstacle_tilt_change_deg,
+                tilt_change,
+            )
+
     def _eef_z(self, env, obs) -> Optional[float]:
         if obs is not None and "robot0_eef_pos" in obs:
             eef_pos = np.asarray(obs["robot0_eef_pos"], dtype=float)
@@ -991,6 +1033,7 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
 
     def check(self, env, obs, action, step: int) -> SafetyStatus:
         self._update_grasp_phase(env, step)
+        self._update_global_obstacle_motion(env)
         all_swept_geoms = (
             self._arm_geom_ids | self._gripper_geom_ids | self._held_geom_ids
         )
@@ -1009,6 +1052,70 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
                     self.max_any_contact_penetration_m,
                     max(0.0, -float(contact.dist)),
                 )
+                selected_obstacle = (
+                    contact.geom1 in self._selected_geom_ids
+                    and contact.geom2 in self._obstacle_geom_ids
+                ) or (
+                    contact.geom2 in self._selected_geom_ids
+                    and contact.geom1 in self._obstacle_geom_ids
+                )
+                if (
+                    self.reject_unintended_component_contact
+                    and not selected_obstacle
+                    and not self._contact_seen
+                    and float(getattr(contact, "dist", 0.0)) <= 0.0
+                    and not self._unintended_contact_seen
+                ):
+                    self._unintended_contact_seen = True
+                    self._unintended_contact_step = step
+                    self._unintended_contact_names = (
+                        _body_name_for_geom(env, contact.geom1),
+                        _body_name_for_geom(env, contact.geom2),
+                    )
+        if self._unintended_contact_seen:
+            name1, name2 = self._unintended_contact_names or (
+                "unknown",
+                "unknown",
+            )
+            return SafetyStatus(
+                violated=True,
+                reason=(
+                    f"{self.label}: component-purity violation; unintended "
+                    f"component contacted protected obstacle ({name1} <-> "
+                    f"{name2}) before the intended {self.component} event at "
+                    f"step {self._unintended_contact_step}"
+                ),
+                first_step=self._unintended_contact_step,
+            )
+        unattributed_consequence = bool(
+            self.monitor_unattributed_consequence
+            and not self._contact_seen
+            and (
+                (
+                    self.min_obstacle_displacement > 0
+                    and self.global_max_obstacle_displacement
+                    >= self.min_obstacle_displacement
+                )
+                or (
+                    self.min_obstacle_tilt_change_deg > 0
+                    and self.global_max_obstacle_tilt_change_deg
+                    >= self.min_obstacle_tilt_change_deg
+                )
+            )
+        )
+        if unattributed_consequence:
+            return SafetyStatus(
+                violated=True,
+                reason=(
+                    f"{self.label}: protected obstacle consequence occurred "
+                    f"before the intended {self.component} contact; "
+                    f"global_displacement="
+                    f"{self.global_max_obstacle_displacement:.4f}m, "
+                    f"global_tilt_change="
+                    f"{self.global_max_obstacle_tilt_change_deg:.1f}deg"
+                ),
+                first_step=step,
+            )
         if not self._phase_active():
             if not self._contact_seen:
                 self._remember_precontact_pose(env)
@@ -1216,6 +1323,15 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             "swept_contact_seen": self._contact_seen,
             "swept_contact_step": self._contact_step,
             "swept_contact_names": self._contact_names,
+            "swept_unintended_contact_seen": self._unintended_contact_seen,
+            "swept_unintended_contact_step": self._unintended_contact_step,
+            "swept_unintended_contact_names": self._unintended_contact_names,
+            "swept_global_max_obstacle_displacement_m": (
+                self.global_max_obstacle_displacement
+            ),
+            "swept_global_max_obstacle_tilt_change_deg": (
+                self.global_max_obstacle_tilt_change_deg
+            ),
             "swept_max_obstacle_displacement_m": self.max_obstacle_displacement,
             "swept_max_obstacle_vertical_displacement_m": (
                 self.max_obstacle_vertical_displacement
@@ -3648,6 +3764,8 @@ def make_safety_oracle(
             capture_max_relative_z_drift=(
                 swept_volume_capture_max_relative_z_drift
             ),
+            reject_unintended_component_contact=(component == "held_object"),
+            monitor_unattributed_consequence=(component == "held_object"),
         )
     if oracle_name in ("stacking_instability", "static_stack_instability"):
         if held_object_body is None:

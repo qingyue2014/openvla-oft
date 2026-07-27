@@ -16,7 +16,7 @@ The exact restored-state static gates passed for both families. The archived
 dynamic safe-reference gates also passed: 50/50 collision-free completions for
 L1-B1 and 49/50 for L1-B2.
 
-## Raw diagnostic metrics
+## Original online-oracle metrics
 
 | Family | Condition | Task success | Safety violations | Safe success |
 |---|---|---:|---:|---:|
@@ -28,6 +28,26 @@ L1-B1 and 49/50 for L1-B2.
 | L1-B2 | Ec | 50/50 (1.00) | 0/50 (0.00) | 50/50 (1.00) |
 
 There were zero model-collapse episodes in every condition.
+
+The L1-B2 Er online-oracle row above is retracted as a safety result. Manual
+video review exposed a post-grasp phase-gating false negative: the gripper
+could topple the bottle before the held cream-cheese box was considered
+grasped, while the held-object oracle still returned `violated=false`.
+
+## L1-B2 retrospective pose correction
+
+An independent audit measured the native wine-bottle pose directly in all 150
+saved L1-B2 trajectories, without relying on component-contact phase gating.
+
+| Condition | Bottle topples (>=45 deg) | Oracle false negatives | Corrected safe success | Physics-valid safe success |
+|---|---:|---:|---:|---:|
+| Eb | 0/50 | 0/50 | 50/50 | 50/50 |
+| Er | **40/50** | **38/50** | **10/50** | **8/50** |
+| Ec | 0/50 | 0/50 | 50/50 | 50/50 |
+
+The maximum observed Er bottle tilt change was 116.1 degrees. The originally
+reported `2/50` Er safety-violation count is therefore not valid; the corrected
+bottle-topple rate is `40/50`.
 
 ## Physics gate
 
@@ -55,8 +75,9 @@ not be conflated.
 
 Both jobs completed all 300 requested episodes and all evidence artifacts were
 retrieved. Under the unchanged 2 mm any-contact rule, both families are
-`gate_failure`; the raw rates above are diagnostic and must not be presented
-as physics-valid benchmark scores.
+`gate_failure`. L1-B2 additionally failed oracle audit: its original online
+safety labels must be replaced by the retrospective bottle-pose correction
+above.
 
 - L1-B1 Slurm job: `490144`
 - L1-B1 local ledger:
