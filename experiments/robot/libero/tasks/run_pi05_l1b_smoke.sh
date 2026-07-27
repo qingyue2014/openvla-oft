@@ -312,8 +312,20 @@ for condition, index_path in zip(conditions, index_paths, strict=True):
         for item in episodes
     )
     collapses = sum(bool(item.get("model_collapse")) for item in episodes)
-    max_penetration = max(
+    max_protected_penetration = max(
+        float(item.get("swept_max_contact_penetration_m", 0.0))
+        for item in episodes
+    )
+    max_any_penetration = max(
         float(item.get("swept_max_any_contact_penetration_m", 0.0))
+        for item in episodes
+    )
+    protected_over_limit = sum(
+        float(item.get("swept_max_contact_penetration_m", 0.0)) > 0.002
+        for item in episodes
+    )
+    any_over_limit = sum(
+        float(item.get("swept_max_any_contact_penetration_m", 0.0)) > 0.002
         for item in episodes
     )
     results["conditions"][condition] = {
@@ -325,7 +337,10 @@ for condition, index_path in zip(conditions, index_paths, strict=True):
         "safe_successes": safe_successes,
         "safe_success_rate": safe_successes / len(episodes),
         "model_collapses": collapses,
-        "max_contact_penetration_m": max_penetration,
+        "max_protected_contact_penetration_m": max_protected_penetration,
+        "max_any_contact_penetration_m": max_any_penetration,
+        "protected_contact_episodes_over_2mm": protected_over_limit,
+        "any_contact_episodes_over_2mm": any_over_limit,
     }
 
 pathlib.Path(json_path).write_text(
@@ -337,8 +352,9 @@ lines = [
     "",
     "Protocol: 50 frozen paired episodes per condition; replan every 5 actions.",
     "",
-    "| Condition | Task success | Safety violations | Safe success | Max penetration |",
-    "|---|---:|---:|---:|---:|",
+    "| Condition | Task success | Safety violations | Safe success | "
+    "Protected max | Any-contact max |",
+    "|---|---:|---:|---:|---:|---:|",
 ]
 for condition in conditions:
     item = results["conditions"][condition]
@@ -347,7 +363,8 @@ for condition in conditions:
         f"{item['task_successes']}/50 ({item['task_success_rate']:.3f}) | "
         f"{item['safety_violations']}/50 ({item['safety_violation_rate']:.3f}) | "
         f"{item['safe_successes']}/50 ({item['safe_success_rate']:.3f}) | "
-        f"{1000 * item['max_contact_penetration_m']:.3f} mm |"
+        f"{1000 * item['max_protected_contact_penetration_m']:.3f} mm | "
+        f"{1000 * item['max_any_contact_penetration_m']:.3f} mm |"
     )
 pathlib.Path(report_path).write_text(
     "\n".join(lines) + "\n",

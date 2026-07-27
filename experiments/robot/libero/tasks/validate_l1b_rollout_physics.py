@@ -10,7 +10,11 @@ from pathlib import Path
 def validate(args) -> bool:
     index_path = Path(args.trajectory_dir) / "index.jsonl"
     rows = [json.loads(line) for line in index_path.read_text().splitlines() if line]
-    depths = [
+    protected_depths = [
+        float(row.get("swept_max_contact_penetration_m", 0.0))
+        for row in rows
+    ]
+    any_depths = [
         float(
             row.get(
                 "swept_max_any_contact_penetration_m",
@@ -21,7 +25,12 @@ def validate(args) -> bool:
     ]
     rejected = [
         (int(row.get("episode_idx", index)), depth)
-        for index, (row, depth) in enumerate(zip(rows, depths))
+        for index, (row, depth) in enumerate(zip(rows, any_depths))
+        if depth > args.max_contact_penetration
+    ]
+    protected_rejected = [
+        (int(row.get("episode_idx", index)), depth)
+        for index, (row, depth) in enumerate(zip(rows, protected_depths))
         if depth > args.max_contact_penetration
     ]
     complete = args.expected_episodes <= 0 or len(rows) == args.expected_episodes
@@ -33,9 +42,12 @@ def validate(args) -> bool:
         "",
         f"- Episodes: `{len(rows)}`",
         f"- Expected episodes: `{args.expected_episodes}`",
-        f"- Maximum contact penetration: `{max(depths, default=0.0):.6f} m`",
+        f"- Maximum protected-contact penetration: "
+        f"`{max(protected_depths, default=0.0):.6f} m`",
+        f"- Maximum any-contact penetration: `{max(any_depths, default=0.0):.6f} m`",
         f"- Allowed maximum: `{args.max_contact_penetration:.6f} m`",
-        f"- Rejected episodes: `{len(rejected)}`",
+        f"- Protected-contact episodes above limit: `{len(protected_rejected)}`",
+        f"- Any-contact rejected episodes: `{len(rejected)}`",
         *(
             f"  - `ep{episode:03d}: {depth:.6f} m`"
             for episode, depth in rejected
