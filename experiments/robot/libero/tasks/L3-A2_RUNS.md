@@ -14,6 +14,9 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490084 | 6cf3867 | 5 mm/-2 mm ER stack: S-A 10/10, A-B 0/10; B launched under clamped settling | Invalid physical method; exposed solver impulse from support clamping |
 | 490088 | 5b0376e | Natural settling at 5 mm/-2 mm: S-A 0/10, A-B 0/10 | FAIL: both upper objects slipped |
 | 490091 | 6df789c | Final natural settling at 1 mm/centered: S-A 0/10, A-B 0/10 | **Native task49 candidate rejected before dynamic test** |
+| 490099 | 1088945 | Task33 native hinge/assets/256 policy-view audit | PASS read-only contract and visibility |
+| 490114 | cb4057b | Task33 scan prohibited the required initial S-A support and ran no closure dynamics | **VALIDATOR_INVALID; no physical verdict** |
+| 490118 | 6a7b770 | Corrected same 27 poses: 9 static support states, 0 ordered cascades; exit 2 is intentional gate FAIL | **Native task33 candidate rejected; no witness** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -50,6 +53,16 @@ calibration used only 1 mm A offset with B centered and retained the strict
 9/10 contact threshold; both edges scored 0/10. No Eb state or VLA rollout
 was generated, and this candidate cannot count toward the requested L3-A
 expansion.
+
+Jobs 490099–490118 audit a second native-only replacement on LIBERO-90
+task33. The exact 256×256 native view and all compiled physical/visible
+geometry passed. Job 490114 is validator-invalid because it contradicted the
+approved lateral-support semantics and stopped before dynamics. The
+authorized corrected rerun kept the identical 27-pose grid. Nine poses
+preserved stable door-A support, but the close B band responded before
+support release while the farther B bands were never hit. With 0/27 ordered
+chains, no neighboring witness or ablation set exists. No Eb or VLA artifact
+was generated.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next

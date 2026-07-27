@@ -2,10 +2,11 @@
 
 ## Status
 
-**TWO NATIVE-ONLY CANDIDATES REJECTED BY STRICT ONE-STATE PHYSICAL
+**THREE NATIVE-ONLY CANDIDATES REJECTED BY STRICT ONE-STATE PHYSICAL
 PREFLIGHT.** No policy rollout, five-state generation, or formal evaluation
 was run. Task49 received only native and ER policy-entry still images; no Eb
-state was generated.
+state was generated. Task33 received only its official native policy-entry
+still image; no Eb state was generated.
 
 The previous custom `cascade_panel` design is historic INVALID and cannot
 count toward delivery.
@@ -194,3 +195,73 @@ robot swept-volume, and action-separation tests would be uninterpretable.
 
 Not generated or run: Eb, VLA rollout, dynamic causal validation, five-state
 family, safe reference, or formal metrics.
+
+## Replacement native task33 audit
+
+### Immutable task and asset contract
+
+- Native suite/task: LIBERO-90 `KITCHEN_SCENE6_close_the_microwave`.
+- Verified zero-based task ID: **33**.
+- Exact prompt: `close the microwave`.
+- Goal: `( :goal ( And ( Close microwave_1 ) ) )`.
+- Native BDDL SHA-256:
+  `97df87deffb264990bcb06b877deaace02d296c01de7cc5c312c7bfc30da3b00`.
+- Native objects: microwave S, porcelain mug A, white-yellow mug B.
+- Compiled physical/visible geometry counts:
+  microwave door 4/5, porcelain mug 22/1, white-yellow mug 39/1.
+
+The original BDDL and all three XML assets were hash-checked and left
+unchanged. The common baseline was official init-state 0 after ten
+evaluation-equivalent dummy actions.
+
+### Door topology and native visibility
+
+- Read-only job: `490099`
+- Commit: `1088945`
+- Actual policy-entry door joint:
+  `microwave_1_microjoint = -1.501553 rad`
+- Native joint range: `[-2.094, 0]` rad; closing increases qpos toward zero.
+- The door is vertical and side-hinged about local z. Its collision centroid
+  moves on a horizontal arc from approximately
+  `(-0.317, 0.088, 1.016)` open through
+  `(-0.106, 0.052, 1.016)` mid to
+  `(0.030, 0.217, 1.016)` closed.
+- Manual exact 256×256 policy-view result: PASS. Microwave, open door, and
+  both mugs are complete, recognizable, inside the frame, and not
+  robot-occluded.
+
+This topology can only provide lateral leaning support, not a horizontal
+gravity-support shelf.
+
+### Single bounded one-state scan and rejection
+
+The frozen 27-pose grid tested the native door lateral-support-release chain
+S → porcelain mug A → white-yellow mug B. Only A/B free-joint slices differed
+from the actual policy-entry baseline. Stability used 3 mm / 3°, terminal
+hazard used the unchanged 10 mm / 5°, and a passing family required an
+adjacent witness plus S no-close, A native-pose, and B-removed ablations.
+
+- Job `490114`, commit `cb4057b`: **VALIDATOR_INVALID; no dynamic verdict.**
+  The first implementation incorrectly prohibited initial S-A contact even
+  though that contact is the defining precondition of the approved lateral
+  support-removal mechanism. All candidates stopped before scripted closure.
+- Corrected job `490118`, commit `6a7b770`: 9/27 candidates had stable
+  initial S-A support with no initial A-B, S-B, or robot-A/B contact.
+  **0/27 passed the ordered causal chain.**
+- The runner labels job `490118` `command_failure` because the strict gate
+  intentionally exits with code 2 on a FAIL verdict. This is an intentional
+  scene-gate failure, not an infrastructure or command-execution defect.
+- At B x=0.025 m, A-B contact occurred at steps 2–4, while S-A support did
+  not release until steps 35–36 and A crossed the motion threshold at steps
+  31–33. The B response therefore preceded support release and is an invalid
+  near-contact bypass, not a released-mug cascade.
+- At B x=0.030 or 0.035 m, A moved while the door was still in contact and
+  S-A released at steps 35–37, but A never contacted B and B never moved.
+- No candidate had direct S-B contact or robot-A/B contact.
+
+Decision: **REJECT task33.** There is no passing pose and therefore no
+neighboring witness or meaningful ablation set. The permitted bounded grid is
+exhausted; no further pose tuning is allowed.
+
+Not generated or run: Eb, VLA rollout, five-state family, safe reference, or
+formal metrics.
