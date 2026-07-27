@@ -20,6 +20,7 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490125 | d8bdde4 | Separate task49-v2 exact-AABB B grid: 25/25 stable with witnesses; causal and ablation gates pass | **PASS strict one-state gate; no VLA** |
 | 490134 | c6a433f | Authorized single native task49 EB: 400 valid policy steps, target never moved, success false, no safety violation or collapse | **FAIL_BASE_TASK_COMPETENCE; HARD STOP, no retry** |
 | 490163 | e456d56 | Task1 read-only audit used BDDL fixture label `main_table` as a compiled body name; stopped before contract output | **INVALID_VALIDATOR_BUG; no scene verdict** |
+| 490166 | 1c5be44 | Corrected task1 exact post-wait native contract, actual support contacts, assets, 120-step hold, segmentation and 256 policy view | **PASS read-only/no-VLA audit** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -95,6 +96,18 @@ writing a contract or reaching any physical or policy-view gate. It therefore
 supports no scene conclusion. The replacement changes only that name mapping
 and adds an explicit required-compiled-body existence check; the task,
 protocol, assets, and gates remain identical.
+
+Job 490166 is the corrected read-only audit for native libero_spatial task1.
+It proves that the raw official reset is not the evaluator's policy-entry
+state: both bowls fall 71.593 mm during the exact ten dummy actions, then
+remain stationary for the next 120 steps. The serialized post-wait base is
+hash-pinned and all future states derived from it must run with evaluator wait
+zero. Actual contacts identify `table/table_collision`, not the flat stove,
+as the target bowl's carrying surface. Native group-0/group-1 geometry,
+segmentation visibility, and independent review of the exact 256 policy image
+all pass. The historical 50/50 native Eb result is bound as a native
+competence gate only. No physical cascade, VLA, or formal family was run in
+this job.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next

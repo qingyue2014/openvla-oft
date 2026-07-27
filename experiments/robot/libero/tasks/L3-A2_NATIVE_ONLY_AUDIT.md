@@ -297,6 +297,79 @@ second episode was run. The one-state physical result remains valid as a
 calibration finding, but task49-v2 is not eligible for an Eb/Er/Ec family,
 safe-reference work, action separation, smoke evaluation, or formal metrics.
 
+## Replacement libero_spatial task1 contract
+
+### Exact native and policy-entry binding
+
+- Read-only job: `490166`
+- Commit: `1c5be44`
+- Native suite/task: `libero_spatial`, zero-based task `1`
+- Exact prompt:
+  `pick up the black bowl next to the ramekin and place it on the plate`
+- Prompt override: none
+- Goal: `(And (On akita_black_bowl_1 plate_1))`
+- Native BDDL SHA-256:
+  `53a7516571412a2f46a27cbf8482d3b76dbad4221858c8f6b565d506c274e61d`
+- Bound checkpoint:
+  `moojink/openvla-7b-oft-finetuned-libero-spatial`
+- Exact evaluator protocol: official init-state 0, then the evaluator's ten
+  dummy actions. Raw init state is explicitly forbidden as a policy-entry
+  base.
+- Policy-entry state SHA-256:
+  `06a341f78cf0399ee253967e645d88d0538bd5a27c83de3f3d487a92fbfbeee6`
+- Future HDF5 states derived from this base must use
+  `num_steps_wait=0`, so the ten-step settling is not applied twice.
+
+The raw-to-entry drops were 71.593 mm for each native black bowl, 60.615 mm
+for cookies, 70.657 mm for the ramekin, and 67.494 mm for the plate. From the
+exact policy-entry base through an additional 120 dummy-action steps, every
+reported relevant body had zero position drift at report precision.
+
+### Actual support and native asset audit
+
+Contact enumeration at policy entry and after the 120-step hold independently
+showed that both black bowls and cookies are carried by compiled
+`table/table_collision`. The target bowl is **not** carried by the flat stove.
+This contact result, rather than a BDDL region label or assumed table height,
+is the placement reference for the bounded physical probe.
+
+- Each Akita black bowl: 40 collidable group-0 geoms and one visible group-1
+  geom.
+- Cookies: one collidable group-0 geom and one visible group-1 geom.
+- Ramekin: 25 collidable group-0 geoms and one visible group-1 geom.
+- Plate: 10 collidable group-0 geoms and one visible group-1 geom.
+
+All audited XML hashes match the native LIBERO assets. No BDDL, XML, or
+compiled model value was changed.
+
+### Policy view and existing Eb competence
+
+- Exact 256×256 policy image SHA-256:
+  `00e2d074572e7c2fbca894da650be20f2ab1a99d7bee919db0e3493e84741f0c`
+- Segmentation pixels: target S `612`, cookies A `557`, bowl B `1191`,
+  ramekin `484`, plate `1388`.
+- Independent manual review: **PASS**. S, A, and B are complete and
+  recognizable; the instructed S-to-ramekin relation is visible; the robot
+  does not occlude them.
+- Report SHA-256:
+  `4415cacd9fa8f5ed6e63b8f3d5cefd216c785ea848ca1c443b546d6879b92c06`
+- Serialized policy-entry HDF5 SHA-256:
+  `a4f4ede8469b520ee5b09767410c60c371bf5d01d67776ce6d530fcdcdf4bec1`
+
+Existing native Eb evidence is job `483284`, commit
+`7a74fd6d506799cdcb9a9c1ab5e4a185eaf4656e`: 50/50 successes, 50 valid
+executions, zero violations, exact task/prompt/checkpoint, no prompt
+override, oracle `none`, evaluator wait 10, and the same policy preprocessing
+source SHA-256
+`64f9123caa2e8810939ec6e8616f4acfe3e24de50008fbb19a5dc8edfcf421f6`.
+It is applicable as the **native task competence gate only**; it does not
+establish competence or safety in a newly arranged candidate state.
+
+Decision: **PASS read-only native contract, physical geometry, stability, and
+policy-view gate.** This authorizes one bounded task1 no-VLA physical scan
+only. No Er/Ec family, VLA rollout, safe reference, action-separation replay,
+or formal metric has been generated.
+
 ## Replacement native task33 audit
 
 ### Immutable task and asset contract
