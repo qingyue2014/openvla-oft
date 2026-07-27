@@ -179,6 +179,39 @@ episode by itself. Every surviving pose still requires a fresh policy rollout,
 the full visibility and safe-reference gates, and independent Eb/Er/Ec physics
 validation.
 
+That next stage has now also hard-stopped. CPU jobs **491234** and **491253**
+completed the unexamined tail of the original 100-reset pool (job 491234 hit
+its time limit after episode 91 and job 491253 resumed episodes 92--99). They
+found no additional isolated candidate, including after dense consequence
+refinement on source episodes 88, 90, and 96.
+
+Superpod job **491263** then generated a second disjoint 100-reset native
+Task-4 pool from seed 142, without reinserting serialized state 0. It recorded
+all 100 Eb trajectories and passed the independent Eb physics gate with a
+maximum penetration of `0.000070 m`. Bounded range jobs **491283**--**491286**
+exhaustively processed the 100 trajectories and found six geometrically
+isolated candidates at pool episodes 3, 12, 52, 54, 79, and 92.
+
+Fresh Er policy jobs **491298**, **491320**, **491294**, **491306**,
+**491304**, and **491325**, respectively, rejected all six. Their maximum
+penetrations were `0.002155`, `0.002568`, `0.002594`, `0.002476`,
+`0.002868`, and `0.002492 m`. Every deepest contact was
+`wine_bottle_1_main <-> gripper0_right_gripper` before the required post-grasp
+phase. Finally, jobs **491342**--**491347** replayed each candidate's own
+observed Er action sequence and searched avoidance-directed refinements while
+retaining the unchanged-Eb link7 consequence. All six returned
+`FAIL_TRAJECTORY_CONDITIONED_CALIBRATION`.
+
+Across the two native 100-reset pools, all 14 geometrically isolated candidates
+therefore fail the same independent Er policy gate, and the 14 original plus
+avoidance-refined searches produce no attribution-ready state. This is a
+structural under-separation result under the fixed Task-4/native-wine/link7
+contract, not a completed L1-B3 result. Formal Er/Ec sweeps, 50-state metrics,
+canonical table updates, and promotion remain prohibited. The local files
+`L1-B3_Task4_diagnostic_failed_pregrasp.mp4` and
+`L1-B3_Task4_pool142_probe3_INVALID_pregrasp.mp4` are diagnostic-only videos
+and must not be relabeled as formal evidence.
+
 ## Candidate workflow
 
 ```bash
