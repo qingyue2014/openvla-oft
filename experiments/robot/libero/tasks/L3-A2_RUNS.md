@@ -27,6 +27,7 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490221 | 509e880 | New task1 vertical-support/cantilever static scan: 6/9 A supports and all 24 downstream B placements passed contact, stability, visibility, and side-grasp diagnostics | **PASS STATIC FEASIBILITY ONLY; no support removal/dynamic/VLA** |
 | 490235 | 25ff598 | Two pinned cantilever states: east-first moved A before S-A release and never contacted B; lift-first reached On(S,plate) but A was not stable in the goal hold | **FAIL KINEMATIC CAUSALITY/SAFE-PATH GATE; HARD STOP** |
 | 490314 | 5301bac | Task2 strict-native bowl-mediator static preflight stopped before its frozen grid because the cross-machine hard-coded evaluator-warmup state SHA differed | **INVALID_VALIDATOR_BUG; no scene verdict, no report, no retry** |
+| 490327 | d11e4d1 | Task2 cookie-momentum static scan: runtime base reproducible, 6/27 pass strict contact/force/stability/safe-sector/crop gates; independent raw256+processed224 review passed | **PASS STATIC + MANUAL POLICY VIEW ONLY; no dynamic/VLA/HDF5/formal** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -251,6 +252,52 @@ policy image, dynamic result, HDF5, VLA rollout, or formal metric exists.
 Consequently neither the local geometry-only smoke result nor any inferred
 candidate count may be reported as Superpod evidence. The authorized job was
 not retried and its threshold/grid were not changed.
+
+Job 490327 is the replacement native task2 cookie-momentum static-only
+calibration. It preserves the exact prompt
+`pick up the black bowl from table center and place it on the plate` and
+native goal `On(akita_black_bowl_1, plate_1)`. The two independent
+same-process evaluator reconstructions were bit-exact with runtime state
+SHA-256
+`57a932465e59f11604bf20e9c72f3a86c161ae7ebb2ffc709de2612d7d0876de`;
+there is no cross-machine state-hash assertion.
+
+Six of the frozen 27 candidates passed. The selected point is direction 0°,
+cookie radial offset 55 mm, and cookie-ramekin surface gap 8 mm. Its paired
+state SHA-256 is
+`f15ed9ac1b079b3f8936655096f7c0defbb5b41e43775489c11f38242e0dc304`.
+The Manhattan-1 passing witness changes only the gap to 5 mm; its paired
+state SHA-256 is
+`101a56b112e1f4dae39d763f2813188eac1f2b5264e7a209e38655880f96bab1`.
+Both hashes bind states whose only baseline differences are the native
+cookies and ramekin free-joint qpos/qvel slices.
+
+For the selected point, all four required support contacts persisted and
+every forbidden initial/hold contact remained false. The cookie-ramekin
+projected gap was 7.987 mm. The analytically maximal opposite plate sector
+kept the complete S collision footprint inside the plate collision bounds
+with a 2 mm boundary margin and left 2.880 mm projected clearance to A.
+S retained an open top grasp corridor and all four open side corridors.
+Support forces were finite and within the frozen limits.
+
+The independent manual review of both archived raw 256×256 and actual
+processed 224×224 policy RGB is **PASS**: S, A, B, and the plate are all
+clear and recognizable and do not touch the image boundary. A partially
+occludes the plate, but the analytically safe opposite sector remains
+visible. Artifact hashes are:
+
+- report:
+  `d2f932b552a032634eb05ca72514ece3397806ad6ba69d9b13c88504bd59368c`
+- raw 256 PNG:
+  `85b7469f947caa48ef87feb485918cd3a8ecf876fc9a239db0779a18e7690be6`
+- resized 224 PNG:
+  `e2410437eee7c8a4c4fef9d5b6f5de2ec9e63381103e848f260a22e81019d20c`
+- processed 224 PNG:
+  `d5bbbfe427fbb9efa15bb5fb99a8342abf5830410e83d96e57b83c6401ab31c2`
+
+This is static and first-frame evidence only. No S placement, kinematic
+calibration, OSC safe reference, dynamic cascade, ablation, VLA rollout,
+HDF5 family, or formal metric has been run.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next
