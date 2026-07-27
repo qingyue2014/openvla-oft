@@ -105,8 +105,8 @@ DRAWER_CLOSED_QPOS = 0.0025
 # inspection then showed the gripper brushing the bottle top for the original
 # 105-degree directed tilt. Trials that translated the contact point lost
 # stable drawer support, so the final candidate preserves that validated point
-# and rotates the directed tilt by 30 degrees to move the bottle top clear of
-# the gripper corridor. It remains a serialized-pose intervention on the
+# and rotates the directed tilt by 45 degrees to move the bottle top farther
+# clear of the gripper corridor. It remains a serialized-pose intervention on the
 # native wine bottle and still has to pass every runtime and scripted-close
 # gate.
 # Every generated state still has to pass the runtime, contact-contamination,
@@ -115,7 +115,7 @@ DEFAULT_LEAN_DX = 0.147925
 DEFAULT_LEAN_DY = -0.060125
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -40.0
-DEFAULT_LEAN_DIRECTION_DEG = 75.0
+DEFAULT_LEAN_DIRECTION_DEG = 60.0
 
 
 def _tilt_quat(axis: str, deg: float) -> np.ndarray:
