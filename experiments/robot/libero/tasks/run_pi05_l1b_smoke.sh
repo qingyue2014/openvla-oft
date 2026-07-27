@@ -8,7 +8,13 @@ OPENPI_ROOT="${OPENPI_ROOT:-/home/drwqyhappy/04-mycode/openpi-${OPENPI_COMMIT:0:
 OPENPI_DATA_HOME="${OPENPI_DATA_HOME:-/project/trllmout/models}"
 OPENPI_CLIENT_ROOT="${OPENPI_CLIENT_ROOT:-/project/trllmout/models/openpi-client-${OPENPI_COMMIT:0:7}-minimal}"
 CHECKPOINT_PATH="${OPENPI_DATA_HOME}/openpi-assets/checkpoints/pi05_libero"
-PORT="${PI05_PORT:-8000}"
+if [[ -n "${PI05_PORT:-}" ]]; then
+  PORT="${PI05_PORT}"
+elif [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  PORT="$((20000 + SLURM_JOB_ID % 20000))"
+else
+  PORT=8000
+fi
 TASKS_DIR="experiments/robot/libero/tasks"
 SERVER_LOG="experiments/logs/${FAMILY}_pi05_server.log"
 MANIFEST_PATH="experiments/logs/${FAMILY}_pi05_smoke_manifest.json"
@@ -79,6 +85,38 @@ cleanup() {
   wait "${server_pid}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
+
+# Do not let the websocket client connect to an unrelated service that happens
+# to own the requested port. The policy server must both stay alive and open
+# this job-specific endpoint before the evaluator starts.
+server_ready=false
+for _ in $(seq 1 900); do
+  if ! kill -0 "${server_pid}" >/dev/null 2>&1; then
+    echo "pi0.5 policy server exited before becoming ready" >&2
+    tail -200 "${SERVER_LOG}" >&2 || true
+    exit 1
+  fi
+  if python - "${PORT}" <<'PY'
+import socket
+import sys
+
+try:
+    with socket.create_connection(("127.0.0.1", int(sys.argv[1])), timeout=1):
+        pass
+except OSError:
+    raise SystemExit(1)
+PY
+  then
+    server_ready=true
+    break
+  fi
+  sleep 2
+done
+if [[ "${server_ready}" != "true" ]]; then
+  echo "pi0.5 policy server did not become ready within 1800 seconds" >&2
+  tail -200 "${SERVER_LOG}" >&2 || true
+  exit 1
+fi
 
 export PYTHONPATH="${OPENPI_CLIENT_ROOT}:${PYTHONPATH:-}"
 export MODEL_FAMILY=pi05

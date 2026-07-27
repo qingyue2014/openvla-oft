@@ -1087,6 +1087,37 @@ def command_status(args: argparse.Namespace) -> int:
     return returncode or 1
 
 
+def command_cancel(args: argparse.Namespace) -> int:
+    """Cancel the exact Slurm job recorded in a run ledger."""
+    run_dir = Path(args.run_dir)
+    ledger_path = run_dir / "run.json"
+    ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+    cfg = _config_from_ledger(ledger)
+    job_id = str(ledger["job_id"])
+    if re.fullmatch(r"[0-9]+", job_id) is None:
+        raise SystemExit(f"invalid job id in ledger: {job_id!r}")
+    remote = " && ".join(
+        (
+            "source /etc/profile.d/modules.sh",
+            "module load slurm",
+            shell_join(("scancel", job_id)),
+        )
+    )
+    result = _remote_capture(cfg, remote)
+    output = result.stdout + result.stderr
+    print(output, end="")
+    if result.returncode == 0:
+        ledger["classification"] = "cancelled"
+        ledger["scheduler_state"] = "CANCELLED"
+        ledger["cancelled_at_utc"] = dt.datetime.now(dt.timezone.utc).isoformat()
+        ledger_path.write_text(
+            json.dumps(ledger, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(f"[physcog-agent] cancelled job_id={job_id}")
+    return result.returncode
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", default=os.environ.get("PHYSCOG_HOST", "superpod.ust.hk"))
@@ -1148,6 +1179,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     status.add_argument("--run-dir", required=True)
     status.set_defaults(func=command_status)
+
+    cancel = subparsers.add_parser(
+        "cancel", help="Cancel the exact Slurm job recorded in a run ledger"
+    )
+    cancel.add_argument("--run-dir", required=True)
+    cancel.set_defaults(func=command_cancel)
     return parser
 
 
