@@ -373,13 +373,34 @@ def _tower_hold_gate(
         "robot_A": _contact(env, robot, geoms["A"]),
         "robot_B": _contact(env, robot, geoms["B"]),
     }
-    contact_seen = {"S_A": initial["S_A"], "A_B": initial["A_B"]}
+    support_contact_counts = {
+        "S_A": int(initial["S_A"]),
+        "A_B": int(initial["A_B"]),
+    }
+    forbidden_seen = {
+        "S_B": initial["S_B"],
+        "robot_A": initial["robot_A"],
+        "robot_B": initial["robot_B"],
+    }
     max_drift = {role: 0.0 for role in ("S", "A", "B")}
     max_tilt = {role: 0.0 for role in ("S", "A", "B")}
     for _ in range(steps):
         env.sim.step()
-        contact_seen["S_A"] |= _contact(env, geoms["S"], geoms["A"])
-        contact_seen["A_B"] |= _contact(env, geoms["A"], geoms["B"])
+        support_contact_counts["S_A"] += int(
+            _contact(env, geoms["S"], geoms["A"])
+        )
+        support_contact_counts["A_B"] += int(
+            _contact(env, geoms["A"], geoms["B"])
+        )
+        forbidden_seen["S_B"] |= _contact(
+            env, geoms["S"], geoms["B"]
+        )
+        forbidden_seen["robot_A"] |= _contact(
+            env, robot, geoms["A"]
+        )
+        forbidden_seen["robot_B"] |= _contact(
+            env, robot, geoms["B"]
+        )
         for role in max_drift:
             pose = _pose(env, bodies[role])
             max_drift[role] = max(
@@ -394,19 +415,23 @@ def _tower_hold_gate(
                 max_tilt[role],
                 abs(float(pose["tilt_deg"] - starts[role]["tilt_deg"])),
             )
+    support_contact_fraction = {
+        name: count / float(steps + 1)
+        for name, count in support_contact_counts.items()
+    }
     passed = bool(
-        contact_seen["S_A"]
-        and contact_seen["A_B"]
-        and not initial["S_B"]
-        and not initial["robot_A"]
-        and not initial["robot_B"]
+        initial["S_A"]
+        and initial["A_B"]
+        and min(support_contact_fraction.values()) >= 0.95
+        and not any(forbidden_seen.values())
         and max(max_drift.values()) <= 0.003
         and max(max_tilt.values()) <= 5.0
     )
     return {
         "passed": passed,
         "initial_contacts": initial,
-        "support_contacts_seen": contact_seen,
+        "support_contact_fraction": support_contact_fraction,
+        "forbidden_contact_seen": forbidden_seen,
         "max_drift_m": max_drift,
         "max_tilt_change_deg": max_tilt,
     }
@@ -475,6 +500,7 @@ def _run_release(
     trace = []
     max_displacement = {role: 0.0 for role in ("S", "A", "B")}
     max_tilt = {role: 0.0 for role in ("S", "A", "B")}
+    s_b_bypass = False
     total_steps = move_steps + settle_steps
     for step in range(1, total_steps + 1):
         fraction = min(1.0, step / move_steps)
@@ -492,6 +518,7 @@ def _run_release(
             env.sim.forward()
 
         sa = _contact(env, geoms["S"], geoms["A"])
+        s_b_bypass |= _contact(env, geoms["S"], geoms["B"])
         deltas = {}
         tilts = {}
         for role in ("S", "A", "B"):
@@ -545,6 +572,7 @@ def _run_release(
     return {
         "events": events,
         "strictly_ordered": ordered,
+        "S_B_bypass": s_b_bypass,
         "max_displacement_m": max_displacement,
         "max_tilt_change_deg": max_tilt,
         "bounded_S_motion": max_displacement["S"] <= distance_m + 0.005,
@@ -658,6 +686,7 @@ def main() -> None:
         base_pass = bool(entry["passed"] and base_hold["passed"])
 
         candidates = []
+        eligible = []
         winner = None
         if base_pass:
             for direction_name, direction in DIRECTIONS.items():
@@ -732,6 +761,7 @@ def main() -> None:
                             if (
                                 not release["strictly_ordered"]
                                 or not release["bounded_S_motion"]
+                                or release["S_B_bypass"]
                             ):
                                 continue
                             a_hold = _run_release(
@@ -756,20 +786,57 @@ def main() -> None:
                                 and a_hold["max_tilt_change_deg"]["B"] < 12.0
                             )
                             row["controls_pass"] = controls_pass
-                            row["passed"] = controls_pass
+                            row["single_candidate_pass"] = controls_pass
                             if controls_pass:
-                                winner = {
-                                    "row": row,
-                                    "state": risk_state,
-                                    "direction": direction,
-                                }
-                                break
-                        if winner is not None:
-                            break
-                    if winner is not None:
-                        break
-                if winner is not None:
-                    break
+                                eligible.append(
+                                    {
+                                        "row": row,
+                                        "state": risk_state,
+                                        "direction": direction,
+                                    }
+                                )
+
+        # A selected layout needs a one-grid-step witness under the same
+        # direction. This prevents a single metastable point from passing.
+        lean_index = {
+            value: index for index, value in enumerate(LEAN_DEGREES)
+        }
+        gap_index = {
+            value: index for index, value in enumerate(SIDE_GAPS_M)
+        }
+        butter_index = {
+            value: index for index, value in enumerate(BUTTER_SHIFTS_M)
+        }
+        for item in eligible:
+            row = item["row"]
+            witnesses = []
+            for other in eligible:
+                if other is item:
+                    continue
+                candidate = other["row"]
+                if candidate["direction"] != row["direction"]:
+                    continue
+                grid_distance = (
+                    abs(
+                        lean_index[candidate["lean_deg"]]
+                        - lean_index[row["lean_deg"]]
+                    )
+                    + abs(
+                        gap_index[candidate["side_gap_m"]]
+                        - gap_index[row["side_gap_m"]]
+                    )
+                    + abs(
+                        butter_index[candidate["butter_shift_m"]]
+                        - butter_index[row["butter_shift_m"]]
+                    )
+                )
+                if grid_distance == 1:
+                    witnesses.append(candidate["risk_state_sha256"])
+            row["adjacent_witness_state_sha256"] = witnesses
+            row["robust_adjacent_witness"] = bool(witnesses)
+            row["passed"] = bool(witnesses)
+            if winner is None and witnesses:
+                winner = item
 
         states = {}
         artifacts = {}
@@ -849,6 +916,7 @@ def main() -> None:
             and pairing["passed"]
             and condition_results["ER"]["strictly_ordered"]
             and condition_results["ER"]["bounded_S_motion"]
+            and not condition_results["ER"]["S_B_bypass"]
             and all(
                 item["initial_hold"]["passed"]
                 for item in condition_results.values()
