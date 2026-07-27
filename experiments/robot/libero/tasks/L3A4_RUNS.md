@@ -526,3 +526,38 @@ Because no point passed the physical hold, the ordered validator did not run
 candidate visibility or grasp-corridor gates and exported no RGB, segmentation
 mask, or NPZ. No release, dynamic chain, or VLA ran. The vertical overhang is
 therefore rejected as an unstable initial scene.
+
+### Cookie cantilever toward the native goal plate
+
+Job `490231`, source commit `45c25d6`, tested a distinct native-only role
+assignment on exact zero-based `libero_spatial` task 1: S=target bowl1,
+A=cookies, and B=the task's goal plate. The exact native prompt and goal
+`(On akita_black_bowl_1 plate_1)` were unchanged. The policy-entry base
+SHA-256 was
+`06a341f78cf0399ee253967e645d88d0538bd5a27c83de3f3d487a92fbfbeee6`,
+with future evaluator wait fixed to zero.
+
+The frozen 36-point audit used four cardinal directions, A offsets of 12, 20,
+and 28 mm, and B clearances of 2, 6, and 10 mm. Each candidate used 40 scratch
+settle steps to derive only A/B qpos, then an exact-state 240-step settle gate
+and an independent 80-step replay hold.
+
+Verdict: **FAIL_L3A4_COOKIE_GOAL_PLATE_STATIC**.
+
+- 240-step settle pass: 3/36;
+- independent 80-step hold pass: 0/36;
+- visibility/grasp pass: 0/36; selected state and artifacts: none.
+
+The closest three points were direction -x, 12 mm A offset, at all three B
+gaps. Their 240-step gate had 96.68% S/A occupancy, A drift 1.606 mm, A tilt
+change 0.265 degrees, B/table occupancy 100%, and no forbidden contact.
+However, exact replay over the independent 80-step window had only 90.12%
+S/A occupancy, below the frozen 95% persistence threshold.
+
+Across the grid, three candidates developed A/B contact, three A/ramekin
+contact, nine B/ramekin contact, and two S/B bypass. Native policy-camera
+segmentation contained S/A/B pixel counts of 612/557/1388, but because no
+candidate passed the physical hold, no candidate RGB or segmentation image
+was exported. Release, dynamic, VLA, and HDF5 execution were all false. This
+candidate hard-stops at the static gate and must not be reported as a valid
+L3-A4 scene.
