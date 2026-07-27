@@ -150,7 +150,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "env",
             "RENDER_GPU_DEVICE_ID=1",
-            "SAVE_VIDEO_MODE=none",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIOLATION_VIDEOS=10",
+            "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10",
             "bash",
             "experiments/robot/libero/tasks/run_l1b_swept.sh",
             "l1b6_native_held_object",
@@ -169,9 +172,9 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b6_native_held_object_ec_rollout_physics.md",
             "experiments/robot/libero/tasks/l1b6_native_held_object_pairing.json",
             "experiments/robot/libero/tasks/l1b_swept_preview/l1b6_native_held_object",
-            "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-eb/trajectories",
-            "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-er/trajectories",
-            "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-ec/trajectories",
+            "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-eb",
+            "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-er",
+            "rollouts/libero_goal/L1-B6-goal-cream-cheese-native-wine-bottle-knockdown-ec",
         ),
     ),
     ("l1b6", "ec_repair"): PhaseSpec(
@@ -254,7 +257,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "env",
             "RENDER_GPU_DEVICE_ID=1",
-            "SAVE_VIDEO_MODE=none",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIOLATION_VIDEOS=10",
+            "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10",
             "bash",
             "experiments/robot/libero/tasks/run_l1b_swept.sh",
             "l1b7_native_arm",
@@ -271,9 +277,9 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b7_native_arm_ec_rollout_physics.md",
             "experiments/robot/libero/tasks/l1b7_native_arm_pairing.json",
             "experiments/robot/libero/tasks/l1b_swept_preview/l1b7_native_arm",
-            "rollouts/libero_goal/L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-eb/trajectories",
-            "rollouts/libero_goal/L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-er/trajectories",
-            "rollouts/libero_goal/L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-ec/trajectories",
+            "rollouts/libero_goal/L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-eb",
+            "rollouts/libero_goal/L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-er",
+            "rollouts/libero_goal/L1-B7-goal-bowl-cabinet-native-wine-link-knockdown-ec",
         ),
     ),
     # L1-A2R occluded corridor hazard: the perception increment on l1b7.
@@ -326,7 +332,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=(
             "env",
             "RENDER_GPU_DEVICE_ID=1",
-            "SAVE_VIDEO_MODE=none",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIOLATION_VIDEOS=10",
+            "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10",
             "bash",
             "experiments/robot/libero/tasks/run_l1b_swept.sh",
             "l1a2r_occluded_arm",
@@ -342,7 +351,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1a2r_occluded_arm_er_rollout_physics.md",
             "experiments/robot/libero/tasks/l1a2r_occluded_arm_pairing.json",
             "experiments/robot/libero/tasks/l1b_swept_preview/l1a2r_occluded_arm",
-            "rollouts/libero_goal/L1-A2R-goal-bowl-cabinet-occluded-wine-link-knockdown-er/trajectories",
+            "rollouts/libero_goal/L1-A2R-goal-bowl-cabinet-occluded-wine-link-knockdown-er",
         ),
     ),
     ("l1a2r", "attribution"): PhaseSpec(
@@ -361,6 +370,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",
         artifacts=(
+            "experiments/logs/l3a1_native_preflight.md",
             "experiments/logs/l3a1_risk_check.md",
             "experiments/logs/l3a1_stable_check.md",
             "experiments/robot/libero/tasks/l3a1_drawer_bottle_risk_initial_states.hdf5",
@@ -382,6 +392,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "risk", "safe_reference"),
         count_env="SAFE_REF_STATES",
         artifacts=(
+            "experiments/logs/l3a1_native_preflight.md",
             "experiments/logs/l3a1_safe_reference.md",
             "experiments/logs/l3a1_safe_reference.csv",
         ),
@@ -390,6 +401,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "smoke"),
         count_env="SMOKE_TRIALS",
         artifacts=(
+            "experiments/logs/l3a1_native_preflight.md",
             "experiments/logs/experiment_records.csv",
             "experiments/logs/experiment_records.md",
             "experiments/logs/review_videos.md",
@@ -401,15 +413,22 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ),
     ("l3a1", "formal"): PhaseSpec(
         command=(
-            "env", "FAMILIES=l3a1", "SEEDS=42", "SAVE_VIDEO_MODE=none", "bash",
+            "env", "FAMILIES=l3a1", "SEEDS=42",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIOLATION_VIDEOS=10", "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10", "bash",
             "experiments/robot/libero/tasks/run_paper_matrix.sh", "full",
         ),
         count_env="NUM_TRIALS",
         artifacts=(
+            "experiments/logs/l3a1_native_preflight.md",
             "experiments/logs/l3a1_attribution.md",
             "experiments/logs/experiment_records.csv",
             "experiments/logs/experiment_records.md",
             "experiments/logs/result_tables.md",
+            "rollouts/libero_10/L3-A1-drawer-bottle-eb-native-seed42",
+            "rollouts/libero_10/L3-A1-drawer-bottle-er-support-removal-seed42",
+            "rollouts/libero_10/L3-A1-drawer-bottle-ec-self-supporting-seed42",
         ),
     ),
     ("l1a2", "check"): PhaseSpec(
@@ -455,7 +474,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "env",
             "FAMILIES=l1a2",
             "SEEDS=42",
-            "SAVE_VIDEO_MODE=none",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIOLATION_VIDEOS=10",
+            "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10",
             "bash",
             "experiments/robot/libero/tasks/run_paper_matrix.sh",
             "full",
@@ -466,6 +488,9 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/experiment_records.csv",
             "experiments/logs/experiment_records.md",
             "experiments/logs/result_tables.md",
+            "rollouts/libero_spatial/L1-A1-native-baseline-seed42",
+            "rollouts/libero_spatial/L1-A2-upright-cookie-occlusion-seed42",
+            "rollouts/libero_spatial/L1-A2-upright-cookie-matched-safe-seed42",
         ),
     ),
 }
@@ -535,7 +560,10 @@ def build_batch_script(
         f"cd {shlex.quote(cfg.remote_repo)}",
         f"export PATH={shlex.quote(cfg.remote_python_bin)}:$PATH",
         *(
-            [f"export PYTHONPATH={shlex.quote(cfg.libero_root)}:${{PYTHONPATH:-}}"]
+            [
+                f"export LIBERO_ROOT={shlex.quote(cfg.libero_root)}",
+                f"export PYTHONPATH={shlex.quote(cfg.libero_root)}:${{PYTHONPATH:-}}",
+            ]
             if cfg.libero_root else []
         ),
         "export PYTHONUNBUFFERED=1",

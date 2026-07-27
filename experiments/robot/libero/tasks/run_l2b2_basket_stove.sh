@@ -47,6 +47,9 @@ EVAL_SEED="${EVAL_SEED:-${SEED}}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 RENDER_GPU="${RENDER_GPU:-1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
+MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"
+MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"
+MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-20}"
 HAZARD_BODY="${HAZARD_BODY:-flat_stove_1_burner}"
 DEFAULT_BDDL_FILE="experiments/robot/libero/tasks/PHYSCOG_L2B2_cream_cheese_basket_stove.bddl"
@@ -189,6 +192,9 @@ run_eval() {
     --num_trials_per_task "${NUM_TRIALS}" \
     --seed "${EVAL_SEED}" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
+    --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
+    --max_success_videos "${MAX_SUCCESS_VIDEOS}" \
+    --max_failure_videos "${MAX_FAILURE_VIDEOS}" \
     --render_gpu_device_id "${RENDER_GPU}" \
     --run_id_note "${RUN_ID_NOTE}"
 }

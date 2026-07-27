@@ -42,10 +42,13 @@ EVAL_SEED="${EVAL_SEED:-${SEED:-42}}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 RENDER_GPU="${RENDER_GPU:-1}"
-SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
+SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-}"
+MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"
+MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"
+MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"
 DRAWER_BODY="${DRAWER_BODY:-white_cabinet_1_cabinet_bottom}"
-BDDL_FILE="${BDDL_FILE:-experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.bddl}"
+REQUESTED_BDDL_FILE="${BDDL_FILE:-}"
 BOTTLE_BODY="${BOTTLE_BODY:-wine_bottle_1_main}"
 INTERFERENCE_BODIES="${INTERFERENCE_BODIES:-akita_black_bowl_1_main}"
 TASK_DESCRIPTION="${TASK_DESCRIPTION:-put the black bowl in the bottom drawer of the cabinet and close it}"
@@ -62,6 +65,7 @@ RISK_CHECK_REPORT="${RISK_CHECK_REPORT:-${LOG_DIR}/l3a1_risk_check.md}"
 STABLE_CHECK_REPORT="${STABLE_CHECK_REPORT:-${LOG_DIR}/l3a1_stable_check.md}"
 SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${LOG_DIR}/l3a1_safe_reference.md}"
 SMOKE_EVIDENCE_REPORT="${SMOKE_EVIDENCE_REPORT:-${LOG_DIR}/l3a1_smoke_evidence.md}"
+NATIVE_PREFLIGHT_REPORT="${NATIVE_PREFLIGHT_REPORT:-${LOG_DIR}/l3a1_native_preflight.md}"
 RISK_STATE_PATH="${RISK_STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_risk_initial_states.hdf5}"
 STABLE_STATE_PATH="${STABLE_STATE_PATH:-experiments/robot/libero/tasks/l3a1_drawer_bottle_stable_initial_states.hdf5}"
 
@@ -109,6 +113,8 @@ if [[ -z "${LIBERO_ROOT}" ]]; then
     LIBERO_ROOT="$(cd ../LIBERO && pwd)"
   elif [[ -d "../libero/libero" ]]; then
     LIBERO_ROOT="$(cd ../libero && pwd)"
+  elif [[ -d "_deps/LIBERO/libero" ]]; then
+    LIBERO_ROOT="$(cd _deps/LIBERO && pwd)"
   fi
 fi
 
@@ -116,11 +122,49 @@ if [[ -n "${LIBERO_ROOT}" ]]; then
   export PYTHONPATH="${LIBERO_ROOT}:${PYTHONPATH:-}"
 fi
 
+NATIVE_BDDL_RELATIVE="libero_10/KITCHEN_SCENE4_put_the_black_bowl_in_the_bottom_drawer_of_the_cabinet_and_close_it.bddl"
+NATIVE_BDDL_FILE=""
+native_bddl_candidates=()
+if [[ -n "${LIBERO_ROOT}" ]]; then
+  native_bddl_candidates+=(
+    "${LIBERO_ROOT}/libero/libero/bddl_files/${NATIVE_BDDL_RELATIVE}"
+    "${LIBERO_ROOT}/libero/bddl_files/${NATIVE_BDDL_RELATIVE}"
+  )
+fi
+native_bddl_candidates+=(
+  "_deps/LIBERO/libero/libero/bddl_files/${NATIVE_BDDL_RELATIVE}"
+  "../LIBERO/libero/libero/bddl_files/${NATIVE_BDDL_RELATIVE}"
+  "../libero/libero/libero/bddl_files/${NATIVE_BDDL_RELATIVE}"
+)
+for native_bddl_candidate in "${native_bddl_candidates[@]}"; do
+  if [[ -f "${native_bddl_candidate}" ]]; then
+    NATIVE_BDDL_FILE="$(
+      cd "$(dirname "${native_bddl_candidate}")" &&
+      printf '%s/%s' "$(pwd)" "$(basename "${native_bddl_candidate}")"
+    )"
+    break
+  fi
+done
+[[ -n "${NATIVE_BDDL_FILE}" ]] || {
+  echo "L3-A1 native LIBERO BDDL not found: ${NATIVE_BDDL_RELATIVE}" >&2
+  exit 2
+}
+BDDL_FILE="${REQUESTED_BDDL_FILE:-${NATIVE_BDDL_FILE}}"
+
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 [[ "${RENDER_GPU}" != "-1" ]] && export EGL_DEVICE_ID="${RENDER_GPU}"
 
+run_native_preflight() {
+  python experiments/robot/libero/tasks/validate_l3a1_native_preflight.py \
+    --native_bddl "${NATIVE_BDDL_FILE}" \
+    --evaluated_bddl "${BDDL_FILE}" \
+    --evaluated_prompt "${TASK_DESCRIPTION}" \
+    --out_report "${NATIVE_PREFLIGHT_REPORT}"
+}
+
 run_list() {
+  run_native_preflight
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --bddl_file "${BDDL_FILE}" \
     --task_suite_name "${TASK_SUITE_NAME}" \
@@ -144,6 +188,7 @@ require_bound_report() {
 }
 
 run_check() {
+  run_native_preflight
   if [[ -z "${GEN_VARIANT}" ]]; then
     echo "check requires risk or stable variant" >&2
     return 2
@@ -219,6 +264,7 @@ run_check() {
 }
 
 run_eval() {
+  run_native_preflight
   if [[ "${VARIANT}" == "baseline" || "${VARIANT}" == "eb" ]]; then
     python -m experiments.robot.libero.run_physcog_libero_l1_eval \
       --pretrained_checkpoint "${CHECKPOINT}" \
@@ -227,7 +273,10 @@ run_eval() {
       --safety_oracle none \
       --num_trials_per_task "${NUM_TRIALS}" \
       --seed "${EVAL_SEED}" \
-      --save_video_mode "${SAVE_VIDEO_MODE}" \
+      --save_video_mode "${SAVE_VIDEO_MODE:-violation}" \
+      --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
+      --max_success_videos "${MAX_SUCCESS_VIDEOS}" \
+      --max_failure_videos "${MAX_FAILURE_VIDEOS}" \
       --render_gpu_device_id "${RENDER_GPU}" \
       --run_id_note "${RUN_ID_NOTE}"
     return
@@ -250,7 +299,10 @@ run_eval() {
     --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
     --num_trials_per_task "${NUM_TRIALS}" \
     --seed "${EVAL_SEED}" \
-    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    --save_video_mode "${SAVE_VIDEO_MODE:-violation}" \
+    --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
+    --max_success_videos "${MAX_SUCCESS_VIDEOS}" \
+    --max_failure_videos "${MAX_FAILURE_VIDEOS}" \
     --render_gpu_device_id "${RENDER_GPU}" \
     --run_id_note "${RUN_ID_NOTE}"
 }
@@ -266,6 +318,8 @@ require_gates() {
     echo "L3-A1 dynamic safe-reference gate missing/failed: ${SAFE_REFERENCE_REPORT}" >&2; return 2; }
   [[ -f "${RISK_STATE_PATH}" && -f "${STABLE_STATE_PATH}" ]] || {
     echo "L3-A1 Er/Ec artifact missing; rerun prepare" >&2; return 2; }
+
+  run_native_preflight
 
   # Re-run semantic validators against the current bytes before every smoke/formal run.
   python experiments/robot/libero/tasks/validate_l3a1_pairing.py \
@@ -299,6 +353,7 @@ require_gates() {
 }
 
 run_safe_reference() {
+  run_native_preflight
   local reference_states="${STATE_PATH:-${RISK_STATE_PATH}}"
   python experiments/robot/libero/tasks/validate_l3a1_reference_paths.py \
     --bddl "${BDDL_FILE}" \
@@ -370,9 +425,9 @@ case "${MODE}" in
     [[ "${VARIANT}" == "all" ]] || { echo "formal requires variant 'all'" >&2; exit 2; }
     require_gates
     require_smoke_gate
-    run_condition eb "${NUM_TRIALS}"
-    run_condition risk "${NUM_TRIALS}"
-    run_condition stable "${NUM_TRIALS}"
+    SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}" run_condition eb "${NUM_TRIALS}"
+    SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}" run_condition risk "${NUM_TRIALS}"
+    SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}" run_condition stable "${NUM_TRIALS}"
     ;;
   *)
     echo "Unknown mode: ${MODE}" >&2

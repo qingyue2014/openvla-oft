@@ -175,6 +175,10 @@ def test_er_base_preservation_gate_rejects_non_bottle_drift(tmp_path):
 
 def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     text = RUNNER.read_text()
+    assert "validate_l3a1_native_preflight.py" in text
+    assert 'BDDL_FILE="${REQUESTED_BDDL_FILE:-${NATIVE_BDDL_FILE}}"' in text
+    assert "PHYSCOG_L3A1_bowl_drawer_bottle.bddl" not in text
+    assert "PASS_L3A1_NATIVE_ONLY_PREFLIGHT" not in text
     assert "--support_baseline_on_activation True" in text
     assert "--support_activate_on_gripper_contact False" in text
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
@@ -184,6 +188,13 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert 'LEAN_DY="${LEAN_DY:--0.185}"' in text
     assert 'LEAN_DEG="${LEAN_DEG:--22.0}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
+    assert 'MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"' in text
+    assert 'MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"' in text
+    assert 'MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"' in text
+    assert text.count('SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}" run_condition') == 3
+    assert '--max_violation_videos "${MAX_VIOLATION_VIDEOS}"' in text
+    assert '--max_success_videos "${MAX_SUCCESS_VIDEOS}"' in text
+    assert '--max_failure_videos "${MAX_FAILURE_VIDEOS}"' in text
 
 
 def test_artifact_binding_covers_bytes_count_and_geometry(tmp_path):

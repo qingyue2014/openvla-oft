@@ -206,6 +206,12 @@ case "${MODE}" in
         do_tables
         ;;
     full)
+        # Formal evidence retention is outcome-stratified per condition.
+        # The evaluator applies each cap independently.
+        export SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
+        export MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"
+        export MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"
+        export MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"
         do_seed_loop "${NUM_TRIALS}" "seed" "${SEEDS}"
         do_attribution
         do_tables

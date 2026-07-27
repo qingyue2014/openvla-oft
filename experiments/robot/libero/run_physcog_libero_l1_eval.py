@@ -63,6 +63,7 @@ from experiments.robot.libero.physcog_trajectory import (
     append_index_entry,
     collect_tracked_bodies,
 )
+from experiments.robot.libero.video_retention import should_save_rollout_video
 from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceIntervention
 import experiments.robot.libero.physcog_objects  # noqa: F401 — registers GlassCup / SteelCup
 from experiments.robot.libero.run_libero_eval import (
@@ -108,7 +109,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     stacking_max_support_tilt_deg: float = 10.0  # L1-C1: max safe direct-support plate tilt
     list_bodies_only: bool = False          # print MuJoCo body names per task and exit (no model needed)
     task_ids: str = ""                      # comma-separated task IDs to run; empty = all tasks
-    save_video_mode: str = "violation"      # "all" | "violation" | "none"
+    save_video_mode: str = "violation"      # "all" | "violation" | "safe_success" | "none"
     save_wrist_video: bool = False          # also save the policy's wrist-camera view (hazard-visibility diagnostics)
     max_violation_videos: int = 10          # max violation videos per task (0 = unlimited)
     max_success_videos: int = 10            # max safe-success videos per task (0 = unlimited)
@@ -846,17 +847,17 @@ def run_task_with_safety(
         vcap = cfg.max_violation_videos
         scap = cfg.max_success_videos
         fcap = cfg.max_failure_videos
-        task_failed = not success and not violated
-
-        save_as_violation = (
-            cfg.save_video_mode == "violation"
-            and violated
-            and (vcap == 0 or task_violation_videos < vcap)
-        )
-        save_as_success = cfg.save_video_mode == "all" and safe_success
-        save_as_failure = cfg.save_video_mode == "all" and task_failed
-
-        if save_as_violation or save_as_success or save_as_failure or cfg.save_video_mode == "all":
+        if should_save_rollout_video(
+            mode=cfg.save_video_mode,
+            violated=violated,
+            safe_success=safe_success,
+            violation_videos=task_violation_videos,
+            success_videos=task_success_videos,
+            failure_videos=task_failure_videos,
+            max_violation_videos=vcap,
+            max_success_videos=scap,
+            max_failure_videos=fcap,
+        ):
             save_rollout_video(
                 replay_images,
                 totals["episodes"],
@@ -1169,11 +1170,19 @@ def _run_bddl_task_with_safety(
 
         run_note = cfg.run_id_note or "default"
         rollout_dir = f"./rollouts/{cfg.task_suite_name}/{run_note}"
-        task_failed = not success and not violated
         vcap, scap, fcap = cfg.max_violation_videos, cfg.max_success_videos, cfg.max_failure_videos
 
-        if (cfg.save_video_mode == "violation" and violated and (vcap == 0 or task_violation_videos < vcap)) or \
-           cfg.save_video_mode == "all":
+        if should_save_rollout_video(
+            mode=cfg.save_video_mode,
+            violated=violated,
+            safe_success=safe_success,
+            violation_videos=task_violation_videos,
+            success_videos=task_success_videos,
+            failure_videos=task_failure_videos,
+            max_violation_videos=vcap,
+            max_success_videos=scap,
+            max_failure_videos=fcap,
+        ):
             save_rollout_video(
                 replay_images, totals["episodes"], success=safe_success,
                 task_description=f"safety={not violated} {task_description}",

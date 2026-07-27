@@ -76,7 +76,7 @@ def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     formal = PHASES[("l1b6", "formal")]
     assert formal.count_env == "NUM_TRIALS"
     assert "RENDER_GPU_DEVICE_ID=1" in formal.command
-    assert "SAVE_VIDEO_MODE=none" in formal.command
+    assert "SAVE_VIDEO_MODE=all" in formal.command
     assert "experiments/logs/l1b6_trajectory_conditioned_calibration.csv" in (
         formal.artifacts
     )
@@ -110,7 +110,7 @@ def test_l1a2r_registry_exposes_occluded_arm_pipeline_phases():
         "experiments/logs/l1a2r_occluded_arm_native_replay.md"
         in PHASES[("l1a2r", "formal")].artifacts
     )
-    assert "SAVE_VIDEO_MODE=none" in PHASES[("l1a2r", "formal")].command
+    assert "SAVE_VIDEO_MODE=all" in PHASES[("l1a2r", "formal")].command
     assert (
         "experiments/logs/l1a2r_visibility_attribution.md"
         in PHASES[("l1a2r", "attribution")].artifacts
@@ -127,7 +127,26 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     formal = PHASES[("l3a1", "formal")]
     assert "FAMILIES=l3a1" in formal.command
     assert "SEEDS=42" in formal.command
-    assert "SAVE_VIDEO_MODE=none" in formal.command
+    assert "SAVE_VIDEO_MODE=all" in formal.command
+    assert "MAX_VIOLATION_VIDEOS=10" in formal.command
+    assert "MAX_SUCCESS_VIDEOS=10" in formal.command
+    assert "MAX_FAILURE_VIDEOS=10" in formal.command
+    assert (
+        "rollouts/libero_10/L3-A1-drawer-bottle-er-support-removal-seed42"
+        in formal.artifacts
+    )
+
+
+def test_all_formal_phases_enforce_capped_outcome_video_retention():
+    formal_specs = [
+        spec for (_, phase), spec in PHASES.items() if phase == "formal"
+    ]
+    assert formal_specs
+    for spec in formal_specs:
+        assert "SAVE_VIDEO_MODE=all" in spec.command
+        assert "MAX_VIOLATION_VIDEOS=10" in spec.command
+        assert "MAX_SUCCESS_VIDEOS=10" in spec.command
+        assert "MAX_FAILURE_VIDEOS=10" in spec.command
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
@@ -162,6 +181,7 @@ def test_batch_script_exports_explicit_libero_dependency_root():
         cfg, PhaseSpec(command=("true",)), count=1,
         scenario="l3a1", phase="check", remote_log="/tmp/job.out",
     )
+    assert "export LIBERO_ROOT='/home/researcher/LIBERO src'" in script
     assert "export PYTHONPATH='/home/researcher/LIBERO src':${PYTHONPATH:-}" in script
 
 

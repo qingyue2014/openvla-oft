@@ -23,7 +23,6 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
 )
 from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states import (
     BOTTLE_BODY,
-    DEFAULT_BDDL,
     DRAWER_BODY_CANDIDATES,
     DRAWER_CLOSED_QPOS,
     DRAWER_JOINT_CANDIDATES,
@@ -116,7 +115,7 @@ def _replay_runtime_wait(env, oracle):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--states", required=True)
-    parser.add_argument("--bddl", default=DEFAULT_BDDL)
+    parser.add_argument("--bddl", required=True)
     parser.add_argument("--task_description", default="put the black bowl in the bottom drawer of the cabinet and close it")
     parser.add_argument("--num_states", type=int, default=0, help="0 validates every state")
     parser.add_argument("--close_steps", type=int, default=60)

@@ -51,7 +51,6 @@ from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
     _table_xy_bounds,
 )
 
-DEFAULT_BDDL = "experiments/robot/libero/tasks/PHYSCOG_L3A1_bowl_drawer_bottle.bddl"
 # The leaning bottle needs ~300 sim steps to fully settle against the drawer
 # (probe showed angular speed still ~2 rad/s at step 80, converging to ~0 only
 # by ~step 300). Settle long enough that the SAVED state is genuinely at rest,
@@ -585,7 +584,7 @@ def generate_states(
 
 def main():
     parser = argparse.ArgumentParser(description="Generate L3-A1 drawer/bottle initial states")
-    parser.add_argument("--bddl", default=DEFAULT_BDDL)
+    parser.add_argument("--bddl", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--num_states", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)

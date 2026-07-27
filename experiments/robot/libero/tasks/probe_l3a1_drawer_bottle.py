@@ -32,7 +32,6 @@ from experiments.robot.libero.physcog_oracles import _find_free_joint_vadr
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import _body_pos, _find_body
 from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states import (
     BOTTLE_BODY,
-    DEFAULT_BDDL,
     DEFAULT_LEAN_DEG,
     DEFAULT_LEAN_DX,
     DEFAULT_LEAN_DY,
@@ -112,7 +111,7 @@ def _find_joint_qadr(sim, *candidates) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Probe the L3-A1 drawer/bottle layout")
-    parser.add_argument("--bddl", default=DEFAULT_BDDL)
+    parser.add_argument("--bddl", required=True)
     parser.add_argument("--variant", choices=("risk", "stable"), default="risk")
     parser.add_argument("--out_dir", default="experiments/robot/libero/tasks/l3a1_drawer_bottle_debug")
     parser.add_argument("--resolution", type=int, default=512)

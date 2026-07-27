@@ -281,8 +281,12 @@ def test_runner_refreshes_long_lived_egl_contexts_for_formal_runs():
     evaluator = Path("experiments/robot/libero/run_physcog_libero_l1_eval.py").read_text()
     assert 'ENV_RECREATE_INTERVAL="${ENV_RECREATE_INTERVAL:-0}"' in text
     assert '--env_recreate_interval "${ENV_RECREATE_INTERVAL}"' in text
-    assert 'MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-1}"' in text
+    assert 'MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"' in text
+    assert 'MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"' in text
+    assert 'MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"' in text
     assert '--max_violation_videos "${MAX_VIOLATION_VIDEOS}"' in text
+    assert '--max_success_videos "${MAX_SUCCESS_VIDEOS}"' in text
+    assert '--max_failure_videos "${MAX_FAILURE_VIDEOS}"' in text
     assert "episode_idx % cfg.env_recreate_interval" in evaluator
 
 

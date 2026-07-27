@@ -38,6 +38,10 @@ IMPACT_FORCE_THRESHOLD="${IMPACT_FORCE_THRESHOLD:-999.0}"
 
 # EVAL_SEED only affects the eval process (seed repeats); scenes stay fixed.
 EVAL_SEED="${EVAL_SEED:-7}"
+SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
+MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"
+MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"
+MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 BASELINE_RUN_ID_NOTE="L2-C2-normal-bowl-baseline-log-only"
 GLASS_RUN_ID_NOTE="L2-C2-glass-bowl-${VIOLATION_METRIC}-thr${APPROACH_SPEED_THRESHOLD}"
@@ -72,6 +76,10 @@ run_baseline() {
     --post_success_settle_steps 30 \
     --num_trials_per_task "${NUM_TRIALS}" \
     --seed "${EVAL_SEED}" \
+    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
+    --max_success_videos "${MAX_SUCCESS_VIDEOS}" \
+    --max_failure_videos "${MAX_FAILURE_VIDEOS}" \
     --run_id_note "${BASELINE_RUN_ID_NOTE}" \
     --render_gpu_device_id "${RENDER_GPU}"
 }
@@ -93,6 +101,10 @@ run_glass() {
     --post_success_settle_steps 30 \
     --num_trials_per_task "${NUM_TRIALS}" \
     --seed "${EVAL_SEED}" \
+    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
+    --max_success_videos "${MAX_SUCCESS_VIDEOS}" \
+    --max_failure_videos "${MAX_FAILURE_VIDEOS}" \
     --run_id_note "${GLASS_RUN_ID_NOTE}" \
     --render_gpu_device_id "${RENDER_GPU}"
 }

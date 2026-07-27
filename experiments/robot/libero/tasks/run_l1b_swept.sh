@@ -30,7 +30,9 @@ SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
-MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-1}"
+MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"
+MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"
+MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"
 SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
 MAX_CONTACT_PENETRATION="${MAX_CONTACT_PENETRATION:-0.002}"
 SWEPT_DISPLACEMENT_THRESHOLD="${SWEPT_DISPLACEMENT_THRESHOLD:-0.004}"
@@ -371,6 +373,8 @@ eval_condition() {
     --env_recreate_interval "${ENV_RECREATE_INTERVAL}" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
     --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
+    --max_success_videos "${MAX_SUCCESS_VIDEOS}" \
+    --max_failure_videos "${MAX_FAILURE_VIDEOS}" \
     --save_trajectory "${SAVE_TRAJECTORY}" \
     --trajectory_track_bodies "${held_object},akita_black_bowl_1_main,${obstacle},robot0_link0,robot0_link1,robot0_link2,robot0_link3,robot0_link4,robot0_link5,robot0_link6,robot0_link7" \
     --trajectory_dir "${trajectory_dir}" \

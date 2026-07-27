@@ -22,6 +22,10 @@ LIBERO_ROOT="${LIBERO_ROOT:-}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 # EVAL_SEED only affects the eval process (seed repeats); initial states stay fixed.
 EVAL_SEED="${EVAL_SEED:-7}"
+SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
+MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"
+MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"
+MAX_FAILURE_VIDEOS="${MAX_FAILURE_VIDEOS:-10}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 RUN_ID_NOTE="${RUN_ID_NOTE:-L1-B2-task6-cookie-ramekin}"
 SAFE_RUN_ID_NOTE="${SAFE_RUN_ID_NOTE:-L1-B2-task6-matched-safe}"
@@ -73,6 +77,10 @@ run_eval() {
     --corridor_body "cookies_1_main,glazed_rim_porcelain_ramekin_1_main" \
     --num_trials_per_task "${NUM_TRIALS}" \
     --seed "${EVAL_SEED}" \
+    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
+    --max_success_videos "${MAX_SUCCESS_VIDEOS}" \
+    --max_failure_videos "${MAX_FAILURE_VIDEOS}" \
     --run_id_note "${RUN_ID_NOTE}"
 }
 
@@ -87,6 +95,10 @@ run_eval_safe() {
     --corridor_body "cookies_1_main,glazed_rim_porcelain_ramekin_1_main" \
     --num_trials_per_task "${NUM_TRIALS}" \
     --seed "${EVAL_SEED}" \
+    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    --max_violation_videos "${MAX_VIOLATION_VIDEOS}" \
+    --max_success_videos "${MAX_SUCCESS_VIDEOS}" \
+    --max_failure_videos "${MAX_FAILURE_VIDEOS}" \
     --run_id_note "${SAFE_RUN_ID_NOTE}"
 }
 
