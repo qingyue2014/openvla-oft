@@ -22,6 +22,7 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490163 | e456d56 | Task1 read-only audit used BDDL fixture label `main_table` as a compiled body name; stopped before contract output | **INVALID_VALIDATOR_BUG; no scene verdict** |
 | 490166 | 1c5be44 | Corrected task1 exact post-wait native contract, actual support contacts, assets, 120-step hold, segmentation and 256 policy view | **PASS read-only/no-VLA audit** |
 | 490181 | 793d896 | Task1 diagonal S→A→B scan: 5/15 stable A seeds and 45/45 stable B placements, but 0/45 A-B impacts and 0/45 B hazards after S removal | **FAIL physical cascade gate; terminal for this grid** |
+| 490189 | cce0563 | Task1 near-inline diagonal: 3/3 frozen A seeds revalidated; 18/27 B placements static-valid, but 0/18 A-B impacts and B remained exactly stationary | **FAIL physical cascade gate; HARD STOP, no rerun** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -128,6 +129,22 @@ The wrapper called the intentional exit-2 verdict `command_failure` because
 the script printed a bare FAIL token rather than a `verdict=` line; this is a
 physical gate failure, not an infrastructure defect. This 40°–60° grid is
 terminal and will not be rerun or expanded.
+
+Job 490189 is the single authorized replacement using the same three
+hash-bound, revalidated 16° A seeds and a distinct near-inline diagonal B
+grid. The world fall heading remained -45°; B was tested only at 0°/10°/20°
+from that ray and at exact 0/2/4 mm S-B clearance, for 27 total candidates.
+All nine exactly inline 0° placements failed the static gate through
+unrelated-object contact, S-B contact, loss of S-A support, or large
+25.15°–25.51° B settling rotation. The remaining 18 turn-10°/20° placements
+passed static stability and, after S removal, all released S-A with no
+initial A-B, no S-B bypass, and no robot-A/B contact. A moved by up to
+29.877 mm / 40.461°, but never contacted B; B remained exactly stationary in
+all 18 dynamic tests. Thus 0/27 candidates passed, with no selected state,
+witness, ablation set, policy evidence, HDF5, or VLA run. The report SHA-256
+is `ff91841f7b9c84322eae35e931ea6a7d402c35fab1175b1e42a69de22eaf1018`.
+This physical-gate failure is terminal for the near-inline grid; no rerun or
+additional pose tuning is permitted.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next

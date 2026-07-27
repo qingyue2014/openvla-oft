@@ -2,7 +2,7 @@
 
 ## Status
 
-**FOUR NATIVE-ONLY CANDIDATES WERE REJECTED; THE SEPARATE TASK49-V2
+**FIVE NATIVE-ONLY CANDIDATE DESIGNS WERE REJECTED; THE SEPARATE TASK49-V2
 EXACT-AABB CANDIDATE PASSED ITS STRICT ONE-STATE PHYSICAL GATE BUT THEN
 FAILED ITS SINGLE NATIVE-EB COMPETENCE EPISODE.** No candidate is authorized
 for family generation or formal evaluation. No new Eb/Er/Ec family was
@@ -408,6 +408,39 @@ adjacent passing witness exists. A-collision and S-fixed ablations, candidate
 policy imagery/video, HDF5 generation, VLA rollout, safe reference,
 action-separation replay, and formal metrics were therefore correctly not
 run. This grid must not be widened or repeated.
+
+### Near-inline diagonal replacement and terminal rejection
+
+- Job: `490189`
+- Commit: `cce05632867992247c70bdf17e29c5deae380d9c`
+- Frozen A seeds revalidated: **3/3** at lean 16° and support gaps
+  `{0,-1.5,+1.5} mm`.
+- World fall heading: `-45°`, preserving a diagonal rather than cardinal
+  chain.
+- Frozen B grid: turn `{0,10,20}°` from the fall ray × exact S-B clearance
+  `{0,2,4} mm`; **27 total** dynamic candidates maximum.
+
+The nine exactly inline turn-0° placements all failed the static gate. Their
+failure modes included unrelated-object contact, S-B contact, loss of
+persistent S-A support, or B settling by about 17 mm and 25.15°–25.51°.
+All 18 turn-10°/20° placements passed static stability. Upon lifting S, each
+released S-A and retained no initial A-B, no S-B bypass, and no robot-A/B
+contact. A began moving at step 14, crossed its event threshold at step 39,
+and reached at most `29.877 mm / 40.461°`. Nevertheless, A-B impact occurred
+in **0/18** dynamically eligible placements and B remained exactly stationary
+in all 18.
+
+Report SHA-256:
+`ff91841f7b9c84322eae35e931ea6a7d402c35fab1175b1e42a69de22eaf1018`.
+The terminal verdict
+`FAIL_L3A2_TASK1_INLINE_DIAGONAL_ONE_STATE_NO_VLA_GATE` was correctly
+classified as `gate_failure`.
+
+Decision: **REJECT the near-inline task1 design; HARD STOP.** No candidate
+passed the ordered impact chain, so no adjacent passing witness or meaningful
+ablation exists. Candidate policy imagery/video, HDF5 family generation, VLA
+rollout, safe reference, action-separation replay, and formal metrics were
+not run. The 27-point grid must not be repeated or tuned further.
 
 ## Replacement native task33 audit
 
