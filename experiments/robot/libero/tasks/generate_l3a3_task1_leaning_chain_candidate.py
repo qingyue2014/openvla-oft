@@ -58,6 +58,10 @@ GOAL_SHA256 = (
     "07c4e9989a2fe0573829bc079d74208d81504f70271a099d02b901be37c0c3fd"
 )
 EB_BINDING_SHA256 = ""
+POLICY_REVIEW_VERDICT = "PASS_L3A3_TASK1_POLICY_VIEW_REVIEWED"
+POLICY_EVIDENCE_SHA256 = (
+    "c3bff2689123a5c09720769c1dd519a0716f49e259a70b568f7af77fd266f571"
+)
 
 S = "akita_black_bowl_1_main"
 A = "cookies_1_main"
@@ -842,8 +846,6 @@ def validate_policy_entry_base(
         and max(row["orientation_deg"] for row in repeat_body_delta.values())
         <= ENTRY_ORIENTATION_DRIFT_MAX_DEG
         and repeat_qpos_max_abs <= ENTRY_QPOS_DRIFT_MAX
-        and repeat_rgb_similarity["psnr_db"] >= ENTRY_RGB_PSNR_MIN_DB
-        and repeat_rgb_similarity["global_ssim"] >= ENTRY_RGB_SSIM_MIN
     )
     return {
         "passed": passed,
@@ -860,6 +862,8 @@ def validate_policy_entry_base(
         "repeat_body_delta": repeat_body_delta,
         "repeat_qpos_max_abs_drift": repeat_qpos_max_abs,
         "repeat_wait0_rgb_similarity": repeat_rgb_similarity,
+        "repeat_wait0_rgb_similarity_gates_visibility": False,
+        "visibility_gate_source": "hash_bound_independent_manual_policy_review",
         "raw_wait10_capture_vs_wait0_runtime_rgb_diagnostic_only": (
             raw_capture_vs_wait0
         ),
@@ -869,6 +873,7 @@ def validate_policy_entry_base(
             "qpos_max_abs": ENTRY_QPOS_DRIFT_MAX,
             "rgb_psnr_min_db": ENTRY_RGB_PSNR_MIN_DB,
             "rgb_global_ssim_min": ENTRY_RGB_SSIM_MIN,
+            "rgb_thresholds_are_diagnostic_only": True,
         },
         "extra_wait10_task_object_stability_diagnostic_only": {
             "gates_wait0_runtime_entry": False,
@@ -949,6 +954,49 @@ def main() -> None:
 
     binding_path = Path(__file__).with_name("L3-A3_TASK1_EB_BINDING.json")
     binding = json.loads(binding_path.read_text())
+    review_path = Path(__file__).with_name(
+        "L3-A3_TASK1_WAIT0_POLICY_REVIEW.json"
+    )
+    export_path = Path(__file__).with_name(
+        "L3-A3_TASK1_WAIT0_POLICY_EXPORT.json"
+    )
+    review = json.loads(review_path.read_text())
+    export_record = json.loads(export_path.read_text())
+    if review.get("verdict") != POLICY_REVIEW_VERDICT:
+        raise RuntimeError("task1 independent policy review verdict missing")
+    if review.get("evidence_json_sha256") != POLICY_EVIDENCE_SHA256:
+        raise RuntimeError("task1 independent policy review evidence hash drift")
+    if export_record.get("status") != POLICY_REVIEW_VERDICT:
+        raise RuntimeError("task1 policy export record is not manually reviewed")
+    if (
+        export_record.get("manual_review", {}).get("evidence_json_sha256")
+        != POLICY_EVIDENCE_SHA256
+    ):
+        raise RuntimeError("task1 policy export/review evidence hash mismatch")
+    reviewed_pngs = {
+        row["policy_png_sha256"] for row in export_record.get("captures", [])
+    }
+    if (
+        review.get("reviewed_png_count") != 2
+        or set(review.get("reviewed_policy_png_sha256", [])) != reviewed_pngs
+    ):
+        raise RuntimeError("task1 independent review does not bind both PNGs")
+    review_fields = (
+        "complete",
+        "recognizable",
+        "unoccluded",
+        "inside_frame",
+        "visible_at_policy_entry",
+    )
+    review_roles = {"S": S, "A": A, "B": B, "goal": PLATE}
+    for role, body in review_roles.items():
+        row = review.get("conditions", {}).get(role, {})
+        if row.get("body") != body or not all(
+            row.get(field) is True for field in review_fields
+        ):
+            raise RuntimeError(
+                f"task1 independent policy review failed role {role}"
+            )
     suite = benchmark.get_benchmark_dict()[SUITE]()
     task = suite.get_task(TASK_ID)
     if task.language != POLICY_PROMPT:
@@ -1031,7 +1079,7 @@ def main() -> None:
         if not entry_validation["passed"]:
             raise RuntimeError(
                 "settled policy-entry base failed repeated wait0 restore+refresh "
-                "state/RGB equivalence validation"
+                "state equivalence validation"
             )
         # This is the common EB/ER/EC policy-entry base. No second evaluator
         # pre-roll is part of the state contract or the physical search.
@@ -1200,6 +1248,16 @@ def main() -> None:
                 "twice above. The extra wait10 is task-object diagnostic only. "
                 "Any evaluator consuming exported HDF5 must use num_steps_wait=0."
             ),
+        },
+        "independent_policy_view_gate": {
+            "verdict": review["verdict"],
+            "reviewer": review["reviewer"],
+            "review_file": review_path.name,
+            "review_file_sha256": sha256(review_path.read_bytes()),
+            "export_record_file": export_path.name,
+            "export_record_file_sha256": sha256(export_path.read_bytes()),
+            "evidence_json_sha256": POLICY_EVIDENCE_SHA256,
+            "reviewed_png_count": review["reviewed_png_count"],
         },
         "native_roles": {"S": S, "A": A, "B": B, "goal": PLATE, "landmark": RAMEKIN},
         "native_asset_gate": asset_gate,

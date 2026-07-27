@@ -433,9 +433,11 @@ def test_task1_corrected_probe_uses_policy_entry_base_and_wait0_export_contract(
         validation.index("passed = bool(") : validation.index("\n    return {")
     ]
     assert "repeat_qpos_max_abs" in passed_block
-    assert "repeat_rgb_similarity" in passed_block
+    assert "repeat_rgb_similarity" not in passed_block
     assert "diagnostic_qpos_max_abs" not in passed_block
     assert "diagnostic_rgb_similarity" not in passed_block
+    assert '"repeat_wait0_rgb_similarity_gates_visibility": False' in validation
+    assert '"rgb_thresholds_are_diagnostic_only": True' in validation
     assert "ENTRY_BODY_DRIFT_MAX_M" in validation
     assert "ENTRY_RGB_PSNR_MIN_DB" in validation
     assert 'group.attrs["policy_entry_base"] = True' in text
@@ -626,6 +628,66 @@ def test_task1_wait0_export_is_visibility_only_and_never_runs_physical_grid():
     assert "place_candidate_geometry" not in text
     assert "static_gate" not in text
     assert "chain_trace" not in text
+
+
+def test_task1_wait0_export_result_is_hash_bound_and_manually_reviewed():
+    result = json.loads(
+        (TASKS / "L3-A3_TASK1_WAIT0_POLICY_EXPORT.json").read_text()
+    )
+    assert result["status"] == (
+        "PASS_L3A3_TASK1_POLICY_VIEW_REVIEWED"
+    )
+    assert result["job"]["job_id"] == "490187"
+    assert result["automated_zero_pixel_gate"]["passed"] is True
+    assert result["automated_zero_pixel_gate"]["zero_pixel_roles"] == []
+    for role in ("S", "A", "B", "goal"):
+        row = result["role_visibility_identical_across_repeats"][role]
+        assert row["visible_pixels"] > 0
+        assert row["touches_policy_image_boundary"] is False
+    assert len(result["captures"]) == 2
+    assert result["manual_review"]["status"] == (
+        "PASS_L3A3_TASK1_POLICY_VIEW_REVIEWED"
+    )
+    assert result["manual_review"]["reviewer"] == "primary_root"
+    assert result["repeat_render_psnr_ssim"] == (
+        "DIAGNOSTIC_ONLY_NOT_A_VISIBILITY_GATE"
+    )
+    assert result["physical_grid_status"] == "NOT_RUN"
+    assert result["vla_status"] == "NOT_RUN"
+
+
+def test_task1_manual_review_is_hash_bound_before_frozen_physical_grid():
+    review = json.loads(
+        (TASKS / "L3-A3_TASK1_WAIT0_POLICY_REVIEW.json").read_text()
+    )
+    assert review["verdict"] == "PASS_L3A3_TASK1_POLICY_VIEW_REVIEWED"
+    assert review["reviewer"] == "primary_root"
+    assert review["reviewed_export_job_id"] == "490187"
+    assert review["evidence_json_sha256"] == (
+        "c3bff2689123a5c09720769c1dd519a0716f49e259a70b568f7af77fd266f571"
+    )
+    assert review["reviewed_png_count"] == 2
+    assert len(review["reviewed_policy_png_sha256"]) == 2
+    for role in ("S", "A", "B", "goal"):
+        row = review["conditions"][role]
+        for field in (
+            "complete",
+            "recognizable",
+            "unoccluded",
+            "inside_frame",
+            "visible_at_policy_entry",
+        ):
+            assert row[field] is True
+    text = (
+        TASKS / "generate_l3a3_task1_leaning_chain_candidate.py"
+    ).read_text()
+    review_gate = text.index(
+        'review.get("verdict") != POLICY_REVIEW_VERDICT'
+    )
+    physical_grid = text.index("for direction_name, direction in DIRECTIONS")
+    assert review_gate < physical_grid
+    assert "task1 independent review does not bind both PNGs" in text
+    assert "task1 independent policy review failed role" in text
 
 
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():

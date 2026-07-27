@@ -1,0 +1,111 @@
+{
+  "status": "PASS_L3A3_TASK1_POLICY_VIEW_REVIEWED",
+  "job": {
+    "job_id": "490187",
+    "commit": "9b0ab731a77436f9991509b9feb1fa941fe1424d",
+    "compute_node": "dgx-21",
+    "exit_code": 0
+  },
+  "scope": "export_only_no_candidate_construction_no_physical_grid_no_vla",
+  "runtime_contract": {
+    "policy_camera": "agentview",
+    "resolution": [
+      256,
+      256
+    ],
+    "policy_transform": "agentview_image[::-1, ::-1]",
+    "policy_entry_state_sha256": "06a341f78cf0399ee253967e645d88d0538bd5a27c83de3f3d487a92fbfbeee6",
+    "required_evaluator_num_steps_wait": 0
+  },
+  "automated_zero_pixel_gate": {
+    "passed": true,
+    "zero_pixel_roles": []
+  },
+  "role_visibility_identical_across_repeats": {
+    "S": {
+      "body": "akita_black_bowl_1_main",
+      "visible_pixels": 612,
+      "policy_bbox_xyxy": [
+        21,
+        112,
+        53,
+        136
+      ],
+      "touches_policy_image_boundary": false
+    },
+    "A": {
+      "body": "cookies_1_main",
+      "visible_pixels": 557,
+      "policy_bbox_xyxy": [
+        106,
+        174,
+        127,
+        199
+      ],
+      "touches_policy_image_boundary": false
+    },
+    "B": {
+      "body": "akita_black_bowl_2_main",
+      "visible_pixels": 1191,
+      "policy_bbox_xyxy": [
+        139,
+        182,
+        180,
+        218
+      ],
+      "touches_policy_image_boundary": false
+    },
+    "goal": {
+      "body": "plate_1_main",
+      "visible_pixels": 1388,
+      "policy_bbox_xyxy": [
+        39,
+        169,
+        86,
+        205
+      ],
+      "touches_policy_image_boundary": false
+    }
+  },
+  "captures": [
+    {
+      "repeat": 1,
+      "policy_png_sha256": "dc18aae65b3e306cfa9f9ad6b49f49f8e9792451d93b8bc3985aa22cd1f234e3",
+      "segmentation_ids_npy_sha256": "c581aef92950ccc30c447ebe869e27c78c47e9106b40c6f73c2041830f2fafec",
+      "segmentation_id_plane_sha256": "728edc59c7424002a06bf2a08fae8b3c184dc48a183f9ec23e7bf81dee8bf212",
+      "role_mask_png_sha256": "f36d78ffc8359b71467304fc8e576281ed80603aca3d7769bc19a3f0bec2ee19",
+      "S_table_contact_count": 20,
+      "S_stove_contact_count": 0
+    },
+    {
+      "repeat": 2,
+      "policy_png_sha256": "e62a467678b35a70fa9a9ea0ab54c4aa68c1aeb431c80339b421c27dc94a4e8a",
+      "segmentation_ids_npy_sha256": "9dde0397ab730e863b59bdba6296d5f97b22cdde92d6f7d068dc576a29a8a0fa",
+      "segmentation_id_plane_sha256": "4483f81fa1187c20c00026a936e099e68229a9f9234d1e03ef65b7e8fbb67f47",
+      "role_mask_png_sha256": "f36d78ffc8359b71467304fc8e576281ed80603aca3d7769bc19a3f0bec2ee19",
+      "S_table_contact_count": 20,
+      "S_stove_contact_count": 0
+    }
+  ],
+  "manual_review": {
+    "reviewer_must_be_independent": true,
+    "status": "PASS_L3A3_TASK1_POLICY_VIEW_REVIEWED",
+    "reviewer": "primary_root",
+    "review_file": "L3-A3_TASK1_WAIT0_POLICY_REVIEW.json",
+    "evidence_json_sha256": "c3bff2689123a5c09720769c1dd519a0716f49e259a70b568f7af77fd266f571",
+    "required_per_role_fields": [
+      "complete",
+      "recognizable",
+      "unoccluded",
+      "inside_frame",
+      "visible_at_policy_entry"
+    ]
+  },
+  "repeat_render_psnr_ssim": "DIAGNOSTIC_ONLY_NOT_A_VISIBILITY_GATE",
+  "physical_grid_status": "NOT_RUN",
+  "vla_status": "NOT_RUN",
+  "evidence": {
+    "fetched_evidence_json_sha256": "c3bff2689123a5c09720769c1dd519a0716f49e259a70b568f7af77fd266f571",
+    "local_run_ledger": ".physcog-agent/runs/20260727T043452Z-l3a3-task1_wait0_policy_export"
+  }
+}

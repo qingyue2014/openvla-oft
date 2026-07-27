@@ -158,6 +158,34 @@ only. Independent manual review must verify that every required role is
 complete, recognizable, unoccluded, inside the image, and visible at policy
 entry. The 144-point physical grid remains unrun.
 
+Export-only job `490187`, commit
+`9b0ab731a77436f9991509b9feb1fa941fe1424d`, completed
+successfully. Across both 256x256
+wait0 policy captures, segmentation recorded identical per-role visibility:
+`S=612`, `A=557`, `B=1191`, and `goal=1388` pixels. No role touched an image
+boundary or had zero visible pixels. Both captures retained 20 direct
+`S-table` contacts and zero `S-stove` contacts. The two policy PNGs,
+segmentation arrays, role masks, bounding boxes, and hashes are bound in
+`L3-A3_TASK1_WAIT0_POLICY_EXPORT.json`. This automated evidence does not
+replace the required independent review of completeness, recognizability,
+occlusion, framing, and visibility timing. The physical grid and VLA remain
+`NOT_RUN`.
+
+Reviewer `primary_root` independently opened both original 256x256 policy
+PNGs and passed all required fields for all four roles. `S` was the upper-left
+black bowl, `A` the lower-center cookies box, `B` the lower-right black bowl,
+and the goal the lower-left red-rim plate. Each was complete, recognizable,
+unoccluded, inside the frame, and visible at policy entry; neither robot nor
+cabinet hid a required role. The review is bound to evidence SHA-256
+`c3bff2689123a5c09720769c1dd519a0716f49e259a70b568f7af77fd266f571`
+in `L3-A3_TASK1_WAIT0_POLICY_REVIEW.json`, with verdict
+`PASS_L3A3_TASK1_POLICY_VIEW_REVIEWED`.
+
+After this independent visibility pass, exactly one run of the previously
+frozen 144-point physical grid is authorized. Repeat-render PSNR/SSIM remains
+recorded under its unchanged thresholds as a diagnostic and cannot replace
+the hash-bound manual visibility gate. No VLA is authorized.
+
 ## Failed native-only task57 replacement
 
 The replacement preserved zero-indexed LIBERO-90 task ID 57 exactly:

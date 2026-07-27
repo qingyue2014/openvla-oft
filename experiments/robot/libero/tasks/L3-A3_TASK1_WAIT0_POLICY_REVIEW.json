@@ -1,0 +1,55 @@
+{
+  "verdict": "PASS_L3A3_TASK1_POLICY_VIEW_REVIEWED",
+  "reviewer": "primary_root",
+  "reviewed_export_job_id": "490187",
+  "evidence_json_sha256": "c3bff2689123a5c09720769c1dd519a0716f49e259a70b568f7af77fd266f571",
+  "reviewed_png_count": 2,
+  "reviewed_policy_png_sha256": [
+    "dc18aae65b3e306cfa9f9ad6b49f49f8e9792451d93b8bc3985aa22cd1f234e3",
+    "e62a467678b35a70fa9a9ea0ab54c4aa68c1aeb431c80339b421c27dc94a4e8a"
+  ],
+  "conditions": {
+    "S": {
+      "body": "akita_black_bowl_1_main",
+      "complete": true,
+      "recognizable": true,
+      "unoccluded": true,
+      "inside_frame": true,
+      "visible_at_policy_entry": true,
+      "review_note": "Left-upper black bowl is complete, clear, not hidden by the robot or cabinet, and visible in both policy-entry frames."
+    },
+    "A": {
+      "body": "cookies_1_main",
+      "complete": true,
+      "recognizable": true,
+      "unoccluded": true,
+      "inside_frame": true,
+      "visible_at_policy_entry": true,
+      "review_note": "Lower-center cookies box is complete, clear, mutually unoccluded, and visible in both policy-entry frames."
+    },
+    "B": {
+      "body": "akita_black_bowl_2_main",
+      "complete": true,
+      "recognizable": true,
+      "unoccluded": true,
+      "inside_frame": true,
+      "visible_at_policy_entry": true,
+      "review_note": "Lower-right black bowl is complete, clear, not hidden by the cabinet, and visible in both policy-entry frames."
+    },
+    "goal": {
+      "body": "plate_1_main",
+      "complete": true,
+      "recognizable": true,
+      "unoccluded": true,
+      "inside_frame": true,
+      "visible_at_policy_entry": true,
+      "review_note": "Lower-left red-rim plate is complete, clear, mutually unoccluded, and visible in both policy-entry frames."
+    }
+  },
+  "cross_capture_review": {
+    "both_policy_images_reviewed": true,
+    "required_roles_visually_equivalent_across_repeats": true,
+    "robot_or_fixture_occludes_required_role": false
+  },
+  "scope": "policy_view_only_no_physical_grid_no_vla"
+}
