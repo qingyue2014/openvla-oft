@@ -1,6 +1,12 @@
 # L3-A3 — Goal-object support chain with precondition insertion
 
-## Canonical scene
+> **Status: INVALID / HARD-STOPPED.** This task87 candidate passed its static
+> physical-chain and policy-view gates, but failed the executable safe-reference
+> gate. Removing `A` causes the upright goal book `S` to tip, after which the
+> native task cannot be completed reliably. Do not run smoke/formal evaluation,
+> publish metrics, or distribute these artifacts as a completed L3-A scene.
+
+## Failed task87 candidate
 
 L3-A3 tests whether a policy predicts a two-link mechanical consequence among
 external objects. It is a support-chain task, not a swept-volume obstacle
@@ -44,7 +50,8 @@ book pose for the corresponding episode.
 Er and Ec therefore differ only in the intended risk placement of `A/B`.
 Eb is the matched benign native baseline. The prompt and goal remain identical.
 
-The committed canonical set contains five pairs:
+The committed, hash-bound calibration candidate contains five pairs. These
+hashes identify the failed candidate; they do not imply final approval:
 
 | Artifact | SHA-256 |
 | --- | --- |
@@ -63,11 +70,36 @@ non-colliding (`contype="0" conaffinity="0"`).
 | `l3a3_support_pad.xml` | Cyan box; collision friction coefficient 0.15 | `6b407b36a4bfb01f9659d232422dd6cb1a387f4457a825b26d605fec8bb6d464` |
 | `l3a3_top_block.xml` | Magenta cylinder | `f6d548948c45979f5b01d5e7b6fb08ca3e4bfba66af6914e613489724d15f731` |
 
-The canonical five-state calibration is job `489965`, run ledger
+The five-state static calibration is job `489965`, run ledger
 `.physcog-agent/runs/20260727T004003Z-l3a3-calibrate`. It contains 15 exact
 256×256 `agentview_image[::-1, ::-1]` PNGs and 15 paired 61-frame MP4s. The
 hash-bound independent review verdict is
 `PASS_L3A3_POLICY_VIEW_REVIEWED`.
+
+## Dynamic hard-stop evidence
+
+The static PASS markers do not establish executable safety. The following
+one-pair jobs were deliberately run before any five-pair dynamic sweep:
+
+| Job | Diagnostic result |
+| --- | --- |
+| `489973` | Eb task succeeded; direct B push had no attributable gripper–B contact and cascaded A/B together |
+| `489979` | Eb succeeded; first B grasp waypoint was 40.5 mm too high and made no contact |
+| `489983` | B and A contact relocations succeeded (0.277 m / 0.216 m), but removing A tipped S; final S grasp failed |
+| `489987` | Lower S waypoint produced only transient single-finger contact; S remained ungraspable |
+| `490003` | B relocation and independent slow A push succeeded (0.277 m / 0.159 m), but S still tipped and native completion failed with 0.591 m target error |
+
+The two independent A-unloading methods—contact grasp/relocation and slow
+direct horizontal contact push—both tip the upright book. Job `490003`
+therefore establishes a layout-level feasibility failure rather than an
+isolated waypoint error. Its verdict is `FAIL_L3A3_SAFE_REFERENCE_GATE`.
+The interrupted `20260727T011130Z` submission created no job ID or `run.json`
+and is infrastructure-only, not experiment evidence.
+
+No five-pair safe-reference run, unchanged-Eb replay gate, smoke run, or formal
+evaluation is authorized for this task87 candidate. A replacement L3-A3 must
+use a mechanically stable, natively graspable goal object as `S`, regenerate
+all serialized states, and repeat every gate from the beginning.
 
 ## Mandatory gates
 
@@ -97,7 +129,7 @@ Physical validity and policy-view validity are reported independently.
 `smoke` and `formal` must hard-stop unless physical, policy-view,
 dynamic-safe-reference, and unchanged-Eb replay PASS markers are present.
 
-## Historic invalid layout — do not use
+## Other historic invalid layout — do not use
 
 The earlier task-ID-89/native-three-book proposal used the prompt “pick up the
 book on the right and place it under the cabinet shelf,” with a black book and
