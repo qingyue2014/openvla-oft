@@ -184,6 +184,14 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
     full = PHASES[("l1b3_task4", "candidate_full")]
     assert "candidate_full" in full.command
     assert "formal" not in full.command
+    for condition in ("eb", "er", "ec"):
+        rollout_dir = (
+            "rollouts/libero_goal/"
+            "L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-"
+            f"{condition}"
+        )
+        assert rollout_dir in full.artifacts
+        assert f"{rollout_dir}/trajectories" not in full.artifacts
     for suffix in (
         "native_replay.csv",
         "safe_reference.csv",

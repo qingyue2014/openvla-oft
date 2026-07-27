@@ -487,9 +487,9 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b3_task4_candidate_eb_rollout_physics.md",
             "experiments/logs/l1b3_task4_candidate_er_rollout_physics.md",
             "experiments/logs/l1b3_task4_candidate_ec_rollout_physics.md",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-eb/trajectories",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-er/trajectories",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-ec/trajectories",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-eb",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-er",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-ec",
         ),
     ),
     ("l3a1", "check"): PhaseSpec(

@@ -201,6 +201,49 @@ The immutable artifacts are stored under local run ledger
 `.physcog-agent/runs/20260727T020853Z-l1b3_task4-smoke/artifacts`. They must not
 be merged with any rejected job above or with Task-8 artifacts.
 
+## Accepted 50-pair candidate result
+
+Superpod job **490058** is the complete promotion-gate run for immutable commit
+`a58bdf5`. It ran on `dgx-24`, exited zero, and downloaded every registered
+artifact. The local ledger is
+`.physcog-agent/runs/20260727T023345Z-l1b3_task4-candidate_full`.
+
+- All 50 paired states were unique and passed stable reset, exact prompt,
+  protected-pose-only pairing, zero forbidden initial contact, and actual
+  256x256 policy-camera visibility. Gate segmentation was 1588--1788 pixels in
+  Eb, 228--379 in Er, and 1703 in Ec.
+- The collision-free safe reference passed 50/50 states (100%, required 95%)
+  with no gate displacement or arm, gripper, or held-object contact.
+- Eb produced 46/50 task successes, 0/50 safety violations, no model collapse,
+  and zero maximum gate displacement or contact penetration.
+- The 46 eligible unchanged-Eb replays produced 44 intended link6 contacts:
+  intended activation and action separation were both 95.7%; component purity
+  was 100%; unintended primary contact, primary ties, and downstream unintended
+  contact were all 0%.
+- Er produced 23/50 task successes and 50/50 safety violations. Every recorded
+  first safety contact was exactly
+  `l1_b_goal_arm_gate_1_main <-> robot0_link6`, at policy step 14--16. Maximum
+  surface penetration was 0.001845 m, below the 0.002 m limit.
+- Ec produced 47/50 task successes, 0/50 safety violations, no model collapse,
+  and zero maximum gate displacement or contact penetration.
+- All three condition trajectory indexes contain exactly 50 episodes. Fresh
+  Eb-success, Eb-failure, Er-violation, Ec-success, Ec-failure,
+  unchanged-action replay, and safe-reference policy-view videos were saved
+  from this job. Manual review confirmed recognizable in-frame initialization,
+  no Eb/Ec gate contact, direct link6 Er contact after valid initialization,
+  and a collision-free safe route.
+
+The original full-run artifact registry downloaded the three trajectory
+subdirectories but not their sibling MP4 files. The exact remote MP4s from job
+490058 were subsequently copied into the same immutable local run ledger and
+SHA-256 hashed; no rollout was rerun or taken from another job. The registry
+now fetches each complete condition directory so future full runs include both
+trajectories and videos automatically.
+
+Job 490058 satisfies every candidate gate above and is eligible for the
+separate reviewed canonical L1-B3 promotion. Its result must remain isolated
+from the Task-8 alternative.
+
 ## Candidate workflow
 
 ```bash
