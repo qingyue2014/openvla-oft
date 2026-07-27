@@ -327,6 +327,33 @@ def test_task57_probe_reads_suite_contract_without_guessing_or_policy():
     assert "task_description_override" not in text
 
 
+def test_task59_probe_verifies_exact_suite_id_contract_and_native_roles():
+    text = (TASKS / "probe_l3a3_task59_native.py").read_text()
+    assert "EXPECTED_TASK_ID = 59" in text
+    assert (
+        'EXPECTED_PROMPT = "pick up the tomato sauce and put it in the tray"'
+        in text
+    )
+    assert "for task_id in range(suite.n_tasks)" in text
+    assert "prompt_matches != [EXPECTED_TASK_ID]" in text
+    for stem in (
+        "cream_cheese",
+        "alphabet_soup",
+        "tomato_sauce",
+        "ketchup",
+        "butter",
+        "wooden_tray",
+    ):
+        assert f'"{stem}"' in text
+    assert '"S": resolved["tomato_sauce"]' in text
+    assert '"A": resolved["alphabet_soup"]' in text
+    assert '"B": resolved["butter"]' in text
+    assert "task.language != bddl_prompt" in text
+    assert '"candidate_status": "NOT_CONSTRUCTED"' in text
+    assert "pretrained_checkpoint" not in text
+    assert "task_description_override" not in text
+
+
 def test_task57_candidate_is_native_only_one_state_and_fail_closed():
     text = (TASKS / "generate_l3a3_task57_native_candidate.py").read_text()
     assert 'SUPPORT = "cream_cheese_1_main"' in text
