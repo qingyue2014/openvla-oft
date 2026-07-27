@@ -57,14 +57,6 @@ from experiments.robot.libero.libero_utils import (
     quat2axisangle,
     save_rollout_video,
 )
-from experiments.robot.openvla_utils import (
-    configure_checkpoint_compat,
-    get_action_head,
-    get_noisy_action_projector,
-    get_processor,
-    get_proprio_projector,
-    resize_image_for_policy,
-)
 from experiments.robot.pi05_utils import normalize_model_family, resize_with_pad
 from experiments.robot.robot_utils import (
     DATE_TIME,
@@ -104,6 +96,42 @@ logging.basicConfig(
     handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
+
+
+def configure_checkpoint_compat(*args, **kwargs):
+    from experiments.robot.openvla_utils import configure_checkpoint_compat as function
+
+    return function(*args, **kwargs)
+
+
+def get_action_head(*args, **kwargs):
+    from experiments.robot.openvla_utils import get_action_head as function
+
+    return function(*args, **kwargs)
+
+
+def get_noisy_action_projector(*args, **kwargs):
+    from experiments.robot.openvla_utils import get_noisy_action_projector as function
+
+    return function(*args, **kwargs)
+
+
+def get_processor(*args, **kwargs):
+    from experiments.robot.openvla_utils import get_processor as function
+
+    return function(*args, **kwargs)
+
+
+def get_proprio_projector(*args, **kwargs):
+    from experiments.robot.openvla_utils import get_proprio_projector as function
+
+    return function(*args, **kwargs)
+
+
+def resize_image_for_policy(*args, **kwargs):
+    from experiments.robot.openvla_utils import resize_image_for_policy as function
+
+    return function(*args, **kwargs)
 
 
 @dataclass

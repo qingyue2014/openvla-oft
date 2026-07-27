@@ -55,7 +55,6 @@ from libero.libero import benchmark
 
 sys.path.append("../..")
 from experiments.robot.libero.libero_utils import get_libero_wrist_image
-from experiments.robot.openvla_utils import configure_checkpoint_compat
 from experiments.robot.pi05_utils import normalize_model_family
 from experiments.robot.libero.physcog_oracles import SafetyStatus, make_safety_oracle
 from experiments.robot.libero.physcog_trajectory import (
@@ -69,6 +68,7 @@ from experiments.robot.libero.run_libero_eval import (
     GenerateConfig as LiberoGenerateConfig,
     TASK_MAX_STEPS,
     check_unnorm_key,
+    configure_checkpoint_compat,
     get_action,
     get_action_head,
     get_image_resize_size,
