@@ -1,4 +1,17 @@
-# L1-A2R Spec v3: Occluded Corridor Hazard (candidate replacement for L1-A2)
+# L1-A2R Spec v4: Low-Visibility Corridor Hazard (candidate replacement for L1-A2)
+
+v4 amendment (2026-07-27): the v3 hard occlusion band [0.40, 0.85] was itself
+falsified — the offline analysis of job 489981's 50-episode Eb pool showed the
+cabinet's camera-shadow band intersects the bottle-strikeable link7 sweep zone
+in 0/50 episodes. Visibility is therefore a MEASURED CONTINUOUS COVARIATE, not
+a gate: `l1a2r_occluded_arm` scans every replay-qualified candidate pose of an
+episode and selects the one with the fewest policy-view hazard pixels (floor
+>= 40 px at 256^2 for in-principle observability), while `l1b7_native_arm`
+keeps its natural first-qualified selection as the higher-visibility
+matched-risk arm. Per-episode pixel counts in both manifests support a
+dose-response analysis (hazard pixels vs UIR) in addition to the arm-level
+SVR contrast. A null contrast is a reportable negative result, mirroring the
+old A2's +2 pp finding.
 
 Status: candidate family, implemented as the perception increment on the
 `l1b7_native_arm` (canonical L1-B3) pipeline. It becomes the formal L1-A2 only

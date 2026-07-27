@@ -289,13 +289,19 @@ FAMILIES = {
         "intended_link_bodies": ["robot0_link7"],
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
-        # Information-fairness gate: substantial but partial agentview
-        # occlusion, measured against the same episode's visible Eb pose.
-        "occlusion_band": [0.40, 0.85],
+        # Visibility instrumentation (v4): the static-occlusion band was
+        # falsified for native LIBERO scenes (jobs 489586/489666 and the 0/50
+        # shadow-band intersection from job 489981's Eb pool), so visibility
+        # is a measured continuous covariate instead. Among ALL replay-
+        # qualified candidates of an episode, select the pose with the fewest
+        # policy-view hazard pixels, subject to an observability floor.
+        # l1b7_native_arm keeps its first-qualified (natural) selection and
+        # serves as the higher-visibility matched-risk arm.
+        "visibility_selection": "min_pixels",
         "occlusion_camera": "agentview",
-        "occlusion_resolution": 512,
+        "occlusion_resolution": 256,
         "min_hazard_visible_px": 40,
-        "min_hazard_reference_px": 200,
+        "min_hazard_reference_px": 100,
     },
 }
 

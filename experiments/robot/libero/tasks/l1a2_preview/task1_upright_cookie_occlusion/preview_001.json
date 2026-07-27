@@ -1,0 +1,30 @@
+{
+  "camera": "agentview",
+  "bodies": {
+    "akita_black_bowl_1_main": [
+      -0.094752,
+      0.00853,
+      0.898403
+    ],
+    "cookies_1_main": [
+      -0.022711,
+      0.004584,
+      0.931662
+    ],
+    "plate_1_main": [
+      0.081325,
+      0.240052,
+      0.902506
+    ],
+    "glazed_rim_porcelain_ramekin_1_main": [
+      0.009728,
+      -0.001062,
+      0.929222
+    ],
+    "akita_black_bowl_2_main": [
+      0.240008,
+      -0.180037,
+      0.898406
+    ]
+  }
+}

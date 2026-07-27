@@ -255,15 +255,29 @@ def _rewrite_selected_trajectories(
 
 
 def _occlusion_config(spec: dict, args: argparse.Namespace):
-    """Resolve the occlusion gate: CLI overrides the FAMILIES spec."""
+    """Resolve the visibility instrumentation: CLI overrides the FAMILIES spec.
+
+    Two modes share the same measurement machinery:
+    - band: hard partial-occlusion gate (falsified for native LIBERO scenes;
+      kept for completeness / custom-asset revivals);
+    - min_pixels selection: among ALL replay-qualified candidates of an
+      episode, select the pose with the fewest policy-view hazard pixels
+      (subject to the observability floor). Visibility becomes a measured
+      per-episode covariate instead of a dichotomous gate.
+    """
+    strategy = spec.get("visibility_selection")
     band_text = args.occlusion_band
     if not band_text and spec.get("occlusion_band"):
         band_text = ",".join(str(value) for value in spec["occlusion_band"])
-    if not band_text:
+    if not band_text and strategy is None:
         return None
-    low, high = (float(value) for value in band_text.split(","))
+    band = None
+    if band_text:
+        low, high = (float(value) for value in band_text.split(","))
+        band = (low, high)
     return {
-        "band": (low, high),
+        "strategy": strategy,
+        "band": band,
         "camera": args.occlusion_camera or spec.get("occlusion_camera", "agentview"),
         "resolution": int(
             args.occlusion_resolution or spec.get("occlusion_resolution", 512)
@@ -349,6 +363,7 @@ def calibrate(args: argparse.Namespace) -> str:
             invalid_candidates = 0
             confounded_candidates = 0
             occlusion_rejected = 0
+            qualified_pool_candidates: list[dict] = []
             if physics_qualified_eb:
                 candidates = _trajectory_candidates(trajectory, args)
                 if args.max_candidates_per_episode > 0:
@@ -395,7 +410,6 @@ def calibrate(args: argparse.Namespace) -> str:
                     if occlusion_cfg is not None:
                         from experiments.robot.libero.tasks.l1a2r_occlusion import (
                             measure_hazard_occlusion,
-                            occlusion_gate_verdict,
                         )
 
                         occlusion = measure_hazard_occlusion(
@@ -406,23 +420,29 @@ def calibrate(args: argparse.Namespace) -> str:
                             camera=occlusion_cfg["camera"],
                             resolution=occlusion_cfg["resolution"],
                         )
-                        in_band, occ_message = occlusion_gate_verdict(
-                            occlusion,
-                            occlusion_cfg["band"],
-                            occlusion_cfg["min_hazard_visible_px"],
-                            occlusion_cfg["min_hazard_reference_px"],
+                        floor_ok = (
+                            occlusion["hazard_px"]
+                            >= occlusion_cfg["min_hazard_visible_px"]
+                            and occlusion["reference_px"]
+                            >= occlusion_cfg["min_hazard_reference_px"]
                         )
-                        if not in_band:
+                        band = occlusion_cfg.get("band")
+                        band_ok = band is None or (
+                            np.isfinite(occlusion["ratio"])
+                            and band[0] <= occlusion["ratio"] <= band[1]
+                        )
+                        if not floor_ok or not band_ok:
                             occlusion_rejected += 1
                             if occlusion_rejected <= 5:
                                 print(
-                                    f"  episode={episode:03d} candidate occlusion "
-                                    f"REJECT: {occ_message}"
+                                    f"  episode={episode:03d} candidate visibility "
+                                    f"REJECT: px={occlusion['hazard_px']} "
+                                    f"ratio={occlusion['ratio']:.3f}"
                                 )
                             continue
                     env.reset()
                     env.set_init_state(candidate_state)
-                    selected = {
+                    candidate = {
                         "state": candidate_state,
                         "path_step": path_step,
                         "proposed_link": proposed_link,
@@ -433,7 +453,28 @@ def calibrate(args: argparse.Namespace) -> str:
                         "replay": replay,
                         "occlusion": occlusion,
                     }
+                    if (
+                        occlusion_cfg is not None
+                        and occlusion_cfg.get("strategy") == "min_pixels"
+                    ):
+                        # Scan every qualified candidate; the least-visible
+                        # pose (fewest policy-view hazard pixels above the
+                        # observability floor) is selected after the loop.
+                        qualified_pool_candidates.append(candidate)
+                        continue
+                    selected = candidate
                     break
+                if selected is None and qualified_pool_candidates:
+                    selected = min(
+                        qualified_pool_candidates,
+                        key=lambda entry: entry["occlusion"]["hazard_px"],
+                    )
+                    print(
+                        f"  episode={episode:03d} min-visibility selection: "
+                        f"{len(qualified_pool_candidates)} qualified, chose "
+                        f"px={selected['occlusion']['hazard_px']} "
+                        f"(max px={max(entry['occlusion']['hazard_px'] for entry in qualified_pool_candidates)})"
+                    )
             if selected is not None:
                 output_er_states[episode] = selected["state"]
             replay = None if selected is None else selected["replay"]
@@ -447,6 +488,15 @@ def calibrate(args: argparse.Namespace) -> str:
                 "invalid_candidates": invalid_candidates,
                 "confounded_candidates": confounded_candidates,
                 "occlusion_rejected": occlusion_rejected,
+                "qualified_candidates": len(qualified_pool_candidates),
+                "max_qualified_px": (
+                    max(
+                        entry["occlusion"]["hazard_px"]
+                        for entry in qualified_pool_candidates
+                    )
+                    if qualified_pool_candidates
+                    else ""
+                ),
                 "occlusion_ratio": (
                     ""
                     if selected is None or selected.get("occlusion") is None
@@ -622,7 +672,12 @@ def calibrate(args: argparse.Namespace) -> str:
             if row["occlusion_ratio"] != ""
         ]
         metadata["occlusion_gate"] = {
-            "band": list(occlusion_cfg["band"]),
+            "strategy": occlusion_cfg.get("strategy"),
+            "band": (
+                list(occlusion_cfg["band"])
+                if occlusion_cfg.get("band") is not None
+                else None
+            ),
             "camera": occlusion_cfg["camera"],
             "resolution": occlusion_cfg["resolution"],
             "min_hazard_visible_px": occlusion_cfg["min_hazard_visible_px"],
@@ -645,13 +700,16 @@ def calibrate(args: argparse.Namespace) -> str:
     occlusion_lines = ""
     if occlusion_cfg is not None:
         total_occ_rejected = sum(int(row["occlusion_rejected"]) for row in rows)
+        band = occlusion_cfg.get("band")
+        band_text = f"[{band[0]}, {band[1]}]" if band is not None else "disabled"
         occlusion_lines = (
-            f"- Occlusion band: [{occlusion_cfg['band'][0]}, "
-            f"{occlusion_cfg['band'][1]}] on {occlusion_cfg['camera']} "
+            f"- Visibility strategy: {occlusion_cfg.get('strategy') or 'gate-only'} "
+            f"on {occlusion_cfg['camera']} @ {occlusion_cfg['resolution']}px "
             f"(reference: same-episode Eb pose, depth^2 corrected)\n"
-            f"- Minimum visible hazard pixels: "
+            f"- Occlusion band: {band_text}\n"
+            f"- Minimum visible hazard pixels (observability floor): "
             f"{occlusion_cfg['min_hazard_visible_px']}\n"
-            f"- Candidates rejected by the occlusion gate: {total_occ_rejected}\n"
+            f"- Candidates rejected below the floor/band: {total_occ_rejected}\n"
         )
     report.write_text(
         f"# {args.family} trajectory-conditioned wine-bottle/link calibration\n\n"
