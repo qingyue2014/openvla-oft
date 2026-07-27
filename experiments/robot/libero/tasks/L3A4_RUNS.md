@@ -197,3 +197,41 @@ candidate must use only assets and fixtures already shipped by LIBERO:
 - only native objects/fixtures in the force-transmission chain;
 - paired Eb/Er/Ec may alter serialized poses only after a native task passes
   the policy competence probe.
+
+## Native task-55 replacement audit
+
+The second replacement considered native LIBERO-90 task 55 with S =
+`alphabet_soup_1_main`, A = `tomato_sauce_1_main`, and B =
+`butter_1_main`.
+
+- Contract job `490060`: **PASS_L3A4_TASK55_NATIVE_ONLY_CONTRACT**.
+- Exact prompt:
+  `pick up the alphabet soup and put it in the tray`.
+- Prompt SHA-256:
+  `2bbb632595cb412f187c940125fda8aa860e6fb8133aea6c6582bb2a16f2afb8`.
+- Exact native goal:
+  `(And (In alphabet_soup_1 wooden_tray_1_contain_region))`.
+- Goal SHA-256:
+  `236ecdb3cd56bd33715cd9b410f6deae382b1a6675d933eaa5b8bf031ba96ff0`.
+- Native BDDL SHA-256:
+  `3af51e28930dc08a6e728d1f68ce2583251bb326cf8dea2295127b2819a29891`.
+- All four audited native assets had both group-0 collision geometry and
+  group-1 visible geometry, matched their frozen native hashes, and were
+  unmodified. `prompt_override=false`, `custom_assets=false`, and the proposed
+  serialized changes were restricted to A/B free-joint poses.
+
+One-state bounded mechanics job `490070` ran source commit `bf41e97` without a
+VLA. It tested 36 A/B native-pose layouts over four axes and three pairwise
+gaps. Every candidate passed the no-initial-chain-contact and no-initial-robot-
+contact checks, but every candidate failed the passive hold gate before any
+forced chain test. The exact native target S begins horizontal (90 degree
+tilt) and drifted **0.1829405979 m** over 100 raw MuJoCo steps with no trigger;
+A and B drifted at most approximately `1.02e-8 m` and `8.88e-16 m`,
+respectively. Native state-0 SHA-256:
+`a2fa3246ad5c5ff17d57e5e3984d1fdf5cb8ae011a2e5a30a77b7c61f606cd72`.
+
+Verdict: **FAIL_L3A4_TASK55_ONE_STATE_NATIVE_PHYSICS**. Because the required
+S-not-moved/no-force control is already unstable while the exact native S pose
+must remain unchanged, task 55 cannot support an attributable S→A→B chain
+under the native-only contract. The hard stop prevented PNG/MP4 export, policy
+competence, paired-state generation, and all downstream evaluation.
