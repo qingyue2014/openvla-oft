@@ -235,3 +235,59 @@ S-not-moved/no-force control is already unstable while the exact native S pose
 must remain unchanged, task 55 cannot support an attributable S→A→B chain
 under the native-only contract. The hard stop prevented PNG/MP4 export, policy
 competence, paired-state generation, and all downstream evaluation.
+
+### Task-55 policy-entry settled-base v2
+
+The v2 audit retained job `490070` as an invalid raw-state calibration and
+tested the user's explicitly authorized policy-entry settled base. It advanced
+the exact raw native state through LIBERO's real
+`env.step([0, 0, 0, 0, 0, 0, -1])` path before changing any A/B pose.
+
+- Raw state SHA-256:
+  `a2fa3246ad5c5ff17d57e5e3984d1fdf5cb8ae011a2e5a30a77b7c61f606cd72`.
+- Policy-entry settling took 17 dummy-action steps to produce eight
+  consecutive stable steps.
+- S moved `0.0173607533 m` from the raw state before settling.
+- Settled-base SHA-256:
+  `a15e71324af558ecb0196470f6919b5951157d0ea1bc9a1c8f3f2cc60f5fcd8b`.
+- A subsequent 120-step raw-MuJoCo hold passed: A and B had zero measured
+  drift, while S drift was approximately `3.05e-16 m`.
+
+Job `490077` then tested 192 low-lean tower candidates (5–16 degrees).
+The settled-base gate passed, but no candidate formed the required S→A
+support contact. Although 110 candidates held A→B contact and several were
+numerically stable, all 192 failed the joint support-chain hold gate. This is a
+failed geometry calibration, not a scene pass.
+
+Job `490092` was submitted for the final bounded contact sweep but cancelled
+while still pending, before scene computation, so that the implementation
+could bind the additionally required continuous-contact and adjacent-witness
+gates. It has no scene verdict.
+
+Final job `490095`, source commit `93d5dd4`, exhaustively tested the fixed
+bounded grid:
+
+- lean: 20, 25, 30, and 35 degrees;
+- S/A side gap: -6, -10, -14, and -18 mm;
+- B shift on A: -6, 0, and +6 mm;
+- four support directions, with +y evaluated first;
+- 192 total native-pose candidates, with unchanged assets and thresholds.
+
+The strict hold required initial S→A and A→B contacts, at least 95% contact
+occupancy for both links over 120 steps, no S→B or robot bypass, and at most
+3 mm / 5 degrees drift. Results:
+
+- joint hold pass: **0/192**;
+- initial S→A and A→B contacts simultaneously: **0/192**;
+- maximum S→A contact occupancy: **49.59%**;
+- maximum A→B occupancy reached 100%, but never jointly with valid S→A;
+- candidates with S→B bypass: **31/192**;
+- strict S-release < A-motion < B-motion pass: **0/192**;
+- A-frozen single-candidate pass: **0/192**;
+- robust adjacent-witness pass: **0/192**.
+
+Final verdict: **FAIL_L3A4_TASK55_TOWER_V2_PHYSICS**. Task 55 is now
+permanently rejected under the agreed native-only bounded search. No further
+grid expansion is authorized. Because no physical candidate passed, the
+validator correctly emitted `NOT_REVIEWABLE_PHYSICS_FAILED`, exported no
+PNG/MP4, and did not run a VLA.
