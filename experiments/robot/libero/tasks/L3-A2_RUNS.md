@@ -26,6 +26,7 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490200 | cc314fd | A-only task1 swept-path diagnostic: 3/3 seeds traced for 181 frames; true heading ≈-45°, but no swept-hull tangent admitted a contact-free static B placement | **DIAGNOSTIC COMPLETE; no scene verdict or VLA** |
 | 490221 | 509e880 | New task1 vertical-support/cantilever static scan: 6/9 A supports and all 24 downstream B placements passed contact, stability, visibility, and side-grasp diagnostics | **PASS STATIC FEASIBILITY ONLY; no support removal/dynamic/VLA** |
 | 490235 | 25ff598 | Two pinned cantilever states: east-first moved A before S-A release and never contacted B; lift-first reached On(S,plate) but A was not stable in the goal hold | **FAIL KINEMATIC CAUSALITY/SAFE-PATH GATE; HARD STOP** |
+| 490314 | 5301bac | Task2 strict-native bowl-mediator static preflight stopped before its frozen grid because the cross-machine hard-coded evaluator-warmup state SHA differed | **INVALID_VALIDATOR_BUG; no scene verdict, no report, no retry** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -239,6 +240,17 @@ and
 `60ec1ef264bc6a573bcfed8cd2f9520f947599e3800e074b9919644e8b0713a7`.
 No HDF5, VLA, robot rollout, or formal family was generated. The fixed
 cantilever mechanism is terminal; no parameter change or rerun is permitted.
+
+Job 490314 is validator-invalid and supplies no scene verdict. It ran commit
+`5301bac3a78060b5836058409cffcd0b7c249d1a` on `dgx-09`, then stopped before
+the first candidate at the hard-coded cross-machine evaluator-warmup state
+SHA assertion (`RuntimeError: task2 exact evaluator-warmup base drift`).
+The process exited 1, the runner classified it as `validator_bug`, and the
+downloaded artifact directory is empty: no `report.json`, selected state,
+policy image, dynamic result, HDF5, VLA rollout, or formal metric exists.
+Consequently neither the local geometry-only smoke result nor any inferred
+candidate count may be reported as Superpod evidence. The authorized job was
+not retried and its threshold/grid were not changed.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next
