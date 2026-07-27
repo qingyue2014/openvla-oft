@@ -33,6 +33,10 @@ def test_task1_policy_entry_is_post_wait_and_serialized_once():
 
 def test_task1_audit_checks_actual_support_geometry_and_policy_pixels():
     source = SCRIPT.read_text()
+    assert '"table",' in source
+    assert '"main_table",' not in source
+    assert "compiled_bodies = set(env.sim.model.body_names)" in source
+    assert "task1 required compiled bodies missing" in source
     assert '"policy_entry_contacts": entry_contacts' in source
     assert '"hold_end_contacts": hold_contacts' in source
     assert "exact_compiled_group0_primitive_mesh_world_aabb" in source

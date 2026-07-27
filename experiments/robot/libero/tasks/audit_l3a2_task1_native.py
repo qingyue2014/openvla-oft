@@ -39,7 +39,7 @@ RELEVANT = (
     "glazed_rim_porcelain_ramekin_1_main",
     "plate_1_main",
     "flat_stove_1_main",
-    "main_table",
+    "table",
 )
 ASSET_SHA256 = {
     "stable_scanned_objects/akita_black_bowl/akita_black_bowl.xml":
@@ -255,6 +255,12 @@ def main() -> None:
     try:
         env.reset()
         obs = env.set_init_state(states[0])
+        compiled_bodies = set(env.sim.model.body_names)
+        missing_bodies = sorted(set(RELEVANT) - compiled_bodies)
+        if missing_bodies:
+            raise RuntimeError(
+                f"task1 required compiled bodies missing: {missing_bodies}"
+            )
         raw_pose = {name: _pose(env, name) for name in RELEVANT}
         raw_position = {name: _position(env, name) for name in RELEVANT}
         for _ in range(POLICY_ENTRY_WAIT_STEPS):

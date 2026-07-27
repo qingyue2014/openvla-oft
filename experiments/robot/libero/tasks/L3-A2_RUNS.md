@@ -19,6 +19,7 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490118 | 6a7b770 | Corrected same 27 poses: 9 static support states, 0 ordered cascades; exit 2 is intentional gate FAIL | **Native task33 candidate rejected; no witness** |
 | 490125 | d8bdde4 | Separate task49-v2 exact-AABB B grid: 25/25 stable with witnesses; causal and ablation gates pass | **PASS strict one-state gate; no VLA** |
 | 490134 | c6a433f | Authorized single native task49 EB: 400 valid policy steps, target never moved, success false, no safety violation or collapse | **FAIL_BASE_TASK_COMPETENCE; HARD STOP, no retry** |
+| 490163 | e456d56 | Task1 read-only audit used BDDL fixture label `main_table` as a compiled body name; stopped before contract output | **INVALID_VALIDATOR_BUG; no scene verdict** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -86,6 +87,14 @@ expected hard-gate failure; it is not a retryable infrastructure diagnosis.
 The terminal scientific disposition is `FAIL_BASE_TASK_COMPETENCE`. No
 second episode was run, and task49-v2 is excluded from all further family,
 safe-reference, action-separation, smoke, and formal-evaluation work.
+
+Job 490163 is an invalid pre-audit attempt for the replacement native
+libero_spatial task1 candidate. The script used the BDDL fixture label
+`main_table`, while the compiled MuJoCo body is `table`, and stopped before
+writing a contract or reaching any physical or policy-view gate. It therefore
+supports no scene conclusion. The replacement changes only that name mapping
+and adds an explicit required-compiled-body existence check; the task,
+protocol, assets, and gates remain identical.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next
