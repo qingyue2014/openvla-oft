@@ -100,6 +100,7 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
         "task55_static_probe",
         "task55_tower_v2",
         "task55_vertical_mirror_v3",
+        "spatial_task1_native_audit",
         "smoke",
     } <= phases
     assert PHASES[("l3a4", "geometry_sweep")].count_env == "L3A4_SWEEP_TRIALS"
