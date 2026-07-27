@@ -219,12 +219,20 @@ def _push_unload(
     unloaded_attribute: str,
     push_height: float | None = None,
     push_distance: float | None = None,
+    push_max_command: float | None = None,
+    max_push_steps: int | None = None,
 ):
     """Unload one chain member by a controlled horizontal OSC push."""
     direction = np.asarray(direction_xyz, dtype=float)
     direction /= np.linalg.norm(direction)
     height = args.push_height if push_height is None else push_height
     distance = args.push_distance if push_distance is None else push_distance
+    command_limit = (
+        args.push_max_command
+        if push_max_command is None
+        else push_max_command
+    )
+    step_limit = args.max_push_steps if max_push_steps is None else max_push_steps
     start_body = _body_pos(io.env, body)
     pre_body = start_body - direction * args.push_start_clearance
     pre_eef = pre_body.copy()
@@ -245,12 +253,14 @@ def _push_unload(
     )
     displacement = 0.0
     contact_seen = _gripper_contacts_body(io.env, body)
-    for _ in range(args.max_push_steps):
+    contact_trace = set(_target_contact_pairs(io.env, body))
+    for _ in range(step_limit):
         action = _position_action(_eef_pos(io.obs), push_goal, close_sign, args)
         action[:3] = np.clip(
-            action[:3], -args.push_max_command, args.push_max_command
+            action[:3], -command_limit, command_limit
         )
         status = io.advance(action, "mitigate", oracle)
+        contact_trace.update(_target_contact_pairs(io.env, body))
         contact_seen = contact_seen or _gripper_contacts_body(io.env, body)
         displacement = float(
             np.linalg.norm(_body_pos(io.env, body) - start_body)
@@ -265,10 +275,16 @@ def _push_unload(
         ):
             break
     else:
+        pairs = "|".join(sorted(contact_trace)) or "none"
+        print(
+            f"{body} push contact diagnostic: "
+            f"eef={_eef_pos(io.obs).tolist()} "
+            f"body={_body_pos(io.env, body).tolist()} pairs={pairs}"
+        )
         reason = (
             "push_unload_not_observed"
             if contact_seen
-            else "push_contact_not_observed"
+            else f"push_contact_not_observed[pairs={pairs}]"
         )
         return (
             MotionFailure(
@@ -761,30 +777,19 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
                 final_error_m=top_displacement,
             )
     if failure is None:
-        middle_target = middle_initial + np.array(
-            [args.middle_parking_dx, args.middle_parking_dy, 0.0]
-        )
-        middle_target[2] = support_z + args.middle_table_z_offset
-        failure, middle_error = _relocate(
+        failure, middle_error = _push_unload(
             io,
             MIDDLE_BODY,
-            middle_target,
-            open_sign,
+            np.array([1.0, 0.0, 0.0]),
             close_sign,
             args,
             oracle,
-            grasp_height=args.middle_grasp_height,
+            "middle_unloaded",
+            push_height=args.middle_push_height,
+            push_distance=args.middle_push_distance,
+            push_max_command=args.middle_push_max_command,
+            max_push_steps=args.max_middle_push_steps,
         )
-        middle_stable, middle_displacement = _table_stable_unloaded(
-            io, MIDDLE_BODY, middle_initial, args
-        )
-        middle_error = middle_displacement
-        if failure is None and not (middle_stable and oracle.middle_unloaded):
-            failure = MotionFailure(
-                "independent_table_stable_unload_gate_failed",
-                f"{MIDDLE_BODY}:relocate_verify",
-                final_error_m=middle_displacement,
-            )
     if failure is None and not oracle.safe_precondition_inserted:
         # Update once after the final settle; no simulator write is performed.
         status = oracle.check(env, io.obs, np.r_[np.zeros(6), open_sign], io.step)
@@ -823,7 +828,7 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             "ec_control_state_sha256": _state_hash(ec_state),
             "controller": "OSC_POSITION_7D",
             "direct_qpos_edits_after_restore": False,
-            "mitigation": "contact_grasp_relocate_B_then_A_then_native_S_suffix",
+            "mitigation": "contact_relocate_B_then_slow_push_A_then_native_S_suffix",
             "success": safe_success,
             "task_success": task_success,
             "violated": oracle_violated,
@@ -925,7 +930,7 @@ def run(args):
         f"{sum(r['safe_success'] for r in safe_rows)}/{len(safe_rows)} ({rate:.3f})\n"
         f"- Required: {args.min_safe_reference_rate:.3f}, N>={args.min_episodes}\n"
         "- Exact state: every episode starts from serialized Er.\n"
-        "- Πsafe: contact-verified OSC B relocate → OSC A relocate "
+        "- Πsafe: contact-verified OSC B relocate → slow OSC A push "
         "→ native OSC S task suffix.\n"
         "- State-edit contract: no object qpos/qvel writes after Er restore; all motion uses env.step.\n"
         "- Eb expert contract: exact paired Eb, native S suffix, successful before replay eligibility.\n"
@@ -996,6 +1001,8 @@ def main():
     parser.add_argument("--push_distance", type=float, default=0.12)
     parser.add_argument("--top_push_distance", type=float, default=0.16)
     parser.add_argument("--middle_push_distance", type=float, default=0.12)
+    parser.add_argument("--middle_push_max_command", type=float, default=0.05)
+    parser.add_argument("--max_middle_push_steps", type=int, default=320)
     parser.add_argument("--top_parking_dx", type=float, default=0.18)
     parser.add_argument("--top_parking_dy", type=float, default=0.16)
     parser.add_argument("--middle_parking_dx", type=float, default=0.08)

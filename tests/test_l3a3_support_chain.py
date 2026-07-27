@@ -203,13 +203,13 @@ def test_action_validators_do_not_edit_sim_state_after_er_reset():
     assert namespace["_episode"]("eb_expert_ep004.npz") == 4
 
 
-def test_safe_reference_provides_contact_verified_b_then_a_relocation_and_video():
+def test_safe_reference_provides_contact_verified_b_then_a_unload_and_video():
     path = TASKS / "validate_l3a3_safe_reference.py"
     text = path.read_text()
     reset_at = text.index("obs = env.set_init_state(er_state)")
     tail = text[reset_at:]
     top_call = text.index("_relocate(\n            io,\n            TOP_BODY")
-    middle_call = text.index("_relocate(\n            io,\n            MIDDLE_BODY")
+    middle_call = text.index("_push_unload(\n            io,\n            MIDDLE_BODY")
     assert top_call < middle_call
     assert middle_call < text.index("_place_target_on_open_top(", middle_call)
     assert "native_S_suffix_only" in text
@@ -221,7 +221,8 @@ def test_safe_reference_provides_contact_verified_b_then_a_relocation_and_video(
     middle_push = text[middle_call : text.index(
         "if failure is None and not oracle.safe_precondition_inserted", middle_call
     )]
-    assert "middle_target" in middle_push
+    assert "np.array([1.0, 0.0, 0.0])" in middle_push
+    assert "push_max_command=args.middle_push_max_command" in middle_push
     push_function = text[text.index("def _push_unload(") : text.index(
         "def _table_stable_unloaded("
     )]
