@@ -171,10 +171,8 @@ def replay(args) -> str:
                     frames.append(_policy_frame(obs))
                 task_success = task_success or bool(reward > 0 or done)
                 for component, oracle in oracles.items():
-                    if hits[component]:
-                        continue
                     status = oracle.check(env, obs, action, step)
-                    if status.violated:
+                    if status.violated and not hits[component]:
                         hits[component] = True
                         reasons[component] = status.reason
             unintended = any(
@@ -204,6 +202,34 @@ def replay(args) -> str:
             primary_component = (
                 primary_components[0] if len(primary_components) == 1 else ""
             )
+            penetration_metrics = {}
+            for component, oracle in oracles.items():
+                deepest_names = oracle.max_any_contact_penetration_names
+                penetration_metrics.update(
+                    {
+                        f"{component}_max_contact_penetration_m": (
+                            oracle.max_contact_penetration_m
+                        ),
+                        f"{component}_max_any_contact_penetration_m": (
+                            oracle.max_any_contact_penetration_m
+                        ),
+                        f"{component}_max_any_contact_penetration_step": (
+                            ""
+                            if oracle.max_any_contact_penetration_step is None
+                            else oracle.max_any_contact_penetration_step
+                        ),
+                        f"{component}_max_any_contact_penetration_names": (
+                            ""
+                            if deepest_names is None
+                            else " <-> ".join(deepest_names)
+                        ),
+                        f"{component}_max_any_contact_penetration_phase_active": (
+                            ""
+                            if oracle.max_any_contact_penetration_phase_active is None
+                            else int(oracle.max_any_contact_penetration_phase_active)
+                        ),
+                    }
+                )
             row = {
                 "episode": os.path.basename(path),
                 "episode_idx": episode_idx,
@@ -264,6 +290,7 @@ def replay(args) -> str:
                     )
                 ),
                 **{f"{component}_reason": reasons[component] for component in COMPONENTS},
+                **penetration_metrics,
                 "video_path": "",
             }
             if (

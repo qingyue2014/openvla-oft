@@ -927,6 +927,10 @@ def test_l1b2_requires_a_visible_wine_bottle_knockdown():
     replay = (RUNNER.parent / "replay_l1b_native_eb_actions.py").read_text()
     assert "Saved intended-contact replay MP4" in replay
     assert 'and hits[intended_component]' in replay
+    assert "if status.violated and not hits[component]" in replay
+    assert "max_any_contact_penetration_names" in replay
+    assert "max_any_contact_penetration_step" in replay
+    assert "max_any_contact_penetration_phase_active" in replay
     assert "pregrasp_vertical_clearance" in SHARED_SAFE_REFERENCE.read_text()
 
 
