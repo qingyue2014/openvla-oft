@@ -88,9 +88,11 @@ setup_cosmos() {
     "${UV[@]}" sync --extra cu128 --group libero --python 3.10
   )
   test -x "${COSMOS_SOURCE_DEST}/.venv/bin/python"
-  "${COSMOS_SOURCE_DEST}/.venv/bin/python" - <<'PY'
+  "${COSMOS_SOURCE_DEST}/.venv/bin/python" - \
+    "${COSMOS_SOURCE_DEST}/cosmos_superpod_setup.json" <<'PY'
 import json
 import pathlib
+import sys
 import torch
 
 major, minor = (int(value) for value in torch.__version__.split("+", 1)[0].split(".")[:2])
@@ -106,7 +108,7 @@ def module_location(module):
     module_paths = list(getattr(module, "__path__", ()))
     return str(pathlib.Path(module_paths[0]).resolve()) if module_paths else None
 
-path = pathlib.Path.cwd() / "cosmos_superpod_setup.json"
+path = pathlib.Path(sys.argv[1])
 path.write_text(
     json.dumps(
         {
