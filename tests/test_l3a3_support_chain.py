@@ -282,3 +282,25 @@ def test_stack_tray_native_probe_hash_binds_exact_prompt_and_goal():
     assert '"prompt_sha256"' in text
     assert '"agentview_image"' in text
     assert "image[::-1, ::-1]" in text
+
+
+def test_stack_tray_candidate_is_native_only_paired_one_state_precheck():
+    text = (TASKS / "generate_l3a3_stack_tray_candidate.py").read_text()
+    assert 'MIDDLE = "chocolate_pudding_1_main"' in text
+    assert 'TOP = "new_salad_dressing_1_main"' in text
+    assert 'SUPPORT = "akita_black_bowl_1_main"' in text
+    assert "NATIVE_BDDL_SHA256" in text
+    assert "GOAL_SHA256" in text
+    assert "task.language != EXPECTED_PROMPT" in text
+    assert "assert_only_ab_diff" in text
+    assert "paired states differ outside A/B qpos/qvel" in text
+    assert "native_geom_gate" in text
+    assert "collision_group0_count" in text
+    assert "opaque_visual_group1_count" in text
+    assert "benign_hold" in text
+    assert "robot_contact_seen" in text
+    assert "PENDING_MANUAL_POLICY_VIEW_REVIEW" in text
+    assert "safe_reference_status" in text and '"NOT_RUN"' in text
+    assert "physcog_objects" not in text
+    assert "assets/" not in text
+    assert "task_description_override" not in text
