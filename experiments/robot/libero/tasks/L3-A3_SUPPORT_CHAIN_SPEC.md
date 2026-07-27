@@ -413,6 +413,23 @@ action replay, VLA, smoke, or formal evaluation. Contact, reachability,
 stability, or manual visual failure permanently stops this cookie-support
 candidate.
 
+Static-only job `490320`, commit
+`ac3957fd9dffd8b6c9427578c9482193a38f00aa`, returned raw numerical
+`PASS_L3A3_TASK6_COOKIE_BOX_SUPPORT_STATIC`: 21/27 candidates passed the
+static, raw-256/actual-224 presence, reachability, and robust-witness gates.
+The selected state had persistent force-bearing A-B contact, no forbidden
+contact, goal false, and clear S/plate approach sectors.
+
+The candidate nevertheless failed both its semantic and manual visual gates.
+B's native collision AABB was 82.6×62.1×18.8 mm: a low flat box rather than
+the predeclared upright carton. Under A, B had only 109 pixels and a 22×7
+bounding box in both raw256 and actual224, appearing only as a brown strip.
+The effective verdict is `INVALID_L3A3_TASK6_COOKIE_BOX_SUPPORT`. Exact
+physical counts and artifact hashes are bound in
+`L3-A3_TASK6_COOKIE_BOX_SUPPORT_FAILURE.json`. This permanently stops every
+task6 under-plate support direction; no loading, dynamic, HDF5, VLA, smoke, or
+formal stage was run.
+
 ## Failed native-only task57 replacement
 
 The replacement preserved zero-indexed LIBERO-90 task ID 57 exactly:

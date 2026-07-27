@@ -994,6 +994,33 @@ def test_task6_cookie_box_support_is_one_frozen_native_static_grid():
     assert "task_description_override" not in text
 
 
+def test_task6_cookie_support_failure_stops_all_under_plate_support():
+    failure = json.loads(
+        (TASKS / "L3-A3_TASK6_COOKIE_BOX_SUPPORT_FAILURE.json").read_text()
+    )
+    assert failure["status"] == (
+        "PHYSICAL_PASS_BUT_SEMANTIC_AND_MANUAL_VISUAL_FAIL"
+    )
+    assert failure["job"]["job_id"] == "490320"
+    assert failure["physical_result"]["static_pass_count"] == 21
+    assert failure["physical_result"]["robust_adjacent_witness_count"] == 21
+    assert failure["semantic_and_visual_result"]["passed"] is False
+    assert failure["semantic_and_visual_result"][
+        "B_collision_AABB_extent_xyz_m"
+    ][2] == 0.018825044295988302
+    assert failure["semantic_and_visual_result"][
+        "selected_B_actual224_visible_pixels"
+    ] == 109
+    assert failure["downstream"]["all_task6_under_plate_support_tuning"] == (
+        "FORBIDDEN"
+    )
+    assert failure["downstream"]["release_dynamics"] == "NOT_RUN"
+    assert failure["downstream"]["vla"] == "NOT_RUN"
+    assert failure["conclusion"] == (
+        "PERMANENT_HARD_STOP_TASK6_UNDER_PLATE_SUPPORT_DIRECTION"
+    )
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text

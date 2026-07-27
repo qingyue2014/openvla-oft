@@ -1,0 +1,87 @@
+{
+  "status": "PHYSICAL_PASS_BUT_SEMANTIC_AND_MANUAL_VISUAL_FAIL",
+  "raw_verdict": "PASS_L3A3_TASK6_COOKIE_BOX_SUPPORT_STATIC",
+  "effective_verdict": "INVALID_L3A3_TASK6_COOKIE_BOX_SUPPORT",
+  "job": {
+    "job_id": "490320",
+    "commit": "ac3957fd9dffd8b6c9427578c9482193a38f00aa",
+    "compute_node": "dgx-09",
+    "exit_code": 0
+  },
+  "contract": {
+    "suite": "libero_spatial",
+    "task_id_zero_based": 6,
+    "policy_prompt": "pick up the black bowl next to the cookie box and place it on the plate",
+    "prompt_override": null,
+    "candidate_grid_count": 27,
+    "settle_steps": 240,
+    "hold_steps": 80,
+    "candidate_hdf5": "NOT_EXPORTED"
+  },
+  "physical_result": {
+    "static_pass_count": 21,
+    "automated_raw256_actual224_reachability_pass_count": 21,
+    "robust_adjacent_witness_count": 21,
+    "selected_parameters_direction_deg_radial_embed_m": [
+      30.0,
+      0.016,
+      -0.001
+    ],
+    "selected_A_B_min_normal_force_N": 0.04701375729969251,
+    "selected_A_motion_m": 5.134844281449606e-06,
+    "selected_B_motion_m": 1.7465724536310474e-05,
+    "selected_forbidden_contacts_seen": false,
+    "selected_goal_remained_false": true,
+    "selected_S_clear_side_sectors": 6,
+    "selected_plate_clear_side_sectors": 7
+  },
+  "semantic_and_visual_result": {
+    "reviewer": "primary_root",
+    "passed": false,
+    "B_collision_AABB_extent_xyz_m": [
+      0.08262367790522976,
+      0.062082689240477884,
+      0.018825044295988302
+    ],
+    "semantic_failure": "The native cookies collision body is a low flat box, not the predeclared upright cookie carton support.",
+    "selected_B_raw256_visible_pixels": 109,
+    "selected_B_raw256_bbox_xyxy": [
+      105,
+      196,
+      126,
+      202
+    ],
+    "selected_B_actual224_visible_pixels": 109,
+    "selected_B_actual224_bbox_xyxy": [
+      89,
+      180,
+      110,
+      186
+    ],
+    "manual_failure": "In both raw256 and actual224, B appears only as a 22x7 brown strip below the plate and is not recognizable as a cookie carton."
+  },
+  "artifacts": {
+    "report_json_sha256": "c42ba99a7c867ab7e6e41c41c30a7658663a6e9a21cb07d341887b0a8ffd554b",
+    "report_json_bytes": 436498,
+    "selected_policy256_png_sha256": "2dd54d7e481a7ffd99e93e293d464edf942bb1dadc8bd2a39e35f7f5097b4b39",
+    "selected_actual224_png_sha256": "3f5075d51909f724347ef8773be76d50e45a9702250769f4afe501a7e5fa2e80",
+    "selected_role_mask256_png_sha256": "3890c2711ceec6bf878974e81a6875018585f904ff8c5353631cc202998bd60f",
+    "selected_role_mask224_png_sha256": "843b7d27ff9f4448538c175304448997106d28c9156e83133795adc4c2b4c687",
+    "selected_segmentation256_npy_sha256": "a9b6cde37bb7aa2c08f76347236c8e7c702e7318c5e1332c5991d7ccaf1c9683",
+    "candidate_hdf5": "NOT_EXPORTED",
+    "local_run_ledger": ".physcog-agent/runs/20260727T054115Z-l3a3-task6_cookie_box_support_static"
+  },
+  "downstream": {
+    "all_task6_under_plate_support_tuning": "FORBIDDEN",
+    "loading_target_onto_plate": "NOT_RUN",
+    "release_dynamics": "NOT_RUN",
+    "causal_ablation": "NOT_RUN",
+    "safe_reference": "NOT_RUN",
+    "action_separation": "NOT_RUN",
+    "candidate_hdf5": "NOT_EXPORTED",
+    "vla": "NOT_RUN",
+    "smoke": "NOT_RUN",
+    "formal": "NOT_RUN"
+  },
+  "conclusion": "PERMANENT_HARD_STOP_TASK6_UNDER_PLATE_SUPPORT_DIRECTION"
+}
