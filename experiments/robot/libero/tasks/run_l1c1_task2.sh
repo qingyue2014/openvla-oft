@@ -89,6 +89,8 @@ RISK_DEPENDENT_XY_ANGLE_DEG="${RISK_DEPENDENT_XY_ANGLE_DEG:-135}"
 BOWL_STACK_CALIBRATION_CSV="${BOWL_STACK_CALIBRATION_CSV:-${LOG_DIR}/l1c1_bowl_stack_calibration.csv}"
 BOWL_STACK_CALIBRATION_REPORT="${BOWL_STACK_CALIBRATION_REPORT:-${LOG_DIR}/l1c1_bowl_stack_calibration.md}"
 BOWL_STACK_SAFE_REFERENCE_VIDEOS="${BOWL_STACK_SAFE_REFERENCE_VIDEOS:-${LOG_DIR}/l1c1_safe_reference_videos}"
+NATIVE_PREFLIGHT_JSON="${NATIVE_PREFLIGHT_JSON:-${LOG_DIR}/l1c1_native_preflight.json}"
+NATIVE_PREFLIGHT_REPORT="${NATIVE_PREFLIGHT_REPORT:-${LOG_DIR}/l1c1_native_preflight.md}"
 BOWL_STACK_EB_NOTE="${BOWL_STACK_EB_NOTE:-L1-C1-hidden-bowl-stack-eb}"
 BOWL_STACK_ER_NOTE="${BOWL_STACK_ER_NOTE:-L1-C1-hidden-bowl-stack-risk}"
 BOWL_STACK_EC_NOTE="${BOWL_STACK_EC_NOTE:-L1-C1-hidden-bowl-stack-ec}"
@@ -244,7 +246,18 @@ generate_bowl_stack_candidate() {
     --output "${BOWL_STACK_EC_STATE_PATH}" \
     --num_states "${trials}" --seed "${SEED}" \
     --source_indices "${BOWL_STACK_SOURCE_INDICES}"
+  run_bowl_stack_native_preflight
   echo "PASS_L1C1_PAIRED_INITIAL_STATES_GENERATED count=${trials}"
+}
+
+run_bowl_stack_native_preflight() {
+  python experiments/robot/libero/tasks/preflight_l1c1_native.py \
+    --eb_states "${BOWL_STACK_EB_STATE_PATH}" \
+    --er_states "${BOWL_STACK_STATE_PATH}" \
+    --ec_states "${BOWL_STACK_EC_STATE_PATH}" \
+    --out_json "${NATIVE_PREFLIGHT_JSON}" \
+    --out_report "${NATIVE_PREFLIGHT_REPORT}"
+  grep -q 'PASS_NATIVE_ONLY_PREFLIGHT' "${NATIVE_PREFLIGHT_REPORT}"
 }
 
 regenerate_bowl_stack_risk_candidate() {
@@ -308,6 +321,7 @@ run_bowl_stack_direction_sweep() {
 }
 
 run_bowl_stack_preview() {
+  run_bowl_stack_native_preflight
   require_states "${BOWL_STACK_EB_STATE_PATH}"
   require_states "${BOWL_STACK_STATE_PATH}"
   require_states "${BOWL_STACK_EC_STATE_PATH}"
@@ -324,6 +338,7 @@ require_bowl_stack_bundle() {
 }
 
 run_bowl_stack_safe_reference() {
+  run_bowl_stack_native_preflight
   require_states "${BOWL_STACK_STATE_PATH}"
   mkdir -p "${BOWL_STACK_SAFE_REFERENCE_VIDEOS}"
   find "${BOWL_STACK_SAFE_REFERENCE_VIDEOS}" -maxdepth 1 -type f -name '*.mp4' -delete
@@ -340,6 +355,7 @@ run_bowl_stack_safe_reference() {
 }
 
 run_bowl_stack_calibration() {
+  run_bowl_stack_native_preflight
   require_states "${BOWL_STACK_STATE_PATH}"
   python experiments/robot/libero/tasks/calibrate_l1c1_bowl_stack.py \
     --state_path "${BOWL_STACK_STATE_PATH}" \
@@ -357,6 +373,7 @@ run_bowl_stack_calibration() {
 run_bowl_stack_risk() {
   local trials="$1"
   local note="$2"
+  run_bowl_stack_native_preflight
   require_states "${BOWL_STACK_STATE_PATH}"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
@@ -383,6 +400,7 @@ run_bowl_stack_risk() {
 run_bowl_stack_baseline() {
   local trials="$1"
   local note="$2"
+  run_bowl_stack_native_preflight
   require_states "${BOWL_STACK_EB_STATE_PATH}"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
@@ -403,6 +421,7 @@ run_bowl_stack_baseline() {
 run_bowl_stack_ec() {
   local trials="$1"
   local note="$2"
+  run_bowl_stack_native_preflight
   require_states "${BOWL_STACK_EC_STATE_PATH}"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
@@ -421,6 +440,7 @@ run_bowl_stack_ec() {
 }
 
 run_bowl_stack_replay() {
+  run_bowl_stack_native_preflight
   run_bowl_stack_er_replay
   python experiments/robot/libero/tasks/replay_l1c1_ec_actions.py \
     --eb "${BOWL_STACK_EB_TRAJECTORY_DIR}" \
@@ -452,6 +472,7 @@ run_bowl_stack_analysis() {
 }
 
 run_bowl_stack_validation() {
+  run_bowl_stack_native_preflight
   require_bowl_stack_bundle
   run_bowl_stack_calibration
   run_bowl_stack_safe_reference
@@ -531,6 +552,7 @@ case "${MODE}" in
   bowl_stack_preview) run_bowl_stack_preview ;;
   bowl_stack_validate) run_bowl_stack_validation ;;
   bowl_stack_calibrate) run_bowl_stack_calibration ;;
+  bowl_stack_native_preflight) run_bowl_stack_native_preflight ;;
   bowl_stack_safe_reference) run_bowl_stack_safe_reference ;;
   bowl_stack_replay) run_bowl_stack_replay ;;
   bowl_stack_recalibrate)
@@ -549,6 +571,7 @@ case "${MODE}" in
     ;;
   bowl_stack_analyze) run_bowl_stack_analysis ;;
   bowl_stack_eval)
+    run_bowl_stack_native_preflight
     require_bowl_stack_bundle
     run_bowl_stack_validation
     prepare_bowl_stack_formal_outputs
@@ -568,7 +591,7 @@ case "${MODE}" in
   record) record_results ;;
   *)
     echo "Unknown mode: ${MODE}" >&2
-    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_validate|bowl_stack_calibrate|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_recalibrate|bowl_stack_direction_sweep|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
+    echo "Expected check|debug|preview|sweep|calibrate|calibrate_candidate|bowl_stack_check|bowl_stack_preview|bowl_stack_validate|bowl_stack_calibrate|bowl_stack_native_preflight|bowl_stack_safe_reference|bowl_stack_replay|bowl_stack_recalibrate|bowl_stack_direction_sweep|bowl_stack_risk|bowl_stack_smoke|bowl_stack_analyze|bowl_stack_eval|baseline|control|risk|smoke|eval|all|record" >&2
     exit 2
     ;;
 esac

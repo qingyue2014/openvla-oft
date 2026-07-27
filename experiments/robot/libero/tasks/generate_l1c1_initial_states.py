@@ -25,8 +25,10 @@ safe; novelty alone should not elicit a stacking response.
 """
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -206,6 +208,103 @@ INITIAL_SUPPORT_MAX_XY_OFFSET = 0.075
 INITIAL_SUPPORT_MAX_TILT_DEG = 5.0
 INITIAL_SUPPORT_MIN_TABLE_CLEARANCE = 0.003
 INITIAL_DEPENDENT_MAX_XY_OFFSET = 0.040
+
+
+def _typed_bddl_declarations(source: str, section: str) -> list[dict]:
+    """Return the exact typed names declared in one native BDDL section."""
+    declarations = []
+    active = False
+    balance = 0
+    for line in source.splitlines():
+        if not active and re.search(rf"\(:{re.escape(section)}\b", line):
+            active = True
+        if not active:
+            continue
+        balance += line.count("(") - line.count(")")
+        match = re.match(
+            r"\s*([A-Za-z0-9_\s]+?)\s*-\s*([A-Za-z0-9_]+)\s*$", line
+        )
+        if match:
+            declarations.extend(
+                {"name": name, "asset_class": match.group(2)}
+                for name in match.group(1).split()
+            )
+        if balance <= 0:
+            break
+    if not active:
+        raise RuntimeError(f"Native BDDL is missing :{section}")
+    return declarations
+
+
+def _model_names(model, count_name: str, lookup_name: str) -> list[str]:
+    count = int(getattr(model, count_name, 0))
+    lookup = getattr(model, lookup_name, None)
+    if lookup is None:
+        return [""] * count
+    return [lookup(idx) or "" for idx in range(count)]
+
+
+def runtime_asset_inventory(model) -> dict:
+    """Serialize compiled topology that identifies the native task assets."""
+    geoms = []
+    for geom_id in range(int(model.ngeom)):
+        geoms.append(
+            {
+                "name": model.geom_id2name(geom_id) or "",
+                "body_id": int(model.geom_bodyid[geom_id]),
+                "type": int(model.geom_type[geom_id]),
+                "group": int(model.geom_group[geom_id]),
+                "contype": int(model.geom_contype[geom_id]),
+                "conaffinity": int(model.geom_conaffinity[geom_id]),
+                "data_id": int(model.geom_dataid[geom_id]),
+                "material_id": int(model.geom_matid[geom_id]),
+                "size": np.asarray(model.geom_size[geom_id], dtype=float).tolist(),
+            }
+        )
+    return {
+        "bodies": _model_names(model, "nbody", "body_id2name"),
+        "joints": _model_names(model, "njnt", "joint_id2name"),
+        "geoms": geoms,
+        "sites": _model_names(model, "nsite", "site_id2name"),
+        "mesh_count": int(getattr(model, "nmesh", 0)),
+        "material_count": int(getattr(model, "nmat", 0)),
+        "texture_count": int(getattr(model, "ntex", 0)),
+    }
+
+
+def json_sha256(value: object) -> str:
+    payload = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def native_task_context(task_suite_name, task_id, task, task_bddl, env) -> dict:
+    """Capture the immutable native task identity before state intervention."""
+    bddl = Path(task_bddl).resolve()
+    if bddl.name != Path(task.bddl_file).name or "bddl_files" not in bddl.parts:
+        raise RuntimeError(f"Resolved BDDL is not native LIBERO source: {bddl}")
+    source = bddl.read_text()
+    language = re.search(r"\(:language\s+([^\r\n)]+)\)", source)
+    if language is None:
+        raise RuntimeError("Native BDDL is missing its declared :language")
+    inventory = runtime_asset_inventory(env.sim.model)
+    return {
+        "native_suite": task_suite_name,
+        "native_task_id": int(task_id),
+        "native_prompt": task.language,
+        "native_bddl_declared_language": language.group(1).strip(),
+        "native_bddl": str(Path(task.problem_folder) / task.bddl_file),
+        "native_bddl_resolved_path": str(bddl),
+        "native_bddl_source": source,
+        "native_bddl_sha256": hashlib.sha256(source.encode()).hexdigest(),
+        "native_declared_asset_inventory": {
+            "fixtures": _typed_bddl_declarations(source, "fixtures"),
+            "objects": _typed_bddl_declarations(source, "objects"),
+        },
+        "native_runtime_asset_inventory": inventory,
+        "native_asset_inventory_sha256": json_sha256(inventory),
+    }
 
 
 def _zero_free_joint_velocity(sim, qadr: int) -> None:
@@ -686,6 +785,9 @@ def generate_states(
     env = OffScreenRenderEnv(bddl_file_name=task_bddl, camera_heights=256, camera_widths=256)
     env.seed(seed)
     default_states = task_suite.get_task_init_states(v["task_id"])
+    native_context = native_task_context(
+        task_suite_name, v["task_id"], task, task_bddl, env
+    )
 
     print(f"\nVariant: {variant_key}")
     print(f"Task {v['task_id']}: {task.language}")
@@ -845,15 +947,33 @@ def generate_states(
         )
 
     env.close()
-    result = (states, task.language, accepted_source_indices)
+    result = (states, task.language, accepted_source_indices, native_context)
     return result if return_source_indices else result[:2]
 
 
-def save_hdf5(states, task_description: str, out_path: str) -> None:
+def save_hdf5(
+    states,
+    task_description: str,
+    out_path: str,
+    *,
+    native_context: dict,
+    variant: str,
+) -> None:
     os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
     key = task_description.replace(" ", "_")
     with h5py.File(out_path, "w") as f:
         grp = f.create_group(key)
+        for name in (
+            "native_suite",
+            "native_task_id",
+            "native_prompt",
+            "native_bddl",
+            "native_bddl_sha256",
+            "native_asset_inventory_sha256",
+        ):
+            grp.attrs[name] = native_context[name]
+        grp.attrs["state_intervention_variant"] = variant
+        grp.attrs["custom_assets"] = "[]"
         for i, state in enumerate(states):
             ep = grp.create_group(f"demo_{i}")
             ep.create_dataset("initial_state", data=state)
@@ -912,7 +1032,7 @@ def main():
                 f"{args.source_indices} contains {len(source_indices)} indices, "
                 f"but --num_states={args.num_states}"
             )
-    states, task_desc, accepted_indices = generate_states(
+    states, task_desc, accepted_indices, native_context = generate_states(
         args.variant,
         args.task_suite_name,
         args.num_states,
@@ -925,7 +1045,13 @@ def main():
         source_state_indices=source_indices,
         return_source_indices=True,
     )
-    save_hdf5(states, task_desc, args.output)
+    save_hdf5(
+        states,
+        task_desc,
+        args.output,
+        native_context=native_context,
+        variant=args.variant,
+    )
     if args.source_indices_out:
         index_path = Path(args.source_indices_out)
         index_path.parent.mkdir(parents=True, exist_ok=True)

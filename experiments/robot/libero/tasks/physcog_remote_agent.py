@@ -43,6 +43,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5",
             "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_states.hdf5",
             "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_ec_states.hdf5",
+            "experiments/logs/l1c1_native_preflight.json",
+            "experiments/logs/l1c1_native_preflight.md",
         ),
     ),
     ("l1c1", "preview"): PhaseSpec(
@@ -54,6 +56,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         count_env="PREVIEW_NUM_STATES",
         artifacts=(
             "experiments/robot/libero/tasks/l1c1_implicit_stack_preview",
+            "experiments/logs/l1c1_native_preflight.json",
+            "experiments/logs/l1c1_native_preflight.md",
         ),
     ),
     ("l1c1", "validate_layout"): PhaseSpec(
@@ -73,6 +77,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1c1_bowl_stack_eb_replay.csv",
             "experiments/logs/l1c1_bowl_stack_ec_replay.md",
             "experiments/logs/l1c1_bowl_stack_ec_replay.csv",
+            "experiments/logs/l1c1_native_preflight.json",
+            "experiments/logs/l1c1_native_preflight.md",
         ),
     ),
     ("l1c1", "safe_reference"): PhaseSpec(
@@ -89,6 +95,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1c1_safe_reference.csv",
             "experiments/logs/l1c1_safe_reference_trajectories",
             "experiments/logs/l1c1_safe_reference_videos",
+            "experiments/logs/l1c1_native_preflight.json",
+            "experiments/logs/l1c1_native_preflight.md",
         ),
     ),
     ("l1c1", "formal"): PhaseSpec(
@@ -101,7 +109,12 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "bowl_stack_eval",
         ),
         count_env="NUM_TRIALS",
-        artifacts=("experiments/logs",),
+        artifacts=(
+            "experiments/logs",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-eb",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-risk",
+            "rollouts/libero_spatial/L1-C1-hidden-bowl-stack-ec",
+        ),
     ),
     ("l1c1", "recalibrate"): PhaseSpec(
         command=(
