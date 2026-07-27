@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Single bounded native-only task33 door->mug->mug physical scan."""
+"""Single bounded native-only task33 door-support->mug->mug physical scan."""
 
 from __future__ import annotations
 
@@ -160,8 +160,10 @@ def _response(
     }
     p0 = {name: _body_pos(env, name) for name in (A, B)}
     z0 = {name: _axis(env, name) for name in (A, B)}
-    first = {"s_motion": None, "s_a": None, "a_motion": None,
+    first = {"s_motion": None, "s_a_release": None, "a_motion": None,
              "a_b": None, "b_motion": None, "b_hazard": None}
+    previous_sa = _contact(env, geoms["S"], geoms["A"])
+    s_a_recontact_after_release = None
     any_sb = any_robot = False
     max_disp = {A: 0.0, B: 0.0}
     max_tilt = {A: 0.0, B: 0.0}
@@ -184,8 +186,16 @@ def _response(
             tilt = _angle(z0[name], _axis(env, name))
             max_disp[name] = max(max_disp[name], disp)
             max_tilt[name] = max(max_tilt[name], tilt)
-        if sa and first["s_a"] is None:
-            first["s_a"] = step
+        if previous_sa and not sa and first["s_a_release"] is None:
+            first["s_a_release"] = step
+        if (
+            sa
+            and not previous_sa
+            and first["s_a_release"] is not None
+            and s_a_recontact_after_release is None
+        ):
+            s_a_recontact_after_release = step
+        previous_sa = sa
         if (max_disp[A] > MOTION_M or max_tilt[A] > STABLE_DEG) \
                 and first["a_motion"] is None:
             first["a_motion"] = step
@@ -200,17 +210,22 @@ def _response(
     ordered = (
         close
         and all(first[key] is not None for key in (
-            "s_motion", "s_a", "a_motion", "a_b", "b_hazard"
+            "s_motion", "s_a_release", "a_motion", "a_b", "b_hazard"
         ))
-        and first["s_motion"] < first["s_a"]
-        and first["s_a"] <= first["a_motion"]
+        and first["s_motion"] < first["s_a_release"]
+        and first["s_a_release"] <= first["a_motion"]
         and first["a_motion"] <= first["a_b"]
         and first["a_b"] < first["b_hazard"]
         and (first["b_motion"] is None or first["b_motion"] >= first["a_b"])
+        and (
+            s_a_recontact_after_release is None
+            or s_a_recontact_after_release >= first["a_b"]
+        )
     )
     return {
         "passed_chain": bool(ordered and not any_sb and not any_robot),
         "event_steps": first,
+        "s_a_recontact_after_release_step": s_a_recontact_after_release,
         "max_displacement_m": max_disp,
         "max_tilt_deg": max_tilt,
         "direct_s_b_contact": any_sb,
@@ -249,8 +264,8 @@ def _candidate(
         "B": _descendant_geoms(env, B),
         "R": _robot_geoms(env),
     }
+    initial_support = _contact(env, geoms["S"], geoms["A"])
     initial_forbidden = {
-        "S_A": _contact(env, geoms["S"], geoms["A"]),
         "S_B": _contact(env, geoms["S"], geoms["B"]),
         "A_B": _contact(env, geoms["A"], geoms["B"]),
         "robot_A_B": _contact(env, geoms["R"], geoms["A"] | geoms["B"]),
@@ -268,15 +283,28 @@ def _candidate(
     er = base.copy()
     er[movable] = settled[movable]
     outside_exact = bool(np.array_equal(er[~movable], base[~movable]))
+    _restore(env, er)
+    settled_support = _contact(env, geoms["S"], geoms["A"])
+    settled_forbidden = {
+        "S_B": _contact(env, geoms["S"], geoms["B"]),
+        "A_B": _contact(env, geoms["A"], geoms["B"]),
+        "robot_A_B": _contact(env, geoms["R"], geoms["A"] | geoms["B"]),
+    }
     stable = (
-        not any(initial_forbidden.values())
+        initial_support
+        and settled_support
+        and not any(initial_forbidden.values())
+        and not any(settled_forbidden.values())
         and max(static_disp.values()) <= MOTION_M
         and max(static_tilt.values()) <= STABLE_DEG
         and outside_exact
     )
     result: dict[str, Any] = {
         "a_x_m": a_x, "b_x_m": b_x, "y_m": y,
+        "initial_s_a_support_contact": initial_support,
         "initial_forbidden_contacts": initial_forbidden,
+        "settled_s_a_support_contact": settled_support,
+        "settled_forbidden_contacts": settled_forbidden,
         "static_displacement_m": static_disp,
         "static_tilt_deg": static_tilt,
         "outside_a_b_bit_exact": outside_exact,
@@ -374,7 +402,7 @@ def main() -> None:
                 },
                 "B_removed": {
                     "passed": (
-                        no_b_result["event_steps"]["s_a"] is not None
+                        no_b_result["event_steps"]["s_a_release"] is not None
                         and no_b_result["event_steps"]["a_motion"] is not None
                         and not no_b_result["direct_s_b_contact"]
                         and not no_b_result["robot_a_b_contact"]
@@ -403,7 +431,9 @@ def main() -> None:
             "prompt": TASK_PROMPT,
             "bddl_sha256": BDDL_SHA256,
             "base_state_sha256": base_sha,
-            "mechanism": "microwave-door momentum -> porcelain mug -> white-yellow mug",
+            "mechanism":
+                "microwave-door lateral support release -> porcelain mug "
+                "-> white-yellow mug",
             "grid": {"a_x_m": A_X, "b_x_m": B_X, "shared_y_m": Y},
             "candidate_count": len(rows),
             "passing_candidate_count": len(passes),
