@@ -44,6 +44,8 @@ python -m pip install --upgrade --no-deps --target "${OPENPI_CLIENT_ROOT}" \
 
 (
   cd "${OPENPI_ROOT}"
+  CC="${OPENPI_CC:-/usr/bin/gcc}" \
+  CXX="${OPENPI_CXX:-/usr/bin/g++}" \
   OPENPI_DATA_HOME="${OPENPI_DATA_HOME}" "${UV[@]}" run python - \
     "${CHECKPOINT_PATH}" <<'PY'
 import pathlib

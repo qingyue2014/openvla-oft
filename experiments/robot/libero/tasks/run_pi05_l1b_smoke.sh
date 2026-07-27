@@ -63,6 +63,8 @@ fi
   cd "${OPENPI_ROOT}"
   CUDA_VISIBLE_DEVICES=0 \
   XLA_PYTHON_CLIENT_MEM_FRACTION="${XLA_PYTHON_CLIENT_MEM_FRACTION:-0.85}" \
+  CC="${OPENPI_CC:-/usr/bin/gcc}" \
+  CXX="${OPENPI_CXX:-/usr/bin/g++}" \
   OPENPI_DATA_HOME="${OPENPI_DATA_HOME}" \
     "${UV[@]}" run scripts/serve_policy.py \
       --env LIBERO \
