@@ -92,6 +92,7 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
         "preview",
         "safe_reference",
         "eb_replay",
+        "eb_source_pilot",
         "smoke",
     } <= phases
     assert PHASES[("l3a4", "geometry_sweep")].count_env == "L3A4_SWEEP_TRIALS"
@@ -111,6 +112,10 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
     assert PHASES[("l3a4", "smoke")].environment == (
         ("CHECKPOINT", L3A4_CHECKPOINT),
     )
+    source_pilot = PHASES[("l3a4", "eb_source_pilot")]
+    assert source_pilot.count_env == "NUM_TRIALS"
+    assert ("L3A4_EB_SOURCE_MAX_STEPS", "600") in source_pilot.environment
+    assert "evaluation.eval_physcog_libero_l1()" in source_pilot.command[-1]
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
