@@ -23,6 +23,26 @@ def is_cosmos_model_family(model_family: str) -> bool:
     return model_family.lower() in COSMOS_MODEL_ALIASES
 
 
+def resolve_cosmos_package_root(cosmos_policy_module: Any) -> Path:
+    """Resolve both regular and PEP 420 namespace-package installations."""
+    module_file = getattr(cosmos_policy_module, "__file__", None)
+    if module_file:
+        candidates = (Path(module_file).resolve().parent,)
+    else:
+        candidates = tuple(
+            Path(location).resolve()
+            for location in getattr(cosmos_policy_module, "__path__", ())
+        )
+
+    for candidate in candidates:
+        if (candidate / "config" / "config.py").is_file():
+            return candidate
+    raise RuntimeError(
+        "Could not locate Cosmos Policy's config/config.py from its installed "
+        f"package paths: {[str(path) for path in candidates]}"
+    )
+
+
 def validate_cosmos_actions(actions: Any) -> np.ndarray:
     """Return a finite ``(T, 7)`` action chunk or raise a useful error."""
     action_array = np.asarray(actions, dtype=np.float32)
@@ -104,7 +124,7 @@ class CosmosPolicy:
         if missing:
             raise FileNotFoundError(f"Incomplete Cosmos Policy checkpoint at {checkpoint}; missing: {missing}")
 
-        package_root = Path(cosmos_policy.__file__).resolve().parent
+        package_root = resolve_cosmos_package_root(cosmos_policy)
         cosmos_cfg = PolicyEvalConfig(
             config="cosmos_predict2_2b_480p_libero__inference_only",
             ckpt_path=str(checkpoint),
