@@ -304,3 +304,24 @@ def test_stack_tray_candidate_is_native_only_paired_one_state_precheck():
     assert "physcog_objects" not in text
     assert "assets/" not in text
     assert "task_description_override" not in text
+
+
+def test_task57_probe_reads_suite_contract_without_guessing_or_policy():
+    text = (TASKS / "probe_l3a3_task57_native.py").read_text()
+    assert "TASK_ID = 57" in text
+    for stem in (
+        "cream_cheese",
+        "alphabet_soup",
+        "tomato_sauce",
+        "ketchup",
+        "butter",
+        "wooden_tray",
+    ):
+        assert f'"{stem}"' in text
+    assert "task.language != bddl_prompt" in text
+    assert 'balanced_form(bddl_text, "goal")' in text
+    assert '"goal_form_sha256"' in text
+    assert '"native_bddl_sha256"' in text
+    assert '"candidate_status": "NOT_CONSTRUCTED"' in text
+    assert "pretrained_checkpoint" not in text
+    assert "task_description_override" not in text
