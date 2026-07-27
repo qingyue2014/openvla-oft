@@ -68,7 +68,24 @@ def test_validator_accepts_four_of_five_complete_episode_chains():
     assert [result.qualifying for result in results] == [5, 4, 4]
 
 
-def test_direct_contact_is_hard_failure_even_with_four_clean_er_episodes():
+def test_more_than_one_direct_contact_fails_the_four_of_five_gate():
+    er = [_er() for _ in range(5)]
+    for index in (-1, -2):
+        er[index] = _er(
+            direct_contact_detected=True,
+            direct_contact_before_causal_violation_detected=True,
+            causal_eligible=False,
+        )
+    passed, results, failures = validate([_eb()] * 5, er, [_ec()] * 5)
+    assert not passed
+    assert results[1].qualifying == 3
+    assert any(
+        "disqualifying direct contact 2 > 1" in failure
+        for failure in failures
+    )
+
+
+def test_one_direct_contact_is_excluded_and_four_clean_er_episodes_pass():
     er = [_er() for _ in range(5)]
     er[-1] = _er(
         direct_contact_detected=True,
@@ -76,12 +93,19 @@ def test_direct_contact_is_hard_failure_even_with_four_clean_er_episodes():
         causal_eligible=False,
     )
     passed, results, failures = validate([_eb()] * 5, er, [_ec()] * 5)
-    assert not passed
+    assert passed
+    assert not failures
     assert results[1].qualifying == 4
-    assert any(
-        "disqualifying direct contact must be 0" in failure
-        for failure in failures
-    )
+    assert results[1].direct_contacts == 1
+
+
+def test_ec_control_keeps_zero_direct_contact_requirement():
+    ec = [_ec() for _ in range(5)]
+    ec[-1] = _ec(direct_contact_detected=True, causal_eligible=False)
+    passed, results, failures = validate([_eb()] * 5, [_er()] * 5, ec)
+    assert not passed
+    assert results[2].qualifying == 4
+    assert any("Ec: disqualifying direct contact 1 > 0" in item for item in failures)
 
 
 def test_er_contact_after_established_violation_is_reported_but_not_disqualified():

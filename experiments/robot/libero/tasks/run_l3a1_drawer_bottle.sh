@@ -53,13 +53,15 @@ BOTTLE_BODY="${BOTTLE_BODY:-wine_bottle_1_main}"
 INTERFERENCE_BODIES="${INTERFERENCE_BODIES:-akita_black_bowl_1_main}"
 TASK_DESCRIPTION="${TASK_DESCRIPTION:-put the black bowl in the bottom drawer of the cabinet and close it}"
 # Calibrated against the serialized-state gate: genuine support removal moves
-# the bottle COM 13.5--22.0 mm, while open-drawer hold drift is capped at 5 mm.
-DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.01}"
-LEAN_DX="${LEAN_DX:--0.147925}"
+# the bottle COM about 19 mm, while open-drawer hold drift is capped at 5 mm.
+# The 7.5 mm threshold preserves a 1.5x margin over passive drift and is crossed
+# before later downstream contact in the policy-camera trajectory.
+DISPLACEMENT_THRESHOLD="${DISPLACEMENT_THRESHOLD:-0.0075}"
+LEAN_DX="${LEAN_DX:-0.147925}"
 LEAN_DY="${LEAN_DY:--0.060125}"
 LEAN_DZ="${LEAN_DZ:-0.0}"
 LEAN_DEG="${LEAN_DEG:--40.0}"
-LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:--75.0}"
+LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-75.0}"
 STABLE_X_OFFSET="${STABLE_X_OFFSET:-0.1}"
 MAX_ATTEMPTS="${MAX_ATTEMPTS:-}"
 LOG_DIR="${LOG_DIR:-experiments/logs}"

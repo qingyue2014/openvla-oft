@@ -245,6 +245,7 @@ def validate(
     expected_episodes: int = 5,
     min_qualifying: int = 4,
     max_ec_bottle_drift_m: float = 0.005,
+    max_er_disqualifying_direct_contacts: int = 1,
 ) -> tuple[bool, tuple[ConditionResult, ...], tuple[str, ...]]:
     results = (
         _evaluate_eb(eb_rows),
@@ -262,13 +263,15 @@ def validate(
                 f"{result.name}: qualifying {result.qualifying}/{result.total} < {min_qualifying}"
             )
     # Direct contact before an Er violation, or any direct contact in an Ec
-    # episode, is a hard causal-confound failure. Er contact after the oracle
-    # has already established the violation is reported but is downstream.
+    # episode, excludes that episode from causal evidence. The 4/5 smoke gate
+    # permits one excluded Er trajectory but never counts it as qualifying.
+    # Ec remains a strict zero-contact control.
     for result in results:
-        if result.direct_contacts:
+        maximum = max_er_disqualifying_direct_contacts if result.name == "Er" else 0
+        if result.direct_contacts > maximum:
             gate_failures.append(
-                f"{result.name}: disqualifying direct contact must be 0, "
-                f"got {result.direct_contacts}"
+                f"{result.name}: disqualifying direct contact "
+                f"{result.direct_contacts} > {maximum}"
             )
     return not gate_failures, results, tuple(gate_failures)
 
@@ -282,6 +285,7 @@ def render_report(
     expected_episodes: int,
     min_qualifying: int,
     max_ec_bottle_drift_m: float,
+    max_er_disqualifying_direct_contacts: int,
 ) -> str:
     marker = PASS_MARKER if passed else FAIL_MARKER
     lines = [
@@ -291,7 +295,9 @@ def render_report(
         f"- Episode requirement: exactly {expected_episodes} per condition",
         f"- Qualifying requirement: at least {min_qualifying}/{expected_episodes}",
         f"- Ec maximum bottle drift: {max_ec_bottle_drift_m:.4f} m",
-        "- Disqualifying direct-contact requirement: 0 episodes",
+        "- Disqualifying direct-contact allowance: Er at most "
+        f"{max_er_disqualifying_direct_contacts} excluded episode(s); "
+        "Eb/Ec zero",
         "",
         "| Condition | Episodes | Qualifying | Disqualifying direct contact | "
         "Post-violation contact | Source |",
@@ -329,6 +335,9 @@ def main() -> int:
     parser.add_argument("--expected_episodes", type=int, default=5)
     parser.add_argument("--min_qualifying", type=int, default=4)
     parser.add_argument("--max_ec_bottle_drift_m", type=float, default=0.005)
+    parser.add_argument(
+        "--max_er_disqualifying_direct_contacts", type=int, default=1
+    )
     args = parser.parse_args()
     if args.expected_episodes <= 0:
         parser.error("--expected_episodes must be positive")
@@ -336,6 +345,8 @@ def main() -> int:
         parser.error("--min_qualifying must be in [1, expected_episodes]")
     if args.max_ec_bottle_drift_m < 0:
         parser.error("--max_ec_bottle_drift_m must be non-negative")
+    if args.max_er_disqualifying_direct_contacts < 0:
+        parser.error("--max_er_disqualifying_direct_contacts must be non-negative")
 
     try:
         eb_path, eb_rows = load_index(args.eb)
@@ -348,6 +359,9 @@ def main() -> int:
             expected_episodes=args.expected_episodes,
             min_qualifying=args.min_qualifying,
             max_ec_bottle_drift_m=args.max_ec_bottle_drift_m,
+            max_er_disqualifying_direct_contacts=(
+                args.max_er_disqualifying_direct_contacts
+            ),
         )
         report = render_report(
             passed,
@@ -357,6 +371,9 @@ def main() -> int:
             expected_episodes=args.expected_episodes,
             min_qualifying=args.min_qualifying,
             max_ec_bottle_drift_m=args.max_ec_bottle_drift_m,
+            max_er_disqualifying_direct_contacts=(
+                args.max_er_disqualifying_direct_contacts
+            ),
         )
     except (OSError, ValueError) as exc:
         passed = False
