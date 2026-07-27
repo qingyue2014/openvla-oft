@@ -331,6 +331,11 @@ safe_reference_family() {
     extra_args+=(--approach_height 0.15 --lift_height 0.18)
     extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
     extra_args+=(--position_tolerance 0.030)
+    # The elevated cabinet approach settles 31.9--39.0 mm from its requested
+    # intermediate transport poses in smoke job 489971. These are collision-
+    # monitored via points, not the final placement: the latter retains its
+    # independent 6 mm controller tolerance and native task-success gate.
+    extra_args+=(--transport_position_tolerance 0.040)
     extra_args+=(--transport_clearance 0.12 --preplace_height 0.12)
     extra_args+=(--pregrasp_detour_y 0.15)
     extra_args+=(--place_offset_x -0.05 --place_offset_y 0.02)

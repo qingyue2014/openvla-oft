@@ -49,6 +49,7 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert 'extra_args+=(--component_bodies "robot0_link6")' in common
     assert 'extra_args+=(--required_phase "all")' in common
     assert 'extra_args+=(--swept_volume_component_bodies "robot0_link6")' in common
+    assert 'extra_args+=(--transport_position_tolerance 0.040)' in common
     completed = subprocess.run(
         ["bash", str(RUNNER), "formal"],
         cwd=REPO_ROOT,

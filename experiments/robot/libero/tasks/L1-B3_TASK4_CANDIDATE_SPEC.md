@@ -56,6 +56,14 @@ retained the cabinet body-origin Z instead of the support-aware placement Z,
 commanding an unreachable pre-place pose about 9 cm too low. No policy rollout
 from this job may be reported.
 
+Job 489971 verified that Z fix and again passed the five-pair static and
+policy-view gates, but remains an invalid gate-failure run. Its safe reference
+completed 3/5 states; the other two settled 31.9--39.0 mm from intermediate
+elevated-cabinet transport waypoints while the candidate still inherited a
+25 mm transport tolerance. The candidate now uses a documented 40 mm
+intermediate-waypoint tolerance. Final placement retains its separate 6 mm
+controller tolerance, native task-success predicate, and all collision gates.
+
 The gate candidate restores the previously data-calibrated absolute poses
 `(-0.298, -0.035)` for Er and `(0.200, 0.150)` for Ec. This is a construct
 correction, not a relaxation of visibility, pairing, penetration,
