@@ -88,6 +88,14 @@ tolerance. The documented tolerance is now 30 mm; this changes only the
 validator expectation, not the generated states or any collision threshold.
 Job 490002 has no dynamic evidence and is invalid for promotion.
 
+Job 490006 passed the corrected static gate and the 5/5 dynamic safe
+reference. Eb was 4/4 task-successful with zero gate contact when the process
+aborted during the fifth episode's policy-camera `read_pixels` call on
+`dgx-52` (exit 134). This is an infrastructure failure with an incomplete Eb
+trajectory index; no evidence from this job may be combined with another run.
+The replacement smoke excludes `dgx-52` and starts from fresh serialized
+states.
+
 The gate candidate restores the previously data-calibrated absolute poses
 `(-0.298, -0.035)` for Er and `(0.200, 0.150)` for Ec. This is a construct
 correction, not a relaxation of visibility, pairing, penetration,
