@@ -217,6 +217,85 @@ def _refinement_seed_priority(
     )
 
 
+def _causal_separation_offsets(
+    replay: dict,
+    trajectory: dict,
+    placement: np.ndarray,
+    target_body: str,
+    args: argparse.Namespace,
+) -> list[np.ndarray]:
+    """Move a strong seed away from components that causally pre-empt link7."""
+    intended_step = replay["hit_steps"].get("intended")
+    if intended_step is None:
+        return []
+    causal_names = [
+        name
+        for name in ("gripper", "held_object", "other_arm")
+        if replay["hit_steps"].get(name) is not None
+        and replay["hit_steps"][name] <= intended_step
+    ]
+    if not causal_names:
+        return []
+
+    sources: list[np.ndarray] = []
+    for name in causal_names:
+        step = int(replay["hit_steps"][name])
+        if name == "gripper":
+            positions = np.asarray(trajectory.get("eef_pos", []), dtype=float)
+            if 0 <= step < len(positions):
+                sources.append(positions[step, :2])
+        elif name == "held_object":
+            positions = np.asarray(
+                trajectory.get(f"body_pos__{target_body}", []), dtype=float
+            )
+            if 0 <= step < len(positions):
+                sources.append(positions[step, :2])
+        else:
+            arm_positions = []
+            for body_name in OTHER_ARM_LINKS:
+                positions = np.asarray(
+                    trajectory.get(f"body_pos__{body_name}", []), dtype=float
+                )
+                if 0 <= step < len(positions):
+                    arm_positions.append(positions[step, :2])
+            if arm_positions:
+                sources.append(
+                    min(
+                        arm_positions,
+                        key=lambda xy: float(
+                            np.linalg.norm(placement - xy)
+                        ),
+                    )
+                )
+
+    radii = _float_values(args.causal_separation_radial_distances)
+    angles = np.deg2rad(_float_values(args.causal_separation_angles_deg))
+    offsets: list[np.ndarray] = []
+    seen: set[tuple[float, float]] = set()
+    for source in sources:
+        away = np.asarray(placement, dtype=float) - np.asarray(
+            source, dtype=float
+        )
+        norm = float(np.linalg.norm(away))
+        if norm <= 1e-9:
+            continue
+        away /= norm
+        normal = np.array([-away[1], away[0]], dtype=float)
+        for radius in radii:
+            for angle in angles:
+                direction = np.cos(angle) * away + np.sin(angle) * normal
+                offset = radius * direction
+                key = (
+                    round(float(offset[0]), 6),
+                    round(float(offset[1]), 6),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+                offsets.append(offset)
+    return offsets
+
+
 def _novel_refinement_candidates(
     *,
     path_step: int,
@@ -953,6 +1032,7 @@ def calibrate(args: argparse.Namespace) -> str:
                         int,
                         str,
                         np.ndarray,
+                        dict,
                     ]
                 ] = []
                 effect_seed_pool: list[
@@ -961,6 +1041,7 @@ def calibrate(args: argparse.Namespace) -> str:
                         int,
                         str,
                         np.ndarray,
+                        dict,
                     ]
                 ] = []
                 scheduled_contact_refinements = 0
@@ -971,6 +1052,7 @@ def calibrate(args: argparse.Namespace) -> str:
                     path_step: int,
                     proposed_link: str,
                     placement: np.ndarray,
+                    seed_replay: dict,
                 ) -> int:
                     nonlocal refinement_seeds
                     nonlocal contact_refinement_seeds
@@ -987,7 +1069,16 @@ def calibrate(args: argparse.Namespace) -> str:
                             args.max_refinement_candidates
                             - scheduled_effect_refinements
                         )
-                        offsets = effect_refinement_offsets
+                        offsets = [
+                            *_causal_separation_offsets(
+                                seed_replay,
+                                trajectory,
+                                placement,
+                                target,
+                                args,
+                            ),
+                            *effect_refinement_offsets,
+                        ]
                     else:
                         if (
                             contact_refinement_seeds
@@ -1033,21 +1124,41 @@ def calibrate(args: argparse.Namespace) -> str:
                         ranked_refinements_scheduled = True
                         ranked_effect_seed_candidates = len(effect_seed_pool)
                         ranked_contact_seed_candidates = len(contact_seed_pool)
-                        for _, seed_step, seed_link, seed_xy in sorted(
+                        for (
+                            _,
+                            seed_step,
+                            seed_link,
+                            seed_xy,
+                            seed_replay,
+                        ) in sorted(
                             effect_seed_pool,
                             key=lambda item: item[0],
                             reverse=True,
                         ):
                             schedule_refinement_seed(
-                                "effect", seed_step, seed_link, seed_xy
+                                "effect",
+                                seed_step,
+                                seed_link,
+                                seed_xy,
+                                seed_replay,
                             )
-                        for _, seed_step, seed_link, seed_xy in sorted(
+                        for (
+                            _,
+                            seed_step,
+                            seed_link,
+                            seed_xy,
+                            seed_replay,
+                        ) in sorted(
                             contact_seed_pool,
                             key=lambda item: item[0],
                             reverse=True,
                         ):
                             schedule_refinement_seed(
-                                "contact", seed_step, seed_link, seed_xy
+                                "contact",
+                                seed_step,
+                                seed_link,
+                                seed_xy,
+                                seed_replay,
                             )
                         if not pending_refinements:
                             break
@@ -1200,6 +1311,7 @@ def calibrate(args: argparse.Namespace) -> str:
                             path_step,
                             proposed_link,
                             placement,
+                            replay,
                         )
                     elif (
                         immediate_anchor
@@ -1210,6 +1322,7 @@ def calibrate(args: argparse.Namespace) -> str:
                             path_step,
                             proposed_link,
                             placement,
+                            replay,
                         )
                     elif not is_refinement and replay["hits"]["intended"]:
                         effect_seed_pool.append(
@@ -1220,6 +1333,7 @@ def calibrate(args: argparse.Namespace) -> str:
                                 path_step,
                                 proposed_link,
                                 placement.copy(),
+                                replay,
                             )
                         )
                     elif (
@@ -1234,6 +1348,7 @@ def calibrate(args: argparse.Namespace) -> str:
                                 path_step,
                                 proposed_link,
                                 placement.copy(),
+                                replay,
                             )
                         )
             if selected is not None:
@@ -1604,6 +1719,19 @@ def main() -> None:
             "Independent offsets for turning intended link7 contact into a "
             "qualified consequence without consuming effect-refinement budget"
         ),
+    )
+    parser.add_argument(
+        "--causal_separation_radial_distances",
+        default="0.005,0.006,0.008,0.010,0.012",
+        help=(
+            "Additional offsets for moving a strong link7-effect seed away "
+            "from a causally earlier gripper, held object, or other arm link"
+        ),
+    )
+    parser.add_argument(
+        "--causal_separation_angles_deg",
+        default="0,15,-15,30,-30",
+        help="Angular deviations around each measured away-from-confound vector",
     )
     parser.add_argument(
         "--refinement_angular_candidates_deg",

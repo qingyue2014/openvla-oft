@@ -86,6 +86,9 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "effect_refinement_attempts" in text
     assert "contact_refinement_attempts" in text
     assert "def _refinement_seed_priority(" in text
+    assert "def _causal_separation_offsets(" in text
+    assert "causal_separation_radial_distances" in text
+    assert "0.005,0.006,0.008,0.010,0.012" in text
     assert "def _motion_aligned_candidates(" in text
     assert "def _balanced_low_and_motion_indices(" in text
     assert "Preserve the historical low-surface pool" in text
