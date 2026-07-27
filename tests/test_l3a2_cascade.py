@@ -309,6 +309,7 @@ def test_remote_registry_has_every_preformal_l3a2_gate():
     assert phases == {
         "native_preflight",
         "task49_native_preview",
+        "task49_er_preview",
         "adaptive_refine",
         "adaptive_sweep",
         "geometry_sweep",
