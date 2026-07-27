@@ -467,3 +467,26 @@ tilt change from 0.532 to 17.125 degrees. One non-passing point also contacted
 the robot through B. Since no physical candidate passed, the job exported no
 PNG, MP4, or NPZ and marked the scene not reviewable. No VLA ran. This
 bowl2 mechanism is rejected and will not be rerun.
+
+### Cookies-to-ramekin landmark-impact candidate
+
+Read-only exact-geometry job `490194`, source commit `32c3404`, tested a new
+native-only role assignment: S=target bowl1, A=cookies, and B=the prompt's
+ramekin landmark. Its frozen 30-point grid combined four cardinal directions
+plus one -x/-y diagonal, three coupled A lean/overlap pairs
+(`65°/-3 mm`, `72°/-4 mm`, and `78°/-5 mm`), and two inline S/B clearances
+(+2 and +6 mm). Each candidate used only pose assignment, `sim.forward()`,
+and contact queries; no candidate raw-MuJoCo step or VLA ran.
+
+Verdict: **FAIL_L3A4_LANDMARK_IMPACT_STATIC_FEASIBILITY**. A/table and
+B/table contact passed in all 30 placements. A/B, S/B, robot/A, and robot/B
+contacts were absent in all 30. However, true MuJoCo S/A contact was absent in
+all 30, so 0/30 candidates were feasible.
+
+The exact directional projection reported S/A overlap from -5 to -3 mm and
+S/B clearance from +2 to +6 mm, confirming that the placement signs were
+correct. The cookie box entered the non-convex bowl's projected footprint but
+did not touch its compiled collision surface; an AABB or one-axis overlap
+therefore cannot substitute for the required true contact. This candidate
+hard-stopped at the static gate and never entered hold, release, image, video,
+state export, or VLA evaluation.
