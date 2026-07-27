@@ -20,6 +20,11 @@ COSMOS_ACTION_DIM = 7
 COSMOS_CHUNK_SIZE = 16
 COSMOS_CONFIG_MODULE_PATH = "cosmos_policy/config/config.py"
 COSMOS_CHECKPOINT_FILENAME = "Cosmos-Policy-LIBERO-Predict2-2B.pt"
+COSMOS_TOKENIZER_REPO_ID = "nvidia/Cosmos-Predict2-2B-Video2World"
+COSMOS_TOKENIZER_REVISION = "f50c09f5d8ab133a90cac3f4886a6471e9ba3f18"
+COSMOS_DEFAULT_TOKENIZER = Path(
+    "/project/trllmout/models/Cosmos-Predict2-2B-Video2World/tokenizer/tokenizer.pth"
+)
 
 
 def is_cosmos_model_family(model_family: str) -> bool:
@@ -69,6 +74,23 @@ def defer_unused_cosmos_base_checkpoint_downloads(checkpoint_db: Any):
         checkpoint_db.get_checkpoint_by_hf = original_get_checkpoint_by_hf
         if cache_clear is not None:
             cache_clear()
+
+
+@contextmanager
+def use_local_cosmos_tokenizer(checkpoint_utils: Any, tokenizer_path: Path):
+    """Resolve the pinned Wan VAE tokenizer without network access."""
+    original_hf_hub_download = checkpoint_utils.hf_hub_download
+
+    def resolve_pinned_tokenizer(*, repo_id: str, filename: str, **kwargs):
+        if repo_id == COSMOS_TOKENIZER_REPO_ID and filename == "tokenizer/tokenizer.pth":
+            return str(tokenizer_path)
+        return original_hf_hub_download(repo_id=repo_id, filename=filename, **kwargs)
+
+    checkpoint_utils.hf_hub_download = resolve_pinned_tokenizer
+    try:
+        yield
+    finally:
+        checkpoint_utils.hf_hub_download = original_hf_hub_download
 
 
 def validate_cosmos_actions(actions: Any) -> np.ndarray:
@@ -125,6 +147,7 @@ class CosmosPolicy:
                 init_t5_text_embeddings_cache,
                 load_dataset_stats,
             )
+            from cosmos_policy.utils import checkpoint_utils
             from cosmos_policy.experiments.robot.libero.run_libero_eval import (
                 PolicyEvalConfig,
             )
@@ -152,6 +175,15 @@ class CosmosPolicy:
         missing = [name for name in required_files if not (checkpoint / name).is_file()]
         if missing:
             raise FileNotFoundError(f"Incomplete Cosmos Policy checkpoint at {checkpoint}; missing: {missing}")
+        tokenizer_path = Path(
+            str(getattr(cfg, "cosmos_tokenizer_path", "") or COSMOS_DEFAULT_TOKENIZER)
+        ).expanduser()
+        if not tokenizer_path.is_file():
+            raise FileNotFoundError(
+                f"Cosmos Wan VAE tokenizer not found: {tokenizer_path}. "
+                "Accept access to nvidia/Cosmos-Predict2-2B-Video2World, then "
+                "rerun the registered Superpod phase models:setup_cosmos."
+            )
 
         # Resolve the namespace package to validate this exact source install,
         # but pass the module-style path expected by Cosmos' config loader.
@@ -182,7 +214,10 @@ class CosmosPolicy:
 
         init_t5_text_embeddings_cache(cosmos_cfg.t5_text_embeddings_path)
         dataset_stats = load_dataset_stats(cosmos_cfg.dataset_stats_path)
-        with defer_unused_cosmos_base_checkpoint_downloads(checkpoint_db):
+        with (
+            defer_unused_cosmos_base_checkpoint_downloads(checkpoint_db),
+            use_local_cosmos_tokenizer(checkpoint_utils, tokenizer_path),
+        ):
             model, train_cfg = get_model(cosmos_cfg)
         train_chunk_size = train_cfg.dataloader_train.dataset.chunk_size
         if train_chunk_size != COSMOS_CHUNK_SIZE:

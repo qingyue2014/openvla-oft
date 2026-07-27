@@ -19,6 +19,10 @@ COSMOS_DEST="${MODEL_ROOT}/Cosmos-Policy-LIBERO-Predict2-2B"
 COSMOS_SOURCE_URL="https://github.com/nvlabs/cosmos-policy.git"
 COSMOS_SOURCE_REVISION="18a2accadf4e7a3531e56754102af5a24d2316da"
 COSMOS_SOURCE_DEST="${SOURCE_ROOT}/cosmos-policy"
+COSMOS_BASE_REPO_ID="nvidia/Cosmos-Predict2-2B-Video2World"
+COSMOS_BASE_REVISION="f50c09f5d8ab133a90cac3f4886a6471e9ba3f18"
+COSMOS_BASE_DEST="${MODEL_ROOT}/Cosmos-Predict2-2B-Video2World"
+COSMOS_TOKENIZER_FILE="tokenizer/tokenizer.pth"
 
 DREAMZERO_REPO_ID="GEAR-Dreams/DreamZero-DROID"
 DREAMZERO_REVISION="96ad344138c66e82536422432ad742f015784942"
@@ -57,6 +61,25 @@ hf_download() {
   fi
 }
 
+hf_download_file() {
+  local repo_id="$1" revision="$2" filename="$3" destination="$4"
+  mkdir -p "${destination}"
+  if command -v hf >/dev/null 2>&1; then
+    hf download "${repo_id}" "${filename}" \
+      --repo-type model \
+      --revision "${revision}" \
+      --local-dir "${destination}"
+  elif command -v huggingface-cli >/dev/null 2>&1; then
+    huggingface-cli download "${repo_id}" "${filename}" \
+      --repo-type model \
+      --revision "${revision}" \
+      --local-dir "${destination}"
+  else
+    echo "Neither 'hf' nor 'huggingface-cli' is available." >&2
+    exit 3
+  fi
+}
+
 checkout_source() {
   local source_url="$1" revision="$2" destination="$3"
   if [[ ! -d "${destination}/.git" ]]; then
@@ -69,10 +92,14 @@ checkout_source() {
 
 setup_cosmos() {
   hf_download "${COSMOS_REPO_ID}" "${COSMOS_REVISION}" "${COSMOS_DEST}"
+  hf_download_file \
+    "${COSMOS_BASE_REPO_ID}" "${COSMOS_BASE_REVISION}" \
+    "${COSMOS_TOKENIZER_FILE}" "${COSMOS_BASE_DEST}"
   test -s "${COSMOS_DEST}/Cosmos-Policy-LIBERO-Predict2-2B.pt"
   test -s "${COSMOS_DEST}/config.json"
   test -s "${COSMOS_DEST}/libero_dataset_statistics.json"
   test -s "${COSMOS_DEST}/libero_t5_embeddings.pkl"
+  test -s "${COSMOS_BASE_DEST}/${COSMOS_TOKENIZER_FILE}"
   checkout_source \
     "${COSMOS_SOURCE_URL}" "${COSMOS_SOURCE_REVISION}" "${COSMOS_SOURCE_DEST}"
   if command -v uv >/dev/null 2>&1; then
@@ -100,7 +127,10 @@ path.write_text(
 )
 PY
   "${COSMOS_SOURCE_DEST}/.venv/bin/python" - \
-    "${COSMOS_SOURCE_DEST}/cosmos_superpod_setup.json" <<'PY'
+    "${COSMOS_SOURCE_DEST}/cosmos_superpod_setup.json" \
+    "${COSMOS_BASE_DEST}/${COSMOS_TOKENIZER_FILE}" \
+    "${COSMOS_BASE_REPO_ID}" "${COSMOS_BASE_REVISION}" <<'PY'
+import hashlib
 import json
 import pathlib
 import sys
@@ -119,7 +149,16 @@ def module_location(module):
     module_paths = list(getattr(module, "__path__", ()))
     return str(pathlib.Path(module_paths[0]).resolve()) if module_paths else None
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8 * 1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
 path = pathlib.Path(sys.argv[1])
+tokenizer_path = pathlib.Path(sys.argv[2])
+tokenizer_sha256 = sha256_file(tokenizer_path)
 path.write_text(
     json.dumps(
         {
@@ -127,6 +166,13 @@ path.write_text(
             "libero": module_location(libero),
             "python": str(pathlib.Path(__import__("sys").executable).resolve()),
             "torch": torch.__version__,
+            "tokenizer": {
+                "path": str(tokenizer_path.resolve()),
+                "repo_id": sys.argv[3],
+                "revision": sys.argv[4],
+                "sha256": tokenizer_sha256,
+                "size_bytes": tokenizer_path.stat().st_size,
+            },
         },
         indent=2,
         sort_keys=True,
@@ -141,6 +187,8 @@ PY
   printf 'COSMOS_CHECKPOINT=%s\n' "${COSMOS_DEST}"
   printf 'COSMOS_MODEL_REVISION=%s\n' "${COSMOS_REVISION}"
   printf 'COSMOS_SOURCE_REVISION=%s\n' "${COSMOS_SOURCE_REVISION}"
+  printf 'COSMOS_BASE_REVISION=%s\n' "${COSMOS_BASE_REVISION}"
+  printf 'COSMOS_TOKENIZER=%s\n' "${COSMOS_BASE_DEST}/${COSMOS_TOKENIZER_FILE}"
   printf 'COSMOS_PYTHON=%s\n' "${COSMOS_SOURCE_DEST}/.venv/bin/python"
 }
 
