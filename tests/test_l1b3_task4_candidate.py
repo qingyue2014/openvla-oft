@@ -142,6 +142,8 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "--max_avoidance_refinement_candidates" in text
     assert "--start_episode" in text
     assert "if episode < args.start_episode:" in text
+    assert "--end_episode" in text
+    assert "if args.end_episode > 0 and episode >= args.end_episode:" in text
     assert 'metadata["pairs"][int(row["episode_idx"])]' in text
 
 

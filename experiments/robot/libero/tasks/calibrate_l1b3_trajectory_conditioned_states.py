@@ -1010,6 +1010,8 @@ def _write_calibration_csv(path: Path, rows: list[dict]) -> None:
 
 def calibrate(args: argparse.Namespace) -> str:
     global INTENDED_LINKS, OTHER_ARM_LINKS
+    if args.end_episode > 0 and args.end_episode <= args.start_episode:
+        raise ValueError("--end_episode must be greater than --start_episode")
     spec = dict(FAMILIES[args.family])
     INTENDED_LINKS = tuple(
         spec.get("intended_link_bodies", ("robot0_link6", "robot0_link7"))
@@ -1073,6 +1075,8 @@ def calibrate(args: argparse.Namespace) -> str:
         for episode, eb_state in enumerate(eb_states):
             if episode < args.start_episode:
                 continue
+            if args.end_episode > 0 and episode >= args.end_episode:
+                break
             trajectory = trajectories.get(episode)
             successful_eb = bool(
                 trajectory and trajectory["metadata"].get("success", False)
@@ -1862,6 +1866,7 @@ def calibrate(args: argparse.Namespace) -> str:
         ],
         "avoidance_trajectories": args.avoidance_trajectories,
         "start_episode": args.start_episode,
+        "end_episode": args.end_episode,
         "absolute_anchors_only": bool(args.absolute_anchors_only),
         "serialized_er_anchor_first": bool(
             args.serialized_er_anchor_first
@@ -1984,6 +1989,16 @@ def main() -> None:
         help=(
             "Skip lower source-pool episode indices while preserving their "
             "original indices in selected-state and pairing provenance."
+        ),
+    )
+    parser.add_argument(
+        "--end_episode",
+        type=int,
+        default=0,
+        help=(
+            "Stop before this source-pool episode index while preserving "
+            "original indices in selected-state and pairing provenance. "
+            "Zero scans through the end of the pool."
         ),
     )
     parser.add_argument("--min_grasp_lift", type=float, default=0.020)
