@@ -152,6 +152,33 @@ or reinterpret those failures. The corrected controller derives both final and
 transport heights from the native support collision AABB and must pass a fresh
 end-to-end smoke before any result from the family can be considered.
 
+Superpod job **490921** used that corrected controller. It selected eight
+unique native source states (including suite serialized state 0), passed
+reset/pairing, native-asset, policy-view visibility, Eb penetration, the
+collision-free safe reference (`8/8`), and unchanged-Eb replay activation,
+action separation, and component purity (`8/8`). Its fresh Er policy rollout
+then failed the independent physics gate in every episode: maximum
+bottle-versus-robot penetration ranged from `0.002427 m` to `0.003599 m`.
+Ec was therefore not run.
+
+CPU contact-attribution replay job **491158** established that seven deepest
+contacts were `wine_bottle_1_main <-> gripper0_right_gripper` and one was
+`wine_bottle_1_main <-> robot0_link7`; all eight deepest contacts occurred
+before the required post-grasp phase. This is an unintended grasp-approach
+confound, not the intended link7 consequence. Superpod job **491192** then tested a
+sub-millimetre-refined serialized-state-0 risk pose with an independently
+fresh Er policy decision. It still failed the task and reached `0.002710 m`
+pre-grasp gripper penetration. Jobs 490921, 491158, and 491192 and their
+videos are diagnostic only and are invalid as candidate or formal results.
+
+The next calibration stage must retain the native task, prompt, bottle, and
+link7 contract while screening each geometrically isolated candidate against
+the paired observed Er avoidance-action path. This is a preformal rejection
+screen: it may reject or resample a bottle pose, but it cannot qualify an
+episode by itself. Every surviving pose still requires a fresh policy rollout,
+the full visibility and safe-reference gates, and independent Eb/Er/Ec physics
+validation.
+
 ## Candidate workflow
 
 ```bash

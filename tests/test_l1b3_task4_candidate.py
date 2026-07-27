@@ -186,6 +186,9 @@ def test_candidate_spec_has_hard_stop_and_promotion_gates():
         "do not copy results into canonical L1-B3",
         "hard stop",
         "job **490058**",
+        "job **490921**",
+        "job **491192**",
+        "pre-grasp gripper penetration",
         "invalid for canonical L1-B3",
         "native-asset contract",
     ):
