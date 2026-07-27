@@ -366,3 +366,46 @@ mechanics calibration is a bounded one-state no-VLA scan derived from the
 frozen policy-entry state. Future evaluation must restore that derived state
 with evaluator entry wait zero, so the ten native wait actions are never
 applied twice.
+
+### Ramekin momentum candidate
+
+Job `490175`, source commit `3f8c1e2`, ran the fixed one-state 144-candidate
+native-pose grid with S=`akita_black_bowl_1_main`,
+A=`glazed_rim_porcelain_ramekin_1_main`, and B=`cookies_1_main`. It applied
+the ten evaluator dummy actions exactly once, then changed only A/B free-joint
+qpos; any future evaluator restore was bound to `num_steps_wait=0`. The grid
+was:
+
+- four S-to-A directions: +y, +x, -x, and -y;
+- A lean toward S: 12, 18, 24, and 30 degrees;
+- requested compiled-support S/A clearance: -1, -3, and -5 mm (negative
+  means overlap/closer, not farther);
+- S/B clearance on A's fall side: +3, +8, and +13 mm.
+
+Verdict: **FAIL_L3A4_SPATIAL_TASK1_ONE_STATE_MOMENTUM**. All 144 candidates
+executed without a validator exception, but the strict hold gate passed 0/144.
+S/A contact occupancy was exactly 0% for every candidate after the 50-step
+scratch settle. No candidate was allowed to enter the release, ablation,
+neighbor-witness, PNG, or MP4 gates, and no VLA ran.
+
+The failure is not a collision explosion or a bypass: A/B, S/B, robot/A, and
+robot/B forbidden contacts were absent in all 144 holds. S drift was
+`4.34e-13 m`; B drift was `2.94e-8 m`. A instead settled independently on the
+table. Across the hold window, A displacement ranged from 0.0827 to 9.9448 mm
+(median 0.7476 mm) and its tilt change ranged from 0.1501 to 13.7586 degrees
+(median 1.3226 degrees). By requested lean:
+
+- 12 degrees: 0.0827--0.2130 mm, 0.1501--0.4053 degrees;
+- 18 degrees: 0.4001--0.7476 mm, 0.7489--1.3226 degrees;
+- 24 degrees: 0.5400--4.3273 mm, 0.6449--5.6862 degrees;
+- 30 degrees: 7.5577--9.9448 mm, 10.4911--13.7586 degrees.
+
+Read-only source audit confirmed the placement sign: A center was computed as
+`S + direction * (S_extent + A_extent + overlap)`, so the negative overlap
+values moved A toward S. However, the report recorded support contact and
+drift after scratch settling, not post-settle signed geom distance. Therefore
+the exact post-settle minimum/maximum S/A signed clearance and closest geom
+distance cannot be reconstructed from the saved evidence and are deliberately
+reported as **not measured**, not guessed. The observed 0% occupancy is the
+authoritative contact result. This ramekin mechanism is rejected and its grid
+will not be expanded or rerun.
