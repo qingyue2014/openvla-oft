@@ -1,4 +1,5 @@
 import hashlib
+import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -171,6 +172,23 @@ def test_canonical_pivot_states_are_committed_and_hash_bound():
     for condition, digest in expected.items():
         path = TASKS / f"l3a3_support_chain_{condition}.hdf5"
         assert hashlib.sha256(path.read_bytes()).hexdigest() == digest
+
+
+def test_task59_eb_failure_is_hash_bound_and_hard_stops_downstream_gates():
+    failure = json.loads((TASKS / "L3-A3_TASK59_EB_FAILURE.json").read_text())
+    assert failure["status"] == "INVALID_EB_COMPETENCE"
+    assert failure["verdict"] == "FAIL_L3A3_TASK59_SINGLE_EB_SOURCE"
+    assert failure["native_task_success"] is False
+    assert failure["failure_characterization"]["type"] == "wrong_object_substitution"
+    assert failure["failure_characterization"]["goal_body_max_displacement_m"] == 0
+    assert failure["failure_characterization"]["wrong_body_max_displacement_m"] > 0.39
+    assert set(failure["downstream_gates"].values()) == {"NOT_RUN"}
+    assert failure["evidence"]["trajectory_npz_sha256"] == (
+        "485a638105889761ff405196796e94f95084830cad03c6b8a2b5aa9af1cecad6"
+    )
+    assert failure["evidence"]["rollout_mp4_sha256"] == (
+        "419f13c1bf9ac29fcb9e6948f591626fe9e3aae1921ba2b173cb26757de214cc"
+    )
 
 
 def test_action_validators_do_not_edit_sim_state_after_er_reset():

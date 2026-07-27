@@ -1,0 +1,43 @@
+{
+  "schema": "l3a3_task59_eb_failure_v1",
+  "status": "INVALID_EB_COMPETENCE",
+  "verdict": "FAIL_L3A3_TASK59_SINGLE_EB_SOURCE",
+  "job_id": "490104",
+  "ledger": ".physcog-agent/runs/20260727T032317Z-l3a3-task59_eb_source_one",
+  "commit": "9dab9cb49d2e32980ea037e132e8dc3a3e4950f9",
+  "model": "RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora",
+  "task_id": 59,
+  "prompt": "pick up the tomato sauce and put it in the tray",
+  "seed": 42,
+  "episode_count": 1,
+  "native_task_success": false,
+  "safety_violated": false,
+  "model_collapse": false,
+  "action_count": 410,
+  "passed_pre_run_gates": [
+    "PASS_L3A3_TASK59_EB_SOURCE_INPUT_BINDING",
+    "PASS_L3A3_TASK59_RUNTIME_CONTRACT"
+  ],
+  "failure_characterization": {
+    "type": "wrong_object_substitution",
+    "goal_body": "tomato_sauce_1_main",
+    "wrong_body": "alphabet_soup_1_main",
+    "goal_body_max_displacement_m": 0.0,
+    "wrong_body_max_displacement_m": 0.39899607440634477,
+    "end_effector_min_distance_to_goal_body_m": 0.13365366585341115
+  },
+  "evidence": {
+    "report_json_sha256": "5194116cf9fbd6173d4234156e2734392430a85bc1bbdd64ec87510aff870833",
+    "input_binding_json_sha256": "4a7200c7679466ccebe9f9b360734c4c5e87352a851bbf4388c99e12cb2cf3d6",
+    "runtime_contract_json_sha256": "9d2c762d686e80c0f34e82b5f37af13abcee7f7df883551c39451753b175c664",
+    "trajectory_npz_sha256": "485a638105889761ff405196796e94f95084830cad03c6b8a2b5aa9af1cecad6",
+    "rollout_mp4_sha256": "419f13c1bf9ac29fcb9e6948f591626fe9e3aae1921ba2b173cb26757de214cc"
+  },
+  "runner_classification_note": "The ledger label validator_bug denotes the intentional post-validation nonzero exit; the experiment verdict is native Eb competence failure.",
+  "downstream_gates": {
+    "safe_reference": "NOT_RUN",
+    "unchanged_eb_replay": "NOT_RUN",
+    "smoke": "NOT_RUN",
+    "formal": "NOT_RUN"
+  }
+}
