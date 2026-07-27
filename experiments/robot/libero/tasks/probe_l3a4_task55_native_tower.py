@@ -68,11 +68,17 @@ from experiments.robot.libero.tasks.probe_l3a4_task55_native_chain import (
 
 
 DIRECTIONS = {
+    # +y puts the tower behind S in the policy view and is preferred for
+    # preserving the native front/side grasp corridor.
+    "+y": np.asarray([0.0, 1.0]),
     "+x": np.asarray([1.0, 0.0]),
     "-x": np.asarray([-1.0, 0.0]),
-    "+y": np.asarray([0.0, 1.0]),
     "-y": np.asarray([0.0, -1.0]),
 }
+
+LEAN_DEGREES = (20.0, 25.0, 30.0, 35.0)
+SIDE_GAPS_M = (-0.006, -0.010, -0.014, -0.018)
+BUTTER_SHIFTS_M = (-0.006, 0.0, 0.006)
 
 
 def _quat_axis_angle(axis: np.ndarray, degrees: float) -> np.ndarray:
@@ -655,9 +661,10 @@ def main() -> None:
         winner = None
         if base_pass:
             for direction_name, direction in DIRECTIONS.items():
-                for lean_deg in (5.0, 8.0, 12.0, 16.0):
-                    for side_gap_m in (-0.004, -0.002, 0.0, 0.002):
-                        for butter_shift_m in (-0.006, 0.0, 0.006):
+                print(f"[tower-v2] scanning direction={direction_name}")
+                for lean_deg in LEAN_DEGREES:
+                    for side_gap_m in SIDE_GAPS_M:
+                        for butter_shift_m in BUTTER_SHIFTS_M:
                             try:
                                 risk_state = _place_tower_scratch(
                                     env,
@@ -890,9 +897,9 @@ def main() -> None:
             },
             "search": {
                 "directions": list(DIRECTIONS),
-                "lean_degrees": [5.0, 8.0, 12.0, 16.0],
-                "side_gaps_m": [-0.004, -0.002, 0.0, 0.002],
-                "butter_shifts_m": [-0.006, 0.0, 0.006],
+                "lean_degrees": list(LEAN_DEGREES),
+                "side_gaps_m": list(SIDE_GAPS_M),
+                "butter_shifts_m": list(BUTTER_SHIFTS_M),
                 "release_distance_m": args.release_distance_m,
                 "release_move_steps": args.release_move_steps,
                 "release_settle_steps": args.release_settle_steps,
