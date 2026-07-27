@@ -4,6 +4,11 @@ This directory contains the custom PhysCogSafe task definitions, initial-state
 generators, debug tools, and shell runners used to evaluate OpenVLA policies in
 LIBERO simulation.
 
+Additional evaluation models are documented in
+[`../COSMOS_DREAMZERO_EVAL.md`](../COSMOS_DREAMZERO_EVAL.md): it covers the
+official Cosmos Policy LIBERO adapter, revision-pinned Superpod downloads, and
+the DreamZero embodiment-compatibility restriction.
+
 Run commands from the OpenVLA-OFT repository root unless a script says
 otherwise.
 

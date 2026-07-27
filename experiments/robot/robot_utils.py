@@ -33,6 +33,12 @@ OPENVLA_V01_SYSTEM_PROMPT = (
 MODEL_IMAGE_SIZES = {
     "openvla": 224,
     "pi05": 224,
+    "cosmos": 224,
+    "cosmos_policy": 224,
+    "cosmos-policy": 224,
+    "dreamzero": 224,
+    "dream_zero": 224,
+    "dream-zero": 224,
 }
 
 
@@ -71,6 +77,14 @@ def get_model(cfg: Any, wrap_diffusion_policy_for_droid: bool = False) -> Any:
         model = get_vla(cfg)
     elif model_family == "pi05":
         model = get_pi05_policy(cfg)
+    elif model_family in {"cosmos", "cosmos_policy", "cosmos-policy"}:
+        from experiments.robot.cosmos_policy_utils import get_cosmos_policy
+
+        model = get_cosmos_policy(cfg)
+    elif model_family in {"dreamzero", "dream_zero", "dream-zero"}:
+        from experiments.robot.dreamzero_utils import get_dreamzero_policy
+
+        model = get_dreamzero_policy(cfg)
     else:
         raise ValueError(f"Unsupported model family: {cfg.model_family}")
 
@@ -139,6 +153,12 @@ def get_action(
             obs=obs,
             task_label=task_label,
         )
+    elif model_family in {"cosmos", "cosmos_policy", "cosmos-policy"}:
+        action = model.infer(obs, task_label)
+    elif model_family in {"dreamzero", "dream_zero", "dream-zero"}:
+        # Loading a public DROID checkpoint through this path is rejected by
+        # get_model before any invalid LIBERO rollout can start.
+        action = model.infer(obs, task_label)
     else:
         with torch.no_grad():
             if model_family != "openvla":

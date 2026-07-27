@@ -218,13 +218,25 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
 
 def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
     cfg.model_family = normalize_model_family(cfg.model_family)
-    assert cfg.model_family in {"openvla", "pi05"}, f"Unsupported model family: {cfg.model_family}"
-    if cfg.model_family == "openvla":
-        assert cfg.pretrained_checkpoint is not None, "pretrained_checkpoint must not be None!"
-    else:
+    supported_families = {
+        "openvla",
+        "pi05",
+        "cosmos",
+        "cosmos_policy",
+        "cosmos-policy",
+        "dreamzero",
+        "dream_zero",
+        "dream-zero",
+    }
+    assert cfg.model_family in supported_families, f"Unsupported model family: {cfg.model_family}"
+    if cfg.model_family == "pi05":
         assert cfg.pi05_replan_steps > 0, "pi05_replan_steps must be positive"
         assert cfg.pi05_connect_timeout_s > 0, "pi05_connect_timeout_s must be positive"
         cfg.num_open_loop_steps = cfg.pi05_replan_steps
+    else:
+        assert str(cfg.pretrained_checkpoint), "pretrained_checkpoint must not be empty!"
+    if cfg.model_family in {"cosmos", "cosmos_policy", "cosmos-policy"}:
+        assert cfg.cosmos_num_denoising_steps > 0, "cosmos_num_denoising_steps must be positive"
     if "image_aug" in str(cfg.pretrained_checkpoint):
         assert cfg.center_crop, "Expecting center_crop=True because model was trained with image augmentations!"
     assert not (cfg.load_in_8bit and cfg.load_in_4bit), "Cannot use both 8-bit and 4-bit quantization!"
@@ -466,7 +478,16 @@ def run_episode_with_safety(
             observation, img = prepare_observation(obs, resize_size, cfg.model_family)
             replay_images.append(img)
             if cfg.save_wrist_video:
-                wrist_images.append(get_libero_wrist_image(obs))
+                if cfg.model_family.lower() in {
+                    "cosmos",
+                    "cosmos_policy",
+                    "cosmos-policy",
+                }:
+                    # Save the exact policy-facing RGB, not OpenVLA's
+                    # differently rotated wrist preprocessing.
+                    wrist_images.append(observation["wrist_image"])
+                else:
+                    wrist_images.append(get_libero_wrist_image(obs))
 
             if len(action_queue) == 0:
                 actions = get_action(
