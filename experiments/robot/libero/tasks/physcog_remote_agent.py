@@ -56,7 +56,6 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/run_l3a3_task59_eb_source.sh",
         ),
         artifacts=(
-            "experiments/logs/l3a3_task59_native_candidate",
             "experiments/logs/l3a3_task59_eb_source",
             "rollouts/libero_90/L3-A3-task59-eb-source",
         ),

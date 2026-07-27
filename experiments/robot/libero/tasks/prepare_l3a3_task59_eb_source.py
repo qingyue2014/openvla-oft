@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 
 import h5py
+from PIL import Image
 
 
 PROMPT = "pick up the tomato sauce and put it in the tray"
@@ -15,6 +16,7 @@ KEY = PROMPT.replace(" ", "_")
 EXPECTED_HDF5_SHA256 = "da6efc49c24513644b2138dd6ababc5abd8a57afe507a0991e5cc9955e40cdad"
 EXPECTED_STATE_SHA256 = "e8156dd33774f028f8a098b9463c661e12853e589ade5a8cad77990f543eb66b"
 EXPECTED_POLICY_STATUS = "PASS_L3A3_TASK59_POLICY_VIEW_REVIEWED"
+EXPECTED_REVIEW_SHA256 = "cd5b5b10c9a13bc0807580bb0c101b4c44d812f1f8de9f0fdcd6d542eec504d5"
 
 
 def sha256(value: bytes) -> str:
@@ -31,7 +33,8 @@ def main() -> None:
 
     candidate_dir = Path(args.candidate_dir)
     report = json.loads((candidate_dir / "report.json").read_text())
-    review = json.loads(Path(args.review_json).read_text())
+    review_path = Path(args.review_json)
+    review = json.loads(review_path.read_text())
     source = candidate_dir / "l3a3_task59_eb_one.hdf5"
     source_digest = sha256(source.read_bytes())
     if report["verdict"] != "PASS_L3A3_TASK59_ONE_STATE_STATIC_GATE":
@@ -42,12 +45,25 @@ def main() -> None:
         raise RuntimeError("task59 independent policy-view gate is not PASS")
     if int(review["reviewed_job_id"]) != 490085:
         raise RuntimeError("task59 review is not bound to job 490085")
+    if sha256(review_path.read_bytes()) != EXPECTED_REVIEW_SHA256:
+        raise RuntimeError("task59 policy review manifest byte hash mismatch")
     if source_digest != EXPECTED_HDF5_SHA256:
         raise RuntimeError("task59 reviewed EB HDF5 byte hash mismatch")
     for name, digest in review["evidence_sha256"].items():
         path = candidate_dir / name
         if sha256(path.read_bytes()) != digest:
-            raise RuntimeError(f"task59 reviewed evidence hash mismatch: {name}")
+            raise RuntimeError(f"task59 canonical evidence hash mismatch: {name}")
+    for name, digest in review["decoded_rgb_sha256"].items():
+        image = Image.open(candidate_dir / name).convert("RGB")
+        if image.size != (256, 256):
+            raise RuntimeError(f"task59 canonical image dimensions mismatch: {name}")
+        if sha256(image.tobytes()) != digest:
+            raise RuntimeError(f"task59 canonical decoded RGB mismatch: {name}")
+    for condition, digest in review["state_sha256"].items():
+        if report["states"][condition]["state_sha256"] != digest:
+            raise RuntimeError(
+                f"task59 regenerated {condition} state differs from review"
+            )
 
     with h5py.File(source, "r") as handle:
         state = handle[KEY]["demo_0"][:]
@@ -81,6 +97,8 @@ def main() -> None:
         "eval_hdf5_sha256": sha256(output.read_bytes()),
         "policy_review_status": EXPECTED_POLICY_STATUS,
         "policy_review_job_id": 490085,
+        "policy_review_manifest_sha256": EXPECTED_REVIEW_SHA256,
+        "canonical_artifact_source": str(candidate_dir),
     }
     Path(args.out_report).write_text(
         json.dumps(binding, indent=2, sort_keys=True) + "\n"

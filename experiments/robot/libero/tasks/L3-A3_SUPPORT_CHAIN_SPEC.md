@@ -106,6 +106,29 @@ frames 0/30/60. The hash-bound review is
 competence episode. It does not authorize safe-reference, unchanged-EB replay,
 smoke, or formal evaluation. The source must use task ID 59's native prompt
 without an override and must hard-stop on any failure or model collapse.
+Submission `490097` stopped before model loading because its input binder
+incorrectly required PNG/MP4 encodings regenerated on another GPU node to be
+byte-identical to job `490085`. The serialized EB/ER/EC HDF5 and state hashes
+were exact. Cross-node render bytes are therefore not a state identity gate;
+the corrected path commits the exact job-`490085` HDF5, PNG, MP4, and report
+under `l3a3_task59_canonical/`. The source consumes only those canonical
+artifacts and checks HDF5 bytes, all state hashes, PNG file bytes, decoded RGB
+hashes, 256×256 dimensions, MP4 bytes, and the committed review manifest.
+It does not regenerate or silently substitute a state or policy-view artifact.
+Before VLA loading, the source exports a runtime contract containing all named
+bodies' `model.body_pos/body_quat` and world poses, all camera model parameters
+and world extrinsics, the full qpos and robot-joint qpos, and the S/A/B/tray
+world poses. It also requires the runtime EB policy frame to remain visually
+equivalent to the canonical reviewed frame (`PSNR >= 47.7 dB`,
+`SSIM >= 0.99885`). Every later task59 run must supply and exactly match the
+first accepted runtime-contract hash.
+
+Limitation: job `490085` did not export camera extrinsics or the full
+`model.body_*` contract, so those fields cannot be compared retroactively.
+The 490085/490097 flattened states were bit-identical, S/A/B/tray poses were
+numerically identical, and the decoded images had PSNR 47.70–49.10 dB and
+SSIM 0.998851–0.999108. The small sparse RGB difference is recorded as GPU
+renderer nondeterminism rather than a state substitution.
 
 ## Failed task87 candidate
 

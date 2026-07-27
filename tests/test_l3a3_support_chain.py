@@ -408,17 +408,61 @@ def test_task59_eb_source_is_single_exact_prompt_fail_closed():
     assert "--num_trials_per_task 1" in run
     assert "--safety_oracle none" in run
     assert "--task_description_override" not in run
+    assert "l3a3_task59_canonical" in run
+    assert "generate_l3a3_task59_native_candidate.py" not in run
     assert "validate_l3a3_task59_eb_source.py" in run
+    assert "export_l3a3_task59_runtime_contract.py" in run
+    assert "--runtime_contract" in run
     assert "EXPECTED_HDF5_SHA256" in prepare
     assert "EXPECTED_STATE_SHA256" in prepare
+    assert "EXPECTED_REVIEW_SHA256" in prepare
+    assert "decoded_rgb_sha256" in prepare
+    assert "canonical_artifact_source" in prepare
     assert "task_description_override" in prepare
     assert "PASS_L3A3_TASK59_POLICY_VIEW_REVIEWED" in review
     assert "reviewed_job_id" in review and "490085" in review
     assert '"success": metadata.get("success") is True' in validate
     assert '"no_model_collapse": metadata.get("model_collapse") is False' in validate
     assert '"initial_pose_binding"' in validate
+    assert '"runtime_contract_pass"' in validate
     assert '"safe_reference_status": "NOT_RUN"' in validate
     assert '"action_separation_status": "NOT_RUN"' in validate
+
+
+def test_task59_canonical_artifacts_are_exact_reviewed_job490085_bytes():
+    canonical = TASKS / "l3a3_task59_canonical"
+    expected = {
+        "l3a3_task59_eb_one.hdf5": "da6efc49c24513644b2138dd6ababc5abd8a57afe507a0991e5cc9955e40cdad",
+        "l3a3_task59_er_one.hdf5": "592d6fadd343e2f9bbce34292d537ec82b6257718c48fa898c82c9c3ff5f45de",
+        "l3a3_task59_ec_one.hdf5": "53c37fca7fa1fe7de31e2887bc856a26f70fcd68bd39c9e8666ef3b26cd826a8",
+        "eb_ep000_policy.png": "0886c0ca40e515598c38f8f406a1d4fa93cad72504ae9dd086f609fc606d1766",
+        "er_ep000_policy.png": "ccddd832881af82da041f1414429a6dc2731ab3c8cb206080827a26605ce0160",
+        "ec_ep000_policy.png": "16ef39732d7daf3dbbefbdb23bcb58385331759f418ac75a4540822c8b732408",
+        "eb_ep000_passive.mp4": "5e7b99137f97747f29a0445978148ea1e8c93ea7898b21a370b1007bdbfec478",
+        "er_ep000_passive.mp4": "c5e4b02632db49eb4f1e48961883f5bcebc6344a00c51d76526e816f452a1c25",
+        "ec_ep000_passive.mp4": "94cfc9a425612404025bd225a200ad5e724f14bcd0124ae6b0650c1d97a07957",
+        "report.json": "f59747272302ca15820ded19e85bd6c4c4eee8e55e933f1cca97ed8b1a06107c",
+    }
+    for name, digest in expected.items():
+        assert hashlib.sha256((canonical / name).read_bytes()).hexdigest() == digest
+
+
+def test_task59_runtime_contract_binds_model_camera_robot_and_visual_equivalence():
+    text = (TASKS / "export_l3a3_task59_runtime_contract.py").read_text()
+    assert "model.body_pos" in text
+    assert "model.body_quat" in text
+    assert "data.cam_xpos" in text
+    assert "data.cam_xmat" in text
+    assert "model.cam_pos" in text and "model.cam_quat" in text
+    assert '"robot_joints"' in text
+    assert '"relevant_world_poses"' in text
+    assert '"full_qpos_sha256"' in text
+    assert "MIN_PSNR_DB = 47.7" in text
+    assert "MIN_SSIM = 0.99885" in text
+    assert "GPU_renderer_nondeterminism" in text
+    assert "job 490085 did not export camera extrinsics" in text
+    assert "expected_contract" in text
+    assert "pretrained_checkpoint" not in text
 
 
 def test_task57_candidate_entry_is_historic_visual_hard_stop():

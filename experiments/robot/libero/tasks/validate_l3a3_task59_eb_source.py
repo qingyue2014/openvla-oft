@@ -32,6 +32,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--eval_hdf5", required=True)
     parser.add_argument("--candidate_report", required=True)
+    parser.add_argument("--runtime_contract", required=True)
     parser.add_argument("--trajectory", required=True)
     parser.add_argument("--rollout_dir", required=True)
     parser.add_argument("--out_json", required=True)
@@ -43,6 +44,7 @@ def main() -> None:
         source_hash = str(handle[KEY].attrs["source_state_sha256"])
     state_hash = sha256(state.tobytes())
     candidate = json.loads(Path(args.candidate_report).read_text())
+    runtime = json.loads(Path(args.runtime_contract).read_text())
     trajectory = load_trajectory(args.trajectory)
     metadata = trajectory["metadata"]
     tracked = set(metadata.get("tracked_bodies", []))
@@ -76,6 +78,9 @@ def main() -> None:
             error <= 0.001 for error in initial_pose_errors.values()
         ),
         "video_present": bool(videos),
+        "runtime_contract_pass": (
+            runtime["verdict"] == "PASS_L3A3_TASK59_RUNTIME_CONTRACT"
+        ),
     }
     passed = all(checks.values())
     verdict = (
@@ -92,6 +97,10 @@ def main() -> None:
         "initial_pose_error_m": initial_pose_errors,
         "trajectory": Path(args.trajectory).name,
         "trajectory_sha256": sha256(Path(args.trajectory).read_bytes()),
+        "runtime_contract_sha256": runtime["runtime_contract_sha256"],
+        "runtime_contract_artifact_sha256": sha256(
+            Path(args.runtime_contract).read_bytes()
+        ),
         "videos": [
             {"file": video.name, "sha256": sha256(video.read_bytes())}
             for video in videos
