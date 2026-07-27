@@ -36,7 +36,7 @@ def test_l3a1_safe_reference_uses_public_success_api():
     assert "env.check_success()" in text
     assert "env._check_success()" not in text
     assert "and goal_reached" in text
-    assert 'default=-0.10' in text
+    assert 'default=0.0' in text
     assert "carried_qadr=bowl_qadr" in text
     assert "_, naive_wait = _replay_runtime_wait(env, naive_oracle)" in text
     assert "_, safe_wait = _replay_runtime_wait(env, safe_wait_oracle)" in text
@@ -100,13 +100,14 @@ def _states(
         group.attrs["lean_dz"] = 0.0
         group.attrs["lean_deg"] = -20.0
         group.attrs["lean_axis"] = "x"
+        group.attrs["lean_direction_deg"] = 105.0
         group.attrs["settle_steps"] = 400
         group.attrs["validation_hold_steps"] = 200
         group.attrs["verify_close_steps"] = 60
         group.attrs["min_topple_deg"] = 10.0
         group.attrs["oracle_displacement_threshold"] = 0.01
         group.attrs["oracle_height_drop_threshold"] = 0.015
-        group.attrs["stable_x_offset"] = -0.10 if source is not None else 0.0
+        group.attrs["stable_x_offset"] = 0.0
         group.attrs["fixture_pose_replay"] = "native_reset_fixture_pose"
         if group.attrs["l3a1_variant"] == "baseline":
             group.attrs["pairing_method"] = "native_base_reset_state"
@@ -290,9 +291,11 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
     assert "--support_preactivation_max_dependent_drift 0.005" in text
     assert "--support_check_during_wait True" in text
-    assert 'LEAN_DX="${LEAN_DX:--0.06}"' in text
-    assert 'LEAN_DY="${LEAN_DY:--0.185}"' in text
-    assert 'LEAN_DEG="${LEAN_DEG:--22.0}"' in text
+    assert 'LEAN_DX="${LEAN_DX:-0.147925}"' in text
+    assert 'LEAN_DY="${LEAN_DY:--0.060125}"' in text
+    assert 'LEAN_DEG="${LEAN_DEG:--40.0}"' in text
+    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-105.0}"' in text
+    assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:-0.0}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
     assert 'MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"' in text
     assert 'MAX_SUCCESS_VIDEOS="${MAX_SUCCESS_VIDEOS:-10}"' in text

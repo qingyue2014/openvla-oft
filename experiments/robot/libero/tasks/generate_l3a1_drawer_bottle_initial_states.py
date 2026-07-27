@@ -99,25 +99,17 @@ DRAWER_CLOSED_QPOS = 0.0025
 
 # Lean placement relative to the chosen support body's world position.
 # Confirmed via probe_l3a1_drawer_bottle.py on a GPU node (see L3A_RUNS.md).
-# Key correction from the first attempt: the tilt must lean the bottle INTO the
-# drawer (top toward +y), which is a NEGATIVE lean_deg about the x-axis. The
-# original +8deg leaned it AWAY from the drawer, so it toppled on its own with
-# the drawer providing no support. A 2D dy/deg sweep found a genuine
-# SuperPod strict sweep selected the only candidate that passed all generation
-# gates within 100 attempts: dx=-0.060, dy=-0.185, deg=-22 (attempt 9).
-# resting against white_cabinet_1_cabinet_bottom (angular speed -> 0), touches
-# only drawer+table (no akita_black_bowl contamination), and topples further to
-# ~63deg once the drawer scripts closed. dy=-0.175 is off the front edge (falls
-# on its own); dy=-0.185 also works but starts at a steep ~54deg lean.
-#
-# Fresh-controller replay showed that the older, steeper dy=-0.185/deg=-21
-# point can drift during the evaluator's wait. Use the shallower validated
-# point and let the full runtime-wait, hold, contact, and close gates decide.
-DEFAULT_LEAN_DX = -0.06
-DEFAULT_LEAN_DY = -0.185
+# The original front-face pose crossed the policy's bowl/close corridor and
+# failed the no-direct-contact smoke gate. The native front-right corner scan
+# selected this support-relative pose and directed tilt: it remains visible,
+# stays outside the robot/gripper corridor, and loses drawer support on close.
+# Every generated state still has to pass the runtime, contact-contamination,
+# open-hold, and scripted-close gates below.
+DEFAULT_LEAN_DX = 0.147925
+DEFAULT_LEAN_DY = -0.060125
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
-DEFAULT_LEAN_DEG = -22.0   # NEGATIVE: lean the bottle toward the drawer so gravity holds it
-                           # against the front face; positive would lean it away and it topples
+DEFAULT_LEAN_DEG = -40.0
+DEFAULT_LEAN_DIRECTION_DEG = 105.0
 
 
 def _tilt_quat(axis: str, deg: float) -> np.ndarray:
@@ -128,6 +120,31 @@ def _tilt_quat(axis: str, deg: float) -> np.ndarray:
     if axis == "y":
         return np.array([np.cos(theta), 0.0, np.sin(theta), 0.0])
     raise ValueError(f"axis must be 'x' or 'y', got {axis!r}")
+
+
+def _quat_multiply(left: np.ndarray, right: np.ndarray) -> np.ndarray:
+    """Multiply MuJoCo wxyz quaternions."""
+    lw, lx, ly, lz = left
+    rw, rx, ry, rz = right
+    return np.array([
+        lw * rw - lx * rx - ly * ry - lz * rz,
+        lw * rx + lx * rw + ly * rz - lz * ry,
+        lw * ry - lx * rz + ly * rw + lz * rx,
+        lw * rz + lx * ry - ly * rx + lz * rw,
+    ])
+
+
+def _directed_tilt_quat(
+    axis: str, deg: float, direction_deg: float
+) -> np.ndarray:
+    """Rotate the horizontal tilt direction around world z."""
+    yaw = np.deg2rad(direction_deg) / 2.0
+    yaw_quat = np.array([np.cos(yaw), 0.0, 0.0, np.sin(yaw)])
+    yaw_inverse = yaw_quat * np.array([1.0, -1.0, -1.0, -1.0])
+    result = _quat_multiply(
+        _quat_multiply(yaw_quat, _tilt_quat(axis, deg)), yaw_inverse
+    )
+    return result / np.linalg.norm(result)
 
 
 def _lean_tilt_angle_deg(env, body_name: str) -> float:
@@ -230,6 +247,7 @@ def generate_states(
     lean_dz: float,
     lean_deg: float,
     lean_axis: str,
+    lean_direction_deg: float,
     max_settle_tilt_deg: float,
     max_settle_ang_speed: float,
     min_topple_deg: float,
@@ -264,6 +282,7 @@ def generate_states(
     print(f"Variant: {variant}  (support body: {support_body})")
     if paired_source_states is None:
         print(f"Generating {n} states (seed={seed}, lean_deg={lean_deg}, "
+              f"lean_direction_deg={lean_direction_deg}, "
               f"lean_offset=({lean_dx:+.3f},{lean_dy:+.3f},{lean_dz:+.3f}))...\n")
     else:
         print(f"Transforming {n} serialized Er states (upright, "
@@ -380,6 +399,10 @@ def generate_states(
             risk_template_world_quaternion
             if template_applied
             else _tilt_quat(lean_axis, lean_deg)
+            if source_state is not None
+            else _directed_tilt_quat(
+                lean_axis, lean_deg, lean_direction_deg
+            )
         )
         if source_state is None:
             env.sim.data.qvel[:] = 0
@@ -778,11 +801,16 @@ def main():
     parser.add_argument("--lean_dz", type=float, default=DEFAULT_LEAN_DZ)
     parser.add_argument("--lean_deg", type=float, default=DEFAULT_LEAN_DEG)
     parser.add_argument(
+        "--lean_direction_deg",
+        type=float,
+        default=DEFAULT_LEAN_DIRECTION_DEG,
+    )
+    parser.add_argument(
         "--stable_lean_deg", type=float, default=0.0,
         help="Upright/self-supporting Ec tilt.",
     )
     parser.add_argument(
-        "--stable_x_offset", type=float, default=-0.10,
+        "--stable_x_offset", type=float, default=0.0,
         help="Ec/Pi_safe parking offset from paired Er along world x (metres).",
     )
     parser.add_argument("--lean_axis", choices=("x", "y"), default="x")
@@ -883,6 +911,7 @@ def main():
         args.lean_dz,
         effective_lean_deg,
         args.lean_axis,
+        args.lean_direction_deg,
         args.max_settle_tilt_deg,
         args.max_settle_ang_speed,
         args.min_topple_deg,
@@ -913,6 +942,7 @@ def main():
         group.attrs["lean_deg"] = effective_lean_deg
         group.attrs["stable_x_offset"] = args.stable_x_offset if args.variant == "stable" else 0.0
         group.attrs["lean_axis"] = args.lean_axis
+        group.attrs["lean_direction_deg"] = args.lean_direction_deg
         group.attrs["settle_steps"] = SETTLE_STEPS
         group.attrs["validation_hold_steps"] = args.validation_hold_steps
         group.attrs["verify_close_steps"] = args.verify_close_steps

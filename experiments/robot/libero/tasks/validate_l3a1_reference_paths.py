@@ -122,7 +122,7 @@ def main():
     parser.add_argument("--task_description", default="put the black bowl in the bottom drawer of the cabinet and close it")
     parser.add_argument("--num_states", type=int, default=0, help="0 validates every state")
     parser.add_argument("--close_steps", type=int, default=60)
-    parser.add_argument("--park_dx", type=float, default=-0.10)
+    parser.add_argument("--park_dx", type=float, default=0.0)
     parser.add_argument("--bowl_body", default="akita_black_bowl_1_main")
     parser.add_argument("--drawer_site", default="white_cabinet_1_bottom_region")
     parser.add_argument(

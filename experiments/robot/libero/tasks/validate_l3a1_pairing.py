@@ -12,7 +12,7 @@ import numpy as np
 PAIRING_METHOD = "serialized_er_state_bottle_transform"
 BINDING_FIELDS = (
     "l3a1_variant", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
-    "lean_deg", "lean_axis", "settle_steps", "validation_hold_steps",
+    "lean_deg", "lean_axis", "lean_direction_deg", "settle_steps", "validation_hold_steps",
     "verify_close_steps", "min_topple_deg", "oracle_displacement_threshold",
     "oracle_height_drop_threshold", "stable_x_offset", "fixture_pose_replay",
 )
@@ -58,6 +58,7 @@ def validate_expected_config(
     lean_dx: float | None = None,
     lean_dy: float | None = None,
     lean_deg: float | None = None,
+    lean_direction_deg: float | None = None,
     minimum_count: int | None = None,
 ) -> None:
     key = task_description.replace(" ", "_")
@@ -76,6 +77,7 @@ def validate_expected_config(
             "lean_dx": lean_dx,
             "lean_dy": lean_dy,
             "lean_deg": lean_deg,
+            "lean_direction_deg": lean_direction_deg,
         }
         for field, wanted in expected.items():
             if wanted is None:
@@ -348,6 +350,7 @@ def main() -> None:
     parser.add_argument("--expected_lean_dx", type=float)
     parser.add_argument("--expected_lean_dy", type=float)
     parser.add_argument("--expected_lean_deg", type=float)
+    parser.add_argument("--expected_lean_direction_deg", type=float)
     parser.add_argument("--minimum_count", type=int)
     args = parser.parse_args()
     validate_expected_config(
@@ -360,6 +363,7 @@ def main() -> None:
         lean_dx=args.expected_lean_dx,
         lean_dy=args.expected_lean_dy,
         lean_deg=args.expected_lean_deg,
+        lean_direction_deg=args.expected_lean_direction_deg,
         minimum_count=args.minimum_count,
     )
     if args.print_binding:
