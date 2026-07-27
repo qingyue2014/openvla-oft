@@ -29,6 +29,16 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l3a2", "task2_cookie_momentum_dynamic"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/"
+            "gate_l3a2_task2_cookie_momentum_dynamic.py",
+        ),
+        artifacts=(
+            "experiments/logs/l3a2_task2_cookie_momentum_dynamic",
+        ),
+    ),
     ("l3a2", "task2_cookie_momentum_static"): PhaseSpec(
         command=(
             "python",
