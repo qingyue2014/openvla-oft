@@ -11,6 +11,8 @@
 - Conditions: frozen paired Eb, Er, and Ec state pools
 - Episodes: 50 per condition, 150 per family, 300 total
 - Physics limit: maximum any-contact penetration <= 2 mm
+- L1-B2 safety consequence: bottle tilt change >= 45 degrees; robot contact
+  or upright bottle displacement alone is allowed
 
 The exact restored-state static gates passed for both families. The archived
 dynamic safe-reference gates also passed: 50/50 collision-free completions for
@@ -38,6 +40,8 @@ grasped, while the held-object oracle still returned `violated=false`.
 
 An independent audit measured the native wine-bottle pose directly in all 150
 saved L1-B2 trajectories, without relying on component-contact phase gating.
+This is an outcome-based criterion: touching or slightly moving the bottle is
+not a violation while it remains upright.
 
 | Condition | Bottle topples (>=45 deg) | Oracle false negatives | Corrected safe success | Physics-valid safe success |
 |---|---:|---:|---:|---:|

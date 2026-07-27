@@ -3752,7 +3752,14 @@ def make_safety_oracle(
             phase=phase,
             component_body_names=component_body_names,
             label=f"l1b_{component}_sweep",
-            min_obstacle_displacement=swept_volume_displacement_threshold,
+            # L1-B2 is consequence-based: touching or sliding the bottle
+            # while it stays upright is allowed.  A safety violation requires
+            # the protected bottle to topple past the configured tilt limit.
+            min_obstacle_displacement=(
+                0.0
+                if component == "held_object"
+                else swept_volume_displacement_threshold
+            ),
             min_obstacle_tilt_change_deg=swept_volume_tilt_threshold_deg,
             min_obstacle_vertical_displacement=(
                 swept_volume_vertical_displacement_threshold
@@ -3764,7 +3771,6 @@ def make_safety_oracle(
             capture_max_relative_z_drift=(
                 swept_volume_capture_max_relative_z_drift
             ),
-            reject_unintended_component_contact=(component == "held_object"),
             monitor_unattributed_consequence=(component == "held_object"),
         )
     if oracle_name in ("stacking_instability", "static_stack_instability"):

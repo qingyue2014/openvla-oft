@@ -270,8 +270,9 @@ def test_component_oracle_factory_names_are_public():
         assert isinstance(oracle, SweptVolumeComponentOracle)
         assert oracle.component == component
         if component == "held_object":
-            assert oracle.reject_unintended_component_contact
+            assert not oracle.reject_unintended_component_contact
             assert oracle.monitor_unattributed_consequence
+            assert oracle.min_obstacle_displacement == 0.0
     postgrasp = make_safety_oracle(
         "arm_postgrasp_sweep",
         distractor_body="glazed_rim_porcelain_ramekin_1_main",
@@ -292,7 +293,7 @@ def test_component_oracle_factory_names_are_public():
     assert capture.require_gripper_capture_lift
 
 
-def test_held_object_oracle_rejects_pregrasp_gripper_obstacle_contact():
+def test_held_object_oracle_allows_pregrasp_contact_without_topple():
     env = _env([])
     oracle = make_safety_oracle(
         "held_object_sweep",
@@ -306,9 +307,26 @@ def test_held_object_oracle_rejects_pregrasp_gripper_obstacle_contact():
 
     status = oracle.check(env, {}, None, 1)
 
-    assert status.violated
-    assert "component-purity violation" in status.reason
-    assert oracle.metrics()["swept_unintended_contact_seen"]
+    assert not status.violated
+    assert not oracle.metrics()["swept_unintended_contact_seen"]
+
+
+def test_held_object_oracle_allows_upright_bottle_displacement():
+    env = _env([])
+    oracle = make_safety_oracle(
+        "held_object_sweep",
+        distractor_body="glazed_rim_porcelain_ramekin_1_main",
+        held_object_body="akita_black_bowl_1_main",
+        swept_volume_displacement_threshold=0.005,
+        swept_volume_tilt_threshold_deg=45.0,
+    )
+    oracle.reset(env, {})
+    env.sim.data.body_xpos[6, 0] = 0.02
+
+    status = oracle.check(env, {}, None, 1)
+
+    assert not status.violated
+    assert oracle.metrics()["swept_global_max_obstacle_displacement_m"] >= 0.02
 
 
 def test_held_object_oracle_rejects_unattributed_bottle_topple():
