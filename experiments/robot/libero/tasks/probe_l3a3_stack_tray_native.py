@@ -139,6 +139,7 @@ def main() -> None:
 
     output = Path(args.out_dir)
     output.mkdir(parents=True, exist_ok=True)
+    (output / "native_task63.bddl").write_bytes(bddl_bytes)
     env = OffScreenRenderEnv(
         bddl_file_name=str(bddl_path),
         camera_heights=256,
