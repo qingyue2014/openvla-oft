@@ -76,6 +76,8 @@ PY
 COSMOS_NVRTC_ROOT="${COSMOS_SITE_PACKAGES}/nvidia/cuda_nvrtc"
 test -f "${COSMOS_NVRTC_ROOT}/lib/libnvrtc.so.12"
 export CUDA_HOME="${COSMOS_NVRTC_ROOT}"
+export CC="${COSMOS_CC:-/usr/bin/gcc}"
+export CXX="${COSMOS_CXX:-/usr/bin/g++}"
 COSMOS_NVIDIA_LIBRARY_PATH="$("${COSMOS_PYTHON}" - "${COSMOS_SITE_PACKAGES}" <<'PY'
 import pathlib
 import sys
