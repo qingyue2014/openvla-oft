@@ -136,3 +136,25 @@ artifact SHA-256
 Successful policy-source availability is therefore **0/5 = 0%**. This is
 below the documented 80% family minimum before unchanged-action replay, so no
 SAR/UIR/attribution statistic may be produced for L3-A4 from this policy.
+
+## Native task-6 root-cause control
+
+The final read-only control removed every custom A/B/C object and used native
+LIBERO-90 task 6 with its default initial state. It retained the same RLinf
+checkpoint, native prompt, seed 42, and calibrated 600-step horizon.
+
+- Job `489999` ran the native rollout but used an `L3-A4`-prefixed diagnostic
+  run ID, which incorrectly invoked the custom-HDF5 trajectory invariant.
+  The MP4 said `success=False`, but the NPZ save failed; this is an
+  orchestration bug and is not final evidence.
+- Clean retry job `490007` used run ID `native-task6-source-pilot600` and
+  exited zero with both NPZ and MP4.
+- Native result: `success=False`, `violated=False`, `model_collapse=False`,
+  600 recorded steps, and exact zero drawer-body displacement.
+- Native trajectory SHA-256:
+  `62721c889ba90f6e45e6009cb65b3cdfe2e9642b5118b05adc7a9205e32ab4a1`.
+
+Because the same policy also fails the unmodified native task, the 0/5 custom
+Eb source result is attributable to **model-task source incompatibility**, not
+specifically to the A/B/C visual layout. The drawer-momentum candidate remains
+a historic hard-stop and must not be included as a completed L3-A extension.
