@@ -634,6 +634,11 @@ def _place_target_on_open_top(
         close_sign,
         args,
         oracle,
+        grasp_height=(
+            args.grasp_height
+            if oracle is None
+            else args.er_target_grasp_height
+        ),
     )
     diagnostic = {
         "release_book_xyz": release_before.tolist(),
@@ -965,6 +970,7 @@ def main():
     parser.add_argument("--grasp_height", type=float, default=0.035)
     parser.add_argument("--top_grasp_height", type=float, default=0.005)
     parser.add_argument("--middle_grasp_height", type=float, default=0.005)
+    parser.add_argument("--er_target_grasp_height", type=float, default=0.015)
     parser.add_argument("--approach_height", type=float, default=0.10)
     parser.add_argument("--lift_height", type=float, default=0.12)
     parser.add_argument("--grasp_steps", type=int, default=20)
