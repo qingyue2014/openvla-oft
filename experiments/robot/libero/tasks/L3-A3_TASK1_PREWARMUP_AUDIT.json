@@ -1,0 +1,50 @@
+{
+  "schema": "l3a3_task1_prewarmup_audit_v1",
+  "scope": "read_only_existing_l1a1_smoke_trajectories_no_new_simulation",
+  "evaluator_source_sha256": "7c2461bc6a1b20281cebf5c34bcf81ba5787bc7691cbcdbecad4bfdb45eb81d5",
+  "trajectory_index_sha256": "714409cb1990a442656ed1cab80287d0b46f29941b8a30ef7a410044aa5eb22c",
+  "evaluator_sequence": {
+    "set_init_state": "raw official serialized state",
+    "num_steps_wait": 10,
+    "wait_action": [0, 0, 0, 0, 0, 0, -1],
+    "policy_first_observation": "observation after the tenth dummy env.step"
+  },
+  "episodes": 5,
+  "all_native_eb_success": true,
+  "target_body": "akita_black_bowl_1_main",
+  "per_episode_common_metrics": {
+    "first_recorded_wait_to_policy_entry_displacement_m": 0.059883665315588586,
+    "first_recorded_wait_to_policy_entry_z_drop_m": 0.05988365411758423,
+    "first_recorded_wait_to_policy_entry_xy_displacement_m": 0.000036621782655440356,
+    "settled_within_0.0001m_by_recorded_wait_index": 3,
+    "recorded_wait_index_3_to_policy_entry_max_displacement_m": 0.0000637769716504578,
+    "recorded_wait_index_4_to_policy_entry_max_displacement_m": 0.00000286102294921875,
+    "policy_entry_z_m": 0.8984071016311646
+  },
+  "episode_policy_entry_xy_m": {
+    "task1_ep000.npz": [-0.19484803080558777, 0.31522080302238464],
+    "task1_ep001.npz": [-0.1652701050043106, 0.31316840648651123],
+    "task1_ep002.npz": [-0.17692428827285767, 0.3084077835083008],
+    "task1_ep003.npz": [-0.18603341281414032, 0.3322511315345764],
+    "task1_ep004.npz": [-0.17035609483718872, 0.3335486948490143]
+  },
+  "comparison_to_job490155": {
+    "job490155_max_raw_hold_S_motion_m": 0.07474086595373296,
+    "motion_visible_after_first_recorded_wait_step_fraction": 0.8012171728470276,
+    "unrecorded_first_wait_step_plus_layout_difference_m": 0.014857200638144372,
+    "interpretation": "The target's large raw-state motion occurs overwhelmingly inside the evaluator-equivalent ten-step wait and is settled several dummy actions before the first policy observation."
+  },
+  "conclusion": {
+    "job490155_scope": "Fails the raw-prewarmup construction that repeatedly pins S at the official raw pose while settling A/B.",
+    "not_ruled_out": "A construction using the evaluator-equivalent policy-entry settled native state as the common Eb/Er/Ec serialized base.",
+    "existing_eb_evidence_scope": "The 50/50 formal result establishes task/prompt/checkpoint competence; the five trajectories directly bind the settled policy-entry pose. It does not byte-bind a newly serialized settled HDF5."
+  },
+  "recommended_next_gate_if_authorized": [
+    "Restore the official task1 state and execute exactly ten evaluator dummy actions.",
+    "Capture that post-wait flattened state as the common base before moving only A/B.",
+    "Restore the captured base, execute another ten dummy actions, and require S/plate/ramekin/robot stability plus policy-RGB equivalence to the original policy-entry observation.",
+    "Repeat the same bounded physical gates; do not infer a pass from this audit.",
+    "Run a single exact-prompt EB competence episode on the hash-bound settled serialization before safe-reference or replay."
+  ],
+  "new_physical_job": "NOT_RUN"
+}

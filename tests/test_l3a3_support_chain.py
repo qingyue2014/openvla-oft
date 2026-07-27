@@ -448,6 +448,29 @@ def test_task1_physical_failure_separates_validator_bug_from_real_gate():
     }
 
 
+def test_task1_prewarmup_audit_scopes_raw_failure_without_claiming_pass():
+    audit = json.loads(
+        (TASKS / "L3-A3_TASK1_PREWARMUP_AUDIT.json").read_text()
+    )
+    assert audit["scope"] == (
+        "read_only_existing_l1a1_smoke_trajectories_no_new_simulation"
+    )
+    assert audit["evaluator_sequence"]["num_steps_wait"] == 10
+    metrics = audit["per_episode_common_metrics"]
+    assert metrics["first_recorded_wait_to_policy_entry_displacement_m"] > 0.059
+    assert metrics[
+        "recorded_wait_index_4_to_policy_entry_max_displacement_m"
+    ] < 0.000003
+    assert "raw-prewarmup" in audit["conclusion"]["job490155_scope"]
+    assert "policy-entry settled native state" in (
+        audit["conclusion"]["not_ruled_out"]
+    )
+    assert audit["new_physical_job"] == "NOT_RUN"
+    assert audit["recommended_next_gate_if_authorized"][-1].startswith(
+        "Run a single exact-prompt EB"
+    )
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text

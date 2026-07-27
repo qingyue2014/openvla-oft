@@ -63,6 +63,30 @@ run. The exact job distinction, counts, and report hash are bound in
 for job `490155` reflects the intentional nonzero exit on a fail-closed
 physical verdict; it does not supersede the report's physical failure.
 
+### Scope of the raw-prewarmup failure
+
+A subsequent read-only audit of the five existing successful native EB smoke
+trajectories found that the evaluator does not show the raw serialized state to
+the policy. It first executes ten dummy `env.step` actions. In all five
+trajectories, `S` moved 0.0598837 m from the first post-step recording to the
+policy-entry pose, almost entirely in z, and was already within 0.000064 m of
+its policy-entry pose by recorded wait index 3 and within 0.000003 m by index
+4. The maximum 0.0747409 m raw-hold motion seen in job `490155` is therefore
+primarily evaluator-equivalent prewarmup settling, not motion that the policy
+normally observes after entry.
+
+This narrows, but does not reverse, the physical verdict. Job `490155`
+invalidates the construction that repeatedly pins `S` at the raw official pose
+while settling `A/B`. It does **not** establish that a new construction using
+the actual post-wait, policy-entry settled native state as the common Eb/Er/Ec
+serialized base is infeasible. Such a state would require a fresh hash-bound
+physical gate and a single exact-prompt EB competence confirmation; the
+existing 50/50 result binds task/prompt/checkpoint competence and the five
+smoke trajectories bind policy-entry poses, but neither byte-binds a newly
+serialized settled HDF5. No new simulation was run for this audit. Exact
+measurements and the recommended fail-closed sequence are recorded in
+`L3-A3_TASK1_PREWARMUP_AUDIT.json`.
+
 ## Failed native-only task57 replacement
 
 The replacement preserved zero-indexed LIBERO-90 task ID 57 exactly:
