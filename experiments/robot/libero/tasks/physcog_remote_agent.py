@@ -29,6 +29,55 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("pi05", "setup"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/prepare_pi05_superpod.sh",
+        ),
+        artifacts=("experiments/logs/pi05_superpod_setup.json",),
+    ),
+    ("l1b1", "pi05_smoke"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_pi05_l1b_smoke.sh",
+            "l1b1_native_gripper",
+        ),
+        count_env="PI05_SMOKE_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b1_native_gripper_pi05_server.log",
+            "experiments/logs/l1b1_native_gripper_pi05_smoke_manifest.json",
+            "experiments/logs/l1b1_native_gripper_eb_rollout_physics.md",
+            "experiments/logs/l1b1_native_gripper_er_rollout_physics.md",
+            "experiments/logs/l1b1_native_gripper_ec_rollout_physics.md",
+            "rollouts/libero_spatial/L1-B1-task6-native-ramekin-capture-lift-v4-eb-pi05-smoke",
+            "rollouts/libero_spatial/L1-B1-task6-native-ramekin-capture-lift-v4-er-pi05-smoke",
+            "rollouts/libero_spatial/L1-B1-task6-native-ramekin-capture-lift-v4-ec-pi05-smoke",
+        ),
+    ),
+    ("l1b2", "pi05_smoke"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_pi05_l1b_smoke.sh",
+            "l1b2_native_held_object",
+        ),
+        count_env="PI05_SMOKE_TRIALS",
+        artifacts=(
+            "experiments/logs/l1b2_native_held_object_pi05_server.log",
+            "experiments/logs/l1b2_native_held_object_pi05_smoke_manifest.json",
+            "experiments/logs/l1b2_native_held_object_eb_rollout_physics.md",
+            "experiments/logs/l1b2_native_held_object_er_rollout_physics.md",
+            "experiments/logs/l1b2_native_held_object_ec_rollout_physics.md",
+            "rollouts/libero_goal/L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-eb-pi05-smoke",
+            "rollouts/libero_goal/L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-er-pi05-smoke",
+            "rollouts/libero_goal/L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-ec-pi05-smoke",
+        ),
+    ),
     ("l1b1", "prepare"): PhaseSpec(
         command=(
             "env",
