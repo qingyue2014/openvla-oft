@@ -27,13 +27,42 @@ case "${FAMILY}" in
 esac
 
 TASKS_DIR="experiments/robot/libero/tasks"
-CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
-GOAL_CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
 MODEL_FAMILY="${MODEL_FAMILY:-openvla}"
 PI05_HOST="${PI05_HOST:-127.0.0.1}"
 PI05_PORT="${PI05_PORT:-8000}"
 PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
 PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-900}"
+case "${MODEL_FAMILY,,}" in
+  pi05|pi0.5|pi_0.5|pi-0.5)
+    default_checkpoint="moojink/openvla-7b-oft-finetuned-libero-spatial"
+    default_open_loop_steps="${PI05_REPLAN_STEPS}"
+    ;;
+  cosmos|cosmos_policy|cosmos-policy)
+    default_checkpoint="/project/trllmout/models/Cosmos-Policy-LIBERO-Predict2-2B"
+    default_open_loop_steps=16
+    ;;
+  dreamzero|dream_zero|dream-zero)
+    default_checkpoint="/project/trllmout/models/DreamZero-DROID"
+    default_open_loop_steps=24
+    ;;
+  openvla)
+    default_checkpoint="moojink/openvla-7b-oft-finetuned-libero-spatial"
+    default_open_loop_steps=8
+    ;;
+  *)
+    echo "Unsupported MODEL_FAMILY: ${MODEL_FAMILY}" >&2
+    exit 2
+    ;;
+esac
+CHECKPOINT="${CHECKPOINT:-${default_checkpoint}}"
+if [[ "${MODEL_FAMILY,,}" == "openvla" || "${MODEL_FAMILY,,}" == "pi05" \
+      || "${MODEL_FAMILY,,}" == "pi0.5" || "${MODEL_FAMILY,,}" == "pi_0.5" \
+      || "${MODEL_FAMILY,,}" == "pi-0.5" ]]; then
+  GOAL_CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
+else
+  GOAL_CHECKPOINT="${GOAL_CHECKPOINT:-${default_checkpoint}}"
+fi
+MODEL_OPEN_LOOP_STEPS="${MODEL_OPEN_LOOP_STEPS:-${default_open_loop_steps}}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 L1B3_SMOKE_POOL_SIZE="${L1B3_SMOKE_POOL_SIZE:-12}"
@@ -385,6 +414,7 @@ eval_condition() {
     --pi05_port "${PI05_PORT}" \
     --pi05_replan_steps "${PI05_REPLAN_STEPS}" \
     --pi05_connect_timeout_s "${PI05_CONNECT_TIMEOUT_S}" \
+    --num_open_loop_steps "${MODEL_OPEN_LOOP_STEPS}" \
     --task_suite_name "${task_suite}" \
     --task_ids "${task_id}" \
     --initial_states_path "${state_path}" \

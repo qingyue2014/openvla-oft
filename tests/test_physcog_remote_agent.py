@@ -52,6 +52,7 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
         "prepare",
         "smoke",
         "formal",
+        "pi05_smoke",
     }
     prepare = PHASES[("l1b1", "prepare")]
     assert prepare.count_env == "NUM_TRIALS"
@@ -108,7 +109,7 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
 def test_l1b2_registry_exposes_calibration_and_gated_evaluation_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b2") == {
         "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke",
-        "formal", "ec_repair", "ec_video",
+        "formal", "ec_repair", "ec_video", "pi05_smoke",
     }
     assert PHASES[("l1b2", "calibrate")].count_env == "CALIBRATION_TRIALS"
     assert any(

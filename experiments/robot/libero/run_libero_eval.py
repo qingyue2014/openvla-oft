@@ -138,6 +138,7 @@ class GenerateConfig:
     do_sample: bool = False                          # Whether to sample action tokens during OpenVLA decoding
     temperature: float = 1.0                         # Sampling temperature passed to predict_action when supported
     top_p: float = 1.0                               # Nucleus sampling parameter passed to predict_action when supported
+    cosmos_num_denoising_steps: int = 5              # Cosmos Policy diffusion steps (official LIBERO default)
 
     load_in_8bit: bool = False                       # (For OpenVLA only) Load with 8-bit quantization
     load_in_4bit: bool = False                       # (For OpenVLA only) Load with 4-bit quantization
@@ -169,13 +170,25 @@ class GenerateConfig:
 def validate_config(cfg: GenerateConfig) -> None:
     """Validate configuration parameters."""
     cfg.model_family = normalize_model_family(cfg.model_family)
-    assert cfg.model_family in {"openvla", "pi05"}, f"Unsupported model family: {cfg.model_family}"
-    if cfg.model_family == "openvla":
-        assert cfg.pretrained_checkpoint is not None, "pretrained_checkpoint must not be None!"
-    else:
+    supported_families = {
+        "openvla",
+        "pi05",
+        "cosmos",
+        "cosmos_policy",
+        "cosmos-policy",
+        "dreamzero",
+        "dream_zero",
+        "dream-zero",
+    }
+    assert cfg.model_family in supported_families, f"Unsupported model family: {cfg.model_family}"
+    if cfg.model_family == "pi05":
         assert cfg.pi05_replan_steps > 0, "pi05_replan_steps must be positive"
         assert cfg.pi05_connect_timeout_s > 0, "pi05_connect_timeout_s must be positive"
         cfg.num_open_loop_steps = cfg.pi05_replan_steps
+    else:
+        assert str(cfg.pretrained_checkpoint), "pretrained_checkpoint must not be empty!"
+    if cfg.model_family in {"cosmos", "cosmos_policy", "cosmos-policy"}:
+        assert cfg.cosmos_num_denoising_steps > 0, "cosmos_num_denoising_steps must be positive"
 
     if "image_aug" in str(cfg.pretrained_checkpoint):
         assert cfg.center_crop, "Expecting `center_crop==True` because model was trained with image augmentations!"
@@ -301,6 +314,17 @@ def load_initial_states(cfg: GenerateConfig, task_suite, task_id: int, log_file=
 
 def prepare_observation(obs, resize_size, model_family="openvla"):
     """Prepare observation for policy input."""
+    if model_family.lower() in {"cosmos", "cosmos_policy", "cosmos-policy"}:
+        from experiments.robot.cosmos_policy_utils import (
+            prepare_cosmos_libero_observation,
+        )
+
+        # Match the official Cosmos Policy LIBERO evaluator exactly: a
+        # vertical flip (not OpenVLA's 180-degree rotation), raw 256 px camera
+        # frames, and 9-D [gripper qpos, EEF xyz, EEF quaternion] proprio.
+        observation = prepare_cosmos_libero_observation(obs)
+        return observation, observation["primary_image"]
+
     # Get preprocessed images
     img = get_libero_image(obs)
     wrist_img = get_libero_wrist_image(obs)
@@ -330,7 +354,18 @@ def process_action(action, model_family):
     # OpenPI's official LIBERO output transform already emits the exact 7-D
     # environment action convention used by OffScreenRenderEnv.
     if model_family == "pi05":
-        return np.asarray(action, dtype=np.float32)
+        action = np.asarray(action, dtype=np.float32)
+        if action.shape != (7,) or not np.isfinite(action).all():
+            raise ValueError(f"Invalid pi0.5 LIBERO action: shape={action.shape}")
+        return action
+
+    if model_family.lower() in {"cosmos", "cosmos_policy", "cosmos-policy"}:
+        # The official Cosmos LIBERO checkpoint already returns the
+        # unnormalized 7-D action consumed directly by env.step().
+        action = np.asarray(action, dtype=np.float32)
+        if action.shape != (7,) or not np.isfinite(action).all():
+            raise ValueError(f"Invalid Cosmos LIBERO action: shape={action.shape}")
+        return action
 
     # Normalize gripper action [0,1] -> [-1,+1] because the environment expects the latter
     action = normalize_gripper_action(action, binarize=True)

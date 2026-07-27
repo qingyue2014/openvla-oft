@@ -78,6 +78,27 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_goal/L1-B2-goal-cream-cheese-native-wine-bottle-knockdown-ec-pi05-smoke",
         ),
     ),
+    ("models", "setup_cosmos"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/setup_cosmos_dreamzero_models.sh",
+            "cosmos",
+        ),
+    ),
+    ("models", "setup_dreamzero"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/setup_cosmos_dreamzero_models.sh",
+            "dreamzero",
+        ),
+    ),
+    ("models", "setup_all"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/setup_cosmos_dreamzero_models.sh",
+            "all",
+        ),
+    ),
     ("l1b1", "prepare"): PhaseSpec(
         command=(
             "env",
