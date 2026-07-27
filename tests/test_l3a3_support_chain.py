@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -152,6 +153,17 @@ def test_pivot_custom_object_classes_are_registered():
     ):
         script_text = (TASKS / script).read_text()
         assert "physcog_objects.assert_l3a3_pivot_objects_registered()" in script_text
+
+
+def test_canonical_pivot_states_are_committed_and_hash_bound():
+    expected = {
+        "eb": "1675b1ffa49e99ef82953b4153d16e15078cbcbedd3733c565483edcd74c25c8",
+        "er": "32954b264b6abdaaa2ecb8ac2edcbdcc64a860b52776aadeb044ef90fff09625",
+        "ec": "bfcb32cf737f977c6061e6e82e9b4a5d024922e89fc7eaa62e1a1870464984fd",
+    }
+    for condition, digest in expected.items():
+        path = TASKS / f"l3a3_support_chain_{condition}.hdf5"
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == digest
 
 
 def test_action_validators_do_not_edit_sim_state_after_er_reset():
