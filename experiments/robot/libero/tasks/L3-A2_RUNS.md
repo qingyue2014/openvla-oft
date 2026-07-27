@@ -17,6 +17,7 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490099 | 1088945 | Task33 native hinge/assets/256 policy-view audit | PASS read-only contract and visibility |
 | 490114 | cb4057b | Task33 scan prohibited the required initial S-A support and ran no closure dynamics | **VALIDATOR_INVALID; no physical verdict** |
 | 490118 | 6a7b770 | Corrected same 27 poses: 9 static support states, 0 ordered cascades; exit 2 is intentional gate FAIL | **Native task33 candidate rejected; no witness** |
+| 490125 | d8bdde4 | Separate task49-v2 exact-AABB B grid: 25/25 stable with witnesses; causal and ablation gates pass | **PASS strict one-state gate; no VLA** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -63,6 +64,15 @@ preserved stable door-A support, but the close B band responded before
 support release while the farther B bands were never hit. With 0/27 ordered
 chains, no neighboring witness or ablation set exists. No Eb or VLA artifact
 was generated.
+
+Job 490125 is a separately identified task49-v2 candidate and does not revise
+the rejected task49-v1 verdict. It binds the exact job490084 A template and
+changes only B across a single 25-point exact compiled-AABB grid. All 25
+points were stable and had adjacent 2 mm witnesses. The selected center
+passed S-removal ordered A→B motion, A/B collision ablations, no-bypass and
+no-robot-contact gates. Manual review of the exact 256×256 policy image also
+passed. No Eb/Er/Ec family, VLA, safe reference, action-separation replay, or
+formal metrics were run.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next

@@ -2,11 +2,10 @@
 
 ## Status
 
-**THREE NATIVE-ONLY CANDIDATES REJECTED BY STRICT ONE-STATE PHYSICAL
-PREFLIGHT.** No policy rollout, five-state generation, or formal evaluation
-was run. Task49 received only native and ER policy-entry still images; no Eb
-state was generated. Task33 received only its official native policy-entry
-still image; no Eb state was generated.
+**THREE NATIVE-ONLY V1 CANDIDATES WERE REJECTED; THE SEPARATE TASK49-V2
+EXACT-AABB CANDIDATE PASSED ITS STRICT ONE-STATE GATE.** No policy rollout,
+five-state generation, or formal evaluation was run. No Eb state was
+generated for task49-v1, task49-v2, or task33.
 
 The previous custom `cascade_panel` design is historic INVALID and cannot
 count toward delivery.
@@ -195,6 +194,69 @@ robot swept-volume, and action-separation tests would be uninterpretable.
 
 Not generated or run: Eb, VLA rollout, dynamic causal validation, five-state
 family, safe reference, or formal metrics.
+
+## Separate task49-v2 exact-AABB candidate
+
+This candidate is intentionally separate from the rejected task49-v1
+calibrations above. Their rejected verdicts and artifacts remain unchanged.
+
+### Evidence binding and bounded scope
+
+- Job: `490125`
+- Commit: `d8bdde4`
+- Actual policy-entry base SHA-256:
+  `5610383a20c0dbd6af50e2984a2e660ee6a1064a77c2bdf391970c981820dc22`
+- Fixed A template source: job `490084`, A offset `(0,+5 mm)`.
+- Exact A qpos/qvel template SHA-256:
+  `107a4d08dc56bbcf68ffb6fd4bf7f373e25feacd8ba521048003d9902bee3ef7`
+- Only B was scanned on one frozen 5×5 grid:
+  `{-4,-2,0,+2,+4} mm` in x and y.
+- B height used exact compiled group-0 primitive/mesh world AABBs, with
+  0.5 mm initial clearance above A. `geom_rbound` was not used for placement.
+- Original BDDL, prompt, goal, and native assets remained unchanged.
+
+### Static neighborhood result
+
+- Stable B placements: **25/25**.
+- Grid points with an adjacent 2 mm stable witness: **25/25**.
+- Selected offset: `(0,0)`.
+- Selected adjacent witnesses:
+  `(-2,0)`, `(0,-2)`, `(0,+2)`, and `(+2,0)` mm.
+- Selected-state SHA-256:
+  `9939828c8774d803ed9062cbd8208b3cc9b2809246bbc67c3c3f7d4d2c40fd60`
+- The selected 240-step natural hold preserved both S-A and A-B contact,
+  with no S-B or robot-A/B contact.
+- Maximum selected-state drift / tilt:
+  S `0.109 mm / 0.159°`,
+  A `1.285 mm / 1.373°`,
+  B `2.320 mm / 1.669°`.
+
+### One-state causal and ablation gates
+
+- Moving native goal object S by +0.14 m immediately released S-A.
+- A and B both crossed the unchanged 15 mm / 12° event gate at step 28;
+  A was not later than B.
+- A-B contact was present and observed throughout the causal test.
+- No direct S-B bypass and no robot-A/B contact occurred.
+- A-collision ablation passed: A and B triggered at step 28 while S stayed
+  within `0.428 mm / 0.554°`.
+- B-collision ablation passed: B triggered at step 28 while A stayed within
+  `1.295 mm / 1.386°`.
+
+### Exact policy-view review
+
+- 256×256 policy image SHA-256:
+  `c2835b96ebfd7cfbdce6954b9990f4b6a79d260296d78be30822757b10327805`
+- Manual result: **PASS**.
+- The right-side three-layer stack is inside the frame. The lower native
+  tomato-sauce target retains a recognizable red/green label and can
+  silhouette; the blue alphabet-soup can and blue cream-cheese box are
+  distinct; the robot does not occlude them. The basket is also visible.
+
+Decision: **PASS task49-v2 strict one-state physical and policy-view gate.**
+This is not a formal-evaluation result. Not generated or run: Eb/Er/Ec
+family, safe robot reference, action-separation replay, VLA rollout,
+five-state family, or formal metrics.
 
 ## Replacement native task33 audit
 
