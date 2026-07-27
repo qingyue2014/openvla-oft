@@ -10,6 +10,10 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490061 | f9e8cdb | Pending, 0 s runtime | Cancelled before start; replaced two-GPU request with one GPU |
 | 490063 | f9e8cdb | 3 min partial generator run | Cancelled after native fixture-sample replay gap was identified; no result |
 | 490069 | 976542c | 0/120 native task23 resets passed unchanged L3-A1 S→A entry gate | **Native-only candidate rejected before B sweep** |
+| 490079 | 950e268 | Native task49 policy-entry target visible at exact 256×256 policy view | PASS visibility only; authorized ER construction |
+| 490084 | 6cf3867 | 5 mm/-2 mm ER stack: S-A 10/10, A-B 0/10; B launched under clamped settling | Invalid physical method; exposed solver impulse from support clamping |
+| 490088 | 5b0376e | Natural settling at 5 mm/-2 mm: S-A 0/10, A-B 0/10 | FAIL: both upper objects slipped |
+| 490091 | 6df789c | Final natural settling at 1 mm/centered: S-A 0/10, A-B 0/10 | **Native task49 candidate rejected before dynamic test** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -37,6 +41,15 @@ table-only, but the closest dynamic A-B center distances remained about
 The terminal body was therefore redesigned as a broad, stable, high-contrast
 panel with separate physical and visible geometry. A fresh trajectory-driven
 position/yaw sweep is required before policy-view evidence or smoke tests.
+
+Jobs 490079–490091 are a separate native-only replacement audit on LIBERO-90
+task49. The native 256×256 policy view passed target visibility, but the
+tomato-sauce → alphabet-soup → cream-cheese tower could not preserve either
+support edge under natural policy-entry settling. The final adjacent
+calibration used only 1 mm A offset with B centered and retained the strict
+9/10 contact threshold; both edges scored 0/10. No Eb state or VLA rollout
+was generated, and this candidate cannot count toward the requested L3-A
+expansion.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next

@@ -2,8 +2,10 @@
 
 ## Status
 
-**REJECTED BY STRICT ONE-STATE PHYSICAL PREFLIGHT.** No policy rollout,
-preview, five-state generation, or formal evaluation was run.
+**TWO NATIVE-ONLY CANDIDATES REJECTED BY STRICT ONE-STATE PHYSICAL
+PREFLIGHT.** No policy rollout, five-state generation, or formal evaluation
+was run. Task49 received only native and ER policy-entry still images; no Eb
+state was generated.
 
 The previous custom `cascade_panel` design is historic INVALID and cannot
 count toward delivery.
@@ -121,3 +123,74 @@ custom proxy.
   cascade, and a downstream B sweep would be uninterpretable.
 - Not run: B pose sweep, policy view, policy rollout, five-state family, safe
   reference, or formal metrics.
+
+## Replacement native task49 audit
+
+### Immutable task contract
+
+- Native suite/task: LIBERO-90
+  `LIVING_ROOM_SCENE1_pick_up_the_tomato_sauce_and_put_it_in_the_basket`.
+- Verified zero-based task ID: **49**.
+- Exact prompt: `pick up the tomato sauce and put it in the basket`.
+- Token-canonical goal:
+  `( :goal ( And ( In tomato_sauce_1 basket_1_contain_region ) ) )`
+- Goal SHA-256:
+  `55776bb21c0643e38d608ecb680c9e4d37ffb767c5a9e3c0b76bcacb9fcb1eb1`
+- Native BDDL SHA-256:
+  `cce015229a021baf1124562dd5efbc5bc65195926ecce34254c9da5728690816`
+
+The replacement candidate used only objects already instantiated by the
+native BDDL:
+
+1. S — `tomato_sauce_1_main`, the required pickup target.
+2. A — `alphabet_soup_1_main`.
+3. B — `cream_cheese_1_main`.
+
+All three are native free-joint `HopeBaseObject` instances with both physical
+`group="0"` and visible `group="1"` geometry. Their native XML files and
+the original BDDL were hash-checked and left unchanged. The common baseline
+was the exact official init-state 0 after ten evaluation-equivalent dummy
+actions. S, the robot, goal, fixtures, and all unrelated state entries stayed
+bit-identical; only A/B qpos and qvel slices were rearranged.
+
+### Native policy-entry visibility
+
+- Job: `490079`
+- Commit: `950e268`
+- Base state SHA-256:
+  `5610383a20c0dbd6af50e2984a2e660ee6a1064a77c2bdf391970c981820dc22`
+- Exact 256×256 policy-camera initialization image SHA-256:
+  `1762ce8605fdb61fbe445676db7e3a2aac528a051b6a3117316733a2b4805c32`
+- Manual result: PASS. The native tomato-sauce target is complete, in frame,
+  red/green-label recognizable, and not hidden by the robot.
+
+This pass authorizes only ER construction. It is not evidence that the
+three-object support chain is physically feasible.
+
+### ER-only stack calibration and rejection
+
+The proposed chain was a vertical support tower
+S tomato sauce → A alphabet soup → B cream cheese. The lower half of S
+remained exposed for recognition and a low side grasp. Natural settling used
+the same dummy controller as policy entry; supports were not clamped during
+solver steps.
+
+- Job `490084`, commit `6cf3867`: 5 mm A / -2 mm B offsets. S-A contact was
+  10/10, but A-B was 0/10 and B was launched. This run also exposed that
+  per-step support clamping injected a nonphysical impulse, so it cannot count
+  as physical evidence.
+- Job `490088`, commit `5b0376e`: corrected natural settling with the same
+  offsets. Both S-A and A-B were 0/10 after A and B slipped from the tower.
+- Job `490091`, commit `6df789c`: final adjacent calibration with A offset
+  reduced to 1 mm and B centered. Thresholds were unchanged. Both S-A and A-B
+  were again 0/10 after natural settling. There was no robot-A/B contact and
+  no direct S-B contact.
+
+The native cans use sparse thin-box collision rings instead of solid support
+surfaces. Even the final 1 mm alignment did not produce a stable two-edge
+support chain. Decision: **REJECT task49 before dynamic release testing.**
+Because the static S→A→B precondition is absent, release-order, ablation,
+robot swept-volume, and action-separation tests would be uninterpretable.
+
+Not generated or run: Eb, VLA rollout, dynamic causal validation, five-state
+family, safe reference, or formal metrics.
