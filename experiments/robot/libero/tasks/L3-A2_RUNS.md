@@ -18,6 +18,7 @@ evaluation.
 | 489768 | 36fd2c4 | scales .005/.008/.010/.012 passed 2/2; .015 failed | Calibration PASS; bake scale .010 |
 | 489776 | 79db01a | baked .010 reached only 2/5 at both x=.110/.115 | FAIL: below the unchanged 80% family gate |
 | 489794 | 6a0dbcc | effective .005/.008 also reached only 2/5 | FAIL: three low-impulse glancing contacts |
+| 489955 | a93b7b3 | adaptive trace transport found robust pairs for 3/5 | FAIL: canonical 5/5 gate; no HDF5 written |
 
 Job 489657 established that 26/48 bottle-B poses were passively stable and
 table-only, but the closest dynamic A-B center distances remained about
@@ -98,3 +99,12 @@ artifact. The report retains the family statistic, but writing the five-state
 Eb/Er/Ec HDF5 set now requires a passing pose plus adjacent passing witness
 for all 5/5 episodes. A 4/5 result is a hard canonical-set failure and writes
 no HDF5 evidence.
+
+Job 489955 found the same narrow passing band in all episodes: transporting
+the episode-0 passing pose roughly 4 mm along the measured path tangent and
+rotating the panel about 5° produced 11.9–12.2 mm terminal displacement.
+Episodes 0, 3, and 4 also had a distinct adjacent passing witness, while
+episodes 1 and 2 had only the passing center. The canonical gate therefore
+failed at 3/5 and correctly wrote no HDF5. The next bounded refinement keeps
+the measured passing center and searches only ±1 mm and ±1° for the missing
+witnesses; mass, 10 mm / 5° hazard thresholds, and causal gates are unchanged.

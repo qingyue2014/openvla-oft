@@ -275,6 +275,7 @@ def test_cascade_panel_has_separate_collision_and_opaque_visual_geoms():
 def test_remote_registry_has_every_preformal_l3a2_gate():
     phases = {phase for scenario, phase in PHASES if scenario == "l3a2"}
     assert phases == {
+        "adaptive_refine",
         "adaptive_sweep",
         "geometry_sweep",
         "mass_sweep",
