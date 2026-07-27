@@ -157,7 +157,7 @@ import hashlib
 import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
-import libero
+import libero.libero as libero_package
 from libero.libero import benchmark
 
 task_id = 55
@@ -191,7 +191,7 @@ if goal_predicate != expected_goal:
         f"task55 goal drift: {{goal_predicate!r}} != {{expected_goal!r}}"
     )
 
-asset_root = Path(libero.__file__).resolve().parent / "assets"
+asset_root = Path(libero_package.__file__).resolve().parent / "assets"
 asset_relpaths = {{
     "S_alphabet_soup":
         "stable_hope_objects/alphabet_soup/alphabet_soup.xml",
