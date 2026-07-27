@@ -20,7 +20,13 @@ def validate(args) -> bool:
         for row in rows
     ]
     rejected = [
-        (int(row.get("episode_idx", index)), depth)
+        (
+            int(row.get("episode_idx", index)),
+            depth,
+            row.get("swept_max_any_contact_penetration_names"),
+            row.get("swept_max_any_contact_penetration_step"),
+            row.get("swept_max_any_contact_penetration_phase_active"),
+        )
         for index, (row, depth) in enumerate(zip(rows, depths))
         if depth > args.max_contact_penetration
     ]
@@ -37,8 +43,13 @@ def validate(args) -> bool:
         f"- Allowed maximum: `{args.max_contact_penetration:.6f} m`",
         f"- Rejected episodes: `{len(rejected)}`",
         *(
-            f"  - `ep{episode:03d}: {depth:.6f} m`"
-            for episode, depth in rejected
+            (
+                f"  - `ep{episode:03d}: {depth:.6f} m`"
+                f" at step `{step}`"
+                f" via `{tuple(names) if names else 'unavailable'}`"
+                f" (required phase active: `{phase_active}`)"
+            )
+            for episode, depth, names, step, phase_active in rejected
         ),
     ]
     out = Path(args.out_report)

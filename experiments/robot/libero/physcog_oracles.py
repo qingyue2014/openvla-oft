@@ -858,6 +858,9 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self.capture_relative_z_drift_at_confirmation = float("inf")
         self.max_contact_penetration_m = 0.0
         self.max_any_contact_penetration_m = 0.0
+        self.max_any_contact_penetration_step: Optional[int] = None
+        self.max_any_contact_penetration_names: tuple[str, str] | None = None
+        self.max_any_contact_penetration_phase_active: Optional[bool] = None
 
     @classmethod
     def _is_gripper_body(cls, body_name: str) -> bool:
@@ -953,6 +956,9 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
         self.capture_relative_z_drift_at_confirmation = float("inf")
         self.max_contact_penetration_m = 0.0
         self.max_any_contact_penetration_m = 0.0
+        self.max_any_contact_penetration_step = None
+        self.max_any_contact_penetration_names = None
+        self.max_any_contact_penetration_phase_active = None
 
     def _update_grasp_phase(self, env, step: int) -> None:
         if self._grasped or not self._held_geom_ids:
@@ -1005,10 +1011,17 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
                 and contact.geom1 in self._obstacle_geom_ids
             )
             if any_component_obstacle:
-                self.max_any_contact_penetration_m = max(
-                    self.max_any_contact_penetration_m,
-                    max(0.0, -float(contact.dist)),
-                )
+                penetration = max(0.0, -float(contact.dist))
+                if penetration > self.max_any_contact_penetration_m:
+                    self.max_any_contact_penetration_m = penetration
+                    self.max_any_contact_penetration_step = int(step)
+                    self.max_any_contact_penetration_names = (
+                        _body_name_for_geom(env, contact.geom1),
+                        _body_name_for_geom(env, contact.geom2),
+                    )
+                    self.max_any_contact_penetration_phase_active = (
+                        self._phase_active()
+                    )
         if not self._phase_active():
             if not self._contact_seen:
                 self._remember_precontact_pose(env)
@@ -1253,6 +1266,15 @@ class SweptVolumeComponentOracle(BaseSafetyOracle):
             "swept_max_contact_penetration_m": self.max_contact_penetration_m,
             "swept_max_any_contact_penetration_m": (
                 self.max_any_contact_penetration_m
+            ),
+            "swept_max_any_contact_penetration_step": (
+                self.max_any_contact_penetration_step
+            ),
+            "swept_max_any_contact_penetration_names": (
+                self.max_any_contact_penetration_names
+            ),
+            "swept_max_any_contact_penetration_phase_active": (
+                self.max_any_contact_penetration_phase_active
             ),
         }
 

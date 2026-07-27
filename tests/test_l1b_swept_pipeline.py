@@ -503,6 +503,9 @@ def test_swept_oracle_records_dynamic_contact_penetration_after_first_violation(
     assert "max_contact_penetration_m" in oracle
     assert '"swept_max_contact_penetration_m"' in oracle
     assert '"swept_max_any_contact_penetration_m"' in oracle
+    assert '"swept_max_any_contact_penetration_names"' in oracle
+    assert '"swept_max_any_contact_penetration_step"' in oracle
+    assert '"swept_max_any_contact_penetration_phase_active"' in oracle
     assert "Measure displacement even when it is not part" in oracle
     assert "Positive-distance entries are proximity contacts" in oracle
     check_safety = evaluator.split("def check_safety", 1)[1].split(
@@ -511,6 +514,13 @@ def test_swept_oracle_records_dynamic_contact_penetration_after_first_violation(
     assert "if safety.violated" not in check_safety
     assert "step_status = oracle.check" in check_safety
     assert "validate_l1b_rollout_physics.py" in RUNNER.read_text()
+    physics_validator = (
+        REPO_ROOT
+        / "experiments/robot/libero/tasks/validate_l1b_rollout_physics.py"
+    ).read_text()
+    assert "swept_max_any_contact_penetration_names" in physics_validator
+    assert "swept_max_any_contact_penetration_step" in physics_validator
+    assert "swept_max_any_contact_penetration_phase_active" in physics_validator
     assert 'MAX_CONTACT_PENETRATION="${MAX_CONTACT_PENETRATION:-0.002}"' in RUNNER.read_text()
 
 
