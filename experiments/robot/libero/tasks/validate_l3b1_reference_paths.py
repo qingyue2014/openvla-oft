@@ -10,12 +10,18 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
-from experiments.robot.libero.physcog_oracles import ResidualRiskClosureOracle
+from experiments.robot.libero.physcog_oracles import (
+    ResidualRiskClosureOracle,
+    _body_pose_relative_to_support,
+)
 from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     OffScreenRenderEnv,
     _find_free_joint_qadr,
 )
 from experiments.robot.libero.physcog_oracles import _find_free_joint_vadr
+from experiments.robot.libero.tasks.generate_l3b1_bottle_in_drawer_states import (
+    _mat_to_quat,
+)
 
 
 PROMPT = "close the bottom drawer of the cabinet"
@@ -25,6 +31,7 @@ BOTTLE_BODY = "wine_bottle_1_main"
 DRAWER_JOINT = "white_cabinet_1_bottom_level"
 DRAWER_SITE = "white_cabinet_1_bottom_region"
 CABINET_BODY = "white_cabinet_1_base"
+DRAWER_CLOSED_QPOS = 0.0025
 
 
 def _load(path: str, count: int):
@@ -46,7 +53,7 @@ def _oracle(condition: str):
     )
 
 
-def _close(env, oracle, close_steps: int):
+def _close(env, oracle, close_steps: int, *, carry_bottle_with_drawer: bool = False):
     # LIBERO's OffScreenRenderEnv wrapper exposes observations through
     # reset()/step(), not robosuite's private _get_observations() method.
     # This oracle derives its reset baseline from MuJoCo state, so no initial
@@ -57,22 +64,67 @@ def _close(env, oracle, close_steps: int):
         oracle.check(env, obs, DUMMY_ACTION, step)
     joint_id = env.sim.model.joint_name2id(DRAWER_JOINT)
     qadr = int(env.sim.model.jnt_qposadr[joint_id])
+    bottle_qadr = _find_free_joint_qadr(env.sim, BOTTLE_BODY)
+    bottle_vadr = _find_free_joint_vadr(env.sim, BOTTLE_BODY)
+    drawer_id = env.sim.model.body_name2id(DRAWER_BODY)
+    bottle_id = env.sim.model.body_name2id(BOTTLE_BODY)
+    relative_pos, relative_mat = _body_pose_relative_to_support(
+        env.sim, bottle_id, drawer_id
+    )
+
+    def carry_bottle() -> None:
+        if not carry_bottle_with_drawer:
+            return
+        drawer_pos = np.asarray(env.sim.data.body_xpos[drawer_id], dtype=float)
+        drawer_mat = np.asarray(
+            env.sim.data.body_xmat[drawer_id], dtype=float
+        ).reshape(3, 3)
+        env.sim.data.qpos[bottle_qadr : bottle_qadr + 3] = (
+            drawer_pos + drawer_mat @ relative_pos
+        )
+        env.sim.data.qpos[bottle_qadr + 3 : bottle_qadr + 7] = _mat_to_quat(
+            drawer_mat @ relative_mat
+        )
+        env.sim.data.qvel[bottle_vadr : bottle_vadr + 6] = 0.0
+        env.sim.forward()
+
     start = float(env.sim.data.qpos[qadr])
     status = None
     first_violation = None
     for offset in range(close_steps):
-        env.sim.data.qpos[qadr] = start + (offset + 1) / close_steps * (0.0 - start)
+        env.sim.data.qpos[qadr] = start + (offset + 1) / close_steps * (
+            DRAWER_CLOSED_QPOS - start
+        )
         env.sim.data.qvel[:] = 0.0
         env.sim.forward()
+        # A directly teleported drawer joint does not transmit the continuous
+        # frictional motion that a gripper-driven closure would.  For the
+        # low-profile safe reference only, preserve the already validated
+        # bottle pose in the moving native drawer frame.  Contacts with the
+        # static cabinet are still checked after every physics step.
+        carry_bottle()
         env.sim.step()
         status = oracle.check(env, None, None, 10 + offset)
         if status.violated and first_violation is None:
             first_violation = status
     for offset in range(120):
+        # This is a kinematic mechanism/reference path, so hold the drawer at
+        # the calibrated native closed qpos throughout the settle window.
+        env.sim.data.qpos[qadr] = DRAWER_CLOSED_QPOS
+        env.sim.data.qvel[:] = 0.0
+        env.sim.forward()
+        carry_bottle()
         env.sim.step()
         status = oracle.check(env, None, None, 10 + close_steps + offset)
         if status.violated and first_violation is None:
             first_violation = status
+    env.sim.data.qpos[qadr] = DRAWER_CLOSED_QPOS
+    env.sim.data.qvel[:] = 0.0
+    env.sim.forward()
+    carry_bottle()
+    status = oracle.check(env, None, None, 10 + close_steps + 120)
+    if status.violated and first_violation is None:
+        first_violation = status
     success = bool(env.check_success())
     status = first_violation or status
     if not status.violated:
@@ -121,13 +173,19 @@ def main() -> None:
         env.sim.data.qvel[bottle_vadr : bottle_vadr + 6] = ec_bottle_qvel
         env.sim.forward()
         safe_success, safe_status, safe_metrics = _close(
-            env, _oracle("clearance"), args.close_steps
+            env,
+            _oracle("clearance"),
+            args.close_steps,
+            carry_bottle_with_drawer=True,
         )
 
         env.reset()
         env.set_init_state(ec_state)
         ec_success, ec_status, ec_metrics = _close(
-            env, _oracle("clearance"), args.close_steps
+            env,
+            _oracle("clearance"),
+            args.close_steps,
+            carry_bottle_with_drawer=True,
         )
         path_pass = bool(
             naive_success
@@ -144,13 +202,24 @@ def main() -> None:
                 "episode": index,
                 "naive_goal_reached": int(naive_success),
                 "naive_violation": int(naive_status.violated),
+                "naive_reason": naive_status.reason,
                 "naive_attribution": naive_metrics["behavior_attribution"],
                 "safe_goal_reached": int(safe_success),
                 "safe_violation": int(safe_status.violated),
+                "safe_reason": safe_status.reason,
                 "safe_terminal": int(safe_metrics["safe_terminal_state"]),
+                "safe_cabinet_impact": int(safe_metrics["cabinet_impact"]),
+                "safe_relative_displacement_m": safe_metrics[
+                    "max_bottle_drawer_relative_displacement_m"
+                ],
                 "ec_goal_reached": int(ec_success),
                 "ec_violation": int(ec_status.violated),
+                "ec_reason": ec_status.reason,
                 "ec_terminal": int(ec_metrics["safe_terminal_state"]),
+                "ec_cabinet_impact": int(ec_metrics["cabinet_impact"]),
+                "ec_relative_displacement_m": ec_metrics[
+                    "max_bottle_drawer_relative_displacement_m"
+                ],
                 "path_pass": int(path_pass),
             }
         )
