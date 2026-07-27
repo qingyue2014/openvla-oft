@@ -107,6 +107,7 @@ def _states(
         group.attrs["oracle_displacement_threshold"] = 0.01
         group.attrs["oracle_height_drop_threshold"] = 0.015
         group.attrs["stable_x_offset"] = -0.10 if source is not None else 0.0
+        group.attrs["fixture_pose_replay"] = "native_reset_fixture_pose"
         if group.attrs["l3a1_variant"] == "baseline":
             group.attrs["pairing_method"] = "native_base_reset_state"
             group.attrs["source_task_key"] = "task"
@@ -121,6 +122,9 @@ def _states(
             demo.attrs["runtime_wait_displacement_m"] = 0.0
             demo.attrs["bottle_qpos_flat_start"] = 3
             demo.attrs["bottle_qvel_flat_start"] = 20
+            demo.attrs["fixture_root_body"] = "cabinet"
+            demo.attrs["fixture_root_position"] = [0.0, 0.3, 0.0]
+            demo.attrs["fixture_root_quaternion"] = [1.0, 0.0, 0.0, 0.0]
             if group.attrs["l3a1_variant"] in {"risk", "stable"}:
                 demo.attrs["support_body"] = "drawer"
                 demo.attrs["bottle_body"] = "bottle"
@@ -161,17 +165,27 @@ def test_native_baseline_is_exact_er_preintervention_state(tmp_path):
 
 def test_native_replay_translates_only_the_bottle_onto_current_drawer():
     class Model:
+        body_pos = np.zeros((2, 3), dtype=float)
+        body_quat = np.tile([1.0, 0.0, 0.0, 0.0], (2, 1))
+
         @staticmethod
         def body_name2id(name):
-            assert name == "drawer"
-            return 0
+            return {"cabinet": 0, "drawer": 1}[name]
 
     class Data:
-        body_xpos = np.asarray([[1.0, 2.0, 3.0]])
+        body_xpos = np.zeros((2, 3), dtype=float)
 
     class Sim:
         model = Model()
         data = Data()
+
+        @staticmethod
+        def set_state_from_flattened(_state):
+            return None
+
+        @classmethod
+        def forward(cls):
+            cls.data.body_xpos[1] = cls.model.body_pos[0] + [0.0, 0.1, 0.0]
 
     class Env:
         sim = Sim()
@@ -180,6 +194,9 @@ def test_native_replay_translates_only_the_bottle_onto_current_drawer():
     record = {
         "initial_state": original,
         "support_body": "drawer",
+        "fixture_root_body": "cabinet",
+        "fixture_root_position": np.asarray([1.0, 1.9, 3.0]),
+        "fixture_root_quaternion": np.asarray([1.0, 0.0, 0.0, 0.0]),
         "bottle_qpos_flat_start": 3,
         "bottle_qvel_flat_start": 20,
         "support_relative_position": np.asarray([0.1, -0.2, 0.3]),
@@ -188,6 +205,7 @@ def test_native_replay_translates_only_the_bottle_onto_current_drawer():
     }
     replay = materialize_l3a1_native_state(Env(), record)
     assert np.allclose(replay[3:6], [1.1, 1.8, 3.3])
+    assert np.allclose(Env.sim.model.body_pos[0], [1.0, 1.9, 3.0])
     assert np.array_equal(replay[10:20], original[10:20])
     assert np.array_equal(original, np.arange(30, dtype=float))
 

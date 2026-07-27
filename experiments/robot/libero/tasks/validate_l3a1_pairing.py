@@ -14,7 +14,7 @@ BINDING_FIELDS = (
     "l3a1_variant", "seed", "bddl", "lean_dx", "lean_dy", "lean_dz",
     "lean_deg", "lean_axis", "settle_steps", "validation_hold_steps",
     "verify_close_steps", "min_topple_deg", "oracle_displacement_threshold",
-    "oracle_height_drop_threshold", "stable_x_offset",
+    "oracle_height_drop_threshold", "stable_x_offset", "fixture_pose_replay",
 )
 
 
@@ -118,6 +118,28 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                 raise ValueError(f"initial EEF drift is nonzero at demo_{index}")
             if float(demo.attrs.get("runtime_wait_displacement_m", np.inf)) > 0.005:
                 raise ValueError(f"runtime wait drift exceeds 5 mm at demo_{index}")
+            fixture_required = (
+                "fixture_root_body",
+                "fixture_root_position",
+                "fixture_root_quaternion",
+            )
+            fixture_missing = [
+                name for name in fixture_required if name not in demo.attrs
+            ]
+            if fixture_missing:
+                raise ValueError(
+                    f"missing native fixture replay metadata at demo_{index}: "
+                    f"{fixture_missing}"
+                )
+            for name, size in (
+                ("fixture_root_position", 3),
+                ("fixture_root_quaternion", 4),
+            ):
+                value = np.asarray(demo.attrs[name], dtype=float)
+                if value.shape != (size,) or not np.all(np.isfinite(value)):
+                    raise ValueError(
+                        f"invalid {name} metadata at demo_{index}: {value!r}"
+                    )
             if variant in {"risk", "stable"}:
                 required = (
                     "support_body",
@@ -183,6 +205,18 @@ def validate_baseline_pairing(
                 raise ValueError(
                     f"Eb is not the exact Er base_reset_state at demo_{index}"
                 )
+            for field in (
+                "fixture_root_body",
+                "fixture_root_position",
+                "fixture_root_quaternion",
+            ):
+                if not np.array_equal(
+                    np.asarray(eb_demo.attrs[field]),
+                    np.asarray(er_demo.attrs[field]),
+                ):
+                    raise ValueError(
+                        f"Eb/Er native fixture mismatch for {field} at demo_{index}"
+                    )
         count = len(er_group)
     return count
 
@@ -250,6 +284,18 @@ def validate_pairing(er_path: str, ec_path: str, task_description: str) -> list[
                 raise ValueError(
                     f"non-bottle state mismatch at demo_{index}; changed indices={changed[:10].tolist()}"
                 )
+            for field in (
+                "fixture_root_body",
+                "fixture_root_position",
+                "fixture_root_quaternion",
+            ):
+                if not np.array_equal(
+                    np.asarray(er_demo.attrs[field]),
+                    np.asarray(ec_demo.attrs[field]),
+                ):
+                    raise ValueError(
+                        f"Er/Ec native fixture mismatch for {field} at demo_{index}"
+                    )
             if np.array_equal(
                 er_state[qpos_start:qpos_start + 7], ec_state[qpos_start:qpos_start + 7]
             ):

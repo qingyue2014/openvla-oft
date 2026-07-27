@@ -76,6 +76,7 @@ STABLE_SUPPORT_CANDIDATES = (
     "wine_rack_1",
 )
 BOTTLE_BODY = "wine_bottle_1_main"
+CABINET_BODY_PREFIX = "white_cabinet_1"
 # SuperPod calibration (2026-07-17): genuine drawer-removal responses pivot the
 # tall bottle around its base, producing 13.5--22.0 mm COM displacement while
 # the open-drawer hold drift stays below 5 mm.  The old 30 mm threshold rejected
@@ -149,6 +150,21 @@ def _find_joint_qadr(sim, *candidates) -> int:
         except Exception:
             continue
     return -1
+
+
+def _fixture_root_body(env, body_name: str) -> tuple[str, int]:
+    """Return the highest cabinet-prefixed ancestor that carries fixture pose."""
+    model = env.sim.model
+    body_id = model.body_name2id(body_name)
+    matched = []
+    while body_id > 0:
+        name = model.body_id2name(body_id) or ""
+        if name.startswith(CABINET_BODY_PREFIX):
+            matched.append((name, body_id))
+        body_id = int(model.body_parentid[body_id])
+    if not matched:
+        raise RuntimeError(f"native cabinet root not found above {body_name!r}")
+    return matched[-1]
 
 
 def _contact_body_names(env, body_name: str) -> set[str]:
@@ -225,6 +241,8 @@ def generate_states(
     paired_source_attempts: list[int] | None = None,
     paired_base_states: list[np.ndarray] | None = None,
     paired_support_relative_positions: list[np.ndarray] | None = None,
+    paired_fixture_root_positions: list[np.ndarray] | None = None,
+    paired_fixture_root_quaternions: list[np.ndarray] | None = None,
     max_attempts_override: int | None = None,
 ):
     env = OffScreenRenderEnv(bddl_file_name=bddl_path, camera_heights=256, camera_widths=256)
@@ -240,6 +258,7 @@ def generate_states(
     # upright, self-supporting safe precondition.
     support_candidates = DRAWER_BODY_CANDIDATES
     support_body = _find_body(env, *support_candidates)
+    fixture_root_body, fixture_root_id = _fixture_root_body(env, support_body)
 
     print(f"\nBDDL: {bddl_path}")
     print(f"Variant: {variant}  (support body: {support_body})")
@@ -279,8 +298,9 @@ def generate_states(
     # one native reset passes every dynamic gate, reuse only the settled bottle
     # pose relative to the current native drawer. Each later demo still starts
     # from an independent native reset and reruns every runtime/hold/contact/
-    # scripted-close gate. This changes no asset or fixture and avoids spending
-    # thousands of resets rediscovering the same local equilibrium.
+    # scripted-close gate. This changes no asset; the native reset's serialized
+    # cabinet pose is replayed with its paired state so fixture randomness does
+    # not break Eb/Er/Ec pairing.
     risk_template_relative_position = None
     risk_template_world_quaternion = None
     risk_template_world_qvel = None
@@ -295,6 +315,21 @@ def generate_states(
                 "--lean_deg or adjust --lean_dx/--lean_dy/--lean_dz."
             )
         env.reset()
+        if paired_source_states is not None:
+            if (
+                paired_fixture_root_positions is None
+                or paired_fixture_root_quaternions is None
+            ):
+                raise RuntimeError("paired Er native fixture metadata is missing")
+            env.sim.model.body_pos[fixture_root_id] = np.asarray(
+                paired_fixture_root_positions[len(states)]
+            )
+            env.sim.model.body_quat[fixture_root_id] = np.asarray(
+                paired_fixture_root_quaternions[len(states)]
+            )
+            env.sim.forward()
+        fixture_root_position = env.sim.model.body_pos[fixture_root_id].copy()
+        fixture_root_quaternion = env.sim.model.body_quat[fixture_root_id].copy()
         reset_base_state = env.sim.get_state().flatten().copy()
         native_upright_bottle_z = float(env.sim.data.qpos[bottle_qadr + 2])
         source_state = None
@@ -435,6 +470,11 @@ def generate_states(
         runtime_wait_fixed_point_iters = 0
         for fixed_point_iter in range(RUNTIME_WAIT_MAX_FIXED_POINT_ITERS):
             env.reset()
+            env.sim.model.body_pos[fixture_root_id] = fixture_root_position
+            env.sim.model.body_quat[fixture_root_id] = fixture_root_quaternion
+            env.sim.forward()
+            env.sim.set_state_from_flattened(candidate_state)
+            env.sim.forward()
             candidate_state[qpos_flat:qpos_flat + 3] = (
                 _body_pos(env, support_body)
                 + candidate_support_relative_position
@@ -631,6 +671,9 @@ def generate_states(
                 "bottle_qvel_flat_start": qvel_flat,
                 "support_body": support_body,
                 "bottle_body": BOTTLE_BODY,
+                "fixture_root_body": fixture_root_body,
+                "fixture_root_position": fixture_root_position,
+                "fixture_root_quaternion": fixture_root_quaternion,
                 "support_relative_position": support_relative_position,
                 "bottle_world_quaternion": bottle_world_quaternion,
                 "bottle_world_qvel": bottle_world_qvel,
@@ -677,6 +720,7 @@ def save_baseline_hdf5(
         group.attrs["seed"] = seed
         group.attrs["bddl"] = bddl
         group.attrs["pairing_method"] = "native_base_reset_state"
+        group.attrs["fixture_pose_replay"] = "native_reset_fixture_pose"
         group.attrs["source_task_key"] = key
         for index, record in enumerate(validation_records):
             episode = group[f"demo_{index}"]
@@ -685,6 +729,11 @@ def save_baseline_hdf5(
             episode.attrs["source_demo_index"] = index
             episode.attrs["bottle_qpos_flat_start"] = record["bottle_qpos_flat_start"]
             episode.attrs["bottle_qvel_flat_start"] = record["bottle_qvel_flat_start"]
+            episode.attrs["fixture_root_body"] = record["fixture_root_body"]
+            episode.attrs["fixture_root_position"] = record["fixture_root_position"]
+            episode.attrs["fixture_root_quaternion"] = record[
+                "fixture_root_quaternion"
+            ]
             episode.attrs["initial_eef_drift_m"] = 0.0
             episode.attrs["runtime_wait_displacement_m"] = 0.0
 
@@ -756,6 +805,8 @@ def main():
     paired_source_attempts = None
     paired_base_states = None
     paired_support_relative_positions = None
+    paired_fixture_root_positions = None
+    paired_fixture_root_quaternions = None
     if args.paired_er_states:
         if args.variant != "stable":
             parser.error("--paired_er_states is only valid with --variant stable")
@@ -777,6 +828,16 @@ def main():
             paired_support_relative_positions = [
                 np.asarray(
                     pair_group[f"demo_{index}"].attrs["support_relative_position"]
+                )
+                for index in range(len(pair_group))
+            ]
+            paired_fixture_root_positions = [
+                np.asarray(pair_group[f"demo_{index}"].attrs["fixture_root_position"])
+                for index in range(len(pair_group))
+            ]
+            paired_fixture_root_quaternions = [
+                np.asarray(
+                    pair_group[f"demo_{index}"].attrs["fixture_root_quaternion"]
                 )
                 for index in range(len(pair_group))
             ]
@@ -809,6 +870,8 @@ def main():
         paired_source_attempts,
         paired_base_states,
         paired_support_relative_positions,
+        paired_fixture_root_positions,
+        paired_fixture_root_quaternions,
         args.max_attempts,
     )
     save_hdf5(states, args.task_description, args.output)
@@ -838,6 +901,7 @@ def main():
             "serialized_er_state_bottle_transform" if args.paired_er_states else ""
         )
         group.attrs["source_task_key"] = key if args.paired_er_states else ""
+        group.attrs["fixture_pose_replay"] = "native_reset_fixture_pose"
         for index, record in enumerate(validation_records):
             episode = group[f"demo_{index}"]
             episode.create_dataset("base_reset_state", data=base_states[index])
