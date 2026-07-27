@@ -6,6 +6,7 @@ OpenVLA-OFT evaluation package does not require the separate Cosmos runtime.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -43,6 +44,31 @@ def resolve_cosmos_package_root(cosmos_policy_module: Any) -> Path:
         "Could not locate Cosmos Policy's config/config.py from its installed "
         f"package paths: {[str(path) for path in candidates]}"
     )
+
+
+@contextmanager
+def defer_unused_cosmos_base_checkpoint_downloads(checkpoint_db: Any):
+    """Avoid eager downloads for config defaults replaced by our local checkpoint.
+
+    Cosmos Policy scans every experiment while constructing its config. The
+    LIBERO experiment eagerly resolves its *training* base-checkpoint URI even
+    though ``load_model_from_checkpoint`` replaces that value with
+    ``ckpt_path`` before model validation and loading. Keep the URI unresolved
+    during config construction so evaluation needs only the complete official
+    LIBERO inference checkpoint selected by the caller.
+    """
+    original_get_checkpoint_by_hf = checkpoint_db.get_checkpoint_by_hf
+    get_checkpoint_path = checkpoint_db.get_checkpoint_path
+    cache_clear = getattr(get_checkpoint_path, "cache_clear", None)
+    if cache_clear is not None:
+        cache_clear()
+    checkpoint_db.get_checkpoint_by_hf = lambda uri: uri
+    try:
+        yield
+    finally:
+        checkpoint_db.get_checkpoint_by_hf = original_get_checkpoint_by_hf
+        if cache_clear is not None:
+            cache_clear()
 
 
 def validate_cosmos_actions(actions: Any) -> np.ndarray:
@@ -92,6 +118,7 @@ class CosmosPolicy:
     def __init__(self, cfg: Any):
         try:
             import cosmos_policy
+            from cosmos_policy._src.imaginaire.utils import checkpoint_db
             from cosmos_policy.experiments.robot.cosmos_utils import (
                 get_action,
                 get_model,
@@ -155,7 +182,8 @@ class CosmosPolicy:
 
         init_t5_text_embeddings_cache(cosmos_cfg.t5_text_embeddings_path)
         dataset_stats = load_dataset_stats(cosmos_cfg.dataset_stats_path)
-        model, train_cfg = get_model(cosmos_cfg)
+        with defer_unused_cosmos_base_checkpoint_downloads(checkpoint_db):
+            model, train_cfg = get_model(cosmos_cfg)
         train_chunk_size = train_cfg.dataloader_train.dataset.chunk_size
         if train_chunk_size != COSMOS_CHUNK_SIZE:
             raise ValueError(

@@ -9,6 +9,7 @@ from experiments.robot.cosmos_policy_utils import (
     COSMOS_CONFIG_MODULE_PATH,
     COSMOS_DEFAULT_CHECKPOINT,
     COSMOS_LIBERO_REPO_ID,
+    defer_unused_cosmos_base_checkpoint_downloads,
     is_cosmos_model_family,
     prepare_cosmos_libero_observation,
     resolve_cosmos_package_root,
@@ -70,6 +71,26 @@ def test_cosmos_package_root_supports_namespace_packages(tmp_path):
     (package_root / "config" / "config.py").write_text("# config\n")
     namespace_module = SimpleNamespace(__file__=None, __path__=[str(package_root)])
     assert resolve_cosmos_package_root(namespace_module) == package_root.resolve()
+
+
+def test_cosmos_defers_only_eager_hf_config_resolution():
+    cache_clears = []
+
+    def get_checkpoint_path(uri):
+        return checkpoint_db.get_checkpoint_by_hf(uri)
+
+    get_checkpoint_path.cache_clear = lambda: cache_clears.append(True)
+    original = lambda uri: f"/downloaded/{uri}"
+    checkpoint_db = SimpleNamespace(
+        get_checkpoint_by_hf=original,
+        get_checkpoint_path=get_checkpoint_path,
+    )
+
+    with defer_unused_cosmos_base_checkpoint_downloads(checkpoint_db):
+        assert checkpoint_db.get_checkpoint_path("hf://base/model.pt") == "hf://base/model.pt"
+
+    assert checkpoint_db.get_checkpoint_by_hf is original
+    assert cache_clears == [True, True]
 
 
 def test_dreamzero_aliases_and_libero_guard(tmp_path):
