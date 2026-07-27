@@ -267,3 +267,18 @@ def test_preview_uses_exact_policy_transform_and_manual_hash_gate():
     runner = (TASKS / "run_l3a3_support_chain.sh").read_text()
     assert 'PREVIEW_EPISODES="${PREVIEW_EPISODES:-5}"' in runner
     assert '--episodes "${PREVIEW_EPISODES}"' in runner
+
+
+def test_stack_tray_native_probe_hash_binds_exact_prompt_and_goal():
+    text = (TASKS / "probe_l3a3_stack_tray_native.py").read_text()
+    assert (
+        'EXPECTED_PROMPT = "stack the left bowl on the right bowl '
+        'and place them in the tray"'
+    ) in text
+    assert "task.language != EXPECTED_PROMPT" in text
+    assert 'balanced_form(bddl_text, "goal")' in text
+    assert '"goal_form_sha256"' in text
+    assert '"native_bddl_sha256"' in text
+    assert '"prompt_sha256"' in text
+    assert '"agentview_image"' in text
+    assert "image[::-1, ::-1]" in text

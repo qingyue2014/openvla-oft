@@ -29,6 +29,13 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l3a3", "stack_tray_native_probe"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/probe_l3a3_stack_tray_native.py",
+        ),
+        artifacts=("experiments/logs/l3a3_stack_tray_native_probe",),
+    ),
     ("l3a3", "open_target_probe"): PhaseSpec(
         command=(
             "python",
