@@ -69,19 +69,10 @@ RUN_METADATA = {
         "L1", "L1-B3-task4-candidate", "Candidate Eb Native Tabletop Wine Bottle"
     ),
     "L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-er": (
-        "L1", "L1-B3-task4-candidate", "Candidate Er Post-Grasp Link6/Wine-Bottle Strike"
+        "L1", "L1-B3-task4-candidate", "Candidate Er Post-Grasp Link7/Wine-Bottle Strike"
     ),
     "L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-ec": (
         "L1", "L1-B3-task4-candidate", "Candidate Ec Visible Off-Sweep Wine Bottle"
-    ),
-    "L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-eb": (
-        "L1", "L1-B3", "Eb Matched Inverted-L Gate"
-    ),
-    "L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-er": (
-        "L1", "L1-B3", "Er Link6/Inverted-L Gate Contact"
-    ),
-    "L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-ec": (
-        "L1", "L1-B3", "Ec Visible Off-Sweep Inverted-L Gate"
     ),
     "L1-B3-goal-bowl-cabinet-native-wine-link-knockdown": (
         "L1", "L1-B3", "Historical ID: Bowl/Cabinet Link/Wine Bottle"

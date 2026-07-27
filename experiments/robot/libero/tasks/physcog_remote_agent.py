@@ -408,7 +408,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1b3_task4", "smoke"): PhaseSpec(
         command=(
             "env",
-            "RENDER_GPU_DEVICE_ID=0",
+            "RENDER_GPU_DEVICE_ID=1",
             "SAVE_VIDEO_MODE=all",
             "SAFE_REF_VIDEO_DIR=experiments/logs/l1b3_task4_candidate_safe_reference_videos",
             "SAFE_REF_MAX_VIDEOS=1",
@@ -424,21 +424,23 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b3_task4_candidate_safe_reference.md",
             "experiments/logs/l1b3_task4_candidate_safe_reference.csv",
             "experiments/logs/l1b3_task4_candidate_safe_reference_videos",
+            "experiments/logs/l1b3_task4_candidate_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1b3_task4_candidate_trajectory_conditioned_calibration.csv",
             "experiments/logs/l1b3_task4_candidate_native_replay.md",
             "experiments/logs/l1b3_task4_candidate_native_replay.csv",
             "experiments/logs/l1b3_task4_candidate_native_replay_videos",
             "experiments/logs/l1b3_task4_candidate_eb_rollout_physics.md",
             "experiments/logs/l1b3_task4_candidate_er_rollout_physics.md",
             "experiments/logs/l1b3_task4_candidate_ec_rollout_physics.md",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-eb",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-er",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-ec",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-eb",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-er",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-ec",
         ),
     ),
     ("l1b3_task4", "prepare"): PhaseSpec(
         command=(
             "env",
-            "RENDER_GPU_DEVICE_ID=0",
+            "RENDER_GPU_DEVICE_ID=1",
             "SAVE_VIDEO_MODE=violation",
             "SAFE_REF_VIDEO_DIR=experiments/logs/l1b3_task4_candidate_safe_reference_videos",
             "SAFE_REF_MAX_VIDEOS=1",
@@ -457,12 +459,17 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b3_task4_candidate_safe_reference.md",
             "experiments/logs/l1b3_task4_candidate_safe_reference.csv",
             "experiments/logs/l1b3_task4_candidate_safe_reference_videos",
+            "experiments/logs/l1b3_task4_candidate_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1b3_task4_candidate_trajectory_conditioned_calibration.csv",
+            "experiments/logs/l1b3_task4_candidate_native_replay.md",
+            "experiments/logs/l1b3_task4_candidate_native_replay.csv",
+            "experiments/logs/l1b3_task4_candidate_eb_rollout_physics.md",
         ),
     ),
     ("l1b3_task4", "candidate_full"): PhaseSpec(
         command=(
             "env",
-            "RENDER_GPU_DEVICE_ID=0",
+            "RENDER_GPU_DEVICE_ID=1",
             "SAVE_VIDEO_MODE=all",
             "MAX_VIOLATION_VIDEOS=1",
             "MAX_SUCCESS_VIDEOS=1",
@@ -481,48 +488,17 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b3_task4_candidate_safe_reference.md",
             "experiments/logs/l1b3_task4_candidate_safe_reference.csv",
             "experiments/logs/l1b3_task4_candidate_safe_reference_videos",
+            "experiments/logs/l1b3_task4_candidate_trajectory_conditioned_calibration.md",
+            "experiments/logs/l1b3_task4_candidate_trajectory_conditioned_calibration.csv",
             "experiments/logs/l1b3_task4_candidate_native_replay.md",
             "experiments/logs/l1b3_task4_candidate_native_replay.csv",
             "experiments/logs/l1b3_task4_candidate_native_replay_videos",
             "experiments/logs/l1b3_task4_candidate_eb_rollout_physics.md",
             "experiments/logs/l1b3_task4_candidate_er_rollout_physics.md",
             "experiments/logs/l1b3_task4_candidate_ec_rollout_physics.md",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-eb",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-er",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-ec",
-        ),
-    ),
-    ("l1b3_task4", "formal"): PhaseSpec(
-        command=(
-            "env",
-            "RENDER_GPU_DEVICE_ID=0",
-            "SAVE_VIDEO_MODE=all",
-            "MAX_VIOLATION_VIDEOS=1",
-            "MAX_SUCCESS_VIDEOS=1",
-            "MAX_FAILURE_VIDEOS=1",
-            "SAFE_REF_VIDEO_DIR=experiments/logs/l1b3_task4_candidate_safe_reference_videos",
-            "SAFE_REF_MAX_VIDEOS=1",
-            "bash",
-            "experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh",
-            "formal",
-        ),
-        count_env="NUM_TRIALS",
-        artifacts=(
-            "experiments/robot/libero/tasks/l1b3_task4_candidate_pairing.json",
-            "experiments/robot/libero/tasks/l1b_swept_preview/l1b3_task4_candidate",
-            "experiments/logs/l1b3_task4_candidate_scene_check.md",
-            "experiments/logs/l1b3_task4_candidate_safe_reference.md",
-            "experiments/logs/l1b3_task4_candidate_safe_reference.csv",
-            "experiments/logs/l1b3_task4_candidate_safe_reference_videos",
-            "experiments/logs/l1b3_task4_candidate_native_replay.md",
-            "experiments/logs/l1b3_task4_candidate_native_replay.csv",
-            "experiments/logs/l1b3_task4_candidate_native_replay_videos",
-            "experiments/logs/l1b3_task4_candidate_eb_rollout_physics.md",
-            "experiments/logs/l1b3_task4_candidate_er_rollout_physics.md",
-            "experiments/logs/l1b3_task4_candidate_ec_rollout_physics.md",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-eb",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-er",
-            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-ec",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-eb/trajectories",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-er/trajectories",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-ec/trajectories",
         ),
     ),
     ("l3a1", "check"): PhaseSpec(
@@ -817,12 +793,12 @@ def classify_result(returncode: int, text: str, verdicts: Sequence[str]) -> str:
         "Unable to allocate resources",
         "Repository Not Found",
     )
+    if fatal_traceback or any(signature in text for signature in validator_signatures):
+        return "validator_bug"
     if any(signature in text for signature in infrastructure_signatures):
         return "infrastructure_failure"
     if any(v.startswith(("FAIL", "NEEDS_", "BENCHMARK_INCOMPLETE")) for v in verdicts):
         return "gate_failure"
-    if fatal_traceback or any(signature in text for signature in validator_signatures):
-        return "validator_bug"
     if returncode != 0:
         return "command_failure"
     if any(v.startswith(("PASS", "BENCHMARK_READY")) for v in verdicts):

@@ -81,22 +81,20 @@ See [ALOHA.md](ALOHA.md) for fine-tuning/evaluating on real-world ALOHA robot ta
 
 ### PhysCogSafe L1-B
 
-The L1-B matrix uses swept-volume cases. L1-B1 isolates incidental gripper
-capture-and-lift of a native ramekin, L1-B2 isolates a held cream-cheese box
-knocking down a native wine bottle, and canonical L1-B3 uses LIBERO-Goal task 4
-(`put the bowl on top of the cabinet`) with a visible inverted-L gate to
-isolate `robot0_link6`. Superpod job 490058 passed the full 50-pair promotion
-gates. The former Task-8 bowl-on-plate attempt remains a separately labeled
-alternative and is not pooled with L1-B3.
+The L1-B matrix uses native-asset swept-volume cases. L1-B1 isolates incidental
+gripper capture-and-lift of a native ramekin, L1-B2 isolates a held
+cream-cheese box knocking down a native wine bottle, and L1-B3 is temporarily
+withheld while native task 4 is validated as an isolated post-grasp
+`robot0_link7`/wine-bottle candidate. The former B5/B6/B7 numbering is retired.
 See
 [L1-B_SPEC.md](experiments/robot/libero/tasks/L1-B_SPEC.md) and
 [L1-B3_TASK4_CANDIDATE_SPEC.md](experiments/robot/libero/tasks/L1-B3_TASK4_CANDIDATE_SPEC.md).
 
 ```bash
-NUM_TRIALS=50 SAVE_VIDEO_MODE=all \
+SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all \
   SAFE_REF_VIDEO_DIR=experiments/logs/l1b3_task4_candidate_safe_reference_videos \
-  RENDER_GPU_DEVICE_ID=0 \
-  bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh formal
+  RENDER_GPU_DEVICE_ID=1 \
+  bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh smoke
 ```
 
 ## Support

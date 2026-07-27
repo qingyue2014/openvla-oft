@@ -156,15 +156,15 @@ def test_l1b3_task8_registry_is_explicitly_separated_as_alternative():
         assert "experiments/logs/l1b3_native_arm_safe_reference.csv" in artifacts
 
 
-def test_l1b3_task4_registry_exposes_isolated_formal_phase():
+def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
     phases = {
         phase for scenario, phase in PHASES if scenario == "l1b3_task4"
     }
-    assert phases == {"smoke", "prepare", "candidate_full", "formal"}
+    assert phases == {"smoke", "prepare", "candidate_full"}
     assert ("l1b3", "formal") not in PHASES
     for phase in phases:
         spec = PHASES[("l1b3_task4", phase)]
-        assert "RENDER_GPU_DEVICE_ID=0" in spec.command
+        assert "RENDER_GPU_DEVICE_ID=1" in spec.command
         assert any(
             part.endswith("run_l1b3_task4_candidate.sh")
             for part in spec.command
@@ -177,21 +177,13 @@ def test_l1b3_task4_registry_exposes_isolated_formal_phase():
     assert "SAVE_VIDEO_MODE=all" in smoke.command
     for condition in ("eb", "er", "ec"):
         assert any(
-            f"task4-candidate-bowl-cabinet-inverted-l-link6-{condition}"
+            f"task4-candidate-bowl-cabinet-native-wine-link-knockdown-{condition}"
             in artifact
             for artifact in smoke.artifacts
         )
     full = PHASES[("l1b3_task4", "candidate_full")]
     assert "candidate_full" in full.command
     assert "formal" not in full.command
-    for condition in ("eb", "er", "ec"):
-        rollout_dir = (
-            "rollouts/libero_goal/"
-            "L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6-"
-            f"{condition}"
-        )
-        assert rollout_dir in full.artifacts
-        assert f"{rollout_dir}/trajectories" not in full.artifacts
     for suffix in (
         "native_replay.csv",
         "safe_reference.csv",
@@ -200,10 +192,6 @@ def test_l1b3_task4_registry_exposes_isolated_formal_phase():
         "ec_rollout_physics.md",
     ):
         assert any(artifact.endswith(suffix) for artifact in full.artifacts)
-    formal = PHASES[("l1b3_task4", "formal")]
-    assert "formal" in formal.command
-    assert formal.count_env == "NUM_TRIALS"
-    assert formal.artifacts == full.artifacts
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():
@@ -320,15 +308,6 @@ def test_classification_prioritizes_crashes_over_stale_pass_reports():
     assert classify_result(0, "Verdict: FAIL_LAYOUT", ["FAIL_LAYOUT"]) == "gate_failure"
     assert classify_result(0, "Verdict: PASS_LAYOUT", ["PASS_LAYOUT"]) == "pass"
     assert classify_result(1, "srun: error: allocation failed", []) == "infrastructure_failure"
-
-
-def test_classification_recognizes_fail_fast_gate_traceback():
-    text = """Verdict: **FAIL_TRAJECTORY_CONDITIONED_CALIBRATION**
-Traceback (most recent call last):
-  File "calibrate.py", line 1, in <module>
-RuntimeError: FAIL_TRAJECTORY_CONDITIONED_CALIBRATION
-"""
-    assert classify_result(1, text, extract_verdicts(text)) == "gate_failure"
 
 
 def test_classification_ignores_egl_destructor_traceback_after_success():

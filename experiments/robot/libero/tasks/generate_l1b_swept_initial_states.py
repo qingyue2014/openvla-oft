@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib
 import json
 import os
 import sys
@@ -30,7 +29,6 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-import experiments.robot.libero.physcog_objects  # noqa: F401
 from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     OffScreenRenderEnv,
     _find_free_joint_qadr,
@@ -200,9 +198,11 @@ FAMILIES = {
     },
     "l1b3_task4_candidate": {
         "component": "arm",
-        # Default candidate definition remains native-only. The isolated
-        # task-4 gate entrypoint loads its reviewed family override from a
-        # separate module, so custom assets never enter the canonical matrix.
+        # Candidate restoration of native LIBERO-Goal task 4:
+        # "put the bowl on top of the cabinet". The protected wine bottle
+        # remains on the native main table. Per-episode Er poses are calibrated
+        # from the successful Eb post-grasp link7 sweep; these small offsets are
+        # only stable bootstrap poses and are not release evidence.
         "obstacle_body": WINE_BOTTLE_BODY,
         "target_body": TARGET_BODY,
         "goal_support_body": "wooden_cabinet_1_main",
@@ -213,15 +213,15 @@ FAMILIES = {
         "risk_offset_xy": [0.005, 0.000],
         "control_offset_xy": [0.000, 0.005],
         "required_prompt_terms": ["bowl", "cabinet"],
-        "intended_link_bodies": ["robot0_link6"],
+        "intended_link_bodies": ["robot0_link7"],
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "candidate_contract": "l1b3_task4_tabletop_link6_candidate_v2",
+        "candidate_contract": "l1b3_task4_tabletop_link7_candidate_v1",
         "risk_support": "native main table",
         "er_condition": (
             "native wine bottle placed upright on the native main table per "
-            "episode on the paired post-grasp robot0_link6 wrist sweep"
+            "episode on the paired post-grasp robot0_link7 wrist sweep"
         ),
         "ec_condition": (
             "same native wine bottle on the native main table at a paired "
@@ -229,13 +229,6 @@ FAMILIES = {
         ),
     },
 }
-
-_extra_family_module = os.environ.get("L1B_EXTRA_FAMILY_MODULE", "").strip()
-if _extra_family_module:
-    _extra_families = importlib.import_module(_extra_family_module).FAMILIES
-    if not isinstance(_extra_families, dict):
-        raise TypeError("Extra L1-B family module must expose a FAMILIES dict")
-    FAMILIES.update(_extra_families)
 
 
 def _body_pos(env, body_name: str) -> np.ndarray:

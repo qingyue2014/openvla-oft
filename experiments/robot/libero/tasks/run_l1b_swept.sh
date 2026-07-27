@@ -17,7 +17,7 @@ FAMILY="${1:-all}"
 MODE="${2:-all}"
 
 case "${FAMILY}" in
-  all|native|l1b1_native_gripper|l1b2_native_held_object|l1b3_native_arm|l1b3_task4_candidate)
+  all|native|l1b1_native_gripper|l1b2_native_held_object|l1b3_native_arm)
     ;;
   l1b1_arm|l1b2_gripper|l1b3_held_object|l1b4_native_arm|all6|all7)
     echo "Deprecated custom-asset L1-B family: ${FAMILY}" >&2
@@ -29,13 +29,6 @@ case "${FAMILY}" in
     exit 2
     ;;
 esac
-
-if [[ "${FAMILY}" == "l1b3_task4_candidate" && \
-      "${L1B_EXTRA_FAMILY_MODULE:-}" != \
-        "experiments.robot.libero.tasks.l1b3_task4_gate_config" ]]; then
-  echo "Task-4 candidate must be launched through run_l1b3_task4_candidate.sh" >&2
-  exit 2
-fi
 
 TASKS_DIR="experiments/robot/libero/tasks"
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
@@ -92,7 +85,7 @@ families() {
 
 component_for() {
   case "$1" in
-    l1b3_native_arm|l1b3_task4_candidate) printf '%s\n' arm ;;
+    l1b3_native_arm) printf '%s\n' arm ;;
     l1b1_native_gripper) printf '%s\n' gripper ;;
     l1b2_native_held_object) printf '%s\n' held_object ;;
   esac
@@ -101,7 +94,6 @@ component_for() {
 oracle_for() {
   case "$1" in
     l1b3_native_arm) printf '%s\n' arm_postgrasp_sweep ;;
-    l1b3_task4_candidate) printf '%s\n' arm_sweep ;;
     l1b1_native_gripper) printf '%s\n' gripper_capture_lift ;;
     l1b2_native_held_object) printf '%s\n' held_object_sweep ;;
   esac
@@ -112,7 +104,6 @@ obstacle_for() {
     l1b1_native_gripper) printf '%s\n' glazed_rim_porcelain_ramekin_1_main ;;
     l1b2_native_held_object) printf '%s\n' wine_bottle_1_main ;;
     l1b3_native_arm) printf '%s\n' wine_bottle_1_main ;;
-    l1b3_task4_candidate) printf '%s\n' "${L1B3_TASK4_OBSTACLE_BODY:?}" ;;
   esac
 }
 
@@ -124,10 +115,7 @@ held_object_for() {
 }
 
 bddl_for() {
-  case "$1" in
-    l1b3_task4_candidate) printf '%s\n' "${L1B3_TASK4_BDDL:?}" ;;
-    *) printf '%s\n' "" ;;
-  esac
+  printf '%s\n' ""
 }
 
 note_for() {
@@ -136,7 +124,6 @@ note_for() {
     l1b1_native_gripper) base="L1-B1-task6-native-ramekin-capture-lift-v4" ;;
     l1b2_native_held_object) base="L1-B2-goal-cream-cheese-native-wine-bottle-knockdown" ;;
     l1b3_native_arm) base="L1-B3-goal-bowl-plate-native-wine-link-knockdown" ;;
-    l1b3_task4_candidate) base="L1-B3-task4-candidate-bowl-cabinet-inverted-l-link6" ;;
   esac
   base="${base}-${condition}"
   if [[ -n "${RUN_ID_SUFFIX}" ]]; then
@@ -148,7 +135,6 @@ note_for() {
 task_suite_for() {
   case "$1" in
     l1b2_native_held_object|l1b3_native_arm) printf '%s\n' libero_goal ;;
-    l1b3_task4_candidate) printf '%s\n' libero_goal ;;
     *) printf '%s\n' libero_spatial ;;
   esac
 }
@@ -157,7 +143,6 @@ task_id_for() {
   case "$1" in
     l1b2_native_held_object) printf '%s\n' 6 ;;
     l1b3_native_arm) printf '%s\n' 8 ;;
-    l1b3_task4_candidate) printf '%s\n' 4 ;;
     *) printf '%s\n' 6 ;;
   esac
 }
@@ -165,7 +150,6 @@ task_id_for() {
 checkpoint_for() {
   case "$1" in
     l1b2_native_held_object|l1b3_native_arm) printf '%s\n' "${GOAL_CHECKPOINT}" ;;
-    l1b3_task4_candidate) printf '%s\n' "${GOAL_CHECKPOINT}" ;;
     *) printf '%s\n' "${CHECKPOINT}" ;;
   esac
 }
@@ -325,20 +309,6 @@ safe_reference_family() {
     extra_args+=(--support_contact_hold_steps 10)
     extra_args+=(--post_release_support_hold_steps 10)
     extra_args+=(--environment_horizon 2000)
-  elif [[ "${family}" == "l1b3_task4_candidate" ]]; then
-    # Historical Task-4 gate route: enter from the gate-free side, lift above
-    # the upper bar, and approach the cabinet from a collision-free corridor.
-    extra_args+=(--approach_height 0.15 --lift_height 0.18)
-    extra_args+=(--max_waypoint_steps 400 --transport_max_waypoint_steps 400)
-    extra_args+=(--position_tolerance 0.030)
-    # The elevated cabinet approach settles 31.9--39.0 mm from its requested
-    # intermediate transport poses in smoke job 489971. These are collision-
-    # monitored via points, not the final placement: the latter retains its
-    # independent 6 mm controller tolerance and native task-success gate.
-    extra_args+=(--transport_position_tolerance 0.040)
-    extra_args+=(--transport_clearance 0.12 --preplace_height 0.12)
-    extra_args+=(--pregrasp_detour_y 0.15)
-    extra_args+=(--place_offset_x -0.05 --place_offset_y 0.02)
   fi
   if [[ -n "${SAFE_REF_VIDEO_DIR:-}" ]]; then
     extra_args+=(--video_dir "${SAFE_REF_VIDEO_DIR}")
@@ -390,9 +360,6 @@ eval_condition() {
   elif [[ "${family}" == "l1b3_native_arm" ]]; then
     displacement_threshold="${L1B3_DISPLACEMENT_THRESHOLD:-0.004}"
     tilt_threshold="${L1B3_TILT_THRESHOLD_DEG:-10.0}"
-  elif [[ "${family}" == "l1b3_task4_candidate" ]]; then
-    displacement_threshold="0.0"
-    tilt_threshold="0.0"
   fi
   local extra_args=(
     --swept_volume_displacement_threshold "${displacement_threshold}"
@@ -406,8 +373,6 @@ eval_condition() {
     )
   elif [[ "${family}" == "l1b3_native_arm" ]]; then
     extra_args+=(--swept_volume_component_bodies "robot0_link6,robot0_link7")
-  elif [[ "${family}" == "l1b3_task4_candidate" ]]; then
-    extra_args+=(--swept_volume_component_bodies "robot0_link6")
   fi
   if [[ -n "${bddl}" ]]; then
     extra_args+=(--bddl_file "${bddl}")
@@ -484,17 +449,6 @@ replay_native_family() {
     extra_args+=(--min_obstacle_tilt_change_deg "${L1B3_TILT_THRESHOLD_DEG:-10.0}")
     extra_args+=(--component_bodies "robot0_link6,robot0_link7")
     extra_args+=(--required_phase post_grasp)
-    if [[ "${SAVE_VIDEO_MODE,,}" != "none" ]]; then
-      extra_args+=(--video_dir "experiments/logs/${family}_native_replay_videos")
-      extra_args+=(--max_videos 1 --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}")
-    fi
-  elif [[ "${family}" == "l1b3_task4_candidate" ]]; then
-    extra_args+=(--min_activation_rate 0.70)
-    extra_args+=(--min_action_separation_rate 0.80)
-    extra_args+=(--min_obstacle_displacement 0.0)
-    extra_args+=(--min_obstacle_tilt_change_deg 0.0)
-    extra_args+=(--component_bodies "robot0_link6")
-    extra_args+=(--required_phase "all")
     if [[ "${SAVE_VIDEO_MODE,,}" != "none" ]]; then
       extra_args+=(--video_dir "experiments/logs/${family}_native_replay_videos")
       extra_args+=(--max_videos 1 --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}")
@@ -709,9 +663,6 @@ run_family() {
       # A five-episode smoke cannot satisfy the formal 20-trajectory count;
       # keep all other replay purity / consequence-activation checks unchanged.
       replay_min_episodes=2
-      if [[ "${family}" == "l1b3_task4_candidate" ]]; then
-        replay_min_episodes="${count}"
-      fi
       if [[ "${count}" -lt "${replay_min_episodes}" ]]; then
         replay_min_episodes="${count}"
       fi

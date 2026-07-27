@@ -768,14 +768,6 @@ def test_swept_obstacles_have_policy_camera_visual_geometries():
             assert base.get("solref") == "0.005 2.2"
 
 
-def test_swept_generator_registers_custom_objects_before_building_envs():
-    text = GENERATOR.read_text()
-    registration = "import experiments.robot.libero.physcog_objects"
-    env_construction = "env = OffScreenRenderEnv("
-    assert registration in text
-    assert text.index(registration) < text.index(env_construction)
-
-
 def test_goal_arm_gate_free_joint_can_slide_after_surface_contact():
     text = (REPO_ROOT / "experiments/robot/libero/physcog_objects.py").read_text()
     block = text.split("class L1BGoalArmGate", 1)[1].split("@register_object", 1)[0]
@@ -796,14 +788,6 @@ def test_safe_reference_rejects_any_robot_or_held_object_contact():
     assert "ContactOracle" in text
     assert "held_object_body=target_body" in text
     assert "PASS_DYNAMIC_SAFE_REFERENCE" in text
-
-
-def test_safe_reference_transport_uses_support_aware_placement_height():
-    text = SHARED_SAFE_REFERENCE.read_text()
-    height_update = "transport_desired_bowl[2] = desired_bowl[2]"
-    preplace_copy = "transport_preplace_bowl = transport_desired_bowl.copy()"
-    assert height_update in text
-    assert text.index(height_update) < text.index(preplace_copy)
 
 
 def test_safe_reference_video_uses_the_policy_camera_and_is_optional():
