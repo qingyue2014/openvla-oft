@@ -1,8 +1,10 @@
 # L3-A3 — Goal-object support chain with precondition insertion
 
-> **Status: INVALID / HARD-STOPPED.** All four attempted candidates are invalid.
+> **Status: INVALID / HARD-STOPPED.** All attempted candidate paths are invalid.
 > The native-only spatial task1 leaning-chain candidate exhausted its bounded
-> 144-point one-state search without one stable S-A support contact.
+> 144-point raw-prewarmup search without one stable S-A support contact; its
+> first policy-entry-base replacement was an invalid protocol validator and
+> did not reach candidate search. One protocol-corrected replacement is pending.
 > The task87 candidate failed the executable safe-reference gate. The native-only
 > task57 replacement passed its numerical static gate but failed independent
 > policy-view review because the goal support was occluded and not side-graspable.
@@ -89,20 +91,40 @@ measurements and the recommended fail-closed sequence are recorded in
 
 ### Authorized corrected policy-entry-base probe
 
-A single corrected physical probe is authorized to resolve the narrow
-raw-prewarmup ambiguity above. It captures the common Eb/Er/Ec base after
-exactly the evaluator's ten dummy actions, then restores that settled base and
-runs another ten dummy actions only as a pose/RGB stability-equivalence audit.
-The latter is not a second policy-entry pre-roll: any evaluator consuming an
-exported settled HDF5 must use `num_steps_wait=0`.
+A corrected physical probe captures the common Eb/Er/Ec base after exactly the
+evaluator's ten dummy actions. The actual exported-state runtime contract is
+then a restore of that settled HDF5 followed by an immediate observation
+refresh with `num_steps_wait=0`.
 
-The bounded search remains the exact predeclared 144-point grid from job
+The bounded search remained the exact predeclared 144-point grid from job
 `490155`; no direction, tilt, contact offset, B gap, motion threshold, or
 causal threshold is changed. Before candidate dynamics can pass, the validator
 must separately establish that `S` is supported by compiled body `table`, not
 `flat_stove_1_main`, and that the leaning `A` has low table contact plus a
-higher `S-A` contact with at least 0.015 m vertical separation. No VLA is
-loaded. The corrected remote result remains pending.
+higher `S-A` contact with at least 0.015 m vertical separation. No VLA was
+loaded.
+
+The first corrected implementation ran as job `490171`, commit
+`874b34206b143ef48f61384668ae7b722a915185`, and hard-stopped before
+the candidate grid. The captured policy-entry `S` had 20 direct contacts with
+compiled body `table` and zero with `flat_stove_1_main`, establishing the
+support surface. The five relevant objects were effectively stationary across
+the restored-base validation (maximum translation `4.34e-13` m and maximum
+orientation change `4.18e-06` degrees). The implementation nevertheless
+compared the RGB from the raw state's wait10 path against the settled state's
+wait0 restore path, then treated robot qpos (`0.00669`) and RGB changes from an
+extra diagnostic wait10 as a required wait0 equivalence gate. Those are
+different runtime paths, so job `490171` is
+`INVALID_PROTOCOL_VALIDATOR`, not a physical or visual scene failure. No
+candidate row, leaning contact topology, causal trace, HDF5, PNG, video, or
+VLA evaluation was run. Exact measurements and the fetched-audit hash are
+bound in `L3-A3_TASK1_POLICY_ENTRY_FAILURE.json`.
+
+One replacement is authorized with no physics, prompt, asset, search-grid, or
+threshold change. It restores the settled base twice and compares the exact
+wait0 immediate-refresh path to itself for state/RGB equivalence. An extra
+wait10 remains only a task-object stability diagnostic; robot qpos and RGB
+changes from that diagnostic cannot gate the wait0 runtime entry.
 
 ## Failed native-only task57 replacement
 

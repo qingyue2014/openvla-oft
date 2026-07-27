@@ -421,8 +421,21 @@ def test_task1_corrected_probe_uses_policy_entry_base_and_wait0_export_contract(
         text.index("def validate_policy_entry_base(") :
         text.index("def capture(env")
     ]
-    assert "validation_only_not_an_additional_policy_entry_wait" in validation
+    assert "def restored_wait0_runtime()" in validation
+    assert "first = restored_wait0_runtime()" in validation
+    assert "second = restored_wait0_runtime()" in validation
+    assert "obs = refresh(env, before_refresh)" in validation
+    assert "repeat_exact_wait0_restore_plus_immediate_refresh" in validation
     assert "range(POLICY_ENTRY_WAIT_STEPS)" in validation
+    assert "extra_wait10_task_object_stability_diagnostic_only" in validation
+    assert '"gates_wait0_runtime_entry": False' in validation
+    passed_block = validation[
+        validation.index("passed = bool(") : validation.index("\n    return {")
+    ]
+    assert "repeat_qpos_max_abs" in passed_block
+    assert "repeat_rgb_similarity" in passed_block
+    assert "diagnostic_qpos_max_abs" not in passed_block
+    assert "diagnostic_rgb_similarity" not in passed_block
     assert "ENTRY_BODY_DRIFT_MAX_M" in validation
     assert "ENTRY_RGB_PSNR_MIN_DB" in validation
     assert 'group.attrs["policy_entry_base"] = True' in text
@@ -522,6 +535,27 @@ def test_task1_prewarmup_audit_scopes_raw_failure_without_claiming_pass():
     assert audit["new_physical_job"] == "NOT_RUN"
     assert audit["recommended_next_gate_if_authorized"][-1].startswith(
         "Run a single exact-prompt EB"
+    )
+
+
+def test_task1_job490171_is_bound_as_invalid_protocol_not_scene_failure():
+    failure = json.loads(
+        (TASKS / "L3-A3_TASK1_POLICY_ENTRY_FAILURE.json").read_text()
+    )
+    assert failure["status"] == "INVALID_PROTOCOL_VALIDATOR"
+    assert failure["job"]["job_id"] == "490171"
+    assert failure["scope"]["candidate_rows_evaluated"] == 0
+    assert failure["policy_entry_capture"]["S_compiled_support_body"] == "table"
+    assert failure["policy_entry_capture"]["S_stove_contact_count"] == 0
+    conclusions = failure["conclusions"]
+    assert conclusions["visual_validity"] == (
+        "NOT_EVALUATED_INVALID_PROTOCOL_COMPARISON"
+    )
+    assert conclusions["replacement"] == (
+        "ONE_PROTOCOL_CORRECTED_REPLACEMENT_AUTHORIZED"
+    )
+    assert conclusions["parameter_tuning"] == (
+        "NOT_AUTHORIZED_AND_NOT_PERFORMED"
     )
 
 

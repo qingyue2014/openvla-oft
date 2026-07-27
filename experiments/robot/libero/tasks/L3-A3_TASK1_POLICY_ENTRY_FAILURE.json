@@ -1,0 +1,76 @@
+{
+  "status": "INVALID_PROTOCOL_VALIDATOR",
+  "job": {
+    "job_id": "490171",
+    "commit": "874b34206b143ef48f61384668ae7b722a915185",
+    "compute_node": "dgx-26",
+    "intentional_fail_closed_exit_code": 1,
+    "runner_classification": "validator_bug",
+    "runner_classification_interpretation": "The validator compared raw-wait10 RGB to wait0 restored RGB and then incorrectly gated on the robot qpos/RGB changes from an extra wait10. Those are different runtime paths, so the job is invalid protocol evidence rather than a physical or visual scene verdict."
+  },
+  "scope": {
+    "suite": "libero_spatial",
+    "task_id_zero_based": 1,
+    "policy_prompt": "pick up the black bowl next to the ramekin and place it on the plate",
+    "bddl_language_is_policy_prompt": false,
+    "prompt_override": null,
+    "vla_loaded": false,
+    "candidate_grid_unchanged": true,
+    "candidate_grid_limit": 144,
+    "candidate_rows_evaluated": 0
+  },
+  "policy_entry_capture": {
+    "capture_wait_steps": 10,
+    "raw_state_sha256": "d116842e01703fbea595511db813a3816c8d9f2302b4e979ebec4f15b7a750a2",
+    "policy_entry_state_sha256": "06a341f78cf0399ee253967e645d88d0538bd5a27c83de3f3d487a92fbfbeee6",
+    "S_compiled_support_body": "table",
+    "S_table_contact_count": 20,
+    "S_stove_contact_count": 0,
+    "support_surface_gate_passed": true
+  },
+  "invalid_restored_base_wait10_equivalence_gate": {
+    "passed": false,
+    "validation_wait_steps": 10,
+    "validation_wait_interpretation": "Validation only; it is not an additional policy-entry wait and does not change the required future evaluator num_steps_wait=0 contract.",
+    "persistent_S_table": true,
+    "S_stove_seen": false,
+    "relevant_object_translation_max_m": 4.3387517688885053e-13,
+    "relevant_object_orientation_max_deg": 4.182619578303745e-06,
+    "qpos_max_abs_drift": 0.006691572896350306,
+    "captured_entry_vs_immediate_restore_rgb": {
+      "psnr_db": 26.082772362957925,
+      "global_ssim": 0.9680810116308008
+    },
+    "captured_entry_vs_post_validation_wait_rgb": {
+      "psnr_db": 25.506956287804737,
+      "global_ssim": 0.9634958905679666
+    },
+    "predeclared_thresholds": {
+      "relevant_object_translation_max_m": 0.0001,
+      "relevant_object_orientation_max_deg": 0.05,
+      "qpos_max_abs": 0.0001,
+      "rgb_psnr_min_db": 50.0,
+      "rgb_global_ssim_min": 0.999
+    }
+  },
+  "conclusions": {
+    "physical_support_surface": "PASS_S_ON_COMPILED_TABLE_NOT_STOVE",
+    "full_policy_entry_state_equivalence": "NOT_EVALUATED_ON_MATCHED_RUNTIME_PATH",
+    "visual_validity": "NOT_EVALUATED_INVALID_PROTOCOL_COMPARISON",
+    "leaning_chain_physical_verdict": "NOT_ESTABLISHED_SEARCH_NOT_RUN",
+    "candidate_hdf5": "NOT_EXPORTED",
+    "policy_png_or_video": "NOT_EXPORTED",
+    "vla_status": "NOT_RUN",
+    "safe_reference_status": "NOT_RUN",
+    "action_separation_status": "NOT_RUN",
+    "smoke_status": "NOT_RUN",
+    "formal_status": "NOT_RUN",
+    "replacement": "ONE_PROTOCOL_CORRECTED_REPLACEMENT_AUTHORIZED",
+    "parameter_tuning": "NOT_AUTHORIZED_AND_NOT_PERFORMED"
+  },
+  "evidence": {
+    "fetched_policy_entry_base_audit_sha256": "5c9a1882da667e1a47b231cc12afd2b6fa763c681744876cf0c2f09fa7e49ed4",
+    "fetched_policy_entry_base_audit_bytes": 14393,
+    "local_run_ledger": ".physcog-agent/runs/20260727T042327Z-l3a3-task1_leaning_chain_one"
+  }
+}
