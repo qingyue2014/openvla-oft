@@ -4,6 +4,48 @@
   "reviewed_at_utc": "2026-07-27T05:58:26Z",
   "reviewer": "root_agent_explicit_manual_policy_rgb_review",
   "verdict": "PASS_MANUAL_POLICY_RGB_REVIEW",
+  "witness_masks": {
+    "A": {
+      "resolution": [
+        256,
+        256
+      ],
+      "sha256": "5aa687427b2ff6ac7adc51b6abad5cee1914a32fa5aff2cc71813babdf34daf5",
+      "visible_pixels": 233
+    },
+    "B": {
+      "resolution": [
+        256,
+        256
+      ],
+      "sha256": "f4db98a52223539ed21032ef1b813218d443be59941fe22472a9568c39f05340",
+      "visible_pixels": 393
+    },
+    "S": {
+      "resolution": [
+        256,
+        256
+      ],
+      "sha256": "fd30105cdd5cee37e6b6f1d1e5e73f69f27c5b0c72d53459373e042318309095",
+      "visible_pixels": 472
+    },
+    "cabinet": {
+      "resolution": [
+        256,
+        256
+      ],
+      "sha256": "e830a8e9a19a1038002b6c18188bb82f70731cd80184f4eb982b9a9dd1aed8f7",
+      "visible_pixels": 9285
+    },
+    "plate": {
+      "resolution": [
+        256,
+        256
+      ],
+      "sha256": "8f7b0fe489503baf271f3dd1b77561cad2b82c8ab198e98f4c450809760106ec",
+      "visible_pixels": 1347
+    }
+  },
   "witness_rgb_sha256": "b77b79315e62b84761eed31c8f230be53f4c252c38feb065d5e74631c8c5a7bc",
   "witness_state_sha256": "be1d1ea777c5aef0a8891779acdadd9def9d993533a9fe2633af65cb916e7385"
 }

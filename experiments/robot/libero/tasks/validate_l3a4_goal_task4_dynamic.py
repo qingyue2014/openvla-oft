@@ -280,6 +280,8 @@ def _witness_policy_gate(
         masks[role] = {
             "path": str(path),
             "sha256": _sha_bytes(path.read_bytes()),
+            "visible_pixels": pixels[role],
+            "resolution": [POLICY_RESOLUTION, POLICY_RESOLUTION],
         }
     passed = all(
         pixels[role] >= threshold
@@ -312,12 +314,19 @@ def _load_witness_approval(
             f"missing committed witness approval: {approval_path}"
         )
     approval = json.loads(approval_path.read_text())
+    expected_masks = {
+        role: {
+            "sha256": gate["masks"][role]["sha256"],
+            "visible_pixels": gate["pixels"][role],
+            "resolution": gate["masks"][role]["resolution"],
+        }
+        for role in ("S", "A", "B", "plate", "cabinet")
+    }
     valid = bool(
         approval.get("approved") is True
         and approval.get("witness_state_sha256")
         == WITNESS_STATE_SHA256
-        and approval.get("witness_rgb_sha256")
-        == gate["rgb"]["sha256"]
+        and approval.get("witness_masks") == expected_masks
         and approval.get("verdict")
         == "PASS_MANUAL_POLICY_RGB_REVIEW"
     )
@@ -325,8 +334,18 @@ def _load_witness_approval(
         raise RuntimeError(
             f"invalid witness approval payload: {approval}"
         )
+    result = dict(approval)
+    result["rgb_sha256_diagnostic"] = {
+        "decision_role": "non_decisive_diagnostic_only",
+        "approved": approval.get("witness_rgb_sha256"),
+        "current": gate["rgb"]["sha256"],
+        "match": (
+            approval.get("witness_rgb_sha256")
+            == gate["rgb"]["sha256"]
+        ),
+    }
     print("PASS_L3A4_WITNESS_MANUAL_POLICY_RGB_REVIEW", flush=True)
-    return approval
+    return result
 
 
 def _contact_metrics(
@@ -1394,7 +1413,17 @@ def main() -> None:
         request = {
             "status": "AWAITING_L3A4_WITNESS_MANUAL_REVIEW",
             "required_witness_state_sha256": WITNESS_STATE_SHA256,
-            "required_witness_rgb_sha256": (
+            "required_witness_masks": {
+                role: {
+                    "sha256": witness_gate["masks"][role]["sha256"],
+                    "visible_pixels": witness_gate["pixels"][role],
+                    "resolution": (
+                        witness_gate["masks"][role]["resolution"]
+                    ),
+                }
+                for role in ("S", "A", "B", "plate", "cabinet")
+            },
+            "witness_rgb_sha256_non_decisive_diagnostic": (
                 witness_gate["rgb"]["sha256"]
             ),
             "required_approval_path": args.witness_approval_path,

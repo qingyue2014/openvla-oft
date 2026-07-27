@@ -51,6 +51,26 @@ def test_witness_policy_gate_hard_stops_before_any_dynamic_execution():
     assert approval < dynamic_started < preflight
 
 
+def test_manual_approval_binds_deterministic_masks_not_rgb_encoding():
+    module = ast.parse(SOURCE)
+    loader = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_load_witness_approval"
+    )
+    loader_source = ast.get_source_segment(SOURCE, loader)
+    assert 'for role in ("S", "A", "B", "plate", "cabinet")' in loader_source
+    assert 'approval.get("witness_masks") == expected_masks' in loader_source
+    assert '"resolution": gate["masks"][role]["resolution"]' in loader_source
+    assert '"visible_pixels": gate["pixels"][role]' in loader_source
+    assert '"decision_role": "non_decisive_diagnostic_only"' in loader_source
+    assert (
+        'and approval.get("witness_rgb_sha256")'
+        not in loader_source
+    )
+
+
 def test_fixed_risk_schedule_and_strict_chain_thresholds():
     for token in (
         "RISK_LOW_LIFT_M = 0.008",

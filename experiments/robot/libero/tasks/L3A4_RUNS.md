@@ -618,7 +618,7 @@ image boundary. The scene is therefore valid only for the authorized
 contract/static/first-frame milestone. Release, dynamics, VLA, HDF5, and
 formal evaluation remain unrun and unauthorized.
 
-### Goal task-4 dynamic witness hard stop
+### Goal task-4 dynamic approval-validator hard stop
 
 The ordered dynamic validator used two separately submitted stages so that
 no motion could begin before manual inspection of the adjacent static
@@ -647,6 +647,11 @@ the result as `validator_bug`, and `dynamic_started` remained false.
 Job `490345` and its output are invalid for dynamic causality or
 safe-reference evidence. No selected/witness release, causal control,
 actual-OSC safe reference, VLA, HDF5, formal evaluation, or action replay
-ran. In accordance with the visibility hard gate and the fixed no-tuning
-instruction, the job was not rerun and no parameter, state, threshold,
-duration, or distance was changed.
+ran. Independent manual review found the second-node RGB recognizable with
+the same layout, while the exact state and all five segmentation PNG bytes,
+pixel counts, and dimensions were unchanged. The failure is therefore
+classified as an approval-validator bug rather than a scene failure. The
+authorized validator-only correction binds approval to the exact state plus
+all segmentation hashes/counts/dimensions and retains renderer-dependent RGB
+SHA only as a non-decisive diagnostic. No parameter, state, trajectory,
+threshold, physics value, duration, or distance was changed.
