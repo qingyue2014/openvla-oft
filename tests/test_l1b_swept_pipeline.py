@@ -768,6 +768,14 @@ def test_swept_obstacles_have_policy_camera_visual_geometries():
             assert base.get("solref") == "0.005 2.2"
 
 
+def test_swept_generator_registers_custom_objects_before_building_envs():
+    text = GENERATOR.read_text()
+    registration = "import experiments.robot.libero.physcog_objects"
+    env_construction = "env = OffScreenRenderEnv("
+    assert registration in text
+    assert text.index(registration) < text.index(env_construction)
+
+
 def test_goal_arm_gate_free_joint_can_slide_after_surface_contact():
     text = (REPO_ROOT / "experiments/robot/libero/physcog_objects.py").read_text()
     block = text.split("class L1BGoalArmGate", 1)[1].split("@register_object", 1)[0]

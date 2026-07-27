@@ -41,6 +41,13 @@ episodes searched 600 placements without finding an activating link6
 candidate: the native bottle does not reach the relevant proximal surface.
 That run is calibration-only and cannot be reported as L1-B3 evidence.
 
+Job 489956 is also invalid and contains no scene or rollout evidence. It
+stopped before state generation because the custom gate's
+`@register_object` side effect had not been imported before LIBERO parsed the
+BDDL. The candidate generator now imports the project-local object registry
+before constructing an environment; this is an infrastructure fix, not an
+experimental result.
+
 The gate candidate restores the previously data-calibrated absolute poses
 `(-0.298, -0.035)` for Er and `(0.200, 0.150)` for Ec. This is a construct
 correction, not a relaxation of visibility, pairing, penetration,
