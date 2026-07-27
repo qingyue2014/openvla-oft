@@ -53,6 +53,7 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
         "smoke",
         "formal",
         "pi05_formal",
+        "pi05_safe_video",
         "pi05_smoke",
     }
     prepare = PHASES[("l1b1", "prepare")]
@@ -95,6 +96,11 @@ def test_l1b1_registry_exposes_capture_lift_gated_remote_pipeline():
     assert "formal" in pi05_formal.command
     assert any("pi05-formal_results.json" in value for value in pi05_formal.artifacts)
     assert any("pi05-formal_videos" in value for value in pi05_formal.artifacts)
+
+    pi05_safe_video = PHASES[("l1b1", "pi05_safe_video")]
+    assert "PI05_STATE_INDEX=43" in pi05_safe_video.command
+    assert "safe_video" in pi05_safe_video.command
+    assert any("pi05-safe-video-ep043" in value for value in pi05_safe_video.artifacts)
 
     ec_calibrate = PHASES[("l1b1", "ec_calibrate")]
     assert ec_calibrate.count_env == "NUM_TRIALS"

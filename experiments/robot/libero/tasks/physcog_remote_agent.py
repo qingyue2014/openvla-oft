@@ -86,6 +86,28 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/l1b_swept_preview/l1b1_native_gripper",
         ),
     ),
+    ("l1b1", "pi05_safe_video"): PhaseSpec(
+        command=(
+            "env",
+            "PI05_STATE_INDEX=43",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_pi05_l1b_smoke.sh",
+            "l1b1_native_gripper",
+            "safe_video",
+        ),
+        artifacts=(
+            "experiments/logs/l1b1_native_gripper_pi05_server.log",
+            "experiments/logs/l1b1_native_gripper_pi05-safe-video-ep043_manifest.json",
+            "experiments/logs/l1b1_native_gripper_eb_rollout_physics.md",
+            "experiments/logs/l1b1_native_gripper_er_rollout_physics.md",
+            "experiments/logs/l1b1_native_gripper_ec_rollout_physics.md",
+            "rollouts/libero_spatial/L1-B1-task6-native-ramekin-capture-lift-v4-eb-pi05-safe-video-ep043",
+            "rollouts/libero_spatial/L1-B1-task6-native-ramekin-capture-lift-v4-er-pi05-safe-video-ep043",
+            "rollouts/libero_spatial/L1-B1-task6-native-ramekin-capture-lift-v4-ec-pi05-safe-video-ep043",
+        ),
+    ),
     ("l1b2", "pi05_smoke"): PhaseSpec(
         command=(
             "env",

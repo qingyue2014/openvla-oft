@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-FAMILY="${1:?usage: run_pi05_l1b_smoke.sh FAMILY [smoke|formal]}"
+FAMILY="${1:?usage: run_pi05_l1b_smoke.sh FAMILY [smoke|formal|safe_video]}"
 RUN_KIND="${2:-smoke}"
 case "${RUN_KIND}" in
   smoke)
@@ -11,6 +11,11 @@ case "${RUN_KIND}" in
   formal)
     COUNT="${PI05_FORMAL_TRIALS:-50}"
     RUN_SUFFIX="pi05-formal"
+    ;;
+  safe_video)
+    COUNT=1
+    PI05_STATE_INDEX="${PI05_STATE_INDEX:?safe_video requires PI05_STATE_INDEX}"
+    RUN_SUFFIX="pi05-safe-video-ep$(printf '%03d' "${PI05_STATE_INDEX}")"
     ;;
   *)
     echo "Unsupported pi0.5 evaluation mode: ${RUN_KIND}" >&2
@@ -78,6 +83,16 @@ for condition in eb er ec; do
   destination="${TASKS_DIR}/${FAMILY}_${condition}_states.hdf5"
   test -f "${source_path}"
   cp "${source_path}" "${destination}"
+  if [[ "${RUN_KIND}" == "safe_video" ]]; then
+    selected_path="${destination%.hdf5}_selected.hdf5"
+    python "${TASKS_DIR}/extract_repeated_initial_state.py" \
+      --input "${destination}" \
+      --output "${selected_path}" \
+      --demo_index "${PI05_STATE_INDEX}" \
+      --repeats 1 \
+      --overwrite
+    mv "${selected_path}" "${destination}"
+  fi
   STATE_HASHES["${condition}"]="$(sha256sum "${destination}" | awk '{print $1}')"
   printf 'Frozen %s state: %s sha256=%s\n' \
     "${condition}" "${source_path}" "${STATE_HASHES[${condition}]}"
@@ -235,7 +250,7 @@ python - "${MANIFEST_PATH}" "${FAMILY}" "${CHECKPOINT_PATH}" \
   "${STATE_HASHES[eb]}" "${STATE_HASHES[er]}" "${STATE_HASHES[ec]}" \
   "${CONDITION_EXIT_CODES[eb]}" "${CONDITION_EXIT_CODES[er]}" \
   "${CONDITION_EXIT_CODES[ec]}" "${COUNT}" "${RUN_KIND}" \
-  "${SOURCE_COMMIT}" <<'PY'
+  "${SOURCE_COMMIT}" "${PI05_STATE_INDEX:-}" <<'PY'
 import datetime
 import json
 import pathlib
@@ -254,6 +269,7 @@ import sys
     episode_count,
     run_kind,
     source_commit,
+    source_state_index,
 ) = sys.argv[1:]
 manifest = {
     "created_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
@@ -266,6 +282,9 @@ manifest = {
     "evaluation_kind": run_kind,
     "replan_steps": 5,
     "frozen_scene_source_commit": source_commit,
+    "source_state_index": (
+        int(source_state_index) if source_state_index else None
+    ),
     "state_sha256": {"eb": eb_hash, "er": er_hash, "ec": ec_hash},
     "condition_exit_codes": {
         "eb": int(eb_status),
