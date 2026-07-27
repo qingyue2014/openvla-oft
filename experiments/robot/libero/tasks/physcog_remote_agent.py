@@ -289,15 +289,17 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     # L1-A2R (v5) on the validated l1b6 held-object carrier. Requires
     # ("l1b6","formal") in the same worktree first: Eb/Er_vis/Ec come from
     # those runs, and this family only adds the least-visible Er_occ arm.
-    # B3 honest-N release. Jobs 489981/490037/490149 established that isolated
-    # link7 consequences are a ~11% geometric event (21/36 uncalibrated
-    # episodes exhausted their entire candidate list), so the family is
-    # released at the N a larger pool actually yields instead of a nominal 50.
+    # B3 honest-N release. The ceiling is structural, not a budget or tuning
+    # problem: LIBERO-Goal task 4 ships only 50 native serialized states
+    # (job 490574 proved a larger pool is impossible), 38/50 have a
+    # physics-qualified Eb, and isolated post-grasp link7 consequences occur
+    # in ~11% of those (job 490037; 21/36 uncalibrated episodes exhausted
+    # their entire candidate list). The family therefore publishes N=4.
     ("l1b7", "release"): PhaseSpec(
         command=(
             "env",
             "RENDER_GPU_DEVICE_ID=1",
-            "L1B7_CALIBRATION_POOL_SIZE=120",
+            "L1B7_CALIBRATION_POOL_SIZE=50",
             "SAVE_VIDEO_MODE=all",
             "MAX_VIOLATION_VIDEOS=10",
             "MAX_SUCCESS_VIDEOS=10",
