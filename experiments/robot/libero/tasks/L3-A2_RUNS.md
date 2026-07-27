@@ -23,6 +23,7 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490166 | 1c5be44 | Corrected task1 exact post-wait native contract, actual support contacts, assets, 120-step hold, segmentation and 256 policy view | **PASS read-only/no-VLA audit** |
 | 490181 | 793d896 | Task1 diagonal S→A→B scan: 5/15 stable A seeds and 45/45 stable B placements, but 0/45 A-B impacts and 0/45 B hazards after S removal | **FAIL physical cascade gate; terminal for this grid** |
 | 490189 | cce0563 | Task1 near-inline diagonal: 3/3 frozen A seeds revalidated; 18/27 B placements static-valid, but 0/18 A-B impacts and B remained exactly stationary | **FAIL physical cascade gate; HARD STOP, no rerun** |
+| 490200 | cc314fd | A-only task1 swept-path diagnostic: 3/3 seeds traced for 181 frames; true heading ≈-45°, but no swept-hull tangent admitted a contact-free static B placement | **DIAGNOSTIC COMPLETE; no scene verdict or VLA** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -145,6 +146,31 @@ witness, ablation set, policy evidence, HDF5, or VLA run. The report SHA-256
 is `ff91841f7b9c84322eae35e931ea6a7d402c35fab1175b1e42a69de22eaf1018`.
 This physical-gate failure is terminal for the near-inline grid; no rerun or
 additional pose tuning is permitted.
+
+Job 490200 is a no-VLA A-only diagnostic, not a third task1 scene attempt.
+For each of the three frozen 16° A seeds, it kept B at its native far pose and
+recorded 181 frames of A body pose, per-step/cumulative translation, rotation,
+every group-0 geometry's world vertices/AABB, contacts, and the union swept
+envelope under the identical 0.20 m S lift. The measured planar headings were
+approximately -45.01° for all seeds, so the two failed B scans were not caused
+by an incorrect nominal fall angle. Instead, the planar body path was only
+15.62–16.40 mm; the 28.89–29.88 mm total displacement included
+23.38–23.98 mm downward motion and 39.06°–40.46° rotation. Although S-A was
+released immediately, A recontacted S from step 102 onward and no seed became
+permanently S-clear within the 180-step horizon.
+
+Post-trace static checks placed upright native B tangent 1 mm beyond the
+actual group-0 leading surface at every eligible sampled pose. The three seeds
+exhausted 119, 100, and 126 candidate checks respectively, with no placeable
+point. Every candidate contacted both S and another native object during
+initial settling/hold; two candidates per seed also contacted initial A.
+Therefore a statically legal B must leave the measured A swept corridor,
+which explains the 0-impact results in jobs 490181 and 490189. This is a
+geometry diagnosis, not permission to tune another angular grid. Report
+SHA-256:
+`c60c0bd8047c3324e67371c991b2233526ad6bc46e7029f4c5141e16f54fbaaf`.
+No scene verdict, selected candidate, policy evidence, HDF5, or VLA run was
+produced.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next

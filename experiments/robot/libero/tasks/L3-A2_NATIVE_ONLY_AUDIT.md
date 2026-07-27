@@ -442,6 +442,51 @@ ablation exists. Candidate policy imagery/video, HDF5 family generation, VLA
 rollout, safe reference, action-separation replay, and formal metrics were
 not run. The 27-point grid must not be repeated or tuned further.
 
+### A-only swept-path diagnosis
+
+- Job: `490200`
+- Commit: `cc314fd5638ad1d6cadf3517a083726bcfdaa6f0`
+- Scope: diagnostic only; no scene verdict, B dynamics, policy artifact,
+  HDF5, VLA, or formal-family generation.
+- Inputs: the same three revalidated 16° A seeds; B remained at its native far
+  pose throughout each S-lift trace.
+- Sampling: 181 frames per seed, including A body pose, cumulative and
+  per-step translation headings, rotation, every group-0 geom's world
+  vertices/AABB, contact states, and the full swept envelope.
+
+The actual planar movement did follow the nominal diagonal: net/maximum
+translation headings were about `-45.01°` for all three seeds, and headings
+after the 2 mm motion gate remained within approximately
+`[-45.19°,-45.01°]`. The mismatch was reach and clearance, not angle.
+
+| A support gap | Planar path | 3D max translation | Max rotation |
+| ---: | ---: | ---: | ---: |
+| `0 mm` | `15.891 mm` | `29.184 mm` | `39.475°` |
+| `-1.5 mm` | `15.615 mm` | `28.888 mm` | `39.061°` |
+| `+1.5 mm` | `16.403 mm` | `29.877 mm` | `40.460°` |
+
+The 3D displacement was dominated by a `23.38–23.98 mm` downward component.
+S-A released immediately at intervention, but A recontacted S beginning at
+step 102; each trace still contained S-A contact through step 180. Thus none
+of the seeds became permanently clear of S within the diagnostic horizon.
+
+The diagnostic then tested native upright B at a 1 mm tangent beyond the
+actual future group-0 leading surface, restoring the frozen pre-lift S/A state
+for each 120-step settle plus 120-step hold. It exhausted `119`, `100`, and
+`126` eligible sampled placements for the 0, -1.5, and +1.5 mm seeds.
+**No first placeable point existed.** Every attempted point contacted S and
+another native object; two per seed also contacted A. A statically legal B
+must therefore lie outside the measured A swept corridor.
+
+Report SHA-256:
+`c60c0bd8047c3324e67371c991b2233526ad6bc46e7029f4c5141e16f54fbaaf`.
+
+Diagnostic conclusion: the frozen task1 A seeds do not support another
+native-B layout derived from their swept hull. Jobs 490181/490189 failed
+because the useful impact corridor is occupied and too short, not because the
+chosen ray angle missed a substantially different trajectory. Do not continue
+B angular/clearance tuning from these seeds.
+
 ## Replacement native task33 audit
 
 ### Immutable task and asset contract
