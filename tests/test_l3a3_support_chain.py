@@ -786,6 +786,49 @@ def test_task1_vertical_settle40_failure_authorizes_only_A2_aligned_review():
     assert failure["downstream"]["vla"] == "NOT_RUN"
 
 
+def test_task1_vertical_settle240_review_is_final_physical_hard_stop():
+    failure = json.loads(
+        (TASKS / "L3-A3_TASK1_VERTICAL_SETTLE240_FAILURE.json").read_text()
+    )
+    assert failure["status"] == "INVALID_STATIC_FEASIBILITY_GATE"
+    assert failure["verdict"] == (
+        "FAIL_L3A3_TASK1_VERTICAL_CANTILEVER_SETTLE240_STATIC_REVIEW"
+    )
+    assert failure["job"]["job_id"] == "490233"
+    assert failure["job"]["commit"] == (
+        "840f097e7b94aca418030416d12365f4186f4735"
+    )
+    assert failure["review_contract"]["only_physical_execution_change"] == (
+        "settle_steps_40_to_240"
+    )
+    assert failure["review_contract"]["one_authorized_review_consumed"] is True
+    assert failure["contract"]["candidate_grid_count"] == 36
+    assert failure["contract"]["settle_steps"] == 240
+    assert failure["contract"]["hold_steps"] == 80
+    counts = failure["counts"]
+    assert counts["geometry_gate_pass_count"] == 0
+    assert counts["stability_gate_pass_count"] == 15
+    assert counts["full_static_visibility_pass_count"] == 0
+    assert counts["robust_adjacent_witness_count"] == 0
+    assert counts["B_top_below_A_lower_plus_5mm_count"] == 0
+    assert counts["forbidden_A_B_contact_count"] == 18
+    assert counts["forbidden_S_B_contact_count"] == 12
+    assert failure["artifacts"]["report_json_sha256"] == (
+        "2ac35aa3731c457b0fcb06b50c412da1b72f371295be21e7054b1945656dd8f4"
+    )
+    assert failure["artifacts"]["selected_candidate"] is None
+    assert failure["downstream"]["further_settle_duration_review"] == "FORBIDDEN"
+    assert (
+        failure["downstream"]["further_run_or_tuning_of_this_36_grid"]
+        == "FORBIDDEN"
+    )
+    assert failure["downstream"]["release_dynamics"] == "NOT_RUN"
+    assert failure["downstream"]["vla"] == "NOT_RUN"
+    assert failure["conclusion"] == (
+        "PERMANENT_HARD_STOP_VERTICAL_CANTILEVER_MECHANISM"
+    )
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text

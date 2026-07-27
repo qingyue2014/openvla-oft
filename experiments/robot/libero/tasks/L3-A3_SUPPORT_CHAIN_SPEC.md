@@ -8,6 +8,9 @@
 > an overstrict repeat-render gate before candidate search. Independent
 > visibility review subsequently passed, but the one authorized frozen-grid
 > run still produced zero stable S-A candidates and a genuine physical FAIL.
+> A separate vertical cantilever design then exhausted its one authorized
+> L1-A2-aligned 240-step settle review with zero complete static candidates
+> and zero robust witnesses, so that mechanism is also permanently stopped.
 > The task87 candidate failed the executable safe-reference gate. The native-only
 > task57 replacement passed its numerical static gate but failed independent
 > policy-view review because the goal support was occluded and not side-graspable.
@@ -267,6 +270,27 @@ The review has its own report directory and verdict name. Release, causal
 dynamics, ablation, safe reference, replay, and VLA remain forbidden. If the
 review again has zero feasible candidates or no adjacent robust witness, this
 vertical mechanism is permanently hard-stopped.
+
+That sole review completed as job `490233`, commit
+`840f097e7b94aca418030416d12365f4186f4735`, with verdict
+`FAIL_L3A3_TASK1_VERTICAL_CANTILEVER_SETTLE240_STATIC_REVIEW`. The exact
+36 placements, task, prompt, assets, base state, thresholds, and 80-step hold
+were unchanged; only the settle duration changed from 40 to 240. Fifteen
+candidates passed the stability gate, but the complete static gate remained
+`0/36` and the robust adjacent-witness count remained zero. In particular,
+all 36 failed the frozen requirement that B's collision top lie at least 5 mm
+below A's collision lower bound. Eighteen candidates developed forbidden A-B
+contact and twelve developed forbidden S-B contact.
+
+No candidate HDF5, policy PNG, role mask, or segmentation artifact was
+exported because no candidate was statically feasible. Release dynamics,
+causal ablation, safe reference, action replay, VLA, smoke, and formal
+evaluation were not run. The runner's generic `validator_bug` label again
+reflects the intentional nonzero fail-closed exit, not a protocol defect. The
+exact report hash and diagnostics are bound in
+`L3-A3_TASK1_VERTICAL_SETTLE240_FAILURE.json`. This consumes the only
+authorized settle-duration review: further tuning or execution of this
+36-point vertical mechanism is forbidden.
 
 ## Failed native-only task57 replacement
 

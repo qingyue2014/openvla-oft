@@ -1,0 +1,106 @@
+{
+  "status": "INVALID_STATIC_FEASIBILITY_GATE",
+  "verdict": "FAIL_L3A3_TASK1_VERTICAL_CANTILEVER_SETTLE240_STATIC_REVIEW",
+  "job": {
+    "job_id": "490233",
+    "commit": "840f097e7b94aca418030416d12365f4186f4735",
+    "compute_node": "dgx-21",
+    "intentional_fail_closed_exit_code": 1,
+    "runner_classification": "validator_bug",
+    "runner_classification_interpretation": "The broad runner label reflects the intentional nonzero exit on the static report's FAIL verdict; the report is a valid physical static-feasibility failure."
+  },
+  "review_contract": {
+    "prior_job_id": "490225",
+    "prior_report_json_sha256": "402da55a314278032f284b4429ca7a5ff8b13659208b107e5c7a1bdf6a365a4a",
+    "only_physical_execution_change": "settle_steps_40_to_240",
+    "candidate_grid_unchanged": true,
+    "thresholds_unchanged": true,
+    "hold_steps_unchanged": true,
+    "prompt_task_assets_and_base_state_unchanged": true,
+    "one_authorized_review_consumed": true
+  },
+  "contract": {
+    "suite": "libero_spatial",
+    "task_id_zero_based": 1,
+    "policy_prompt": "pick up the black bowl next to the ramekin and place it on the plate",
+    "prompt_override": null,
+    "custom_assets": false,
+    "base_state_sha256": "06a341f78cf0399ee253967e645d88d0538bd5a27c83de3f3d487a92fbfbeee6",
+    "candidate_grid_count": 36,
+    "settle_steps": 240,
+    "hold_steps": 80
+  },
+  "counts": {
+    "candidate_count": 36,
+    "geometry_gate_pass_count": 0,
+    "stability_gate_pass_count": 15,
+    "full_static_visibility_pass_count": 0,
+    "robust_adjacent_witness_count": 0,
+    "raw_placement_initial_S_A_contact_count": 25,
+    "initial_S_A_contact_count": 36,
+    "initial_rim_contact_count": 34,
+    "initial_A_not_table_count": 36,
+    "initial_B_table_count": 36,
+    "persistent_S_A_count": 16,
+    "persistent_A_not_table_count": 36,
+    "persistent_B_table_count": 21,
+    "S_A_force_gate_count": 15,
+    "automated_visibility_pass_count": 36,
+    "no_forbidden_contact_count": 18,
+    "B_top_below_A_lower_plus_5mm_count": 0,
+    "cantilever_overhang_gate_count": 25,
+    "forbidden_A_B_contact_count": 18,
+    "forbidden_S_B_contact_count": 12
+  },
+  "diagnostics": {
+    "S_A_min_normal_force_N_range": [
+      0.0,
+      0.06873374733394588
+    ],
+    "A_hold_motion_m_range": [
+      8.820244919369813e-06,
+      0.7615208707236707
+    ],
+    "A_hold_orientation_deg_range": [
+      0.013333868360723988,
+      127.98457245332193
+    ],
+    "A_B_exact_AABB_gap_m_range": [
+      0.0,
+      0.02097401985086403
+    ],
+    "A_B_projected_gap_m_range": [
+      -0.026467824421068736,
+      0.015617464463165698
+    ],
+    "cantilever_overhang_m_range": [
+      0.0006650851118089052,
+      0.04275037399604334
+    ],
+    "interpretation": "The longer settle yielded 15 stability-pass placements, all at radial offset 0.022 m, but none satisfied the frozen geometry contract: B_top_below_A_lower_plus_5mm failed for all 36 candidates. Eighteen candidates also developed forbidden A-B contact and twelve developed forbidden S-B contact. Therefore no candidate passed the complete static gate and no adjacent robust witness exists."
+  },
+  "artifacts": {
+    "selected_candidate": null,
+    "candidate_hdf5": "NOT_EXPORTED",
+    "policy_png": "NOT_EXPORTED",
+    "role_mask_png": "NOT_EXPORTED",
+    "segmentation_ids_npy": "NOT_EXPORTED",
+    "manual_policy_view_review": "NOT_RUN_NO_STATIC_FEASIBLE_CANDIDATE",
+    "report_json_sha256": "2ac35aa3731c457b0fcb06b50c412da1b72f371295be21e7054b1945656dd8f4",
+    "report_json_bytes": 495678,
+    "report_json_relative_path": "artifacts/experiments/logs/l3a3_task1_vertical_cantilever_settle240_static_review/report.json",
+    "local_run_ledger": ".physcog-agent/runs/20260727T050300Z-l3a3-task1_vertical_settle240_static_review"
+  },
+  "downstream": {
+    "further_settle_duration_review": "FORBIDDEN",
+    "further_run_or_tuning_of_this_36_grid": "FORBIDDEN",
+    "release_dynamics": "NOT_RUN",
+    "causal_ablation": "NOT_RUN",
+    "safe_reference": "NOT_RUN",
+    "action_separation": "NOT_RUN",
+    "vla": "NOT_RUN",
+    "smoke": "NOT_RUN",
+    "formal": "NOT_RUN"
+  },
+  "conclusion": "PERMANENT_HARD_STOP_VERTICAL_CANTILEVER_MECHANISM"
+}
