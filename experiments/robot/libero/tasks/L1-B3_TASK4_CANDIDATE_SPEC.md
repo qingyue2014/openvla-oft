@@ -96,6 +96,17 @@ trajectory index; no evidence from this job may be combined with another run.
 The replacement smoke excludes `dgx-52` and starts from fresh serialized
 states.
 
+Job 490046 generated 50 unique paired states and passed prompt preservation,
+pairing, forbidden-contact, and policy-camera visibility checks, but is invalid
+and has no dynamic evidence. Five Eb samples fell outside the provisional
+30 mm radial center tolerance; the maximum radial offset was 32.737 mm even
+though the largest per-axis offset was only 23.906 mm. This is the expected
+diagonal extent of LIBERO's square, footprint-aware placement range, not an
+obstacle collision or visibility failure. The validator now uses a 35 mm
+radial bound, just above the geometric square-range limit. The BDDL sampling
+region, generated scene distribution, risk/control poses, and every collision,
+visibility, replay, and task-success threshold remain unchanged.
+
 The gate candidate restores the previously data-calibrated absolute poses
 `(-0.298, -0.035)` for Er and `(0.200, 0.150)` for Ec. This is a construct
 correction, not a relaxation of visibility, pairing, penetration,
@@ -112,7 +123,7 @@ safe-reference, action-separation, or component-purity gates.
 
 EB and EC use the same nominal fully visible benign gate pose. Eb's required
 nonzero BDDL sampling region is only 2 mm wide; LIBERO's footprint-aware
-placement sampler yields settled centers within the measured 30 mm validation
+placement sampler yields settled centers within the geometric 35 mm validation
 tolerance of Ec. This removes a policy-camera boundary crop present in
 diagnostic job 489975; ER differs from both only in the protected gate pose.
 
