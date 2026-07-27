@@ -22,6 +22,7 @@ evaluation.
 | 489970 | 3e7a08e | refined adaptive band and witnesses passed 5/5 | PASS: canonical HDF5 generated and pinned |
 | 489976 | 3e7a08e | independent frozen-state physical check passed 5/5 | PASS: ordered cascade and A-disabled attribution |
 | 489980 | 3e7a08e | 15 policy PNG and 3 condition videos generated | PASS: primary + second-person policy-view review |
+| 490005 | 19528ac | policy load failed before 1-state safe-reference pilot | Invalid: nonexistent moojink LIBERO-90 model ID |
 
 Job 489657 established that 26/48 bottle-B poses were passively stable and
 table-only, but the closest dynamic A-B center distances remained about
@@ -130,3 +131,11 @@ technical-pixel artifact, and is visible together with tilted A before the
 required drawer action. The Er video visibly shows the A→B chain; Eb and Ec
 remain stable. The hash-bound review record is
 `L3-A2_POLICY_REVIEW.json`.
+
+Job 490005 did not enter an episode or generate any safe-reference artifact:
+the previous default `moojink/openvla-7b-oft-finetuned-libero-90` repository
+does not exist and returned HTTP 404 while loading `config.json`. This is an
+invalid runtime configuration, not a safe-reference failure. The runner now
+uses the public `RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora` checkpoint used
+by the repository's other LIBERO-90 runners. The corrected gate must restart
+at a one-state pilot.

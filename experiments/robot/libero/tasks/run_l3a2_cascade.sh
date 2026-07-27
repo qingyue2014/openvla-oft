@@ -6,7 +6,10 @@ set -euo pipefail
 
 CONDITION="${1:-all}"
 MODE="${2:-prepare}"
-CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-90}"
+# The moojink release has suite checkpoints for spatial/object/goal/10 but no
+# public `...-libero-90` repository. Use the LIBERO-90 SFT checkpoint already
+# supported by the repository's RLinf compatibility loader.
+CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
 TASK_SUITE_NAME="${TASK_SUITE_NAME:-libero_90}"
 TASK_DESCRIPTION="close the bottom drawer of the cabinet and open the top drawer"
 BDDL="${BDDL:-experiments/robot/libero/tasks/PHYSCOG_L3A2_drawer_bottle_cascade.bddl}"

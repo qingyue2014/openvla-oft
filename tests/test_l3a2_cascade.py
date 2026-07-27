@@ -289,3 +289,11 @@ def test_remote_registry_has_every_preformal_l3a2_gate():
         "experiments/logs/l3a2_policy_evidence"
         in PHASES[("l3a2", "preview")].artifacts
     )
+
+
+def test_l3a2_uses_existing_public_libero90_checkpoint():
+    runner = (
+        ROOT / "experiments/robot/libero/tasks/run_l3a2_cascade.sh"
+    ).read_text()
+    assert "RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora" in runner
+    assert "moojink/openvla-7b-oft-finetuned-libero-90" not in runner
