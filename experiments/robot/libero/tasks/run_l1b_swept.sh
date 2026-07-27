@@ -453,12 +453,20 @@ calibrate_l1b7_trajectory_states() {
   if [[ "${family}" == "l1a2r_occluded_arm" && -n "${L1A2R_OCCLUSION_BAND:-}" ]]; then
     extra_args+=(--occlusion_band "${L1A2R_OCCLUSION_BAND}")
   fi
+  # Offline analysis of the 50-episode formal Eb pool (job 489981): only 8%
+  # of the lifted link5/6 path sits at bottle-strikeable height (<= 1.19 m,
+  # the wine-bottle top), so the 200-candidate budget was spent almost
+  # entirely on unstrikeable high-arc poses (pool yield 1/38). Capping the
+  # path proxy at the bottle top re-allocates the same budget to candidates
+  # link7 can actually strike. This is a candidate-generation efficiency
+  # knob, not a consequence threshold.
   python "${TASKS_DIR}/calibrate_l1b7_trajectory_conditioned_states.py" \
     --eb_trajectories "rollouts/libero_goal/${eb_note}/trajectories" \
     --min_obstacle_displacement "${L1B7_DISPLACEMENT_THRESHOLD:-0.010}" \
     --min_obstacle_tilt_change_deg "${L1B7_TILT_THRESHOLD_DEG:-30.0}" \
     --max_contact_penetration "${MAX_CONTACT_PENETRATION}" \
     --max_candidates_per_episode "${L1B7_MAX_CANDIDATES_PER_EPISODE}" \
+    --max_link_z "${L1B7_MAX_LINK_Z:-1.18}" \
     --min_successful_eb "${REPLAY_MIN_EPISODES:-20}" \
     --fail_on_invalid \
     "${extra_args[@]}"
