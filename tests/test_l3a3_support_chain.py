@@ -325,3 +325,28 @@ def test_task57_probe_reads_suite_contract_without_guessing_or_policy():
     assert '"candidate_status": "NOT_CONSTRUCTED"' in text
     assert "pretrained_checkpoint" not in text
     assert "task_description_override" not in text
+
+
+def test_task57_candidate_is_native_only_one_state_and_fail_closed():
+    text = (TASKS / "generate_l3a3_task57_native_candidate.py").read_text()
+    assert 'SUPPORT = "cream_cheese_1_main"' in text
+    assert 'MIDDLE = "alphabet_soup_1_main"' in text
+    assert 'TOP = "tomato_sauce_1_main"' in text
+    assert "PROMPT_SHA256" in text
+    assert "NATIVE_BDDL_SHA256" in text
+    assert "GOAL_SHA256" in text
+    assert "assert_pairing" in text
+    assert "differ outside A/B qpos/qvel" in text
+    assert "condition_hold" in text
+    assert "move_s_gate" in text
+    assert "collision_ablation" in text
+    assert "top_ablation_relative_gate" in text
+    assert "s_b_bypass" in text
+    assert "robot_relevant" in text
+    assert "PENDING_MANUAL_POLICY_VIEW_REVIEW" in text
+    assert '"eb_source_status": "NOT_RUN"' in text
+    assert '"safe_reference_status": "NOT_RUN"' in text
+    assert '"action_separation_status": "NOT_RUN"' in text
+    assert "physcog_objects" not in text
+    assert "assets/" not in text
+    assert "task_description_override" not in text
