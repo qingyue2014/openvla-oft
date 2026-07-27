@@ -449,6 +449,15 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a4_spatial_task1_landmark_impact",
         ),
     ),
+    ("l3a4", "spatial_task1_vertical_overhang_static"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/audit_l3a4_spatial_task1_vertical_overhang.py",
+        ),
+        artifacts=(
+            "experiments/logs/l3a4_spatial_task1_vertical_overhang",
+        ),
+    ),
     ("l3a4", "task64_competence"): PhaseSpec(
         command=(
             "python",
