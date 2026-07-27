@@ -1,6 +1,6 @@
 # L1-B3 Task-4 Candidate: Bowl-on-Cabinet Wrist Sweep
 
-Updated: 2026-07-26
+Updated: 2026-07-27
 
 Status: **candidate only — not canonical, formal, or publishable**
 
@@ -133,6 +133,24 @@ The copied `L1-B3_Task4_*.mp4` files in the local project root are retained
 only for diagnostic review. They are not formal evidence. The active Task-4
 candidate remains the native tabletop `wine_bottle_1_main` implementation
 defined above and is still incomplete.
+
+## Incomplete native-wine diagnostics
+
+Superpod job **490762** used only the native Task-4 assets and successfully
+selected eight unique source states from its 100-reset preflight pool. Its
+strict serialized-Er replay passed `8/8`, as did reset/pairing, native-asset,
+policy-camera visibility, and Eb penetration checks. It is nevertheless
+**incomplete and invalid as release evidence**: the shared safe-reference
+controller copied its transport pose before converting the cabinet body origin
+to the cabinet-top support height. The resulting path approached the cabinet
+side roughly `0.224 m` below the support surface and failed the first five
+states at the same transport stage. The job was cancelled once its maximum
+possible safe-reference rate fell below the required `0.95`.
+
+This was a validator implementation defect, not permission to relax the gate
+or reinterpret those failures. The corrected controller derives both final and
+transport heights from the native support collision AABB and must pass a fresh
+end-to-end smoke before any result from the family can be considered.
 
 ## Candidate workflow
 

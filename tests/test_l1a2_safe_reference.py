@@ -37,6 +37,36 @@ def test_native_goal_is_authoritative_over_asset_aabb_gap(monkeypatch):
     assert np.isclose(result["place_bottom_gap_m"], -0.10)
 
 
+def test_goal_support_transport_uses_support_top_not_body_origin(monkeypatch):
+    positions = {
+        reference.TARGET: np.array([-0.2, 0.1, 0.08]),
+        reference.PLATE: np.array([0.1, -0.1, 0.01]),
+    }
+    monkeypatch.setattr(reference, "_body_pos", lambda _env, body: positions[body])
+    monkeypatch.setattr(
+        generator,
+        "_world_aabb",
+        lambda _env, body: (
+            np.array([-0.05, -0.05, 0.05 if body == reference.TARGET else -0.20]),
+            np.array([0.05, 0.05, 0.12 if body == reference.TARGET else 0.24]),
+        ),
+    )
+    args = SimpleNamespace(
+        place_offset_x=0.01,
+        place_offset_y=-0.02,
+        transport_place_offset_x=None,
+        transport_place_offset_y=0.03,
+        release_clearance=0.002,
+    )
+
+    desired, transport = reference._goal_support_bowl_waypoints(object(), args)
+
+    expected_z = 0.24 + (0.08 - 0.05) + 0.002
+    np.testing.assert_allclose(desired, [0.11, -0.12, expected_z])
+    np.testing.assert_allclose(transport, [0.11, -0.07, expected_z])
+    assert transport[2] > positions[reference.PLATE][2] + 0.20
+
+
 def test_attempt_ranking_prefers_complete_safe_success():
     failed = {
         "safe_success": 0,

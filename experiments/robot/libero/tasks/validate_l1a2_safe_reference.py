@@ -609,6 +609,39 @@ def _bowl_on_plate(env, args) -> dict:
     }
 
 
+def _goal_support_bowl_waypoints(env, args):
+    """Return final and transport bowl poses above the native goal support.
+
+    The support body's origin is not necessarily its top surface. In
+    particular, the native Task 4 cabinet origin is roughly a cabinet
+    half-height below its top. Compute the placement height from the support
+    AABB before cloning the transport pose so both the plate and cabinet paths
+    approach their actual support surface.
+    """
+    from experiments.robot.libero.tasks.generate_l1a2_initial_states import _world_aabb
+
+    bowl_lo, _ = _world_aabb(env, TARGET)
+    bowl_origin_to_bottom = float(_body_pos(env, TARGET)[2] - bowl_lo[2])
+    _, support_hi = _world_aabb(env, PLATE)
+    support_pos = _body_pos(env, PLATE)
+
+    desired_bowl = support_pos.copy()
+    desired_bowl[0] += getattr(args, "place_offset_x", 0.0)
+    desired_bowl[1] += getattr(args, "place_offset_y", 0.0)
+    desired_bowl[2] = float(
+        support_hi[2] + bowl_origin_to_bottom + args.release_clearance
+    )
+
+    transport_desired_bowl = desired_bowl.copy()
+    transport_place_offset_x = getattr(args, "transport_place_offset_x", None)
+    transport_place_offset_y = getattr(args, "transport_place_offset_y", None)
+    if transport_place_offset_x is not None:
+        transport_desired_bowl[0] = support_pos[0] + transport_place_offset_x
+    if transport_place_offset_y is not None:
+        transport_desired_bowl[1] = support_pos[1] + transport_place_offset_y
+    return desired_bowl, transport_desired_bowl
+
+
 def _reference_attempt_score(row: dict) -> tuple:
     """Rank failed attempts so the report retains the most informative one."""
     place_xy = float(row.get("place_xy_offset_m", float("inf")))
@@ -1237,34 +1270,12 @@ def _run_episode(
 
     # Convert the desired bowl pose into an EEF waypoint using the measured
     # rigid grasp offset, avoiding hard-coded asset dimensions.
-    bowl_lo, _ = _world_aabb(env, TARGET)
-    bowl_origin_to_bottom = float(_body_pos(env, TARGET)[2] - bowl_lo[2])
-    _, plate_hi = _world_aabb(env, PLATE)
-    desired_bowl = _body_pos(env, PLATE).copy()
-    desired_bowl[0] += getattr(args, "place_offset_x", 0.0)
-    desired_bowl[1] += getattr(args, "place_offset_y", 0.0)
-    transport_desired_bowl = desired_bowl.copy()
-    transport_place_offset_x = getattr(args, "transport_place_offset_x", None)
-    transport_place_offset_y = getattr(args, "transport_place_offset_y", None)
-    if transport_place_offset_x is not None:
-        transport_desired_bowl[0] = (
-            _body_pos(env, PLATE)[0] + transport_place_offset_x
-        )
-    if transport_place_offset_y is not None:
-        transport_desired_bowl[1] = (
-            _body_pos(env, PLATE)[1] + transport_place_offset_y
-        )
+    desired_bowl, transport_desired_bowl = _goal_support_bowl_waypoints(
+        env, args
+    )
     require_support_contact = bool(
         getattr(args, "require_support_contact_before_release", False)
     )
-    if require_support_contact:
-        # Concave bowl / rimmed-plate AABBs are too coarse for the final
-        # release height. Stage above the support, then descend to real contact.
-        desired_bowl[2] = max(float(source[2]), float(_body_pos(env, PLATE)[2]))
-    else:
-        desired_bowl[2] = float(
-            plate_hi[2] + bowl_origin_to_bottom + args.release_clearance
-        )
     preplace_bowl = desired_bowl.copy()
     preplace_bowl[2] += args.preplace_height
     transport_preplace_bowl = transport_desired_bowl.copy()
@@ -1451,8 +1462,8 @@ def _run_episode(
                 )
     transport_stages.extend(
         [
-            ("translate_above_plate", transit_plate_bowl),
-            ("move_above_plate", transport_preplace_bowl),
+            ("translate_above_goal_support", transit_plate_bowl),
+            ("move_above_goal_support", transport_preplace_bowl),
         ]
     )
     for stage, bowl_waypoint in transport_stages:
@@ -1550,7 +1561,7 @@ def _run_episode(
             close_sign,
             step,
             args,
-            "center_above_plate",
+            "center_above_goal_support",
             tolerance=float(
                 getattr(
                     args,
