@@ -1023,11 +1023,15 @@ def command_status(args: argparse.Namespace) -> int:
             (
                 "source /etc/profile.d/modules.sh",
                 "module load slurm",
-                shell_join(("squeue", "-h", "-j", str(ledger["job_id"]), "-o", "%T")),
+                shell_join(
+                    ("squeue", "-h", "-j", str(ledger["job_id"]), "-o", "%T|%R")
+                ),
             )
         )
         result = _remote_capture(cfg, query)
-        state = result.stdout.strip() or "AWAITING_OUTPUT"
+        scheduler_output = result.stdout.strip()
+        state, _, reason = scheduler_output.partition("|")
+        state = state or "AWAITING_OUTPUT"
         classification = {
             "PENDING": "queued",
             "CONFIGURING": "queued",
@@ -1036,12 +1040,14 @@ def command_status(args: argparse.Namespace) -> int:
         }.get(state, "awaiting_output")
         ledger["classification"] = classification
         ledger["scheduler_state"] = state
+        ledger["scheduler_reason"] = reason
         ledger_path.write_text(
             json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
         print(
             f"[physcog-agent] job_id={ledger['job_id']} classification={classification} "
             f"scheduler_state={state}"
+            + (f" reason={reason}" if reason else "")
         )
         return 0
 
