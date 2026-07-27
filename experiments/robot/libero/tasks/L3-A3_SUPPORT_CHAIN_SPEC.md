@@ -380,6 +380,39 @@ counts, top-three image hashes, and report hash are bound in
 the task6 bowl-support family is permanently stopped, and no loading,
 dynamic, HDF5, VLA, smoke, or formal stage was run.
 
+### Pending native task6 cookie-carton support replacement
+
+This is a new mechanism, not a repair or continuation of the permanently
+stopped bowl-support family. It keeps the same exact task6 prompt, goal,
+assets, official source state, and policy-entry procedure. The roles are
+`S=akita_black_bowl_1_main`, `A=plate_1_main`, and
+`B=cookies_1_main`. S and the upright table-supported B remain bit-identical
+to their native policy-entry state, preserving “next to the cookie box.”
+Only A is placed on top of B.
+
+The single frozen static grid has 27 candidates. Its direction is centered on
+the native vector from S away toward B, rotated by `{−30, 0, +30}` degrees.
+A's radial offset from B is `{0, 0.008, 0.016}` m and its collision-lower
+embedding relative to B's collision top is `{−0.002, −0.001, 0}` m. Every
+candidate uses 240 controller-aware settle steps and the unchanged 80-step
+hold.
+
+The gate requires persistent force-bearing A-B top contact, B/S table support,
+A clear of the table, stable S/A/B poses, no S-A/S-B, fixture, other-object,
+or robot bypass contact, and the original goal false. S must retain top and
+side grasp space, and A must retain a safe top-loading approach plus side
+sector. S/A/B must have nonzero unclipped segmentation in both raw 256×256
+policy RGB and its exact center `[16:240,16:240]` 224×224 crop. Manual review
+must recognize B as an upright cookie carton, not a thin strip. At least one
+nonduplicate adjacent grid witness is required.
+
+Every physical PASS exports its raw-256 and actual-224 first-frame images for
+review; the top three B-visible candidates are indexed. This stage exports no
+HDF5 and does not load S, release support, run causal dynamics, safe reference,
+action replay, VLA, smoke, or formal evaluation. Contact, reachability,
+stability, or manual visual failure permanently stops this cookie-support
+candidate.
+
 ## Failed native-only task57 replacement
 
 The replacement preserved zero-indexed LIBERO-90 task ID 57 exactly:

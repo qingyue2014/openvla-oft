@@ -125,6 +125,13 @@ def test_l3a3_registry_separates_task1_export_from_physical_grid():
         "experiments/logs/"
         "l3a3_task6_plate_support_visibility_repair_static",
     )
+    cookie = PHASES[("l3a3", "task6_cookie_box_support_static")]
+    assert cookie.command[-1].endswith(
+        "probe_l3a3_task6_cookie_box_support_static.py"
+    )
+    assert cookie.artifacts == (
+        "experiments/logs/l3a3_task6_cookie_box_support_static",
+    )
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():

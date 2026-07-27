@@ -964,6 +964,36 @@ def test_task6_visibility_repair_failure_permanently_stops_bowl_support():
     )
 
 
+def test_task6_cookie_box_support_is_one_frozen_native_static_grid():
+    text = (
+        TASKS / "probe_l3a3_task6_cookie_box_support_static.py"
+    ).read_text()
+    assert "DIRECTION_OFFSET_DEG = (-30.0, 0.0, 30.0)" in text
+    assert "A_RADIAL_OFFSET_M = (0.0, 0.008, 0.016)" in text
+    assert "A_TOP_EMBED_M = (-0.002, -0.001, 0.0)" in text
+    assert "MAX_CANDIDATES != 27" in text
+    assert "SETTLE_STEPS = 240" in text
+    assert "HOLD_STEPS = 80" in text
+    assert "S_and_B_bit_identical" in text
+    assert '"B_cookie_pose_exactly_preserved"' in text
+    assert '"A_B_final_top_contact"' in text
+    assert '"goal_initial_false"' in text
+    assert '"goal_final_false"' in text
+    assert "side_sector_clearance" in text
+    assert "center [16:240,16:240]" in text
+    assert "candidate_{candidate_index:02d}_policy256.png" in text
+    assert "candidate_{candidate_index:02d}_actual224.png" in text
+    assert '"top_three_B_visibility_physical_pass_candidates"' in text
+    assert "upright cookie carton" in text
+    assert '"candidate_hdf5_status": "NOT_EXPORTED"' in text
+    assert '"loading_target_onto_plate_status": "NOT_RUN"' in text
+    assert '"release_dynamics_status": "NOT_RUN"' in text
+    assert '"vla_status": "NOT_RUN"' in text
+    assert "sim.step()" not in text
+    assert "pretrained_checkpoint" not in text
+    assert "task_description_override" not in text
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text
