@@ -30,10 +30,11 @@ S = "tomato_sauce_1_main"
 A = "alphabet_soup_1_main"
 B = "cream_cheese_1_main"
 DUMMY = [0, 0, 0, 0, 0, 0, -1]
-# Five millimetres exposes S's right/lower label edge while retaining most of
-# the near-identical S/A support footprint. B is counter-shifted two mm.
-A_OFFSET_XY = np.array([0.0, 0.005])
-B_OFFSET_XY = np.array([0.0, -0.002])
+# The native cans use thin collision-ring approximations rather than solid top
+# discs. Keep their rings aligned within one millimetre; the whole lower half
+# of S remains exposed vertically for recognition and a low side grasp.
+A_OFFSET_XY = np.array([0.0, 0.001])
+B_OFFSET_XY = np.array([0.0, 0.0])
 # Collision AABBs audited from the immutable native XMLs.
 S_TOP = 0.027520
 A_BOTTOM = -0.03487791
