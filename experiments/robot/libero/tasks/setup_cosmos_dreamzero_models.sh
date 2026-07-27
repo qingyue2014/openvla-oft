@@ -118,10 +118,31 @@ setup_cosmos() {
   test -x "${COSMOS_SOURCE_DEST}/.venv/bin/python"
   test -x "${LEGACY_LIBERO_PYTHON}"
   LEGACY_LIBERO_ASSETS="$("${LEGACY_LIBERO_PYTHON}" - <<'PY'
+import sys
 from pathlib import Path
+import libero.libero
 from libero.libero import get_libero_path
 
-print(Path(get_libero_path("assets")).resolve())
+module_root = Path(libero.libero.__file__).resolve().parent
+candidates = [
+    Path(get_libero_path("assets")).expanduser().resolve(),
+    module_root / "assets",
+    module_root.parent / "assets",
+]
+for candidate in dict.fromkeys(path.resolve() for path in candidates):
+    valid = all(
+        (candidate / subdir).is_dir()
+        for subdir in ("turbosquid_objects", "stable_scanned_objects")
+    )
+    print(
+        f"Legacy LIBERO asset candidate: {candidate} valid={valid}",
+        file=sys.stderr,
+    )
+    if valid:
+        print(candidate)
+        break
+else:
+    raise SystemExit("No canonical legacy LIBERO asset directory was found")
 PY
 )"
   test -d "${LEGACY_LIBERO_ASSETS}"
