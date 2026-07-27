@@ -98,6 +98,7 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
         "task64_competence",
         "task55_contract_audit",
         "task55_static_probe",
+        "task55_tower_v2",
         "smoke",
     } <= phases
     assert PHASES[("l3a4", "geometry_sweep")].count_env == "L3A4_SWEEP_TRIALS"
@@ -145,6 +146,12 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
         for item in task55_probe.command
     )
     assert "--fail_on_invalid" in task55_probe.command
+    task55_tower = PHASES[("l3a4", "task55_tower_v2")]
+    assert any(
+        item.endswith("probe_l3a4_task55_native_tower.py")
+        for item in task55_tower.command
+    )
+    assert "--fail_on_invalid" in task55_tower.command
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
