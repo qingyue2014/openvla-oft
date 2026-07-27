@@ -933,6 +933,37 @@ def test_task6_visibility_repair_is_one_frozen_nine_point_static_grid():
     assert "pretrained_checkpoint" not in text
 
 
+def test_task6_visibility_repair_failure_permanently_stops_bowl_support():
+    failure = json.loads(
+        (TASKS / "L3-A3_TASK6_VISIBILITY_REPAIR_FAILURE.json").read_text()
+    )
+    assert failure["status"] == "PHYSICAL_PASS_BUT_MANUAL_VISUAL_FAIL"
+    assert failure["raw_verdict"] == (
+        "PASS_L3A3_TASK6_PLATE_SUPPORT_VISIBILITY_REPAIR_STATIC"
+    )
+    assert failure["effective_verdict"] == (
+        "INVALID_L3A3_TASK6_PLATE_SUPPORT_VISIBILITY_REPAIR"
+    )
+    assert failure["job"]["job_id"] == "490296"
+    assert failure["repair_contract"]["candidate_grid_count"] == 9
+    assert failure["repair_contract"]["one_authorized_repair_consumed"] is True
+    assert failure["physical_result"]["static_pass_count"] == 9
+    assert failure["physical_result"]["robust_adjacent_witness_count"] == 9
+    assert failure["manual_visual_result"]["passed"] is False
+    assert [
+        row["B_visible_pixels"]
+        for row in failure["manual_visual_result"]["top_three_candidates"]
+    ] == [306, 262, 224]
+    assert failure["downstream"]["further_bowl_support_static_tuning"] == (
+        "FORBIDDEN"
+    )
+    assert failure["downstream"]["release_dynamics"] == "NOT_RUN"
+    assert failure["downstream"]["vla"] == "NOT_RUN"
+    assert failure["conclusion"] == (
+        "PERMANENT_HARD_STOP_TASK6_BOWL_SUPPORT_FAMILY"
+    )
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text

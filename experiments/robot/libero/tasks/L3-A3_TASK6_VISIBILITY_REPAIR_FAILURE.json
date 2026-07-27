@@ -1,0 +1,123 @@
+{
+  "status": "PHYSICAL_PASS_BUT_MANUAL_VISUAL_FAIL",
+  "raw_verdict": "PASS_L3A3_TASK6_PLATE_SUPPORT_VISIBILITY_REPAIR_STATIC",
+  "effective_verdict": "INVALID_L3A3_TASK6_PLATE_SUPPORT_VISIBILITY_REPAIR",
+  "job": {
+    "job_id": "490296",
+    "commit": "181ef991cad18bb46d5ce685ff1e32dbb36633a5",
+    "compute_node": "dgx-10",
+    "exit_code": 0
+  },
+  "repair_contract": {
+    "prior_job_id": "490268",
+    "prior_effective_verdict": "INVALID_L3A3_TASK6_PLATE_SUPPORT_POLICY_VIEW",
+    "candidate_grid_count": 9,
+    "radial_offset_m": [
+      0.012,
+      0.018,
+      0.024
+    ],
+    "lateral_offset_m": [
+      -0.003,
+      0.0,
+      0.003
+    ],
+    "exposure_direction_xy": [
+      0.7071067811865475,
+      -0.7071067811865475
+    ],
+    "A_rim_embed_m_fixed": -0.001,
+    "settle_steps": 240,
+    "hold_steps": 80,
+    "manual_gate": "B must be recognizable as a complete or mostly complete bowl, not only a thin arc or lower crescent.",
+    "one_authorized_repair_consumed": true
+  },
+  "physical_result": {
+    "static_pass_count": 9,
+    "automated_visibility_reachability_pass_count": 9,
+    "robust_adjacent_witness_count": 9,
+    "selected_radial_lateral_offset_m": [
+      0.024,
+      -0.003
+    ],
+    "selected_A_B_min_normal_force_N": 0.0522659735546549,
+    "selected_A_motion_m": 7.3173172581665e-07,
+    "selected_B_motion_m": 2.9716629216161707e-07,
+    "selected_forbidden_contacts_seen": false,
+    "selected_goal_remained_false": true
+  },
+  "manual_visual_result": {
+    "reviewer": "primary_root",
+    "passed": false,
+    "top_three_candidates": [
+      {
+        "candidate_index": 6,
+        "radial_lateral_offset_m": [
+          0.024,
+          -0.003
+        ],
+        "B_visible_pixels": 306,
+        "B_bbox_xyxy": [
+          49,
+          175,
+          84,
+          201
+        ],
+        "policy_png_sha256": "35f35f1a96eb89fa0171d79d8d482fe0f77fd3d452fc932539e16e8232af54b0"
+      },
+      {
+        "candidate_index": 7,
+        "radial_lateral_offset_m": [
+          0.024,
+          0.0
+        ],
+        "B_visible_pixels": 262,
+        "B_bbox_xyxy": [
+          48,
+          177,
+          84,
+          202
+        ],
+        "policy_png_sha256": "2cbb4b4021b8aaee6849b5ed2ea85f8ede90608a98d6deb5cc97f9dfec2fec1f"
+      },
+      {
+        "candidate_index": 8,
+        "radial_lateral_offset_m": [
+          0.024,
+          0.003
+        ],
+        "B_visible_pixels": 224,
+        "B_bbox_xyxy": [
+          46,
+          181,
+          83,
+          203
+        ],
+        "policy_png_sha256": "2aa6243d7b44d60b5fb123481fe4d8f451f0da8ee7404accf07684c2adab37b0"
+      }
+    ],
+    "failure_reason": "All three top policy images expose only the lower crescent or lower half of B beneath the plate. The support is more visible than in job 490268 but still is not a complete or mostly complete recognizable bowl as required by the frozen manual gate."
+  },
+  "artifacts": {
+    "report_json_sha256": "8b0fd70e742b536f96eaa41be8d5234ca32e53e3a148612c678a7195777ea031",
+    "report_json_bytes": 121607,
+    "selected_policy_png_sha256": "35f35f1a96eb89fa0171d79d8d482fe0f77fd3d452fc932539e16e8232af54b0",
+    "selected_role_mask_png_sha256": "1eb3e4a34886f19cf22c9803fed28dd600c0d7f948057ad168d8e99dc9511573",
+    "selected_segmentation_ids_npy_sha256": "d9b3b73a83308865bf05251dc01b8970bcb938f4e21379d4d28a1167e4e2433b",
+    "candidate_hdf5": "NOT_EXPORTED",
+    "local_run_ledger": ".physcog-agent/runs/20260727T052822Z-l3a3-task6_plate_support_visibility_repair_static"
+  },
+  "downstream": {
+    "further_bowl_support_static_tuning": "FORBIDDEN",
+    "loading_target_onto_plate": "NOT_RUN",
+    "release_dynamics": "NOT_RUN",
+    "causal_ablation": "NOT_RUN",
+    "safe_reference": "NOT_RUN",
+    "action_separation": "NOT_RUN",
+    "candidate_hdf5": "NOT_EXPORTED",
+    "vla": "NOT_RUN",
+    "smoke": "NOT_RUN",
+    "formal": "NOT_RUN"
+  },
+  "conclusion": "PERMANENT_HARD_STOP_TASK6_BOWL_SUPPORT_FAMILY"
+}

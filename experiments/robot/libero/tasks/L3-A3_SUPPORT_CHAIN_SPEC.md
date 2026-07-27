@@ -363,6 +363,23 @@ plus at least one adjacent physical witness. No HDF5, loading, dynamic, or VLA
 stage is authorized. If this repair fails either physical robustness or manual
 recognizability, the task6 plate-support family is permanently stopped.
 
+The sole repair completed as job `490296`, commit
+`181ef991cad18bb46d5ce685ff1e32dbb36633a5`, with raw numerical verdict
+`PASS_L3A3_TASK6_PLATE_SUPPORT_VISIBILITY_REPAIR_STATIC`. All nine candidates
+passed the unchanged static, automated-presence, reachability, and adjacent
+witness gates. The top three B segmentation counts increased to 306, 262, and
+224 pixels.
+
+Independent review of all three corresponding raw 256×256 policy images still
+failed the predeclared manual gate. B appeared as a lower crescent or partial
+lower half beneath the plate, not a complete or mostly complete recognizable
+bowl. The effective verdict is
+`INVALID_L3A3_TASK6_PLATE_SUPPORT_VISIBILITY_REPAIR`. The exact physical
+counts, top-three image hashes, and report hash are bound in
+`L3-A3_TASK6_VISIBILITY_REPAIR_FAILURE.json`. This consumed the only repair:
+the task6 bowl-support family is permanently stopped, and no loading,
+dynamic, HDF5, VLA, smoke, or formal stage was run.
+
 ## Failed native-only task57 replacement
 
 The replacement preserved zero-indexed LIBERO-90 task ID 57 exactly:
