@@ -178,6 +178,62 @@ def _state_slices(env: Any, body_name: str) -> tuple[int, int]:
     return 1 + qadr, 1 + int(env.sim.model.nq) + vadr
 
 
+def _restore_native_fixture_sample(
+    env: Any,
+    expected_support_xyz: np.ndarray,
+) -> dict[str, Any]:
+    """Replay the generator's sampled native cabinet pose in this env.
+
+    Fixed fixture poses are model state and are absent from MuJoCo's flattened
+    qpos/qvel state. The original BDDL samples the cabinet within a 2-cm native
+    region at environment construction. We therefore translate the native
+    cabinet root to the exact sampled pose recorded by the generator, without
+    changing its XML, orientation, geometry, or any condition-specific state.
+    """
+    model = env.sim.model
+    support_name = "white_cabinet_1_cabinet_bottom"
+    support_id = int(model.body_name2id(support_name))
+    root_id = support_id
+    while True:
+        parent = int(model.body_parentid[root_id])
+        parent_name = model.body_id2name(parent) or ""
+        if not parent_name.startswith("white_cabinet_1"):
+            break
+        root_id = parent
+    before = _body_pos(env, support_name)
+    delta = np.asarray(expected_support_xyz, dtype=float) - before
+    model.body_pos[root_id] = np.asarray(model.body_pos[root_id]) + delta
+    env.sim.forward()
+    after = _body_pos(env, support_name)
+    error = float(np.linalg.norm(after - expected_support_xyz))
+    if error > 1e-9:
+        raise RuntimeError(
+            "failed to restore exact native cabinet fixture sample: "
+            f"error={error:.3e}m"
+        )
+    env.reset()
+    after_reset = _body_pos(env, support_name)
+    reset_error = float(np.linalg.norm(after_reset - expected_support_xyz))
+    if reset_error > 1e-9:
+        raise RuntimeError(
+            "native fixture sample is not stable across environment reset: "
+            f"error={reset_error:.3e}m"
+        )
+    return {
+        "method": "restore_exact_generator_native_bddl_fixture_sample",
+        "root_body": model.body_id2name(root_id) or f"body_{root_id}",
+        "support_body": support_name,
+        "support_before_xyz_m": before.tolist(),
+        "support_expected_xyz_m": np.asarray(expected_support_xyz).tolist(),
+        "support_after_xyz_m": after.tolist(),
+        "support_after_reset_xyz_m": after_reset.tolist(),
+        "translation_m": delta.tolist(),
+        "restore_error_m": error,
+        "reset_restore_error_m": reset_error,
+        "condition_specific": False,
+    }
+
+
 def _patch_object(
     target: np.ndarray,
     source: np.ndarray,
@@ -309,7 +365,12 @@ def _prepare_native_states(
     env: Any,
     seed: int,
     max_attempts: int,
-) -> tuple[tuple[np.ndarray, np.ndarray, np.ndarray], tuple[int, int], tuple[int, int]]:
+) -> tuple[
+    tuple[np.ndarray, np.ndarray, np.ndarray],
+    tuple[int, int],
+    tuple[int, int],
+    dict[str, Any],
+]:
     generated = generate_states(
         str(bddl), "risk", "right", 1, seed,
         DEFAULT_LEAN_DX, DEFAULT_LEAN_DY, DEFAULT_LEAN_DZ,
@@ -337,7 +398,7 @@ def _prepare_native_states(
     eb = base.copy()
     if not outside_ab_exact((eb, er, ec), a_slice, b_slice):
         raise RuntimeError("generated states differ outside native A/B slices")
-    return (eb, er, ec), a_slice, b_slice
+    return (eb, er, ec), a_slice, b_slice, records[0]
 
 
 def run(args: argparse.Namespace) -> str:
@@ -350,8 +411,16 @@ def run(args: argparse.Namespace) -> str:
     )
     env.seed(args.seed)
     try:
-        states, a_slice, b_slice = _prepare_native_states(
+        states, a_slice, b_slice, generation_record = _prepare_native_states(
             bddl, env, args.seed, args.max_attempts
+        )
+        fixture_replay = _restore_native_fixture_sample(
+            env,
+            np.asarray([
+                generation_record["support_world_x_m"],
+                generation_record["support_world_y_m"],
+                generation_record["support_world_z_m"],
+            ]),
         )
         eb0, er0, ec0 = states
         native_b = eb0.copy()
@@ -467,6 +536,7 @@ def run(args: argparse.Namespace) -> str:
                 "B": TERMINAL_BODY,
             },
             "asset_audit": asset_audit,
+            "fixture_replay": fixture_replay,
             "state_pairing_outside_a_b_exact": True,
             "candidates_evaluated": len(rows),
             "passing_candidates": len(passing),
@@ -519,6 +589,8 @@ def run(args: argparse.Namespace) -> str:
             "and B moved back to its native reset pose.",
             "- No-bypass gate: no robot, wine-rack, or drawer-component contact may cause B.",
             "- BDDL/assets edited: **none**; serialized free-joint slices only.",
+            "- Fixed-fixture replay: exact generator native-BDDL cabinet sample, "
+            "shared by all conditions.",
             "- Policy rollout / policy-view / five-state family: **not run**.",
         ]
         if witness:

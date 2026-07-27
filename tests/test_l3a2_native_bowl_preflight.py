@@ -45,6 +45,8 @@ def test_native_preflight_has_no_custom_asset_or_bddl_writer():
     assert "PHYSCOG_L3A2" not in source
     assert "write_bytes" not in source
     assert "write_text" in source  # reports only
+    assert "model.body_pos[root_id]" in source
+    assert '"condition_specific": False' in source
     tree = ast.parse(source)
     imports = {
         alias.name
