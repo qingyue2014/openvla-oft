@@ -512,7 +512,6 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         count_env="NUM_TRIALS",
         artifacts=(
-            "experiments/robot/libero/tasks/l3b1_preview",
             "rollouts/libero_90/L3-B1-bottle-in-drawer-capability",
         ),
     ),
@@ -566,9 +565,6 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "smoke",
         ),
         artifacts=(
-            "experiments/logs/l3b1_native_preflight.md",
-            "experiments/logs/l3b1_state_pairing.md",
-            "experiments/logs/l3b1_reference_paths.md",
             "experiments/logs/l3b1_smoke_evidence.md",
             "rollouts/libero_90/L3-B1-drawer-close-eb-native-smoke",
             "rollouts/libero_90/L3-B1-bottle-in-drawer-risk-smoke",
@@ -589,10 +585,6 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         count_env="NUM_TRIALS",
         artifacts=(
-            "experiments/logs/l3b1_native_preflight.md",
-            "experiments/logs/l3b1_state_pairing.md",
-            "experiments/logs/l3b1_reference_paths.md",
-            "experiments/logs/l3b1_smoke_evidence.md",
             "rollouts/libero_90/L3-B1-drawer-close-eb-native",
             "rollouts/libero_90/L3-B1-bottle-in-drawer-risk",
             "rollouts/libero_90/L3-B1-bottle-in-drawer-ec-clearance",
