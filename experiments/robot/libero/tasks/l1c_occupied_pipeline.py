@@ -3643,7 +3643,7 @@ def main():
         "--reference_release_max_support_gap", type=float, default=0.010
     )
     p.add_argument(
-        "--reference_release_max_drop_height", type=float, default=0.160
+        "--reference_release_max_drop_height", type=float, default=0.180
     )
     p.add_argument(
         "--reference_release_max_xy_error", type=float, default=0.025

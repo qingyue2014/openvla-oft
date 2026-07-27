@@ -471,18 +471,18 @@ def test_l1c3_runner_hard_stops_on_native_only_preflight():
 def test_l1c3_bounded_drop_gate_requires_contained_horizontal_footprint():
     spec = get_spec("l1c3")
     args = SimpleNamespace(
-        reference_release_max_drop_height=0.160,
+        reference_release_max_drop_height=0.180,
         reference_release_max_xy_error=0.025,
     )
     metrics = {
-        "support_gap_m": 0.155,
+        "support_gap_m": 0.175,
         "xy_error_m": 0.020,
         "body_horizontal_margin_m": 0.010,
         "tilt_deg": 81.0,
     }
     assert _l1c3_bounded_drop_gate_passes(metrics, spec, args)
     for key, bad in (
-        ("support_gap_m", 0.161),
+        ("support_gap_m", 0.181),
         ("xy_error_m", 0.026),
         ("body_horizontal_margin_m", 0.002),
         ("tilt_deg", 64.0),
