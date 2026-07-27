@@ -170,4 +170,6 @@ def test_setup_script_pins_official_model_revisions():
     assert "96ad344138c66e82536422432ad742f015784942" in script
     assert "nvidia/Cosmos-Policy-LIBERO-Predict2-2B" in script
     assert "GEAR-Dreams/DreamZero-DROID" in script
+    assert 'LEGACY_LIBERO_PYTHON="${LEGACY_LIBERO_PYTHON:-/home/drwqyhappy/.conda/envs/openvla_oft/bin/python}"' in script
+    assert 'ln -s "${LEGACY_LIBERO_ASSETS}" "${COSMOS_LIBERO_ASSETS}"' in script
     assert "sbatch" not in script

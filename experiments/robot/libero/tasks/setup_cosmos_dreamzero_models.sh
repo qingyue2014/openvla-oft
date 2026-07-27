@@ -23,6 +23,7 @@ COSMOS_BASE_REPO_ID="nvidia/Cosmos-Predict2-2B-Video2World"
 COSMOS_BASE_REVISION="f50c09f5d8ab133a90cac3f4886a6471e9ba3f18"
 COSMOS_BASE_DEST="${MODEL_ROOT}/Cosmos-Predict2-2B-Video2World"
 COSMOS_TOKENIZER_FILE="tokenizer/tokenizer.pth"
+LEGACY_LIBERO_PYTHON="${LEGACY_LIBERO_PYTHON:-/home/drwqyhappy/.conda/envs/openvla_oft/bin/python}"
 
 DREAMZERO_REPO_ID="GEAR-Dreams/DreamZero-DROID"
 DREAMZERO_REVISION="96ad344138c66e82536422432ad742f015784942"
@@ -115,6 +116,32 @@ setup_cosmos() {
     "${UV[@]}" sync --extra cu128 --group libero --python 3.10
   )
   test -x "${COSMOS_SOURCE_DEST}/.venv/bin/python"
+  test -x "${LEGACY_LIBERO_PYTHON}"
+  LEGACY_LIBERO_ASSETS="$("${LEGACY_LIBERO_PYTHON}" - <<'PY'
+from pathlib import Path
+from libero.libero import get_libero_path
+
+print(Path(get_libero_path("assets")).resolve())
+PY
+)"
+  test -d "${LEGACY_LIBERO_ASSETS}"
+  COSMOS_LIBERO_ASSETS="$("${COSMOS_SOURCE_DEST}/.venv/bin/python" - <<'PY'
+from pathlib import Path
+import libero.libero
+
+print(Path(libero.libero.__file__).resolve().parent / "assets")
+PY
+)"
+  if [[ -L "${COSMOS_LIBERO_ASSETS}" ]]; then
+    test "$(readlink -f "${COSMOS_LIBERO_ASSETS}")" = "${LEGACY_LIBERO_ASSETS}"
+  elif [[ -e "${COSMOS_LIBERO_ASSETS}" ]]; then
+    echo "Refusing to replace existing Cosmos LIBERO assets: ${COSMOS_LIBERO_ASSETS}" >&2
+    exit 4
+  else
+    ln -s "${LEGACY_LIBERO_ASSETS}" "${COSMOS_LIBERO_ASSETS}"
+  fi
+  test -d "${COSMOS_LIBERO_ASSETS}/turbosquid_objects"
+  test -d "${COSMOS_LIBERO_ASSETS}/stable_scanned_objects"
   "${COSMOS_SOURCE_DEST}/.venv/bin/python" - <<'PY'
 import pathlib
 import site
@@ -129,7 +156,8 @@ PY
   "${COSMOS_SOURCE_DEST}/.venv/bin/python" - \
     "${COSMOS_SOURCE_DEST}/cosmos_superpod_setup.json" \
     "${COSMOS_BASE_DEST}/${COSMOS_TOKENIZER_FILE}" \
-    "${COSMOS_BASE_REPO_ID}" "${COSMOS_BASE_REVISION}" <<'PY'
+    "${COSMOS_BASE_REPO_ID}" "${COSMOS_BASE_REVISION}" \
+    "${COSMOS_LIBERO_ASSETS}" "${LEGACY_LIBERO_ASSETS}" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -164,6 +192,11 @@ path.write_text(
         {
             "cosmos_policy": module_location(cosmos_policy),
             "libero": module_location(libero),
+            "libero_assets": {
+                "package_path": str(pathlib.Path(sys.argv[5])),
+                "source_path": str(pathlib.Path(sys.argv[6])),
+                "resolved_path": str(pathlib.Path(sys.argv[5]).resolve()),
+            },
             "python": str(pathlib.Path(__import__("sys").executable).resolve()),
             "torch": torch.__version__,
             "tokenizer": {
@@ -189,6 +222,7 @@ PY
   printf 'COSMOS_SOURCE_REVISION=%s\n' "${COSMOS_SOURCE_REVISION}"
   printf 'COSMOS_BASE_REVISION=%s\n' "${COSMOS_BASE_REVISION}"
   printf 'COSMOS_TOKENIZER=%s\n' "${COSMOS_BASE_DEST}/${COSMOS_TOKENIZER_FILE}"
+  printf 'COSMOS_LIBERO_ASSETS=%s\n' "${COSMOS_LIBERO_ASSETS}"
   printf 'COSMOS_PYTHON=%s\n' "${COSMOS_SOURCE_DEST}/.venv/bin/python"
 }
 

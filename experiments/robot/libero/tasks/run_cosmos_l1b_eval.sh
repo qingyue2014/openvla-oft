@@ -66,6 +66,16 @@ test -s "${CHECKPOINT}/libero_t5_embeddings.pkl"
 test -d "${COSMOS_SOURCE_ROOT}/.git"
 test "$(git -C "${COSMOS_SOURCE_ROOT}" rev-parse HEAD)" = "${COSMOS_SOURCE_REVISION}"
 test -x "${COSMOS_PYTHON}"
+COSMOS_LIBERO_ASSETS="$("${COSMOS_PYTHON}" - <<'PY'
+from pathlib import Path
+from libero.libero import get_assets_path
+
+print(Path(get_assets_path()).resolve())
+PY
+)"
+test -d "${COSMOS_LIBERO_ASSETS}/turbosquid_objects"
+test -d "${COSMOS_LIBERO_ASSETS}/stable_scanned_objects"
+printf 'Cosmos LIBERO assets: %s\n' "${COSMOS_LIBERO_ASSETS}"
 
 export PATH="$(dirname "${COSMOS_PYTHON}"):${PATH}"
 COSMOS_SITE_PACKAGES="$("${COSMOS_PYTHON}" - <<'PY'
