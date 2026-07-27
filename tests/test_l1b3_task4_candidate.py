@@ -140,6 +140,9 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "max_penetration_step" in text
     assert "--avoidance_clearance_radial_distances" in text
     assert "--max_avoidance_refinement_candidates" in text
+    assert "--start_episode" in text
+    assert "if episode < args.start_episode:" in text
+    assert 'metadata["pairs"][int(row["episode_idx"])]' in text
 
 
 def test_html_native_wine_pose_is_first_task4_regression_anchor():

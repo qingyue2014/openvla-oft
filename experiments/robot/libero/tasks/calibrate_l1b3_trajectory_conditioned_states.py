@@ -1071,6 +1071,8 @@ def calibrate(args: argparse.Namespace) -> str:
             env.sim, obstacle, candidate_spec
         )
         for episode, eb_state in enumerate(eb_states):
+            if episode < args.start_episode:
+                continue
             trajectory = trajectories.get(episode)
             successful_eb = bool(
                 trajectory and trajectory["metadata"].get("success", False)
@@ -1779,7 +1781,8 @@ def calibrate(args: argparse.Namespace) -> str:
 
     pairing_path = Path(args.pairing_json)
     metadata = json.loads(pairing_path.read_text())
-    for row, pair in zip(rows, metadata["pairs"]):
+    for row in rows:
+        pair = metadata["pairs"][int(row["episode_idx"])]
         pair["trajectory_conditioned_risk"] = bool(row["calibrated"])
         pair["trajectory_path_step"] = row["path_step"]
         pair["trajectory_link"] = row["proposed_link"]
@@ -1858,6 +1861,7 @@ def calibrate(args: argparse.Namespace) -> str:
             for anchor in _xy_offsets(args.absolute_risk_anchors_xy)
         ],
         "avoidance_trajectories": args.avoidance_trajectories,
+        "start_episode": args.start_episode,
         "absolute_anchors_only": bool(args.absolute_anchors_only),
         "serialized_er_anchor_first": bool(
             args.serialized_er_anchor_first
@@ -1973,6 +1977,15 @@ def main() -> None:
     )
     parser.add_argument("--task_suite_name", default="libero_goal")
     parser.add_argument("--task_id", type=int, default=8)
+    parser.add_argument(
+        "--start_episode",
+        type=int,
+        default=0,
+        help=(
+            "Skip lower source-pool episode indices while preserving their "
+            "original indices in selected-state and pairing provenance."
+        ),
+    )
     parser.add_argument("--min_grasp_lift", type=float, default=0.020)
     parser.add_argument(
         "--max_goal_region_distance",
