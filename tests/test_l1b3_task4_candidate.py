@@ -130,6 +130,11 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "pool_yield >= args.min_activation_rate" in text
     assert "if not text.strip():" in text
     assert "return []" in text
+    assert "--avoidance_trajectories" in text
+    assert "avoidance_checked_candidates" in text
+    assert "avoidance_rejected_candidates" in text
+    assert 'not any(avoidance_replay["hits"].values())' in text
+    assert "This is a preformal screen" in text
 
 
 def test_html_native_wine_pose_is_first_task4_regression_anchor():

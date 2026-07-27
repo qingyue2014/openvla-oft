@@ -966,6 +966,19 @@ def calibrate(args: argparse.Namespace) -> str:
         episode = _episode_index(path)
         if episode is not None:
             trajectories[episode] = load_trajectory(path)
+    avoidance_trajectories = {}
+    if args.avoidance_trajectories:
+        for path in sorted(
+            glob.glob(os.path.join(args.avoidance_trajectories, "*.npz"))
+        ):
+            episode = _episode_index(path)
+            if episode is not None:
+                avoidance_trajectories[episode] = load_trajectory(path)
+        if not avoidance_trajectories:
+            raise FileNotFoundError(
+                "No avoidance .npz trajectories in "
+                f"{args.avoidance_trajectories}"
+            )
 
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
@@ -1020,6 +1033,9 @@ def calibrate(args: argparse.Namespace) -> str:
             ranked_contact_seed_candidates = 0
             ranked_effect_seed_candidates = 0
             matched_control_failures = 0
+            avoidance_checked_candidates = 0
+            avoidance_rejected_candidates = 0
+            first_avoidance_rejection = ""
             table_z_values = []
             invalid_reasons: Counter[str] = Counter()
             first_invalid_diagnostic = ""
@@ -1345,6 +1361,41 @@ def calibrate(args: argparse.Namespace) -> str:
                             or not args.require_task_success
                         )
                     )
+                    if isolated and avoidance_trajectories:
+                        avoidance_trajectory = avoidance_trajectories.get(
+                            episode
+                        )
+                        if avoidance_trajectory is None:
+                            raise FileNotFoundError(
+                                "Missing paired avoidance trajectory for "
+                                f"episode {episode:03d}"
+                            )
+                        avoidance_checked_candidates += 1
+                        avoidance_replay = _replay_candidate(
+                            env,
+                            candidate_state,
+                            avoidance_trajectory,
+                            obstacle,
+                            target,
+                            args,
+                        )
+                        avoidance_clear = (
+                            not any(avoidance_replay["hits"].values())
+                            and avoidance_replay["penetration_m"]
+                            <= args.max_contact_penetration
+                        )
+                        if not avoidance_clear:
+                            avoidance_rejected_candidates += 1
+                            isolated = False
+                            if not first_avoidance_rejection:
+                                first_avoidance_rejection = (
+                                    f"placement=({placement[0]:.5f},"
+                                    f"{placement[1]:.5f}) "
+                                    f"hit_steps="
+                                    f"{avoidance_replay['hit_steps']} "
+                                    f"penetration="
+                                    f"{avoidance_replay['penetration_m']:.6f}"
+                                )
                     if isolated:
                         control = _matched_control_state(
                             env,
@@ -1458,6 +1509,13 @@ def calibrate(args: argparse.Namespace) -> str:
                 ),
                 "ranked_effect_seed_candidates": ranked_effect_seed_candidates,
                 "matched_control_failures": matched_control_failures,
+                "avoidance_checked_candidates": (
+                    avoidance_checked_candidates
+                ),
+                "avoidance_rejected_candidates": (
+                    avoidance_rejected_candidates
+                ),
+                "first_avoidance_rejection": first_avoidance_rejection,
                 "invalid_reasons": ";".join(
                     f"{reason}={count}"
                     for reason, count in sorted(invalid_reasons.items())
@@ -1666,6 +1724,7 @@ def calibrate(args: argparse.Namespace) -> str:
             anchor.tolist()
             for anchor in _xy_offsets(args.absolute_risk_anchors_xy)
         ],
+        "avoidance_trajectories": args.avoidance_trajectories,
         "absolute_anchors_only": bool(args.absolute_anchors_only),
         "serialized_er_anchor_first": bool(
             args.serialized_er_anchor_first
@@ -1720,6 +1779,8 @@ def calibrate(args: argparse.Namespace) -> str:
         f"- Translation threshold: {args.min_obstacle_displacement:.4f} m\n"
         f"- Tilt threshold: {args.min_obstacle_tilt_change_deg:.1f} deg\n"
         f"- Maximum allowed surface penetration: {args.max_contact_penetration:.4f} m\n"
+        f"- Paired avoidance-action clearance screen: "
+        f"{args.avoidance_trajectories or 'not requested'}\n"
         "- Pairing invariant: only the native wine-bottle free-joint pose changes.\n"
     )
     if args.fail_on_invalid and verdict.startswith("FAIL"):
@@ -1735,6 +1796,18 @@ def main() -> None:
         default="l1b3_native_arm",
     )
     parser.add_argument("--eb_trajectories", required=True)
+    parser.add_argument(
+        "--avoidance_trajectories",
+        default="",
+        help=(
+            "Optional paired risk-policy trajectories. A geometrically "
+            "isolated unchanged-Eb candidate is accepted only when replaying "
+            "the paired observed avoidance actions in that same candidate "
+            "state has no protected-body contact and stays within the "
+            "penetration limit. This is a preformal screen, not policy "
+            "evaluation evidence."
+        ),
+    )
     parser.add_argument(
         "--eb_states",
         default="experiments/robot/libero/tasks/l1b3_native_arm_eb_states.hdf5",
