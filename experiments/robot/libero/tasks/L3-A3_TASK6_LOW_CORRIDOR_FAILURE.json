@@ -1,0 +1,106 @@
+{
+  "status": "INVALID_STATIC_PHYSICAL_FEASIBILITY_GATE",
+  "raw_verdict": "FAIL_L3A3_TASK6_LOW_CORRIDOR_STATIC",
+  "effective_verdict": "HARD_STOP_L3A3_TASK6_LOW_CORRIDOR",
+  "job": {
+    "job_id": "490343",
+    "commit": "6538789eb26854ec9c130277724c60657a2a8c9a",
+    "compute_node": "dgx-26",
+    "exit_code": 1,
+    "helper_classification": "validator_bug",
+    "helper_classification_note": "The helper did not extract the fail-closed verdict before classifying the nonzero exit. The raw log and hash-bound report explicitly record FAIL_L3A3_TASK6_LOW_CORRIDOR_STATIC, so this is a scene-gate failure, not authorization to rerun."
+  },
+  "contract": {
+    "suite": "libero_spatial",
+    "task_id_zero_based": 6,
+    "policy_prompt": "pick up the black bowl next to the cookie box and place it on the plate",
+    "prompt_override": null,
+    "raw_source_state_sha256": "d81530779b15be6bdfe4935a7a802102e3e3883823b29fefd40a2131e50fd515",
+    "candidate_grid_count": 27,
+    "path_fraction": [
+      0.35,
+      0.45,
+      0.55
+    ],
+    "A_lateral_offset_m": [
+      -0.01,
+      0.0,
+      0.01
+    ],
+    "A_B_collision_surface_gap_m": [
+      0.002,
+      0.005,
+      0.008
+    ],
+    "settle_steps": 240,
+    "hold_steps": 80,
+    "one_authorized_static_run_consumed": true,
+    "candidate_hdf5": "NOT_EXPORTED"
+  },
+  "physical_result": {
+    "static_pass_count": 0,
+    "geometry_gate_pass_count": 0,
+    "stability_gate_pass_count": 14,
+    "robust_adjacent_witness_count": 0,
+    "all_native_S_cookies_plate_exact_count": 27,
+    "goal_initial_false_count": 27,
+    "goal_final_false_count": 27,
+    "high_lift_100mm_clearance_pass_count": 27,
+    "S_top_approach_pass_count": 27,
+    "S_side_grasp_pass_count": 27,
+    "native_plate_top_approach_pass_count": 8,
+    "native_plate_side_approach_pass_count": 27,
+    "positive_A_B_gap_after_hold_count": 10,
+    "A_B_gap_within_1mm_tolerance_count": 1,
+    "B_downstream_before_plate_count": 13,
+    "persistent_support_counts": {
+      "S_table": 24,
+      "A_table": 0,
+      "B_table": 9,
+      "cookies_table": 24,
+      "plate_table": 27
+    },
+    "forbidden_contact_candidate_counts": {
+      "S_A": 3,
+      "S_B": 0,
+      "A_B": 1,
+      "A_cookies": 3,
+      "B_cookies": 2,
+      "A_plate": 0,
+      "B_plate": 20,
+      "A_stove": 0,
+      "B_stove": 0,
+      "robot_relevant": 0
+    },
+    "failure_summary": "No candidate preserved the required physical geometry. A never retained the required table-contact predicate, B retained table support in only 9/27 candidates, only 1/27 retained its frozen A-B gap within 1 mm, and 20/27 developed forbidden B-plate contact."
+  },
+  "visual_result": {
+    "automated_raw256_actual224_presence_pass_count": 11,
+    "manual_review": "NOT_RUN_NO_ROBUST_PHYSICAL_CANDIDATE",
+    "selected_policy_images": "NOT_EXPORTED_NO_ROBUST_CANDIDATE",
+    "physical_and_visual_validity_reported_separately": true
+  },
+  "artifacts": {
+    "report_json_sha256": "93ea7ebc5188ada90f3658d1498b16c70657fca6c372f35c2bb90ca391eff517",
+    "report_json_bytes": 507707,
+    "remote_log_sha256": "00755b68282b62b6c4753d66698e357baf202fe423092f71014e6515902e29c6",
+    "remote_log_bytes": 3229,
+    "candidate_hdf5": "NOT_EXPORTED",
+    "local_run_ledger": ".physcog-agent/runs/20260727T055915Z-l3a3-task6_low_corridor_static"
+  },
+  "downstream": {
+    "further_tuning_or_resubmission_of_this_27_grid": "FORBIDDEN",
+    "manual_policy_view_review": "NOT_RUN_NO_ROBUST_PHYSICAL_CANDIDATE",
+    "target_transport": "NOT_RUN",
+    "impact_chain": "NOT_RUN",
+    "release_dynamics": "NOT_RUN",
+    "causal_ablation": "NOT_RUN",
+    "safe_reference": "NOT_RUN",
+    "action_separation": "NOT_RUN",
+    "candidate_hdf5": "NOT_EXPORTED",
+    "vla": "NOT_RUN",
+    "smoke": "NOT_RUN",
+    "formal": "NOT_RUN"
+  },
+  "conclusion": "PERMANENT_HARD_STOP_TASK6_LOW_CORRIDOR_GRID"
+}

@@ -1056,6 +1056,46 @@ def test_task6_low_corridor_is_one_frozen_native_static_grid():
     assert "task_description_override" not in text
 
 
+def test_task6_low_corridor_job490343_is_permanent_physical_hard_stop():
+    failure = json.loads(
+        (TASKS / "L3-A3_TASK6_LOW_CORRIDOR_FAILURE.json").read_text()
+    )
+    assert failure["status"] == "INVALID_STATIC_PHYSICAL_FEASIBILITY_GATE"
+    assert failure["raw_verdict"] == (
+        "FAIL_L3A3_TASK6_LOW_CORRIDOR_STATIC"
+    )
+    assert failure["job"]["job_id"] == "490343"
+    assert failure["job"]["commit"] == (
+        "6538789eb26854ec9c130277724c60657a2a8c9a"
+    )
+    assert failure["contract"]["candidate_grid_count"] == 27
+    assert failure["contract"]["one_authorized_static_run_consumed"] is True
+    physical = failure["physical_result"]
+    assert physical["static_pass_count"] == 0
+    assert physical["geometry_gate_pass_count"] == 0
+    assert physical["stability_gate_pass_count"] == 14
+    assert physical["robust_adjacent_witness_count"] == 0
+    assert physical["high_lift_100mm_clearance_pass_count"] == 27
+    assert physical["persistent_support_counts"]["A_table"] == 0
+    assert physical["persistent_support_counts"]["B_table"] == 9
+    assert physical["A_B_gap_within_1mm_tolerance_count"] == 1
+    assert physical["forbidden_contact_candidate_counts"]["B_plate"] == 20
+    assert failure["visual_result"]["manual_review"] == (
+        "NOT_RUN_NO_ROBUST_PHYSICAL_CANDIDATE"
+    )
+    assert failure["artifacts"]["report_json_sha256"] == (
+        "93ea7ebc5188ada90f3658d1498b16c70657fca6c372f35c2bb90ca391eff517"
+    )
+    assert failure["downstream"][
+        "further_tuning_or_resubmission_of_this_27_grid"
+    ] == "FORBIDDEN"
+    assert failure["downstream"]["target_transport"] == "NOT_RUN"
+    assert failure["downstream"]["vla"] == "NOT_RUN"
+    assert failure["conclusion"] == (
+        "PERMANENT_HARD_STOP_TASK6_LOW_CORRIDOR_GRID"
+    )
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text

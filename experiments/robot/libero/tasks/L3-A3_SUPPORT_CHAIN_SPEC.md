@@ -763,3 +763,20 @@ frame only: target transport, impact dynamics, causal ablation, HDF5, VLA,
 smoke, and formal evaluation remain forbidden. One Superpod run is
 authorized. Any physical or manual visual failure hard-stops this candidate
 grid.
+
+Job `490343` consumed that one authorized static run at commit `6538789`.
+Its raw verdict is `FAIL_L3A3_TASK6_LOW_CORRIDOR_STATIC`: 0/27 candidates
+passed the full static gate, 0/27 passed geometry, and no adjacent witness
+exists. Although all 27 preserved exact native S/cookies/plate and passed the
+100 mm diagnostic high-lift route, A retained the required table-contact
+predicate in 0/27, B retained table support in 9/27, only one candidate kept
+the A-B gap within 1 mm after hold, and 20/27 developed forbidden B-plate
+contact. Automated raw256/actual224 presence passed 11/27, but manual visual
+review is not run because there is no robust physical candidate and no
+selected image was exported.
+
+The remote helper labeled the nonzero fail-closed exit `validator_bug` because
+it did not extract the printed verdict; this does not override the explicit
+FAIL in the raw log and hash-bound report. This frozen 27-point low-corridor
+grid is permanently stopped. No retuning, resubmission, target transport,
+impact dynamics, HDF5, VLA, smoke, or formal evaluation is authorized.
