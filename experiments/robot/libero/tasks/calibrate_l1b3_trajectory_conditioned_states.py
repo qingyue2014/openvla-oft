@@ -889,6 +889,19 @@ def _rewrite_selected_trajectories(
     return pool_dir
 
 
+def _write_calibration_csv(path: Path, rows: list[dict]) -> None:
+    """Atomically checkpoint completed episodes for long remote searches."""
+    if not rows:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+    temporary.replace(path)
+
+
 def calibrate(args: argparse.Namespace) -> str:
     global INTENDED_LINKS, OTHER_ARM_LINKS
     spec = dict(FAMILIES[args.family])
@@ -1421,6 +1434,7 @@ def calibrate(args: argparse.Namespace) -> str:
                 ),
             }
             rows.append(row)
+            _write_calibration_csv(Path(args.out_csv), rows)
             if selected is not None:
                 selected_indices.append(episode)
             print(
@@ -1488,12 +1502,7 @@ def calibrate(args: argparse.Namespace) -> str:
         _save_hdf5(Path(args.ec_states), task.language, output_ec_states)
         pool_trajectory_dir = None
 
-    out_csv = Path(args.out_csv)
-    out_csv.parent.mkdir(parents=True, exist_ok=True)
-    with out_csv.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
+    _write_calibration_csv(Path(args.out_csv), rows)
 
     pairing_path = Path(args.pairing_json)
     metadata = json.loads(pairing_path.read_text())

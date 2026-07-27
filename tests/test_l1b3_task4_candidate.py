@@ -100,6 +100,8 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "ranked_contact_seed_candidates" in text
     assert "ranked_effect_seed_candidates" in text
     assert "best_contact_diagnostic" in text
+    assert "def _write_calibration_csv(" in text
+    assert "temporary.replace(path)" in text
     assert "Qualification pool physics-qualified Eb" in text
     assert "Qualification pool isolated link7 consequences" in text
     assert "0.00025,0.0005,0.00075" in text
