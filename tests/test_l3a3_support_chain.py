@@ -424,6 +424,30 @@ def test_task1_eb_binding_distinguishes_suite_prompt_from_bddl_language():
     )
 
 
+def test_task1_physical_failure_separates_validator_bug_from_real_gate():
+    failure = json.loads(
+        (TASKS / "L3-A3_TASK1_PHYSICAL_FAILURE.json").read_text()
+    )
+    assert failure["status"] == "INVALID_PHYSICAL_GATE"
+    assert failure["invalid_validator_job"]["job_id"] == "490152"
+    assert failure["invalid_validator_job"]["status"] == (
+        "INVALID_VALIDATOR_BUG"
+    )
+    assert failure["physical_job"]["job_id"] == "490155"
+    assert failure["bounded_search"]["candidate_count"] == 144
+    assert failure["bounded_search"]["static_pass_count"] == 0
+    assert failure["bounded_search"]["persistent_S_A_count"] == 0
+    assert failure["bounded_search"]["full_pass_count"] == 0
+    assert failure["bounded_search"]["robust_adjacent_witness_count"] == 0
+    assert failure["artifacts"]["candidate_hdf5"] == (
+        "NOT_EXPORTED_DUE_PHYSICAL_FAILURE"
+    )
+    assert set(failure["downstream_gates"].values()) == {
+        "NOT_RUN",
+        "NOT_RUN_NO_STATIC_ELIGIBLE_CANDIDATE",
+    }
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text

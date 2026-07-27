@@ -1,0 +1,62 @@
+{
+  "schema": "l3a3_task1_physical_failure_v1",
+  "status": "INVALID_PHYSICAL_GATE",
+  "verdict": "FAIL_L3A3_TASK1_LEANING_CHAIN_ONE_STATE_PHYSICAL",
+  "invalid_validator_job": {
+    "job_id": "490152",
+    "commit": "c4e65be504a770efe9eca3f094e8062eab583c61",
+    "status": "INVALID_VALIDATOR_BUG",
+    "reason": "BDDL fixture label main_table was not the compiled MuJoCo body table.",
+    "run_json_sha256": "55b5aa246182f419311b2ecce3e4696007e961a877112e4731fc8b7ae47ad3b1",
+    "remote_log_sha256": "11476dfb8987cec8361a64a66712331c2ac3e00c178901d2657a0b0eb5078941"
+  },
+  "physical_job": {
+    "job_id": "490155",
+    "commit": "a00ea8005ba70d286670ea483d80ac76dc9c8ec8",
+    "ledger": ".physcog-agent/runs/20260727T040620Z-l3a3-task1_leaning_chain_one",
+    "run_json_sha256": "a96dd022f203c436bbdc430cb093cbf25745f00bb36d615c53eeb48d75657f7d",
+    "remote_log_sha256": "384d79b9a761d940f80e69a4fba1b4df3eb11e4f4690ac2d2273e030fd062741",
+    "report_json_sha256": "f98a8ac5a5b2634c5bc59b4e10b6e87d9b51266be60a632799dffcfa0c9799c7",
+    "report_md_sha256": "851fb17c836abbb132469dea80c1cca1c85f99febaaaefd1a19dd2476eb75188"
+  },
+  "contract": {
+    "suite": "libero_spatial",
+    "task_id": 1,
+    "policy_prompt": "pick up the black bowl next to the ramekin and place it on the plate",
+    "prompt_override": null,
+    "native_only_roles": {
+      "S": "akita_black_bowl_1_main",
+      "A": "cookies_1_main",
+      "B": "akita_black_bowl_2_main",
+      "goal": "plate_1_main",
+      "landmark": "glazed_rim_porcelain_ramekin_1_main"
+    },
+    "eb_binding_sha256": "738e2c49d4f5b704120c15827ad2bd0759f05686db9eb278033da42f3ffd848b"
+  },
+  "bounded_search": {
+    "candidate_limit": 144,
+    "candidate_count": 144,
+    "static_pass_count": 0,
+    "persistent_S_A_count": 0,
+    "persistent_A_table_count": 128,
+    "full_pass_count": 0,
+    "robust_adjacent_witness_count": 0,
+    "S_hold_motion_min_m": 0.022529006533741555,
+    "S_hold_motion_max_m": 0.07474086595373296
+  },
+  "artifacts": {
+    "candidate_hdf5": "NOT_EXPORTED_DUE_PHYSICAL_FAILURE",
+    "policy_png": "NOT_EXPORTED_DUE_PHYSICAL_FAILURE",
+    "passive_video": "NOT_EXPORTED_DUE_PHYSICAL_FAILURE"
+  },
+  "downstream_gates": {
+    "S_removal_chain": "NOT_RUN_NO_STATIC_ELIGIBLE_CANDIDATE",
+    "causal_ablations": "NOT_RUN_NO_STATIC_ELIGIBLE_CANDIDATE",
+    "vla": "NOT_RUN",
+    "safe_reference": "NOT_RUN",
+    "unchanged_eb_replay": "NOT_RUN",
+    "smoke": "NOT_RUN",
+    "formal": "NOT_RUN"
+  },
+  "runner_classification_note": "The physical job's wrapper label validator_bug denotes the intentional nonzero exit after a fail-closed physical verdict; the report verdict is physical failure."
+}

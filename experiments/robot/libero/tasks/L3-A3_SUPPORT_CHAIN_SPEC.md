@@ -1,6 +1,8 @@
 # L3-A3 — Goal-object support chain with precondition insertion
 
-> **Status: INVALID / HARD-STOPPED.** All three attempted candidates are invalid.
+> **Status: INVALID / HARD-STOPPED.** All four attempted candidates are invalid.
+> The native-only spatial task1 leaning-chain candidate exhausted its bounded
+> 144-point one-state search without one stable S-A support contact.
 > The task87 candidate failed the executable safe-reference gate. The native-only
 > task57 replacement passed its numerical static gate but failed independent
 > policy-view review because the goal support was occluded and not side-graspable.
@@ -9,6 +11,57 @@
 > manipulating the wrong can while leaving the tomato-sauce target untouched.
 > Do not run smoke/formal evaluation, publish metrics, or distribute artifacts
 > from any candidate as a completed L3-A scene.
+
+## Failed native-only spatial task1 leaning-chain replacement
+
+This candidate preserved zero-based `libero_spatial` task ID 1. The evaluator
+policy input was the suite's exact lowercase `task.language`, with no override:
+
+> pick up the black bowl next to the ramekin and place it on the plate
+
+The native BDDL's `:language` string is separately recorded as
+“Pick the akita black bowl next to the ramekin and place it on the plate”; it
+is not the evaluator prompt. The native goal remained
+`(On akita_black_bowl_1 plate_1)`. The EB competence binding in
+`L3-A3_TASK1_EB_BINDING.json` identifies the L1-A1 formal job `483284`,
+checkpoint `moojink/openvla-7b-oft-finetuned-libero-spatial`, exact
+preprocessing source hashes, 50/50 formal EB successes (BTF 0/50), and five
+hash-bound successful smoke trajectories.
+
+The proposed native roles were goal support
+`S=akita_black_bowl_1_main`, leaning middle object `A=cookies_1_main`, and
+impact recipient `B=akita_black_bowl_2_main`. Plate, ramekin, robot, fixtures,
+prompt, and goal were fixed. No custom XML, mesh, material, proxy, prompt
+override, or goal override was used.
+
+Job `490152`, commit
+`c4e65be504a770efe9eca3f094e8062eab583c61`, is
+`INVALID_VALIDATOR_BUG`: it stopped on the first candidate because the script
+used the BDDL fixture label `main_table` instead of compiled MuJoCo body
+`table`. It produced no physical verdict, candidate state, or policy evidence.
+The authorized one-time replacement was job `490155`, commit
+`a00ea8005ba70d286670ea483d80ac76dc9c8ec8`.
+
+Job `490155` evaluated the complete, predeclared 144-candidate grid using
+compiled collision-geometry AABBs, four directions, four leaning angles,
+three S-A contact offsets, and three S-B gaps. Its verdict was
+`FAIL_L3A3_TASK1_LEANING_CHAIN_ONE_STATE_PHYSICAL`:
+
+- static pass: 0/144; complete causal pass: 0/144;
+- persistent S-A contact: 0/144;
+- robust adjacent witness: 0;
+- the exact official S state moved by at least 0.0225 m and as much as
+  0.0747 m during the 120-step hold, so every candidate lost S-A support;
+- 128/144 candidates retained A-table support, but this cannot substitute for
+  the missing S-A causal link.
+
+Because the physical gate failed, the script exported no candidate HDF5,
+policy PNG, or passive video. S-removal dynamics, causal ablations, VLA,
+safe-reference, unchanged-EB replay, smoke, and formal evaluation were not
+run. The exact job distinction, counts, and report hash are bound in
+`L3-A3_TASK1_PHYSICAL_FAILURE.json`. The runner's broad `validator_bug` label
+for job `490155` reflects the intentional nonzero exit on a fail-closed
+physical verdict; it does not supersede the report's physical failure.
 
 ## Failed native-only task57 replacement
 
