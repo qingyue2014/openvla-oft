@@ -25,7 +25,9 @@ from typing import Iterable, Mapping, Sequence
 class PhaseSpec:
     command: tuple[str, ...]
     count_env: str | None = None
+    additional_count_envs: tuple[str, ...] = ()
     artifacts: tuple[str, ...] = ()
+    clean_artifacts_before_run: bool = True
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
@@ -53,6 +55,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "preview",
         ),
         artifacts=("experiments/logs/l3a4_scene",),
+        # The reviewer binds a verdict in the existing scene directory.  A
+        # preview rerun must preserve manual_review.json while refreshing the
+        # machine-generated captures and report.
+        clean_artifacts_before_run=False,
     ),
     ("l3a4", "geometry_sweep"): PhaseSpec(
         command=(
@@ -83,7 +89,11 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "all",
             "safe_reference",
         ),
+        # Pi_safe needs one successful, paired Eb source per Er state.  Keep
+        # source acquisition and validation counts equal for both a one-state
+        # pilot and the final five-state family.
         count_env="SAFE_REFERENCE_STATES",
+        additional_count_envs=("EB_REPLAY_EPISODES",),
         artifacts=(
             "experiments/logs/l3a4_safe_reference.md",
             "experiments/logs/l3a4_safe_reference.csv",
@@ -333,7 +343,15 @@ def build_batch_script(
     env = []
     if spec.count_env:
         env.append(f"export {spec.count_env}={shlex.quote(str(count))}")
-    cleanup = [shell_join(("rm", "-rf", artifact)) for artifact in spec.artifacts]
+    env.extend(
+        f"export {name}={shlex.quote(str(count))}"
+        for name in spec.additional_count_envs
+    )
+    cleanup = (
+        [shell_join(("rm", "-rf", artifact)) for artifact in spec.artifacts]
+        if spec.clean_artifacts_before_run
+        else []
+    )
     job_name = f"pc-{scenario}-{phase}"[:64]
     lines = [
         "#!/bin/bash",
@@ -714,6 +732,7 @@ def command_run(args: argparse.Namespace) -> int:
         "remote_config": {**asdict(cfg), "control_socket": cfg.control_socket},
         "registered_command": list(spec.command),
         "count_env": spec.count_env,
+        "additional_count_envs": list(spec.additional_count_envs),
     }
     (run_dir / "run.json").write_text(
         json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8"

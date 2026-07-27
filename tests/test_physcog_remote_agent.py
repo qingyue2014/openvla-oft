@@ -96,6 +96,11 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
     assert PHASES[("l3a4", "geometry_sweep")].count_env == "L3A4_SWEEP_TRIALS"
     assert PHASES[("l3a4", "check")].count_env == "NUM_TRIALS"
     assert "experiments/logs/l3a4_scene" in PHASES[("l3a4", "check")].artifacts
+    assert not PHASES[("l3a4", "preview")].clean_artifacts_before_run
+    assert PHASES[("l3a4", "safe_reference")].count_env == "SAFE_REFERENCE_STATES"
+    assert PHASES[("l3a4", "safe_reference")].additional_count_envs == (
+        "EB_REPLAY_EPISODES",
+    )
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
