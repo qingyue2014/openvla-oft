@@ -122,7 +122,7 @@ for index, char in enumerate(text[start:], start=start):
 if end is None:
     raise RuntimeError("unterminated native goal block")
 goal_block = text[start:end]
-goal_predicate = " ".join(goal_block.split())[len("(:goal "):-1]
+goal_predicate = " ".join(goal_block.split())[len("(:goal "):-1].strip()
 expected_prompt = {L3A4_TASK64_PROMPT!r}
 expected_goal = {L3A4_TASK64_GOAL!r}
 if task.language != expected_prompt:
