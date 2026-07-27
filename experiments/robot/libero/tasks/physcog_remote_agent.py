@@ -88,6 +88,16 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a3_task6_cookie_box_support_static",
         ),
     ),
+    ("l3a3", "task6_low_corridor_static"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/"
+            "probe_l3a3_task6_low_corridor_static.py",
+        ),
+        artifacts=(
+            "experiments/logs/l3a3_task6_low_corridor_static",
+        ),
+    ),
     ("l3a3", "task59_native_probe"): PhaseSpec(
         command=(
             "python",

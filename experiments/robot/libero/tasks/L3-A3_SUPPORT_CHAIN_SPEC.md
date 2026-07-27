@@ -735,3 +735,31 @@ bash experiments/robot/libero/tasks/run_l3a3_support_chain.sh smoke
 
 Formal evaluation is intentionally outside scene construction and remains
 hard-stopped until every mandatory gate is hash-bound to the canonical states.
+
+## Pending native task6 low transport-corridor replacement
+
+This is a new mechanism and is not part of the permanently stopped
+under-plate support direction. It preserves the exact task6 suite prompt,
+native BDDL goal, official state index 0 plus ten no-op policy-entry base, and
+the existing 50/50 native competence binding. `S=akita_black_bowl_1_main`,
+`cookies_1_main`, and the native `plate_1_main` remain bit-identical to that
+base. Only `A=glazed_rim_porcelain_ramekin_1_main` and
+`B=akita_black_bowl_2_main` move to stable table poses.
+
+A is placed at path fractions 0.35/0.45/0.55 along the direct S-to-native
+plate XY corridor with lateral offsets -10/0/+10 mm. B is downstream with an
+exact collision-AABB projected surface gap of 2/5/8 mm, producing 27 frozen
+candidates. Initial and held S-A, S-B, and A-B contacts must all remain false;
+all objects must retain table support, stability, forbidden-contact freedom,
+and a false native goal through 240 settle plus 80 hold steps. A diagnostic
+high-lift route must keep the transported S collision bottom at least 100 mm
+above the higher A/B collision top across 11 corridor samples. Native S grasp
+and native plate goal approaches must remain clear.
+
+Automated visibility is measured independently in raw agentview 256 and the
+actual center-cropped 224 policy input. A manual hash-bound review must
+recognize S, A, B, cookies, and plate in both views. This phase is static first
+frame only: target transport, impact dynamics, causal ablation, HDF5, VLA,
+smoke, and formal evaluation remain forbidden. One Superpod run is
+authorized. Any physical or manual visual failure hard-stops this candidate
+grid.

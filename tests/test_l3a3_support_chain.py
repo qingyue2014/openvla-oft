@@ -1021,6 +1021,41 @@ def test_task6_cookie_support_failure_stops_all_under_plate_support():
     )
 
 
+def test_task6_low_corridor_is_one_frozen_native_static_grid():
+    text = (
+        TASKS / "probe_l3a3_task6_low_corridor_static.py"
+    ).read_text()
+    assert "PATH_FRACTION = (0.35, 0.45, 0.55)" in text
+    assert "A_LATERAL_OFFSET_M = (-0.010, 0.0, 0.010)" in text
+    assert "A_B_SURFACE_GAP_M = (0.002, 0.005, 0.008)" in text
+    assert "MAX_CANDIDATES != 27" in text
+    assert "SETTLE_STEPS = 240" in text
+    assert "HOLD_STEPS = 80" in text
+    assert 'A = "glazed_rim_porcelain_ramekin_1_main"' in text
+    assert 'B = "akita_black_bowl_2_main"' in text
+    assert 'PLATE = "plate_1_main"' in text
+    assert "S_cookies_plate_bit_identical" in text
+    assert '"S_pose_exactly_preserved"' in text
+    assert '"cookies_pose_exactly_preserved"' in text
+    assert '"plate_pose_exactly_preserved"' in text
+    assert '"S_A_contact"' in text
+    assert '"S_B_contact"' in text
+    assert '"A_B_contact"' in text
+    assert "MIN_HIGH_LIFT_CLEARANCE_M = 0.100" in text
+    assert "high_lift_safe_corridor" in text
+    assert "center [16:240,16:240]" in text
+    assert "S/A/B/cookies/plate must each be" in text
+    assert '"goal_initial_false"' in text
+    assert '"goal_final_false"' in text
+    assert '"target_transport_status": "NOT_RUN"' in text
+    assert '"impact_chain_status": "NOT_RUN"' in text
+    assert '"candidate_hdf5_status": "NOT_EXPORTED"' in text
+    assert '"vla_status": "NOT_RUN"' in text
+    assert "sim.step()" not in text
+    assert "pretrained_checkpoint" not in text
+    assert "task_description_override" not in text
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text

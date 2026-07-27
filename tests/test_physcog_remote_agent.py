@@ -132,6 +132,13 @@ def test_l3a3_registry_separates_task1_export_from_physical_grid():
     assert cookie.artifacts == (
         "experiments/logs/l3a3_task6_cookie_box_support_static",
     )
+    corridor = PHASES[("l3a3", "task6_low_corridor_static")]
+    assert corridor.command[-1].endswith(
+        "probe_l3a3_task6_low_corridor_static.py"
+    )
+    assert corridor.artifacts == (
+        "experiments/logs/l3a3_task6_low_corridor_static",
+    )
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
