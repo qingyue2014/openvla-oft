@@ -882,6 +882,36 @@ def test_task6_existing_native_competence_binding_is_exact():
     )
 
 
+def test_task6_job490268_is_physical_pass_but_visual_failure():
+    failure = json.loads(
+        (TASKS / "L3-A3_TASK6_STATIC_VISUAL_FAILURE.json").read_text()
+    )
+    assert failure["status"] == (
+        "PHYSICAL_PASS_BUT_INVALID_VISUAL_OCCLUSION"
+    )
+    assert failure["raw_verdict"] == (
+        "PASS_L3A3_TASK6_PLATE_SUPPORT_STATIC"
+    )
+    assert failure["effective_verdict"] == (
+        "INVALID_L3A3_TASK6_PLATE_SUPPORT_POLICY_VIEW"
+    )
+    assert failure["job"]["job_id"] == "490268"
+    assert failure["physical_result"]["static_pass_count"] == 27
+    assert failure["physical_result"]["robust_adjacent_witness_count"] == 27
+    assert failure["visual_result"]["selected_B_visible_pixels"] == 63
+    assert failure["visual_result"]["all_candidate_B_visible_pixel_range"] == [
+        43,
+        93,
+    ]
+    assert failure["visual_result"]["manual_recognizability"] is False
+    assert failure["downstream"]["loading_target_onto_plate"] == "NOT_RUN"
+    assert failure["downstream"]["release_dynamics"] == "NOT_RUN"
+    assert failure["downstream"]["vla"] == "NOT_RUN"
+    assert failure["downstream"]["visibility_repair_static_grid"] == (
+        "AUTHORIZED_ONCE_9_FROZEN_POINTS"
+    )
+
+
 def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
     text = (TASKS / "generate_l3a3_task59_native_candidate.py").read_text()
     assert "candidate.TASK_ID = 59" in text

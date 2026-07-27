@@ -331,6 +331,38 @@ report for review, but explicitly exports no HDF5. Target loading, release
 dynamics, causal ablation, safe reference, action replay, VLA, smoke, and
 formal evaluation remain forbidden regardless of the static verdict.
 
+Static-only job `490268`, commit
+`42033b29bb84a693b963bb414cb1c8fbec012d78`, returned the raw numerical
+verdict `PASS_L3A3_TASK6_PLATE_SUPPORT_STATIC`: all 27 candidates passed the
+physical, automated-presence, reachability, and adjacent-witness gates. The
+selected centered support had persistent A-B contact with minimum normal
+force 0.0570 N, negligible A/B motion, no forbidden contact, the native goal
+still false, and exact S/cookies preservation.
+
+The independent raw-256 policy-view review failed. B had only 63 visible
+pixels in the selected image and appeared as a thin arc below A rather than a
+recognizable support bowl. Across the entire frozen grid B had only 43–93
+visible pixels; even the maximum-pixel candidate exposed only a 28×11-pixel
+strip. The effective verdict is therefore
+`INVALID_L3A3_TASK6_PLATE_SUPPORT_POLICY_VIEW`, separately from the physical
+PASS. Exact counts and artifact hashes are recorded in
+`L3-A3_TASK6_STATIC_VISUAL_FAILURE.json`. Loading, dynamic, and VLA stages
+were not run.
+
+Exactly one visibility-repair static grid is authorized. It fixes A rim embed
+at −1 mm and follows the only evidence-backed exposure direction from the
+failed grid: camera-exposure direction `(+x, −y)`. B's radial offset from A
+is frozen to `{0.012, 0.018, 0.024}` m and the perpendicular lateral offset
+to `{−0.003, 0, +0.003}` m, for nine candidates total. Settle/hold duration,
+all physical/contact/goal/semantic/reachability thresholds, prompt, task,
+assets, and policy-entry base contract remain unchanged. Every physical PASS
+candidate must export a raw policy image, and the three highest-B-pixel
+candidates must be explicitly indexed for review. Manual PASS requires B to
+be recognizable as a complete or mostly complete bowl, not only a rim arc,
+plus at least one adjacent physical witness. No HDF5, loading, dynamic, or VLA
+stage is authorized. If this repair fails either physical robustness or manual
+recognizability, the task6 plate-support family is permanently stopped.
+
 ## Failed native-only task57 replacement
 
 The replacement preserved zero-indexed LIBERO-90 task ID 57 exactly:

@@ -1,0 +1,81 @@
+{
+  "status": "PHYSICAL_PASS_BUT_INVALID_VISUAL_OCCLUSION",
+  "raw_verdict": "PASS_L3A3_TASK6_PLATE_SUPPORT_STATIC",
+  "effective_verdict": "INVALID_L3A3_TASK6_PLATE_SUPPORT_POLICY_VIEW",
+  "job": {
+    "job_id": "490268",
+    "commit": "42033b29bb84a693b963bb414cb1c8fbec012d78",
+    "compute_node": "dgx-10",
+    "exit_code": 0
+  },
+  "contract": {
+    "suite": "libero_spatial",
+    "task_id_zero_based": 6,
+    "policy_prompt": "pick up the black bowl next to the cookie box and place it on the plate",
+    "prompt_override": null,
+    "base_state_sha256": "ecadca7420094a1303cd43e3d7b96ca62c9885be1ae4ed4d9b50332f7011761e",
+    "candidate_grid_count": 27,
+    "settle_steps": 240,
+    "hold_steps": 80,
+    "candidate_hdf5": "NOT_EXPORTED"
+  },
+  "physical_result": {
+    "static_pass_count": 27,
+    "automated_visibility_reachability_pass_count": 27,
+    "robust_adjacent_witness_count": 27,
+    "selected_parameters_B_dx_B_dy_A_embed_m": [
+      0.0,
+      0.0,
+      -0.001
+    ],
+    "selected_A_B_min_normal_force_N": 0.05702980376187355,
+    "selected_A_motion_m": 4.40951701440499e-07,
+    "selected_B_motion_m": 1.7769816044930678e-11,
+    "selected_forbidden_contacts_seen": false,
+    "selected_goal_remained_false": true,
+    "S_and_cookies_exactly_preserved": true,
+    "S_and_plate_top_approach_gate": true
+  },
+  "visual_result": {
+    "reviewer": "primary_root",
+    "selected_B_visible_pixels": 63,
+    "selected_B_bbox_xyxy": [
+      48,
+      189,
+      73,
+      197
+    ],
+    "all_candidate_B_visible_pixel_range": [
+      43,
+      93
+    ],
+    "best_candidate_B_visible_pixels": 93,
+    "best_candidate_B_bbox_xyxy": [
+      49,
+      189,
+      76,
+      199
+    ],
+    "manual_recognizability": false,
+    "failure_reason": "The support bowl B is almost completely hidden below the plate. It appears only as a thin arc and is not recognizable as a complete or mostly complete bowl in the raw 256x256 policy RGB.",
+    "interpretation": "Nonzero segmentation pixels and an in-frame bounding box establish presence only; they do not satisfy the required policy-view recognizability gate."
+  },
+  "artifacts": {
+    "report_json_sha256": "d1d14ae9b5735dc300d5bb2cda00ef75aae6b0b3f039703c584c99d3229239e9",
+    "report_json_bytes": 259824,
+    "policy_png_sha256": "4db1d7a52b9a8323e830726477c17fea2faa5d4147cbe770da960e8722b9b348",
+    "role_mask_png_sha256": "ab0e809a1c4fd81607750734b0b69ccbaf72e711ada47e5b98a7d0c937216b59",
+    "segmentation_ids_npy_sha256": "604204fa8ae06d9acad0031d3db57ebb37004225b5bdfdb4f651f0157570e79d",
+    "local_run_ledger": ".physcog-agent/runs/20260727T051812Z-l3a3-task6_plate_support_static"
+  },
+  "downstream": {
+    "loading_target_onto_plate": "NOT_RUN",
+    "release_dynamics": "NOT_RUN",
+    "causal_ablation": "NOT_RUN",
+    "safe_reference": "NOT_RUN",
+    "action_separation": "NOT_RUN",
+    "candidate_hdf5": "NOT_EXPORTED",
+    "vla": "NOT_RUN",
+    "visibility_repair_static_grid": "AUTHORIZED_ONCE_9_FROZEN_POINTS"
+  }
+}
