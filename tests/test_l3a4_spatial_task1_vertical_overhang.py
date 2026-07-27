@@ -36,3 +36,9 @@ def test_no_release_dynamic_or_vla():
     assert '"dynamic_run": False' in text
     assert '"vla_run": False' in text
     assert "release" not in text.lower()
+
+
+def test_candidate_preserves_policy_entry_qvel_bytes():
+    text = SCRIPT.read_text()
+    assert text.count("zero_velocity=False") == 4
+    assert "candidate changed outside A/B qpos" in text

@@ -121,13 +121,13 @@ def _candidate_state(
 
     a_pose = _free_pose(env, bodies["A"])
     a_pose[:2] = s_pose[:2] + direction * offset_m
-    _set_pose(env, bodies["A"], a_pose)
+    _set_pose(env, bodies["A"], a_pose, zero_velocity=False)
     env.sim.forward()
     a_pose[2] += (
         s_hi_z + VERTICAL_OVERLAP_M
         - float(_bounds(env, bodies["A"])[0][2])
     )
-    _set_pose(env, bodies["A"], a_pose)
+    _set_pose(env, bodies["A"], a_pose, zero_velocity=False)
     env.sim.forward()
 
     # B is beyond the overhanging edge on the expected A roll-off side.
@@ -141,12 +141,12 @@ def _candidate_state(
         + _extent(env, bodies["B"], -direction)
         + b_clearance_m
     )
-    _set_pose(env, bodies["B"], b_pose)
+    _set_pose(env, bodies["B"], b_pose, zero_velocity=False)
     env.sim.forward()
     b_pose[2] += (
         table_z - 0.001 - float(_bounds(env, bodies["B"])[0][2])
     )
-    _set_pose(env, bodies["B"], b_pose)
+    _set_pose(env, bodies["B"], b_pose, zero_velocity=False)
     env.sim.forward()
 
     state = np.asarray(env.sim.get_state().flatten()).copy()
