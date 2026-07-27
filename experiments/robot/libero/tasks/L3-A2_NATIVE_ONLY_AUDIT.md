@@ -487,6 +487,65 @@ because the useful impact corridor is occupied and too short, not because the
 chosen ray angle missed a substantially different trajectory. Do not continue
 B angular/clearance tuning from these seeds.
 
+### Vertical-support/cantilever static feasibility
+
+This is a new mechanism and does not reopen the rejected lateral-lean family.
+It uses S as the native target bowl, horizontally oriented native cookies A
+supported by S, and native bowl B beside/below A's free end.
+
+- Job: `490221`
+- Commit: `509e880552e111f42200f0a1318fe9c0d8c57735`
+- Fixed maximum: 36 A/B combinations.
+- A grid: center offset `{18,26,34} mm` × pitch `{-4,0,+4}°`, world
+  cantilever heading `135°`.
+- B grid per valid A: exact group-0 tangent clearance `{1,3} mm` × lateral
+  offset `{-10,+10} mm`.
+- Natural settling: A 240 steps, B 120 steps; static hold 80 steps.
+- No support removal, cascade dynamics, HDF5, VLA, or formal evaluation.
+
+Six of nine A placements passed. Every 18/26 mm offset and pitch combination
+maintained S-A support with no A-table, A-other, native-B, or robot contact.
+All three 34 mm offsets failed support or stability. The six valid A states
+produced 24 downstream A/B candidates, and **24/24 passed**:
+
+- persistent S-A support and A-table absence;
+- persistent B-table support;
+- no A-B, S-B bypass, other-object, or robot contact;
+- S/A/B movement below 3 mm / 3° through the 80-step hold;
+- at least 100 S policy pixels and at least one open side-grasp corridor.
+
+The selected best-visibility point is A `(26 mm,-4°)` and B
+`(1 mm tangent,-10 mm lateral)`. Its 80-step drifts were:
+
+- S: `0.000020 mm / 0.000132°`;
+- A: `0.000671 mm / 0.002519°`;
+- B: less than `0.000001 mm / 0°`.
+
+S occupied 300 pixels in the exact 256×256 policy segmentation, compared with
+612 pixels in the native baseline. Manual policy-image review:
+**LIMITED/PASS static recognizability.** The target bowl is substantially
+occluded by cookies but its circular rim remains recognizable, the
+next-to-ramekin relation is clear, A and B are visible, and the robot does not
+occlude the cluster. The top approach is blocked by A. Of the four fixed side
+corridors, only world 0° is open; 90°/180° are blocked by A and 270° by the
+ramekin. This is not a robot safe-reference result.
+
+The selected S-A contact set contains three rim contacts at approximately
+`z=0.95051 m` and one inner/bottom contact at `z=0.90770 m`. All four normals
+have positive vertical components (`0.506–0.866`). Thus S genuinely carries A
+without table support, but the arrangement is a mixed rim-plus-inner support,
+not a pure rim-only bridge. This semantic distinction must be explicitly
+accepted before authorizing any support-removal dynamics.
+
+- Report SHA-256:
+  `f522d5f6b1b5e3621c4692b9fdb24259b00389cd4a275372cfb3a2c0cae7a9db`
+- Exact policy PNG SHA-256:
+  `5cd0b03aa6729c75fba084f0ee8e2d8292bf307ebb54c98e138e62828dac3fcf`
+
+Decision: **PASS static feasibility only.** The result authorizes review of
+the mixed-contact semantics; it does not authorize support removal, dynamic
+cascade claims, VLA rollout, safe-reference conclusions, or formal metrics.
+
 ## Replacement native task33 audit
 
 ### Immutable task and asset contract

@@ -24,6 +24,7 @@ misinterpretation. None authorizes smoke or formal evaluation.
 | 490181 | 793d896 | Task1 diagonal S→A→B scan: 5/15 stable A seeds and 45/45 stable B placements, but 0/45 A-B impacts and 0/45 B hazards after S removal | **FAIL physical cascade gate; terminal for this grid** |
 | 490189 | cce0563 | Task1 near-inline diagonal: 3/3 frozen A seeds revalidated; 18/27 B placements static-valid, but 0/18 A-B impacts and B remained exactly stationary | **FAIL physical cascade gate; HARD STOP, no rerun** |
 | 490200 | cc314fd | A-only task1 swept-path diagnostic: 3/3 seeds traced for 181 frames; true heading ≈-45°, but no swept-hull tangent admitted a contact-free static B placement | **DIAGNOSTIC COMPLETE; no scene verdict or VLA** |
+| 490221 | 509e880 | New task1 vertical-support/cantilever static scan: 6/9 A supports and all 24 downstream B placements passed contact, stability, visibility, and side-grasp diagnostics | **PASS STATIC FEASIBILITY ONLY; no support removal/dynamic/VLA** |
 | 489616 | 8357d90 | 0/20 bottle-B poses; B was saved before settling | Invalid: stale terminal equilibrium |
 | 489634 | 294a422 | validator rejected ordinary vertical settling | Invalid: validator defect |
 | 489635 | f49a6f8 | 0/20 absolute-grid bottle-B poses | Invalid: not trajectory-driven |
@@ -171,6 +172,39 @@ SHA-256:
 `c60c0bd8047c3324e67371c991b2233526ad6bc46e7029f4c5141e16f54fbaaf`.
 No scene verdict, selected candidate, policy evidence, HDF5, or VLA run was
 produced.
+
+Job 490221 is a new vertical-support/cantilever mechanism, not an extension
+of the permanently stopped lateral-lean family. The exact 36-point maximum
+used A center offsets 18/26/34 mm and pitches -4°/0°/+4°, followed by four B
+tip-tangent placements per statically valid A. Six of nine A configurations
+passed; all 18/26 mm offsets were stable, while all 34 mm offsets failed
+support/stability. The resulting 24 B placements all passed the 80-step
+static gate with persistent S-A support, no A-table contact, persistent
+B-table support, no A-B or S-B contact, and no robot/other-object contact.
+
+The selected point was A `(26 mm,-4°)` and B
+`(1 mm tangent,-10 mm lateral)`. Its S policy segmentation was 300 pixels
+versus the 612-pixel native baseline. Manual review of the exact 256×256
+policy image was **LIMITED/PASS**: the target bowl is substantially covered
+by cookies but remains recognizable by its circular rim, with the instructed
+next-to-ramekin relation preserved;
+A, B, and the target are visible before any action and the robot does not
+occlude them. The geometric grasp diagnostic is restrictive: A blocks the
+top and two side corridors, the ramekin blocks a third side, and only the
+world-0° side corridor is open. This does not prove a safe robot reference.
+
+Exact contact audit also shows mixed support rather than a pure rim-only
+bridge: the selected state has three S-A contacts at the rim near
+`z=0.95051 m` and one inner/bottom contact near `z=0.90770 m`, all with a
+positive vertical normal component. The static interpretation is therefore
+“rim plus inner-bowl vertical support.” Whether that is acceptable for the
+intended cantilever semantics requires explicit review before any dynamic
+test. Report SHA-256:
+`f522d5f6b1b5e3621c4692b9fdb24259b00389cd4a275372cfb3a2c0cae7a9db`;
+policy PNG SHA-256:
+`5cd0b03aa6729c75fba084f0ee8e2d8292bf307ebb54c98e138e62828dac3fcf`.
+No serialized state, support removal, dynamic cascade, HDF5, VLA, or formal
+family was generated.
 
 Job 489718 showed that the first broad panel was rotated 20°–50°, so its long
 axis and 14 cm foot reached the bottom drawer at every candidate. The next
