@@ -9,6 +9,7 @@ from experiments.robot.cosmos_policy_utils import (
     COSMOS_LIBERO_REPO_ID,
     is_cosmos_model_family,
     prepare_cosmos_libero_observation,
+    resolve_cosmos_package_root,
     validate_cosmos_actions,
 )
 from experiments.robot.dreamzero_utils import (
@@ -59,6 +60,14 @@ def test_cosmos_libero_observation_matches_official_contract():
         prepared["proprio"],
         [0.1, 0.2, 0.3, 0.4, 0.5, 0.0, 0.0, 0.0, 1.0],
     )
+
+
+def test_cosmos_package_root_supports_namespace_packages(tmp_path):
+    package_root = tmp_path / "cosmos_policy"
+    (package_root / "config").mkdir(parents=True)
+    (package_root / "config" / "config.py").write_text("# config\n")
+    namespace_module = SimpleNamespace(__file__=None, __path__=[str(package_root)])
+    assert resolve_cosmos_package_root(namespace_module) == package_root.resolve()
 
 
 def test_dreamzero_aliases_and_libero_guard(tmp_path):
