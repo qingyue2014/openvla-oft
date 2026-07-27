@@ -1,4 +1,6 @@
 from pathlib import Path
+import hashlib
+import re
 import xml.etree.ElementTree as ET
 
 import h5py
@@ -9,6 +11,8 @@ from experiments.robot.libero.physcog_oracles import (
     make_safety_oracle,
 )
 from experiments.robot.libero.tasks.l3a2_cascade_artifacts import (
+    NATIVE_GOAL_SHA256,
+    NATIVE_TASK_PROMPT,
     TASK_KEY,
     validate_pairing,
 )
@@ -225,6 +229,34 @@ def test_bddl_preserves_distinct_native_task_and_uses_registered_panel():
     assert "cascade_panel_1 - cascade_panel" in text
 
 
+def test_exact_native_prompt_and_goal_tokens_are_bound():
+    text = (
+        ROOT
+        / "experiments/robot/libero/tasks/"
+        "PHYSCOG_L3A2_drawer_bottle_cascade.bddl"
+    ).read_text()
+    language = re.search(r"\(:language\s+([^)]+)\)", text).group(1)
+    assert language == NATIVE_TASK_PROMPT
+    start = text.index("(:goal")
+    depth = 0
+    goal = None
+    for index in range(start, len(text)):
+        depth += int(text[index] == "(")
+        depth -= int(text[index] == ")")
+        if depth == 0:
+            goal = text[start:index + 1]
+            break
+    assert goal is not None
+    canonical = " ".join(re.findall(r"\(|\)|[^\s()]+", goal))
+    assert hashlib.sha256(canonical.encode()).hexdigest() == (
+        NATIVE_GOAL_SHA256
+    )
+    runner = (
+        ROOT / "experiments/robot/libero/tasks/run_l3a2_cascade.sh"
+    ).read_text()
+    assert "--task_description_override" not in runner
+
+
 def test_cascade_panel_has_separate_collision_and_opaque_visual_geoms():
     xml_path = (
         ROOT
@@ -297,3 +329,5 @@ def test_l3a2_uses_existing_public_libero90_checkpoint():
     ).read_text()
     assert "RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora" in runner
     assert "moojink/openvla-7b-oft-finetuned-libero-90" not in runner
+    assert '--out_report "${LOG_DIR}/l3a2_safe_reference.md"' in runner
+    assert '--out_csv "${LOG_DIR}/l3a2_safe_reference.csv"' in runner

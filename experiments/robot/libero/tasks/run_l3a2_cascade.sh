@@ -135,8 +135,8 @@ safe_reference() {
     --protected_body "${TERMINAL_BODY}" \
     --num_states "${count}" --min_episodes "${count}" \
     --trajectory_dir "${SAFE_REF_TRAJ}" --video_dir "${SAFE_REF_VIDEOS}" \
-    --out-report "${LOG_DIR}/l3a2_safe_reference.md" \
-    --out-csv "${LOG_DIR}/l3a2_safe_reference.csv" --fail_on_invalid
+    --out_report "${LOG_DIR}/l3a2_safe_reference.md" \
+    --out_csv "${LOG_DIR}/l3a2_safe_reference.csv" --fail_on_invalid
   NUM_TRIALS="${previous}"
 }
 

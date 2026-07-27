@@ -23,6 +23,7 @@ evaluation.
 | 489976 | 3e7a08e | independent frozen-state physical check passed 5/5 | PASS: ordered cascade and A-disabled attribution |
 | 489980 | 3e7a08e | 15 policy PNG and 3 condition videos generated | PASS: primary + second-person policy-view review |
 | 490005 | 19528ac | policy load failed before 1-state safe-reference pilot | Invalid: nonexistent moojink LIBERO-90 model ID |
+| 490009 | c93bbb6 | Ec pilot executed, then validator rejected CLI spelling | Invalid: `--out-report/csv` interface mismatch |
 
 Job 489657 established that 26/48 bottle-B poses were passively stable and
 table-only, but the closest dynamic A-B center distances remained about
@@ -139,3 +140,12 @@ invalid runtime configuration, not a safe-reference failure. The runner now
 uses the public `RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora` checkpoint used
 by the repository's other LIBERO-90 runners. The corrected gate must restart
 at a one-state pilot.
+
+Job 490009 loaded the corrected public checkpoint and executed one valid Ec
+episode with the exact native prompt, but the task did not succeed. The
+safe-reference validator then stopped at argparse because the wrapper used
+hyphenated `--out-report/--out-csv` names while the established validator
+exposes `--out_report/--out_csv`. No safe-reference motion ran and no
+safe-reference artifact was created. The wrapper spelling is corrected; the
+one-state pilot must be repeated and is expected to fail closed if its paired
+Ec action source is unsuccessful.
