@@ -32,6 +32,13 @@ class PhaseSpec:
 
 
 L3A4_CHECKPOINT = "RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora"
+L3A4_TASK64_PROMPT = (
+    "stack the right bowl on the left bowl and place them in the tray"
+)
+L3A4_TASK64_GOAL = (
+    "(And (On akita_black_bowl_2 akita_black_bowl_1) "
+    "(In akita_black_bowl_1 wooden_tray_1_contain_region))"
+)
 L3A4_EB_SOURCE_PILOT = """
 import os
 import sys
@@ -89,6 +96,59 @@ sys.argv = [
     "--run_id_note", "native-task6-source-pilot600",
 ]
 evaluation.eval_physcog_libero_l1()
+""".strip()
+L3A4_TASK64_CONTRACT_AUDIT = f"""
+import hashlib
+import json
+from pathlib import Path
+from libero.libero import benchmark
+
+task_id = 64
+suite = benchmark.get_benchmark_dict()["libero_90"]()
+task = suite.get_task(task_id)
+bddl = Path(suite.get_task_bddl_file_path(task_id))
+text = bddl.read_text()
+start = text.index("(:goal")
+depth = 0
+end = None
+for index, char in enumerate(text[start:], start=start):
+    if char == "(":
+        depth += 1
+    elif char == ")":
+        depth -= 1
+        if depth == 0:
+            end = index + 1
+            break
+if end is None:
+    raise RuntimeError("unterminated native goal block")
+goal_block = text[start:end]
+goal_predicate = " ".join(goal_block.split())[len("(:goal "):-1]
+expected_prompt = {L3A4_TASK64_PROMPT!r}
+expected_goal = {L3A4_TASK64_GOAL!r}
+if task.language != expected_prompt:
+    raise RuntimeError(
+        f"task64 prompt drift: {{task.language!r}} != {{expected_prompt!r}}"
+    )
+if goal_predicate != expected_goal:
+    raise RuntimeError(
+        f"task64 goal drift: {{goal_predicate!r}} != {{expected_goal!r}}"
+    )
+report = {{
+    "verdict": "PASS_L3A4_TASK64_NATIVE_CONTRACT",
+    "task_suite": "libero_90",
+    "task_id": task_id,
+    "prompt": task.language,
+    "prompt_sha256": hashlib.sha256(task.language.encode()).hexdigest(),
+    "bddl_path": str(bddl),
+    "bddl_sha256": hashlib.sha256(text.encode()).hexdigest(),
+    "goal_predicate": goal_predicate,
+    "goal_sha256": hashlib.sha256(goal_predicate.encode()).hexdigest(),
+    "prompt_override": False,
+}}
+out = Path("experiments/logs/l3a4_task64_native_contract.json")
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(report, indent=2) + "\\n")
+print(report["verdict"], json.dumps(report, sort_keys=True))
 """.strip()
 
 
@@ -200,6 +260,45 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         artifacts=(
             "rollouts/libero_90/native-task6-source-pilot600",
         ),
+    ),
+    ("l3a4", "task64_contract_audit"): PhaseSpec(
+        command=("python", "-c", L3A4_TASK64_CONTRACT_AUDIT),
+        artifacts=("experiments/logs/l3a4_task64_native_contract.json",),
+    ),
+    ("l3a4", "task64_competence"): PhaseSpec(
+        command=(
+            "python",
+            "-m",
+            "experiments.robot.libero.run_physcog_libero_l1_eval",
+            "--pretrained_checkpoint",
+            L3A4_CHECKPOINT,
+            "--task_suite_name",
+            "libero_90",
+            "--task_ids",
+            "64",
+            "--safety_oracle",
+            "none",
+            "--trajectory_track_bodies",
+            (
+                "akita_black_bowl_1_main,akita_black_bowl_2_main,"
+                "wooden_tray_1_main"
+            ),
+            "--post_success_settle_steps",
+            "30",
+            "--num_steps_wait",
+            "0",
+            "--num_trials_per_task",
+            "1",
+            "--seed",
+            "42",
+            "--save_video_mode",
+            "all",
+            "--render_gpu_device_id",
+            "1",
+            "--run_id_note",
+            "native-task64-competence",
+        ),
+        artifacts=("rollouts/libero_90/native-task64-competence",),
     ),
     ("l3a4", "smoke"): PhaseSpec(
         command=(
