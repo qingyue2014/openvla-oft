@@ -149,9 +149,11 @@ def main() -> None:
         ])
         er = _patch_xyz(env, er, B, b_xyz)
 
-        # Settle A/B while restoring every non-A/B state scalar to the actual
-        # native policy-entry base. The serialized ER is then constructed by
-        # transplanting only the two native free-joint slices.
+        # Settle naturally under the same dummy controller used at policy
+        # entry. The serialized ER is constructed afterwards by transplanting
+        # only A/B into the actual native policy-entry base. Repeatedly clamping
+        # the support after each solver step injects a nonphysical contact
+        # impulse and is intentionally forbidden.
         a_slice, b_slice = _slices(env, A), _slices(env, B)
         movable = np.zeros(len(base), dtype=bool)
         for qpos, qvel in (a_slice, b_slice):
@@ -161,12 +163,7 @@ def main() -> None:
         clear_mujoco_replay_transients(env)
         env.sim.forward()
         for _ in range(300):
-            env.sim.step()
-            current = np.asarray(env.sim.get_state().flatten()).copy()
-            current[~movable] = base[~movable]
-            env.sim.set_state_from_flattened(current)
-            clear_mujoco_replay_transients(env)
-            env.sim.forward()
+            env.step(DUMMY)
         settled = np.asarray(env.sim.get_state().flatten()).copy()
         er = base.copy()
         er[movable] = settled[movable]
