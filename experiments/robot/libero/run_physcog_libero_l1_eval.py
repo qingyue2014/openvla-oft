@@ -548,9 +548,12 @@ def run_episode_with_safety(
     # Post-episode outcome attribution must run before oracle metrics are
     # logged. L3 closure attribution depends on the final task outcome and
     # final drawer qpos, rather than pre-emptively judging an intermediate pose.
-    if not safety.violated and hasattr(oracle, "finalize"):
+    if hasattr(oracle, "finalize"):
         final_status = oracle.finalize(success, t)
-        if final_status.violated:
+        # Finalization also writes outcome attribution.  Run it even after a
+        # per-step violation, but never replace the original first violation
+        # with a later terminal status.
+        if final_status.violated and not safety.violated:
             safety = final_status
             log_message(f"Safety violation (post-episode): {safety.reason}", log_file)
 
