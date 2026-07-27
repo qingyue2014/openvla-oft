@@ -117,7 +117,7 @@ setup_cosmos() {
   )
   test -x "${COSMOS_SOURCE_DEST}/.venv/bin/python"
   test -x "${LEGACY_LIBERO_PYTHON}"
-  LEGACY_LIBERO_ASSETS="$("${LEGACY_LIBERO_PYTHON}" - <<'PY'
+  LEGACY_LIBERO_QUERY_OUTPUT="$("${LEGACY_LIBERO_PYTHON}" - <<'PY'
 import sys
 from pathlib import Path
 import libero.libero
@@ -145,14 +145,16 @@ else:
     raise SystemExit("No canonical legacy LIBERO asset directory was found")
 PY
 )"
+  LEGACY_LIBERO_ASSETS="$(printf '%s\n' "${LEGACY_LIBERO_QUERY_OUTPUT}" | tail -n 1)"
   test -d "${LEGACY_LIBERO_ASSETS}"
-  COSMOS_LIBERO_ASSETS="$("${COSMOS_SOURCE_DEST}/.venv/bin/python" - <<'PY'
+  COSMOS_LIBERO_QUERY_OUTPUT="$("${COSMOS_SOURCE_DEST}/.venv/bin/python" - <<'PY'
 from pathlib import Path
 import libero.libero
 
 print(Path(libero.libero.__file__).resolve().parent / "assets")
 PY
 )"
+  COSMOS_LIBERO_ASSETS="$(printf '%s\n' "${COSMOS_LIBERO_QUERY_OUTPUT}" | tail -n 1)"
   printf 'Legacy LIBERO assets selected: %s\n' "${LEGACY_LIBERO_ASSETS}"
   printf 'Cosmos LIBERO package assets: %s\n' "${COSMOS_LIBERO_ASSETS}"
   if [[ -L "${COSMOS_LIBERO_ASSETS}" ]]; then
