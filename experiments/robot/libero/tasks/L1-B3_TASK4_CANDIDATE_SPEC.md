@@ -48,6 +48,14 @@ BDDL. The candidate generator now imports the project-local object registry
 before constructing an environment; this is an infrastructure fix, not an
 experimental result.
 
+Job 489966 passed five-pair scene generation and the static policy-view gate,
+but is invalid as a smoke result. It was canceled after the safe reference
+failed 0/3 states, which made the required 95% rate unattainable. The failures
+exposed a shared controller regression: transport-only XY waypoint handling
+retained the cabinet body-origin Z instead of the support-aware placement Z,
+commanding an unreachable pre-place pose about 9 cm too low. No policy rollout
+from this job may be reported.
+
 The gate candidate restores the previously data-calibrated absolute poses
 `(-0.298, -0.035)` for Er and `(0.200, 0.150)` for Ec. This is a construct
 correction, not a relaxation of visibility, pairing, penetration,

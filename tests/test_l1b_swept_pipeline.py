@@ -798,6 +798,14 @@ def test_safe_reference_rejects_any_robot_or_held_object_contact():
     assert "PASS_DYNAMIC_SAFE_REFERENCE" in text
 
 
+def test_safe_reference_transport_uses_support_aware_placement_height():
+    text = SHARED_SAFE_REFERENCE.read_text()
+    height_update = "transport_desired_bowl[2] = desired_bowl[2]"
+    preplace_copy = "transport_preplace_bowl = transport_desired_bowl.copy()"
+    assert height_update in text
+    assert text.index(height_update) < text.index(preplace_copy)
+
+
 def test_safe_reference_video_uses_the_policy_camera_and_is_optional():
     shared = SHARED_SAFE_REFERENCE.read_text()
     validator = SAFE_REFERENCE.read_text()

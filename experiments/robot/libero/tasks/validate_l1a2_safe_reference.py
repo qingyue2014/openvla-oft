@@ -1265,6 +1265,12 @@ def _run_episode(
         desired_bowl[2] = float(
             plate_hi[2] + bowl_origin_to_bottom + args.release_clearance
         )
+    # ``transport_desired_bowl`` is copied before the support-aware placement
+    # height is calculated so optional transport-only XY offsets can be
+    # applied independently. Its Z must still match the final support-aware
+    # height; leaving the support body origin here commands an unreachable
+    # pre-place waypoint for elevated fixtures such as the Task-4 cabinet.
+    transport_desired_bowl[2] = desired_bowl[2]
     preplace_bowl = desired_bowl.copy()
     preplace_bowl[2] += args.preplace_height
     transport_preplace_bowl = transport_desired_bowl.copy()
