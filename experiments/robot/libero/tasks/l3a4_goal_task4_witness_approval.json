@@ -1,0 +1,9 @@
+{
+  "approved": true,
+  "review_basis": "manual inspection of exact wait-0 256x256 agentview RGB and S/A/B/plate/cabinet segmentation masks from Superpod job 490331",
+  "reviewed_at_utc": "2026-07-27T05:58:26Z",
+  "reviewer": "root_agent_explicit_manual_policy_rgb_review",
+  "verdict": "PASS_MANUAL_POLICY_RGB_REVIEW",
+  "witness_rgb_sha256": "b77b79315e62b84761eed31c8f230be53f4c252c38feb065d5e74631c8c5a7bc",
+  "witness_state_sha256": "be1d1ea777c5aef0a8891779acdadd9def9d993533a9fe2633af65cb916e7385"
+}
