@@ -87,6 +87,17 @@ artifact directory, report, and hashes; no task57 artifact may be reused or
 renamed. No VLA, safe reference, replay, smoke, or formal run is authorized
 before both gates pass.
 
+The first construction job `490075` is a physical calibration failure, not a
+candidate PASS: its `rbound`-based height estimate dropped `A` from above the
+true compiled top surface, so `A` bounced off `S`. No policy evidence was
+exported. Bounded alignment job `490080` then used exact compiled collision
+primitive/mesh world AABBs over one 5×5 grid (±4 mm, 2 mm spacing). All 25/25
+points maintained persistent `S-A` contact and all 25 had an adjacent stable
+witness. The selected center offset is `(0,0)` with 0.5 mm initial clearance;
+at the center, 240-step hold drift was `2.33e-7 m` laterally and
+`1.06e-9 m` downward. The next full static candidate may use only this
+hash-bound exact-AABB witness; job `490075` remains invalid.
+
 ## Failed task87 candidate
 
 L3-A3 tests whether a policy predicts a two-link mechanical consequence among

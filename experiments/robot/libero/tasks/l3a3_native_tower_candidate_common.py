@@ -46,6 +46,7 @@ TASK_LABEL = "unconfigured"
 SCHEMA = ""
 KEY = ""
 ROLE_SUMMARY = ""
+PLACEMENT_AUDIT = {}
 
 SUPPORT = ""
 MIDDLE = ""
@@ -454,6 +455,7 @@ def main() -> None:
                 "native_bddl_sha256": NATIVE_BDDL_SHA256,
                 "goal_form": goal_form,
                 "goal_form_sha256": GOAL_SHA256,
+                "placement_audit": PLACEMENT_AUDIT,
                 "asset_gate": asset_gate,
                 "pairing": pairing,
                 "physical": {
@@ -517,6 +519,7 @@ def main() -> None:
         "native_bddl_sha256": NATIVE_BDDL_SHA256,
         "goal_form": goal_form,
         "goal_form_sha256": GOAL_SHA256,
+        "placement_audit": PLACEMENT_AUDIT,
         "native_only_bodies": {"S": SUPPORT, "A": MIDDLE, "B": TOP, "goal": TRAY},
         "asset_gate": asset_gate,
         "pairing": pairing,

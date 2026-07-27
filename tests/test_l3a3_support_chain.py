@@ -374,6 +374,12 @@ def test_task59_candidate_uses_native_roles_and_exact_hash_bound_contract():
         in text
     )
     assert "candidate.main()" in text
+    assert "place_with_exact_aabb" in text
+    assert "candidate.place_on_top = place_on_top_exact" in text
+    assert '"diagnostic_job_id": 490080' in text
+    assert '"grid_stable_count": 25' in text
+    assert '"robust_adjacent_witness_count": 25' in text
+    assert '"selected_S_A_offset_m": [0.0, 0.0]' in text
     assert "physcog_objects" not in text
     assert "assets/" not in text
     assert "task_description_override" not in text
@@ -427,6 +433,7 @@ def test_native_tower_common_is_native_only_one_state_and_fail_closed():
     assert "final_poses" in text
     assert "TASK_LABEL" in text
     assert "ROLE_SUMMARY" in text
+    assert "PLACEMENT_AUDIT" in text
     ec_block = text[text.index("# EC: swap A/B") : text.index("a_xyz_native")]
     assert "set_state_from_flattened(base)" in ec_block
     assert "sim.forward()" in ec_block
