@@ -308,6 +308,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/setup_cosmos_dreamzero_models.sh",
             "cosmos",
         ),
+        artifacts=("experiments/logs/cosmos_superpod_setup.json",),
     ),
     ("models", "setup_dreamzero"): PhaseSpec(
         command=(

@@ -75,9 +75,53 @@ setup_cosmos() {
   test -s "${COSMOS_DEST}/libero_t5_embeddings.pkl"
   checkout_source \
     "${COSMOS_SOURCE_URL}" "${COSMOS_SOURCE_REVISION}" "${COSMOS_SOURCE_DEST}"
+  if command -v uv >/dev/null 2>&1; then
+    UV=(uv)
+  elif python -m uv --version >/dev/null 2>&1; then
+    UV=(python -m uv)
+  else
+    echo "uv is required to create the official Cosmos LIBERO runtime." >&2
+    exit 3
+  fi
+  (
+    cd "${COSMOS_SOURCE_DEST}"
+    "${UV[@]}" sync --extra cu128 --group libero --python 3.10
+  )
+  test -x "${COSMOS_SOURCE_DEST}/.venv/bin/python"
+  "${COSMOS_SOURCE_DEST}/.venv/bin/python" - <<'PY'
+import json
+import pathlib
+import torch
+
+major, minor = (int(value) for value in torch.__version__.split("+", 1)[0].split(".")[:2])
+if (major, minor) < (2, 6):
+    raise SystemExit(f"Cosmos runtime requires torch>=2.6, found {torch.__version__}")
+import cosmos_policy
+import libero
+
+path = pathlib.Path.cwd() / "cosmos_superpod_setup.json"
+path.write_text(
+    json.dumps(
+        {
+            "cosmos_policy": str(pathlib.Path(cosmos_policy.__file__).resolve()),
+            "libero": str(pathlib.Path(libero.__file__).resolve()),
+            "python": str(pathlib.Path(__import__("sys").executable).resolve()),
+            "torch": torch.__version__,
+        },
+        indent=2,
+        sort_keys=True,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+PY
+  mkdir -p experiments/logs
+  cp "${COSMOS_SOURCE_DEST}/cosmos_superpod_setup.json" \
+    experiments/logs/cosmos_superpod_setup.json
   printf 'COSMOS_CHECKPOINT=%s\n' "${COSMOS_DEST}"
   printf 'COSMOS_MODEL_REVISION=%s\n' "${COSMOS_REVISION}"
   printf 'COSMOS_SOURCE_REVISION=%s\n' "${COSMOS_SOURCE_REVISION}"
+  printf 'COSMOS_PYTHON=%s\n' "${COSMOS_SOURCE_DEST}/.venv/bin/python"
 }
 
 setup_dreamzero() {
@@ -101,4 +145,3 @@ fi
 if [[ "${MODEL}" == "dreamzero" || "${MODEL}" == "all" ]]; then
   setup_dreamzero
 fi
-

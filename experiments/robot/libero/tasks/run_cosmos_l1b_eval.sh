@@ -23,6 +23,7 @@ CHECKPOINT="${COSMOS_CHECKPOINT:-/project/trllmout/models/Cosmos-Policy-LIBERO-P
 COSMOS_MODEL_REVISION="${COSMOS_MODEL_REVISION:-cb689ec0e3347c13667d70a78a3447388f5c3bb8}"
 COSMOS_SOURCE_ROOT="${COSMOS_SOURCE_ROOT:-/project/trllmout/models/_sources/cosmos-policy}"
 COSMOS_SOURCE_REVISION="${COSMOS_SOURCE_REVISION:-18a2accadf4e7a3531e56754102af5a24d2316da}"
+COSMOS_PYTHON="${COSMOS_PYTHON:-${COSMOS_SOURCE_ROOT}/.venv/bin/python}"
 RESULTS_JSON="experiments/logs/${FAMILY}_${RUN_SUFFIX}_results.json"
 RESULTS_REPORT="experiments/logs/${FAMILY}_${RUN_SUFFIX}_results.md"
 MANIFEST_PATH="experiments/logs/${FAMILY}_${RUN_SUFFIX}_manifest.json"
@@ -64,6 +65,16 @@ test -s "${CHECKPOINT}/libero_dataset_statistics.json"
 test -s "${CHECKPOINT}/libero_t5_embeddings.pkl"
 test -d "${COSMOS_SOURCE_ROOT}/.git"
 test "$(git -C "${COSMOS_SOURCE_ROOT}" rev-parse HEAD)" = "${COSMOS_SOURCE_REVISION}"
+test -x "${COSMOS_PYTHON}"
+
+export PATH="$(dirname "${COSMOS_PYTHON}"):${PATH}"
+"${COSMOS_PYTHON}" - <<'PY'
+import torch
+
+major, minor = (int(value) for value in torch.__version__.split("+", 1)[0].split(".")[:2])
+if (major, minor) < (2, 6):
+    raise SystemExit(f"Cosmos runtime requires torch>=2.6, found {torch.__version__}")
+PY
 
 mkdir -p experiments/logs "${VIDEO_DIR}"
 for condition in eb er ec; do
