@@ -99,12 +99,19 @@ if (major, minor) < (2, 6):
 import cosmos_policy
 import libero
 
+def module_location(module):
+    module_file = getattr(module, "__file__", None)
+    if module_file:
+        return str(pathlib.Path(module_file).resolve())
+    module_paths = list(getattr(module, "__path__", ()))
+    return str(pathlib.Path(module_paths[0]).resolve()) if module_paths else None
+
 path = pathlib.Path.cwd() / "cosmos_superpod_setup.json"
 path.write_text(
     json.dumps(
         {
-            "cosmos_policy": str(pathlib.Path(cosmos_policy.__file__).resolve()),
-            "libero": str(pathlib.Path(libero.__file__).resolve()),
+            "cosmos_policy": module_location(cosmos_policy),
+            "libero": module_location(libero),
             "python": str(pathlib.Path(__import__("sys").executable).resolve()),
             "torch": torch.__version__,
         },
