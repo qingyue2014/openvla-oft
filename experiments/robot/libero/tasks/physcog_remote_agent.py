@@ -467,6 +467,15 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a4_spatial_task1_cookie_goal_plate",
         ),
     ),
+    ("l3a4", "goal_task4_native_static"): PhaseSpec(
+        command=(
+            "python",
+            "experiments/robot/libero/tasks/audit_l3a4_goal_task4_native_static.py",
+        ),
+        artifacts=(
+            "experiments/logs/l3a4_goal_task4_native_static",
+        ),
+    ),
     ("l3a4", "task64_competence"): PhaseSpec(
         command=(
             "python",

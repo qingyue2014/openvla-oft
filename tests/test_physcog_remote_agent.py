@@ -160,6 +160,14 @@ def test_l3a4_registry_separates_geometry_scene_and_policy_phases():
         for item in task55_mirror.command
     )
     assert "--fail_on_invalid" in task55_mirror.command
+    goal_task4 = PHASES[("l3a4", "goal_task4_native_static")]
+    assert any(
+        item.endswith("audit_l3a4_goal_task4_native_static.py")
+        for item in goal_task4.command
+    )
+    assert goal_task4.artifacts == (
+        "experiments/logs/l3a4_goal_task4_native_static",
+    )
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
