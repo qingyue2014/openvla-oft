@@ -291,3 +291,26 @@ permanently rejected under the agreed native-only bounded search. No further
 grid expansion is authorized. Because no physical candidate passed, the
 validator correctly emitted `NOT_REVIEWABLE_PHYSICS_FAILED`, exported no
 PNG/MP4, and did not run a VLA.
+
+### Task-55 exact-AABB vertical mirror v3
+
+The separately authorized v3 mirrored the validated task59 compiled-AABB
+center-stack method with task55 roles S=`alphabet_soup`, A=`tomato_sauce`,
+and B=`butter`. Source commit `f43e5ca` bound the same actual policy-entry
+settled base, a fixed 25-point ±4 mm alignment grid, exact compiled collision
+primitive/mesh AABBs, an adjacent-witness requirement, and one-state
+EB/ER/EC physical and 256-pixel gates. No VLA was loaded by the experiment.
+
+Job `490110` did not produce a scene verdict. It remained CPU-active but was
+terminated by Slurm at the fixed wall limit:
+
+- scheduler state: `TIMEOUT`;
+- elapsed: `00:40:28`;
+- batch state: `CANCELLED`, exit `0:15`;
+- terminal message:
+  `JOB 490110 ... CANCELLED ... DUE TO TIME LIMIT`;
+- no probe JSON, PNG, MP4, state artifact, or PASS/FAIL marker was emitted.
+
+This is an orchestration timeout, not physical or visual evidence. Per the
+bounded-task instruction, task55 v3 is not rerun and task55 never enters VLA
+evaluation.
