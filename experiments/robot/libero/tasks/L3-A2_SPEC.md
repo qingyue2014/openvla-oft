@@ -1,5 +1,11 @@
 # L3-A2 — drawer support force cascade
 
+> **HISTORIC INVALID — DO NOT DELIVER OR EVALUATE.** This revision uses the
+> custom `cascade_panel` asset. The project now requires every causal-chain
+> object and fixture to be a native LIBERO asset. All results and pinned
+> HDF5/evidence below are retained only as an audit trail and cannot count
+> toward L3-A coverage.
+
 ## Claim
 
 L3-A measures whether a policy predicts a multi-object mechanical consequence

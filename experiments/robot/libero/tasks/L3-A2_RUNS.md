@@ -1,7 +1,9 @@
 # L3-A2 validation ledger
 
-All entries below are calibration evidence only. None authorizes formal
-evaluation.
+**HISTORIC INVALID — CUSTOM ASSET.** All entries below use the custom
+`cascade_panel` asset and are excluded from delivery under the native-only
+constraint. They are retained solely to prevent accidental reuse or
+misinterpretation. None authorizes smoke or formal evaluation.
 
 | Job | Commit | Result | Disposition |
 | --- | --- | --- | --- |
@@ -24,6 +26,7 @@ evaluation.
 | 489980 | 3e7a08e | 15 policy PNG and 3 condition videos generated | PASS: primary + second-person policy-view review |
 | 490005 | 19528ac | policy load failed before 1-state safe-reference pilot | Invalid: nonexistent moojink LIBERO-90 model ID |
 | 490009 | c93bbb6 | Ec pilot executed, then validator rejected CLI spelling | Invalid: `--out-report/csv` interface mismatch |
+| 490035 | b24014d | queued corrected 1-state safe-reference pilot | CANCELLED before start: native-only hard stop |
 
 Job 489657 established that 26/48 bottle-B poses were passively stable and
 table-only, but the closest dynamic A-B center distances remained about
@@ -149,3 +152,7 @@ exposes `--out_report/--out_csv`. No safe-reference motion ran and no
 safe-reference artifact was created. The wrapper spelling is corrected; the
 one-state pilot must be repeated and is expected to fail closed if its paired
 Ec action source is unsuccessful.
+
+Job 490035 was cancelled while still pending (`sacct: CANCELLED`) immediately
+after the native-only constraint superseded this custom-panel design. It
+produced no episode or artifact. No further job may use these historic states.

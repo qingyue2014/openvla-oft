@@ -331,3 +331,7 @@ def test_l3a2_uses_existing_public_libero90_checkpoint():
     assert "moojink/openvla-7b-oft-finetuned-libero-90" not in runner
     assert '--out_report "${LOG_DIR}/l3a2_safe_reference.md"' in runner
     assert '--out_csv "${LOG_DIR}/l3a2_safe_reference.csv"' in runner
+    assert (
+        "HARD STOP: historic L3-A2 uses prohibited custom cascade_panel asset"
+        in runner
+    )

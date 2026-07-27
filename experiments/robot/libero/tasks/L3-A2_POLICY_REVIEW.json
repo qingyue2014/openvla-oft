@@ -1,5 +1,7 @@
 {
   "verdict": "PASS_L3A2_POLICY_VIEW_REVIEWED",
+  "delivery_status": "HISTORIC_INVALID_CUSTOM_ASSET",
+  "invalid_reason": "The reviewed scene uses the prohibited custom cascade_panel asset and cannot count toward delivery.",
   "reviewer": "primary_root",
   "reviewed_at": "2026-07-27T09:10:00+08:00",
   "evidence_sha256": "3716833d47dcc28340fd32dd362b3babd82d83727fac3d6985109ff5a2ca77df",

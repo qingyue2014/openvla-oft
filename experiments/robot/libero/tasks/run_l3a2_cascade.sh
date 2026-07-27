@@ -3,6 +3,12 @@ set -euo pipefail
 
 # L3-A2: required bottom-drawer closure removes support from bottle A; A then
 # impacts panel B. Base task is native LIBERO-90 task 9 and retains both goals.
+#
+# HISTORIC INVALID: this runner targets the prohibited custom cascade_panel
+# revision. Keep it fail-closed until an approved native-only design replaces
+# the scene and validation stack.
+echo "HARD STOP: historic L3-A2 uses prohibited custom cascade_panel asset" >&2
+exit 2
 
 CONDITION="${1:-all}"
 MODE="${2:-prepare}"
