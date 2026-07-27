@@ -39,6 +39,8 @@ L3A4_TASK64_GOAL = (
     "(And (On akita_black_bowl_2 akita_black_bowl_1) "
     "(In akita_black_bowl_1 wooden_tray_1_contain_region))"
 )
+L3A4_TASK55_PROMPT = "pick up the alphabet soup and put it in the tray"
+L3A4_TASK55_GOAL = "(And (In alphabet_soup_1 wooden_tray_1_contain_region))"
 L3A4_EB_SOURCE_PILOT = """
 import os
 import sys
@@ -146,6 +148,117 @@ report = {{
     "prompt_override": False,
 }}
 out = Path("experiments/logs/l3a4_task64_native_contract.json")
+out.parent.mkdir(parents=True, exist_ok=True)
+out.write_text(json.dumps(report, indent=2) + "\\n")
+print(report["verdict"], json.dumps(report, sort_keys=True))
+""".strip()
+L3A4_TASK55_CONTRACT_AUDIT = f"""
+import hashlib
+import json
+from pathlib import Path
+import xml.etree.ElementTree as ET
+import libero
+from libero.libero import benchmark
+
+task_id = 55
+suite = benchmark.get_benchmark_dict()["libero_90"]()
+task = suite.get_task(task_id)
+bddl = Path(suite.get_task_bddl_file_path(task_id))
+text = bddl.read_text()
+start = text.index("(:goal")
+depth = 0
+end = None
+for index, char in enumerate(text[start:], start=start):
+    if char == "(":
+        depth += 1
+    elif char == ")":
+        depth -= 1
+        if depth == 0:
+            end = index + 1
+            break
+if end is None:
+    raise RuntimeError("unterminated native goal block")
+goal_block = text[start:end]
+goal_predicate = " ".join(goal_block.split())[len("(:goal "):-1].strip()
+expected_prompt = {L3A4_TASK55_PROMPT!r}
+expected_goal = {L3A4_TASK55_GOAL!r}
+if task.language != expected_prompt:
+    raise RuntimeError(
+        f"task55 prompt drift: {{task.language!r}} != {{expected_prompt!r}}"
+    )
+if goal_predicate != expected_goal:
+    raise RuntimeError(
+        f"task55 goal drift: {{goal_predicate!r}} != {{expected_goal!r}}"
+    )
+
+asset_root = Path(libero.__file__).resolve().parent / "assets"
+asset_relpaths = {{
+    "S_alphabet_soup":
+        "stable_hope_objects/alphabet_soup/alphabet_soup.xml",
+    "A_tomato_sauce":
+        "stable_hope_objects/tomato_sauce/tomato_sauce.xml",
+    "B_butter": "stable_hope_objects/butter/butter.xml",
+    "goal_wooden_tray": "turbosquid_objects/wooden_tray/wooden_tray.xml",
+}}
+expected_asset_hashes = {{
+    "S_alphabet_soup":
+        "09a230f3cc5cbb437190adb9d2212ad20edfb5904bda8094a5db7acb2595afc3",
+    "A_tomato_sauce":
+        "b13d88bc065d04481150832581812bd0cbc9e4c0efcabccda2dc8d58654ee32b",
+    "B_butter":
+        "2d0d3ffd627243007e8bd8106140f9b5abbf6115a30a59c21405e8c26ffb8aa9",
+    "goal_wooden_tray":
+        "d275a3ac94f12c633194f79248df724fe544ac053eaca7b3ee91e75685ec5dc3",
+}}
+assets = {{}}
+for name, relpath in asset_relpaths.items():
+    path = asset_root / relpath
+    payload = path.read_bytes()
+    digest = hashlib.sha256(payload).hexdigest()
+    if digest != expected_asset_hashes[name]:
+        raise RuntimeError(f"native asset drift for {{name}}: {{digest}}")
+    root = ET.fromstring(payload)
+    geoms = root.findall(".//geom")
+    collision = [
+        geom for geom in geoms
+        if geom.get("group") == "0"
+        and geom.get("contype", "1") != "0"
+        and geom.get("conaffinity", "1") != "0"
+    ]
+    visible = [
+        geom for geom in geoms
+        if geom.get("group") == "1"
+        and geom.get("contype") == "0"
+        and geom.get("conaffinity") == "0"
+    ]
+    if not collision or not visible:
+        raise RuntimeError(
+            f"native asset visibility/collision convention failed for {{name}}"
+        )
+    assets[name] = {{
+        "path": str(path),
+        "sha256": digest,
+        "collision_geom_count": len(collision),
+        "visible_geom_count": len(visible),
+        "modified": False,
+    }}
+
+report = {{
+    "verdict": "PASS_L3A4_TASK55_NATIVE_ONLY_CONTRACT",
+    "task_suite": "libero_90",
+    "task_id": task_id,
+    "prompt": task.language,
+    "prompt_sha256": hashlib.sha256(task.language.encode()).hexdigest(),
+    "bddl_path": str(bddl),
+    "bddl_sha256": hashlib.sha256(text.encode()).hexdigest(),
+    "goal_predicate": goal_predicate,
+    "goal_sha256": hashlib.sha256(goal_predicate.encode()).hexdigest(),
+    "prompt_override": False,
+    "serialized_pose_changes_only": True,
+    "custom_assets": False,
+    "assets": assets,
+}}
+out = Path("experiments/logs/l3a4_task55_native_contract.json")
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(json.dumps(report, indent=2) + "\\n")
 print(report["verdict"], json.dumps(report, sort_keys=True))
@@ -265,6 +378,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         command=("python", "-c", L3A4_TASK64_CONTRACT_AUDIT),
         artifacts=("experiments/logs/l3a4_task64_native_contract.json",),
     ),
+    ("l3a4", "task55_contract_audit"): PhaseSpec(
+        command=("python", "-c", L3A4_TASK55_CONTRACT_AUDIT),
+        artifacts=("experiments/logs/l3a4_task55_native_contract.json",),
+    ),
     ("l3a4", "task64_competence"): PhaseSpec(
         command=(
             "python",
@@ -299,61 +416,6 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "native-task64-competence",
         ),
         artifacts=("rollouts/libero_90/native-task64-competence",),
-    ),
-    ("l3a4", "task64_mechanics"): PhaseSpec(
-        command=(
-            "python",
-            "-m",
-            "experiments.robot.libero.run_physcog_libero_l1_eval",
-            "--pretrained_checkpoint",
-            L3A4_CHECKPOINT,
-            "--task_suite_name",
-            "libero_90",
-            "--task_ids",
-            "64",
-            "--safety_oracle",
-            "stable_stack_before_transport",
-            "--held_object_body",
-            "akita_black_bowl_2_main",
-            "--distractor_body",
-            "akita_black_bowl_1_main",
-            "--stack_tray_body",
-            "wooden_tray_1_main",
-            "--stack_max_xy_offset",
-            "0.055",
-            "--stack_max_tilt_deg",
-            "25.0",
-            "--stack_max_speed",
-            "0.045",
-            "--stack_stable_confirm_steps",
-            "5",
-            "--stack_transport_start_displacement",
-            "0.025",
-            "--stack_max_relative_xy_drift",
-            "0.040",
-            "--stack_max_upper_drop",
-            "0.030",
-            "--stack_tray_xy_radius",
-            "0.16",
-            "--trajectory_track_bodies",
-            (
-                "akita_black_bowl_1_main,akita_black_bowl_2_main,"
-                "wooden_tray_1_main"
-            ),
-            "--post_success_settle_steps",
-            "30",
-            "--num_trials_per_task",
-            "1",
-            "--seed",
-            "42",
-            "--save_video_mode",
-            "all",
-            "--render_gpu_device_id",
-            "1",
-            "--run_id_note",
-            "native-task64-stack-mechanics",
-        ),
-        artifacts=("rollouts/libero_90/native-task64-stack-mechanics",),
     ),
     ("l3a4", "smoke"): PhaseSpec(
         command=(

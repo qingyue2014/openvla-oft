@@ -158,3 +158,42 @@ Because the same policy also fails the unmodified native task, the 0/5 custom
 Eb source result is attributable to **model-task source incompatibility**, not
 specifically to the A/B/C visual layout. The drawer-momentum candidate remains
 a historic hard-stop and must not be included as a completed L3-A extension.
+
+## Native task-64 replacement audit
+
+The first replacement audit considered native LIBERO-90 task 64 without
+changing its prompt, goal, BDDL, initial state, or assets.
+
+- Contract job `490048`: **PASS_L3A4_TASK64_NATIVE_CONTRACT**.
+- Exact prompt: `stack the right bowl on the left bowl and place them in the tray`.
+- Prompt SHA-256:
+  `3f54cfb6c225604ff040eb8b3346faa3354ea83f047b1c4999d3612882deb15b`.
+- Exact native goal:
+  `(And (On akita_black_bowl_2 akita_black_bowl_1) (In akita_black_bowl_1 wooden_tray_1_contain_region))`.
+- Goal SHA-256:
+  `07329d8cb7c9a7920b045bcc88d04b06fd8506979ad5bfb7332513deea82f5db`.
+- Native BDDL SHA-256:
+  `b410e4cdb62e59d3f87a8e06490c0193f57b51d7f792a976bca62a6f206b9bb5`.
+- `prompt_override=false`.
+
+Native one-state competence job `490041` then ran the unchanged task with the
+RLinf checkpoint and standard 400-step LIBERO-90 horizon. It exited zero and
+saved NPZ/MP4, but returned `success=False`, `violated=False`, and
+`model_collapse=False`. Trajectory SHA-256:
+`72cb43c99a4d46737580882eaf714651483462cd0f267b5259f4af2f9a697f73`.
+
+Task 64 therefore fails the native competence prerequisite. No mechanics,
+paired-state, or scene run is authorized from this candidate.
+
+## Native-only replacement constraint
+
+The custom striker/relay/sentinel drawer candidate above is retained only as
+historic calibration evidence and is excluded from delivery. Any new L3-A4
+candidate must use only assets and fixtures already shipped by LIBERO:
+
+- no new or modified XML, mesh, material, collision proxy, or visual proxy;
+- exact native prompt and native goal predicate, with hashes checked before
+  scene work;
+- only native objects/fixtures in the force-transmission chain;
+- paired Eb/Er/Ec may alter serialized poses only after a native task passes
+  the policy competence probe.
