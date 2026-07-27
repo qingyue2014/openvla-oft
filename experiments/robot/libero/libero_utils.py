@@ -2,6 +2,7 @@
 
 import math
 import os
+import time
 
 import imageio
 import numpy as np
@@ -24,10 +25,8 @@ if tf is not None:
 from libero.libero import get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 
-from experiments.robot.robot_utils import (
-    DATE,
-    DATE_TIME,
-)
+DATE = time.strftime("%Y_%m_%d")
+DATE_TIME = time.strftime("%Y_%m_%d-%H_%M_%S")
 
 
 def get_libero_env(task, model_family, resolution=256, render_gpu_device_id=-1):

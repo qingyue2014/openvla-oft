@@ -88,6 +88,17 @@ setup_cosmos() {
     "${UV[@]}" sync --extra cu128 --group libero --python 3.10
   )
   test -x "${COSMOS_SOURCE_DEST}/.venv/bin/python"
+  "${COSMOS_SOURCE_DEST}/.venv/bin/python" - <<'PY'
+import pathlib
+import site
+
+path = pathlib.Path(site.getsitepackages()[0]) / "robosuite" / "macros_private.py"
+path.write_text(
+    "import robosuite.macros as macros\n"
+    "macros.FILE_LOGGING_LEVEL = None\n",
+    encoding="utf-8",
+)
+PY
   "${COSMOS_SOURCE_DEST}/.venv/bin/python" - \
     "${COSMOS_SOURCE_DEST}/cosmos_superpod_setup.json" <<'PY'
 import json
