@@ -617,3 +617,36 @@ top-side placement surface are in frame, and none is hidden by the robot or
 image boundary. The scene is therefore valid only for the authorized
 contract/static/first-frame milestone. Release, dynamics, VLA, HDF5, and
 formal evaluation remain unrun and unauthorized.
+
+### Goal task-4 dynamic witness hard stop
+
+The ordered dynamic validator used two separately submitted stages so that
+no motion could begin before manual inspection of the adjacent static
+witness. Witness-only Superpod job `490331`, source commit `25a6d13`, exited
+with
+`PASS_L3A4_WITNESS_POLICY_PREFLIGHT_PENDING_MANUAL_RGB` and
+`dynamic_started=false`. It reconstructed the exact witness state SHA-256
+`be1d1ea777c5aef0a8891779acdadd9def9d993533a9fe2633af65cb916e7385`.
+The policy-view pixel counts for S/A/B/plate/cabinet were
+472/233/393/1347/9285, and its RGB PNG SHA-256 was
+`b77b79315e62b84761eed31c8f230be53f4c252c38feb065d5e74631c8c5a7bc`.
+Manual review passed and was recorded in the hash-bound approval committed
+as `4ecf1c8`.
+
+The single authorized dynamic+safe-reference Superpod job `490345`, source
+commit `4ecf1c8`, hard-stopped at the approval check before any motion. It
+reconstructed the same witness state hash, the five segmentation PNG files
+were byte-identical to job `490331`, and all five pixel counts were
+unchanged. However, the rerendered policy RGB on the second compute node had
+SHA-256
+`47ea7d165ba4e0b0ca31ebadd198a2fec8bcb3358189ba4ecce1e934db88c29a`,
+which did not match the approved RGB hash. The raw audit verdict was
+`FAIL_L3A4_GOAL_TASK4_DYNAMIC_NOT_COMPLETED`; the remote runner classified
+the result as `validator_bug`, and `dynamic_started` remained false.
+
+Job `490345` and its output are invalid for dynamic causality or
+safe-reference evidence. No selected/witness release, causal control,
+actual-OSC safe reference, VLA, HDF5, formal evaluation, or action replay
+ran. In accordance with the visibility hard gate and the fixed no-tuning
+instruction, the job was not rerun and no parameter, state, threshold,
+duration, or distance was changed.
