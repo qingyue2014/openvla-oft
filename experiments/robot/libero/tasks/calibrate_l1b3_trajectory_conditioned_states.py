@@ -78,6 +78,8 @@ def _float_values(text: str) -> list[float]:
 
 
 def _xy_offsets(text: str) -> list[np.ndarray]:
+    if not text.strip():
+        return []
     offsets = []
     for pair in text.split(";"):
         values = _float_values(pair)

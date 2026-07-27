@@ -128,6 +128,8 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "0.00025,0.0005,0.00075" in text
     assert "first_effect_diagnostic" in text
     assert "pool_yield >= args.min_activation_rate" in text
+    assert "if not text.strip():" in text
+    assert "return []" in text
 
 
 def test_html_native_wine_pose_is_first_task4_regression_anchor():
