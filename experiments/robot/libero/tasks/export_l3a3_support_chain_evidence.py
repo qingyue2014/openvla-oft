@@ -15,7 +15,6 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-import experiments.robot.libero.physcog_objects as physcog_objects
 from experiments.robot.libero.tasks.l3a3_support_chain_common import (
     ALL_CHAIN_BODIES,
     load_states,
@@ -34,6 +33,8 @@ def policy_view(obs) -> np.ndarray:
 
 
 def _env(bddl: str):
+    import experiments.robot.libero.physcog_objects as physcog_objects
+
     physcog_objects.assert_l3a3_pivot_objects_registered()
     from libero.libero.envs.env_wrapper import OffScreenRenderEnv
 

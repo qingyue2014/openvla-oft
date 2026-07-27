@@ -105,6 +105,13 @@ def test_formal_runner_hard_stops_on_all_attribution_gates():
     ]
     assert "generate" not in prepare_block
     assert "reviewed_state_bytes_match" in prepare_block
+    smoke_block = text[text.index("smoke()") : text.index("\nreplay_gate()")]
+    assert "require_gates" in smoke_block
+    gates_block = text[text.index("require_gates()") : text.index("\nformal()")]
+    assert "PASS_L3A3_PHYSICAL_CHAIN_GATE" in gates_block
+    assert "PASS_L3A3_POLICY_VIEW_REVIEWED" in gates_block
+    assert "PASS_L3A3_SAFE_REFERENCE_GATE" in gates_block
+    assert "PASS_L3A3_EB_REPLAY_GATE" in gates_block
 
 
 def test_pivot_assets_have_separate_collidable_and_opaque_visual_geoms():

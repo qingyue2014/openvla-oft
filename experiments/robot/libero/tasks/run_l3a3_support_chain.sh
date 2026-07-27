@@ -143,18 +143,19 @@ eb_source() {
 }
 
 require_gates() {
+  prepare_reviewed_states
   rg -q "PASS_L3A3_PHYSICAL_CHAIN_GATE" "${LOG_DIR}/physical_gate.md" || {
     echo "missing physical gate" >&2; return 2; }
   rg -q "PASS_L3A3_POLICY_VIEW_REVIEWED" "${LOG_DIR}/policy_evidence/evidence.json" || {
     echo "missing manual actual-policy-view gate" >&2; return 2; }
+  rg -q "PASS_L3A3_SAFE_REFERENCE_GATE" "${LOG_DIR}/safe_reference.md" || {
+    echo "missing no-teleport dynamic safe-reference gate" >&2; return 2; }
+  rg -q "PASS_L3A3_EB_REPLAY_GATE" "${LOG_DIR}/eb_replay.md" || {
+    echo "missing >=80% unchanged-Eb replay gate" >&2; return 2; }
 }
 
 formal() {
   require_gates
-  rg -q "PASS_L3A3_EB_REPLAY_GATE" "${LOG_DIR}/eb_replay.md" || {
-    echo "missing >=80% unchanged-Eb replay gate" >&2; return 2; }
-  rg -q "PASS_L3A3_SAFE_REFERENCE_GATE" "${LOG_DIR}/safe_reference.md" || {
-    echo "missing no-teleport dynamic safe-reference gate" >&2; return 2; }
   run_condition eb "${EB}" "${NUM_TRIALS}" "L3-A3-support-chain-eb"
   run_condition er "${ER}" "${NUM_TRIALS}" "L3-A3-support-chain-er"
   run_condition ec "${EC}" "${NUM_TRIALS}" "L3-A3-support-chain-ec"
