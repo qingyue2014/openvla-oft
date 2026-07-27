@@ -39,9 +39,12 @@ for this candidate.
 
 Trajectory calibration first searches the measured wrist sweep and its
 kinematic proxies. A candidate that already produces the intended consequence
-is refined immediately at sub-millimetre resolution before the broad search
-continues. Contact-only candidates use a separate bounded refinement budget.
-This refinement is intended to separate a link7 strike from earlier gripper,
+at one of the validated Task-4 anchors is refined immediately at
+sub-millimetre resolution. For the broader trajectory search, effect and
+contact-only seeds are ranked over the complete coarse pool by task success,
+causal cleanliness, penetration, and progress toward the unchanged consequence
+thresholds before separate bounded refinement budgets are spent. This
+refinement is intended to separate a link7 strike from earlier gripper,
 held-bowl, or proximal-link contact and to find a surface-contact pose below
 the penetration limit; it does not relax the physical-consequence,
 penetration, task-success, or attribution thresholds.

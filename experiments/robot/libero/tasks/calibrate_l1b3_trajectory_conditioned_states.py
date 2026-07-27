@@ -153,6 +153,103 @@ def _causal_contact_partition(
     )
 
 
+def _consequence_score(replay: dict, args: argparse.Namespace) -> float:
+    """Return progress toward either unchanged physical-effect threshold."""
+    displacement_score = (
+        replay["displacement_m"] / args.min_obstacle_displacement
+        if args.min_obstacle_displacement > 0
+        else 0.0
+    )
+    tilt_score = (
+        replay["tilt_deg"] / args.min_obstacle_tilt_change_deg
+        if args.min_obstacle_tilt_change_deg > 0
+        else 0.0
+    )
+    return max(displacement_score, tilt_score)
+
+
+def _refinement_seed_priority(
+    replay: dict,
+    args: argparse.Namespace,
+    *,
+    kind: str,
+) -> tuple[float, ...]:
+    """Rank coarse seeds without relaxing any acceptance condition.
+
+    The previous search refined the first contact/effect seeds encountered.
+    Candidate order is only a sampling artifact, so it often exhausted the
+    local-search budget around deeply penetrating or causally confounded
+    points. Rank the complete coarse pool instead: successful-task,
+    attribution-clean, low-penetration, near-threshold seeds come first.
+    """
+    reference_key = "intended" if kind == "effect" else "intended_contact"
+    reference_step = replay["hit_steps"].get(reference_key)
+    confound_steps = [
+        replay["hit_steps"].get(name)
+        for name in ("other_arm", "gripper", "held_object")
+    ]
+    causal_steps = [
+        step
+        for step in confound_steps
+        if step is not None
+        and reference_step is not None
+        and step <= reference_step
+    ]
+    # For tied confound counts, prefer contacts closest to the attribution
+    # boundary: a small pose perturbation is more likely to move those
+    # secondary contacts after the intended event.
+    earliest_margin = (
+        1.0
+        if not causal_steps or reference_step is None
+        else float(min(causal_steps) - reference_step)
+    )
+    penetration = float(replay["penetration_m"])
+    penetration_excess = max(0.0, penetration - args.max_contact_penetration)
+    return (
+        float(bool(replay["task_success"])),
+        float(not causal_steps),
+        float(-len(causal_steps)),
+        earliest_margin,
+        float(penetration <= args.max_contact_penetration),
+        -penetration_excess,
+        _consequence_score(replay, args),
+        -penetration,
+    )
+
+
+def _novel_refinement_candidates(
+    *,
+    path_step: int,
+    proposed_link: str,
+    placement: np.ndarray,
+    kind: str,
+    offsets: list[np.ndarray],
+    limit: int,
+    seen_placements: set[tuple[float, float]],
+) -> list[tuple[int, str, np.ndarray, str]]:
+    additions: list[tuple[int, str, np.ndarray, str]] = []
+    for offset in offsets:
+        if len(additions) >= limit:
+            break
+        refined = placement + offset
+        key = (
+            round(float(refined[0]), 5),
+            round(float(refined[1]), 5),
+        )
+        if key in seen_placements:
+            continue
+        seen_placements.add(key)
+        additions.append(
+            (
+                path_step,
+                f"{proposed_link}_{kind}_refinement",
+                refined,
+                kind,
+            )
+        )
+    return additions
+
+
 def _measured_wrist_geom_path(
     env,
     eb_state: np.ndarray,
@@ -576,11 +673,15 @@ def calibrate(args: argparse.Namespace) -> str:
             contact_refinement_seeds = 0
             effect_refinement_attempts = 0
             effect_refinement_seeds = 0
+            ranked_contact_seed_candidates = 0
+            ranked_effect_seed_candidates = 0
             matched_control_failures = 0
             table_z_values = []
             invalid_reasons: Counter[str] = Counter()
             first_invalid_diagnostic = ""
             first_effect_diagnostic = ""
+            best_contact_diagnostic = ""
+            best_contact_score = float("-inf")
             if physics_qualified_eb:
                 candidates = _trajectory_candidates(
                     trajectory,
@@ -634,9 +735,110 @@ def calibrate(args: argparse.Namespace) -> str:
                 pending_refinements: list[
                     tuple[int, str, np.ndarray, str]
                 ] = []
+                contact_seed_pool: list[
+                    tuple[
+                        tuple[float, ...],
+                        int,
+                        str,
+                        np.ndarray,
+                    ]
+                ] = []
+                effect_seed_pool: list[
+                    tuple[
+                        tuple[float, ...],
+                        int,
+                        str,
+                        np.ndarray,
+                    ]
+                ] = []
                 scheduled_contact_refinements = 0
                 scheduled_effect_refinements = 0
-                while coarse_index < len(candidates) or pending_refinements:
+
+                def schedule_refinement_seed(
+                    kind: str,
+                    path_step: int,
+                    proposed_link: str,
+                    placement: np.ndarray,
+                ) -> int:
+                    nonlocal refinement_seeds
+                    nonlocal contact_refinement_seeds
+                    nonlocal effect_refinement_seeds
+                    nonlocal scheduled_contact_refinements
+                    nonlocal scheduled_effect_refinements
+                    if kind == "effect":
+                        if (
+                            effect_refinement_seeds
+                            >= args.max_refinement_seeds
+                        ):
+                            return 0
+                        remaining = (
+                            args.max_refinement_candidates
+                            - scheduled_effect_refinements
+                        )
+                        offsets = effect_refinement_offsets
+                    else:
+                        if (
+                            contact_refinement_seeds
+                            >= args.max_contact_refinement_seeds
+                        ):
+                            return 0
+                        remaining = (
+                            args.max_contact_refinement_candidates
+                            - scheduled_contact_refinements
+                        )
+                        offsets = contact_refinement_offsets
+                    if remaining <= 0:
+                        return 0
+                    additions = _novel_refinement_candidates(
+                        path_step=path_step,
+                        proposed_link=proposed_link,
+                        placement=placement,
+                        kind=kind,
+                        offsets=offsets,
+                        limit=remaining,
+                        seen_placements=seen_placements,
+                    )
+                    pending_refinements.extend(additions)
+                    if not additions:
+                        return 0
+                    refinement_seeds += 1
+                    if kind == "effect":
+                        effect_refinement_seeds += 1
+                        scheduled_effect_refinements += len(additions)
+                    else:
+                        contact_refinement_seeds += 1
+                        scheduled_contact_refinements += len(additions)
+                    return len(additions)
+
+                ranked_refinements_scheduled = False
+                while True:
+                    if (
+                        not pending_refinements
+                        and coarse_index >= len(candidates)
+                    ):
+                        if ranked_refinements_scheduled:
+                            break
+                        ranked_refinements_scheduled = True
+                        ranked_effect_seed_candidates = len(effect_seed_pool)
+                        ranked_contact_seed_candidates = len(contact_seed_pool)
+                        for _, seed_step, seed_link, seed_xy in sorted(
+                            effect_seed_pool,
+                            key=lambda item: item[0],
+                            reverse=True,
+                        ):
+                            schedule_refinement_seed(
+                                "effect", seed_step, seed_link, seed_xy
+                            )
+                        for _, seed_step, seed_link, seed_xy in sorted(
+                            contact_seed_pool,
+                            key=lambda item: item[0],
+                            reverse=True,
+                        ):
+                            schedule_refinement_seed(
+                                "contact", seed_step, seed_link, seed_xy
+                            )
+                        if not pending_refinements:
+                            break
                     if pending_refinements:
                         (
                             path_step,
@@ -705,6 +907,21 @@ def calibrate(args: argparse.Namespace) -> str:
                     intended_effect_candidates += int(
                         replay["hits"]["intended"]
                     )
+                    if replay["hits"]["intended_contact"]:
+                        consequence_score = _consequence_score(replay, args)
+                        if consequence_score > best_contact_score:
+                            best_contact_score = consequence_score
+                            best_contact_diagnostic = (
+                                f"placement=({placement[0]:.5f},"
+                                f"{placement[1]:.5f}) "
+                                f"path_step={path_step} "
+                                f"proposed_link={proposed_link} "
+                                f"hit_steps={replay['hit_steps']} "
+                                f"score={consequence_score:.4f} "
+                                f"displacement={replay['displacement_m']:.5f} "
+                                f"tilt={replay['tilt_deg']:.2f} "
+                                f"penetration={replay['penetration_m']:.6f}"
+                            )
                     confounded, late_contact = _causal_contact_partition(
                         replay["hit_steps"]
                     )
@@ -760,67 +977,53 @@ def calibrate(args: argparse.Namespace) -> str:
                             "control": control,
                         }
                         break
-                    refinement_kind_to_schedule = ""
-                    refinement_offsets = ()
-                    remaining_refinement_budget = 0
+                    immediate_anchor = path_step == -1 and not is_refinement
                     if (
                         refinement_kind != "effect"
                         and replay["hits"]["intended"]
-                        and effect_refinement_seeds < args.max_refinement_seeds
-                        and scheduled_effect_refinements
-                        < args.max_refinement_candidates
+                        and (immediate_anchor or refinement_kind == "contact")
                     ):
-                        refinement_kind_to_schedule = "effect"
-                        refinement_offsets = effect_refinement_offsets
-                        remaining_refinement_budget = (
-                            args.max_refinement_candidates
-                            - scheduled_effect_refinements
+                        schedule_refinement_seed(
+                            "effect",
+                            path_step,
+                            proposed_link,
+                            placement,
+                        )
+                    elif (
+                        immediate_anchor
+                        and replay["hits"]["intended_contact"]
+                    ):
+                        schedule_refinement_seed(
+                            "contact",
+                            path_step,
+                            proposed_link,
+                            placement,
+                        )
+                    elif not is_refinement and replay["hits"]["intended"]:
+                        effect_seed_pool.append(
+                            (
+                                _refinement_seed_priority(
+                                    replay, args, kind="effect"
+                                ),
+                                path_step,
+                                proposed_link,
+                                placement.copy(),
+                            )
                         )
                     elif (
                         not is_refinement
                         and replay["hits"]["intended_contact"]
-                        and contact_refinement_seeds
-                        < args.max_contact_refinement_seeds
-                        and scheduled_contact_refinements
-                        < args.max_contact_refinement_candidates
                     ):
-                        refinement_kind_to_schedule = "contact"
-                        refinement_offsets = contact_refinement_offsets
-                        remaining_refinement_budget = (
-                            args.max_contact_refinement_candidates
-                            - scheduled_contact_refinements
+                        contact_seed_pool.append(
+                            (
+                                _refinement_seed_priority(
+                                    replay, args, kind="contact"
+                                ),
+                                path_step,
+                                proposed_link,
+                                placement.copy(),
+                            )
                         )
-                    if refinement_kind_to_schedule:
-                        additions = 0
-                        for offset in refinement_offsets:
-                            if additions >= remaining_refinement_budget:
-                                break
-                            refined = placement + offset
-                            key = (
-                                round(float(refined[0]), 5),
-                                round(float(refined[1]), 5),
-                            )
-                            if key in seen_placements:
-                                continue
-                            seen_placements.add(key)
-                            pending_refinements.append(
-                                (
-                                    path_step,
-                                    f"{proposed_link}_{refinement_kind_to_schedule}"
-                                    "_refinement",
-                                    refined,
-                                    refinement_kind_to_schedule,
-                                )
-                            )
-                            additions += 1
-                        if additions:
-                            refinement_seeds += 1
-                            if refinement_kind_to_schedule == "effect":
-                                effect_refinement_seeds += 1
-                                scheduled_effect_refinements += additions
-                            else:
-                                contact_refinement_seeds += 1
-                                scheduled_contact_refinements += additions
             if selected is not None:
                 output_er_states[episode] = selected["state"]
                 output_ec_states[episode] = selected["control"]["state"]
@@ -848,6 +1051,10 @@ def calibrate(args: argparse.Namespace) -> str:
                 "contact_refinement_seeds": contact_refinement_seeds,
                 "effect_refinement_attempts": effect_refinement_attempts,
                 "effect_refinement_seeds": effect_refinement_seeds,
+                "ranked_contact_seed_candidates": (
+                    ranked_contact_seed_candidates
+                ),
+                "ranked_effect_seed_candidates": ranked_effect_seed_candidates,
                 "matched_control_failures": matched_control_failures,
                 "invalid_reasons": ";".join(
                     f"{reason}={count}"
@@ -855,6 +1062,7 @@ def calibrate(args: argparse.Namespace) -> str:
                 ),
                 "first_invalid_diagnostic": first_invalid_diagnostic,
                 "first_effect_diagnostic": first_effect_diagnostic,
+                "best_contact_diagnostic": best_contact_diagnostic,
                 "confounded_candidates": confounded_candidates,
                 "late_contact_candidates": late_contact_candidates,
                 "path_step": "" if selected is None else selected["path_step"],
@@ -1069,10 +1277,9 @@ def calibrate(args: argparse.Namespace) -> str:
     report.write_text(
         f"# {args.family} trajectory-conditioned wine-bottle/link calibration\n\n"
         f"Verdict: **{verdict}**\n\n"
-        f"- Successful paired Eb trajectories: {successful}\n"
-        f"- Isolated post-grasp terminal-wrist consequences: {calibrated}\n"
-        f"- Activation rate: {activation_rate:.3f}\n"
         f"- Qualification pool processed: {len(rows)}\n"
+        f"- Qualification pool physics-qualified Eb: {pool_successful}\n"
+        f"- Qualification pool isolated link7 consequences: {pool_calibrated}\n"
         f"- Qualification pool yield: {pool_calibrated}/{pool_successful} "
         f"({pool_yield:.3f})\n"
         f"- Selected qualified states: "

@@ -85,6 +85,12 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "max_contact_refinement_candidates" in text
     assert "effect_refinement_attempts" in text
     assert "contact_refinement_attempts" in text
+    assert "def _refinement_seed_priority(" in text
+    assert "ranked_contact_seed_candidates" in text
+    assert "ranked_effect_seed_candidates" in text
+    assert "best_contact_diagnostic" in text
+    assert "Qualification pool physics-qualified Eb" in text
+    assert "Qualification pool isolated link7 consequences" in text
     assert "0.00025,0.0005,0.00075" in text
     assert "first_effect_diagnostic" in text
     assert "pool_yield >= args.min_activation_rate" in text
