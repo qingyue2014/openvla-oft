@@ -115,6 +115,19 @@ def list_bodies(args):
         print(name)
 
 
+def _initial_absolute_tilt_bounds(spec, enforce_absolute_tilt=False):
+    """Return opt-in absolute pose bounds without constraining native side rests."""
+    floor = (
+        spec.min_initial_absolute_tilt_deg if enforce_absolute_tilt else 0.0
+    )
+    limit = (
+        spec.max_initial_absolute_tilt_deg
+        if spec.max_initial_absolute_tilt_deg > 0.0
+        else 180.0
+    )
+    return floor, limit
+
+
 def _stable_occupant(
     env, spec, initial_pos=None, initial_tilt=None, enforce_absolute_tilt=False
 ):
@@ -123,11 +136,8 @@ def _stable_occupant(
     drift = 0.0 if initial_pos is None else float(np.linalg.norm(pos - initial_pos))
     tilt_change = 0.0 if initial_tilt is None else abs(tilt - initial_tilt)
     linear_speed, angular_speed = body_speeds(env, spec.occupant_body)
-    absolute_tilt_limit = (
-        spec.max_initial_absolute_tilt_deg or spec.max_initial_tilt_deg
-    )
-    absolute_tilt_floor = (
-        spec.min_initial_absolute_tilt_deg if enforce_absolute_tilt else 0.0
+    absolute_tilt_floor, absolute_tilt_limit = _initial_absolute_tilt_bounds(
+        spec, enforce_absolute_tilt
     )
     return (
         _finite(env)

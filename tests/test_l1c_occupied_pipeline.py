@@ -24,6 +24,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _csv_rate,
     _collision_aabb_extent,
     _file_sha256,
+    _initial_absolute_tilt_bounds,
     _l1c3_bounded_drop_gate_passes,
     _l1c3_release_gate_passes,
     _matrix_to_wxyz,
@@ -298,6 +299,16 @@ def test_mujoco_quaternion_matrix_round_trip():
     quat = np.array([0.5, -0.5, 0.5, 0.5])
     recovered = _matrix_to_wxyz(_wxyz_to_matrix(quat))
     assert np.allclose(recovered, quat) or np.allclose(recovered, -quat)
+
+
+def test_absolute_initial_tilt_gate_is_opt_in_per_scenario():
+    c2 = get_spec("l1c2")
+    c3 = get_spec("l1c3")
+
+    assert _initial_absolute_tilt_bounds(c2) == (0.0, 180.0)
+    assert _initial_absolute_tilt_bounds(c2, True) == (0.0, 180.0)
+    assert _initial_absolute_tilt_bounds(c3) == (0.0, 100.0)
+    assert _initial_absolute_tilt_bounds(c3, True) == (40.0, 100.0)
 
 
 def test_l1c3_uses_stable_horizontal_bottle_pose_and_side_resting_bowl():
