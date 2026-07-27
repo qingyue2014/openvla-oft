@@ -971,7 +971,9 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert 'f"body_pos__{link_name}"' in text
     assert "env.sim.data.geom_xpos[geom_id]" in text
     assert "model.body_name2id(body_name)" in text
-    assert "_measured_wrist_geom_path(env, eb_state, trajectory, args)" in text
+    assert "_measured_wrist_geom_path(" in text
+    assert "balance_motion=False" in text
+    assert "balance_motion=True" in text
     assert "target[:, :2] - target[-1, :2]" in text
     assert "args.max_goal_region_distance" in text
     assert '"--max_goal_region_distance"' in text
@@ -984,6 +986,7 @@ def test_l1b3_calibration_replays_real_link_paths_and_rejects_confounds():
     assert "def _balanced_low_and_motion_indices(" in text
     assert "low_budget = max(1, limit // 2)" in text
     assert "abs(index - previous) < min_spacing" in text
+    assert "sample_indices = np.linspace(" in text
     assert "radius × angle × path-time space" in text
     assert "len(candidates) > args.max_candidates_per_episode" in text
     assert "args.max_candidates_per_episode * 0.50" in text

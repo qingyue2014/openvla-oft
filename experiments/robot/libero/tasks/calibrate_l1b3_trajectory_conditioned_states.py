@@ -310,6 +310,8 @@ def _measured_wrist_geom_path(
     eb_state: np.ndarray,
     trajectory: dict,
     args: argparse.Namespace,
+    *,
+    balance_motion: bool = False,
 ) -> list[tuple[int, str, np.ndarray]]:
     """Replay Eb once and measure the actual terminal-wrist geom sweep.
 
@@ -379,13 +381,17 @@ def _measured_wrist_geom_path(
                     float(position[2]),
                 )
             )
-    # Low wrist surfaces remain the most contactable, but using only the
-    # lowest samples discards the horizontal transport instants that can tip a
-    # bottle without the gripper catching up. Split the bounded path budget
-    # between low geometry and high measured body motion.
+    # Preserve the historical low-surface pool as the global-grid fallback.
+    # A separate call with ``balance_motion`` supplies additional energetic
+    # path instants without replacing any of those established hypotheses.
     measured.sort(key=lambda item: (item[3], -item[0], item[1]))
-    if len(measured) <= args.max_path_steps_per_link:
+    if (
+        not balance_motion
+        or len(measured) <= args.max_path_steps_per_link
+    ):
         selected = measured
+        if len(selected) > args.max_path_steps_per_link:
+            selected = selected[: args.max_path_steps_per_link]
     else:
         low_budget = max(1, args.max_path_steps_per_link // 2)
         selected = measured[:low_budget]
@@ -506,10 +512,18 @@ def _trajectory_candidates(
         np.linalg.norm(target[:, :2] - target[-1, :2], axis=1)
         <= args.max_goal_region_distance
     )
-    candidate_steps: list[tuple[int, str, np.ndarray]] = []
+    global_candidate_steps: list[tuple[int, str, np.ndarray]] = []
+    motion_candidate_steps: list[tuple[int, str, np.ndarray]] = []
     if env is not None and eb_state is not None:
-        candidate_steps.extend(
-            _measured_wrist_geom_path(env, eb_state, trajectory, args)
+        global_candidate_steps.extend(
+            _measured_wrist_geom_path(
+                env, eb_state, trajectory, args, balance_motion=False
+            )
+        )
+        motion_candidate_steps.extend(
+            _measured_wrist_geom_path(
+                env, eb_state, trajectory, args, balance_motion=True
+            )
         )
     # The wrist collision meshes are offset from their body origins. The
     # coincident
@@ -530,22 +544,65 @@ def _trajectory_candidates(
             and goal_region[index]
             and args.min_link_z <= positions[index, 2] <= args.max_link_z
         ]
-        selected = _balanced_low_and_motion_indices(
+        low_order = sorted(
+            eligible, key=lambda index: (positions[index, 2], -index)
+        )
+        spaced: list[int] = []
+        for index in low_order:
+            if all(
+                abs(index - previous) >= args.min_step_spacing
+                for previous in spaced
+            ):
+                spaced.append(index)
+        if len(spaced) > args.max_path_steps_per_link:
+            sample_indices = np.linspace(
+                0,
+                len(spaced) - 1,
+                num=args.max_path_steps_per_link,
+                dtype=int,
+            )
+            global_selected = [
+                spaced[index] for index in np.unique(sample_indices)
+            ]
+        else:
+            global_selected = spaced
+        motion_selected = _balanced_low_and_motion_indices(
             eligible,
             positions,
             args.max_path_steps_per_link,
             args.motion_direction_window_steps,
             args.min_step_spacing,
         )
-        for index in selected:
-            candidate_steps.append((index, link_name, positions[index, :2]))
+        for index in global_selected:
+            global_candidate_steps.append(
+                (index, link_name, positions[index, :2])
+            )
+        for index in motion_selected:
+            motion_candidate_steps.append(
+                (index, link_name, positions[index, :2])
+            )
+
+    motion_candidates = _motion_aligned_candidates(
+        motion_candidate_steps, trajectory, args
+    )
+
+    global_candidates: list[tuple[int, str, np.ndarray]] = []
+    radii = _float_values(args.radial_distance_candidates)
+    angles = np.deg2rad(_float_values(args.angular_candidates_deg))
+    # Search every observed path instant at one radius before expanding the
+    # next radius. This avoids spending the whole budget around a single step.
+    for radius in radii:
+        for angle in angles:
+            offset = radius * np.array([np.cos(angle), np.sin(angle)], dtype=float)
+            for index, link_name, link_xy in global_candidate_steps:
+                placement = link_xy + offset
+                global_candidates.append((index, link_name, placement))
 
     candidates: list[tuple[int, str, np.ndarray]] = []
     seen: set[tuple[float, float]] = set()
 
-    def append_novel(
-        path_step: int, proposed_link: str, placement: np.ndarray
-    ) -> None:
+    def append_novel(candidate: tuple[int, str, np.ndarray]) -> None:
+        path_step, proposed_link, placement = candidate
         # Replay depends on the serialized pose, not on the diagnostic path
         # label.  Deduplicating XY across nearby path samples preserves replay
         # budget for genuinely different physical hypotheses.
@@ -558,25 +615,24 @@ def _trajectory_candidates(
         seen.add(key)
         candidates.append((path_step, proposed_link, placement))
 
-    for index, link_name, placement in _motion_aligned_candidates(
-        candidate_steps, trajectory, args
+    # New motion hypotheses must not crowd the established global grid out of
+    # the bounded replay prefix. Interleave three global proposals for every
+    # motion-aligned proposal, then exhaust either remainder.
+    global_index = 0
+    motion_index = 0
+    global_stride = max(1, args.global_candidates_per_motion)
+    while (
+        global_index < len(global_candidates)
+        or motion_index < len(motion_candidates)
     ):
-        append_novel(index, link_name, placement)
-
-    radii = _float_values(args.radial_distance_candidates)
-    angles = np.deg2rad(_float_values(args.angular_candidates_deg))
-    # Search every observed path instant at one radius before expanding the
-    # next radius. This avoids spending the whole budget around a single step.
-    for radius in radii:
-        for angle in angles:
-            offset = radius * np.array([np.cos(angle), np.sin(angle)], dtype=float)
-            for index, link_name, link_xy in candidate_steps:
-                placement = link_xy + offset
-                # Every angle is identical at radius zero, and nearby path
-                # samples can quantize to the same pose. Replaying duplicate
-                # placements multiplies calibration time without adding a
-                # distinct physical hypothesis.
-                append_novel(index, link_name, placement)
+        for _ in range(global_stride):
+            if global_index >= len(global_candidates):
+                break
+            append_novel(global_candidates[global_index])
+            global_index += 1
+        if motion_index < len(motion_candidates):
+            append_novel(motion_candidates[motion_index])
+            motion_index += 1
     return candidates
 
 
@@ -1518,6 +1574,15 @@ def main() -> None:
         help=(
             "Minimum centered-window XY displacement needed for a "
             "motion-aligned proposal"
+        ),
+    )
+    parser.add_argument(
+        "--global_candidates_per_motion",
+        type=int,
+        default=3,
+        help=(
+            "Number of established global-grid proposals interleaved before "
+            "each additional motion-aligned proposal"
         ),
     )
     parser.add_argument("--max_path_steps_per_link", type=int, default=32)

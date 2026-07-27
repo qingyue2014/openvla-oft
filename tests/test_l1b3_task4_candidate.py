@@ -88,9 +88,11 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "def _refinement_seed_priority(" in text
     assert "def _motion_aligned_candidates(" in text
     assert "def _balanced_low_and_motion_indices(" in text
-    assert "Split the bounded path budget" in text
+    assert "Preserve the historical low-surface pool" in text
     assert "motion_aligned_angles_deg" in text
     assert "min_motion_direction_displacement" in text
+    assert "global_candidates_per_motion" in text
+    assert "must not crowd the established global grid" in text
     assert "Deduplicating XY across nearby path samples" in text
     assert "ranked_contact_seed_candidates" in text
     assert "ranked_effect_seed_candidates" in text
