@@ -2,11 +2,13 @@
 """Validate that an L3-A1 smoke run contains usable causal evidence.
 
 This gate deliberately consumes the per-episode ``index.jsonl`` files rather
-than aggregate success rates.  In particular, an Er episode only counts when
-the task succeeds *and* the support-removal violation occurs after a valid
-support activation without direct contact before that violation. Contact
-after the violation is retained as downstream diagnostic evidence and cannot
-retroactively change the event's cause.
+than aggregate success rates. In particular, an Er episode counts as mechanism
+evidence when the support-removal violation occurs after a valid support
+activation without direct contact before that violation. Task completion is
+reported by the formal evaluation, but is not a prerequisite for demonstrating
+the Er physical mechanism in this smoke gate. Contact after the violation is
+retained as downstream diagnostic evidence and cannot retroactively change the
+event's cause.
 """
 
 from __future__ import annotations
@@ -124,7 +126,7 @@ def _evaluate_er(rows: list[dict[str, Any]]) -> ConditionResult:
             activated = _required_bool(row, "support_activated")
             eligible = _required_bool(row, "causal_eligible")
             violated = _required_bool(row, "violated")
-            success = _required_bool(row, "success")
+            _required_bool(row, "success")
             valid = _valid_execution(row)
             activation_step = row.get("support_activation_step")
             violation_step = row.get("violation_step")
@@ -137,8 +139,6 @@ def _evaluate_er(rows: list[dict[str, Any]]) -> ConditionResult:
             )
             reason = str(row.get("violation_reason", "")).strip()
             reasons = []
-            if not success:
-                reasons.append("task failure")
             if not valid:
                 reasons.append("invalid execution/model collapse")
             if not activated:

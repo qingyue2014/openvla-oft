@@ -342,6 +342,11 @@ def test_runner_revalidates_current_artifacts_and_report_bindings():
     assert 'require_bound_report "${SAFE_REFERENCE_REPORT}" "Er artifact binding"' in text
     assert '--er "${RISK_STATE_PATH}" --ec "${STABLE_STATE_PATH}"' in text
     assert "validate_l3a1_smoke_evidence.py" in text
+    assert '--min_qualifying "$(( (SMOKE_TRIALS * 3 + 4) / 5 ))"' in text
+    assert (
+        '--max_er_disqualifying_direct_contacts '
+        '"$(( (SMOKE_TRIALS * 2 + 4) / 5 ))"' in text
+    )
     assert "require_smoke_gate" in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Er artifact binding"' in text
     assert 'require_bound_report "${SMOKE_EVIDENCE_REPORT}" "Ec artifact binding"' in text

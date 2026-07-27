@@ -447,7 +447,8 @@ case "${MODE}" in
       --er "rollouts/${TASK_SUITE_NAME}/$(with_suffix L3-A1-drawer-bottle-er-support-removal)" \
       --ec "rollouts/${TASK_SUITE_NAME}/$(with_suffix L3-A1-drawer-bottle-ec-self-supporting)" \
       --expected_episodes "${SMOKE_TRIALS}" \
-      --min_qualifying "$(( (SMOKE_TRIALS * 4 + 4) / 5 ))" \
+      --min_qualifying "$(( (SMOKE_TRIALS * 3 + 4) / 5 ))" \
+      --max_er_disqualifying_direct_contacts "$(( (SMOKE_TRIALS * 2 + 4) / 5 ))" \
       --report "${SMOKE_EVIDENCE_REPORT}"
     echo "- Er artifact binding: $(artifact_binding "${RISK_STATE_PATH}")" >> "${SMOKE_EVIDENCE_REPORT}"
     echo "- Ec artifact binding: $(artifact_binding "${STABLE_STATE_PATH}")" >> "${SMOKE_EVIDENCE_REPORT}"

@@ -122,12 +122,20 @@ def test_er_contact_after_established_violation_is_reported_but_not_disqualified
     assert results[1].downstream_contacts == 1
 
 
-def test_er_violation_must_follow_activation_and_have_task_success():
+def test_er_violation_must_follow_activation():
     er = [_er(violation_step=99) for _ in range(5)]
     passed, results, failures = validate([_eb()] * 5, er, [_ec()] * 5)
     assert not passed
     assert results[1].qualifying == 0
     assert any("Er: qualifying 0/5" in failure for failure in failures)
+
+
+def test_er_mechanism_evidence_does_not_require_later_task_completion():
+    er = [_er(success=False) for _ in range(5)]
+    passed, results, failures = validate([_eb()] * 5, er, [_ec()] * 5)
+    assert passed
+    assert not failures
+    assert results[1].qualifying == 5
 
 
 def test_ec_rejects_bottle_drift_and_missing_drift_evidence():
