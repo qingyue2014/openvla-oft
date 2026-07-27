@@ -211,19 +211,20 @@ def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
 
 
 def initialize_model(cfg: PhysCogGenerateConfig):
-    configure_checkpoint_compat(cfg)
+    if cfg.model_family == "openvla":
+        configure_checkpoint_compat(cfg)
     model = get_model(cfg)
 
     proprio_projector = None
-    if cfg.use_proprio:
+    if cfg.model_family == "openvla" and cfg.use_proprio:
         proprio_projector = get_proprio_projector(cfg, model.llm_dim, proprio_dim=8)
 
     action_head = None
-    if cfg.use_l1_regression or cfg.use_diffusion:
+    if cfg.model_family == "openvla" and (cfg.use_l1_regression or cfg.use_diffusion):
         action_head = get_action_head(cfg, model.llm_dim)
 
     noisy_action_projector = None
-    if cfg.use_diffusion:
+    if cfg.model_family == "openvla" and cfg.use_diffusion:
         noisy_action_projector = get_noisy_action_projector(cfg, model.llm_dim)
 
     processor = None
@@ -432,10 +433,19 @@ def run_episode_with_safety(
                     env._update_observables(force=True)
                     obs = env._get_observations()
 
-            observation, img = prepare_observation(obs, resize_size)
+            observation, img = prepare_observation(obs, resize_size, cfg.model_family)
             replay_images.append(img)
             if cfg.save_wrist_video:
-                wrist_images.append(get_libero_wrist_image(obs))
+                if cfg.model_family.lower() in {
+                    "cosmos",
+                    "cosmos_policy",
+                    "cosmos-policy",
+                }:
+                    # Save the exact policy-facing RGB, not OpenVLA's
+                    # differently rotated wrist preprocessing.
+                    wrist_images.append(observation["wrist_image"])
+                else:
+                    wrist_images.append(get_libero_wrist_image(obs))
 
             if len(action_queue) == 0:
                 actions = get_action(

@@ -132,6 +132,7 @@ class GenerateConfig:
     do_sample: bool = False                          # Whether to sample action tokens during OpenVLA decoding
     temperature: float = 1.0                         # Sampling temperature passed to predict_action when supported
     top_p: float = 1.0                               # Nucleus sampling parameter passed to predict_action when supported
+    cosmos_num_denoising_steps: int = 5              # Cosmos Policy diffusion steps (official LIBERO default)
 
     load_in_8bit: bool = False                       # (For OpenVLA only) Load with 8-bit quantization
     load_in_4bit: bool = False                       # (For OpenVLA only) Load with 4-bit quantization
@@ -175,13 +176,14 @@ def validate_config(cfg: GenerateConfig) -> None:
 
 def initialize_model(cfg: GenerateConfig):
     """Initialize model and associated components."""
-    configure_checkpoint_compat(cfg)
+    if cfg.model_family == "openvla":
+        configure_checkpoint_compat(cfg)
     # Load model
     model = get_model(cfg)
 
     # Load proprio projector if needed
     proprio_projector = None
-    if cfg.use_proprio:
+    if cfg.model_family == "openvla" and cfg.use_proprio:
         proprio_projector = get_proprio_projector(
             cfg,
             model.llm_dim,
@@ -190,12 +192,12 @@ def initialize_model(cfg: GenerateConfig):
 
     # Load action head if needed
     action_head = None
-    if cfg.use_l1_regression or cfg.use_diffusion:
+    if cfg.model_family == "openvla" and (cfg.use_l1_regression or cfg.use_diffusion):
         action_head = get_action_head(cfg, model.llm_dim)
 
     # Load noisy action projector if using diffusion
     noisy_action_projector = None
-    if cfg.use_diffusion:
+    if cfg.model_family == "openvla" and cfg.use_diffusion:
         noisy_action_projector = get_noisy_action_projector(cfg, model.llm_dim)
 
     # Get OpenVLA processor if needed
@@ -285,8 +287,19 @@ def load_initial_states(cfg: GenerateConfig, task_suite, task_id: int, log_file=
         return initial_states, None
 
 
-def prepare_observation(obs, resize_size):
+def prepare_observation(obs, resize_size, model_family="openvla"):
     """Prepare observation for policy input."""
+    if model_family.lower() in {"cosmos", "cosmos_policy", "cosmos-policy"}:
+        from experiments.robot.cosmos_policy_utils import (
+            prepare_cosmos_libero_observation,
+        )
+
+        # Match the official Cosmos Policy LIBERO evaluator exactly: a
+        # vertical flip (not OpenVLA's 180-degree rotation), raw 256 px camera
+        # frames, and 9-D [gripper qpos, EEF xyz, EEF quaternion] proprio.
+        observation = prepare_cosmos_libero_observation(obs)
+        return observation, observation["primary_image"]
+
     # Get preprocessed images
     img = get_libero_image(obs)
     wrist_img = get_libero_wrist_image(obs)
@@ -309,6 +322,14 @@ def prepare_observation(obs, resize_size):
 
 def process_action(action, model_family):
     """Process action before sending to environment."""
+    if model_family.lower() in {"cosmos", "cosmos_policy", "cosmos-policy"}:
+        # The official Cosmos LIBERO checkpoint already returns the
+        # unnormalized 7-D action consumed directly by env.step().
+        action = np.asarray(action, dtype=np.float32)
+        if action.shape != (7,) or not np.isfinite(action).all():
+            raise ValueError(f"Invalid Cosmos LIBERO action: shape={action.shape}")
+        return action
+
     # Normalize gripper action [0,1] -> [-1,+1] because the environment expects the latter
     action = normalize_gripper_action(action, binarize=True)
 
@@ -366,7 +387,7 @@ def run_episode(
                 continue
 
             # Prepare observation
-            observation, img = prepare_observation(obs, resize_size)
+            observation, img = prepare_observation(obs, resize_size, cfg.model_family)
             replay_images.append(img)
 
             # If action queue is empty, requery model

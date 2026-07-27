@@ -29,6 +29,27 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("models", "setup_cosmos"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/setup_cosmos_dreamzero_models.sh",
+            "cosmos",
+        ),
+    ),
+    ("models", "setup_dreamzero"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/setup_cosmos_dreamzero_models.sh",
+            "dreamzero",
+        ),
+    ),
+    ("models", "setup_all"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/setup_cosmos_dreamzero_models.sh",
+            "all",
+        ),
+    ),
     ("l1b1", "prepare"): PhaseSpec(
         command=(
             "env",

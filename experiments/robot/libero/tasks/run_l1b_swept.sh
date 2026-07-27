@@ -27,8 +27,32 @@ case "${FAMILY}" in
 esac
 
 TASKS_DIR="experiments/robot/libero/tasks"
-CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-spatial}"
-GOAL_CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
+MODEL_FAMILY="${MODEL_FAMILY:-openvla}"
+case "${MODEL_FAMILY,,}" in
+  cosmos|cosmos_policy|cosmos-policy)
+    default_checkpoint="/project/trllmout/models/Cosmos-Policy-LIBERO-Predict2-2B"
+    default_open_loop_steps=16
+    ;;
+  dreamzero|dream_zero|dream-zero)
+    default_checkpoint="/project/trllmout/models/DreamZero-DROID"
+    default_open_loop_steps=24
+    ;;
+  openvla)
+    default_checkpoint="moojink/openvla-7b-oft-finetuned-libero-spatial"
+    default_open_loop_steps=8
+    ;;
+  *)
+    echo "Unsupported MODEL_FAMILY: ${MODEL_FAMILY}" >&2
+    exit 2
+    ;;
+esac
+CHECKPOINT="${CHECKPOINT:-${default_checkpoint}}"
+if [[ "${MODEL_FAMILY,,}" == "openvla" ]]; then
+  GOAL_CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
+else
+  GOAL_CHECKPOINT="${GOAL_CHECKPOINT:-${default_checkpoint}}"
+fi
+MODEL_OPEN_LOOP_STEPS="${MODEL_OPEN_LOOP_STEPS:-${default_open_loop_steps}}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 L1B3_SMOKE_POOL_SIZE="${L1B3_SMOKE_POOL_SIZE:-12}"
@@ -374,7 +398,9 @@ eval_condition() {
     extra_args+=(--bddl_file "${bddl}")
   fi
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+    --model_family "${MODEL_FAMILY}" \
     --pretrained_checkpoint "${checkpoint}" \
+    --num_open_loop_steps "${MODEL_OPEN_LOOP_STEPS}" \
     --task_suite_name "${task_suite}" \
     --task_ids "${task_id}" \
     --initial_states_path "${state_path}" \
