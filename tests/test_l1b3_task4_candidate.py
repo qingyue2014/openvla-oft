@@ -135,6 +135,11 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "avoidance_rejected_candidates" in text
     assert 'not any(avoidance_replay["hits"].values())' in text
     assert "This is a preformal screen" in text
+    assert "def _avoidance_clearance_offsets(" in text
+    assert "max_penetration_names" in text
+    assert "max_penetration_step" in text
+    assert "--avoidance_clearance_radial_distances" in text
+    assert "--max_avoidance_refinement_candidates" in text
 
 
 def test_html_native_wine_pose_is_first_task4_regression_anchor():

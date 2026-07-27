@@ -816,8 +816,9 @@ def _replay_candidate(
                 hits[name] = True
                 hit_steps[name] = step
     intended = oracles["intended"]
-    maximum_penetration = max(
-        oracle.max_any_contact_penetration_m for oracle in oracles.values()
+    deepest_oracle = max(
+        oracles.values(),
+        key=lambda oracle: oracle.max_any_contact_penetration_m,
     )
     return {
         "hits": hits,
@@ -827,8 +828,73 @@ def _replay_candidate(
         "contact_names": intended._contact_names,
         "displacement_m": intended.max_obstacle_displacement,
         "tilt_deg": intended.max_obstacle_tilt_change_deg,
-        "penetration_m": maximum_penetration,
+        "penetration_m": deepest_oracle.max_any_contact_penetration_m,
+        "max_penetration_step": (
+            deepest_oracle.max_any_contact_penetration_step
+        ),
+        "max_penetration_names": (
+            deepest_oracle.max_any_contact_penetration_names
+        ),
     }
+
+
+def _avoidance_clearance_offsets(
+    replay: dict,
+    trajectory: dict,
+    placement: np.ndarray,
+    target_body: str,
+    args: argparse.Namespace,
+) -> list[np.ndarray]:
+    """Propose positions away from the observed deepest avoidance contact."""
+    step = replay.get("max_penetration_step")
+    names = tuple(replay.get("max_penetration_names") or ())
+    if step is None:
+        finite_steps = [
+            value
+            for value in replay["hit_steps"].values()
+            if value is not None
+        ]
+        step = min(finite_steps) if finite_steps else None
+    if step is None:
+        return []
+
+    source = None
+    if any("gripper" in name for name in names):
+        positions = np.asarray(trajectory.get("eef_pos", []), dtype=float)
+        if 0 <= step < len(positions):
+            source = positions[step, :2]
+    elif target_body in names:
+        positions = np.asarray(
+            trajectory.get(f"body_pos__{target_body}", []), dtype=float
+        )
+        if 0 <= step < len(positions):
+            source = positions[step, :2]
+    else:
+        for name in names:
+            positions = np.asarray(
+                trajectory.get(f"body_pos__{name}", []), dtype=float
+            )
+            if 0 <= step < len(positions):
+                source = positions[step, :2]
+                break
+    if source is None:
+        return []
+
+    away = np.asarray(placement, dtype=float) - np.asarray(source, dtype=float)
+    norm = float(np.linalg.norm(away))
+    if norm <= 1e-9:
+        return []
+    away /= norm
+    normal = np.array([-away[1], away[0]], dtype=float)
+    radii = _float_values(args.avoidance_clearance_radial_distances)
+    angles = np.deg2rad(
+        _float_values(args.avoidance_clearance_angles_deg)
+    )
+    return [
+        radius * (np.cos(angle) * away + np.sin(angle) * normal)
+        for radius in radii
+        for angle in angles
+    ]
 
 
 def _matched_control_state(
@@ -1035,6 +1101,8 @@ def calibrate(args: argparse.Namespace) -> str:
             matched_control_failures = 0
             avoidance_checked_candidates = 0
             avoidance_rejected_candidates = 0
+            avoidance_refinement_attempts = 0
+            avoidance_refinement_seeds = 0
             first_avoidance_rejection = ""
             table_z_values = []
             invalid_reasons: Counter[str] = Counter()
@@ -1126,6 +1194,7 @@ def calibrate(args: argparse.Namespace) -> str:
                 ] = []
                 scheduled_contact_refinements = 0
                 scheduled_effect_refinements = 0
+                scheduled_avoidance_refinements = 0
 
                 def schedule_refinement_seed(
                     kind: str,
@@ -1191,6 +1260,50 @@ def calibrate(args: argparse.Namespace) -> str:
                     else:
                         contact_refinement_seeds += 1
                         scheduled_contact_refinements += len(additions)
+                    return len(additions)
+
+                def schedule_avoidance_refinement_seed(
+                    path_step: int,
+                    proposed_link: str,
+                    placement: np.ndarray,
+                    avoidance_replay: dict,
+                    avoidance_trajectory: dict,
+                ) -> int:
+                    nonlocal refinement_seeds
+                    nonlocal avoidance_refinement_seeds
+                    nonlocal scheduled_avoidance_refinements
+                    if (
+                        avoidance_refinement_seeds
+                        >= args.max_avoidance_refinement_seeds
+                    ):
+                        return 0
+                    remaining = (
+                        args.max_avoidance_refinement_candidates
+                        - scheduled_avoidance_refinements
+                    )
+                    if remaining <= 0:
+                        return 0
+                    additions = _novel_refinement_candidates(
+                        path_step=path_step,
+                        proposed_link=proposed_link,
+                        placement=placement,
+                        kind="avoidance",
+                        offsets=_avoidance_clearance_offsets(
+                            avoidance_replay,
+                            avoidance_trajectory,
+                            placement,
+                            target,
+                            args,
+                        ),
+                        limit=remaining,
+                        seen_placements=seen_placements,
+                    )
+                    pending_refinements.extend(additions)
+                    if not additions:
+                        return 0
+                    refinement_seeds += 1
+                    avoidance_refinement_seeds += 1
+                    scheduled_avoidance_refinements += len(additions)
                     return len(additions)
 
                 ranked_refinements_scheduled = False
@@ -1275,6 +1388,9 @@ def calibrate(args: argparse.Namespace) -> str:
                     )
                     effect_refinement_attempts += int(
                         refinement_kind == "effect"
+                    )
+                    avoidance_refinement_attempts += int(
+                        refinement_kind == "avoidance"
                     )
                     placement = np.asarray(placement_xy, dtype=float)
                     env.reset()
@@ -1387,6 +1503,13 @@ def calibrate(args: argparse.Namespace) -> str:
                         if not avoidance_clear:
                             avoidance_rejected_candidates += 1
                             isolated = False
+                            schedule_avoidance_refinement_seed(
+                                path_step,
+                                proposed_link,
+                                placement,
+                                avoidance_replay,
+                                avoidance_trajectory,
+                            )
                             if not first_avoidance_rejection:
                                 first_avoidance_rejection = (
                                     f"placement=({placement[0]:.5f},"
@@ -1394,7 +1517,11 @@ def calibrate(args: argparse.Namespace) -> str:
                                     f"hit_steps="
                                     f"{avoidance_replay['hit_steps']} "
                                     f"penetration="
-                                    f"{avoidance_replay['penetration_m']:.6f}"
+                                    f"{avoidance_replay['penetration_m']:.6f} "
+                                    f"max_step="
+                                    f"{avoidance_replay['max_penetration_step']} "
+                                    f"max_names="
+                                    f"{avoidance_replay['max_penetration_names']}"
                                 )
                     if isolated:
                         control = _matched_control_state(
@@ -1514,6 +1641,12 @@ def calibrate(args: argparse.Namespace) -> str:
                 ),
                 "avoidance_rejected_candidates": (
                     avoidance_rejected_candidates
+                ),
+                "avoidance_refinement_attempts": (
+                    avoidance_refinement_attempts
+                ),
+                "avoidance_refinement_seeds": (
+                    avoidance_refinement_seeds
                 ),
                 "first_avoidance_rejection": first_avoidance_rejection,
                 "invalid_reasons": ";".join(
@@ -1807,6 +1940,20 @@ def main() -> None:
             "penetration limit. This is a preformal screen, not policy "
             "evaluation evidence."
         ),
+    )
+    parser.add_argument(
+        "--avoidance_clearance_radial_distances",
+        default="0.005,0.008,0.012,0.016,0.020,0.025,0.030",
+    )
+    parser.add_argument(
+        "--avoidance_clearance_angles_deg",
+        default="0,15,-15,30,-30,45,-45,90,-90,180",
+    )
+    parser.add_argument(
+        "--max_avoidance_refinement_seeds", type=int, default=4
+    )
+    parser.add_argument(
+        "--max_avoidance_refinement_candidates", type=int, default=256
     )
     parser.add_argument(
         "--eb_states",
