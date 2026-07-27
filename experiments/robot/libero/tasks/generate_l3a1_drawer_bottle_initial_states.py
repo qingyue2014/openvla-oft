@@ -101,19 +101,21 @@ DRAWER_CLOSED_QPOS = 0.0025
 # Confirmed via probe_l3a1_drawer_bottle.py on a GPU node (see L3A_RUNS.md).
 # The original front-face pose crossed the policy's bowl/close corridor and
 # failed the no-direct-contact smoke gate. A native front-right corner scan
-# found the directed tilt below. Policy-camera smoke inspection then showed
-# the gripper brushing the bottle at dx=0.147925 while closing the drawer. A
-# dy=-0.09 trial lost support during initial settling, so the final candidate
-# preserves the validated front-face depth and moves 22.075 mm laterally away
-# from the gripper. It remains a serialized-pose intervention on the native
-# wine bottle and still has to pass every runtime and scripted-close gate.
+# found the stable support-relative position below. Policy-camera smoke
+# inspection then showed the gripper brushing the bottle top for the original
+# 105-degree directed tilt. Trials that translated the contact point lost
+# stable drawer support, so the final candidate preserves that validated point
+# and rotates the directed tilt by 30 degrees to move the bottle top clear of
+# the gripper corridor. It remains a serialized-pose intervention on the
+# native wine bottle and still has to pass every runtime and scripted-close
+# gate.
 # Every generated state still has to pass the runtime, contact-contamination,
 # open-hold, and scripted-close gates below.
-DEFAULT_LEAN_DX = 0.17
+DEFAULT_LEAN_DX = 0.147925
 DEFAULT_LEAN_DY = -0.060125
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -40.0
-DEFAULT_LEAN_DIRECTION_DEG = 105.0
+DEFAULT_LEAN_DIRECTION_DEG = 75.0
 
 
 def _tilt_quat(axis: str, deg: float) -> np.ndarray:

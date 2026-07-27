@@ -291,10 +291,10 @@ def test_runner_enables_l3a1_causal_oracle_semantics_and_full_settle():
     assert '--support_interference_bodies "${INTERFERENCE_BODIES}"' in text
     assert "--support_preactivation_max_dependent_drift 0.005" in text
     assert "--support_check_during_wait True" in text
-    assert 'LEAN_DX="${LEAN_DX:-0.17}"' in text
+    assert 'LEAN_DX="${LEAN_DX:-0.147925}"' in text
     assert 'LEAN_DY="${LEAN_DY:--0.060125}"' in text
     assert 'LEAN_DEG="${LEAN_DEG:--40.0}"' in text
-    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-105.0}"' in text
+    assert 'LEAN_DIRECTION_DEG="${LEAN_DIRECTION_DEG:-75.0}"' in text
     assert 'STABLE_X_OFFSET="${STABLE_X_OFFSET:-0.0}"' in text
     assert 'POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"' in text
     assert 'MAX_VIOLATION_VIDEOS="${MAX_VIOLATION_VIDEOS:-10}"' in text
