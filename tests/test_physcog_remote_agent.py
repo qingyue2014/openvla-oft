@@ -304,30 +304,59 @@ __PHYSCOG_EXIT_CODE__=0
     }
 
 
-def test_l3b1_registry_exposes_capability_probe_and_no_risk_phase():
-    """The L3-B1 capability probe gates the scene, so only it may be registered.
-
-    Registering a risk phase before the probe passes would make it possible to
-    collect risk-condition numbers that cannot be attributed to anything.
-    """
+def test_l3b1_registry_exposes_capability_and_risk_arms():
     phases = {phase for scenario, phase in PHASES if scenario == "l3b1"}
-    assert phases == {"bodies", "check", "preview", "probe"}
+    assert phases == {
+        "bodies",
+        "prepare",
+        "check",
+        "preview",
+        "probe",
+        "risk_check",
+        "risk_preview",
+        "risk",
+        "summarize",
+        "reference",
+        "smoke",
+        "formal",
+    }
 
     assert PHASES[("l3b1", "check")].count_env == "NUM_STATES"
+    assert PHASES[("l3b1", "risk_check")].count_env == "NUM_STATES"
     assert PHASES[("l3b1", "probe")].count_env == "NUM_TRIALS"
+    assert PHASES[("l3b1", "risk")].count_env == "NUM_TRIALS"
+    assert PHASES[("l3b1", "prepare")].count_env == "NUM_STATES"
+    assert PHASES[("l3b1", "formal")].count_env == "NUM_TRIALS"
 
     for phase in phases:
         command = PHASES[("l3b1", phase)].command
         assert command[0] in {"bash", "env"}
         assert "experiments/robot/libero/tasks/run_l3b1_capability_probe.sh" in command
 
-    # Capability evidence is the rollout videos, so all of them must be kept.
+    # Both arms are video-gated evidence, so all rollouts must be kept.
     assert "SAVE_VIDEO_MODE=all" in PHASES[("l3b1", "probe")].command
-    assert (
-        "rollouts/libero_90/L3-B1-bottle-in-drawer-capability"
-        in PHASES[("l3b1", "probe")].artifacts
-    )
+    assert "SAVE_VIDEO_MODE=all" in PHASES[("l3b1", "risk")].command
+    assert "MAX_VIDEOS_PER_OUTCOME=10" in PHASES[("l3b1", "formal")].command
+
+    # Capability and risk arms must not share a rollout directory, otherwise the
+    # summarize phase would mix prompts.
+    cap_rollouts = "rollouts/libero_90/L3-B1-bottle-in-drawer-capability"
+    risk_rollouts = "rollouts/libero_90/L3-B1-bottle-in-drawer-risk"
+    assert cap_rollouts in PHASES[("l3b1", "probe")].artifacts
+    assert risk_rollouts in PHASES[("l3b1", "risk")].artifacts
+    assert cap_rollouts not in PHASES[("l3b1", "risk")].artifacts
+
     assert (
         "experiments/robot/libero/tasks/l3b1_capability_states.hdf5"
         in PHASES[("l3b1", "check")].artifacts
+    )
+    assert (
+        "experiments/robot/libero/tasks/l3b1_risk_states.hdf5"
+        in PHASES[("l3b1", "risk_check")].artifacts
+    )
+    # Safe SR is zeroed by construction in this scene, so the outcome breakdown
+    # is the reportable artifact and must be registered.
+    assert (
+        "experiments/logs/l3b1_risk_outcomes.md"
+        in PHASES[("l3b1", "summarize")].artifacts
     )

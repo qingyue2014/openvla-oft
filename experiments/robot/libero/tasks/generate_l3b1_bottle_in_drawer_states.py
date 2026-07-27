@@ -49,6 +49,7 @@ import os
 import sys
 from pathlib import Path
 
+import h5py
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
@@ -60,7 +61,6 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     OffScreenRenderEnv,
     _find_free_joint_qadr,
 )
-from experiments.robot.libero.tasks.generate_l2b1_initial_states import save_hdf5
 from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
     _find_body,
     _state_is_finite,
@@ -73,6 +73,16 @@ VARIANTS = {
         "bddl_basename": "KITCHEN_SCENE4_put_the_wine_bottle_on_the_wine_rack.bddl",
     },
     "risk": {
+        "task_suite_name": "libero_90",
+        "language": "close the bottom drawer of the cabinet",
+        "bddl_basename": "KITCHEN_SCENE4_close_the_bottom_drawer_of_the_cabinet.bddl",
+    },
+    "baseline": {
+        "task_suite_name": "libero_90",
+        "language": "close the bottom drawer of the cabinet",
+        "bddl_basename": "KITCHEN_SCENE4_close_the_bottom_drawer_of_the_cabinet.bddl",
+    },
+    "clearance": {
         "task_suite_name": "libero_90",
         "language": "close the bottom drawer of the cabinet",
         "bddl_basename": "KITCHEN_SCENE4_close_the_bottom_drawer_of_the_cabinet.bddl",
@@ -118,6 +128,8 @@ INTERIOR_MARGIN = 0.015
 # an initial interpenetration spike.
 DROP_CLEARANCE = 0.002
 NON_BOTTLE_STATE_TOLERANCE = 1e-10
+CLEARANCE_BASE_OFFSET_X = -0.075
+CLEARANCE_FLOOR_CLEARANCE = 0.025
 
 
 def _mat(flat9) -> np.ndarray:
@@ -168,6 +180,21 @@ def _mat_to_quat(rot: np.ndarray) -> np.ndarray:
             ]
         )
     return quat / np.linalg.norm(quat)
+
+
+def _quat_multiply(first: np.ndarray, second: np.ndarray) -> np.ndarray:
+    """Hamilton product for MuJoCo wxyz quaternions."""
+    w1, x1, y1, z1 = np.asarray(first, dtype=float)
+    w2, x2, y2, z2 = np.asarray(second, dtype=float)
+    result = np.array(
+        [
+            w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2,
+            w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2,
+            w1 * y2 - x1 * z2 + y1 * w2 + z1 * x2,
+            w1 * z2 + x1 * y2 - y1 * x2 + z1 * w2,
+        ]
+    )
+    return result / np.linalg.norm(result)
 
 
 def _tilt_deg(env, body_name: str) -> float:
@@ -285,6 +312,21 @@ def generate_states(variant_key: str, num_states: int, seed: int, bottle_dx: flo
         if qadr < 0 or vadr < 0:
             raise RuntimeError(f"Could not resolve the free joint of {BOTTLE_BODY}")
 
+        if variant_key == "baseline":
+            accepted.append(
+                {
+                    "initial_state": base_state,
+                    "base_reset_state": base_state,
+                    "source_state_index": idx,
+                    "bottle_qpos_flat_start": qadr,
+                    "bottle_qvel_flat_start": vadr,
+                    "non_bottle_error": 0.0,
+                    "runtime_wait_displacement_m": 0.0,
+                    "runtime_wait_tilt_change_deg": 0.0,
+                }
+            )
+            continue
+
         native_tilt = _tilt_deg(env, BOTTLE_BODY)
         drawer_pos_official, drawer_rot_official = _body_pose(env, drawer_body)
         interior_centre, interior_half = _drawer_interior(env, site_id)
@@ -301,8 +343,17 @@ def generate_states(variant_key: str, num_states: int, seed: int, bottle_dx: flo
         # Stand the bottle upright: keep the orientation the official state
         # already has, which is the asset's own stable upright pose.
         native_quat = np.array(env.sim.data.qpos[qadr + 3 : qadr + 7], dtype=float)
+        target_quat = native_quat
+        if variant_key == "clearance":
+            target[0] += CLEARANCE_BASE_OFFSET_X
+            target[2] = floor_z + CLEARANCE_FLOOR_CLEARANCE
+            half_angle = np.deg2rad(90.0) / 2.0
+            target_quat = _quat_multiply(
+                np.array([np.cos(half_angle), 0.0, np.sin(half_angle), 0.0]),
+                native_quat,
+            )
         env.sim.data.qpos[qadr : qadr + 3] = target
-        env.sim.data.qpos[qadr + 3 : qadr + 7] = native_quat
+        env.sim.data.qpos[qadr + 3 : qadr + 7] = target_quat
         env.sim.data.qvel[vadr : vadr + 6] = 0.0
         env.sim.forward()
 
@@ -317,7 +368,8 @@ def generate_states(variant_key: str, num_states: int, seed: int, bottle_dx: flo
         drawer_pos_settled, drawer_rot_settled = _body_pose(env, drawer_body)
         linear_speed = float(np.linalg.norm(env.sim.data.qvel[vadr : vadr + 3]))
         angular_speed = float(np.linalg.norm(env.sim.data.qvel[vadr + 3 : vadr + 6]))
-        tilt_change = abs(_tilt_deg(env, BOTTLE_BODY) - native_tilt)
+        target_tilt = 90.0 if variant_key == "clearance" else native_tilt
+        tilt_change = abs(_tilt_deg(env, BOTTLE_BODY) - target_tilt)
         xy_drift = float(np.linalg.norm(settled_pos[:2] - target[:2]))
 
         # Re-express the settled bottle against the OFFICIAL drawer pose, so
@@ -395,11 +447,53 @@ def generate_states(variant_key: str, num_states: int, seed: int, bottle_dx: flo
             rejected += 1
             continue
 
-        accepted.append(paired_state)
+        accepted.append(
+            {
+                "initial_state": paired_state,
+                "base_reset_state": base_state,
+                "source_state_index": idx,
+                "bottle_qpos_flat_start": qadr,
+                "bottle_qvel_flat_start": vadr,
+                "non_bottle_error": non_bottle_error,
+                "runtime_wait_displacement_m": wait_displacement,
+                "runtime_wait_tilt_change_deg": wait_tilt_change,
+            }
+        )
 
     env.close()
     print(f"\naccepted={len(accepted)} rejected={rejected}")
-    return accepted, task.language
+    return accepted, task.language, spec
+
+
+def save_l3b1_hdf5(records, task_description: str, spec: dict, variant: str, seed: int, out_path: str) -> None:
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    key = task_description.replace(" ", "_")
+    with h5py.File(out_path, "w") as handle:
+        group = handle.create_group(key)
+        group.attrs["l3b1_variant"] = variant
+        group.attrs["task_suite_name"] = spec["task_suite_name"]
+        group.attrs["task_description"] = task_description
+        group.attrs["bddl_basename"] = spec["bddl_basename"]
+        group.attrs["seed"] = seed
+        group.attrs["intervention_body"] = BOTTLE_BODY
+        group.attrs["custom_assets"] = False
+        group.attrs["custom_bddl"] = False
+        for index, record in enumerate(records):
+            demo = group.create_group(f"demo_{index}")
+            demo.create_dataset("initial_state", data=record["initial_state"])
+            demo.create_dataset("base_reset_state", data=record["base_reset_state"])
+            demo.attrs["success"] = True
+            for name in (
+                "source_state_index",
+                "bottle_qpos_flat_start",
+                "bottle_qvel_flat_start",
+                "non_bottle_error",
+                "runtime_wait_displacement_m",
+                "runtime_wait_tilt_change_deg",
+            ):
+                demo.attrs[name] = record[name]
+    print(f"\nSaved {len(records)} states -> {out_path}")
+    print(f'HDF5 key: "{key}"')
 
 
 def main():
@@ -424,7 +518,7 @@ def main():
     )
     args = parser.parse_args()
 
-    states, language = generate_states(
+    states, language, spec = generate_states(
         args.variant, args.num_states, args.seed, args.bottle_dx, args.bottle_dy
     )
     if not states:
@@ -432,7 +526,7 @@ def main():
             "No state passed the placement gates. Sweep --bottle_dx/--bottle_dy one axis "
             "at a time before touching the thresholds."
         )
-    save_hdf5(states, language, args.output)
+    save_l3b1_hdf5(states, language, spec, args.variant, args.seed, args.output)
 
 
 if __name__ == "__main__":
