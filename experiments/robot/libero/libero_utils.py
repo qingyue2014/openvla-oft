@@ -5,17 +5,21 @@ import os
 
 import imageio
 import numpy as np
-import tensorflow as tf
 
-# TensorFlow is used here only for lightweight image preprocessing.  Keep it
-# off the accelerator so it neither reserves OpenVLA's GPU memory nor triggers
-# a long PTX JIT on newer (for example sm_90) evaluation nodes.
+# TensorFlow is not required by these utilities. Some OpenVLA environments
+# import it transitively, so keep it off the accelerator when it is available
+# without making it a dependency of the official Cosmos runtime.
 try:
-    tf.config.set_visible_devices([], "GPU")
-except RuntimeError:
-    # A caller may already have initialized TensorFlow before importing this
-    # module; in that case its device policy can no longer be changed.
-    pass
+    import tensorflow as tf
+except ImportError:
+    tf = None
+if tf is not None:
+    try:
+        tf.config.set_visible_devices([], "GPU")
+    except RuntimeError:
+        # A caller may already have initialized TensorFlow before importing
+        # this module; its device policy can no longer be changed.
+        pass
 
 from libero.libero import get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
