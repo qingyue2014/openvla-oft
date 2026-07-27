@@ -163,6 +163,33 @@ def validate_base_preservation(path: str, task_description: str) -> int:
                         raise ValueError(
                             f"invalid {name} metadata at demo_{index}: {value!r}"
                         )
+                if "runtime_wait_contacts" not in demo.attrs:
+                    raise ValueError(
+                        f"missing runtime_wait_contacts at demo_{index}"
+                    )
+                runtime_contacts = {
+                    name
+                    for name in str(demo.attrs["runtime_wait_contacts"]).split(",")
+                    if name
+                }
+                forbidden_prefixes = (
+                    ("akita_black_bowl_1", "wine_rack_1")
+                    if variant == "risk"
+                    else (
+                        "akita_black_bowl_1",
+                        "white_cabinet_1",
+                        "wine_rack_1",
+                    )
+                )
+                contamination = {
+                    name for name in runtime_contacts
+                    if name.startswith(forbidden_prefixes)
+                }
+                if contamination:
+                    raise ValueError(
+                        f"runtime-wait contamination at demo_{index}: "
+                        f"{sorted(contamination)}"
+                    )
     return count
 
 

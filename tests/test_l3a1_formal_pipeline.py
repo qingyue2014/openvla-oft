@@ -126,6 +126,7 @@ def _states(
             demo.attrs["fixture_root_position"] = [0.0, 0.3, 0.0]
             demo.attrs["fixture_root_quaternion"] = [1.0, 0.0, 0.0, 0.0]
             if group.attrs["l3a1_variant"] in {"risk", "stable"}:
+                demo.attrs["runtime_wait_contacts"] = "table"
                 demo.attrs["support_body"] = "drawer"
                 demo.attrs["bottle_body"] = "bottle"
                 demo.attrs["support_relative_position"] = [0.1, -0.2, 0.3]
@@ -252,6 +253,17 @@ def test_pairing_gate_requires_zero_initial_eef_drift(tmp_path):
         handle["task/demo_0"].attrs["initial_eef_drift_m"] = 0.01
     with pytest.raises(ValueError, match="initial EEF drift"):
         validate_pairing(str(er), str(ec), "task")
+
+
+def test_pairing_gate_rejects_runtime_wait_contact_contamination(tmp_path):
+    er = tmp_path / "er.hdf5"
+    _states(er, [2], mutate_bottle=True)
+    with h5py.File(er, "a") as handle:
+        handle["task/demo_0"].attrs["runtime_wait_contacts"] = (
+            "table,akita_black_bowl_1_main"
+        )
+    with pytest.raises(ValueError, match="runtime-wait contamination"):
+        validate_base_preservation(str(er), "task")
 
 
 def test_er_base_preservation_gate_rejects_non_bottle_drift(tmp_path):

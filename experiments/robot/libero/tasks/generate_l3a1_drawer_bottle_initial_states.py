@@ -468,7 +468,9 @@ def generate_states(
         # before applying the serialized state.
         runtime_wait_converged = False
         runtime_wait_fixed_point_iters = 0
+        runtime_wait_contacts: set[str] = set()
         for fixed_point_iter in range(RUNTIME_WAIT_MAX_FIXED_POINT_ITERS):
+            runtime_wait_contacts = set()
             env.reset()
             env.sim.model.body_pos[fixture_root_id] = fixture_root_position
             env.sim.model.body_quat[fixture_root_id] = fixture_root_quaternion
@@ -486,6 +488,9 @@ def generate_states(
             runtime_wait_max_displacement = 0.0
             for _ in range(RUNTIME_WAIT_STEPS):
                 env.step(DUMMY_ACTION)
+                runtime_wait_contacts.update(
+                    _contact_body_names(env, BOTTLE_BODY)
+                )
                 runtime_wait_max_displacement = max(
                     runtime_wait_max_displacement,
                     float(
@@ -639,6 +644,24 @@ def generate_states(
             risk_template_world_quaternion = bottle_world_quaternion.copy()
             risk_template_world_qvel = bottle_world_qvel.copy()
             risk_template_source_attempt = attempts
+        runtime_wait_forbidden = (
+            {"akita_black_bowl_1_main", *STABLE_SUPPORT_CANDIDATES}
+            if variant == "risk"
+            else {
+                "akita_black_bowl_1_main",
+                *DRAWER_BODY_CANDIDATES,
+                *STABLE_SUPPORT_CANDIDATES,
+            }
+        )
+        runtime_wait_contamination = runtime_wait_contacts.intersection(
+            runtime_wait_forbidden
+        )
+        if runtime_wait_contamination:
+            print(
+                f"  [skip attempt {attempts}] runtime-wait contamination: "
+                f"forbidden={sorted(runtime_wait_contamination)}"
+            )
+            continue
 
         state_index = len(states)
         if state_index == 0:
@@ -686,6 +709,7 @@ def generate_states(
                 "runtime_wait_endpoint_displacement_m": runtime_wait_endpoint_displacement,
                 "runtime_wait_tilt_delta_deg": runtime_wait_tilt_delta,
                 "runtime_wait_fixed_point_iters": runtime_wait_fixed_point_iters,
+                "runtime_wait_contacts": ",".join(sorted(runtime_wait_contacts)),
                 "settled_tilt_deg": tilt_deg,
                 "hold_displacement_m": hold_displacement,
                 "hold_tilt_delta_deg": hold_tilt_delta,
