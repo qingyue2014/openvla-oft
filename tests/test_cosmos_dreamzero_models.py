@@ -5,6 +5,8 @@ import numpy as np
 import pytest
 
 from experiments.robot.cosmos_policy_utils import (
+    COSMOS_CHECKPOINT_FILENAME,
+    COSMOS_CONFIG_MODULE_PATH,
     COSMOS_DEFAULT_CHECKPOINT,
     COSMOS_LIBERO_REPO_ID,
     is_cosmos_model_family,
@@ -81,6 +83,8 @@ def test_dreamzero_aliases_and_libero_guard(tmp_path):
 def test_checkpoint_identities_and_superpod_paths_are_explicit():
     assert COSMOS_LIBERO_REPO_ID == "nvidia/Cosmos-Policy-LIBERO-Predict2-2B"
     assert COSMOS_DEFAULT_CHECKPOINT == Path("/project/trllmout/models/Cosmos-Policy-LIBERO-Predict2-2B")
+    assert COSMOS_CHECKPOINT_FILENAME == "Cosmos-Policy-LIBERO-Predict2-2B.pt"
+    assert COSMOS_CONFIG_MODULE_PATH == "cosmos_policy/config/config.py"
     assert DREAMZERO_DROID_REPO_ID == "GEAR-Dreams/DreamZero-DROID"
     assert DREAMZERO_DEFAULT_CHECKPOINT == Path("/project/trllmout/models/DreamZero-DROID")
 
