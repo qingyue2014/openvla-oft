@@ -101,15 +101,16 @@ DRAWER_CLOSED_QPOS = 0.0025
 # Confirmed via probe_l3a1_drawer_bottle.py on a GPU node (see L3A_RUNS.md).
 # The original front-face pose crossed the policy's bowl/close corridor and
 # failed the no-direct-contact smoke gate. A native front-right corner scan
-# found the x offset and directed tilt below. Policy-camera smoke inspection
-# then showed the gripper brushing the bottle at dy=-0.060125 while closing the
-# drawer, so the bottle is moved another 29.875 mm outward along the same
-# native drawer face. It remains a serialized-pose intervention on the native
+# found the directed tilt below. Policy-camera smoke inspection then showed
+# the gripper brushing the bottle at dx=0.147925 while closing the drawer. A
+# dy=-0.09 trial lost support during initial settling, so the final candidate
+# preserves the validated front-face depth and moves 22.075 mm laterally away
+# from the gripper. It remains a serialized-pose intervention on the native
 # wine bottle and still has to pass every runtime and scripted-close gate.
 # Every generated state still has to pass the runtime, contact-contamination,
 # open-hold, and scripted-close gates below.
-DEFAULT_LEAN_DX = 0.147925
-DEFAULT_LEAN_DY = -0.09
+DEFAULT_LEAN_DX = 0.17
+DEFAULT_LEAN_DY = -0.060125
 DEFAULT_LEAN_DZ = 0.0      # z is left at the BDDL-sampled resting height
 DEFAULT_LEAN_DEG = -40.0
 DEFAULT_LEAN_DIRECTION_DEG = 105.0
