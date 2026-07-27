@@ -690,7 +690,9 @@ def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     assert "pre_release_drawer_insertion_gate" in source
     assert "reference_release_root_vertical_margin" in source
     assert "target_final_body_not_inside_drawer_vertical" in source
-    assert "eb_grasp_prefix_plus_table_regrasp_safe_er_placement" in source
+    assert '"direct_bounded", "table_regrasp"' in source
+    assert 'default="direct_bounded"' in source
+    assert "args.reference_strategy" in source
     assert "-abs(args.rotate_sign)" in source
 
 

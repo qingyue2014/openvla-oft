@@ -2011,6 +2011,105 @@ def _l1c3_bounded_drop_gate_passes(metrics, spec, args):
     )
 
 
+def _l1c3_prepare_direct_bounded_release(
+    env, obs, oracle, recorder, spec, offset, rotate_sign, close, step, args,
+):
+    """Align the policy-held bottle over the free drawer side for release."""
+    failure = None
+    transport_eef = _eef(obs).copy()
+    transport_eef[2] = max(
+        transport_eef[2],
+        anchor_point(env, spec)[2]
+        + args.reference_transport_height_above_anchor,
+    )
+    obs, step, failure, _ = _move(
+        env, obs, oracle, recorder, transport_eef, close, step, args,
+    )
+    if failure is None:
+        rotation_eef = _eef(obs) + np.array(
+            [0.0, 0.0, args.reference_rotation_clearance]
+        )
+        obs, step, failure, _ = _move(
+            env, obs, oracle, recorder, rotation_eef, close, step, args,
+        )
+    if failure is None:
+        obs, step, status = _hold(
+            env, obs, oracle, recorder, close,
+            args.reference_rotation_settle_steps, step,
+        )
+        if status is not None and status.violated:
+            failure = status
+
+    desired_depth = np.cross(
+        l1c3_horizontal_rotation_axis(env, spec),
+        np.array([0.0, 0.0, 1.0]),
+    )
+    desired_depth *= 1.0 if rotate_sign >= 0.0 else -1.0
+    if failure is None:
+        obs, step, status, aligned = _align_body_axis(
+            env, obs, oracle, recorder, spec.target_body,
+            desired_depth, close,
+            args.reference_alignment_steps, step,
+            controller_sign=1.0,
+            command=args.reference_rotation_command,
+        )
+        if status is not None and status.violated:
+            failure = status
+        elif not aligned:
+            failure = "orientation_timeout"
+    if failure is None:
+        obs, step, status = _hold(
+            env, obs, oracle, recorder, close,
+            args.reference_rotation_settle_steps, step,
+        )
+        if status is not None and status.violated:
+            failure = status
+
+    current_state = env.sim.get_state()
+    place_at_anchor(
+        env, spec, spec.target_body, offset, args.drop_clearance,
+    )
+    desired_body = body_pos(env, spec.target_body).copy()
+    env.sim.set_state(current_state)
+    env.sim.forward()
+    desired_body_xy = desired_body[:2]
+    lateral_eef = _eef(obs).copy()
+    lateral_eef[:2] += (
+        desired_body_xy - body_pos(env, spec.target_body)[:2]
+    )
+    if failure is None:
+        obs, step, failure, _ = _move_with_body_alignment(
+            env, obs, oracle, recorder, lateral_eef,
+            spec.target_body, desired_depth, close, step, args,
+            tolerance=args.reference_lateral_tolerance,
+        )
+    descent_eef = _eef(obs).copy()
+    descent_eef[2] += desired_body[2] - body_pos(
+        env, spec.target_body
+    )[2]
+    if failure is None:
+        obs, step, failure, _ = _move_with_body_alignment(
+            env, obs, oracle, recorder, descent_eef,
+            spec.target_body, desired_depth, close, step, args,
+        )
+
+    release_gate = _l1c3_release_gate_metrics(
+        env, spec, desired_body_xy
+    )
+    seated = _l1c3_release_gate_passes(release_gate, spec, args)
+    bounded = _l1c3_bounded_drop_gate_passes(
+        release_gate, spec, args
+    )
+    release_mode = (
+        "seated" if seated else "bounded_drop" if bounded else "not_applicable"
+    )
+    if failure == "waypoint_timeout" and (seated or bounded):
+        failure = None
+    if failure is None and not (seated or bounded):
+        failure = "pre_release_drawer_insertion_gate"
+    return obs, step, failure, release_gate, release_mode
+
+
 def _query_collision_drop_body_position(
     env, body_name, xy, support_z, clearance
 ):
@@ -2548,7 +2647,22 @@ def _safe_reference_from_eb_prefix(args, files):
                     "tilt_deg": preplace_target_tilt,
                 }
                 release_mode = "not_applicable"
-                if spec.scenario == "L1-C3":
+                if (
+                    spec.scenario == "L1-C3"
+                    and args.reference_strategy == "direct_bounded"
+                ):
+                    if failure is None:
+                        (
+                            obs,
+                            step,
+                            failure,
+                            release_gate,
+                            release_mode,
+                        ) = _l1c3_prepare_direct_bounded_release(
+                            env, obs, oracle, recorder, spec, offset,
+                            rotate_sign, close, step, args,
+                        )
+                elif spec.scenario == "L1-C3":
                     # The policy's neck grasp puts the gripper beside a
                     # horizontal bottle, so the wrist collides with the cabinet
                     # before the bottle reaches the shallow drawer. Lay the
@@ -3033,7 +3147,10 @@ def _safe_reference_from_eb_prefix(args, files):
             recorder.save(
                 os.path.join(args.trajectory_dir, f"safe_reference_ep{idx:03d}.npz"),
                 {
-                    "mode": "eb_grasp_prefix_plus_table_regrasp_safe_er_placement",
+                    "mode": (
+                        "eb_grasp_prefix_plus_"
+                        f"{args.reference_strategy}_safe_er_placement"
+                    ),
                     "source_trajectory": os.path.basename(path),
                     "attempt": row["attempt"],
                     "offset": [row["offset_x_m"], row["offset_y_m"]],
@@ -3085,8 +3202,8 @@ def _safe_reference_from_eb_prefix(args, files):
         f"- Required: N >= {args.min_reference_episodes}, rate >= {args.min_safe_rate:.3f}",
         "- Scope: fully executable OSC actions; no object teleport is retained in the rollout.",
         "- Safe-reference motion: replay the successful Eb grasp/transport prefix, "
-        "lay the bottle horizontally on a clear matched table pose, regrasp it from "
-        "above, and lower it toward the drawer.",
+        "align the held bottle horizontally over the calibrated free drawer side, "
+        "and lower it toward the drawer.",
         "- Release gate: either (a) complete three-dimensional containment with "
         "drawer contact or <=10 mm floor gap, or (b) the complete horizontal "
         "footprint is inside, XY error is bounded, storage tilt is 65--115 degrees, "
@@ -3505,6 +3622,11 @@ def main():
     p.add_argument("--lift_height", type=float, default=0.12)
     p.add_argument("--min_lift", type=float, default=0.030)
     p.add_argument("--reference_handoff_xy_distance", type=float, default=0.100)
+    p.add_argument(
+        "--reference_strategy",
+        choices=("direct_bounded", "table_regrasp"),
+        default="direct_bounded",
+    )
     p.add_argument("--reference_descent", type=float, default=0.120)
     p.add_argument(
         "--reference_transport_height_above_anchor", type=float, default=0.225
