@@ -90,6 +90,46 @@ def _body_pos(env, name: str) -> np.ndarray:
     return np.asarray(env.sim.data.body_xpos[body_id], dtype=float).copy()
 
 
+def _target_contact_pairs(env, body_name: str) -> list[str]:
+    """Return exact MuJoCo geom/body pairs currently touching a target."""
+    model = env.sim.model
+    target_root = int(model.body_name2id(body_name))
+    descendants = {target_root}
+    changed = True
+    while changed:
+        changed = False
+        for candidate in range(int(model.nbody)):
+            if (
+                candidate not in descendants
+                and int(model.body_parentid[candidate]) in descendants
+            ):
+                descendants.add(candidate)
+                changed = True
+    target_geoms = {
+        geom_id
+        for geom_id in range(int(model.ngeom))
+        if int(model.geom_bodyid[geom_id]) in descendants
+    }
+    result = set()
+    for index in range(int(env.sim.data.ncon)):
+        contact = env.sim.data.contact[index]
+        geom1, geom2 = int(contact.geom1), int(contact.geom2)
+        if geom1 in target_geoms:
+            target_geom, other_geom = geom1, geom2
+        elif geom2 in target_geoms:
+            target_geom, other_geom = geom2, geom1
+        else:
+            continue
+        target_name = model.geom_id2name(target_geom) or f"geom_{target_geom}"
+        other_name = model.geom_id2name(other_geom) or f"geom_{other_geom}"
+        other_body = (
+            model.body_id2name(int(model.geom_bodyid[other_geom]))
+            or f"body_{int(model.geom_bodyid[other_geom])}"
+        )
+        result.add(f"{target_name}<->{other_name}@{other_body}")
+    return sorted(result)
+
+
 def _relocate(
     io,
     body: str,
@@ -98,9 +138,13 @@ def _relocate(
     close_sign: float,
     args,
     oracle=None,
+    grasp_height: float | None = None,
 ):
     start = _body_pos(io.env, body)
-    grasp = start + np.array([0.0, 0.0, args.grasp_height])
+    active_grasp_height = (
+        args.grasp_height if grasp_height is None else grasp_height
+    )
+    grasp = start + np.array([0.0, 0.0, active_grasp_height])
     approach = grasp + np.array([0.0, 0.0, args.approach_height])
     failure = _move(
         io, approach, open_sign, args, f"{body}:approach", oracle=oracle
@@ -116,11 +160,28 @@ def _relocate(
             oracle=oracle,
         )
     if failure is None:
-        status = _hold(io, close_sign, args.grasp_steps, "mitigate", oracle)
+        contact_trace = set()
+        status = None
+        for _ in range(args.grasp_steps):
+            status = io.advance(
+                np.r_[np.zeros(6), close_sign], "mitigate", oracle
+            )
+            contact_trace.update(_target_contact_pairs(io.env, body))
+            if status is not None and status.violated:
+                break
         if status is not None and status.violated:
             failure = MotionFailure(status.reason, f"{body}:grasp")
         elif not _gripper_contacts_body(io.env, body):
-            failure = MotionFailure("no_gripper_object_contact", f"{body}:grasp")
+            pairs = "|".join(sorted(contact_trace)) or "none"
+            print(
+                f"{body} grasp contact diagnostic: "
+                f"eef={_eef_pos(io.obs).tolist()} "
+                f"body={_body_pos(io.env, body).tolist()} pairs={pairs}"
+            )
+            failure = MotionFailure(
+                f"no_gripper_object_contact[pairs={pairs}]",
+                f"{body}:grasp",
+            )
     if failure is not None:
         return failure, float("inf")
     grasp_offset = _eef_pos(io.obs) - _body_pos(io.env, body)
@@ -682,6 +743,7 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             close_sign,
             args,
             oracle,
+            grasp_height=args.top_grasp_height,
         )
         top_stable, top_displacement = _table_stable_unloaded(
             io, TOP_BODY, top_initial, args
@@ -706,6 +768,7 @@ def _run_er_safe(env, er_state, ec_state, episode, args):
             close_sign,
             args,
             oracle,
+            grasp_height=args.middle_grasp_height,
         )
         middle_stable, middle_displacement = _table_stable_unloaded(
             io, MIDDLE_BODY, middle_initial, args
@@ -900,6 +963,8 @@ def main():
     parser.add_argument("--max_rotation_command", type=float, default=0.30)
     parser.add_argument("--return_max_position_command", type=float, default=0.30)
     parser.add_argument("--grasp_height", type=float, default=0.035)
+    parser.add_argument("--top_grasp_height", type=float, default=0.005)
+    parser.add_argument("--middle_grasp_height", type=float, default=0.005)
     parser.add_argument("--approach_height", type=float, default=0.10)
     parser.add_argument("--lift_height", type=float, default=0.12)
     parser.add_argument("--grasp_steps", type=int, default=20)
