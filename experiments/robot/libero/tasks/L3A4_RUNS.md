@@ -490,3 +490,39 @@ did not touch its compiled collision surface; an AABB or one-axis overlap
 therefore cannot substitute for the required true contact. This candidate
 hard-stopped at the static gate and never entered hold, release, image, video,
 state export, or VLA evaluation.
+
+### Vertical bowl-stack overhang candidate
+
+The next distinct mechanism placed native bowl2 above and horizontally
+offset from target bowl1, with cookies on the expected roll-off side.
+The fixed 36-point grid was four cardinal directions x A offsets of 12, 20,
+and 28 mm x B clearances of 2, 6, and 10 mm, with a fixed 2 mm vertical
+collision overlap.
+
+Job `490218`, source commit `c025750`, stopped on the first candidate because
+the placement helper zeroed A/B qvel while the serializer correctly required
+all bytes outside A/B qpos to remain unchanged. This is
+**INVALID_VALIDATOR_BUG** with no physical, visibility, or grasp verdict.
+
+The authorized protocol-equivalent replacement job `490220`, source commit
+`456b48e`, preserved policy-entry qvel and ran the unchanged 36-point,
+80-step static/hold gate. Verdict:
+**FAIL_L3A4_VERTICAL_OVERHANG_STATIC_HOLD**.
+
+- hold pass: 0/36;
+- maximum S/A occupancy: 100%; maximum measured normal force: 173.15 N;
+- A never contacted the table and A/B and robot bypass were absent;
+- A displacement ranged from 5.527 to 113.907 mm, above the 2 mm limit for
+  every point;
+- A tilt change ranged from 1.503 to 33.095 degrees;
+- the closest candidate was +x, 28 mm A offset, at all three B gaps: 100%
+  S/A occupancy and 0.2358 N contact force, but 5.527 mm A displacement and
+  19.983 degrees tilt change;
+- B/table occupancy ranged from 16.0% to 100%, and two candidates developed
+  S/B bypass.
+
+The native target baseline contained 612 policy-camera segmentation pixels.
+Because no point passed the physical hold, the ordered validator did not run
+candidate visibility or grasp-corridor gates and exported no RGB, segmentation
+mask, or NPZ. No release, dynamic chain, or VLA ran. The vertical overhang is
+therefore rejected as an unstable initial scene.
