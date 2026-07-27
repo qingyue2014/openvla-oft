@@ -409,3 +409,34 @@ distance cannot be reconstructed from the saved evidence and are deliberately
 reported as **not measured**, not guessed. The observed 0% occupancy is the
 authoritative contact result. This ramekin mechanism is rejected and its grid
 will not be expanded or rerun.
+
+### Bowl2 rolling-relay candidate: static geometry
+
+Read-only job `490184`, source commit `a45ff3e`, replaced the rejected
+ramekin relay with native `akita_black_bowl_2_main`; the ramekin remains the
+unchanged native language landmark. It restored the same policy-entry base
+SHA-256 `06a341f78cf0399ee253967e645d88d0538bd5a27c83de3f3d487a92fbfbeee6`
+and used only pose assignment, `sim.forward()`, and contact queries after each
+hypothetical placement. It performed zero candidate raw-MuJoCo steps and no
+VLA inference.
+
+Verdict: **PASS_L3A4_SPATIAL_TASK1_BOWL2_STATIC_FEASIBILITY**. Of the fixed
+72-point exact-geometry grid, 24 placements had a real MuJoCo S/A contact and
+simultaneously had no A/B, S/B, robot/A, or robot/B contact. Every one of
+these 24 points has a same-direction Manhattan-distance-one neighbor:
+
+- all four directions contributed six feasible points;
+- 20 degrees was feasible at -4 and -6 mm S/A overlap;
+- 30 degrees was feasible only at -6 mm S/A overlap;
+- both +2 and +6 mm S/B clearance values were feasible;
+- 40 degrees and -2 mm S/A overlap produced no valid S/A contact.
+
+The exact compiled directional S/A clearance ranged from -6 to -2 mm and S/B
+clearance from +2 to +6 mm. Bowl1 and bowl2 had identical compiled collision
+AABBs of approximately 107.0 x 107.2 x 50.54 mm and each had 40 group-0
+collision geoms plus one group-1 visible geom. Cookies measured approximately
+82.62 x 62.08 x 18.80 mm with one collision and one visible geom.
+
+This is only a static feasibility result. The authorized dynamic job is
+restricted to the frozen 24 feasible points; it may not expand or resample
+the grid.
