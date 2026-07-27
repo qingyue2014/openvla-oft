@@ -1,10 +1,58 @@
 # L3-A3 — Goal-object support chain with precondition insertion
 
-> **Status: INVALID / HARD-STOPPED.** This task87 candidate passed its static
-> physical-chain and policy-view gates, but failed the executable safe-reference
-> gate. Removing `A` causes the upright goal book `S` to tip, after which the
-> native task cannot be completed reliably. Do not run smoke/formal evaluation,
-> publish metrics, or distribute these artifacts as a completed L3-A scene.
+> **Status: INVALID / HARD-STOPPED.** Both attempted candidates are invalid.
+> The task87 candidate failed the executable safe-reference gate. The native-only
+> task57 replacement passed its numerical static gate but failed independent
+> policy-view review because the goal support was occluded and not side-graspable.
+> Do not run smoke/formal evaluation, publish metrics, or distribute artifacts
+> from either candidate as a completed L3-A scene.
+
+## Failed native-only task57 replacement
+
+The replacement preserved zero-indexed LIBERO-90 task ID 57 exactly:
+
+> pick up the cream cheese and put it in the tray
+
+It used only native LIBERO bodies: goal support `S=cream_cheese_1_main`,
+middle load `A=alphabet_soup_1_main`, top load
+`B=tomato_sauce_1_main`, and goal `wooden_tray_1_main`. No custom XML,
+mesh, material, proxy object, prompt override, or goal override was used.
+
+Remote job `490064`, exact commit
+`cb25e274b981f93d2bd9092bc6bfa66a76715633`, returned
+`PASS_L3A3_TASK57_ONE_STATE_STATIC_GATE`. This marker establishes only the
+numerical static precheck:
+
+- all native assets had collidable `group="0"` and opaque visible `group="1"`
+  geometry;
+- Eb and Ec were stable and benign;
+- Er maintained `S-A` and `A-B` contact with no direct `S-B` bypass;
+- moving `S`, disabling `A` collision, and disabling `B` collision produced
+  the intended causal responses;
+- Eb/Er/Ec were bit-identical outside the native `A/B` qpos/qvel indices.
+
+The static artifacts are hash-bound below so they can be identified and
+excluded:
+
+| Artifact | SHA-256 |
+| --- | --- |
+| `l3a3_task57_eb_one.hdf5` | `8569168a0af5abb1b95fc30c64516ed9040fa6aa569a0440dfbe38edffd584bb` |
+| `l3a3_task57_er_one.hdf5` | `2905217c8203ebb96ce8420f228d0bb6fbfbd3d72f0cbf2fb433baaf9332b6f2` |
+| `l3a3_task57_ec_one.hdf5` | `45365c2b4dac50ba15e0b1cb4e39e28fbff08c75180dc7b28dd68f7fed4eaec9` |
+| `er_ep000_policy.png` | `b12e93a1c77214c301812a2a8b663b8901d3c141c36e411896d02aad86ae7efc` |
+| `er_ep000_passive.mp4` | `fa5d8935b13f132b06b3b82d39947c2601fca3b3e8c89f089b15140e47c48acc` |
+
+Two reviewers independently inspected the exact 256×256 Er policy input. The
+cream-cheese target was reduced to a thin blue strip beneath two cans, its
+identity was not recognizable, and the middle can obstructed the side-grasp
+corridor. The final verdict is therefore
+`INVALID_VISUAL_OCCLUSION`; the apparent static PASS does not override this
+independent visual hard stop.
+
+Job `490064`, its three HDF5 files, its PNGs, and its passive videos must not
+be counted, packaged, or cited as a valid L3-A3 result. Eb source generation,
+safe-reference validation, unchanged-Eb replay, smoke, and formal evaluation
+were intentionally not run.
 
 ## Failed task87 candidate
 
