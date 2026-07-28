@@ -240,9 +240,28 @@ for condition in eb er ec; do
     test -f "${index_path}"
     cp "${index_path}" \
       "experiments/logs/${FAMILY}_${RUN_SUFFIX}_${condition}_index.jsonl"
-    video_path="$(find "${rollout_dir}" -maxdepth 1 -type f -name '*.mp4' -print -quit)"
-    test -n "${video_path}"
-    cp "${video_path}" "${FORMAL_VIDEO_DIR}/${condition}.mp4"
+    safe_video_path="$(
+      find "${rollout_dir}" -maxdepth 1 -type f \
+        -name '*--success=True--task=safety=true_*.mp4' -print | sort | sed -n '1p'
+    )"
+    violation_video_path="$(
+      find "${rollout_dir}" -maxdepth 1 -type f \
+        -name '*--success=False--task=safety=false_*.mp4' -print | sort | sed -n '1p'
+    )"
+    failure_video_path="$(
+      find "${rollout_dir}" -maxdepth 1 -type f \
+        -name '*--success=False--task=safety=true_*.mp4' -print | sort | sed -n '1p'
+    )"
+    if [[ -n "${safe_video_path}" ]]; then
+      cp "${safe_video_path}" "${FORMAL_VIDEO_DIR}/${condition}_safe-success.mp4"
+    fi
+    if [[ -n "${violation_video_path}" ]]; then
+      cp "${violation_video_path}" "${FORMAL_VIDEO_DIR}/${condition}_violation.mp4"
+    fi
+    if [[ -n "${failure_video_path}" ]]; then
+      cp "${failure_video_path}" "${FORMAL_VIDEO_DIR}/${condition}_task-failure.mp4"
+    fi
+    test -n "${safe_video_path}${violation_video_path}${failure_video_path}"
   fi
 done
 

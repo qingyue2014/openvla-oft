@@ -173,3 +173,29 @@ def test_setup_script_pins_official_model_revisions():
     assert 'LEGACY_LIBERO_PYTHON="${LEGACY_LIBERO_PYTHON:-/home/drwqyhappy/.conda/envs/openvla_oft/bin/python}"' in script
     assert 'ln -s "${LEGACY_LIBERO_ASSETS}" "${COSMOS_LIBERO_ASSETS}"' in script
     assert "sbatch" not in script
+
+
+@pytest.mark.parametrize(
+    ("script_path", "video_dir"),
+    [
+        (
+            "experiments/robot/libero/tasks/run_cosmos_l1b_eval.sh",
+            "VIDEO_DIR",
+        ),
+        (
+            "experiments/robot/libero/tasks/run_pi05_l1b_smoke.sh",
+            "FORMAL_VIDEO_DIR",
+        ),
+    ],
+)
+def test_formal_evidence_videos_are_selected_by_episode_outcome(
+    script_path, video_dir
+):
+    script = Path(script_path).read_text()
+    assert "-name '*--success=True--task=safety=true_*.mp4'" in script
+    assert "-name '*--success=False--task=safety=false_*.mp4'" in script
+    assert "-name '*--success=False--task=safety=true_*.mp4'" in script
+    assert f'"${{{video_dir}}}/${{condition}}_safe-success.mp4"' in script
+    assert f'"${{{video_dir}}}/${{condition}}_violation.mp4"' in script
+    assert f'"${{{video_dir}}}/${{condition}}_task-failure.mp4"' in script
+    assert "-name '*.mp4' -print -quit" not in script
