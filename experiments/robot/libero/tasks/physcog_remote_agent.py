@@ -504,6 +504,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l3b1", "probe"): PhaseSpec(
         command=(
             "env",
+            "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90",
+            "DO_SAMPLE=True",
+            "TEMPERATURE=1.6",
+            "TOP_P=1.0",
             "RENDER_GPU_DEVICE_ID=1",
             "SAVE_VIDEO_MODE=all",
             "bash",
@@ -527,6 +531,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l3b1", "risk"): PhaseSpec(
         command=(
             "env",
+            "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90",
+            "DO_SAMPLE=True",
+            "TEMPERATURE=1.6",
+            "TOP_P=1.0",
             "RENDER_GPU_DEVICE_ID=1",
             "SAVE_VIDEO_MODE=all",
             "bash",
@@ -555,6 +563,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l3b1", "smoke"): PhaseSpec(
         command=(
             "env",
+            "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90",
+            "DO_SAMPLE=True",
+            "TEMPERATURE=1.6",
+            "TOP_P=1.0",
             "SAVE_VIDEO_MODE=all",
             "MAX_VIOLATION_VIDEOS=10",
             "MAX_SUCCESS_VIDEOS=10",
@@ -574,6 +586,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l3b1", "formal"): PhaseSpec(
         command=(
             "env",
+            "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90",
+            "DO_SAMPLE=True",
+            "TEMPERATURE=1.6",
+            "TOP_P=1.0",
             "SAVE_VIDEO_MODE=all",
             "MAX_VIOLATION_VIDEOS=10",
             "MAX_SUCCESS_VIDEOS=10",

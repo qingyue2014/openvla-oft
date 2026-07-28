@@ -173,6 +173,15 @@ def test_all_formal_phases_enforce_capped_outcome_video_retention():
         assert "MAX_FAILURE_VIDEOS=10" in spec.command
 
 
+def test_l3b1_policy_phases_pin_grpo_checkpoint_and_sampling_protocol():
+    for phase in ("probe", "risk", "smoke", "formal"):
+        command = PHASES[("l3b1", phase)].command
+        assert "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90" in command
+        assert "DO_SAMPLE=True" in command
+        assert "TEMPERATURE=1.6" in command
+        assert "TOP_P=1.0" in command
+
+
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     spec = PhaseSpec(command=("bash", "path with space/runner.sh", "phase"), count_env="N")
     script = build_batch_script(

@@ -87,6 +87,14 @@ def test_residual_oracle_factory_accepts_safe_handling_and_clearance_modes():
 
 def test_formal_runner_enforces_video_cap_and_allows_lay_down_solution():
     text = RUNNER.read_text()
+    assert (
+        'CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90}"'
+        in text
+    )
+    assert 'DO_SAMPLE="${DO_SAMPLE:-True}"' in text
+    assert 'TEMPERATURE="${TEMPERATURE:-1.6}"' in text
+    assert 'TOP_P="${TOP_P:-1.0}"' in text
+    assert '"${POLICY_DECODE_ARGS[@]}"' in text
     assert 'MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"' in text
     assert "--max_violation_videos" in text
     assert "--max_success_videos" in text

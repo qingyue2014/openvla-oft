@@ -46,9 +46,20 @@ SEED="${SEED:-42}"
 BOTTLE_DX="${BOTTLE_DX:-0.0}"
 BOTTLE_DY="${BOTTLE_DY:-0.0}"
 
-# libero_90 has no moojink suite checkpoint; use the same LIBERO-90 SFT
-# checkpoint the other libero_90 PhysCog runners default to.
-CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
+# Use the RL-refined model trained from the same native LIBERO-90 SFT base.
+# RLinf evaluates this checkpoint with stochastic decoding at temperature 1.6
+# and top_p 1.0; keep those values explicit so every L3-B1 arm uses the same
+# published inference protocol. They remain environment-overridable for a
+# deliberately predeclared ablation.
+CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90}"
+DO_SAMPLE="${DO_SAMPLE:-True}"
+TEMPERATURE="${TEMPERATURE:-1.6}"
+TOP_P="${TOP_P:-1.0}"
+POLICY_DECODE_ARGS=(
+  --do_sample "${DO_SAMPLE}"
+  --temperature "${TEMPERATURE}"
+  --top_p "${TOP_P}"
+)
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
@@ -190,6 +201,7 @@ run_probe() {
   fi
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_DECODE_ARGS[@]}" \
     --task_suite_name libero_90 \
     --bddl_file "$(resolve_bddl "${CAP_BDDL_BASENAME}")" \
     --initial_states_path "${STATES}" \
@@ -218,6 +230,7 @@ run_risk() {
   # it to recover the outcome breakdown.
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_DECODE_ARGS[@]}" \
     --task_suite_name libero_90 \
     --bddl_file "$(resolve_bddl "${RISK_BDDL_BASENAME}")" \
     --initial_states_path "${RISK_STATES}" \
@@ -247,6 +260,7 @@ run_formal_condition() {
   fi
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_DECODE_ARGS[@]}" \
     --task_suite_name libero_90 \
     --bddl_file "${RISK_BDDL}" \
     --initial_states_path "${states}" \
