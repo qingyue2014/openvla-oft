@@ -44,6 +44,7 @@ NATIVE_CAP_PREVIEW_DIR="${NATIVE_CAP_PREVIEW_DIR:-${STATE_DIR}/l3b1_native_capab
 NUM_STATES="${NUM_STATES:-20}"
 NUM_TRIALS="${NUM_TRIALS:-20}"
 PREVIEW_NUM_STATES="${PREVIEW_NUM_STATES:-3}"
+PREVIEW_MODEL_FAMILY="${PREVIEW_MODEL_FAMILY:-openvla}"
 SEED="${SEED:-42}"
 BOTTLE_DX="${BOTTLE_DX:-0.0}"
 BOTTLE_DY="${BOTTLE_DY:-0.0}"
@@ -210,7 +211,8 @@ run_preview_variant() {
     --variant "${variant}" \
     --states "${states}" \
     --out_dir "${out_dir}" \
-    --num_states "${PREVIEW_NUM_STATES}"
+    --num_states "${PREVIEW_NUM_STATES}" \
+    --model_family "${PREVIEW_MODEL_FAMILY}"
 }
 
 run_capability_eval() {

@@ -44,6 +44,12 @@ def main():
     parser.add_argument("--states", required=True, help="HDF5 written by the generator")
     parser.add_argument("--out_dir", required=True)
     parser.add_argument("--num_states", type=int, default=3)
+    parser.add_argument(
+        "--model_family",
+        choices=("openvla", "cosmos"),
+        default="openvla",
+        help="Save the exact policy-facing camera transform for this model.",
+    )
     args = parser.parse_args()
 
     spec = VARIANTS[args.variant]
@@ -73,7 +79,22 @@ def main():
             # actually acts on, so report and render both.
             if "agentview_image" not in obs:
                 raise KeyError(f"agentview_image missing; observation keys: {sorted(obs.keys())}")
-            imageio.imwrite(os.path.join(args.out_dir, f"{name}_t0.png"), obs["agentview_image"])
+            if args.model_family == "cosmos":
+                from experiments.robot.cosmos_policy_utils import (
+                    prepare_cosmos_libero_observation,
+                )
+
+                policy_obs = prepare_cosmos_libero_observation(obs)
+                primary = policy_obs["primary_image"]
+                wrist = policy_obs["wrist_image"]
+            else:
+                primary = obs["agentview_image"]
+                wrist = None
+            imageio.imwrite(os.path.join(args.out_dir, f"{name}_t0.png"), primary)
+            if wrist is not None:
+                imageio.imwrite(
+                    os.path.join(args.out_dir, f"{name}_t0_wrist.png"), wrist
+                )
             print(
                 f"{name} t0  bottle={np.round(bottle_pos, 4).tolist()} "
                 f"drawer={np.round(drawer_pos, 4).tolist()} "
@@ -83,10 +104,25 @@ def main():
 
             for _ in range(RUNTIME_WAIT_STEPS):
                 obs = env.step(DUMMY_ACTION)[0]
+            if args.model_family == "cosmos":
+                policy_obs = prepare_cosmos_libero_observation(obs)
+                primary = policy_obs["primary_image"]
+                wrist = policy_obs["wrist_image"]
+            else:
+                primary = obs["agentview_image"]
+                wrist = None
             imageio.imwrite(
                 os.path.join(args.out_dir, f"{name}_t{RUNTIME_WAIT_STEPS}.png"),
-                obs["agentview_image"],
+                primary,
             )
+            if wrist is not None:
+                imageio.imwrite(
+                    os.path.join(
+                        args.out_dir,
+                        f"{name}_t{RUNTIME_WAIT_STEPS}_wrist.png",
+                    ),
+                    wrist,
+                )
             bottle_wait, _ = _body_pose(env, BOTTLE_BODY)
             print(
                 f"{name} t{RUNTIME_WAIT_STEPS} bottle={np.round(bottle_wait, 4).tolist()} "

@@ -46,6 +46,7 @@ def test_cosmos_l3b1_wrapper_pins_runtime_and_native_gates():
     assert "cb689ec0e3347c13667d70a78a3447388f5c3bb8" in text
     assert "18a2accadf4e7a3531e56754102af5a24d2316da" in text
     assert "MODEL_FAMILY=cosmos" in text
+    assert "PREVIEW_MODEL_FAMILY=cosmos" in text
     assert "MODEL_OPEN_LOOP_STEPS=16" in text
     assert "PASS_L3B1_NATIVE_CAPABILITY_SMOKE" in text
     assert "MAX_VIDEOS_PER_OUTCOME=10" in text
@@ -56,6 +57,7 @@ def test_l3b1_runner_passes_model_family_to_every_policy_arm():
     assert 'MODEL_FAMILY="${MODEL_FAMILY:-openvla}"' in text
     assert 'MODEL_OPEN_LOOP_STEPS="${MODEL_OPEN_LOOP_STEPS:-8}"' in text
     assert text.count('"${POLICY_MODEL_ARGS[@]}"') == 3
+    assert '--model_family "${PREVIEW_MODEL_FAMILY}"' in text
 
 
 def test_remote_agent_registers_gated_cosmos_l3b1_pipeline():
