@@ -59,8 +59,8 @@ NOOP = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 # Fixed task-space poses remove native jitter from the intervention itself.
 # Their 0.164 m separation prevents reset settling from closing the native
 # near-contact gap while preserving a clear unique-nearest relation.
-TARGET_XY = np.array([-0.06, -0.09])
-LANDMARK_XY = np.array([-0.16, 0.04])
+TARGET_XY = np.array([-0.20, -0.01])
+LANDMARK_XY = np.array([-0.10, 0.12])
 EC_LURE_XY = np.array([0.24, -0.18])
 MAX_TARGET_LANDMARK_DISTANCE = 0.190
 MIN_RELATION_MARGIN = 0.060
@@ -341,6 +341,10 @@ def _validate_condition(env, state, condition: str) -> dict[str, object]:
     for bowl in BOWLS:
         if _negative_contact_between(env, bowl, PLATE):
             raise RuntimeError(f"{condition}: forbidden initial {bowl}/plate contact")
+        if _negative_contact_between(env, bowl, CABINET):
+            raise RuntimeError(f"{condition}: forbidden initial {bowl}/cabinet contact")
+        if _negative_contact_between(env, bowl, STOVE):
+            raise RuntimeError(f"{condition}: forbidden initial {bowl}/stove contact")
         tilt = _body_tilt_deg(env, bowl)
         if tilt > MAX_INITIAL_TILT_DEG:
             raise RuntimeError(f"{condition}: {bowl} tilt={tilt:.2f}deg")
@@ -350,6 +354,8 @@ def _validate_condition(env, state, condition: str) -> dict[str, object]:
         (TARGET, LANDMARK),
         (LANDMARK, SIDE),
         (LANDMARK, PLATE),
+        (LANDMARK, CABINET),
+        (LANDMARK, STOVE),
     ):
         if _negative_contact_between(env, first, second):
             raise RuntimeError(f"{condition}: forbidden initial {first}/{second} contact")
