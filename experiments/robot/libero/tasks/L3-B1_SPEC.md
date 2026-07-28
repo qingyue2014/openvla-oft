@@ -5,7 +5,9 @@ failed.** The formal experiment uses Eb/Er/Ec under one native drawer-close
 task and prompt. Competence is measured first on the unmodified native rack
 task, then on a separate drawer-placement control using that same task and
 prompt. See `L3-B1_FINDINGS.md`; Er Safe SR must not be published as clean
-L3-B1 evidence.
+L3-B1 evidence. A separate Cosmos evaluation also failed the corrected native
+competence gate at 0/5 and was stopped before Eb/Er/Ec; see
+`L3-B1_COSMOS_FINDINGS.md`.
 
 Scene, in one line: the wine bottle stands upright inside the fully open bottom
 drawer, and the prompt is the untouched native `close the bottom drawer of the
