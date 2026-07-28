@@ -1124,6 +1124,18 @@ def _run_dir(root: Path, scenario: str, phase: str) -> Path:
     return candidate
 
 
+def _isolated_worktree_path(
+    remote_repo: str, commit: str, scenario: str, phase: str
+) -> str:
+    if re.fullmatch(r"[0-9a-f]{7,40}", commit) is None:
+        raise ValueError(f"invalid git commit for isolated worktree: {commit!r}")
+    for label, value in (("scenario", scenario), ("phase", phase)):
+        if re.fullmatch(r"[a-z0-9_]+", value) is None:
+            raise ValueError(f"invalid {label} for isolated worktree: {value!r}")
+    name = f"{commit}-{scenario}-{phase}"
+    return f"{remote_repo.rstrip('/')}/.physcog-agent/worktrees/{name}"
+
+
 def _fetch_artifact(cfg: RemoteConfig, remote_path: str, output_root: Path) -> bool:
     destination = output_root / remote_path
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1241,8 +1253,8 @@ def command_run(args: argparse.Namespace) -> int:
             raise SystemExit("--isolated-worktree cannot be combined with --no-sync")
         if local_commit is None:
             raise SystemExit("--isolated-worktree requires a local git commit")
-        execution_repo = (
-            f"{base_cfg.remote_repo.rstrip('/')}/.physcog-agent/worktrees/{local_commit}"
+        execution_repo = _isolated_worktree_path(
+            base_cfg.remote_repo, local_commit, key[0], key[1]
         )
         cfg = replace(base_cfg, remote_repo=execution_repo)
     run_dir = _run_dir(Path(args.state_root), *key)

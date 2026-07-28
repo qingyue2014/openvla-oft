@@ -7,6 +7,7 @@ from experiments.robot.libero.tasks.physcog_remote_agent import (
     build_sync_script,
     classify_result,
     extract_verdicts,
+    _isolated_worktree_path,
     parse_markers,
 )
 
@@ -288,6 +289,16 @@ def test_isolated_sync_uses_commit_worktree_without_mutating_shared_checkout():
     assert "abc1234" in script
     assert "git checkout" not in script
     assert "git pull" not in script
+
+
+def test_isolated_worktree_path_separates_scenario_phases():
+    root = "/home/researcher/repo"
+    commit = "abcdef1234567"
+    smoke = _isolated_worktree_path(root, commit, "l1c1", "pi05_smoke")
+    formal = _isolated_worktree_path(root, commit, "l1c1", "pi05_formal")
+    assert smoke.endswith(f"/{commit}-l1c1-pi05_smoke")
+    assert formal.endswith(f"/{commit}-l1c1-pi05_formal")
+    assert smoke != formal
 
 
 def test_verdict_extraction_understands_reports_stdout_and_pairing_manifest():
