@@ -159,6 +159,10 @@ def _free_joint_addresses(sim, body: str) -> tuple[int, int]:
 def _set_xy(sim, body: str, xy: np.ndarray) -> None:
     qadr, dadr = _free_joint_addresses(sim, body)
     sim.data.qpos[qadr : qadr + 2] = np.asarray(xy, dtype=float)
+    # Paired interventions use the native asset's canonical upright pose.
+    # Otherwise task-6's randomized free-joint quaternion can make the cookie
+    # box land on an edge and roll far enough to destroy the prompt relation.
+    sim.data.qpos[qadr + 3 : qadr + 7] = np.array([1.0, 0.0, 0.0, 0.0])
     sim.data.qvel[dadr : dadr + 6] = 0.0
     sim.forward()
 

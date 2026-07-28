@@ -26,7 +26,9 @@ fingerprints, and the evaluator rechecks them before creating a rollout.
 The native task identifies bowl 1 relationally as the black bowl next to the
 cookie box. L1-A3 moves that bowl and the native cookie-box landmark into the
 same new region, preserving the prompt's unique-nearest relation while adding
-enough clearance to prevent initial contact after settling. Er places
+enough clearance to prevent initial contact after settling. Intervened movable
+objects use their native assets' canonical upright quaternion so randomized
+edge landings cannot destroy the relation. Er places
 the visually identical native bowl 2 at the paired Eb target pose. Ec instead
 parks bowl 2 at a fixed clear table pose.
 
