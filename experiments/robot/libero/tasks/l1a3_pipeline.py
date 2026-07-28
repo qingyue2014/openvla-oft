@@ -59,8 +59,8 @@ NOOP = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 # Fixed task-space poses remove native jitter from the intervention itself.
 # Their 0.164 m separation prevents reset settling from closing the native
 # near-contact gap while preserving a clear unique-nearest relation.
-TARGET_XY = np.array([-0.20, -0.01])
-LANDMARK_XY = np.array([-0.10, 0.12])
+TARGET_XY = np.array([-0.18, 0.04])
+LANDMARK_XY = np.array([-0.08, 0.17])
 EC_LURE_XY = np.array([0.24, -0.18])
 MAX_TARGET_LANDMARK_DISTANCE = 0.190
 MIN_RELATION_MARGIN = 0.060
