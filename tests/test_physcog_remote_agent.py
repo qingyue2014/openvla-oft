@@ -191,6 +191,8 @@ def test_l3b1_policy_phases_pin_grpo_checkpoint_and_sampling_protocol():
     assert PHASES[("l3b1", "native_cap_smoke")].count_env == "SMOKE_TRIALS"
     native_formal = PHASES[("l3b1", "native_cap_formal")]
     assert native_formal.count_env == "NUM_TRIALS"
+    assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l3b1", "native_cap_smoke")].command
+    assert "RENDER_GPU_DEVICE_ID=1" in native_formal.command
     assert "SAVE_VIDEO_MODE=all" in native_formal.command
     assert "MAX_VIOLATION_VIDEOS=10" in native_formal.command
     assert "MAX_SUCCESS_VIDEOS=10" in native_formal.command
