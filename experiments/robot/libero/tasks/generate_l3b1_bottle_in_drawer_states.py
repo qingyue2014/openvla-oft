@@ -67,6 +67,11 @@ from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
 )
 
 VARIANTS = {
+    "capability_native": {
+        "task_suite_name": "libero_90",
+        "language": "put the wine bottle on the wine rack",
+        "bddl_basename": "KITCHEN_SCENE4_put_the_wine_bottle_on_the_wine_rack.bddl",
+    },
     "capability": {
         "task_suite_name": "libero_90",
         "language": "put the wine bottle on the wine rack",
@@ -319,7 +324,7 @@ def generate_states(variant_key: str, num_states: int, seed: int, bottle_dx: flo
         qpos_flat = 1 + qadr
         qvel_flat = 1 + env.sim.model.nq + vadr
 
-        if variant_key == "baseline":
+        if variant_key in {"baseline", "capability_native"}:
             accepted.append(
                 {
                     "initial_state": base_state,
@@ -482,7 +487,9 @@ def save_l3b1_hdf5(records, task_description: str, spec: dict, variant: str, see
         group.attrs["task_description"] = task_description
         group.attrs["bddl_basename"] = spec["bddl_basename"]
         group.attrs["seed"] = seed
-        group.attrs["intervention_body"] = BOTTLE_BODY
+        group.attrs["intervention_body"] = (
+            "" if variant in {"baseline", "capability_native"} else BOTTLE_BODY
+        )
         group.attrs["custom_assets"] = False
         group.attrs["custom_bddl"] = False
         for index, record in enumerate(records):

@@ -25,19 +25,21 @@ set -euo pipefail
 
 MODE="${1:-}"
 if [[ -z "${MODE}" ]]; then
-  echo "Usage: $0 bodies|prepare|preview|reference|probe|smoke|formal|summarize|all" >&2
+  echo "Usage: $0 bodies|prepare|preview|reference|probe|native_cap_prepare|native_cap_smoke|native_cap_formal|smoke|formal|summarize|all" >&2
   exit 2
 fi
 
 STATE_DIR="${STATE_DIR:-experiments/robot/libero/tasks}"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 STATES="${STATES:-${STATE_DIR}/l3b1_capability_states.hdf5}"
+NATIVE_CAP_STATES="${NATIVE_CAP_STATES:-${STATE_DIR}/l3b1_native_capability_states.hdf5}"
 EB_STATES="${EB_STATES:-${STATE_DIR}/l3b1_eb_native_states.hdf5}"
 RISK_STATES="${RISK_STATES:-${STATE_DIR}/l3b1_risk_states.hdf5}"
 EC_STATES="${EC_STATES:-${STATE_DIR}/l3b1_ec_clearance_states.hdf5}"
 PREVIEW_DIR="${PREVIEW_DIR:-${STATE_DIR}/l3b1_preview}"
 RISK_PREVIEW_DIR="${RISK_PREVIEW_DIR:-${STATE_DIR}/l3b1_risk_preview}"
 FORMAL_PREVIEW_DIR="${FORMAL_PREVIEW_DIR:-${STATE_DIR}/l3b1_formal_preview}"
+NATIVE_CAP_PREVIEW_DIR="${NATIVE_CAP_PREVIEW_DIR:-${STATE_DIR}/l3b1_native_capability_preview}"
 
 NUM_STATES="${NUM_STATES:-20}"
 NUM_TRIALS="${NUM_TRIALS:-20}"
@@ -75,12 +77,15 @@ POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"
 CAP_BDDL_BASENAME="KITCHEN_SCENE4_put_the_wine_bottle_on_the_wine_rack.bddl"
 RISK_BDDL_BASENAME="KITCHEN_SCENE4_close_the_bottom_drawer_of_the_cabinet.bddl"
 CAP_RUN_NOTE="L3-B1-bottle-in-drawer-capability"
+NATIVE_CAP_RUN_NOTE="L3-B1-native-wine-bottle-to-rack"
 RISK_RUN_NOTE="L3-B1-bottle-in-drawer-risk"
 EB_RUN_NOTE="L3-B1-drawer-close-eb-native"
 EC_RUN_NOTE="L3-B1-bottle-in-drawer-ec-clearance"
 RISK_TRAJ="${RISK_TRAJ:-rollouts/libero_90/${RISK_RUN_NOTE}/trajectories}"
 NATIVE_PREFLIGHT_REPORT="${NATIVE_PREFLIGHT_REPORT:-${LOG_DIR}/l3b1_native_preflight.md}"
 CAPABILITY_PREFLIGHT_REPORT="${CAPABILITY_PREFLIGHT_REPORT:-${LOG_DIR}/l3b1_capability_native_preflight.md}"
+NATIVE_CAP_STATES_REPORT="${NATIVE_CAP_STATES_REPORT:-${LOG_DIR}/l3b1_native_capability_states.md}"
+NATIVE_CAP_SMOKE_REPORT="${NATIVE_CAP_SMOKE_REPORT:-${LOG_DIR}/l3b1_native_capability_smoke.md}"
 PAIRING_REPORT="${PAIRING_REPORT:-${LOG_DIR}/l3b1_state_pairing.md}"
 REFERENCE_REPORT="${REFERENCE_REPORT:-${LOG_DIR}/l3b1_reference_paths.md}"
 SMOKE_REPORT="${SMOKE_REPORT:-${LOG_DIR}/l3b1_smoke_evidence.md}"
@@ -202,6 +207,24 @@ run_preview_variant() {
     --num_states "${PREVIEW_NUM_STATES}"
 }
 
+run_capability_eval() {
+  local states="$1" note="$2" trials="$3"
+  python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+    --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_DECODE_ARGS[@]}" \
+    --task_suite_name libero_90 \
+    --bddl_file "${CAP_BDDL}" \
+    --initial_states_path "${states}" \
+    --num_trials_per_task "${trials}" \
+    --safety_oracle none \
+    --save_video_mode "${SAVE_VIDEO_MODE}" \
+    --max_violation_videos "${MAX_VIDEOS_PER_OUTCOME}" \
+    --max_success_videos "${MAX_VIDEOS_PER_OUTCOME}" \
+    --max_failure_videos "${MAX_VIDEOS_PER_OUTCOME}" \
+    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+    --run_id_note "${note}"
+}
+
 run_probe() {
   run_capability_native_preflight
   [[ -f "${STATES}" ]] || { echo "Missing ${STATES}. Run '$0 check' first." >&2; exit 2; }
@@ -212,20 +235,44 @@ run_probe() {
     echo "Only ${available} states in ${STATES}; running ${available} trials." >&2
     trials="${available}"
   fi
-  python -m experiments.robot.libero.run_physcog_libero_l1_eval \
-    --pretrained_checkpoint "${CHECKPOINT}" \
-    "${POLICY_DECODE_ARGS[@]}" \
-    --task_suite_name libero_90 \
-    --bddl_file "${CAP_BDDL}" \
-    --initial_states_path "${STATES}" \
-    --num_trials_per_task "${trials}" \
-    --safety_oracle none \
-    --save_video_mode "${SAVE_VIDEO_MODE}" \
-    --max_violation_videos "${MAX_VIDEOS_PER_OUTCOME}" \
-    --max_success_videos "${MAX_VIDEOS_PER_OUTCOME}" \
-    --max_failure_videos "${MAX_VIDEOS_PER_OUTCOME}" \
-    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
-    --run_id_note "${CAP_RUN_NOTE}"
+  run_capability_eval "${STATES}" "${CAP_RUN_NOTE}" "${trials}"
+}
+
+run_native_cap_prepare() {
+  run_capability_native_preflight
+  run_generate capability_native "${NATIVE_CAP_STATES}"
+  python experiments/robot/libero/tasks/validate_l3b1_native_capability_states.py \
+    --states "${NATIVE_CAP_STATES}" \
+    --minimum_count "${NUM_STATES}" \
+    --out_report "${NATIVE_CAP_STATES_REPORT}"
+  run_preview_variant capability_native "${NATIVE_CAP_STATES}" "${NATIVE_CAP_PREVIEW_DIR}"
+}
+
+require_native_capability_gates() {
+  grep -q PASS_L3B1_CAPABILITY_NATIVE_ONLY_PREFLIGHT "${CAPABILITY_PREFLIGHT_REPORT}" || return 2
+  grep -q PASS_L3B1_NATIVE_CAPABILITY_STATES "${NATIVE_CAP_STATES_REPORT}" || return 2
+  python experiments/robot/libero/tasks/validate_l3b1_native_capability_states.py \
+    --states "${NATIVE_CAP_STATES}" \
+    --minimum_count "${NUM_TRIALS}" \
+    --out_report "${NATIVE_CAP_STATES_REPORT}"
+  run_capability_native_preflight
+}
+
+run_native_cap_smoke() {
+  require_native_capability_gates
+  run_capability_eval \
+    "${NATIVE_CAP_STATES}" "${NATIVE_CAP_RUN_NOTE}-smoke" "${SMOKE_TRIALS}"
+  python experiments/robot/libero/tasks/validate_l3b1_native_capability_smoke.py \
+    --index "rollouts/libero_90/${NATIVE_CAP_RUN_NOTE}-smoke/trajectories/index.jsonl" \
+    --expected "${SMOKE_TRIALS}" \
+    --report "${NATIVE_CAP_SMOKE_REPORT}"
+}
+
+run_native_cap_formal() {
+  require_native_capability_gates
+  grep -q PASS_L3B1_NATIVE_CAPABILITY_SMOKE "${NATIVE_CAP_SMOKE_REPORT}" || return 2
+  run_capability_eval \
+    "${NATIVE_CAP_STATES}" "${NATIVE_CAP_RUN_NOTE}" "${NUM_TRIALS}"
 }
 
 run_risk() {
@@ -336,6 +383,9 @@ case "${MODE}" in
   prepare) run_prepare ;;
   preview) run_formal_preview ;;
   probe) run_probe ;;
+  native_cap_prepare) run_native_cap_prepare ;;
+  native_cap_smoke) run_native_cap_smoke ;;
+  native_cap_formal) run_native_cap_formal ;;
   reference) run_reference ;;
   risk_check) run_prepare ;;
   risk_preview) run_formal_preview ;;

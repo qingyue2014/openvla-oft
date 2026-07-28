@@ -13,6 +13,9 @@ from experiments.robot.libero.tasks.validate_l3b1_native_preflight import (
     validate_native_task,
 )
 from experiments.robot.libero.tasks.validate_l3b1_states import validate_pairing
+from experiments.robot.libero.tasks.validate_l3b1_native_capability_states import (
+    validate as validate_native_capability_states,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,6 +89,29 @@ def test_paired_states_allow_only_bottle_change(tmp_path):
     assert validate_pairing(str(eb), str(er), str(ec), 1) == 1
 
 
+def test_native_capability_states_are_exact_official_baselines(tmp_path):
+    path = tmp_path / "native_capability.hdf5"
+    key = CAPABILITY_TASK_PROMPT.replace(" ", "_")
+    with h5py.File(path, "w") as handle:
+        group = handle.create_group(key)
+        group.attrs["l3b1_variant"] = "capability_native"
+        group.attrs["task_suite_name"] = "libero_90"
+        group.attrs["task_description"] = CAPABILITY_TASK_PROMPT
+        group.attrs["bddl_basename"] = (
+            "KITCHEN_SCENE4_put_the_wine_bottle_on_the_wine_rack.bddl"
+        )
+        group.attrs["custom_assets"] = False
+        group.attrs["custom_bddl"] = False
+        group.attrs["intervention_body"] = ""
+        demo = group.create_group("demo_0")
+        state = np.arange(30, dtype=float)
+        demo.create_dataset("initial_state", data=state)
+        demo.create_dataset("base_reset_state", data=state)
+        demo.attrs["source_state_index"] = 0
+        demo.attrs["non_bottle_error"] = 0.0
+    assert validate_native_capability_states(str(path), 1) == 1
+
+
 def test_residual_oracle_factory_accepts_safe_handling_and_clearance_modes():
     risk = make_safety_oracle(
         "residual_risk_closure",
@@ -115,6 +141,9 @@ def test_formal_runner_enforces_video_cap_and_allows_lay_down_solution():
     assert 'TOP_P="${TOP_P:-1.0}"' in text
     assert '"${POLICY_DECODE_ARGS[@]}"' in text
     assert "run_capability_native_preflight" in text
+    assert "run_native_cap_prepare" in text
+    assert "run_native_cap_smoke" in text
+    assert "run_native_cap_formal" in text
     assert 'MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"' in text
     assert "--max_violation_videos" in text
     assert "--max_success_videos" in text

@@ -174,12 +174,27 @@ def test_all_formal_phases_enforce_capped_outcome_video_retention():
 
 
 def test_l3b1_policy_phases_pin_grpo_checkpoint_and_sampling_protocol():
-    for phase in ("probe", "risk", "smoke", "formal"):
+    for phase in (
+        "probe",
+        "risk",
+        "smoke",
+        "formal",
+        "native_cap_smoke",
+        "native_cap_formal",
+    ):
         command = PHASES[("l3b1", phase)].command
         assert "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90" in command
         assert "DO_SAMPLE=True" in command
         assert "TEMPERATURE=1.6" in command
         assert "TOP_P=1.0" in command
+    assert PHASES[("l3b1", "native_cap_prepare")].count_env == "NUM_STATES"
+    assert PHASES[("l3b1", "native_cap_smoke")].count_env == "SMOKE_TRIALS"
+    native_formal = PHASES[("l3b1", "native_cap_formal")]
+    assert native_formal.count_env == "NUM_TRIALS"
+    assert "SAVE_VIDEO_MODE=all" in native_formal.command
+    assert "MAX_VIOLATION_VIDEOS=10" in native_formal.command
+    assert "MAX_SUCCESS_VIDEOS=10" in native_formal.command
+    assert "MAX_FAILURE_VIDEOS=10" in native_formal.command
 
 
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
@@ -321,6 +336,9 @@ def test_l3b1_registry_exposes_capability_and_risk_arms():
         "check",
         "preview",
         "probe",
+        "native_cap_prepare",
+        "native_cap_smoke",
+        "native_cap_formal",
         "risk_check",
         "risk_preview",
         "risk",
