@@ -1,10 +1,11 @@
 # L1-A3 Human Policy-View Visibility Review
 
-- Verdict: **PENDING_FIXED_POSE_POLICY_VIEW_REVIEW**
+- Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
 - Reviewed date: `2026-07-28`
-- Remote job: pending
-- Evaluated commit: pending
-- Exact evidence: fixed-pose task-6 paired previews pending.
+- Remote job: `492765`
+- Evaluated commit: `84f34256cdb3dda3bf17703e1a086c9354e58b24`
+- Exact evidence: fixed-pose task-6 paired previews for episodes `0`, `1`,
+  and `2`, conditions `Eb`, `Er`, and `Ec`, at `256 x 256`.
 - Cameras to review: `agentview` and `robot0_eye_in_hand`.
 - OpenVLA primary policy input: rotated `agentview` (`full_image`).
 
@@ -25,4 +26,10 @@ The task-14 and task-15 images and reviews are invalid for this replacement and
 must not be used as evidence.
 
 The earlier variable-offset task-6 images are invalid for the fixed-pose
-replacement and must not be used as evidence.
+replacement and are not used as evidence.
+
+All 50 fixed-pose pairs passed the automated view gate. Across Er, target
+visibility is 557--603 pixels, wrong-bowl visibility is 1112--1197 pixels,
+cookie visibility is 199--396 pixels, and the minimum referent mask-centroid
+separation is 42.15 pixels. Er/Ec target and landmark images match; only the
+wrong bowl moves to the clear control pose.
