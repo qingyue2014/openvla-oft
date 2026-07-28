@@ -277,8 +277,9 @@ def _save_preview(env, state, out_dir: Path, condition: str, index: int) -> None
     out_dir.mkdir(parents=True, exist_ok=True)
     obs = env.set_init_state(state)
     env.sim.forward()
-    # Refresh observations after the exact serialized state restoration.
-    obs = env._get_observations()
+    # set_init_state returns observations from the restored state. No direct
+    # qpos edit occurs afterwards, so this is the fresh policy observation
+    # rather than a stale reset frame.
     images = _policy_images(obs)
     for camera, image in images.items():
         imageio.imwrite(out_dir / f"{camera}_{index:03d}.png", image)
