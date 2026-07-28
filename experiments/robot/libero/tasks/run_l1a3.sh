@@ -129,6 +129,13 @@ require_states() {
   fi
 }
 
+ensure_states() {
+  if ! states_ready; then
+    log "L1-A3 paired artifacts missing in this worktree; regenerating deterministically"
+    generate
+  fi
+}
+
 require_visibility_review() {
   require_states
   if [[ ! -f "${VISIBILITY_REVIEW}" ]] \
@@ -267,6 +274,7 @@ case "${MODE}" in
     preview
     ;;
   smoke)
+    ensure_states
     require_visibility_review
     smoke_eb="${EB_NOTE}-smoke"
     smoke_er="${ER_NOTE}-smoke"
@@ -285,6 +293,7 @@ case "${MODE}" in
     echo "verdict=PASS_L1A3_SMOKE"
     ;;
   formal)
+    ensure_states
     require_visibility_review
     eval_condition Eb "${EB_STATES}" none "${EB_NOTE}" "${NUM_TRIALS}"
     replay_gate "${EB_NOTE}" 20 "${REPLAY_CSV}" "${REPLAY_REPORT}"
