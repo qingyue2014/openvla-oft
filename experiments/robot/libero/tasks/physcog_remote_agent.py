@@ -850,10 +850,11 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1a3", "formal"): PhaseSpec(
         command=(
             "env",
-            "SAVE_VIDEO_MODE=all",
-            "MAX_VIOLATION_VIDEOS=10",
-            "MAX_SUCCESS_VIDEOS=10",
-            "MAX_FAILURE_VIDEOS=10",
+            # Formal evidence comes from trajectories and metrics.  The
+            # already-gated smoke phase supplies representative MP4s; forking
+            # ffmpeg repeatedly inside a long-lived MuJoCo EGL process can
+            # invalidate the renderer after a few episodes.
+            "SAVE_VIDEO_MODE=none",
             "bash",
             "experiments/robot/libero/tasks/run_l1a3.sh",
             "formal",

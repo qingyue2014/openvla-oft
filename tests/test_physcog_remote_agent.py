@@ -59,6 +59,7 @@ def test_l1a3_registry_exposes_native_gated_pipeline():
     assert PHASES[("l1a3", "check")].count_env == "NUM_TRIALS"
     assert PHASES[("l1a3", "smoke")].count_env == "SMOKE_TRIALS"
     assert PHASES[("l1a3", "formal")].count_env == "NUM_TRIALS"
+    assert "SAVE_VIDEO_MODE=none" in PHASES[("l1a3", "formal")].command
     assert (
         "experiments/robot/libero/tasks/l1a3_native_preflight.json"
         in PHASES[("l1a3", "check")].artifacts
@@ -185,12 +186,14 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     )
 
 
-def test_all_formal_phases_enforce_capped_outcome_video_retention():
+def test_all_formal_phases_cap_or_disable_inline_video_retention():
     formal_specs = [
         spec for (_, phase), spec in PHASES.items() if phase == "formal"
     ]
     assert formal_specs
     for spec in formal_specs:
+        if "SAVE_VIDEO_MODE=none" in spec.command:
+            continue
         assert "SAVE_VIDEO_MODE=all" in spec.command
         assert "MAX_VIOLATION_VIDEOS=10" in spec.command
         assert "MAX_SUCCESS_VIDEOS=10" in spec.command
