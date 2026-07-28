@@ -249,13 +249,20 @@ run_native_cap_prepare() {
 }
 
 require_native_capability_gates() {
-  grep -q PASS_L3B1_CAPABILITY_NATIVE_ONLY_PREFLIGHT "${CAPABILITY_PREFLIGHT_REPORT}" || return 2
-  grep -q PASS_L3B1_NATIVE_CAPABILITY_STATES "${NATIVE_CAP_STATES_REPORT}" || return 2
+  [[ -f "${NATIVE_CAP_STATES}" ]] || {
+    echo "Missing ${NATIVE_CAP_STATES}. Run '$0 native_cap_prepare' first." >&2
+    return 2
+  }
+  # Re-run both native-only gates in every evaluation job. The remote runner
+  # clears declared report artifacts before launch, so reports are outputs of
+  # this phase rather than durable inputs inherited from `native_cap_prepare`.
   python experiments/robot/libero/tasks/validate_l3b1_native_capability_states.py \
     --states "${NATIVE_CAP_STATES}" \
     --minimum_count "${NUM_TRIALS}" \
     --out_report "${NATIVE_CAP_STATES_REPORT}"
   run_capability_native_preflight
+  grep -q PASS_L3B1_CAPABILITY_NATIVE_ONLY_PREFLIGHT "${CAPABILITY_PREFLIGHT_REPORT}" || return 2
+  grep -q PASS_L3B1_NATIVE_CAPABILITY_STATES "${NATIVE_CAP_STATES_REPORT}" || return 2
 }
 
 run_native_cap_smoke() {
@@ -270,6 +277,12 @@ run_native_cap_smoke() {
 
 run_native_cap_formal() {
   require_native_capability_gates
+  # Reconstruct the smoke verdict from its immutable trajectory index because
+  # the remote runner clears the fetched report artifact before this job.
+  python experiments/robot/libero/tasks/validate_l3b1_native_capability_smoke.py \
+    --index "rollouts/libero_90/${NATIVE_CAP_RUN_NOTE}-smoke/trajectories/index.jsonl" \
+    --expected "${SMOKE_TRIALS}" \
+    --report "${NATIVE_CAP_SMOKE_REPORT}"
   grep -q PASS_L3B1_NATIVE_CAPABILITY_SMOKE "${NATIVE_CAP_SMOKE_REPORT}" || return 2
   run_capability_eval \
     "${NATIVE_CAP_STATES}" "${NATIVE_CAP_RUN_NOTE}" "${NUM_TRIALS}"

@@ -144,6 +144,16 @@ def test_formal_runner_enforces_video_cap_and_allows_lay_down_solution():
     assert "run_native_cap_prepare" in text
     assert "run_native_cap_smoke" in text
     assert "run_native_cap_formal" in text
+    gate = text.split("require_native_capability_gates() {", 1)[1].split(
+        "\n}", 1
+    )[0]
+    assert gate.index("validate_l3b1_native_capability_states.py") < gate.index(
+        "grep -q PASS_L3B1_NATIVE_CAPABILITY_STATES"
+    )
+    formal = text.split("run_native_cap_formal() {", 1)[1].split("\n}", 1)[0]
+    assert formal.index("validate_l3b1_native_capability_smoke.py") < formal.index(
+        "grep -q PASS_L3B1_NATIVE_CAPABILITY_SMOKE"
+    )
     assert 'MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"' in text
     assert "--max_violation_videos" in text
     assert "--max_success_videos" in text
