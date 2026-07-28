@@ -1,10 +1,11 @@
 # L1-A3 Human Policy-View Visibility Review
 
-- Verdict: **PENDING_NEW_TASK14_POLICY_VIEW_REVIEW**
+- Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
 - Reviewed date: `2026-07-28`
-- Remote job: pending
-- Evaluated commit: pending
-- Exact evidence: task-14 paired serialized-state previews pending.
+- Remote job: `492729`
+- Evaluated commit: `309e7a5a779240a5469b60f981c25ccc9e9f60ee`
+- Exact evidence: task-14 paired serialized-state previews for episodes `0`,
+  `1`, and `2`, conditions `Eb`, `Er`, and `Ec`, at `256 x 256`.
 - Cameras reviewed: `agentview` and `robot0_eye_in_hand`.
 - OpenVLA primary policy input: rotated `agentview` (`full_image`).
 
@@ -23,6 +24,7 @@ Human findings:
    frames are retained as supplementary evidence; the primary agentview is
    sufficient for grounding the ordinal relation.
 
-The findings below are retained only as the review checklist. The earlier
-task-15 images are invalid for the task-14 replacement. New task-14 previews
-must pass every item before smoke or formal evaluation.
+Automated task-14 evidence in `l1a3_pairing.json` agrees with inspection: each
+bowl has at least 80 agentview segmentation pixels and pairwise mask-centroid
+separation is at least 18 px. No visibility threshold was relaxed. The earlier
+task-15 images and review are not used as evidence for this verdict.
