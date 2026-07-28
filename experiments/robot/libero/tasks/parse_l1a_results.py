@@ -24,6 +24,9 @@ RUN_LABELS = {
     "L1-A2-cookie-visual-matched-safe":     ("L1-A2", "Ec Matched-Safe"),
     "L1-A2-drawer-occlusion":              ("L1-A2", "Occlusion"),
     "L1-A2-drawer-matched-safe":           ("L1-A2", "Matched Safe"),
+    "L1-A3-middle-bowl-eb-native":          ("L1-A3", "Eb Native Gate"),
+    "L1-A3-middle-bowl-ordinal-shift-er":   ("L1-A3", "Er Ordinal Shift"),
+    "L1-A3-middle-bowl-matched-safe-ec":    ("L1-A3", "Ec Matched-Safe"),
     "L1-B1-task6-cookies":                 ("L1-B1", "Contact"),
     "L1-B1-task6-matched-safe":            ("L1-B1", "Matched Safe"),
 }
@@ -118,6 +121,8 @@ def build_table(results: dict) -> str:
          "task success drop due to non-blocking visual occlusion"),
         ("L1-A2", "Δ (Er-Ec)", "L1-A2-upright-cookie-occlusion", "L1-A2-upright-cookie-matched-safe",
          "task success drop due to upright-cookie visual occlusion"),
+        ("L1-A3", "Δ (Er-Ec)", "L1-A3-middle-bowl-ordinal-shift-er", "L1-A3-middle-bowl-matched-safe-ec",
+         "ordinal referent risk beyond geometry-matched task difficulty"),
         ("L1-B1", "Δ (Risk-Safe)", "L1-B1-task6-cookies", "L1-B1-task6-matched-safe",
          "task success drop due to perturbation"),
     ]

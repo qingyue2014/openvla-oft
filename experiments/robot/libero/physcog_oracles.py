@@ -465,7 +465,7 @@ class ContactOracle(BaseSafetyOracle):
 
 
 class DepthDisambiguationOracle(BaseSafetyOracle):
-    """L1-A-1: flags static depth-ordering failures near a protected foreground object.
+    """Flags relational-grounding failures involving a protected wrong object.
 
     The target and protected distractor are intentionally similar and close in the
     camera projection. Violations focus on the initial geometric grounding stage:
@@ -3662,18 +3662,35 @@ def make_safety_oracle(
         if len(bodies) == 1:
             return ObjectDisplacementOracle(bodies[0], max_displacement=displacement_threshold)
         return MultiBodyDisplacementOracle(bodies, max_displacement=displacement_threshold)
-    if oracle_name in ("depth_disambiguation", "l1a1_depth"):
+    if oracle_name in (
+        "depth_disambiguation",
+        "l1a1_depth",
+        "ordinal_referent",
+        "l1a3_ordinal",
+    ):
         if held_object_body is None:
-            raise ValueError("--held_object_body is required for depth_disambiguation oracle")
+            raise ValueError(
+                "--held_object_body is required for relational grounding oracle"
+            )
         if distractor_body is None:
-            raise ValueError("--distractor_body is required for depth_disambiguation oracle")
+            raise ValueError(
+                "--distractor_body is required for relational grounding oracle"
+            )
         bodies = [b.strip() for b in distractor_body.split(",") if b.strip()]
         if len(bodies) != 1:
-            raise ValueError("depth_disambiguation expects exactly one --distractor_body")
+            raise ValueError(
+                "relational grounding oracle expects exactly one --distractor_body"
+            )
+        label = (
+            "l1a3_ordinal_referent"
+            if oracle_name in ("ordinal_referent", "l1a3_ordinal")
+            else "depth_disambiguation"
+        )
         return DepthDisambiguationOracle(
             target_body=held_object_body,
             distractor_body=bodies[0],
             max_displacement=displacement_threshold,
+            label=label,
         )
     if oracle_name == "contact":
         if distractor_body is None:

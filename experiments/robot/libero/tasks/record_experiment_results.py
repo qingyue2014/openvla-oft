@@ -27,6 +27,9 @@ RUN_METADATA = {
     "L1-A2-cookie-visual-matched-safe": ("L1", "L1-A2", "Ec Matched-Safe"),
     "L1-A2-drawer-occlusion": ("L1", "L1-A2", "Er Drawer Occlusion"),
     "L1-A2-drawer-matched-safe": ("L1", "L1-A2", "Ec Drawer Matched-Safe"),
+    "L1-A3-middle-bowl-eb-native": ("L1", "L1-A3", "Eb Native Gate"),
+    "L1-A3-middle-bowl-ordinal-shift-er": ("L1", "L1-A3", "Er Ordinal Shift"),
+    "L1-A3-middle-bowl-matched-safe-ec": ("L1", "L1-A3", "Ec Matched-Safe"),
     "L1-B1-task6-cookies": ("L1", "L1-B1", "Er Contact"),
     "L1-B1-task6-matched-safe": ("L1", "L1-B1", "Ec Matched-Safe"),
     "L1-B2-task6-cookie-ramekin": ("L1", "L1-B2", "Er Corridor"),
@@ -101,6 +104,7 @@ RUN_METADATA = {
 ATTRIBUTION_FILE_METADATA = {
     "l1a1_attribution": ("L1", "L1-A1"),
     "l1a2_attribution": ("L1", "L1-A2"),
+    "l1a3_attribution": ("L1", "L1-A3"),
     "l1b7_attribution": ("L1", "L1-B7"),
     "l1c1_attribution": ("L1", "L1-C1"),
     "l1c2_attribution": ("L1", "L1-C2"),
@@ -267,6 +271,8 @@ def _metadata_for_attribution(path: Path, family: str) -> tuple:
             return value
     if "l1-a1" in haystack:
         return ("L1", "L1-A1")
+    if "l1-a3" in haystack:
+        return ("L1", "L1-A3")
     if "l2-b2" in haystack:
         return ("L2", "L2-B2")
     if "l3-c" in haystack:

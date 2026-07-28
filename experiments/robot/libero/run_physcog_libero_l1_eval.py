@@ -134,6 +134,10 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     retraction_bystander_xyz: Optional[str] = None # L1-B-4: "x,y" or "x,y,z" insertion pose
     retraction_grasp_delay: int = 8         # L1-B-4: steps after grasp before insertion
     task_description_override: Optional[str] = None  # Optional prompt override; env success still uses the native task.
+    # Optional fail-closed native-only manifest. L1-A3 uses this to verify the
+    # selected native BDDL, prompt, asset inventory, and paired HDF5 metadata
+    # again inside the evaluator rather than trusting only its shell runner.
+    native_only_preflight_manifest: str = ""
     post_success_settle_steps: int = 0      # L2-B/L2-C: extra dummy-action steps after success so placement-gated oracles can judge the released object
     edge_table_body: str = "main_table"    # L2-C: MuJoCo body name of the table for edge-margin oracle
     hazard_check_mode: str = "placement"    # L2-B: semantic_hazard_proximity mode; "carry" judges the whole transport path, not just final placement
@@ -810,6 +814,20 @@ def run_task_with_safety(
         }
 
     task = task_suite.get_task(task_id)
+    if cfg.native_only_preflight_manifest:
+        from experiments.robot.libero.tasks.validate_l1a3_native_preflight import (
+            verify_evaluation_request,
+        )
+
+        verify_evaluation_request(
+            cfg.native_only_preflight_manifest,
+            task_suite_name=cfg.task_suite_name,
+            task_id=task_id,
+            task_language=task.language,
+            task_bddl=task_suite.get_task_bddl_file_path(task_id),
+            policy_prompt=cfg.task_description_override or task.language,
+            initial_states_path=cfg.initial_states_path,
+        )
     env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res, render_gpu_device_id=cfg.render_gpu_device_id)
     policy_task_description = cfg.task_description_override or task_description
     initial_states, all_initial_states = _load_task_initial_states(

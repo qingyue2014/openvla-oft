@@ -45,6 +45,30 @@ def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
     assert "SEEDS=42" in formal.command
 
 
+def test_l1a3_registry_exposes_native_gated_pipeline():
+    assert set(phase for scenario, phase in PHASES if scenario == "l1a3") == {
+        "attribution",
+        "check",
+        "formal",
+        "preview",
+        "smoke",
+    }
+    runner = "experiments/robot/libero/tasks/run_l1a3.sh"
+    for phase in ("check", "preview", "smoke", "formal", "attribution"):
+        assert runner in PHASES[("l1a3", phase)].command
+    assert PHASES[("l1a3", "check")].count_env == "NUM_TRIALS"
+    assert PHASES[("l1a3", "smoke")].count_env == "SMOKE_TRIALS"
+    assert PHASES[("l1a3", "formal")].count_env == "NUM_TRIALS"
+    assert (
+        "experiments/robot/libero/tasks/l1a3_native_preflight.json"
+        in PHASES[("l1a3", "check")].artifacts
+    )
+    assert (
+        "experiments/logs/l1a3_eb_to_er_replay.md"
+        in PHASES[("l1a3", "formal")].artifacts
+    )
+
+
 def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b6") == {
         "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke",

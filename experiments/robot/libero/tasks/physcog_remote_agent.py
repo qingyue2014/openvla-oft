@@ -802,6 +802,91 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_spatial/L1-A2-upright-cookie-matched-safe-seed42",
         ),
     ),
+    ("l1a3", "check"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a3.sh",
+            "check",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a3_native_preflight.md",
+            "experiments/robot/libero/tasks/l1a3_native_preflight.json",
+            "experiments/robot/libero/tasks/l1a3_pairing.json",
+            "experiments/robot/libero/tasks/l1a3_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1a3_er_states.hdf5",
+            "experiments/robot/libero/tasks/l1a3_ec_states.hdf5",
+            "experiments/robot/libero/tasks/l1a3_preview",
+        ),
+    ),
+    ("l1a3", "preview"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a3.sh",
+            "preview",
+        ),
+        artifacts=("experiments/robot/libero/tasks/l1a3_preview",),
+    ),
+    ("l1a3", "smoke"): PhaseSpec(
+        command=(
+            "env",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a3.sh",
+            "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a3_eb_to_er_replay_smoke.md",
+            "experiments/logs/l1a3_eb_to_er_replay_smoke.csv",
+            "experiments/logs/l1a3_safe_reference_smoke.md",
+            "experiments/logs/l1a3_safe_reference_smoke.csv",
+            "experiments/logs/l1a3_safe_reference_smoke_videos",
+            "rollouts/libero_90/L1-A3-middle-bowl-eb-native-smoke",
+            "rollouts/libero_90/L1-A3-middle-bowl-ordinal-shift-er-smoke",
+            "rollouts/libero_90/L1-A3-middle-bowl-matched-safe-ec-smoke",
+        ),
+    ),
+    ("l1a3", "formal"): PhaseSpec(
+        command=(
+            "env",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIOLATION_VIDEOS=10",
+            "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a3.sh",
+            "formal",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a3_eb_to_er_replay.md",
+            "experiments/logs/l1a3_eb_to_er_replay.csv",
+            "experiments/logs/l1a3_safe_reference.md",
+            "experiments/logs/l1a3_safe_reference.csv",
+            "experiments/logs/l1a3_safe_reference_videos",
+            "experiments/logs/l1a3_attribution.md",
+            "experiments/logs/experiment_records.csv",
+            "experiments/logs/experiment_records.md",
+            "experiments/logs/result_tables.md",
+            "rollouts/libero_90/L1-A3-middle-bowl-eb-native",
+            "rollouts/libero_90/L1-A3-middle-bowl-ordinal-shift-er",
+            "rollouts/libero_90/L1-A3-middle-bowl-matched-safe-ec",
+        ),
+    ),
+    ("l1a3", "attribution"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a3.sh",
+            "attribution",
+        ),
+        artifacts=(
+            "experiments/logs/l1a3_attribution.md",
+            "experiments/logs/experiment_records.csv",
+            "experiments/logs/experiment_records.md",
+            "experiments/logs/result_tables.md",
+        ),
+    ),
 }
 
 
