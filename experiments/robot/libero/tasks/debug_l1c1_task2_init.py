@@ -18,6 +18,8 @@ from pathlib import Path
 
 import h5py
 import imageio.v2 as imageio
+import numpy as np
+from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
@@ -54,6 +56,34 @@ def _save_agentview(obs, path: Path) -> None:
     imageio.imwrite(path, obs["agentview_image"][::-1, ::-1])
 
 
+def _save_policy_agentview(obs, path: Path, model_family: str) -> None:
+    if "agentview_image" not in obs:
+        raise KeyError(f"agentview_image not found in observation keys: {sorted(obs.keys())}")
+    image = np.asarray(obs["agentview_image"])
+    family = str(model_family).lower().replace("_", "").replace("-", "")
+    if family == "cosmos" or family == "cosmospolicy":
+        transformed = image[::-1].copy()
+    elif family in {"pi05", "pi0.5"}:
+        transformed = np.asarray(
+            Image.fromarray(image[::-1, ::-1].copy()).resize(
+                (224, 224), resample=Image.Resampling.BILINEAR
+            )
+        )
+    else:
+        rotated = image[::-1, ::-1].copy()
+        height, width = rotated.shape[:2]
+        crop_h = max(1, int(round(height * 0.9)))
+        crop_w = max(1, int(round(width * 0.9)))
+        top = (height - crop_h) // 2
+        left = (width - crop_w) // 2
+        transformed = np.asarray(
+            Image.fromarray(
+                rotated[top:top + crop_h, left:left + crop_w]
+            ).resize((224, 224), resample=Image.Resampling.LANCZOS)
+        )
+    imageio.imwrite(path, transformed)
+
+
 def _print_object_table(env, title: str) -> None:
     print(f"\n{title}")
     print(f"{'body':42s} {'body_x':>8s} {'body_y':>8s} {'body_z':>8s}  {'qpos_xyz':>27s}  {'quat_wxyz':>39s}")
@@ -83,7 +113,8 @@ def main() -> None:
     parser.add_argument("--out_dir", default="experiments/robot/libero/tasks/l1c1_task2_debug")
     parser.add_argument("--demo_idx", type=int, default=0)
     parser.add_argument("--num_demos", type=int, default=1)
-    parser.add_argument("--resolution", type=int, default=512)
+    parser.add_argument("--resolution", type=int, default=256)
+    parser.add_argument("--model_family", default="openvla")
     parser.add_argument(
         "--condition",
         choices=("control", "risk", "bowl_stack", "bowl_stack_eb", "bowl_stack_ec"),
@@ -107,6 +138,11 @@ def main() -> None:
     _print_object_table(env, "DEFAULT LIBERO task2 state")
     default_png = out_dir / f"default_demo{args.demo_idx}.png"
     _save_agentview(default_obs, default_png)
+    _save_policy_agentview(
+        default_obs,
+        out_dir / f"default_demo{args.demo_idx}_policy.png",
+        args.model_family,
+    )
 
     with h5py.File(args.state_path, "r") as f:
         if key not in f:
@@ -123,6 +159,11 @@ def main() -> None:
             _print_object_table(env, f"GENERATED L1-C {args.condition} state demo_{demo_idx}")
             generated_png = out_dir / f"generated_demo{demo_idx}.png"
             _save_agentview(generated_obs, generated_png)
+            _save_policy_agentview(
+                generated_obs,
+                out_dir / f"generated_demo{demo_idx}_policy.png",
+                args.model_family,
+            )
             generated_pngs.append(generated_png)
 
     env.close()
