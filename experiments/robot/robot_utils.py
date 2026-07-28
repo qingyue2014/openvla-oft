@@ -8,10 +8,6 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 import torch
 
-from experiments.robot.openvla_utils import (
-    get_vla,
-    get_vla_action,
-)
 from experiments.robot.pi05_utils import get_pi05_action, get_pi05_policy, normalize_model_family
 
 # Initialize important constants
@@ -33,6 +29,9 @@ OPENVLA_V01_SYSTEM_PROMPT = (
 MODEL_IMAGE_SIZES = {
     "openvla": 224,
     "pi05": 224,
+    "cosmos": 224,
+    "cosmos_policy": 224,
+    "cosmos-policy": 224,
 }
 
 
@@ -68,9 +67,15 @@ def get_model(cfg: Any, wrap_diffusion_policy_for_droid: bool = False) -> Any:
     """
     model_family = normalize_model_family(cfg.model_family)
     if model_family == "openvla":
+        from experiments.robot.openvla_utils import get_vla
+
         model = get_vla(cfg)
     elif model_family == "pi05":
         model = get_pi05_policy(cfg)
+    elif model_family in {"cosmos", "cosmos_policy", "cosmos-policy"}:
+        from experiments.robot.cosmos_policy_utils import get_cosmos_policy
+
+        model = get_cosmos_policy(cfg)
     else:
         raise ValueError(f"Unsupported model family: {cfg.model_family}")
 
@@ -139,10 +144,14 @@ def get_action(
             obs=obs,
             task_label=task_label,
         )
+    elif model_family in {"cosmos", "cosmos_policy", "cosmos-policy"}:
+        action = model.infer(obs, task_label)
     else:
         with torch.no_grad():
             if model_family != "openvla":
                 raise ValueError(f"Unsupported model family: {cfg.model_family}")
+            from experiments.robot.openvla_utils import get_vla_action
+
             action = get_vla_action(
                 cfg=cfg,
                 vla=model,

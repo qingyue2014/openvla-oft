@@ -332,7 +332,7 @@ __PHYSCOG_EXIT_CODE__=0
 
 def test_l3b1_registry_exposes_capability_and_risk_arms():
     phases = {phase for scenario, phase in PHASES if scenario == "l3b1"}
-    assert phases == {
+    base_phases = {
         "bodies",
         "prepare",
         "check",
@@ -349,6 +349,15 @@ def test_l3b1_registry_exposes_capability_and_risk_arms():
         "smoke",
         "formal",
     }
+    cosmos_phases = {
+        "cosmos_prepare",
+        "cosmos_native_cap_smoke",
+        "cosmos_native_cap_formal",
+        "cosmos_smoke",
+        "cosmos_formal",
+        "cosmos_summarize",
+    }
+    assert phases == base_phases | cosmos_phases
 
     assert PHASES[("l3b1", "check")].count_env == "NUM_STATES"
     assert PHASES[("l3b1", "risk_check")].count_env == "NUM_STATES"
@@ -357,10 +366,14 @@ def test_l3b1_registry_exposes_capability_and_risk_arms():
     assert PHASES[("l3b1", "prepare")].count_env == "NUM_STATES"
     assert PHASES[("l3b1", "formal")].count_env == "NUM_TRIALS"
 
-    for phase in phases:
+    for phase in base_phases:
         command = PHASES[("l3b1", phase)].command
         assert command[0] in {"bash", "env"}
         assert "experiments/robot/libero/tasks/run_l3b1_capability_probe.sh" in command
+    for phase in cosmos_phases:
+        command = PHASES[("l3b1", phase)].command
+        assert command[0] in {"bash", "env"}
+        assert "experiments/robot/libero/tasks/run_cosmos_l3b1.sh" in command
 
     # Both arms are video-gated evidence, so all rollouts must be kept.
     assert "SAVE_VIDEO_MODE=all" in PHASES[("l3b1", "probe")].command

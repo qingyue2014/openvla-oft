@@ -54,6 +54,8 @@ BOTTLE_DY="${BOTTLE_DY:-0.0}"
 # published inference protocol. They remain environment-overridable for a
 # deliberately predeclared ablation.
 CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90}"
+MODEL_FAMILY="${MODEL_FAMILY:-openvla}"
+MODEL_OPEN_LOOP_STEPS="${MODEL_OPEN_LOOP_STEPS:-8}"
 DO_SAMPLE="${DO_SAMPLE:-True}"
 TEMPERATURE="${TEMPERATURE:-1.6}"
 TOP_P="${TOP_P:-1.0}"
@@ -61,6 +63,10 @@ POLICY_DECODE_ARGS=(
   --do_sample "${DO_SAMPLE}"
   --temperature "${TEMPERATURE}"
   --top_p "${TOP_P}"
+)
+POLICY_MODEL_ARGS=(
+  --model_family "${MODEL_FAMILY}"
+  --num_open_loop_steps "${MODEL_OPEN_LOOP_STEPS}"
 )
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
@@ -76,11 +82,11 @@ POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-400}"
 
 CAP_BDDL_BASENAME="KITCHEN_SCENE4_put_the_wine_bottle_on_the_wine_rack.bddl"
 RISK_BDDL_BASENAME="KITCHEN_SCENE4_close_the_bottom_drawer_of_the_cabinet.bddl"
-CAP_RUN_NOTE="L3-B1-bottle-in-drawer-capability"
-NATIVE_CAP_RUN_NOTE="L3-B1-native-wine-bottle-to-rack"
-RISK_RUN_NOTE="L3-B1-bottle-in-drawer-risk"
-EB_RUN_NOTE="L3-B1-drawer-close-eb-native"
-EC_RUN_NOTE="L3-B1-bottle-in-drawer-ec-clearance"
+CAP_RUN_NOTE="${CAP_RUN_NOTE:-L3-B1-bottle-in-drawer-capability}"
+NATIVE_CAP_RUN_NOTE="${NATIVE_CAP_RUN_NOTE:-L3-B1-native-wine-bottle-to-rack}"
+RISK_RUN_NOTE="${RISK_RUN_NOTE:-L3-B1-bottle-in-drawer-risk}"
+EB_RUN_NOTE="${EB_RUN_NOTE:-L3-B1-drawer-close-eb-native}"
+EC_RUN_NOTE="${EC_RUN_NOTE:-L3-B1-bottle-in-drawer-ec-clearance}"
 RISK_TRAJ="${RISK_TRAJ:-rollouts/libero_90/${RISK_RUN_NOTE}/trajectories}"
 NATIVE_PREFLIGHT_REPORT="${NATIVE_PREFLIGHT_REPORT:-${LOG_DIR}/l3b1_native_preflight.md}"
 CAPABILITY_PREFLIGHT_REPORT="${CAPABILITY_PREFLIGHT_REPORT:-${LOG_DIR}/l3b1_capability_native_preflight.md}"
@@ -211,6 +217,7 @@ run_capability_eval() {
   local states="$1" note="$2" trials="$3"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_MODEL_ARGS[@]}" \
     "${POLICY_DECODE_ARGS[@]}" \
     --task_suite_name libero_90 \
     --bddl_file "${CAP_BDDL}" \
@@ -303,6 +310,7 @@ run_risk() {
   # it to recover the outcome breakdown.
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_MODEL_ARGS[@]}" \
     "${POLICY_DECODE_ARGS[@]}" \
     --task_suite_name libero_90 \
     --bddl_file "$(resolve_bddl "${RISK_BDDL_BASENAME}")" \
@@ -333,6 +341,7 @@ run_formal_condition() {
   fi
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
+    "${POLICY_MODEL_ARGS[@]}" \
     "${POLICY_DECODE_ARGS[@]}" \
     --task_suite_name libero_90 \
     --bddl_file "${RISK_BDDL}" \
@@ -352,13 +361,18 @@ run_formal_condition() {
 }
 
 require_gates() {
-  grep -q PASS_L3B1_NATIVE_ONLY_PREFLIGHT "${NATIVE_PREFLIGHT_REPORT}" || return 2
-  grep -q PASS_L3B1_PAIRED_NATIVE_STATES "${PAIRING_REPORT}" || return 2
-  grep -q PASS_L3B1_REFERENCE_PATHS "${REFERENCE_REPORT}" || return 2
+  [[ -f "${EB_STATES}" && -f "${RISK_STATES}" && -f "${EC_STATES}" ]] || {
+    echo "Missing paired L3-B1 states. Run '$0 prepare' first." >&2
+    return 2
+  }
   python experiments/robot/libero/tasks/validate_l3b1_states.py \
     --eb "${EB_STATES}" --er "${RISK_STATES}" --ec "${EC_STATES}" \
     --minimum_count "${NUM_TRIALS}" --out_report "${PAIRING_REPORT}"
   run_native_preflight
+  run_reference
+  grep -q PASS_L3B1_NATIVE_ONLY_PREFLIGHT "${NATIVE_PREFLIGHT_REPORT}" || return 2
+  grep -q PASS_L3B1_PAIRED_NATIVE_STATES "${PAIRING_REPORT}" || return 2
+  grep -q PASS_L3B1_REFERENCE_PATHS "${REFERENCE_REPORT}" || return 2
 }
 
 run_smoke() {
@@ -375,6 +389,11 @@ run_smoke() {
 
 run_formal() {
   require_gates
+  python experiments/robot/libero/tasks/validate_l3b1_smoke_evidence.py \
+    --eb "rollouts/libero_90/${EB_RUN_NOTE}-smoke/trajectories/index.jsonl" \
+    --er "rollouts/libero_90/${RISK_RUN_NOTE}-smoke/trajectories/index.jsonl" \
+    --ec "rollouts/libero_90/${EC_RUN_NOTE}-smoke/trajectories/index.jsonl" \
+    --expected "${SMOKE_TRIALS}" --report "${SMOKE_REPORT}"
   grep -q PASS_L3B1_SMOKE_EVIDENCE "${SMOKE_REPORT}" || return 2
   run_formal_condition eb "${EB_STATES}" "${EB_RUN_NOTE}" "${NUM_TRIALS}"
   run_formal_condition er "${RISK_STATES}" "${RISK_RUN_NOTE}" "${NUM_TRIALS}"
