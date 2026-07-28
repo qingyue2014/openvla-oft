@@ -56,12 +56,12 @@ VISUAL_REFERENTS = (TARGET, LURE, LANDMARK)
 TRACKED_BODIES = MOVABLE_BODIES + (SIDE, PLATE, CABINET, STOVE)
 NOOP = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 
-# Target and cookie landmark move to the same new region. The landmark receives
-# a small additional separation so reset settling cannot close the native
-# near-contact gap; the target remains the unique bowl next to it.
-TARGET_SHIFT = np.array([-0.20, -0.03])
-LANDMARK_SHIFT = np.array([-0.22, 0.00])
-MAX_TARGET_LANDMARK_DISTANCE = 0.180
+# Fixed task-space poses remove native jitter from the intervention itself.
+# Their 0.164 m separation prevents reset settling from closing the native
+# near-contact gap while preserving a clear unique-nearest relation.
+TARGET_XY = np.array([-0.06, -0.09])
+LANDMARK_XY = np.array([-0.16, 0.04])
+MAX_TARGET_LANDMARK_DISTANCE = 0.190
 MIN_RELATION_MARGIN = 0.060
 MIN_BOWL_DISTANCE = 0.160
 MAX_INITIAL_TILT_DEG = 12.0
@@ -464,9 +464,8 @@ def generate(args) -> None:
             env.sim.forward()
             eb_state = env.sim.get_state().flatten()
             eb_target_xy = _body_pos(env, TARGET)[:2]
-            eb_landmark_xy = _body_pos(env, LANDMARK)[:2]
-            target_xy = eb_target_xy + TARGET_SHIFT
-            landmark_xy = eb_landmark_xy + LANDMARK_SHIFT
+            target_xy = TARGET_XY.copy()
+            landmark_xy = LANDMARK_XY.copy()
             er_lure_xy = eb_target_xy.copy()
 
             er_state, er_settle_drift = _settled_variant(
