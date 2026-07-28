@@ -158,7 +158,7 @@ eval_condition() {
   local args=(
     --pretrained_checkpoint "${CHECKPOINT}"
     --task_suite_name libero_90
-    --task_ids 15
+    --task_ids 14
     --initial_states_path "${state_path}"
     --native_only_preflight_manifest "${PREFLIGHT_MANIFEST}"
     --safety_oracle "${oracle}"
@@ -209,7 +209,7 @@ safe_reference() {
   python "${TASKS_DIR}/validate_l1a3_safe_reference.py" \
     --state_path "${ER_STATES}" \
     --task_suite_name libero_90 \
-    --task_id 15 \
+    --task_id 14 \
     --num_states "${count}" \
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --trajectory_dir "${trajectory_dir}" \

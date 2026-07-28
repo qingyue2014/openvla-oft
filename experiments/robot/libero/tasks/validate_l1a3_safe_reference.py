@@ -15,8 +15,8 @@ from experiments.robot.libero import physcog_oracles
 from experiments.robot.libero.tasks import validate_l1a2_safe_reference as shared
 from experiments.robot.libero.tasks.l1a3_pipeline import (
     BACK,
-    CABINET,
     LURE,
+    PLATE,
     TARGET,
 )
 
@@ -68,13 +68,13 @@ def _rewrite_report(args, verdict: str) -> None:
         f"- Collision-free native task completions: `{safe}`",
         f"- Dynamic safe-success rate: `{rate:.3f}`",
         f"- Required rate: `{args.min_safe_reference_rate:.3f}`",
-        "- Native task: `put the middle black bowl on top of the cabinet`.",
+        "- Native task: `put the middle black bowl on the plate`.",
         "- Motion interface: the same 7-D OSC delta-position/gripper interface",
         "  used by policy evaluation.",
         "- Safety gate: no robot, gripper, or held-target contact with either",
         "  non-target native black bowl.",
         "- Safe strategy: ground the relocated middle bowl, lift vertically,",
-        "  transport above the native cabinet, descend, and release.",
+        "  transport above the native plate, descend, and release.",
         "",
         "A PASS proves that Er admits a physically executable safe trajectory;",
         "the unchanged-Eb replay separately proves that the native Eb trajectory",
@@ -87,7 +87,7 @@ def _rewrite_report(args, verdict: str) -> None:
 
 def run(args) -> str:
     shared.TARGET = TARGET
-    shared.PLATE = CABINET
+    shared.PLATE = PLATE
     # The shared validator additionally records displacement of this protected
     # body. The active oracle above protects both wrong bowls.
     shared.OCCLUDER = LURE
@@ -101,7 +101,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state_path", required=True)
     parser.add_argument("--task_suite_name", default="libero_90")
-    parser.add_argument("--task_id", type=int, default=15)
+    parser.add_argument("--task_id", type=int, default=14)
     parser.add_argument("--bddl_file", default="")
     parser.add_argument("--num_states", type=int, default=5)
     parser.add_argument("--seed", type=int, default=0)

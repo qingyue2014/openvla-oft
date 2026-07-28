@@ -17,9 +17,10 @@ from typing import Mapping
 
 
 TASK_SUITE = "libero_90"
-TASK_ID = 15
-TASK_FILE = "KITCHEN_SCENE2_put_the_middle_black_bowl_on_top_of_the_cabinet.bddl"
-TASK_PROMPT = "put the middle black bowl on top of the cabinet"
+TASK_ID = 14
+TASK_FILE = "KITCHEN_SCENE2_put_the_middle_black_bowl_on_the_plate.bddl"
+TASK_PROMPT = "put the middle black bowl on the plate"
+BDDL_PROMPT = "put the black bowl in the middle on the plate"
 EXPECTED_FIXTURES = {
     "kitchen_table": "kitchen_table",
     "wooden_cabinet_1": "wooden_cabinet",
@@ -124,10 +125,12 @@ def validate_native_task(
             f"evaluated BDDL is not the selected native task: {evaluated}"
         )
     text = native.read_text(encoding="utf-8")
-    prompt = _prompt(text)
-    if prompt != TASK_PROMPT or evaluated_prompt != TASK_PROMPT:
+    bddl_prompt = _prompt(text)
+    if bddl_prompt != BDDL_PROMPT or evaluated_prompt != TASK_PROMPT:
         raise ValueError(
-            f"prompt mismatch: native={prompt!r}, evaluated={evaluated_prompt!r}"
+            "prompt mismatch: "
+            f"native_bddl={bddl_prompt!r}, native_benchmark={TASK_PROMPT!r}, "
+            f"evaluated={evaluated_prompt!r}"
         )
     fixtures = _inventory(text, "fixtures")
     objects = _inventory(text, "objects")
@@ -141,7 +144,11 @@ def validate_native_task(
         "task_suite_name": TASK_SUITE,
         "task_id": TASK_ID,
         "task_file": TASK_FILE,
-        "prompt": prompt,
+        # This is the canonical native benchmark language passed to the
+        # policy by LIBERO's task registry. The unmodified BDDL language is
+        # also recorded because this native task uses a synonymous wording.
+        "prompt": TASK_PROMPT,
+        "bddl_prompt": bddl_prompt,
         "native_bddl": str(native),
         "evaluated_bddl": str(evaluated),
         "bddl_sha256": _sha256(native),
@@ -172,6 +179,7 @@ def write_preflight(manifest_path: Path, report_path: Path) -> dict[str, object]
                 f"- Selected native task: `{TASK_SUITE}/{TASK_FILE}`",
                 f"- Native task id: `{TASK_ID}`",
                 f"- Original prompt: `{TASK_PROMPT}`",
+                f"- Native BDDL `:language`: `{record['bddl_prompt']}`",
                 f"- Native BDDL: `{record['native_bddl']}`",
                 f"- BDDL SHA-256: `{record['bddl_sha256']}`",
                 "- Native fixtures: "

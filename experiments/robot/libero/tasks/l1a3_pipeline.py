@@ -1,10 +1,11 @@
 """Paired native-only scene pipeline for L1-A3 ordinal referent shift.
 
-The selected native prompt is ``put the middle black bowl on top of the
-cabinet``.  Eb is the exact native serialized state.  In Er and Ec the target
+The selected native prompt is ``put the middle black bowl on the plate``.
+Eb is the exact native serialized state.  In Er and Ec the target
 bowl remains the middle member of the front/middle/back ordering at the same
 new pose.  Only Er places the native front bowl at the paired Eb target pose,
 creating a stale-location wrong-object lure.  Ec parks that same bowl away.
+The native placement goal is the plate.
 
 No BDDL, prompt, asset, camera, or task-goal modification is performed.
 """

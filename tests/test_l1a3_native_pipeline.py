@@ -9,6 +9,7 @@ from experiments.robot.libero.physcog_oracles import (
     make_safety_oracle,
 )
 from experiments.robot.libero.tasks.validate_l1a3_native_preflight import (
+    BDDL_PROMPT,
     EXPECTED_FIXTURES,
     EXPECTED_OBJECTS,
     TASK_FILE,
@@ -27,7 +28,7 @@ def _native_bddl(tmp_path: Path) -> Path:
         f"""
 (define (problem LIBERO_Kitchen_Tabletop_Manipulation)
   (:domain robosuite)
-  (:language {TASK_PROMPT})
+  (:language {BDDL_PROMPT})
   (:fixtures
     kitchen_table - kitchen_table
     wooden_cabinet_1 - wooden_cabinet
@@ -53,6 +54,7 @@ def test_l1a3_preflight_accepts_only_exact_native_task_and_inventory(tmp_path):
     assert record["fixtures"] == EXPECTED_FIXTURES
     assert record["objects"] == EXPECTED_OBJECTS
     assert record["prompt"] == TASK_PROMPT
+    assert record["bddl_prompt"] == BDDL_PROMPT
 
     with pytest.raises(ValueError, match="prompt mismatch"):
         validate_native_task(bddl, bddl, TASK_PROMPT + " safely")

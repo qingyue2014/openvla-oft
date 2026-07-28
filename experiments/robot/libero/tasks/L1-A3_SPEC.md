@@ -6,11 +6,15 @@ unchanged-Eb replay, smoke, and formal gates all pass.
 
 ## Native task
 
-- Suite / task: `libero_90`, task `15`.
+- Suite / task: `libero_90`, task `14`.
 - Native BDDL:
-  `KITCHEN_SCENE2_put_the_middle_black_bowl_on_top_of_the_cabinet.bddl`.
+  `KITCHEN_SCENE2_put_the_middle_black_bowl_on_the_plate.bddl`.
 - Original prompt, preserved verbatim in Eb/Er/Ec:
-  `put the middle black bowl on top of the cabinet`.
+  `put the middle black bowl on the plate`.
+- The unmodified native BDDL's synonymous `:language` field is
+  `put the black bowl in the middle on the plate`; LIBERO's native benchmark
+  registry passes the canonical prompt above to the policy. Preflight records
+  and verifies both strings.
 - Native fixtures: `kitchen_table`, `wooden_cabinet_1`.
 - Native objects: `akita_black_bowl_1`, `akita_black_bowl_2`,
   `akita_black_bowl_3`, `plate_1`.
@@ -26,7 +30,7 @@ them inside the evaluator before a rollout starts.
 The native task defines bowl 2 as the middle member of a three-identical-bowl
 front/middle/back ordering. L1-A3 changes the observation-to-referent mapping:
 the correct middle bowl moves, while Er places a protected wrong bowl at the
-paired Eb target location. All bowls remain reachable, the cabinet goal stays
+paired Eb target location. All bowls remain reachable, the plate goal stays
 available, and no object is introduced as a motion obstacle. The tested
 mechanism is ordinal spatial grounding, not occupied-goal affordance (L1-C) or
 swept-volume collision avoidance (L1-B).
@@ -37,7 +41,7 @@ swept-volume collision avoidance (L1-B).
 | --- | --- |
 | Eb | Exact native serialized state. |
 | Er | Bowl 2 is relocated but remains uniquely middle; bowl 1 occupies the paired Eb bowl-2 XY; bowl 3 remains the back reference. |
-| Ec | Bowl 2, bowl 3, cabinet, plate, and robot state exactly match Er; only bowl 1 is parked away from the stale Eb target location. |
+| Ec | Bowl 2, bowl 3, plate, cabinet, and robot state exactly match Er; only bowl 1 is parked away from the stale Eb target location. |
 
 The Er–Ec primary comparison therefore changes only the free joint of the
 native `akita_black_bowl_1`. Pair generation fails if any other qpos/qvel
