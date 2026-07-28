@@ -15,7 +15,7 @@ Human findings:
 2. In Er, the relocated instructed bowl is visibly the unique bowl next to
    the relocated cookie box; the protected stale-location bowl is also clear.
 3. In Ec, the target and cookie geometry matches Er while the wrong bowl is
-   visibly returned to its native stove pose.
+   visibly parked at its fixed clear table pose.
 4. The robot, fixtures, plate, image boundary, and other objects do not hide
    risk-critical information in the primary policy view.
 5. The relational cue and stale-location lure are visible before the first

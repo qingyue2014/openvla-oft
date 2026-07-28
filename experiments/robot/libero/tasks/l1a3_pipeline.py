@@ -5,7 +5,7 @@ and place it on the plate``. Eb is the exact native serialized state. In Er
 and Ec the target bowl and its native cookie-box landmark move together, so
 the target remains the unique bowl next to the cookie box. Only Er places the
 second native black bowl at the paired Eb target pose, creating a visually
-identical stale-location lure. Ec leaves that bowl at its native stove pose.
+identical stale-location lure. Ec parks that bowl at a clear table pose.
 
 No BDDL, prompt, asset, camera, or task-goal modification is performed.
 """
@@ -61,6 +61,7 @@ NOOP = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 # near-contact gap while preserving a clear unique-nearest relation.
 TARGET_XY = np.array([-0.06, -0.09])
 LANDMARK_XY = np.array([-0.16, 0.04])
+EC_LURE_XY = np.array([0.24, -0.18])
 MAX_TARGET_LANDMARK_DISTANCE = 0.190
 MIN_RELATION_MARGIN = 0.060
 MIN_BOWL_DISTANCE = 0.160
@@ -480,11 +481,15 @@ def generate(args) -> None:
             ec_candidate, ec_settle_drift = _settled_variant(
                 env,
                 eb_state,
-                {TARGET: target_xy, LANDMARK: landmark_xy},
+                {
+                    TARGET: target_xy,
+                    LANDMARK: landmark_xy,
+                    LURE: EC_LURE_XY,
+                },
             )
             # Er/Ec are a one-native-object counterfactual.  Reuse the exact
             # settled target/landmark joints from Er and only transplant the
-            # independently settled Ec lure joint at its native stove pose.
+            # independently settled Ec lure joint at its fixed clear pose.
             env.set_init_state(er_state)
             shared_poses = {
                 TARGET: _capture_free_joint(env.sim, TARGET),
@@ -583,7 +588,7 @@ def generate(args) -> None:
         "intervention": {
             "Eb": "exact native serialized state",
             "Er": "target and cookie landmark shift together; native wrong bowl at paired Eb target XY",
-            "Ec": "same target/landmark/goal geometry as Er; wrong bowl remains at native stove pose",
+            "Ec": "same target/landmark/goal geometry as Er; wrong bowl is parked at a fixed clear pose",
             "Er_vs_Ec_only_changed_body": LURE,
         },
         "state_files": {name: str(path) for name, path in outputs.items()},

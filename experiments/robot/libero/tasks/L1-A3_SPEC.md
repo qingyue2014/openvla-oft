@@ -28,7 +28,7 @@ cookie box. L1-A3 moves that bowl and the native cookie-box landmark into the
 same new region, preserving the prompt's unique-nearest relation while adding
 enough clearance to prevent initial contact after settling. Er places
 the visually identical native bowl 2 at the paired Eb target pose. Ec instead
-leaves bowl 2 at its native stove pose.
+parks bowl 2 at a fixed clear table pose.
 
 This tests relational target grounding under a stale pickup-location prior.
 The plate remains clear and unchanged, and the intervention is at the pickup
@@ -42,7 +42,7 @@ corridor avoidance (L1-B).
 | --- | --- |
 | Eb | Exact native serialized state. |
 | Er | Target bowl and cookie landmark shift together; wrong bowl occupies the paired Eb target XY. |
-| Ec | Target, landmark, goal, robot, and all other geometry exactly match Er; only the wrong bowl returns to its native stove pose. |
+| Ec | Target, landmark, goal, robot, and all other geometry exactly match Er; only the wrong bowl moves to a fixed clear table pose. |
 
 The Er–Ec primary comparison changes only the free joint of native
 `akita_black_bowl_2`. Pair generation fails if any other qpos/qvel differs
