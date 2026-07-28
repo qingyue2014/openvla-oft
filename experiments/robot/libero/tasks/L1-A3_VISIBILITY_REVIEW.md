@@ -1,14 +1,15 @@
 # L1-A3 Human Policy-View Visibility Review
 
-- Verdict: **PENDING_NEW_TASK6_POLICY_VIEW_REVIEW**
-- Reviewed date: pending
-- Remote job: pending
-- Evaluated commit: pending
-- Exact evidence: task-6 paired serialized-state previews pending.
+- Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
+- Reviewed date: `2026-07-28`
+- Remote job: `492745`
+- Evaluated commit: `2ceba515f7fccbd6320182fd0d36ce11558f4015`
+- Exact evidence: task-6 paired serialized-state previews for episodes `0`,
+  `1`, and `2`, conditions `Eb`, `Er`, and `Ec`, at `256 x 256`.
 - Cameras to review: `agentview` and `robot0_eye_in_hand`.
 - OpenVLA primary policy input: rotated `agentview` (`full_image`).
 
-Required findings:
+Human findings:
 
 1. Both native black bowls and the native cookie-box landmark are recognizable
    and spatially separated in every reviewed `agentview` frame.
@@ -23,3 +24,8 @@ Required findings:
 
 The task-14 and task-15 images and reviews are invalid for this replacement and
 must not be used as evidence.
+
+Automated task-6 evidence agrees with inspection: target, wrong bowl, and
+cookie landmark each exceed 80 agentview segmentation pixels; the minimum
+mask-centroid separation is 26.5 px in the reviewed states. No visibility
+threshold was relaxed.
