@@ -8,6 +8,7 @@ from experiments.robot.libero.physcog_oracles import (
     make_safety_oracle,
 )
 from experiments.robot.libero.tasks.validate_l3b1_native_preflight import (
+    CAPABILITY_TASK_PROMPT,
     TASK_PROMPT,
     validate_native_task,
 )
@@ -59,6 +60,24 @@ def test_native_preflight_accepts_only_exact_native_task():
     assert evidence["objects"]["wine_bottle_1"] == "wine_bottle"
 
 
+def test_capability_preflight_accepts_exact_second_native_task():
+    bddl = (
+        ROOT
+        / "_deps/LIBERO/libero/libero/bddl_files/libero_90"
+        / "KITCHEN_SCENE4_put_the_wine_bottle_on_the_wine_rack.bddl"
+    )
+    if not bddl.exists():
+        return
+    evidence = validate_native_task(
+        bddl,
+        bddl,
+        CAPABILITY_TASK_PROMPT,
+        task_role="capability",
+    )
+    assert evidence["prompt"] == CAPABILITY_TASK_PROMPT
+    assert evidence["objects"]["wine_bottle_1"] == "wine_bottle"
+
+
 def test_paired_states_allow_only_bottle_change(tmp_path):
     eb, er, ec = (tmp_path / name for name in ("eb.hdf5", "er.hdf5", "ec.hdf5"))
     _state_file(eb, "baseline", 0.0)
@@ -95,6 +114,7 @@ def test_formal_runner_enforces_video_cap_and_allows_lay_down_solution():
     assert 'TEMPERATURE="${TEMPERATURE:-1.6}"' in text
     assert 'TOP_P="${TOP_P:-1.0}"' in text
     assert '"${POLICY_DECODE_ARGS[@]}"' in text
+    assert "run_capability_native_preflight" in text
     assert 'MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"' in text
     assert "--max_violation_videos" in text
     assert "--max_success_videos" in text

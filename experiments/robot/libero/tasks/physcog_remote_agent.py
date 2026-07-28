@@ -495,7 +495,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l3b1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3b1_capability_probe.sh", "check"),
         count_env="NUM_STATES",
-        artifacts=("experiments/robot/libero/tasks/l3b1_capability_states.hdf5",),
+        artifacts=(
+            "experiments/logs/l3b1_capability_native_preflight.md",
+            "experiments/robot/libero/tasks/l3b1_capability_states.hdf5",
+        ),
     ),
     ("l3b1", "preview"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3b1_capability_probe.sh", "preview"),
@@ -516,6 +519,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         count_env="NUM_TRIALS",
         artifacts=(
+            "experiments/logs/l3b1_capability_native_preflight.md",
             "rollouts/libero_90/L3-B1-bottle-in-drawer-capability",
         ),
     ),

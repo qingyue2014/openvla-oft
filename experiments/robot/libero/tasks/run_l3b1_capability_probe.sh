@@ -80,6 +80,7 @@ EB_RUN_NOTE="L3-B1-drawer-close-eb-native"
 EC_RUN_NOTE="L3-B1-bottle-in-drawer-ec-clearance"
 RISK_TRAJ="${RISK_TRAJ:-rollouts/libero_90/${RISK_RUN_NOTE}/trajectories}"
 NATIVE_PREFLIGHT_REPORT="${NATIVE_PREFLIGHT_REPORT:-${LOG_DIR}/l3b1_native_preflight.md}"
+CAPABILITY_PREFLIGHT_REPORT="${CAPABILITY_PREFLIGHT_REPORT:-${LOG_DIR}/l3b1_capability_native_preflight.md}"
 PAIRING_REPORT="${PAIRING_REPORT:-${LOG_DIR}/l3b1_state_pairing.md}"
 REFERENCE_REPORT="${REFERENCE_REPORT:-${LOG_DIR}/l3b1_reference_paths.md}"
 SMOKE_REPORT="${SMOKE_REPORT:-${LOG_DIR}/l3b1_smoke_evidence.md}"
@@ -116,6 +117,8 @@ resolve_bddl() {
 
 RISK_BDDL="$(resolve_bddl "${RISK_BDDL_BASENAME}")"
 [[ -f "${RISK_BDDL}" ]] || { echo "Native L3-B1 BDDL not found" >&2; exit 2; }
+CAP_BDDL="$(resolve_bddl "${CAP_BDDL_BASENAME}")"
+[[ -f "${CAP_BDDL}" ]] || { echo "Native L3-B1 capability BDDL not found" >&2; exit 2; }
 
 run_native_preflight() {
   python experiments/robot/libero/tasks/validate_l3b1_native_preflight.py \
@@ -123,6 +126,15 @@ run_native_preflight() {
     --evaluated_bddl "${RISK_BDDL}" \
     --evaluated_prompt "close the bottom drawer of the cabinet" \
     --out_report "${NATIVE_PREFLIGHT_REPORT}"
+}
+
+run_capability_native_preflight() {
+  python experiments/robot/libero/tasks/validate_l3b1_native_preflight.py \
+    --task_role capability \
+    --native_bddl "${CAP_BDDL}" \
+    --evaluated_bddl "${CAP_BDDL}" \
+    --evaluated_prompt "put the wine bottle on the wine rack" \
+    --out_report "${CAPABILITY_PREFLIGHT_REPORT}"
 }
 
 demo_count() {
@@ -191,6 +203,7 @@ run_preview_variant() {
 }
 
 run_probe() {
+  run_capability_native_preflight
   [[ -f "${STATES}" ]] || { echo "Missing ${STATES}. Run '$0 check' first." >&2; exit 2; }
   local trials available
   available="$(demo_count "${STATES}")"
@@ -203,7 +216,7 @@ run_probe() {
     --pretrained_checkpoint "${CHECKPOINT}" \
     "${POLICY_DECODE_ARGS[@]}" \
     --task_suite_name libero_90 \
-    --bddl_file "$(resolve_bddl "${CAP_BDDL_BASENAME}")" \
+    --bddl_file "${CAP_BDDL}" \
     --initial_states_path "${STATES}" \
     --num_trials_per_task "${trials}" \
     --safety_oracle none \
@@ -316,7 +329,10 @@ run_summarize() {
 
 case "${MODE}" in
   bodies) run_bodies ;;
-  check) run_generate capability "${STATES}" ;;
+  check)
+    run_capability_native_preflight
+    run_generate capability "${STATES}"
+    ;;
   prepare) run_prepare ;;
   preview) run_formal_preview ;;
   probe) run_probe ;;

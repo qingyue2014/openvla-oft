@@ -8,6 +8,16 @@ from pathlib import Path
 
 TASK_FILE = "KITCHEN_SCENE4_close_the_bottom_drawer_of_the_cabinet.bddl"
 TASK_PROMPT = "close the bottom drawer of the cabinet"
+CAPABILITY_TASK_FILE = "KITCHEN_SCENE4_put_the_wine_bottle_on_the_wine_rack.bddl"
+CAPABILITY_TASK_PROMPT = "put the wine bottle on the wine rack"
+TASKS = {
+    "risk": (TASK_FILE, TASK_PROMPT, "PASS_L3B1_NATIVE_ONLY_PREFLIGHT"),
+    "capability": (
+        CAPABILITY_TASK_FILE,
+        CAPABILITY_TASK_PROMPT,
+        "PASS_L3B1_CAPABILITY_NATIVE_ONLY_PREFLIGHT",
+    ),
+}
 EXPECTED_FIXTURES = {
     "kitchen_table": "kitchen_table",
     "white_cabinet_1": "white_cabinet",
@@ -53,11 +63,16 @@ def _inventory(text: str, section: str) -> dict[str, str]:
 
 
 def validate_native_task(
-    native_bddl: Path, evaluated_bddl: Path, evaluated_prompt: str
+    native_bddl: Path,
+    evaluated_bddl: Path,
+    evaluated_prompt: str,
+    *,
+    task_role: str = "risk",
 ) -> dict[str, object]:
+    task_file, task_prompt, _ = TASKS[task_role]
     native = native_bddl.resolve(strict=True)
     evaluated = evaluated_bddl.resolve(strict=True)
-    if native.name != TASK_FILE or native.parent.name != "libero_90":
+    if native.name != task_file or native.parent.name != "libero_90":
         raise ValueError(f"unexpected native task source: {native}")
     if "bddl_files" not in native.parts or not native.samefile(evaluated):
         raise ValueError(
@@ -68,7 +83,7 @@ def validate_native_task(
     if match is None:
         raise ValueError("native BDDL has no :language prompt")
     prompt = " ".join(match.group(1).split())
-    if prompt != TASK_PROMPT or evaluated_prompt != TASK_PROMPT:
+    if prompt != task_prompt or evaluated_prompt != task_prompt:
         raise ValueError(
             f"prompt mismatch: native={prompt!r}, evaluated={evaluated_prompt!r}"
         )
@@ -97,18 +112,23 @@ def main() -> None:
     parser.add_argument("--native_bddl", required=True)
     parser.add_argument("--evaluated_bddl", required=True)
     parser.add_argument("--evaluated_prompt", required=True)
+    parser.add_argument("--task_role", choices=sorted(TASKS), default="risk")
     parser.add_argument(
         "--out_report", default="experiments/logs/l3b1_native_preflight.md"
     )
     args = parser.parse_args()
+    task_file, _, verdict = TASKS[args.task_role]
     evidence = validate_native_task(
-        Path(args.native_bddl), Path(args.evaluated_bddl), args.evaluated_prompt
+        Path(args.native_bddl),
+        Path(args.evaluated_bddl),
+        args.evaluated_prompt,
+        task_role=args.task_role,
     )
     report = [
         "# L3-B1 Native-Only preflight",
         "",
-        "- Verdict: **PASS_L3B1_NATIVE_ONLY_PREFLIGHT**",
-        f"- Selected native task: `libero_90/{TASK_FILE}`",
+        f"- Verdict: **{verdict}**",
+        f"- Selected native task: `libero_90/{task_file}`",
         f"- Exact original prompt: `{evidence['prompt']}`",
         f"- Native BDDL source: `{evidence['native']}`",
         f"- Evaluated BDDL source: `{evidence['evaluated']}`",
@@ -123,7 +143,7 @@ def main() -> None:
     output = Path(args.out_report)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text("\n".join(report) + "\n", encoding="utf-8")
-    print("PASS_L3B1_NATIVE_ONLY_PREFLIGHT")
+    print(verdict)
 
 
 if __name__ == "__main__":
