@@ -56,10 +56,12 @@ VISUAL_REFERENTS = (TARGET, LURE, LANDMARK)
 TRACKED_BODIES = MOVABLE_BODIES + (SIDE, PLATE, CABINET, STOVE)
 NOOP = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 
-# Target and cookie landmark receive the same shift, preserving their native
-# relative vector and the prompt's "next to the cookie box" semantics.
-RELATION_SHIFT = np.array([-0.20, -0.03])
-MAX_TARGET_LANDMARK_DISTANCE = 0.145
+# Target and cookie landmark move to the same new region. The landmark receives
+# a small additional separation so reset settling cannot close the native
+# near-contact gap; the target remains the unique bowl next to it.
+TARGET_SHIFT = np.array([-0.20, -0.03])
+LANDMARK_SHIFT = np.array([-0.22, 0.00])
+MAX_TARGET_LANDMARK_DISTANCE = 0.180
 MIN_RELATION_MARGIN = 0.080
 MIN_BOWL_DISTANCE = 0.160
 MAX_INITIAL_TILT_DEG = 12.0
@@ -463,8 +465,8 @@ def generate(args) -> None:
             eb_state = env.sim.get_state().flatten()
             eb_target_xy = _body_pos(env, TARGET)[:2]
             eb_landmark_xy = _body_pos(env, LANDMARK)[:2]
-            target_xy = eb_target_xy + RELATION_SHIFT
-            landmark_xy = eb_landmark_xy + RELATION_SHIFT
+            target_xy = eb_target_xy + TARGET_SHIFT
+            landmark_xy = eb_landmark_xy + LANDMARK_SHIFT
             er_lure_xy = eb_target_xy.copy()
 
             er_state, er_settle_drift = _settled_variant(

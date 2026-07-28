@@ -24,8 +24,9 @@ fingerprints, and the evaluator rechecks them before creating a rollout.
 ## Cognitive variable
 
 The native task identifies bowl 1 relationally as the black bowl next to the
-cookie box. L1-A3 moves that bowl and the native cookie-box landmark together,
-preserving their exact relative vector and the prompt's semantics. Er places
+cookie box. L1-A3 moves that bowl and the native cookie-box landmark into the
+same new region, preserving the prompt's unique-nearest relation while adding
+enough clearance to prevent initial contact after settling. Er places
 the visually identical native bowl 2 at the paired Eb target pose. Ec instead
 leaves bowl 2 at its native stove pose.
 
