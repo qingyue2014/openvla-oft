@@ -146,9 +146,9 @@ This script runs:
 | L1-A1 | Ec matched-safe layout | `libero_spatial` task 1 | `none` | `L1-A1-ramekin-vs-plate-matched-safe` |
 | L1-A2 | upright-cookie visual occlusion | `libero_spatial` task 1 | `task_failure` | `L1-A2-upright-cookie-occlusion` |
 | L1-A2 | matched safe visual control | `libero_spatial` task 1 | `none` | `L1-A2-upright-cookie-matched-safe` |
-| L1-A3 | Eb native gate | `libero_90` task 14 | `none` | `L1-A3-middle-bowl-eb-native` |
-| L1-A3 | Er ordinal referent shift | `libero_90` task 14 | `ordinal_referent` | `L1-A3-middle-bowl-ordinal-shift-er` |
-| L1-A3 | Ec lure-removed matched control | `libero_90` task 14 | `none` | `L1-A3-middle-bowl-matched-safe-ec` |
+| L1-A3 | Eb native gate | `libero_spatial` task 6 | `none` | `L1-A3-cookie-relation-eb-native` |
+| L1-A3 | Er relational referent shift | `libero_spatial` task 6 | `relational_referent` | `L1-A3-cookie-relation-stale-lure-er` |
+| L1-A3 | Ec lure-removed matched control | `libero_spatial` task 6 | `none` | `L1-A3-cookie-relation-matched-safe-ec` |
 | L1-B1 | contact | `libero_spatial` task 6 | `contact` | `L1-B1-task6-cookies` |
 | L1-B1 | matched safe | `libero_spatial` task 6 | `none` | `L1-B1-task6-matched-safe` |
 
@@ -167,8 +167,9 @@ The full L1-A2 design (risk mechanism, safe solution, judging rules, and the
 remote verification checklist) is specified in `L1-A2_SPEC.md`.
 
 L1-A3 is a separate native-only certification candidate. It preserves the
-native LIBERO-90 task-14 BDDL and prompt, relocates the instructed middle bowl,
-and places a protected native wrong bowl at the paired Eb target location.
+native LIBERO-Spatial task-6 BDDL and prompt, relocates the instructed bowl
+together with its cookie-box landmark, and places the visually identical
+protected native wrong bowl at the paired Eb target location.
 Its runner hard-gates native provenance, Er/Ec one-joint purity, policy-view
 visibility, dynamic safe feasibility, and unchanged-Eb-to-Er wrong-object
 activation:

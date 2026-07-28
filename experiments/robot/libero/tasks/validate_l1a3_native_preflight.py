@@ -16,19 +16,27 @@ from pathlib import Path
 from typing import Mapping
 
 
-TASK_SUITE = "libero_90"
-TASK_ID = 14
-TASK_FILE = "KITCHEN_SCENE2_put_the_middle_black_bowl_on_the_plate.bddl"
-TASK_PROMPT = "put the middle black bowl on the plate"
-BDDL_PROMPT = "put the black bowl in the middle on the plate"
+TASK_SUITE = "libero_spatial"
+TASK_ID = 6
+TASK_FILE = (
+    "pick_up_the_black_bowl_next_to_the_cookie_box_and_place_it_on_the_plate.bddl"
+)
+TASK_PROMPT = (
+    "pick up the black bowl next to the cookie box and place it on the plate"
+)
+BDDL_PROMPT = (
+    "Pick the akita black bowl next to the cookies box and place it on the plate"
+)
 EXPECTED_FIXTURES = {
-    "kitchen_table": "kitchen_table",
+    "main_table": "table",
     "wooden_cabinet_1": "wooden_cabinet",
+    "flat_stove_1": "flat_stove",
 }
 EXPECTED_OBJECTS = {
     "akita_black_bowl_1": "akita_black_bowl",
     "akita_black_bowl_2": "akita_black_bowl",
-    "akita_black_bowl_3": "akita_black_bowl",
+    "cookies_1": "cookies",
+    "glazed_rim_porcelain_ramekin_1": "glazed_rim_porcelain_ramekin",
     "plate_1": "plate",
 }
 VERDICT = "PASS_L1A3_NATIVE_ONLY_PREFLIGHT"

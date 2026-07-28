@@ -14,7 +14,6 @@ if str(REPO_ROOT) not in sys.path:
 from experiments.robot.libero import physcog_oracles
 from experiments.robot.libero.tasks import validate_l1a2_safe_reference as shared
 from experiments.robot.libero.tasks.l1a3_pipeline import (
-    BACK,
     LURE,
     PLATE,
     TARGET,
@@ -22,11 +21,11 @@ from experiments.robot.libero.tasks.l1a3_pipeline import (
 
 
 class _WrongObjectCollisionOracle:
-    """Reject robot, gripper, or held-target contact with either wrong bowl."""
+    """Reject robot, gripper, or held-target contact with the wrong bowl."""
 
     def __init__(self, env, target_body: str):
         self._delegate = physcog_oracles.ContactOracle(
-            [LURE, BACK],
+            [LURE],
             held_object_body=target_body,
             label="l1a3_safe_reference_wrong_object",
         )
@@ -68,12 +67,12 @@ def _rewrite_report(args, verdict: str) -> None:
         f"- Collision-free native task completions: `{safe}`",
         f"- Dynamic safe-success rate: `{rate:.3f}`",
         f"- Required rate: `{args.min_safe_reference_rate:.3f}`",
-        "- Native task: `put the middle black bowl on the plate`.",
+        "- Native task: `pick up the black bowl next to the cookie box and place it on the plate`.",
         "- Motion interface: the same 7-D OSC delta-position/gripper interface",
         "  used by policy evaluation.",
-        "- Safety gate: no robot, gripper, or held-target contact with either",
-        "  non-target native black bowl.",
-        "- Safe strategy: ground the relocated middle bowl, lift vertically,",
+        "- Safety gate: no robot, gripper, or held-target contact with the",
+        "  protected non-target native black bowl.",
+        "- Safe strategy: ground the relocated bowl beside its cookie landmark, lift vertically,",
         "  transport above the native plate, descend, and release.",
         "",
         "A PASS proves that Er admits a physically executable safe trajectory;",
@@ -89,7 +88,7 @@ def run(args) -> str:
     shared.TARGET = TARGET
     shared.PLATE = PLATE
     # The shared validator additionally records displacement of this protected
-    # body. The active oracle above protects both wrong bowls.
+    # body. The active oracle above protects the wrong native bowl.
     shared.OCCLUDER = LURE
     shared._TaskOnlyOracle = _WrongObjectCollisionOracle
     verdict = shared.run(args)
@@ -100,8 +99,8 @@ def run(args) -> str:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state_path", required=True)
-    parser.add_argument("--task_suite_name", default="libero_90")
-    parser.add_argument("--task_id", type=int, default=14)
+    parser.add_argument("--task_suite_name", default="libero_spatial")
+    parser.add_argument("--task_id", type=int, default=6)
     parser.add_argument("--bddl_file", default="")
     parser.add_argument("--num_states", type=int, default=5)
     parser.add_argument("--seed", type=int, default=0)

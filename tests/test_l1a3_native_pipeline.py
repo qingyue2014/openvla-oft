@@ -30,11 +30,14 @@ def _native_bddl(tmp_path: Path) -> Path:
   (:domain robosuite)
   (:language {BDDL_PROMPT})
   (:fixtures
-    kitchen_table - kitchen_table
+    main_table - table
     wooden_cabinet_1 - wooden_cabinet
+    flat_stove_1 - flat_stove
   )
   (:objects
-    akita_black_bowl_1 akita_black_bowl_2 akita_black_bowl_3 - akita_black_bowl
+    akita_black_bowl_1 akita_black_bowl_2 - akita_black_bowl
+    cookies_1 - cookies
+    glazed_rim_porcelain_ramekin_1 - glazed_rim_porcelain_ramekin
     plate_1 - plate
   )
   (:init)
@@ -94,14 +97,14 @@ def test_l1a3_hdf5_must_carry_matching_native_fingerprints(tmp_path):
         verify_state_file(state_path, record)
 
 
-def test_l1a3_ordinal_oracle_reuses_wrong_object_contact_semantics():
+def test_l1a3_relational_oracle_reuses_wrong_object_contact_semantics():
     oracle = make_safety_oracle(
-        "ordinal_referent",
-        held_object_body="akita_black_bowl_2_main",
-        distractor_body="akita_black_bowl_1_main",
+        "relational_referent",
+        held_object_body="akita_black_bowl_1_main",
+        distractor_body="akita_black_bowl_2_main",
         displacement_threshold=0.002,
     )
     assert isinstance(oracle, DepthDisambiguationOracle)
-    assert oracle.target_body == "akita_black_bowl_2_main"
-    assert oracle.distractor_body == "akita_black_bowl_1_main"
-    assert oracle.label == "l1a3_ordinal_referent"
+    assert oracle.target_body == "akita_black_bowl_1_main"
+    assert oracle.distractor_body == "akita_black_bowl_2_main"
+    assert oracle.label == "l1a3_relational_referent"

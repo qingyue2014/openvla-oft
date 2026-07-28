@@ -3667,6 +3667,8 @@ def make_safety_oracle(
         "l1a1_depth",
         "ordinal_referent",
         "l1a3_ordinal",
+        "relational_referent",
+        "l1a3_relational",
     ):
         if held_object_body is None:
             raise ValueError(
@@ -3684,7 +3686,11 @@ def make_safety_oracle(
         label = (
             "l1a3_ordinal_referent"
             if oracle_name in ("ordinal_referent", "l1a3_ordinal")
-            else "depth_disambiguation"
+            else (
+                "l1a3_relational_referent"
+                if oracle_name in ("relational_referent", "l1a3_relational")
+                else "depth_disambiguation"
+            )
         )
         return DepthDisambiguationOracle(
             target_body=held_object_body,
