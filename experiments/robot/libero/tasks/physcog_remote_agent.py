@@ -814,6 +814,79 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
 }
 
 
+def _l1c_model_artifacts(
+    scenario: str, model: str, evaluation_kind: str
+) -> tuple[str, ...]:
+    prefix = f"experiments/logs/{scenario}_{model}-{evaluation_kind}"
+    shared = (
+        f"{prefix}_manifest.json",
+        f"{prefix}_results.json",
+        f"{prefix}_results.md",
+        f"{prefix}_native_preflight.json",
+        f"{prefix}_native_preflight.md",
+        f"{prefix}_eb_index.jsonl",
+        f"{prefix}_er_index.jsonl",
+        f"{prefix}_ec_index.jsonl",
+        f"{prefix}_videos",
+    )
+    if model == "pi05":
+        shared += (f"{prefix}_server.log",)
+    if scenario == "l1c1":
+        return shared + (
+            "experiments/logs/l1c1_bowl_stack_calibration.md",
+            "experiments/logs/l1c1_bowl_stack_calibration.csv",
+            "experiments/logs/l1c1_safe_reference.md",
+            "experiments/logs/l1c1_safe_reference.csv",
+            "experiments/logs/l1c1_attribution.md",
+            "experiments/logs/l1c1_attribution.csv",
+            "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_candidate_states.hdf5",
+            "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_ec_states.hdf5",
+            "experiments/robot/libero/tasks/l1c1_task2_bowl_stack_source_indices.json",
+            "experiments/robot/libero/tasks/l1c1_implicit_stack_preview",
+        )
+    return shared + (
+        f"experiments/logs/{scenario}_calibration.md",
+        f"experiments/logs/{scenario}_calibration.csv",
+        f"experiments/logs/{scenario}_safe_reference.md",
+        f"experiments/logs/{scenario}_safe_reference.csv",
+        f"experiments/logs/{scenario}_attribution.md",
+        f"experiments/logs/{scenario}_attribution.csv",
+        f"experiments/robot/libero/tasks/{scenario}_eb_states.hdf5",
+        f"experiments/robot/libero/tasks/{scenario}_er_states.hdf5",
+        f"experiments/robot/libero/tasks/{scenario}_ec_states.hdf5",
+        f"experiments/robot/libero/tasks/{scenario}_source_indices.json",
+        f"experiments/robot/libero/tasks/{scenario}_preview",
+    )
+
+
+PHASES = dict(PHASES)
+for _l1c_scenario in ("l1c1", "l1c2", "l1c3"):
+    for _l1c_model in ("pi05", "cosmos"):
+        for _l1c_kind in ("smoke", "formal"):
+            _l1c_phase = f"{_l1c_model}_{_l1c_kind}"
+            PHASES[(_l1c_scenario, _l1c_phase)] = PhaseSpec(
+                command=(
+                    "env",
+                    "RENDER_GPU_DEVICE_ID=1",
+                    "SAVE_VIDEO_MODE=all",
+                    "bash",
+                    "experiments/robot/libero/tasks/run_model_l1c_eval.sh",
+                    _l1c_model,
+                    _l1c_scenario,
+                    _l1c_kind,
+                ),
+                count_env=(
+                    "L1C_SMOKE_TRIALS"
+                    if _l1c_kind == "smoke"
+                    else "L1C_FORMAL_TRIALS"
+                ),
+                artifacts=_l1c_model_artifacts(
+                    _l1c_scenario, _l1c_model, _l1c_kind
+                ),
+            )
+
+
 VERDICT_RE = re.compile(
     r"(?:Verdict:\s*(?:\*\*)?|verdict=|\"occlusion_gate\"\s*:\s*\")"
     r"([A-Z][A-Z0-9_-]+)",

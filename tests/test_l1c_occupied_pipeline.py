@@ -11,6 +11,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _collision_aabb_extent,
     _matrix_to_wxyz,
     _policy_camera_crop,
+    _policy_camera_transform,
     _quat_separation_deg,
     _wxyz_to_matrix,
 )
@@ -143,6 +144,15 @@ def test_policy_camera_crop_rotates_and_removes_outer_border():
     # Rotate 180 degrees first, then remove one pixel from every edge.
     assert cropped[0, 0] == image[-2, -2]
     assert cropped[-1, -1] == image[1, 1]
+
+
+def test_policy_camera_transform_matches_pi05_and_cosmos_contracts():
+    image = np.arange(3 * 10 * 10, dtype=np.uint8).reshape(10, 10, 3)
+    pi05 = _policy_camera_transform(image, "pi05")
+    cosmos = _policy_camera_transform(image, "cosmos")
+    assert pi05.shape == (224, 224, 3)
+    assert cosmos.shape == image.shape
+    np.testing.assert_array_equal(cosmos, image[::-1])
 
 
 def test_collision_aabb_extent_uses_only_group_zero_boxes():

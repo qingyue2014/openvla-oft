@@ -539,13 +539,19 @@ def preview(args):
                 # 0.9 centre crop (see libero_utils.get_libero_image and
                 # openvla_utils.center_crop_image).
                 Image.fromarray(image[::-1].copy()).save(out / f"{condition}_{idx:02d}.png")
-                policy_image = _policy_camera_crop(image)
+                policy_image = _policy_camera_transform(
+                    image, args.model_family
+                )
                 Image.fromarray(policy_image).save(out / f"{condition}_{idx:02d}_policy.png")
 
                 geom_ids = descendant_geom_ids(env, spec.occupant_body)
                 seg_ids = _render_segmentation_geom_ids(env, "agentview", 256)
                 raw_mask = np.isin(seg_ids, tuple(geom_ids))
-                policy_mask = _policy_camera_crop(raw_mask.astype(np.uint8), resize=False).astype(bool)
+                policy_mask = _policy_camera_transform(
+                    raw_mask.astype(np.uint8),
+                    args.model_family,
+                    is_mask=True,
+                ).astype(bool)
                 collision_extent = _collision_aabb_extent(env, spec.occupant_body)
                 Image.fromarray((policy_mask.astype(np.uint8) * 255)).save(
                     out / f"{condition}_{idx:02d}_occupant_mask.png"
@@ -565,7 +571,9 @@ def preview(args):
                 Image.fromarray(policy_start_image[::-1].copy()).save(
                     out / f"{condition}_{idx:02d}_t{args.policy_start_step}.png"
                 )
-                policy_start_image = _policy_camera_crop(policy_start_image)
+                policy_start_image = _policy_camera_transform(
+                    policy_start_image, args.model_family
+                )
                 Image.fromarray(policy_start_image).save(
                     out / f"{condition}_{idx:02d}_policy_t{args.policy_start_step}.png"
                 )
@@ -573,15 +581,19 @@ def preview(args):
                     env, "agentview", 256
                 )
                 start_mask = np.isin(start_seg_ids, tuple(geom_ids))
-                start_policy_mask = _policy_camera_crop(
-                    start_mask.astype(np.uint8), resize=False
+                start_policy_mask = _policy_camera_transform(
+                    start_mask.astype(np.uint8),
+                    args.model_family,
+                    is_mask=True,
                 ).astype(bool)
                 anchor_geom_ids = descendant_geom_ids(env, spec.anchor_body)
                 start_anchor_mask = np.isin(
                     start_seg_ids, tuple(anchor_geom_ids)
                 )
-                start_anchor_policy_mask = _policy_camera_crop(
-                    start_anchor_mask.astype(np.uint8), resize=False
+                start_anchor_policy_mask = _policy_camera_transform(
+                    start_anchor_mask.astype(np.uint8),
+                    args.model_family,
+                    is_mask=True,
                 ).astype(bool)
                 Image.fromarray(
                     start_policy_mask.astype(np.uint8) * 255
@@ -922,6 +934,35 @@ def _policy_camera_crop(array: np.ndarray, crop_scale: float = 0.9, resize: bool
         return cropped
     # OPENVLA_IMAGE_SIZE is 224. LANCZOS matches the policy's RGB resize.
     return np.asarray(Image.fromarray(cropped).resize((224, 224), resample=Image.Resampling.LANCZOS))
+
+
+def _policy_camera_transform(
+    array: np.ndarray,
+    model_family: str,
+    *,
+    is_mask: bool = False,
+) -> np.ndarray:
+    """Apply the primary-image transform seen by the selected VLA family."""
+    from PIL import Image
+
+    family = str(model_family).lower().replace("_", "").replace("-", "")
+    source = np.asarray(array)
+    if family == "cosmos" or family == "cosmospolicy":
+        # The official Cosmos LIBERO evaluator vertically flips the raw
+        # 256-pixel agentview without OpenVLA's centre crop.
+        return source[::-1].copy()
+    if family in {"pi05", "pi0.5"}:
+        # OpenPI rotates LIBERO agentview by 180 degrees, then applies
+        # resize-with-pad to 224 square pixels. The source is already square.
+        rotated = source[::-1, ::-1].copy()
+        resample = Image.Resampling.NEAREST if is_mask else Image.Resampling.BILINEAR
+        return np.asarray(
+            Image.fromarray(rotated).resize((224, 224), resample=resample)
+        )
+    return _policy_camera_crop(
+        source,
+        resize=True,
+    )
 
 
 def _placement_result(
@@ -1861,6 +1902,7 @@ def main():
     p.add_argument("--out_dir", required=True)
     p.add_argument("--num_states", type=int, default=3)
     p.add_argument("--policy_start_step", type=int, default=10)
+    p.add_argument("--model_family", default="openvla")
 
     p = sub.add_parser("screen-occupants")
     _defaults(p)

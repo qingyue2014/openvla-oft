@@ -31,9 +31,16 @@ CALIBRATION_NUM_STATES="${CALIBRATION_NUM_STATES:-8}"
 # `...-libero-90` repository.  Use the public LIBERO-90 SFT checkpoint already
 # supported by this repository's RLinf compatibility loader.
 CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
+MODEL_FAMILY="${MODEL_FAMILY:-openvla}"
+PI05_HOST="${PI05_HOST:-127.0.0.1}"
+PI05_PORT="${PI05_PORT:-8000}"
+PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
+PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-1800}"
+MODEL_OPEN_LOOP_STEPS="${MODEL_OPEN_LOOP_STEPS:-8}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
+RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 
 # Match the established PhysCog runners: most server checkouts keep LIBERO as
 # a sibling of openvla-oft (~/04-mycode/LIBERO).  LIBERO_ROOT may also point
@@ -55,9 +62,13 @@ fi
 export LIBERO_ROOT
 export PYTHONPATH="${LIBERO_ROOT}:${PYTHONPATH:-}"
 
-EB_NOTE="${UPPER_SCENARIO}-${SLUG}-eb"
-ER_NOTE="${UPPER_SCENARIO}-${SLUG}-risk"
-EC_NOTE="${UPPER_SCENARIO}-${SLUG}-ec"
+NOTE_SUFFIX=""
+if [[ -n "${RUN_ID_SUFFIX}" ]]; then
+  NOTE_SUFFIX="-${RUN_ID_SUFFIX}"
+fi
+EB_NOTE="${UPPER_SCENARIO}-${SLUG}-eb${NOTE_SUFFIX}"
+ER_NOTE="${UPPER_SCENARIO}-${SLUG}-risk${NOTE_SUFFIX}"
+EC_NOTE="${UPPER_SCENARIO}-${SLUG}-ec${NOTE_SUFFIX}"
 EB_TRAJ="rollouts/libero_90/${EB_NOTE}/trajectories"
 ER_TRAJ="rollouts/libero_90/${ER_NOTE}/trajectories"
 EC_TRAJ="rollouts/libero_90/${EC_NOTE}/trajectories"
@@ -73,6 +84,8 @@ EC_REPLAY_CSV="${LOG_DIR}/${SCENARIO}_eb_to_ec_replay.csv"
 EC_REPLAY_REPORT="${LOG_DIR}/${SCENARIO}_eb_to_ec_replay.md"
 ATTRIBUTION_CSV="${LOG_DIR}/${SCENARIO}_attribution.csv"
 ATTRIBUTION_REPORT="${LOG_DIR}/${SCENARIO}_attribution.md"
+NATIVE_PREFLIGHT_JSON="${NATIVE_PREFLIGHT_JSON:-${LOG_DIR}/${SCENARIO}_native_preflight.json}"
+NATIVE_PREFLIGHT_REPORT="${NATIVE_PREFLIGHT_REPORT:-${LOG_DIR}/${SCENARIO}_native_preflight.md}"
 
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
@@ -104,9 +117,21 @@ run_bodies() {
   python "${PIPELINE}" list-bodies --scenario "${SCENARIO}"
 }
 
+run_native_preflight() {
+  python experiments/robot/libero/tasks/audit_l1c_native_preflight.py \
+    --scenario "${SCENARIO}" \
+    --state "eb=${EB_STATES}" \
+    --state "er=${ER_STATES}" \
+    --state "ec=${EC_STATES}" \
+    --expected_episodes "$1" \
+    --out_json "${NATIVE_PREFLIGHT_JSON}" \
+    --out_report "${NATIVE_PREFLIGHT_REPORT}"
+}
+
 run_preview() {
   python "${PIPELINE}" preview "${common_state_args[@]}" \
-    --out_dir "${PREVIEW_DIR}" --num_states "${PREVIEW_NUM_STATES:-3}"
+    --out_dir "${PREVIEW_DIR}" --num_states "${PREVIEW_NUM_STATES:-3}" \
+    --model_family "${MODEL_FAMILY}"
 }
 
 run_screen_occupants() {
@@ -144,7 +169,13 @@ run_condition() {
   local bddl
   bddl="$(resolve_bddl)"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+    --model_family "${MODEL_FAMILY}" \
     --pretrained_checkpoint "${CHECKPOINT}" \
+    --pi05_host "${PI05_HOST}" \
+    --pi05_port "${PI05_PORT}" \
+    --pi05_replan_steps "${PI05_REPLAN_STEPS}" \
+    --pi05_connect_timeout_s "${PI05_CONNECT_TIMEOUT_S}" \
+    --num_open_loop_steps "${MODEL_OPEN_LOOP_STEPS}" \
     --task_suite_name libero_90 \
     --bddl_file "${bddl}" \
     --initial_states_path "${state_path}" \
@@ -205,7 +236,10 @@ case "${MODE}" in
   eb|er|ec) run_condition "${MODE}" "${NUM_TRIALS}" ;;
   replay) run_replay ;;
   smoke)
+    run_bodies
     run_check "${SMOKE_TRIALS}"
+    run_native_preflight "${SMOKE_TRIALS}"
+    run_preview
     run_calibrate
     grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
     run_condition eb "${SMOKE_TRIALS}"
@@ -219,7 +253,10 @@ case "${MODE}" in
   analyze) run_analyze ;;
   record) run_record ;;
   eval)
+    run_bodies
     run_check "${NUM_TRIALS}"
+    run_native_preflight "${NUM_TRIALS}"
+    run_preview
     run_calibrate
     grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
     run_condition eb "${NUM_TRIALS}"
