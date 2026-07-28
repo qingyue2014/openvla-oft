@@ -628,6 +628,7 @@ def _run_episode(
                 step,
                 args,
                 stage,
+                tolerance=getattr(args, "transport_position_tolerance", None),
                 max_steps=args.transport_max_waypoint_steps,
                 max_position_command=args.transport_max_position_command,
                 retained_body=TARGET,
