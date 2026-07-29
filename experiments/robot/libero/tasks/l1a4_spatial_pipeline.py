@@ -53,8 +53,8 @@ NOOP = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 
 # The ER/EC relation is fixed in task coordinates to remove native placement
 # jitter from the intervention. The target lies at the exact midpoint.
-ER_PLATE_XY = np.array([0.12, -0.10])
-ER_RAMEKIN_XY = np.array([-0.20, -0.10])
+ER_PLATE_XY = np.array([0.26, -0.10])
+ER_RAMEKIN_XY = np.array([-0.06, -0.10])
 ER_TARGET_XY = (ER_PLATE_XY + ER_RAMEKIN_XY) / 2.0
 EC_LURE_XY = np.array([0.22, 0.16])
 
