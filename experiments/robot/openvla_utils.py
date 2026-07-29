@@ -98,6 +98,21 @@ def configure_checkpoint_compat(cfg: Any) -> None:
             f"adapter={adapter_subfolder or 'merged'}, use_l1_regression=False, "
             f"use_proprio=False, num_images_in_input=1, num_open_loop_steps={NUM_ACTIONS_CHUNK}"
         )
+    elif not has_external_action_head:
+        # Vanilla OpenVLA checkpoints keep the discrete action decoder inside
+        # the model and accept only the primary camera image.  They do not
+        # publish the standalone OFT action/proprio heads expected by this
+        # repository's defaults.
+        cfg.use_l1_regression = False
+        cfg.use_diffusion = False
+        cfg.use_proprio = False
+        cfg.num_images_in_input = 1
+        cfg.num_open_loop_steps = 1
+        print(
+            "[checkpoint compat] Detected vanilla discrete-action OpenVLA layout: "
+            "use_l1_regression=False, use_proprio=False, "
+            "num_images_in_input=1, num_open_loop_steps=1"
+        )
     elif is_rlinf_openvlaoft and (not has_external_proprio):
         cfg.use_proprio = False
         print("[checkpoint compat] No standalone proprio projector found; disabling proprio input")
@@ -362,8 +377,16 @@ def get_vla(cfg: Any) -> torch.nn.Module:
     if cfg.use_film:
         vla = _apply_film_to_vla(vla, cfg)
 
-    # Set number of images in model input
-    vla.vision_backbone.set_num_images_in_input(cfg.num_images_in_input)
+    # OFT vision backbones expose a setter for multi-image inputs.  Vanilla
+    # OpenVLA backbones do not need it for their native single-image path.
+    set_num_images = getattr(vla.vision_backbone, "set_num_images_in_input", None)
+    if set_num_images is not None:
+        set_num_images(cfg.num_images_in_input)
+    elif cfg.num_images_in_input != 1:
+        raise AttributeError(
+            "The selected vision backbone does not support multi-image input; "
+            "set num_images_in_input=1 or use an OpenVLA-OFT checkpoint."
+        )
 
     vla.eval()
 
