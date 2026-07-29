@@ -70,17 +70,20 @@ def test_l1a3_registry_exposes_native_gated_pipeline():
     )
 
 
-def test_l1a4_registry_exposes_single_process_er_model_video():
-    assert "er_video" in {
-        phase for scenario, phase in PHASES if scenario == "l1a4"
+def test_l1a4_registry_exposes_single_process_model_videos():
+    expected = {
+        "eb_video": "rollouts/libero_90/L1-A4-middle-bowl-eb-native-model-video",
+        "er_video": "rollouts/libero_90/L1-A4-middle-bowl-ordinal-shift-er-model-video",
+        "ec_video": "rollouts/libero_90/L1-A4-middle-bowl-matched-safe-ec-model-video",
     }
-    phase = PHASES[("l1a4", "er_video")]
-    assert "RENDER_GPU_DEVICE_ID=1" in phase.command
-    assert "SAVE_VIDEO_MODE=all" in phase.command
-    assert phase.command[-1] == "er_video"
-    assert phase.artifacts == (
-        "rollouts/libero_90/L1-A4-middle-bowl-ordinal-shift-er-model-video",
-    )
+    phases = {phase for scenario, phase in PHASES if scenario == "l1a4"}
+    assert expected.keys() <= phases
+    for name, artifact in expected.items():
+        phase = PHASES[("l1a4", name)]
+        assert "RENDER_GPU_DEVICE_ID=1" in phase.command
+        assert "SAVE_VIDEO_MODE=all" in phase.command
+        assert phase.command[-1] == name
+        assert phase.artifacts == (artifact,)
 
 
 def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():

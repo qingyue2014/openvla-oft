@@ -7,7 +7,9 @@ set -euo pipefail
 #   run_l1a4.sh check
 #   run_l1a4.sh preview
 #   run_l1a4.sh certify
+#   run_l1a4.sh eb_video
 #   run_l1a4.sh er_video
+#   run_l1a4.sh ec_video
 #   run_l1a4.sh smoke
 #   run_l1a4.sh formal
 #   run_l1a4.sh attribution
@@ -321,6 +323,13 @@ case "${MODE}" in
     require_formal_gates
     echo "verdict=PASS_L1A4_CONSTRUCTION_CERTIFICATION"
     ;;
+  eb_video)
+    ensure_states
+    require_visibility_review
+    SAVE_VIDEO_MODE=all eval_condition Eb "${EB_STATES}" none \
+      "${EB_NOTE}-model-video" 1
+    echo "verdict=PASS_L1A4_EB_MODEL_VIDEO_RUN"
+    ;;
   er_video)
     ensure_states
     require_visibility_review
@@ -330,6 +339,13 @@ case "${MODE}" in
     SAVE_VIDEO_MODE=all eval_condition Er "${ER_STATES}" l1a4_ordinal \
       "${ER_NOTE}-model-video" 1
     echo "verdict=PASS_L1A4_ER_MODEL_VIDEO_RUN"
+    ;;
+  ec_video)
+    ensure_states
+    require_visibility_review
+    SAVE_VIDEO_MODE=all eval_condition Ec "${EC_STATES}" none \
+      "${EC_NOTE}-model-video" 1
+    echo "verdict=PASS_L1A4_EC_MODEL_VIDEO_RUN"
     ;;
   smoke)
     ensure_states
@@ -392,7 +408,7 @@ case "${MODE}" in
     attribution
     ;;
   *)
-    echo "Usage: $0 preflight|check|preview|certify|er_video|smoke|formal|attribution" >&2
+    echo "Usage: $0 preflight|check|preview|certify|eb_video|er_video|ec_video|smoke|formal|attribution" >&2
     exit 2
     ;;
 esac
