@@ -19,10 +19,14 @@ collision geometry, or named asset. The project-local BDDL file pins the
 existing native cabinet, stove, and wine-rack poses so the exact experiment
 layout is reproducible; a BDDL layout is not an asset definition.
 
-The fixture layout pins the native cabinet, stove, and wine rack to the exact
+The state generator pins the native cabinet, stove, and wine rack to the exact
 seed-0 poses used by the successful HTML Task-4 trajectory, rather than mixing
-the HTML cabinet with seed-42 auxiliary fixtures. The native
-cream-cheese box and wine bottle stay at their HTML-success table poses in Eb.
+the HTML cabinet with seed-42 auxiliary fixtures. Policy rollouts deliberately
+use the native `libero_goal` Task-4 benchmark path, not the evaluator's
+direct-BDDL shortcut. The generated serialized free-joint states restore into
+that native seed-0 environment, whose fixture poses and policy RGB are
+pixel-identical to the pinned generation layout. The native cream-cheese box
+and wine bottle stay at their HTML-success table poses in Eb.
 In Er and Ec only the native wine bottle's free-joint pose changes: it is
 inverted and settled on its neck directly on the native cabinet top. The
 inverted orientation is an explicit serialized pose of the existing bottle,
@@ -183,9 +187,15 @@ under-robust. The active revision restores the exact HTML fixture pose while
 using the unchanged HTML movable-object scene in Eb. Superpod job **495759**
 tested the common cream-cheese support with the corrected cabinet and still
 returned `0/5` Eb successes, proving that support itself changes policy
-behavior; it is permanently rejected. The active direct-cabinet revision must
-pass a fresh Eb policy probe using all three restored seed-0 fixtures; prior
-jobs restored only the cabinet and do not qualify it.
+behavior; it is permanently rejected. Superpod job **495785** used all three
+restored seed-0 fixture poses and the direct-cabinet candidate. Its sole
+successful episode had `0.002316 m` pre-grasp wine-bottle/right-gripper
+penetration, so it is invalid. A post-run equivalence audit found that its
+initial policy RGB was pixel-identical to the accepted HTML episode, but the
+runner had selected the evaluator's direct-BDDL control path whereas the HTML
+job used native `libero_goal` Task 4. Revision v11 keeps the fixed layout only
+for paired-state generation and restores native Task-4 evaluation. It must pass
+a fresh Eb probe before any Er/Ec calibration.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.

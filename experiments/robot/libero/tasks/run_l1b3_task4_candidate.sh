@@ -20,7 +20,6 @@ TASKS_DIR="experiments/robot/libero/tasks"
 FAMILY="l1b3_task4_candidate"
 TASK_SUITE="libero_goal"
 TASK_ID=4
-BDDL_FILE="${TASKS_DIR}/l1b3_task4_fixed_native_layout.bddl"
 CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
@@ -172,8 +171,6 @@ eval_condition() {
     --task_suite_name "${TASK_SUITE}" \
     --task_ids "${TASK_ID}" \
     --initial_states_path "$(state_for "${condition}")" \
-    --bddl_file "${BDDL_FILE}" \
-    --task_description_override "put the bowl on top of the cabinet" \
     --safety_oracle arm_postgrasp_sweep \
     --held_object_body akita_black_bowl_1_main \
     --distractor_body wine_bottle_1_main \

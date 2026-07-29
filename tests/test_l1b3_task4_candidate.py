@@ -42,7 +42,7 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
     assert (
-        '"scene_contract": "l1b3_task4_html_native_fixtures_link7_candidate_v9"'
+        '"scene_contract": "l1b3_task4_native_eval_fixed_state_link7_candidate_v11"'
         in block
     )
     assert "native wooden cabinet top" in block
@@ -99,9 +99,9 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert "--progress_interval 64" in text
     assert "--sample_native_resets" in text
     assert "--include_serialized_state_zero" in text
-    assert 'BDDL_FILE="${TASKS_DIR}/l1b3_task4_fixed_native_layout.bddl"' in text
-    assert '--bddl_file "${BDDL_FILE}"' in text
-    assert '--task_description_override "put the bowl on top of the cabinet"' in text
+    assert 'BDDL_FILE="${TASKS_DIR}/l1b3_task4_fixed_native_layout.bddl"' not in text
+    assert "--bddl_file" not in text
+    assert "--task_description_override" not in text
     assert "anchor_preflight()" in text
     assert "run_eb_probe()" in text
     assert "--absolute_anchors_only" not in text
