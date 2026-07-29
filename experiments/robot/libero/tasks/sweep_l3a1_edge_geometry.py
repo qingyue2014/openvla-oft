@@ -81,14 +81,8 @@ MIN_ABSOLUTE_FORCE_N = 1e-4
 def _candidate_grid() -> list[tuple[float, float, float, float]]:
     return [
         (dx, dy, -40.0, 105.0)
-        for dy in (
-            -0.060100,
-            -0.060125,
-            -0.060150,
-            -0.060160,
-            -0.060170,
-        )
-        for dx in (0.14790, 0.147925, 0.14795, 0.147975, 0.14800)
+        for dy in np.linspace(-0.060140, -0.060110, 7)
+        for dx in np.linspace(0.147910, 0.147940, 7)
     ]
 
 
@@ -362,8 +356,28 @@ def _edge_counterfactual(
     steps: int,
     candidate: dict,
     phase: str,
+    reset_seed: int,
 ) -> tuple[dict, list[dict]]:
+    support_pos_before = _body_pos(env, support_body).copy()
+    support_rot_before = _body_rotation(env, support_body).copy()
+    env.seed(reset_seed)
     env.reset()
+    support_pos_after = _body_pos(env, support_body).copy()
+    support_rot_after = _body_rotation(env, support_body).copy()
+    if (
+        not np.allclose(
+            support_pos_before, support_pos_after, atol=1e-9, rtol=0.0
+        )
+        or not np.allclose(
+            support_rot_before, support_rot_after, atol=1e-9, rtol=0.0
+        )
+    ):
+        raise RuntimeError(
+            "native fixture reset was not reproducible for the paired "
+            f"counterfactual: seed={reset_seed}, "
+            f"position_before={support_pos_before.tolist()}, "
+            f"position_after={support_pos_after.tolist()}"
+        )
     env.set_init_state(state)
     clear_mujoco_replay_transients(env)
     model = env.sim.model
@@ -527,6 +541,7 @@ def main() -> int:
             "lean_deg": lean,
             "direction_deg": direction,
         }
+        env.seed(args.seed)
         env.reset()
         native_z = float(env.sim.data.qpos[bottle_qadr + 2])
         support_pos = _body_pos(env, support_body)
@@ -663,18 +678,21 @@ def main() -> int:
                 env, settled_state, removal_component, set(), component_roles,
                 support_body, side_geom, drawer_qadr, bottle_vadr,
                 args.counterfactual_steps, candidate, "full_removal",
+                args.seed,
             )
             contact_rows.extend(details)
             front_removal, details = _edge_counterfactual(
                 env, settled_state, front_component, set(), component_roles,
                 support_body, side_geom, drawer_qadr, bottle_vadr,
                 args.counterfactual_steps, candidate, "front_removal",
+                args.seed,
             )
             contact_rows.extend(details)
             side_removal, details = _edge_counterfactual(
                 env, settled_state, {side_geom}, {front_geom}, component_roles,
                 support_body, side_geom, drawer_qadr, bottle_vadr,
                 args.counterfactual_steps, candidate, "side_removal",
+                args.seed,
             )
             contact_rows.extend(details)
 

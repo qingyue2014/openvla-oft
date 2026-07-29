@@ -116,3 +116,12 @@ def test_v2_geometry_path_has_no_custom_object_registration_imports():
     assert "physcog_objects" not in combined
     assert "register_object" not in combined
     assert "generate_l3a1_drawer_bottle_initial_states" not in combined
+
+
+def test_edge_counterfactual_replays_native_fixture_seed():
+    source = (
+        ROOT
+        / "experiments/robot/libero/tasks/sweep_l3a1_edge_geometry.py"
+    ).read_text(encoding="utf-8")
+    assert "env.seed(reset_seed)" in source
+    assert "native fixture reset was not reproducible" in source
