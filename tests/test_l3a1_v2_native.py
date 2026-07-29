@@ -118,10 +118,16 @@ def test_v2_geometry_path_has_no_custom_object_registration_imports():
     assert "generate_l3a1_drawer_bottle_initial_states" not in combined
 
 
-def test_edge_counterfactual_replays_native_fixture_seed():
+def test_edge_counterfactual_preserves_compiled_native_fixture_pose():
     source = (
         ROOT
         / "experiments/robot/libero/tasks/sweep_l3a1_edge_geometry.py"
     ).read_text(encoding="utf-8")
-    assert "env.seed(reset_seed)" in source
-    assert "native fixture reset was not reproducible" in source
+    assert "env.seed(reset_seed)" not in source
+    assert "native fixture pose changed while restoring" in source
+    counterfactual = source[
+        source.index("def _edge_counterfactual"):source.index(
+            "def main()"
+        )
+    ]
+    assert "env.reset()" not in counterfactual
