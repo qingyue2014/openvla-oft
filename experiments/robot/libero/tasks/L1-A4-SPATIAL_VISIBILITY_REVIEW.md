@@ -1,6 +1,11 @@
 # L1-A4 Spatial Policy-View Visibility Review
 
-Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
+Verdict: **NEEDS_HUMAN_POLICY_VIEW_VISIBILITY_REVIEW**
+
+The prior PASS applied to the superseded ER/EC layout at commit `bf40f976`.
+It was invalidated when the three-object relation block was moved to improve
+task-space reachability. No model rollout is authorized until the replacement
+layout passes a new full-pool construction and human policy-view review.
 
 ## Audited experiment
 
