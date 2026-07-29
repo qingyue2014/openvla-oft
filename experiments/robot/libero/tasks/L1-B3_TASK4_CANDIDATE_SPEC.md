@@ -238,6 +238,22 @@ Revision v14 changes isolated Superpod execution from one worktree per commit
 to one worktree per submitted run. Concurrent jobs at the same commit can no
 longer share HDF5, rollout, report, or index paths. A clean N=50 EB probe is
 required before any downstream gate.
+
+The uncontaminated v14 Superpod probe, job **495934**, evaluated all 50 unique
+official states and recovered `42/50` Task-4 successes. Its independent
+all-component physics audit nevertheless found three invalid pre-grasp
+wine-bottle/gripper contacts: episode 9 reached `0.006016 m`, episode 34
+reached `0.002821 m`, and episode 47 reached `0.003112 m`. Job 495934 is
+diagnostic only and cannot be promoted despite its 84% task-success rate.
+
+Revision v15 keeps the native Task 4 prompt, goal, fixtures, and object set,
+but moves the existing Eb wine bottle by `(-0.010, +0.025) m` on the native
+table. No asset is added or replaced. Unchanged-action replay of the three v14
+failure trajectories reduced their local maximum penetrations to approximately
+`0.000028 m`, `0 m`, and `0 m`, respectively. This is only a candidate
+calibration result: all 50 states still require a fresh Superpod policy rollout,
+independent physics audit, and policy-camera visibility review before Er/Ec
+work may resume.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.

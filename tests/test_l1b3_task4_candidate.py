@@ -27,6 +27,7 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"native_layout_only": True' in block
     assert '"preserve_native_layout": True' in block
     assert '"placement_mode": "supported_relative_goal"' in block
+    assert '"eb_obstacle_offset_xy": [-0.010, 0.025]' in block
     assert '"common_support_body"' not in block
     assert '"obstacle_quat_wxyz": [0.0, 1.0, 0.0, 0.0]' in block
     assert '"obstacle_support_settle_steps": 420' in block
@@ -42,7 +43,7 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
     assert (
-        '"scene_contract": "l1b3_task4_per_run_isolated_link7_candidate_v14"'
+        '"scene_contract": "l1b3_task4_eb_clearance_link7_candidate_v15"'
         in block
     )
     assert "transformers-openvla-oft-bc339d9_tokenizers-0.19.1" in block

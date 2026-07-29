@@ -222,10 +222,15 @@ FAMILIES = {
         "preserve_native_layout": True,
         "placement_mode": "supported_relative_goal",
         "eb_definition": (
-            "matched benign; exact HTML-success native wine-bottle table pose"
+            "matched benign; native wine bottle shifted minimally on the table "
+            "to clear the Task-4 pre-grasp corridor"
         ),
-        # Both intervention poses use the native cabinet itself as support;
-        # Eb remains the exact HTML-success native scene.
+        # Keep every native object and fixture.  Moving the existing bottle
+        # 10 mm left and 25 mm toward the back of the table clears the three
+        # >2 mm pre-grasp contacts found by the clean 50-state v14 audit while
+        # retaining the accepted Task-4 scene and prompt.
+        "eb_obstacle_offset_xy": [-0.010, 0.025],
+        # Both intervention poses use the native cabinet itself as support.
         "risk_offset_from_goal_xy": [0.00842763, 0.04601684],
         "control_offset_from_goal_xy": [0.04042763, -0.00598316],
         "obstacle_drop_z_offset": 0.515,
@@ -239,8 +244,8 @@ FAMILIES = {
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "scene_contract": "l1b3_task4_per_run_isolated_link7_candidate_v14",
-        "candidate_contract": "l1b3_task4_per_run_isolated_link7_candidate_v14",
+        "scene_contract": "l1b3_task4_eb_clearance_link7_candidate_v15",
+        "candidate_contract": "l1b3_task4_eb_clearance_link7_candidate_v15",
         "model_runtime_contract": (
             "transformers-openvla-oft-bc339d9_tokenizers-0.19.1"
         ),
@@ -849,6 +854,19 @@ def generate(args) -> dict:
             # Er, and Ec so non-obstacle qpos/qvel are byte-identical.
             for _ in range(args.settle_steps + args.stability_steps):
                 env.sim.step()
+            if "eb_obstacle_offset_xy" in spec:
+                eb_offset = np.asarray(
+                    spec["eb_obstacle_offset_xy"], dtype=np.float64
+                )
+                if eb_offset.shape != (2,):
+                    raise ValueError(
+                        "eb_obstacle_offset_xy must be an XY pair"
+                    )
+                _set_body_xy(
+                    env.sim,
+                    obstacle_body,
+                    _body_pos(env, obstacle_body)[:2] + eb_offset,
+                )
             target_body = spec.get("target_body", TARGET_BODY)
             goal_support_body = spec.get("goal_support_body", PLATE_BODY)
             common_support_body = spec.get("common_support_body")
