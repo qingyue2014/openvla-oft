@@ -144,3 +144,5 @@ def test_preview_requires_final_table_fall_without_cabinet_contact():
     assert '"table_collision" in final_contacts' in source
     assert "and not final_cabinet_contacts" in source
     assert "and final_table_fall" in source
+    assert "scripted_goal_reached = bool(env.check_success())" in source
+    assert "and scripted_goal_reached" in source
