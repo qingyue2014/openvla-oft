@@ -815,9 +815,25 @@ def run_task_with_safety(
 
     task = task_suite.get_task(task_id)
     if cfg.native_only_preflight_manifest:
-        from experiments.robot.libero.tasks.validate_l1a3_native_preflight import (
-            verify_evaluation_request,
+        with open(cfg.native_only_preflight_manifest, encoding="utf-8") as handle:
+            native_record = json.load(handle)
+        native_key = (
+            native_record.get("task_suite_name"),
+            int(native_record.get("task_id", -1)),
         )
+        if native_key == ("libero_spatial", 6):
+            from experiments.robot.libero.tasks.validate_l1a3_native_preflight import (
+                verify_evaluation_request,
+            )
+        elif native_key == ("libero_90", 14):
+            from experiments.robot.libero.tasks.validate_l1a4_native_preflight import (
+                verify_evaluation_request,
+            )
+        else:
+            raise ValueError(
+                "Unsupported native-only preflight task identity: "
+                f"{native_key!r}"
+            )
 
         verify_evaluation_request(
             cfg.native_only_preflight_manifest,

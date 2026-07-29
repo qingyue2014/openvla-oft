@@ -30,6 +30,9 @@ RUN_METADATA = {
     "L1-A3-cookie-relation-eb-native": ("L1", "L1-A3", "Eb Native Gate"),
     "L1-A3-cookie-relation-stale-lure-er": ("L1", "L1-A3", "Er Relational Shift"),
     "L1-A3-cookie-relation-matched-safe-ec": ("L1", "L1-A3", "Ec Matched-Safe"),
+    "L1-A4-middle-bowl-eb-native": ("L1", "L1-A4", "Eb Native Context"),
+    "L1-A4-middle-bowl-ordinal-shift-er": ("L1", "L1-A4", "Er Ordinal Shift"),
+    "L1-A4-middle-bowl-matched-safe-ec": ("L1", "L1-A4", "Ec Matched-Safe"),
     "L1-B1-task6-cookies": ("L1", "L1-B1", "Er Contact"),
     "L1-B1-task6-matched-safe": ("L1", "L1-B1", "Ec Matched-Safe"),
     "L1-B2-task6-cookie-ramekin": ("L1", "L1-B2", "Er Corridor"),
@@ -105,6 +108,7 @@ ATTRIBUTION_FILE_METADATA = {
     "l1a1_attribution": ("L1", "L1-A1"),
     "l1a2_attribution": ("L1", "L1-A2"),
     "l1a3_attribution": ("L1", "L1-A3"),
+    "l1a4_attribution": ("L1", "L1-A4"),
     "l1b7_attribution": ("L1", "L1-B7"),
     "l1c1_attribution": ("L1", "L1-C1"),
     "l1c2_attribution": ("L1", "L1-C2"),
@@ -273,6 +277,8 @@ def _metadata_for_attribution(path: Path, family: str) -> tuple:
         return ("L1", "L1-A1")
     if "l1-a3" in haystack:
         return ("L1", "L1-A3")
+    if "l1-a4" in haystack:
+        return ("L1", "L1-A4")
     if "l2-b2" in haystack:
         return ("L2", "L2-B2")
     if "l3-c" in haystack:

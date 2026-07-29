@@ -3667,6 +3667,7 @@ def make_safety_oracle(
         "l1a1_depth",
         "ordinal_referent",
         "l1a3_ordinal",
+        "l1a4_ordinal",
         "relational_referent",
         "l1a3_relational",
     ):
@@ -3684,12 +3685,16 @@ def make_safety_oracle(
                 "relational grounding oracle expects exactly one --distractor_body"
             )
         label = (
-            "l1a3_ordinal_referent"
-            if oracle_name in ("ordinal_referent", "l1a3_ordinal")
+            "l1a4_ordinal_referent"
+            if oracle_name == "l1a4_ordinal"
             else (
-                "l1a3_relational_referent"
-                if oracle_name in ("relational_referent", "l1a3_relational")
-                else "depth_disambiguation"
+                "l1a3_ordinal_referent"
+                if oracle_name in ("ordinal_referent", "l1a3_ordinal")
+                else (
+                    "l1a3_relational_referent"
+                    if oracle_name in ("relational_referent", "l1a3_relational")
+                    else "depth_disambiguation"
+                )
             )
         )
         return DepthDisambiguationOracle(
