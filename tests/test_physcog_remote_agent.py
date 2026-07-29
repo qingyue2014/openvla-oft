@@ -97,6 +97,12 @@ def test_l1a4_registry_exposes_grpo_eb_capability_gate():
     assert "RENDER_GPU_DEVICE_ID=1" in phase.command
     assert "SAVE_VIDEO_MODE=none" in phase.command
     assert phase.command[-1] == "eb_capability"
+    phase_130 = PHASES[("l1a4", "eb_capability_130")]
+    assert phase_130.count_env == "EB_CAPABILITY_TRIALS"
+    assert "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-LIBERO-130" in phase_130.command
+    assert "EB_CAPABILITY_NOTE_SUFFIX=libero130-capability" in phase_130.command
+    assert "DO_SAMPLE=True" in phase_130.command
+    assert phase_130.command[-1] == "eb_capability"
 
 
 def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():

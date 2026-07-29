@@ -23,6 +23,7 @@ PIPELINE="${TASKS_DIR}/l1a4_pipeline.py"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 EB_CAPABILITY_TRIALS="${EB_CAPABILITY_TRIALS:-10}"
+EB_CAPABILITY_NOTE_SUFFIX="${EB_CAPABILITY_NOTE_SUFFIX:-grpo-capability}"
 SAFE_REF_STATES="${SAFE_REF_STATES:-5}"
 SEED="${SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-7}"
@@ -329,7 +330,7 @@ case "${MODE}" in
     ensure_states
     require_visibility_review
     SAVE_VIDEO_MODE=none eval_condition Eb "${EB_STATES}" none \
-      "${EB_NOTE}-grpo-capability" "${EB_CAPABILITY_TRIALS}"
+      "${EB_NOTE}-${EB_CAPABILITY_NOTE_SUFFIX}" "${EB_CAPABILITY_TRIALS}"
     echo "verdict=PASS_L1A4_EB_CAPABILITY_RUN"
     ;;
   eb_video)
