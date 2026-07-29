@@ -244,9 +244,16 @@ def validate(args) -> bool:
     invariant_bodies = [
         body
         for body in dict.fromkeys(
-            (target_body, goal_support_body, TARGET_BODY, PLATE_BODY, LANDMARK_BODY)
+            (
+                target_body,
+                goal_support_body,
+                spec.get("common_support_body"),
+                TARGET_BODY,
+                PLATE_BODY,
+                LANDMARK_BODY,
+            )
         )
-        if body != obstacle_body and body in model_body_names
+        if body and body != obstacle_body and body in model_body_names
     ]
     max_pair_drift = {body: 0.0 for body in invariant_bodies}
     initial_contacts = 0
@@ -442,7 +449,10 @@ def validate(args) -> bool:
     native_asset_gate = bool(
         not spec.get("native_assets_only")
         or (
-            spec.get("bddl_file") is None
+            (
+                spec.get("bddl_file") is None
+                or spec.get("native_layout_only")
+            )
             and not any(
                 body_name.startswith("l1_b_")
                 for body_name in model_body_names

@@ -40,6 +40,7 @@ from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
     _allowed_obstacle_state_indices,
     _body_pos,
     _changed_state_indices,
+    _forbidden_initial_contact_pairs,
     _save_hdf5,
     _settle_and_validate,
     benchmark,
@@ -1050,9 +1051,12 @@ def calibrate(args: argparse.Namespace) -> str:
 
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
-    bddl = os.path.join(
-        get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
-    )
+    if spec.get("bddl_file"):
+        bddl = str(Path(__file__).with_name(spec["bddl_file"]))
+    else:
+        bddl = os.path.join(
+            get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
+        )
     from libero.libero.envs.env_wrapper import ControlEnv
 
     env = ControlEnv(
@@ -1116,7 +1120,160 @@ def calibrate(args: argparse.Namespace) -> str:
             first_effect_diagnostic = ""
             best_contact_diagnostic = ""
             best_contact_score = float("-inf")
-            if physics_qualified_eb:
+            supported_serialized_mode = bool(
+                spec.get("placement_mode") == "supported_relative_goal"
+            )
+            if physics_qualified_eb and supported_serialized_mode:
+                # V2 Task-4 states already contain fully settled, paired
+                # cabinet/cream-cheese-supported Er/Ec poses.  Rebuilding them
+                # from an Eb XY proposal would silently drop the bottle back
+                # to table height and destroy both the support relation and
+                # the full quaternion intervention.  Qualify the exact
+                # serialized states directly against the unchanged Eb actions.
+                attempts = 1
+                candidate_spec = dict(spec)
+                allowed_indices = _allowed_obstacle_state_indices(
+                    env.sim, obstacle, candidate_spec
+                )
+
+                def validate_serialized(
+                    state: np.ndarray,
+                ) -> tuple[dict, np.ndarray]:
+                    env.reset()
+                    env.set_init_state(state)
+                    start = _body_pos(env, obstacle)
+                    forbidden = set(
+                        _forbidden_initial_contact_pairs(env, obstacle)
+                    )
+                    for _ in range(args.stability_steps):
+                        env.sim.step()
+                        forbidden.update(
+                            _forbidden_initial_contact_pairs(env, obstacle)
+                        )
+                    end = _body_pos(env, obstacle)
+                    return (
+                        {
+                            "placed_xyz": start,
+                            "end_xyz": end,
+                            "drift_m": float(np.linalg.norm(end - start)),
+                            "forbidden_contacts": sorted(forbidden),
+                            "valid": bool(
+                                np.linalg.norm(end - start) <= 0.002
+                                and not forbidden
+                            ),
+                        },
+                        np.asarray(state, dtype=float),
+                    )
+
+                er_diagnostics, serialized_er = validate_serialized(
+                    fallback_er_states[episode]
+                )
+                ec_diagnostics, serialized_ec = validate_serialized(
+                    ec_states[episode]
+                )
+                er_changed = _changed_state_indices(eb_state, serialized_er)
+                ec_changed = _changed_state_indices(eb_state, serialized_ec)
+                er_only_obstacle = bool(er_changed) and set(
+                    er_changed
+                ).issubset(allowed_indices)
+                ec_only_obstacle = bool(ec_changed) and set(
+                    ec_changed
+                ).issubset(allowed_indices)
+                er_replay = _replay_candidate(
+                    env,
+                    serialized_er,
+                    trajectory,
+                    obstacle,
+                    target,
+                    args,
+                )
+                ec_replay = _replay_candidate(
+                    env,
+                    serialized_ec,
+                    trajectory,
+                    obstacle,
+                    target,
+                    args,
+                )
+                intended_contact_candidates = int(
+                    er_replay["hits"]["intended_contact"]
+                )
+                intended_effect_candidates = int(
+                    er_replay["hits"]["intended"]
+                )
+                confounded, late_contact = _causal_contact_partition(
+                    er_replay["hit_steps"]
+                )
+                confounded_candidates = int(confounded)
+                late_contact_candidates = int(late_contact)
+                valid_table_candidates = int(
+                    er_diagnostics["valid"]
+                    and ec_diagnostics["valid"]
+                    and er_only_obstacle
+                    and ec_only_obstacle
+                )
+                table_z_values = [
+                    float(er_diagnostics["end_xyz"][2]),
+                    float(ec_diagnostics["end_xyz"][2]),
+                ]
+                ec_clear = bool(
+                    not any(ec_replay["hits"].values())
+                    and ec_replay["penetration_m"]
+                    <= args.max_contact_penetration
+                    and (
+                        ec_replay["task_success"]
+                        or not args.require_task_success
+                    )
+                )
+                isolated = bool(
+                    valid_table_candidates
+                    and er_replay["hits"]["intended"]
+                    and not confounded
+                    and er_replay["penetration_m"]
+                    <= args.max_contact_penetration
+                    and ec_clear
+                )
+                if isolated:
+                    env.reset()
+                    env.set_init_state(serialized_ec)
+                    control = {
+                        "state": serialized_ec,
+                        "placement": _body_pos(env, obstacle)[:2],
+                        "end_xyz": _body_pos(env, obstacle),
+                        "changed_indices": ec_changed,
+                        "diagnostics": ec_diagnostics,
+                    }
+                    env.reset()
+                    env.set_init_state(serialized_er)
+                    selected = {
+                        "state": serialized_er,
+                        "path_step": (
+                            er_replay["hit_steps"]["intended_contact"]
+                        ),
+                        "proposed_link": "serialized_supported_robot0_link7",
+                        "placement": _body_pos(env, obstacle),
+                        "end_xyz": _body_pos(env, obstacle),
+                        "changed_indices": er_changed,
+                        "diagnostics": er_diagnostics,
+                        "replay": er_replay,
+                        "control": control,
+                    }
+                else:
+                    invalid_candidates = int(not valid_table_candidates)
+                    matched_control_failures = int(not ec_clear)
+                    first_invalid_diagnostic = (
+                        f"supported_er_valid={er_diagnostics['valid']} "
+                        f"supported_ec_valid={ec_diagnostics['valid']} "
+                        f"er_only_obstacle={er_only_obstacle} "
+                        f"ec_only_obstacle={ec_only_obstacle} "
+                        f"er_hits={er_replay['hit_steps']} "
+                        f"ec_hits={ec_replay['hit_steps']} "
+                        f"er_task_success={er_replay['task_success']} "
+                        f"ec_task_success={ec_replay['task_success']} "
+                        f"er_penetration={er_replay['penetration_m']:.6f} "
+                        f"ec_penetration={ec_replay['penetration_m']:.6f}"
+                    )
+            elif physics_qualified_eb:
                 if args.absolute_anchors_only:
                     candidates = _prepend_absolute_anchors(
                         [], args.absolute_risk_anchors_xy

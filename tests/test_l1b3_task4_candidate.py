@@ -13,31 +13,63 @@ CALIBRATOR = TASKS / "calibrate_l1b3_trajectory_conditioned_states.py"
 RUNNER = TASKS / "run_l1b3_task4_candidate.sh"
 CANONICAL_RUNNER = TASKS / "run_l1b_swept.sh"
 SPEC = TASKS / "L1-B3_TASK4_CANDIDATE_SPEC.md"
+FIXED_NATIVE_BDDL = TASKS / "l1b3_task4_fixed_native_layout.bddl"
 
 
 def _family_block(text: str, family: str) -> str:
     return text.split(f'"{family}":', 1)[1].split("\n    },", 1)[0]
 
 
-def test_task4_candidate_uses_native_prompt_objects_and_link7_contract():
+def test_task4_candidate_uses_native_support_and_link7_contract():
     block = _family_block(GENERATOR.read_text(), "l1b3_task4_candidate")
-    assert '"bddl_file": None' in block
+    assert '"bddl_file": "l1b3_task4_fixed_native_layout.bddl"' in block
     assert '"native_assets_only": True' in block
+    assert '"native_layout_only": True' in block
     assert '"preserve_native_layout": True' in block
+    assert '"placement_mode": "supported_relative_goal"' in block
+    assert '"common_support_body": CREAM_CHEESE_BODY' in block
+    assert '"obstacle_quat_wxyz": [0.0, 1.0, 0.0, 0.0]' in block
+    assert '"obstacle_support_settle_steps": 420' in block
     generator = GENERATOR.read_text()
     assert "--sample_native_resets" in generator
     assert "seeded_native_bddl_resets" in generator
-    assert "settled seeded native BDDL reset" in generator
-    assert "Keep the seeded env.reset() result exactly as sampled" in generator
+    assert "def _set_body_free_pose(" in generator
+    assert "byte-identical common source state" in generator
     assert '"goal_support_body": "wooden_cabinet_1_main"' in block
     assert '"required_prompt_terms": ["bowl", "cabinet"]' in block
     assert '"intended_link_bodies": ["robot0_link7"]' in block
     assert '"min_obstacle_displacement": 0.010' in block
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
-    assert "native main table" in block
+    assert (
+        '"scene_contract": "l1b3_task4_native_support_link7_candidate_v2"'
+        in block
+    )
+    assert "native cream-cheese box on native cabinet top" in block
     assert "l1_b_goal_arm_gate" not in block
     assert "l1b4_goal_arm_sweep.bddl" not in block
+
+
+def test_task4_layout_defines_no_new_assets_and_preserves_task_semantics():
+    text = FIXED_NATIVE_BDDL.read_text()
+    assert "(:language Put the bowl on top of the cabinet)" in text
+    assert "(And (On akita_black_bowl_1 wooden_cabinet_1_top_side))" in text
+    for fixture in (
+        "main_table - table",
+        "wooden_cabinet_1 - wooden_cabinet",
+        "flat_stove_1 - flat_stove",
+        "wine_rack_1 - wine_rack",
+    ):
+        assert fixture in text
+    for obj in (
+        "akita_black_bowl_1 - akita_black_bowl",
+        "cream_cheese_1 - cream_cheese",
+        "wine_bottle_1 - wine_bottle",
+        "plate_1 - plate",
+    ):
+        assert obj in text
+    assert "l1_b_" not in text
+    assert ".xml" not in text
 
 
 def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
@@ -64,6 +96,9 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert "--progress_interval 64" in text
     assert "--sample_native_resets" in text
     assert "--include_serialized_state_zero" in text
+    assert 'BDDL_FILE="${TASKS_DIR}/l1b3_task4_fixed_native_layout.bddl"' in text
+    assert '--bddl_file "${BDDL_FILE}"' in text
+    assert '--task_description_override "put the bowl on top of the cabinet"' in text
     assert "anchor_preflight()" in text
     assert "--absolute_anchors_only" not in text
     assert "--serialized_er_anchor_first" in text
@@ -145,21 +180,24 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "--end_episode" in text
     assert "if args.end_episode > 0 and episode >= args.end_episode:" in text
     assert 'metadata["pairs"][int(row["episode_idx"])]' in text
+    assert 'spec.get("placement_mode") == "supported_relative_goal"' in text
+    assert "Qualify the exact" in text
+    assert 'ec_replay["task_success"]' in text
+    assert 'er_replay["task_success"]' not in text.split(
+        "isolated = bool(", 1
+    )[1].split(")", 1)[0]
 
 
-def test_html_native_wine_pose_is_first_task4_regression_anchor():
+def test_html_result_is_provenance_not_the_fixed_support_contract():
     runner = RUNNER.read_text()
     html_xy = (-0.17987147616914112, -0.0010137409172496538)
-    assert f"{html_xy[0]},{html_xy[1]}" in runner
-    calibrator = CALIBRATOR.read_text()
-    assert "def _prepend_absolute_anchors(" in calibrator
-    assert '(-1, "validated_task4_anchor", anchor)' in calibrator
-    assert "--absolute_anchors_only" in calibrator
-    assert "PASS_TASK4_ANCHOR_PREFLIGHT" in calibrator
-    assert "HTML native-anchor preflight" in calibrator
-    assert "def _prepend_serialized_er_anchor(" in calibrator
-    assert '(-2, "serialized_er_anchor", placement)' in calibrator
-    assert '"--absolute_risk_anchors_xy=${ABSOLUTE_RISK_ANCHORS_XY}"' in runner
+    assert f"{html_xy[0]},{html_xy[1]}" not in runner
+    assert "ABSOLUTE_RISK_ANCHORS_XY" not in runner
+    text = SPEC.read_text()
+    assert "historical single-episode HTML result" in text
+    assert "provenance only" in text
+    assert "does not" in text
+    assert "define the new fixed-layout support geometry" in text
 
 
 def test_candidate_results_cannot_pool_with_task8_or_formal_l1b3():

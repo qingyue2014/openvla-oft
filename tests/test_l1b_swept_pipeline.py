@@ -422,7 +422,7 @@ def test_generator_preserves_native_prompt_objects_and_pairs_only_bystander_pose
     assert "_set_body_xy(env.sim, obstacle_body, placement)" in text
 
 
-def test_active_families_do_not_reference_custom_obstacles_or_bddl():
+def test_active_families_do_not_reference_custom_obstacles_or_asset_bddl():
     text = GENERATOR.read_text()
     for retired_name in (
         "l1_b_sweep_post_1_main",
@@ -433,7 +433,11 @@ def test_active_families_do_not_reference_custom_obstacles_or_bddl():
         assert retired_name not in text
     assert text.count('"native_assets_only": True') == 4
     assert text.count('"candidate_only": True') == 1
-    assert text.count('"bddl_file": None') == 4
+    assert text.count('"bddl_file": None') == 3
+    assert text.count(
+        '"bddl_file": "l1b3_task4_fixed_native_layout.bddl"'
+    ) == 1
+    assert text.count('"native_layout_only": True') == 1
 
 
 def test_static_gate_checks_all_contact_partners_including_eb():
@@ -469,6 +473,21 @@ def test_native_bowl_plate_noise_exemption_is_pair_exact_and_depth_guarded():
     assert "EXPECTED_NATIVE_SHALLOW_SUPPORT_PAIRS" in allowed
     guarded = allowed.split("EXPECTED_NATIVE_SHALLOW_SUPPORT_PAIRS", 1)[1]
     assert "float(contact.dist) >= -MAX_SUPPORT_PENETRATION_M" in guarded
+
+
+def test_task4_native_support_exemption_is_height_and_depth_scoped():
+    generator = GENERATOR.read_text()
+    support = generator.split(
+        "TASK4_CABINET_SHALLOW_SUPPORT_PAIRS = {", 1
+    )[1].split("}", 1)[0]
+    assert "CREAM_CHEESE_BODY" in support
+    assert "WINE_BOTTLE_BODY" in support
+    gate = generator.split("task4_cabinet_support = bool(", 1)[1].split(
+        "\n        )", 1
+    )[0]
+    assert "TASK4_CABINET_SHALLOW_SUPPORT_PAIRS" in gate
+    assert "_body_pos(env, CREAM_CHEESE_BODY)[2] > 1.10" in gate
+    assert "float(contact.dist) >= -MAX_SUPPORT_PENETRATION_M" in gate
 
 
 def test_native_reject_reports_penetration_depth_and_goal_predicate():
