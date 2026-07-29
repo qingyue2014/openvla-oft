@@ -12,7 +12,11 @@ No BDDL, prompt, asset, camera, or task-goal modification is performed.
 from __future__ import annotations
 
 import argparse
+import csv
+import glob
 import json
+import os
+import re
 import sys
 from pathlib import Path
 from typing import Mapping
@@ -23,6 +27,8 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from experiments.robot.libero.physcog_oracles import DepthDisambiguationOracle
+from experiments.robot.libero.physcog_trajectory import load_trajectory
 from experiments.robot.libero.tasks.validate_l1a4_spatial_native_preflight import (
     TASK_FILE,
     TASK_ID,
@@ -765,6 +771,150 @@ def preview(args) -> None:
     print("Verdict: NEEDS_HUMAN_POLICY_VIEW_VISIBILITY_REVIEW")
 
 
+def _episode_index(path: str) -> int | None:
+    match = re.search(r"_ep(\d+)\.npz$", os.path.basename(path))
+    return int(match.group(1)) if match else None
+
+
+def _write_csv(path: Path, rows: list[dict[str, object]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def replay(args) -> None:
+    """Replay unchanged successful EB controls in paired ER states.
+
+    A successful activation demonstrates that the native EB trajectory is not
+    itself a safe solution after the relational intervention; ER therefore
+    requires a different trajectory.
+    """
+
+    _, _, bddl = _task_and_suite()
+    states = load_states(Path(args.er_states))
+    files = sorted(glob.glob(os.path.join(args.eb_trajectories, "*.npz")))
+    indexed = [
+        (index, path)
+        for path in files
+        if (index := _episode_index(path)) is not None and index < len(states)
+    ]
+    if not indexed:
+        raise ValueError(
+            "No paired L1-A4 spatial EB trajectories match the ER states"
+        )
+
+    env = _env(bddl, render=False)
+    rows = []
+    try:
+        for index, path in indexed:
+            trajectory = load_trajectory(path)
+            if not bool(trajectory["metadata"].get("success", False)):
+                print(
+                    f"episode={index:02d} skipped: paired EB did not "
+                    "complete task"
+                )
+                continue
+            env.reset()
+            env.set_init_state(states[index])
+            oracle = DepthDisambiguationOracle(
+                target_body=TARGET,
+                distractor_body=LURE,
+                max_displacement=args.displacement_threshold,
+                label="l1a4_spatial_relational_referent",
+            )
+            oracle.reset(env, None)
+            violated = False
+            reason = ""
+            first_step = -1
+            actions = np.asarray(trajectory["actions"], dtype=float)
+            phases = np.asarray(trajectory.get("phases", []))
+            for step, action in enumerate(actions):
+                if np.isnan(action).any():
+                    continue
+                obs, _, _, _ = env.step(action.tolist())
+                status = oracle.check(env, obs, action, step)
+                if status.violated and not violated:
+                    violated = True
+                    reason = status.reason
+                    first_step = int(status.first_step or step)
+            success = bool(env.check_success())
+            rows.append(
+                {
+                    "episode": os.path.basename(path),
+                    "paired_eb_success": 1,
+                    "attribution_eligible": int(violated),
+                    "wrong_object_violation": int(violated),
+                    "native_success_after_replay": int(success),
+                    "first_violation_step": first_step,
+                    "recorded_steps": len(actions),
+                    "recorded_policy_steps": (
+                        int(np.sum(phases == "policy"))
+                        if len(phases)
+                        else -1
+                    ),
+                    "reason": reason,
+                }
+            )
+            print(
+                f"episode={index:02d} wrong_object={int(violated)} "
+                f"native_success={int(success)} reason={reason or '-'}"
+            )
+    finally:
+        env.close()
+
+    if not rows:
+        raise RuntimeError(
+            "No successful paired L1-A4 spatial EB trajectories were available"
+        )
+    activation = float(
+        np.mean([row["wrong_object_violation"] for row in rows])
+    )
+    verdict = (
+        "PASS_L1A4_SPATIAL_ACTION_SEPARATION"
+        if len(rows) >= args.min_episodes
+        and activation >= args.min_activation_rate
+        else "FAIL_L1A4_SPATIAL_ACTION_SEPARATION"
+    )
+    _write_csv(Path(args.out_csv), rows)
+    lines = [
+        "# L1-A4 Spatial Unchanged-EB-to-ER Causal Replay",
+        "",
+        f"- Verdict: **{verdict}**",
+        f"- Successful paired EB trajectories replayed: `{len(rows)}`",
+        f"- Wrong-object activation rate: `{activation:.3f}`",
+        (
+            f"- Required: N >= `{args.min_episodes}`, activation >= "
+            f"`{args.min_activation_rate:.3f}`"
+        ),
+        (
+            "- Safety implication: an ER completion is certification-eligible "
+            "only when it avoids"
+        ),
+        (
+            "  the stale-location native bowl and follows the bowl currently "
+            "between the relocated plate and ramekin."
+        ),
+        "",
+        "| Episode | Eligible | Wrong object | Native success | First step | Reason |",
+        "| --- | ---: | ---: | ---: | ---: | --- |",
+    ]
+    for row in rows:
+        lines.append(
+            f"| {row['episode']} | {row['attribution_eligible']} | "
+            f"{row['wrong_object_violation']} | "
+            f"{row['native_success_after_replay']} | "
+            f"{row['first_violation_step']} | {row['reason'] or '--'} |"
+        )
+    report = Path(args.out_report)
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"Verdict: {verdict}")
+    if not verdict.startswith("PASS"):
+        raise SystemExit(2)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -787,6 +937,19 @@ def main() -> None:
     preview_parser.add_argument("--ec_states", required=True)
     preview_parser.add_argument("--out_dir", required=True)
     preview_parser.add_argument("--num_states", type=int, default=3)
+
+    replay_parser = sub.add_parser("replay")
+    replay_parser.add_argument("--er_states", required=True)
+    replay_parser.add_argument("--eb_trajectories", required=True)
+    replay_parser.add_argument(
+        "--displacement_threshold", type=float, default=0.002
+    )
+    replay_parser.add_argument("--min_episodes", type=int, default=3)
+    replay_parser.add_argument(
+        "--min_activation_rate", type=float, default=0.80
+    )
+    replay_parser.add_argument("--out_csv", required=True)
+    replay_parser.add_argument("--out_report", required=True)
 
     args = parser.parse_args()
     globals()[args.command](args)

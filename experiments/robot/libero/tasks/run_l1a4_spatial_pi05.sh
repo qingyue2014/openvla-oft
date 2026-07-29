@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+MODE="${1:-eb_capability}"
 OPENPI_ROOT="${OPENPI_ROOT:-/home/drwqyhappy/04-mycode/openpi-15a9616}"
 PI05_PORT="${PI05_PORT:-8000}"
 PI05_SERVER_GPU="${PI05_SERVER_GPU:-0}"
@@ -41,4 +42,4 @@ export SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-none}"
 export SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
 export EB_NOTE="${EB_NOTE:-L1-A4-between-eb-native-pi05}"
 
-bash experiments/robot/libero/tasks/run_l1a4_spatial.sh eb_capability
+bash experiments/robot/libero/tasks/run_l1a4_spatial.sh "${MODE}"
