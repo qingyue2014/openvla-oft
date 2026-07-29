@@ -71,7 +71,7 @@ POLICY_WAIT_STEPS = 10
 SETTLE_STEPS = 80
 STABILITY_CONFIRM_STEPS = 40
 PAIR_TOLERANCE = 1e-10
-RELATION_TRANSLATION_XY = np.array([0.0, -0.16])
+RELATION_TRANSLATION_XY = np.array([0.0, 0.16])
 
 
 def _ensure_libero_importable() -> None:
