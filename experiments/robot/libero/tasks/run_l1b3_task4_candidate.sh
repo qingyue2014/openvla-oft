@@ -23,8 +23,8 @@ TASK_ID=4
 CHECKPOINT="${GOAL_CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-goal}"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
-SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-100}"
-CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-400}"
+SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-50}"
+CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-50}"
 MIN_SUCCESSFUL_EB="${TASK4_MIN_SUCCESSFUL_EB:-20}"
 MAX_CANDIDATES_PER_EPISODE="${TASK4_MAX_CANDIDATES_PER_EPISODE:-600}"
 MAX_REFINEMENT_SEEDS="${TASK4_MAX_REFINEMENT_SEEDS:-8}"
@@ -130,19 +130,13 @@ trajectory_dir_for() {
 }
 
 generate_states() {
-  local count="$1" sample_native="${2:-false}"
-  local extra_args=()
-  if [[ "${sample_native,,}" == "true" ]]; then
-    extra_args+=(--sample_native_resets)
-    extra_args+=(--include_serialized_state_zero)
-  fi
+  local count="$1"
   python "${TASKS_DIR}/generate_l1b_swept_initial_states.py" \
     --family "${FAMILY}" \
     --task_suite_name "${TASK_SUITE}" \
     --task_id "${TASK_ID}" \
     --num_states "${count}" \
-    --seed "${SCENE_SEED}" \
-    "${extra_args[@]}"
+    --seed "${SCENE_SEED}"
 }
 
 archive_anchor_source_pool() {
@@ -353,7 +347,7 @@ require_complete_index() {
 }
 
 run_smoke() {
-  generate_states "${SMOKE_POOL_SIZE}" true
+  generate_states "${SMOKE_POOL_SIZE}"
   eval_condition eb "${SMOKE_POOL_SIZE}" false
   require_complete_index "${SMOKE_POOL_SIZE}"
   archive_anchor_source_pool
@@ -374,13 +368,13 @@ run_eb_probe() {
   # Cheap visual-behavior gate for a scene-layout revision.  It deliberately
   # stops before any Er/Ec interpretation and never selects or promotes a
   # candidate family.
-  generate_states "${SMOKE_TRIALS}" true
+  generate_states "${SMOKE_TRIALS}"
   eval_condition eb "${SMOKE_TRIALS}" false
   require_complete_index "${SMOKE_TRIALS}"
 }
 
 run_prepare() {
-  generate_states "${CALIBRATION_POOL_SIZE}" true
+  generate_states "${CALIBRATION_POOL_SIZE}"
   eval_condition eb "${CALIBRATION_POOL_SIZE}" false
   require_complete_index "${CALIBRATION_POOL_SIZE}"
   archive_anchor_source_pool

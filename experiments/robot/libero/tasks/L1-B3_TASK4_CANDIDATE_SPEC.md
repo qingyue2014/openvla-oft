@@ -207,7 +207,17 @@ Revision v12 loads an isolated Superpod user-cache overlay containing
 `transformers-openvla-oft` commit `bc339d9` (package version `4.40.1`) and
 `tokenizers==0.19.1`, without modifying the shared conda environment. The
 runner hard-stops before model evaluation if either exact version is absent.
-It must pass a fresh Eb probe before any Er/Ec calibration.
+Superpod job **495832** used that exact runtime and recovered `4/5` safe Eb
+successes with a separate `0.000000 m` maximum-penetration audit. Its one
+failed episode came from the newer sampled-reset pool, not the official
+serialized source sequence used by the accepted HTML job.
+
+Revision v13 removes sampled resets from the Task-4 workflow. The five-state
+probe uses official LIBERO serialized states 0--4, and the qualification pool
+uses all 50 unique official serialized states exactly once. This restores the
+HTML source-state convention and prevents repeated or randomly synthesized
+states from inflating an N=50 result. It must pass a fresh Eb probe before any
+Er/Ec calibration.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.
@@ -249,12 +259,12 @@ and must not be relabeled as formal evidence.
 ## Candidate workflow
 
 ```bash
-# Five selected pairs from a 100-reset native source probe, with Eb/Er/Ec videos.
+# Five selected pairs from the 50 official native states, with Eb/Er/Ec videos.
 SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all RENDER_GPU_DEVICE_ID=1 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh smoke
 
-# Sample a 400-reset native source pool, preflight-select 50 unique pairs,
-# then rerun all strict pre-evaluation gates on those exact 50 pairs.
+# Use all 50 official native serialized states exactly once, then rerun all
+# strict pre-evaluation gates on those exact 50 pairs.
 NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=1 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh prepare
 

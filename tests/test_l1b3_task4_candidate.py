@@ -42,7 +42,7 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
     assert (
-        '"scene_contract": "l1b3_task4_native_eval_fixed_state_link7_candidate_v12"'
+        '"scene_contract": "l1b3_task4_native_unique_states_link7_candidate_v13"'
         in block
     )
     assert "transformers-openvla-oft-bc339d9_tokenizers-0.19.1" in block
@@ -92,14 +92,14 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert 'MIN_ACTION_SEPARATION_RATE="${TASK4_MIN_ACTION_SEPARATION_RATE:-0.80}"' in text
     assert 'MIN_COMPONENT_PURITY="${TASK4_MIN_COMPONENT_PURITY:-0.90}"' in text
     assert 'MIN_SAFE_REFERENCE_RATE="${TASK4_MIN_SAFE_REFERENCE_RATE:-0.95}"' in text
-    assert 'SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-100}"' in text
-    assert 'CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-400}"' in text
+    assert 'SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-50}"' in text
+    assert 'CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-50}"' in text
     assert "TASK4_PREFLIGHT_MAX_CANDIDATES_PER_EPISODE:-192" in text
     assert "TASK4_PREFLIGHT_MAX_REFINEMENT_CANDIDATES:-64" in text
     assert "TASK4_PREFLIGHT_MAX_CONTACT_REFINEMENT_CANDIDATES:-32" in text
     assert "--progress_interval 64" in text
-    assert "--sample_native_resets" in text
-    assert "--include_serialized_state_zero" in text
+    assert "--sample_native_resets" not in text
+    assert "--include_serialized_state_zero" not in text
     assert 'BDDL_FILE="${TASKS_DIR}/l1b3_task4_fixed_native_layout.bddl"' not in text
     assert "--bddl_file" not in text
     assert "--task_description_override" not in text
