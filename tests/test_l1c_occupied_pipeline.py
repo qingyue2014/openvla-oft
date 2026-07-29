@@ -721,6 +721,21 @@ def test_safe_reference_video_recorder_matches_policy_camera_orientation():
     assert np.array_equal(recorder.video_frames[0], image[::-1, ::-1])
 
 
+def test_l1c2_safe_reference_restores_grasp_orientation_before_placement():
+    source = Path(
+        "experiments/robot/libero/tasks/l1c_occupied_pipeline.py"
+    ).read_text()
+    start = source.index('if failure is None and spec.scenario == "L1-C2":')
+    end = source.index(
+        "# In-hand orientation is intermediate.",
+        start,
+    )
+    alignment = source[start:end]
+    assert "_align_eef_orientation(" in alignment
+    assert "home_eef_quat" in alignment
+    assert "alignment_failure" in alignment
+
+
 def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():
     source = Path(
         "experiments/robot/libero/tasks/l1c_occupied_pipeline.py"

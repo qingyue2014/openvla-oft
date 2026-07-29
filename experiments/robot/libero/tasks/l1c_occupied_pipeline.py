@@ -2733,6 +2733,27 @@ def _safe_reference_from_eb_prefix(args, files):
                     failure = (
                         status if status is not None and status.violated else None
                     )
+                if failure is None and spec.scenario == "L1-C2":
+                    # A successful policy grasp may leave the cream-cheese box
+                    # slightly pitched in hand.  Replaying that prefix and
+                    # translating directly can make the box fall onto its
+                    # side, incorrectly rejecting an otherwise executable
+                    # side-placement path.  Restore the recorded downward
+                    # end-effector orientation before moving over the tray;
+                    # the subsequent release and safety gates remain fully
+                    # physical and unchanged.
+                    obs, step, alignment_failure = _align_eef_orientation(
+                        env,
+                        obs,
+                        oracle,
+                        recorder,
+                        home_eef_quat,
+                        close,
+                        step,
+                        args,
+                    )
+                    if alignment_failure is not None:
+                        failure = alignment_failure
                 # In-hand orientation is intermediate. L1-C3 applies a strict
                 # complete-body containment gate before the final release.
                 preplace_target_tilt = body_tilt_deg(env, spec.target_body)
