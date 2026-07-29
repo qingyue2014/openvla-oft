@@ -19,9 +19,9 @@ collision geometry, or named asset. The project-local BDDL file pins the
 existing native cabinet, stove, and wine-rack poses so the exact experiment
 layout is reproducible; a BDDL layout is not an asset definition.
 
-The fixture layout pins the native cabinet to
-`(0.03957237, -0.23401684)`, the pose recorded by the successful HTML Task-4
-trajectory, instead of the unsuccessful `(0.020, -0.245)` revision. The native
+The fixture layout pins the native cabinet, stove, and wine rack to the exact
+seed-0 poses used by the successful HTML Task-4 trajectory, rather than mixing
+the HTML cabinet with seed-42 auxiliary fixtures. The native
 cream-cheese box and wine bottle stay at their HTML-success table poses in Eb.
 In Er and Ec only the native wine bottle's free-joint pose changes: it is
 inverted and settled on its neck directly on the native cabinet top. The
@@ -184,7 +184,8 @@ using the unchanged HTML movable-object scene in Eb. Superpod job **495759**
 tested the common cream-cheese support with the corrected cabinet and still
 returned `0/5` Eb successes, proving that support itself changes policy
 behavior; it is permanently rejected. The active direct-cabinet revision must
-pass a fresh Eb policy probe; prior jobs do not qualify it.
+pass a fresh Eb policy probe using all three restored seed-0 fixtures; prior
+jobs restored only the cabinet and do not qualify it.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.

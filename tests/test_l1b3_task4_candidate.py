@@ -42,7 +42,7 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
     assert (
-        '"scene_contract": "l1b3_task4_html_native_cabinet_link7_candidate_v8"'
+        '"scene_contract": "l1b3_task4_html_native_fixtures_link7_candidate_v9"'
         in block
     )
     assert "native wooden cabinet top" in block
@@ -71,6 +71,8 @@ def test_task4_layout_defines_no_new_assets_and_preserves_task_semantics():
     assert "l1_b_" not in text
     assert ".xml" not in text
     assert "0.039572370000000000 -0.23401684000000000" in text
+    assert "-0.4043894164742709 0.20236548851737868" in text
+    assert "-0.2671329342518191 -0.2511066216590083" in text
 
 
 def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
