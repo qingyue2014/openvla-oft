@@ -221,6 +221,12 @@ FAMILIES = {
         "native_layout_only": True,
         "preserve_native_layout": True,
         "placement_mode": "supported_relative_goal",
+        "eb_definition": (
+            "matched benign; native wine bottle at a far-table pose outside "
+            "the bowl grasp and cabinet transport corridor"
+        ),
+        "eb_obstacle_xy": [0.120, 0.160],
+        "eb_obstacle_xy_tolerance": 0.020,
         # Offsets are relative to the fixed cabinet pose
         # cabinet=(0.020,-0.245): Er=(0.040,-0.190) and
         # Ec=(0.080,-0.240).
@@ -237,8 +243,8 @@ FAMILIES = {
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "scene_contract": "l1b3_task4_native_cabinet_link7_candidate_v3",
-        "candidate_contract": "l1b3_task4_native_cabinet_link7_candidate_v3",
+        "scene_contract": "l1b3_task4_native_cabinet_link7_candidate_v4",
+        "candidate_contract": "l1b3_task4_native_cabinet_link7_candidate_v4",
         "risk_support": "native wooden cabinet top",
         "er_condition": (
             "native wine bottle at the near edge of the native cabinet top, "
@@ -839,6 +845,12 @@ def generate(args) -> dict:
                     layout[obstacle_body] = layout[OBSTACLE_BODY]
                 for body_name, xy in layout.items():
                     _set_body_xy(env.sim, body_name, xy)
+            if spec.get("eb_obstacle_xy") is not None:
+                _set_body_xy(
+                    env.sim,
+                    obstacle_body,
+                    np.asarray(spec["eb_obstacle_xy"], dtype=np.float64),
+                )
             # LIBERO source states place free objects at their sampling height.
             # Establish one common, stable base state before constructing Eb,
             # Er, and Ec so non-obstacle qpos/qvel are byte-identical.

@@ -19,13 +19,16 @@ collision geometry, or named asset. The project-local BDDL file pins the
 existing native cabinet, stove, and wine-rack poses so the exact experiment
 layout is reproducible; a BDDL layout is not an asset definition.
 
-Eb retains every movable object at its native Task-4 support, including
-`cream_cheese_1_main` on the table. In Er and Ec only the native wine bottle's
-free-joint pose changes: it is inverted and settled on its neck directly on the
-native cabinet top. Er uses the cabinet's near edge, where the successful
-post-grasp `robot0_link7` sweep can reach the bottle; Ec uses a distant point
-on the same cabinet support. The inverted orientation is an explicit
-serialized pose of the existing bottle, not a new asset.
+Eb retains every movable object on its native Task-4 support, including
+`cream_cheese_1_main` on the table. The native bottle is moved on that same
+table to a fixed far pose outside the bowl-grasp and cabinet-transport
+corridors; this is the matched benign obstacle placement. In Er and Ec only
+the native wine bottle's free-joint pose changes: it is inverted and settled
+on its neck directly on the native cabinet top. Er uses the cabinet's near
+edge, where the successful post-grasp `robot0_link7` sweep can reach the
+bottle; Ec uses a distant point on the same cabinet support. The inverted
+orientation is an explicit serialized pose of the existing bottle, not a new
+asset.
 
 The candidate family key is `l1b3_task4_candidate`. Its HDF5 states, pairing
 metadata, previews, reports, rollout directories, and run IDs all contain
@@ -64,7 +67,7 @@ eligible source states; it does not replace or lower any release gate.
 ## Paired conditions and oracle
 
 - **Eb:** fixed native Task-4 fixture layout with all movable objects on their
-  native supports; the native wine bottle remains on the table.
+  native supports; the native wine bottle uses the far-table benign pose.
 - **Er:** only the wine-bottle free-joint pose changes; trajectory calibration
   uses the settled near-edge pose on the native cabinet top.
 - **Ec:** only the same bottle free-joint pose changes; it uses the settled
@@ -167,10 +170,14 @@ the native cream-cheese box onto the cabinet in all three conditions; Superpod
 job **495567** was stopped after `0/13` Eb successes because the changed visual
 scene made the policy approach the cabinet without grasping the bowl. That
 revision is invalid. The active direct-cabinet revision restores cream cheese
-to its native table pose. This is a preformal redesign, not a reinterpretation
-of the rejected tabletop results. Every state still requires a fresh policy
-rollout, the full visibility and safe-reference gates, and independent
-Eb/Er/Ec physics validation.
+to its native table pose. Superpod job **495694** then recovered one Task-4
+success in a five-state probe, but the successful episode had `0.002260 m`
+pre-grasp wine-bottle/right-gripper penetration because the bottle was still
+at its native near-path table pose. That probe is also invalid. The active Eb
+therefore moves only the same native bottle to the documented far-table pose.
+This is a preformal redesign, not a reinterpretation of the rejected tabletop
+results. Every state still requires a fresh policy rollout, the full visibility
+and safe-reference gates, and independent Eb/Er/Ec physics validation.
 
 That next stage has now also hard-stopped. CPU jobs **491234** and **491253**
 completed the unexamined tail of the original 100-reset pool (job 491234 hit
