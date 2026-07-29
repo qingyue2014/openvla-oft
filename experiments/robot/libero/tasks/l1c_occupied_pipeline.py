@@ -866,12 +866,46 @@ def screen_occupants(args):
 
 def _render_segmentation_geom_ids(env, camera: str, resolution: int) -> np.ndarray:
     """Render MuJoCo instance segmentation and return the object-id plane."""
-    seg = env.sim.render(
-        width=resolution,
-        height=resolution,
-        camera_name=camera,
-        segmentation=True,
-    )
+    try:
+        seg = env.sim.render(
+            width=resolution,
+            height=resolution,
+            camera_name=camera,
+            segmentation=True,
+        )
+    except OverflowError:
+        # robosuite <=1.4 decodes the three uint8 segmentation channels before
+        # widening them. NumPy 2 rejects the implicit ``uint8 * 256`` overflow
+        # used by that decoder. Re-read the exact MuJoCo segmentation buffer
+        # and decode it after an explicit int32 cast.
+        import mujoco
+
+        context = env.sim._render_context_offscreen
+        camera_id = env.sim.model.camera_name2id(camera)
+        context.render(
+            resolution,
+            resolution,
+            camera_id=camera_id,
+            segmentation=True,
+        )
+        viewport = mujoco.MjrRect(0, 0, resolution, resolution)
+        rgb = np.empty((resolution, resolution, 3), dtype=np.uint8)
+        mujoco.mjr_readPixels(
+            rgb=rgb, depth=None, viewport=viewport, con=context.con
+        )
+        rgb32 = rgb.astype(np.int32)
+        encoded = (
+            rgb32[..., 0]
+            + rgb32[..., 1] * 256
+            + rgb32[..., 2] * 65536
+        )
+        encoded[encoded >= context.scn.ngeom + 1] = 0
+        ids = np.full((context.scn.ngeom + 1, 2), -1, dtype=np.int32)
+        for index in range(context.scn.ngeom):
+            geom = context.scn.geoms[index]
+            if geom.segid != -1:
+                ids[geom.segid + 1] = (geom.objtype, geom.objid)
+        seg = ids[encoded]
     if seg is None:
         raise RuntimeError("Segmentation render returned None")
     seg = np.asarray(seg)

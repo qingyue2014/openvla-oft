@@ -155,6 +155,15 @@ def test_policy_camera_transform_matches_pi05_and_cosmos_contracts():
     np.testing.assert_array_equal(cosmos, image[::-1])
 
 
+def test_cosmos_numpy2_segmentation_overflow_has_exact_mujoco_fallback():
+    text = Path(
+        "experiments/robot/libero/tasks/l1c_occupied_pipeline.py"
+    ).read_text()
+    assert "except OverflowError" in text
+    assert "mujoco.mjr_readPixels" in text
+    assert "rgb.astype(np.int32)" in text
+
+
 def test_collision_aabb_extent_uses_only_group_zero_boxes():
     class _BoxModel(_Model):
         geom_group = np.array([0, 1, 0])
