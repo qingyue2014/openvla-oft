@@ -10,9 +10,6 @@ from pathlib import Path
 import imageio.v2 as imageio
 import numpy as np
 
-from experiments.robot.libero.tasks.export_l3a1_init_evidence import (
-    policy_agentview,
-)
 from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
     OffScreenRenderEnv,
     _find_free_joint_qadr,
@@ -21,14 +18,16 @@ from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
     _body_pos,
     _find_body,
 )
-from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states import (
+from experiments.robot.libero.tasks.l3a1_native_geometry import (
     BOTTLE_BODY,
-    DEFAULT_BDDL,
     DRAWER_BODY_CANDIDATES,
     DRAWER_CLOSED_QPOS,
     DRAWER_JOINT_CANDIDATES,
+    FRONT_BOARD_SIGNATURE,
+    INNER_FRONT_BOARD_SIGNATURE,
     L3A1_DISPLACEMENT_THRESHOLD,
     L3A1_TILT_CHANGE_THRESHOLD_DEG,
+    RIGHT_SIDE_SIGNATURE,
     SETTLE_STEPS,
     _axis_change_deg,
     _body_rotation,
@@ -37,9 +36,6 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
     _find_joint_qadr,
 )
 from experiments.robot.libero.tasks.sweep_l3a1_corner_geometry import (
-    FRONT_BOARD_SIGNATURE,
-    INNER_FRONT_BOARD_SIGNATURE,
-    RIGHT_SIDE_SIGNATURE,
     _resolve_geom_by_signature,
 )
 from experiments.robot.libero.tasks.sweep_l3a1_edge_geometry import (
@@ -54,6 +50,16 @@ SELECTED_DIRECTION_DEG = 105.0
 HEIGHT_DROP_THRESHOLD_M = 0.015
 
 
+def policy_agentview(obs: dict) -> np.ndarray:
+    """Apply the exact orientation used by the LIBERO policy evaluator."""
+    image = np.asarray(obs["agentview_image"])
+    if image.shape != (256, 256, 3):
+        raise ValueError(
+            f"expected 256x256 RGB agentview_image, got {image.shape}"
+        )
+    return np.ascontiguousarray(image[::-1, ::-1])
+
+
 def _render_policy_frame(env) -> np.ndarray:
     state = np.asarray(env.sim.get_state().flatten()).copy()
     obs = env.regenerate_obs_from_state(state)
@@ -65,7 +71,7 @@ def _render_policy_frame(env) -> np.ndarray:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bddl", default=DEFAULT_BDDL)
+    parser.add_argument("--bddl", required=True)
     parser.add_argument(
         "--out_dir", default="experiments/logs/l3a1_edge_preview"
     )

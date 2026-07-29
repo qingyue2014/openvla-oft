@@ -25,13 +25,15 @@ from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
     _body_pos,
     _find_body,
 )
-from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states import (
+from experiments.robot.libero.tasks.l3a1_native_geometry import (
     BOTTLE_BODY,
-    DEFAULT_BDDL,
     DRAWER_BODY_CANDIDATES,
     DRAWER_JOINT_CANDIDATES,
+    FRONT_BOARD_SIGNATURE,
+    INNER_FRONT_BOARD_SIGNATURE,
     L3A1_DISPLACEMENT_THRESHOLD,
     L3A1_TILT_CHANGE_THRESHOLD_DEG,
+    RIGHT_SIDE_SIGNATURE,
     SETTLE_STEPS,
     _axis_change_deg,
     _body_rotation,
@@ -43,9 +45,6 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
     _validate_native_support_panel_model,
 )
 from experiments.robot.libero.tasks.sweep_l3a1_corner_geometry import (
-    FRONT_BOARD_SIGNATURE,
-    INNER_FRONT_BOARD_SIGNATURE,
-    RIGHT_SIDE_SIGNATURE,
     HEIGHT_DROP_THRESHOLD_M,
     MAX_OPEN_ANGULAR_SPEED_RAD_S,
     MAX_OPEN_ATTITUDE_CHANGE_DEG,
@@ -472,7 +471,7 @@ def _edge_counterfactual(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bddl", default=DEFAULT_BDDL)
+    parser.add_argument("--bddl", required=True)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--settle_steps", type=int, default=SETTLE_STEPS)
     parser.add_argument("--hold_steps", type=int, default=800)

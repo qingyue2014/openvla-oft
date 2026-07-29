@@ -26,13 +26,15 @@ from experiments.robot.libero.tasks.generate_l2b1_stove_initial_states import (
     _body_pos,
     _find_body,
 )
-from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states import (
+from experiments.robot.libero.tasks.l3a1_native_geometry import (
     BOTTLE_BODY,
-    DEFAULT_BDDL,
     DRAWER_BODY_CANDIDATES,
     DRAWER_JOINT_CANDIDATES,
+    FRONT_BOARD_SIGNATURE,
+    INNER_FRONT_BOARD_SIGNATURE,
     L3A1_DISPLACEMENT_THRESHOLD,
     L3A1_TILT_CHANGE_THRESHOLD_DEG,
+    RIGHT_SIDE_SIGNATURE,
     SETTLE_STEPS,
     _axis_change_deg,
     _body_rotation,
@@ -47,22 +49,6 @@ from experiments.robot.libero.tasks.generate_l3a1_drawer_bottle_initial_states i
 )
 from experiments.robot.libero.tasks.l3a1_replay import clear_mujoco_replay_transients
 
-
-FRONT_BOARD_SIGNATURE = {
-    "pos": [0.00334, -0.07524, 0.04476],
-    "quat": [0.5, 0.5, -0.5, -0.5],
-    "size": [0.00271, 0.03427, 0.10934],
-}
-INNER_FRONT_BOARD_SIGNATURE = {
-    "pos": [0.00334, -0.06839, 0.04525],
-    "quat": [0.5, 0.5, 0.5, 0.5],
-    "size": [0.00356, 0.03214, 0.10679],
-}
-RIGHT_SIDE_SIGNATURE = {
-    "pos": [0.10894, 0.01105, 0.04525],
-    "quat": [0.70711, 0.70711, -0.00115, -0.00115],
-    "size": [0.00241, 0.03133, 0.08148],
-}
 
 # The side panel begins at local y ~= -0.07043; the inward face of the front
 # board is at y ~= -0.07253.  Their 2.1 mm overlap/gap approximation defines
@@ -355,7 +341,7 @@ def _candidate_grid() -> list[tuple[float, float, float, float]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bddl", default=DEFAULT_BDDL)
+    parser.add_argument("--bddl", required=True)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--settle_steps", type=int, default=SETTLE_STEPS)
     parser.add_argument("--hold_steps", type=int, default=200)

@@ -29,6 +29,30 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    ("l3a1", "v2_native_edge_sweep"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a1_v2_native.sh",
+            "edge_sweep",
+        ),
+        artifacts=(
+            "experiments/logs/l3a1_v2_native_preflight.md",
+            "experiments/logs/l3a1_v2_edge_sweep.md",
+            "experiments/logs/l3a1_v2_edge_sweep.csv",
+            "experiments/logs/l3a1_v2_edge_contacts.csv",
+        ),
+    ),
+    ("l3a1", "v2_native_edge_preview"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a1_v2_native.sh",
+            "edge_preview",
+        ),
+        artifacts=(
+            "experiments/logs/l3a1_v2_native_preflight.md",
+            "experiments/logs/l3a1_v2_edge_preview",
+        ),
+    ),
     ("l3a1", "check"): PhaseSpec(
         command=("bash", "experiments/robot/libero/tasks/run_l3a1_drawer_bottle.sh", "all", "prepare"),
         count_env="NUM_TRIALS",
