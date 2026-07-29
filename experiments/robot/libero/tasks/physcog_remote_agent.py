@@ -888,6 +888,44 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/result_tables.md",
         ),
     ),
+    # Replacement L1-A4: native libero_spatial task 0. The target is the
+    # native black bowl between the native plate and ramekin; no custom assets,
+    # BDDL, or prompt are permitted.
+    ("l1a4s", "check"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4_spatial.sh",
+            "check",
+        ),
+        count_env="NUM_STATES",
+        artifacts=(
+            "experiments/logs/l1a4_spatial_native_preflight.md",
+            "experiments/robot/libero/tasks/l1a4_spatial_native_preflight.json",
+            "experiments/robot/libero/tasks/l1a4_spatial_pairing.json",
+            "experiments/robot/libero/tasks/l1a4_spatial_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1a4_spatial_er_states.hdf5",
+            "experiments/robot/libero/tasks/l1a4_spatial_ec_states.hdf5",
+            "experiments/robot/libero/tasks/l1a4_spatial_preview",
+        ),
+    ),
+    ("l1a4s", "eb_capability_pi05"): PhaseSpec(
+        command=(
+            "env",
+            "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=none",
+            "SAVE_TRAJECTORY=True",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4_spatial_pi05.sh",
+        ),
+        count_env="EB_CAPABILITY_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a4_spatial_pi05_server.log",
+            "rollouts/libero_spatial/L1-A4-between-eb-native-pi05",
+        ),
+    ),
     ("l1a4", "check"): PhaseSpec(
         command=(
             "bash",

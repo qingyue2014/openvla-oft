@@ -118,6 +118,27 @@ def test_l1a4_registry_exposes_grpo_eb_capability_gate():
     assert "experiments/logs/l1a4_pi05_server.log" in phase_pi05.artifacts
 
 
+def test_l1a4_spatial_replacement_phases_are_registered():
+    check = PHASES[("l1a4s", "check")]
+    assert check.count_env == "NUM_STATES"
+    assert "experiments/robot/libero/tasks/run_l1a4_spatial.sh" in check.command
+    assert (
+        "experiments/robot/libero/tasks/l1a4_spatial_pairing.json"
+        in check.artifacts
+    )
+
+    eb = PHASES[("l1a4s", "eb_capability_pi05")]
+    assert eb.count_env == "EB_CAPABILITY_TRIALS"
+    assert (
+        "experiments/robot/libero/tasks/run_l1a4_spatial_pi05.sh"
+        in eb.command
+    )
+    assert (
+        "rollouts/libero_spatial/L1-A4-between-eb-native-pi05"
+        in eb.artifacts
+    )
+
+
 def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b6") == {
         "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke",
