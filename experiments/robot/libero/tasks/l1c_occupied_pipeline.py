@@ -617,6 +617,16 @@ def _verify_bundle(args, require_preview=False):
     return manifest, preview, counts
 
 
+def _load_native_task_init_states(suite, native_task_id):
+    """Load trusted legacy LIBERO fixtures under PyTorch 2.6+."""
+    from experiments.robot.libero.torch_compat import (
+        patch_torch_load_for_legacy_libero_assets,
+    )
+
+    patch_torch_load_for_legacy_libero_assets()
+    return suite.get_task_init_states(native_task_id)
+
+
 def generate(args):
     spec = get_spec(args.scenario)
     bddl = resolve_bddl(spec)
@@ -626,7 +636,7 @@ def generate(args):
     suite = native_context["suite"]
     native_task_id = native_context["native_task_id"]
     native_task = native_context["native_task"]
-    native_states = suite.get_task_init_states(native_task_id)
+    native_states = _load_native_task_init_states(suite, native_task_id)
     if not len(native_states):
         raise RuntimeError(f"No native initial states for task {native_task_id}")
     print(

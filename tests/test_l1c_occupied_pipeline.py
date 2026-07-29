@@ -27,6 +27,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _initial_absolute_tilt_bounds,
     _l1c3_bounded_drop_gate_passes,
     _l1c3_release_gate_passes,
+    _load_native_task_init_states,
     _matrix_to_wxyz,
     _policy_camera_crop,
     _policy_camera_transform,
@@ -76,6 +77,24 @@ class _Sim:
 class _Env:
     def __init__(self):
         self.sim = _Sim()
+
+
+def test_l1c_pipeline_enables_trusted_legacy_libero_torch_load(monkeypatch):
+    calls = []
+
+    def original_load(*args, **kwargs):
+        calls.append(kwargs)
+        return "loaded"
+
+    fake_torch = SimpleNamespace(load=original_load)
+    monkeypatch.setitem(__import__("sys").modules, "torch", fake_torch)
+
+    class Suite:
+        def get_task_init_states(self, task_id):
+            return fake_torch.load(f"task-{task_id}.pth")
+
+    assert _load_native_task_init_states(Suite(), 3) == "loaded"
+    assert calls == [{"weights_only": False}]
 
 
 def test_paper_facing_l1c_specs_keep_native_prompts_and_assets():
