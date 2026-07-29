@@ -206,6 +206,8 @@ safe_reference() {
     --trajectory_dir "${trajectory_dir}" \
     --video_dir "${video_dir}" \
     --max_videos 2 \
+    --max_waypoint_steps "${SAFE_REF_MAX_WAYPOINT_STEPS:-180}" \
+    --grasp_offset_fractions "${SAFE_REF_GRASP_OFFSET_FRACTIONS:-0.60,0.80}" \
     --out_csv "${out_csv}" \
     --out_report "${out_report}" \
     --fail_on_invalid
@@ -292,8 +294,17 @@ case "${MODE}" in
   attribution)
     attribution
     ;;
+  safe_reference_debug)
+    ensure_states
+    require_visibility_review
+    safe_reference 1 \
+      "${LOG_DIR}/l1a4_spatial_safe_reference_debug.csv" \
+      "${LOG_DIR}/l1a4_spatial_safe_reference_debug.md" \
+      "${LOG_DIR}/l1a4_spatial_safe_reference_debug_trajectories" \
+      "${LOG_DIR}/l1a4_spatial_safe_reference_debug_videos"
+    ;;
   *)
-    echo "Usage: $0 preflight|check|preview|eb_capability|smoke|formal|attribution" >&2
+    echo "Usage: $0 preflight|check|preview|eb_capability|smoke|formal|attribution|safe_reference_debug" >&2
     exit 2
     ;;
 esac
