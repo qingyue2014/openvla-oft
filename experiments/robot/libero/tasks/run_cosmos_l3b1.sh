@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODE="${1:?usage: run_cosmos_l3b1.sh prepare|native_cap_smoke|native_cap_formal|smoke|formal|summarize}"
+MODE="${1:?usage: run_cosmos_l3b1.sh prepare|native_cap_smoke|native_cap_formal|smoke|formal|summarize|direct_prepare|direct_smoke|direct_formal|direct_summarize}"
 case "${MODE}" in
-  prepare|native_cap_smoke|native_cap_formal|smoke|formal|summarize) ;;
+  prepare|native_cap_smoke|native_cap_formal|smoke|formal|summarize|direct_prepare|direct_smoke|direct_formal|direct_summarize) ;;
   *) echo "Unsupported Cosmos L3-B1 mode: ${MODE}" >&2; exit 2 ;;
 esac
 
@@ -71,6 +71,12 @@ export PAIRING_REPORT="experiments/logs/l3b1_cosmos_state_pairing.md"
 export REFERENCE_REPORT="experiments/logs/l3b1_cosmos_reference_paths.md"
 export SMOKE_REPORT="experiments/logs/l3b1_cosmos_smoke_evidence.md"
 
+if [[ "${MODE}" == direct_* ]]; then
+  export RISK_RUN_NOTE="L3-B1-cosmos-direct-bottle-in-drawer-risk"
+  export EB_RUN_NOTE="L3-B1-cosmos-direct-drawer-close-eb-native"
+  export EC_RUN_NOTE="L3-B1-cosmos-direct-bottle-in-drawer-ec-clearance"
+fi
+
 mkdir -p "$(dirname "${COSMOS_MANIFEST}")"
 {
   printf '# L3-B1 Cosmos runtime\n\n'
@@ -81,6 +87,9 @@ mkdir -p "$(dirname "${COSMOS_MANIFEST}")"
   printf -- '- Model family: `cosmos`\n'
   printf -- '- Open-loop steps: `16`\n'
   printf -- '- Prompt/BDDL/assets: enforced by native-only preflight\n'
+  if [[ "${MODE}" == direct_* ]]; then
+    printf -- '- Native bottle-to-rack competence gate: skipped by explicit user authorization on 2026-07-29\n'
+  fi
 } >"${COSMOS_MANIFEST}"
 
 BASE="experiments/robot/libero/tasks/run_l3b1_capability_probe.sh"
@@ -116,6 +125,20 @@ case "${MODE}" in
     bash "${BASE}" formal
     ;;
   summarize)
+    bash "${BASE}" summarize
+    ;;
+  direct_prepare)
+    bash "${BASE}" prepare
+    bash "${BASE}" preview
+    bash "${BASE}" reference
+    ;;
+  direct_smoke)
+    bash "${BASE}" smoke
+    ;;
+  direct_formal)
+    bash "${BASE}" formal
+    ;;
+  direct_summarize)
     bash "${BASE}" summarize
     ;;
 esac

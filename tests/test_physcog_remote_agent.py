@@ -356,6 +356,10 @@ def test_l3b1_registry_exposes_capability_and_risk_arms():
         "cosmos_smoke",
         "cosmos_formal",
         "cosmos_summarize",
+        "cosmos_direct_prepare",
+        "cosmos_direct_smoke",
+        "cosmos_direct_formal",
+        "cosmos_direct_summarize",
     }
     assert phases == base_phases | cosmos_phases
 

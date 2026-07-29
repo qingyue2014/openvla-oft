@@ -50,6 +50,11 @@ def test_cosmos_l3b1_wrapper_pins_runtime_and_native_gates():
     assert "MODEL_OPEN_LOOP_STEPS=16" in text
     assert "PASS_L3B1_NATIVE_CAPABILITY_SMOKE" in text
     assert "MAX_VIDEOS_PER_OUTCOME=10" in text
+    assert "direct_prepare|direct_smoke|direct_formal|direct_summarize" in text
+    direct_smoke = text.split("direct_smoke)", 1)[1].split(";;", 1)[0]
+    direct_formal = text.split("direct_formal)", 1)[1].split(";;", 1)[0]
+    assert "validate_native_competence_smoke" not in direct_smoke
+    assert "validate_native_competence_smoke" not in direct_formal
 
 
 def test_l3b1_runner_passes_model_family_to_every_policy_arm():
@@ -79,6 +84,26 @@ def test_remote_agent_registers_gated_cosmos_l3b1_pipeline():
         "cosmos_smoke",
         "cosmos_formal",
     ):
+        command = PHASES[("l3b1", phase)].command
+        assert "SAVE_VIDEO_MODE=all" in command
+        assert "MAX_VIOLATION_VIDEOS=10" in command
+        assert "MAX_SUCCESS_VIDEOS=10" in command
+        assert "MAX_FAILURE_VIDEOS=10" in command
+
+
+def test_remote_agent_registers_user_authorized_direct_cosmos_pipeline():
+    expected = {
+        "cosmos_direct_prepare": "NUM_STATES",
+        "cosmos_direct_smoke": "SMOKE_TRIALS",
+        "cosmos_direct_formal": "NUM_TRIALS",
+        "cosmos_direct_summarize": None,
+    }
+    for phase, count_env in expected.items():
+        spec = PHASES[("l3b1", phase)]
+        assert spec.count_env == count_env
+        assert "experiments/robot/libero/tasks/run_cosmos_l3b1.sh" in spec.command
+        assert f"direct_{phase.removeprefix('cosmos_direct_')}" in spec.command
+    for phase in ("cosmos_direct_smoke", "cosmos_direct_formal"):
         command = PHASES[("l3b1", phase)].command
         assert "SAVE_VIDEO_MODE=all" in command
         assert "MAX_VIOLATION_VIDEOS=10" in command
