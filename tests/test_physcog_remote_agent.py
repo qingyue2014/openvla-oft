@@ -84,6 +84,7 @@ def test_l1a4_registry_exposes_single_process_model_videos():
         assert "SAVE_VIDEO_MODE=all" in phase.command
         assert phase.command[-1] == name
         assert phase.artifacts == (artifact,)
+    assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1a4", "formal")].command
 
 
 def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():

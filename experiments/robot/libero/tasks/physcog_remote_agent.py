@@ -1009,6 +1009,10 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1a4", "formal"): PhaseSpec(
         command=(
             "env",
+            # Explicitly bind MuJoCo EGL to the second allocated GPU. Leaving
+            # this unset reproducibly aborts in read_pixels at episode two on
+            # the current Superpod nodes.
+            "RENDER_GPU_DEVICE_ID=1",
             "SAVE_VIDEO_MODE=none",
             "bash",
             "experiments/robot/libero/tasks/run_l1a4.sh",
