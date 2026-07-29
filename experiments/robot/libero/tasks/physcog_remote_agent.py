@@ -995,6 +995,23 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_90/L1-A4-middle-bowl-eb-native-vqvla-capability",
         ),
     ),
+    ("l1a4", "eb_capability_pi05"): PhaseSpec(
+        command=(
+            "env",
+            "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=none",
+            "SAVE_TRAJECTORY=True",
+            "EB_CAPABILITY_NOTE_SUFFIX=pi05-capability",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4_pi05_capability.sh",
+        ),
+        count_env="EB_CAPABILITY_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a4_pi05_server.log",
+            "rollouts/libero_90/L1-A4-middle-bowl-eb-native-pi05-capability",
+        ),
+    ),
     ("l1a4", "eb_video"): PhaseSpec(
         command=(
             "env",

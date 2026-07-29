@@ -111,6 +111,11 @@ def test_l1a4_registry_exposes_grpo_eb_capability_gate():
     assert "DO_SAMPLE=False" in phase_vq.command
     assert "EB_CAPABILITY_NOTE_SUFFIX=vqvla-capability" in phase_vq.command
     assert phase_vq.command[-1] == "eb_capability"
+    phase_pi05 = PHASES[("l1a4", "eb_capability_pi05")]
+    assert phase_pi05.count_env == "EB_CAPABILITY_TRIALS"
+    assert "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616" in phase_pi05.command
+    assert "experiments/robot/libero/tasks/run_l1a4_pi05_capability.sh" in phase_pi05.command
+    assert "experiments/logs/l1a4_pi05_server.log" in phase_pi05.artifacts
 
 
 def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
