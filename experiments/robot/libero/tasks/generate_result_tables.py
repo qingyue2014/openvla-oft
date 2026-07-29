@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from experiments.robot.libero.tasks.record_experiment_results import collect_records
+from experiments.robot.libero.tasks.record_experiment_results import collect_records, load_records_csv
 from experiments.robot.libero.tasks.physcog_stats import (
     format_p,
     format_rate_ci,
@@ -429,13 +429,13 @@ def _table5(scenario_rows: List[Dict[str, object]]) -> List[str]:
     return lines
 
 
-def generate_tables(
-    log_dir: Path,
+def generate_tables_from_records(
+    records: List[Dict[str, object]],
+    source: str,
     default_model: str = "",
     pool_mode: str = "latest",
     pool_since: str = "",
 ) -> str:
-    records = collect_records(log_dir)
     scenario_rows = _build_scenario_rows(
         records, default_model=default_model, pool_mode=pool_mode, pool_since=pool_since
     )
@@ -444,7 +444,7 @@ def generate_tables(
         "",
         f"Generated: {datetime.now():%Y-%m-%d %H:%M:%S}",
         "",
-        "Source: parsed from `experiments/logs/EVAL-*.txt` and `experiments/logs/*attribution*.md`.",
+        f"Source: {source}.",
         "",
         "Aggregation: macro-average across scenario families unless otherwise noted.",
         "",
@@ -460,9 +460,27 @@ def generate_tables(
     return "\n".join(lines)
 
 
+def generate_tables(
+    log_dir: Path,
+    default_model: str = "",
+    pool_mode: str = "latest",
+    pool_since: str = "",
+) -> str:
+    return generate_tables_from_records(
+        collect_records(log_dir),
+        "parsed from `experiments/logs/EVAL-*.txt` and "
+        "`experiments/logs/*attribution*.md`",
+        default_model=default_model,
+        pool_mode=pool_mode,
+        pool_since=pool_since,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate filled PhysCog result tables")
     parser.add_argument("--log_dir", default="experiments/logs")
+    parser.add_argument("--records", default="",
+                        help="Archived experiment_records.csv to use instead of reparsing logs")
     parser.add_argument("--out", default="experiments/logs/result_tables.md")
     parser.add_argument("--default_model", default="",
                         help="Model name used for attribution reports when it cannot be inferred automatically")
@@ -474,17 +492,30 @@ def main() -> None:
                              "use with --pool_mode all so stale design-iteration runs are excluded")
     args = parser.parse_args()
 
-    log_dir = Path(args.log_dir)
-    if not log_dir.exists():
-        raise SystemExit(f"log_dir not found: {log_dir}")
+    records_path = Path(args.records) if args.records else None
+    if records_path:
+        if not records_path.is_file():
+            raise SystemExit(f"records file not found: {records_path}")
+        table_text = generate_tables_from_records(
+            load_records_csv(records_path),
+            f"loaded from archived `{records_path.name}`",
+            default_model=args.default_model,
+            pool_mode=args.pool_mode,
+            pool_since=args.pool_since,
+        )
+    else:
+        log_dir = Path(args.log_dir)
+        if not log_dir.exists():
+            raise SystemExit(f"log_dir not found: {log_dir}")
+        table_text = generate_tables(
+            log_dir,
+            default_model=args.default_model,
+            pool_mode=args.pool_mode,
+            pool_since=args.pool_since,
+        )
     output = Path(args.out)
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(generate_tables(
-        log_dir,
-        default_model=args.default_model,
-        pool_mode=args.pool_mode,
-        pool_since=args.pool_since,
-    ))
+    output.write_text(table_text)
     print(f"Wrote filled result tables to {output}")
 
 

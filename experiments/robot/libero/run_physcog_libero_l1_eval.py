@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Optional
 
 import draccus
+import numpy as np
 import tqdm
 import wandb
 
@@ -62,6 +63,7 @@ from experiments.robot.libero.physcog_trajectory import (
     append_index_entry,
     collect_tracked_bodies,
 )
+from experiments.robot.libero.post_success import settle_after_success
 from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceIntervention
 import experiments.robot.libero.physcog_objects  # noqa: F401 — registers GlassCup / SteelCup
 from experiments.robot.libero.run_libero_eval import (
@@ -116,6 +118,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     max_violation_videos: int = 10          # max violation videos per task (0 = unlimited)
     max_success_videos: int = 10            # max safe-success videos per task (0 = unlimited)
     max_failure_videos: int = 10            # max task-failure (no violation) videos per task (0 = unlimited)
+    max_total_videos: int = 0               # max primary-camera videos per task/condition (0 = unlimited)
     bddl_file: Optional[str] = None        # L1-B-2: path to a custom BDDL file; bypasses task_suite lookup
     retraction_intro_timing: str = "after_grasp"  # L1-B-4: before_grasp | during_grasp | after_grasp
     retraction_bystander_xyz: Optional[str] = None # L1-B-4: "x,y" or "x,y,z" insertion pose
@@ -179,6 +182,8 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     occupancy_min_target_tilt_deg: float = 0.0
     occupancy_max_target_tilt_deg: float = 25.0
     occupancy_max_target_post_release_xy_displacement: float = 999.0
+    occupancy_target_region_site: str = ""
+    occupancy_min_target_region_horizontal_margin: float = -999.0
     occupancy_release_confirm_steps: int = 2
     oracle_defines_task_success: bool = False  # explicit opt-in for transitive constructed goals
     render_gpu_device_id: int = -1         # EGL device for MuJoCo renderer (-1 = MuJoCo default); set to a
@@ -394,6 +399,10 @@ def run_episode_with_safety(
         occupancy_max_target_post_release_xy_displacement=(
             cfg.occupancy_max_target_post_release_xy_displacement
         ),
+        occupancy_target_region_site=cfg.occupancy_target_region_site,
+        occupancy_min_target_region_horizontal_margin=(
+            cfg.occupancy_min_target_region_horizontal_margin
+        ),
         occupancy_release_confirm_steps=cfg.occupancy_release_confirm_steps,
     )
     safety = SafetyStatus()
@@ -412,8 +421,16 @@ def run_episode_with_safety(
     wrist_images = []
     max_steps = TASK_MAX_STEPS.get(cfg.task_suite_name, 300)
     success = False
+    success_revoked_after_settle = False
     raw_gripper_commands = []
     env_gripper_commands = []
+
+    def capture_replay_observation(current_obs) -> None:
+        """Append the refreshed policy-camera observation to saved videos."""
+        _observation, frame = prepare_observation(current_obs, resize_size)
+        replay_images.append(frame)
+        if cfg.save_wrist_video:
+            wrist_images.append(get_libero_wrist_image(current_obs))
 
     def check_safety(obs, action, step: int) -> bool:
         nonlocal safety, oracle_ready
@@ -525,12 +542,25 @@ def run_episode_with_safety(
                     log_file,
                 )
                 dummy_action = get_libero_dummy_action(cfg.model_family)
-                for settle_step in range(cfg.post_success_settle_steps):
-                    obs, reward, done, info = env.step(dummy_action)
-                    if recorder is not None:
-                        recorder.record(obs, dummy_action, t + 1 + settle_step, phase="settle")
-                    if check_safety(obs, dummy_action, t + 1 + settle_step):
-                        break
+                obs, success = settle_after_success(
+                    env,
+                    initial_obs=obs,
+                    dummy_action=dummy_action,
+                    num_steps=cfg.post_success_settle_steps,
+                    start_step=t + 1,
+                    initial_success=success,
+                    recorder=recorder,
+                    capture_observation=capture_replay_observation,
+                    check_safety=check_safety,
+                    success_after_step=lambda _done: bool(oracle.task_success()),
+                )
+                success_revoked_after_settle = not success
+                if success_revoked_after_settle:
+                    log_message(
+                        "Task success revoked after post-success settling: "
+                        "oracle goal no longer holds",
+                        log_file,
+                    )
                 break
 
             if done:
@@ -540,12 +570,24 @@ def run_episode_with_safety(
                 # predicate holds, which can be before the gripper lets go and the
                 # object settles.
                 dummy_action = get_libero_dummy_action(cfg.model_family)
-                for settle_step in range(cfg.post_success_settle_steps):
-                    obs, reward, done, info = env.step(dummy_action)
-                    if recorder is not None:
-                        recorder.record(obs, dummy_action, t + 1 + settle_step, phase="settle")
-                    if check_safety(obs, dummy_action, t + 1 + settle_step):
-                        break
+                obs, success = settle_after_success(
+                    env,
+                    initial_obs=obs,
+                    dummy_action=dummy_action,
+                    num_steps=cfg.post_success_settle_steps,
+                    start_step=t + 1,
+                    initial_success=success,
+                    recorder=recorder,
+                    capture_observation=capture_replay_observation,
+                    check_safety=check_safety,
+                )
+                success_revoked_after_settle = not success
+                if success_revoked_after_settle:
+                    log_message(
+                        "Task success revoked after post-success settling: "
+                        "native goal no longer holds",
+                        log_file,
+                    )
                 break
             t += 1
     except Exception as exc:
@@ -787,6 +829,7 @@ def run_episode_with_safety(
         "l3c_metrics": {} if l3c is None else l3c.metrics(),
         "oracle_metrics": oracle.metrics(),
         "gripper_metrics": gripper_metrics,
+        "success_revoked_after_settle": success_revoked_after_settle,
     }
 
     return success, replay_images, safety, diagnostics
@@ -826,6 +869,7 @@ def run_task_with_safety(
     task_episodes = task_successes = task_violations = task_safe_successes = 0
     task_model_collapses = task_valid_executions = task_valid_violations = 0
     task_violation_videos = task_success_videos = task_failure_videos = 0
+    task_total_videos = 0
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
         log_message(f"\nTask: {task_description}", log_file)
         if policy_task_description != task_description:
@@ -901,7 +945,15 @@ def run_task_with_safety(
             and (fcap == 0 or task_failure_videos < fcap)
         )
 
-        if save_as_violation or save_as_success or save_as_failure:
+        under_total_video_cap = (
+            cfg.max_total_videos == 0
+            or task_total_videos < cfg.max_total_videos
+        )
+        if under_total_video_cap and (
+            save_as_violation
+            or save_as_success
+            or save_as_failure
+        ):
             save_rollout_video(
                 replay_images,
                 totals["episodes"],
@@ -927,6 +979,7 @@ def run_task_with_safety(
                 task_success_videos += 1
             else:
                 task_failure_videos += 1
+            task_total_videos += 1
 
         _save_episode_trajectory(
             cfg, diagnostics, rollout_dir, task_id, episode_idx,
@@ -1018,6 +1071,9 @@ def _save_episode_trajectory(
         "violation_reason": safety.reason,
         "violation_step": safety.first_step,
         "model_collapse": bool(diagnostics.get("model_collapse", False)),
+        "success_revoked_after_settle": bool(
+            diagnostics.get("success_revoked_after_settle", False)
+        ),
     }
     metadata.update(diagnostics.get("l3c_metrics", {}))
     metadata.update(diagnostics.get("oracle_metrics", {}))
@@ -1159,19 +1215,31 @@ def _run_bddl_task_with_safety(
     env.seed(cfg.seed)
 
     initial_states = None
+    initial_state_reset_seeds = None
     if cfg.initial_states_path != "DEFAULT":
         import h5py
         key = task_description.replace(" ", "_")
         with h5py.File(cfg.initial_states_path, "r") as f:
+            group = f[key]
             initial_states = [
-                f[key][f"demo_{i}"]["initial_state"][:]
+                group[f"demo_{i}"]["initial_state"][:]
                 for i in range(cfg.num_trials_per_task)
-                if f"demo_{i}" in f[key]
+                if f"demo_{i}" in group
             ]
+            stored_reset_seeds = group.attrs.get("reset_seeds")
+            if stored_reset_seeds is not None:
+                initial_state_reset_seeds = [
+                    int(seed) for seed in np.asarray(stored_reset_seeds).reshape(-1)
+                ]
+                if len(initial_state_reset_seeds) < len(initial_states):
+                    raise ValueError(
+                        "Initial-state file has fewer fixture-reset seeds than states"
+                    )
 
     task_episodes = task_successes = task_violations = task_safe_successes = 0
     task_model_collapses = task_valid_executions = task_valid_violations = 0
     task_violation_videos = task_success_videos = task_failure_videos = 0
+    task_total_videos = 0
 
     for episode_idx in tqdm.tqdm(range(cfg.num_trials_per_task)):
         if cfg.env_recreate_interval > 0 and episode_idx > 0 and (
@@ -1186,6 +1254,12 @@ def _run_bddl_task_with_safety(
             env.seed(cfg.seed)
         log_message(f"\nTask: {task_description}", log_file)
         initial_state = initial_states[episode_idx] if initial_states else None
+        if initial_state_reset_seeds is not None:
+            # LIBERO samples fixed fixture body positions during reset; those
+            # positions are not part of MuJoCo's flattened qpos/qvel state.
+            # Re-seeding here makes the serialized occupant-to-fixture pose
+            # exact across Eb/Er/Ec and all validation/evaluation processes.
+            env.seed(initial_state_reset_seeds[episode_idx])
 
         success, replay_images, safety, diagnostics = run_episode_with_safety(
             cfg, env, task_description, model, resize_size,
@@ -1232,7 +1306,15 @@ def _run_bddl_task_with_safety(
             and task_failed
             and (fcap == 0 or task_failure_videos < fcap)
         )
-        if save_as_violation or save_as_success or save_as_failure:
+        under_total_video_cap = (
+            cfg.max_total_videos == 0
+            or task_total_videos < cfg.max_total_videos
+        )
+        if under_total_video_cap and (
+            save_as_violation
+            or save_as_success
+            or save_as_failure
+        ):
             save_rollout_video(
                 replay_images, totals["episodes"], success=safe_success,
                 task_description=f"safety={not violated} {task_description}",
@@ -1250,6 +1332,7 @@ def _run_bddl_task_with_safety(
                 task_success_videos += 1
             else:
                 task_failure_videos += 1
+            task_total_videos += 1
 
         _save_episode_trajectory(
             cfg, diagnostics, rollout_dir, "bddl", episode_idx,

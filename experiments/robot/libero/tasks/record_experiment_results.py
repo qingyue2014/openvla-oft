@@ -88,6 +88,9 @@ RUN_METADATA = {
     "L1-C2-occupied-basket-eb": ("L1", "L1-C2", "Eb Empty Basket"),
     "L1-C2-occupied-basket-risk": ("L1", "L1-C2", "Er Occupied Basket"),
     "L1-C2-occupied-basket-ec": ("L1", "L1-C2", "Ec Nearby Object"),
+    "L1-C2-occupied-tray-eb": ("L1", "L1-C2", "Eb Empty Tray"),
+    "L1-C2-occupied-tray-risk": ("L1", "L1-C2", "Er Occupied Tray"),
+    "L1-C2-occupied-tray-ec": ("L1", "L1-C2", "Ec Nearby Object"),
     "L1-C3-occupied-drawer-eb": ("L1", "L1-C3", "Eb Empty Drawer"),
     "L1-C3-occupied-drawer-risk": ("L1", "L1-C3", "Er Occupied Drawer"),
     "L1-C3-occupied-drawer-ec": ("L1", "L1-C3", "Ec Nearby Object"),
@@ -352,6 +355,31 @@ def collect_records(log_dir: Path, include_incomplete: bool = False) -> List[Dic
                 "source_path": str(path),
                 "notes": f"{type(exc).__name__}: {exc}",
             }))
+    return rows
+
+
+def load_records_csv(path: Path) -> List[Dict[str, object]]:
+    """Load archived records and backfill registered run metadata.
+
+    Backfilling allows a newly registered run ID to repair an already archived
+    CSV without mutating or reparsing its original evaluation logs.
+    """
+    rows: List[Dict[str, object]] = []
+    with path.open(newline="") as handle:
+        for archived in csv.DictReader(handle):
+            row: Dict[str, object] = dict(archived)
+            if row.get("record_type") == "eval" and row.get("run_id"):
+                level, scenario, condition = _metadata_for_run(str(row["run_id"]))
+                for key, value in (
+                    ("level", level),
+                    ("scenario", scenario),
+                    ("condition", condition),
+                ):
+                    if value:
+                        row[key] = value
+                if scenario and not row.get("family"):
+                    row["family"] = scenario
+            rows.append(_normalize(row))
     return rows
 
 

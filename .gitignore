@@ -154,5 +154,7 @@ wandb/
 
 # Local PhysCog debug artifacts
 .physcog-agent/
+# Stable local archives of fetched formal reports and rollout videos.
+artifacts/
 experiments/robot/libero/tasks/l1b2_task6_debug/
 experiments/robot/libero/tasks/l1b2_*_initial_states.hdf5

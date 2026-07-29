@@ -4,7 +4,7 @@ set -euo pipefail
 SCENARIO="${1:-}"
 MODE="${2:-}"
 if [[ ! "${SCENARIO}" =~ ^l1c[234]$ ]] || [[ -z "${MODE}" ]]; then
-  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|preview|screen_occupants|calibrate|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
+  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|native_preflight|preview|verify|validate_layout|screen_occupants|calibrate|competence|policy_probe|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
   exit 2
 fi
 
@@ -22,15 +22,34 @@ EB_STATES="${EB_STATES:-${STATE_DIR}/${SCENARIO}_eb_states.hdf5}"
 ER_STATES="${ER_STATES:-${STATE_DIR}/${SCENARIO}_er_states.hdf5}"
 EC_STATES="${EC_STATES:-${STATE_DIR}/${SCENARIO}_ec_states.hdf5}"
 SOURCE_INDICES="${SOURCE_INDICES:-${STATE_DIR}/${SCENARIO}_source_indices.json}"
+STATE_BUNDLE_MANIFEST="${STATE_BUNDLE_MANIFEST:-${STATE_DIR}/${SCENARIO}_state_bundle.json}"
 PREVIEW_DIR="${PREVIEW_DIR:-${STATE_DIR}/${SCENARIO}_preview}"
+PREVIEW_MANIFEST="${PREVIEW_MANIFEST:-${PREVIEW_DIR}/manifest.json}"
 
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 CALIBRATION_NUM_STATES="${CALIBRATION_NUM_STATES:-8}"
-# The moojink release has suite checkpoints for spatial/object/goal/10, but no
-# `...-libero-90` repository.  Use the public LIBERO-90 SFT checkpoint already
-# supported by this repository's RLinf compatibility loader.
-CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
+if [[ "${SCENARIO}" == "l1c2" || "${SCENARIO}" == "l1c3" ]]; then
+  # Fixed Eb competence probes rejected the deterministic LIBERO-90 base
+  # checkpoint (L1-C2: 7/50; L1-C3: 0/8). Use RLinf's official RL-trained
+  # all-task LIBERO-130 checkpoint with the same published sampling settings;
+  # keep the seed identical across Eb/Er/Ec for paired attribution.
+  DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-LIBERO-130"
+  DEFAULT_DO_SAMPLE="true"
+  DEFAULT_TEMPERATURE="1.6"
+  DEFAULT_UNNORM_KEY="libero_130_no_noops_trajall"
+else
+  DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora"
+  DEFAULT_DO_SAMPLE="false"
+  DEFAULT_TEMPERATURE="1.0"
+  DEFAULT_UNNORM_KEY=""
+fi
+CHECKPOINT="${CHECKPOINT:-${DEFAULT_CHECKPOINT}}"
+DO_SAMPLE="${DO_SAMPLE:-${DEFAULT_DO_SAMPLE}}"
+TEMPERATURE="${TEMPERATURE:-${DEFAULT_TEMPERATURE}}"
+TOP_P="${TOP_P:-1.0}"
+UNNORM_KEY="${UNNORM_KEY:-${DEFAULT_UNNORM_KEY}}"
+MODEL_SEED="${MODEL_SEED:-7}"
 MODEL_FAMILY="${MODEL_FAMILY:-openvla}"
 PI05_HOST="${PI05_HOST:-127.0.0.1}"
 PI05_PORT="${PI05_PORT:-8000}"
@@ -39,6 +58,7 @@ PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-1800}"
 MODEL_OPEN_LOOP_STEPS="${MODEL_OPEN_LOOP_STEPS:-8}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
+MAX_VIDEOS_PER_CONDITION="${MAX_VIDEOS_PER_CONDITION:-0}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
 
@@ -76,14 +96,21 @@ EC_TRAJ="rollouts/libero_90/${EC_NOTE}/trajectories"
 CALIBRATION_CSV="${LOG_DIR}/${SCENARIO}_calibration.csv"
 CALIBRATION_REPORT="${LOG_DIR}/${SCENARIO}_calibration.md"
 SAFE_REFERENCE_CSV="${LOG_DIR}/${SCENARIO}_safe_reference.csv"
+SAFE_REFERENCE_ATTEMPTS_CSV="${LOG_DIR}/${SCENARIO}_safe_reference_attempts.csv"
 SAFE_REFERENCE_REPORT="${LOG_DIR}/${SCENARIO}_safe_reference.md"
 SAFE_REFERENCE_TRAJ="${LOG_DIR}/${SCENARIO}_safe_reference_trajectories"
+SAFE_REFERENCE_VIDEOS="${LOG_DIR}/${SCENARIO}_safe_reference_videos"
+EB_COMPETENCE_CSV="${LOG_DIR}/${SCENARIO}_eb_competence.csv"
+EB_COMPETENCE_REPORT="${LOG_DIR}/${SCENARIO}_eb_competence.md"
 ER_REPLAY_CSV="${LOG_DIR}/${SCENARIO}_eb_to_er_replay.csv"
 ER_REPLAY_REPORT="${LOG_DIR}/${SCENARIO}_eb_to_er_replay.md"
 EC_REPLAY_CSV="${LOG_DIR}/${SCENARIO}_eb_to_ec_replay.csv"
 EC_REPLAY_REPORT="${LOG_DIR}/${SCENARIO}_eb_to_ec_replay.md"
 ATTRIBUTION_CSV="${LOG_DIR}/${SCENARIO}_attribution.csv"
 ATTRIBUTION_REPORT="${LOG_DIR}/${SCENARIO}_attribution.md"
+RESULT_TABLES_MD="${LOG_DIR}/result_tables.md"
+PREVIEW_CSV="${LOG_DIR}/${SCENARIO}_exact_state_preview.csv"
+PREVIEW_REPORT="${LOG_DIR}/${SCENARIO}_exact_state_preview.md"
 NATIVE_PREFLIGHT_JSON="${NATIVE_PREFLIGHT_JSON:-${LOG_DIR}/${SCENARIO}_native_preflight.json}"
 NATIVE_PREFLIGHT_REPORT="${NATIVE_PREFLIGHT_REPORT:-${LOG_DIR}/${SCENARIO}_native_preflight.md}"
 
@@ -110,28 +137,37 @@ resolve_bddl() {
 run_check() {
   local n="${1:-${NUM_TRIALS}}"
   python "${PIPELINE}" generate "${common_state_args[@]}" \
-    --source_indices "${SOURCE_INDICES}" --num_states "${n}"
+    --source_indices "${SOURCE_INDICES}" \
+    --bundle_manifest "${STATE_BUNDLE_MANIFEST}" --num_states "${n}"
+  run_native_preflight
+}
+
+run_native_preflight() {
+  python "${PIPELINE}" native-preflight "${common_state_args[@]}" \
+    --out_json "${NATIVE_PREFLIGHT_JSON}" \
+    --out_report "${NATIVE_PREFLIGHT_REPORT}"
+  grep -q 'PASS_NATIVE_ONLY_PREFLIGHT' "${NATIVE_PREFLIGHT_REPORT}"
 }
 
 run_bodies() {
   python "${PIPELINE}" list-bodies --scenario "${SCENARIO}"
 }
 
-run_native_preflight() {
-  python experiments/robot/libero/tasks/audit_l1c_native_preflight.py \
-    --scenario "${SCENARIO}" \
-    --state "eb=${EB_STATES}" \
-    --state "er=${ER_STATES}" \
-    --state "ec=${EC_STATES}" \
-    --expected_episodes "$1" \
-    --out_json "${NATIVE_PREFLIGHT_JSON}" \
-    --out_report "${NATIVE_PREFLIGHT_REPORT}"
-}
-
 run_preview() {
   python "${PIPELINE}" preview "${common_state_args[@]}" \
+    --source_indices "${SOURCE_INDICES}" \
+    --bundle_manifest "${STATE_BUNDLE_MANIFEST}" \
+    --preview_manifest "${PREVIEW_MANIFEST}" \
     --out_dir "${PREVIEW_DIR}" --num_states "${PREVIEW_NUM_STATES:-3}" \
+    --out_csv "${PREVIEW_CSV}" --out_report "${PREVIEW_REPORT}" \
     --model_family "${MODEL_FAMILY}"
+}
+
+run_verify() {
+  python "${PIPELINE}" verify "${common_state_args[@]}" \
+    --source_indices "${SOURCE_INDICES}" \
+    --bundle_manifest "${STATE_BUNDLE_MANIFEST}" \
+    --preview_manifest "${PREVIEW_MANIFEST}" --min_states "${1:-${NUM_TRIALS}}"
 }
 
 run_screen_occupants() {
@@ -147,12 +183,23 @@ run_calibrate() {
 run_safe_reference() {
   # Do not leave a stale report that can be mistaken for the current scene if
   # the prerequisite Eb-trajectory check exits before writing new results.
-  rm -f "${SAFE_REFERENCE_CSV}" "${SAFE_REFERENCE_REPORT}"
+  rm -f "${SAFE_REFERENCE_CSV}" "${SAFE_REFERENCE_ATTEMPTS_CSV}" \
+    "${SAFE_REFERENCE_REPORT}"
+  mkdir -p "${SAFE_REFERENCE_TRAJ}" "${SAFE_REFERENCE_VIDEOS}"
+  find "${SAFE_REFERENCE_TRAJ}" -maxdepth 1 -type f -name '*.npz' -delete
+  find "${SAFE_REFERENCE_VIDEOS}" -maxdepth 1 -type f -name '*.mp4' -delete
   python "${PIPELINE}" safe-reference "${common_state_args[@]}" \
     --num_states "${CALIBRATION_NUM_STATES}" \
     --max_attempts_per_state "${SAFE_REFERENCE_MAX_ATTEMPTS:-0}" \
     --eb_trajectories "${EB_TRAJ}" --trajectory_dir "${SAFE_REFERENCE_TRAJ}" \
+    --video_dir "${SAFE_REFERENCE_VIDEOS}" \
     --out_csv "${SAFE_REFERENCE_CSV}" --out_report "${SAFE_REFERENCE_REPORT}"
+}
+
+run_competence() {
+  python "${PIPELINE}" competence --scenario "${SCENARIO}" \
+    --trajectories "${EB_TRAJ}" --min_episodes "${1:-${NUM_TRIALS}}" \
+    --out_csv "${EB_COMPETENCE_CSV}" --out_report "${EB_COMPETENCE_REPORT}"
 }
 
 run_condition() {
@@ -176,6 +223,11 @@ run_condition() {
     --pi05_replan_steps "${PI05_REPLAN_STEPS}" \
     --pi05_connect_timeout_s "${PI05_CONNECT_TIMEOUT_S}" \
     --num_open_loop_steps "${MODEL_OPEN_LOOP_STEPS}" \
+    --unnorm_key "${UNNORM_KEY}" \
+    --do_sample "${DO_SAMPLE}" \
+    --temperature "${TEMPERATURE}" \
+    --top_p "${TOP_P}" \
+    --seed "${MODEL_SEED}" \
     --task_suite_name libero_90 \
     --bddl_file "${bddl}" \
     --initial_states_path "${state_path}" \
@@ -190,6 +242,8 @@ run_condition() {
     --occupancy_min_target_tilt_deg "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').min_target_tilt_deg)")" \
     --occupancy_max_target_tilt_deg "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_tilt_deg)")" \
     --occupancy_max_target_post_release_xy_displacement "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').max_target_post_release_xy_displacement)")" \
+    --occupancy_target_region_site "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').anchor_site)")" \
+    --occupancy_min_target_region_horizontal_margin "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').min_target_region_horizontal_margin)")" \
     --trajectory_track_bodies "$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').anchor_body)")" \
     --trajectory_dir "${trajectory_dir}" \
     --post_success_settle_steps 60 \
@@ -197,6 +251,7 @@ run_condition() {
     --max_violation_videos "${MAX_VIDEOS_PER_OUTCOME}" \
     --max_success_videos "${MAX_VIDEOS_PER_OUTCOME}" \
     --max_failure_videos "${MAX_VIDEOS_PER_OUTCOME}" \
+    --max_total_videos "${MAX_VIDEOS_PER_CONDITION}" \
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --run_id_note "${note}"
 }
@@ -218,54 +273,84 @@ run_analyze() {
     --safe_reference_csv "${SAFE_REFERENCE_CSV}" \
     --out_csv "${ATTRIBUTION_CSV}" --out_report "${ATTRIBUTION_REPORT}"
   python experiments/robot/libero/tasks/record_experiment_results.py --log_dir "${LOG_DIR}"
-  python experiments/robot/libero/tasks/generate_result_tables.py --records "${LOG_DIR}/experiment_records.csv"
+  python experiments/robot/libero/tasks/generate_result_tables.py \
+    --log_dir "${LOG_DIR}" --out "${RESULT_TABLES_MD}"
 }
 
 run_record() {
   python experiments/robot/libero/tasks/record_experiment_results.py --log_dir "${LOG_DIR}"
-  python experiments/robot/libero/tasks/generate_result_tables.py --records "${LOG_DIR}/experiment_records.csv"
+  python experiments/robot/libero/tasks/generate_result_tables.py \
+    --log_dir "${LOG_DIR}" --out "${RESULT_TABLES_MD}"
 }
 
 case "${MODE}" in
   bodies) run_bodies ;;
   check) run_check ;;
-  preview) run_preview ;;
-  screen_occupants) run_screen_occupants ;;
-  calibrate) run_calibrate ;;
-  safe_reference) run_safe_reference ;;
-  eb|er|ec) run_condition "${MODE}" "${NUM_TRIALS}" ;;
-  replay) run_replay ;;
+  native_preflight) run_native_preflight ;;
+  preview) run_native_preflight; run_preview ;;
+  verify) run_native_preflight; run_verify ;;
+  validate_layout)
+    run_native_preflight
+    run_verify "${NUM_TRIALS}"
+    run_calibrate
+    grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
+    ;;
+  screen_occupants) run_native_preflight; run_screen_occupants ;;
+  calibrate) run_native_preflight; run_calibrate ;;
+  competence) run_native_preflight; run_competence ;;
+  policy_probe)
+    run_native_preflight
+    run_verify "${NUM_TRIALS}"
+    run_condition eb "${NUM_TRIALS}"
+    run_competence "${NUM_TRIALS}"
+    grep -q 'PASS_EB_COMPETENCE' "${EB_COMPETENCE_REPORT}"
+    ;;
+  safe_reference) run_native_preflight; run_safe_reference ;;
+  eb|er|ec) run_native_preflight; run_condition "${MODE}" "${NUM_TRIALS}" ;;
+  replay) run_native_preflight; run_replay ;;
   smoke)
     run_bodies
     run_check "${SMOKE_TRIALS}"
-    run_native_preflight "${SMOKE_TRIALS}"
-    run_preview
+    PREVIEW_NUM_STATES="${SMOKE_TRIALS}" run_preview
+    grep -q 'PASS_EXACT_STATE_PREVIEW' "${PREVIEW_REPORT}"
+    run_verify "${SMOKE_TRIALS}"
     run_calibrate
     grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
     run_condition eb "${SMOKE_TRIALS}"
+    run_competence "${SMOKE_TRIALS}"
+    grep -q 'PASS_EB_COMPETENCE' "${EB_COMPETENCE_REPORT}"
     run_safe_reference
     grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
+    run_replay
+    grep -q 'PASS_ACTION_SEPARATION' "${ER_REPLAY_REPORT}"
+    grep -q 'PASS_EC_UNCHANGED_EB_REPLAY_SAFE' "${EC_REPLAY_REPORT}"
     run_condition er "${SMOKE_TRIALS}"
     run_condition ec "${SMOKE_TRIALS}"
-    run_replay
     run_analyze
     ;;
-  analyze) run_analyze ;;
+  analyze) run_native_preflight; run_analyze ;;
   record) run_record ;;
   eval)
     run_bodies
     run_check "${NUM_TRIALS}"
-    run_native_preflight "${NUM_TRIALS}"
-    run_preview
+    run_native_preflight
+    PREVIEW_NUM_STATES="${PREVIEW_NUM_STATES:-3}" run_preview
+    grep -q 'PASS_EXACT_STATE_PREVIEW' "${PREVIEW_REPORT}"
+    run_verify "${NUM_TRIALS}"
     run_calibrate
     grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
     run_condition eb "${NUM_TRIALS}"
+    run_competence "${NUM_TRIALS}"
+    grep -q 'PASS_EB_COMPETENCE' "${EB_COMPETENCE_REPORT}"
     run_safe_reference
     grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
+    run_replay
+    grep -q 'PASS_ACTION_SEPARATION' "${ER_REPLAY_REPORT}"
+    grep -q 'PASS_EC_UNCHANGED_EB_REPLAY_SAFE' "${EC_REPLAY_REPORT}"
     run_condition er "${NUM_TRIALS}"
     run_condition ec "${NUM_TRIALS}"
-    run_replay
     run_analyze
+    grep -q 'BENCHMARK_READY_FOR_ATTRIBUTION' "${ATTRIBUTION_REPORT}"
     ;;
   *) echo "Unknown mode: ${MODE}" >&2; exit 2 ;;
 esac
