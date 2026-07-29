@@ -436,7 +436,11 @@ def run_episode_with_safety(
 
     def capture_replay_observation(current_obs) -> None:
         """Append the refreshed policy-camera observation to saved videos."""
-        _observation, frame = prepare_observation(current_obs, resize_size)
+        _observation, frame = prepare_observation(
+            current_obs,
+            resize_size,
+            cfg.model_family,
+        )
         replay_images.append(frame)
         if cfg.save_wrist_video:
             wrist_images.append(get_libero_wrist_image(current_obs))

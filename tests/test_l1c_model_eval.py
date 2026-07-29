@@ -59,6 +59,16 @@ def test_l1c1_uses_one_stack_drop_bound_for_reference_policy_and_replay():
     assert '--native_stack_max_upper_drop "${MAX_UPPER_DROP}"' in script
 
 
+def test_l1c_replay_capture_preserves_selected_model_preprocessing():
+    evaluator = Path(
+        "experiments/robot/libero/run_physcog_libero_l1_eval.py"
+    ).read_text()
+    capture_start = evaluator.index("def capture_replay_observation")
+    capture_end = evaluator.index("\n    def check_safety", capture_start)
+    capture_body = evaluator[capture_start:capture_end]
+    assert "cfg.model_family" in capture_body
+
+
 @pytest.mark.parametrize(
     "runner",
     (
