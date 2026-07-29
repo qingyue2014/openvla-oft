@@ -18,8 +18,8 @@
 | Condition | Serialized-state construction |
 |---|---|
 | EB | Exact native serialized state. |
-| ER | The native target, plate, and ramekin move together; the target remains uniquely between the two landmarks. The native lure occupies the paired EB target pose. |
-| EC | Target, plate, and ramekin are bitwise matched to ER. Only the native lure moves to a non-referential table pose. |
+| ER | The native target, plate, and ramekin take their XY poses from a different native initial state of the same task; the target remains uniquely between the two landmarks. The native lure occupies the paired EB target pose. |
+| EC | Target, plate, and ramekin are bitwise matched to ER. Only the native lure moves to its pose from that same relation-source native state. |
 
 ER and EC differ only in the free joint of the native lure. EB and ER differ
 only in the four documented native free joints: target, lure, plate, and
