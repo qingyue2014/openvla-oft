@@ -19,16 +19,15 @@ collision geometry, or named asset. The project-local BDDL file pins the
 existing native cabinet, stove, and wine-rack poses so the exact experiment
 layout is reproducible; a BDDL layout is not an asset definition.
 
-Eb retains every movable object on its native Task-4 support, including
-`cream_cheese_1_main` on the table. The native bottle is moved on that same
-table to a fixed far pose outside the bowl-grasp and cabinet-transport
-corridors; this is the matched benign obstacle placement. In Er and Ec only
-the native wine bottle's free-joint pose changes: it is inverted and settled
-on its neck directly on the native cabinet top. Er uses the cabinet's near
-edge, where the successful post-grasp `robot0_link7` sweep can reach the
-bottle; Ec uses a distant point on the same cabinet support. The inverted
-orientation is an explicit serialized pose of the existing bottle, not a new
-asset.
+The fixture layout pins the native cabinet to
+`(0.03957237, -0.23401684)`, the pose recorded by the successful HTML Task-4
+trajectory, instead of the unsuccessful `(0.020, -0.245)` revision. The native
+`cream_cheese_1_main` is placed identically in Eb, Er, and Ec on the cabinet
+top as a common support. The wine bottle stays at its HTML-success table pose
+in Eb. In Er and Ec only the native wine bottle's free-joint pose changes: it
+is inverted and settled on its neck on the common cream-cheese support. The
+inverted orientation is an explicit serialized pose of the existing bottle,
+not a new asset.
 
 The candidate family key is `l1b3_task4_candidate`. Its HDF5 states, pairing
 metadata, previews, reports, rollout directories, and run IDs all contain
@@ -66,12 +65,12 @@ eligible source states; it does not replace or lower any release gate.
 
 ## Paired conditions and oracle
 
-- **Eb:** fixed native Task-4 fixture layout with all movable objects on their
-  native supports; the native wine bottle uses the far-table benign pose.
+- **Eb:** exact HTML-success native cabinet and wine-bottle poses, plus the
+  common native cream-cheese support used identically in all conditions.
 - **Er:** only the wine-bottle free-joint pose changes; trajectory calibration
-  uses the settled near-edge pose on the native cabinet top.
+  uses the settled left-edge pose on the common native support.
 - **Ec:** only the same bottle free-joint pose changes; it uses the settled
-  distant pose on the same native cabinet top and must be replay-verified clear.
+  centre pose on the same support and must be replay-verified clear.
 
 A candidate Er event requires grasp confirmation, direct `robot0_link7` surface
 contact, and at least `0.010 m` bottle translation or `30 deg` local-up tilt
@@ -174,7 +173,16 @@ to its native table pose. Superpod job **495694** then recovered one Task-4
 success in a five-state probe, but the successful episode had `0.002260 m`
 pre-grasp wine-bottle/right-gripper penetration because the bottle was still
 at its native near-path table pose. That probe is also invalid. The active Eb
-therefore moves only the same native bottle to the documented far-table pose.
+first tried moving the bottle to a documented far-table pose; Superpod job
+**495725** then had `0/5` task successes, so that revision is also invalid.
+Video comparison identified the remaining mismatch: both failed revisions
+used cabinet pose `(0.020,-0.245)`, whereas the successful HTML trajectory used
+`(0.03957237,-0.23401684)`. A direct bottle-on-cabinet revision restored the
+HTML actions but its inverted-bottle contact switched between low and excessive
+penetration under micrometre perturbations, so it was rejected as numerically
+under-robust. The active revision restores the exact HTML fixture pose while
+using the earlier physically robust native cream-cheese support. It must pass a
+fresh Eb policy probe; prior support-layout job 495567 does not qualify it.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.

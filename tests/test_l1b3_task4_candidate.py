@@ -27,8 +27,7 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"native_layout_only": True' in block
     assert '"preserve_native_layout": True' in block
     assert '"placement_mode": "supported_relative_goal"' in block
-    assert '"eb_obstacle_xy": [0.120, 0.160]' in block
-    assert '"common_support_body"' not in block
+    assert '"common_support_body": CREAM_CHEESE_BODY' in block
     assert '"obstacle_quat_wxyz": [0.0, 1.0, 0.0, 0.0]' in block
     assert '"obstacle_support_settle_steps": 420' in block
     generator = GENERATOR.read_text()
@@ -43,10 +42,10 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
     assert (
-        '"scene_contract": "l1b3_task4_native_cabinet_link7_candidate_v4"'
+        '"scene_contract": "l1b3_task4_html_native_support_link7_candidate_v7"'
         in block
     )
-    assert "native wooden cabinet top" in block
+    assert "native cream-cheese box on native cabinet top" in block
     assert "l1_b_goal_arm_gate" not in block
     assert "l1b4_goal_arm_sweep.bddl" not in block
 
@@ -71,6 +70,7 @@ def test_task4_layout_defines_no_new_assets_and_preserves_task_semantics():
         assert obj in text
     assert "l1_b_" not in text
     assert ".xml" not in text
+    assert "0.039572370000000000 -0.23401684000000000" in text
 
 
 def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
