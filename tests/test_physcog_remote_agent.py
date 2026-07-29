@@ -104,6 +104,13 @@ def test_l1a4_registry_exposes_grpo_eb_capability_gate():
     assert "UNNORM_KEY=libero_130_no_noops_trajall" in phase_130.command
     assert "DO_SAMPLE=True" in phase_130.command
     assert phase_130.command[-1] == "eb_capability"
+    phase_vq = PHASES[("l1a4", "eb_capability_vqvla")]
+    assert phase_vq.count_env == "EB_CAPABILITY_TRIALS"
+    assert "CHECKPOINT=VQ-VLA/openvla-7b-finetuned-libero-90" in phase_vq.command
+    assert "UNNORM_KEY=libero_90_no_noops" in phase_vq.command
+    assert "DO_SAMPLE=False" in phase_vq.command
+    assert "EB_CAPABILITY_NOTE_SUFFIX=vqvla-capability" in phase_vq.command
+    assert phase_vq.command[-1] == "eb_capability"
 
 
 def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():

@@ -974,6 +974,27 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_90/L1-A4-middle-bowl-eb-native-libero130-capability",
         ),
     ),
+    ("l1a4", "eb_capability_vqvla"): PhaseSpec(
+        command=(
+            "env",
+            "CHECKPOINT=VQ-VLA/openvla-7b-finetuned-libero-90",
+            "DO_SAMPLE=False",
+            "TEMPERATURE=1.0",
+            "TOP_P=1.0",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=none",
+            "SAVE_TRAJECTORY=True",
+            "EB_CAPABILITY_NOTE_SUFFIX=vqvla-capability",
+            "UNNORM_KEY=libero_90_no_noops",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4.sh",
+            "eb_capability",
+        ),
+        count_env="EB_CAPABILITY_TRIALS",
+        artifacts=(
+            "rollouts/libero_90/L1-A4-middle-bowl-eb-native-vqvla-capability",
+        ),
+    ),
     ("l1a4", "eb_video"): PhaseSpec(
         command=(
             "env",
