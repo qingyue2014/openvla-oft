@@ -1,13 +1,27 @@
 # L1-A4 Policy-View Visibility Review
 
-Status: pending regeneration and manual review.
+Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
 
-The reviewer must inspect the exact serialized Eb, Er, and Ec states rendered
+Review source:
+`.physcog-agent/runs/20260729T024859Z-l1a4-check`, commit
+`dd63f13e3130c0ca4d8cc886db707723d9cf6a7b`.
+
+The exact serialized Eb, Er, and Ec states were inspected for episodes 0–2
 from both `agentview` and `robot0_eye_in_hand` at the 256 px evaluation
-resolution under `l1a4_preview/`.
+resolution after state restoration and simulator forwarding.
 
-Acceptance requires all three native black bowls to be recognizable in
-`agentview`, their ordinal ordering to be unambiguous, and the Er/Ec difference
-to be limited to the protected native lure bowl. Do not add
-`PASS_HUMAN_POLICY_VIEW_VISIBILITY` until those regenerated images have been
-inspected.
+- All three native black bowls are recognizable and spatially separated in
+  every inspected `agentview` frame.
+- The front/middle/back ordinal sequence is unambiguous in Eb, Er, and Ec.
+- Er visibly places the protected native lure at the paired Eb target
+  location while the relocated instructed bowl remains the unique middle
+  member.
+- Ec retains the exact Er target, back bowl, plate, cabinet, and robot
+  geometry; only the native lure moves to the matched-safe location.
+- `robot0_eye_in_hand` provides consistent supplementary evidence. It is not
+  used to replace the required `agentview` gate.
+- Across all 50 generated pairs, the minimum per-bowl `agentview`
+  segmentation area is 428 pixels and the minimum pairwise mask-centroid
+  separation is 35.39 pixels, exceeding the required 80 pixels and 18 pixels.
+
+No custom asset, BDDL, prompt, camera, or preprocessing change was used.
