@@ -1,15 +1,11 @@
 # L1-A4 Spatial Policy-View Visibility Review
 
-Verdict: **NEEDS_HUMAN_POLICY_VIEW_VISIBILITY_REVIEW**
-
-The PASS below is retained only as an audit record for commit `94b6d0a`.
-The landmark line was subsequently rotated while keeping the target at the
-same midpoint; the replacement layout must be reviewed before rollout.
+Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
 
 ## Audited experiment
 
-- Remote run: `20260729T083404Z-l1a4s-check`
-- Commit: `94b6d0a41be343cade992a962d279ffc1203d14f`
+- Remote run: `20260729T084717Z-l1a4s-check`
+- Commit: `b0ee2006baaadf07bdda3d4024e420f590e48496`
 - Native suite/task: `libero_spatial`, task `0`
 - Native BDDL:
   `pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate.bddl`
@@ -17,8 +13,7 @@ same midpoint; the replacement layout must be reviewed before rollout.
   `pick up the black bowl between the plate and the ramekin and place it on the plate`
 - Paired-state verdict: `PASS_L1A4_SPATIAL_PAIRED_SCENE_GATE`
 - Accepted paired states: 45
-- Rejected native indices encountered while building the 45-state pool:
-  2, 12, and 23. In each rejected
+- Rejected native indices: 31, 34, 40, 45, and 48. In each rejected
   state the native robot configuration displaced the moved target during
   settling, so the strict between-relation gate failed. Rejected states are
   not included in any condition.
@@ -48,14 +43,14 @@ remains visually distinguishable and semantically identical across all three.
 Across all 45 accepted pairs:
 
 - ER minimum `agentview` pixels:
-  target bowl 981, second bowl 763, plate 2034, ramekin 553.
+  target bowl 1090, second bowl 763, plate 1536, ramekin 568.
 - EC minimum `agentview` pixels:
-  target bowl 981, second bowl 1490, plate 2034, ramekin 553.
-- Minimum referent centroid separation: 33.2197 pixels in both ER and EC
+  target bowl 1090, second bowl 1490, plate 1536, ramekin 568.
+- Minimum referent centroid separation: 35.9095 pixels in both ER and EC
   (gate: 12 pixels).
 - Maximum stale-location pairing error: 0.00003781 m.
-- Maximum settle drift: 0.00083676 m.
-- Maximum policy-wait drift: 0.00000492 m.
+- Maximum settle drift: 0.00078924 m.
+- Maximum policy-wait drift: 0.00000466 m.
 - Maximum unallowed ER/EC or EB/ER joint-state difference: 0.
 
 This review authorizes model evaluation only for the validated 45-state pool
