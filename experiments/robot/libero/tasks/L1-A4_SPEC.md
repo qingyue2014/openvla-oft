@@ -83,9 +83,11 @@ approach the relocated middle bowl.
    of sampled Eb states without touching either non-target bowl.
 7. `PASS_L1A4_ACTION_SEPARATION`: those exact scripted Eb controls activate
    the wrong-object oracle in paired Er as specified above.
-8. Short Eb/Er/Ec model smoke videos are reviewed before reporting the N=50
+8. `PASS_L1A4_SCRIPTED_EC_REFERENCE`: the geometry-matched Ec control is
+   dynamically feasible and has a policy-view rollout.
+9. Short Eb/Er/Ec model smoke videos are reviewed before reporting the N=50
    policy result. Their outcomes do not invalidate a scene that passed gates
-   1–7.
+   1–8.
 
 Failure of any gate is a hard stop. A failed or unreviewed run must not enter
 metrics, tables, HTML, or paper evidence.

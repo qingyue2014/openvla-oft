@@ -44,6 +44,10 @@ EB_REF_CSV="${LOG_DIR}/l1a4_scripted_eb_reference.csv"
 EB_REF_REPORT="${LOG_DIR}/l1a4_scripted_eb_reference.md"
 EB_REF_TRAJ="${LOG_DIR}/l1a4_scripted_eb_reference_trajectories"
 EB_REF_VIDEOS="${LOG_DIR}/l1a4_scripted_eb_reference_videos"
+EC_REF_CSV="${LOG_DIR}/l1a4_scripted_ec_reference.csv"
+EC_REF_REPORT="${LOG_DIR}/l1a4_scripted_ec_reference.md"
+EC_REF_TRAJ="${LOG_DIR}/l1a4_scripted_ec_reference_trajectories"
+EC_REF_VIDEOS="${LOG_DIR}/l1a4_scripted_ec_reference_videos"
 REPLAY_CSV="${LOG_DIR}/l1a4_eb_to_er_replay.csv"
 REPLAY_REPORT="${LOG_DIR}/l1a4_eb_to_er_replay.md"
 ATTRIBUTION_REPORT="${LOG_DIR}/l1a4_attribution.md"
@@ -256,6 +260,11 @@ require_formal_gates() {
     echo "L1-A4 dynamic safe-reference gate missing or failed: ${SAFE_REF_REPORT}" >&2
     exit 2
   fi
+  if [[ ! -f "${EC_REF_REPORT}" ]] \
+    || ! grep -q "PASS_L1A4_SCRIPTED_EC_REFERENCE" "${EC_REF_REPORT}"; then
+    echo "L1-A4 scripted Ec reference gate missing or failed: ${EC_REF_REPORT}" >&2
+    exit 2
+  fi
   echo "verdict=BENCHMARK_READY_L1A4"
 }
 
@@ -306,6 +315,8 @@ case "${MODE}" in
     safe_reference "${SAFE_REF_STATES}" \
       "${SAFE_REF_CSV}" "${SAFE_REF_REPORT}" \
       "${SAFE_REF_TRAJ}" "${SAFE_REF_VIDEOS}"
+    scripted_reference ec_control "${EC_STATES}" "${SAFE_REF_STATES}" \
+      "${EC_REF_CSV}" "${EC_REF_REPORT}" "${EC_REF_TRAJ}" "${EC_REF_VIDEOS}"
     require_formal_gates
     echo "verdict=PASS_L1A4_CONSTRUCTION_CERTIFICATION"
     ;;
@@ -330,6 +341,11 @@ case "${MODE}" in
       "${LOG_DIR}/l1a4_safe_reference_smoke.md" \
       "${LOG_DIR}/l1a4_safe_reference_smoke_trajectories" \
       "${LOG_DIR}/l1a4_safe_reference_smoke_videos"
+    scripted_reference ec_control "${EC_STATES}" "${SMOKE_TRIALS}" \
+      "${LOG_DIR}/l1a4_scripted_ec_reference_smoke.csv" \
+      "${LOG_DIR}/l1a4_scripted_ec_reference_smoke.md" \
+      "${LOG_DIR}/l1a4_scripted_ec_reference_smoke_trajectories" \
+      "${LOG_DIR}/l1a4_scripted_ec_reference_smoke_videos"
     # Repeated ffmpeg forks can invalidate a long-lived MuJoCo EGL context.
     # Keep multi-episode measurement video-free, then launch one fresh process
     # per condition for the required representative policy video.
@@ -353,6 +369,8 @@ case "${MODE}" in
     safe_reference "${SAFE_REF_STATES}" \
       "${SAFE_REF_CSV}" "${SAFE_REF_REPORT}" \
       "${SAFE_REF_TRAJ}" "${SAFE_REF_VIDEOS}"
+    scripted_reference ec_control "${EC_STATES}" "${SAFE_REF_STATES}" \
+      "${EC_REF_CSV}" "${EC_REF_REPORT}" "${EC_REF_TRAJ}" "${EC_REF_VIDEOS}"
     require_formal_gates
     eval_condition Er "${ER_STATES}" l1a4_ordinal "${ER_NOTE}" "${NUM_TRIALS}"
     eval_condition Ec "${EC_STATES}" none "${EC_NOTE}" "${NUM_TRIALS}"
