@@ -343,6 +343,20 @@ def _safe_response(response: dict) -> bool:
     )
 
 
+def _fixture_anchor_signature(
+    env, descendant_body: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the fixed top-level fixture anchor in compiled model space."""
+    model = env.sim.model
+    body_id = int(model.body_name2id(descendant_body))
+    while int(model.body_parentid[body_id]) != 0:
+        body_id = int(model.body_parentid[body_id])
+    return (
+        np.asarray(model.body_pos[body_id], dtype=float).copy(),
+        np.asarray(model.body_quat[body_id], dtype=float).copy(),
+    )
+
+
 def _edge_counterfactual(
     env,
     state: np.ndarray,
@@ -357,28 +371,30 @@ def _edge_counterfactual(
     candidate: dict,
     phase: str,
 ) -> tuple[dict, list[dict]]:
-    support_pos_before = _body_pos(env, support_body).copy()
-    support_rot_before = _body_rotation(env, support_body).copy()
+    anchor_pos_before, anchor_quat_before = _fixture_anchor_signature(
+        env, support_body
+    )
     # A LIBERO reset re-samples fixed fixture model.body_pos, which is outside
     # flattened qpos/qvel state and is not reproducible via env.seed(). Keep the
     # same compiled native scene and restore only its serialized dynamic state.
     env.set_init_state(state)
     clear_mujoco_replay_transients(env)
-    support_pos_after = _body_pos(env, support_body)
-    support_rot_after = _body_rotation(env, support_body)
+    anchor_pos_after, anchor_quat_after = _fixture_anchor_signature(
+        env, support_body
+    )
     if (
         not np.allclose(
-            support_pos_before, support_pos_after, atol=1e-9, rtol=0.0
+            anchor_pos_before, anchor_pos_after, atol=1e-12, rtol=0.0
         )
         or not np.allclose(
-            support_rot_before, support_rot_after, atol=1e-9, rtol=0.0
+            anchor_quat_before, anchor_quat_after, atol=1e-12, rtol=0.0
         )
     ):
         raise RuntimeError(
             "native fixture pose changed while restoring the paired "
             "counterfactual state: "
-            f"position_before={support_pos_before.tolist()}, "
-            f"position_after={support_pos_after.tolist()}"
+            f"anchor_before={anchor_pos_before.tolist()}, "
+            f"anchor_after={anchor_pos_after.tolist()}"
         )
     model = env.sim.model
     geom_ids = [model.geom_name2id(name) for name in disabled_geoms]

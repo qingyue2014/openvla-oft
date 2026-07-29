@@ -125,6 +125,8 @@ def test_edge_counterfactual_preserves_compiled_native_fixture_pose():
     ).read_text(encoding="utf-8")
     assert "env.seed(reset_seed)" not in source
     assert "native fixture pose changed while restoring" in source
+    assert "model.body_pos[body_id]" in source
+    assert "model.body_quat[body_id]" in source
     counterfactual = source[
         source.index("def _edge_counterfactual"):source.index(
             "def main()"
