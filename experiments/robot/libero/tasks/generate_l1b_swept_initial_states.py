@@ -239,8 +239,11 @@ FAMILIES = {
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "scene_contract": "l1b3_task4_native_eval_fixed_state_link7_candidate_v11",
-        "candidate_contract": "l1b3_task4_native_eval_fixed_state_link7_candidate_v11",
+        "scene_contract": "l1b3_task4_native_eval_fixed_state_link7_candidate_v12",
+        "candidate_contract": "l1b3_task4_native_eval_fixed_state_link7_candidate_v12",
+        "model_runtime_contract": (
+            "transformers-openvla-oft-bc339d9_tokenizers-0.19.1"
+        ),
         "risk_support": "native wooden cabinet top",
         "er_condition": (
             "native wine bottle at the near edge of the native cabinet top, "

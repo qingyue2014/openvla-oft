@@ -193,9 +193,21 @@ successful episode had `0.002316 m` pre-grasp wine-bottle/right-gripper
 penetration, so it is invalid. A post-run equivalence audit found that its
 initial policy RGB was pixel-identical to the accepted HTML episode, but the
 runner had selected the evaluator's direct-BDDL control path whereas the HTML
-job used native `libero_goal` Task 4. Revision v11 keeps the fixed layout only
-for paired-state generation and restores native Task-4 evaluation. It must pass
-a fresh Eb probe before any Er/Ec calibration.
+job used native `libero_goal` Task 4. Revision v11 kept the fixed layout only
+for paired-state generation and restored native Task-4 evaluation. Superpod
+job **495815** confirmed that it used native Task ID 4, but still reproduced
+the same `1/5` Eb outcome. The accepted HTML job and job 495815 used the same
+model remote-code hash and episode-0 initial body poses, but job 495815 ran
+with unsupported `transformers==4.51.3` and `tokenizers==0.21.4`; the
+checkpoint explicitly requires `4.40.1` and `0.19.1`. Their first policy
+action chunks differed. Job 495815 is therefore an invalid dependency-drift
+diagnostic.
+
+Revision v12 loads an isolated Superpod user-cache overlay containing
+`transformers-openvla-oft` commit `bc339d9` (package version `4.40.1`) and
+`tokenizers==0.19.1`, without modifying the shared conda environment. The
+runner hard-stops before model evaluation if either exact version is absent.
+It must pass a fresh Eb probe before any Er/Ec calibration.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.

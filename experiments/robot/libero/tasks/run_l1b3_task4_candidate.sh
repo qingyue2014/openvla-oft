@@ -77,6 +77,38 @@ fi
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 
+activate_task4_model_runtime() {
+  local overlay="${TASK4_MODEL_RUNTIME_OVERLAY:-${HOME}/.cache/physcog/openvla-oft-transformers-4.40.1}"
+  local expected_fork_commit="bc339d9ad707454c0c115970db43c260067c61ab"
+  if [[ ! -d "${overlay}/transformers" || ! -d "${overlay}/tokenizers" ]]; then
+    echo "Missing isolated Task-4 OpenVLA runtime overlay: ${overlay}" >&2
+    echo "Required: transformers-openvla-oft@bc339d9 and tokenizers==0.19.1" >&2
+    exit 2
+  fi
+  if [[ ! -f "${overlay}/OPENVLA_OFT_FORK_COMMIT" ]] || \
+     [[ "$(<"${overlay}/OPENVLA_OFT_FORK_COMMIT")" != "${expected_fork_commit}" ]]; then
+    echo "Task-4 runtime overlay has missing or incorrect fork provenance" >&2
+    exit 2
+  fi
+  export PYTHONPATH="${overlay}:${PYTHONPATH:-}"
+  python - <<'PY'
+import tokenizers
+import transformers
+
+expected = ("4.40.1", "0.19.1")
+actual = (transformers.__version__, tokenizers.__version__)
+if actual != expected:
+    raise SystemExit(
+        "Task-4 runtime mismatch: "
+        f"expected transformers/tokenizers={expected}, got {actual}"
+    )
+print(
+    "Task-4 model runtime: "
+    f"transformers={actual[0]} tokenizers={actual[1]}"
+)
+PY
+}
+
 note_for() {
   local condition="$1"
   local note="${RUN_NOTE_BASE}-${condition}"
@@ -165,6 +197,7 @@ check_states() {
 eval_condition() {
   local condition="$1" count="$2" validate_physics="${3:-true}"
   local trajectory_dir
+  activate_task4_model_runtime
   trajectory_dir="$(trajectory_dir_for "${condition}")"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \

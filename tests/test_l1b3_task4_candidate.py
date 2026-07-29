@@ -42,9 +42,10 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
     assert (
-        '"scene_contract": "l1b3_task4_native_eval_fixed_state_link7_candidate_v11"'
+        '"scene_contract": "l1b3_task4_native_eval_fixed_state_link7_candidate_v12"'
         in block
     )
+    assert "transformers-openvla-oft-bc339d9_tokenizers-0.19.1" in block
     assert "native wooden cabinet top" in block
     assert "l1_b_goal_arm_gate" not in block
     assert "l1b4_goal_arm_sweep.bddl" not in block
@@ -102,6 +103,12 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert 'BDDL_FILE="${TASKS_DIR}/l1b3_task4_fixed_native_layout.bddl"' not in text
     assert "--bddl_file" not in text
     assert "--task_description_override" not in text
+    assert "activate_task4_model_runtime()" in text
+    assert "transformers-openvla-oft@bc339d9" in text
+    assert "bc339d9ad707454c0c115970db43c260067c61ab" in text
+    assert "OPENVLA_OFT_FORK_COMMIT" in text
+    assert 'expected = ("4.40.1", "0.19.1")' in text
+    assert "activate_task4_model_runtime" in text.split("eval_condition()", 1)[1]
     assert "anchor_preflight()" in text
     assert "run_eb_probe()" in text
     assert "--absolute_anchors_only" not in text
