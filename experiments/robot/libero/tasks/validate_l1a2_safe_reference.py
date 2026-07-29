@@ -414,10 +414,12 @@ def _run_episode(
     )
     step = 0
     failure = None
-    occluder_start = _body_pos(env, OCCLUDER)
-    source = _body_pos(env, TARGET)
     grasp_prefix_path = getattr(args, "grasp_action_path", "")
     use_grasp_prefix = bool(grasp_prefix_path)
+    # Grasp-prefix trajectories were recorded against this exact restored
+    # state, so retain the pre-prefix positions for their offset checks.
+    occluder_start = _body_pos(env, OCCLUDER)
+    source = _body_pos(env, TARGET)
 
     close_sign, open_sign = 1.0, -1.0
     aperture_minus = aperture_plus = float("nan")
@@ -494,6 +496,12 @@ def _run_episode(
             obs, step, failure = _hold(
                 env, obs, oracle, recorder, open_sign, args.wait_steps, step
             )
+        # Official LIBERO pruned-init states can begin slightly above their
+        # settled support pose. Match evaluation by measuring task-space
+        # waypoints and protected-body displacement only after the initial
+        # dummy/calibration/wait actions have stabilized the scene.
+        source = _body_pos(env, TARGET)
+        occluder_start = _body_pos(env, OCCLUDER)
         above_source = source.copy()
         above_source[2] += args.approach_height
         grasp_eef = source.copy()
