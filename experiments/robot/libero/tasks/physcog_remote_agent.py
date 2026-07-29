@@ -755,7 +755,7 @@ def build_isolated_sync_script(
     remote_job_dir: str,
     commit: str,
 ) -> str:
-    """Prepare an immutable per-commit worktree without touching a dirty checkout."""
+    """Prepare an immutable per-run worktree without touching a dirty checkout."""
     if re.fullmatch(r"[0-9a-f]{7,40}", commit) is None:
         raise ValueError(f"invalid git commit for isolated worktree: {commit!r}")
     worktree_parent = str(Path(execution_repo).parent)
@@ -1010,17 +1010,18 @@ def command_run(args: argparse.Namespace) -> int:
     base_cfg = _config_from_args(args)
     cfg = base_cfg
     local_commit = _local_commit()
+    run_dir = _run_dir(Path(args.state_root), *key)
+    tag = run_dir.name
     if args.isolated_worktree:
         if args.no_sync:
             raise SystemExit("--isolated-worktree cannot be combined with --no-sync")
         if local_commit is None:
             raise SystemExit("--isolated-worktree requires a local git commit")
         execution_repo = (
-            f"{base_cfg.remote_repo.rstrip('/')}/.physcog-agent/worktrees/{local_commit}"
+            f"{base_cfg.remote_repo.rstrip('/')}/.physcog-agent/run-worktrees/"
+            f"{local_commit}-{tag}"
         )
         cfg = replace(base_cfg, remote_repo=execution_repo)
-    run_dir = _run_dir(Path(args.state_root), *key)
-    tag = run_dir.name
     remote_job_dir = f"{cfg.remote_repo.rstrip('/')}/.physcog-agent/jobs"
     remote_job_script = f"{remote_job_dir}/{tag}.sh"
     remote_log = f"{remote_job_dir}/{tag}.out"

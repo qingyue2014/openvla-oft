@@ -42,7 +42,7 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
     assert (
-        '"scene_contract": "l1b3_task4_native_unique_states_link7_candidate_v13"'
+        '"scene_contract": "l1b3_task4_per_run_isolated_link7_candidate_v14"'
         in block
     )
     assert "transformers-openvla-oft-bc339d9_tokenizers-0.19.1" in block

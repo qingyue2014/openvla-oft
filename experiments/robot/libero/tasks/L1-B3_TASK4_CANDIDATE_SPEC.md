@@ -218,6 +218,26 @@ uses all 50 unique official serialized states exactly once. This restores the
 HTML source-state convention and prevents repeated or randomly synthesized
 states from inflating an N=50 result. It must pass a fresh Eb probe before any
 Er/Ec calibration.
+
+Superpod jobs **495842** (`dgx-18`) and **495895** (`dgx-21`) used the same
+five official states and exact pinned runtime, but returned `3/5` and `4/5`
+safe Eb successes respectively. Every tracked initial body pose matched the
+accepted HTML trajectories exactly, while the first action chunks differed by
+only `0.008`--`0.014` after discretization. The node-specific repetition does
+not justify selecting a favorable run.
+
+Superpod job **495899** then executed all 50 official states and logged `39/50`
+safe Eb successes, but it overlapped job 495895 in the same per-commit remote
+worktree. Both processes wrote the same trajectory directory, producing 55
+index rows and overwritten files. Four retained N=50 episodes also exceeded
+the 2 mm pre-grasp penetration threshold. Job 495899 is invalid both for
+concurrent artifact contamination and the physical gate; its 78% success rate
+is diagnostic only.
+
+Revision v14 changes isolated Superpod execution from one worktree per commit
+to one worktree per submitted run. Concurrent jobs at the same commit can no
+longer share HDF5, rollout, report, or index paths. A clean N=50 EB probe is
+required before any downstream gate.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.
