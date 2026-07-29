@@ -87,6 +87,18 @@ def test_l1a4_registry_exposes_single_process_model_videos():
     assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1a4", "formal")].command
 
 
+def test_l1a4_registry_exposes_grpo_eb_capability_gate():
+    phase = PHASES[("l1a4", "eb_capability")]
+    assert phase.count_env == "EB_CAPABILITY_TRIALS"
+    assert "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90" in phase.command
+    assert "DO_SAMPLE=True" in phase.command
+    assert "TEMPERATURE=1.6" in phase.command
+    assert "TOP_P=1.0" in phase.command
+    assert "RENDER_GPU_DEVICE_ID=1" in phase.command
+    assert "SAVE_VIDEO_MODE=none" in phase.command
+    assert phase.command[-1] == "eb_capability"
+
+
 def test_l1b6_registry_exposes_calibration_and_gated_evaluation_phases():
     assert set(phase for scenario, phase in PHASES if scenario == "l1b6") == {
         "calibrate", "search", "path_calibrate", "prepare", "smoke", "pool_smoke",

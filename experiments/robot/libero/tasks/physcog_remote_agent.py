@@ -934,6 +934,25 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1a4_scripted_ec_reference_videos",
         ),
     ),
+    ("l1a4", "eb_capability"): PhaseSpec(
+        command=(
+            "env",
+            "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90",
+            "DO_SAMPLE=True",
+            "TEMPERATURE=1.6",
+            "TOP_P=1.0",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=none",
+            "SAVE_TRAJECTORY=True",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4.sh",
+            "eb_capability",
+        ),
+        count_env="EB_CAPABILITY_TRIALS",
+        artifacts=(
+            "rollouts/libero_90/L1-A4-middle-bowl-eb-native-grpo-capability",
+        ),
+    ),
     ("l1a4", "eb_video"): PhaseSpec(
         command=(
             "env",

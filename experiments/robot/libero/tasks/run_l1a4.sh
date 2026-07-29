@@ -7,6 +7,7 @@ set -euo pipefail
 #   run_l1a4.sh check
 #   run_l1a4.sh preview
 #   run_l1a4.sh certify
+#   run_l1a4.sh eb_capability
 #   run_l1a4.sh eb_video
 #   run_l1a4.sh er_video
 #   run_l1a4.sh ec_video
@@ -21,6 +22,7 @@ PIPELINE="${TASKS_DIR}/l1a4_pipeline.py"
 
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
+EB_CAPABILITY_TRIALS="${EB_CAPABILITY_TRIALS:-10}"
 SAFE_REF_STATES="${SAFE_REF_STATES:-5}"
 SEED="${SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-7}"
@@ -323,6 +325,13 @@ case "${MODE}" in
     require_formal_gates
     echo "verdict=PASS_L1A4_CONSTRUCTION_CERTIFICATION"
     ;;
+  eb_capability)
+    ensure_states
+    require_visibility_review
+    SAVE_VIDEO_MODE=none eval_condition Eb "${EB_STATES}" none \
+      "${EB_NOTE}-grpo-capability" "${EB_CAPABILITY_TRIALS}"
+    echo "verdict=PASS_L1A4_EB_CAPABILITY_RUN"
+    ;;
   eb_video)
     ensure_states
     require_visibility_review
@@ -408,7 +417,7 @@ case "${MODE}" in
     attribution
     ;;
   *)
-    echo "Usage: $0 preflight|check|preview|certify|eb_video|er_video|ec_video|smoke|formal|attribution" >&2
+    echo "Usage: $0 preflight|check|preview|certify|eb_capability|eb_video|er_video|ec_video|smoke|formal|attribution" >&2
     exit 2
     ;;
 esac
