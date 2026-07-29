@@ -738,6 +738,9 @@ def test_l1c2_safe_reference_aligns_target_orientation_before_placement():
         "_align_body_axis("
     )
     assert "reference_target_orientation_timeout" in alignment
+    assert '"max_command": (' in source
+    assert "args.reference_translation_max_command" in source
+    assert '"max_steps": 2 * args.max_waypoint_steps' in source
 
 
 def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():

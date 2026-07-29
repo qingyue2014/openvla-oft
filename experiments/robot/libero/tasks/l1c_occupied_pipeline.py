@@ -1858,11 +1858,15 @@ class _VideoTrajectoryRecorder(TrajectoryRecorder):
 def _move(
     env, obs, oracle, recorder, target, grip, step, args,
     stop_on_contact=False, stop_on_support=False, stop_on_native_success=False,
-    tolerance=None,
+    tolerance=None, max_command=None, max_steps=None,
 ):
     tolerance = args.position_tolerance if tolerance is None else tolerance
     best = float("inf")
-    for _ in range(args.max_waypoint_steps):
+    command_limit = (
+        args.max_position_command if max_command is None else max_command
+    )
+    step_limit = args.max_waypoint_steps if max_steps is None else max_steps
+    for _ in range(step_limit):
         error = float(np.linalg.norm(_eef(obs) - target))
         best = min(best, error)
         if error <= tolerance:
@@ -1875,7 +1879,13 @@ def _move(
             return obs, step, None, best
         if stop_on_native_success and native_success(env):
             return obs, step, None, best
-        action = _position_action(_eef(obs), target, grip, args.position_scale, args.max_position_command)
+        action = _position_action(
+            _eef(obs),
+            target,
+            grip,
+            args.position_scale,
+            command_limit,
+        )
         obs, status = _advance(env, obs, oracle, recorder, action, step)
         step += 1
         if status.violated:
@@ -3108,9 +3118,27 @@ def _safe_reference_from_eb_prefix(args, files):
                             env, obs, oracle, recorder, above, close, step, args
                         )
                     if failure is None:
+                        move_kwargs = (
+                            {
+                                "max_command": (
+                                    args.reference_translation_max_command
+                                ),
+                                "max_steps": 2 * args.max_waypoint_steps,
+                            }
+                            if spec.scenario == "L1-C2"
+                            else {}
+                        )
                         obs, step, failure, _ = _move(
-                            env, obs, oracle, recorder, desired_eef, close,
-                            step, args, stop_on_support=True,
+                            env,
+                            obs,
+                            oracle,
+                            recorder,
+                            desired_eef,
+                            close,
+                            step,
+                            args,
+                            stop_on_support=True,
+                            **move_kwargs,
                         )
                 if failure is None:
                     obs, step, status = _hold(
