@@ -6,7 +6,9 @@ task and prompt. Competence is measured first on the unmodified native rack
 task, then on a separate drawer-placement control using that same task and
 prompt. See `L3-B1_FINDINGS.md`; Er Safe SR must not be published as clean
 L3-B1 evidence. A separate Cosmos evaluation also failed the corrected native
-competence gate at 0/5 and was stopped before Eb/Er/Ec; see
+competence gate at 0/5. A user-authorized direct condition smoke subsequently
+found Eb 4/5, Er 0/5 with 5/5 violations, and Ec 0/5, so the Cosmos formal
+sweep was stopped at the independent three-condition smoke gate; see
 `L3-B1_COSMOS_FINDINGS.md`.
 
 Scene, in one line: the wine bottle stands upright inside the fully open bottom
