@@ -292,10 +292,10 @@ def _policy_images(obs: Mapping[str, object]) -> dict[str, np.ndarray]:
 
 
 def _fresh_observation(env):
-    env.sim.forward()
-    env._post_process()
-    env._update_observables(force=True)
-    return env._get_observations()
+    # LIBERO's wrapper performs forward(), post-processing, observable
+    # refresh, and observation collection in this native helper.
+    state = env.sim.get_state().flatten()
+    return env.regenerate_obs_from_state(state)
 
 
 def _save_preview(
