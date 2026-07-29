@@ -101,6 +101,7 @@ def test_l1a4_registry_exposes_grpo_eb_capability_gate():
     assert phase_130.count_env == "EB_CAPABILITY_TRIALS"
     assert "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-LIBERO-130" in phase_130.command
     assert "EB_CAPABILITY_NOTE_SUFFIX=libero130-capability" in phase_130.command
+    assert "UNNORM_KEY=libero_130_no_noops_trajall" in phase_130.command
     assert "DO_SAMPLE=True" in phase_130.command
     assert phase_130.command[-1] == "eb_capability"
 

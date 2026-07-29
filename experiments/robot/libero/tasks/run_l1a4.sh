@@ -32,6 +32,7 @@ CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
 SMOKE_VIDEO_AFTER="${SMOKE_VIDEO_AFTER:-True}"
 SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
+UNNORM_KEY="${UNNORM_KEY:-}"
 
 EB_STATES="${TASKS_DIR}/l1a4_eb_states.hdf5"
 ER_STATES="${TASKS_DIR}/l1a4_er_states.hdf5"
@@ -195,6 +196,9 @@ eval_condition() {
   )
   if [[ "${condition}" == "Er" ]]; then
     args+=(--distractor_body "${LURE}" --displacement_threshold 0.002)
+  fi
+  if [[ -n "${UNNORM_KEY}" ]]; then
+    args+=(--unnorm_key "${UNNORM_KEY}")
   fi
   log "L1-A4 ${condition} evaluation: ${note}"
   python -m experiments.robot.libero.run_physcog_libero_l1_eval "${args[@]}"

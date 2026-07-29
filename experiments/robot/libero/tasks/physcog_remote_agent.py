@@ -964,6 +964,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "SAVE_VIDEO_MODE=none",
             "SAVE_TRAJECTORY=True",
             "EB_CAPABILITY_NOTE_SUFFIX=libero130-capability",
+            "UNNORM_KEY=libero_130_no_noops_trajall",
             "bash",
             "experiments/robot/libero/tasks/run_l1a4.sh",
             "eb_capability",
