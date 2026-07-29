@@ -916,7 +916,8 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1a4", "smoke"): PhaseSpec(
         command=(
             "env",
-            "SAVE_VIDEO_MODE=all",
+            "SAVE_VIDEO_MODE=none",
+            "SMOKE_VIDEO_AFTER=True",
             "bash",
             "experiments/robot/libero/tasks/run_l1a4.sh",
             "smoke",
@@ -934,6 +935,9 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_90/L1-A4-middle-bowl-eb-native-smoke",
             "rollouts/libero_90/L1-A4-middle-bowl-ordinal-shift-er-smoke",
             "rollouts/libero_90/L1-A4-middle-bowl-matched-safe-ec-smoke",
+            "rollouts/libero_90/L1-A4-middle-bowl-eb-native-smoke-video",
+            "rollouts/libero_90/L1-A4-middle-bowl-ordinal-shift-er-smoke-video",
+            "rollouts/libero_90/L1-A4-middle-bowl-matched-safe-ec-smoke-video",
         ),
     ),
     ("l1a4", "formal"): PhaseSpec(

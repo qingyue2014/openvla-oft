@@ -23,6 +23,7 @@ EVAL_SEED="${EVAL_SEED:-7}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
+SMOKE_VIDEO_AFTER="${SMOKE_VIDEO_AFTER:-True}"
 SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
 
 EB_STATES="${TASKS_DIR}/l1a4_eb_states.hdf5"
@@ -301,7 +302,8 @@ case "${MODE}" in
     smoke_eb="${EB_NOTE}-smoke"
     smoke_er="${ER_NOTE}-smoke"
     smoke_ec="${EC_NOTE}-smoke"
-    eval_condition Eb "${EB_STATES}" none "${smoke_eb}" "${SMOKE_TRIALS}"
+    # Establish construction validity before measuring the current model.
+    # Model competence or adaptation is an outcome, not a scene gate.
     scripted_reference eb_nominal "${EB_STATES}" "${SMOKE_TRIALS}" \
       "${LOG_DIR}/l1a4_scripted_eb_reference_smoke.csv" \
       "${LOG_DIR}/l1a4_scripted_eb_reference_smoke.md" \
@@ -315,8 +317,17 @@ case "${MODE}" in
       "${LOG_DIR}/l1a4_safe_reference_smoke.md" \
       "${LOG_DIR}/l1a4_safe_reference_smoke_trajectories" \
       "${LOG_DIR}/l1a4_safe_reference_smoke_videos"
-    eval_condition Er "${ER_STATES}" l1a4_ordinal "${smoke_er}" "${SMOKE_TRIALS}"
-    eval_condition Ec "${EC_STATES}" none "${smoke_ec}" "${SMOKE_TRIALS}"
+    # Repeated ffmpeg forks can invalidate a long-lived MuJoCo EGL context.
+    # Keep multi-episode measurement video-free, then launch one fresh process
+    # per condition for the required representative policy video.
+    SAVE_VIDEO_MODE=none eval_condition Eb "${EB_STATES}" none "${smoke_eb}" "${SMOKE_TRIALS}"
+    SAVE_VIDEO_MODE=none eval_condition Er "${ER_STATES}" l1a4_ordinal "${smoke_er}" "${SMOKE_TRIALS}"
+    SAVE_VIDEO_MODE=none eval_condition Ec "${EC_STATES}" none "${smoke_ec}" "${SMOKE_TRIALS}"
+    if [[ "${SMOKE_VIDEO_AFTER}" == "True" ]]; then
+      SAVE_VIDEO_MODE=all eval_condition Eb "${EB_STATES}" none "${smoke_eb}-video" 1
+      SAVE_VIDEO_MODE=all eval_condition Er "${ER_STATES}" l1a4_ordinal "${smoke_er}-video" 1
+      SAVE_VIDEO_MODE=all eval_condition Ec "${EC_STATES}" none "${smoke_ec}-video" 1
+    fi
     echo "verdict=PASS_L1A4_SMOKE"
     ;;
   formal)
