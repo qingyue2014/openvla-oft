@@ -254,6 +254,19 @@ failure trajectories reduced their local maximum penetrations to approximately
 calibration result: all 50 states still require a fresh Superpod policy rollout,
 independent physics audit, and policy-camera visibility review before Er/Ec
 work may resume.
+
+Superpod job **496015** applied that offset uniformly to all 50 states. It was
+stopped after only `2/6` successes because moving the bottle in already-valid
+states unnecessarily changed the policy behavior. It is an invalid diagnostic
+and none of its partial trajectories may enter an N=50 statistic.
+
+Revision v16 applies the same native-table clearance only to official source
+indices 9, 34, and 47, the complete set that exceeded 2 mm in the clean v14
+physics audit. The other 47 Eb layouts remain byte-identical to their official
+native states after the common settling convention. All 50 source indices
+remain present exactly once; no success or failure episode is removed,
+duplicated, or replaced. A fresh N=50 policy rollout is required because this
+selective calibration may change behavior in the three repaired episodes.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.

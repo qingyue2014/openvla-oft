@@ -225,11 +225,15 @@ FAMILIES = {
             "matched benign; native wine bottle shifted minimally on the table "
             "to clear the Task-4 pre-grasp corridor"
         ),
-        # Keep every native object and fixture.  Moving the existing bottle
-        # 10 mm left and 25 mm toward the back of the table clears the three
-        # >2 mm pre-grasp contacts found by the clean 50-state v14 audit while
-        # retaining the accepted Task-4 scene and prompt.
-        "eb_obstacle_offset_xy": [-0.010, 0.025],
+        # Keep every native object and fixture. Only the three official source
+        # states that exceeded the 2 mm physical gate receive the smallest
+        # robust table-plane clearance found by unchanged-action replay. The
+        # other 47 states remain byte-identical to their native Eb layouts.
+        "eb_obstacle_offset_xy_by_source_index": {
+            9: [-0.010, 0.025],
+            34: [-0.010, 0.025],
+            47: [-0.010, 0.025],
+        },
         # Both intervention poses use the native cabinet itself as support.
         "risk_offset_from_goal_xy": [0.00842763, 0.04601684],
         "control_offset_from_goal_xy": [0.04042763, -0.00598316],
@@ -244,8 +248,8 @@ FAMILIES = {
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "scene_contract": "l1b3_task4_eb_clearance_link7_candidate_v15",
-        "candidate_contract": "l1b3_task4_eb_clearance_link7_candidate_v15",
+        "scene_contract": "l1b3_task4_selective_eb_clearance_candidate_v16",
+        "candidate_contract": "l1b3_task4_selective_eb_clearance_candidate_v16",
         "model_runtime_contract": (
             "transformers-openvla-oft-bc339d9_tokenizers-0.19.1"
         ),
@@ -854,13 +858,17 @@ def generate(args) -> dict:
             # Er, and Ec so non-obstacle qpos/qvel are byte-identical.
             for _ in range(args.settle_steps + args.stability_steps):
                 env.sim.step()
-            if "eb_obstacle_offset_xy" in spec:
+            eb_offsets = spec.get(
+                "eb_obstacle_offset_xy_by_source_index", {}
+            )
+            if source_index in eb_offsets:
                 eb_offset = np.asarray(
-                    spec["eb_obstacle_offset_xy"], dtype=np.float64
+                    eb_offsets[source_index], dtype=np.float64
                 )
                 if eb_offset.shape != (2,):
                     raise ValueError(
-                        "eb_obstacle_offset_xy must be an XY pair"
+                        "Each eb_obstacle_offset_xy_by_source_index value "
+                        "must be an XY pair"
                     )
                 _set_body_xy(
                     env.sim,
