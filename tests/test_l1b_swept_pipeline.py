@@ -480,13 +480,13 @@ def test_task4_native_support_exemption_is_height_and_depth_scoped():
     support = generator.split(
         "TASK4_CABINET_SHALLOW_SUPPORT_PAIRS = {", 1
     )[1].split("}", 1)[0]
-    assert "CREAM_CHEESE_BODY" in support
     assert "WINE_BOTTLE_BODY" in support
+    assert "wooden_cabinet_1_main" in support
     gate = generator.split("task4_cabinet_support = bool(", 1)[1].split(
         "\n        )", 1
     )[0]
     assert "TASK4_CABINET_SHALLOW_SUPPORT_PAIRS" in gate
-    assert "_body_pos(env, CREAM_CHEESE_BODY)[2] > 1.10" in gate
+    assert "_body_pos(env, WINE_BOTTLE_BODY)[2] > 1.10" in gate
     assert "float(contact.dist) >= -MAX_SUPPORT_PENETRATION_M" in gate
 
 

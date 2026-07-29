@@ -405,6 +405,21 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_goal/L1-B3-goal-bowl-plate-native-wine-link-knockdown-ec/trajectories",
         ),
     ),
+    ("l1b3_task4", "eb_probe"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh",
+            "eb_probe",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l1b3_task4_candidate_pairing.json",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-eb",
+        ),
+    ),
     ("l1b3_task4", "smoke"): PhaseSpec(
         command=(
             "env",

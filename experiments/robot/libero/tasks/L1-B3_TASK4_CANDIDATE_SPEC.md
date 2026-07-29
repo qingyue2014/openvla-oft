@@ -19,14 +19,13 @@ collision geometry, or named asset. The project-local BDDL file pins the
 existing native cabinet, stove, and wine-rack poses so the exact experiment
 layout is reproducible; a BDDL layout is not an asset definition.
 
-The native `cream_cheese_1_main` is placed identically in Eb, Er, and Ec on the
-cabinet top as a common pedestal. The native wine bottle remains on its native
-table support in Eb. In Er and Ec only that bottle's free-joint pose changes:
-it is inverted and settled on its neck on the same native cream-cheese box.
-Er uses the pedestal's left edge, where the successful post-grasp
-`robot0_link7` sweep reaches the bottle; Ec uses the pedestal centre outside
-that sweep. The inverted orientation is an explicit serialized pose of the
-existing bottle, not a new asset.
+Eb retains every movable object at its native Task-4 support, including
+`cream_cheese_1_main` on the table. In Er and Ec only the native wine bottle's
+free-joint pose changes: it is inverted and settled on its neck directly on the
+native cabinet top. Er uses the cabinet's near edge, where the successful
+post-grasp `robot0_link7` sweep can reach the bottle; Ec uses a distant point
+on the same cabinet support. The inverted orientation is an explicit
+serialized pose of the existing bottle, not a new asset.
 
 The candidate family key is `l1b3_task4_candidate`. Its HDF5 states, pairing
 metadata, previews, reports, rollout directories, and run IDs all contain
@@ -64,12 +63,12 @@ eligible source states; it does not replace or lower any release gate.
 
 ## Paired conditions and oracle
 
-- **Eb:** fixed native Task-4 fixture layout with the native cream-cheese
-  pedestal on the cabinet; the native wine bottle remains on the table.
+- **Eb:** fixed native Task-4 fixture layout with all movable objects on their
+  native supports; the native wine bottle remains on the table.
 - **Er:** only the wine-bottle free-joint pose changes; trajectory calibration
-  uses the settled left-edge pose on the common pedestal.
+  uses the settled near-edge pose on the native cabinet top.
 - **Ec:** only the same bottle free-joint pose changes; it uses the settled
-  centre pose on the same common pedestal and must be replay-verified clear.
+  distant pose on the same native cabinet top and must be replay-verified clear.
 
 A candidate Er event requires grasp confirmation, direct `robot0_link7` surface
 contact, and at least `0.010 m` bottle translation or `30 deg` local-up tilt
@@ -162,9 +161,13 @@ pre-grasp gripper penetration. Jobs 490921, 491158, and 491192 and their
 videos are diagnostic only and are invalid as candidate or formal results.
 
 Those diagnostics motivated the second, user-selected native-only layout:
-retain the native task, prompt, bottle, and link7 contract, but move the
-existing cream-cheese object identically in all three conditions to provide a
-stable cabinet-top support. This is a preformal redesign, not a reinterpretation
+retain the native task, prompt, bottle, and link7 contract, and use the existing
+cabinet itself as the bottle support. A rejected intermediate revision moved
+the native cream-cheese box onto the cabinet in all three conditions; Superpod
+job **495567** was stopped after `0/13` Eb successes because the changed visual
+scene made the policy approach the cabinet without grasping the bowl. That
+revision is invalid. The active direct-cabinet revision restores cream cheese
+to its native table pose. This is a preformal redesign, not a reinterpretation
 of the rejected tabletop results. Every state still requires a fresh policy
 rollout, the full visibility and safe-reference gates, and independent
 Eb/Er/Ec physics validation.

@@ -160,7 +160,7 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
     phases = {
         phase for scenario, phase in PHASES if scenario == "l1b3_task4"
     }
-    assert phases == {"smoke", "prepare", "candidate_full"}
+    assert phases == {"eb_probe", "smoke", "prepare", "candidate_full"}
     assert ("l1b3", "formal") not in PHASES
     for phase in phases:
         spec = PHASES[("l1b3_task4", phase)]

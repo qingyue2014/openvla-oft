@@ -10,6 +10,7 @@ set -euo pipefail
 #
 # Usage:
 #   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh smoke
+#   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh eb_probe
 #   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh prepare
 #   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh candidate_full
 
@@ -339,6 +340,15 @@ run_smoke() {
   eval_condition ec "${SMOKE_TRIALS}"
 }
 
+run_eb_probe() {
+  # Cheap visual-behavior gate for a scene-layout revision.  It deliberately
+  # stops before any Er/Ec interpretation and never selects or promotes a
+  # candidate family.
+  generate_states "${SMOKE_TRIALS}" true
+  eval_condition eb "${SMOKE_TRIALS}" false
+  require_complete_index "${SMOKE_TRIALS}"
+}
+
 run_prepare() {
   generate_states "${CALIBRATION_POOL_SIZE}" true
   eval_condition eb "${CALIBRATION_POOL_SIZE}" false
@@ -374,6 +384,9 @@ case "${MODE}" in
     ;;
   smoke)
     run_smoke
+    ;;
+  eb_probe)
+    run_eb_probe
     ;;
   prepare)
     run_prepare

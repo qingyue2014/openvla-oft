@@ -1124,8 +1124,8 @@ def calibrate(args: argparse.Namespace) -> str:
                 spec.get("placement_mode") == "supported_relative_goal"
             )
             if physics_qualified_eb and supported_serialized_mode:
-                # V2 Task-4 states already contain fully settled, paired
-                # cabinet/cream-cheese-supported Er/Ec poses.  Rebuilding them
+                # Task-4 states already contain fully settled, paired
+                # cabinet-supported Er/Ec poses. Rebuilding them
                 # from an Eb XY proposal would silently drop the bottle back
                 # to table height and destroy both the support relation and
                 # the full quaternion intervention.  Qualify the exact
