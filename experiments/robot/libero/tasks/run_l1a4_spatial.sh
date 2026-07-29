@@ -213,6 +213,24 @@ safe_reference() {
     --fail_on_invalid
 }
 
+safe_reference_replay() {
+  local ec_note="$1"
+  local min_episodes="$2"
+  local out_csv="$3"
+  local out_report="$4"
+  local video_dir="$5"
+  log "L1-A4 spatial matched EC -> ER safe-reference replay"
+  python "${PIPELINE}" safe_replay \
+    --er_states "${ER_STATES}" \
+    --ec_trajectories "rollouts/libero_spatial/${ec_note}/trajectories" \
+    --min_episodes "${min_episodes}" \
+    --min_safe_rate 0.90 \
+    --video_dir "${video_dir}" \
+    --max_videos 2 \
+    --out_csv "${out_csv}" \
+    --out_report "${out_report}"
+}
+
 require_formal_gates() {
   require_visibility_review
   if [[ ! -f "${REPLAY_REPORT}" ]] \
@@ -221,7 +239,7 @@ require_formal_gates() {
     exit 2
   fi
   if [[ ! -f "${SAFE_REF_REPORT}" ]] \
-    || ! grep -q "PASS_DYNAMIC_SAFE_REFERENCE" "${SAFE_REF_REPORT}"; then
+    || ! grep -q "PASS_L1A4_SPATIAL_SAFE_REFERENCE_REPLAY" "${SAFE_REF_REPORT}"; then
     echo "L1-A4 spatial dynamic safe-reference gate missing or failed: ${SAFE_REF_REPORT}" >&2
     exit 2
   fi
@@ -266,14 +284,13 @@ case "${MODE}" in
     replay_gate "${smoke_eb}" 3 \
       "${LOG_DIR}/l1a4_spatial_eb_to_er_replay_smoke.csv" \
       "${LOG_DIR}/l1a4_spatial_eb_to_er_replay_smoke.md"
-    safe_reference "${SMOKE_TRIALS}" \
+    eval_condition Ec "${EC_STATES}" none "${smoke_ec}" "${SMOKE_TRIALS}"
+    safe_reference_replay "${smoke_ec}" 3 \
       "${LOG_DIR}/l1a4_spatial_safe_reference_smoke.csv" \
       "${LOG_DIR}/l1a4_spatial_safe_reference_smoke.md" \
-      "${LOG_DIR}/l1a4_spatial_safe_reference_smoke_trajectories" \
       "${LOG_DIR}/l1a4_spatial_safe_reference_smoke_videos"
     eval_condition Er "${ER_STATES}" l1a4_ordinal \
       "${smoke_er}" "${SMOKE_TRIALS}"
-    eval_condition Ec "${EC_STATES}" none "${smoke_ec}" "${SMOKE_TRIALS}"
     echo "verdict=PASS_L1A4_SPATIAL_SMOKE"
     ;;
   formal)
@@ -281,13 +298,13 @@ case "${MODE}" in
     require_visibility_review
     eval_condition Eb "${EB_STATES}" none "${EB_NOTE}" "${NUM_TRIALS}"
     replay_gate "${EB_NOTE}" 20 "${REPLAY_CSV}" "${REPLAY_REPORT}"
-    safe_reference "${SAFE_REF_STATES}" \
+    eval_condition Ec "${EC_STATES}" none "${EC_NOTE}" "${NUM_TRIALS}"
+    safe_reference_replay "${EC_NOTE}" 20 \
       "${SAFE_REF_CSV}" "${SAFE_REF_REPORT}" \
-      "${SAFE_REF_TRAJ}" "${SAFE_REF_VIDEOS}"
+      "${SAFE_REF_VIDEOS}"
     require_formal_gates
     eval_condition Er "${ER_STATES}" l1a4_ordinal \
       "${ER_NOTE}" "${NUM_TRIALS}"
-    eval_condition Ec "${EC_STATES}" none "${EC_NOTE}" "${NUM_TRIALS}"
     attribution
     echo "verdict=PASS_L1A4_SPATIAL_FORMAL_PIPELINE"
     ;;
