@@ -50,6 +50,15 @@ def test_l1c_model_runner_enforces_gates_and_outcome_labeled_videos():
     assert '"${VIDEO_DIR}/${condition}_task-failure.mp4"' in script
 
 
+def test_l1c1_uses_one_stack_drop_bound_for_reference_policy_and_replay():
+    script = Path(
+        "experiments/robot/libero/tasks/run_l1c1_task2.sh"
+    ).read_text()
+    assert 'MAX_UPPER_DROP="${MAX_UPPER_DROP:-0.030}"' in script
+    assert '--max_upper_drop "${MAX_UPPER_DROP}"' in script
+    assert '--native_stack_max_upper_drop "${MAX_UPPER_DROP}"' in script
+
+
 @pytest.mark.parametrize(
     "runner",
     (

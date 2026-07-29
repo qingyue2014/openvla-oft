@@ -52,6 +52,9 @@ MAX_PLATE_TILT_DEG="${MAX_PLATE_TILT_DEG:-10.0}"
 MAX_BOWL_TILT_DEG="${MAX_BOWL_TILT_DEG:-20.0}"
 MAX_UPPER_LOWER_OFFSET="${MAX_UPPER_LOWER_OFFSET:-0.035}"
 MAX_LOWER_PLATE_OFFSET="${MAX_LOWER_PLATE_OFFSET:-0.025}"
+# Nested bowls can settle by roughly 25 mm while remaining centred, upright,
+# and in transitive contact. Match the project's general stack oracle bound.
+MAX_UPPER_DROP="${MAX_UPPER_DROP:-0.030}"
 HELD_OBJECT_BODY="${HELD_OBJECT_BODY:-akita_black_bowl_1_main}"
 SUPPORT_BODIES="${SUPPORT_BODIES:-plate_1_main,cookies_1_main}"
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-50}"
@@ -272,6 +275,7 @@ run_bowl_stack_safe_reference() {
     --max_lower_plate_offset "${MAX_LOWER_PLATE_OFFSET}" \
     --max_bowl_tilt_deg "${MAX_BOWL_TILT_DEG}" \
     --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}" \
+    --max_upper_drop "${MAX_UPPER_DROP}" \
     --fail_on_invalid
 }
 
@@ -307,6 +311,7 @@ run_bowl_stack_risk() {
     --stacking_max_support_tilt_deg "${MAX_PLATE_TILT_DEG}" \
     --native_stack_max_xy_offset "${MAX_UPPER_LOWER_OFFSET}" \
     --native_stack_max_tilt_deg "${MAX_BOWL_TILT_DEG}" \
+    --native_stack_max_upper_drop "${MAX_UPPER_DROP}" \
     --oracle_defines_task_success True \
     --post_success_settle_steps "${POST_SUCCESS_SETTLE_STEPS}" \
     --trajectory_track_bodies "${PLATE_BODY}" \
@@ -362,7 +367,8 @@ run_bowl_stack_replay() {
     --max_upper_lower_offset "${MAX_UPPER_LOWER_OFFSET}" \
     --max_bowl_tilt_deg "${MAX_BOWL_TILT_DEG}" \
     --max_lower_plate_offset "${MAX_LOWER_PLATE_OFFSET}" \
-    --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}"
+    --max_plate_tilt_deg "${MAX_PLATE_TILT_DEG}" \
+    --max_upper_drop "${MAX_UPPER_DROP}"
   python experiments/robot/libero/tasks/replay_l1c1_ec_actions.py \
     --eb "rollouts/libero_spatial/${BOWL_STACK_EB_NOTE}/trajectories" \
     --ec_states "${BOWL_STACK_EC_STATE_PATH}"

@@ -201,6 +201,7 @@ def _run_episode(env, state, args, episode_idx, grasp_xy_offset=(0.0, 0.0), atte
         max_tilt_deg=args.max_bowl_tilt_deg,
         max_lower_plate_xy_offset=args.max_lower_plate_offset,
         max_plate_tilt_deg=args.max_plate_tilt_deg,
+        max_upper_drop=args.max_upper_drop,
     )
     oracle.reset(env, obs)
     recorder = TrajectoryRecorder(env, [UPPER, LOWER, PLATE])
@@ -553,6 +554,7 @@ def main():
     parser.add_argument("--max_bowl_tilt_deg", type=float, default=20.0)
     parser.add_argument("--max_lower_plate_offset", type=float, default=0.025)
     parser.add_argument("--max_plate_tilt_deg", type=float, default=10.0)
+    parser.add_argument("--max_upper_drop", type=float, default=0.030)
     parser.add_argument(
         "--trajectory_dir", default="experiments/logs/l1c1_safe_reference_trajectories"
     )

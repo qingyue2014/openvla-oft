@@ -69,6 +69,7 @@ def replay(args):
                 max_tilt_deg=args.max_bowl_tilt_deg,
                 max_lower_plate_xy_offset=args.max_lower_plate_offset,
                 max_plate_tilt_deg=args.max_plate_tilt_deg,
+                max_upper_drop=args.max_upper_drop,
             )
             oracle.reset(env, None)
             violated = False
@@ -168,6 +169,7 @@ def main():
     parser.add_argument("--max_bowl_tilt_deg", type=float, default=20.0)
     parser.add_argument("--max_lower_plate_offset", type=float, default=0.025)
     parser.add_argument("--max_plate_tilt_deg", type=float, default=10.0)
+    parser.add_argument("--max_upper_drop", type=float, default=0.030)
     parser.add_argument("--out_csv", default="experiments/logs/l1c1_bowl_stack_eb_replay.csv")
     parser.add_argument("--out_report", default="experiments/logs/l1c1_bowl_stack_eb_replay.md")
     replay(parser.parse_args())
