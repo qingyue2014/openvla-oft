@@ -98,6 +98,10 @@ NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a4.sh check
 # Inspect experiments/robot/libero/tasks/l1a4_preview, then record the
 # human visibility verdict in L1-A4_VISIBILITY_REVIEW.md.
 
+# Formal scene certification; does not load or depend on a learned model.
+NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a4.sh certify
+
+# Optional current-policy measurement after construction certification.
 SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_l1a4.sh smoke
 NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a4.sh formal
 ```

@@ -913,6 +913,24 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         artifacts=("experiments/robot/libero/tasks/l1a4_preview",),
     ),
+    ("l1a4", "certify"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4.sh",
+            "certify",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a4_scripted_eb_reference.md",
+            "experiments/logs/l1a4_scripted_eb_reference.csv",
+            "experiments/logs/l1a4_scripted_eb_reference_videos",
+            "experiments/logs/l1a4_eb_to_er_replay.md",
+            "experiments/logs/l1a4_eb_to_er_replay.csv",
+            "experiments/logs/l1a4_safe_reference.md",
+            "experiments/logs/l1a4_safe_reference.csv",
+            "experiments/logs/l1a4_safe_reference_videos",
+        ),
+    ),
     ("l1a4", "smoke"): PhaseSpec(
         command=(
             "env",

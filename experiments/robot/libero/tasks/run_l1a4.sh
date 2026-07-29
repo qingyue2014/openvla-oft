@@ -6,6 +6,7 @@ set -euo pipefail
 #   run_l1a4.sh preflight
 #   run_l1a4.sh check
 #   run_l1a4.sh preview
+#   run_l1a4.sh certify
 #   run_l1a4.sh smoke
 #   run_l1a4.sh formal
 #   run_l1a4.sh attribution
@@ -296,6 +297,18 @@ case "${MODE}" in
     require_states
     preview
     ;;
+  certify)
+    ensure_states
+    require_visibility_review
+    scripted_reference eb_nominal "${EB_STATES}" 20 \
+      "${EB_REF_CSV}" "${EB_REF_REPORT}" "${EB_REF_TRAJ}" "${EB_REF_VIDEOS}"
+    replay_gate "${EB_REF_TRAJ}" 20 "${REPLAY_CSV}" "${REPLAY_REPORT}"
+    safe_reference "${SAFE_REF_STATES}" \
+      "${SAFE_REF_CSV}" "${SAFE_REF_REPORT}" \
+      "${SAFE_REF_TRAJ}" "${SAFE_REF_VIDEOS}"
+    require_formal_gates
+    echo "verdict=PASS_L1A4_CONSTRUCTION_CERTIFICATION"
+    ;;
   smoke)
     ensure_states
     require_visibility_review
@@ -350,7 +363,7 @@ case "${MODE}" in
     attribution
     ;;
   *)
-    echo "Usage: $0 preflight|check|preview|smoke|formal|attribution" >&2
+    echo "Usage: $0 preflight|check|preview|certify|smoke|formal|attribution" >&2
     exit 2
     ;;
 esac
