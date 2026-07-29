@@ -25,3 +25,26 @@ resolution after state restoration and simulator forwarding.
   separation is 35.39 pixels, exceeding the required 80 pixels and 18 pixels.
 
 No custom asset, BDDL, prompt, camera, or preprocessing change was used.
+
+## Model rollout smoke review
+
+Verdict: **PASS_HUMAN_MODEL_SMOKE_VISIBILITY**
+
+The exact 256 px `agentview` rollout videos were manually inspected at the
+first, middle, and final frames:
+
+- Eb: `.physcog-agent/runs/20260729T034607Z-l1a4-eb_video`, commit
+  `a44b34447b366fa3b1d8bd57622a82987768ece7`.
+- Er: `.physcog-agent/runs/20260729T033508Z-l1a4-er_video`, commit
+  `c97da3bc1aa8fbb9277bea07d2c78e16ee4d07d6`.
+- Ec: `.physcog-agent/runs/20260729T034618Z-l1a4-ec_video`, commit
+  `a44b34447b366fa3b1d8bd57622a82987768ece7`.
+
+All three videos contain 400 refreshed policy-view frames. The three native
+bowls and plate are recognizable and spatially separated before the robot
+approaches, and the robot visibly executes model actions. The single sampled
+episode in each condition was a valid execution but did not complete the
+native task. The Er episode did not activate the protected-wrong-bowl oracle.
+These policy outcomes measure model competence; they do not replace or
+invalidate the independently passed construction, safe-reference, and action
+separation gates.
