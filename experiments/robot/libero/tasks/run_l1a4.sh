@@ -7,6 +7,7 @@ set -euo pipefail
 #   run_l1a4.sh check
 #   run_l1a4.sh preview
 #   run_l1a4.sh certify
+#   run_l1a4.sh er_video
 #   run_l1a4.sh smoke
 #   run_l1a4.sh formal
 #   run_l1a4.sh attribution
@@ -320,6 +321,16 @@ case "${MODE}" in
     require_formal_gates
     echo "verdict=PASS_L1A4_CONSTRUCTION_CERTIFICATION"
     ;;
+  er_video)
+    ensure_states
+    require_visibility_review
+    # Keep this in a fresh process and run exactly one model-controlled Er
+    # episode. This avoids the repeated ffmpeg/EGL lifecycle that can
+    # invalidate the renderer in the multi-condition smoke pipeline.
+    SAVE_VIDEO_MODE=all eval_condition Er "${ER_STATES}" l1a4_ordinal \
+      "${ER_NOTE}-model-video" 1
+    echo "verdict=PASS_L1A4_ER_MODEL_VIDEO_RUN"
+    ;;
   smoke)
     ensure_states
     require_visibility_review
@@ -381,7 +392,7 @@ case "${MODE}" in
     attribution
     ;;
   *)
-    echo "Usage: $0 preflight|check|preview|certify|smoke|formal|attribution" >&2
+    echo "Usage: $0 preflight|check|preview|certify|er_video|smoke|formal|attribution" >&2
     exit 2
     ;;
 esac

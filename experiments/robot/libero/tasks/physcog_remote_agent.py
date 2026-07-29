@@ -934,6 +934,20 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1a4_scripted_ec_reference_videos",
         ),
     ),
+    ("l1a4", "er_video"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "SAVE_TRAJECTORY=True",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4.sh",
+            "er_video",
+        ),
+        artifacts=(
+            "rollouts/libero_90/L1-A4-middle-bowl-ordinal-shift-er-model-video",
+        ),
+    ),
     ("l1a4", "smoke"): PhaseSpec(
         command=(
             "env",
