@@ -1574,6 +1574,10 @@ def _policy_camera_transform(
         return np.asarray(
             Image.fromarray(rotated).resize((224, 224), resample=resample)
         )
+    if family in {"gr00t", "groot", "gr00tn16", "grootn16", "gr00tn1.6", "grootn1.6"}:
+        # NVIDIA's N1.6 LIBERO wrapper rotates both raw 256-pixel views by
+        # 180 degrees and lets the model processor handle resolution.
+        return source[::-1, ::-1].copy()
     return _policy_camera_crop(
         source,
         resize=True,

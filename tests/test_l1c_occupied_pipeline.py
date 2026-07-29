@@ -295,6 +295,13 @@ def test_policy_camera_transform_matches_pi05_and_cosmos_contracts():
     np.testing.assert_array_equal(cosmos, image[::-1])
 
 
+def test_policy_camera_transform_matches_gr00t_n16_contract():
+    image = np.arange(4 * 5 * 3, dtype=np.uint8).reshape(4, 5, 3)
+    transformed = _policy_camera_transform(image, "gr00t_n16")
+    assert transformed.shape == image.shape
+    np.testing.assert_array_equal(transformed, image[::-1, ::-1])
+
+
 def test_cosmos_numpy2_segmentation_overflow_has_exact_mujoco_fallback():
     text = Path(
         "experiments/robot/libero/tasks/l1c_occupied_pipeline.py"

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL="${1:?usage: run_model_l1c_eval.sh pi05|cosmos l1c1|l1c2|l1c3 smoke|formal}"
-SCENARIO="${2:?usage: run_model_l1c_eval.sh pi05|cosmos l1c1|l1c2|l1c3 smoke|formal}"
-RUN_KIND="${3:?usage: run_model_l1c_eval.sh pi05|cosmos l1c1|l1c2|l1c3 smoke|formal}"
+MODEL="${1:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal}"
+SCENARIO="${2:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal}"
+RUN_KIND="${3:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal}"
 case "${MODEL}" in
-  pi05|cosmos) ;;
+  pi05|cosmos|gr00t_n16) ;;
   *) echo "Unsupported model: ${MODEL}" >&2; exit 2 ;;
 esac
 case "${SCENARIO}" in
@@ -55,6 +55,13 @@ COSMOS_MODEL_REVISION="${COSMOS_MODEL_REVISION:-cb689ec0e3347c13667d70a78a344738
 COSMOS_SOURCE_ROOT="${COSMOS_SOURCE_ROOT:-/project/trllmout/models/_sources/cosmos-policy}"
 COSMOS_SOURCE_REVISION="${COSMOS_SOURCE_REVISION:-18a2accadf4e7a3531e56754102af5a24d2316da}"
 COSMOS_PYTHON="${COSMOS_PYTHON:-${COSMOS_SOURCE_ROOT}/.venv/bin/python}"
+
+GR00T_N16_CHECKPOINT="${GR00T_N16_CHECKPOINT:-/project/trllmout/models/GR00T-N1.6-LIBERO}"
+GR00T_N16_MODEL_REVISION="${GR00T_N16_MODEL_REVISION:-d690a226ad06e81736786f56cf879d2ed1dd3f0f}"
+GR00T_N16_SOURCE_ROOT="${GR00T_N16_SOURCE_ROOT:-/project/trllmout/models/_sources/Isaac-GR00T-N1.6}"
+GR00T_N16_SOURCE_REVISION="${GR00T_N16_SOURCE_REVISION:-9b37aa1ce69c73c6d165233fa88128283bba4508}"
+GR00T_N16_PYTHON="${GR00T_N16_PYTHON:-${GR00T_N16_SOURCE_ROOT}/.venv/bin/python}"
+GR00T_N16_CLIENT_ROOT="${GR00T_N16_CLIENT_ROOT:-/project/trllmout/models/gr00t-n16-client-minimal}"
 
 export LIBERO_ROOT
 export NUM_TRIALS="${COUNT}"
@@ -158,6 +165,83 @@ PY
   export MODEL_OPEN_LOOP_STEPS=5
   MODEL_REVISION="pi05_libero"
   SOURCE_REVISION="${OPENPI_COMMIT}"
+elif [[ "${MODEL}" == "gr00t_n16" ]]; then
+  test -s "${GR00T_N16_CHECKPOINT}/config.json"
+  test -s "${GR00T_N16_CHECKPOINT}/processor_config.json"
+  test -s "${GR00T_N16_CHECKPOINT}/model.safetensors.index.json"
+  test -d "${GR00T_N16_SOURCE_ROOT}/.git"
+  test "$(git -C "${GR00T_N16_SOURCE_ROOT}" rev-parse HEAD)" = "${GR00T_N16_SOURCE_REVISION}"
+  test -x "${GR00T_N16_PYTHON}"
+  test -d "${GR00T_N16_CLIENT_ROOT}/msgpack"
+  if [[ -n "${GR00T_N16_PORT:-}" ]]; then
+    PORT="${GR00T_N16_PORT}"
+  elif [[ -n "${SLURM_JOB_ID:-}" ]]; then
+    PORT="$((40000 + SLURM_JOB_ID % 10000))"
+  else
+    PORT=5555
+  fi
+  SERVER_LOG="${RESULT_PREFIX}_server.log"
+  (
+    cd "${GR00T_N16_SOURCE_ROOT}"
+    CUDA_VISIBLE_DEVICES=0 \
+      "${GR00T_N16_PYTHON}" gr00t/eval/run_gr00t_server.py \
+        --model-path "${GR00T_N16_CHECKPOINT}" \
+        --embodiment-tag LIBERO_PANDA \
+        --device cuda \
+        --host 0.0.0.0 \
+        --port "${PORT}" \
+        --use-sim-policy-wrapper
+  ) >"${SERVER_LOG}" 2>&1 &
+  server_pid=$!
+  server_ready=false
+  for _ in $(seq 1 900); do
+    if ! kill -0 "${server_pid}" >/dev/null 2>&1; then
+      echo "GR00T N1.6 policy server exited before becoming ready" >&2
+      tail -200 "${SERVER_LOG}" >&2 || true
+      exit 1
+    fi
+    if PYTHONPATH="${GR00T_N16_CLIENT_ROOT}" python - "${PORT}" <<'PY'
+import msgpack
+import sys
+import zmq
+
+context = zmq.Context()
+socket = context.socket(zmq.REQ)
+socket.setsockopt(zmq.LINGER, 0)
+socket.setsockopt(zmq.SNDTIMEO, 1000)
+socket.setsockopt(zmq.RCVTIMEO, 1000)
+socket.connect(f"tcp://127.0.0.1:{int(sys.argv[1])}")
+try:
+    socket.send(msgpack.packb({"endpoint": "ping"}, use_bin_type=True))
+    response = msgpack.unpackb(socket.recv(), raw=False)
+    if response.get("status") != "ok":
+        raise SystemExit(1)
+except zmq.error.ZMQError:
+    raise SystemExit(1)
+finally:
+    socket.close()
+    context.term()
+PY
+    then
+      server_ready=true
+      break
+    fi
+    sleep 2
+  done
+  if [[ "${server_ready}" != "true" ]]; then
+    echo "GR00T N1.6 server did not become ready within 1800 seconds" >&2
+    exit 1
+  fi
+  export PYTHONPATH="${GR00T_N16_CLIENT_ROOT}:${LIBERO_ROOT}:${PYTHONPATH:-}"
+  export MODEL_FAMILY=gr00t_n16
+  export CHECKPOINT="${GR00T_N16_CHECKPOINT}"
+  export GR00T_N16_HOST=127.0.0.1
+  export GR00T_N16_PORT="${PORT}"
+  export GR00T_N16_CONNECT_TIMEOUT_S=1800
+  export GR00T_N16_REQUEST_TIMEOUT_S="${GR00T_N16_REQUEST_TIMEOUT_S:-120}"
+  export MODEL_OPEN_LOOP_STEPS=8
+  MODEL_REVISION="${GR00T_N16_MODEL_REVISION}"
+  SOURCE_REVISION="${GR00T_N16_SOURCE_REVISION}"
 else
   test -s "${COSMOS_CHECKPOINT}/Cosmos-Policy-LIBERO-Predict2-2B.pt"
   test -s "${COSMOS_CHECKPOINT}/config.json"

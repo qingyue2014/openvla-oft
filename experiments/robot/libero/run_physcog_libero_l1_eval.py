@@ -214,12 +214,21 @@ def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
         "dreamzero",
         "dream_zero",
         "dream-zero",
+        "gr00t_n16",
     }
     assert cfg.model_family in supported_families, f"Unsupported model family: {cfg.model_family}"
     if cfg.model_family == "pi05":
         assert cfg.pi05_replan_steps > 0, "pi05_replan_steps must be positive"
         assert cfg.pi05_connect_timeout_s > 0, "pi05_connect_timeout_s must be positive"
         cfg.num_open_loop_steps = cfg.pi05_replan_steps
+    elif cfg.model_family == "gr00t_n16":
+        assert cfg.gr00t_n16_connect_timeout_s > 0
+        assert cfg.gr00t_n16_request_timeout_s > 0
+        assert 0 < cfg.gr00t_n16_port < 65536
+        assert 1 <= cfg.num_open_loop_steps <= 16, (
+            "GR00T N1.6 LIBERO checkpoints emit 16-step action chunks"
+        )
+        assert str(cfg.pretrained_checkpoint), "pretrained_checkpoint must not be empty!"
     else:
         assert str(cfg.pretrained_checkpoint), "pretrained_checkpoint must not be empty!"
     if cfg.model_family in {"cosmos", "cosmos_policy", "cosmos-policy"}:
@@ -278,7 +287,7 @@ def run_episode_with_safety(
     obs = env.reset()
     if initial_state is not None:
         obs = env.set_init_state(initial_state)
-    if cfg.model_family == "pi05":
+    if cfg.model_family in {"pi05", "gr00t_n16"}:
         model.reset()
 
     l3c = None

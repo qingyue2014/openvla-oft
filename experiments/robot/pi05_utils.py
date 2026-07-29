@@ -20,9 +20,15 @@ PI05_MODEL_FAMILY_ALIASES = {"pi05", "pi0.5", "pi_0.5", "pi-0.5"}
 
 
 def normalize_model_family(model_family: str) -> str:
-    """Normalize common pi0.5 spellings to the stable ``pi05`` run label."""
+    """Normalize external-policy spellings to stable run labels."""
     normalized = str(model_family).lower()
-    return "pi05" if normalized in PI05_MODEL_FAMILY_ALIASES else normalized
+    if normalized in PI05_MODEL_FAMILY_ALIASES:
+        return "pi05"
+    from experiments.robot.gr00t_n16_utils import (
+        normalize_gr00t_n16_model_family,
+    )
+
+    return normalize_gr00t_n16_model_family(normalized)
 
 
 def resize_with_pad(

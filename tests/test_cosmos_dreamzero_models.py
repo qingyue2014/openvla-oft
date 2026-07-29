@@ -160,11 +160,19 @@ def test_remote_agent_registers_model_setup_phases():
             )
         else:
             assert spec.artifacts == ()
+    gr00t = PHASES[("models", "setup_gr00t_n16")]
+    assert gr00t.command == (
+        "bash",
+        "experiments/robot/libero/tasks/setup_gr00t_n16_superpod.sh",
+    )
+    assert gr00t.artifacts == (
+        "experiments/logs/gr00t_n16_superpod_setup.json",
+    )
 
 
 def test_remote_agent_registers_all_l1c_model_evaluations():
     for scenario in ("l1c1", "l1c2", "l1c3"):
-        for model in ("pi05", "cosmos"):
+        for model in ("pi05", "cosmos", "gr00t_n16"):
             for kind, count_env in (
                 ("smoke", "L1C_SMOKE_TRIALS"),
                 ("formal", "L1C_FORMAL_TRIALS"),

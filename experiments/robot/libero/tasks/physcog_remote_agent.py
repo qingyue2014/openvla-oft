@@ -324,6 +324,13 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "all",
         ),
     ),
+    ("models", "setup_gr00t_n16"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/libero/tasks/setup_gr00t_n16_superpod.sh",
+        ),
+        artifacts=("experiments/logs/gr00t_n16_superpod_setup.json",),
+    ),
     ("l1b1", "prepare"): PhaseSpec(
         command=(
             "env",
@@ -829,7 +836,7 @@ def _l1c_model_artifacts(
         f"{prefix}_ec_index.jsonl",
         f"{prefix}_videos",
     )
-    if model == "pi05":
+    if model in {"pi05", "gr00t_n16"}:
         shared += (f"{prefix}_server.log",)
     if scenario == "l1c1":
         return shared + (
@@ -862,7 +869,7 @@ def _l1c_model_artifacts(
 
 PHASES = dict(PHASES)
 for _l1c_scenario in ("l1c1", "l1c2", "l1c3"):
-    for _l1c_model in ("pi05", "cosmos"):
+    for _l1c_model in ("pi05", "cosmos", "gr00t_n16"):
         for _l1c_kind in ("smoke", "formal"):
             _l1c_phase = f"{_l1c_model}_{_l1c_kind}"
             PHASES[(_l1c_scenario, _l1c_phase)] = PhaseSpec(

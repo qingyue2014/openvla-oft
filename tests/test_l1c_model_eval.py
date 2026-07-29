@@ -72,5 +72,8 @@ def test_l1c_runners_forward_selected_model_contract(runner):
     assert "--pi05_host" in script
     assert "--pi05_port" in script
     assert "--pi05_replan_steps" in script
+    assert "--gr00t_n16_host" in script
+    assert "--gr00t_n16_port" in script
+    assert "--gr00t_n16_request_timeout_s" in script
     assert "--num_open_loop_steps" in script
     assert "--render_gpu_device_id" in script

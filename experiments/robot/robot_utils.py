@@ -35,6 +35,7 @@ MODEL_IMAGE_SIZES = {
     "dreamzero": 224,
     "dream_zero": 224,
     "dream-zero": 224,
+    "gr00t_n16": 256,
 }
 
 
@@ -83,6 +84,10 @@ def get_model(cfg: Any, wrap_diffusion_policy_for_droid: bool = False) -> Any:
         from experiments.robot.dreamzero_utils import get_dreamzero_policy
 
         model = get_dreamzero_policy(cfg)
+    elif model_family == "gr00t_n16":
+        from experiments.robot.gr00t_n16_utils import get_gr00t_n16_policy
+
+        model = get_gr00t_n16_policy(cfg)
     else:
         raise ValueError(f"Unsupported model family: {cfg.model_family}")
 
@@ -156,6 +161,8 @@ def get_action(
     elif model_family in {"dreamzero", "dream_zero", "dream-zero"}:
         # Loading a public DROID checkpoint through this path is rejected by
         # get_model before any invalid LIBERO rollout can start.
+        action = model.infer(obs, task_label)
+    elif model_family == "gr00t_n16":
         action = model.infer(obs, task_label)
     else:
         with torch.no_grad():

@@ -148,6 +148,11 @@ class GenerateConfig:
     pi05_api_key: str = ""                           # Optional OpenPI server API key
     pi05_replan_steps: int = 5                       # Official LIBERO client replans every 5 actions
     pi05_connect_timeout_s: float = 900.0            # Fail instead of waiting forever for a missing server
+    gr00t_n16_host: str = "127.0.0.1"                # NVIDIA PolicyServer host
+    gr00t_n16_port: int = 5555                       # NVIDIA PolicyServer ZeroMQ port
+    gr00t_n16_api_token: str = ""                    # Optional PolicyServer API token
+    gr00t_n16_connect_timeout_s: float = 1800.0      # Server startup timeout
+    gr00t_n16_request_timeout_s: float = 120.0       # Per-inference request timeout
 
     use_l1_regression: bool = True                   # If True, uses continuous action head with L1 regression objective
     use_diffusion: bool = False                      # If True, uses continuous action head with diffusion modeling objective (DDIM)
@@ -207,12 +212,21 @@ def validate_config(cfg: GenerateConfig) -> None:
         "dreamzero",
         "dream_zero",
         "dream-zero",
+        "gr00t_n16",
     }
     assert cfg.model_family in supported_families, f"Unsupported model family: {cfg.model_family}"
     if cfg.model_family == "pi05":
         assert cfg.pi05_replan_steps > 0, "pi05_replan_steps must be positive"
         assert cfg.pi05_connect_timeout_s > 0, "pi05_connect_timeout_s must be positive"
         cfg.num_open_loop_steps = cfg.pi05_replan_steps
+    elif cfg.model_family == "gr00t_n16":
+        assert cfg.gr00t_n16_connect_timeout_s > 0
+        assert cfg.gr00t_n16_request_timeout_s > 0
+        assert 0 < cfg.gr00t_n16_port < 65536
+        assert 1 <= cfg.num_open_loop_steps <= 16, (
+            "GR00T N1.6 LIBERO checkpoints emit 16-step action chunks"
+        )
+        assert str(cfg.pretrained_checkpoint), "pretrained_checkpoint must not be empty!"
     else:
         assert str(cfg.pretrained_checkpoint), "pretrained_checkpoint must not be empty!"
     if cfg.model_family in {"cosmos", "cosmos_policy", "cosmos-policy"}:
@@ -342,6 +356,14 @@ def load_initial_states(cfg: GenerateConfig, task_suite, task_id: int, log_file=
 
 def prepare_observation(obs, resize_size, model_family="openvla"):
     """Prepare observation for policy input."""
+    if model_family == "gr00t_n16":
+        from experiments.robot.gr00t_n16_utils import (
+            prepare_gr00t_n16_libero_observation,
+        )
+
+        observation = prepare_gr00t_n16_libero_observation(obs)
+        return observation, observation["video.image"][0, 0]
+
     if model_family.lower() in {"cosmos", "cosmos_policy", "cosmos-policy"}:
         from experiments.robot.cosmos_policy_utils import (
             prepare_cosmos_libero_observation,
@@ -379,6 +401,13 @@ def prepare_observation(obs, resize_size, model_family="openvla"):
 
 def process_action(action, model_family):
     """Process action before sending to environment."""
+    if model_family == "gr00t_n16":
+        from experiments.robot.gr00t_n16_utils import (
+            process_gr00t_n16_libero_action,
+        )
+
+        return process_gr00t_n16_libero_action(action)
+
     # OpenPI's official LIBERO output transform already emits the exact 7-D
     # environment action convention used by OffScreenRenderEnv.
     if model_family == "pi05":
@@ -428,7 +457,7 @@ def run_episode(
         obs = env.set_init_state(initial_state)
     else:
         obs = env.get_observation()
-    if cfg.model_family == "pi05":
+    if cfg.model_family in {"pi05", "gr00t_n16"}:
         model.reset()
 
     # Initialize action queue
