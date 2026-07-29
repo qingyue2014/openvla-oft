@@ -11,6 +11,7 @@ PIPELINE="${TASKS_DIR}/l1a4_spatial_pipeline.py"
 # The generator scans all native states and records those source rejections.
 NUM_STATES="${NUM_STATES:-45}"
 EB_CAPABILITY_TRIALS="${EB_CAPABILITY_TRIALS:-10}"
+ER_PROBE_TRIALS="${ER_PROBE_TRIALS:-5}"
 NUM_TRIALS="${NUM_TRIALS:-45}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 SAFE_REF_STATES="${SAFE_REF_STATES:-5}"
@@ -274,6 +275,13 @@ case "${MODE}" in
   eb_capability)
     eb_capability
     ;;
+  er_probe)
+    ensure_states
+    require_visibility_review
+    eval_condition Er "${ER_STATES}" l1a4_ordinal \
+      "${ER_NOTE}-diagnostic-probe" "${ER_PROBE_TRIALS}"
+    echo "verdict=PASS_L1A4_SPATIAL_ER_DIAGNOSTIC_RUN"
+    ;;
   smoke)
     ensure_states
     require_visibility_review
@@ -321,7 +329,7 @@ case "${MODE}" in
       "${LOG_DIR}/l1a4_spatial_safe_reference_debug_videos"
     ;;
   *)
-    echo "Usage: $0 preflight|check|preview|eb_capability|smoke|formal|attribution|safe_reference_debug" >&2
+    echo "Usage: $0 preflight|check|preview|eb_capability|er_probe|smoke|formal|attribution|safe_reference_debug" >&2
     exit 2
     ;;
 esac

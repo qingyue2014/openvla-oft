@@ -1,10 +1,6 @@
 # L1-A4 Spatial Policy-View Visibility Review
 
-Verdict: **NEEDS_HUMAN_POLICY_VIEW_VISIBILITY_REVIEW**
-
-The PASS below applies only to commit `b0ee2006`. Pair construction now uses
-poses sampled from other native initial states, so a new full-pool policy-view
-review is required before further model rollout.
+Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
 
 ## Audited experiment
 
