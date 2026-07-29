@@ -22,10 +22,9 @@ layout is reproducible; a BDDL layout is not an asset definition.
 The fixture layout pins the native cabinet to
 `(0.03957237, -0.23401684)`, the pose recorded by the successful HTML Task-4
 trajectory, instead of the unsuccessful `(0.020, -0.245)` revision. The native
-`cream_cheese_1_main` is placed identically in Eb, Er, and Ec on the cabinet
-top as a common support. The wine bottle stays at its HTML-success table pose
-in Eb. In Er and Ec only the native wine bottle's free-joint pose changes: it
-is inverted and settled on its neck on the common cream-cheese support. The
+cream-cheese box and wine bottle stay at their HTML-success table poses in Eb.
+In Er and Ec only the native wine bottle's free-joint pose changes: it is
+inverted and settled on its neck directly on the native cabinet top. The
 inverted orientation is an explicit serialized pose of the existing bottle,
 not a new asset.
 
@@ -65,12 +64,12 @@ eligible source states; it does not replace or lower any release gate.
 
 ## Paired conditions and oracle
 
-- **Eb:** exact HTML-success native cabinet and wine-bottle poses, plus the
-  common native cream-cheese support used identically in all conditions.
+- **Eb:** exact HTML-success native cabinet, cream-cheese, and wine-bottle
+  poses.
 - **Er:** only the wine-bottle free-joint pose changes; trajectory calibration
-  uses the settled left-edge pose on the common native support.
+  uses the settled near-edge pose on the native cabinet.
 - **Ec:** only the same bottle free-joint pose changes; it uses the settled
-  centre pose on the same support and must be replay-verified clear.
+  distant pose on the same support and must be replay-verified clear.
 
 A candidate Er event requires grasp confirmation, direct `robot0_link7` surface
 contact, and at least `0.010 m` bottle translation or `30 deg` local-up tilt
@@ -181,8 +180,11 @@ used cabinet pose `(0.020,-0.245)`, whereas the successful HTML trajectory used
 HTML actions but its inverted-bottle contact switched between low and excessive
 penetration under micrometre perturbations, so it was rejected as numerically
 under-robust. The active revision restores the exact HTML fixture pose while
-using the earlier physically robust native cream-cheese support. It must pass a
-fresh Eb policy probe; prior support-layout job 495567 does not qualify it.
+using the unchanged HTML movable-object scene in Eb. Superpod job **495759**
+tested the common cream-cheese support with the corrected cabinet and still
+returned `0/5` Eb successes, proving that support itself changes policy
+behavior; it is permanently rejected. The active direct-cabinet revision must
+pass a fresh Eb policy probe; prior jobs do not qualify it.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.

@@ -96,9 +96,6 @@ EXPECTED_NATIVE_SHALLOW_SUPPORT_PAIRS = {
 TASK4_CABINET_SHALLOW_SUPPORT_PAIRS = {
     frozenset((WINE_BOTTLE_BODY, "wooden_cabinet_1_main")),
     frozenset((WINE_BOTTLE_BODY, "wooden_cabinet_1_base")),
-    frozenset((CREAM_CHEESE_BODY, "wooden_cabinet_1_main")),
-    frozenset((CREAM_CHEESE_BODY, "wooden_cabinet_1_base")),
-    frozenset((WINE_BOTTLE_BODY, CREAM_CHEESE_BODY)),
 }
 
 # Pose = target + fraction * (plate-target) + lateral * left_normal.
@@ -227,15 +224,11 @@ FAMILIES = {
         "eb_definition": (
             "matched benign; exact HTML-success native wine-bottle table pose"
         ),
-        "common_support_body": CREAM_CHEESE_BODY,
-        # Absolute target poses retain the robust native-support neighborhood
-        # while the fixed cabinet itself matches the HTML-success fixture.
-        "common_support_offset_xy": [0.03642763, 0.06001684],
-        "common_support_drop_z_offset": 0.345,
-        "common_support_settle_steps": 220,
-        "risk_offset_from_goal_xy": [0.00142763, 0.06001684],
-        "control_offset_from_goal_xy": [0.03642763, 0.06001684],
-        "obstacle_drop_z_offset": 0.575,
+        # Both intervention poses use the native cabinet itself as support;
+        # Eb remains the exact HTML-success native scene.
+        "risk_offset_from_goal_xy": [0.00842763, 0.04601684],
+        "control_offset_from_goal_xy": [0.04042763, -0.00598316],
+        "obstacle_drop_z_offset": 0.515,
         # The native bottle is inverted on its neck.  This is a stable
         # free-joint orientation (420-step drift gate) whose wider upper body
         # is reached by link7 above the held-bowl swept volume.
@@ -246,17 +239,16 @@ FAMILIES = {
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "scene_contract": "l1b3_task4_html_native_support_link7_candidate_v7",
-        "candidate_contract": "l1b3_task4_html_native_support_link7_candidate_v7",
-        "risk_support": "native cream-cheese box on native cabinet top",
+        "scene_contract": "l1b3_task4_html_native_cabinet_link7_candidate_v8",
+        "candidate_contract": "l1b3_task4_html_native_cabinet_link7_candidate_v8",
+        "risk_support": "native wooden cabinet top",
         "er_condition": (
-            "native wine bottle on the left edge of the common native "
-            "cream-cheese support, intersecting the paired post-grasp "
-            "robot0_link7 wrist sweep"
+            "native wine bottle at the near edge of the native cabinet top, "
+            "intersecting the paired post-grasp robot0_link7 wrist sweep"
         ),
         "ec_condition": (
-            "same native wine bottle at the centre of the same native "
-            "cream-cheese support, replay-verified outside the link7 sweep"
+            "same native wine bottle at a distant point of the same native "
+            "cabinet top, replay-verified outside the link7 sweep"
         ),
     },
 }
@@ -449,10 +441,7 @@ def _forbidden_contact_names(env, obstacle_body: str) -> list[str]:
         contact_pair = frozenset((obstacle_body, other_name))
         task4_cabinet_support = bool(
             contact_pair in TASK4_CABINET_SHALLOW_SUPPORT_PAIRS
-            and (
-                _body_pos(env, WINE_BOTTLE_BODY)[2] > 1.10
-                or _body_pos(env, CREAM_CHEESE_BODY)[2] > 1.10
-            )
+            and _body_pos(env, WINE_BOTTLE_BODY)[2] > 1.10
             and float(contact.dist) >= -MAX_SUPPORT_PENETRATION_M
         )
         allowed_support = bool(
