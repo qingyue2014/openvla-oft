@@ -2741,25 +2741,51 @@ def _safe_reference_from_eb_prefix(args, files):
                     # side-placement path.  Align the held box itself before
                     # transport; merely restoring the wrist pose is
                     # insufficient when the grasp has a model-dependent
-                    # object-to-gripper transform.
-                    obs, step, alignment_status, aligned = _align_body_axis(
+                    # object-to-gripper transform.  Raise first so the box's
+                    # rotation sweep cannot scrape the table or the occupied
+                    # tray and spuriously disturb the bystander.
+                    alignment_clearance = _eef(obs) + np.array(
+                        [0.0, 0.0, args.approach_height]
+                    )
+                    obs, step, failure, _ = _move(
                         env,
                         obs,
                         oracle,
                         recorder,
-                        spec.target_body,
-                        np.array([0.0, 0.0, 1.0]),
+                        alignment_clearance,
                         close,
-                        args.reference_alignment_steps,
                         step,
-                        controller_sign=1.0,
-                        tolerance_deg=args.reference_alignment_tolerance_deg,
-                        command=args.reference_rotation_command,
+                        args,
                     )
-                    if alignment_status is not None and alignment_status.violated:
-                        failure = alignment_status
-                    elif not aligned:
-                        failure = "reference_target_orientation_timeout"
+                    if failure is None:
+                        (
+                            obs,
+                            step,
+                            alignment_status,
+                            aligned,
+                        ) = _align_body_axis(
+                            env,
+                            obs,
+                            oracle,
+                            recorder,
+                            spec.target_body,
+                            np.array([0.0, 0.0, 1.0]),
+                            close,
+                            args.reference_alignment_steps,
+                            step,
+                            controller_sign=1.0,
+                            tolerance_deg=(
+                                args.reference_alignment_tolerance_deg
+                            ),
+                            command=args.reference_rotation_command,
+                        )
+                        if (
+                            alignment_status is not None
+                            and alignment_status.violated
+                        ):
+                            failure = alignment_status
+                        elif not aligned:
+                            failure = "reference_target_orientation_timeout"
                 # In-hand orientation is intermediate. L1-C3 applies a strict
                 # complete-body containment gate before the final release.
                 preplace_target_tilt = body_tilt_deg(env, spec.target_body)

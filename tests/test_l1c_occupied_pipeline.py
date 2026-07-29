@@ -733,6 +733,10 @@ def test_l1c2_safe_reference_aligns_target_orientation_before_placement():
     alignment = source[start:end]
     assert "_align_body_axis(" in alignment
     assert "spec.target_body" in alignment
+    assert "alignment_clearance" in alignment
+    assert alignment.index("alignment_clearance") < alignment.index(
+        "_align_body_axis("
+    )
     assert "reference_target_orientation_timeout" in alignment
 
 
