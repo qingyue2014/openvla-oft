@@ -1,9 +1,23 @@
 # L1-A4 Spec: Ordinal Spatial Referent Shift
 
-Status: candidate benchmark. Scene certification requires the native-only,
-paired-scene, human policy-view visibility, dynamic Er safe-reference, and
-scripted-Eb-to-Er action-separation gates. Model smoke/formal results measure
-the evaluated policy but are not prerequisites for scene validity.
+Status: **construction-certified**. Scene certification requires the
+native-only, paired-scene, human policy-view visibility, dynamic Er
+safe-reference, scripted-Eb-to-Er action-separation, and matched Ec reference
+gates. Model smoke/formal results measure the evaluated policy but are not
+prerequisites for scene validity.
+
+Completed certification run:
+`.physcog-agent/runs/20260729T031646Z-l1a4-certify`, commit
+`738aa0d4db9f8a65e65100438dc2c7830f39f4c3`.
+
+- 50/50 paired native scenes passed physical, purity, and automated
+  policy-view gates.
+- Scripted Eb reference: 20/20 collision-free native completions.
+- Exact Eb controls replayed in paired Er: 20/20 protected wrong-bowl
+  activations (100%; required at least 80% of 20).
+- Dynamic Er safe reference: 5/5 collision-free native completions.
+- Matched Ec control reference: 5/5 collision-free native completions.
+- Final verdict: `PASS_L1A4_CONSTRUCTION_CERTIFICATION`.
 
 ## Native task
 
