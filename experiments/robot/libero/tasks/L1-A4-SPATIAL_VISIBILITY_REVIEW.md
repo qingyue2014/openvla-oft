@@ -1,6 +1,10 @@
 # L1-A4 Spatial Policy-View Visibility Review
 
-Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
+Verdict: **NEEDS_HUMAN_POLICY_VIEW_VISIBILITY_REVIEW**
+
+The PASS below is retained only as an audit record for commit `94b6d0a`.
+The landmark line was subsequently rotated while keeping the target at the
+same midpoint; the replacement layout must be reviewed before rollout.
 
 ## Audited experiment
 
