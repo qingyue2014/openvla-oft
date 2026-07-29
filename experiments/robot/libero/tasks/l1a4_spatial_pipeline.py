@@ -512,6 +512,88 @@ def _write_hdf5(
             episode.attrs["native_state_index"] = int(source_index)
 
 
+def _construct_pair(env, native_state, source_index: int):
+    env.reset()
+    env.set_init_state(native_state)
+    env.sim.forward()
+    eb_state = env.sim.get_state().flatten()
+    eb_target_xy = _body_pos(env, TARGET)[:2]
+
+    common_positions = {
+        TARGET: ER_TARGET_XY,
+        PLATE: ER_PLATE_XY,
+        RAMEKIN: ER_RAMEKIN_XY,
+    }
+    er_state, er_settle_drift = _settled_variant(
+        env,
+        eb_state,
+        {**common_positions, LURE: eb_target_xy},
+    )
+    ec_candidate, ec_settle_drift = _settled_variant(
+        env,
+        eb_state,
+        {**common_positions, LURE: EC_LURE_XY},
+    )
+
+    env.set_init_state(er_state)
+    shared_poses = {
+        body: _capture_free_joint(env.sim, body)
+        for body in (TARGET, PLATE, RAMEKIN)
+    }
+    env.set_init_state(ec_candidate)
+    shared_poses[LURE] = _capture_free_joint(env.sim, LURE)
+    ec_state = _transplant(env, eb_state, shared_poses)
+
+    er_info = _validate_condition(env, er_state, "Er")
+    ec_info = _validate_condition(env, ec_state, "Ec")
+
+    env.set_init_state(eb_state)
+    actual_eb_target_xy = _body_pos(env, TARGET)[:2]
+    env.set_init_state(er_state)
+    actual_er_lure_xy = _body_pos(env, LURE)[:2]
+    stale_error = float(
+        np.linalg.norm(actual_er_lure_xy - actual_eb_target_xy)
+    )
+    if stale_error > 0.012:
+        raise RuntimeError(
+            f"ER lure misses paired EB target by {stale_error:.4f}m"
+        )
+
+    er_ec_qpos_error, er_ec_qvel_error = _purity_error(
+        env, er_state, ec_state, (LURE,)
+    )
+    if max(er_ec_qpos_error, er_ec_qvel_error) > PAIR_TOLERANCE:
+        raise RuntimeError(
+            "ER/EC differ outside native lure joint: "
+            f"qpos={er_ec_qpos_error:.3e}, "
+            f"qvel={er_ec_qvel_error:.3e}"
+        )
+    eb_er_qpos_error, eb_er_qvel_error = _purity_error(
+        env, eb_state, er_state, MOVABLE_BODIES
+    )
+    if max(eb_er_qpos_error, eb_er_qvel_error) > PAIR_TOLERANCE:
+        raise RuntimeError(
+            "EB/ER differ outside the four documented native "
+            "movable-object joints"
+        )
+
+    record = {
+        "native_state_index": source_index,
+        "eb_target_xy": actual_eb_target_xy.round(6).tolist(),
+        "er_lure_xy": actual_er_lure_xy.round(6).tolist(),
+        "stale_location_error_m": stale_error,
+        "er_ec_unallowed_qpos_error": er_ec_qpos_error,
+        "er_ec_unallowed_qvel_error": er_ec_qvel_error,
+        "eb_er_unallowed_qpos_error": eb_er_qpos_error,
+        "eb_er_unallowed_qvel_error": eb_er_qvel_error,
+        "er_settle_drift_m": er_settle_drift,
+        "ec_settle_drift_m": ec_settle_drift,
+        "er": er_info,
+        "ec": ec_info,
+    }
+    return eb_state, er_state, ec_state, record
+
+
 def generate(args) -> None:
     preflight = write_preflight(
         Path(args.preflight_manifest), Path(args.preflight_report)
@@ -529,95 +611,34 @@ def generate(args) -> None:
     states = {"eb": [], "er": [], "ec": []}
     source_indices = []
     records = []
+    rejected = []
     try:
-        for source_index in range(args.num_states):
-            env.reset()
-            env.set_init_state(native_states[source_index])
-            env.sim.forward()
-            eb_state = env.sim.get_state().flatten()
-            eb_target_xy = _body_pos(env, TARGET)[:2]
-
-            common_positions = {
-                TARGET: ER_TARGET_XY,
-                PLATE: ER_PLATE_XY,
-                RAMEKIN: ER_RAMEKIN_XY,
-            }
-            er_state, er_settle_drift = _settled_variant(
-                env,
-                eb_state,
-                {**common_positions, LURE: eb_target_xy},
-            )
-            ec_candidate, ec_settle_drift = _settled_variant(
-                env,
-                eb_state,
-                {**common_positions, LURE: EC_LURE_XY},
-            )
-
-            env.set_init_state(er_state)
-            shared_poses = {
-                body: _capture_free_joint(env.sim, body)
-                for body in (TARGET, PLATE, RAMEKIN)
-            }
-            env.set_init_state(ec_candidate)
-            shared_poses[LURE] = _capture_free_joint(env.sim, LURE)
-            ec_state = _transplant(env, eb_state, shared_poses)
-
-            er_info = _validate_condition(env, er_state, "Er")
-            ec_info = _validate_condition(env, ec_state, "Ec")
-
-            env.set_init_state(eb_state)
-            actual_eb_target_xy = _body_pos(env, TARGET)[:2]
-            env.set_init_state(er_state)
-            actual_er_lure_xy = _body_pos(env, LURE)[:2]
-            stale_error = float(
-                np.linalg.norm(actual_er_lure_xy - actual_eb_target_xy)
-            )
-            if stale_error > 0.012:
-                raise RuntimeError(
-                    f"pair {source_index}: ER lure misses paired EB target "
-                    f"by {stale_error:.4f}m"
+        for source_index, native_state in enumerate(native_states):
+            if len(records) >= args.num_states:
+                break
+            try:
+                eb_state, er_state, ec_state, record = _construct_pair(
+                    env, native_state, source_index
                 )
-
-            er_ec_qpos_error, er_ec_qvel_error = _purity_error(
-                env, er_state, ec_state, (LURE,)
-            )
-            if max(er_ec_qpos_error, er_ec_qvel_error) > PAIR_TOLERANCE:
-                raise RuntimeError(
-                    f"pair {source_index}: ER/EC differ outside native lure "
-                    f"joint: qpos={er_ec_qpos_error:.3e}, "
-                    f"qvel={er_ec_qvel_error:.3e}"
+            except RuntimeError as exc:
+                rejection = {
+                    "native_state_index": source_index,
+                    "reason": str(exc),
+                }
+                rejected.append(rejection)
+                print(
+                    f"REJECT native={source_index:02d}: "
+                    f"{rejection['reason']}"
                 )
-            eb_er_qpos_error, eb_er_qvel_error = _purity_error(
-                env, eb_state, er_state, MOVABLE_BODIES
-            )
-            if max(eb_er_qpos_error, eb_er_qvel_error) > PAIR_TOLERANCE:
-                raise RuntimeError(
-                    f"pair {source_index}: EB/ER differ outside the four "
-                    "documented native movable-object joints"
-                )
+                continue
 
             episode = len(records)
             states["eb"].append(eb_state)
             states["er"].append(er_state)
             states["ec"].append(ec_state)
             source_indices.append(source_index)
-            records.append(
-                {
-                    "episode": episode,
-                    "native_state_index": source_index,
-                    "eb_target_xy": actual_eb_target_xy.round(6).tolist(),
-                    "er_lure_xy": actual_er_lure_xy.round(6).tolist(),
-                    "stale_location_error_m": stale_error,
-                    "er_ec_unallowed_qpos_error": er_ec_qpos_error,
-                    "er_ec_unallowed_qvel_error": er_ec_qvel_error,
-                    "eb_er_unallowed_qpos_error": eb_er_qpos_error,
-                    "eb_er_unallowed_qvel_error": eb_er_qvel_error,
-                    "er_settle_drift_m": er_settle_drift,
-                    "ec_settle_drift_m": ec_settle_drift,
-                    "er": er_info,
-                    "ec": ec_info,
-                }
-            )
+            record["episode"] = episode
+            records.append(record)
             if episode < args.preview_count:
                 _save_preview(
                     env, eb_state, Path(args.preview_dir), "Eb", episode
@@ -630,14 +651,20 @@ def generate(args) -> None:
                 )
             print(
                 f"pair={episode:02d} native={source_index:02d} "
-                f"stale_error={stale_error:.4f}m "
+                f"stale_error={record['stale_location_error_m']:.4f}m "
                 f"Er_target_pixels="
-                f"{er_info['agentview_masks'][TARGET]['pixels']} "
+                f"{record['er']['agentview_masks'][TARGET]['pixels']} "
                 f"Er_referent_sep="
-                f"{er_info['min_agentview_centroid_separation_px']:.1f}px"
+                f"{record['er']['min_agentview_centroid_separation_px']:.1f}px"
             )
     finally:
         env.close()
+
+    if len(records) < args.num_states:
+        raise RuntimeError(
+            f"Only {len(records)} of {args.num_states} requested valid paired "
+            f"states were available; rejected={rejected}"
+        )
 
     outputs = {
         "eb": Path(args.eb_states),
@@ -681,6 +708,7 @@ def generate(args) -> None:
             name: str(path) for name, path in outputs.items()
         },
         "num_states": len(records),
+        "rejected_native_states": rejected,
         "policy_camera": "agentview",
         "policy_resolution": POLICY_RESOLUTION,
         "visibility_gate": {
