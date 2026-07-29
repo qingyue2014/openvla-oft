@@ -2738,10 +2738,10 @@ def _safe_reference_from_eb_prefix(args, files):
                     # slightly pitched in hand.  Replaying that prefix and
                     # translating directly can make the box fall onto its
                     # side, incorrectly rejecting an otherwise executable
-                    # side-placement path.  Align the held box itself and
-                    # preserve that body-axis pose through transport; merely
-                    # restoring the wrist pose is insufficient when the grasp
-                    # has a model-dependent object-to-gripper transform.
+                    # side-placement path.  Align the held box itself before
+                    # transport; merely restoring the wrist pose is
+                    # insufficient when the grasp has a model-dependent
+                    # object-to-gripper transform.
                     obs, step, alignment_status, aligned = _align_body_axis(
                         env,
                         obs,
@@ -3078,43 +3078,14 @@ def _safe_reference_from_eb_prefix(args, files):
                         [0.0, 0.0, args.approach_height]
                     )
                     if failure is None:
-                        if spec.scenario == "L1-C2":
-                            obs, step, failure, _ = _move_with_body_alignment(
-                                env,
-                                obs,
-                                oracle,
-                                recorder,
-                                above,
-                                spec.target_body,
-                                np.array([0.0, 0.0, 1.0]),
-                                close,
-                                step,
-                                args,
-                            )
-                        else:
-                            obs, step, failure, _ = _move(
-                                env, obs, oracle, recorder, above, close, step, args
-                            )
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, above, close, step, args
+                        )
                     if failure is None:
-                        if spec.scenario == "L1-C2":
-                            obs, step, failure, _ = _move_with_body_alignment(
-                                env,
-                                obs,
-                                oracle,
-                                recorder,
-                                desired_eef,
-                                spec.target_body,
-                                np.array([0.0, 0.0, 1.0]),
-                                close,
-                                step,
-                                args,
-                                stop_on_support=True,
-                            )
-                        else:
-                            obs, step, failure, _ = _move(
-                                env, obs, oracle, recorder, desired_eef, close,
-                                step, args, stop_on_support=True,
-                            )
+                        obs, step, failure, _ = _move(
+                            env, obs, oracle, recorder, desired_eef, close,
+                            step, args, stop_on_support=True,
+                        )
                 if failure is None:
                     obs, step, status = _hold(
                         env, obs, oracle, recorder, opened,
