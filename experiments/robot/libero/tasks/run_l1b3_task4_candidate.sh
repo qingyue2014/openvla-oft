@@ -369,7 +369,7 @@ run_eb_probe() {
   # stops before any Er/Ec interpretation and never selects or promotes a
   # candidate family.
   generate_states "${SMOKE_TRIALS}"
-  eval_condition eb "${SMOKE_TRIALS}" false
+  eval_condition eb "${SMOKE_TRIALS}"
   require_complete_index "${SMOKE_TRIALS}"
 }
 

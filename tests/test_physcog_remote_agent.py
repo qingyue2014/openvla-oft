@@ -256,6 +256,15 @@ def test_batch_script_can_exclude_unstable_render_nodes():
     assert "#SBATCH --exclude=dgx-29" in script
 
 
+def test_batch_script_can_pin_the_html_reference_node():
+    cfg = RemoteConfig(**{**_config().__dict__, "nodelist": "dgx-21"})
+    script = build_batch_script(
+        cfg, PhaseSpec(command=("true",)), count=1,
+        scenario="l1b3_task4", phase="eb_probe", remote_log="/tmp/job.out",
+    )
+    assert "#SBATCH --nodelist=dgx-21" in script
+
+
 def test_smoke_batch_requests_five_fresh_all_video_trials():
     script = build_batch_script(
         _config(), PHASES[("l1a2", "smoke")], count=5,

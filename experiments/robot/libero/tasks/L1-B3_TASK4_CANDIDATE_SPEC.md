@@ -267,6 +267,23 @@ native states after the common settling convention. All 50 source indices
 remain present exactly once; no success or failure episode is removed,
 duplicated, or replaced. A fresh N=50 policy rollout is required because this
 selective calibration may change behavior in the three repaired episodes.
+
+The HTML reference job 489521 ran on `dgx-21`. A v16 attempt on `dgx-27`,
+job **496044**, made no generation progress and produced Slurm accounting
+timeouts, so it was cancelled as infrastructure-invalid. Job **496048** ran
+the unchanged first four source layouts on `dgx-09` and returned only `2/4`
+successes, confirming the previously observed node-sensitive action
+discretization; it was stopped and is diagnostic only. Candidate EB, smoke,
+and downstream conditions must therefore use the same documented `dgx-21`
+hardware contract as the accepted HTML reference. Results from other nodes
+must not be pooled.
+
+The next execution revision also makes `eb_probe` run
+`validate_l1b_rollout_physics.py` itself. A successful Slurm exit now requires
+both a complete trajectory index and the independent 2 mm all-component
+physics gate. This permits an auditable `afterok` dependency for smoke without
+allowing Er/EC work to start after a merely completed but physically invalid
+Eb batch.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.

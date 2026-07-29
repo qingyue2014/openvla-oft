@@ -417,6 +417,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         count_env="SMOKE_TRIALS",
         artifacts=(
             "experiments/robot/libero/tasks/l1b3_task4_candidate_pairing.json",
+            "experiments/logs/l1b3_task4_candidate_eb_rollout_physics.md",
             "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-eb",
         ),
     ),
@@ -671,6 +672,8 @@ class RemoteConfig:
     time_limit: str
     libero_root: str = ""
     exclude_nodes: str = ""
+    nodelist: str = ""
+    dependency_afterok: str = ""
 
     @property
     def target(self) -> str:
@@ -701,6 +704,7 @@ def build_batch_script(
         f"#SBATCH --gpus={cfg.gpus}",
         f"#SBATCH --partition={cfg.partition}",
         *([f"#SBATCH --exclude={cfg.exclude_nodes}"] if cfg.exclude_nodes else []),
+        *([f"#SBATCH --nodelist={cfg.nodelist}"] if cfg.nodelist else []),
         f"#SBATCH --account={cfg.account}",
         f"#SBATCH --time={cfg.time_limit}",
         f"#SBATCH --output={remote_log}",
@@ -969,6 +973,8 @@ def _config_from_args(args: argparse.Namespace) -> RemoteConfig:
         time_limit=args.time_limit,
         libero_root=args.libero_root,
         exclude_nodes=args.exclude_nodes,
+        nodelist=args.nodelist,
+        dependency_afterok=args.dependency_afterok,
     )
 
 
@@ -1039,7 +1045,18 @@ def command_run(args: argparse.Namespace) -> int:
             "module load slurm",
             "set -euo pipefail",
             f"cd {shlex.quote(cfg.remote_repo)}",
-            shell_join(("sbatch", "--parsable", remote_job_script)),
+            shell_join(
+                (
+                    "sbatch",
+                    "--parsable",
+                    *(
+                        (f"--dependency=afterok:{cfg.dependency_afterok}",)
+                        if cfg.dependency_afterok
+                        else ()
+                    ),
+                    remote_job_script,
+                )
+            ),
         )
     )
     if args.dry_run:
@@ -1210,6 +1227,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--exclude-nodes",
         default="",
         help="Comma-separated Slurm nodes to exclude from a run",
+    )
+    parser.add_argument(
+        "--nodelist",
+        default="",
+        help="Exact Slurm node list required for a reproducible run",
+    )
+    parser.add_argument(
+        "--dependency-afterok",
+        default="",
+        help="Submit only after this Slurm job ID exits successfully",
     )
     parser.add_argument("--nodes", type=int, default=1)
     parser.add_argument("--gpus", type=int, default=2)

@@ -115,6 +115,8 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert "activate_task4_model_runtime" in text.split("eval_condition()", 1)[1]
     assert "anchor_preflight()" in text
     assert "run_eb_probe()" in text
+    assert 'eval_condition eb "${SMOKE_TRIALS}"' in text
+    assert 'eval_condition eb "${SMOKE_TRIALS}" false' not in text
     assert "--absolute_anchors_only" not in text
     assert "--serialized_er_anchor_first" in text
     assert '--min_activation_rate 0.0' in text
