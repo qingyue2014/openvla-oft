@@ -721,7 +721,7 @@ def test_safe_reference_video_recorder_matches_policy_camera_orientation():
     assert np.array_equal(recorder.video_frames[0], image[::-1, ::-1])
 
 
-def test_l1c2_safe_reference_restores_grasp_orientation_before_placement():
+def test_l1c2_safe_reference_tracks_target_orientation_through_placement():
     source = Path(
         "experiments/robot/libero/tasks/l1c_occupied_pipeline.py"
     ).read_text()
@@ -731,9 +731,10 @@ def test_l1c2_safe_reference_restores_grasp_orientation_before_placement():
         start,
     )
     alignment = source[start:end]
-    assert "_align_eef_orientation(" in alignment
-    assert "home_eef_quat" in alignment
-    assert "alignment_failure" in alignment
+    assert "_align_body_axis(" in alignment
+    assert "spec.target_body" in alignment
+    assert "reference_target_orientation_timeout" in alignment
+    assert source.count("_move_with_body_alignment(") >= 3
 
 
 def test_l1c3_safe_reference_reuses_eb_transport_and_hands_off_near_drawer():

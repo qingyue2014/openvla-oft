@@ -2738,22 +2738,28 @@ def _safe_reference_from_eb_prefix(args, files):
                     # slightly pitched in hand.  Replaying that prefix and
                     # translating directly can make the box fall onto its
                     # side, incorrectly rejecting an otherwise executable
-                    # side-placement path.  Restore the recorded downward
-                    # end-effector orientation before moving over the tray;
-                    # the subsequent release and safety gates remain fully
-                    # physical and unchanged.
-                    obs, step, alignment_failure = _align_eef_orientation(
+                    # side-placement path.  Align the held box itself and
+                    # preserve that body-axis pose through transport; merely
+                    # restoring the wrist pose is insufficient when the grasp
+                    # has a model-dependent object-to-gripper transform.
+                    obs, step, alignment_status, aligned = _align_body_axis(
                         env,
                         obs,
                         oracle,
                         recorder,
-                        home_eef_quat,
+                        spec.target_body,
+                        np.array([0.0, 0.0, 1.0]),
                         close,
+                        args.reference_alignment_steps,
                         step,
-                        args,
+                        controller_sign=1.0,
+                        tolerance_deg=args.reference_alignment_tolerance_deg,
+                        command=args.reference_rotation_command,
                     )
-                    if alignment_failure is not None:
-                        failure = alignment_failure
+                    if alignment_status is not None and alignment_status.violated:
+                        failure = alignment_status
+                    elif not aligned:
+                        failure = "reference_target_orientation_timeout"
                 # In-hand orientation is intermediate. L1-C3 applies a strict
                 # complete-body containment gate before the final release.
                 preplace_target_tilt = body_tilt_deg(env, spec.target_body)
@@ -3072,14 +3078,43 @@ def _safe_reference_from_eb_prefix(args, files):
                         [0.0, 0.0, args.approach_height]
                     )
                     if failure is None:
-                        obs, step, failure, _ = _move(
-                            env, obs, oracle, recorder, above, close, step, args
-                        )
+                        if spec.scenario == "L1-C2":
+                            obs, step, failure, _ = _move_with_body_alignment(
+                                env,
+                                obs,
+                                oracle,
+                                recorder,
+                                above,
+                                spec.target_body,
+                                np.array([0.0, 0.0, 1.0]),
+                                close,
+                                step,
+                                args,
+                            )
+                        else:
+                            obs, step, failure, _ = _move(
+                                env, obs, oracle, recorder, above, close, step, args
+                            )
                     if failure is None:
-                        obs, step, failure, _ = _move(
-                            env, obs, oracle, recorder, desired_eef, close,
-                            step, args, stop_on_support=True,
-                        )
+                        if spec.scenario == "L1-C2":
+                            obs, step, failure, _ = _move_with_body_alignment(
+                                env,
+                                obs,
+                                oracle,
+                                recorder,
+                                desired_eef,
+                                spec.target_body,
+                                np.array([0.0, 0.0, 1.0]),
+                                close,
+                                step,
+                                args,
+                                stop_on_support=True,
+                            )
+                        else:
+                            obs, step, failure, _ = _move(
+                                env, obs, oracle, recorder, desired_eef, close,
+                                step, args, stop_on_support=True,
+                            )
                 if failure is None:
                     obs, step, status = _hold(
                         env, obs, oracle, recorder, opened,
