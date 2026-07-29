@@ -286,7 +286,10 @@ def build_batch_script(
         f"cd {shlex.quote(cfg.remote_repo)}",
         f"export PATH={shlex.quote(cfg.remote_python_bin)}:$PATH",
         *(
-            [f"export PYTHONPATH={shlex.quote(cfg.libero_root)}:${{PYTHONPATH:-}}"]
+            [
+                f"export LIBERO_ROOT={shlex.quote(cfg.libero_root)}",
+                f"export PYTHONPATH={shlex.quote(cfg.libero_root)}:${{PYTHONPATH:-}}",
+            ]
             if cfg.libero_root else []
         ),
         "export PYTHONUNBUFFERED=1",

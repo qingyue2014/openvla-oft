@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from experiments.robot.libero.tasks.physcog_remote_agent import PHASES
+from experiments.robot.libero.tasks.physcog_remote_agent import (
+    PHASES,
+    RemoteConfig,
+    build_batch_script,
+)
 from experiments.robot.libero.tasks.validate_l3a1_native_preflight import (
     BDDL_BASENAME,
     EXPECTED_FIXTURES,
@@ -69,6 +73,32 @@ def test_remote_agent_registers_native_v2_calibration():
             mode,
         )
         assert "experiments/logs/l3a1_v2_native_preflight.md" in spec.artifacts
+
+
+def test_remote_batch_exports_native_libero_root():
+    config = RemoteConfig(
+        host="example",
+        user="user",
+        control_socket="/tmp/example.sock",
+        remote_repo="/repo",
+        remote_python_bin="/env/bin",
+        branch="branch",
+        account="account",
+        partition="partition",
+        nodes=1,
+        gpus=1,
+        time_limit="00:10:00",
+        libero_root="/native/LIBERO",
+    )
+    script = build_batch_script(
+        config,
+        PHASES[("l3a1", "v2_native_edge_sweep")],
+        1,
+        "l3a1",
+        "v2_native_edge_sweep",
+        "/tmp/job.out",
+    )
+    assert "export LIBERO_ROOT=/native/LIBERO" in script
 
 
 
