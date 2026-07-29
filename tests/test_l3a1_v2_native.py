@@ -133,3 +133,14 @@ def test_edge_counterfactual_preserves_compiled_native_fixture_pose():
         )
     ]
     assert "env.reset()" not in counterfactual
+
+
+def test_preview_requires_final_table_fall_without_cabinet_contact():
+    source = (
+        ROOT
+        / "experiments/robot/libero/tasks/export_l3a1_edge_preview.py"
+    ).read_text(encoding="utf-8")
+    assert "MIN_FINAL_TABLE_FALL_TILT_DEG = 80.0" in source
+    assert '"table_collision" in final_contacts' in source
+    assert "and not final_cabinet_contacts" in source
+    assert "and final_table_fall" in source

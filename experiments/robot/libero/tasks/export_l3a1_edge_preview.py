@@ -34,6 +34,8 @@ from experiments.robot.libero.tasks.l3a1_native_geometry import (
     _contact_geom_names,
     _directed_tilt_quat,
     _find_joint_qadr,
+    _lean_tilt_angle_deg,
+    _other_cabinet_contact_geoms,
 )
 from experiments.robot.libero.tasks.sweep_l3a1_corner_geometry import (
     _resolve_geom_by_signature,
@@ -48,6 +50,7 @@ SELECTED_DY = -0.060125
 SELECTED_LEAN_DEG = -40.0
 SELECTED_DIRECTION_DEG = 105.0
 HEIGHT_DROP_THRESHOLD_M = 0.015
+MIN_FINAL_TABLE_FALL_TILT_DEG = 80.0
 
 
 def policy_agentview(obs: dict) -> np.ndarray:
@@ -266,6 +269,18 @@ def main() -> int:
         np.linalg.norm(_body_pos(env, BOTTLE_BODY) - initial_pos)
     )
     final_attitude = _axis_change_deg(env, BOTTLE_BODY, initial_axis)
+    final_tilt = _lean_tilt_angle_deg(env, BOTTLE_BODY)
+    final_contacts = _contact_geom_names(env, BOTTLE_BODY)
+    final_component_contacts = final_contacts & clearance_component
+    final_cabinet_contacts = _other_cabinet_contact_geoms(
+        env, front_geom
+    ) | final_component_contacts
+    final_table_contact = "table_collision" in final_contacts
+    final_table_fall = (
+        final_tilt >= MIN_FINAL_TABLE_FALL_TILT_DEG
+        and final_table_contact
+        and not final_cabinet_contacts
+    )
     report = {
         "verdict": (
             "PASS_L3A1_EDGE_PREVIEW"
@@ -273,6 +288,7 @@ def main() -> int:
                 release_step >= 1
                 and first_oracle_step > release_step
                 and not recontact_after_release
+                and final_table_fall
             )
             else "FAIL_L3A1_EDGE_PREVIEW"
         ),
@@ -298,6 +314,12 @@ def main() -> int:
         "max_pre_release_attitude_change_deg": max_pre_release_attitude,
         "final_displacement_m": final_displacement,
         "final_attitude_change_deg": final_attitude,
+        "final_tilt_deg": final_tilt,
+        "min_final_table_fall_tilt_deg": MIN_FINAL_TABLE_FALL_TILT_DEG,
+        "final_contacts": sorted(final_contacts),
+        "final_table_contact": final_table_contact,
+        "final_cabinet_contacts": sorted(final_cabinet_contacts),
+        "final_table_fall": final_table_fall,
         "timeline": timeline,
     }
     (out_dir / "preview_report.json").write_text(
@@ -314,6 +336,10 @@ def main() -> int:
             f"- First oracle step: {first_oracle_step}",
             f"- Final displacement: {final_displacement:.4f} m",
             f"- Final attitude change: {final_attitude:.2f} deg",
+            f"- Final absolute tilt: {final_tilt:.2f} deg",
+            f"- Final table contact: {final_table_contact}",
+            f"- Final cabinet contacts: `{','.join(sorted(final_cabinet_contacts))}`",
+            f"- Final table-fall gate: {final_table_fall}",
             "",
         ]),
         encoding="utf-8",
