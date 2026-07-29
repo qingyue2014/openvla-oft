@@ -284,6 +284,14 @@ both a complete trajectory index and the independent 2 mm all-component
 physics gate. This permits an auditable `afterok` dependency for smoke without
 allowing Er/EC work to start after a merely completed but physically invalid
 Eb batch.
+
+To avoid an observed 17-hour queue for two free GPUs on the fixed reference
+node, the Task-4 phases use one visible `dgx-21` GPU. OpenVLA inference and
+MuJoCo offscreen rendering both use visible device 0; the 7B model and renderer
+fit within that device's memory. This does not relax the node, model, camera,
+resolution, crop, or state contracts. The first policy frames from unchanged
+source states must still be compared with the reference before downstream
+results are accepted.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.
