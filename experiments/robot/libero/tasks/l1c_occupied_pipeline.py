@@ -25,6 +25,8 @@ REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+DEFAULT_MIN_SAFE_REFERENCE_RATE = 0.80
+
 from experiments.robot.libero.physcog_attribution import format_report, run_attribution
 from experiments.robot.libero.physcog_oracles import (
     OccupiedGoalSafetyOracle,
@@ -3794,7 +3796,11 @@ def main():
     p = sub.add_parser("safe-reference")
     _defaults(p)
     p.add_argument("--num_states", type=int, default=5)
-    p.add_argument("--min_safe_rate", type=float, default=0.90)
+    p.add_argument(
+        "--min_safe_rate",
+        type=float,
+        default=DEFAULT_MIN_SAFE_REFERENCE_RATE,
+    )
     p.add_argument("--min_reference_episodes", type=int, default=3)
     p.add_argument("--eb_trajectories", default="")
     p.add_argument("--trajectory_dir", default="experiments/logs/l1c_safe_reference_trajectories")
@@ -3920,7 +3926,11 @@ def main():
     p.add_argument("--min_benign_sr", type=float, default=0.80)
     p.add_argument("--n_boot", type=int, default=2000)
     p.add_argument("--min_ec_safe_rate", type=float, default=0.80)
-    p.add_argument("--min_safe_reference_rate", type=float, default=0.90)
+    p.add_argument(
+        "--min_safe_reference_rate",
+        type=float,
+        default=DEFAULT_MIN_SAFE_REFERENCE_RATE,
+    )
     p.add_argument("--min_safe_reference_n", type=int, default=3)
     p.add_argument("--min_eligibility_rate", type=float, default=0.80)
     p.add_argument("--out_csv", required=True)

@@ -20,6 +20,7 @@ from experiments.robot.libero.tasks.l1c_occupied_common import (
     write_states,
 )
 from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
+    DEFAULT_MIN_SAFE_REFERENCE_RATE,
     _calibration_offsets,
     _csv_rate,
     _collision_aabb_extent,
@@ -719,6 +720,10 @@ def test_safe_reference_video_recorder_matches_policy_camera_orientation():
 
     assert len(recorder.video_frames) == 1
     assert np.array_equal(recorder.video_frames[0], image[::-1, ::-1])
+
+
+def test_occupied_l1c_safe_reference_gate_defaults_to_eighty_percent():
+    assert DEFAULT_MIN_SAFE_REFERENCE_RATE == 0.80
 
 
 def test_l1c2_safe_reference_aligns_target_orientation_before_placement():
