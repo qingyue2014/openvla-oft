@@ -6,7 +6,10 @@ TASKS_DIR="experiments/robot/libero/tasks"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 PIPELINE="${TASKS_DIR}/l1a4_spatial_pipeline.py"
 
-NUM_STATES="${NUM_STATES:-50}"
+# Five of the 50 native initial states fail the strict post-settle relation
+# gate because the native robot configuration displaces the moved target.
+# The generator scans all native states and records those source rejections.
+NUM_STATES="${NUM_STATES:-45}"
 EB_CAPABILITY_TRIALS="${EB_CAPABILITY_TRIALS:-10}"
 SEED="${SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-7}"
