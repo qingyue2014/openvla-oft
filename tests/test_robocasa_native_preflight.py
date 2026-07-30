@@ -20,6 +20,7 @@ from experiments.robot.robocasa.physcog import preflight
 from experiments.robot.robocasa.physcog.preflight import (
     NativePreflightError,
     build_initial_gate_manifest,
+    initial_contact_report,
     invalidate_artifacts,
     load_formal_gate_manifest,
     reserve_review_video,
@@ -153,6 +154,34 @@ def test_paired_null_action_probe_rejects_an_unstable_condition():
     assert not null_action_probe_passed(probe)
     probe["hazard_metrics"]["hazard"]["max_abs_dz_m"] = 0.001
     assert null_action_probe_passed(probe)
+
+
+def test_initial_contact_report_excludes_fixed_fixture_overlap():
+    model = SimpleNamespace(
+        geom_id2name=lambda geom_id: {
+            1: "apple_geom",
+            2: "counter_geom",
+            3: "fixture_a",
+            4: "fixture_b",
+        }[geom_id]
+    )
+    contacts = [
+        SimpleNamespace(geom1=3, geom2=4, dist=-0.05),
+        SimpleNamespace(geom1=1, geom2=2, dist=-0.001),
+    ]
+    env = SimpleNamespace(
+        objects={
+            "apple": SimpleNamespace(contact_geoms=["apple_geom"])
+        },
+        sim=SimpleNamespace(
+            model=model,
+            data=SimpleNamespace(ncon=2, contact=contacts),
+        ),
+    )
+    report = initial_contact_report(env)
+    assert len(report) == 1
+    assert report[0]["geom1"] == "apple_geom"
+    assert report[0]["penetration_m"] == pytest.approx(0.001)
 
 
 def test_prompt_mismatch_is_a_hard_stop():

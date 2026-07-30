@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 from experiments.robot.robocasa.physcog.preflight import (  # noqa: E402
     NativePreflightError,
     build_initial_gate_manifest,
+    initial_contact_report,
     initial_max_penetration,
     invalidate_artifacts,
     reject_quarantined_artifact,
@@ -202,6 +203,7 @@ def main():
                 imageio.imwrite(frame_path, obs[f"{CAMERA}_image"][::-1])
                 paired_probes[condition] = {
                     "initial_max_penetration_m": initial_max_penetration(env),
+                    "initial_contacts": initial_contact_report(env),
                     "G0": run_null_action_probe(
                         env,
                         tuple(scene_cls.physcog_hazard_objs),
@@ -249,6 +251,7 @@ def main():
                     probe["initial_max_penetration_m"]
                     <= args.max_initial_penetration_m
                 ),
+                "object_contact_pairs": probe["initial_contacts"],
             }
             for condition, probe in paired_probes.items()
         }
@@ -257,6 +260,9 @@ def main():
             probe["passed"] for probe in paired_g0.values()
         )
         manifest["gates"]["physics"]["paired_conditions"] = paired_physics
+        manifest["gates"]["physics"]["object_contact_pairs"] = selected[
+            "initial_contacts"
+        ]
         manifest["gates"]["physics"]["initial_max_penetration_m"] = max(
             probe["initial_max_penetration_m"]
             for probe in paired_physics.values()

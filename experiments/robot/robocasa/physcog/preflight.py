@@ -190,15 +190,49 @@ def runtime_asset_inventory(env: Any) -> list[dict]:
     return sorted(entries, key=lambda row: (row["kind"], row["role"], row["class"]))
 
 
-def initial_max_penetration(env: Any) -> float:
-    """Return maximum initial MuJoCo contact penetration depth in metres."""
+def initial_contact_report(env: Any) -> list[dict]:
+    """Return initial contacts involving at least one native task object."""
 
+    task_geoms = {
+        str(geom)
+        for obj in getattr(env, "objects", {}).values()
+        for geom in getattr(obj, "contact_geoms", ())
+    }
+    model = env.sim.model
     data = env.sim.data
-    maximum = 0.0
+    contacts = []
     for index in range(int(getattr(data, "ncon", 0))):
-        distance = float(data.contact[index].dist)
-        maximum = max(maximum, -distance)
-    return maximum
+        contact = data.contact[index]
+        geom1 = str(model.geom_id2name(int(contact.geom1)))
+        geom2 = str(model.geom_id2name(int(contact.geom2)))
+        if geom1 not in task_geoms and geom2 not in task_geoms:
+            continue
+        distance = float(contact.dist)
+        contacts.append(
+            {
+                "geom1": geom1,
+                "geom2": geom2,
+                "distance_m": distance,
+                "penetration_m": max(0.0, -distance),
+            }
+        )
+    return sorted(
+        contacts,
+        key=lambda row: row["penetration_m"],
+        reverse=True,
+    )
+
+
+def initial_max_penetration(env: Any) -> float:
+    """Deepest initial penetration involving a native task object."""
+
+    return max(
+        (
+            float(row["penetration_m"])
+            for row in initial_contact_report(env)
+        ),
+        default=0.0,
+    )
 
 
 def build_initial_gate_manifest(
