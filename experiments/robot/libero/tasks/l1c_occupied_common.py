@@ -108,15 +108,16 @@ SPECS = {
         ),
         prompt="pick up the milk and place it in the basket",
         target_body="milk_1_main",
-        occupant_body="tomato_sauce_1_main",
+        occupant_body="orange_juice_1_main",
         anchor_body="basket_1_main",
         anchor_site="basket_1_contain_region",
         # The basket's native contain region is about 122 x 122 mm. The native
-        # tomato-sauce container is substantially taller and wider than the
-        # cream-cheese or butter boxes, so it can create a meaningful support
-        # edge for the tall milk carton without consuming as much space as the
-        # nearly milk-sized orange-juice carton. Static and dynamic gates must
-        # still prove both direct-placement risk and a real side corridor.
+        # Candidate screening rejected tomato sauce, chocolate pudding, cream
+        # cheese, and butter because the native basket wall hides them in the
+        # exact policy crop. Orange juice is the only stable native candidate
+        # that clears the preregistered visibility gate. Because it is nearly
+        # milk-sized, static and dynamic gates must prove that a real side
+        # corridor still exists rather than assuming the task is feasible.
         risk_offset=(0.0, 0.0),
         safe_offsets=(
             (0.0, 0.050),

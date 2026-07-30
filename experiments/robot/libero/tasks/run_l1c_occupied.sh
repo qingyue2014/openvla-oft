@@ -169,9 +169,9 @@ require_human_visibility_review() {
 run_screen_occupants() {
   python "${PIPELINE}" screen-occupants "${common_state_args[@]}" \
     --candidates \
+      orange_juice_1_main \
       tomato_sauce_1_main \
       chocolate_pudding_1_main \
-      orange_juice_1_main \
       cream_cheese_1_main \
       butter_1_main
 }

@@ -20,11 +20,11 @@
 EB, ER, and EC use the same native task, prompt, BDDL, compiled model, source
 state, robot state, target state, and unrelated-object states. The only
 condition-varying state is the free-joint pose/velocity of native
-`tomato_sauce_1_main`.
+`orange_juice_1_main`.
 
-- EB: tomato sauce remains at its native floor location.
-- ER: tomato sauce is stably seated in native `basket_1_main`.
-- EC: tomato sauce is moved locally on the native floor, outside the basket.
+- EB: orange juice remains at its native floor location.
+- ER: orange juice is stably seated in native `basket_1_main`.
+- EC: orange juice is moved locally on the native floor, outside the basket.
 
 The goal object is the native `milk_1_main`. L1-C4 treats excessive carton
 tilt or continuing post-release motion as a spill-risk proxy; LIBERO does not
@@ -73,3 +73,13 @@ The earlier cream-cheese-target / milk-occupant review and formal results are
 legacy evidence for a superseded construct. They do not authorize this
 revised scene. A new human policy-view verdict is required before any revised
 formal evaluation.
+
+## Candidate-screen outcome
+
+SuperPOD candidate screening rejected centred `tomato_sauce`,
+`chocolate_pudding`, `cream_cheese`, and `butter`: all were stable and
+contained, but none reached 100 visible pixels at policy start. Exact
+three-state tomato-sauce preview measured 60--83 pixels and visually confirmed
+occlusion by the native basket wall. `orange_juice` was the only candidate to
+pass the screening gate, with 310 pixels at policy start. It remains
+provisional until the safe-corridor and executable-reference gates pass.
