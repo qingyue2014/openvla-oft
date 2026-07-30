@@ -6,6 +6,10 @@ Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
 
 - Remote run: `20260729T084717Z-l1a4s-check`
 - Commit: `b0ee2006baaadf07bdda3d4024e420f590e48496`
+- Revalidation run: `20260730T030129Z-l1a4s-check`
+- Revalidation commit: `ff8255f20f37756f445c5483dba6a31f85c9a5da`
+- All 45 serialized state arrays in EB, ER, and EC are bitwise identical
+  between the audited and revalidated runs.
 - Native suite/task: `libero_spatial`, task `0`
 - Native BDDL:
   `pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate.bddl`

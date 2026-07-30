@@ -12,9 +12,13 @@ Status: **SCENE_VALID; FULL_PI05_RUN_PENDING; FORMAL_NOT_CERTIFIED**
 - Custom assets, BDDL, prompt, task semantics, and asset-inventory changes:
   none.
 
-## Retired fixed-layout candidate
+## Validated fixed-layout scene
 
-- Retired implementation commit: `bcc25eb3f45629f41695de44bd194ee6091fd67b`
+- Initial validated implementation: `bcc25eb3f45629f41695de44bd194ee6091fd67b`
+- Current revalidation run: `20260730T030129Z-l1a4s-check`
+- Current revalidation commit: `ff8255f20f37756f445c5483dba6a31f85c9a5da`
+- The 45 EB/ER/EC serialized state arrays are bitwise identical to the
+  previously human-reviewed valid pool.
 - Current ER-probe run: `20260729T090623Z-l1a4s-er_probe_pi05`
 - Native-only runtime preflight:
   `PASS_L1A4_SPATIAL_NATIVE_ONLY_PREFLIGHT`
@@ -22,7 +26,7 @@ Status: **SCENE_VALID; FULL_PI05_RUN_PENDING; FORMAL_NOT_CERTIFIED**
 - Accepted paired states: 45
 - Rejected native states: 31, 34, 40, 45, and 48. They fail the strict
   post-settle between-relation gate and are excluded.
-- Human policy-view gate passed for the retired fixed-layout state pool only.
+- Human policy-view gate passed for this bitwise-identical state pool.
 
 ## Official pi0.5 checkpoint results
 
