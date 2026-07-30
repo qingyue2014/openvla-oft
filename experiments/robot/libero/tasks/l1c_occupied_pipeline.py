@@ -1387,6 +1387,12 @@ def verify(args):
     )
 
 
+def _reset_episode_to_state(env, state):
+    """Reset controller time before restoring a serialized screening state."""
+    env.reset()
+    return env.set_init_state(state)
+
+
 def screen_occupants(args):
     """Compare native occupant candidates in one identical basket state."""
     spec = get_spec(args.scenario)
@@ -1407,7 +1413,7 @@ def screen_occupants(args):
         }
         # Official Eb also undergoes ten evaluator wait steps. Compare Er
         # anchor motion against that paired natural motion, not against t=0.
-        env.set_init_state(base)
+        _reset_episode_to_state(env, base)
         baseline_anchor_policy_start = body_pos(env, spec.anchor_body)
         baseline_anchor_visible_policy_start = _visible_pixels_in_policy_crop(
             env, spec.anchor_body
@@ -1424,7 +1430,7 @@ def screen_occupants(args):
                 print(f"candidate={body_name} valid=0 reason=body_not_found")
                 continue
             candidate_spec = replace(spec, occupant_body=body_name)
-            env.set_init_state(base)
+            _reset_episode_to_state(env, base)
             place_at_anchor(
                 env, candidate_spec, body_name, candidate_spec.risk_offset
             )
@@ -1449,6 +1455,10 @@ def screen_occupants(args):
             # then restore the official robot, basket, target, and all other
             # objects. Visibility before this transplant can be inflated by
             # the 220 no-op settling steps moving the robot out of the view.
+            # Candidate settling can consume hundreds of environment steps.
+            # Reset the episode clock before reproducing the evaluator's
+            # paired-state wait, otherwise later candidates can hit horizon.
+            env.reset()
             _restore_native_with_anchor_relative_occupant(
                 env, base, body_name, candidate_spec.anchor_body
             )

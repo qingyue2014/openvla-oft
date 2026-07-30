@@ -14,6 +14,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _matrix_to_wxyz,
     _policy_camera_crop,
     _quat_separation_deg,
+    _reset_episode_to_state,
     _replay_support_body,
     _replay_target_constraints,
     _wxyz_to_matrix,
@@ -59,6 +60,18 @@ class _Env:
         self.sim = _Sim()
 
 
+class _ResetEnv:
+    def __init__(self):
+        self.calls = []
+
+    def reset(self):
+        self.calls.append("reset")
+
+    def set_init_state(self, state):
+        self.calls.append(("set_init_state", state))
+        return "observation"
+
+
 def test_paper_facing_l1c_specs_keep_native_prompts_and_assets():
     expected = {
         "l1c2": ("cream_cheese_1_main", "ketchup_1_main", "tray"),
@@ -98,6 +111,12 @@ def test_l1c4_preregisters_a_liquid_carton_upright_gate():
     assert spec.max_target_tilt_deg == 15.0
     assert spec.max_target_post_release_xy_displacement == 0.015
     assert spec.min_target_clearance == 0.045
+
+
+def test_candidate_screen_resets_episode_before_state_restore():
+    env = _ResetEnv()
+    assert _reset_episode_to_state(env, "state") == "observation"
+    assert env.calls == ["reset", ("set_init_state", "state")]
 
 
 def test_l1c4_runner_uses_native_suite_mode_and_review_storage():
