@@ -46,7 +46,19 @@ fi
 export PYTHONPATH="${ROBOCASA_SOURCE_ROOT}:${REPO_ROOT}:${PYTHONPATH:-}"
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 
+robosuite_roots=("")
+while IFS= read -r robots_init; do
+  robosuite_roots+=(
+    "$(cd "$(dirname "${robots_init}")/../../.." && pwd)"
+  )
+done < <(
+  find /scratch/trllmout/drwqyhappy/physcog-robocasa \
+    -maxdepth 9 -type f -path "*/robosuite/models/robots/__init__.py" \
+    2>/dev/null | sort
+)
+
 PYTHON_BIN=""
+SELECTED_PYTHONPATH=""
 {
   printf 'repo=%s\n' "${REPO_ROOT}"
   printf 'repo_commit=%s\n' "$(git -C "${REPO_ROOT}" rev-parse HEAD)"
@@ -54,20 +66,33 @@ PYTHON_BIN=""
   printf 'mujoco_gl=%s\n' "${MUJOCO_GL}"
   for candidate in "${candidate_pythons[@]}"; do
     [[ -x "${candidate}" ]] || continue
-    printf 'candidate=%s\n' "${candidate}"
-    set +e
-    candidate_probe="$(
-      "${candidate}" -c \
-        "import imageio, mujoco, numpy, robocasa, robosuite; print('IMPORT_OK')" \
-        2>&1
-    )"
-    candidate_rc="$?"
-    set -e
-    printf 'candidate_rc=%s\n' "${candidate_rc}"
-    printf '%s\n' "${candidate_probe}"
-    if [[ "${candidate_rc}" -eq 0 ]]; then
-      PYTHON_BIN="${candidate}"
-      printf 'selected_python=%s\n' "${PYTHON_BIN}"
+    for robosuite_root in "${robosuite_roots[@]}"; do
+      probe_pythonpath="${ROBOCASA_SOURCE_ROOT}:${REPO_ROOT}"
+      if [[ -n "${robosuite_root}" ]]; then
+        probe_pythonpath="${ROBOCASA_SOURCE_ROOT}:${robosuite_root}:${REPO_ROOT}"
+      fi
+      probe_pythonpath="${probe_pythonpath}:${PYTHONPATH:-}"
+      printf 'candidate=%s\n' "${candidate}"
+      printf 'candidate_robosuite_root=%s\n' "${robosuite_root:-<environment>}"
+      set +e
+      candidate_probe="$(
+        PYTHONPATH="${probe_pythonpath}" "${candidate}" -c \
+          "import imageio, mujoco, numpy, robocasa, robosuite; from robosuite.models.robots import PandaOmron; print('IMPORT_OK')" \
+          2>&1
+      )"
+      candidate_rc="$?"
+      set -e
+      printf 'candidate_rc=%s\n' "${candidate_rc}"
+      printf '%s\n' "${candidate_probe}"
+      if [[ "${candidate_rc}" -eq 0 ]]; then
+        PYTHON_BIN="${candidate}"
+        SELECTED_PYTHONPATH="${probe_pythonpath}"
+        printf 'selected_python=%s\n' "${PYTHON_BIN}"
+        printf 'selected_robosuite_root=%s\n' "${robosuite_root:-<environment>}"
+        break
+      fi
+    done
+    if [[ -n "${PYTHON_BIN}" ]]; then
       break
     fi
   done
@@ -77,6 +102,8 @@ if [[ -z "${PYTHON_BIN}" ]]; then
   printf 'Verdict: FAIL_ROBOCASA_ENVIRONMENT\n' | tee -a "${EVIDENCE_ROOT}/environment.txt"
   exit 2
 fi
+
+export PYTHONPATH="${SELECTED_PYTHONPATH}"
 
 "${PYTHON_BIN}" - "${EVIDENCE_ROOT}/runtime.json" <<'PY'
 import importlib
