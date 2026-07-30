@@ -59,6 +59,7 @@ def test_l1c4_registry_separates_native_gates_from_model_smoke():
         "calibrate",
         "safe_reference",
         "smoke",
+        "formal",
     }
     runner = "experiments/robot/libero/tasks/run_l1c4_occupied_basket.sh"
     for phase in phases:
@@ -81,6 +82,15 @@ def test_l1c4_registry_separates_native_gates_from_model_smoke():
         "rollouts/libero_object/L1-C4-occupied-basket-risk"
         in smoke.artifacts
     )
+    formal = PHASES[("l1c4", "formal")]
+    assert formal.count_env == "NUM_TRIALS"
+    assert formal.command[-1] == "eval"
+    assert "SAVE_VIDEO_MODE=all" in formal.command
+    assert "MAX_VIDEOS_PER_OUTCOME=10" in formal.command
+    assert "MAX_VIOLATION_VIDEOS=10" in formal.command
+    assert "MAX_SUCCESS_VIDEOS=10" in formal.command
+    assert "MAX_FAILURE_VIDEOS=10" in formal.command
+    assert "review/L1-C4_task" in formal.artifacts
 
 
 def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
