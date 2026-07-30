@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-MODEL="${1:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal}"
-SCENARIO="${2:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal}"
-RUN_KIND="${3:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal}"
+MODEL="${1:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal|native_control}"
+SCENARIO="${2:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal|native_control}"
+RUN_KIND="${3:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal|native_control}"
 CONTINUE_AFTER_FAILED_GATES="${L1C_CONTINUE_AFTER_FAILED_GATES:-0}"
 case "${MODEL}" in
   pi05|cosmos|gr00t_n16) ;;
@@ -22,6 +22,10 @@ case "${RUN_KIND}" in
     COUNT="${L1C_FORMAL_TRIALS:-50}"
     RUN_MODE="eval"
     ;;
+  native_control)
+    COUNT="${L1C_NATIVE_CONTROL_TRIALS:-5}"
+    RUN_MODE=""
+    ;;
   *) echo "Unsupported evaluation kind: ${RUN_KIND}" >&2; exit 2 ;;
 esac
 if [[ "${RUN_KIND}" == "smoke" && "${COUNT}" -ne 5 ]]; then
@@ -30,6 +34,10 @@ if [[ "${RUN_KIND}" == "smoke" && "${COUNT}" -ne 5 ]]; then
 fi
 if [[ "${RUN_KIND}" == "formal" && "${COUNT}" -ne 50 ]]; then
   echo "Registered L1-C formal evaluation requires exactly 50 episodes." >&2
+  exit 2
+fi
+if [[ "${RUN_KIND}" == "native_control" && ( "${SCENARIO}" != "l1c3" || "${COUNT}" -ne 5 ) ]]; then
+  echo "Registered native control is restricted to exactly 5 L1-C3 episodes." >&2
   exit 2
 fi
 if [[ "${CONTINUE_AFTER_FAILED_GATES}" == "1" && ( "${RUN_KIND}" != "formal" || "${SCENARIO}" != "l1c3" ) ]]; then
@@ -279,6 +287,40 @@ PY
   export MODEL_OPEN_LOOP_STEPS=16
   MODEL_REVISION="${COSMOS_MODEL_REVISION}"
   SOURCE_REVISION="${COSMOS_SOURCE_REVISION}"
+fi
+
+if [[ "${RUN_KIND}" == "native_control" ]]; then
+  CONTROL_NOTE="L1-C3-native-official-eb-${MODEL}-control"
+  CONTROL_TRAJ="rollouts/libero_90/${CONTROL_NOTE}/trajectories"
+  mkdir -p "${CONTROL_TRAJ}"
+  find "${CONTROL_TRAJ}" -maxdepth 1 -type f \
+    \( -name '*.npz' -o -name 'index.jsonl' \) -delete
+  python -m experiments.robot.libero.run_physcog_libero_l1_eval \
+    --model_family "${MODEL_FAMILY}" \
+    --pretrained_checkpoint "${CHECKPOINT}" \
+    --pi05_host "${PI05_HOST:-127.0.0.1}" \
+    --pi05_port "${PI05_PORT:-8000}" \
+    --pi05_replan_steps "${PI05_REPLAN_STEPS:-5}" \
+    --pi05_connect_timeout_s "${PI05_CONNECT_TIMEOUT_S:-1800}" \
+    --num_open_loop_steps "${MODEL_OPEN_LOOP_STEPS}" \
+    --seed 7 \
+    --task_suite_name libero_90 \
+    --task_ids 26 \
+    --initial_states_path DEFAULT \
+    --num_trials_per_task "${COUNT}" \
+    --safety_oracle none \
+    --held_object_body wine_bottle_1_main \
+    --distractor_body akita_black_bowl_1_main \
+    --trajectory_track_bodies white_cabinet_1_cabinet_bottom \
+    --trajectory_dir "${CONTROL_TRAJ}" \
+    --post_success_settle_steps 60 \
+    --save_video_mode all \
+    --max_violation_videos 1 \
+    --max_success_videos 1 \
+    --max_failure_videos 1 \
+    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+    --run_id_note "${CONTROL_NOTE}"
+  exit 0
 fi
 
 if [[ "${SCENARIO}" == "l1c1" ]]; then

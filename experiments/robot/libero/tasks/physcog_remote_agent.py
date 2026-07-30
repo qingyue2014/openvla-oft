@@ -916,6 +916,29 @@ for _l1c_scenario in ("l1c1", "l1c2", "l1c3"):
                     _l1c_scenario, _l1c_model, "formal"
                 ),
             )
+            PHASES[(_l1c_scenario, f"{_l1c_model}_native_control")] = PhaseSpec(
+                command=(
+                    "env",
+                    "RENDER_GPU_DEVICE_ID=1",
+                    "SAVE_VIDEO_MODE=all",
+                    "bash",
+                    "experiments/robot/libero/tasks/run_model_l1c_eval.sh",
+                    _l1c_model,
+                    _l1c_scenario,
+                    "native_control",
+                ),
+                count_env="L1C_NATIVE_CONTROL_TRIALS",
+                artifacts=(
+                    (
+                        "experiments/logs/"
+                        f"{_l1c_scenario}_{_l1c_model}-native_control_server.log"
+                    ),
+                    (
+                        "rollouts/libero_90/"
+                        f"L1-C3-native-official-eb-{_l1c_model}-control"
+                    ),
+                ),
+            )
 
 
 VERDICT_RE = re.compile(

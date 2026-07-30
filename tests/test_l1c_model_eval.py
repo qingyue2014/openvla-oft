@@ -67,6 +67,18 @@ def test_remote_agent_registers_explicit_l1c3_complete_formal_phases():
     assert '"L1C_CONTINUE_AFTER_FAILED_GATES=1"' in script
 
 
+def test_l1c3_native_control_uses_official_states_and_task_id():
+    script = Path(
+        "experiments/robot/libero/tasks/run_model_l1c_eval.sh"
+    ).read_text()
+    control = script[script.index('if [[ "${RUN_KIND}" == "native_control" ]'): ]
+    control = control[:control.index('if [[ "${SCENARIO}" == "l1c1" ]')]
+    assert "--task_ids 26" in control
+    assert "--initial_states_path DEFAULT" in control
+    assert "--seed 7" in control
+    assert "l1c3_eb_states.hdf5" not in control
+
+
 def test_l1c1_uses_one_stack_drop_bound_for_reference_policy_and_replay():
     script = Path(
         "experiments/robot/libero/tasks/run_l1c1_task2.sh"
