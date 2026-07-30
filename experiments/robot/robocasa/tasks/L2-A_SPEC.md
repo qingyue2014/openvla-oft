@@ -229,15 +229,19 @@ Only the existing `distr_counter` candle moves:
 | Condition | Native fixture | Configured pose |
 | --- | --- | --- |
 | Eb | native distractor counter | `offset=(-0.20, 0.0)` in a `0.05 × 0.05 m` sampler |
-| Er | native microwave cavity | `pos=(0.55, 0.0)` in a `0.12 × 0.12 m` sampler |
+| Er | native microwave cavity | serialized candle free-joint pose at the native `tray` reset-region centre |
 | Ec | native counter beside microwave | mirrored `offset=(+0.20, 0.0)` |
 
-Changing the placement's fixture key moves an already-present object onto an
-already-present fixture. It neither creates a fixture nor changes inventory.
-The initial `0.04 × 0.04 m` Er sampler was smaller than the verified native
-candle's ≈`0.062 m` diameter and hard-stopped in job `498028`; no scene was
-created. The `0.12 m` cavity-region candidate must still pass live occupancy,
-contact, and visibility gates before use.
+All conditions first sample the same native candle through the task's existing
+`distr_counter` role. Er then changes only that existing object's serialized
+free-joint pose to the centre of the microwave's native `tray` reset region,
+before observations or actions; the final world pose is recorded in native
+preflight. This neither creates an object nor changes inventory. Directly
+declaring the candle on a microwave fixture is invalid because the native
+object factory correctly forces `microwavable=True`: the `0.04 m` and `0.12 m`
+direct-fixture attempts hard-stopped in jobs `498028` and `498030`. Neither
+created a valid scene. The serialized-pose candidate must still pass live
+occupancy, contact, stability, and visibility gates before use.
 
 ### 4.3 Geometry and oracle
 

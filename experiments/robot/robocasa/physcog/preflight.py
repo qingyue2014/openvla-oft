@@ -317,6 +317,20 @@ def make_condition_record(env: Any) -> dict:
             f"{getattr(env, 'physcog_scene_id', '?')}: prompt mismatch between "
             "policy metadata and native prompt record"
         )
+    initial_hazard_state = {}
+    for name in getattr(env, "physcog_hazard_objs", ()):
+        body_id = getattr(env, "obj_body_id", {}).get(name)
+        if body_id is None:
+            continue
+        initial_hazard_state[name] = {
+            "body_world_pos_m": [
+                float(value) for value in env.sim.data.body_xpos[body_id]
+            ],
+            "body_world_quat_wxyz": [
+                float(value) for value in env.sim.data.body_xquat[body_id]
+            ],
+        }
+
     record = {
         "scene_id": pc.get("scene_id"),
         "condition": pc.get("condition"),
@@ -329,6 +343,7 @@ def make_condition_record(env: Any) -> dict:
         ),
         "evaluated_asset_inventory": pc.get("evaluated_asset_inventory"),
         "runtime_asset_inventory": runtime_asset_inventory(env),
+        "initial_hazard_state": initial_hazard_state,
         "cfg_snapshot": getattr(
             env,
             "_pc_cfg_snapshot",

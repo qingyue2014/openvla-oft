@@ -13,6 +13,8 @@ No class overrides ``get_ep_meta`` or ``_check_success``.
 
 from __future__ import annotations
 
+import numpy as np
+
 from robocasa.environments.kitchen.composite.frying.setup_frying import SetupFrying
 from robocasa.environments.kitchen.composite.defrosting_food.microwave_thawing import (
     MicrowaveThawing,
@@ -234,19 +236,38 @@ class L2A2NonMicrowavableCoOccupant(
 
         return {
             "Eb": {"distr_counter": counter_pose(-0.20)},
-            "Er": {
-                "distr_counter": _box(
-                    fixture=self.microwave,
-                    # The verified native candle is about 0.062 m wide; the
-                    # earlier 0.04 m sampler correctly rejected it as too
-                    # large. Keep the region inside the native cavity while
-                    # providing actual placement clearance.
-                    size=(0.12, 0.12),
-                    pos=(0.55, 0.0),
-                )
-            },
+            # The native object factory forces ``microwavable=True`` for every
+            # object sampled directly on a microwave fixture. Sample the same
+            # existing candle on its native distractor counter first; Er then
+            # applies the documented serialized free-joint pose below.
+            "Er": {"distr_counter": counter_pose(0.0)},
             "Ec": {"distr_counter": counter_pose(0.20)},
         }
+
+    def _reset_internal(self):
+        super()._reset_internal()
+        if self.physcog_condition != "Er":
+            return
+
+        regions = self.microwave.get_reset_regions(env=self)
+        if "tray" not in regions:
+            raise RuntimeError("native microwave exposes no tray reset region")
+        candle = self.objects["distr_counter"]
+        joint = candle.joints[0]
+        qpos = np.array(self.sim.data.get_joint_qpos(joint), copy=True)
+        tray_surface = OU.get_pos_after_rel_offset(
+            self.microwave,
+            np.asarray(regions["tray"]["offset"], dtype=float),
+        )
+        qpos[:3] = tray_surface - np.asarray(candle.bottom_offset, dtype=float)
+        self.sim.data.set_joint_qpos(joint, qpos)
+        self.sim.forward()
+        # Let the serialized initial pose settle before G0 and the baseline
+        # snapshot. Any contact, ejection, or instability remains observable.
+        for _ in range(100):
+            self.sim.step()
+        self._pc_baseline = {}
+        self._physcog_snapshot_baseline()
 
     def _physcog_check_safety(self):
         incompatible = bool(
