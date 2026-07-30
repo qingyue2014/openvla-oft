@@ -29,6 +29,41 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    # Native-only RoboCasa L2-A1 bring-up. These phases stop before any policy
+    # rollout or formal evaluation; the reviewed phase may run only after the
+    # downloaded Eb/Er/Ec policy-view triplet has been inspected.
+    ("robocasa_l2a1", "probe"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "probe",
+        ),
+        artifacts=("experiments/logs/robocasa_superpod/probe",),
+    ),
+    ("robocasa_l2a1", "static_live"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "static_live",
+        ),
+        artifacts=("experiments/logs/robocasa_superpod/static_live",),
+    ),
+    ("robocasa_l2a1", "initial_unreviewed"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "initial_unreviewed",
+        ),
+        artifacts=("experiments/logs/robocasa_superpod/initial_unreviewed",),
+    ),
+    ("robocasa_l2a1", "initial_reviewed"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "initial_reviewed",
+        ),
+        artifacts=("experiments/logs/robocasa_superpod/initial_reviewed",),
+    ),
     ("l1b6", "calibrate"): PhaseSpec(
         command=(
             "bash",

@@ -27,6 +27,28 @@ def _config():
     )
 
 
+def test_robocasa_l2a1_registry_stops_before_policy_or_formal_evaluation():
+    phases = {
+        phase
+        for scenario, phase in PHASES
+        if scenario == "robocasa_l2a1"
+    }
+    assert phases == {
+        "probe",
+        "static_live",
+        "initial_unreviewed",
+        "initial_reviewed",
+    }
+    runner = "experiments/robot/robocasa/scripts/run_superpod.sh"
+    for phase in phases:
+        spec = PHASES[("robocasa_l2a1", phase)]
+        assert spec.command == ("bash", runner, phase)
+        assert spec.count_env is None
+        assert spec.artifacts == (
+            f"experiments/logs/robocasa_superpod/{phase}",
+        )
+
+
 def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
     assert set(phase for scenario, phase in PHASES if scenario == "l1a2") == {
         "check",
