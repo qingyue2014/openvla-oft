@@ -81,5 +81,13 @@ SuperPOD candidate screening rejected centred `tomato_sauce`,
 contained, but none reached 100 visible pixels at policy start. Exact
 three-state tomato-sauce preview measured 60--83 pixels and visually confirmed
 occlusion by the native basket wall. `orange_juice` was the only candidate to
-pass the screening gate, with 310 pixels at policy start. It remains
-provisional until the safe-corridor and executable-reference gates pass.
+pass the screening gate, with 310 pixels at policy start.
+
+A centred orange-juice occupant failed the first eight-state static
+calibration: every tested target offset had zero native success and zero safe
+success. The revised preregistered geometry places orange juice at +Y 30 mm
+and tests milk at the opposing −Y 30--35 mm corridor. This follows the
+measured approximately 53 mm carton widths and approximately 122 mm basket
+region: the opposing centres are 60--65 mm apart, while a centre milk drop
+still overlaps the occupant. It remains provisional until the exact preview,
+static safe-corridor, and executable-reference gates pass.

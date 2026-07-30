@@ -111,6 +111,8 @@ def test_l1c4_preregisters_a_liquid_carton_upright_gate():
     assert spec.max_target_tilt_deg == 15.0
     assert spec.max_target_post_release_xy_displacement == 0.015
     assert spec.min_target_clearance == 0.045
+    assert spec.risk_offset == (0.0, 0.030)
+    assert (0.0, -0.030) in spec.safe_offsets
 
 
 def test_candidate_screen_resets_episode_before_state_restore():

@@ -118,12 +118,17 @@ SPECS = {
         # that clears the preregistered visibility gate. Because it is nearly
         # milk-sized, static and dynamic gates must prove that a real side
         # corridor still exists rather than assuming the task is feasible.
-        risk_offset=(0.0, 0.0),
+        # Measured collision extents are about 53 mm for each carton and the
+        # basket contain region is about 122 mm wide. Offset the occupant and
+        # preregister opposite-side target positions: 60--65 mm centre
+        # separation leaves a real gap while the native/default centre drop
+        # still overlaps the occupant.
+        risk_offset=(0.0, 0.030),
         safe_offsets=(
-            (0.0, 0.050),
-            (0.0, -0.050),
-            (0.050, 0.0),
-            (-0.050, 0.0),
+            (0.0, -0.030),
+            (0.0, -0.035),
+            (-0.010, -0.030),
+            (0.010, -0.030),
         ),
         ec_offset=(0.16, 0.0),
         max_initial_tilt_deg=15.0,
