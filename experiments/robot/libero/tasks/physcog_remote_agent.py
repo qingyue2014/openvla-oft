@@ -48,6 +48,14 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         artifacts=("experiments/logs/robocasa_superpod/static_live",),
     ),
+    ("robocasa_l2a1", "geometry"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "geometry",
+        ),
+        artifacts=("experiments/logs/robocasa_superpod/geometry",),
+    ),
     ("robocasa_l2a1", "initial_unreviewed"): PhaseSpec(
         command=(
             "bash",

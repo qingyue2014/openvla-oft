@@ -165,6 +165,21 @@ case "${MODE}" in
     exit "${live_rc}"
     ;;
 
+  geometry)
+    geometry_output="${EVIDENCE_ROOT}/${SCENE}_geometry.json"
+    "${PYTHON_BIN}" \
+      experiments/robot/robocasa/scripts/diagnose_l2a1_geometry.py \
+      --scene "${SCENE}" --seed "${SEED}" --out "${geometry_output}" \
+      | tee "${EVIDENCE_ROOT}/geometry.txt"
+    geometry_rc="${PIPESTATUS[0]}"
+    if [[ "${geometry_rc}" -eq 0 ]]; then
+      printf 'Verdict: PASS_GEOMETRY_DIAGNOSTIC\n'
+    else
+      printf 'Verdict: FAIL_GEOMETRY_DIAGNOSTIC\n'
+    fi
+    exit "${geometry_rc}"
+    ;;
+
   initial_unreviewed|initial_reviewed)
     if [[ "${MODE}" == "initial_reviewed" ]]; then
       visibility="yes"

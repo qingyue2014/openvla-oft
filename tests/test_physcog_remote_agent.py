@@ -36,6 +36,7 @@ def test_robocasa_l2a1_registry_stops_before_policy_or_formal_evaluation():
     assert phases == {
         "probe",
         "static_live",
+        "geometry",
         "initial_unreviewed",
         "initial_reviewed",
     }
