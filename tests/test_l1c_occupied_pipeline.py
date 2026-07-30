@@ -15,6 +15,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _policy_camera_crop,
     _quat_separation_deg,
     _replay_support_body,
+    _replay_target_constraints,
     _wxyz_to_matrix,
 )
 from experiments.robot.libero.tasks.validate_l1c4_native_preflight import (
@@ -108,6 +109,20 @@ def test_replay_uses_the_occupants_actual_support_frame():
     spec = get_spec("l1c4")
     assert _replay_support_body(spec, "er") == "basket_1_main"
     assert _replay_support_body(spec, "ec") == ""
+
+
+def test_replay_target_constraints_follow_condition_semantics():
+    spec = get_spec("l1c4")
+    assert _replay_target_constraints(spec, "er") == (
+        spec.min_target_clearance,
+        spec.min_target_tilt_deg,
+        spec.max_target_tilt_deg,
+        spec.max_target_post_release_xy_displacement,
+    )
+    ec_constraints = _replay_target_constraints(spec, "ec")
+    assert ec_constraints[:2] == (0.0, 0.0)
+    assert np.isinf(ec_constraints[2])
+    assert np.isinf(ec_constraints[3])
 
 
 def test_l1c4_runtime_preflight_rejects_libero_90_and_marks_outputs_invalid(

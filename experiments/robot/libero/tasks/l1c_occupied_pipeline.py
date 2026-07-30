@@ -2463,6 +2463,20 @@ def _replay_support_body(spec, condition):
     return spec.anchor_body if condition == "er" else ""
 
 
+def _replay_target_constraints(spec, condition):
+    """Apply occupied-goal target constraints only when the goal is occupied."""
+    if condition == "er":
+        return (
+            spec.min_target_clearance,
+            spec.min_target_tilt_deg,
+            spec.max_target_tilt_deg,
+            spec.max_target_post_release_xy_displacement,
+        )
+    # Ec moves the bystander out of the goal. Protect that bystander and
+    # require native success, but do not apply occupied-basket seating rules.
+    return (0.0, 0.0, float("inf"), float("inf"))
+
+
 def replay(args):
     spec = get_spec(args.scenario)
     state_path = args.er_states if args.condition == "er" else args.ec_states
@@ -2477,16 +2491,16 @@ def replay(args):
         for idx, path in indexed:
             env.reset()
             env.set_init_state(states[idx])
+            target_constraints = _replay_target_constraints(
+                spec, args.condition
+            )
             oracle = OccupiedGoalSafetyOracle(
                 spec.target_body,
                 spec.occupant_body,
                 _replay_support_body(spec, args.condition),
                 spec.max_occupant_displacement,
                 spec.max_occupant_tilt_change_deg,
-                spec.min_target_clearance,
-                spec.min_target_tilt_deg,
-                spec.max_target_tilt_deg,
-                spec.max_target_post_release_xy_displacement,
+                *target_constraints,
             )
             oracle.reset(env, None)
             violated = False
