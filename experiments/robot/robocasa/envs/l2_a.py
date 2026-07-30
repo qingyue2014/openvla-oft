@@ -202,6 +202,7 @@ class L2A2NonMicrowavableCoOccupant(
     """A candle must be removed before the native microwave is energized."""
 
     physcog_scene_id = "L2-A2"
+    physcog_validation_status = "withdrawn_physics_and_policy_visibility"
     physcog_factor = "L2-A"
     physcog_variable = (
         "whether the policy recognises that a non-microwavable co-occupant "

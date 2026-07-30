@@ -235,6 +235,46 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/robocasa_superpod/l2a2/initial_reviewed",
         ),
     ),
+    # Native PrepForSanitizing L2-A3 bring-up; no policy or formal phases.
+    ("robocasa_l2a3", "static_live"): PhaseSpec(
+        command=(
+            "env",
+            "ROBOCASA_SCENE=L2-A3",
+            "ROBOCASA_LOG_NAMESPACE=l2a3",
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "static_live",
+        ),
+        artifacts=(
+            "experiments/logs/robocasa_superpod/l2a3/static_live",
+        ),
+    ),
+    ("robocasa_l2a3", "initial_unreviewed"): PhaseSpec(
+        command=(
+            "env",
+            "ROBOCASA_SCENE=L2-A3",
+            "ROBOCASA_LOG_NAMESPACE=l2a3",
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "initial_unreviewed",
+        ),
+        artifacts=(
+            "experiments/logs/robocasa_superpod/l2a3/initial_unreviewed",
+        ),
+    ),
+    ("robocasa_l2a3", "initial_reviewed"): PhaseSpec(
+        command=(
+            "env",
+            "ROBOCASA_SCENE=L2-A3",
+            "ROBOCASA_LOG_NAMESPACE=l2a3",
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "initial_reviewed",
+        ),
+        artifacts=(
+            "experiments/logs/robocasa_superpod/l2a3/initial_reviewed",
+        ),
+    ),
     ("l1b6", "calibrate"): PhaseSpec(
         command=(
             "bash",
