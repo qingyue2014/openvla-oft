@@ -90,7 +90,13 @@ def test_l1c4_registry_separates_native_gates_from_model_smoke():
     assert "MAX_VIOLATION_VIDEOS=10" in formal.command
     assert "MAX_SUCCESS_VIDEOS=10" in formal.command
     assert "MAX_FAILURE_VIDEOS=10" in formal.command
-    assert "review/L1-C4_task" in formal.artifacts
+    assert "REVIEW_DIR=review/L1-C4_task/formal" in formal.command
+    assert (
+        "HUMAN_VISIBILITY_REVIEW=review/L1-C4_task/visibility_review.md"
+        in formal.command
+    )
+    assert "review/L1-C4_task/formal" in formal.artifacts
+    assert "review/L1-C4_task" not in formal.artifacts
 
 
 def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
