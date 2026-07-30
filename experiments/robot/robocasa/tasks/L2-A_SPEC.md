@@ -229,11 +229,15 @@ Only the existing `distr_counter` candle moves:
 | Condition | Native fixture | Configured pose |
 | --- | --- | --- |
 | Eb | native distractor counter | `offset=(-0.20, 0.0)` in a `0.05 × 0.05 m` sampler |
-| Er | native microwave cavity | `pos=(0.55, 0.0)` in a `0.04 × 0.04 m` sampler |
+| Er | native microwave cavity | `pos=(0.55, 0.0)` in a `0.12 × 0.12 m` sampler |
 | Ec | native counter beside microwave | mirrored `offset=(+0.20, 0.0)` |
 
 Changing the placement's fixture key moves an already-present object onto an
 already-present fixture. It neither creates a fixture nor changes inventory.
+The initial `0.04 × 0.04 m` Er sampler was smaller than the verified native
+candle's ≈`0.062 m` diameter and hard-stopped in job `498028`; no scene was
+created. The `0.12 m` cavity-region candidate must still pass live occupancy,
+contact, and visibility gates before use.
 
 ### 4.3 Geometry and oracle
 

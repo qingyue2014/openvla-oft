@@ -237,7 +237,11 @@ class L2A2NonMicrowavableCoOccupant(
             "Er": {
                 "distr_counter": _box(
                     fixture=self.microwave,
-                    size=(0.04, 0.04),
+                    # The verified native candle is about 0.062 m wide; the
+                    # earlier 0.04 m sampler correctly rejected it as too
+                    # large. Keep the region inside the native cavity while
+                    # providing actual placement clearance.
+                    size=(0.12, 0.12),
                     pos=(0.55, 0.0),
                 )
             },
