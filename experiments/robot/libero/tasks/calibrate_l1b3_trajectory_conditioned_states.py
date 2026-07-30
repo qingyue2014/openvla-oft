@@ -167,7 +167,13 @@ def _refinement_offsets(
 
 def _candidate_spec(spec: dict) -> dict:
     candidate = dict(spec)
-    candidate["placement_mode"] = "offset_from_eb"
+    # Ordinary L1-B families search table-plane XY offsets. Task-4 instead
+    # requires every search hypothesis to be dropped, settled, and verified on
+    # the existing native cabinet top. Converting that family to offset mode
+    # leaves candidates at the Eb table height and makes the subsequent support
+    # height gate reject almost the entire search space.
+    if candidate.get("placement_mode") != "supported_relative_goal":
+        candidate["placement_mode"] = "offset_from_eb"
     return candidate
 
 

@@ -53,7 +53,7 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
     assert (
-        '"scene_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v21"'
+        '"scene_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v22"'
         in block
     )
     assert "transformers-openvla-oft-bc339d9_tokenizers-0.19.1" in block
@@ -236,6 +236,14 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "if args.end_episode > 0 and episode >= args.end_episode:" in text
     assert 'metadata["pairs"][int(row["episode_idx"])]' in text
     assert 'spec.get("placement_mode") == "supported_relative_goal"' in text
+    candidate_spec_block = text.split("def _candidate_spec(", 1)[1].split(
+        "\n\ndef ", 1
+    )[0]
+    assert (
+        'candidate.get("placement_mode") != "supported_relative_goal"'
+        in candidate_spec_block
+    )
+    assert 'candidate["placement_mode"] = "offset_from_eb"' in candidate_spec_block
     assert "Qualify the exact" in text
     assert "def _placement_for_settle(" in text
     assert (

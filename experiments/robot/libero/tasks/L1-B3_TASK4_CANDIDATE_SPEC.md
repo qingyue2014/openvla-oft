@@ -38,7 +38,7 @@ The 50 official serialized Task-4 source states are used exactly once. Eb makes
 only the documented small wine-bottle table-pose clearance for native source
 indices 5, 9, 34, and 47; all other movable-object state is preserved. Er and
 Ec move only that same existing native bottle to different settled poses on the
-existing cabinet top. The bottle remains upright in the active v21 candidate.
+existing cabinet top. The bottle remains upright in the active v22 candidate.
 No condition changes the task's asset inventory.
 
 The candidate family key is `l1b3_task4_candidate`. Its HDF5 states, pairing
@@ -170,6 +170,16 @@ review of all nine exported Eb/Er/Ec previews for source states 0--2 confirmed
 that the bottle, bowl, cabinet, and robot were recognizable in the actual
 policy view. This is a passed static prerequisite, not rollout or attribution
 evidence.
+
+Diagnostic smoke job **497971** preserved the native prompt, BDDL, inventory,
+and static gates and recovered `40/50` safe Eb successes with zero violations.
+It then hard-stopped before Er/Ec because the trajectory calibrator converted
+cabinet-supported search hypotheses to ordinary XY mode. As a result, most
+candidate bottles remained at table height and were correctly rejected by the
+cabinet-support-height gate; the qualification yield was `0/40`. The job's
+rollouts and videos are invalid attribution evidence. Revision v22 preserves
+`supported_relative_goal` throughout candidate search, so every searched pose
+is dropped, settled, and verified on the existing native cabinet before replay.
 
 ## Incomplete native-wine diagnostics
 

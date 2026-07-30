@@ -260,8 +260,8 @@ FAMILIES = {
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "scene_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v21",
-        "candidate_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v21",
+        "scene_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v22",
+        "candidate_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v22",
         "model_runtime_contract": (
             "transformers-openvla-oft-bc339d9_tokenizers-0.19.1"
         ),
