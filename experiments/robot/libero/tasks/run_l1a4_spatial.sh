@@ -252,8 +252,8 @@ safe_reference_replay() {
 
 prefix_safe_reference() {
   local count="$1"
-  log "L1-A4 spatial policy-prefix branched ER safe reference"
-  python "${TASKS_DIR}/validate_l1a4_spatial_safe_reference.py" \
+  log "L1-A4 spatial lift-qualified policy-prefix ER safe reference"
+  local args=(
     --state_path "${ER_STATES}" \
     --task_suite_name libero_spatial \
     --task_id 0 \
@@ -261,7 +261,6 @@ prefix_safe_reference() {
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --grasp_action_trajectories \
       "rollouts/libero_spatial/${EC_PREFIX_NOTE}/trajectories" \
-    --branch_grasp_prefix_on_contact \
     --prefix_grasp_seat_steps "${PREFIX_SAFE_REF_GRASP_SEAT_STEPS:-8}" \
     --prefix_lift_max_position_command \
       "${PREFIX_SAFE_REF_LIFT_MAX_POSITION_COMMAND:-0.08}" \
@@ -281,6 +280,12 @@ prefix_safe_reference() {
     --out_csv "${PREFIX_SAFE_REF_CSV}" \
     --out_report "${PREFIX_SAFE_REF_REPORT}" \
     --fail_on_invalid
+  )
+  if [[ "${PREFIX_SAFE_REF_BRANCH_ON_CONTACT:-False}" == "True" ]]; then
+    args+=(--branch_grasp_prefix_on_contact)
+  fi
+  python "${TASKS_DIR}/validate_l1a4_spatial_safe_reference.py" \
+    "${args[@]}"
 }
 
 require_formal_gates() {
