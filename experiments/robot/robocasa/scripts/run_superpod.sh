@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Registered SuperPod entry point for native-only RoboCasa validation.
+# SuperPod entry point for native-only RoboCasa validation and smoke runs.
 #
 # This script is intentionally narrow: it supports environment discovery,
-# L2-A1 live native preflight, native-layout diagnostics, and the two-stage
-# initial-state gate. It does
-# not run a policy, G1/G2/G3, or formal evaluation.
+# live native preflight, native-layout diagnostics, the two-stage initial-state
+# gate, and a non-formal pi0.5 cross-simulator smoke run. It does not run
+# G1/G2/G3 or formal evaluation.
 
 set -uo pipefail
 
@@ -266,6 +266,68 @@ PY
       printf 'Verdict: FAIL_INITIAL_GATES\n'
     fi
     exit "${gate_rc}"
+    ;;
+
+  pi05_smoke)
+    gate_manifest="${ROBOCASA_GATE_MANIFEST:-}"
+    if [[ -z "${gate_manifest}" || ! -f "${gate_manifest}" ]]; then
+      printf 'ROBOCASA_GATE_MANIFEST must name a reviewed initial-gate manifest\n' >&2
+      exit 65
+    fi
+    openpi_root="${OPENPI_ROOT:-/home/drwqyhappy/04-mycode/openpi-15a9616}"
+    server_python="${openpi_root}/.venv/bin/python"
+    server_script="${openpi_root}/scripts/serve_policy.py"
+    pi05_port="${PI05_PORT:-8000}"
+    if [[ ! -x "${server_python}" || ! -f "${server_script}" ]]; then
+      printf 'missing official OpenPI environment under %s\n' "${openpi_root}" >&2
+      exit 2
+    fi
+    server_log="${EVIDENCE_ROOT}/pi05_server.txt"
+    (
+      cd "${openpi_root}"
+      CUDA_VISIBLE_DEVICES="${PI05_SERVER_GPU:-0}" \
+        XLA_PYTHON_CLIENT_MEM_FRACTION="${XLA_PYTHON_CLIENT_MEM_FRACTION:-0.9}" \
+        "${server_python}" "${server_script}" \
+          --env LIBERO \
+          --port "${pi05_port}"
+    ) >"${server_log}" 2>&1 &
+    server_pid="$!"
+    cleanup_pi05() {
+      kill "${server_pid}" 2>/dev/null || true
+      wait "${server_pid}" 2>/dev/null || true
+    }
+    trap cleanup_pi05 EXIT INT TERM
+
+    export PYTHONPATH="${openpi_root}/packages/openpi-client/src:${PYTHONPATH}"
+    export PI05_HOST="${PI05_HOST:-127.0.0.1}"
+    export PI05_PORT="${pi05_port}"
+    export PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-600}"
+    export PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
+    export MUJOCO_EGL_DEVICE_ID="${MUJOCO_EGL_DEVICE_ID:-0}"
+    rollout_out="${EVIDENCE_ROOT}/${SCENE}_pi05_${ROBOCASA_CONDITION:-Eb}.jsonl"
+    set +e
+    CUDA_VISIBLE_DEVICES="${ROBOCASA_SIM_GPU:-1}" \
+      "${PYTHON_BIN}" experiments/robot/robocasa/scripts/run_condition.py \
+        --scene "${SCENE}" \
+        --condition "${ROBOCASA_CONDITION:-Eb}" \
+        --episodes "${ROBOCASA_EPISODES:-1}" \
+        --horizon "${ROBOCASA_HORIZON:-500}" \
+        --seed "${SEED}" \
+        --policy pi05 \
+        --smoke-gate-manifest "${gate_manifest}" \
+        --video "${REVIEW_DIR}" \
+        --out "${rollout_out}" \
+        >"${EVIDENCE_ROOT}/pi05_smoke.txt" 2>&1
+    smoke_rc="$?"
+    set -e
+    sed -n '1,320p' "${EVIDENCE_ROOT}/pi05_smoke.txt"
+    tail -120 "${server_log}" || true
+    if [[ "${smoke_rc}" -eq 0 ]]; then
+      printf 'Verdict: PASS_PI05_ROBOCASA_SMOKE_EXECUTION\n'
+    else
+      printf 'Verdict: FAIL_PI05_ROBOCASA_SMOKE_EXECUTION\n'
+    fi
+    exit "${smoke_rc}"
     ;;
 
   *)

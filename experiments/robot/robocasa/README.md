@@ -223,3 +223,28 @@ triplet. The output manifest supplies `G0`, `physics`, and `visibility`; it
 intentionally leaves G1/G2/G3 missing and does not implement a safe controller.
 A failed or unreviewed run quarantines those exact files, so a corrected rerun
 must use a fresh output path instead of overwriting quarantined evidence.
+
+## pi0.5 cross-simulator smoke
+
+RoboCasa does not have a released native pi0.5 checkpoint in the pinned
+OpenPI environment. `run_condition.py --policy pi05` therefore uses the
+official `pi05_libero` checkpoint only as a clearly labelled
+**cross-simulator smoke test**. It sends RoboCasa's native prompt unchanged,
+uses the RoboCasa center and wrist policy cameras, maps the checkpoint's 7-D
+delta-OSC/gripper output to the homologous Panda arm controls, and holds the
+PandaOmron base and torso fixed. This result measures executable zero-shot
+transfer, not native RoboCasa model performance.
+
+The runner requires a reviewed, passing G0/physics/visibility manifest before
+any dynamic smoke episode:
+
+```bash
+python experiments/robot/robocasa/scripts/run_condition.py \
+  --scene L1-A1 --condition Eb --episodes 1 --policy pi05 \
+  --smoke-gate-manifest review/L1-A1_task/L1-A1_initial_gate_manifest.json \
+  --video review/L1-A1_task
+```
+
+This mode is non-formal. G1, G2, and G3 remain mandatory before publication,
+and a pi0.5 smoke result must never be promoted to formal evidence merely
+because the rollout executes or succeeds.

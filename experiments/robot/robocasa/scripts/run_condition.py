@@ -5,9 +5,11 @@
         --scene L1-A1 --condition Er --episodes 5 --video review/L1-A1_task
 
 The policy is pluggable: ``--policy zero`` and ``--policy random`` need no
-checkpoint and are meant for scene bring-up and gate calibration. A VLA policy
+checkpoint and are meant for scene bring-up and gate calibration.
+``--policy pi05`` uses the released pi05-LIBERO checkpoint as an explicitly
+cross-simulator smoke test with the PandaOmron base frozen. A custom VLA policy
 is supplied by passing ``--policy module:function``, where the function takes
-``(obs, lang)`` and returns a 7-D (or 12-D mobile-base) action.
+``(obs, lang, env)`` and returns a 12-D mobile-base action.
 """
 
 from __future__ import annotations
@@ -54,6 +56,10 @@ def load_policy(spec: str):
             return np.random.uniform(low, high)
 
         return _rand
+    if spec in {"pi05", "pi0.5", "pi_0.5", "pi-0.5"}:
+        from experiments.robot.robocasa.pi05_policy import make_policy
+
+        return make_policy()
     module_name, fn_name = spec.split(":")
     return getattr(importlib.import_module(module_name), fn_name)
 
@@ -65,6 +71,7 @@ def make_env(
     render: bool,
     *,
     layout_id: int | None = None,
+    camera_names: list[str] | tuple[str, ...] | None = None,
 ):
     cls = get_scene(scene_id)
     kwargs = dict(
@@ -74,7 +81,7 @@ def make_env(
         has_renderer=False,
         has_offscreen_renderer=render,
         use_camera_obs=render,
-        camera_names=[CAMERA] if render else [],
+        camera_names=list(camera_names or ([CAMERA] if render else [])),
         camera_heights=256,
         camera_widths=256,
         control_freq=20,
@@ -121,6 +128,36 @@ def save_preflight_manifest(scene_id: str, manifest: dict) -> pathlib.Path:
     return path
 
 
+def load_smoke_gate_manifest(
+    path: str | None, *, scene_id: str, preflight_sha256: str
+) -> dict | None:
+    """Require reviewed initial-state gates before a dynamic smoke rollout."""
+
+    if path is None:
+        return None
+    manifest_path = pathlib.Path(path)
+    payload = json.loads(manifest_path.read_text())
+    if payload.get("scene_id") != scene_id:
+        raise NativePreflightError(
+            f"smoke gate manifest scene mismatch: {payload.get('scene_id')!r}"
+        )
+    if payload.get("native_preflight_sha256") != preflight_sha256:
+        raise NativePreflightError(
+            "smoke gate manifest native-preflight hash is stale or mismatched"
+        )
+    gates = payload.get("gates") or {}
+    missing = [
+        name
+        for name in ("G0", "physics", "visibility")
+        if not (gates.get(name) or {}).get("passed")
+    ]
+    if missing:
+        raise NativePreflightError(
+            f"smoke gate manifest has unpassed prerequisites: {missing}"
+        )
+    return payload
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--scene", required=True)
@@ -142,6 +179,11 @@ def main():
         default=None,
         help="JSON publication-gate manifest required by --formal",
     )
+    ap.add_argument(
+        "--smoke-gate-manifest",
+        default=None,
+        help="reviewed G0/physics/visibility manifest required by calibrated smoke jobs",
+    )
     args = ap.parse_args()
 
     artifacts = [
@@ -150,11 +192,21 @@ def main():
         if path is not None
     ]
     try:
-        render = args.video is not None
-        vdir = review_dir(args.scene, args.video) if render else None
+        policy = load_policy(args.policy)
+        save_video = args.video is not None
+        camera_obs = save_video or bool(
+            getattr(policy, "requires_camera_obs", False)
+        )
+        policy_cameras = getattr(policy, "camera_names", None)
+        vdir = review_dir(args.scene, args.video) if save_video else None
         manifest = run_native_preflight(args.scene, args.seed)
         manifest_path = save_preflight_manifest(args.scene, manifest)
         print(f"native-only preflight PASS -> {manifest_path}")
+        smoke_gates = load_smoke_gate_manifest(
+            args.smoke_gate_manifest,
+            scene_id=args.scene,
+            preflight_sha256=manifest["preflight_sha256"],
+        )
         formal_gates = (
             load_formal_gate_manifest(
                 args.gate_manifest,
@@ -164,13 +216,20 @@ def main():
             if args.formal
             else None
         )
-        env = make_env(args.scene, args.condition, args.seed, render)
-        policy = load_policy(args.policy)
+        env = make_env(
+            args.scene,
+            args.condition,
+            args.seed,
+            camera_obs,
+            camera_names=policy_cameras,
+        )
 
         results, saved_actions = [], {}
         try:
             for ep in range(args.episodes):
                 obs = env.reset()
+                if hasattr(policy, "reset"):
+                    policy.reset()
                 lang = env.native_lang
                 penetration = initial_max_penetration(env)
                 if lang != manifest["native_prompt"]:
@@ -180,7 +239,7 @@ def main():
                     )
                 frames, actions = [], []
                 initial_frame_path = None
-                if render:
+                if save_video:
                     import imageio
 
                     vdir.mkdir(parents=True, exist_ok=True)
@@ -195,7 +254,7 @@ def main():
                     act = np.asarray(policy(obs, lang, env), dtype=np.float64)
                     obs, _, _, info = env.step(act)
                     actions.append(act)
-                    if render:
+                    if save_video:
                         frames.append(obs[f"{CAMERA}_image"][::-1])
                     if info["physcog"]["task_success"]:
                         break
@@ -206,6 +265,11 @@ def main():
                     seed=args.seed + ep,
                     preflight_sha256=manifest["preflight_sha256"],
                     formal=bool(args.formal),
+                    policy=args.policy,
+                    policy_model_label=getattr(policy, "model_label", args.policy),
+                    smoke_gate_manifest=(
+                        args.smoke_gate_manifest if smoke_gates else None
+                    ),
                     formal_gate_manifest=args.gate_manifest if formal_gates else None,
                     initial_max_penetration_m=penetration,
                     policy_camera=CAMERA,
@@ -219,7 +283,7 @@ def main():
                 if summary["task_success"] and not summary["safety_violated"]:
                     saved_actions[f"ep{ep}"] = np.asarray(actions)
 
-                if render and frames:
+                if save_video and frames:
                     import imageio
 
                     outcome = (
