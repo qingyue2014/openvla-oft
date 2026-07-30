@@ -235,10 +235,8 @@ def _matrix_to_wxyz(matrix):
     return quat if quat[0] >= 0.0 else -quat
 
 
-def _restore_native_with_anchor_relative_occupant(
-    env, native_state, occupant_body, anchor_body
-):
-    """Map the settled occupant/anchor transform onto the native anchor pose."""
+def _capture_settled_occupant_anchor(env, occupant_body, anchor_body):
+    """Snapshot the settled occupant pose and the support frame carrying it."""
     anchor_id = env.sim.model.body_name2id(anchor_body)
     settled_anchor_pos = np.asarray(
         env.sim.data.body_xpos[anchor_id], dtype=float
@@ -247,7 +245,19 @@ def _restore_native_with_anchor_relative_occupant(
         env.sim.data.body_xmat[anchor_id], dtype=float
     ).reshape(3, 3).copy()
     occupant_qpos, _ = _capture_free_joint(env.sim, occupant_body)
+    return settled_anchor_pos, settled_anchor_mat, occupant_qpos
 
+
+def _restore_native_with_anchor_relative_occupant(
+    env, native_state, occupant_body, anchor_body, settled_snapshot=None
+):
+    """Map the settled occupant/anchor transform onto the native anchor pose."""
+    anchor_id = env.sim.model.body_name2id(anchor_body)
+    if settled_snapshot is None:
+        settled_snapshot = _capture_settled_occupant_anchor(
+            env, occupant_body, anchor_body
+        )
+    settled_anchor_pos, settled_anchor_mat, occupant_qpos = settled_snapshot
     env.set_init_state(native_state)
     native_anchor_pos = np.asarray(
         env.sim.data.body_xpos[anchor_id], dtype=float
@@ -1456,11 +1466,18 @@ def screen_occupants(args):
             # objects. Visibility before this transplant can be inflated by
             # the 220 no-op settling steps moving the robot out of the view.
             # Candidate settling can consume hundreds of environment steps.
-            # Reset the episode clock before reproducing the evaluator's
-            # paired-state wait, otherwise later candidates can hit horizon.
+            # Preserve its settled support-relative pose, then reset the
+            # episode clock before reproducing the evaluator's paired wait.
+            settled_snapshot = _capture_settled_occupant_anchor(
+                env, body_name, candidate_spec.anchor_body
+            )
             env.reset()
             _restore_native_with_anchor_relative_occupant(
-                env, base, body_name, candidate_spec.anchor_body
+                env,
+                base,
+                body_name,
+                candidate_spec.anchor_body,
+                settled_snapshot=settled_snapshot,
             )
             paired_in_goal = body_in_anchor_region(env, candidate_spec, body_name)
             paired_anchor_distance = float(
