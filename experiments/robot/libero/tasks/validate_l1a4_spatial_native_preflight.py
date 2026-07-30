@@ -44,6 +44,7 @@ EXPECTED_OBJECTS = {
     "plate_1": "plate",
 }
 VERDICT = "PASS_L1A4_SPATIAL_NATIVE_ONLY_PREFLIGHT"
+INTERVENTION_ID = "l1a4_spatial_native_near_adaptive_v4"
 
 
 def resolve_native_bddl() -> Path:
@@ -171,6 +172,7 @@ def verify_state_file(
             "native_bddl_sha256",
             "asset_inventory_sha256",
             "condition",
+            "intervention_id",
         }
         missing = sorted(required - set(handle.attrs))
         if missing:
@@ -186,6 +188,7 @@ def verify_state_file(
             "native_prompt": record["prompt"],
             "native_bddl_sha256": record["bddl_sha256"],
             "asset_inventory_sha256": record["asset_inventory_sha256"],
+            "intervention_id": INTERVENTION_ID,
         }
         mismatches = {
             name: (_read_attr(handle.attrs, name), value)

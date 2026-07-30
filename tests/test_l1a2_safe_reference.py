@@ -21,8 +21,8 @@ def test_native_goal_is_authoritative_over_asset_aabb_gap(monkeypatch):
     }
     monkeypatch.setattr(reference, "_body_pos", lambda _env, body: positions[body])
     monkeypatch.setattr(
-        generator,
-        "_world_aabb",
+        reference,
+        "_collision_world_aabb",
         lambda _env, body: (
             np.array([-0.05, -0.05, 0.80 if body == reference.TARGET else 0.85]),
             np.array([0.05, 0.05, 0.95 if body == reference.TARGET else 0.90]),
@@ -121,6 +121,34 @@ def test_transport_aborts_when_grasped_body_stops_following_eef(monkeypatch):
 
     assert failure.reason == "grasp_slipped"
     assert failure.stage == "translate_above_plate"
+
+
+def test_place_descent_stops_when_native_goal_is_already_satisfied():
+    obs = {"robot0_eef_pos": np.zeros(3)}
+    args = SimpleNamespace(
+        position_tolerance=0.001,
+        max_waypoint_steps=10,
+        max_position_command=0.25,
+        position_scale=0.08,
+        max_grasp_offset_drift=0.005,
+    )
+
+    returned_obs, returned_step, failure = reference._move_to(
+        _NativeSuccessEnv(True),
+        obs,
+        object(),
+        object(),
+        np.array([1.0, 0.0, 0.0]),
+        1.0,
+        7,
+        args,
+        "descend_to_place",
+        accept_native_task_success=True,
+    )
+
+    assert returned_obs is obs
+    assert returned_step == 7
+    assert failure is None
 
 
 def test_layout_displacement_gate_rejects_objects_that_settle_far_from_request(

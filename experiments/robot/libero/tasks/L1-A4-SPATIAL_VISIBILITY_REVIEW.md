@@ -2,61 +2,59 @@
 
 Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
 
-## Audited experiment
+Intervention ID: `l1a4_spatial_native_near_adaptive_v4`
 
-- Remote run: `20260729T084717Z-l1a4s-check`
-- Commit: `b0ee2006baaadf07bdda3d4024e420f590e48496`
-- Revalidation run: `20260730T030129Z-l1a4s-check`
-- Revalidation commit: `ff8255f20f37756f445c5483dba6a31f85c9a5da`
-- All 45 serialized state arrays in EB, ER, and EC are bitwise identical
-  between the audited and revalidated runs.
-- Native suite/task: `libero_spatial`, task `0`
-- Native BDDL:
-  `pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate.bddl`
-- Exact benchmark prompt:
-  `pick up the black bowl between the plate and the ramekin and place it on the plate`
-- Paired-state verdict: `PASS_L1A4_SPATIAL_PAIRED_SCENE_GATE`
-- Accepted paired states: 45
-- Rejected native indices: 31, 34, 40, 45, and 48. In each rejected
-  state the native robot configuration displaced the moved target during
-  settling, so the strict between-relation gate failed. Rejected states are
-  not included in any condition.
+## Audited state pool
 
-## Human review
+- Local generation: `2026-07-30 13:34 +08:00`
+- Git base: `cb491ef630b3cd8f432141e189f7a8ecbef94e51`
+- Pipeline SHA-256:
+  `e20c8f93dd0255576f14eff96dbb0c0916115612215115a21cfdd9e36939fee6`
+- Pairing manifest SHA-256:
+  `d8c71d1e608ace5a2b9777d51a980bbe8d00b598b8abad08555b3f5727941f31`
+- EB HDF5 SHA-256:
+  `9d170876b29c0ac95d8f3deb712897a0c2a2f8b4e12abf0c332550cd0a04976b`
+- ER HDF5 SHA-256:
+  `968c9a43cd9070b19693dafa0b380f168e18b0cd70b25372dc46a76166087552`
+- EC HDF5 SHA-256:
+  `b20bb09802cc95354da3017434ed08878e60e3442c9357da5e4c22c1fe719412`
+- Paired scene verdict: `PASS_L1A4_SPATIAL_PAIRED_SCENE_GATE`
+- Accepted pairs: 45; rejected native source states: 5.
+
+## Human policy-view inspection
 
 The exact post-settle serialized states for episodes 0, 1, and 2 were
-regenerated through the LIBERO environment wrapper and inspected in both RGB
-streams consumed by the policy:
+regenerated through the LIBERO wrapper and inspected in both simultaneous
+256-pixel RGB streams consumed by the policy.
 
-- `agentview`: EB shows both native black bowls, the plate, and the ramekin.
-  ER clearly shows the moved target bowl between the moved plate and ramekin,
-  while the second bowl remains at the paired EB target location. EC preserves
-  the same target/plate/ramekin layout and moves only the second bowl away.
-- `robot0_eye_in_hand`: the near-field objects are sharp and unoccluded. Its
-  crop does not always contain every landmark at once, but the simultaneously
-  supplied `agentview` fully resolves the complete ordinal relation and both
-  candidate bowls.
-- No audited frame is blank, corrupted, dominated by robot occlusion, or
+- `agentview`: both native black bowls, the plate, and the ramekin are
+  recognizable in every EB/ER/EC frame. In ER and EC, the relocated target is
+  visually between the ramekin and plate. ER and EC match except for the native
+  lure pose.
+- The plate remains clearly recognizable in ER/EC and has at least 1774
+  segmentation pixels.
+- `robot0_eye_in_hand`: frames are sharp and uncorrupted. This crop does not
+  always contain every landmark simultaneously, but the paired `agentview`
+  resolves the full relation.
+- No reviewed frame is blank, corrupted, dominated by robot occlusion, or
   dependent on an oracle-only camera.
 
-The first three episodes vary in native EB placement; the ER/EC intervention
-remains visually distinguishable and semantically identical across all three.
+## Automatic physical and visual evidence
 
-## Automatic visibility and stability evidence
+- ER minimum `agentview` pixels: target 874, lure 769, plate 1774,
+  ramekin 554.
+- EC minimum `agentview` pixels: target 874, lure 626, plate 1774,
+  ramekin 557.
+- Minimum centroid separation: ER 29.496 px; EC 30.510 px (gate: 12 px).
+- Maximum post-settle layout error: 0.019928 m (gate: 0.020 m).
+- Maximum settle drift: 0.002507 m.
+- Maximum policy-wait drift: 0.009994 m (gate: 0.010 m).
+- Maximum EC displacement from native region centers: 0.156934 m
+  (gate: 0.170 m).
+- Maximum stale-location pairing error: 0.009735 m (gate: 0.012 m).
+- Maximum unallowed ER/EC qpos and qvel difference: 0.
 
-Across all 45 accepted pairs:
-
-- ER minimum `agentview` pixels:
-  target bowl 1090, second bowl 763, plate 1536, ramekin 568.
-- EC minimum `agentview` pixels:
-  target bowl 1090, second bowl 1490, plate 1536, ramekin 568.
-- Minimum referent centroid separation: 35.9095 pixels in both ER and EC
-  (gate: 12 pixels).
-- Maximum stale-location pairing error: 0.00003781 m.
-- Maximum settle drift: 0.00078924 m.
-- Maximum policy-wait drift: 0.00000466 m.
-- Maximum unallowed ER/EC or EB/ER joint-state difference: 0.
-
-This review authorizes model evaluation only for the validated 45-state pool
-at the commit and task identity above. It does not claim task success or safe
-adaptation by any model.
+This verdict authorizes dynamic reference and short smoke testing only for the
+state hashes above. Formal evaluation remains blocked until dynamic
+feasibility, action separation, and EB/EC capability gates pass. Review videos
+must be stored under `review/L1-A4_task/`.

@@ -156,6 +156,55 @@ def _body_pos(env, name):
     return np.asarray(env.sim.data.body_xpos[env.sim.model.body_name2id(name)], dtype=float).copy()
 
 
+def _collision_world_aabb(env, body_name: str) -> tuple[np.ndarray, np.ndarray]:
+    """Return a world AABB built only from enabled collision geoms."""
+    from experiments.robot.libero.tasks.generate_l1a2_initial_states import (
+        _geom_ids_for_body,
+    )
+
+    mins = np.full(3, np.inf)
+    maxs = np.full(3, -np.inf)
+    model = env.sim.model
+    for geom_id in _geom_ids_for_body(env, body_name):
+        # LIBERO assets can include a coarse visual-only mesh. Including it
+        # overestimates the Akita bowl's support depth by about 0.10 m and
+        # sends the OSC transport waypoint outside the reachable workspace.
+        if not (
+            int(model.geom_contype[geom_id])
+            or int(model.geom_conaffinity[geom_id])
+        ):
+            continue
+        pos = np.asarray(env.sim.data.geom_xpos[geom_id], dtype=float)
+        mat = np.asarray(
+            env.sim.data.geom_xmat[geom_id], dtype=float
+        ).reshape(3, 3)
+        size = np.asarray(model.geom_size[geom_id], dtype=float)
+        geom_type = int(model.geom_type[geom_id])
+        if geom_type == 6:  # box
+            corners = np.array(
+                [
+                    [sx * size[0], sy * size[1], sz * size[2]]
+                    for sx in (-1, 1)
+                    for sy in (-1, 1)
+                    for sz in (-1, 1)
+                ]
+            )
+            world = (mat @ corners.T).T + pos
+            mins = np.minimum(mins, world.min(axis=0))
+            maxs = np.maximum(maxs, world.max(axis=0))
+        else:
+            radius = float(np.max(size[:2]))
+            half_z = float(size[2] if len(size) > 2 else radius)
+            half_extent = np.array([radius, radius, half_z])
+            mins = np.minimum(mins, pos - half_extent)
+            maxs = np.maximum(maxs, pos + half_extent)
+    if not np.isfinite(mins).all():
+        raise RuntimeError(
+            f"No enabled collision geoms found for body: {body_name}"
+        )
+    return mins, maxs
+
+
 def _eef_pos(obs):
     return np.asarray(obs["robot0_eef_pos"], dtype=float)
 
@@ -195,6 +244,7 @@ def _move_to(
     max_position_command=None,
     retained_body=None,
     retained_offset=None,
+    accept_native_task_success=False,
 ):
     tolerance = args.position_tolerance if tolerance is None else tolerance
     max_steps = args.max_waypoint_steps if max_steps is None else max_steps
@@ -211,6 +261,8 @@ def _move_to(
         if error <= tolerance:
             return obs, step, None
         if accept_gripper_target_contact and oracle._metrics(env)["gripper_contact"]:
+            return obs, step, None
+        if accept_native_task_success and env.check_success():
             return obs, step, None
         action = _position_action(
             _eef_pos(obs),
@@ -309,12 +361,10 @@ def _seat_grasp(env, obs, oracle, recorder, target, close_sign, step, args):
 
 
 def _bowl_on_plate(env, args) -> dict:
-    from experiments.robot.libero.tasks.generate_l1a2_initial_states import _world_aabb
-
     bowl_pos = _body_pos(env, TARGET)
     plate_pos = _body_pos(env, PLATE)
-    plate_lo, plate_hi = _world_aabb(env, PLATE)
-    bowl_lo, _ = _world_aabb(env, TARGET)
+    plate_lo, plate_hi = _collision_world_aabb(env, PLATE)
+    bowl_lo, _ = _collision_world_aabb(env, TARGET)
     xy_offset = float(np.linalg.norm(bowl_pos[:2] - plate_pos[:2]))
     bottom_gap = float(bowl_lo[2] - plate_hi[2])
     # The native BDDL predicate is authoritative.  AABB bottom-vs-top gaps are
@@ -329,6 +379,96 @@ def _bowl_on_plate(env, args) -> dict:
         "place_bottom_gap_m": bottom_gap,
         "place_xy_sanity_ok": bool(xy_offset <= args.max_place_xy_offset),
     }
+
+
+def _recover_near_plate_push(
+    env,
+    obs,
+    oracle,
+    recorder,
+    close_sign,
+    open_sign,
+    step,
+    args,
+):
+    """Push a released near-miss bowl toward the plate until native success."""
+    bowl = _body_pos(env, TARGET)
+    plate = _body_pos(env, PLATE)
+    delta = plate[:2] - bowl[:2]
+    distance = float(np.linalg.norm(delta))
+    if distance <= 1e-9 or distance > args.near_plate_push_max_xy:
+        return obs, step, MotionFailure(
+            reason="near_plate_push_not_applicable",
+            stage="near_plate_push",
+        )
+    direction = delta / distance
+    push_height = float(bowl[2] + args.near_plate_push_height)
+    behind = bowl.copy()
+    behind[:2] -= direction * args.near_plate_push_behind
+    behind[2] = push_height
+    above_behind = behind.copy()
+    above_behind[2] += args.near_plate_push_clearance
+    push_end = plate.copy()
+    push_end[:2] += direction * args.near_plate_push_overshoot
+    push_end[2] = push_height
+
+    failure = None
+    for stage, target in (
+        ("near_plate_push_approach", above_behind),
+        ("near_plate_push_descend", behind),
+    ):
+        if failure is None:
+            obs, step, failure = _move_to(
+                env,
+                obs,
+                oracle,
+                recorder,
+                target,
+                close_sign,
+                step,
+                args,
+                stage,
+                tolerance=args.near_plate_push_waypoint_tolerance,
+            )
+    if failure is None:
+        obs, step, failure = _move_to(
+            env,
+            obs,
+            oracle,
+            recorder,
+            push_end,
+            close_sign,
+            step,
+            args,
+            "near_plate_push",
+            tolerance=args.place_position_tolerance,
+            accept_native_task_success=True,
+        )
+    if failure is None:
+        retreat = _eef_pos(obs).copy()
+        retreat[2] += args.retreat_height
+        obs, step, failure = _move_to(
+            env,
+            obs,
+            oracle,
+            recorder,
+            retreat,
+            open_sign,
+            step,
+            args,
+            "near_plate_push_retreat",
+        )
+    if failure is None:
+        obs, step, failure = _hold(
+            env,
+            obs,
+            oracle,
+            recorder,
+            open_sign,
+            args.settle_steps,
+            step,
+        )
+    return obs, step, failure
 
 
 def _reference_attempt_score(row: dict) -> tuple:
@@ -412,8 +552,6 @@ def _run_episode(
     attempt_idx=0,
     capture_video=False,
 ):
-    from experiments.robot.libero.tasks.generate_l1a2_initial_states import _world_aabb
-
     obs = env.reset()
     obs = env.set_init_state(state)
     oracle = _TaskOnlyOracle(env, TARGET)
@@ -602,9 +740,9 @@ def _run_episode(
 
     # Convert the desired bowl pose into an EEF waypoint using the measured
     # rigid grasp offset, avoiding hard-coded asset dimensions.
-    bowl_lo, _ = _world_aabb(env, TARGET)
+    bowl_lo, _ = _collision_world_aabb(env, TARGET)
     bowl_origin_to_bottom = float(_body_pos(env, TARGET)[2] - bowl_lo[2])
-    _, plate_hi = _world_aabb(env, PLATE)
+    _, plate_hi = _collision_world_aabb(env, PLATE)
     desired_bowl = _body_pos(env, PLATE).copy()
     if getattr(args, "place_at_current_xy", False):
         desired_bowl[:2] = _body_pos(env, TARGET)[:2]
@@ -627,11 +765,34 @@ def _run_episode(
     transit_plate_bowl[2] = transit_z
     transport_stages = [("raise_for_transport", transit_source_bowl)]
     transport_via_x = getattr(args, "transport_via_x", None)
-    if transport_via_x is not None:
+    transport_via_y = getattr(args, "transport_via_y", None)
+    if transport_via_x is not None and transport_via_y is not None:
+        via_source_x = transit_source_bowl.copy()
+        via_source_x[0] = transport_via_x
+        via_source_xy = via_source_x.copy()
+        via_source_xy[1] = transport_via_y
+        via_plate_xy = transit_plate_bowl.copy()
+        via_plate_xy[1] = transport_via_y
+        transport_stages.extend(
+            [
+                ("transport_detour_out_x", via_source_x),
+                ("transport_detour_out_y", via_source_xy),
+                ("transport_detour_across", via_plate_xy),
+            ]
+        )
+    elif transport_via_x is not None:
         via_source = transit_source_bowl.copy()
         via_source[0] = transport_via_x
         via_plate = transit_plate_bowl.copy()
         via_plate[0] = transport_via_x
+        transport_stages.extend(
+            [("transport_detour_out", via_source), ("transport_detour_across", via_plate)]
+        )
+    elif transport_via_y is not None:
+        via_source = transit_source_bowl.copy()
+        via_source[1] = transport_via_y
+        via_plate = transit_plate_bowl.copy()
+        via_plate[1] = transport_via_y
         transport_stages.extend(
             [("transport_detour_out", via_source), ("transport_detour_across", via_plate)]
         )
@@ -668,7 +829,22 @@ def _run_episode(
             args,
             "descend_to_place",
             args.place_position_tolerance,
+            accept_native_task_success=True,
         )
+    if (
+        failure is not None
+        and getattr(args, "near_plate_push_recovery", False)
+        and getattr(failure, "reason", "") == "waypoint_timeout"
+        and getattr(failure, "stage", "") == "descend_to_place"
+        and np.linalg.norm(
+            _body_pos(env, TARGET)[:2] - _body_pos(env, PLATE)[:2]
+        )
+        <= args.near_plate_push_max_xy
+    ):
+        # The held bowl is already over the plate neighborhood. Release and
+        # let the final native predicate, not an unreachable EEF coordinate,
+        # decide whether a small recovery push is needed.
+        failure = None
     if failure is None:
         obs, step, failure = _hold(
             env, obs, oracle, recorder, close_sign, args.contact_hold_steps, step
@@ -697,6 +873,23 @@ def _run_episode(
         )
 
     placement = _bowl_on_plate(env, args)
+    if (
+        failure is None
+        and not placement["task_success"]
+        and getattr(args, "near_plate_push_recovery", False)
+        and placement["place_xy_offset_m"] <= args.near_plate_push_max_xy
+    ):
+        obs, step, failure = _recover_near_plate_push(
+            env,
+            obs,
+            oracle,
+            recorder,
+            close_sign,
+            open_sign,
+            step,
+            args,
+        )
+        placement = _bowl_on_plate(env, args)
     occluder_displacement_m = float(np.linalg.norm(_body_pos(env, OCCLUDER) - occluder_start))
     occluder_stable = bool(
         occluder_displacement_m <= args.max_occluder_displacement
@@ -784,12 +977,16 @@ def _run_episode(
 def run(args):
     from experiments.robot.libero.tasks.calibrate_l1c1_risk_layout import _load_states
     from experiments.robot.libero.tasks.generate_l1b2_initial_states import benchmark, get_libero_path
-    from experiments.robot.libero.tasks.generate_l1a2_initial_states import _world_aabb
     from libero.libero.envs.env_wrapper import ControlEnv
 
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
-    states = _load_states(args.state_path, task.language.replace(" ", "_"), args.num_states)
+    start_state = max(0, int(getattr(args, "start_state", 0)))
+    states = _load_states(
+        args.state_path,
+        task.language.replace(" ", "_"),
+        start_state + args.num_states,
+    )[start_state:]
     bddl_override = getattr(args, "bddl_file", "")
     bddl = bddl_override or os.path.join(
         get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
@@ -810,7 +1007,8 @@ def run(args):
     selected_grasp = None
     videos_saved = 0
     try:
-        for idx, state in enumerate(states):
+        for local_idx, state in enumerate(states):
+            idx = start_state + local_idx
             env.reset()
             env.set_init_state(state)
             grasp_prefix_dir = getattr(args, "grasp_action_trajectories", "")
@@ -824,7 +1022,7 @@ def run(args):
                     )
             else:
                 args.grasp_action_path = ""
-            bowl_lo, bowl_hi = _world_aabb(env, TARGET)
+            bowl_lo, bowl_hi = _collision_world_aabb(env, TARGET)
             # Guard against mesh geom_size conventions that report a coarse
             # bounding radius rather than the visible bowl footprint.
             half_xy = np.clip((bowl_hi[:2] - bowl_lo[:2]) / 2.0, 0.020, 0.060)
@@ -970,6 +1168,7 @@ def main():
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--task_id", type=int, default=1)
     parser.add_argument("--num_states", type=int, default=5)
+    parser.add_argument("--start_state", type=int, default=0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--position_scale", type=float, default=0.08)
     parser.add_argument("--max_position_command", type=float, default=0.25)
@@ -988,6 +1187,7 @@ def main():
     parser.add_argument("--pregrasp_detour_y", type=float, default=None)
     parser.add_argument("--pregrasp_clearance", type=float, default=0.0)
     parser.add_argument("--transport_via_x", type=float, default=None)
+    parser.add_argument("--transport_via_y", type=float, default=None)
     parser.add_argument("--grasp_height", type=float, default=0.015)
     parser.add_argument(
         "--grasp_height_candidates",
@@ -1010,6 +1210,19 @@ def main():
     parser.add_argument("--contact_hold_steps", type=int, default=5)
     parser.add_argument("--release_steps", type=int, default=12)
     parser.add_argument("--retreat_height", type=float, default=0.08)
+    parser.add_argument("--near_plate_push_recovery", action="store_true")
+    parser.add_argument("--near_plate_push_max_xy", type=float, default=0.06)
+    parser.add_argument("--near_plate_push_behind", type=float, default=0.07)
+    parser.add_argument("--near_plate_push_height", type=float, default=0.03)
+    parser.add_argument(
+        "--near_plate_push_waypoint_tolerance", type=float, default=0.03
+    )
+    parser.add_argument(
+        "--near_plate_push_clearance", type=float, default=0.08
+    )
+    parser.add_argument(
+        "--near_plate_push_overshoot", type=float, default=0.03
+    )
     parser.add_argument("--settle_steps", type=int, default=50)
     parser.add_argument("--min_safe_reference_rate", type=float, default=0.9)
     parser.add_argument("--max_place_xy_offset", type=float, default=0.060)

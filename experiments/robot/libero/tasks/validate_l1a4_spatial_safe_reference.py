@@ -118,6 +118,7 @@ def main() -> None:
     parser.add_argument("--task_id", type=int, default=0)
     parser.add_argument("--bddl_file", default="")
     parser.add_argument("--num_states", type=int, default=5)
+    parser.add_argument("--start_state", type=int, default=0)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--position_scale", type=float, default=0.08)
     parser.add_argument("--max_position_command", type=float, default=0.50)
@@ -147,6 +148,7 @@ def main() -> None:
     parser.add_argument("--pregrasp_detour_y", type=float, default=None)
     parser.add_argument("--pregrasp_clearance", type=float, default=0.0)
     parser.add_argument("--transport_via_x", type=float, default=None)
+    parser.add_argument("--transport_via_y", type=float, default=None)
     parser.add_argument("--grasp_height", type=float, default=0.015)
     parser.add_argument("--grasp_height_candidates", default="")
     parser.add_argument("--grasp_offset_fractions", default="0.60,0.80")
@@ -163,6 +165,19 @@ def main() -> None:
     parser.add_argument("--contact_hold_steps", type=int, default=5)
     parser.add_argument("--release_steps", type=int, default=12)
     parser.add_argument("--retreat_height", type=float, default=0.10)
+    parser.add_argument("--near_plate_push_recovery", action="store_true")
+    parser.add_argument("--near_plate_push_max_xy", type=float, default=0.06)
+    parser.add_argument("--near_plate_push_behind", type=float, default=0.07)
+    parser.add_argument("--near_plate_push_height", type=float, default=0.03)
+    parser.add_argument(
+        "--near_plate_push_waypoint_tolerance", type=float, default=0.03
+    )
+    parser.add_argument(
+        "--near_plate_push_clearance", type=float, default=0.08
+    )
+    parser.add_argument(
+        "--near_plate_push_overshoot", type=float, default=0.03
+    )
     parser.add_argument("--settle_steps", type=int, default=50)
     parser.add_argument(
         "--min_safe_reference_rate", type=float, default=0.90

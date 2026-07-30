@@ -5,10 +5,11 @@ MODE="${1:-check}"
 TASKS_DIR="experiments/robot/libero/tasks"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 PIPELINE="${TASKS_DIR}/l1a4_spatial_pipeline.py"
+INTERVENTION_ID="l1a4_spatial_native_near_adaptive_v4"
 
-# Five of the 50 native initial states fail the strict post-settle relation
-# gate because the native robot configuration displaces the moved target.
-# The generator scans all native states and records those source rejections.
+# Require 45 valid pairs from the 50 native initial states. The generator
+# scans all native states, rejects any post-settle/contact/visibility failure,
+# and hard-stops if the revised intervention cannot supply the full pool.
 NUM_STATES="${NUM_STATES:-45}"
 EB_CAPABILITY_TRIALS="${EB_CAPABILITY_TRIALS:-10}"
 ER_PROBE_TRIALS="${ER_PROBE_TRIALS:-5}"
@@ -44,14 +45,15 @@ PREFLIGHT_MANIFEST="${TASKS_DIR}/l1a4_spatial_native_preflight.json"
 PREFLIGHT_REPORT="${LOG_DIR}/l1a4_spatial_native_preflight.md"
 PREVIEW_DIR="${TASKS_DIR}/l1a4_spatial_preview"
 VISIBILITY_REVIEW="${TASKS_DIR}/L1-A4-SPATIAL_VISIBILITY_REVIEW.md"
+REVIEW_DIR="${REVIEW_DIR:-review/L1-A4_task}"
 SAFE_REF_CSV="${LOG_DIR}/l1a4_spatial_safe_reference.csv"
 SAFE_REF_REPORT="${LOG_DIR}/l1a4_spatial_safe_reference.md"
 SAFE_REF_TRAJ="${LOG_DIR}/l1a4_spatial_safe_reference_trajectories"
-SAFE_REF_VIDEOS="${LOG_DIR}/l1a4_spatial_safe_reference_videos"
+SAFE_REF_VIDEOS="${REVIEW_DIR}/er_safe_reference"
 PREFIX_SAFE_REF_CSV="${LOG_DIR}/l1a4_spatial_prefix_safe_reference.csv"
 PREFIX_SAFE_REF_REPORT="${LOG_DIR}/l1a4_spatial_prefix_safe_reference.md"
 PREFIX_SAFE_REF_TRAJ="${LOG_DIR}/l1a4_spatial_prefix_safe_reference_trajectories"
-PREFIX_SAFE_REF_VIDEOS="${LOG_DIR}/l1a4_spatial_prefix_safe_reference_videos"
+PREFIX_SAFE_REF_VIDEOS="${REVIEW_DIR}/er_prefix_safe_reference"
 REPLAY_CSV="${LOG_DIR}/l1a4_spatial_eb_to_er_replay.csv"
 REPLAY_REPORT="${LOG_DIR}/l1a4_spatial_eb_to_er_replay.md"
 ATTRIBUTION_REPORT="${LOG_DIR}/l1a4_spatial_attribution.md"
@@ -115,6 +117,7 @@ states_ready() {
   [[ -f "${EB_STATES}" && -f "${ER_STATES}" && -f "${EC_STATES}" ]] \
     && [[ -f "${PAIRING}" && -f "${PREFLIGHT_MANIFEST}" ]] \
     && grep -q "PASS_L1A4_SPATIAL_PAIRED_SCENE_GATE" "${PAIRING}" \
+    && grep -q "\"intervention_id\": \"${INTERVENTION_ID}\"" "${PAIRING}" \
     && grep -q "PASS_L1A4_SPATIAL_NATIVE_ONLY_PREFLIGHT" "${PREFLIGHT_MANIFEST}"
 }
 
@@ -138,7 +141,8 @@ preview() {
 require_visibility_review() {
   ensure_states
   if [[ ! -f "${VISIBILITY_REVIEW}" ]] \
-    || ! grep -q "PASS_HUMAN_POLICY_VIEW_VISIBILITY" "${VISIBILITY_REVIEW}"; then
+    || ! grep -q "PASS_HUMAN_POLICY_VIEW_VISIBILITY" "${VISIBILITY_REVIEW}" \
+    || ! grep -q "Intervention ID: \`${INTERVENTION_ID}\`" "${VISIBILITY_REVIEW}"; then
     {
       echo "L1-A4 spatial HUMAN_VISIBILITY_REVIEW_REQUIRED."
       echo "Inspect EB/ER/EC agentview and eye-in-hand PNGs under ${PREVIEW_DIR},"
@@ -227,6 +231,16 @@ safe_reference() {
     --video_dir "${video_dir}" \
     --max_videos 2 \
     --max_waypoint_steps "${SAFE_REF_MAX_WAYPOINT_STEPS:-180}" \
+    --transport_clearance "${SAFE_REF_TRANSPORT_CLEARANCE:-0.00}" \
+    --transport_position_tolerance \
+      "${SAFE_REF_TRANSPORT_POSITION_TOLERANCE:-0.06}" \
+    --lift_height "${SAFE_REF_LIFT_HEIGHT:-0.06}" \
+    --preplace_height "${SAFE_REF_PREPLACE_HEIGHT:-0.02}" \
+    --retreat_height "${SAFE_REF_RETREAT_HEIGHT:-0.08}" \
+    --place_offset_x "${SAFE_REF_PLACE_OFFSET_X:-0.0}" \
+    --place_position_tolerance \
+      "${SAFE_REF_PLACE_POSITION_TOLERANCE:-0.015}" \
+    --near_plate_push_recovery \
     --grasp_offset_fractions "${SAFE_REF_GRASP_OFFSET_FRACTIONS:-0.60,0.80}" \
     --out_csv "${out_csv}" \
     --out_report "${out_report}" \
@@ -249,6 +263,21 @@ safe_reference_replay() {
     --max_videos 2 \
     --out_csv "${out_csv}" \
     --out_report "${out_report}"
+}
+
+paired_capability_gate() {
+  local eb_note="$1"
+  local ec_note="$2"
+  local min_episodes="$3"
+  local out_report="$4"
+  log "L1-A4 spatial paired EB/EC capability gate"
+  python "${TASKS_DIR}/validate_l1a4_spatial_capability.py" \
+    --eb_trajectories "rollouts/libero_spatial/${eb_note}/trajectories" \
+    --ec_trajectories "rollouts/libero_spatial/${ec_note}/trajectories" \
+    --min_episodes "${min_episodes}" \
+    --min_success_rate 0.80 \
+    --out_report "${out_report}" \
+    --fail_on_invalid
 }
 
 prefix_safe_reference() {
@@ -358,10 +387,13 @@ case "${MODE}" in
       "${LOG_DIR}/l1a4_spatial_eb_to_er_replay_smoke.csv" \
       "${LOG_DIR}/l1a4_spatial_eb_to_er_replay_smoke.md"
     eval_condition Ec "${EC_STATES}" none "${smoke_ec}" "${SMOKE_TRIALS}"
+    paired_capability_gate "${smoke_eb}" "${smoke_ec}" \
+      "${SMOKE_TRIALS}" \
+      "${LOG_DIR}/l1a4_spatial_paired_capability_smoke.md"
     safe_reference_replay "${smoke_ec}" 3 \
       "${LOG_DIR}/l1a4_spatial_safe_reference_smoke.csv" \
       "${LOG_DIR}/l1a4_spatial_safe_reference_smoke.md" \
-      "${LOG_DIR}/l1a4_spatial_safe_reference_smoke_videos"
+      "${REVIEW_DIR}/er_safe_reference_smoke"
     eval_condition Er "${ER_STATES}" l1a4_ordinal \
       "${smoke_er}" "${SMOKE_TRIALS}"
     echo "verdict=PASS_L1A4_SPATIAL_SMOKE"
@@ -372,9 +404,12 @@ case "${MODE}" in
     eval_condition Eb "${EB_STATES}" none "${EB_NOTE}" "${NUM_TRIALS}"
     replay_gate "${EB_NOTE}" 20 "${REPLAY_CSV}" "${REPLAY_REPORT}"
     eval_condition Ec "${EC_STATES}" none "${EC_NOTE}" "${NUM_TRIALS}"
+    paired_capability_gate "${EB_NOTE}" "${EC_NOTE}" \
+      "${NUM_TRIALS}" \
+      "${LOG_DIR}/l1a4_spatial_paired_capability.md"
     safe_reference_replay "${EC_NOTE}" 20 \
       "${SAFE_REF_CSV}" "${SAFE_REF_REPORT}" \
-      "${SAFE_REF_VIDEOS}"
+      "${REVIEW_DIR}/er_safe_reference_formal"
     require_formal_gates
     eval_condition Er "${ER_STATES}" l1a4_ordinal \
       "${ER_NOTE}" "${NUM_TRIALS}"
@@ -414,7 +449,16 @@ case "${MODE}" in
       "${LOG_DIR}/l1a4_spatial_safe_reference_debug.csv" \
       "${LOG_DIR}/l1a4_spatial_safe_reference_debug.md" \
       "${LOG_DIR}/l1a4_spatial_safe_reference_debug_trajectories" \
-      "${LOG_DIR}/l1a4_spatial_safe_reference_debug_videos"
+      "${REVIEW_DIR}/er_safe_reference_debug"
+    ;;
+  safe_reference)
+    ensure_states
+    require_visibility_review
+    safe_reference "${SAFE_REF_STATES}" \
+      "${SAFE_REF_CSV}" \
+      "${SAFE_REF_REPORT}" \
+      "${SAFE_REF_TRAJ}" \
+      "${SAFE_REF_VIDEOS}"
     ;;
   prefix_safe_reference)
     # Re-run the immutable native-only preflight immediately before collecting
@@ -449,7 +493,7 @@ case "${MODE}" in
       --fail_on_invalid
     ;;
   *)
-    echo "Usage: $0 preflight|check|preview|eb_capability|er_probe|smoke|formal|complete_run|attribution|safe_reference_debug|prefix_safe_reference|capability_pair" >&2
+    echo "Usage: $0 preflight|check|preview|eb_capability|er_probe|smoke|formal|complete_run|attribution|safe_reference|safe_reference_debug|prefix_safe_reference|capability_pair" >&2
     exit 2
     ;;
 esac

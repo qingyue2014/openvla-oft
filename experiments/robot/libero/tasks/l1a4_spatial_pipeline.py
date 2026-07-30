@@ -30,6 +30,7 @@ if str(REPO_ROOT) not in sys.path:
 from experiments.robot.libero.physcog_oracles import DepthDisambiguationOracle
 from experiments.robot.libero.physcog_trajectory import load_trajectory
 from experiments.robot.libero.tasks.validate_l1a4_spatial_native_preflight import (
+    INTERVENTION_ID,
     TASK_FILE,
     TASK_ID,
     TASK_PROMPT,
@@ -64,6 +65,7 @@ MIN_LURE_RELATION_DISTANCE_M = 0.110
 MIN_BOWL_DISTANCE_M = 0.130
 MAX_INITIAL_TILT_DEG = 12.0
 MAX_POLICY_WAIT_DRIFT_M = 0.010
+MAX_LAYOUT_POSITION_ERROR_M = 0.020
 MIN_VISIBLE_PIXELS = 60
 MIN_MASK_CENTROID_SEPARATION_PX = 12.0
 POLICY_RESOLUTION = 256
@@ -72,12 +74,37 @@ SETTLE_STEPS = 80
 STABILITY_CONFIRM_STEPS = 40
 PAIR_TOLERANCE = 1e-10
 
-# Fixed task-space poses remove native placement jitter from the intervention.
-# The target lies at the exact midpoint of its two native landmarks.
-ER_PLATE_XY = np.array([0.26, -0.10])
-ER_RAMEKIN_XY = np.array([-0.06, -0.10])
-ER_TARGET_XY = (ER_PLATE_XY + ER_RAMEKIN_XY) / 2.0
-EC_LURE_XY = np.array([0.22, 0.16])
+# Centers of the selected native BDDL initialization regions.
+NATIVE_TARGET_XY = np.array([-0.05, 0.20])
+NATIVE_PLATE_XY = np.array([0.06, 0.20])
+NATIVE_RAMEKIN_XY = np.array([-0.20, 0.20])
+NATIVE_LURE_XY = np.array([-0.18, 0.32])
+
+# Ordered, preregistered translations discovered by static calibration. For
+# each native robot state, generation accepts the first candidate that passes
+# every physical, pairing, stability, and visibility gate. This avoids both
+# the retired y=-0.10 fixed layout and silently relaxing a failed gate.
+RELATION_TRANSLATION_CANDIDATES_XY = (
+    np.array([0.10, -0.11]),
+    np.array([0.11, -0.10]),
+    np.array([0.12, -0.09]),
+    np.array([0.11, -0.11]),
+    np.array([0.12, -0.10]),
+    np.array([0.12, -0.11]),
+)
+EC_LURE_XY = NATIVE_LURE_XY.copy()
+
+# EC is a benign capability control, so every task-relevant movable body must
+# remain close to the center of its native initialization region after
+# settling. The largest preregistered translation is 0.163 m; 0.170 m leaves
+# only a small allowance for settling while rejecting the retired layouts.
+MAX_EC_NATIVE_CENTER_DISPLACEMENT_M = 0.17
+NATIVE_REGION_CENTERS = {
+    TARGET: NATIVE_TARGET_XY,
+    LURE: NATIVE_LURE_XY,
+    PLATE: NATIVE_PLATE_XY,
+    RAMEKIN: NATIVE_RAMEKIN_XY,
+}
 
 
 def _ensure_libero_importable() -> None:
@@ -237,8 +264,16 @@ def _geom_ids_for_body(env, body: str) -> set[int]:
 
 
 def _negative_contact_between(env, first: str, second: str) -> bool:
-    first_geoms = _geom_ids_for_body(env, first)
-    second_geoms = _geom_ids_for_body(env, second)
+    return _negative_contact_between_geom_sets(
+        env,
+        _geom_ids_for_body(env, first),
+        _geom_ids_for_body(env, second),
+    )
+
+
+def _negative_contact_between_geom_sets(
+    env, first_geoms: set[int], second_geoms: set[int]
+) -> bool:
     for index in range(env.sim.data.ncon):
         contact = env.sim.data.contact[index]
         if float(getattr(contact, "dist", -1.0)) >= 0.0:
@@ -254,16 +289,68 @@ def _negative_contact_between(env, first: str, second: str) -> bool:
     return False
 
 
+def _robot_geom_ids(env) -> set[int]:
+    geom_ids = set()
+    for geom_id in range(env.sim.model.ngeom):
+        body_id = int(env.sim.model.geom_bodyid[geom_id])
+        body_name = env.sim.model.body_id2name(body_id) or ""
+        lowered = body_name.lower()
+        if (
+            body_name.startswith(("robot0_", "gripper0_"))
+            or "finger" in lowered
+            or "hand" in lowered
+            or "eef" in lowered
+        ):
+            geom_ids.add(geom_id)
+    return geom_ids
+
+
 def _segmentation(env, camera: str) -> np.ndarray:
-    seg = np.asarray(
-        env.sim.render(
+    try:
+        seg = np.asarray(
+            env.sim.render(
+                width=POLICY_RESOLUTION,
+                height=POLICY_RESOLUTION,
+                camera_name=camera,
+                segmentation=True,
+            )
+        )
+    except OverflowError:
+        # robosuite <= 1.4 decodes MuJoCo's RGB segmentation IDs while the
+        # channels are still uint8. NumPy 2.x rejects multiplication by 256
+        # as an out-of-range uint8 operation. Render the identical ID-color
+        # buffer and decode only after promoting it to int32.
+        context = env.sim._render_context_offscreen
+        camera_id = env.sim.model.camera_name2id(camera)
+        context.render(
             width=POLICY_RESOLUTION,
             height=POLICY_RESOLUTION,
-            camera_name=camera,
+            camera_id=camera_id,
             segmentation=True,
         )
-    )
+        rgb = context.read_pixels(
+            POLICY_RESOLUTION,
+            POLICY_RESOLUTION,
+            depth=False,
+            segmentation=False,
+        )
+        seg = _decode_segmentation_rgb(rgb, context.scn)
     return seg[..., -1] if seg.ndim == 3 else seg
+
+
+def _decode_segmentation_rgb(
+    rgb_img: np.ndarray, scene
+) -> np.ndarray:
+    rgb = np.asarray(rgb_img, dtype=np.int32)
+    seg_img = rgb[..., 0] + rgb[..., 1] * (2**8) + rgb[..., 2] * (2**16)
+    seg_img[seg_img >= (scene.ngeom + 1)] = 0
+    seg_ids = np.full((scene.ngeom + 1, 2), -1, dtype=np.int32)
+    for index in range(scene.ngeom):
+        geom = scene.geoms[index]
+        if geom.segid != -1:
+            seg_ids[geom.segid + 1, 0] = geom.objtype
+            seg_ids[geom.segid + 1, 1] = geom.objid
+    return seg_ids[seg_img]
 
 
 def _mask_stats(
@@ -356,12 +443,62 @@ def _between_metrics(env, body: str) -> dict[str, float | bool]:
     }
 
 
-def _validate_condition(env, state, condition: str) -> dict[str, object]:
+def _validate_condition(
+    env,
+    state,
+    condition: str,
+    expected_positions: Mapping[str, np.ndarray] | None = None,
+) -> dict[str, object]:
     env.set_init_state(state)
     env.sim.forward()
     positions = {
         body: _body_pos(env, body) for body in TRACKED_BODIES
     }
+    if expected_positions is None:
+        translation = RELATION_TRANSLATION_CANDIDATES_XY[0]
+        expected_positions = {
+            TARGET: NATIVE_TARGET_XY + translation,
+            PLATE: NATIVE_PLATE_XY + translation,
+            RAMEKIN: NATIVE_RAMEKIN_XY + translation,
+        }
+        if condition.lower() == "ec":
+            expected_positions[LURE] = EC_LURE_XY
+    layout_position_error = {
+        body: float(
+            np.linalg.norm(positions[body][:2] - expected_xy)
+        )
+        for body, expected_xy in expected_positions.items()
+    }
+    excessive_layout_error = {
+        body: error
+        for body, error in layout_position_error.items()
+        if error > MAX_LAYOUT_POSITION_ERROR_M
+    }
+    if excessive_layout_error:
+        raise RuntimeError(
+            f"{condition}: post-settle layout error exceeds "
+            f"{MAX_LAYOUT_POSITION_ERROR_M:.3f}m: "
+            f"{excessive_layout_error}"
+        )
+    native_center_displacement = {
+        body: float(
+            np.linalg.norm(
+                positions[body][:2] - NATIVE_REGION_CENTERS[body]
+            )
+        )
+        for body in MOVABLE_BODIES
+    }
+    if condition.lower() == "ec":
+        excessive = {
+            body: distance
+            for body, distance in native_center_displacement.items()
+            if distance > MAX_EC_NATIVE_CENTER_DISPLACEMENT_M
+        }
+        if excessive:
+            raise RuntimeError(
+                "Ec: native-distribution displacement exceeds "
+                f"{MAX_EC_NATIVE_CENTER_DISPLACEMENT_M:.3f}m: {excessive}"
+            )
     target_relation = _between_metrics(env, TARGET)
     lure_relation = _between_metrics(env, LURE)
     if not target_relation["is_between"]:
@@ -402,6 +539,14 @@ def _validate_condition(env, state, condition: str) -> dict[str, object]:
                 raise RuntimeError(
                     f"{condition}: forbidden initial {first}/{second} contact"
                 )
+    robot_geoms = _robot_geom_ids(env)
+    for body in MOVABLE_BODIES:
+        if _negative_contact_between_geom_sets(
+            env, robot_geoms, _geom_ids_for_body(env, body)
+        ):
+            raise RuntimeError(
+                f"{condition}: forbidden initial robot/{body} contact"
+            )
 
     stats = _mask_stats(env, "agentview")
     for body, body_stats in stats.items():
@@ -444,6 +589,8 @@ def _validate_condition(env, state, condition: str) -> dict[str, object]:
             body: value.round(6).tolist()
             for body, value in positions.items()
         },
+        "native_center_displacement_m": native_center_displacement,
+        "layout_position_error_m": layout_position_error,
         "target_relation": target_relation,
         "lure_relation": lure_relation,
         "bowl_distance_m": bowl_distance,
@@ -508,6 +655,7 @@ def _write_hdf5(
             "asset_inventory_sha256"
         ]
         handle.attrs["condition"] = condition
+        handle.attrs["intervention_id"] = INTERVENTION_ID
         group = handle.create_group(key)
         for index, (state, source_index) in enumerate(
             zip(states, source_indices)
@@ -518,7 +666,17 @@ def _write_hdf5(
             episode.attrs["native_state_index"] = int(source_index)
 
 
-def _construct_pair(env, native_state, source_index: int):
+def _construct_pair(
+    env,
+    native_state,
+    source_index: int,
+    relation_translation_xy: np.ndarray | None = None,
+):
+    if relation_translation_xy is None:
+        relation_translation_xy = RELATION_TRANSLATION_CANDIDATES_XY[0]
+    relation_translation_xy = np.asarray(
+        relation_translation_xy, dtype=float
+    )
     env.reset()
     env.set_init_state(native_state)
     env.sim.forward()
@@ -526,9 +684,9 @@ def _construct_pair(env, native_state, source_index: int):
     eb_target_xy = _body_pos(env, TARGET)[:2]
 
     common_positions = {
-        TARGET: ER_TARGET_XY,
-        PLATE: ER_PLATE_XY,
-        RAMEKIN: ER_RAMEKIN_XY,
+        TARGET: NATIVE_TARGET_XY + relation_translation_xy,
+        PLATE: NATIVE_PLATE_XY + relation_translation_xy,
+        RAMEKIN: NATIVE_RAMEKIN_XY + relation_translation_xy,
     }
     er_state, er_settle_drift = _settled_variant(
         env,
@@ -550,8 +708,15 @@ def _construct_pair(env, native_state, source_index: int):
     shared_poses[LURE] = _capture_free_joint(env.sim, LURE)
     ec_state = _transplant(env, eb_state, shared_poses)
 
-    er_info = _validate_condition(env, er_state, "Er")
-    ec_info = _validate_condition(env, ec_state, "Ec")
+    er_info = _validate_condition(
+        env, er_state, "Er", common_positions
+    )
+    ec_info = _validate_condition(
+        env,
+        ec_state,
+        "Ec",
+        {**common_positions, LURE: EC_LURE_XY},
+    )
 
     env.set_init_state(eb_state)
     actual_eb_target_xy = _body_pos(env, TARGET)[:2]
@@ -585,6 +750,9 @@ def _construct_pair(env, native_state, source_index: int):
 
     record = {
         "native_state_index": source_index,
+        "relation_translation_xy_m": (
+            relation_translation_xy.round(6).tolist()
+        ),
         "eb_target_xy": actual_eb_target_xy.round(6).tolist(),
         "er_lure_xy": actual_er_lure_xy.round(6).tolist(),
         "stale_location_error_m": stale_error,
@@ -618,18 +786,36 @@ def generate(args) -> None:
     source_indices = []
     records = []
     rejected = []
+    selected_translation_counts: dict[str, int] = {}
     try:
         for source_index, native_state in enumerate(native_states):
             if len(records) >= args.num_states:
                 break
-            try:
-                pair = _construct_pair(
-                    env, native_state, source_index
-                )
-            except RuntimeError as exc:
+            pair = None
+            candidate_rejections = []
+            for candidate in RELATION_TRANSLATION_CANDIDATES_XY:
+                try:
+                    pair = _construct_pair(
+                        env,
+                        native_state,
+                        source_index,
+                        relation_translation_xy=candidate,
+                    )
+                    break
+                except RuntimeError as exc:
+                    candidate_rejections.append(
+                        {
+                            "translation_xy_m": candidate.tolist(),
+                            "reason": str(exc),
+                        }
+                    )
+            if pair is None:
                 rejection = {
                     "native_state_index": source_index,
-                    "reason": str(exc),
+                    "reason": (
+                        "no preregistered near-native translation passed"
+                    ),
+                    "candidate_rejections": candidate_rejections,
                 }
                 rejected.append(rejection)
                 print(
@@ -638,6 +824,16 @@ def generate(args) -> None:
                 )
                 continue
             eb_state, er_state, ec_state, record = pair
+            record["rejected_translation_candidates"] = (
+                candidate_rejections
+            )
+            translation_key = json.dumps(
+                record["relation_translation_xy_m"],
+                separators=(",", ":"),
+            )
+            selected_translation_counts[translation_key] = (
+                selected_translation_counts.get(translation_key, 0) + 1
+            )
 
             episode = len(records)
             states["eb"].append(eb_state)
@@ -658,6 +854,7 @@ def generate(args) -> None:
                 )
             print(
                 f"pair={episode:02d} native={source_index:02d} "
+                f"translation={record['relation_translation_xy_m']} "
                 f"stale_error={record['stale_location_error_m']:.4f}m "
                 f"Er_target_pixels="
                 f"{record['er']['agentview_masks'][TARGET]['pixels']} "
@@ -698,18 +895,36 @@ def generate(args) -> None:
         "native_bddl": str(bddl),
         "native_bddl_sha256": preflight["bddl_sha256"],
         "asset_inventory_sha256": preflight["asset_inventory_sha256"],
+        "intervention_id": INTERVENTION_ID,
         "intervention": {
             "Eb": "exact native serialized state",
             "Er": (
-                "native target, plate, and ramekin relocated with the target "
-                "uniquely between the landmarks; native lure at paired EB "
-                "target XY"
+                "native target, plate, and ramekin keep their native BDDL "
+                "relative geometry while translating together by the first "
+                "fully valid member of the preregistered near-native "
+                "candidate list; native lure at paired EB target XY"
             ),
             "Ec": (
                 "same target/plate/ramekin geometry as ER; only the native "
-                "lure is parked away"
+                "lure returns to the center of its native BDDL initialization "
+                "region"
             ),
             "Er_vs_Ec_only_changed_body": LURE,
+        },
+        "native_distribution_gate": {
+            "native_region_centers_xy": {
+                body: xy.tolist()
+                for body, xy in NATIVE_REGION_CENTERS.items()
+            },
+            "max_ec_native_center_displacement_m": (
+                MAX_EC_NATIVE_CENTER_DISPLACEMENT_M
+            ),
+            "max_layout_position_error_m": MAX_LAYOUT_POSITION_ERROR_M,
+            "relation_translation_candidates_xy_m": [
+                value.tolist()
+                for value in RELATION_TRANSLATION_CANDIDATES_XY
+            ],
+            "selected_translation_counts": selected_translation_counts,
         },
         "state_files": {
             name: str(path) for name, path in outputs.items()
