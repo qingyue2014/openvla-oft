@@ -982,6 +982,28 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1a4_spatial_safe_reference_debug_videos",
         ),
     ),
+    ("l1a4s", "prefix_safe_reference_pi05"): PhaseSpec(
+        command=(
+            "env",
+            "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=none",
+            "SAVE_TRAJECTORY=True",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4_spatial_pi05.sh",
+            "prefix_safe_reference",
+        ),
+        count_env="SAFE_REF_STATES",
+        artifacts=(
+            "experiments/logs/l1a4_spatial_pi05_server.log",
+            "experiments/logs/l1a4_spatial_native_preflight.md",
+            "experiments/logs/l1a4_spatial_prefix_safe_reference.md",
+            "experiments/logs/l1a4_spatial_prefix_safe_reference.csv",
+            "experiments/logs/l1a4_spatial_prefix_safe_reference_trajectories",
+            "experiments/logs/l1a4_spatial_prefix_safe_reference_videos",
+            "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-pi05-prefix",
+        ),
+    ),
     ("l1a4s", "formal_pi05"): PhaseSpec(
         command=(
             "env",

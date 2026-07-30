@@ -39,6 +39,10 @@ SAFE_REF_CSV="${LOG_DIR}/l1a4_spatial_safe_reference.csv"
 SAFE_REF_REPORT="${LOG_DIR}/l1a4_spatial_safe_reference.md"
 SAFE_REF_TRAJ="${LOG_DIR}/l1a4_spatial_safe_reference_trajectories"
 SAFE_REF_VIDEOS="${LOG_DIR}/l1a4_spatial_safe_reference_videos"
+PREFIX_SAFE_REF_CSV="${LOG_DIR}/l1a4_spatial_prefix_safe_reference.csv"
+PREFIX_SAFE_REF_REPORT="${LOG_DIR}/l1a4_spatial_prefix_safe_reference.md"
+PREFIX_SAFE_REF_TRAJ="${LOG_DIR}/l1a4_spatial_prefix_safe_reference_trajectories"
+PREFIX_SAFE_REF_VIDEOS="${LOG_DIR}/l1a4_spatial_prefix_safe_reference_videos"
 REPLAY_CSV="${LOG_DIR}/l1a4_spatial_eb_to_er_replay.csv"
 REPLAY_REPORT="${LOG_DIR}/l1a4_spatial_eb_to_er_replay.md"
 ATTRIBUTION_REPORT="${LOG_DIR}/l1a4_spatial_attribution.md"
@@ -49,6 +53,7 @@ TRACKED="${TARGET},${LURE},plate_1_main,glazed_rim_porcelain_ramekin_1_main,cook
 EB_NOTE="${EB_NOTE:-L1-A4-between-eb-native-pi05}"
 ER_NOTE="${ER_NOTE:-L1-A4-between-stale-lure-er-pi05}"
 EC_NOTE="${EC_NOTE:-L1-A4-between-matched-safe-ec-pi05}"
+EC_PREFIX_NOTE="${EC_PREFIX_NOTE:-L1-A4-between-matched-safe-ec-pi05-prefix}"
 
 if [[ -d "_deps/LIBERO/libero" ]]; then
   export LIBERO_ROOT="${LIBERO_ROOT:-$(cd _deps/LIBERO && pwd)}"
@@ -232,6 +237,39 @@ safe_reference_replay() {
     --out_report "${out_report}"
 }
 
+prefix_safe_reference() {
+  local count="$1"
+  log "L1-A4 spatial policy-prefix branched ER safe reference"
+  python "${TASKS_DIR}/validate_l1a4_spatial_safe_reference.py" \
+    --state_path "${ER_STATES}" \
+    --task_suite_name libero_spatial \
+    --task_id 0 \
+    --num_states "${count}" \
+    --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
+    --grasp_action_trajectories \
+      "rollouts/libero_spatial/${EC_PREFIX_NOTE}/trajectories" \
+    --branch_grasp_prefix_on_contact \
+    --prefix_grasp_seat_steps "${PREFIX_SAFE_REF_GRASP_SEAT_STEPS:-8}" \
+    --prefix_lift_max_position_command \
+      "${PREFIX_SAFE_REF_LIFT_MAX_POSITION_COMMAND:-0.08}" \
+    --lift_height "${PREFIX_SAFE_REF_LIFT_HEIGHT:-0.14}" \
+    --max_waypoint_steps "${PREFIX_SAFE_REF_MAX_WAYPOINT_STEPS:-360}" \
+    --transport_max_waypoint_steps \
+      "${PREFIX_SAFE_REF_TRANSPORT_MAX_WAYPOINT_STEPS:-500}" \
+    --transport_max_position_command \
+      "${PREFIX_SAFE_REF_TRANSPORT_MAX_POSITION_COMMAND:-0.15}" \
+    --transport_position_tolerance \
+      "${PREFIX_SAFE_REF_TRANSPORT_POSITION_TOLERANCE:-0.015}" \
+    --transport_clearance "${PREFIX_SAFE_REF_TRANSPORT_CLEARANCE:-0.04}" \
+    --preplace_height "${PREFIX_SAFE_REF_PREPLACE_HEIGHT:-0.08}" \
+    --trajectory_dir "${PREFIX_SAFE_REF_TRAJ}" \
+    --video_dir "${PREFIX_SAFE_REF_VIDEOS}" \
+    --max_videos "${PREFIX_SAFE_REF_MAX_VIDEOS:-3}" \
+    --out_csv "${PREFIX_SAFE_REF_CSV}" \
+    --out_report "${PREFIX_SAFE_REF_REPORT}" \
+    --fail_on_invalid
+}
+
 require_formal_gates() {
   require_visibility_review
   if [[ ! -f "${REPLAY_REPORT}" ]] \
@@ -328,8 +366,19 @@ case "${MODE}" in
       "${LOG_DIR}/l1a4_spatial_safe_reference_debug_trajectories" \
       "${LOG_DIR}/l1a4_spatial_safe_reference_debug_videos"
     ;;
+  prefix_safe_reference)
+    # Re-run the immutable native-only preflight immediately before collecting
+    # actions. The EC rollout supplies only a grasp prefix; every action used
+    # as evidence is replayed in ER under the wrong-object collision oracle.
+    preflight
+    ensure_states
+    require_visibility_review
+    eval_condition Ec "${EC_STATES}" none "${EC_PREFIX_NOTE}" \
+      "${SAFE_REF_STATES}"
+    prefix_safe_reference "${SAFE_REF_STATES}"
+    ;;
   *)
-    echo "Usage: $0 preflight|check|preview|eb_capability|er_probe|smoke|formal|attribution|safe_reference_debug" >&2
+    echo "Usage: $0 preflight|check|preview|eb_capability|er_probe|smoke|formal|attribution|safe_reference_debug|prefix_safe_reference" >&2
     exit 2
     ;;
 esac
