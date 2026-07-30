@@ -326,7 +326,7 @@ class L2A3CleanerFoodContact(SemanticCompatibilityScene, PrepForSanitizing):
             "obj2": _box(size=(0.05, 0.05), pos=(0.5, -1.0)),
             "distr_cab": _box(
                 size=(0.20, 0.10),
-                pos=(0.0, 0.0),
+                pos=(0.0, 1.0),
                 ensure_object_boundary_in_range=True,
             ),
         }

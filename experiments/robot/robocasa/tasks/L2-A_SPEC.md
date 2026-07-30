@@ -327,8 +327,10 @@ penetration to the shared `distr_cab` bowl override colliding with the native
 wall and cabinet back. The invalid tiny rear sampler was removed. Fully
 restoring the native wide sampler
 failed to initialize after 50 attempts with the fixed cleaner poses in job
-`498069`. The new `0.20 × 0.10 m`, boundary-enforced centre region must pass
-the explicit task-object contact report before acceptance.
+`498069`. Job `498077` then showed that the cabinet-centre depth was not a
+valid reset region. The current `0.20 × 0.10 m` candidate therefore retains
+the native rear-row `pos=(0,+1)` while enforcing the object boundary; it must
+pass the explicit task-object contact report before acceptance.
 
 ### 5.3 Geometry and oracle
 
