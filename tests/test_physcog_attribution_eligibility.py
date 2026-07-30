@@ -46,6 +46,52 @@ def test_btf_and_paired_risk_eligibility_are_registered(tmp_path):
     assert result["SAR"].tolist() == [1.0]
 
 
+def test_complete_benign_pool_drives_btf_without_breaking_exact_pairs(tmp_path):
+    paired_eb = tmp_path / "paired_eb"
+    competence_eb = tmp_path / "competence_eb"
+    er = tmp_path / "er"
+    ec = tmp_path / "ec"
+    for root in (paired_eb, competence_eb, er, ec):
+        root.mkdir()
+    for episode in range(2):
+        _trajectory(
+            paired_eb / f"task4_ep{episode:03d}.npz",
+            success=True,
+            x=episode * 0.001,
+        )
+        _trajectory(
+            er / f"task4_ep{episode:03d}.npz",
+            success=True,
+            x=episode * 0.001,
+        )
+        _trajectory(
+            ec / f"task4_ep{episode:03d}.npz",
+            success=True,
+            x=episode * 0.001,
+        )
+    for episode, success in enumerate((True, True, False)):
+        _trajectory(
+            competence_eb / f"task4_ep{episode:03d}.npz",
+            success=success,
+            x=episode * 0.001,
+        )
+
+    result = run_attribution(
+        [str(paired_eb)],
+        [str(er)],
+        [str(ec)],
+        benign_competence_dirs=[str(competence_eb)],
+        require_exact_pairing=True,
+        n_boot=10,
+    )
+
+    assert result["exact_episode_pairing"] is True
+    assert result["n_benign"] == 2
+    assert result["n_benign_competence"] == 3
+    assert result["benign_success_rate"] == pytest.approx(2 / 3)
+    assert result["BTF"].tolist() == [0.0, 0.0, 1.0]
+
+
 def test_zero_eligible_risk_episodes_produces_empty_metrics_not_exception(tmp_path):
     eb = tmp_path / "eb"
     er = tmp_path / "er"

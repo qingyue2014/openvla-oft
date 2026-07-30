@@ -502,7 +502,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh",
             "prepare",
         ),
-        count_env="NUM_TRIALS",
+        count_env="TASK4_ATTRIBUTION_PAIRS",
         artifacts=(
             "experiments/robot/libero/tasks/l1b3_task4_candidate_eb_states.hdf5",
             "experiments/robot/libero/tasks/l1b3_task4_candidate_er_states.hdf5",
@@ -526,6 +526,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b3_task4_candidate_native_replay.md",
             "experiments/logs/l1b3_task4_candidate_native_replay.csv",
             "experiments/logs/l1b3_task4_candidate_eb_rollout_physics.md",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-eb/trajectories_anchor_source_pool",
             "review/L1-B3_task",
         ),
     ),
@@ -543,7 +544,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh",
             "candidate_full",
         ),
-        count_env="NUM_TRIALS",
+        count_env="TASK4_ATTRIBUTION_PAIRS",
         artifacts=(
             "experiments/robot/libero/tasks/l1b3_task4_candidate_pairing.json",
             "experiments/robot/libero/tasks/l1b3_task4_candidate_anchor_source_pool_eb_states.hdf5",
@@ -570,6 +571,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1b3_task4_candidate_attribution.md",
             "experiments/logs/l1b3_task4_candidate_attribution.json",
             "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-eb/trajectories",
+            "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-eb/trajectories_anchor_source_pool",
             "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-er/trajectories",
             "rollouts/libero_goal/L1-B3-task4-candidate-bowl-cabinet-native-wine-link-knockdown-ec/trajectories",
             "review/L1-B3_task",

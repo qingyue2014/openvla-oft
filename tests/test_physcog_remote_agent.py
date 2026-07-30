@@ -175,7 +175,10 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
             part.endswith("run_l1b3_task4_candidate.sh")
             for part in spec.command
         )
-        assert spec.count_env in {"SMOKE_TRIALS", "NUM_TRIALS"}
+        assert spec.count_env in {
+            "SMOKE_TRIALS",
+            "TASK4_ATTRIBUTION_PAIRS",
+        }
         assert all(
             "l1b3_native_arm" not in artifact for artifact in spec.artifacts
         )
@@ -198,6 +201,11 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
     full = PHASES[("l1b3_task4", "candidate_full")]
     assert "candidate_full" in full.command
     assert "formal" not in full.command
+    assert full.count_env == "TASK4_ATTRIBUTION_PAIRS"
+    assert any(
+        artifact.endswith("trajectories_anchor_source_pool")
+        for artifact in full.artifacts
+    )
     for suffix in (
         "native_replay.csv",
         "safe_reference.csv",

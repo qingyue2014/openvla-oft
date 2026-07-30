@@ -127,8 +127,10 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert "--max_goal_region_distance 10.0" in text
     assert 'MIN_ACTIVATION_RATE="${TASK4_MIN_ACTIVATION_RATE:-0.80}"' in text
     assert 'MIN_ACTION_SEPARATION_RATE="${TASK4_MIN_ACTION_SEPARATION_RATE:-0.80}"' in text
+    assert 'MIN_POOL_YIELD="${TASK4_MIN_POOL_YIELD:-0.80}"' in text
     assert 'MIN_COMPONENT_PURITY="${TASK4_MIN_COMPONENT_PURITY:-0.90}"' in text
     assert 'MIN_SAFE_REFERENCE_RATE="${TASK4_MIN_SAFE_REFERENCE_RATE:-0.95}"' in text
+    assert 'ATTRIBUTION_PAIRS="${TASK4_ATTRIBUTION_PAIRS:-20}"' in text
     assert 'SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-50}"' in text
     assert 'CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-50}"' in text
     assert "TASK4_PREFLIGHT_MAX_CANDIDATES_PER_EPISODE:-192" in text
@@ -158,11 +160,17 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert 'eval_condition eb "${SMOKE_TRIALS}" false' not in text
     assert "--absolute_anchors_only" not in text
     assert "--serialized_er_anchor_first" in text
-    assert '--min_activation_rate 0.0' in text
+    assert '--min_activation_rate "${MIN_POOL_YIELD}"' in text
+    assert "--scan_full_pool" in text
+    assert "--reuse_qualified_pool_anchors" in text
     assert '--pool_archive_suffix "_anchor_source_pool"' in text
     assert "--required_selected_pool_indices 0" in text
     assert 'calibrate_states "${SMOKE_TRIALS}" "${SMOKE_TRIALS}"' in text
-    assert 'calibrate_states "${NUM_TRIALS}" "${MIN_SUCCESSFUL_EB}"' in text
+    assert (
+        'calibrate_states "${ATTRIBUTION_PAIRS}" "${ATTRIBUTION_PAIRS}"'
+        in text
+    )
+    assert '--benign_competence_pool "$(benign_competence_trajectory_dir)"' in text
     assert "eval_condition er" in text
     assert "eval_condition ec" in text
     assert "all|eval|formal)" in text
@@ -248,6 +256,9 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "Qualify the exact" in text
     assert "def _placement_for_settle(" in text
     assert "def _supported_search_candidates(" in text
+    assert "def _prepend_qualified_pool_anchors(" in text
+    assert '"qualified_pool_anchor"' in text
+    assert "qualified_pool_anchors.append(settled_xy)" in text
     assert "support_search_half_extent_xy" in text
     assert "candidates = _supported_search_candidates(" in text
     assert (
@@ -265,6 +276,7 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
         "immediate_anchor =", 1
     )[1]
     assert "or supported_serialized_mode" in text
+    assert "and not args.scan_full_pool" in text
     assert "The paired Ec search" in text
     assert 'refinement_kind == "effect"' in text
     assert "one step before link7" in text

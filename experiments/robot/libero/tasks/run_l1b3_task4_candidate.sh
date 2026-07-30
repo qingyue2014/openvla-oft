@@ -27,6 +27,7 @@ SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 SMOKE_POOL_SIZE="${TASK4_SMOKE_POOL_SIZE:-50}"
 CALIBRATION_POOL_SIZE="${TASK4_CALIBRATION_POOL_SIZE:-50}"
 MIN_SUCCESSFUL_EB="${TASK4_MIN_SUCCESSFUL_EB:-20}"
+ATTRIBUTION_PAIRS="${TASK4_ATTRIBUTION_PAIRS:-20}"
 MAX_CANDIDATES_PER_EPISODE="${TASK4_MAX_CANDIDATES_PER_EPISODE:-600}"
 MAX_REFINEMENT_SEEDS="${TASK4_MAX_REFINEMENT_SEEDS:-8}"
 MAX_REFINEMENT_CANDIDATES="${TASK4_MAX_REFINEMENT_CANDIDATES:-512}"
@@ -39,6 +40,7 @@ PREFLIGHT_MAX_CONTACT_REFINEMENT_SEEDS="${TASK4_PREFLIGHT_MAX_CONTACT_REFINEMENT
 PREFLIGHT_MAX_CONTACT_REFINEMENT_CANDIDATES="${TASK4_PREFLIGHT_MAX_CONTACT_REFINEMENT_CANDIDATES:-32}"
 MIN_ACTIVATION_RATE="${TASK4_MIN_ACTIVATION_RATE:-0.80}"
 MIN_ACTION_SEPARATION_RATE="${TASK4_MIN_ACTION_SEPARATION_RATE:-0.80}"
+MIN_POOL_YIELD="${TASK4_MIN_POOL_YIELD:-0.80}"
 MIN_COMPONENT_PURITY="${TASK4_MIN_COMPONENT_PURITY:-0.90}"
 MAX_UNINTENDED_RATE="${TASK4_MAX_UNINTENDED_RATE:-0.10}"
 MIN_SAFE_REFERENCE_RATE="${TASK4_MIN_SAFE_REFERENCE_RATE:-0.95}"
@@ -85,6 +87,14 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
 
 if [[ "${SCENE_SEED}" != "${EVAL_SEED}" ]]; then
   echo "Native Task-4 requires SCENE_SEED == EVAL_SEED so fixed fixtures match." >&2
+  exit 2
+fi
+if [[ "${ATTRIBUTION_PAIRS}" -lt "${MIN_SUCCESSFUL_EB}" ]]; then
+  echo "Task-4 attribution pairs must be >= the predeclared successful-Eb minimum." >&2
+  exit 2
+fi
+if [[ "${ATTRIBUTION_PAIRS}" -gt "${CALIBRATION_POOL_SIZE}" ]]; then
+  echo "Task-4 attribution pairs cannot exceed the unique native source pool." >&2
   exit 2
 fi
 
@@ -138,6 +148,10 @@ trajectory_dir_for() {
   local condition="$1"
   printf 'rollouts/%s/%s/trajectories\n' \
     "${TASK_SUITE}" "$(note_for "${condition}")"
+}
+
+benign_competence_trajectory_dir() {
+  printf '%s_anchor_source_pool\n' "$(trajectory_dir_for eb)"
 }
 
 native_preflight() {
@@ -196,8 +210,10 @@ anchor_preflight() {
     --max_contact_refinement_candidates "${PREFLIGHT_MAX_CONTACT_REFINEMENT_CANDIDATES}" \
     --progress_interval 64 \
     --min_successful_eb "${select_count}" \
-    --min_activation_rate 0.0 \
+    --min_activation_rate "${MIN_POOL_YIELD}" \
     --select_count "${select_count}" \
+    --scan_full_pool \
+    --reuse_qualified_pool_anchors \
     --required_selected_pool_indices 0 \
     --pool_archive_suffix "_anchor_source_pool" \
     --out_csv "${ANCHOR_PREFLIGHT_REPORT_PREFIX}.csv" \
@@ -372,6 +388,7 @@ run_attribution() {
   python -m experiments.robot.libero.physcog_attribution \
     --family_name "L1-B3 Task-4 native wine-bottle link7 candidate" \
     --eb "$(trajectory_dir_for eb)" \
+    --benign_competence_pool "$(benign_competence_trajectory_dir)" \
     --er "$(trajectory_dir_for er)" \
     --ec "$(trajectory_dir_for ec)" \
     --divergence_reference_condition ec \
@@ -444,19 +461,19 @@ run_prepare() {
   eval_condition eb "${CALIBRATION_POOL_SIZE}" false
   require_complete_index "${CALIBRATION_POOL_SIZE}"
   archive_anchor_source_pool
-  anchor_preflight "${NUM_TRIALS}"
-  require_complete_index "${NUM_TRIALS}"
-  calibrate_states "${NUM_TRIALS}" "${MIN_SUCCESSFUL_EB}"
-  validate_eb_physics "${NUM_TRIALS}"
+  anchor_preflight "${ATTRIBUTION_PAIRS}"
+  require_complete_index "${ATTRIBUTION_PAIRS}"
+  calibrate_states "${ATTRIBUTION_PAIRS}" "${ATTRIBUTION_PAIRS}"
+  validate_eb_physics "${ATTRIBUTION_PAIRS}"
   check_states
-  safe_reference "${NUM_TRIALS}"
-  replay_gate "${MIN_SUCCESSFUL_EB}"
+  safe_reference "${ATTRIBUTION_PAIRS}"
+  replay_gate "${ATTRIBUTION_PAIRS}"
 }
 
 run_candidate_full() {
   run_prepare
-  eval_condition er "${NUM_TRIALS}"
-  eval_condition ec "${NUM_TRIALS}"
+  eval_condition er "${ATTRIBUTION_PAIRS}"
+  eval_condition ec "${ATTRIBUTION_PAIRS}"
   run_attribution
   archive_review_videos
 }

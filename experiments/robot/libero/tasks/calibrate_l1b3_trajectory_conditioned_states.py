@@ -153,6 +153,44 @@ def _prepend_serialized_er_anchor(
     return unique
 
 
+def _prepend_qualified_pool_anchors(
+    candidates: list[tuple[int, str, np.ndarray]],
+    anchors: list[np.ndarray],
+) -> list[tuple[int, str, np.ndarray]]:
+    """Replay earlier source-ordered qualified poses before a new grid search.
+
+    Task-4 fixtures are identical across the 50 official serialized source
+    states.  A native bottle pose already qualified against an earlier Eb
+    trajectory is therefore a useful *proposal* for the next trajectory.  It
+    is never accepted by transfer: the new episode must independently pass the
+    same settle, direct-link consequence, confound, matched-control, and
+    penetration gates.
+    """
+    merged: list[tuple[int, str, np.ndarray]] = [
+        (-3, "qualified_pool_anchor", np.asarray(anchor, dtype=float))
+        for anchor in anchors
+    ]
+    merged.extend(candidates)
+    unique: list[tuple[int, str, np.ndarray]] = []
+    seen: set[tuple[float, float]] = set()
+    for path_step, proposed_link, candidate_xy in merged:
+        key = (
+            round(float(candidate_xy[0]), 5),
+            round(float(candidate_xy[1]), 5),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(
+            (
+                path_step,
+                proposed_link,
+                np.asarray(candidate_xy, dtype=float),
+            )
+        )
+    return unique
+
+
 def _refinement_offsets(
     radial_distances: str, angular_candidates_deg: str
 ) -> list[np.ndarray]:
@@ -1181,6 +1219,7 @@ def calibrate(args: argparse.Namespace) -> str:
     output_ec_states = list(ec_states)
     rows: list[dict] = []
     selected_indices: list[int] = []
+    qualified_pool_anchors: list[np.ndarray] = []
     try:
         env.reset()
         candidate_spec = _candidate_spec(spec)
@@ -1400,6 +1439,10 @@ def calibrate(args: argparse.Namespace) -> str:
                         env=env,
                         eb_state=eb_state,
                     )
+                    if args.reuse_qualified_pool_anchors:
+                        candidates = _prepend_qualified_pool_anchors(
+                            candidates, qualified_pool_anchors
+                        )
                     candidates = _prepend_absolute_anchors(
                         candidates, args.absolute_risk_anchors_xy
                     )
@@ -2012,7 +2055,28 @@ def calibrate(args: argparse.Namespace) -> str:
             rows.append(row)
             _write_calibration_csv(Path(args.out_csv), rows)
             if selected is not None:
-                selected_indices.append(episode)
+                settled_xy = np.asarray(selected["end_xyz"][:2], dtype=float)
+                anchor_key = (
+                    round(float(settled_xy[0]), 5),
+                    round(float(settled_xy[1]), 5),
+                )
+                existing_anchor_keys = {
+                    (
+                        round(float(anchor[0]), 5),
+                        round(float(anchor[1]), 5),
+                    )
+                    for anchor in qualified_pool_anchors
+                }
+                if (
+                    args.reuse_qualified_pool_anchors
+                    and anchor_key not in existing_anchor_keys
+                ):
+                    qualified_pool_anchors.append(settled_xy)
+                if (
+                    args.select_count <= 0
+                    or len(selected_indices) < args.select_count
+                ):
+                    selected_indices.append(episode)
             print(
                 f"episode={episode:03d} eb_success={row['eb_success']} "
                 f"eb_physics_qualified={row['eb_physics_qualified']} "
@@ -2021,6 +2085,7 @@ def calibrate(args: argparse.Namespace) -> str:
             if (
                 args.select_count > 0
                 and len(selected_indices) >= args.select_count
+                and not args.scan_full_pool
             ):
                 break
     finally:
@@ -2165,6 +2230,11 @@ def calibrate(args: argparse.Namespace) -> str:
             required_selected_indices
         ),
         "selected_count": args.select_count,
+        "scan_full_pool": bool(args.scan_full_pool),
+        "reuse_qualified_pool_anchors": bool(
+            args.reuse_qualified_pool_anchors
+        ),
+        "qualified_pool_anchor_count": len(qualified_pool_anchors),
         "pool_trajectory_dir": (
             None if pool_trajectory_dir is None else str(pool_trajectory_dir)
         ),
@@ -2227,6 +2297,10 @@ def calibrate(args: argparse.Namespace) -> str:
         f"{'HTML native-anchor preflight' if args.absolute_anchors_only else 'full trajectory-conditioned calibration'}\n"
         f"- Selected qualified states: "
         f"{len(selected_indices) if args.select_count > 0 else 'not applied'}\n"
+        f"- Full qualification pool scan: {bool(args.scan_full_pool)}\n"
+        f"- Source-ordered qualified-anchor reuse: "
+        f"{bool(args.reuse_qualified_pool_anchors)} "
+        f"({len(qualified_pool_anchors)} unique poses)\n"
         f"- Required selected source-pool episodes: "
         f"{sorted(required_selected_indices) or 'none'}\n"
         "- Accepted causal confounds: 0 other-arm, gripper, or held-bowl "
@@ -2449,6 +2523,16 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--reuse_qualified_pool_anchors",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Prepend native bottle poses qualified on earlier source-ordered "
+            "episodes, while independently replaying every gate on the current "
+            "episode."
+        ),
+    )
+    parser.add_argument(
         "--matched_control_offsets_xy",
         default=(
             "0.000,0.070;0.000,-0.070;0.070,0.000;-0.070,0.000;"
@@ -2465,6 +2549,16 @@ def main() -> None:
         type=int,
         default=0,
         help="Select and reindex this many qualified states from a larger pool",
+    )
+    parser.add_argument(
+        "--scan_full_pool",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help=(
+            "Continue through the complete qualification pool after select_count "
+            "is reached so the pool-level yield gate cannot be replaced by "
+            "early favorable selection."
+        ),
     )
     parser.add_argument(
         "--pool_archive_suffix",
