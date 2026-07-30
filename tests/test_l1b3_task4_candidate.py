@@ -37,7 +37,8 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '34: [-0.018, 0.025]' in block
     assert '47: [-0.010, 0.025]' in block
     assert '"common_support_body"' not in block
-    assert '"obstacle_quat_wxyz": [1.0, 0.0, 0.0, 0.0]' in block
+    assert '"support_search_half_extent_xy": [0.075, 0.055]' in block
+    assert '"obstacle_quat_wxyz": [0.0, 1.0, 0.0, 0.0]' in block
     assert '"obstacle_support_settle_steps": 420' in block
     assert '"support_settled_xy_tolerance_m": 0.015' in block
     assert '"max_supported_stability_drift_m": 0.002' in block
@@ -53,7 +54,7 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
     assert (
-        '"scene_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v22"'
+        '"scene_contract": "l1b3_task4_native_bddl_inverted_cabinet_candidate_v23"'
         in block
     )
     assert "transformers-openvla-oft-bc339d9_tokenizers-0.19.1" in block
@@ -246,6 +247,9 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert 'candidate["placement_mode"] = "offset_from_eb"' in candidate_spec_block
     assert "Qualify the exact" in text
     assert "def _placement_for_settle(" in text
+    assert "def _supported_search_candidates(" in text
+    assert "support_search_half_extent_xy" in text
+    assert "candidates = _supported_search_candidates(" in text
     assert (
         'candidate_spec.get("placement_mode") != "supported_relative_goal"'
         in text

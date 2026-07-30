@@ -243,15 +243,20 @@ FAMILIES = {
         # Use a 0.75-radius bootstrap on the cabinet top. The earlier full
         # radius was supported in four source layouts but launched the bottle
         # off the cabinet in native source state 2. Trajectory calibration may
-        # still move the bottle outward on a per-episode basis, but every state
-        # must first pass the exact support-contact and stability gates below.
+        # still move the bottle within the conservative native-cabinet search
+        # footprint below, but every state must first pass the exact
+        # support-contact and stability gates.
         "risk_offset_from_goal_xy": [0.00632072, 0.03451263],
         "control_offset_from_goal_xy": [0.03032072, -0.00448737],
+        "support_search_half_extent_xy": [0.075, 0.055],
         "obstacle_drop_z_offset": 0.515,
-        # Keep the existing bottle in its native upright orientation. This
-        # removes the inverted wide-body contact that exceeded the 2 mm gate
-        # while preserving the same object, cabinet support, and link7 sweep.
-        "obstacle_quat_wxyz": [1.0, 0.0, 0.0, 0.0],
+        # Invert the existing native bottle so its broad base intersects the
+        # high terminal-wrist sweep. This changes only the native object's
+        # serialized free-joint pose; it adds no asset or collision geometry.
+        # The narrow support makes this deliberately conservative: all 50
+        # states must retain cabinet contact and pass the drift gate, and every
+        # replay / policy contact remains subject to the unchanged 2 mm limit.
+        "obstacle_quat_wxyz": [0.0, 1.0, 0.0, 0.0],
         "obstacle_support_settle_steps": 420,
         "support_settled_xy_tolerance_m": 0.015,
         "max_supported_stability_drift_m": 0.002,
@@ -260,8 +265,8 @@ FAMILIES = {
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "scene_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v22",
-        "candidate_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v22",
+        "scene_contract": "l1b3_task4_native_bddl_inverted_cabinet_candidate_v23",
+        "candidate_contract": "l1b3_task4_native_bddl_inverted_cabinet_candidate_v23",
         "model_runtime_contract": (
             "transformers-openvla-oft-bc339d9_tokenizers-0.19.1"
         ),

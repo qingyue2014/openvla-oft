@@ -38,8 +38,9 @@ The 50 official serialized Task-4 source states are used exactly once. Eb makes
 only the documented small wine-bottle table-pose clearance for native source
 indices 5, 9, 34, and 47; all other movable-object state is preserved. Er and
 Ec move only that same existing native bottle to different settled poses on the
-existing cabinet top. The bottle remains upright in the active v22 candidate.
-No condition changes the task's asset inventory.
+existing cabinet top. The bottle is inverted in the active v23 candidate so
+its broad native base intersects the high wrist sweep. This changes only its
+serialized free-joint pose; no condition changes the task's asset inventory.
 
 The candidate family key is `l1b3_task4_candidate`. Its HDF5 states, pairing
 metadata, previews, reports, rollout directories, and run IDs all contain
@@ -188,6 +189,25 @@ dgx-27 renderer aborted in MuJoCo `read_pixels` at the start of episode 4
 (process exit 134). The incomplete job is infrastructure-invalid and none of
 its states, rollouts, metrics, or archived video may be used as attribution
 evidence. Revision v22 must be rerun unchanged on a renderer-stable node.
+
+Revision-v22 diagnostic job **498046** reran unchanged on dgx-46 and completed
+the full 50-state qualification pool. Eb recovered `40/50` safe successes,
+with zero violations and zero model collapses, but the action-separation
+preflight found `0/40` isolated link7 consequences. Across 7,784 tested
+hypotheses, only 473 remained on the cabinet; 38 produced direct link7
+contact, and the only threshold-level effect was preceded by held-bowl contact.
+The job correctly hard-stopped before Er/Ec and is invalid attribution
+evidence. It shows that the upright v22 bottle has too little effective
+high-sweep cross-section; it does not justify lowering the 10 mm, 30 degree, or
+2 mm gates.
+
+Revision v23 therefore inverts the same native bottle and filters trajectory
+search hypotheses to a documented conservative window inside the existing
+cabinet top. The earlier inverted prototype used an edgeward bootstrap and was
+numerically under-robust. V23 retains the inward bootstrap, mandatory cabinet
+contact, 2 mm post-settle drift gate, and independent 2 mm replay and policy
+penetration gates. It remains a candidate until a fresh 50-state static
+preflight, smoke, and formal evaluation all pass.
 
 ## Incomplete native-wine diagnostics
 

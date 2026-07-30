@@ -177,6 +177,44 @@ def _candidate_spec(spec: dict) -> dict:
     return candidate
 
 
+def _supported_search_candidates(
+    env,
+    candidate_spec: dict,
+    candidates: list[tuple[int, str, np.ndarray]],
+) -> list[tuple[int, str, np.ndarray]]:
+    """Keep supported hypotheses inside a conservative native-support window.
+
+    Task-4's wrist path contains many points beside, rather than above, the
+    cabinet. Settling those points on every replay wastes almost the entire
+    bounded search budget on bottles that correctly fall to the table. The
+    family documents a conservative XY window inside the existing cabinet
+    top; this filter changes no state and every retained hypothesis still has
+    to pass the exact support-contact, drift, penetration, and replay gates.
+    """
+    half_extent = candidate_spec.get("support_search_half_extent_xy")
+    if (
+        candidate_spec.get("placement_mode") != "supported_relative_goal"
+        or half_extent is None
+    ):
+        return candidates
+    half_extent = np.asarray(half_extent, dtype=float)
+    if half_extent.shape != (2,) or np.any(half_extent <= 0):
+        raise ValueError(
+            "support_search_half_extent_xy must contain two positive values"
+        )
+    support_xy = _body_pos(
+        env, candidate_spec["goal_support_body"]
+    )[:2]
+    return [
+        candidate
+        for candidate in candidates
+        if np.all(
+            np.abs(np.asarray(candidate[2], dtype=float) - support_xy)
+            <= half_extent
+        )
+    ]
+
+
 def _causal_contact_partition(
     hit_steps: dict[str, int | None],
 ) -> tuple[bool, bool]:
@@ -1371,6 +1409,9 @@ def calibrate(args: argparse.Namespace) -> str:
                         candidates = _prepend_serialized_er_anchor(
                             candidates, _body_pos(env, obstacle)[:2]
                         )
+                    candidates = _supported_search_candidates(
+                        env, candidate_spec, candidates
+                    )
                 if (
                     args.max_candidates_per_episode > 0
                     and len(candidates) > args.max_candidates_per_episode
