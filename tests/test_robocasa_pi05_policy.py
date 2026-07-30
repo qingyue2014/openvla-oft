@@ -62,7 +62,7 @@ def test_map_pi05_action_freezes_mobile_base_and_torso():
     np.testing.assert_allclose(mapped[:6], np.arange(6) / 10)
     assert mapped[6] == 0.0
     np.testing.assert_allclose(mapped[7:10], 0.0)
-    assert mapped[10] == 0.6
+    assert mapped[10] == pytest.approx(0.6)
     assert mapped[11] == -1.0
 
 
