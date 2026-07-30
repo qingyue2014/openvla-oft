@@ -324,8 +324,11 @@ Er/Ec candidates targeted a visible, supported pair, but job `498067` showed
 that the Er apple remained mostly occluded. The current `-0.12 / +0.20 m`
 Er/Ec pair is unvalidated. That job also attributed the prior `0.0567 m`
 penetration to the shared `distr_cab` bowl override colliding with the native
-wall and cabinet back; the unnecessary override was removed so the bowl now
-uses the native task's original placement.
+wall and cabinet back. The invalid tiny rear sampler was removed. Fully
+restoring the native wide sampler
+failed to initialize after 50 attempts with the fixed cleaner poses in job
+`498069`. The new `0.20 × 0.10 m`, boundary-enforced centre region must pass
+the explicit task-object contact report before acceptance.
 
 ### 5.3 Geometry and oracle
 
