@@ -217,6 +217,8 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     )[1]
     assert "or supported_serialized_mode" in text
     assert "The paired Ec search" in text
+    assert 'refinement_kind == "effect"' in text
+    assert "one step before link7" in text
     assert 'ec_replay["task_success"]' in text
     assert 'er_replay["task_success"]' not in text.split(
         "isolated = bool(", 1

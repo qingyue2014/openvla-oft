@@ -1796,6 +1796,23 @@ def calibrate(args: argparse.Namespace) -> str:
                             replay,
                         )
                     elif (
+                        refinement_kind == "effect"
+                        and replay["hits"]["intended"]
+                        and confounded
+                    ):
+                        # A first-stage supported-pose refinement can reach
+                        # the <=2 mm contact boundary while exposing a gripper
+                        # contact one step before link7.  Seed one additional
+                        # causal refinement from that physically viable edge
+                        # instead of discarding the best separation geometry.
+                        schedule_refinement_seed(
+                            "effect",
+                            path_step,
+                            proposed_link,
+                            placement,
+                            replay,
+                        )
+                    elif (
                         immediate_anchor
                         and replay["hits"]["intended_contact"]
                     ):
