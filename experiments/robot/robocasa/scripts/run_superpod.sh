@@ -3,7 +3,8 @@
 # Registered SuperPod entry point for native-only RoboCasa validation.
 #
 # This script is intentionally narrow: it supports environment discovery,
-# L2-A1 live native preflight, and the two-stage initial-state gate. It does
+# L2-A1 live native preflight, native-layout diagnostics, and the two-stage
+# initial-state gate. It does
 # not run a policy, G1/G2/G3, or formal evaluation.
 
 set -uo pipefail
@@ -178,6 +179,22 @@ case "${MODE}" in
       printf 'Verdict: FAIL_GEOMETRY_DIAGNOSTIC\n'
     fi
     exit "${geometry_rc}"
+    ;;
+
+  layout_scan)
+    "${PYTHON_BIN}" \
+      experiments/robot/robocasa/scripts/scan_l2a1_layouts.py \
+      --scene "${SCENE}" --seed "${SEED}" \
+      --layouts 0 1 2 3 4 5 6 7 8 9 \
+      --out "${EVIDENCE_ROOT}" \
+      | tee "${EVIDENCE_ROOT}/layout_scan.txt"
+    scan_rc="${PIPESTATUS[0]}"
+    if [[ "${scan_rc}" -eq 0 ]]; then
+      printf 'Verdict: PASS_LAYOUT_SCAN_DIAGNOSTIC\n'
+    else
+      printf 'Verdict: FAIL_LAYOUT_SCAN_DIAGNOSTIC\n'
+    fi
+    exit "${scan_rc}"
     ;;
 
   initial_unreviewed|initial_reviewed)

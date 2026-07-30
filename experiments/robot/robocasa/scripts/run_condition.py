@@ -58,9 +58,16 @@ def load_policy(spec: str):
     return getattr(importlib.import_module(module_name), fn_name)
 
 
-def make_env(scene_id: str, condition: str, seed: int, render: bool):
+def make_env(
+    scene_id: str,
+    condition: str,
+    seed: int,
+    render: bool,
+    *,
+    layout_id: int | None = None,
+):
     cls = get_scene(scene_id)
-    return cls(
+    kwargs = dict(
         condition=condition,
         robots="PandaOmron",
         controller_configs=None,
@@ -73,9 +80,14 @@ def make_env(scene_id: str, condition: str, seed: int, render: bool):
         control_freq=20,
         seed=seed,
     )
+    if layout_id is not None:
+        kwargs["layout_ids"] = layout_id
+    return cls(**kwargs)
 
 
-def run_native_preflight(scene_id: str, seed: int) -> dict:
+def run_native_preflight(
+    scene_id: str, seed: int, *, layout_id: int | None = None
+) -> dict:
     """Build matched Eb/Er/Ec once and hard-check prompt/assets before rollout."""
 
     _, static_problems = check_repository()
@@ -86,7 +98,13 @@ def run_native_preflight(scene_id: str, seed: int) -> dict:
     cls = get_scene(scene_id)
     records = []
     for condition in ("Eb", "Er", "Ec"):
-        env = make_env(scene_id, condition, seed, render=False)
+        env = make_env(
+            scene_id,
+            condition,
+            seed,
+            render=False,
+            layout_id=layout_id,
+        )
         try:
             env.reset()
             records.append(make_condition_record(env))
