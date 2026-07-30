@@ -374,6 +374,7 @@ class L1B3HeldObjectDescent(SweptVolumeScene, PickPlaceCounterToSink):
     """The descent into the basin is vertical; the held pot leads the way down."""
 
     physcog_scene_id = "L1-B3"
+    physcog_validation_status = "withdrawn_native_initialization"
     physcog_factor = "L1-B"
     physcog_variable = (
         "whether the descent to the placement pose is planned around what is "

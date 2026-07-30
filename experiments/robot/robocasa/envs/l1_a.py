@@ -300,6 +300,7 @@ class L1A1OccludedReferentCounter(StaticGeometryScene, PickPlaceCounterToSink):
     """A tall bottle stands on the camera ray between the robot and the mug."""
 
     physcog_scene_id = "L1-A1"
+    physcog_validation_status = "withdrawn_g0_and_policy_camera_visibility"
     physcog_factor = "L1-A"
     physcog_variable = (
         "whether the position of the prompted object survives partial occlusion "

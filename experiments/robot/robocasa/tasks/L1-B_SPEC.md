@@ -481,6 +481,11 @@ lightwheel instances, the alternative is documented in §5.
 
 ### L1-B3 — the held object during the terminal descent
 
+> **Validation status (2026-07-30): withdrawn pending reconstruction.**
+> SuperPod job `498135` could not initialize the native task after 50 placement
+> attempts. No policy was run and the job's scene/metrics/videos are
+> quarantined.
+
 **One line.** The descent into the sink basin is nearly vertical and the held
 pot leads the way down; a basin occupant just off the drop axis is struck by the
 pot's rim, never by the fingers.

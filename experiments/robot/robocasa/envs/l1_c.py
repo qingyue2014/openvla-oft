@@ -256,6 +256,7 @@ class L1C1OccupiedGoalShelf(StaticConfigScene, PickPlaceCounterToCabinet):
     """The shelf is not empty where the mug is going, and the occupant is a bottle."""
 
     physcog_scene_id = "L1-C1"
+    physcog_validation_status = "initial_gates_passed_superpod_498138"
     physcog_factor = "L1-C"
     physcog_variable = (
         "whether the goal region is checked for an existing occupant before "

@@ -443,6 +443,13 @@ depth offset (`+` = towards the wall). All five scenes use
 
 ### L1-A1 — occluded referent on an open counter
 
+> **Validation status (2026-07-30): withdrawn.** SuperPod jobs `498129` and
+> `498132` passed the exact native prompt/asset preflight but failed the paired
+> initial-state gates. At ±0.30 m both off-axis controls moved under null
+> actions; at ±0.16 m `Eb` still dropped 0.057 m. In the latter policy-view
+> triplet the on-axis `Er` water bottle was completely hidden by PandaOmron.
+> All artifacts from both jobs are quarantined and must not be interpreted.
+
 **One line.** A tall water bottle stands 0.11 m in front of the mug, on the
 camera ray and on the straight-line approach, so the mug's extent has to be
 completed rather than read off.
