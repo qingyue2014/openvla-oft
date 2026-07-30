@@ -262,10 +262,12 @@ prefix_safe_reference() {
     --grasp_action_trajectories \
       "rollouts/libero_spatial/${EC_PREFIX_NOTE}/trajectories" \
     --complete_lift_after_prefix \
+    --prefix_target_xy_distance \
+      "${PREFIX_SAFE_REF_TARGET_XY_DISTANCE:-0.06}" \
     --prefix_grasp_seat_steps "${PREFIX_SAFE_REF_GRASP_SEAT_STEPS:-8}" \
     --prefix_lift_max_position_command \
       "${PREFIX_SAFE_REF_LIFT_MAX_POSITION_COMMAND:-0.08}" \
-    --lift_height "${PREFIX_SAFE_REF_LIFT_HEIGHT:-0.14}" \
+    --lift_height "${PREFIX_SAFE_REF_LIFT_HEIGHT:-0.08}" \
     --max_waypoint_steps "${PREFIX_SAFE_REF_MAX_WAYPOINT_STEPS:-360}" \
     --transport_max_waypoint_steps \
       "${PREFIX_SAFE_REF_TRANSPORT_MAX_WAYPOINT_STEPS:-500}" \
@@ -273,8 +275,8 @@ prefix_safe_reference() {
       "${PREFIX_SAFE_REF_TRANSPORT_MAX_POSITION_COMMAND:-0.15}" \
     --transport_position_tolerance \
       "${PREFIX_SAFE_REF_TRANSPORT_POSITION_TOLERANCE:-0.015}" \
-    --transport_clearance "${PREFIX_SAFE_REF_TRANSPORT_CLEARANCE:-0.04}" \
-    --preplace_height "${PREFIX_SAFE_REF_PREPLACE_HEIGHT:-0.08}" \
+    --transport_clearance "${PREFIX_SAFE_REF_TRANSPORT_CLEARANCE:-0.01}" \
+    --preplace_height "${PREFIX_SAFE_REF_PREPLACE_HEIGHT:-0.04}" \
     --trajectory_dir "${PREFIX_SAFE_REF_TRAJ}" \
     --video_dir "${PREFIX_SAFE_REF_VIDEOS}" \
     --max_videos "${PREFIX_SAFE_REF_MAX_VIDEOS:-3}" \

@@ -377,8 +377,20 @@ def _replay_grasp_prefix(env, obs, oracle, recorder, actions, source, step, args
             close_sign = float(np.sign(action[-1]))
         if status.violated:
             return obs, step, close_sign, status
-        lift_m = float(_body_pos(env, TARGET)[2] - source[2])
-        if lift_m >= args.min_grasp_lift:
+        target_pos = _body_pos(env, TARGET)
+        lift_m = float(target_pos[2] - source[2])
+        target_xy_threshold = float(
+            getattr(args, "prefix_target_xy_distance", 0.0)
+        )
+        if target_xy_threshold > 0:
+            branch_ready = bool(
+                lift_m >= args.min_grasp_lift
+                and np.linalg.norm(target_pos[:2] - _body_pos(env, PLATE)[:2])
+                <= target_xy_threshold
+            )
+        else:
+            branch_ready = bool(lift_m >= args.min_grasp_lift)
+        if branch_ready:
             if recorder._capture_video and not recorder._video_started:
                 recorder.capture_initial(obs)
             return obs, step, close_sign, None

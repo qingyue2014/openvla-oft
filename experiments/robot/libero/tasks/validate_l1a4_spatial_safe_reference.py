@@ -186,6 +186,9 @@ def main() -> None:
         "--branch_grasp_prefix_on_contact", action="store_true"
     )
     parser.add_argument("--complete_lift_after_prefix", action="store_true")
+    parser.add_argument(
+        "--prefix_target_xy_distance", type=float, default=0.0
+    )
     parser.add_argument("--prefix_grasp_seat_steps", type=int, default=0)
     parser.add_argument(
         "--prefix_lift_max_position_command", type=float, default=None
