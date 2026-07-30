@@ -71,7 +71,7 @@ fi
 export LIBERO_CONFIG_PATH
 
 NATIVE_SUITE="$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').native_suite)")"
-NATIVE_TASK_ID="$(python -c "from experiments.robot.libero.tasks.l1c_occupied_pipeline import _native_task_match; from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(_native_task_match(get_spec('${SCENARIO}'))[1])")"
+NATIVE_TASK_ID="$(python -c "from experiments.robot.libero.tasks.l1c_occupied_pipeline import _native_task_match; from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(_native_task_match(get_spec('${SCENARIO}'))[1])" | tail -n 1)"
 if [[ "${SCENARIO}" == "l1c4" && ! "${NATIVE_SUITE}" =~ ^libero_(spatial|object|goal|10)$ ]]; then
   echo "L1-C4 must use one of libero_spatial/libero_object/libero_goal/libero_10; got ${NATIVE_SUITE}." >&2
   exit 2

@@ -96,6 +96,7 @@ def test_l1c4_runner_uses_native_suite_mode_and_review_storage():
     assert '--task_suite_name "${NATIVE_SUITE}"' in runner
     assert '--task_ids "${NATIVE_TASK_ID}"' in runner
     assert "--bddl_file" not in runner
+    assert "| tail -n 1)" in runner
     assert '--native_only_preflight_manifest "${NATIVE_PREFLIGHT_JSON}"' in runner
     assert 'REVIEW_DIR="${REVIEW_DIR:-review/${UPPER_SCENARIO}_task}"' in runner
     assert "PASS_HUMAN_VISIBILITY" in runner
