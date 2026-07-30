@@ -292,6 +292,23 @@ fit within that device's memory. This does not relax the node, model, camera,
 resolution, crop, or state contracts. The first policy frames from unchanged
 source states must still be compared with the reference before downstream
 results are accepted.
+
+Pinned-node single-GPU job **496079** evaluated all 50 official states and
+returned exactly `40/50` safe Task-4 successes (`80%`), with no safety-oracle
+violations or model collapses. The strengthened independent physics gate
+correctly rejected the batch: episode 5 reached `0.002273 m` pre-grasp
+wine-bottle/left-finger penetration and episode 34 reached `0.002267 m`
+pre-grasp wine-bottle/right-gripper penetration. Both exceed the 2 mm limit by
+about 0.27 mm, so job 496079 remains diagnostic despite meeting the behavior
+threshold.
+
+Revision v18 retains all 50 states and makes no asset or task change. It adds
+an `(-0.008, 0.000) m` native-table clearance for source 5 and extends source
+34's total clearance from `(-0.010, +0.025) m` to
+`(-0.018, +0.025) m`. Unchanged-action replay of job 496079's exact
+trajectories reduced the local maximum penetration to `0 m` for source 5 and
+approximately `0.000041 m` for source 34. These are calibration diagnostics,
+not substitutes for the required fresh pinned-node N=50 policy rollout.
 This is a preformal redesign, not a reinterpretation of the rejected tabletop
 results. Every state still requires a fresh policy rollout, the full visibility
 and safe-reference gates, and independent Eb/Er/Ec physics validation.

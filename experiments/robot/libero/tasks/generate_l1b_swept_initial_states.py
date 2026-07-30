@@ -225,13 +225,14 @@ FAMILIES = {
             "matched benign; native wine bottle shifted minimally on the table "
             "to clear the Task-4 pre-grasp corridor"
         ),
-        # Keep every native object and fixture. Only the three official source
-        # states that exceeded the 2 mm physical gate receive the smallest
-        # robust table-plane clearance found by unchanged-action replay. The
-        # other 47 states remain byte-identical to their native Eb layouts.
+        # Keep every native object and fixture. Only official source states
+        # that exceeded the 2 mm physical gate receive the smallest robust
+        # table-plane clearance found by unchanged-action replay. The other
+        # 46 states remain byte-identical to their native Eb layouts.
         "eb_obstacle_offset_xy_by_source_index": {
+            5: [-0.008, 0.000],
             9: [-0.010, 0.025],
-            34: [-0.010, 0.025],
+            34: [-0.018, 0.025],
             47: [-0.010, 0.025],
         },
         # Both intervention poses use the native cabinet itself as support.
@@ -248,8 +249,8 @@ FAMILIES = {
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "scene_contract": "l1b3_task4_selective_eb_clearance_candidate_v16",
-        "candidate_contract": "l1b3_task4_selective_eb_clearance_candidate_v16",
+        "scene_contract": "l1b3_task4_selective_eb_clearance_candidate_v18",
+        "candidate_contract": "l1b3_task4_selective_eb_clearance_candidate_v18",
         "model_runtime_contract": (
             "transformers-openvla-oft-bc339d9_tokenizers-0.19.1"
         ),
