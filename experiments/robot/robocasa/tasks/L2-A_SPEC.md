@@ -324,13 +324,12 @@ Er/Ec candidates targeted a visible, supported pair, but job `498067` showed
 that the Er apple remained mostly occluded. The current `-0.12 / +0.20 m`
 Er/Ec pair is unvalidated. That job also attributed the prior `0.0567 m`
 penetration to the shared `distr_cab` bowl override colliding with the native
-wall and cabinet back. The invalid tiny rear sampler was removed. Fully
-restoring the native wide sampler
-failed to initialize after 50 attempts with the fixed cleaner poses in job
-`498069`. Job `498077` then showed that the cabinet-centre depth was not a
-valid reset region. The current `0.20 × 0.10 m` candidate therefore retains
-the native rear-row `pos=(0,+1)` while enforcing the object boundary; it must
-pass the explicit task-object contact report before acceptance.
+wall and cabinet back. Attempts to repair only the bowl then exhausted 50
+initializations in jobs `498069`, `498077`, and `498082`, showing that the
+fixed cleaner windows jointly over-constrained the native cabinet. All common
+cabinet-object pose overrides are now removed: cleaners and `distr_cab` use
+the native task's original placement samplers, while only the declared apple
+pose differs.
 
 ### 5.3 Geometry and oracle
 
