@@ -161,6 +161,16 @@ and adds mandatory cabinet-contact, settled-XY, and 2 mm post-settle drift
 gates. These gates must pass all 50 official source states; skipping an
 unstable source is prohibited.
 
+Native-only static job **497960** evaluated revision v21 over all 50 official
+source states and passed. Source indices 0--49 and settled-state hashes were
+each unique; forbidden initial contacts were `0`; Er and Ec retained cabinet
+support contact in `50/50` states; and the policy-camera bottle segmentation
+ranges were Eb `298--361`, Er `770--804`, and Ec `818--864` pixels. Manual
+review of all nine exported Eb/Er/Ec previews for source states 0--2 confirmed
+that the bottle, bowl, cabinet, and robot were recognizable in the actual
+policy view. This is a passed static prerequisite, not rollout or attribution
+evidence.
+
 ## Incomplete native-wine diagnostics
 
 Superpod job **490762** used only the native Task-4 assets and successfully
