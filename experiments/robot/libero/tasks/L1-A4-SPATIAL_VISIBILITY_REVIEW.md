@@ -54,7 +54,8 @@ regenerated through the LIBERO wrapper and inspected in both simultaneous
 - Maximum stale-location pairing error: 0.008272 m (gate: 0.012 m).
 - Maximum unallowed ER/EC qpos and qvel difference: 0.
 
-This verdict authorizes dynamic reference and short smoke testing only for the
-state hashes above. Formal evaluation remains blocked until dynamic
-feasibility, action separation, and EB/EC capability gates pass. Review videos
-must be stored under `review/L1-A4_task/`.
+This verdict authorized dynamic reference and smoke testing for the state
+hashes above. Dynamic feasibility, action separation, EB/EC capability, and
+smoke gates subsequently passed, so the same reviewed state pool was used for
+the formal run `20260730T065043Z-l1a4s-formal_pi05`. Review videos are stored
+under `review/L1-A4_task/`.
