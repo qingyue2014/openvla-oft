@@ -261,6 +261,7 @@ prefix_safe_reference() {
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --grasp_action_trajectories \
       "rollouts/libero_spatial/${EC_PREFIX_NOTE}/trajectories" \
+    --complete_lift_after_prefix \
     --prefix_grasp_seat_steps "${PREFIX_SAFE_REF_GRASP_SEAT_STEPS:-8}" \
     --prefix_lift_max_position_command \
       "${PREFIX_SAFE_REF_LIFT_MAX_POSITION_COMMAND:-0.08}" \

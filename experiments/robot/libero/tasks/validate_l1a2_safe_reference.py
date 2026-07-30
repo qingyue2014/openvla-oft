@@ -434,9 +434,9 @@ def _run_episode(
             env, obs, oracle, recorder, prefix_actions, source, step, args
         )
         open_sign = -close_sign
-        if (
-            failure is None
-            and getattr(args, "branch_grasp_prefix_on_contact", False)
+        if failure is None and (
+            getattr(args, "branch_grasp_prefix_on_contact", False)
+            or getattr(args, "complete_lift_after_prefix", False)
         ):
             obs, step, failure = _hold(
                 env,
