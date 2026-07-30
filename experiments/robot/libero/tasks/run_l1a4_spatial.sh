@@ -26,6 +26,15 @@ PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-none}"
 SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
+LOWER_CHECKPOINT="$(printf '%s' "${CHECKPOINT}" | tr '[:upper:]' '[:lower:]')"
+if [[ "${LOWER_CHECKPOINT}" == *"grpo"* ]]; then
+  DO_SAMPLE="${DO_SAMPLE:-True}"
+  TEMPERATURE="${TEMPERATURE:-1.6}"
+else
+  DO_SAMPLE="${DO_SAMPLE:-False}"
+  TEMPERATURE="${TEMPERATURE:-1.0}"
+fi
+TOP_P="${TOP_P:-1.0}"
 
 EB_STATES="${TASKS_DIR}/l1a4_spatial_eb_states.hdf5"
 ER_STATES="${TASKS_DIR}/l1a4_spatial_er_states.hdf5"
@@ -54,6 +63,7 @@ EB_NOTE="${EB_NOTE:-L1-A4-between-eb-native-pi05}"
 ER_NOTE="${ER_NOTE:-L1-A4-between-stale-lure-er-pi05}"
 EC_NOTE="${EC_NOTE:-L1-A4-between-matched-safe-ec-pi05}"
 EC_PREFIX_NOTE="${EC_PREFIX_NOTE:-L1-A4-between-matched-safe-ec-pi05-prefix}"
+CAPABILITY_TAG="${CAPABILITY_TAG:-candidate}"
 
 if [[ -d "_deps/LIBERO/libero" ]]; then
   export LIBERO_ROOT="${LIBERO_ROOT:-$(cd _deps/LIBERO && pwd)}"
@@ -163,6 +173,9 @@ eval_condition() {
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --num_trials_per_task "${trials}" \
     --seed "${EVAL_SEED}" \
+    --do_sample "${DO_SAMPLE}" \
+    --temperature "${TEMPERATURE}" \
+    --top_p "${TOP_P}" \
     --save_video_mode "${SAVE_VIDEO_MODE}" \
     --max_violation_videos 10 \
     --max_success_videos 10 \
@@ -377,8 +390,20 @@ case "${MODE}" in
       "${SAFE_REF_STATES}"
     prefix_safe_reference "${SAFE_REF_STATES}"
     ;;
+  capability_pair)
+    preflight
+    ensure_states
+    require_visibility_review
+    eval_condition Eb "${EB_STATES}" none \
+      "L1-A4-between-eb-native-${CAPABILITY_TAG}-capability" \
+      "${EB_CAPABILITY_TRIALS}"
+    eval_condition Ec "${EC_STATES}" none \
+      "L1-A4-between-matched-safe-ec-${CAPABILITY_TAG}-capability" \
+      "${EB_CAPABILITY_TRIALS}"
+    echo "verdict=PASS_L1A4_SPATIAL_PAIRED_CAPABILITY_RUN"
+    ;;
   *)
-    echo "Usage: $0 preflight|check|preview|eb_capability|er_probe|smoke|formal|attribution|safe_reference_debug|prefix_safe_reference" >&2
+    echo "Usage: $0 preflight|check|preview|eb_capability|er_probe|smoke|formal|attribution|safe_reference_debug|prefix_safe_reference|capability_pair" >&2
     exit 2
     ;;
 esac

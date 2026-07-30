@@ -1004,6 +1004,46 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-pi05-prefix",
         ),
     ),
+    ("l1a4s", "capability_openvla_spatial"): PhaseSpec(
+        command=(
+            "env",
+            "CHECKPOINT=moojink/openvla-7b-oft-finetuned-libero-spatial",
+            "CAPABILITY_TAG=openvla-spatial",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=none",
+            "SAVE_TRAJECTORY=True",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4_spatial.sh",
+            "capability_pair",
+        ),
+        count_env="EB_CAPABILITY_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a4_spatial_native_preflight.md",
+            "rollouts/libero_spatial/L1-A4-between-eb-native-openvla-spatial-capability",
+            "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-openvla-spatial-capability",
+        ),
+    ),
+    ("l1a4s", "capability_grpo_spatial"): PhaseSpec(
+        command=(
+            "env",
+            "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-spatial",
+            "CAPABILITY_TAG=grpo-spatial",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=none",
+            "SAVE_TRAJECTORY=True",
+            "DO_SAMPLE=True",
+            "TEMPERATURE=1.6",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4_spatial.sh",
+            "capability_pair",
+        ),
+        count_env="EB_CAPABILITY_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a4_spatial_native_preflight.md",
+            "rollouts/libero_spatial/L1-A4-between-eb-native-grpo-spatial-capability",
+            "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-grpo-spatial-capability",
+        ),
+    ),
     ("l1a4s", "formal_pi05"): PhaseSpec(
         command=(
             "env",
