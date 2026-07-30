@@ -4,6 +4,9 @@ import subprocess
 from experiments.robot.libero.tasks.record_experiment_results import (
     _metadata_for_run,
 )
+from experiments.robot.libero.tasks.validate_libero_native_preflight import (
+    declared_asset_inventory,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -22,9 +25,10 @@ def _family_block(text: str, family: str) -> str:
 
 def test_task4_candidate_uses_native_support_and_link7_contract():
     block = _family_block(GENERATOR.read_text(), "l1b3_task4_candidate")
-    assert '"bddl_file": "l1b3_task4_fixed_native_layout.bddl"' in block
+    assert '"bddl_file": None' in block
     assert '"native_assets_only": True' in block
-    assert '"native_layout_only": True' in block
+    assert '"require_native_preflight": True' in block
+    assert '"native_layout_only"' not in block
     assert '"preserve_native_layout": True' in block
     assert '"placement_mode": "supported_relative_goal"' in block
     assert '"eb_obstacle_offset_xy_by_source_index": {' in block
@@ -47,7 +51,7 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
     assert (
-        '"scene_contract": "l1b3_task4_upright_cabinet_candidate_v19"'
+        '"scene_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v20"'
         in block
     )
     assert "transformers-openvla-oft-bc339d9_tokenizers-0.19.1" in block
@@ -56,29 +60,54 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert "l1b4_goal_arm_sweep.bddl" not in block
 
 
-def test_task4_layout_defines_no_new_assets_and_preserves_task_semantics():
-    text = FIXED_NATIVE_BDDL.read_text()
-    assert "(:language Put the bowl on top of the cabinet)" in text
-    assert "(And (On akita_black_bowl_1 wooden_cabinet_1_top_side))" in text
-    for fixture in (
-        "main_table - table",
-        "wooden_cabinet_1 - wooden_cabinet",
-        "flat_stove_1 - flat_stove",
-        "wine_rack_1 - wine_rack",
+def test_task4_has_no_project_local_bddl_and_enforces_native_preflight():
+    assert not FIXED_NATIVE_BDDL.exists()
+    for path in (
+        GENERATOR,
+        CALIBRATOR,
+        RUNNER,
+        TASKS / "validate_l1b_swept_states.py",
+        TASKS / "replay_l1b_native_eb_actions.py",
     ):
-        assert fixture in text
-    for obj in (
-        "akita_black_bowl_1 - akita_black_bowl",
-        "cream_cheese_1 - cream_cheese",
-        "wine_bottle_1 - wine_bottle",
-        "plate_1 - plate",
-    ):
-        assert obj in text
-    assert "l1_b_" not in text
-    assert ".xml" not in text
-    assert "0.039572370000000000 -0.23401684000000000" in text
-    assert "-0.4043894164742709 0.20236548851737868" in text
-    assert "-0.2671329342518191 -0.2511066216590083" in text
+        assert "l1b3_task4_fixed_native_layout.bddl" not in path.read_text()
+    preflight = (TASKS / "validate_libero_native_preflight.py").read_text()
+    assert 'STANDARD_SUITES = (' in preflight
+    assert '"libero_goal"' in preflight
+    assert "declared_asset_inventory" in preflight
+    assert "model_body_inventory_sha256" in preflight
+    assert "model_geom_inventory_sha256" in preflight
+    assert "Evaluated prompt differs from exact native prompt" in preflight
+
+
+def test_native_bddl_inventory_parser_records_every_declared_asset():
+    inventory = declared_asset_inventory(
+        """
+        (define (problem native)
+          (:fixtures
+            main_table - table
+            wooden_cabinet_1 - wooden_cabinet
+            flat_stove_1 - flat_stove
+            wine_rack_1 - wine_rack
+          )
+          (:objects
+            akita_black_bowl_1 - akita_black_bowl
+            cream_cheese_1 - cream_cheese
+            wine_bottle_1 - wine_bottle
+            plate_1 - plate
+          )
+        )
+        """
+    )
+    assert {(row["kind"], row["name"], row["type"]) for row in inventory} == {
+        ("fixture", "main_table", "table"),
+        ("fixture", "wooden_cabinet_1", "wooden_cabinet"),
+        ("fixture", "flat_stove_1", "flat_stove"),
+        ("fixture", "wine_rack_1", "wine_rack"),
+        ("object", "akita_black_bowl_1", "akita_black_bowl"),
+        ("object", "cream_cheese_1", "cream_cheese"),
+        ("object", "wine_bottle_1", "wine_bottle"),
+        ("object", "plate_1", "plate"),
+    }
 
 
 def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
@@ -108,6 +137,12 @@ def test_task4_runner_is_fully_namespaced_and_cannot_run_formal():
     assert 'BDDL_FILE="${TASKS_DIR}/l1b3_task4_fixed_native_layout.bddl"' not in text
     assert "--bddl_file" not in text
     assert "--task_description_override" not in text
+    assert "--native_preflight_json" in text
+    assert "--expected_prompt \"put the bowl on top of the cabinet\"" in text
+    assert "validate_libero_native_preflight.py" in text
+    assert "run_attribution()" in text
+    assert "--require_exact_pairing" in text
+    assert 'REVIEW_DIR="review/L1-B3_task"' in text
     assert "activate_task4_model_runtime()" in text
     assert "transformers-openvla-oft@bc339d9" in text
     assert "bc339d9ad707454c0c115970db43c260067c61ab" in text
@@ -225,7 +260,7 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     )[1].split(")", 1)[0]
 
 
-def test_html_result_is_provenance_not_the_fixed_support_contract():
+def test_html_result_is_provenance_not_the_native_task_contract():
     runner = RUNNER.read_text()
     html_xy = (-0.17987147616914112, -0.0010137409172496538)
     assert f"{html_xy[0]},{html_xy[1]}" not in runner
@@ -234,7 +269,7 @@ def test_html_result_is_provenance_not_the_fixed_support_contract():
     assert "historical single-episode HTML result" in text
     assert "provenance only" in text
     assert "does not" in text
-    assert "define the new fixed-layout support geometry" in text
+    assert "define the current native-task evidence" in text
 
 
 def test_candidate_results_cannot_pool_with_task8_or_formal_l1b3():

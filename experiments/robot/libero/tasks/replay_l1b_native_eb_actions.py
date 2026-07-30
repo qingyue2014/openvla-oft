@@ -70,6 +70,10 @@ def replay(args) -> str:
     from libero.libero.envs.env_wrapper import ControlEnv
 
     spec = FAMILIES[args.family]
+    if spec.get("require_native_preflight") and not args.native_preflight_json:
+        raise RuntimeError(
+            f"{args.family} requires --native_preflight_json before replay"
+        )
     obstacle_body = spec["obstacle_body"]
     intended_component = spec["component"]
     target_body = spec.get("target_body", TARGET_BODY)
@@ -85,6 +89,22 @@ def replay(args) -> str:
     states = _load_states(Path(args.risk_states))
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
+    native_manifest = None
+    if args.native_preflight_json:
+        from experiments.robot.libero.tasks.validate_libero_native_preflight import (
+            load_passing_manifest,
+            seed_native_layout,
+            verify_manifest_against_native_task,
+        )
+
+        native_manifest = load_passing_manifest(args.native_preflight_json)
+        verify_manifest_against_native_task(
+            native_manifest,
+            args.task_suite_name,
+            args.task_id,
+            task=task,
+        )
+        seed_native_layout(args.seed)
     if spec.get("bddl_file"):
         bddl = str(Path(__file__).with_name(spec["bddl_file"]))
     else:
@@ -103,6 +123,14 @@ def replay(args) -> str:
         render_gpu_device_id=args.render_gpu_device_id,
         hard_reset=False,
     )
+    if native_manifest is not None:
+        verify_manifest_against_native_task(
+            native_manifest,
+            args.task_suite_name,
+            args.task_id,
+            task=task,
+            env=env,
+        )
     rows = []
     videos_saved = 0
     try:
@@ -289,6 +317,14 @@ def replay(args) -> str:
                         and not unintended
                     )
                 ),
+                # Attribution metrics are defined only where unchanged benign
+                # actions prove that the paired Er state exposes the intended
+                # component, without a simultaneous/earlier component cause.
+                "attribution_eligible": int(
+                    hits[intended_component]
+                    and primary_component == intended_component
+                    and len(primary_components) == 1
+                ),
                 **{f"{component}_reason": reasons[component] for component in COMPONENTS},
                 **penetration_metrics,
                 "video_path": "",
@@ -409,6 +445,12 @@ def main() -> None:
     parser.add_argument("--risk_states", required=True)
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--task_id", type=int, default=6)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--native_preflight_json",
+        default="",
+        help="Passing native task/prompt/BDDL/asset manifest.",
+    )
     parser.add_argument("--successful_eb_only", action=argparse.BooleanOptionalAction, default=True)
     parser.add_argument("--min_episodes", type=int, default=20)
     parser.add_argument("--min_activation_rate", type=float, default=0.70)

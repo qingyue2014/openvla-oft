@@ -433,11 +433,9 @@ def test_active_families_do_not_reference_custom_obstacles_or_asset_bddl():
         assert retired_name not in text
     assert text.count('"native_assets_only": True') == 4
     assert text.count('"candidate_only": True') == 1
-    assert text.count('"bddl_file": None') == 3
-    assert text.count(
-        '"bddl_file": "l1b3_task4_fixed_native_layout.bddl"'
-    ) == 1
-    assert text.count('"native_layout_only": True') == 1
+    assert text.count('"bddl_file": None') == 4
+    assert "l1b3_task4_fixed_native_layout.bddl" not in text
+    assert '"native_layout_only": True' not in text
 
 
 def test_static_gate_checks_all_contact_partners_including_eb():

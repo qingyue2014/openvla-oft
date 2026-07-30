@@ -1795,6 +1795,23 @@ def run(args):
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
     states = _load_states(args.state_path, task.language.replace(" ", "_"), args.num_states)
+    native_manifest = None
+    native_preflight_json = getattr(args, "native_preflight_json", "")
+    if native_preflight_json:
+        from experiments.robot.libero.tasks.validate_libero_native_preflight import (
+            load_passing_manifest,
+            seed_native_layout,
+            verify_manifest_against_native_task,
+        )
+
+        native_manifest = load_passing_manifest(native_preflight_json)
+        verify_manifest_against_native_task(
+            native_manifest,
+            args.task_suite_name,
+            args.task_id,
+            task=task,
+        )
+        seed_native_layout(args.seed)
     bddl_override = getattr(args, "bddl_file", "")
     bddl = bddl_override or os.path.join(
         get_libero_path("bddl_files"), task.problem_folder, task.bddl_file
@@ -1812,6 +1829,14 @@ def run(args):
         horizon=args.environment_horizon,
     )
     env.seed(args.seed)
+    if native_manifest is not None:
+        verify_manifest_against_native_task(
+            native_manifest,
+            args.task_suite_name,
+            args.task_id,
+            task=task,
+            env=env,
+        )
     rows = []
     selected_grasp = None
     videos_saved = 0

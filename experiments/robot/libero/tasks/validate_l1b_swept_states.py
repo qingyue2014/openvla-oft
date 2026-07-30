@@ -171,6 +171,10 @@ def _policy_camera_image(env, camera: str, resolution: int) -> np.ndarray:
 
 def validate(args) -> bool:
     spec = dict(FAMILIES[args.family])
+    if spec.get("require_native_preflight") and not args.native_preflight_json:
+        raise RuntimeError(
+            f"{args.family} requires --native_preflight_json before scene validation"
+        )
     obstacle_body = spec["obstacle_body"]
     target_body = spec.get("target_body", TARGET_BODY)
     goal_support_body = spec.get("goal_support_body", PLATE_BODY)
@@ -236,7 +240,30 @@ def validate(args) -> bool:
 
     preview_dir = Path(args.preview_dir)
     preview_dir.mkdir(parents=True, exist_ok=True)
+    native_manifest = None
+    native_preflight_path = (
+        args.native_preflight_json
+        or pairing.get("native_preflight_json")
+        or ""
+    )
+    if native_preflight_path:
+        from experiments.robot.libero.tasks.validate_libero_native_preflight import (
+            load_passing_manifest,
+            seed_native_layout,
+            verify_manifest_against_native_task,
+        )
+
+        native_manifest = load_passing_manifest(native_preflight_path)
+        seed_native_layout(int(pairing.get("seed", 42)))
     env, task = _make_env(args, spec)
+    if native_manifest is not None:
+        verify_manifest_against_native_task(
+            native_manifest,
+            args.task_suite_name,
+            args.task_id,
+            task=task,
+            env=env,
+        )
     model_body_names = [
         env.sim.model.body_id2name(body_id) or ""
         for body_id in range(env.sim.model.nbody)
@@ -449,9 +476,16 @@ def validate(args) -> bool:
     native_asset_gate = bool(
         not spec.get("native_assets_only")
         or (
-            (
-                spec.get("bddl_file") is None
-                or spec.get("native_layout_only")
+            spec.get("bddl_file") is None
+            and (
+                not spec.get("require_native_preflight")
+                or (
+                    native_manifest is not None
+                    and pairing.get("native_bddl_sha256")
+                    == native_manifest.get("native_bddl_sha256")
+                    and pairing.get("native_asset_inventory_sha256")
+                    == native_manifest.get("declared_asset_inventory_sha256")
+                )
             )
             and not any(
                 body_name.startswith("l1_b_")
@@ -499,6 +533,13 @@ def validate(args) -> bool:
         f"(`{pairing.get('scene_contract')}`)",
         f"- Prompt preservation gate: `{prompt_ok}`",
         f"- Native task asset-set gate: `{native_asset_gate}`",
+        f"- Native BDDL source: "
+        f"`{pairing.get('native_bddl_source')}`",
+        f"- Native BDDL SHA-256: "
+        f"`{pairing.get('native_bddl_sha256')}`",
+        f"- Native asset inventory SHA-256: "
+        f"`{pairing.get('native_asset_inventory_sha256')}`",
+        f"- Native preflight manifest: `{native_preflight_path}`",
         f"- Only protected obstacle pose changed: `{only_obstacle_pose_ok}`",
         f"- Eb protected obstacle at configured far-table pose: `{eb_layout_ok}`",
         f"- Er/Ec matched-control geometry gate: `{matched_control_geometry_ok}`",
@@ -569,6 +610,11 @@ def main() -> None:
     parser.add_argument("--render_size", type=int, default=256)
     parser.add_argument("--policy_camera", default="agentview")
     parser.add_argument("--min_obstacle_pixels", type=int, default=50)
+    parser.add_argument(
+        "--native_preflight_json",
+        default="",
+        help="Passing native task/prompt/BDDL/asset manifest.",
+    )
     parser.add_argument("--num_previews", type=int, default=3)
     parser.add_argument("--preview_dir", required=True)
     parser.add_argument("--out_report", required=True)

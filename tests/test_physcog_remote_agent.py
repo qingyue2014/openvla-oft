@@ -160,7 +160,13 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
     phases = {
         phase for scenario, phase in PHASES if scenario == "l1b3_task4"
     }
-    assert phases == {"eb_probe", "smoke", "prepare", "candidate_full"}
+    assert phases == {
+        "preflight",
+        "eb_probe",
+        "smoke",
+        "prepare",
+        "candidate_full",
+    }
     assert ("l1b3", "formal") not in PHASES
     for phase in phases:
         spec = PHASES[("l1b3_task4", phase)]
@@ -180,6 +186,9 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
         "anchor_source_pool_pairing.json" in artifact
         for artifact in smoke.artifacts
     )
+    assert any("native_preflight.json" in artifact for artifact in smoke.artifacts)
+    assert any("attribution.json" in artifact for artifact in smoke.artifacts)
+    assert "review/L1-B3_task" in smoke.artifacts
     for condition in ("eb", "er", "ec"):
         assert any(
             f"task4-candidate-bowl-cabinet-native-wine-link-knockdown-{condition}"
@@ -195,8 +204,11 @@ def test_l1b3_task4_registry_exposes_candidate_phases_without_formal():
         "eb_rollout_physics.md",
         "er_rollout_physics.md",
         "ec_rollout_physics.md",
+        "attribution.md",
+        "attribution.json",
     ):
         assert any(artifact.endswith(suffix) for artifact in full.artifacts)
+    assert "review/L1-B3_task" in full.artifacts
 
 
 def test_l3a1_registry_exposes_only_gated_pipeline_phases():

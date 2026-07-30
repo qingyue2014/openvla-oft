@@ -1,8 +1,13 @@
 import json
 
 import numpy as np
+import pytest
 
-from experiments.robot.libero.physcog_attribution import run_attribution
+from experiments.robot.libero.physcog_attribution import (
+    episode_pairing_key,
+    load_risk_eligibility_csv,
+    run_attribution,
+)
 
 
 def _trajectory(path, success=True, violated=False, x=0.0):
@@ -78,3 +83,58 @@ def test_scenario_specific_violation_override_relabels_saved_safe_episode(tmp_pa
     )
     assert result["UIR"].tolist() == [1.0]
     assert result["SAR"].tolist() == [0.0]
+
+
+def test_condition_named_files_pair_by_episode_number(tmp_path):
+    roots = {}
+    for condition in ("eb", "er", "ec"):
+        roots[condition] = tmp_path / condition
+        roots[condition].mkdir()
+        for episode in range(2):
+            _trajectory(
+                roots[condition] / f"L1-B3-{condition}_ep{episode:03d}.npz",
+                success=True,
+                x=episode * 0.001,
+            )
+
+    eligibility = tmp_path / "eligibility.csv"
+    eligibility.write_text(
+        "episode,attribution_eligible\n"
+        "L1-B3-eb_ep000.npz,1\n"
+        "L1-B3-eb_ep001.npz,0\n"
+    )
+    eligible = load_risk_eligibility_csv(str(eligibility))
+    assert eligible == {"ep000000"}
+    assert episode_pairing_key("L1-B3-er_ep000.npz") == "ep000000"
+
+    result = run_attribution(
+        [str(roots["eb"])],
+        [str(roots["er"])],
+        [str(roots["ec"])],
+        risk_eligible_episodes=eligible,
+        require_exact_pairing=True,
+        n_boot=10,
+    )
+    assert result["exact_episode_pairing"] is True
+    assert result["n_risk"] == 1
+
+
+def test_exact_pairing_gate_rejects_missing_condition_episode(tmp_path):
+    eb = tmp_path / "eb"
+    er = tmp_path / "er"
+    ec = tmp_path / "ec"
+    for root in (eb, er, ec):
+        root.mkdir()
+    for episode in range(2):
+        _trajectory(eb / f"L1-B3-eb_ep{episode:03d}.npz")
+        _trajectory(er / f"L1-B3-er_ep{episode:03d}.npz")
+    _trajectory(ec / "L1-B3-ec_ep000.npz")
+
+    with pytest.raises(ValueError, match="not exactly paired"):
+        run_attribution(
+            [str(eb)],
+            [str(er)],
+            [str(ec)],
+            require_exact_pairing=True,
+            n_boot=10,
+        )

@@ -63,7 +63,6 @@ from experiments.robot.libero.physcog_trajectory import (
     collect_tracked_bodies,
 )
 from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceIntervention
-import experiments.robot.libero.physcog_objects  # noqa: F401 — registers GlassCup / SteelCup
 from experiments.robot.libero.run_libero_eval import (
     GenerateConfig as LiberoGenerateConfig,
     TASK_MAX_STEPS,
@@ -187,6 +186,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     save_trajectory: bool = True            # save per-episode EEF/object/action trajectories as .npz
     trajectory_dir: str = ""                # override output dir; default <rollout_dir>/trajectories
     trajectory_track_bodies: str = ""       # extra comma-separated body names to record beyond held/distractor/corridor
+    native_preflight_json: str = ""         # hard native prompt/BDDL/asset inventory manifest
     # L3-C temporal shared-space conflict (native moka-pot task)
     l3c_condition: str = "off"               # off | eb | er | ec
     l3c_obstacle_body: str = "chefmate_8_frypan_1_main"
@@ -208,6 +208,34 @@ def validate_physcog_config(cfg: PhysCogGenerateConfig) -> None:
         f"Invalid task suite: {cfg.task_suite_name}. "
         f"Available suites include: {sorted(benchmark_dict.keys())}"
     )
+    if cfg.native_preflight_json:
+        if cfg.bddl_file:
+            raise ValueError(
+                "--native_preflight_json cannot be combined with --bddl_file"
+            )
+        if cfg.task_description_override:
+            raise ValueError(
+                "--native_preflight_json forbids --task_description_override"
+            )
+        from experiments.robot.libero.tasks.validate_libero_native_preflight import (
+            load_passing_manifest,
+            verify_manifest_against_native_task,
+        )
+
+        manifest = load_passing_manifest(cfg.native_preflight_json)
+        task_ids = (
+            [int(value.strip()) for value in cfg.task_ids.split(",") if value.strip()]
+            if cfg.task_ids
+            else list(range(benchmark_dict[cfg.task_suite_name]().n_tasks))
+        )
+        suite = benchmark_dict[cfg.task_suite_name]()
+        for task_id in task_ids:
+            verify_manifest_against_native_task(
+                manifest,
+                cfg.task_suite_name,
+                task_id,
+                task=suite.get_task(task_id),
+            )
 
 
 def initialize_model(cfg: PhysCogGenerateConfig):
@@ -781,7 +809,30 @@ def run_task_with_safety(
         }
 
     task = task_suite.get_task(task_id)
+    native_manifest = None
+    if cfg.native_preflight_json:
+        from experiments.robot.libero.tasks.validate_libero_native_preflight import (
+            load_passing_manifest,
+            seed_native_layout,
+        )
+
+        native_manifest = load_passing_manifest(cfg.native_preflight_json)
+        # Fixture regions are sampled while LIBERO constructs the MuJoCo
+        # model, so reseed immediately before the evaluated native env exists.
+        seed_native_layout(int(native_manifest["layout_seed"]))
     env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res, render_gpu_device_id=cfg.render_gpu_device_id)
+    if native_manifest is not None:
+        from experiments.robot.libero.tasks.validate_libero_native_preflight import (
+            verify_manifest_against_native_task,
+        )
+
+        verify_manifest_against_native_task(
+            native_manifest,
+            cfg.task_suite_name,
+            task_id,
+            task=task,
+            env=env,
+        )
     policy_task_description = cfg.task_description_override or task_description
     initial_states, all_initial_states = _load_task_initial_states(
         cfg, task_suite, task_id, task_description, log_file
@@ -974,6 +1025,7 @@ def _save_episode_trajectory(
         "seed": cfg.seed,
         "safety_oracle": cfg.safety_oracle,
         "bddl_file": cfg.bddl_file,
+        "native_preflight_json": cfg.native_preflight_json or None,
         "num_steps_wait": cfg.num_steps_wait,
         "success": bool(success),
         "violated": bool(safety.violated),
@@ -1278,6 +1330,10 @@ def eval_physcog_libero_l1(cfg: PhysCogGenerateConfig) -> float:
 
     # Direct BDDL mode: bypass task_suite, run a single custom task file (e.g. L1-B-2, L2-B1 stove)
     if cfg.bddl_file:
+        # Custom object registration is deliberately lazy. Native-only runs
+        # never import or register project-local asset classes.
+        import experiments.robot.libero.physcog_objects  # noqa: F401
+
         log_message(f"BDDL file: {cfg.bddl_file}", log_file)
         task_description = (
             cfg.task_description_override

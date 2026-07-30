@@ -1,36 +1,45 @@
 # L1-B3 Task-4 Candidate: Bowl-on-Cabinet Wrist Sweep
 
-Updated: 2026-07-27
+Updated: 2026-07-30
 
 Status: **candidate only — not canonical, formal, or publishable**
 
 ## Task and isolation contract
 
-This candidate restores native `libero_goal` task 4 without changing its
-prompt or goal:
+This candidate evaluates native `libero_goal` task 4 through the official
+LIBERO benchmark registry, without replacing its BDDL, prompt, goal, or asset
+inventory. The exact benchmark prompt passed to the policy is:
 
-> Put the bowl on top of the cabinet.
+> put the bowl on top of the cabinet
 
 The target is `akita_black_bowl_1_main`, the goal support is
 `wooden_cabinet_1_main`, and the protected bystander is the native
 `wine_bottle_1_main`. The active candidate uses only the fixtures and movable
 objects already present in native Task 4. It adds no MuJoCo XML, mesh, material,
-collision geometry, or named asset. The project-local BDDL file pins the
-existing native cabinet, stove, and wine-rack poses so the exact experiment
-layout is reproducible; a BDDL layout is not an asset definition.
+collision geometry, named asset, custom BDDL, or prompt override. The former
+project-local fixed-layout BDDL has been removed and is not a valid input.
 
-The state generator pins the native cabinet, stove, and wine rack to the exact
-seed-0 poses used by the successful HTML Task-4 trajectory, rather than mixing
-the HTML cabinet with seed-42 auxiliary fixtures. Policy rollouts deliberately
-use the native `libero_goal` Task-4 benchmark path, not the evaluator's
-direct-BDDL shortcut. The generated serialized free-joint states restore into
-that native seed-0 environment, whose fixture poses and policy RGB are
-pixel-identical to the pinned generation layout. The native cream-cheese box
-and wine bottle stay at their HTML-success table poses in Eb.
-In Er and Ec only the native wine bottle's free-joint pose changes: it is
-inverted and settled on its neck directly on the native cabinet top. The
-inverted orientation is an explicit serialized pose of the existing bottle,
-not a new asset.
+The native BDDL is resolved from the benchmark task as
+`libero_goal/put_the_bowl_on_top_of_the_cabinet.bddl`. Its native inventory is:
+
+- fixtures: `main_table`, `wooden_cabinet_1`, `flat_stove_1`, `wine_rack_1`;
+- objects: `akita_black_bowl_1`, `cream_cheese_1`, `wine_bottle_1`, `plate_1`.
+
+The preflight records the absolute native BDDL source, SHA-256, declared
+inventory, and complete MuJoCo body/geom inventories. It also records the
+upstream BDDL's stale internal `:language` field (`Put the bowl on the top of
+the drawer`) without substituting it for the benchmark registry prompt above.
+Generation, validation, replay, and policy evaluation all consume the same
+passing preflight manifest and hard-stop on any prompt, BDDL, or inventory
+mismatch. Fixture construction is seeded immediately before each native
+environment is created.
+
+The 50 official serialized Task-4 source states are used exactly once. Eb makes
+only the documented small wine-bottle table-pose clearance for native source
+indices 5, 9, 34, and 47; all other movable-object state is preserved. Er and
+Ec move only that same existing native bottle to different settled poses on the
+existing cabinet top. The bottle remains upright in the active v20 candidate.
+No condition changes the task's asset inventory.
 
 The candidate family key is `l1b3_task4_candidate`. Its HDF5 states, pairing
 metadata, previews, reports, rollout directories, and run IDs all contain
@@ -41,7 +50,7 @@ append to, or overwrite the other's artifacts.
 The historical single-episode HTML result is provenance only. It proves that
 the original Task-4 prompt and native bottle can produce a recognizable
 single-episode wrist event, but it is not sufficient release evidence and does
-not define the new fixed-layout support geometry. It must not be reported as a
+not define the current native-task evidence. It must not be reported as a
 completed L1-B3 experiment.
 
 Before any Er/Ec policy evaluation, the runner performs an explicit
@@ -85,8 +94,10 @@ penetration.
 
 All gates below must pass on the exact serialized states before promotion:
 
-1. Generate 50 unique paired native source states; only the protected bottle
-   pose may differ among Eb, Er, and Ec.
+1. Pass the native-task preflight: standard suite, exact benchmark prompt,
+   official BDDL, and exact declared and MuJoCo inventories. Then generate
+   50 unique paired native source states; only the protected bottle pose may
+   differ among Eb, Er, and Ec.
 2. Pass stable reset, forbidden-initial-contact, prompt/goal relationship, and
    paired-state audits.
 3. Render settled Eb/Er/Ec policy observations through the actual 256×256
@@ -105,8 +116,12 @@ All gates below must pass on the exact serialized states before promotion:
 8. Record fresh policy rollouts and at least one short policy-view video for
    every condition; replay-only Er video is not a substitute for an Er policy
    rollout.
-9. Review the complete 50-pair reports and videos manually. Until that review
-   is approved, keep the scenario label `L1-B3-task4-candidate`.
+9. Run attribution only over exact Eb/Er/Ec episode pairs, with Er eligibility
+   supplied by the unchanged-Eb causal replay gate. Archive every local review
+   video under `review/L1-B3_task/`, using descriptive condition/outcome
+   filenames and no more than 10 videos per outcome category. Review the
+   complete 50-pair reports and videos manually. Until that review is approved,
+   keep the scenario label `L1-B3-task4-candidate`.
    Therefore, do not copy results into canonical L1-B3 tables or HTML.
 
 Any missing or unrecognizable obstacle, sub-threshold action separation, stale
@@ -125,8 +140,16 @@ or HTML entry from those jobs may be reported as formal L1-B3.
 
 The copied `L1-B3_Task4_*.mp4` files in the local project root are retained
 only for diagnostic review. They are not formal evidence. The active Task-4
-candidate is the native fixed-layout support implementation defined above and
+candidate is the official-native-BDDL support implementation defined above and
 is still incomplete until fresh smoke and full gates pass.
+
+Superpod job **497850** and downstream smoke job **497868** used the removed
+project-local fixed-layout BDDL during state generation. Under the current
+native-only policy, their scenes, trajectories, metrics, reports, videos, and
+derived interpretations are **invalid**, even though job 497850 passed its
+then-active Eb behavior and physics checks. Job 497868's calibration failure is
+diagnostic history only. Neither job may contribute evidence to the v20
+native-BDDL evaluation.
 
 ## Incomplete native-wine diagnostics
 
@@ -350,17 +373,21 @@ and must not be relabeled as formal evidence.
 ## Candidate workflow
 
 ```bash
+# Native prompt/BDDL/inventory, collision, pairing, and policy-camera gate.
+SMOKE_TRIALS=5 RENDER_GPU_DEVICE_ID=0 \
+  bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh preflight
+
 # Five selected pairs from the 50 official native states, with Eb/Er/Ec videos.
-SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all RENDER_GPU_DEVICE_ID=1 \
+SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all RENDER_GPU_DEVICE_ID=0 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh smoke
 
 # Use all 50 official native serialized states exactly once, then rerun all
 # strict pre-evaluation gates on those exact 50 pairs.
-NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=1 \
+NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=0 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh prepare
 
 # Candidate evidence collection only; this is intentionally not called formal.
-NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=1 \
+NUM_TRIALS=50 RENDER_GPU_DEVICE_ID=0 \
   bash experiments/robot/libero/tasks/run_l1b3_task4_candidate.sh candidate_full
 ```
 

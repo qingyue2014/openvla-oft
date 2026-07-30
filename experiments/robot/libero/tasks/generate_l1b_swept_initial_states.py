@@ -216,9 +216,13 @@ FAMILIES = {
         "obstacle_body": WINE_BOTTLE_BODY,
         "target_body": TARGET_BODY,
         "goal_support_body": "wooden_cabinet_1_main",
-        "bddl_file": "l1b3_task4_fixed_native_layout.bddl",
+        # Hard native-only contract: generation, calibration, validation,
+        # replay, and policy evaluation all resolve this task through the
+        # official LIBERO benchmark registry. No project-local BDDL is an
+        # active or retained task input.
+        "bddl_file": None,
         "native_assets_only": True,
-        "native_layout_only": True,
+        "require_native_preflight": True,
         "preserve_native_layout": True,
         "placement_mode": "supported_relative_goal",
         "eb_definition": (
@@ -249,8 +253,8 @@ FAMILIES = {
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "scene_contract": "l1b3_task4_upright_cabinet_candidate_v19",
-        "candidate_contract": "l1b3_task4_upright_cabinet_candidate_v19",
+        "scene_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v20",
+        "candidate_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v20",
         "model_runtime_contract": (
             "transformers-openvla-oft-bc339d9_tokenizers-0.19.1"
         ),
@@ -781,9 +785,32 @@ def generate(args) -> dict:
         raise ValueError("--risk_xyz and --control_xyz must be supplied together")
     if args.risk_xy is not None and args.risk_xyz is not None:
         raise ValueError("Use either XY or XYZ placement overrides, not both")
+    if spec.get("require_native_preflight") and not args.native_preflight_json:
+        raise RuntimeError(
+            f"{args.family} requires --native_preflight_json before generation"
+        )
     obstacle_body = spec["obstacle_body"]
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
+    native_manifest = None
+    if args.native_preflight_json:
+        from experiments.robot.libero.tasks.validate_libero_native_preflight import (
+            load_passing_manifest,
+            seed_native_layout,
+            verify_manifest_against_native_task,
+        )
+
+        native_manifest = load_passing_manifest(args.native_preflight_json)
+        verify_manifest_against_native_task(
+            native_manifest,
+            args.task_suite_name,
+            args.task_id,
+            task=task,
+        )
+        # LIBERO samples fixed-fixture layout while constructing the model.
+        # Match the seed used before the policy evaluator constructs its
+        # official native Task-4 environment.
+        seed_native_layout(args.seed)
     if spec.get("bddl_file"):
         bddl = str(Path(__file__).with_name(spec["bddl_file"]))
     else:
@@ -794,6 +821,14 @@ def generate(args) -> dict:
         camera_widths=args.render_size,
     )
     env.seed(args.seed)
+    if native_manifest is not None:
+        verify_manifest_against_native_task(
+            native_manifest,
+            args.task_suite_name,
+            args.task_id,
+            task=task,
+            env=env,
+        )
     native_states = suite.get_task_init_states(args.task_id)
     sampled_native_resets = bool(args.sample_native_resets)
     include_serialized_state_zero = bool(
@@ -1048,6 +1083,27 @@ def generate(args) -> dict:
         "task_suite": args.task_suite_name,
         "task_id": args.task_id,
         "task_language": task.language,
+        "native_preflight_json": args.native_preflight_json or None,
+        "native_bddl_source": (
+            native_manifest.get("native_bddl_source")
+            if native_manifest is not None
+            else None
+        ),
+        "native_bddl_sha256": (
+            native_manifest.get("native_bddl_sha256")
+            if native_manifest is not None
+            else None
+        ),
+        "native_asset_inventory_sha256": (
+            native_manifest.get("declared_asset_inventory_sha256")
+            if native_manifest is not None
+            else None
+        ),
+        "native_asset_inventory": (
+            native_manifest.get("declared_asset_inventory")
+            if native_manifest is not None
+            else None
+        ),
         "scene_contract": spec.get("scene_contract"),
         "geometry_contract": spec.get("geometry_contract"),
         "require_gripper_capture_lift": bool(
@@ -1111,6 +1167,14 @@ def main() -> None:
     parser.add_argument("--stability_steps", type=int, default=20)
     parser.add_argument("--max_attempts", type=int, default=1000)
     parser.add_argument("--render_size", type=int, default=128)
+    parser.add_argument(
+        "--native_preflight_json",
+        default="",
+        help=(
+            "Passing native-task manifest. When supplied, generation hard-stops "
+            "unless prompt, official BDDL, body, geom, and asset inventories match."
+        ),
+    )
     parser.add_argument(
         "--sample_native_resets",
         action="store_true",

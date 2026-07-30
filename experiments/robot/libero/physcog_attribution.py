@@ -49,6 +49,7 @@ import csv
 import glob
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -197,17 +198,29 @@ def _successful_or_all(episodes: List[Episode]) -> List[Episode]:
     return successful if len(successful) >= 2 else episodes
 
 
+def episode_pairing_key(path: str) -> str:
+    """Return a condition-independent episode key for paired trajectory files."""
+    basename = os.path.basename(path)
+    match = re.search(r"(?:^|_)ep(\d+)(?:\.npz)?$", basename)
+    return f"ep{int(match.group(1)):06d}" if match else basename
+
+
 def load_risk_eligibility_csv(path: str) -> set:
     """Load episode-level paired-replay eligibility from a scenario validator."""
     with open(path, newline="") as handle:
         rows = list(csv.DictReader(handle))
-    required = {"episode", "attribution_eligible"}
-    if not rows or not required.issubset(rows[0]):
+    if not rows or "episode" not in rows[0]:
         raise ValueError(
-            f"{path} must contain non-empty columns: {sorted(required)}"
+            f"{path} must contain a non-empty episode column"
+        )
+    if "attribution_eligible" not in rows[0]:
+        raise ValueError(
+            f"{path} must contain attribution_eligible from the paired replay gate"
         )
     return {
-        row["episode"] for row in rows if bool(int(row["attribution_eligible"]))
+        episode_pairing_key(row["episode"])
+        for row in rows
+        if bool(int(row["attribution_eligible"]))
     }
 
 
@@ -223,12 +236,38 @@ def run_attribution(
     risk_divergence_override: Optional[dict] = None,
     risk_violation_override: Optional[dict] = None,
     episode_allowlist: Optional[set] = None,
+    require_exact_pairing: bool = False,
+    native_preflight_manifest: Optional[dict] = None,
 ) -> dict:
     benign = load_condition(eb_dirs)
     risk_all = load_condition(er_dirs)
     null_risk = load_condition(ec_dirs) if ec_dirs else []
+    condition_episode_sets = {
+        "eb": {episode_pairing_key(ep.path) for ep in benign},
+        "er": {episode_pairing_key(ep.path) for ep in risk_all},
+        "ec": {episode_pairing_key(ep.path) for ep in null_risk},
+    }
+    paired_sets = [condition_episode_sets["eb"], condition_episode_sets["er"]]
+    if null_risk:
+        paired_sets.append(condition_episode_sets["ec"])
+    exact_pairing = bool(
+        paired_sets
+        and all(value == paired_sets[0] for value in paired_sets[1:])
+    )
+    if require_exact_pairing and not exact_pairing:
+        details = ", ".join(
+            f"{condition}={len(episodes)}"
+            for condition, episodes in condition_episode_sets.items()
+        )
+        raise ValueError(
+            "Eb/Er/Ec episode basenames are not exactly paired: " + details
+        )
     if episode_allowlist is not None:
-        keep = lambda ep: ep.path in episode_allowlist or os.path.basename(ep.path) in episode_allowlist
+        keep = lambda ep: (
+            ep.path in episode_allowlist
+            or os.path.basename(ep.path) in episode_allowlist
+            or episode_pairing_key(ep.path) in episode_allowlist
+        )
         benign = [ep for ep in benign if keep(ep)]
         risk_all = [ep for ep in risk_all if keep(ep)]
         null_risk = [ep for ep in null_risk if keep(ep)]
@@ -238,7 +277,11 @@ def run_attribution(
     else:
         risk = [
             ep for ep in risk_all
-            if ep.path in risk_eligible_episodes or os.path.basename(ep.path) in risk_eligible_episodes
+            if (
+                ep.path in risk_eligible_episodes
+                or os.path.basename(ep.path) in risk_eligible_episodes
+                or episode_pairing_key(ep.path) in risk_eligible_episodes
+            )
         ]
         included_ids = {id(ep) for ep in risk}
         excluded_risk = [ep for ep in risk_all if id(ep) not in included_ids]
@@ -307,6 +350,11 @@ def run_attribution(
         "n_risk_excluded": len(excluded_risk),
         "excluded_risk_paths": [ep.path for ep in excluded_risk],
         "n_null_risk": len(null_risk),
+        "exact_episode_pairing": exact_pairing,
+        "condition_episode_sets": {
+            key: sorted(value) for key, value in condition_episode_sets.items()
+        },
+        "native_task_contract": native_preflight_manifest or {},
         "risk_outcomes": {ep.path: ep.outcome for ep in risk},
         "null_risk_outcomes": {ep.path: ep.outcome for ep in null_risk},
         "risk_dist_to_reference": {ep.path: ep.dist_to_benign for ep in risk},
@@ -334,6 +382,7 @@ def format_report(result: dict, family_name: str = "") -> str:
         f"{result['benign_success_rate']:.3f}"
         + ("" if result["task_competent"] else "  **TASK COMPETENCE FAILURE — attribution unreliable**"),
         f"- Risk (Er) rollouts: {result['n_risk']}; null-risk (Ec) rollouts: {result['n_null_risk']}",
+        f"- Exact Eb/Er/Ec episode pairing: `{result['exact_episode_pairing']}`",
         f"- Divergence reference: {result['divergence_reference_name']} "
         f"({result['n_reference']} successful-or-all reference rollouts)",
         f"- Divergence threshold (DTW, calibrated from reference pairwise distances): "
@@ -343,6 +392,19 @@ def format_report(result: dict, family_name: str = "") -> str:
         lines.append(
             f"- Paired-replay eligibility: {result['n_risk']}/{result['n_risk_total']} Er episodes; "
             f"excluded {result['n_risk_excluded']} because unchanged Eb actions were already safe."
+        )
+    native_contract = result.get("native_task_contract") or {}
+    if native_contract:
+        lines.extend(
+            [
+                f"- Native task: `{native_contract.get('task_suite_name')}` "
+                f"task `{native_contract.get('task_id')}`",
+                f"- Exact native prompt: `{native_contract.get('task_language')}`",
+                f"- Native BDDL SHA-256: "
+                f"`{native_contract.get('native_bddl_sha256')}`",
+                f"- Native asset inventory SHA-256: "
+                f"`{native_contract.get('declared_asset_inventory_sha256')}`",
+            ]
         )
     if result["divergence_reference_condition"] == "ec":
         lines.append(
@@ -408,11 +470,28 @@ def main():
         default="",
         help="Optional paired-replay CSV with episode,attribution_eligible columns",
     )
+    parser.add_argument(
+        "--require_exact_pairing",
+        action="store_true",
+        help="Hard-stop unless Eb, Er, and Ec contain the same episode basenames.",
+    )
+    parser.add_argument(
+        "--native_preflight_json",
+        default="",
+        help="Passing native prompt/BDDL/asset contract recorded in the report.",
+    )
     parser.add_argument("--out", default="", help="Write the markdown report here (default: print only)")
     parser.add_argument("--json_out", default="", help="Optionally dump raw result arrays as JSON")
     args = parser.parse_args()
 
     eligible = load_risk_eligibility_csv(args.risk_eligibility_csv) if args.risk_eligibility_csv else None
+    native_manifest = None
+    if args.native_preflight_json:
+        from experiments.robot.libero.tasks.validate_libero_native_preflight import (
+            load_passing_manifest,
+        )
+
+        native_manifest = load_passing_manifest(args.native_preflight_json)
     result = run_attribution(
         args.eb, args.er, args.ec,
         percentile=args.percentile,
@@ -420,6 +499,8 @@ def main():
         n_boot=args.n_boot,
         divergence_reference_condition=args.divergence_reference_condition,
         risk_eligible_episodes=eligible,
+        require_exact_pairing=args.require_exact_pairing,
+        native_preflight_manifest=native_manifest,
     )
     report = format_report(result, args.family_name)
     print(report)

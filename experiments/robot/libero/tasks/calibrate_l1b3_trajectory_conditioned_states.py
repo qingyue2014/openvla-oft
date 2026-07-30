@@ -1051,6 +1051,10 @@ def calibrate(args: argparse.Namespace) -> str:
     if args.end_episode > 0 and args.end_episode <= args.start_episode:
         raise ValueError("--end_episode must be greater than --start_episode")
     spec = dict(FAMILIES[args.family])
+    if spec.get("require_native_preflight") and not args.native_preflight_json:
+        raise RuntimeError(
+            f"{args.family} requires --native_preflight_json before calibration"
+        )
     INTENDED_LINKS = tuple(
         spec.get("intended_link_bodies", ("robot0_link6", "robot0_link7"))
     )
@@ -1061,6 +1065,8 @@ def calibrate(args: argparse.Namespace) -> str:
     )
     obstacle = spec["obstacle_body"]
     target = spec["target_body"]
+    pairing_path = Path(args.pairing_json)
+    metadata = json.loads(pairing_path.read_text())
     eb_states = _load_states(Path(args.eb_states))
     fallback_er_states = _load_states(Path(args.er_states))
     ec_states = _load_states(Path(args.ec_states))
@@ -1088,6 +1094,22 @@ def calibrate(args: argparse.Namespace) -> str:
 
     suite = benchmark.get_benchmark_dict()[args.task_suite_name]()
     task = suite.get_task(args.task_id)
+    native_manifest = None
+    if args.native_preflight_json:
+        from experiments.robot.libero.tasks.validate_libero_native_preflight import (
+            load_passing_manifest,
+            seed_native_layout,
+            verify_manifest_against_native_task,
+        )
+
+        native_manifest = load_passing_manifest(args.native_preflight_json)
+        verify_manifest_against_native_task(
+            native_manifest,
+            args.task_suite_name,
+            args.task_id,
+            task=task,
+        )
+        seed_native_layout(int(metadata.get("seed", 42)))
     if spec.get("bddl_file"):
         bddl = str(Path(__file__).with_name(spec["bddl_file"]))
     else:
@@ -1103,6 +1125,14 @@ def calibrate(args: argparse.Namespace) -> str:
         has_offscreen_renderer=False,
         hard_reset=False,
     )
+    if native_manifest is not None:
+        verify_manifest_against_native_task(
+            native_manifest,
+            args.task_suite_name,
+            args.task_id,
+            task=task,
+            env=env,
+        )
     output_er_states = list(fallback_er_states)
     output_ec_states = list(ec_states)
     rows: list[dict] = []
@@ -2023,8 +2053,6 @@ def calibrate(args: argparse.Namespace) -> str:
 
     _write_calibration_csv(Path(args.out_csv), rows)
 
-    pairing_path = Path(args.pairing_json)
-    metadata = json.loads(pairing_path.read_text())
     for row in rows:
         pair = metadata["pairs"][int(row["episode_idx"])]
         pair["trajectory_conditioned_risk"] = bool(row["calibrated"])
@@ -2219,6 +2247,11 @@ def main() -> None:
     parser.add_argument(
         "--pairing_json",
         default="experiments/robot/libero/tasks/l1b3_native_arm_pairing.json",
+    )
+    parser.add_argument(
+        "--native_preflight_json",
+        default="",
+        help="Passing native task/prompt/BDDL/asset manifest.",
     )
     parser.add_argument("--task_suite_name", default="libero_goal")
     parser.add_argument("--task_id", type=int, default=8)

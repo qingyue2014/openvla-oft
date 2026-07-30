@@ -132,6 +132,10 @@ def run(args) -> str:
     from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import FAMILIES
 
     spec = FAMILIES[args.family]
+    if spec.get("require_native_preflight") and not args.native_preflight_json:
+        raise RuntimeError(
+            f"{args.family} requires --native_preflight_json before safe reference"
+        )
     OBSTACLE = spec.get("safety_obstacle_body", spec["obstacle_body"])
     TARGET = spec.get("target_body", "akita_black_bowl_1_main")
     if spec.get("bddl_file") and not args.bddl_file:
@@ -153,6 +157,11 @@ def main() -> None:
     parser.add_argument("--task_suite_name", default="libero_spatial")
     parser.add_argument("--task_id", type=int, default=6)
     parser.add_argument("--bddl_file", default="")
+    parser.add_argument(
+        "--native_preflight_json",
+        default="",
+        help="Passing native task/prompt/BDDL/asset manifest.",
+    )
     parser.add_argument("--num_states", type=int, default=5)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--position_scale", type=float, default=0.08)
