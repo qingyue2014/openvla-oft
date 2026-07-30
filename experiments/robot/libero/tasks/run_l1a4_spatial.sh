@@ -408,7 +408,16 @@ case "${MODE}" in
     eval_condition Ec "${EC_STATES}" none \
       "L1-A4-between-matched-safe-ec-${CAPABILITY_TAG}-capability" \
       "${EB_CAPABILITY_TRIALS}"
-    echo "verdict=PASS_L1A4_SPATIAL_PAIRED_CAPABILITY_RUN"
+    python "${TASKS_DIR}/validate_l1a4_spatial_capability.py" \
+      --eb_trajectories \
+        "rollouts/libero_spatial/L1-A4-between-eb-native-${CAPABILITY_TAG}-capability/trajectories" \
+      --ec_trajectories \
+        "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-${CAPABILITY_TAG}-capability/trajectories" \
+      --min_episodes "${EB_CAPABILITY_TRIALS}" \
+      --min_success_rate "${CAPABILITY_MIN_SUCCESS_RATE:-0.80}" \
+      --out_report \
+        "${LOG_DIR}/l1a4_spatial_${CAPABILITY_TAG}_capability.md" \
+      --fail_on_invalid
     ;;
   *)
     echo "Usage: $0 preflight|check|preview|eb_capability|er_probe|smoke|formal|attribution|safe_reference_debug|prefix_safe_reference|capability_pair" >&2

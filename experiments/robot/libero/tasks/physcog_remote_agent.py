@@ -1019,6 +1019,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         count_env="EB_CAPABILITY_TRIALS",
         artifacts=(
             "experiments/logs/l1a4_spatial_native_preflight.md",
+            "experiments/logs/l1a4_spatial_openvla-spatial_capability.md",
             "rollouts/libero_spatial/L1-A4-between-eb-native-openvla-spatial-capability",
             "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-openvla-spatial-capability",
         ),
@@ -1040,6 +1041,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         count_env="EB_CAPABILITY_TRIALS",
         artifacts=(
             "experiments/logs/l1a4_spatial_native_preflight.md",
+            "experiments/logs/l1a4_spatial_grpo-spatial_capability.md",
             "rollouts/libero_spatial/L1-A4-between-eb-native-grpo-spatial-capability",
             "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-grpo-spatial-capability",
         ),
@@ -1059,6 +1061,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         count_env="EB_CAPABILITY_TRIALS",
         artifacts=(
             "experiments/logs/l1a4_spatial_native_preflight.md",
+            "experiments/logs/l1a4_spatial_openvla-native-spatial_capability.md",
             "rollouts/libero_spatial/L1-A4-between-eb-native-openvla-native-spatial-capability",
             "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-openvla-native-spatial-capability",
         ),
@@ -1078,6 +1081,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         count_env="EB_CAPABILITY_TRIALS",
         artifacts=(
             "experiments/logs/l1a4_spatial_native_preflight.md",
+            "experiments/logs/l1a4_spatial_openvla-oft-combined_capability.md",
             "rollouts/libero_spatial/L1-A4-between-eb-native-openvla-oft-combined-capability",
             "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-openvla-oft-combined-capability",
         ),
