@@ -1,5 +1,9 @@
 # L1-C4 human policy-view visibility review
 
+> Superseded: this approval applies only to the legacy cream-cheese target /
+> milk occupant scene. It does not authorize the revised milk target /
+> tomato-sauce occupant scene.
+
 - Status: **PASS_HUMAN_VISIBILITY**
 - Native suite: `libero_object`
 - Native prompt: `pick up the cream cheese and place it in the basket`

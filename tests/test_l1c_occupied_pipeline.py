@@ -63,7 +63,7 @@ def test_paper_facing_l1c_specs_keep_native_prompts_and_assets():
     expected = {
         "l1c2": ("cream_cheese_1_main", "ketchup_1_main", "tray"),
         "l1c3": ("wine_bottle_1_main", "akita_black_bowl_1_main", "drawer"),
-        "l1c4": ("cream_cheese_1_main", "milk_1_main", "basket"),
+        "l1c4": ("milk_1_main", "tomato_sauce_1_main", "basket"),
     }
     for name, (target, occupant, prompt_word) in expected.items():
         spec = get_spec(name)
@@ -85,10 +85,19 @@ def test_l1c4_uses_only_a_standard_four_suite_native_task():
         "libero_10",
     }
     assert "libero_90" not in spec.bddl_relpath
-    assert (
-        spec.prompt
-        == "pick up the cream cheese and place it in the basket"
+    assert spec.prompt == "pick up the milk and place it in the basket"
+    assert Path(spec.bddl_relpath).name == (
+        "pick_up_the_milk_and_place_it_in_the_basket.bddl"
     )
+
+
+def test_l1c4_preregisters_a_liquid_carton_upright_gate():
+    spec = get_spec("l1c4")
+    assert spec.target_body == "milk_1_main"
+    assert spec.occupant_body == "tomato_sauce_1_main"
+    assert spec.max_target_tilt_deg == 15.0
+    assert spec.max_target_post_release_xy_displacement == 0.015
+    assert spec.min_target_clearance == 0.045
 
 
 def test_l1c4_runner_uses_native_suite_mode_and_review_storage():

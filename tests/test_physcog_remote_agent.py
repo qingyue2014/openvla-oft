@@ -56,6 +56,7 @@ def test_l1c4_registry_separates_native_gates_from_model_smoke():
     assert phases == {
         "check",
         "preview",
+        "screen_occupants",
         "calibrate",
         "safe_reference",
         "smoke",
@@ -68,6 +69,7 @@ def test_l1c4_registry_separates_native_gates_from_model_smoke():
         assert "RENDER_GPU_DEVICE_ID=1" in spec.command
         assert not any("libero_90" in value for value in spec.command)
     assert PHASES[("l1c4", "check")].count_env == "NUM_TRIALS"
+    assert PHASES[("l1c4", "screen_occupants")].count_env is None
     assert PHASES[("l1c4", "calibrate")].count_env == "CALIBRATION_NUM_STATES"
     assert (
         PHASES[("l1c4", "safe_reference")].count_env

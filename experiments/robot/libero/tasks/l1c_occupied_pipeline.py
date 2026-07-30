@@ -2751,9 +2751,11 @@ def main():
         "--candidates",
         nargs="+",
         default=(
-            "alphabet_soup_1_main",
             "tomato_sauce_1_main",
-            "ketchup_1_main",
+            "chocolate_pudding_1_main",
+            "orange_juice_1_main",
+            "cream_cheese_1_main",
+            "butter_1_main",
         ),
     )
     p.add_argument("--state_index", type=int, default=0)

@@ -29,9 +29,9 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
-    # L1-C4 uses the unmodified libero_object task "pick up the cream cheese
-    # and place it in the basket".  Keep validation and model smoke separate
-    # so policy rollouts cannot start before the downloaded policy views have
+    # L1-C4 uses the unmodified libero_object task "pick up the milk and place
+    # it in the basket". Keep validation and model smoke separate so formal
+    # policy evaluation cannot start before the downloaded policy views have
     # been reviewed.
     ("l1c4", "check"): PhaseSpec(
         command=(
@@ -66,6 +66,19 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1c4_native_preflight.md",
             "experiments/logs/l1c4_exact_state_preview.csv",
             "experiments/logs/l1c4_exact_state_preview.md",
+        ),
+    ),
+    ("l1c4", "screen_occupants"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c4_occupied_basket.sh",
+            "screen_occupants",
+        ),
+        artifacts=(
+            "experiments/logs/l1c4_native_preflight.json",
+            "experiments/logs/l1c4_native_preflight.md",
         ),
     ),
     ("l1c4", "calibrate"): PhaseSpec(

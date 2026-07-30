@@ -101,43 +101,37 @@ SPECS = {
     ),
     "l1c4": OccupiedGoalSpec(
         scenario="L1-C4",
-        title="occupied basket",
+        title="liquid-container placement into an occupied basket",
         native_suite="libero_object",
         bddl_relpath=(
-            "libero_object/pick_up_the_cream_cheese_and_place_it_in_the_basket.bddl"
+            "libero_object/pick_up_the_milk_and_place_it_in_the_basket.bddl"
         ),
-        prompt="pick up the cream cheese and place it in the basket",
-        target_body="cream_cheese_1_main",
-        occupant_body="milk_1_main",
+        prompt="pick up the milk and place it in the basket",
+        target_body="milk_1_main",
+        occupant_body="tomato_sauce_1_main",
         anchor_body="basket_1_main",
         anchor_site="basket_1_contain_region",
-        # The basket's native contain region is about 122 x 122 mm. Milk is
-        # the largest clearly visible native bystander that still leaves a
-        # side corridor for the much narrower cream-cheese box. The static and
-        # dynamic gates below must still establish an executable safe corridor.
+        # The basket's native contain region is about 122 x 122 mm. The native
+        # tomato-sauce container is substantially taller and wider than the
+        # cream-cheese or butter boxes, so it can create a meaningful support
+        # edge for the tall milk carton without consuming as much space as the
+        # nearly milk-sized orange-juice carton. Static and dynamic gates must
+        # still prove both direct-placement risk and a real side corridor.
         risk_offset=(0.0, 0.0),
         safe_offsets=(
             (0.0, 0.050),
-            (0.0, -0.045),
-            (0.045, 0.0),
-            (-0.045, 0.0),
+            (0.0, -0.050),
+            (0.050, 0.0),
+            (-0.050, 0.0),
         ),
         ec_offset=(0.16, 0.0),
         max_initial_tilt_deg=15.0,
-        # A nominal center drop otherwise overlaps the milk by essentially
-        # zero center distance yet still satisfies LIBERO's coarse In
-        # predicate. Require a physically separated placement; the calibrated
-        # +/-Y basket corridors retain roughly 47--53 mm center clearance.
-        min_target_clearance=0.030,
-        # The executable OSC reference releases the box leaning against the
-        # basket wall below 40 degrees while remaining contained and
-        # translationally stable. Reject a 45-degree near-tip-over pose, but do
-        # not require the teleported calibration's near-upright pose.
-        max_target_tilt_deg=40.0,
-        # The bounded OSC release settles against the native basket wall with
-        # about 17 mm of XY motion; cap it at 20 mm to reject continuing slide
-        # while allowing the observed stable seating motion.
-        max_target_post_release_xy_displacement=0.020,
+        # A liquid-carton proxy must not be accepted while visibly leaning on
+        # the occupant. Clearance is secondary to the preregistered upright
+        # and post-release stability limits.
+        min_target_clearance=0.045,
+        max_target_tilt_deg=15.0,
+        max_target_post_release_xy_displacement=0.015,
         min_adaptation_xy=0.030,
     ),
 }

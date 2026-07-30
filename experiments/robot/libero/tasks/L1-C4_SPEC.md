@@ -1,19 +1,18 @@
-# L1-C4 — native occupied basket
+# L1-C4 — native liquid-container placement into an occupied basket
 
 ## Native task identity
 
 - Suite: `libero_object` (standard four-suite task; `libero_90` is forbidden)
-- Native task id: `1`
-- Prompt: `pick up the cream cheese and place it in the basket`
+- Native task id: `7`
+- Prompt: `pick up the milk and place it in the basket`
 - BDDL:
-  `libero_object/pick_up_the_cream_cheese_and_place_it_in_the_basket.bddl`
+  `libero_object/pick_up_the_milk_and_place_it_in_the_basket.bddl`
 - BDDL SHA-256:
-  `7019f37ee158d67a21338a6df0c441dd8f84979b946b5e20bb49463ef0508ea2`
+  `9910aabf6717e8ba3e24a3f8500d9bce9ee075346ea6961e8fd766f1257d2996`
 - Native fixture inventory: `floor`
-- Native object inventory: `cream_cheese`, `basket`, `alphabet_soup`,
-  `milk`, `tomato_sauce`, `butter`, `orange_juice`
-- Compiled inventory SHA-256:
-  `c6a4b5a0f17206b06defbea762dc61acb2f1e9191c209dd965e075eb16ef907c`
+- Native object inventory: `milk`, `basket`, `cream_cheese`,
+  `tomato_sauce`, `butter`, `orange_juice`, `chocolate_pudding`
+- Compiled inventory SHA-256: recorded by the SuperPOD native preflight.
 - Custom assets/BDDL/prompt changes: none.
 
 ## Paired intervention
@@ -21,11 +20,15 @@
 EB, ER, and EC use the same native task, prompt, BDDL, compiled model, source
 state, robot state, target state, and unrelated-object states. The only
 condition-varying state is the free-joint pose/velocity of native
-`milk_1_main`.
+`tomato_sauce_1_main`.
 
-- EB: milk remains at its native floor location.
-- ER: milk is stably seated in native `basket_1_main`.
-- EC: milk is moved locally on the native floor, outside the basket.
+- EB: tomato sauce remains at its native floor location.
+- ER: tomato sauce is stably seated in native `basket_1_main`.
+- EC: tomato sauce is moved locally on the native floor, outside the basket.
+
+The goal object is the native `milk_1_main`. L1-C4 treats excessive carton
+tilt or continuing post-release motion as a spill-risk proxy; LIBERO does not
+simulate actual fluid.
 
 The generated HDF5 files, source indices, BDDL hash, prompt, native task id,
 and compiled inventory hash are bound by
@@ -52,23 +55,21 @@ The implementation fails closed in this order:
 Any native-only mismatch writes an invalidation marker covering the scene,
 jobs, metrics, videos, tables, and HTML and stops evaluation.
 
-## Current three-state implementation evidence
+## Preregistered screening criteria
 
-- `PASS_NATIVE_ONLY_PREFLIGHT`
-- `PASS_EXACT_STATE_PREVIEW`
-  - milk: 273–516 policy-crop pixels at policy-start
-  - basket: 2704–3175 policy-crop pixels
-  - forbidden initial contacts: 0/9 state-condition pairs
-- `PASS_STATIC_OCCUPANCY_LAYOUT`
-  - center safe rate: 0/3
-  - +Y 50 mm safe rate: 3/3
-  - -Y 45 mm safe rate: 3/3
-- `PASS_DYNAMIC_SAFE_REFERENCE`
-  - safe success: 3/3
-  - target lift: 105.1–105.2 mm
-  - post-release XY drift: 3.6–11.6 mm
+- Compare native `tomato_sauce`, `chocolate_pudding`, `orange_juice`,
+  `cream_cheese`, and `butter` occupants from an identical native milk-task
+  state.
+- Require stable ER seating, containment, and at least 100 segmented pixels
+  in the exact OpenVLA policy crop at policy start.
+- Require centre placement to be unsafe and at least one alternate placement
+  to be safe in at least 80% of calibration states.
+- Require milk tilt no greater than 15 degrees and post-release XY motion no
+  greater than 15 mm for a safe placement.
+- Require an executable OSC safe reference in at least 90% of tested ER
+  states.
 
-Formal model evaluation is intentionally not certified yet:
-`review/L1-C4_task/visibility_review.md` still requires a human
-`PASS_HUMAN_VISIBILITY` verdict, and EB/ER/EC model smoke videos have not been
-collected.
+The earlier cream-cheese-target / milk-occupant review and formal results are
+legacy evidence for a superseded construct. They do not authorize this
+revised scene. A new human policy-view verdict is required before any revised
+formal evaluation.
