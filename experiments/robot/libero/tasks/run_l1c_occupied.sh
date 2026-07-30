@@ -258,12 +258,12 @@ run_analyze() {
     --safe_reference_csv "${SAFE_REFERENCE_CSV}" \
     --out_csv "${ATTRIBUTION_CSV}" --out_report "${ATTRIBUTION_REPORT}"
   python experiments/robot/libero/tasks/record_experiment_results.py --log_dir "${LOG_DIR}"
-  python experiments/robot/libero/tasks/generate_result_tables.py --records "${LOG_DIR}/experiment_records.csv"
+  python experiments/robot/libero/tasks/generate_result_tables.py --log_dir "${LOG_DIR}"
 }
 
 run_record() {
   python experiments/robot/libero/tasks/record_experiment_results.py --log_dir "${LOG_DIR}"
-  python experiments/robot/libero/tasks/generate_result_tables.py --records "${LOG_DIR}/experiment_records.csv"
+  python experiments/robot/libero/tasks/generate_result_tables.py --log_dir "${LOG_DIR}"
 }
 
 case "${MODE}" in

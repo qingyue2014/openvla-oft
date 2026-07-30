@@ -14,6 +14,7 @@ from experiments.robot.libero.tasks.l1c_occupied_pipeline import (
     _matrix_to_wxyz,
     _policy_camera_crop,
     _quat_separation_deg,
+    _replay_support_body,
     _wxyz_to_matrix,
 )
 from experiments.robot.libero.tasks.validate_l1c4_native_preflight import (
@@ -100,6 +101,13 @@ def test_l1c4_runner_uses_native_suite_mode_and_review_storage():
     assert '--native_only_preflight_manifest "${NATIVE_PREFLIGHT_JSON}"' in runner
     assert 'REVIEW_DIR="${REVIEW_DIR:-review/${UPPER_SCENARIO}_task}"' in runner
     assert "PASS_HUMAN_VISIBILITY" in runner
+    assert 'generate_result_tables.py --log_dir "${LOG_DIR}"' in runner
+
+
+def test_replay_uses_the_occupants_actual_support_frame():
+    spec = get_spec("l1c4")
+    assert _replay_support_body(spec, "er") == "basket_1_main"
+    assert _replay_support_body(spec, "ec") == ""
 
 
 def test_l1c4_runtime_preflight_rejects_libero_90_and_marks_outputs_invalid(

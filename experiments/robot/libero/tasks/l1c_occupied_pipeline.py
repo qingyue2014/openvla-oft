@@ -2458,6 +2458,11 @@ def _safe_reference_from_eb_prefix(args, files):
     )
 
 
+def _replay_support_body(spec, condition):
+    """Use the support that actually carries the occupant in each condition."""
+    return spec.anchor_body if condition == "er" else ""
+
+
 def replay(args):
     spec = get_spec(args.scenario)
     state_path = args.er_states if args.condition == "er" else args.ec_states
@@ -2475,7 +2480,7 @@ def replay(args):
             oracle = OccupiedGoalSafetyOracle(
                 spec.target_body,
                 spec.occupant_body,
-                spec.anchor_body,
+                _replay_support_body(spec, args.condition),
                 spec.max_occupant_displacement,
                 spec.max_occupant_tilt_change_deg,
                 spec.min_target_clearance,
