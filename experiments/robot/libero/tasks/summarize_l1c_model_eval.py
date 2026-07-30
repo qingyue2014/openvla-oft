@@ -102,6 +102,12 @@ def _condition_metrics(rows: list[dict]) -> dict:
     }
 
 
+def _contains(path: Path | None, token: str) -> bool | None:
+    if path is None:
+        return None
+    return token in path.read_text(encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--scenario", choices=("l1c1", "l1c2", "l1c3"), required=True)
@@ -117,6 +123,8 @@ def main() -> None:
     parser.add_argument("--source_revision", required=True)
     parser.add_argument("--calibration_report", type=Path, required=True)
     parser.add_argument("--safe_reference_report", type=Path, required=True)
+    parser.add_argument("--competence_report", type=Path)
+    parser.add_argument("--attribution_report", type=Path)
     parser.add_argument("--out_json", type=Path, required=True)
     parser.add_argument("--out_report", type=Path, required=True)
     parser.add_argument("--out_manifest", type=Path, required=True)
@@ -124,12 +132,40 @@ def main() -> None:
 
     indexes = _assignments(args.index)
     states = _assignments(args.state)
+    calibration_pass = any(
+        _contains(args.calibration_report, token)
+        for token in (
+            "PASS_STACK_PHYSICALLY_FEASIBLE",
+            "PASS_STATIC_OCCUPANCY_LAYOUT",
+        )
+    )
+    safe_reference_pass = bool(
+        _contains(args.safe_reference_report, "PASS_DYNAMIC_SAFE_REFERENCE")
+    )
+    competence_pass = _contains(args.competence_report, "PASS_EB_COMPETENCE")
+    attribution_ready = _contains(
+        args.attribution_report, "BENCHMARK_READY_FOR_ATTRIBUTION"
+    )
+    benchmark_ready = bool(
+        calibration_pass
+        and safe_reference_pass
+        and competence_pass is not False
+        and attribution_ready is not False
+    )
+    validity = {
+        "benchmark_ready": benchmark_ready,
+        "calibration_pass": calibration_pass,
+        "dynamic_safe_reference_pass": safe_reference_pass,
+        "eb_competence_pass": competence_pass,
+        "attribution_ready": attribution_ready,
+    }
     results = {
         "scenario": args.scenario,
         "model_family": args.model_family,
         "evaluation_kind": args.evaluation_kind,
         "checkpoint": str(args.checkpoint),
         "episodes_per_condition": args.episodes,
+        "validity": validity,
         "conditions": {
             condition: _condition_metrics(
                 _load_index(indexes[condition], args.episodes)
@@ -157,6 +193,12 @@ def main() -> None:
         "safe_reference_report": str(args.safe_reference_report),
         "safe_reference_report_sha256": _sha256(args.safe_reference_report),
     }
+    if args.competence_report is not None:
+        manifest["competence_report"] = str(args.competence_report)
+        manifest["competence_report_sha256"] = _sha256(args.competence_report)
+    if args.attribution_report is not None:
+        manifest["attribution_report"] = str(args.attribution_report)
+        manifest["attribution_report_sha256"] = _sha256(args.attribution_report)
 
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(
@@ -170,8 +212,14 @@ def main() -> None:
         "",
         f"- Checkpoint: `{args.checkpoint}`",
         f"- Episodes per condition: `{args.episodes}`",
-        "- Scene calibration: `PASS`",
-        "- Dynamic safe reference: `PASS`",
+        f"- Benchmark validity: `{'READY' if benchmark_ready else 'INCOMPLETE'}`",
+        f"- Scene calibration: `{'PASS' if calibration_pass else 'FAIL'}`",
+        f"- Dynamic safe reference: `{'PASS' if safe_reference_pass else 'FAIL'}`",
+        (
+            f"- Eb competence: `{'PASS' if competence_pass else 'FAIL'}`"
+            if competence_pass is not None
+            else "- Eb competence: `not supplied`"
+        ),
         "",
         "| Condition | Task success | Violations | Safe success | Collapse |",
         "|---|---:|---:|---:|---:|",

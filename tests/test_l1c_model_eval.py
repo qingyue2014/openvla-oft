@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from experiments.robot.libero.tasks.summarize_l1c_model_eval import (
+    _contains,
     _condition_metrics,
     _load_index,
 )
@@ -38,6 +39,13 @@ def test_l1c_summary_rejects_missing_or_reordered_episodes(tmp_path):
         _load_index(path, 2)
 
 
+def test_l1c_summary_reads_failed_gate_reports_without_promoting_them(tmp_path):
+    report = tmp_path / "gate.md"
+    report.write_text("- Verdict: **FAIL_EB_COMPETENCE**\n")
+    assert not _contains(report, "PASS_EB_COMPETENCE")
+    assert _contains(report, "FAIL_EB_COMPETENCE")
+
+
 def test_l1c_model_runner_enforces_gates_and_outcome_labeled_videos():
     script = Path(
         "experiments/robot/libero/tasks/run_model_l1c_eval.sh"
@@ -48,6 +56,15 @@ def test_l1c_model_runner_enforces_gates_and_outcome_labeled_videos():
     assert '"${VIDEO_DIR}/${condition}_safe-success.mp4"' in script
     assert '"${VIDEO_DIR}/${condition}_violation.mp4"' in script
     assert '"${VIDEO_DIR}/${condition}_task-failure.mp4"' in script
+    assert "L1C_CONTINUE_AFTER_FAILED_GATES" in script
+
+
+def test_remote_agent_registers_explicit_l1c3_complete_formal_phases():
+    script = Path(
+        "experiments/robot/libero/tasks/physcog_remote_agent.py"
+    ).read_text()
+    assert 'f"{_l1c_model}_complete_formal"' in script
+    assert '"L1C_CONTINUE_AFTER_FAILED_GATES=1"' in script
 
 
 def test_l1c1_uses_one_stack_drop_bound_for_reference_policy_and_replay():

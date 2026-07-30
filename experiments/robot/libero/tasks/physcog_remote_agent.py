@@ -855,8 +855,14 @@ def _l1c_model_artifacts(
     return shared + (
         f"experiments/logs/{scenario}_calibration.md",
         f"experiments/logs/{scenario}_calibration.csv",
+        f"experiments/logs/{scenario}_eb_competence.md",
+        f"experiments/logs/{scenario}_eb_competence.csv",
         f"experiments/logs/{scenario}_safe_reference.md",
         f"experiments/logs/{scenario}_safe_reference.csv",
+        f"experiments/logs/{scenario}_eb_to_er_replay.md",
+        f"experiments/logs/{scenario}_eb_to_er_replay.csv",
+        f"experiments/logs/{scenario}_eb_to_ec_replay.md",
+        f"experiments/logs/{scenario}_eb_to_ec_replay.csv",
         f"experiments/logs/{scenario}_attribution.md",
         f"experiments/logs/{scenario}_attribution.csv",
         f"experiments/robot/libero/tasks/{scenario}_eb_states.hdf5",
@@ -890,6 +896,24 @@ for _l1c_scenario in ("l1c1", "l1c2", "l1c3"):
                 ),
                 artifacts=_l1c_model_artifacts(
                     _l1c_scenario, _l1c_model, _l1c_kind
+                ),
+            )
+        if _l1c_scenario == "l1c3":
+            PHASES[(_l1c_scenario, f"{_l1c_model}_complete_formal")] = PhaseSpec(
+                command=(
+                    "env",
+                    "L1C_CONTINUE_AFTER_FAILED_GATES=1",
+                    "RENDER_GPU_DEVICE_ID=1",
+                    "SAVE_VIDEO_MODE=all",
+                    "bash",
+                    "experiments/robot/libero/tasks/run_model_l1c_eval.sh",
+                    _l1c_model,
+                    _l1c_scenario,
+                    "formal",
+                ),
+                count_env="L1C_FORMAL_TRIALS",
+                artifacts=_l1c_model_artifacts(
+                    _l1c_scenario, _l1c_model, "formal"
                 ),
             )
 

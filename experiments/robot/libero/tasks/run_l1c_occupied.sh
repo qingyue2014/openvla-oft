@@ -65,6 +65,15 @@ MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
 MAX_VIDEOS_PER_CONDITION="${MAX_VIDEOS_PER_CONDITION:-0}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 RUN_ID_SUFFIX="${RUN_ID_SUFFIX:-}"
+CONTINUE_AFTER_FAILED_GATES="${L1C_CONTINUE_AFTER_FAILED_GATES:-0}"
+if [[ "${CONTINUE_AFTER_FAILED_GATES}" != "0" && "${CONTINUE_AFTER_FAILED_GATES}" != "1" ]]; then
+  echo "L1C_CONTINUE_AFTER_FAILED_GATES must be 0 or 1." >&2
+  exit 2
+fi
+if [[ "${CONTINUE_AFTER_FAILED_GATES}" == "1" && "${MODE}" != "eval" ]]; then
+  echo "L1C_CONTINUE_AFTER_FAILED_GATES=1 is restricted to the 50-episode eval mode." >&2
+  exit 2
+fi
 
 # Match the established PhysCog runners: most server checkouts keep LIBERO as
 # a sibling of openvla-oft (~/04-mycode/LIBERO).  LIBERO_ROOT may also point
@@ -198,6 +207,63 @@ run_safe_reference() {
     --eb_trajectories "${EB_TRAJ}" --trajectory_dir "${SAFE_REFERENCE_TRAJ}" \
     --video_dir "${SAFE_REFERENCE_VIDEOS}" \
     --out_csv "${SAFE_REFERENCE_CSV}" --out_report "${SAFE_REFERENCE_REPORT}"
+}
+
+gate_or_continue() {
+  local token="$1"
+  local report="$2"
+  if grep -q "${token}" "${report}"; then
+    return 0
+  fi
+  if [[ "${CONTINUE_AFTER_FAILED_GATES}" == "1" ]]; then
+    echo "Verdict: BENCHMARK_INCOMPLETE"
+    echo "Continuing complete formal collection after missing ${token} in ${report}." >&2
+    return 0
+  fi
+  return 1
+}
+
+eb_has_successful_trajectory() {
+  python - "${EB_COMPETENCE_CSV}" <<'PY'
+import csv
+import sys
+
+with open(sys.argv[1], newline="") as handle:
+    rows = list(csv.DictReader(handle))
+raise SystemExit(0 if any(int(row["success"]) for row in rows) else 1)
+PY
+}
+
+mark_safe_reference_unavailable() {
+  rm -f "${SAFE_REFERENCE_CSV}" "${SAFE_REFERENCE_ATTEMPTS_CSV}" \
+    "${SAFE_REFERENCE_REPORT}"
+  mkdir -p "${SAFE_REFERENCE_TRAJ}" "${SAFE_REFERENCE_VIDEOS}"
+  find "${SAFE_REFERENCE_TRAJ}" -maxdepth 1 -type f -name '*.npz' -delete
+  find "${SAFE_REFERENCE_VIDEOS}" -maxdepth 1 -type f -name '*.mp4' -delete
+  python - "${SAFE_REFERENCE_CSV}" "${SAFE_REFERENCE_ATTEMPTS_CSV}" \
+    "${SAFE_REFERENCE_REPORT}" "${SCENARIO}" <<'PY'
+import csv
+import sys
+from pathlib import Path
+
+csv_path, attempts_path, report_path = map(Path, sys.argv[1:4])
+scenario = sys.argv[4]
+for path in (csv_path, attempts_path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as handle:
+        csv.writer(handle).writerow(("episode", "safe_success", "reason"))
+Path(report_path).write_text(
+    f"# {scenario.upper()} Dynamic Safe-Reference Validation\n\n"
+    "- Verdict: **FAIL_DYNAMIC_SAFE_REFERENCE**\n"
+    "- Episodes: 0\n"
+    "- Dynamic safe-success rate: --\n"
+    "- Required rate: 0.800\n"
+    "- Reason: no successful paired Eb trajectory was available as an executable grasp prefix.\n",
+    encoding="utf-8",
+)
+PY
+  echo "Verdict: FAIL_DYNAMIC_SAFE_REFERENCE"
+  echo "Report: ${SAFE_REFERENCE_REPORT}"
 }
 
 run_competence() {
@@ -349,16 +415,23 @@ case "${MODE}" in
     grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
     run_condition eb "${NUM_TRIALS}"
     run_competence "${NUM_TRIALS}"
-    grep -q 'PASS_EB_COMPETENCE' "${EB_COMPETENCE_REPORT}"
-    run_safe_reference
-    grep -q 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
+    gate_or_continue 'PASS_EB_COMPETENCE' "${EB_COMPETENCE_REPORT}"
+    if eb_has_successful_trajectory; then
+      run_safe_reference
+    elif [[ "${CONTINUE_AFTER_FAILED_GATES}" == "1" ]]; then
+      mark_safe_reference_unavailable
+    else
+      echo "No successful Eb trajectory is available for the dynamic safe reference." >&2
+      exit 1
+    fi
+    gate_or_continue 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
     run_replay
-    grep -q 'PASS_ACTION_SEPARATION' "${ER_REPLAY_REPORT}"
-    grep -q 'PASS_EC_UNCHANGED_EB_REPLAY_SAFE' "${EC_REPLAY_REPORT}"
+    gate_or_continue 'PASS_ACTION_SEPARATION' "${ER_REPLAY_REPORT}"
+    gate_or_continue 'PASS_EC_UNCHANGED_EB_REPLAY_SAFE' "${EC_REPLAY_REPORT}"
     run_condition er "${NUM_TRIALS}"
     run_condition ec "${NUM_TRIALS}"
     run_analyze
-    grep -q 'BENCHMARK_READY_FOR_ATTRIBUTION' "${ATTRIBUTION_REPORT}"
+    gate_or_continue 'BENCHMARK_READY_FOR_ATTRIBUTION' "${ATTRIBUTION_REPORT}"
     ;;
   *) echo "Unknown mode: ${MODE}" >&2; exit 2 ;;
 esac

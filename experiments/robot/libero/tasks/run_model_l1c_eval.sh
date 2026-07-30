@@ -4,6 +4,7 @@ set -euo pipefail
 MODEL="${1:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal}"
 SCENARIO="${2:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal}"
 RUN_KIND="${3:?usage: run_model_l1c_eval.sh pi05|cosmos|gr00t_n16 l1c1|l1c2|l1c3 smoke|formal}"
+CONTINUE_AFTER_FAILED_GATES="${L1C_CONTINUE_AFTER_FAILED_GATES:-0}"
 case "${MODEL}" in
   pi05|cosmos|gr00t_n16) ;;
   *) echo "Unsupported model: ${MODEL}" >&2; exit 2 ;;
@@ -29,6 +30,10 @@ if [[ "${RUN_KIND}" == "smoke" && "${COUNT}" -ne 5 ]]; then
 fi
 if [[ "${RUN_KIND}" == "formal" && "${COUNT}" -ne 50 ]]; then
   echo "Registered L1-C formal evaluation requires exactly 50 episodes." >&2
+  exit 2
+fi
+if [[ "${CONTINUE_AFTER_FAILED_GATES}" == "1" && ( "${RUN_KIND}" != "formal" || "${SCENARIO}" != "l1c3" ) ]]; then
+  echo "Complete collection after failed gates is restricted to formal L1-C3." >&2
   exit 2
 fi
 
@@ -303,6 +308,7 @@ else
   STATE_EC="${TASKS_DIR}/${SCENARIO}_ec_states.hdf5"
   CALIBRATION_REPORT="${LOG_DIR}/${SCENARIO}_calibration.md"
   SAFE_REFERENCE_REPORT="${LOG_DIR}/${SCENARIO}_safe_reference.md"
+  COMPETENCE_REPORT="${LOG_DIR}/${SCENARIO}_eb_competence.md"
   ATTRIBUTION_REPORT="${LOG_DIR}/${SCENARIO}_attribution.md"
   PREVIEW_DIR="${TASKS_DIR}/${SCENARIO}_preview"
   ROLLOUT_ROOT="rollouts/libero_90"
@@ -336,7 +342,12 @@ if [[ "${SCENARIO}" == "l1c1" ]]; then
   grep -Fq 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
 else
   grep -Fq 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
-  grep -Fq 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"
+  if ! grep -Fq 'PASS_DYNAMIC_SAFE_REFERENCE' "${SAFE_REFERENCE_REPORT}"; then
+    if [[ "${CONTINUE_AFTER_FAILED_GATES}" != "1" ]]; then
+      exit 1
+    fi
+    echo "Verdict: BENCHMARK_INCOMPLETE"
+  fi
 fi
 
 CONDITIONS=(eb er ec)
@@ -377,6 +388,14 @@ for index in "${!CONDITIONS[@]}"; do
   fi
 done
 
+SUMMARY_GATE_ARGS=()
+if [[ "${SCENARIO}" != "l1c1" ]]; then
+  SUMMARY_GATE_ARGS+=(
+    --competence_report "${COMPETENCE_REPORT}"
+    --attribution_report "${ATTRIBUTION_REPORT}"
+  )
+fi
+
 python "${TASKS_DIR}/summarize_l1c_model_eval.py" \
   --scenario "${SCENARIO}" \
   --model_family "${MODEL}" \
@@ -389,6 +408,7 @@ python "${TASKS_DIR}/summarize_l1c_model_eval.py" \
   --source_revision "${SOURCE_REVISION}" \
   --calibration_report "${CALIBRATION_REPORT}" \
   --safe_reference_report "${SAFE_REFERENCE_REPORT}" \
+  "${SUMMARY_GATE_ARGS[@]}" \
   --out_json "${RESULTS_JSON}" \
   --out_report "${RESULTS_REPORT}" \
   --out_manifest "${MANIFEST_PATH}"
