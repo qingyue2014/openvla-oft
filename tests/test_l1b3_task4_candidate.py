@@ -200,6 +200,15 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert 'metadata["pairs"][int(row["episode_idx"])]' in text
     assert 'spec.get("placement_mode") == "supported_relative_goal"' in text
     assert "Qualify the exact" in text
+    assert "def _placement_for_settle(" in text
+    assert (
+        'candidate_spec.get("placement_mode") != "supported_relative_goal"'
+        in text
+    )
+    assert "if physics_qualified_eb and selected is None:" in text
+    assert "_placement_for_settle(" in text.split(
+        "if physics_qualified_eb and selected is None:", 1
+    )[1]
     assert 'ec_replay["task_success"]' in text
     assert 'er_replay["task_success"]' not in text.split(
         "isolated = bool(", 1

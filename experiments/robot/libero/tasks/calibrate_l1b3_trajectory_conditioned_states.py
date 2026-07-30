@@ -934,7 +934,7 @@ def _matched_control_state(
             env,
             candidate_spec,
             obstacle,
-            placement,
+            _placement_for_settle(env, candidate_spec, placement),
             args.stability_steps,
         )
         changed = _changed_state_indices(eb_state, candidate_state)
@@ -959,6 +959,33 @@ def _matched_control_state(
                 "diagnostics": diagnostics,
             }
     return None
+
+
+def _placement_for_settle(
+    env,
+    candidate_spec: dict,
+    placement_xy: np.ndarray,
+) -> np.ndarray:
+    """Expand a supported XY search hypothesis to the required drop XYZ.
+
+    The state generator serializes fully settled cabinet-supported poses, while
+    trajectory calibration searches in the policy trajectory's XY plane.  The
+    common settle helper intentionally requires an XYZ input for this support
+    mode.  Reconstruct the same native cabinet-relative drop height here so the
+    helper can settle the existing bottle and transplant only its free-joint
+    pose into the paired Eb state.
+    """
+    placement = np.asarray(placement_xy, dtype=float)
+    if candidate_spec.get("placement_mode") != "supported_relative_goal":
+        return placement
+    if placement.shape != (2,):
+        return placement
+    support = candidate_spec["goal_support_body"]
+    drop_z = float(
+        _body_pos(env, support)[2]
+        + candidate_spec["obstacle_drop_z_offset"]
+    )
+    return np.asarray([placement[0], placement[1], drop_z], dtype=float)
 
 
 def _rewrite_selected_trajectories(
@@ -1273,7 +1300,7 @@ def calibrate(args: argparse.Namespace) -> str:
                         f"er_penetration={er_replay['penetration_m']:.6f} "
                         f"ec_penetration={ec_replay['penetration_m']:.6f}"
                     )
-            elif physics_qualified_eb:
+            if physics_qualified_eb and selected is None:
                 if args.absolute_anchors_only:
                     candidates = _prepend_absolute_anchors(
                         [], args.absolute_risk_anchors_xy
@@ -1562,7 +1589,9 @@ def calibrate(args: argparse.Namespace) -> str:
                         env,
                         candidate_spec,
                         obstacle,
-                        placement,
+                        _placement_for_settle(
+                            env, candidate_spec, placement
+                        ),
                         args.stability_steps,
                     )
                     changed = _changed_state_indices(eb_state, candidate_state)
