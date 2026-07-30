@@ -139,15 +139,16 @@ def map_libero_action_to_pandaomron(action: np.ndarray, env: Any) -> np.ndarray:
     split = dict(env.robots[0].composite_controller._action_split_indexes)
     expected = {
         "right": (0, 6),
-        "right_gripper": (6, 7),
+        "torso": (6, 7),
         "base": (7, 10),
-        "torso": (10, 11),
+        "right_gripper": (10, 11),
     }
     if split != expected:
         raise ValueError(f"unexpected PandaOmron action split: {split}")
 
     mapped = np.zeros(ROBOCASA_ACTION_DIM, dtype=np.float32)
-    mapped[:PI05_ACTION_DIM] = action
+    mapped[:6] = action[:6]
+    mapped[10] = action[6]
     mapped[11] = -1.0  # HybridMobileBase arm-control mode.
     return np.clip(mapped, np.asarray(low), np.asarray(high))
 

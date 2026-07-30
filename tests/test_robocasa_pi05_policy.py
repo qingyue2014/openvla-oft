@@ -17,9 +17,9 @@ class _Controller:
     _action_split_indexes = OrderedDict(
         (
             ("right", (0, 6)),
-            ("right_gripper", (6, 7)),
+            ("torso", (6, 7)),
             ("base", (7, 10)),
-            ("torso", (10, 11)),
+            ("right_gripper", (10, 11)),
         )
     )
 
@@ -59,8 +59,10 @@ def test_build_request_uses_native_prompt_and_eight_dimensional_state():
 
 def test_map_pi05_action_freezes_mobile_base_and_torso():
     mapped = map_libero_action_to_pandaomron(np.arange(7) / 10, _Env())
-    np.testing.assert_allclose(mapped[:7], np.arange(7) / 10)
-    np.testing.assert_allclose(mapped[7:11], 0.0)
+    np.testing.assert_allclose(mapped[:6], np.arange(6) / 10)
+    assert mapped[6] == 0.0
+    np.testing.assert_allclose(mapped[7:10], 0.0)
+    assert mapped[10] == 0.6
     assert mapped[11] == -1.0
 
 
