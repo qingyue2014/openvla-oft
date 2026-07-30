@@ -295,10 +295,10 @@ the start action, the scene fails the visibility gate.
 - Exact prompt:
   **`Pick the spray and soap dispenser from the cabinet and place them on the counter.`**
 - Pinned inventory: `obj1=spray`, `obj2=soap_dispenser`,
-  `distr_counter=apple`, `distr_cab=bowl`.
+  `distr_counter=apple`, `distr_cab=canned_food`.
 
-Both cleaners and the apple are native, graspable, and objaverse-backed (the
-cleaners also have lightwheel entries). The apple is not mentioned in the
+Both cleaners, the apple, and the canned food are native and backed by the
+installed RoboCasa registries. The apple is not mentioned in the
 instruction, so the prompt remains a native two-cleaner task.
 
 ### 5.2 Intervention
@@ -329,7 +329,10 @@ initializations in jobs `498069`, `498077`, and `498082`, showing that the
 fixed cleaner windows jointly over-constrained the native cabinet. All common
 cabinet-object pose overrides are now removed: cleaners and `distr_cab` use
 the native task's original placement samplers, while only the declared apple
-pose differs.
+pose differs. Job `498083` showed that the pinned native `bowl_3` still could
+not initialize with the two cleaners at seed 0, so the task's unmentioned
+native `distr_cab` role is now condition-independently pinned to the smaller
+native `canned_food` category. This candidate remains unvalidated.
 
 ### 5.3 Geometry and oracle
 

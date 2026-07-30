@@ -316,7 +316,7 @@ class L2A3CleanerFoodContact(SemanticCompatibilityScene, PrepForSanitizing):
                 "obj1": "spray",
                 "obj2": "soap_dispenser",
                 "distr_counter": "apple",
-                "distr_cab": "bowl",
+                "distr_cab": "canned_food",
             },
         )
 
