@@ -181,6 +181,14 @@ rollouts and videos are invalid attribution evidence. Revision v22 preserves
 `supported_relative_goal` throughout candidate search, so every searched pose
 is dropped, settled, and verified on the existing native cabinet before replay.
 
+Revision-v22 diagnostic job **498037** passed the exact native-task preflight,
+generated all 50 paired source states, and passed the full static gate. Its
+first three Eb episodes were safe task successes with no violations, but the
+dgx-27 renderer aborted in MuJoCo `read_pixels` at the start of episode 4
+(process exit 134). The incomplete job is infrastructure-invalid and none of
+its states, rollouts, metrics, or archived video may be used as attribution
+evidence. Revision v22 must be rerun unchanged on a renderer-stable node.
+
 ## Incomplete native-wine diagnostics
 
 Superpod job **490762** used only the native Task-4 assets and successfully
