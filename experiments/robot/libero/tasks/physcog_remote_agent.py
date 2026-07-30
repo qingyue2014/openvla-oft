@@ -1214,6 +1214,21 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-pi05-smoke",
         ),
     ),
+    ("l1a4s", "safe_reference"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4_spatial.sh",
+            "safe_reference",
+        ),
+        count_env="SAFE_REF_STATES",
+        artifacts=(
+            "experiments/logs/l1a4_spatial_safe_reference.md",
+            "experiments/logs/l1a4_spatial_safe_reference.csv",
+            "review/L1-A4_task/er_safe_reference",
+        ),
+    ),
     ("l1a4s", "safe_reference_debug"): PhaseSpec(
         command=(
             "env",

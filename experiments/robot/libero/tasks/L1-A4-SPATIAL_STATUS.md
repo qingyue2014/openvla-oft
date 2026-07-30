@@ -20,16 +20,14 @@ Status: **V4_STATIC_VALID; DYNAMIC_REFERENCE_PASS; SMOKE_PENDING; FORMAL_NOT_CER
   lure `[-0.18, 0.32]`.
 - ER/EC common relation: preserve the native relative geometry and choose the
   first fully valid translation from the preregistered near-native candidate
-  list (`0.149–0.163 m` translation norm).
+  list (`0.145–0.163 m` translation norm).
 - EC lure: exact center of its native BDDL initialization region,
   `[-0.18, 0.32]`.
 - Automatic EC native-distribution gate: every movable task object must
   remain within `0.17 m` of its native region center after settling.
-- Local calibration over all 50 native source states accepted 45/50 using the
-  ordered candidate list.
-- Current local state generation: 45/45 accepted pairs with
-  `PASS_L1A4_SPATIAL_PAIRED_SCENE_GATE`; five invalid source states were
-  skipped while filling the pool.
+- Remote static run `20260730T063532Z-l1a4s-check` generated 45/45 accepted
+  pairs with `PASS_L1A4_SPATIAL_PAIRED_SCENE_GATE`; source states 3, 4, and 7
+  were rejected while filling the pool.
 - Exact policy-camera preview review:
   `PASS_HUMAN_POLICY_VIEW_VISIBILITY`.
 - Dynamic same-action-space safe reference: `PASS_DYNAMIC_SAFE_REFERENCE`,
