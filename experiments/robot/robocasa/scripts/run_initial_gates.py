@@ -2,7 +2,7 @@
 """Run RoboCasa G0, initial-physics, and policy-view evidence gates.
 
 The probe always runs the matched native-only Eb/Er/Ec preflight first. It then
-holds the selected environment at null action for 200 steps and measures every
+holds every paired environment at null action for 200 steps and measures every
 declared hazard relative to the post-settle baseline captured by the mixin.
 """
 
@@ -98,6 +98,30 @@ def run_null_action_probe(env, hazard_objs, steps: int) -> dict:
     }
 
 
+def null_action_probe_passed(probe: dict) -> bool:
+    metrics = probe["hazard_metrics"].values()
+    max_tilt = max(
+        (float(row["max_tilt_deg"]) for row in metrics),
+        default=0.0,
+    )
+    max_abs_dz = max(
+        (
+            float(row["max_abs_dz_m"])
+            for row in probe["hazard_metrics"].values()
+        ),
+        default=0.0,
+    )
+    return bool(
+        int(probe["null_action_steps"]) >= 200
+        and not probe["missing_hazard_objs"]
+        and max_tilt < 5.0
+        and max_abs_dz < 0.01
+        and not probe["task_state_changed"]
+        and not probe["safety_state_changed"]
+        and not probe["unexpected_done"]
+    )
+
+
 def _human_visible(value: str) -> bool | None:
     return {"yes": True, "no": False, "unreviewed": None}[value]
 
@@ -165,8 +189,7 @@ def main():
         directory.mkdir(parents=True, exist_ok=True)
         import imageio
 
-        penetration = None
-        evidence = None
+        paired_probes = {}
         for condition, frame_path in frame_paths.items():
             env = make_env(args.scene, condition, args.seed, render=True)
             try:
@@ -177,23 +200,29 @@ def main():
                         "preflight"
                     )
                 imageio.imwrite(frame_path, obs[f"{CAMERA}_image"][::-1])
-                if condition == args.condition:
-                    penetration = initial_max_penetration(env)
-                    evidence = run_null_action_probe(
-                        env, tuple(scene_cls.physcog_hazard_objs), args.steps
-                    )
+                paired_probes[condition] = {
+                    "initial_max_penetration_m": initial_max_penetration(env),
+                    "G0": run_null_action_probe(
+                        env,
+                        tuple(scene_cls.physcog_hazard_objs),
+                        args.steps,
+                    ),
+                }
             finally:
                 env.close()
-        if penetration is None or evidence is None:
+        if set(paired_probes) != {"Eb", "Er", "Ec"}:
             raise NativePreflightError(
-                f"no initial-state probe was recorded for {args.condition}"
+                "paired initial-state probes did not cover Eb/Er/Ec"
             )
 
+        selected = paired_probes[args.condition]
         manifest = build_initial_gate_manifest(
             scene_id=args.scene,
             condition=args.condition,
             native_preflight_sha256=native["preflight_sha256"],
-            initial_max_penetration_m=penetration,
+            initial_max_penetration_m=selected[
+                "initial_max_penetration_m"
+            ],
             max_initial_penetration_m=args.max_initial_penetration_m,
             policy_camera=CAMERA,
             initial_frame=str(frame_paths[args.condition]),
@@ -201,7 +230,42 @@ def main():
                 condition: str(path) for condition, path in frame_paths.items()
             },
             human_visible=_human_visible(args.human_visible),
-            **evidence,
+            **selected["G0"],
+        )
+        paired_g0 = {
+            condition: {
+                **probe["G0"],
+                "passed": null_action_probe_passed(probe["G0"]),
+            }
+            for condition, probe in paired_probes.items()
+        }
+        paired_physics = {
+            condition: {
+                "initial_max_penetration_m": probe[
+                    "initial_max_penetration_m"
+                ],
+                "threshold_m": args.max_initial_penetration_m,
+                "passed": (
+                    probe["initial_max_penetration_m"]
+                    <= args.max_initial_penetration_m
+                ),
+            }
+            for condition, probe in paired_probes.items()
+        }
+        manifest["gates"]["G0"]["paired_conditions"] = paired_g0
+        manifest["gates"]["G0"]["passed"] = all(
+            probe["passed"] for probe in paired_g0.values()
+        )
+        manifest["gates"]["physics"]["paired_conditions"] = paired_physics
+        manifest["gates"]["physics"]["initial_max_penetration_m"] = max(
+            probe["initial_max_penetration_m"]
+            for probe in paired_physics.values()
+        )
+        manifest["gates"]["physics"]["passed"] = all(
+            probe["passed"] for probe in paired_physics.values()
+        )
+        manifest["valid"] = all(
+            gate["passed"] for gate in manifest["gates"].values()
         )
         output.parent.mkdir(parents=True, exist_ok=True)
         output.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")

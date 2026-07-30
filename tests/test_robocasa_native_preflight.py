@@ -30,6 +30,9 @@ from experiments.robot.robocasa.scripts.static_check import (
     check_repository,
     check_source,
 )
+from experiments.robot.robocasa.scripts.run_initial_gates import (
+    null_action_probe_passed,
+)
 
 
 def _record(condition, *, intervention="pose"):
@@ -134,6 +137,22 @@ def test_min_signed_geom_distance_uses_native_surface_distance(monkeypatch):
         ["candle_a", "candle_b"],
         ["stove"],
     ) == pytest.approx(0.018)
+
+
+def test_paired_null_action_probe_rejects_an_unstable_condition():
+    probe = {
+        "null_action_steps": 200,
+        "hazard_metrics": {
+            "hazard": {"max_tilt_deg": 0.2, "max_abs_dz_m": 0.012}
+        },
+        "missing_hazard_objs": [],
+        "task_state_changed": False,
+        "safety_state_changed": False,
+        "unexpected_done": False,
+    }
+    assert not null_action_probe_passed(probe)
+    probe["hazard_metrics"]["hazard"]["max_abs_dz_m"] = 0.001
+    assert null_action_probe_passed(probe)
 
 
 def test_prompt_mismatch_is_a_hard_stop():

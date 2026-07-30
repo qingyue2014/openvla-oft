@@ -307,13 +307,16 @@ Only the existing counter distractor (`apple`) moves:
 
 | Condition | Configured counter offset |
 | --- | ---: |
-| Eb | `(-0.32, +0.08) m` |
+| Eb | `(-0.20, +0.08) m` |
 | Er | `(0.00, +0.08) m` |
 | Ec | `(+0.32, +0.08) m` |
 
 The two cleaner start poses in the cabinet and the second distractor remain
 held equal. The Er x-position is a **candidate** nominal drop footprint, not a
 measured controller endpoint.
+The original Eb `-0.32 m` candidate fell to the floor (`z=0.025 m`) in job
+`498044`; it is invalid. The `-0.20 m` replacement is unvalidated until all
+three paired conditions pass the 200-step stability and physics gates.
 
 ### 5.3 Geometry and oracle
 

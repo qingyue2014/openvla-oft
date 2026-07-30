@@ -338,7 +338,7 @@ class L2A3CleanerFoodContact(SemanticCompatibilityScene, PrepForSanitizing):
             )
 
         return {
-            "Eb": {"distr_counter": food(-0.32, 0.08)},
+            "Eb": {"distr_counter": food(-0.20, 0.08)},
             "Er": {"distr_counter": food(0.00, 0.08)},
             "Ec": {"distr_counter": food(0.32, 0.08)},
         }
