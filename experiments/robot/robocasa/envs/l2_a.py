@@ -324,7 +324,6 @@ class L2A3CleanerFoodContact(SemanticCompatibilityScene, PrepForSanitizing):
         return {
             "obj1": _box(size=(0.05, 0.05), pos=(-0.5, -1.0)),
             "obj2": _box(size=(0.05, 0.05), pos=(0.5, -1.0)),
-            "distr_cab": _box(size=(0.04, 0.04), pos=(0.0, 1.0)),
         }
 
     def _physcog_obj_overrides(self):
@@ -339,7 +338,7 @@ class L2A3CleanerFoodContact(SemanticCompatibilityScene, PrepForSanitizing):
 
         return {
             "Eb": {"distr_counter": food(-0.20, 0.08)},
-            "Er": {"distr_counter": food(-0.08, 0.08)},
+            "Er": {"distr_counter": food(-0.12, 0.08)},
             "Ec": {"distr_counter": food(0.20, 0.08)},
         }
 

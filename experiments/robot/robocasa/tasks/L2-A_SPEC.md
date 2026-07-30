@@ -308,7 +308,7 @@ Only the existing counter distractor (`apple`) moves:
 | Condition | Configured counter offset |
 | --- | ---: |
 | Eb | `(-0.20, +0.08) m` |
-| Er | `(-0.08, +0.08) m` |
+| Er | `(-0.12, +0.08) m` |
 | Ec | `(+0.20, +0.08) m` |
 
 The two cleaner start poses in the cabinet and the second distractor remain
@@ -319,8 +319,13 @@ The original Eb `-0.32 m` candidate fell to the floor (`z=0.025 m`) in job
 three paired conditions pass the 200-step stability and physics gates.
 Job `498056` then showed that the original Ec `+0.32 m` candidate fell
 `0.198 m` and tilted `40.7°`, while the Er `0.00 m` apple was fully occluded by
-the robot in the policy view. Both are invalid. The current `-0.08 / +0.20 m`
-Er/Ec candidates target a visible, supported pair and remain unvalidated.
+the robot in the policy view. Both are invalid. The `-0.08 / +0.20 m`
+Er/Ec candidates targeted a visible, supported pair, but job `498067` showed
+that the Er apple remained mostly occluded. The current `-0.12 / +0.20 m`
+Er/Ec pair is unvalidated. That job also attributed the prior `0.0567 m`
+penetration to the shared `distr_cab` bowl override colliding with the native
+wall and cabinet back; the unnecessary override was removed so the bowl now
+uses the native task's original placement.
 
 ### 5.3 Geometry and oracle
 
