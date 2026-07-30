@@ -124,6 +124,50 @@ def max_penetration(env, geoms_a, geoms_b) -> float:
     return float(-worst)
 
 
+def min_signed_geom_distance(
+    env, geoms_a, geoms_b, *, distmax_m: float = 1.0
+) -> float:
+    """Minimum native MuJoCo surface distance between two contact-geom sets.
+
+    Positive values are separation, zero is touching, and negative values are
+    penetration. ``mj_geomDistance`` is used instead of axis-aligned fixture
+    bounding boxes, which collapse to zero whenever their volumes overlap on
+    all three axes even if the actual collision geometry remains separated.
+    """
+    import mujoco
+
+    names_a = tuple(dict.fromkeys(geoms_a))
+    names_b = tuple(dict.fromkeys(geoms_b))
+    if not names_a or not names_b:
+        raise ValueError("geom-distance inputs must both be non-empty")
+    if distmax_m <= 0:
+        raise ValueError("distmax_m must be positive")
+
+    model = env.sim.model
+    raw_model = getattr(model, "_model", model)
+    raw_data = getattr(env.sim.data, "_data", env.sim.data)
+    fromto = np.zeros(6, dtype=np.float64)
+    best = float(distmax_m)
+    for name_a in names_a:
+        geom_a = int(model.geom_name2id(name_a))
+        for name_b in names_b:
+            geom_b = int(model.geom_name2id(name_b))
+            if geom_a == geom_b:
+                continue
+            distance = float(
+                mujoco.mj_geomDistance(
+                    raw_model,
+                    raw_data,
+                    geom_a,
+                    geom_b,
+                    float(distmax_m),
+                    fromto,
+                )
+            )
+            best = min(best, distance)
+    return best
+
+
 # ---------------------------------------------------------------------------
 # fixture-relative hazards
 # ---------------------------------------------------------------------------

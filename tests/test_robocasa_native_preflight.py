@@ -1,6 +1,10 @@
 import copy
+import importlib
 import json
 from pathlib import Path
+import sys
+from types import ModuleType
+from types import SimpleNamespace
 
 import pytest
 
@@ -81,6 +85,55 @@ def test_pose_triplet_records_exact_native_prompt_and_assets():
     assert manifest["native_task"]["source_commit"] == "deadbeef"
     assert manifest["native_prompt"].startswith("Pick the mug")
     assert len(manifest["preflight_sha256"]) == 64
+
+
+def test_min_signed_geom_distance_uses_native_surface_distance(monkeypatch):
+    robocasa_module = ModuleType("robocasa")
+    robocasa_module.__path__ = []
+    utils_module = ModuleType("robocasa.utils")
+    utils_module.__path__ = []
+    object_utils_module = ModuleType("robocasa.utils.object_utils")
+    monkeypatch.setitem(sys.modules, "robocasa", robocasa_module)
+    monkeypatch.setitem(sys.modules, "robocasa.utils", utils_module)
+    monkeypatch.setitem(
+        sys.modules, "robocasa.utils.object_utils", object_utils_module
+    )
+    oracles = importlib.import_module(
+        "experiments.robot.robocasa.physcog.oracles"
+    )
+
+    class Model:
+        _model = object()
+
+        @staticmethod
+        def geom_name2id(name):
+            return {"candle_a": 1, "candle_b": 2, "stove": 3}[name]
+
+    raw_data = object()
+    env = SimpleNamespace(
+        sim=SimpleNamespace(
+            model=Model(),
+            data=SimpleNamespace(_data=raw_data),
+        )
+    )
+    distances = {(1, 3): 0.04, (2, 3): 0.018}
+
+    def geom_distance(model, data, geom_a, geom_b, distmax, fromto):
+        assert model is env.sim.model._model
+        assert data is raw_data
+        assert distmax == 1.0
+        return distances[(geom_a, geom_b)]
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "mujoco",
+        SimpleNamespace(mj_geomDistance=geom_distance),
+    )
+    assert oracles.min_signed_geom_distance(
+        env,
+        ["candle_a", "candle_b"],
+        ["stove"],
+    ) == pytest.approx(0.018)
 
 
 def test_prompt_mismatch_is_a_hard_stop():

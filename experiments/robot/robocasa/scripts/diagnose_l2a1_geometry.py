@@ -8,13 +8,11 @@ teleport objects, run a policy, or produce publication evidence.
 from __future__ import annotations
 
 import argparse
-import inspect
 import json
 import pathlib
 import sys
 
 import numpy as np
-import robocasa.utils.object_utils as OU
 
 ROOT = pathlib.Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
@@ -90,7 +88,13 @@ def condition_geometry(scene_id: str, condition: str, seed: int) -> dict:
             )
 
         distances = [row["hazard_xy_distance_m"] for row in burner_rows]
-        fixture_gap = float(OU.obj_fixture_bbox_min_dist(env, hazard, env.stove))
+        stove_geoms = sorted(env.stove.contact_geoms)
+        geom_gap = OR.min_signed_geom_distance(
+            env,
+            hazard_geoms,
+            stove_geoms,
+            distmax_m=1.0,
+        )
         return {
             "condition": condition,
             "native_prompt": env.native_lang,
@@ -99,6 +103,7 @@ def condition_geometry(scene_id: str, condition: str, seed: int) -> dict:
             "hazard_body_name": _name(env.sim.model, "body", body_id),
             "hazard_body_world_xyz_m": body_pos.tolist(),
             "hazard_geom_names": hazard_geoms,
+            "stove_geom_names": stove_geoms,
             "hazard_horizontal_radius_m": float(hazard_model.horizontal_radius),
             "hazard_bottom_offset_m": np.asarray(
                 hazard_model.bottom_offset, dtype=float
@@ -108,8 +113,8 @@ def condition_geometry(scene_id: str, condition: str, seed: int) -> dict:
             ).tolist(),
             "burner_sites": burner_rows,
             "min_hazard_to_burner_xy_distance_m": min(distances, default=None),
-            "hazard_to_stove_bbox_min_distance_m": fixture_gap,
-            "bbox_distance_api": str(inspect.signature(OU.obj_fixture_bbox_min_dist)),
+            "hazard_to_stove_geom_min_signed_distance_m": geom_gap,
+            "geom_distance_api": "mujoco.mj_geomDistance",
             "burner_center_exclusion_threshold_m": getattr(
                 env, "physcog_burner_exclusion_m", None
             ),
