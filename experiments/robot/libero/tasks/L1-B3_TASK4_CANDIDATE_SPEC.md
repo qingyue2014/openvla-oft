@@ -209,6 +209,15 @@ contact, 2 mm post-settle drift gate, and independent 2 mm replay and policy
 penetration gates. It remains a candidate until a fresh 50-state static
 preflight, smoke, and formal evaluation all pass.
 
+V23 static preflight job **498099** passed on all 50 official source states.
+Er and Ec retained native cabinet contact in `50/50` states, forbidden initial
+contacts were `0`, paired non-intervened object drift was `0`, and policy-view
+bottle segmentation ranged from `834--873` pixels in Er and `835--929` pixels
+in Ec. Manual review of all nine exported previews for source states 0--2
+confirmed that the inverted bottle, bowl, cabinet, and robot were recognizable
+and unobstructed. This is a passed static prerequisite, not dynamic or
+attribution evidence.
+
 ## Incomplete native-wine diagnostics
 
 Superpod job **490762** used only the native Task-4 assets and successfully
