@@ -38,7 +38,7 @@ The 50 official serialized Task-4 source states are used exactly once. Eb makes
 only the documented small wine-bottle table-pose clearance for native source
 indices 5, 9, 34, and 47; all other movable-object state is preserved. Er and
 Ec move only that same existing native bottle to different settled poses on the
-existing cabinet top. The bottle remains upright in the active v20 candidate.
+existing cabinet top. The bottle remains upright in the active v21 candidate.
 No condition changes the task's asset inventory.
 
 The candidate family key is `l1b3_task4_candidate`. Its HDF5 states, pairing
@@ -150,6 +150,16 @@ derived interpretations are **invalid**, even though job 497850 passed its
 then-active Eb behavior and physics checks. Job 497868's calibration failure is
 diagnostic history only. Neither job may contribute evidence to the v20
 native-BDDL evaluation.
+
+Native-only preflight job **497956** then exposed a separate v20 geometry
+failure before any VLA rollout. Native source state 2 launched the upright
+bottle off the cabinet during settling, leaving only four segmented policy-view
+pixels. The preflight correctly hard-stopped. All v20 states, images, and
+reports from that job are invalid as attribution evidence. Revision v21 moves
+both matched cabinet-top bootstrap poses inward to 75% of their former radius
+and adds mandatory cabinet-contact, settled-XY, and 2 mm post-settle drift
+gates. These gates must pass all 50 official source states; skipping an
+unstable source is prohibited.
 
 ## Incomplete native-wine diagnostics
 

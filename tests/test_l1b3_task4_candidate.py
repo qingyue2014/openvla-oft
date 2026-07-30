@@ -39,6 +39,8 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"common_support_body"' not in block
     assert '"obstacle_quat_wxyz": [1.0, 0.0, 0.0, 0.0]' in block
     assert '"obstacle_support_settle_steps": 420' in block
+    assert '"support_settled_xy_tolerance_m": 0.015' in block
+    assert '"max_supported_stability_drift_m": 0.002' in block
     generator = GENERATOR.read_text()
     assert "--sample_native_resets" in generator
     assert "seeded_native_bddl_resets" in generator
@@ -51,7 +53,7 @@ def test_task4_candidate_uses_native_support_and_link7_contract():
     assert '"min_obstacle_tilt_change_deg": 30.0' in block
     assert '"candidate_only": True' in block
     assert (
-        '"scene_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v20"'
+        '"scene_contract": "l1b3_task4_native_bddl_upright_cabinet_candidate_v21"'
         in block
     )
     assert "transformers-openvla-oft-bc339d9_tokenizers-0.19.1" in block

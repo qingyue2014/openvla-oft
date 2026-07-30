@@ -27,6 +27,7 @@ from experiments.robot.libero.tasks.generate_l1b_swept_initial_states import (
     benchmark,
     get_libero_path,
     _body_pos,
+    _contact_between,
     _forbidden_initial_contact_pairs,
 )
 
@@ -290,6 +291,7 @@ def validate(args) -> bool:
     near_target_vectors = {condition: [] for condition in ("er", "ec")}
     visible_pixels = {condition: [] for condition in ("eb", "er", "ec")}
     prompt_relation_distances = {condition: [] for condition in states}
+    support_contacts = {condition: [] for condition in ("er", "ec")}
     try:
         oracle = make_safety_oracle(
             (
@@ -360,6 +362,14 @@ def validate(args) -> bool:
                     initial_contact_pairs.append(
                         f"ep{episode_idx:03d}/{condition}: "
                         f"{pair} ({first_seen})"
+                    )
+                if condition in support_contacts:
+                    support_contacts[condition].append(
+                        _contact_between(
+                            env,
+                            obstacle_body,
+                            goal_support_body,
+                        )
                     )
                 visible_pixels[condition].append(
                     _visible_pixel_count(
@@ -473,6 +483,13 @@ def validate(args) -> bool:
         pixels and min(pixels) >= args.min_obstacle_pixels
         for pixels in visible_pixels.values()
     )
+    support_contact_ok = bool(
+        spec.get("placement_mode") != "supported_relative_goal"
+        or all(
+            contacts and all(contacts)
+            for contacts in support_contacts.values()
+        )
+    )
     native_asset_gate = bool(
         not spec.get("native_assets_only")
         or (
@@ -513,6 +530,7 @@ def validate(args) -> bool:
         and prompt_ok
         and oracle_reset_ok
         and visibility_ok
+        and support_contact_ok
         and native_asset_gate
         and only_obstacle_pose_ok
         and prompt_relation_ok
@@ -580,6 +598,12 @@ def validate(args) -> bool:
             f"- {condition.upper()} obstacle pixels (min/max): "
             f"`{min(pixels)}/{max(pixels)}`"
             for condition, pixels in visible_pixels.items()
+        ),
+        f"- Er/Ec native support-contact gate: `{support_contact_ok}`",
+        *(
+            f"- {condition.upper()} support contacts: "
+            f"`{sum(contacts)}/{len(contacts)}`"
+            for condition, contacts in support_contacts.items()
         ),
         f"- Required obstacle pixels: `>= {args.min_obstacle_pixels}` in `{args.policy_camera}`",
         *(
