@@ -55,9 +55,17 @@ PYTHON_BIN=""
   for candidate in "${candidate_pythons[@]}"; do
     [[ -x "${candidate}" ]] || continue
     printf 'candidate=%s\n' "${candidate}"
-    if "${candidate}" -c \
-      "import imageio, mujoco, numpy, robocasa, robosuite" \
-      >/dev/null 2>&1; then
+    set +e
+    candidate_probe="$(
+      "${candidate}" -c \
+        "import imageio, mujoco, numpy, robocasa, robosuite; print('IMPORT_OK')" \
+        2>&1
+    )"
+    candidate_rc="$?"
+    set -e
+    printf 'candidate_rc=%s\n' "${candidate_rc}"
+    printf '%s\n' "${candidate_probe}"
+    if [[ "${candidate_rc}" -eq 0 ]]; then
       PYTHON_BIN="${candidate}"
       printf 'selected_python=%s\n' "${PYTHON_BIN}"
       break
