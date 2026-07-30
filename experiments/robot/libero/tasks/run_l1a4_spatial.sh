@@ -261,7 +261,6 @@ prefix_safe_reference() {
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --grasp_action_trajectories \
       "rollouts/libero_spatial/${EC_PREFIX_NOTE}/trajectories" \
-    --complete_lift_after_prefix \
     --prefix_target_xy_distance \
       "${PREFIX_SAFE_REF_TARGET_XY_DISTANCE:-0.06}" \
     --prefix_grasp_seat_steps "${PREFIX_SAFE_REF_GRASP_SEAT_STEPS:-8}" \
@@ -275,8 +274,8 @@ prefix_safe_reference() {
       "${PREFIX_SAFE_REF_TRANSPORT_MAX_POSITION_COMMAND:-0.15}" \
     --transport_position_tolerance \
       "${PREFIX_SAFE_REF_TRANSPORT_POSITION_TOLERANCE:-0.015}" \
-    --transport_clearance "${PREFIX_SAFE_REF_TRANSPORT_CLEARANCE:-0.01}" \
-    --preplace_height "${PREFIX_SAFE_REF_PREPLACE_HEIGHT:-0.04}" \
+    --transport_clearance "${PREFIX_SAFE_REF_TRANSPORT_CLEARANCE:-0.00}" \
+    --preplace_height "${PREFIX_SAFE_REF_PREPLACE_HEIGHT:-0.02}" \
     --trajectory_dir "${PREFIX_SAFE_REF_TRAJ}" \
     --video_dir "${PREFIX_SAFE_REF_VIDEOS}" \
     --max_videos "${PREFIX_SAFE_REF_MAX_VIDEOS:-3}" \
@@ -286,6 +285,12 @@ prefix_safe_reference() {
   )
   if [[ "${PREFIX_SAFE_REF_BRANCH_ON_CONTACT:-False}" == "True" ]]; then
     args+=(--branch_grasp_prefix_on_contact)
+  fi
+  if [[ "${PREFIX_SAFE_REF_COMPLETE_LIFT:-False}" == "True" ]]; then
+    args+=(--complete_lift_after_prefix)
+  fi
+  if [[ "${PREFIX_SAFE_REF_PLACE_AT_CURRENT_XY:-True}" == "True" ]]; then
+    args+=(--place_at_current_xy)
   fi
   python "${TASKS_DIR}/validate_l1a4_spatial_safe_reference.py" \
     "${args[@]}"

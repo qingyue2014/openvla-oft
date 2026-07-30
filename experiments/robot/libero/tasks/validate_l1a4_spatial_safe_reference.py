@@ -189,6 +189,7 @@ def main() -> None:
     parser.add_argument(
         "--prefix_target_xy_distance", type=float, default=0.0
     )
+    parser.add_argument("--place_at_current_xy", action="store_true")
     parser.add_argument("--prefix_grasp_seat_steps", type=int, default=0)
     parser.add_argument(
         "--prefix_lift_max_position_command", type=float, default=None

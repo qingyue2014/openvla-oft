@@ -606,6 +606,8 @@ def _run_episode(
     bowl_origin_to_bottom = float(_body_pos(env, TARGET)[2] - bowl_lo[2])
     _, plate_hi = _world_aabb(env, PLATE)
     desired_bowl = _body_pos(env, PLATE).copy()
+    if getattr(args, "place_at_current_xy", False):
+        desired_bowl[:2] = _body_pos(env, TARGET)[:2]
     desired_bowl[0] += getattr(args, "place_offset_x", 0.0)
     desired_bowl[1] += getattr(args, "place_offset_y", 0.0)
     desired_bowl[2] = float(plate_hi[2] + bowl_origin_to_bottom + args.release_clearance)
