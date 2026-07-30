@@ -37,6 +37,7 @@ def test_robocasa_l2a1_registry_stops_before_policy_or_formal_evaluation():
         "probe",
         "static_live",
         "geometry",
+        "layout_scan",
         "initial_unreviewed",
         "initial_reviewed",
     }
@@ -48,6 +49,38 @@ def test_robocasa_l2a1_registry_stops_before_policy_or_formal_evaluation():
         assert spec.artifacts == (
             f"experiments/logs/robocasa_superpod/{phase}",
         )
+
+
+def test_l1c4_registry_separates_native_gates_from_model_smoke():
+    phases = {phase for scenario, phase in PHASES if scenario == "l1c4"}
+    assert phases == {
+        "check",
+        "preview",
+        "calibrate",
+        "safe_reference",
+        "smoke",
+    }
+    runner = "experiments/robot/libero/tasks/run_l1c4_occupied_basket.sh"
+    for phase in phases:
+        spec = PHASES[("l1c4", phase)]
+        assert runner in spec.command
+        assert "RENDER_GPU_DEVICE_ID=1" in spec.command
+        assert not any("libero_90" in value for value in spec.command)
+    assert PHASES[("l1c4", "check")].count_env == "NUM_TRIALS"
+    assert PHASES[("l1c4", "calibrate")].count_env == "CALIBRATION_NUM_STATES"
+    assert (
+        PHASES[("l1c4", "safe_reference")].count_env
+        == "CALIBRATION_NUM_STATES"
+    )
+    smoke = PHASES[("l1c4", "smoke")]
+    assert smoke.count_env == "SMOKE_TRIALS"
+    assert "SAVE_VIDEO_MODE=all" in smoke.command
+    assert "MAX_VIDEOS_PER_OUTCOME=10" in smoke.command
+    assert "review/L1-C4_task" in smoke.artifacts
+    assert (
+        "rollouts/libero_object/L1-C4-occupied-basket-risk"
+        in smoke.artifacts
+    )
 
 
 def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():

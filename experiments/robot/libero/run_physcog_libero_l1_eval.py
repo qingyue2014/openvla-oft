@@ -129,6 +129,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     max_violation_videos: int = 10          # max violation videos per task (0 = unlimited)
     max_success_videos: int = 10            # max safe-success videos per task (0 = unlimited)
     max_failure_videos: int = 10            # max task-failure (no violation) videos per task (0 = unlimited)
+    review_video_dir: str = ""              # optional review/<task_name>_task/ destination
     bddl_file: Optional[str] = None        # L1-B-2: path to a custom BDDL file; bypasses task_suite lookup
     retraction_intro_timing: str = "after_grasp"  # L1-B-4: before_grasp | during_grasp | after_grasp
     retraction_bystander_xyz: Optional[str] = None # L1-B-4: "x,y" or "x,y,z" insertion pose
@@ -814,12 +815,19 @@ def run_task_with_safety(
         }
 
     task = task_suite.get_task(task_id)
+    native_runtime_inventory_check = None
     if cfg.native_only_preflight_manifest:
         with open(cfg.native_only_preflight_manifest, encoding="utf-8") as handle:
             native_record = json.load(handle)
         native_key = (
-            native_record.get("task_suite_name"),
-            int(native_record.get("task_id", -1)),
+            native_record.get(
+                "task_suite_name", native_record.get("native_suite")
+            ),
+            int(
+                native_record.get(
+                    "task_id", native_record.get("native_task_id", -1)
+                )
+            ),
         )
         if native_key == ("libero_spatial", 6):
             from experiments.robot.libero.tasks.validate_l1a3_native_preflight import (
@@ -833,6 +841,13 @@ def run_task_with_safety(
             from experiments.robot.libero.tasks.validate_l1a4_native_preflight import (
                 verify_evaluation_request,
             )
+        elif native_record.get("scenario") == "L1-C4":
+            from experiments.robot.libero.tasks.validate_l1c4_native_preflight import (
+                verify_evaluation_request,
+                verify_runtime_asset_inventory,
+            )
+
+            native_runtime_inventory_check = verify_runtime_asset_inventory
         else:
             raise ValueError(
                 "Unsupported native-only preflight task identity: "
@@ -849,6 +864,10 @@ def run_task_with_safety(
             initial_states_path=cfg.initial_states_path,
         )
     env, task_description = get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res, render_gpu_device_id=cfg.render_gpu_device_id)
+    if native_runtime_inventory_check is not None:
+        native_runtime_inventory_check(
+            cfg.native_only_preflight_manifest, env.sim.model
+        )
     policy_task_description = cfg.task_description_override or task_description
     initial_states, all_initial_states = _load_task_initial_states(
         cfg, task_suite, task_id, task_description, log_file
@@ -917,6 +936,7 @@ def run_task_with_safety(
 
         run_note = cfg.run_id_note or "default"
         rollout_dir = f"./rollouts/{cfg.task_suite_name}/{run_note}"
+        video_dir = cfg.review_video_dir or rollout_dir
         vcap = cfg.max_violation_videos
         scap = cfg.max_success_videos
         fcap = cfg.max_failure_videos
@@ -937,7 +957,7 @@ def run_task_with_safety(
                 success=safe_success,
                 task_description=f"safety={not violated} {policy_task_description}",
                 log_file=log_file,
-                rollout_dir=rollout_dir,
+                rollout_dir=video_dir,
                 model_family=cfg.model_family,
             )
             if cfg.save_wrist_video and diagnostics.get("wrist_images"):
@@ -947,7 +967,7 @@ def run_task_with_safety(
                     success=safe_success,
                     task_description=f"WRIST safety={not violated} {policy_task_description}",
                     log_file=log_file,
-                    rollout_dir=rollout_dir,
+                    rollout_dir=video_dir,
                     model_family=cfg.model_family,
                 )
             if violated:

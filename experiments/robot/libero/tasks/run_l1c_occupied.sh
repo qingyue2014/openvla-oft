@@ -4,14 +4,14 @@ set -euo pipefail
 SCENARIO="${1:-}"
 MODE="${2:-}"
 if [[ ! "${SCENARIO}" =~ ^l1c[234]$ ]] || [[ -z "${MODE}" ]]; then
-  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|preview|screen_occupants|calibrate|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
+  echo "Usage: $0 l1c2|l1c3|l1c4 bodies|check|native_preflight|preview|verify|screen_occupants|calibrate|safe_reference|eb|er|ec|replay|smoke|analyze|record|eval" >&2
   exit 2
 fi
 
 case "${SCENARIO}" in
   l1c2) SLUG="occupied-tray" ;;
   l1c3) SLUG="occupied-drawer" ;;
-  l1c4) SLUG="occupied-cabinet-top" ;;
+  l1c4) SLUG="occupied-basket" ;;
 esac
 UPPER_SCENARIO="$(printf '%s' "${SCENARIO}" | tr '[:lower:]' '[:upper:]' | sed 's/C/-C/')"
 
@@ -22,16 +22,23 @@ EB_STATES="${EB_STATES:-${STATE_DIR}/${SCENARIO}_eb_states.hdf5}"
 ER_STATES="${ER_STATES:-${STATE_DIR}/${SCENARIO}_er_states.hdf5}"
 EC_STATES="${EC_STATES:-${STATE_DIR}/${SCENARIO}_ec_states.hdf5}"
 SOURCE_INDICES="${SOURCE_INDICES:-${STATE_DIR}/${SCENARIO}_source_indices.json}"
+STATE_BUNDLE_MANIFEST="${STATE_BUNDLE_MANIFEST:-${STATE_DIR}/${SCENARIO}_state_bundle.json}"
 PREVIEW_DIR="${PREVIEW_DIR:-${STATE_DIR}/${SCENARIO}_preview}"
+PREVIEW_MANIFEST="${PREVIEW_MANIFEST:-${PREVIEW_DIR}/manifest.json}"
+REVIEW_DIR="${REVIEW_DIR:-review/${UPPER_SCENARIO}_task}"
 
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 CALIBRATION_NUM_STATES="${CALIBRATION_NUM_STATES:-8}"
-# The moojink release has suite checkpoints for spatial/object/goal/10, but no
-# `...-libero-90` repository.  Use the public LIBERO-90 SFT checkpoint already
-# supported by this repository's RLinf compatibility loader.
-CHECKPOINT="${CHECKPOINT:-RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora}"
-SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-violation}"
+if [[ "${SCENARIO}" == "l1c4" ]]; then
+  DEFAULT_CHECKPOINT="moojink/openvla-7b-oft-finetuned-libero-object"
+  DEFAULT_SAFE_REFERENCE_GRASP_DEPTH="0.040"
+else
+  DEFAULT_CHECKPOINT="RLinf/RLinf-OpenVLAOFT-LIBERO-90-Base-Lora"
+  DEFAULT_SAFE_REFERENCE_GRASP_DEPTH="0.025"
+fi
+CHECKPOINT="${CHECKPOINT:-${DEFAULT_CHECKPOINT}}"
+SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 
@@ -54,25 +61,46 @@ if [[ -z "${LIBERO_ROOT}" || ! -d "${LIBERO_ROOT}/libero" ]]; then
 fi
 export LIBERO_ROOT
 export PYTHONPATH="${LIBERO_ROOT}:${PYTHONPATH:-}"
+if [[ -z "${LIBERO_CONFIG_PATH:-}" ]]; then
+  LIBERO_CONFIG_PATH="$(python -c "from experiments.robot.libero.tasks.l1c_occupied_pipeline import _ensure_libero_config; print(_ensure_libero_config())")"
+fi
+if [[ -z "${LIBERO_CONFIG_PATH}" || ! -f "${LIBERO_CONFIG_PATH}/config.yaml" ]]; then
+  echo "Could not create a task-local LIBERO config for ${LIBERO_ROOT}." >&2
+  exit 2
+fi
+export LIBERO_CONFIG_PATH
+
+NATIVE_SUITE="$(python -c "from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(get_spec('${SCENARIO}').native_suite)")"
+NATIVE_TASK_ID="$(python -c "from experiments.robot.libero.tasks.l1c_occupied_pipeline import _native_task_match; from experiments.robot.libero.tasks.l1c_occupied_common import get_spec; print(_native_task_match(get_spec('${SCENARIO}'))[1])")"
+if [[ "${SCENARIO}" == "l1c4" && ! "${NATIVE_SUITE}" =~ ^libero_(spatial|object|goal|10)$ ]]; then
+  echo "L1-C4 must use one of libero_spatial/libero_object/libero_goal/libero_10; got ${NATIVE_SUITE}." >&2
+  exit 2
+fi
 
 EB_NOTE="${UPPER_SCENARIO}-${SLUG}-eb"
 ER_NOTE="${UPPER_SCENARIO}-${SLUG}-risk"
 EC_NOTE="${UPPER_SCENARIO}-${SLUG}-ec"
-EB_TRAJ="rollouts/libero_90/${EB_NOTE}/trajectories"
-ER_TRAJ="rollouts/libero_90/${ER_NOTE}/trajectories"
-EC_TRAJ="rollouts/libero_90/${EC_NOTE}/trajectories"
+EB_TRAJ="rollouts/${NATIVE_SUITE}/${EB_NOTE}/trajectories"
+ER_TRAJ="rollouts/${NATIVE_SUITE}/${ER_NOTE}/trajectories"
+EC_TRAJ="rollouts/${NATIVE_SUITE}/${EC_NOTE}/trajectories"
 
 CALIBRATION_CSV="${LOG_DIR}/${SCENARIO}_calibration.csv"
 CALIBRATION_REPORT="${LOG_DIR}/${SCENARIO}_calibration.md"
 SAFE_REFERENCE_CSV="${LOG_DIR}/${SCENARIO}_safe_reference.csv"
 SAFE_REFERENCE_REPORT="${LOG_DIR}/${SCENARIO}_safe_reference.md"
 SAFE_REFERENCE_TRAJ="${LOG_DIR}/${SCENARIO}_safe_reference_trajectories"
+SAFE_REFERENCE_VIDEOS="${REVIEW_DIR}/safe_reference"
 ER_REPLAY_CSV="${LOG_DIR}/${SCENARIO}_eb_to_er_replay.csv"
 ER_REPLAY_REPORT="${LOG_DIR}/${SCENARIO}_eb_to_er_replay.md"
 EC_REPLAY_CSV="${LOG_DIR}/${SCENARIO}_eb_to_ec_replay.csv"
 EC_REPLAY_REPORT="${LOG_DIR}/${SCENARIO}_eb_to_ec_replay.md"
 ATTRIBUTION_CSV="${LOG_DIR}/${SCENARIO}_attribution.csv"
 ATTRIBUTION_REPORT="${LOG_DIR}/${SCENARIO}_attribution.md"
+PREVIEW_CSV="${LOG_DIR}/${SCENARIO}_exact_state_preview.csv"
+PREVIEW_REPORT="${LOG_DIR}/${SCENARIO}_exact_state_preview.md"
+NATIVE_PREFLIGHT_JSON="${LOG_DIR}/${SCENARIO}_native_preflight.json"
+NATIVE_PREFLIGHT_REPORT="${LOG_DIR}/${SCENARIO}_native_preflight.md"
+HUMAN_VISIBILITY_REVIEW="${HUMAN_VISIBILITY_REVIEW:-${REVIEW_DIR}/visibility_review.md}"
 
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
@@ -97,7 +125,16 @@ resolve_bddl() {
 run_check() {
   local n="${1:-${NUM_TRIALS}}"
   python "${PIPELINE}" generate "${common_state_args[@]}" \
-    --source_indices "${SOURCE_INDICES}" --num_states "${n}"
+    --source_indices "${SOURCE_INDICES}" \
+    --bundle_manifest "${STATE_BUNDLE_MANIFEST}" --num_states "${n}"
+  run_native_preflight
+}
+
+run_native_preflight() {
+  python "${PIPELINE}" native-preflight "${common_state_args[@]}" \
+    --out_json "${NATIVE_PREFLIGHT_JSON}" \
+    --out_report "${NATIVE_PREFLIGHT_REPORT}"
+  grep -q 'PASS_NATIVE_ONLY_PREFLIGHT' "${NATIVE_PREFLIGHT_REPORT}"
 }
 
 run_bodies() {
@@ -106,7 +143,27 @@ run_bodies() {
 
 run_preview() {
   python "${PIPELINE}" preview "${common_state_args[@]}" \
-    --out_dir "${PREVIEW_DIR}" --num_states "${PREVIEW_NUM_STATES:-3}"
+    --source_indices "${SOURCE_INDICES}" \
+    --bundle_manifest "${STATE_BUNDLE_MANIFEST}" \
+    --preview_manifest "${PREVIEW_MANIFEST}" \
+    --out_dir "${PREVIEW_DIR}" --num_states "${PREVIEW_NUM_STATES:-3}" \
+    --out_csv "${PREVIEW_CSV}" --out_report "${PREVIEW_REPORT}"
+}
+
+run_verify() {
+  python "${PIPELINE}" verify "${common_state_args[@]}" \
+    --source_indices "${SOURCE_INDICES}" \
+    --bundle_manifest "${STATE_BUNDLE_MANIFEST}" \
+    --preview_manifest "${PREVIEW_MANIFEST}" \
+    --min_states "${1:-${NUM_TRIALS}}"
+}
+
+require_human_visibility_review() {
+  if [[ ! -f "${HUMAN_VISIBILITY_REVIEW}" ]] || \
+     ! grep -q 'PASS_HUMAN_VISIBILITY' "${HUMAN_VISIBILITY_REVIEW}"; then
+    echo "Formal evaluation requires a manual policy-view verdict at ${HUMAN_VISIBILITY_REVIEW} containing PASS_HUMAN_VISIBILITY." >&2
+    exit 1
+  fi
 }
 
 run_screen_occupants() {
@@ -123,10 +180,15 @@ run_safe_reference() {
   # Do not leave a stale report that can be mistaken for the current scene if
   # the prerequisite Eb-trajectory check exits before writing new results.
   rm -f "${SAFE_REFERENCE_CSV}" "${SAFE_REFERENCE_REPORT}"
+  mkdir -p "${SAFE_REFERENCE_TRAJ}" "${SAFE_REFERENCE_VIDEOS}"
+  find "${SAFE_REFERENCE_TRAJ}" -maxdepth 1 -type f -name '*.npz' -delete
+  find "${SAFE_REFERENCE_VIDEOS}" -maxdepth 1 -type f -name '*.mp4' -delete
   python "${PIPELINE}" safe-reference "${common_state_args[@]}" \
     --num_states "${CALIBRATION_NUM_STATES}" \
     --max_attempts_per_state "${SAFE_REFERENCE_MAX_ATTEMPTS:-0}" \
+    --grasp_depth "${SAFE_REFERENCE_GRASP_DEPTH:-${DEFAULT_SAFE_REFERENCE_GRASP_DEPTH}}" \
     --eb_trajectories "${EB_TRAJ}" --trajectory_dir "${SAFE_REFERENCE_TRAJ}" \
+    --video_dir "${SAFE_REFERENCE_VIDEOS}" \
     --out_csv "${SAFE_REFERENCE_CSV}" --out_report "${SAFE_REFERENCE_REPORT}"
 }
 
@@ -139,14 +201,15 @@ run_condition() {
     er) state_path="${ER_STATES}"; note="${ER_NOTE}"; oracle="occupied_goal"; trajectory_dir="${ER_TRAJ}" ;;
     ec) state_path="${EC_STATES}"; note="${EC_NOTE}"; oracle="none"; trajectory_dir="${EC_TRAJ}" ;;
   esac
-  mkdir -p "${trajectory_dir}"
+  local condition_review_dir="${REVIEW_DIR}/${condition}"
+  mkdir -p "${trajectory_dir}" "${condition_review_dir}"
   find "${trajectory_dir}" -maxdepth 1 -type f \( -name '*.npz' -o -name 'index.jsonl' \) -delete
-  local bddl
-  bddl="$(resolve_bddl)"
+  find "${condition_review_dir}" -maxdepth 1 -type f -name '*.mp4' -delete
   python -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --pretrained_checkpoint "${CHECKPOINT}" \
-    --task_suite_name libero_90 \
-    --bddl_file "${bddl}" \
+    --task_suite_name "${NATIVE_SUITE}" \
+    --task_ids "${NATIVE_TASK_ID}" \
+    --native_only_preflight_manifest "${NATIVE_PREFLIGHT_JSON}" \
     --initial_states_path "${state_path}" \
     --num_trials_per_task "${trials}" \
     --safety_oracle "${oracle}" \
@@ -166,8 +229,16 @@ run_condition() {
     --max_violation_videos "${MAX_VIDEOS_PER_OUTCOME}" \
     --max_success_videos "${MAX_VIDEOS_PER_OUTCOME}" \
     --max_failure_videos "${MAX_VIDEOS_PER_OUTCOME}" \
+    --review_video_dir "${condition_review_dir}" \
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --run_id_note "${note}"
+  local video
+  for video in "${condition_review_dir}"/*.mp4; do
+    [[ -e "${video}" ]] || continue
+    if [[ "$(basename "${video}")" != "${UPPER_SCENARIO}-${condition}-"* ]]; then
+      mv "${video}" "${condition_review_dir}/${UPPER_SCENARIO}-${condition}-$(basename "${video}")"
+    fi
+  done
 }
 
 run_replay() {
@@ -198,14 +269,19 @@ run_record() {
 case "${MODE}" in
   bodies) run_bodies ;;
   check) run_check ;;
-  preview) run_preview ;;
-  screen_occupants) run_screen_occupants ;;
-  calibrate) run_calibrate ;;
-  safe_reference) run_safe_reference ;;
-  eb|er|ec) run_condition "${MODE}" "${NUM_TRIALS}" ;;
-  replay) run_replay ;;
+  native_preflight) run_native_preflight ;;
+  preview) run_native_preflight; run_preview ;;
+  verify) run_native_preflight; run_verify ;;
+  screen_occupants) run_native_preflight; run_screen_occupants ;;
+  calibrate) run_native_preflight; run_calibrate ;;
+  safe_reference) run_native_preflight; run_safe_reference ;;
+  eb|er|ec) run_native_preflight; run_verify; run_condition "${MODE}" "${NUM_TRIALS}" ;;
+  replay) run_native_preflight; run_replay ;;
   smoke)
     run_check "${SMOKE_TRIALS}"
+    PREVIEW_NUM_STATES="${SMOKE_TRIALS}" run_preview
+    grep -q 'PASS_EXACT_STATE_PREVIEW' "${PREVIEW_REPORT}"
+    run_verify "${SMOKE_TRIALS}"
     run_calibrate
     grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
     run_condition eb "${SMOKE_TRIALS}"
@@ -220,6 +296,10 @@ case "${MODE}" in
   record) run_record ;;
   eval)
     run_check "${NUM_TRIALS}"
+    PREVIEW_NUM_STATES="${PREVIEW_NUM_STATES:-3}" run_preview
+    grep -q 'PASS_EXACT_STATE_PREVIEW' "${PREVIEW_REPORT}"
+    run_verify "${NUM_TRIALS}"
+    require_human_visibility_review
     run_calibrate
     grep -q 'PASS_STATIC_OCCUPANCY_LAYOUT' "${CALIBRATION_REPORT}"
     run_condition eb "${NUM_TRIALS}"

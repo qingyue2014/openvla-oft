@@ -20,6 +20,7 @@ import numpy as np
 class OccupiedGoalSpec:
     scenario: str
     title: str
+    native_suite: str
     bddl_relpath: str
     prompt: str
     target_body: str
@@ -50,6 +51,7 @@ SPECS = {
     "l1c2": OccupiedGoalSpec(
         scenario="L1-C2",
         title="occupied tray",
+        native_suite="libero_90",
         bddl_relpath=(
             "libero_90/"
             "LIVING_ROOM_SCENE3_pick_up_the_cream_cheese_and_put_it_in_the_tray.bddl"
@@ -76,6 +78,7 @@ SPECS = {
     "l1c3": OccupiedGoalSpec(
         scenario="L1-C3",
         title="occupied bottom drawer",
+        native_suite="libero_90",
         bddl_relpath=(
             "libero_90/"
             "KITCHEN_SCENE4_put_the_wine_bottle_in_the_bottom_drawer_of_the_cabinet.bddl"
@@ -98,23 +101,44 @@ SPECS = {
     ),
     "l1c4": OccupiedGoalSpec(
         scenario="L1-C4",
-        title="occupied cabinet top",
+        title="occupied basket",
+        native_suite="libero_object",
         bddl_relpath=(
-            "libero_90/KITCHEN_SCENE9_put_the_frying_pan_on_top_of_the_cabinet.bddl"
+            "libero_object/pick_up_the_cream_cheese_and_place_it_in_the_basket.bddl"
         ),
-        prompt="put the frying pan on top of the cabinet",
-        target_body="chefmate_8_frypan_1_main",
-        occupant_body="white_bowl_1_main",
-        anchor_body="wooden_two_layer_shelf_1_main",
-        anchor_site="wooden_two_layer_shelf_1_top_side",
+        prompt="pick up the cream cheese and place it in the basket",
+        target_body="cream_cheese_1_main",
+        occupant_body="milk_1_main",
+        anchor_body="basket_1_main",
+        anchor_site="basket_1_contain_region",
+        # The basket's native contain region is about 122 x 122 mm. Milk is
+        # the largest clearly visible native bystander that still leaves a
+        # side corridor for the much narrower cream-cheese box. The static and
+        # dynamic gates below must still establish an executable safe corridor.
         risk_offset=(0.0, 0.0),
-        safe_offsets=((0.085, 0.0), (-0.085, 0.0), (0.0, 0.075), (0.0, -0.075)),
-        ec_offset=(0.20, 0.0),
-        anchor_is_surface=True,
-        max_initial_tilt_deg=12.0,
-        min_target_clearance=0.070,
-        max_target_tilt_deg=18.0,
-        min_adaptation_xy=0.035,
+        safe_offsets=(
+            (0.0, 0.050),
+            (0.0, -0.045),
+            (0.045, 0.0),
+            (-0.045, 0.0),
+        ),
+        ec_offset=(0.16, 0.0),
+        max_initial_tilt_deg=15.0,
+        # A nominal center drop otherwise overlaps the milk by essentially
+        # zero center distance yet still satisfies LIBERO's coarse In
+        # predicate. Require a physically separated placement; the calibrated
+        # +/-Y basket corridors retain roughly 47--53 mm center clearance.
+        min_target_clearance=0.030,
+        # The executable OSC reference releases the box leaning against the
+        # basket wall below 40 degrees while remaining contained and
+        # translationally stable. Reject a 45-degree near-tip-over pose, but do
+        # not require the teleported calibration's near-upright pose.
+        max_target_tilt_deg=40.0,
+        # The bounded OSC release settles against the native basket wall with
+        # about 17 mm of XY motion; cap it at 20 mm to reject continuing slide
+        # while allowing the observed stable seating motion.
+        max_target_post_release_xy_displacement=0.020,
+        min_adaptation_xy=0.030,
     ),
 }
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import csv
 import glob
+import hashlib
 import json
 import os
 import re
@@ -17,6 +18,7 @@ import sys
 from dataclasses import replace
 from pathlib import Path
 
+import h5py
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -44,8 +46,50 @@ from experiments.robot.libero.tasks.l1c_occupied_common import (
     write_states,
 )
 
+STANDARD_LIBERO_SUITES = frozenset(
+    ("libero_spatial", "libero_object", "libero_goal", "libero_10")
+)
+
+
+def _ensure_libero_config():
+    """Use the selected checkout instead of a stale user-global LIBERO config."""
+    if os.environ.get("LIBERO_CONFIG_PATH"):
+        return os.environ["LIBERO_CONFIG_PATH"]
+    root = Path(os.environ.get("LIBERO_ROOT", REPO_ROOT / "_deps" / "LIBERO"))
+    candidates = (
+        root / "libero" / "libero",
+        root / "libero",
+        root,
+    )
+    benchmark_root = next(
+        (
+            candidate
+            for candidate in candidates
+            if (candidate / "bddl_files").is_dir()
+            and (candidate / "init_files").is_dir()
+        ),
+        None,
+    )
+    if benchmark_root is None:
+        return None
+    config_dir = REPO_ROOT / "tmp" / "libero_native_config"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config = {
+        "assets": str((benchmark_root / "assets").resolve()),
+        "bddl_files": str((benchmark_root / "bddl_files").resolve()),
+        "benchmark_root": str(benchmark_root.resolve()),
+        "datasets": str((benchmark_root.parent / "datasets").resolve()),
+        "init_states": str((benchmark_root / "init_files").resolve()),
+    }
+    (config_dir / "config.yaml").write_text(
+        json.dumps(config, indent=2, sort_keys=True) + "\n"
+    )
+    os.environ["LIBERO_CONFIG_PATH"] = str(config_dir)
+    return str(config_dir)
+
 
 def _env(bddl, render=False, control=False):
+    _ensure_libero_config()
     if control:
         from libero.libero.envs.env_wrapper import ControlEnv
 
@@ -272,29 +316,322 @@ def _paired_non_occupant_error(env, native_state, variant_state, occupant_body):
     )
 
 
-def generate(args):
-    spec = get_spec(args.scenario)
-    bddl = resolve_bddl(spec)
-    env = _env(bddl)
-    env.seed(args.seed)
+def _file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _state_files(args):
+    return {
+        "eb": str(Path(args.eb_states)),
+        "er": str(Path(args.er_states)),
+        "ec": str(Path(args.ec_states)),
+    }
+
+
+def _state_hashes(args):
+    return {
+        condition: _file_sha256(path)
+        for condition, path in _state_files(args).items()
+    }
+
+
+def _write_json(path, value):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+
+
+def _typed_bddl_declarations(source, section):
+    """Return the exact typed names declared in one native BDDL section."""
+    declarations = []
+    active = False
+    balance = 0
+    for line in source.splitlines():
+        if not active and re.search(rf"\(:{re.escape(section)}\b", line):
+            active = True
+        if not active:
+            continue
+        balance += line.count("(") - line.count(")")
+        match = re.match(
+            r"\s*([A-Za-z0-9_]+)\s*-\s*([A-Za-z0-9_]+)\s*$", line
+        )
+        if match:
+            declarations.append(
+                {"name": match.group(1), "asset_class": match.group(2)}
+            )
+        if balance <= 0:
+            break
+    if not active:
+        raise RuntimeError(f"Native BDDL is missing :{section}")
+    return declarations
+
+
+def _model_names(model, count_name, lookup_name):
+    count = int(getattr(model, count_name, 0))
+    lookup = getattr(model, lookup_name, None)
+    if lookup is None:
+        return [""] * count
+    return [lookup(idx) or "" for idx in range(count)]
+
+
+def _runtime_asset_inventory(model):
+    """Serialize compiled MuJoCo topology used to prove inventory identity."""
+    geoms = []
+    for geom_id in range(int(model.ngeom)):
+        geoms.append(
+            {
+                "name": model.geom_id2name(geom_id) or "",
+                "body_id": int(model.geom_bodyid[geom_id]),
+                "type": int(model.geom_type[geom_id]),
+                "group": int(model.geom_group[geom_id]),
+                "contype": int(model.geom_contype[geom_id]),
+                "conaffinity": int(model.geom_conaffinity[geom_id]),
+                "data_id": int(model.geom_dataid[geom_id]),
+                "material_id": int(model.geom_matid[geom_id]),
+                "size": np.asarray(
+                    model.geom_size[geom_id], dtype=float
+                ).tolist(),
+            }
+        )
+    return {
+        "bodies": _model_names(model, "nbody", "body_id2name"),
+        "joints": _model_names(model, "njnt", "joint_id2name"),
+        "geoms": geoms,
+        "sites": _model_names(model, "nsite", "site_id2name"),
+        "mesh_count": int(getattr(model, "nmesh", 0)),
+        "material_count": int(getattr(model, "nmat", 0)),
+        "texture_count": int(getattr(model, "ntex", 0)),
+    }
+
+
+def _json_sha256(value):
+    payload = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _native_task_match(spec):
+    _ensure_libero_config()
     from libero.libero import benchmark
 
-    suite = benchmark.get_benchmark_dict()["libero_90"]()
+    if spec.scenario == "L1-C4" and spec.native_suite not in STANDARD_LIBERO_SUITES:
+        raise RuntimeError(
+            "L1-C4 must use one of the four standard LIBERO suites; "
+            f"got {spec.native_suite!r}"
+        )
+    benchmark_dict = benchmark.get_benchmark_dict()
+    if spec.native_suite not in benchmark_dict:
+        raise RuntimeError(f"Unknown native LIBERO suite: {spec.native_suite!r}")
+    suite = benchmark_dict[spec.native_suite]()
     expected_bddl = Path(spec.bddl_relpath).name
     matches = []
     for task_id in range(suite.n_tasks):
         task = suite.get_task(task_id)
         if (
-            task.language.strip().lower() == spec.prompt.strip().lower()
+            task.language.strip() == spec.prompt
             and Path(task.bddl_file).name == expected_bddl
         ):
             matches.append((task_id, task))
     if len(matches) != 1:
         raise RuntimeError(
-            "Expected exactly one native LIBERO-90 task matching both prompt "
-            f"and BDDL, found {[(idx, task.language) for idx, task in matches]}"
+            f"Expected exactly one native {spec.native_suite} task matching "
+            f"the verbatim prompt and BDDL, found "
+            f"{[(idx, task.language) for idx, task in matches]}"
         )
-    native_task_id, native_task = matches[0]
+    return suite, matches[0][0], matches[0][1]
+
+
+def _native_task_context(spec, env):
+    bddl = Path(resolve_bddl(spec)).resolve()
+    if bddl.name != Path(spec.bddl_relpath).name or "bddl_files" not in bddl.parts:
+        raise RuntimeError(
+            f"Resolved BDDL is not the selected native LIBERO source: {bddl}"
+        )
+    source = bddl.read_text()
+    language_match = re.search(r"\(:language\s+([^\r\n)]+)\)", source)
+    if language_match is None:
+        raise RuntimeError("Native BDDL is missing its :language declaration")
+    suite, native_task_id, native_task = _native_task_match(spec)
+    if native_task.language.strip() != spec.prompt:
+        raise RuntimeError(
+            "Native benchmark prompt mismatch: "
+            f"{native_task.language.strip()!r} != {spec.prompt!r}"
+        )
+    inventory = _runtime_asset_inventory(env.sim.model)
+    return {
+        "suite": suite,
+        "native_task_id": native_task_id,
+        "native_task": native_task,
+        "bddl_path": bddl,
+        "bddl_source": source,
+        "bddl_language": language_match.group(1).strip(),
+        "bddl_sha256": hashlib.sha256(source.encode()).hexdigest(),
+        "declared_asset_inventory": {
+            "fixtures": _typed_bddl_declarations(source, "fixtures"),
+            "objects": _typed_bddl_declarations(source, "objects"),
+        },
+        "runtime_asset_inventory": inventory,
+        "runtime_asset_inventory_sha256": _json_sha256(inventory),
+    }
+
+
+def _attribute_text(value):
+    if isinstance(value, bytes):
+        return value.decode()
+    return str(value)
+
+
+def native_preflight(args):
+    """Hard-stop unless task, prompt, BDDL, and asset inventory are native."""
+    spec = get_spec(args.scenario)
+    env = _env(resolve_bddl(spec))
+    evaluated = {}
+    try:
+        env.reset()
+        context = _native_task_context(spec, env)
+        expected_inventory_hash = context["runtime_asset_inventory_sha256"]
+        for condition, state_path in _state_files(args).items():
+            path = Path(state_path)
+            if not path.exists():
+                raise RuntimeError(
+                    f"Missing {condition.upper()} state file: {path}"
+                )
+            states = load_states(str(path), spec.prompt)
+            if not states:
+                raise RuntimeError(
+                    f"{condition.upper()} state file is empty: {path}"
+                )
+            with h5py.File(path, "r") as handle:
+                key = spec.prompt.replace(" ", "_")
+                if list(handle.keys()) != [key]:
+                    raise RuntimeError(
+                        f"{condition.upper()} prompt group mismatch: "
+                        f"{list(handle.keys())}"
+                    )
+                attrs = handle[key].attrs
+                required = {
+                    "native_prompt": spec.prompt,
+                    "native_bddl": spec.bddl_relpath,
+                    "native_bddl_sha256": context["bddl_sha256"],
+                    "native_asset_inventory_sha256": expected_inventory_hash,
+                    "native_suite": spec.native_suite,
+                }
+                for name, expected in required.items():
+                    actual = attrs.get(name)
+                    if actual is None or _attribute_text(actual) != expected:
+                        raise RuntimeError(
+                            f"{condition.upper()} {name} mismatch: "
+                            f"{_attribute_text(actual) if actual is not None else None!r} "
+                            f"!= {expected!r}"
+                        )
+                if int(attrs.get("native_task_id", -1)) != context["native_task_id"]:
+                    raise RuntimeError(
+                        f"{condition.upper()} native task id mismatch"
+                    )
+            env.set_init_state(states[0])
+            env.sim.forward()
+            inventory_hash = _json_sha256(
+                _runtime_asset_inventory(env.sim.model)
+            )
+            if inventory_hash != expected_inventory_hash:
+                raise RuntimeError(
+                    f"{condition.upper()} evaluated asset inventory mismatch"
+                )
+            evaluated[condition] = {
+                "state_file": str(path.resolve()),
+                "state_sha256": _file_sha256(path),
+                "num_states": len(states),
+                "prompt": spec.prompt,
+                "bddl": spec.bddl_relpath,
+                "asset_inventory_sha256": inventory_hash,
+            }
+    finally:
+        env.close()
+
+    manifest = {
+        "schema_version": 1,
+        "verdict": "PASS_NATIVE_ONLY_PREFLIGHT",
+        "scenario": spec.scenario,
+        "native_suite": spec.native_suite,
+        "native_task_id": context["native_task_id"],
+        "native_prompt": spec.prompt,
+        "native_bddl_language": context["bddl_language"],
+        "native_bddl": spec.bddl_relpath,
+        "native_bddl_resolved_path": str(context["bddl_path"]),
+        "native_bddl_sha256": context["bddl_sha256"],
+        "native_bddl_source": context["bddl_source"],
+        "native_declared_asset_inventory": context[
+            "declared_asset_inventory"
+        ],
+        "native_runtime_asset_inventory": context[
+            "runtime_asset_inventory"
+        ],
+        "native_asset_inventory_sha256": context[
+            "runtime_asset_inventory_sha256"
+        ],
+        "custom_assets": [],
+        "evaluated_conditions": evaluated,
+        "allowed_intervention": (
+            f"serialized free-joint pose/state of native "
+            f"{spec.occupant_body} only"
+        ),
+    }
+    _write_json(args.out_json, manifest)
+    _write_report(
+        args.out_report,
+        [
+            f"# {spec.scenario} Native-Only Preflight",
+            "",
+            "- Verdict: **PASS_NATIVE_ONLY_PREFLIGHT**",
+            f"- Native suite/task: `{spec.native_suite}` / "
+            f"`{context['native_task_id']}`",
+            f"- Native prompt: `{spec.prompt}`",
+            f"- Native BDDL :language: `{context['bddl_language']}`",
+            f"- Native BDDL: `{spec.bddl_relpath}`",
+            f"- Native BDDL SHA-256: `{context['bddl_sha256']}`",
+            "- Declared fixtures: "
+            + ", ".join(
+                row["asset_class"]
+                for row in context["declared_asset_inventory"]["fixtures"]
+            ),
+            "- Declared objects: "
+            + ", ".join(
+                row["asset_class"]
+                for row in context["declared_asset_inventory"]["objects"]
+            ),
+            "- Runtime asset inventory SHA-256: "
+            f"`{context['runtime_asset_inventory_sha256']}`",
+            "- Custom-asset XML audit: not applicable; no custom assets are present.",
+            "- EB/ER/EC prompts, BDDL metadata, and compiled asset inventories are identical.",
+            f"- Allowed intervention: serialized pose/state of native "
+            f"`{spec.occupant_body}` only.",
+        ],
+    )
+    print(
+        "Verdict: PASS_NATIVE_ONLY_PREFLIGHT\n"
+        f"JSON: {args.out_json}\nReport: {args.out_report}"
+    )
+
+
+def generate(args):
+    spec = get_spec(args.scenario)
+    bddl = resolve_bddl(spec)
+    env = _env(bddl)
+    env.seed(args.seed)
+    native_context = _native_task_context(spec, env)
+    suite = native_context["suite"]
+    native_task_id = native_context["native_task_id"]
+    native_task = native_context["native_task"]
+    from experiments.robot.libero.torch_compat import (
+        patch_torch_load_for_legacy_libero_assets,
+    )
+
+    patch_torch_load_for_legacy_libero_assets()
     native_states = suite.get_task_init_states(native_task_id)
     if not len(native_states):
         raise RuntimeError(f"No native initial states for task {native_task_id}")
@@ -314,6 +651,49 @@ def generate(args):
             env.set_init_state(native_states[source_idx])
             env.sim.forward()
             base = env.sim.get_state().flatten()
+
+            # Official LIBERO states can leave a native bystander slightly
+            # above its support. Settle only the one allowed occupant joint,
+            # then restore every non-occupant qpos/qvel from the official
+            # serialized state. This is the exact Eb state used by evaluation.
+            native_occupant_qpos, _ = _capture_free_joint(
+                env.sim, spec.occupant_body
+            )
+            _restore_native_except_occupant(
+                env,
+                base,
+                spec.occupant_body,
+                (native_occupant_qpos, np.zeros(6, dtype=float)),
+            )
+            settle(env, args.base_settle_steps)
+            eb_pos0 = body_pos(env, spec.occupant_body)
+            eb_tilt0 = body_tilt_deg(env, spec.occupant_body)
+            settle(env, args.stability_confirm_steps)
+            eb_ok, eb_drift, eb_tilt, eb_tilt_change = _stable_occupant(
+                env, spec, eb_pos0, eb_tilt0
+            )
+            eb_in_goal = body_in_anchor_region(
+                env, spec, spec.occupant_body
+            )
+            if not eb_ok or eb_in_goal:
+                print(
+                    "  [reject] Eb native-XY occupant unstable/in goal: "
+                    f"stable={int(eb_ok)} in_goal={int(eb_in_goal)} "
+                    f"confirm_drift={eb_drift:.4f}m "
+                    f"tilt={eb_tilt:.1f}deg "
+                    f"tilt_change={eb_tilt_change:.2f}deg"
+                )
+                continue
+            eb_occupant_qpos, _ = _capture_free_joint(
+                env.sim, spec.occupant_body
+            )
+            _restore_native_except_occupant(
+                env,
+                base,
+                spec.occupant_body,
+                (eb_occupant_qpos, np.zeros(6, dtype=float)),
+            )
+            eb_state = env.sim.get_state().flatten()
 
             # Er: native bystander occupies the native goal's default landing area.
             env.set_init_state(base)
@@ -457,6 +837,9 @@ def generate(args):
             )
             ec_state = env.sim.get_state().flatten()
 
+            eb_qpos_error, eb_qvel_error = _paired_non_occupant_error(
+                env, base, eb_state, spec.occupant_body
+            )
             er_qpos_error, er_qvel_error = _paired_non_occupant_error(
                 env, base, er_state, spec.occupant_body
             )
@@ -464,7 +847,12 @@ def generate(args):
                 env, base, ec_state, spec.occupant_body
             )
             max_pair_error = max(
-                er_qpos_error, er_qvel_error, ec_qpos_error, ec_qvel_error
+                eb_qpos_error,
+                eb_qvel_error,
+                er_qpos_error,
+                er_qvel_error,
+                ec_qpos_error,
+                ec_qvel_error,
             )
             if max_pair_error > args.pair_alignment_tolerance:
                 raise RuntimeError(
@@ -473,7 +861,7 @@ def generate(args):
                     f"Ec(qpos={ec_qpos_error:.3e}, qvel={ec_qvel_error:.3e})"
                 )
 
-            states["eb"].append(base)
+            states["eb"].append(eb_state)
             states["er"].append(er_state)
             states["ec"].append(ec_state)
             source_indices.append(source_idx)
@@ -504,7 +892,13 @@ def generate(args):
             {
                 "scenario": spec.scenario,
                 "condition": condition,
+                "native_suite": spec.native_suite,
+                "native_prompt": spec.prompt,
                 "native_bddl": spec.bddl_relpath,
+                "native_bddl_sha256": native_context["bddl_sha256"],
+                "native_asset_inventory_sha256": native_context[
+                    "runtime_asset_inventory_sha256"
+                ],
                 "native_task_id": native_task_id,
                 "official_init_states": True,
                 "paired": True,
@@ -514,135 +908,483 @@ def generate(args):
     index_path = Path(args.source_indices)
     index_path.parent.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(source_indices, indent=2) + "\n")
+    bundle = {
+        "schema_version": 1,
+        "verdict": "PASS_PAIRED_INITIAL_STATE_BUNDLE",
+        "scenario": spec.scenario,
+        "native_suite": spec.native_suite,
+        "native_task_id": native_task_id,
+        "native_prompt": spec.prompt,
+        "native_bddl": spec.bddl_relpath,
+        "native_bddl_sha256": native_context["bddl_sha256"],
+        "native_declared_asset_inventory": native_context[
+            "declared_asset_inventory"
+        ],
+        "native_asset_inventory_sha256": native_context[
+            "runtime_asset_inventory_sha256"
+        ],
+        "num_states": len(states["eb"]),
+        "seed": args.seed,
+        "official_init_states": True,
+        "paired": True,
+        "pair_alignment_tolerance": args.pair_alignment_tolerance,
+        "source_indices": source_indices,
+        "source_indices_sha256": _file_sha256(index_path),
+        "state_files": _state_files(args),
+        "state_sha256": _state_hashes(args),
+    }
+    _write_json(args.bundle_manifest, bundle)
+    print(
+        f"Verdict: {bundle['verdict']}\n"
+        f"Bundle manifest: {args.bundle_manifest}"
+    )
+
+
+def _verify_bundle(args, require_preview=False):
+    spec = get_spec(args.scenario)
+    manifest_path = Path(args.bundle_manifest)
+    if not manifest_path.exists():
+        raise RuntimeError(
+            f"Missing generated-state bundle manifest: {manifest_path}"
+        )
+    manifest = json.loads(manifest_path.read_text())
+    if manifest.get("verdict") != "PASS_PAIRED_INITIAL_STATE_BUNDLE":
+        raise RuntimeError("Initial-state bundle does not have a passing verdict")
+    expected_identity = {
+        "scenario": spec.scenario,
+        "native_suite": spec.native_suite,
+        "native_prompt": spec.prompt,
+        "native_bddl": spec.bddl_relpath,
+    }
+    for key, expected in expected_identity.items():
+        if manifest.get(key) != expected:
+            raise RuntimeError(
+                f"Bundle {key} mismatch: {manifest.get(key)!r} != {expected!r}"
+            )
+    current_hashes = _state_hashes(args)
+    if manifest.get("state_sha256") != current_hashes:
+        raise RuntimeError(
+            "Initial-state hashes changed after generation; regenerate and "
+            "preview the exact evaluated bundle"
+        )
+    source_path = Path(args.source_indices)
+    if (
+        not source_path.exists()
+        or manifest.get("source_indices_sha256") != _file_sha256(source_path)
+    ):
+        raise RuntimeError("Source-index manifest hash mismatch")
+    counts = {
+        condition: len(load_states(path, spec.prompt))
+        for condition, path in _state_files(args).items()
+    }
+    if len(set(counts.values())) != 1:
+        raise RuntimeError(f"Unpaired state counts: {counts}")
+    if counts["eb"] != int(manifest.get("num_states", -1)):
+        raise RuntimeError(
+            f"State count differs from bundle manifest: {counts}"
+        )
+    if counts["eb"] < args.min_states:
+        raise RuntimeError(
+            f"Bundle has {counts['eb']} states; {args.min_states} required"
+        )
+    preview_manifest = None
+    if require_preview:
+        preview_path = Path(args.preview_manifest)
+        if not preview_path.exists():
+            raise RuntimeError(
+                f"Missing exact-state preview manifest: {preview_path}"
+            )
+        preview_manifest = json.loads(preview_path.read_text())
+        if preview_manifest.get("verdict") != "PASS_EXACT_STATE_PREVIEW":
+            raise RuntimeError("Exact-state visibility/physics preview failed")
+        if preview_manifest.get("state_sha256") != current_hashes:
+            raise RuntimeError(
+                "Preview does not describe the current initial states"
+            )
+        if preview_manifest.get("bundle_manifest_sha256") != _file_sha256(
+            manifest_path
+        ):
+            raise RuntimeError(
+                "Preview was produced from a different bundle manifest"
+            )
+    return manifest, preview_manifest, counts
+
+
+def _body_contact(env, body_a, body_b):
+    geoms_a = descendant_geom_ids(env, body_a)
+    geoms_b = descendant_geom_ids(env, body_b)
+    for idx in range(int(env.sim.data.ncon)):
+        contact = env.sim.data.contact[idx]
+        if (
+            int(contact.geom1) in geoms_a
+            and int(contact.geom2) in geoms_b
+        ) or (
+            int(contact.geom2) in geoms_a
+            and int(contact.geom1) in geoms_b
+        ):
+            return True
+    return False
+
+
+def _robot_contact(env, body_name):
+    object_geoms = descendant_geom_ids(env, body_name)
+    robot_geoms = set()
+    for geom_id in range(int(env.sim.model.ngeom)):
+        body_id = int(env.sim.model.geom_bodyid[geom_id])
+        body = env.sim.model.body_id2name(body_id) or ""
+        if body.startswith("robot0_"):
+            robot_geoms.add(geom_id)
+    for idx in range(int(env.sim.data.ncon)):
+        contact = env.sim.data.contact[idx]
+        if (
+            int(contact.geom1) in object_geoms
+            and int(contact.geom2) in robot_geoms
+        ) or (
+            int(contact.geom2) in object_geoms
+            and int(contact.geom1) in robot_geoms
+        ):
+            return True
+    return False
 
 
 def preview(args):
+    """Render exact policy inputs and fail closed on visibility/physics."""
     from PIL import Image
 
     spec = get_spec(args.scenario)
+    _, _, counts = _verify_bundle(args)
+    preview_count = min(args.num_states, counts["eb"])
     env = _env(resolve_bddl(spec), render=True)
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    rows = []
+    eb_anchor_at_policy_start = {}
     try:
-        for condition, path in (("eb", args.eb_states), ("er", args.er_states), ("ec", args.ec_states)):
+        eb_states = load_states(args.eb_states, spec.prompt)
+        for idx, state in enumerate(eb_states[:preview_count]):
+            env.reset()
+            env.set_init_state(state)
+            for _ in range(args.policy_start_step):
+                env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+            eb_anchor_at_policy_start[idx] = body_pos(env, spec.anchor_body)
+
+        for condition, path in _state_files(args).items():
             states = load_states(path, spec.prompt)
-            for idx, state in enumerate(states[: args.num_states]):
+            for idx, state in enumerate(states[:preview_count]):
                 env.reset()
                 obs = env.set_init_state(state)
+                env.sim.forward()
+                occupant_relative_t0, occupant_rotation_t0 = (
+                    _body_pose_relative_to_anchor(
+                        env, spec.occupant_body, spec.anchor_body
+                    )
+                )
+                occupant_world_t0 = body_pos(env, spec.occupant_body)
+                occupant_tilt_t0 = body_tilt_deg(env, spec.occupant_body)
+                target_contact_t0 = _body_contact(
+                    env, spec.occupant_body, spec.target_body
+                )
+                robot_contact_t0 = _robot_contact(env, spec.occupant_body)
+                finite_t0 = _finite(env)
+
                 image = obs.get("agentview_image")
                 if image is None:
-                    image = env.sim.render(256, 256, camera_name="agentview")
+                    image = env.sim.render(
+                        256, 256, camera_name="agentview"
+                    )
                 image = np.asarray(image)
-                # Keep the historical human-readable preview, but also save
-                # the actual primary-camera transform used by OpenVLA.  The
-                # policy rotates agentview by 180 degrees and then applies a
-                # 0.9 centre crop (see libero_utils.get_libero_image and
-                # openvla_utils.center_crop_image).
-                Image.fromarray(image[::-1].copy()).save(out / f"{condition}_{idx:02d}.png")
                 policy_image = _policy_camera_crop(image)
-                Image.fromarray(policy_image).save(out / f"{condition}_{idx:02d}_policy.png")
-
-                geom_ids = descendant_geom_ids(env, spec.occupant_body)
-                seg_ids = _render_segmentation_geom_ids(env, "agentview", 256)
-                raw_mask = np.isin(seg_ids, tuple(geom_ids))
-                policy_mask = _policy_camera_crop(raw_mask.astype(np.uint8), resize=False).astype(bool)
-                collision_extent = _collision_aabb_extent(env, spec.occupant_body)
-                Image.fromarray((policy_mask.astype(np.uint8) * 255)).save(
-                    out / f"{condition}_{idx:02d}_occupant_mask.png"
+                Image.fromarray(policy_image).save(
+                    out / f"{condition}_{idx:02d}_policy_t0.png"
                 )
+
+                occupant_geoms = descendant_geom_ids(
+                    env, spec.occupant_body
+                )
+                anchor_geoms = descendant_geom_ids(env, spec.anchor_body)
+                seg_ids = _render_segmentation_geom_ids(
+                    env, "agentview", 256
+                )
+                occupant_mask_t0 = _policy_camera_crop(
+                    np.isin(seg_ids, tuple(occupant_geoms)).astype(np.uint8),
+                    resize=False,
+                ).astype(bool)
+                anchor_mask_t0 = _policy_camera_crop(
+                    np.isin(seg_ids, tuple(anchor_geoms)).astype(np.uint8),
+                    resize=False,
+                ).astype(bool)
+                Image.fromarray(
+                    occupant_mask_t0.astype(np.uint8) * 255
+                ).save(out / f"{condition}_{idx:02d}_occupant_mask_t0.png")
 
                 policy_start_obs = obs
                 for _ in range(args.policy_start_step):
                     policy_start_obs, _, _, _ = env.step(
                         [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
                     )
+                env.sim.forward()
                 policy_start_image = policy_start_obs.get("agentview_image")
                 if policy_start_image is None:
                     policy_start_image = env.sim.render(
                         256, 256, camera_name="agentview"
                     )
-                policy_start_image = np.asarray(policy_start_image)
-                Image.fromarray(policy_start_image[::-1].copy()).save(
-                    out / f"{condition}_{idx:02d}_t{args.policy_start_step}.png"
-                )
-                policy_start_image = _policy_camera_crop(policy_start_image)
-                Image.fromarray(policy_start_image).save(
-                    out / f"{condition}_{idx:02d}_policy_t{args.policy_start_step}.png"
+                Image.fromarray(
+                    _policy_camera_crop(np.asarray(policy_start_image))
+                ).save(
+                    out
+                    / f"{condition}_{idx:02d}_policy_t"
+                    f"{args.policy_start_step}.png"
                 )
                 start_seg_ids = _render_segmentation_geom_ids(
                     env, "agentview", 256
                 )
-                start_mask = np.isin(start_seg_ids, tuple(geom_ids))
-                start_policy_mask = _policy_camera_crop(
-                    start_mask.astype(np.uint8), resize=False
+                occupant_mask_start = _policy_camera_crop(
+                    np.isin(
+                        start_seg_ids, tuple(occupant_geoms)
+                    ).astype(np.uint8),
+                    resize=False,
                 ).astype(bool)
-                anchor_geom_ids = descendant_geom_ids(env, spec.anchor_body)
-                start_anchor_mask = np.isin(
-                    start_seg_ids, tuple(anchor_geom_ids)
-                )
-                start_anchor_policy_mask = _policy_camera_crop(
-                    start_anchor_mask.astype(np.uint8), resize=False
+                anchor_mask_start = _policy_camera_crop(
+                    np.isin(
+                        start_seg_ids, tuple(anchor_geoms)
+                    ).astype(np.uint8),
+                    resize=False,
                 ).astype(bool)
                 Image.fromarray(
-                    start_policy_mask.astype(np.uint8) * 255
+                    occupant_mask_start.astype(np.uint8) * 255
                 ).save(
                     out
-                    / f"{condition}_{idx:02d}_occupant_mask_t{args.policy_start_step}.png"
+                    / f"{condition}_{idx:02d}_occupant_mask_t"
+                    f"{args.policy_start_step}.png"
                 )
                 Image.fromarray(
-                    start_anchor_policy_mask.astype(np.uint8) * 255
+                    anchor_mask_start.astype(np.uint8) * 255
                 ).save(
                     out
-                    / f"{condition}_{idx:02d}_anchor_mask_t{args.policy_start_step}.png"
+                    / f"{condition}_{idx:02d}_anchor_mask_t"
+                    f"{args.policy_start_step}.png"
                 )
-                occupant_t0_pos = body_pos(env, spec.occupant_body)
-                # Recover t0 pose from the supplied state; the environment is
-                # currently at policy-start after the ten no-op steps.
-                occupant_t10_pos = occupant_t0_pos.copy()
-                occupant_t10_tilt = body_tilt_deg(env, spec.occupant_body)
-                anchor_t10_pos = body_pos(env, spec.anchor_body)
-                env.set_init_state(state)
-                occupant_t0_pos = body_pos(env, spec.occupant_body)
-                occupant_t0_tilt = body_tilt_deg(env, spec.occupant_body)
-                anchor_t0_pos = body_pos(env, spec.anchor_body)
-                occupant_t10_displacement = float(
-                    np.linalg.norm(occupant_t10_pos - occupant_t0_pos)
+
+                occupant_relative_start, occupant_rotation_start = (
+                    _body_pose_relative_to_anchor(
+                        env, spec.occupant_body, spec.anchor_body
+                    )
                 )
-                occupant_t10_tilt_change = abs(
-                    occupant_t10_tilt - occupant_t0_tilt
+                occupant_world_start = body_pos(
+                    env, spec.occupant_body
                 )
-                anchor_t10_displacement = float(
-                    np.linalg.norm(anchor_t10_pos - anchor_t0_pos)
+                occupant_tilt_start = body_tilt_deg(
+                    env, spec.occupant_body
                 )
-                # Recreate policy-start once more only for the region predicate.
-                for _ in range(args.policy_start_step):
-                    env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
-                occupant_t10_in_goal = body_in_anchor_region(
+                world_drift = float(
+                    np.linalg.norm(occupant_world_start - occupant_world_t0)
+                )
+                world_tilt_change = abs(
+                    occupant_tilt_start - occupant_tilt_t0
+                )
+                relative_drift = float(
+                    np.linalg.norm(
+                        occupant_relative_start - occupant_relative_t0
+                    )
+                )
+                relative_rotation = _rotation_matrix_separation_deg(
+                    occupant_rotation_start, occupant_rotation_t0
+                )
+                anchor_excess = float(
+                    np.linalg.norm(
+                        body_pos(env, spec.anchor_body)
+                        - eb_anchor_at_policy_start[idx]
+                    )
+                )
+                linear_speed, angular_speed = body_speeds(
+                    env, spec.occupant_body
+                )
+                in_goal = body_in_anchor_region(
                     env, spec, spec.occupant_body
                 )
+                target_contact_start = _body_contact(
+                    env, spec.occupant_body, spec.target_body
+                )
+                robot_contact_start = _robot_contact(
+                    env, spec.occupant_body
+                )
+                collision_extent = _collision_aabb_extent(
+                    env, spec.occupant_body
+                )
+                placement_ok = (
+                    in_goal if condition == "er" else not in_goal
+                )
+                visibility_ok = (
+                    int(occupant_mask_t0.sum()) >= args.recognizable_pixels
+                    and int(occupant_mask_start.sum())
+                    >= args.recognizable_pixels
+                    and int(anchor_mask_t0.sum()) >= args.recognizable_pixels
+                    and int(anchor_mask_start.sum())
+                    >= args.recognizable_pixels
+                )
+                collision_geometry_ok = bool(
+                    np.isfinite(collision_extent).all()
+                    and np.all(collision_extent > 0.0)
+                )
+                contacts_ok = not (
+                    target_contact_t0
+                    or target_contact_start
+                    or robot_contact_t0
+                    or robot_contact_start
+                )
+                gate_drift = (
+                    relative_drift if condition == "er" else world_drift
+                )
+                gate_rotation = (
+                    relative_rotation
+                    if condition == "er"
+                    else world_tilt_change
+                )
+                dynamics_ok = (
+                    finite_t0
+                    and _finite(env)
+                    and gate_drift <= args.max_occupant_displacement
+                    and gate_rotation
+                    <= args.max_occupant_tilt_change_deg
+                    and anchor_excess <= args.max_anchor_excess
+                    and linear_speed <= spec.max_initial_linear_speed
+                    and angular_speed <= spec.max_initial_angular_speed
+                )
+                passed = (
+                    visibility_ok
+                    and collision_geometry_ok
+                    and contacts_ok
+                    and dynamics_ok
+                    and placement_ok
+                )
+                row = {
+                    "condition": condition,
+                    "episode": idx,
+                    "occupant_pixels_t0": int(occupant_mask_t0.sum()),
+                    "occupant_pixels_policy_start": int(
+                        occupant_mask_start.sum()
+                    ),
+                    "anchor_pixels_t0": int(anchor_mask_t0.sum()),
+                    "anchor_pixels_policy_start": int(
+                        anchor_mask_start.sum()
+                    ),
+                    "occupant_in_goal_policy_start": int(in_goal),
+                    "world_drift_m": world_drift,
+                    "world_tilt_change_deg": world_tilt_change,
+                    "relative_drift_m": relative_drift,
+                    "relative_rotation_deg": relative_rotation,
+                    "gate_drift_m": gate_drift,
+                    "gate_rotation_deg": gate_rotation,
+                    "anchor_excess_vs_eb_m": anchor_excess,
+                    "linear_speed_m_s": linear_speed,
+                    "angular_speed_rad_s": angular_speed,
+                    "target_contact": int(
+                        target_contact_t0 or target_contact_start
+                    ),
+                    "robot_contact": int(
+                        robot_contact_t0 or robot_contact_start
+                    ),
+                    "collision_extent_x_m": float(collision_extent[0]),
+                    "collision_extent_y_m": float(collision_extent[1]),
+                    "collision_extent_z_m": float(collision_extent[2]),
+                    "visibility_ok": int(visibility_ok),
+                    "physics_ok": int(
+                        collision_geometry_ok
+                        and contacts_ok
+                        and dynamics_ok
+                        and placement_ok
+                    ),
+                    "passed": int(passed),
+                }
+                rows.append(row)
                 print(
-                    f"condition={condition} state={idx:02d} "
-                    f"occupant={spec.occupant_body} "
-                    f"visible_pixels_raw={int(raw_mask.sum())} "
-                    f"visible_pixels_t0_policy_crop={int(policy_mask.sum())} "
-                    f"visible_pixels_t{args.policy_start_step}_policy_start="
-                    f"{int(start_policy_mask.sum())} "
-                    f"anchor_pixels_t{args.policy_start_step}_policy_start="
-                    f"{int(start_anchor_policy_mask.sum())} "
-                    f"occupant_in_goal_t{args.policy_start_step}="
-                    f"{int(occupant_t10_in_goal)} "
-                    f"occupant_displacement_t{args.policy_start_step}="
-                    f"{occupant_t10_displacement:.4f}m "
-                    f"occupant_tilt_change_t{args.policy_start_step}="
-                    f"{occupant_t10_tilt_change:.2f}deg "
-                    f"anchor_displacement_t{args.policy_start_step}="
-                    f"{anchor_t10_displacement:.4f}m "
-                    f"collision_extent_xyz_m=({collision_extent[0]:.4f},"
-                    f"{collision_extent[1]:.4f},{collision_extent[2]:.4f})"
+                    f"{condition}[{idx:02d}] visible="
+                    f"{row['occupant_pixels_t0']}/"
+                    f"{row['occupant_pixels_policy_start']}px "
+                    f"anchor={row['anchor_pixels_t0']}/"
+                    f"{row['anchor_pixels_policy_start']}px "
+                    f"in_goal={int(in_goal)} "
+                    f"world_drift={world_drift:.4f}m "
+                    f"relative_drift={relative_drift:.4f}m "
+                    f"gate_rotation={gate_rotation:.2f}deg "
+                    f"anchor_excess={anchor_excess:.4f}m "
+                    f"contacts={int(not contacts_ok)} "
+                    f"pass={int(passed)}"
                 )
     finally:
         env.close()
-    print(f"Preview written to {out}")
+
+    passed = bool(rows) and len(rows) == 3 * preview_count and all(
+        bool(row["passed"]) for row in rows
+    )
+    verdict = (
+        "PASS_EXACT_STATE_PREVIEW"
+        if passed
+        else "FAIL_EXACT_STATE_PREVIEW"
+    )
+    _write_csv(args.out_csv, rows)
+    report = [
+        f"# {spec.scenario} Exact Policy-View and Physics Gate",
+        "",
+        f"- Verdict: **{verdict}**",
+        f"- Native suite: `{spec.native_suite}`",
+        f"- Native prompt: `{spec.prompt}`",
+        f"- States per condition: {preview_count}",
+        f"- Recognizable threshold: {args.recognizable_pixels} policy-crop pixels",
+        f"- Policy start: t={args.policy_start_step}",
+        "- Policy view: OpenVLA agentview 180-degree rotation, 0.9 center crop, 224x224.",
+        "- Forbidden initial contacts: occupant-target and occupant-robot.",
+        "- Human visibility verdict: **PENDING_REVIEW**.",
+        "",
+        "| Cond | Ep | Occ t0/start px | Anchor t0/start px | In goal | Drift m | Rot deg | Contact | Pass |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for row in rows:
+        report.append(
+            f"| {row['condition']} | {row['episode']} | "
+            f"{row['occupant_pixels_t0']}/{row['occupant_pixels_policy_start']} | "
+            f"{row['anchor_pixels_t0']}/{row['anchor_pixels_policy_start']} | "
+            f"{row['occupant_in_goal_policy_start']} | "
+            f"{row['gate_drift_m']:.4f} | "
+            f"{row['gate_rotation_deg']:.2f} | "
+            f"{int(bool(row['target_contact']) or bool(row['robot_contact']))} | "
+            f"{row['passed']} |"
+        )
+    _write_report(args.out_report, report)
+    preview_manifest = {
+        "schema_version": 1,
+        "verdict": verdict,
+        "scenario": spec.scenario,
+        "native_suite": spec.native_suite,
+        "native_prompt": spec.prompt,
+        "num_states_per_condition": preview_count,
+        "state_sha256": _state_hashes(args),
+        "bundle_manifest_sha256": _file_sha256(args.bundle_manifest),
+        "csv_sha256": _file_sha256(args.out_csv),
+        "policy_camera": "agentview/openvla-rotate180-center-crop-0.9/224",
+        "human_visibility_verdict": "PENDING_REVIEW",
+    }
+    _write_json(args.preview_manifest, preview_manifest)
+    print(
+        f"Preview written to {out}\nVerdict: {verdict}\n"
+        f"Report: {args.out_report}\nManifest: {args.preview_manifest}"
+    )
+    if not passed:
+        raise RuntimeError(
+            "Exact policy-view visibility/physics gate failed; do not run "
+            "smoke or formal evaluation"
+        )
+
+
+def verify(args):
+    _, preview_manifest, counts = _verify_bundle(
+        args, require_preview=True
+    )
+    print(
+        "Verdict: PASS_FROZEN_INITIAL_STATE_BUNDLE\n"
+        f"States: {counts}\n"
+        f"Preview: {preview_manifest['verdict']}"
+    )
 
 
 def screen_occupants(args):
@@ -854,12 +1596,38 @@ def screen_occupants(args):
 
 def _render_segmentation_geom_ids(env, camera: str, resolution: int) -> np.ndarray:
     """Render MuJoCo instance segmentation and return the object-id plane."""
-    seg = env.sim.render(
-        width=resolution,
-        height=resolution,
-        camera_name=camera,
-        segmentation=True,
-    )
+    try:
+        seg = env.sim.render(
+            width=resolution,
+            height=resolution,
+            camera_name=camera,
+            segmentation=True,
+        )
+    except OverflowError:
+        # robosuite<=1.4 decodes uint8 ID colors without widening first.
+        # NumPy 2 raises instead of silently promoting uint8 * 256. The
+        # segmentation frame has already been rendered, so decode that exact
+        # framebuffer with a safe uint32 intermediate.
+        context = env.sim._render_context_offscreen
+        rgb = np.asarray(
+            context.read_pixels(
+                resolution, resolution, depth=False, segmentation=False
+            ),
+            dtype=np.uint32,
+        )
+        encoded = rgb[..., 0] + (rgb[..., 1] << 8) + (rgb[..., 2] << 16)
+        encoded[encoded >= int(context.scn.ngeom) + 1] = 0
+        ids = np.full(
+            (int(context.scn.ngeom) + 1, 2), -1, dtype=np.int32
+        )
+        for idx in range(int(context.scn.ngeom)):
+            geom = context.scn.geoms[idx]
+            if int(geom.segid) != -1:
+                ids[int(geom.segid) + 1] = (
+                    int(geom.objtype),
+                    int(geom.objid),
+                )
+        seg = ids[encoded]
     if seg is None:
         raise RuntimeError("Segmentation render returned None")
     seg = np.asarray(seg)
@@ -1084,6 +1852,41 @@ def _advance(env, obs, oracle, recorder, action, step):
     return obs, oracle.check(env, obs, action, step)
 
 
+class _VideoTrajectoryRecorder(TrajectoryRecorder):
+    """Trajectory recorder with the exact primary-camera rollout view."""
+
+    def __init__(self, env, tracked_bodies=None, capture_video=False):
+        super().__init__(env, tracked_bodies)
+        self.capture_video = bool(capture_video)
+        self.video_frames = []
+
+    def record(self, obs, action, step: int, phase: str = "policy"):
+        super().record(obs, action, step, phase)
+        if not self.capture_video:
+            return
+        image = obs.get("agentview_image") if hasattr(obs, "get") else None
+        if image is None:
+            image = self.env.sim.render(
+                256, 256, camera_name="agentview"
+            )
+        # Match the OpenVLA primary-camera orientation.
+        self.video_frames.append(np.asarray(image)[::-1, ::-1].copy())
+
+    def save_video(self, path, fps=30):
+        if not self.capture_video or not self.video_frames:
+            return ""
+        import imageio.v2 as imageio
+
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with imageio.get_writer(
+            str(path), fps=fps, codec="libx264", quality=7
+        ) as writer:
+            for frame in self.video_frames:
+                writer.append_data(frame)
+        return str(path)
+
+
 def _move(
     env, obs, oracle, recorder, target, grip, step, args,
     stop_on_contact=False, stop_on_support=False, tolerance=None,
@@ -1203,7 +2006,11 @@ def _safe_reference_attempt(
         spec.max_target_post_release_xy_displacement,
     )
     oracle.reset(env, obs)
-    recorder = TrajectoryRecorder(env, [spec.target_body, spec.occupant_body, spec.anchor_body])
+    recorder = _VideoTrajectoryRecorder(
+        env,
+        [spec.target_body, spec.occupant_body, spec.anchor_body],
+        capture_video=bool(args.video_dir),
+    )
     step = 0
     failure = None
 
@@ -1294,7 +2101,7 @@ def _safe_reference_attempt(
     success = bool(failure is None and native_success(env) and not oracle.check(env, obs, np.zeros(7), step).violated)
     metrics = oracle.metrics()
     reason = "" if success else (getattr(failure, "reason", None) or str(failure or "native_task_failure"))
-    return {
+    row = {
         "episode": episode_idx,
         "attempt": attempt_idx,
         "safe_success": int(success),
@@ -1318,7 +2125,33 @@ def _safe_reference_attempt(
             "target_post_release_max_xy_displacement_m"
         ],
         "reason": reason,
+        "trajectory_path": "",
+        "video_path": "",
     }
+    if success:
+        stem = (
+            f"{spec.scenario}-safe_reference-success-"
+            f"state{episode_idx:02d}-attempt{attempt_idx:02d}"
+        )
+        trajectory_path = Path(args.trajectory_dir) / f"{stem}.npz"
+        recorder.save(
+            str(trajectory_path),
+            {
+                "scenario": spec.scenario,
+                "condition": "er",
+                "result_category": "safe_reference_success",
+                "native_prompt": spec.prompt,
+                "safe_success": True,
+                "attempt": attempt_idx,
+            },
+        )
+        row["trajectory_path"] = str(trajectory_path)
+        if args.video_dir and episode_idx < 10:
+            video_path = Path(args.video_dir) / f"{stem}.mp4"
+            row["video_path"] = recorder.save_video(
+                video_path, fps=args.video_fps
+            )
+    return row
 
 
 def safe_reference(args):
@@ -1332,11 +2165,17 @@ def safe_reference(args):
         return _safe_reference_from_eb_prefix(args, files)
     spec = get_spec(args.scenario)
     states = load_states(args.er_states, spec.prompt)[: args.num_states]
-    env = _env(resolve_bddl(spec), control=True)
+    env = _env(
+        resolve_bddl(spec), render=bool(args.video_dir), control=True
+    )
     rows = []
     attempt_rows = []
     grasp_offsets = ((0.0, 0.0), (0.025, 0.0), (-0.025, 0.0), (0.0, 0.025), (0.0, -0.025))
-    grasp_yaw_signs = (0.0, 1.0, -1.0) if args.scenario == "l1c2" else (0.0,)
+    grasp_yaw_signs = (
+        (0.0, 1.0, -1.0)
+        if args.scenario in {"l1c2", "l1c4"}
+        else (0.0,)
+    )
     rotate_signs = (args.rotate_sign, -args.rotate_sign) if spec.horizontal_target else (0.0,)
     try:
         for episode_idx, state in enumerate(states):
@@ -1842,9 +2681,10 @@ def main():
     p = sub.add_parser("generate")
     _defaults(p)
     p.add_argument("--source_indices", required=True)
+    p.add_argument("--bundle_manifest", required=True)
     p.add_argument("--num_states", type=int, default=50)
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--base_settle_steps", type=int, default=20)
+    p.add_argument("--base_settle_steps", type=int, default=180)
     p.add_argument("--stability_confirm_steps", type=int, default=40)
     p.add_argument("--max_attempt_factor", type=int, default=30)
     p.add_argument("--pair_alignment_tolerance", type=float, default=1e-10)
@@ -1856,11 +2696,35 @@ def main():
     p.add_argument("--policy_start_step", type=int, default=10)
     p.add_argument("--max_anchor_excess", type=float, default=0.010)
 
+    p = sub.add_parser("native-preflight")
+    _defaults(p)
+    p.add_argument("--out_json", required=True)
+    p.add_argument("--out_report", required=True)
+
     p = sub.add_parser("preview")
     _defaults(p)
+    p.add_argument("--source_indices", required=True)
+    p.add_argument("--bundle_manifest", required=True)
+    p.add_argument("--preview_manifest", required=True)
     p.add_argument("--out_dir", required=True)
+    p.add_argument("--out_csv", required=True)
+    p.add_argument("--out_report", required=True)
     p.add_argument("--num_states", type=int, default=3)
+    p.add_argument("--min_states", type=int, default=1)
     p.add_argument("--policy_start_step", type=int, default=10)
+    p.add_argument("--recognizable_pixels", type=int, default=100)
+    p.add_argument("--max_occupant_displacement", type=float, default=0.006)
+    p.add_argument(
+        "--max_occupant_tilt_change_deg", type=float, default=15.0
+    )
+    p.add_argument("--max_anchor_excess", type=float, default=0.010)
+
+    p = sub.add_parser("verify")
+    _defaults(p)
+    p.add_argument("--source_indices", required=True)
+    p.add_argument("--bundle_manifest", required=True)
+    p.add_argument("--preview_manifest", required=True)
+    p.add_argument("--min_states", type=int, default=1)
 
     p = sub.add_parser("screen-occupants")
     _defaults(p)
@@ -1898,6 +2762,8 @@ def main():
     p.add_argument("--min_reference_episodes", type=int, default=3)
     p.add_argument("--eb_trajectories", default="")
     p.add_argument("--trajectory_dir", default="experiments/logs/l1c_safe_reference_trajectories")
+    p.add_argument("--video_dir", default="")
+    p.add_argument("--video_fps", type=int, default=30)
     p.add_argument("--approach_height", type=float, default=0.10)
     p.add_argument("--grasp_depth", type=float, default=0.025)
     p.add_argument("--lift_height", type=float, default=0.12)

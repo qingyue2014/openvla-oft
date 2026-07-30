@@ -29,6 +29,120 @@ class PhaseSpec:
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
+    # L1-C4 uses the unmodified libero_object task "pick up the cream cheese
+    # and place it in the basket".  Keep validation and model smoke separate
+    # so policy rollouts cannot start before the downloaded policy views have
+    # been reviewed.
+    ("l1c4", "check"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c4_occupied_basket.sh",
+            "check",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l1c4_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1c4_er_states.hdf5",
+            "experiments/robot/libero/tasks/l1c4_ec_states.hdf5",
+            "experiments/robot/libero/tasks/l1c4_source_indices.json",
+            "experiments/robot/libero/tasks/l1c4_state_bundle.json",
+            "experiments/logs/l1c4_native_preflight.json",
+            "experiments/logs/l1c4_native_preflight.md",
+        ),
+    ),
+    ("l1c4", "preview"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c4_occupied_basket.sh",
+            "preview",
+        ),
+        artifacts=(
+            "experiments/robot/libero/tasks/l1c4_preview",
+            "experiments/logs/l1c4_native_preflight.json",
+            "experiments/logs/l1c4_native_preflight.md",
+            "experiments/logs/l1c4_exact_state_preview.csv",
+            "experiments/logs/l1c4_exact_state_preview.md",
+        ),
+    ),
+    ("l1c4", "calibrate"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c4_occupied_basket.sh",
+            "calibrate",
+        ),
+        count_env="CALIBRATION_NUM_STATES",
+        artifacts=(
+            "experiments/logs/l1c4_native_preflight.json",
+            "experiments/logs/l1c4_native_preflight.md",
+            "experiments/logs/l1c4_calibration.csv",
+            "experiments/logs/l1c4_calibration.md",
+        ),
+    ),
+    ("l1c4", "safe_reference"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c4_occupied_basket.sh",
+            "safe_reference",
+        ),
+        count_env="CALIBRATION_NUM_STATES",
+        artifacts=(
+            "experiments/logs/l1c4_native_preflight.json",
+            "experiments/logs/l1c4_native_preflight.md",
+            "experiments/logs/l1c4_safe_reference.csv",
+            "experiments/logs/l1c4_safe_reference_attempts.csv",
+            "experiments/logs/l1c4_safe_reference.md",
+            "experiments/logs/l1c4_safe_reference_trajectories",
+            "review/L1-C4_task/safe_reference",
+        ),
+    ),
+    ("l1c4", "smoke"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIDEOS_PER_OUTCOME=10",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1c4_occupied_basket.sh",
+            "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l1c4_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1c4_er_states.hdf5",
+            "experiments/robot/libero/tasks/l1c4_ec_states.hdf5",
+            "experiments/robot/libero/tasks/l1c4_source_indices.json",
+            "experiments/robot/libero/tasks/l1c4_state_bundle.json",
+            "experiments/robot/libero/tasks/l1c4_preview",
+            "experiments/logs/l1c4_native_preflight.json",
+            "experiments/logs/l1c4_native_preflight.md",
+            "experiments/logs/l1c4_exact_state_preview.csv",
+            "experiments/logs/l1c4_exact_state_preview.md",
+            "experiments/logs/l1c4_calibration.csv",
+            "experiments/logs/l1c4_calibration.md",
+            "experiments/logs/l1c4_safe_reference.csv",
+            "experiments/logs/l1c4_safe_reference_attempts.csv",
+            "experiments/logs/l1c4_safe_reference.md",
+            "experiments/logs/l1c4_safe_reference_trajectories",
+            "experiments/logs/l1c4_eb_to_er_replay.csv",
+            "experiments/logs/l1c4_eb_to_er_replay.md",
+            "experiments/logs/l1c4_eb_to_ec_replay.csv",
+            "experiments/logs/l1c4_eb_to_ec_replay.md",
+            "experiments/logs/l1c4_attribution.csv",
+            "experiments/logs/l1c4_attribution.md",
+            "review/L1-C4_task",
+            "rollouts/libero_object/L1-C4-occupied-basket-eb",
+            "rollouts/libero_object/L1-C4-occupied-basket-risk",
+            "rollouts/libero_object/L1-C4-occupied-basket-ec",
+        ),
+    ),
     # Native-only RoboCasa L2-A1 bring-up. These phases stop before any policy
     # rollout or formal evaluation; the reviewed phase may run only after the
     # downloaded Eb/Er/Ec policy-view triplet has been inspected.
@@ -55,6 +169,14 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "geometry",
         ),
         artifacts=("experiments/logs/robocasa_superpod/geometry",),
+    ),
+    ("robocasa_l2a1", "layout_scan"): PhaseSpec(
+        command=(
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "layout_scan",
+        ),
+        artifacts=("experiments/logs/robocasa_superpod/layout_scan",),
     ),
     ("robocasa_l2a1", "initial_unreviewed"): PhaseSpec(
         command=(

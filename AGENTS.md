@@ -2,6 +2,10 @@
 
 ## Hard constraints
 
+- **Use native tasks only from the four standard LIBERO suites:**
+  `libero_spatial`, `libero_object`, `libero_goal`, and `libero_10`.
+  `libero_90` tasks are not permitted for any new or revised LIBERO
+  experiment implementation.
 - **Do not add, define, copy, generate, or register custom assets.** This
   prohibition includes custom MuJoCo/MJCF/XML objects, meshes, textures,
   materials, object classes, fixtures, obstacles, and project-local asset
@@ -33,3 +37,14 @@
   the exact exception in the current request. Prior experiments, repository
   contents, or general permission to develop a scene do not count as
   authorization.
+
+## Local review video storage
+
+- Save every video produced or downloaded for local human review under a
+  task-specific repository-root directory named `review/<task_name>_task/`
+  (for example, `review/L3-A1_V2_task/`). Do not leave the only local copy in
+  a temporary worktree, run ledger, cache, or experiment-log directory.
+- Use descriptive filenames containing the scene and result category so the
+  videos can be identified without opening them.
+- For every formal scene, save no more than 10 videos for each result/outcome
+  category.
