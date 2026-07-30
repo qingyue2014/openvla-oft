@@ -1691,6 +1691,12 @@ def calibrate(args: argparse.Namespace) -> str:
                         and replay["penetration_m"] <= args.max_contact_penetration
                         and (
                             replay["task_success"]
+                            # For the supported Task-4 risk intervention,
+                            # unchanged Eb actions are deliberately ineligible
+                            # when they either trigger the link7 consequence or
+                            # cease to solve the task.  The paired Ec search
+                            # below still requires successful task completion.
+                            or supported_serialized_mode
                             or not args.require_task_success
                         )
                     )

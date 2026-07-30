@@ -215,6 +215,8 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "supported_serialized_mode" in text.split(
         "immediate_anchor =", 1
     )[1]
+    assert "or supported_serialized_mode" in text
+    assert "The paired Ec search" in text
     assert 'ec_replay["task_success"]' in text
     assert 'er_replay["task_success"]' not in text.split(
         "isolated = bool(", 1
