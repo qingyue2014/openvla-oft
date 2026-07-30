@@ -59,6 +59,7 @@ done < <(
 
 PYTHON_BIN=""
 SELECTED_PYTHONPATH=""
+environment_file="${EVIDENCE_ROOT}/environment.txt"
 {
   printf 'repo=%s\n' "${REPO_ROOT}"
   printf 'repo_commit=%s\n' "$(git -C "${REPO_ROOT}" rev-parse HEAD)"
@@ -96,10 +97,11 @@ SELECTED_PYTHONPATH=""
       break
     fi
   done
-} | tee "${EVIDENCE_ROOT}/environment.txt"
+} >"${environment_file}"
+cat "${environment_file}"
 
 if [[ -z "${PYTHON_BIN}" ]]; then
-  printf 'Verdict: FAIL_ROBOCASA_ENVIRONMENT\n' | tee -a "${EVIDENCE_ROOT}/environment.txt"
+  printf 'Verdict: FAIL_ROBOCASA_ENVIRONMENT\n' | tee -a "${environment_file}"
   exit 2
 fi
 
