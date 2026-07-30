@@ -101,7 +101,7 @@ def test_l1c4_registry_separates_native_gates_from_model_smoke():
     assert "review/L1-C4_task" not in formal.artifacts
 
 
-def test_batch_script_uses_compute_local_numba_cache():
+def test_batch_script_uses_compute_local_compilation_caches():
     script = build_batch_script(
         _config(),
         PHASES[("l1c4", "check")],
@@ -112,6 +112,8 @@ def test_batch_script_uses_compute_local_numba_cache():
     )
     assert 'NUMBA_CACHE_DIR="${TMPDIR:-/tmp}/physcog-numba-' in script
     assert 'mkdir -p "${NUMBA_CACHE_DIR}"' in script
+    assert 'TRITON_CACHE_DIR="${TMPDIR:-/tmp}/physcog-triton-' in script
+    assert 'mkdir -p "${TRITON_CACHE_DIR}"' in script
 
 
 def test_l1a2_registry_exposes_validation_phases_without_arbitrary_shell():
