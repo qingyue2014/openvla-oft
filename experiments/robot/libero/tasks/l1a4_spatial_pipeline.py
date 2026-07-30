@@ -91,6 +91,15 @@ RELATION_TRANSLATION_CANDIDATES_XY = (
     np.array([0.11, -0.11]),
     np.array([0.12, -0.10]),
     np.array([0.12, -0.11]),
+    # Cross-platform fallback translations. These remain closer to the native
+    # region centers than the largest primary candidate and are used only when
+    # every primary candidate fails the unchanged physical/visibility gates.
+    np.array([0.105, -0.105]),
+    np.array([0.105, -0.100]),
+    np.array([0.110, -0.095]),
+    np.array([0.115, -0.095]),
+    np.array([0.115, -0.100]),
+    np.array([0.115, -0.105]),
 )
 EC_LURE_XY = NATIVE_LURE_XY.copy()
 

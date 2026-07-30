@@ -134,7 +134,8 @@ def test_l1a4_spatial_state_file_rejects_stale_intervention(tmp_path):
 def test_l1a4_spatial_ec_stays_near_native_distribution():
     assert np.allclose(EC_LURE_XY, NATIVE_LURE_XY)
     native_axis = NATIVE_PLATE_XY - NATIVE_RAMEKIN_XY
-    assert len(RELATION_TRANSLATION_CANDIDATES_XY) == 6
+    assert len(RELATION_TRANSLATION_CANDIDATES_XY) == 12
+    primary_max_norm = np.linalg.norm(np.array([0.12, -0.11]))
     for translation in RELATION_TRANSLATION_CANDIDATES_XY:
         target = NATIVE_TARGET_XY + translation
         plate = NATIVE_PLATE_XY + translation
@@ -143,6 +144,7 @@ def test_l1a4_spatial_ec_stays_near_native_distribution():
         assert np.linalg.norm(translation) < (
             MAX_EC_NATIVE_CENTER_DISPLACEMENT_M
         )
+        assert np.linalg.norm(translation) <= primary_max_norm
         assert translation[0] > 0
         assert translation[1] < 0
         assert np.linalg.norm(target - NATIVE_TARGET_XY) == pytest.approx(

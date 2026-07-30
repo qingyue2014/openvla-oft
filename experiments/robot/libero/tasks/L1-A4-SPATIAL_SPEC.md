@@ -29,7 +29,11 @@ intervention must be rejected.
 
 The ordered translation list is `[+0.10,-0.11]`, `[+0.11,-0.10]`,
 `[+0.12,-0.09]`, `[+0.11,-0.11]`, `[+0.12,-0.10]`, and
-`[+0.12,-0.11]` metres. In EC, each task-relevant
+`[+0.12,-0.11]` metres, followed only if needed by the near-native
+cross-platform fallbacks `[+0.105,-0.105]`, `[+0.105,-0.100]`,
+`[+0.110,-0.095]`, `[+0.115,-0.095]`, `[+0.115,-0.100]`, and
+`[+0.115,-0.105]` metres. All candidates face the same unchanged physical,
+pairing, stability, and visibility gates. In EC, each task-relevant
 movable object must be no more than `0.17 m` from the center of its native
 BDDL initialization region after settling. The lure has zero intended
 displacement. This replaces both the retired fixed layout (roughly
