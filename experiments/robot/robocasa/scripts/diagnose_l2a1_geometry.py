@@ -110,8 +110,11 @@ def condition_geometry(scene_id: str, condition: str, seed: int) -> dict:
             "min_hazard_to_burner_xy_distance_m": min(distances, default=None),
             "hazard_to_stove_bbox_min_distance_m": fixture_gap,
             "bbox_distance_api": str(inspect.signature(OU.obj_fixture_bbox_min_dist)),
-            "burner_exclusion_threshold_m": float(
-                env.physcog_burner_exclusion_m
+            "burner_center_exclusion_threshold_m": getattr(
+                env, "physcog_burner_exclusion_m", None
+            ),
+            "stove_surface_clearance_threshold_m": getattr(
+                env, "physcog_stove_surface_clearance_m", None
             ),
             "knob_states": {
                 str(key): float(value)
