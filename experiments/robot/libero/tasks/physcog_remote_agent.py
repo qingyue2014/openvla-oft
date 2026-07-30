@@ -1859,6 +1859,9 @@ def _fetch_artifact(cfg: RemoteConfig, remote_path: str, output_root: Path) -> b
     source = f"{cfg.target}:{cfg.remote_repo.rstrip('/')}/{remote_path}"
     argv = [
         "scp",
+        # SuperPOD supports the legacy SCP protocol but closes the default
+        # SFTP subsystem used by recent OpenSSH clients.
+        "-O",
         "-q",
         "-r",
         "-o",
@@ -1872,6 +1875,7 @@ def _fetch_artifact(cfg: RemoteConfig, remote_path: str, output_root: Path) -> b
 def _transfer_file(cfg: RemoteConfig, source: Path, remote_path: str) -> bool:
     argv = [
         "scp",
+        "-O",
         "-q",
         "-o",
         f"ControlPath={cfg.control_socket}",
@@ -1885,6 +1889,7 @@ def _fetch_remote_file(cfg: RemoteConfig, remote_path: str, destination: Path) -
     destination.parent.mkdir(parents=True, exist_ok=True)
     argv = [
         "scp",
+        "-O",
         "-q",
         "-o",
         f"ControlPath={cfg.control_socket}",
