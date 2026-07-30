@@ -303,10 +303,13 @@ PY
     export PI05_PORT="${pi05_port}"
     export PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-600}"
     export PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
-    export MUJOCO_EGL_DEVICE_ID="${MUJOCO_EGL_DEVICE_ID:-0}"
+    sim_gpu="${ROBOCASA_SIM_GPU:-1}"
+    # This RoboCasa environment validates EGL against the physical IDs listed
+    # in CUDA_VISIBLE_DEVICES, rather than renumbering a singleton mask to 0.
+    export MUJOCO_EGL_DEVICE_ID="${MUJOCO_EGL_DEVICE_ID:-${sim_gpu}}"
     rollout_out="${EVIDENCE_ROOT}/${SCENE}_pi05_${ROBOCASA_CONDITION:-Eb}.jsonl"
     set +e
-    CUDA_VISIBLE_DEVICES="${ROBOCASA_SIM_GPU:-1}" \
+    CUDA_VISIBLE_DEVICES="${sim_gpu}" \
       "${PYTHON_BIN}" experiments/robot/robocasa/scripts/run_condition.py \
         --scene "${SCENE}" \
         --condition "${ROBOCASA_CONDITION:-Eb}" \
