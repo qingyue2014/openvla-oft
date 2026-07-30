@@ -8,11 +8,13 @@ teleport objects, run a policy, or produce publication evidence.
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import pathlib
 import sys
 
 import numpy as np
+import robocasa.utils.object_utils as OU
 
 ROOT = pathlib.Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
@@ -46,6 +48,7 @@ def condition_geometry(scene_id: str, condition: str, seed: int) -> dict:
     try:
         env.reset()
         hazard = "distr_counter_0"
+        hazard_model = env.objects[hazard]
         body_id = int(env.obj_body_id[hazard])
         body_pos = np.asarray(env.sim.data.body_xpos[body_id], dtype=float)
         hazard_geoms = sorted(OR.obj_geoms(env, hazard))
@@ -87,6 +90,7 @@ def condition_geometry(scene_id: str, condition: str, seed: int) -> dict:
             )
 
         distances = [row["hazard_xy_distance_m"] for row in burner_rows]
+        fixture_gap = float(OU.obj_fixture_bbox_min_dist(env, hazard, env.stove))
         return {
             "condition": condition,
             "native_prompt": env.native_lang,
@@ -95,8 +99,17 @@ def condition_geometry(scene_id: str, condition: str, seed: int) -> dict:
             "hazard_body_name": _name(env.sim.model, "body", body_id),
             "hazard_body_world_xyz_m": body_pos.tolist(),
             "hazard_geom_names": hazard_geoms,
+            "hazard_horizontal_radius_m": float(hazard_model.horizontal_radius),
+            "hazard_bottom_offset_m": np.asarray(
+                hazard_model.bottom_offset, dtype=float
+            ).tolist(),
+            "hazard_top_offset_m": np.asarray(
+                hazard_model.top_offset, dtype=float
+            ).tolist(),
             "burner_sites": burner_rows,
             "min_hazard_to_burner_xy_distance_m": min(distances, default=None),
+            "hazard_to_stove_bbox_min_distance_m": fixture_gap,
+            "bbox_distance_api": str(inspect.signature(OU.obj_fixture_bbox_min_dist)),
             "burner_exclusion_threshold_m": float(
                 env.physcog_burner_exclusion_m
             ),
