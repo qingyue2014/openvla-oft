@@ -239,18 +239,18 @@ FAMILIES = {
         "risk_offset_from_goal_xy": [0.00842763, 0.04601684],
         "control_offset_from_goal_xy": [0.04042763, -0.00598316],
         "obstacle_drop_z_offset": 0.515,
-        # The native bottle is inverted on its neck.  This is a stable
-        # free-joint orientation (420-step drift gate) whose wider upper body
-        # is reached by link7 above the held-bowl swept volume.
-        "obstacle_quat_wxyz": [0.0, 1.0, 0.0, 0.0],
+        # Keep the existing bottle in its native upright orientation. This
+        # removes the inverted wide-body contact that exceeded the 2 mm gate
+        # while preserving the same object, cabinet support, and link7 sweep.
+        "obstacle_quat_wxyz": [1.0, 0.0, 0.0, 0.0],
         "obstacle_support_settle_steps": 420,
         "required_prompt_terms": ["bowl", "cabinet"],
         "intended_link_bodies": ["robot0_link7"],
         "min_obstacle_displacement": 0.010,
         "min_obstacle_tilt_change_deg": 30.0,
         "candidate_only": True,
-        "scene_contract": "l1b3_task4_selective_eb_clearance_candidate_v18",
-        "candidate_contract": "l1b3_task4_selective_eb_clearance_candidate_v18",
+        "scene_contract": "l1b3_task4_upright_cabinet_candidate_v19",
+        "candidate_contract": "l1b3_task4_upright_cabinet_candidate_v19",
         "model_runtime_contract": (
             "transformers-openvla-oft-bc339d9_tokenizers-0.19.1"
         ),
