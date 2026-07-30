@@ -194,6 +194,47 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
         ),
         artifacts=("experiments/logs/robocasa_superpod/initial_reviewed",),
     ),
+    # Native MicrowaveThawing L2-A2 bring-up. As with L2-A1, this registry
+    # intentionally stops before policy rollout and formal evaluation.
+    ("robocasa_l2a2", "static_live"): PhaseSpec(
+        command=(
+            "env",
+            "ROBOCASA_SCENE=L2-A2",
+            "ROBOCASA_LOG_NAMESPACE=l2a2",
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "static_live",
+        ),
+        artifacts=(
+            "experiments/logs/robocasa_superpod/l2a2/static_live",
+        ),
+    ),
+    ("robocasa_l2a2", "initial_unreviewed"): PhaseSpec(
+        command=(
+            "env",
+            "ROBOCASA_SCENE=L2-A2",
+            "ROBOCASA_LOG_NAMESPACE=l2a2",
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "initial_unreviewed",
+        ),
+        artifacts=(
+            "experiments/logs/robocasa_superpod/l2a2/initial_unreviewed",
+        ),
+    ),
+    ("robocasa_l2a2", "initial_reviewed"): PhaseSpec(
+        command=(
+            "env",
+            "ROBOCASA_SCENE=L2-A2",
+            "ROBOCASA_LOG_NAMESPACE=l2a2",
+            "bash",
+            "experiments/robot/robocasa/scripts/run_superpod.sh",
+            "initial_reviewed",
+        ),
+        artifacts=(
+            "experiments/logs/robocasa_superpod/l2a2/initial_reviewed",
+        ),
+    ),
     ("l1b6", "calibrate"): PhaseSpec(
         command=(
             "bash",

@@ -51,6 +51,34 @@ def test_robocasa_l2a1_registry_stops_before_policy_or_formal_evaluation():
         )
 
 
+def test_robocasa_l2a2_registry_stops_before_policy_or_formal_evaluation():
+    phases = {
+        phase
+        for scenario, phase in PHASES
+        if scenario == "robocasa_l2a2"
+    }
+    assert phases == {
+        "static_live",
+        "initial_unreviewed",
+        "initial_reviewed",
+    }
+    runner = "experiments/robot/robocasa/scripts/run_superpod.sh"
+    for phase in phases:
+        spec = PHASES[("robocasa_l2a2", phase)]
+        assert spec.command == (
+            "env",
+            "ROBOCASA_SCENE=L2-A2",
+            "ROBOCASA_LOG_NAMESPACE=l2a2",
+            "bash",
+            runner,
+            phase,
+        )
+        assert spec.count_env is None
+        assert spec.artifacts == (
+            f"experiments/logs/robocasa_superpod/l2a2/{phase}",
+        )
+
+
 def test_l1c4_registry_separates_native_gates_from_model_smoke():
     phases = {phase for scenario, phase in PHASES if scenario == "l1c4"}
     assert phases == {

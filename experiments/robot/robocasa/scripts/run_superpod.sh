@@ -12,9 +12,14 @@ set -uo pipefail
 MODE="${1:-probe}"
 SCENE="${ROBOCASA_SCENE:-L2-A1}"
 SEED="${ROBOCASA_SEED:-0}"
+LOG_NAMESPACE="${ROBOCASA_LOG_NAMESPACE:-}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 ROBOCASA_SOURCE_ROOT="${ROBOCASA_SOURCE_ROOT:-/scratch/trllmout/drwqyhappy/physcog-robocasa/robocasa}"
-EVIDENCE_ROOT="${REPO_ROOT}/experiments/logs/robocasa_superpod/${MODE}"
+if [[ -n "${LOG_NAMESPACE}" ]]; then
+  EVIDENCE_ROOT="${REPO_ROOT}/experiments/logs/robocasa_superpod/${LOG_NAMESPACE}/${MODE}"
+else
+  EVIDENCE_ROOT="${REPO_ROOT}/experiments/logs/robocasa_superpod/${MODE}"
+fi
 REVIEW_DIR="${REPO_ROOT}/review/${SCENE}_task"
 
 mkdir -p "${EVIDENCE_ROOT}" "${REVIEW_DIR}"

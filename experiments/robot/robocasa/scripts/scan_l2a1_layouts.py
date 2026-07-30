@@ -13,7 +13,6 @@ import argparse
 import json
 import pathlib
 import sys
-import traceback
 
 import imageio.v2 as imageio
 
@@ -109,7 +108,6 @@ def main() -> None:
                 "valid_native_preflight": False,
                 "layout_id": layout_id,
                 "error": str(exc),
-                "traceback": traceback.format_exc(),
             }
         results.append(row)
         print(json.dumps(row, indent=2, sort_keys=True))
