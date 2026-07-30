@@ -84,7 +84,9 @@ environment_file="${EVIDENCE_ROOT}/environment.txt"
       candidate_rc="$?"
       set -e
       printf 'candidate_rc=%s\n' "${candidate_rc}"
-      printf '%s\n' "${candidate_probe}"
+      while IFS= read -r diagnostic_line; do
+        printf '[candidate] %s\n' "${diagnostic_line}"
+      done <<<"${candidate_probe}"
       if [[ "${candidate_rc}" -eq 0 ]]; then
         PYTHON_BIN="${candidate}"
         SELECTED_PYTHONPATH="${probe_pythonpath}"
