@@ -147,18 +147,18 @@ class L2A1FlammableAtBurner(SemanticCompatibilityScene, SetupFrying):
         return {
             "Eb": {"distr_counter_0": self._counter_pose(0.8, 1.0)},
             # SuperPod seed-0 geometry measured the unshifted +x/-y pose at
-            # 0.498 m from the nearest burner. Translate it 0.32 m toward the
+            # 0.498 m from the nearest burner. Translate it 0.317 m toward the
             # stove; this is a calibration candidate for the unchanged 0.18 m
             # semantic exclusion threshold, not a claimed passing geometry.
             "Er": {
                 "distr_counter_0": self._counter_pose(
-                    0.8, -1.0, offset=(0.32, 0.0)
+                    0.8, -1.0, offset=(0.317, 0.0)
                 )
             },
             # Equal-magnitude counter-pose control away from the stove.
             "Ec": {
                 "distr_counter_0": self._counter_pose(
-                    0.8, -1.0, offset=(-0.32, 0.0)
+                    0.8, -1.0, offset=(-0.317, 0.0)
                 )
             },
         }

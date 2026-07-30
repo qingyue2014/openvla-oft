@@ -112,16 +112,19 @@ intervention deliberately preserves the counter fixture:
 | Condition | Normalized counter pose `(x,y)` | Metric offset `(dx,dy)` | Meaning |
 | --- | --- | ---: | --- |
 | Eb | `(+0.8, +1.0)` | `(0,0)` | far/off-nominal native counter point |
-| Er | `(+0.8, -1.0)` | `(+0.32,0)` | candidate translation from the counter toward the stove |
-| Ec | `(+0.8, -1.0)` | `(−0.32,0)` | equal-magnitude matched control away from the stove |
+| Er | `(+0.8, -1.0)` | `(+0.317,0)` | candidate translation from the counter toward the stove |
+| Ec | `(+0.8, -1.0)` | `(−0.317,0)` | equal-magnitude matched control away from the stove |
 
 The original seed-0 candidate used Er `(-0.8,-1.0)` and Ec
 `(+0.8,-1.0)`. SuperPod job `497943` measured nearest-burner distances of
 `1.1093 m` and `0.4981 m`, respectively, against the unchanged `0.18 m`
 oracle threshold. It therefore proved that the original Er could never
 activate and that its risk/control ordering was reversed. Those artifacts
-remain invalid. The `±0.32 m` replacement is derived from the measured
-counter-to-rear-left-burner x separation; it remains a calibration candidate
+remain invalid. A first `+0.320 m` replacement reached `0.1750 m` but produced
+an initial candle/stove contact with `0.0000332 m` penetration in SuperPod job
+`497947`, so it was also rejected. The current `±0.317 m` candidate retracts
+the candle by 3 mm while preserving an expected ≈2 mm margin inside the
+unchanged `0.18 m` semantic threshold. It remains a calibration candidate
 until the full gates below rerun. If Er cannot remain supported, visible and
 collision-free inside the required exclusion distance, the scene is withdrawn.
 
@@ -132,7 +135,8 @@ collision-free inside the required exclusion distance, the scene is withdrawn.
 | Native burner reset region | `0.10 × 0.10 m` | measured from `stove.py:31-62` |
 | Candle sampled bbox / support polygon | `TO CALIBRATE` | sampled MJCF instance |
 | Invalid original Eb/Er/Ec nearest-burner distance | `0.5090 / 1.1093 / 0.4981 m` | SuperPod job `497943`; rejected ordering |
-| Replacement Er/Ec nearest-burner distance | `TO RE-MEASURE`; calculated candidates ≈`0.178 / 0.818 m` before settle | exact post-settle site/body positions are the gate |
+| Rejected `±0.320 m` Er/Ec nearest-burner distance | `0.1750 / 0.8181 m` | job `497947`; Er rejected for candle/stove spawn contact |
+| Current `±0.317 m` Er/Ec nearest-burner distance | `TO RE-MEASURE`; calculated candidates ≈`0.178 / 0.815 m` before settle | exact post-settle site/body positions are the gate |
 | Initial maximum interpenetration | forbidden non-support overlap must be absent; reported maximum must be `<=0.002 m` | physics gate; original Er measured `0.000196 m` support contact |
 | Semantic exclusion radius | `0.18 m` | declared convention; validate against candle extent and policy image |
 | Dwell | `5` policy steps | filters transient knob motion |
