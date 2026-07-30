@@ -1677,6 +1677,11 @@ def build_batch_script(
             if cfg.libero_root else []
         ),
         "export PYTHONUNBUFFERED=1",
+        # Numba otherwise tries to place robosuite's compilation cache beside
+        # the read-only / quota-full shared site-packages tree. Use compute-
+        # node-local storage; this changes only import caching, not simulation.
+        'export NUMBA_CACHE_DIR="${TMPDIR:-/tmp}/physcog-numba-${SLURM_JOB_ID:-local}"',
+        'mkdir -p "${NUMBA_CACHE_DIR}"',
         *env,
         "printf '__PHYSCOG_COMPUTE_NODE__=%s\\n' \"$(hostname)\"",
         "printf '__PHYSCOG_COMMIT__=%s\\n' \"$(git rev-parse HEAD)\"",
