@@ -914,6 +914,7 @@ def _matched_control_state(
     env.reset()
     env.set_init_state(fallback_control_state)
     fallback_placement = _body_pos(env, obstacle)[:2]
+    fallback_support_z = float(_body_pos(env, obstacle)[2])
     placements = [fallback_placement]
     placements.extend(
         np.asarray(risk_xy + offset, dtype=float)
@@ -937,6 +938,15 @@ def _matched_control_state(
             _placement_for_settle(env, candidate_spec, placement),
             args.stability_steps,
         )
+        if (
+            candidate_spec.get("placement_mode")
+            == "supported_relative_goal"
+            and abs(
+                float(diagnostics["end_xyz"][2]) - fallback_support_z
+            )
+            > 0.010
+        ):
+            continue
         changed = _changed_state_indices(eb_state, candidate_state)
         only_obstacle = bool(changed) and set(changed).issubset(allowed_indices)
         if not diagnostics["valid"] or not only_obstacle:
@@ -1150,6 +1160,7 @@ def calibrate(args: argparse.Namespace) -> str:
             supported_serialized_mode = bool(
                 spec.get("placement_mode") == "supported_relative_goal"
             )
+            supported_reference_z = None
             if physics_qualified_eb and supported_serialized_mode:
                 # Task-4 states already contain fully settled, paired
                 # cabinet-supported Er/Ec poses. Rebuilding them
@@ -1243,6 +1254,9 @@ def calibrate(args: argparse.Namespace) -> str:
                     float(er_diagnostics["end_xyz"][2]),
                     float(ec_diagnostics["end_xyz"][2]),
                 ]
+                supported_reference_z = float(
+                    er_diagnostics["end_xyz"][2]
+                )
                 ec_clear = bool(
                     not any(ec_replay["hits"].values())
                     and ec_replay["penetration_m"]
@@ -1594,6 +1608,17 @@ def calibrate(args: argparse.Namespace) -> str:
                         ),
                         args.stability_steps,
                     )
+                    if (
+                        supported_reference_z is not None
+                        and abs(
+                            float(diagnostics["end_xyz"][2])
+                            - supported_reference_z
+                        )
+                        > 0.010
+                    ):
+                        invalid_candidates += 1
+                        invalid_reasons.update(["wrong_support_height"])
+                        continue
                     changed = _changed_state_indices(eb_state, candidate_state)
                     only_obstacle = bool(changed) and set(changed).issubset(
                         allowed_indices
@@ -1745,7 +1770,13 @@ def calibrate(args: argparse.Namespace) -> str:
                             "control": control,
                         }
                         break
-                    immediate_anchor = path_step == -1 and not is_refinement
+                    immediate_anchor = (
+                        path_step == -1
+                        or (
+                            supported_serialized_mode
+                            and path_step == -2
+                        )
+                    ) and not is_refinement
                     if (
                         refinement_kind != "effect"
                         and replay["hits"]["intended"]

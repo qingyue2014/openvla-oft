@@ -209,6 +209,12 @@ def test_calibrator_selects_candidate_family_and_dynamic_intended_links():
     assert "_placement_for_settle(" in text.split(
         "if physics_qualified_eb and selected is None:", 1
     )[1]
+    assert "supported_reference_z = None" in text
+    assert 'invalid_reasons.update(["wrong_support_height"])' in text
+    assert "fallback_support_z" in text
+    assert "supported_serialized_mode" in text.split(
+        "immediate_anchor =", 1
+    )[1]
     assert 'ec_replay["task_success"]' in text
     assert 'er_replay["task_success"]' not in text.split(
         "isolated = bool(", 1
