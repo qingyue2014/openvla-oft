@@ -72,6 +72,9 @@ SETTLE_STEPS = 80
 STABILITY_CONFIRM_STEPS = 40
 PAIR_TOLERANCE = 1e-10
 
+RELATION_TRANSLATION_XY = np.array([0.10, -0.13])
+
+
 def _ensure_libero_importable() -> None:
     try:
         from libero.libero import benchmark  # noqa: F401
@@ -510,33 +513,17 @@ def _write_hdf5(
             episode.attrs["native_state_index"] = int(source_index)
 
 
-def _native_object_xy(env, native_state) -> dict[str, np.ndarray]:
-    env.reset()
-    env.set_init_state(native_state)
-    env.sim.forward()
-    return {
-        body: _body_pos(env, body)[:2]
-        for body in MOVABLE_BODIES
-    }
-
-
-def _construct_pair(
-    env,
-    native_state,
-    source_index: int,
-    relation_positions: Mapping[str, np.ndarray],
-    relation_native_state_index: int,
-):
+def _construct_pair(env, native_state, source_index: int):
     env.reset()
     env.set_init_state(native_state)
     env.sim.forward()
     eb_state = env.sim.get_state().flatten()
     eb_target_xy = _body_pos(env, TARGET)[:2]
+    eb_lure_xy = _body_pos(env, LURE)[:2]
 
     common_positions = {
-        TARGET: relation_positions[TARGET],
-        PLATE: relation_positions[PLATE],
-        RAMEKIN: relation_positions[RAMEKIN],
+        body: _body_pos(env, body)[:2] + RELATION_TRANSLATION_XY
+        for body in (TARGET, PLATE, RAMEKIN)
     }
     er_state, er_settle_drift = _settled_variant(
         env,
@@ -546,7 +533,7 @@ def _construct_pair(
     ec_candidate, ec_settle_drift = _settled_variant(
         env,
         eb_state,
-        {**common_positions, LURE: relation_positions[LURE]},
+        {**common_positions, LURE: eb_lure_xy},
     )
 
     env.set_init_state(er_state)
@@ -593,7 +580,9 @@ def _construct_pair(
 
     record = {
         "native_state_index": source_index,
-        "relation_native_state_index": relation_native_state_index,
+        "relation_translation_xy_m": (
+            RELATION_TRANSLATION_XY.round(6).tolist()
+        ),
         "eb_target_xy": actual_eb_target_xy.round(6).tolist(),
         "er_lure_xy": actual_er_lure_xy.round(6).tolist(),
         "stale_location_error_m": stale_error,
@@ -628,43 +617,17 @@ def generate(args) -> None:
     records = []
     rejected = []
     try:
-        native_positions = [
-            _native_object_xy(env, native_state)
-            for native_state in native_states
-        ]
-        used_relation_indices = set()
         for source_index, native_state in enumerate(native_states):
             if len(records) >= args.num_states:
                 break
-            pair = None
-            candidate_errors = []
-            for offset in range(1, len(native_states)):
-                relation_index = (
-                    source_index + offset
-                ) % len(native_states)
-                if relation_index in used_relation_indices:
-                    continue
-                try:
-                    pair = _construct_pair(
-                        env,
-                        native_state,
-                        source_index,
-                        native_positions[relation_index],
-                        relation_index,
-                    )
-                    break
-                except RuntimeError as exc:
-                    candidate_errors.append(
-                        {
-                            "relation_native_state_index": relation_index,
-                            "reason": str(exc),
-                        }
-                    )
-            if pair is None:
+            try:
+                pair = _construct_pair(
+                    env, native_state, source_index
+                )
+            except RuntimeError as exc:
                 rejection = {
                     "native_state_index": source_index,
-                    "reason": "no unused native relation state passed",
-                    "candidate_rejections": candidate_errors,
+                    "reason": str(exc),
                 }
                 rejected.append(rejection)
                 print(
@@ -673,10 +636,6 @@ def generate(args) -> None:
                 )
                 continue
             eb_state, er_state, ec_state, record = pair
-            used_relation_indices.add(
-                record["relation_native_state_index"]
-            )
-            record["rejected_relation_candidates"] = candidate_errors
 
             episode = len(records)
             states["eb"].append(eb_state)
@@ -697,8 +656,6 @@ def generate(args) -> None:
                 )
             print(
                 f"pair={episode:02d} native={source_index:02d} "
-                f"relation_native="
-                f"{record['relation_native_state_index']:02d} "
                 f"stale_error={record['stale_location_error_m']:.4f}m "
                 f"Er_target_pixels="
                 f"{record['er']['agentview_masks'][TARGET]['pixels']} "
@@ -742,15 +699,13 @@ def generate(args) -> None:
         "intervention": {
             "Eb": "exact native serialized state",
             "Er": (
-                "native target, plate, and ramekin relocated to their XY "
-                "poses from a different native initial state, with the target "
-                "uniquely between the landmarks; native lure at paired EB "
-                "target XY"
+                "native target, plate, and ramekin translated together by "
+                f"{RELATION_TRANSLATION_XY.tolist()}m in XY, preserving their "
+                "native relative geometry; native lure at paired EB target XY"
             ),
             "Ec": (
                 "same target/plate/ramekin geometry as ER; only the native "
-                "lure moves to its XY pose from that relation-source native "
-                "initial state"
+                "lure remains at its paired EB native XY pose"
             ),
             "Er_vs_Ec_only_changed_body": LURE,
         },
