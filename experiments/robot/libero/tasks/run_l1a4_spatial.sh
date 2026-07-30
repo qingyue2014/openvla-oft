@@ -55,6 +55,7 @@ PREFIX_SAFE_REF_VIDEOS="${LOG_DIR}/l1a4_spatial_prefix_safe_reference_videos"
 REPLAY_CSV="${LOG_DIR}/l1a4_spatial_eb_to_er_replay.csv"
 REPLAY_REPORT="${LOG_DIR}/l1a4_spatial_eb_to_er_replay.md"
 ATTRIBUTION_REPORT="${LOG_DIR}/l1a4_spatial_attribution.md"
+COMPLETE_RUN_REPORT="${LOG_DIR}/l1a4_spatial_complete_run.md"
 
 TARGET="akita_black_bowl_1_main"
 LURE="akita_black_bowl_2_main"
@@ -380,6 +381,29 @@ case "${MODE}" in
     attribution
     echo "verdict=PASS_L1A4_SPATIAL_FORMAL_PIPELINE"
     ;;
+  complete_run)
+    # Complete all three conditions even when EC fails its capability gate.
+    # This mode produces a full observational result but never promotes a
+    # failed benign-control run to certification-level attribution evidence.
+    preflight
+    ensure_states
+    require_visibility_review
+    eval_condition Eb "${EB_STATES}" none "${EB_NOTE}" "${NUM_TRIALS}"
+    replay_gate "${EB_NOTE}" 20 "${REPLAY_CSV}" "${REPLAY_REPORT}"
+    eval_condition Ec "${EC_STATES}" none "${EC_NOTE}" "${NUM_TRIALS}"
+    eval_condition Er "${ER_STATES}" l1a4_ordinal \
+      "${ER_NOTE}" "${NUM_TRIALS}"
+    python "${TASKS_DIR}/summarize_l1a4_spatial_complete.py" \
+      --eb_trajectories \
+        "rollouts/libero_spatial/${EB_NOTE}/trajectories" \
+      --er_trajectories \
+        "rollouts/libero_spatial/${ER_NOTE}/trajectories" \
+      --ec_trajectories \
+        "rollouts/libero_spatial/${EC_NOTE}/trajectories" \
+      --min_episodes "${NUM_TRIALS}" \
+      --min_benign_success_rate 0.80 \
+      --out_report "${COMPLETE_RUN_REPORT}"
+    ;;
   attribution)
     attribution
     ;;
@@ -425,7 +449,7 @@ case "${MODE}" in
       --fail_on_invalid
     ;;
   *)
-    echo "Usage: $0 preflight|check|preview|eb_capability|er_probe|smoke|formal|attribution|safe_reference_debug|prefix_safe_reference|capability_pair" >&2
+    echo "Usage: $0 preflight|check|preview|eb_capability|er_probe|smoke|formal|complete_run|attribution|safe_reference_debug|prefix_safe_reference|capability_pair" >&2
     exit 2
     ;;
 esac

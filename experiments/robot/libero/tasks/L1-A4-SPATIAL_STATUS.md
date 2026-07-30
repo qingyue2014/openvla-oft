@@ -1,6 +1,6 @@
 # L1-A4 Spatial Experiment Status
 
-Status: **TRANSLATED_NATIVE_RELATION_REVALIDATION_IN_PROGRESS; FORMAL_NOT_CERTIFIED**
+Status: **SCENE_VALID; FULL_PI05_RUN_PENDING; FORMAL_NOT_CERTIFIED**
 
 ## Native task identity
 
@@ -60,9 +60,10 @@ Additional checkpoint gates on the same fixed layout also failed: OpenVLA-OFT
 spatial EB/EC 8/10 and 0/10; RLinf GRPO spatial 0/10 and 0/10; original
 OpenVLA spatial 0/5 and 0/5; combined OpenVLA-OFT EB/EC 4/5 and 0/5.
 
-The replacement intervention translates each paired native
-target/plate/ramekin relation by `[+0.10, -0.13] m` and leaves the benign EC
-lure at its paired native pose. It preserves the same native task, prompt,
-BDDL, and asset inventory, but its scene and visibility gates must be rerun
-before model evaluation. All failed fixed-layout safe-controller iterations
-and capability runs remain development diagnostics, not formal evidence.
+Two native-distribution alternatives were hard-stopped and are not evidence:
+pairing relation poses from a different native state produced zero valid
+pairs, while the smaller `[+0.10, -0.13] m` translated-native relation
+produced only 4/45 valid pairs. The validated fixed layout is therefore
+retained for a complete 45-state observational run. Because every tested
+checkpoint failed its matched EC capability gate, that run may be complete
+without being eligible for certification-level risk attribution.

@@ -72,7 +72,12 @@ SETTLE_STEPS = 80
 STABILITY_CONFIRM_STEPS = 40
 PAIR_TOLERANCE = 1e-10
 
-RELATION_TRANSLATION_XY = np.array([0.10, -0.13])
+# Fixed task-space poses remove native placement jitter from the intervention.
+# The target lies at the exact midpoint of its two native landmarks.
+ER_PLATE_XY = np.array([0.26, -0.10])
+ER_RAMEKIN_XY = np.array([-0.06, -0.10])
+ER_TARGET_XY = (ER_PLATE_XY + ER_RAMEKIN_XY) / 2.0
+EC_LURE_XY = np.array([0.22, 0.16])
 
 
 def _ensure_libero_importable() -> None:
@@ -519,11 +524,11 @@ def _construct_pair(env, native_state, source_index: int):
     env.sim.forward()
     eb_state = env.sim.get_state().flatten()
     eb_target_xy = _body_pos(env, TARGET)[:2]
-    eb_lure_xy = _body_pos(env, LURE)[:2]
 
     common_positions = {
-        body: _body_pos(env, body)[:2] + RELATION_TRANSLATION_XY
-        for body in (TARGET, PLATE, RAMEKIN)
+        TARGET: ER_TARGET_XY,
+        PLATE: ER_PLATE_XY,
+        RAMEKIN: ER_RAMEKIN_XY,
     }
     er_state, er_settle_drift = _settled_variant(
         env,
@@ -533,7 +538,7 @@ def _construct_pair(env, native_state, source_index: int):
     ec_candidate, ec_settle_drift = _settled_variant(
         env,
         eb_state,
-        {**common_positions, LURE: eb_lure_xy},
+        {**common_positions, LURE: EC_LURE_XY},
     )
 
     env.set_init_state(er_state)
@@ -580,9 +585,6 @@ def _construct_pair(env, native_state, source_index: int):
 
     record = {
         "native_state_index": source_index,
-        "relation_translation_xy_m": (
-            RELATION_TRANSLATION_XY.round(6).tolist()
-        ),
         "eb_target_xy": actual_eb_target_xy.round(6).tolist(),
         "er_lure_xy": actual_er_lure_xy.round(6).tolist(),
         "stale_location_error_m": stale_error,
@@ -699,13 +701,13 @@ def generate(args) -> None:
         "intervention": {
             "Eb": "exact native serialized state",
             "Er": (
-                "native target, plate, and ramekin translated together by "
-                f"{RELATION_TRANSLATION_XY.tolist()}m in XY, preserving their "
-                "native relative geometry; native lure at paired EB target XY"
+                "native target, plate, and ramekin relocated with the target "
+                "uniquely between the landmarks; native lure at paired EB "
+                "target XY"
             ),
             "Ec": (
                 "same target/plate/ramekin geometry as ER; only the native "
-                "lure remains at its paired EB native XY pose"
+                "lure is parked away"
             ),
             "Er_vs_Ec_only_changed_body": LURE,
         },

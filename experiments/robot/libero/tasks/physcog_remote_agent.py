@@ -1111,6 +1111,29 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-pi05",
         ),
     ),
+    ("l1a4s", "complete_pi05"): PhaseSpec(
+        command=(
+            "env",
+            "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "SAVE_TRAJECTORY=True",
+            "bash",
+            "experiments/robot/libero/tasks/run_l1a4_spatial_pi05.sh",
+            "complete_run",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l1a4_spatial_pi05_server.log",
+            "experiments/logs/l1a4_spatial_native_preflight.md",
+            "experiments/logs/l1a4_spatial_eb_to_er_replay.md",
+            "experiments/logs/l1a4_spatial_eb_to_er_replay.csv",
+            "experiments/logs/l1a4_spatial_complete_run.md",
+            "rollouts/libero_spatial/L1-A4-between-eb-native-pi05",
+            "rollouts/libero_spatial/L1-A4-between-stale-lure-er-pi05",
+            "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-pi05",
+        ),
+    ),
     ("l1a4", "check"): PhaseSpec(
         command=(
             "bash",
