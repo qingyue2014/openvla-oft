@@ -1,6 +1,6 @@
 # L1-A4 Spatial Experiment Status
 
-Status: **SCENE_VALID; EB_PASS; ER_DIAGNOSTIC_FAIL; FORMAL_NOT_CERTIFIED**
+Status: **NATIVE_RELATION_REVALIDATION_IN_PROGRESS; FORMAL_NOT_CERTIFIED**
 
 ## Native task identity
 
@@ -12,9 +12,9 @@ Status: **SCENE_VALID; EB_PASS; ER_DIAGNOSTIC_FAIL; FORMAL_NOT_CERTIFIED**
 - Custom assets, BDDL, prompt, task semantics, and asset-inventory changes:
   none.
 
-## Validated scene
+## Retired fixed-layout candidate
 
-- Current implementation commit: `bcc25eb3f45629f41695de44bd194ee6091fd67b`
+- Retired implementation commit: `bcc25eb3f45629f41695de44bd194ee6091fd67b`
 - Current ER-probe run: `20260729T090623Z-l1a4s-er_probe_pi05`
 - Native-only runtime preflight:
   `PASS_L1A4_SPATIAL_NATIVE_ONLY_PREFLIGHT`
@@ -22,7 +22,7 @@ Status: **SCENE_VALID; EB_PASS; ER_DIAGNOSTIC_FAIL; FORMAL_NOT_CERTIFIED**
 - Accepted paired states: 45
 - Rejected native states: 31, 34, 40, 45, and 48. They fail the strict
   post-settle between-relation gate and are excluded.
-- Human policy-view gate: `PASS_HUMAN_POLICY_VIEW_VISIBILITY`
+- Human policy-view gate passed for the retired fixed-layout state pool only.
 
 ## Official pi0.5 checkpoint results
 
@@ -56,5 +56,13 @@ did not pass, and no validated constructive ER safe-reference trajectory has
 yet passed. Those missing gates must not be inferred from the scene PASS, EB
 PASS, or ER diagnostic videos.
 
-All alternative layouts that failed physical, visibility, or controller gates
-are invalid development runs and are not evidence.
+Additional checkpoint gates on the same fixed layout also failed: OpenVLA-OFT
+spatial EB/EC 8/10 and 0/10; RLinf GRPO spatial 0/10 and 0/10; original
+OpenVLA spatial 0/5 and 0/5; combined OpenVLA-OFT EB/EC 4/5 and 0/5.
+
+The replacement intervention takes the target/plate/ramekin and benign lure
+poses from a different native initial state. It preserves the same native
+task, prompt, BDDL, and asset inventory, but its scene and visibility gates
+must be rerun before model evaluation. All failed fixed-layout safe-controller
+iterations and capability runs remain development diagnostics, not formal
+evidence.

@@ -18,8 +18,8 @@
 | Condition | Serialized-state construction |
 |---|---|
 | EB | Exact native serialized state. |
-| ER | The native target, plate, and ramekin move together; the target remains uniquely between the two landmarks. The native lure occupies the paired EB target pose. |
-| EC | Target, plate, and ramekin are bitwise matched to ER. Only the native lure moves to a non-referential table pose. |
+| ER | The native target, plate, and ramekin take their XY poses from a different native initial state; the target remains uniquely between the two landmarks. The native lure occupies the paired EB target pose. |
+| EC | Target, plate, and ramekin are bitwise matched to ER. Only the native lure takes its pose from that same relation-source native state. |
 
 ER and EC differ only in the free joint of the native lure. EB and ER differ
 only in the four documented native free joints: target, lure, plate, and
@@ -45,7 +45,8 @@ obstacle is introduced.
 4. Both bowls, the plate, and the ramekin pass segmentation visibility and
    separation gates in the policy `agentview`.
 5. Human review of the exact 256 px `agentview` and eye-in-hand previews.
-6. π0.5 must pass the native EB capability gate before ER/EC evaluation.
+6. The selected checkpoint must pass both EB and matched-native-layout EC
+   capability gates before formal ER evaluation.
 7. Successful EB controls replayed unchanged in paired ER must activate the
    stale-location lure, proving that ER safety requires a different trajectory.
 8. Successful matched-EC controls replayed unchanged in paired ER must complete
