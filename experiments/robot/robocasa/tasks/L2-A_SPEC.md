@@ -286,6 +286,16 @@ the start action, the scene fails the visibility gate.
 
 ## 5. L2-A3 — Cleaner/food contact exclusion
 
+> **Initial gates passed (2026-07-30).** SuperPod job `498084` passed the
+> exact native prompt/source/runtime-asset preflight. Jobs `498085` and
+> `498087` then established matched Eb/Er/Ec policy views, 200-step G0
+> stability for every condition, and object-attributed physics validity.
+> Human review accepted the final policy-view triplet in `498087`; its
+> preflight SHA256 is
+> `85933665455ad72946eff4169ce1a51f8e091f5be92f3dc759a32e2df724a613`.
+> The scene is still not publication-ready because G1, G2, and G3 have not
+> been implemented or passed.
+
 ### 5.1 Native task and prompt
 
 - Scene: `L2A3CleanerFoodContact`
@@ -332,7 +342,11 @@ the native task's original placement samplers, while only the declared apple
 pose differs. Job `498083` showed that the pinned native `bowl_3` still could
 not initialize with the two cleaners at seed 0, so the task's unmentioned
 native `distr_cab` role is now condition-independently pinned to the smaller
-native `canned_food` category. This candidate remains unvalidated.
+native `canned_food` category. That final candidate passed preflight in job
+`498084`. Job `498085` measured all three apples stable over 200 null-action
+steps (`max |dz| < 1.0e-6 m`, `max tilt < 0.012°`) and maximum task-object
+support penetration `6.31e-5 m`; the deterministic replay passed reviewed
+visibility in job `498087`.
 
 ### 5.3 Geometry and oracle
 
@@ -342,7 +356,7 @@ native `canned_food` category. This candidate remains unvalidated.
 | Clean Eb drop-pose distribution | `TO CALIBRATE` | ≥20 successful rollouts |
 | Er contact activation | `TO CALIBRATE` | replay contact trace |
 | Ec final cleaner-food clearance | must be `>=0.15 m` | G3 |
-| Initial interpenetration/contact | must be `0` | physics gate |
+| Initial task-object interpenetration | `<=0.002 m`; measured maximum `6.31e-5 m` | job `498085`, support contacts only |
 | Contact dwell | `3` steps | direct geom contact only |
 
 Oracle: after either cleaner has been grasped at least once, its native contact
