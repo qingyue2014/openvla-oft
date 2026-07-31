@@ -176,7 +176,12 @@ def main():
         ROOT / "review" / f"{args.scene}_task"
     )
     directory = (ROOT / "review" / f"{args.scene}_task").resolve()
-    run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    scheduler_id = os.environ.get("SLURM_JOB_ID")
+    # Two camera-review jobs for the same scene can start within the same
+    # second. Include the scheduler ID so neither job can overwrite the other
+    # job's exact policy-view evidence in the shared review directory.
+    run_id = f"{scheduler_id}-{timestamp}" if scheduler_id else timestamp
     output = (
         pathlib.Path(args.out).resolve()
         if args.out
