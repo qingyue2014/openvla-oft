@@ -24,6 +24,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _live_plate_tracking_target,
     _outside_side_geometry_feedback_action,
     _outside_side_guard_from_world_aabbs,
+    _outside_side_recovery_progress_evidence,
     _plate_finger_contact_sides,
     _push_window_timeout_evidence,
     _robot_contacts_body,
@@ -736,6 +737,128 @@ def test_499921_two_mm_live_clearance_proceeds_with_zero_compiled_margin():
     assert action[2] == pytest.approx(-0.10)
 
 
+def test_499935_submillimetre_deficit_uses_bounded_monotonic_recovery():
+    current = np.array([0.131429676, -0.029432244, 0.970336557])
+    target = np.array([0.136806395, -0.028507780, 0.898654346])
+    strict_positive_clearance = np.nextafter(0.0, np.inf)
+    before_guard = {
+        "outward_direction_xy": [1.0, 0.0],
+        "required_outside_clearance_m": strict_positive_clearance,
+        "minimum_outside_clearance_m": -0.000343294,
+        "required_finger_table_clearance_m": (
+            strict_positive_clearance
+        ),
+        "finger_table_vertical_clearance_m": 0.0573,
+    }
+    action, feedback = _outside_side_geometry_feedback_action(
+        current_eef=current,
+        outside_side_target=target,
+        guard=before_guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    assert feedback["mode"] == "recover_outside_clearance"
+    assert feedback["clearance_deficit_m"] == pytest.approx(
+        0.000343294
+    )
+    # The controller-derived 8 mm world correction comes only from the
+    # unchanged 0.08 action scale and 0.10 bounded-action limit.
+    assert feedback["feedback_target"][0] == pytest.approx(
+        current[0] + 0.08 * 0.10
+    )
+    assert np.allclose(action[:3], [0.10, 0.0, 0.0])
+    assert feedback["recovery_action_saturated"] is True
+
+    delayed_guard = {
+        **before_guard,
+        "minimum_outside_clearance_m": -0.00040,
+    }
+    pending = _outside_side_recovery_progress_evidence(
+        baseline_guard=before_guard,
+        after_guard=delayed_guard,
+        baseline_eef=current,
+        after_eef=current + np.array([-0.00002, 0.0, -0.0005]),
+        actions=[action],
+        maximum_translation_action=0.10,
+    )
+    assert pending["accepted"] is True
+    assert pending["fail_closed"] is False
+    assert pending["pending_controller_response"] is True
+    assert pending["window_exhausted"] is False
+
+    # A positive clearance after the transient does not bypass the response
+    # proof: the second command remains outward until the window resolves.
+    forced_action, forced_feedback = (
+        _outside_side_geometry_feedback_action(
+            current_eef=current,
+            outside_side_target=target,
+            guard={
+                **before_guard,
+                "minimum_outside_clearance_m": 0.0001,
+            },
+            gripper=-1.0,
+            position_action_scale=0.08,
+            maximum_translation_action=0.10,
+            force_outward_recovery=True,
+        )
+    )
+    assert forced_feedback["mode"] == "recover_outside_clearance"
+    assert forced_feedback["clearance_deficit_m"] == 0.0
+    assert np.allclose(forced_action[:3], [0.10, 0.0, 0.0])
+
+    recovered_guard = {
+        **before_guard,
+        "minimum_outside_clearance_m": 0.0017,
+    }
+    evidence = _outside_side_recovery_progress_evidence(
+        baseline_guard=before_guard,
+        after_guard=recovered_guard,
+        baseline_eef=current,
+        after_eef=current + np.array([0.002, 0.0, -0.0005]),
+        actions=[action, action],
+        maximum_translation_action=0.10,
+    )
+    assert evidence["accepted"] is True
+    assert evidence["progress_proven"] is True
+    assert evidence["actions_saturated"] is True
+    assert evidence["net_clearance_progress_m"] > 0.0
+    assert evidence["net_eef_outward_progress_m"] > 0.0
+
+    weak_action = np.array([0.004285, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+    regressed_guard = {
+        **before_guard,
+        "minimum_outside_clearance_m": -0.000343294 - 4.8e-7,
+    }
+    rejected = _outside_side_recovery_progress_evidence(
+        baseline_guard=before_guard,
+        after_guard=regressed_guard,
+        baseline_eef=current,
+        after_eef=current + np.array([-3.6e-7, 0.0, -7.3e-6]),
+        actions=[weak_action],
+        maximum_translation_action=0.10,
+    )
+    assert rejected["accepted"] is False
+    assert rejected["violations"] == [
+        "outward_recovery_action_not_at_controller_bound",
+    ]
+
+    saturated_but_stalled = _outside_side_recovery_progress_evidence(
+        baseline_guard=before_guard,
+        after_guard=regressed_guard,
+        baseline_eef=current,
+        after_eef=current + np.array([-3.6e-7, 0.0, -7.3e-6]),
+        actions=[action, action],
+        maximum_translation_action=0.10,
+    )
+    assert saturated_but_stalled["fail_closed"] is True
+    assert saturated_but_stalled["window_exhausted"] is True
+    assert saturated_but_stalled["violations"] == [
+        "eef_outward_position_lacked_net_window_progress",
+        "live_outside_clearance_lacked_net_window_progress",
+    ]
+
+
 def test_499888_feedback_recovers_x_before_bounded_z_and_stops_above_table():
     current = np.array([0.123946, -0.028254, 0.912431])
     target = np.array([0.136806, -0.028508, 0.898654])
@@ -756,10 +879,11 @@ def test_499888_feedback_recovers_x_before_bounded_z_and_stops_above_table():
     assert feedback["mode"] == "recover_outside_clearance"
     assert feedback["clearance_deficit_m"] == pytest.approx(0.009)
     assert feedback["feedback_target"][0] == pytest.approx(
-        current[0] + 0.009
+        current[0] + 0.008
     )
     assert feedback["feedback_target"][2] == pytest.approx(current[2])
     assert np.allclose(action[:3], [0.10, 0.0, 0.0])
+    assert feedback["recovery_action_saturated"] is True
 
     clearance_restored = {
         **clearance_lost,
@@ -1516,6 +1640,11 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert '"outside_side_feedback"' in bounded_seek
     assert '"post_action_guard"' in bounded_seek
+    assert "_outside_side_recovery_progress_evidence(" in bounded_seek
+    assert "recovery_progress[\"fail_closed\"]" in bounded_seek
+    assert bounded_seek.index("motion_sample = capture(") < (
+        bounded_seek.index("recovery_progress[\"fail_closed\"]")
+    )
     assert (
         "orientation is infeasible before table contact"
         in bounded_seek

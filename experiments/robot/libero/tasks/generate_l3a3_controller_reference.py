@@ -43,6 +43,10 @@ from experiments.robot.libero.tasks.validate_l3a3_state_bundle import (
     artifact_binding,
 )
 
+# Allow one discrete OSC transient and require proof on the repeated bounded
+# command.  This is a temporal response window, not a spatial safety margin.
+OUTSIDE_RECOVERY_RESPONSE_WINDOW_STEPS = 2
+
 
 def _position_action(current, target, gripper, scale):
     action = np.zeros(7, dtype=float)
@@ -873,6 +877,7 @@ def _outside_side_geometry_feedback_action(
     gripper,
     position_action_scale,
     maximum_translation_action,
+    force_outward_recovery=False,
 ):
     """Choose one bounded outward-recovery or vertical-descent OSC action."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -890,12 +895,19 @@ def _outside_side_geometry_feedback_action(
     live_clearance = float(guard["minimum_outside_clearance_m"])
     if current_eef.shape != (3,) or outside_side_target.shape != (3,):
         raise ValueError("current and outside-side EEF targets must be 3-D")
-    if live_clearance < required_clearance:
-        clearance_deficit = required_clearance - live_clearance
+    if live_clearance < required_clearance or force_outward_recovery:
+        clearance_deficit = max(
+            0.0, required_clearance - live_clearance
+        )
+        maximum_world_step = (
+            float(position_action_scale)
+            * float(maximum_translation_action)
+        )
         feedback_target = current_eef.copy()
-        feedback_target[:2] += outward * clearance_deficit
+        feedback_target[:2] += outward * maximum_world_step
         mode = "recover_outside_clearance"
         available_table_descent = None
+        recovery_action_saturated = True
     else:
         vertical_remaining = float(
             current_eef[2] - outside_side_target[2]
@@ -933,6 +945,7 @@ def _outside_side_geometry_feedback_action(
         feedback_target[2] -= commanded_descent
         clearance_deficit = 0.0
         mode = "bounded_vertical_descent"
+        recovery_action_saturated = False
     action = _bounded_side_contact_seek_action(
         current_eef,
         feedback_target,
@@ -951,8 +964,116 @@ def _outside_side_geometry_feedback_action(
         ),
         "live_minimum_outside_clearance_m": live_clearance,
         "clearance_deficit_m": float(clearance_deficit),
+        "force_outward_recovery": bool(force_outward_recovery),
+        "recovery_action_saturated": recovery_action_saturated,
         "available_table_descent_m": available_table_descent,
         "action": action.tolist(),
+    }
+
+
+def _outside_side_recovery_progress_evidence(
+    *,
+    baseline_guard,
+    after_guard,
+    baseline_eef,
+    after_eef,
+    actions,
+    maximum_translation_action,
+    response_window_steps=OUTSIDE_RECOVERY_RESPONSE_WINDOW_STEPS,
+):
+    """Prove net recovery or saturation over a finite OSC response window."""
+    outward = np.asarray(
+        baseline_guard["outward_direction_xy"], dtype=float
+    )
+    baseline_eef = np.asarray(baseline_eef, dtype=float)
+    after_eef = np.asarray(after_eef, dtype=float)
+    actions = [np.asarray(action, dtype=float) for action in actions]
+    if (
+        outward.shape != (2,)
+        or baseline_eef.shape != (3,)
+        or after_eef.shape != (3,)
+        or not actions
+        or any(action.shape[0] < 3 for action in actions)
+    ):
+        raise ValueError("outside-side recovery vectors have invalid shape")
+    outward_norm = float(np.linalg.norm(outward))
+    if not np.isfinite(outward_norm) or outward_norm <= 1e-9:
+        raise ValueError("outward direction must be finite and nonzero")
+    if (
+        not np.isfinite(maximum_translation_action)
+        or not (0.0 < maximum_translation_action <= 1.0)
+    ):
+        raise ValueError("maximum translation action must be in (0, 1]")
+    if response_window_steps < 1:
+        raise ValueError("response window steps must be positive")
+    if len(actions) > response_window_steps:
+        raise ValueError("recovery action window exceeds configured length")
+    outward /= outward_norm
+    baseline_clearance = float(
+        baseline_guard["minimum_outside_clearance_m"]
+    )
+    after_clearance = float(
+        after_guard["minimum_outside_clearance_m"]
+    )
+    clearance_progress = after_clearance - baseline_clearance
+    eef_outward_progress = float(
+        np.dot(after_eef[:2] - baseline_eef[:2], outward)
+    )
+    commanded_outward_actions = [
+        float(np.dot(action[:2], outward))
+        for action in actions
+    ]
+    saturation_floor = float(
+        np.nextafter(maximum_translation_action, -np.inf)
+    )
+    actions_saturated = all(
+        commanded >= saturation_floor
+        for commanded in commanded_outward_actions
+    )
+    progress_proven = (
+        clearance_progress > 0.0
+        and eef_outward_progress > 0.0
+    )
+    window_exhausted = len(actions) >= response_window_steps
+    violations = []
+    if not actions_saturated:
+        violations.append(
+            "outward_recovery_action_not_at_controller_bound"
+        )
+    if window_exhausted and not progress_proven:
+        if eef_outward_progress <= 0.0:
+            violations.append(
+                "eef_outward_position_lacked_net_window_progress"
+            )
+        if clearance_progress <= 0.0:
+            violations.append(
+                "live_outside_clearance_lacked_net_window_progress"
+            )
+    fail_closed = bool(violations)
+    return {
+        "accepted": not fail_closed,
+        "fail_closed": fail_closed,
+        "progress_proven": progress_proven,
+        "pending_controller_response": bool(
+            not fail_closed and not progress_proven
+        ),
+        "window_exhausted": window_exhausted,
+        "response_window_steps": int(response_window_steps),
+        "response_window_basis": (
+            "one discrete OSC transient plus one repeated saturated "
+            "outward command"
+        ),
+        "observed_steps": len(actions),
+        "violations": violations,
+        "baseline_clearance_m": baseline_clearance,
+        "after_clearance_m": after_clearance,
+        "net_clearance_progress_m": float(clearance_progress),
+        "net_eef_outward_progress_m": eef_outward_progress,
+        "commanded_outward_actions": commanded_outward_actions,
+        "maximum_translation_action": float(
+            maximum_translation_action
+        ),
+        "actions_saturated": actions_saturated,
     }
 
 
@@ -1768,9 +1889,14 @@ def _seek_stable_plate_contact(
         env, geometry
     )
     outside_side_feedback_steps = []
+    recovery_response_window = None
     for guard_step in range(1, args.max_waypoint_steps + 1):
-        if latest_outside_side_guard["accepted"]:
+        if (
+            latest_outside_side_guard["accepted"]
+            and recovery_response_window is None
+        ):
             break
+        pre_action_guard = latest_outside_side_guard
         current_eef = np.asarray(
             rollout.obs["robot0_eef_pos"], dtype=float
         )
@@ -1778,11 +1904,14 @@ def _seek_stable_plate_contact(
             action, feedback = _outside_side_geometry_feedback_action(
                 current_eef=current_eef,
                 outside_side_target=outside_side_target,
-                guard=latest_outside_side_guard,
+                guard=pre_action_guard,
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
                 maximum_translation_action=(
                     args.plate_contact_seek_max_translation_action
+                ),
+                force_outward_recovery=(
+                    recovery_response_window is not None
                 ),
             )
         except RuntimeError as exc:
@@ -1801,8 +1930,41 @@ def _seek_stable_plate_contact(
         )
         outside_side_guard_checks += 1
         feedback["post_action_guard"] = latest_outside_side_guard
+        recovery_progress = None
+        if feedback["mode"] == "recover_outside_clearance":
+            if recovery_response_window is None:
+                recovery_response_window = {
+                    "baseline_guard": pre_action_guard,
+                    "baseline_eef": current_eef.copy(),
+                    "actions": [],
+                }
+            recovery_response_window["actions"].append(
+                action.copy()
+            )
+            recovery_progress = (
+                _outside_side_recovery_progress_evidence(
+                    baseline_guard=recovery_response_window[
+                        "baseline_guard"
+                    ],
+                    after_guard=latest_outside_side_guard,
+                    baseline_eef=recovery_response_window[
+                        "baseline_eef"
+                    ],
+                    after_eef=np.asarray(
+                        rollout.obs["robot0_eef_pos"],
+                        dtype=float,
+                    ),
+                    actions=recovery_response_window["actions"],
+                    maximum_translation_action=(
+                        args.plate_contact_seek_max_translation_action
+                    ),
+                )
+            )
+            feedback["recovery_progress"] = recovery_progress
+            if recovery_progress["progress_proven"]:
+                recovery_response_window = None
         outside_side_feedback_steps.append(feedback)
-        capture(
+        motion_sample = capture(
             "outside_side_motion",
             outside_side_motion_steps,
             False,
@@ -1812,7 +1974,28 @@ def _seek_stable_plate_contact(
                 "outside_side_guard": latest_outside_side_guard,
             },
         )
-        if latest_outside_side_guard["accepted"]:
+        if (
+            recovery_progress is not None
+            and recovery_progress["fail_closed"]
+        ):
+            motion_sample["accepted"] = False
+            motion_sample["violations"].extend(
+                recovery_progress["violations"]
+            )
+            raise RuntimeError(
+                "saturated outward OSC recovery failed net live-clearance "
+                "progress over its finite response window; native side is "
+                "dynamically unreachable under the unchanged controller "
+                "bound: "
+                f"source={source} guard_step={guard_step} "
+                f"feedback={json.dumps(feedback, sort_keys=True)} "
+                f"samples={json.dumps(samples, sort_keys=True)} "
+                f"scene={json.dumps(diagnostics(), sort_keys=True)}"
+            )
+        if (
+            latest_outside_side_guard["accepted"]
+            and recovery_response_window is None
+        ):
             break
     else:
         raise RuntimeError(
