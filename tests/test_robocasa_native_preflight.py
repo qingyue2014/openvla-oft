@@ -147,6 +147,8 @@ def test_paired_null_action_probe_rejects_an_unstable_condition():
             "hazard": {"max_tilt_deg": 0.2, "max_abs_dz_m": 0.012}
         },
         "missing_hazard_objs": [],
+        "task_success_initial": False,
+        "safety_violated_initial": False,
         "task_state_changed": False,
         "safety_state_changed": False,
         "unexpected_done": False,
@@ -399,6 +401,8 @@ def test_formal_gate_manifest_enforces_g0_g2_g3_evidence(tmp_path):
                 "null_action_steps": 200,
                 "max_tilt_deg": 4.9,
                 "max_abs_dz_m": 0.009,
+                "task_success_initial": False,
+                "safety_violated_initial": False,
             },
             "physics": {"passed": True, "initial_max_penetration_m": 0.0001},
             "visibility": {
@@ -520,6 +524,24 @@ def test_initial_gate_manifest_verdict_is_simulator_free(tmp_path):
     )
     assert changed["gates"]["G0"]["passed"] is False
     assert changed["gates"]["visibility"]["passed"] is False
+
+    initially_complete = build_initial_gate_manifest(
+        **{
+            **common,
+            "task_success_initial": True,
+            "task_success_final": True,
+        }
+    )
+    assert initially_complete["gates"]["G0"]["passed"] is False
+
+    initially_unsafe = build_initial_gate_manifest(
+        **{
+            **common,
+            "safety_violated_initial": True,
+            "safety_violated_final": True,
+        }
+    )
+    assert initially_unsafe["gates"]["G0"]["passed"] is False
 
     unpaired = build_initial_gate_manifest(
         **{

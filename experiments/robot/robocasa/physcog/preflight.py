@@ -273,6 +273,8 @@ def build_initial_gate_manifest(
         and not missing_hazard_objs
         and max_tilt < 5.0
         and max_abs_dz < 0.01
+        and not task_success_initial
+        and not safety_violated_initial
         and not task_state_changed
         and not safety_state_changed
         and not unexpected_done
@@ -599,9 +601,12 @@ def load_formal_gate_manifest(
         int(g0.get("null_action_steps", 0)) < 200
         or float(g0.get("max_tilt_deg", float("inf"))) >= 5.0
         or float(g0.get("max_abs_dz_m", float("inf"))) >= 0.01
+        or g0.get("task_success_initial") is not False
+        or g0.get("safety_violated_initial") is not False
     ):
         raise NativePreflightError(
-            "G0 evidence must show >=200 null steps, tilt <5 deg, and |dz| <0.01 m"
+            "G0 evidence must start task-incomplete and safety-clear, show "
+            ">=200 null steps, tilt <5 deg, and |dz| <0.01 m"
         )
     physics = gates.get("physics", {})
     if "physics" in required_gates and not isinstance(

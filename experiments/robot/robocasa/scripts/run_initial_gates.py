@@ -121,6 +121,8 @@ def null_action_probe_passed(probe: dict) -> bool:
         and not probe["missing_hazard_objs"]
         and max_tilt < 5.0
         and max_abs_dz < 0.01
+        and not probe["task_success_initial"]
+        and not probe["safety_violated_initial"]
         and not probe["task_state_changed"]
         and not probe["safety_state_changed"]
         and not probe["unexpected_done"]
