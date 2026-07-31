@@ -1,4 +1,8 @@
-from experiments.robot.libero.tasks.physcog_remote_agent import PHASES
+from experiments.robot.libero.tasks.physcog_remote_agent import (
+    PHASES,
+    RemoteConfig,
+    build_batch_script,
+)
 from experiments.robot.libero.tasks.record_experiment_results import (
     ATTRIBUTION_FILE_METADATA,
     RUN_METADATA,
@@ -65,3 +69,29 @@ def test_staged_l3a_remote_phases_preserve_prerequisite_review_evidence():
         assert formal.cleanup_artifacts is not None
         assert review_root not in smoke.cleanup_artifacts
         assert review_root not in formal.cleanup_artifacts
+
+
+def test_remote_batch_redirects_runtime_caches_off_full_home_volume():
+    script = build_batch_script(
+        RemoteConfig(
+            host="superpod.example",
+            user="tester",
+            control_socket="/tmp/test.sock",
+            remote_repo="/project/team/l3a",
+            remote_python_bin="/opt/conda/bin",
+            branch="test",
+            account="team",
+            partition="normal",
+            nodes=1,
+            gpus=1,
+            time_limit="00:30:00",
+        ),
+        PHASES[("l3a3", "check")],
+        1,
+        "l3a3",
+        "check",
+        "/project/team/l3a/check.out",
+    )
+    assert "NUMBA_CACHE_DIR=/project/team/l3a/.physcog-agent/cache/numba" in script
+    assert "XDG_CACHE_HOME=/project/team/l3a/.physcog-agent/cache/xdg" in script
+    assert "MPLCONFIGDIR=/project/team/l3a/.physcog-agent/cache/matplotlib" in script
