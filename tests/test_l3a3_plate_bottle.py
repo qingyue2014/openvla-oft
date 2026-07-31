@@ -26,6 +26,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _live_plate_tracking_target,
     _outside_side_geometry_feedback_action,
     _outside_side_guard_from_world_aabbs,
+    _outside_side_lateral_settle_evidence,
     _outside_side_recovery_progress_evidence,
     _plate_finger_contact_sides,
     _push_window_timeout_evidence,
@@ -886,6 +887,84 @@ def test_500088_descent_norm_is_strictly_inside_bound_without_inward_action():
     assert action[2] == pytest.approx(-0.10)
     assert evidence["raw_outward_error_m"] < 0.0
     assert evidence["commanded_outward_error_m"] == 0.0
+
+
+def test_500096_inward_coupled_descent_requires_lateral_only_settle():
+    target = np.array(
+        [0.13680639548403947, -0.02850777957668001, 0.917769758]
+    )
+    before_eef = np.array(
+        [0.134581421, -0.028733513, 1.058025943]
+    )
+    after_eef = np.array(
+        [0.134502805, -0.028729556, 1.056519669]
+    )
+    required_clearance = np.nextafter(0.0, np.inf)
+    before_guard = {
+        "outward_direction_xy": [1.0, 0.0],
+        "required_outside_clearance_m": required_clearance,
+        "minimum_outside_clearance_m": 0.002748690,
+    }
+    after_guard = {
+        **before_guard,
+        "minimum_outside_clearance_m": 0.002683149,
+    }
+    evidence = _outside_side_lateral_settle_evidence(
+        before_guard=before_guard,
+        after_guard=after_guard,
+        before_eef=before_eef,
+        after_eef=after_eef,
+    )
+    assert evidence["settled"] is False
+    assert evidence["violations"] == [
+        "eef_still_descending_during_lateral_settle",
+        "eef_still_moving_inward_during_lateral_settle",
+        "outside_clearance_still_decreasing_during_lateral_settle",
+    ]
+
+    settle_action, path = _constraint_prioritized_outside_descent_action(
+        current_eef=after_eef,
+        outside_side_target=target,
+        outward_direction_xy=np.array([1.0, 0.0]),
+        maximum_descent_m=0.0,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    assert settle_action[0] > 0.0
+    assert settle_action[2] == 0.0
+    assert path["maximum_descent_m"] == 0.0
+
+    settle_action, feedback = _outside_side_geometry_feedback_action(
+        current_eef=after_eef,
+        outside_side_target=target,
+        guard={
+            **after_guard,
+            "required_finger_table_clearance_m": required_clearance,
+            "finger_table_vertical_clearance_m": 0.143,
+        },
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+        force_lateral_settle=True,
+    )
+    assert feedback["mode"] == "compiled_outside_lateral_settle"
+    assert feedback["force_lateral_settle"] is True
+    assert settle_action[0] > 0.0
+    assert settle_action[2] == 0.0
+
+    settled_guard = {
+        **after_guard,
+        "minimum_outside_clearance_m": 0.0028,
+    }
+    settled = _outside_side_lateral_settle_evidence(
+        before_guard=after_guard,
+        after_guard=settled_guard,
+        before_eef=after_eef,
+        after_eef=after_eef + np.array([0.0001, 0.0, 0.0001]),
+    )
+    assert settled["settled"] is True
+    assert settled["violations"] == []
 
 
 def test_499954_saturated_recovery_follows_improving_discrete_response():
@@ -1904,6 +1983,9 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"outside_side_feedback"' in bounded_seek
     assert '"post_action_guard"' in bounded_seek
     assert "_outside_side_recovery_progress_evidence(" in bounded_seek
+    assert "_outside_side_lateral_settle_evidence(" in bounded_seek
+    assert "force_lateral_settle=(" in bounded_seek
+    assert '"lateral_settle_trigger"' in bounded_seek
     assert "recovery_progress[\"fail_closed\"]" in bounded_seek
     assert bounded_seek.index("motion_sample = capture(") < (
         bounded_seek.index("recovery_progress[\"fail_closed\"]")

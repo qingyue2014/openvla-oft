@@ -1101,13 +1101,13 @@ def _constraint_prioritized_outside_descent_action(
         raise ValueError("outward direction must be finite and nonzero")
     if (
         not np.isfinite(maximum_descent_m)
-        or maximum_descent_m <= 0.0
+        or maximum_descent_m < 0.0
         or not np.isfinite(position_action_scale)
         or position_action_scale <= 0.0
         or not np.isfinite(maximum_translation_action)
         or not (0.0 < maximum_translation_action <= 1.0)
     ):
-        raise ValueError("outside descent bounds must be finite and positive")
+        raise ValueError("outside descent bounds must be finite and valid")
     allocation_translation_action_bound = float(
         np.nextafter(maximum_translation_action, 0.0)
     )
@@ -1231,6 +1231,7 @@ def _outside_side_geometry_feedback_action(
     position_action_scale,
     maximum_translation_action,
     force_outward_recovery=False,
+    force_lateral_settle=False,
 ):
     """Choose one bounded outward-recovery or vertical-descent OSC action."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -1287,15 +1288,20 @@ def _outside_side_geometry_feedback_action(
                 "outside-side geometry impossible before native table "
                 "clearance is exhausted"
             )
+        maximum_descent_request = (
+            0.0
+            if force_lateral_settle
+            else min(
+                vertical_remaining,
+                available_table_descent,
+            )
+        )
         action, descent_path_control = (
             _constraint_prioritized_outside_descent_action(
                 current_eef=current_eef,
                 outside_side_target=outside_side_target,
                 outward_direction_xy=outward,
-                maximum_descent_m=min(
-                    vertical_remaining,
-                    available_table_descent,
-                ),
+                maximum_descent_m=maximum_descent_request,
                 gripper=gripper,
                 position_action_scale=position_action_scale,
                 maximum_translation_action=(
@@ -1306,7 +1312,9 @@ def _outside_side_geometry_feedback_action(
         feedback_target = current_eef.copy()
         feedback_target += action[:3] * float(position_action_scale)
         clearance_deficit = 0.0
-        if action[2] < 0.0:
+        if force_lateral_settle:
+            mode = "compiled_outside_lateral_settle"
+        elif action[2] < 0.0:
             mode = "constraint_prioritized_vertical_descent"
         else:
             mode = "compiled_outside_xy_recovery"
@@ -1331,6 +1339,7 @@ def _outside_side_geometry_feedback_action(
         "live_minimum_outside_clearance_m": live_clearance,
         "clearance_deficit_m": float(clearance_deficit),
         "force_outward_recovery": bool(force_outward_recovery),
+        "force_lateral_settle": bool(force_lateral_settle),
         "recovery_action_saturated": recovery_action_saturated,
         "descent_path_control": descent_path_control,
         "available_table_descent_m": available_table_descent,
@@ -1378,6 +1387,60 @@ def _outside_side_step_response_evidence(
         ),
         "before_clearance_m": before_clearance,
         "after_clearance_m": after_clearance,
+    }
+
+
+def _outside_side_lateral_settle_evidence(
+    *,
+    before_guard,
+    after_guard,
+    before_eef,
+    after_eef,
+):
+    """Require lateral and vertical motion to stop trending toward hazards."""
+    before_eef = np.asarray(before_eef, dtype=float)
+    after_eef = np.asarray(after_eef, dtype=float)
+    if before_eef.shape != (3,) or after_eef.shape != (3,):
+        raise ValueError("outside-side settle EEF vectors must be 3-D")
+    step_response = _outside_side_step_response_evidence(
+        before_guard=before_guard,
+        after_guard=after_guard,
+        before_eef=before_eef,
+        after_eef=after_eef,
+    )
+    vertical_step_progress = float(after_eef[2] - before_eef[2])
+    required_clearance = float(
+        after_guard["required_outside_clearance_m"]
+    )
+    live_clearance = float(
+        after_guard["minimum_outside_clearance_m"]
+    )
+    violations = []
+    if vertical_step_progress < 0.0:
+        violations.append("eef_still_descending_during_lateral_settle")
+    if step_response["eef_outward_step_progress_m"] < 0.0:
+        violations.append("eef_still_moving_inward_during_lateral_settle")
+    if step_response["outside_clearance_step_progress_m"] < 0.0:
+        violations.append(
+            "outside_clearance_still_decreasing_during_lateral_settle"
+        )
+    if live_clearance < required_clearance:
+        violations.append(
+            "outside_clearance_below_compiled_requirement_during_settle"
+        )
+    return {
+        "settled": not violations,
+        "violations": violations,
+        "formula": (
+            "after an observed inward-coupled descent step, issue no Z "
+            "command until measured Z, EEF-outward, and live-clearance "
+            "step progress are all nonnegative and compiled clearance is "
+            "satisfied"
+        ),
+        "vertical_step_progress_m": vertical_step_progress,
+        "step_response": step_response,
+        "required_outside_clearance_m": required_clearance,
+        "live_outside_clearance_m": live_clearance,
     }
 
 
@@ -2441,11 +2504,13 @@ def _seek_stable_plate_contact(
     )
     outside_side_feedback_steps = []
     recovery_response_state = None
+    lateral_settle_state = None
     previous_step_response = None
     for guard_step in range(1, args.max_waypoint_steps + 1):
         if (
             latest_outside_side_guard["accepted"]
             and recovery_response_state is None
+            and lateral_settle_state is None
         ):
             break
         pre_action_guard = latest_outside_side_guard
@@ -2464,6 +2529,9 @@ def _seek_stable_plate_contact(
                 ),
                 force_outward_recovery=(
                     recovery_response_state is not None
+                ),
+                force_lateral_settle=(
+                    lateral_settle_state is not None
                 ),
             )
         except RuntimeError as exc:
@@ -2497,6 +2565,7 @@ def _seek_stable_plate_contact(
         )
         feedback["step_response"] = current_step_response
         recovery_progress = None
+        lateral_settle_progress = None
         if feedback["mode"] == "recover_outside_clearance":
             if recovery_response_state is None:
                 recovery_response_state = {
@@ -2528,6 +2597,40 @@ def _seek_stable_plate_contact(
             feedback["recovery_progress"] = recovery_progress
             if recovery_progress["progress_proven"]:
                 recovery_response_state = None
+        elif feedback["mode"] == "compiled_outside_lateral_settle":
+            lateral_settle_progress = (
+                _outside_side_lateral_settle_evidence(
+                    before_guard=pre_action_guard,
+                    after_guard=latest_outside_side_guard,
+                    before_eef=current_eef,
+                    after_eef=np.asarray(
+                        rollout.obs["robot0_eef_pos"],
+                        dtype=float,
+                    ),
+                )
+            )
+            feedback["lateral_settle_progress"] = (
+                lateral_settle_progress
+            )
+            if lateral_settle_progress["settled"]:
+                lateral_settle_state = None
+        elif feedback["mode"] == (
+            "constraint_prioritized_vertical_descent"
+        ) and (
+            current_step_response["eef_outward_step_progress_m"]
+            < 0.0
+            or current_step_response[
+                "outside_clearance_step_progress_m"
+            ]
+            < 0.0
+        ):
+            lateral_settle_state = {
+                "trigger_guard_step": int(guard_step),
+                "trigger_step_response": current_step_response,
+            }
+            feedback["lateral_settle_trigger"] = (
+                lateral_settle_state
+            )
         outside_side_feedback_steps.append(feedback)
         motion_sample = capture(
             "outside_side_motion",
@@ -2561,6 +2664,7 @@ def _seek_stable_plate_contact(
         if (
             latest_outside_side_guard["accepted"]
             and recovery_response_state is None
+            and lateral_settle_state is None
         ):
             break
     else:
