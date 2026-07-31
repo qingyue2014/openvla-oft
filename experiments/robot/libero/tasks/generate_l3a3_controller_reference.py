@@ -1451,12 +1451,26 @@ def _outside_side_lateral_settle_evidence(
     after_guard,
     before_eef,
     after_eef,
+    previous_stable_response_count=0,
+    required_stable_response_count=2,
 ):
     """Require lateral and vertical motion to stop trending toward hazards."""
     before_eef = np.asarray(before_eef, dtype=float)
     after_eef = np.asarray(after_eef, dtype=float)
     if before_eef.shape != (3,) or after_eef.shape != (3,):
         raise ValueError("outside-side settle EEF vectors must be 3-D")
+    if (
+        isinstance(previous_stable_response_count, bool)
+        or not isinstance(previous_stable_response_count, (int, np.integer))
+        or previous_stable_response_count < 0
+        or isinstance(required_stable_response_count, bool)
+        or not isinstance(required_stable_response_count, (int, np.integer))
+        or required_stable_response_count < 2
+    ):
+        raise ValueError(
+            "outside-side settle confirmation counts must be integers "
+            "with a required count of at least two"
+        )
     step_response = _outside_side_step_response_evidence(
         before_guard=before_guard,
         after_guard=after_guard,
@@ -1485,15 +1499,34 @@ def _outside_side_lateral_settle_evidence(
         violations.append(
             "outside_clearance_below_compiled_requirement_during_settle"
         )
+    instantaneous_stable_response = not violations
+    stable_response_count = (
+        int(previous_stable_response_count) + 1
+        if instantaneous_stable_response
+        else 0
+    )
     return {
-        "settled": not violations,
+        "settled": bool(
+            stable_response_count >= required_stable_response_count
+        ),
+        "instantaneous_stable_response": (
+            instantaneous_stable_response
+        ),
+        "previous_stable_response_count": int(
+            previous_stable_response_count
+        ),
+        "stable_response_count": stable_response_count,
+        "required_stable_response_count": int(
+            required_stable_response_count
+        ),
         "violations": violations,
         "formula": (
             "after every descent step, preserve compiled outside XY and "
             "actively brake in positive Z whenever the previous measured "
-            "Z response is negative; permit another descent only when "
-            "measured Z, EEF-outward, and live-clearance step progress are "
-            "all nonnegative and compiled clearance is satisfied"
+            "Z response is negative; require at least two consecutive "
+            "settle frames where measured Z, EEF-outward, and live-clearance "
+            "step progress are all nonnegative and compiled clearance is "
+            "satisfied before permitting another descent"
         ),
         "vertical_step_progress_m": vertical_step_progress,
         "step_response": step_response,
@@ -1519,6 +1552,7 @@ def _outside_side_staircase_settle_trigger(
         ),
         "trigger_guard_step": int(guard_step),
         "trigger_step_response": step_response,
+        "stable_response_count": 0,
         "inward_response_observed": bool(
             step_response["eef_outward_step_progress_m"] < 0.0
             or step_response[
@@ -2708,6 +2742,11 @@ def _seek_stable_plate_contact(
                     after_eef=np.asarray(
                         rollout.obs["robot0_eef_pos"],
                         dtype=float,
+                    ),
+                    previous_stable_response_count=int(
+                        lateral_settle_state.get(
+                            "stable_response_count", 0
+                        )
                     ),
                 )
             )

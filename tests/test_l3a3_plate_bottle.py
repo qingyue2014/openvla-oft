@@ -988,14 +988,33 @@ def test_500099_every_descent_requires_preventive_active_braking_settle():
         **after_guard,
         "minimum_outside_clearance_m": 0.0028,
     }
-    settled = _outside_side_lateral_settle_evidence(
+    first_stable_confirmation = _outside_side_lateral_settle_evidence(
         before_guard=after_guard,
         after_guard=settled_guard,
         before_eef=after_eef,
         after_eef=after_eef + np.array([0.0001, 0.0, 0.0001]),
     )
-    assert settled["settled"] is True
-    assert settled["violations"] == []
+    assert first_stable_confirmation["settled"] is False
+    assert first_stable_confirmation[
+        "instantaneous_stable_response"
+    ] is True
+    assert first_stable_confirmation["stable_response_count"] == 1
+    assert first_stable_confirmation["violations"] == []
+    second_stable_confirmation = _outside_side_lateral_settle_evidence(
+        before_guard=settled_guard,
+        after_guard={
+            **settled_guard,
+            "minimum_outside_clearance_m": 0.0029,
+        },
+        before_eef=after_eef + np.array([0.0001, 0.0, 0.0001]),
+        after_eef=after_eef + np.array([0.0002, 0.0, 0.0002]),
+        previous_stable_response_count=first_stable_confirmation[
+            "stable_response_count"
+        ],
+    )
+    assert second_stable_confirmation["settled"] is True
+    assert second_stable_confirmation["stable_response_count"] == 2
+    assert second_stable_confirmation["violations"] == []
 
 
 def test_500104_first_settle_step_actively_brakes_exact_negative_z_response():
@@ -1136,6 +1155,124 @@ def test_500104_active_braking_norm_is_strict_and_never_commands_inward():
         )
     assert cases[1][0] < target[0]
     assert cases[2][0] > target[0]
+
+
+def test_500111_one_positive_brake_response_cannot_release_settle_state():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    before_eef = np.array(
+        [
+            0.13349859423038862,
+            -0.02867088066849006,
+            1.061380879160546,
+        ]
+    )
+    after_eef = np.array(
+        [
+            0.13407799884439697,
+            -0.028695901102401576,
+            1.0615561799575444,
+        ]
+    )
+    before_guard = {
+        "outward_direction_xy": [1.0, 0.0],
+        "required_outside_clearance_m": strict_clearance,
+        "minimum_outside_clearance_m": 0.0016664744783980584,
+    }
+    after_guard = {
+        **before_guard,
+        "minimum_outside_clearance_m": 0.0022379574242499534,
+    }
+    first_confirmation = _outside_side_lateral_settle_evidence(
+        before_guard=before_guard,
+        after_guard=after_guard,
+        before_eef=before_eef,
+        after_eef=after_eef,
+        previous_stable_response_count=0,
+    )
+    assert first_confirmation["step_response"] == {
+        "eef_outward_step_progress_m": pytest.approx(
+            0.0005794046140083497
+        ),
+        "vertical_step_progress_m": pytest.approx(
+            0.00017530079699845658
+        ),
+        "outside_clearance_step_progress_m": pytest.approx(
+            0.000571482945851895
+        ),
+        "before_clearance_m": pytest.approx(
+            0.0016664744783980584
+        ),
+        "after_clearance_m": pytest.approx(
+            0.0022379574242499534
+        ),
+    }
+    assert first_confirmation["instantaneous_stable_response"] is True
+    assert first_confirmation["stable_response_count"] == 1
+    assert first_confirmation["required_stable_response_count"] == 2
+    assert first_confirmation["settled"] is False
+    assert first_confirmation["violations"] == []
+
+    action, feedback = _outside_side_geometry_feedback_action(
+        current_eef=after_eef,
+        outside_side_target=np.array(
+            [
+                0.13680639548403947,
+                -0.02850777957668001,
+                0.917769758476126,
+            ]
+        ),
+        guard={
+            **after_guard,
+            "required_finger_table_clearance_m": strict_clearance,
+            "finger_table_vertical_clearance_m": 0.148,
+        },
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+        force_lateral_settle=True,
+        previous_settle_vertical_step_progress_m=first_confirmation[
+            "vertical_step_progress_m"
+        ],
+    )
+    assert feedback["mode"] == "compiled_outside_lateral_settle"
+    assert feedback["active_positive_z_brake_requested"] is False
+    assert action[0] > 0.0
+    assert action[2] == 0.0
+
+    worsening_confirmation = _outside_side_lateral_settle_evidence(
+        before_guard={
+            **before_guard,
+            "minimum_outside_clearance_m": 0.002686379097492364,
+        },
+        after_guard={
+            **after_guard,
+            "minimum_outside_clearance_m": 0.002564755251218201,
+        },
+        before_eef=np.array(
+            [
+                0.13451767004721368,
+                -0.0287257624070834,
+                1.0614536245271924,
+            ]
+        ),
+        after_eef=np.array(
+            [
+                0.1343827765522451,
+                -0.02870835392470038,
+                1.062195398572198,
+            ]
+        ),
+        previous_stable_response_count=first_confirmation[
+            "stable_response_count"
+        ],
+    )
+    assert worsening_confirmation["instantaneous_stable_response"] is False
+    assert worsening_confirmation["stable_response_count"] == 0
+    assert worsening_confirmation["settled"] is False
+    assert worsening_confirmation["violations"] == [
+        "eef_still_moving_inward_during_lateral_settle",
+        "outside_clearance_still_decreasing_during_lateral_settle",
+    ]
 
 
 def test_499954_saturated_recovery_follows_improving_discrete_response():
@@ -2158,6 +2295,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_outside_side_staircase_settle_trigger(" in bounded_seek
     assert "force_lateral_settle=(" in bounded_seek
     assert "previous_settle_vertical_step_progress_m=(" in bounded_seek
+    assert "previous_stable_response_count=int(" in bounded_seek
     assert "lateral_settle_state = lateral_settle_progress" in bounded_seek
     assert '"lateral_settle_trigger"' in bounded_seek
     assert "recovery_progress[\"fail_closed\"]" in bounded_seek
