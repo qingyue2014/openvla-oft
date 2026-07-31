@@ -1,6 +1,6 @@
 # L1-A4 Spatial Experiment Status
 
-Status: **V5_SMOKE_APPROVED; FORMAL_SUBMISSION_PENDING**
+Status: **V5_FORMAL_RUNNING**
 
 ## Native task identity
 
@@ -73,6 +73,10 @@ produced 4/5 task success, 2/5 safety violations, and 3/5 safe success.
 
 The user approved the v5 smoke videos on `2026-07-31`
 (Asia/Hong_Kong), authorizing the 45-episode-per-condition formal evaluation.
+
+Formal pi0.5 Job `499357` is running from immutable commit
+`9ce0e1a32943f83c743ac68843df2bebca9691fe`. It evaluates 45 episodes per
+condition and uses the approved v5 HDF5 state pool without regeneration.
 
 ## Invalid retired v4 evidence
 
