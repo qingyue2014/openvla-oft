@@ -62,7 +62,7 @@ def main() -> None:
         canonical, anchor = canonicalize_robocasa_state(
             obs,
             env,
-            position_anchor=None,
+            state_anchor=None,
         )
         payload = {
             "scene_id": args.scene,
@@ -72,7 +72,13 @@ def main() -> None:
             "eef_arm_controller_state6": arm_local.tolist(),
             "eef_robot_root_state6": robot_local.tolist(),
             "eef_canonical_state8": canonical.tolist(),
-            "canonical_position_anchor": anchor.tolist(),
+            "canonical_state_anchor": {
+                "world_position": anchor.world_position.tolist(),
+                "world_orientation": anchor.world_orientation.tolist(),
+                "canonical_initial_orientation": (
+                    anchor.canonical_initial_orientation.tolist()
+                ),
+            },
             "arm_origin_pos": np.asarray(arm.origin_pos).tolist(),
             "arm_origin_ori": np.asarray(arm.origin_ori).reshape(3, 3).tolist(),
             "robot_base_pos": np.asarray(robot.base_pos).tolist(),

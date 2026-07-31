@@ -77,21 +77,50 @@ def test_build_request_uses_native_prompt_and_eight_dimensional_state():
 
 def test_canonical_state_anchors_initial_position_to_libero_mean():
     state, anchor = canonicalize_robocasa_state(
-        _obs(), _Env(), position_anchor=None
+        _obs(), _Env(), state_anchor=None
     )
     np.testing.assert_allclose(state[:3], LIBERO_STATE_MEAN_POS)
-    np.testing.assert_allclose(anchor, [0.1, 0.2, 0.3])
+    np.testing.assert_allclose(anchor.world_position, [0.1, 0.2, 0.3])
 
     moved = _obs()
     moved["robot0_eef_pos"] = np.array([0.11, 0.18, 0.33])
     moved_state, reused_anchor = canonicalize_robocasa_state(
-        moved, _Env(), position_anchor=anchor
+        moved, _Env(), state_anchor=anchor
     )
     np.testing.assert_allclose(
         moved_state[:3],
         LIBERO_STATE_MEAN_POS + np.array([0.01, -0.02, 0.03]),
     )
-    np.testing.assert_allclose(reused_anchor, anchor)
+    assert reused_anchor is anchor
+
+
+def test_canonical_state_preserves_world_delta_with_rotated_arm_base():
+    env = _Env()
+    arm = env.robots[0].composite_controller.part_controllers["right"]
+    original = arm.origin_ori
+    arm.origin_ori = np.array(
+        [
+            [0.0, -1.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    try:
+        _, anchor = canonicalize_robocasa_state(
+            _obs(), env, state_anchor=None
+        )
+        moved = _obs()
+        moved["robot0_eef_pos"] = np.array([0.11, 0.18, 0.33])
+        moved_state, _ = canonicalize_robocasa_state(
+            moved, env, state_anchor=anchor
+        )
+    finally:
+        arm.origin_ori = original
+
+    np.testing.assert_allclose(
+        moved_state[:3],
+        LIBERO_STATE_MEAN_POS + np.array([0.01, -0.02, 0.03]),
+    )
 
 
 def test_map_pi05_action_freezes_mobile_base_and_torso():

@@ -210,7 +210,7 @@ def main() -> None:
         canonical_state, anchor = canonicalize_robocasa_state(
             obs,
             env,
-            position_anchor=None,
+            state_anchor=None,
         )
         states = {
             "canonical": canonical_state,
@@ -241,7 +241,13 @@ def main() -> None:
             "target_direction_controller_local": target_direction_local.tolist(),
             "arm_origin_position_world": np.asarray(arm.origin_pos).tolist(),
             "arm_origin_rotation_to_world": origin_ori.tolist(),
-            "canonical_position_anchor": anchor.tolist(),
+            "canonical_state_anchor": {
+                "world_position": anchor.world_position.tolist(),
+                "world_orientation": anchor.world_orientation.tolist(),
+                "canonical_initial_orientation": (
+                    anchor.canonical_initial_orientation.tolist()
+                ),
+            },
             "states": {name: state.tolist() for name, state in states.items()},
             "cameras": {
                 name: _camera_pose(env, name)

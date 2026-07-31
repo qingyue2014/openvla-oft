@@ -10,6 +10,7 @@ base and torso fixed and must not be presented as a native RoboCasa policy.
 from __future__ import annotations
 
 from collections import deque
+from dataclasses import dataclass
 import os
 import socket
 import time
@@ -26,6 +27,15 @@ LIBERO_STATE_MEAN_POS = np.array(
     [-0.043638702, 0.035254877, 0.76370335],
     dtype=np.float32,
 )
+
+
+@dataclass(frozen=True)
+class CanonicalStateAnchor:
+    """Initial pose used to preserve world-frame proprioceptive deltas."""
+
+    world_position: np.ndarray
+    world_orientation: np.ndarray
+    canonical_initial_orientation: np.ndarray
 
 
 def resize_with_pad(image: np.ndarray, size: int = 224) -> np.ndarray:
@@ -161,36 +171,52 @@ def canonicalize_robocasa_state(
     obs: Mapping[str, Any],
     env: Any,
     *,
-    position_anchor: np.ndarray | None,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Express PandaOmron proprioception in a LIBERO-like arm-local frame."""
+    state_anchor: CanonicalStateAnchor | None,
+) -> tuple[np.ndarray, CanonicalStateAnchor]:
+    """Align the initial pose to LIBERO while preserving world-frame deltas.
+
+    LIBERO's robosuite 1.4.1 state and delta actions share world-coordinate
+    axes. PandaOmron's absolute world position is far outside the LIBERO state
+    distribution, so the initial position is translated to the LIBERO mean.
+    Subsequent position and orientation changes remain in world coordinates;
+    rotating those changes into the PandaOmron base would make proprioception
+    disagree with the world-frame action emitted by the checkpoint.
+    """
 
     arm = env.robots[0].composite_controller.part_controllers["right"]
-    origin_pos = np.asarray(arm.origin_pos, dtype=np.float64)
     origin_ori = np.asarray(arm.origin_ori, dtype=np.float64).reshape(3, 3)
     world_pos = np.asarray(obs["robot0_eef_pos"], dtype=np.float64)
-    local_pos = origin_ori.T @ (world_pos - origin_pos)
-    anchor = local_pos.copy() if position_anchor is None else position_anchor
-    canonical_pos = LIBERO_STATE_MEAN_POS + (local_pos - anchor)
-
     world_ori = _quat_to_mat(np.asarray(obs["robot0_eef_quat"], dtype=np.float64))
-    local_quat = _mat_to_quat(origin_ori.T @ world_ori)
+    if state_anchor is None:
+        state_anchor = CanonicalStateAnchor(
+            world_position=world_pos.copy(),
+            world_orientation=world_ori.copy(),
+            canonical_initial_orientation=origin_ori.T @ world_ori,
+        )
+    canonical_pos = LIBERO_STATE_MEAN_POS + (
+        world_pos - state_anchor.world_position
+    )
+    world_orientation_delta = world_ori @ state_anchor.world_orientation.T
+    canonical_ori = (
+        world_orientation_delta @ state_anchor.canonical_initial_orientation
+    )
+    canonical_quat = _mat_to_quat(canonical_ori)
     # LIBERO's downward-facing initial pose is represented by a positive
     # x-axis rotation near +pi. Select the equivalent quaternion branch that
     # preserves that representation instead of jumping to approximately -pi.
-    if local_quat[0] < 0.0:
-        local_quat = -local_quat
+    if canonical_quat[0] < 0.0:
+        canonical_quat = -canonical_quat
 
     state = np.concatenate(
         (
             canonical_pos.astype(np.float32),
-            _axis_angle(local_quat),
+            _axis_angle(canonical_quat),
             np.asarray(obs["robot0_gripper_qpos"], dtype=np.float32),
         )
     )
     if state.shape != (8,):
         raise ValueError(f"expected 8-D canonical pi0.5 state, got {state.shape}")
-    return state, anchor
+    return state, state_anchor
 
 
 def build_request(
@@ -286,7 +312,7 @@ class Pi05RoboCasaPolicy:
     requires_camera_obs = True
     camera_names = (AGENT_CAMERA, WRIST_CAMERA)
     model_label = (
-        "pi05_libero_cross_sim_arm_local_state_world_delta_to_panda_base"
+        "pi05_libero_cross_sim_world_delta_state_and_action_to_panda_base"
     )
     # Match examples/libero/main.py: objects settle for ten simulator steps
     # under LIBERO_DUMMY_ACTION before the first policy request.
@@ -313,7 +339,7 @@ class Pi05RoboCasaPolicy:
         )
         self.metadata = self.client.get_server_metadata()
         self._queue: deque[np.ndarray] = deque()
-        self._position_anchor: np.ndarray | None = None
+        self._state_anchor: CanonicalStateAnchor | None = None
         print(
             "Connected to pi0.5 for cross-simulator RoboCasa smoke; "
             f"server=ws://{self.host}:{self.port} metadata={self.metadata}"
@@ -321,7 +347,7 @@ class Pi05RoboCasaPolicy:
 
     def reset(self) -> None:
         self._queue.clear()
-        self._position_anchor = None
+        self._state_anchor = None
 
     @staticmethod
     def settle_action(env: Any) -> np.ndarray:
@@ -338,10 +364,10 @@ class Pi05RoboCasaPolicy:
 
     def __call__(self, obs: Mapping[str, Any], lang: str, env: Any) -> np.ndarray:
         if not self._queue:
-            state, self._position_anchor = canonicalize_robocasa_state(
+            state, self._state_anchor = canonicalize_robocasa_state(
                 obs,
                 env,
-                position_anchor=self._position_anchor,
+                state_anchor=self._state_anchor,
             )
             response = self.client.infer(build_request(obs, lang, state=state))
             if "actions" not in response:
