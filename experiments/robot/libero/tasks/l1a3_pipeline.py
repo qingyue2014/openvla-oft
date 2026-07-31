@@ -69,10 +69,21 @@ EC_LURE_XY = np.array([0.24, -0.18])
 MAX_TARGET_LANDMARK_DISTANCE = 0.190
 MIN_RELATION_MARGIN = 0.060
 MIN_BOWL_DISTANCE = 0.160
-MAX_TRANSIENT_WAIT_TILT_DEG = 10.0
+MAX_TRANSIENT_WAIT_TILT_DEG = 1.0
 MAX_POST_WAIT_LINEAR_SPEED_M_S = 1e-4
 MAX_POST_WAIT_ANGULAR_SPEED_RAD_S = 1e-3
 MAX_CONFIRM_DRIFT_M = 1e-4
+MAX_PRESETTLED_WAIT_POSITION_CHANGE_M = 1e-3
+MAX_NATIVE_EB_WAIT_HORIZONTAL_DRIFT_M = 1e-3
+# Native LIBERO serializes these three free bodies above their BDDL-declared
+# supports. The evaluator's mandatory reset wait therefore includes a
+# deterministic, nearly vertical drop in Eb. Admit only the measured native
+# settling envelope; Er/Ec are already settled and receive no such exception.
+NATIVE_EB_VERTICAL_SETTLE_DROP_RANGE_M = {
+    TARGET: (0.060, 0.080),
+    LURE: (0.070, 0.090),
+    LANDMARK: (0.050, 0.070),
+}
 FORMAL_CONFIRM_STEPS = 5
 MIN_VISIBLE_PIXELS = 80
 MIN_MASK_CENTROID_SEPARATION = 18.0
@@ -335,6 +346,18 @@ def _expected_supports(condition: str) -> dict[str, str]:
     return supports
 
 
+def _missing_expected_supports(env, condition: str) -> list[str]:
+    return [
+        f"{body}->{support}"
+        for body, support in _expected_supports(condition).items()
+        if not _contact_between_geom_sets(
+            env,
+            _geom_ids_for_body(env, body),
+            _geom_ids_for_body(env, support),
+        )
+    ]
+
+
 def _forbidden_contact_pairs(env, condition: str) -> list[str]:
     contact_bodies = MOVABLE_BODIES + (SIDE, PLATE, CABINET, STOVE)
     allowed_support_pairs = {
@@ -419,6 +442,10 @@ def _formal_policy_state_gate(
         body: np.asarray(values["position"], dtype=float).copy()
         for body, values in pre_wait.items()
     }
+    max_wait_position_change = {body: 0.0 for body in MOVABLE_BODIES}
+    max_wait_horizontal_drift = {body: 0.0 for body in MOVABLE_BODIES}
+    max_wait_linear_speed = {body: 0.0 for body in MOVABLE_BODIES}
+    max_wait_angular_speed = {body: 0.0 for body in MOVABLE_BODIES}
 
     for step in range(1, FORMAL_WAIT_STEPS + 1):
         env.step(NOOP)
@@ -444,8 +471,81 @@ def _formal_policy_state_gate(
                 f"exceeds {MAX_TRANSIENT_WAIT_TILT_DEG:.1f}deg: "
                 f"{excessive_transient}"
             )
+        for body in MOVABLE_BODIES:
+            position = _body_pos(env, body)
+            delta = position - wait_drift_origin[body]
+            position_change = float(np.linalg.norm(delta))
+            horizontal_drift = float(np.linalg.norm(delta[:2]))
+            linear_speed, angular_speed = _body_twist(env, body)
+            max_wait_position_change[body] = max(
+                max_wait_position_change[body], position_change
+            )
+            max_wait_horizontal_drift[body] = max(
+                max_wait_horizontal_drift[body], horizontal_drift
+            )
+            max_wait_linear_speed[body] = max(
+                max_wait_linear_speed[body], linear_speed
+            )
+            max_wait_angular_speed[body] = max(
+                max_wait_angular_speed[body], angular_speed
+            )
+            if condition.lower() == "eb":
+                _minimum_drop, maximum_drop = (
+                    NATIVE_EB_VERTICAL_SETTLE_DROP_RANGE_M[body]
+                )
+                vertical_drop = float(-delta[2])
+                if (
+                    horizontal_drift
+                    > MAX_NATIVE_EB_WAIT_HORIZONTAL_DRIFT_M
+                    or vertical_drop < -MAX_NATIVE_EB_WAIT_HORIZONTAL_DRIFT_M
+                    or vertical_drop > maximum_drop
+                ):
+                    raise RuntimeError(
+                        f"{condition}: native reset settling escaped its "
+                        f"registered envelope at wait step {step} for {body}: "
+                        f"horizontal={horizontal_drift:.6f}m, "
+                        f"vertical_drop={vertical_drop:.6f}m"
+                    )
+            elif position_change > MAX_PRESETTLED_WAIT_POSITION_CHANGE_M:
+                raise RuntimeError(
+                    f"{condition}: pre-settled {body} moved "
+                    f"{position_change:.6f}m during formal wait step {step}"
+                )
 
     first_policy = _physical_snapshot(env)
+    final_wait_delta = {
+        body: (
+            np.asarray(values["position"], dtype=float)
+            - wait_drift_origin[body]
+        )
+        for body, values in first_policy.items()
+    }
+    if condition.lower() == "eb":
+        invalid_native_settle = {}
+        for body, delta in final_wait_delta.items():
+            minimum_drop, maximum_drop = (
+                NATIVE_EB_VERTICAL_SETTLE_DROP_RANGE_M[body]
+            )
+            vertical_drop = float(-delta[2])
+            horizontal_drift = float(np.linalg.norm(delta[:2]))
+            if not (
+                minimum_drop <= vertical_drop <= maximum_drop
+                and horizontal_drift
+                <= MAX_NATIVE_EB_WAIT_HORIZONTAL_DRIFT_M
+            ):
+                invalid_native_settle[body] = {
+                    "horizontal_drift_m": horizontal_drift,
+                    "vertical_drop_m": vertical_drop,
+                    "required_vertical_drop_range_m": [
+                        minimum_drop,
+                        maximum_drop,
+                    ],
+                }
+        if invalid_native_settle:
+            raise RuntimeError(
+                f"{condition}: native reset settling did not finish inside "
+                f"its registered envelope: {invalid_native_settle}"
+            )
     _check_upright_tilts(
         condition,
         "first-policy-frame",
@@ -473,17 +573,10 @@ def _formal_policy_state_gate(
         )
 
     expected_supports = _expected_supports(condition)
-    unsupported = []
-    for body, support in expected_supports.items():
-        if not _contact_between_geom_sets(
-            env,
-            _geom_ids_for_body(env, body),
-            _geom_ids_for_body(env, support),
-        ):
-            unsupported.append(f"{body}->{support}")
+    unsupported = _missing_expected_supports(env, condition)
     if unsupported:
         raise RuntimeError(
-            f"{condition}: first-policy-frame objects lack table support: "
+            f"{condition}: first-policy-frame objects lack expected support: "
             f"{unsupported}"
         )
 
@@ -520,6 +613,12 @@ def _formal_policy_state_gate(
             raise RuntimeError(
                 f"{condition}: forbidden contact during post-wait "
                 f"confirmation step {step}: {forbidden}"
+            )
+        unsupported = _missing_expected_supports(env, condition)
+        if unsupported:
+            raise RuntimeError(
+                f"{condition}: objects lose expected support during "
+                f"post-wait confirmation step {step}: {unsupported}"
             )
         step_tilts = {
             body: _body_tilt_deg(env, body) for body in MOVABLE_BODIES
@@ -571,10 +670,24 @@ def _formal_policy_state_gate(
         "max_post_wait_angular_speed_rad_s": (
             MAX_POST_WAIT_ANGULAR_SPEED_RAD_S
         ),
+        "max_presettled_wait_position_change_m": (
+            MAX_PRESETTLED_WAIT_POSITION_CHANGE_M
+        ),
+        "max_native_eb_wait_horizontal_drift_m": (
+            MAX_NATIVE_EB_WAIT_HORIZONTAL_DRIFT_M
+        ),
+        "native_eb_vertical_settle_drop_range_m": {
+            body: list(bounds)
+            for body, bounds in NATIVE_EB_VERTICAL_SETTLE_DROP_RANGE_M.items()
+        },
         "pre_wait": _serializable_snapshot(pre_wait),
         "first_policy_frame": _serializable_snapshot(first_policy),
         "confirmed": _serializable_snapshot(confirmed),
         "max_tilt_during_wait_and_confirmation_deg": max_tilt,
+        "max_wait_position_change_m": max_wait_position_change,
+        "max_wait_horizontal_drift_m": max_wait_horizontal_drift,
+        "max_wait_linear_speed_m_s": max_wait_linear_speed,
+        "max_wait_angular_speed_rad_s": max_wait_angular_speed,
         "formal_wait_position_change_m": {
             body: float(
                 np.linalg.norm(
@@ -948,6 +1061,22 @@ def generate(args) -> None:
                 MAX_POST_WAIT_ANGULAR_SPEED_RAD_S
             ),
             "max_confirmation_drift_m": MAX_CONFIRM_DRIFT_M,
+            "max_presettled_wait_position_change_m": (
+                MAX_PRESETTLED_WAIT_POSITION_CHANGE_M
+            ),
+            "native_eb_reset_settling_exception": {
+                "scope": "Eb movable native bodies only",
+                "max_horizontal_drift_m": (
+                    MAX_NATIVE_EB_WAIT_HORIZONTAL_DRIFT_M
+                ),
+                "vertical_drop_range_m": {
+                    body: list(bounds)
+                    for body, bounds in (
+                        NATIVE_EB_VERTICAL_SETTLE_DROP_RANGE_M.items()
+                    )
+                },
+                "requires_first_policy_and_confirmation_support": True,
+            },
             "per_episode_per_condition_metrics": True,
         },
         "intervention": {
