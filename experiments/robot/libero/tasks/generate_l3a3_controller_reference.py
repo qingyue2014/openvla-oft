@@ -1311,6 +1311,56 @@ def _overhead_lateral_buffer_frame_summary(evidence):
     }
 
 
+def _overhead_lateral_interlock_evidence(
+    lateral_buffer,
+    *,
+    measured_vertical_step_progress_m,
+):
+    """Brake lateral motion only when its full compiled buffer is exhausted."""
+    if (
+        measured_vertical_step_progress_m is None
+        or not np.isfinite(measured_vertical_step_progress_m)
+    ):
+        raise ValueError(
+            "measured lateral vertical-step progress must be finite"
+        )
+    pairs = list(lateral_buffer.get("pairs", ()))
+    if not pairs:
+        raise RuntimeError(
+            "compiled overhead lateral-buffer pairs unavailable"
+        )
+    minimum_surplus = float(
+        lateral_buffer["minimum_lateral_entry_buffer_surplus_m"]
+    )
+    if not np.isfinite(minimum_surplus):
+        raise ValueError("minimum lateral-entry buffer surplus must be finite")
+    all_pairs_accepted = all(bool(pair["accepted"]) for pair in pairs)
+    buffer_accepted = bool(
+        lateral_buffer["accepted"]
+        and all_pairs_accepted
+        and minimum_surplus > 0.0
+    )
+    return {
+        "requires_positive_z_brake": not buffer_accepted,
+        "decision_basis": (
+            "the current live compiled-pair clearance must remain strictly "
+            "above the 16 mm lateral-entry requirement; negative measured "
+            "dz is recorded but does not independently trigger a brake "
+            "because this buffer reserves the original 8 mm base gate after "
+            "one worst-case 8 mm controller tail"
+        ),
+        "compiled_pair_count": len(pairs),
+        "buffer_accepted": buffer_accepted,
+        "minimum_lateral_entry_buffer_surplus_m": minimum_surplus,
+        "measured_vertical_step_progress_m": float(
+            measured_vertical_step_progress_m
+        ),
+        "negative_vertical_tail_observed": bool(
+            measured_vertical_step_progress_m < 0.0
+        ),
+    }
+
+
 def _outside_side_guard_from_world_aabbs(
     *,
     plate_position,
@@ -3521,6 +3571,7 @@ def _seek_stable_plate_contact(
         },
     )
     for guard_step in range(1, args.max_waypoint_steps + 1):
+        lateral_pre_action_interlock = None
         pre_action_guard = latest_outside_side_guard
         current_eef = np.asarray(
             rollout.obs["robot0_eef_pos"], dtype=float
@@ -3546,26 +3597,26 @@ def _seek_stable_plate_contact(
                 }
             )
             structural_stage = "vertical_tail_zero_confirmation"
-        if structural_stage == "overhead_corridor_lateral" and (
-            latest_vertical_step_progress_m is None
-            or latest_vertical_step_progress_m < 0.0
-            or not latest_overhead_lateral_buffer["accepted"]
-        ):
-            vertical_tail_events.append(
-                {
-                    "guard_step": int(guard_step),
-                    "event": "lateral_pre_action_interlock_to_brake",
-                    "measured_vertical_step_progress_m": (
+        if structural_stage == "overhead_corridor_lateral":
+            lateral_pre_action_interlock = (
+                _overhead_lateral_interlock_evidence(
+                    latest_overhead_lateral_buffer,
+                    measured_vertical_step_progress_m=(
                         latest_vertical_step_progress_m
                     ),
-                    "minimum_lateral_entry_buffer_surplus_m": (
-                        latest_overhead_lateral_buffer[
-                            "minimum_lateral_entry_buffer_surplus_m"
-                        ]
-                    ),
-                }
+                )
             )
-            structural_stage = "vertical_tail_brake"
+            if lateral_pre_action_interlock[
+                "requires_positive_z_brake"
+            ]:
+                vertical_tail_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        "event": "lateral_pre_action_buffer_interlock_to_brake",
+                        **lateral_pre_action_interlock,
+                    }
+                )
+                structural_stage = "vertical_tail_brake"
         if structural_stage == "fixed_safe_z_lateral_approach":
             lateral_error = float(
                 np.linalg.norm(
@@ -3629,6 +3680,15 @@ def _seek_stable_plate_contact(
                         latest_overhead_lateral_buffer
                     )
                 ),
+                **(
+                    {
+                        "lateral_pre_action_interlock": (
+                            lateral_pre_action_interlock
+                        )
+                    }
+                    if lateral_pre_action_interlock is not None
+                    else {}
+                ),
             }
         elif structural_stage == "vertical_tail_zero_confirmation":
             action = np.zeros(7, dtype=float)
@@ -3680,6 +3740,9 @@ def _seek_stable_plate_contact(
                     _overhead_lateral_buffer_frame_summary(
                         latest_overhead_lateral_buffer
                     )
+                ),
+                "lateral_pre_action_interlock": (
+                    lateral_pre_action_interlock
                 ),
             }
         elif structural_stage == "vertical_corridor_descent":
@@ -3929,36 +3992,53 @@ def _seek_stable_plate_contact(
                 )
             )
             feedback["corridor_lateral_error_m"] = lateral_error
-            if (
-                measured_vertical_step_progress_m < 0.0
-                or not latest_overhead_lateral_buffer["accepted"]
-            ):
+            lateral_post_action_interlock = (
+                _overhead_lateral_interlock_evidence(
+                    latest_overhead_lateral_buffer,
+                    measured_vertical_step_progress_m=(
+                        measured_vertical_step_progress_m
+                    ),
+                )
+            )
+            feedback["lateral_post_action_interlock"] = (
+                lateral_post_action_interlock
+            )
+            if lateral_post_action_interlock[
+                "requires_positive_z_brake"
+            ]:
                 structural_stage = "vertical_tail_brake"
                 vertical_tail_events.append(
                     {
                         "guard_step": int(guard_step),
-                        "event": "lateral_tail_or_buffer_interlock_to_brake",
-                        "measured_vertical_step_progress_m": (
-                            measured_vertical_step_progress_m
-                        ),
-                        "minimum_lateral_entry_buffer_surplus_m": (
-                            latest_overhead_lateral_buffer[
-                                "minimum_lateral_entry_buffer_surplus_m"
-                            ]
-                        ),
+                        "event": "lateral_post_action_buffer_interlock_to_brake",
+                        **lateral_post_action_interlock,
                     }
                 )
-            elif (
-                lateral_error <= args.position_tolerance
-                and latest_outside_side_guard[
-                    "minimum_outside_clearance_m"
-                ]
-                > vertical_staging_corridor[
-                    "strict_corridor_entry_clearance_m"
-                ]
-                and latest_overhead_guard["accepted"]
-            ):
-                structural_stage = "vertical_corridor_descent"
+            else:
+                if lateral_post_action_interlock[
+                    "negative_vertical_tail_observed"
+                ]:
+                    vertical_tail_events.append(
+                        {
+                            "guard_step": int(guard_step),
+                            "event": (
+                                "lateral_negative_vertical_tail_recorded_"
+                                "with_buffer_retained"
+                            ),
+                            **lateral_post_action_interlock,
+                        }
+                    )
+                if (
+                    lateral_error <= args.position_tolerance
+                    and latest_outside_side_guard[
+                        "minimum_outside_clearance_m"
+                    ]
+                    > vertical_staging_corridor[
+                        "strict_corridor_entry_clearance_m"
+                    ]
+                    and latest_overhead_guard["accepted"]
+                ):
+                    structural_stage = "vertical_corridor_descent"
         elif stage_before_action == "vertical_corridor_settle":
             lateral_settle_progress = (
                 _outside_side_lateral_settle_evidence(

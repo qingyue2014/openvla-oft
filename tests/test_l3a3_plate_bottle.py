@@ -32,6 +32,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _outside_side_guard_from_world_aabbs,
     _outside_side_lateral_settle_evidence,
     _overhead_lateral_buffer_evidence,
+    _overhead_lateral_interlock_evidence,
     _outside_side_recovery_progress_evidence,
     _outside_side_step_response_evidence,
     _outside_side_staircase_settle_trigger,
@@ -1618,10 +1619,10 @@ def test_500137_timeout_trace_is_replaced_by_auditable_overhead_state_machine():
         "for guard_step in range(1, args.max_waypoint_steps + 1)"
         in bounded_seek
     )
+    compact_seek = "".join(bounded_seek.split())
     assert (
-        '"minimum_outside_clearance_m"\n                ]\n'
-        '                > vertical_staging_corridor['
-        in bounded_seek
+        '"minimum_outside_clearance_m"]>vertical_staging_corridor['
+        in compact_seek
     )
 
 
@@ -1723,8 +1724,8 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert '"commanded_z_action": float(action[2])' in bounded_seek
     assert "measured_vertical_step_progress_m >= 0.0" in bounded_seek
     assert 'latest_overhead_lateral_buffer["accepted"]' in bounded_seek
-    assert "lateral_tail_or_buffer_interlock_to_brake" in bounded_seek
-    assert "lateral_pre_action_interlock_to_brake" in bounded_seek
+    assert "lateral_post_action_buffer_interlock_to_brake" in bounded_seek
+    assert "lateral_pre_action_buffer_interlock_to_brake" in bounded_seek
     assert "vertical_tail_events" in bounded_seek
     assert "for confirm" not in bounded_seek[
         bounded_seek.index(
@@ -1733,6 +1734,101 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
             'elif structural_stage == "overhead_corridor_lateral"'
         )
     ]
+
+
+def test_500154_negative_lateral_tail_continues_until_buffer_is_exhausted():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    final_eef = np.array(
+        [0.08934230652832652, -0.03003309577111318, 0.9674248284743504]
+    )
+    corridor_high_target = np.array(
+        [0.14480639548403948, -0.02850777957668001, 0.9401011680386682]
+    )
+    final_dz = -0.00023166049986367288
+    final_buffer_surplus = 0.01947241620272018
+    pair_template = {
+        "gripper_geom": "gripper0_hand_collision",
+        "counterpart_geom": "plate_1_g0",
+        "counterpart_kind": "plate",
+        "strict_no_contact_clearance_m": strict_clearance,
+        "vertical_clearance_m": (
+            strict_clearance + 0.008 + 0.008 + final_buffer_surplus
+        ),
+    }
+    final_guard = {
+        "one_step_vertical_reserve_m": 0.008,
+        "pairs": [
+            {
+                **pair_template,
+                "gripper_geom": f"gripper_collision_{index // 11}",
+                "counterpart_geom": f"native_counterpart_{index % 11}",
+            }
+            for index in range(55)
+        ],
+    }
+    final_buffer = _overhead_lateral_buffer_evidence(
+        final_guard,
+        worst_case_controller_world_step_m=0.008,
+    )
+    assert final_buffer[
+        "minimum_lateral_entry_buffer_surplus_m"
+    ] == pytest.approx(final_buffer_surplus)
+    decision = _overhead_lateral_interlock_evidence(
+        final_buffer,
+        measured_vertical_step_progress_m=final_dz,
+    )
+    assert decision == {
+        "requires_positive_z_brake": False,
+        "decision_basis": decision["decision_basis"],
+        "compiled_pair_count": 55,
+        "buffer_accepted": True,
+        "minimum_lateral_entry_buffer_surplus_m": pytest.approx(
+            final_buffer_surplus
+        ),
+        "measured_vertical_step_progress_m": pytest.approx(final_dz),
+        "negative_vertical_tail_observed": True,
+    }
+    next_action, _ = _fixed_z_lateral_approach_action(
+        current_eef=final_eef,
+        lateral_target_xy=corridor_high_target[:2],
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    assert np.linalg.norm(next_action[:2]) > 0.0
+    assert next_action[2] == 0.0
+
+    exhausted_guard = {
+        **final_guard,
+        "pairs": [
+            {
+                **pair,
+                "vertical_clearance_m": strict_clearance + 0.016,
+            }
+            for pair in final_guard["pairs"]
+        ],
+    }
+    exhausted_buffer = _overhead_lateral_buffer_evidence(
+        exhausted_guard,
+        worst_case_controller_world_step_m=0.008,
+    )
+    assert exhausted_buffer[
+        "minimum_lateral_entry_buffer_surplus_m"
+    ] == pytest.approx(0.0)
+    brake_decision = _overhead_lateral_interlock_evidence(
+        exhausted_buffer,
+        measured_vertical_step_progress_m=0.001,
+    )
+    assert brake_decision["requires_positive_z_brake"] is True
+    brake_action, _ = _fixed_xy_vertical_approach_action(
+        current_eef=final_eef,
+        target_z=final_eef[2] + 0.008,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    assert np.array_equal(brake_action[:2], np.zeros(2))
+    assert brake_action[2] > 0.0
 
 
 def test_499954_saturated_recovery_follows_improving_discrete_response():
