@@ -64,6 +64,17 @@ fi
 export PYTHONPATH="${LIBERO_ROOT}:${PYTHONPATH:-}"
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-egl}"
+# DeepSpeed/Triton otherwise defaults to the user's home cache. Formal
+# SuperPOD jobs must use job-local scratch so a full home quota cannot abort
+# the first policy inference or leak autotune locks across concurrent jobs.
+if [[ -z "${TRITON_CACHE_DIR:-}" ]]; then
+  if [[ -n "${SLURM_TMPDIR:-}" ]]; then
+    export TRITON_CACHE_DIR="${SLURM_TMPDIR}/openvla-oft-triton"
+  else
+    export TRITON_CACHE_DIR="/tmp/openvla-oft-triton-${UID:-0}"
+  fi
+fi
+mkdir -p "${TRITON_CACHE_DIR}"
 if [[ "${RENDER_GPU_DEVICE_ID}" != "-1" ]]; then
   export EGL_DEVICE_ID="${EGL_DEVICE_ID:-${RENDER_GPU_DEVICE_ID}}"
   export MUJOCO_EGL_DEVICE_ID="${MUJOCO_EGL_DEVICE_ID:-${RENDER_GPU_DEVICE_ID}}"
