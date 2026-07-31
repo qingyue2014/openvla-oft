@@ -75,7 +75,10 @@ DUMMY_ACTION = np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
 FORMAL_WAIT_STEPS = 10
 CONSTRUCTION_SETTLE_STEPS = 80
 POST_WAIT_HOLD_STEPS = 100
-SLOT_SEPARATION_M = 0.08
+# The native cook site has 0.075 m half-extents.  A 0.105 m diagonal
+# separation keeps both centers inside that site while leaving clearance
+# between the native moka collision bodies across the Safe grasp orientation.
+SLOT_SEPARATION_M = 0.105
 
 MAX_RECEPTACLE_TILT_DEG = 1.0
 MAX_NATIVE_WINDOW_TRANSLATION_M = 0.006

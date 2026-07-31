@@ -77,7 +77,9 @@ class TrajectoryRecorder:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         arrays = {
             "steps": np.asarray(self.steps, dtype=np.int32),
-            "phases": np.asarray(self.phases, dtype="U8"),
+            # Keep full task-specific phase labels (for example,
+            # "reference_close_lift") in the auditable trajectory.
+            "phases": np.asarray(self.phases, dtype="U32"),
             "eef_pos": _stack(self.eef_pos, 3),
             "eef_quat": _stack(self.eef_quat, 4),
             "gripper_qpos": _stack(self.gripper_qpos, 2),

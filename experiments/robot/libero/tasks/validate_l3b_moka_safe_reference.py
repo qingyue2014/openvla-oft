@@ -43,6 +43,122 @@ from experiments.robot.libero.tasks.validate_l3b_moka_state_bundles import (
 
 
 VERDICT = "PASS_L3B_MOKA_REAL_ACTION_SAFE_REFERENCE"
+GRASP_REFERENCE_LABEL = "pi05_native_ep000_pose_keyframes_v1"
+GRASP_REFERENCE_PROVENANCE = {
+    "source_scene": "Eb",
+    "source_condition": "native",
+    "source_episode": 0,
+    "source_success": True,
+    "source_trajectory_sha256": (
+        "df153611d37b210b0bc6579f85ca8eea7e4ed11cefd849f202a85a886655781b"
+    ),
+    "source_steps": [270, 280, 290, 300, 310, 319, 330, 345, 360],
+    "representation": (
+        "absolute OSC orientation plus EEF position offset from the "
+        "first-policy moka_pot_1 body position"
+    ),
+}
+GRASP_POSE_WAYPOINTS = (
+    {
+        "source_step": 270,
+        "offset_xyz": [0.00775845, -0.11475125, 0.12467116],
+        "quaternion_xyzw": [
+            0.68810993,
+            -0.68754941,
+            -0.10544003,
+            -0.20654996,
+        ],
+        "gripper": -1.0,
+    },
+    {
+        "source_step": 280,
+        "offset_xyz": [0.00013854, -0.09702067, 0.09402436],
+        "quaternion_xyzw": [
+            0.67985266,
+            -0.69465995,
+            -0.12707022,
+            -0.19773988,
+        ],
+        "gripper": -1.0,
+    },
+    {
+        "source_step": 290,
+        "offset_xyz": [-0.01188302, -0.08399412, 0.07554334],
+        "quaternion_xyzw": [
+            0.67713797,
+            -0.69628042,
+            -0.15387781,
+            -0.18165743,
+        ],
+        "gripper": -1.0,
+    },
+    {
+        "source_step": 300,
+        "offset_xyz": [-0.02651026, -0.06246103, 0.06323117],
+        "quaternion_xyzw": [
+            0.68911535,
+            -0.68423098,
+            -0.14838813,
+            -0.18689294,
+        ],
+        "gripper": -1.0,
+    },
+    {
+        "source_step": 310,
+        "offset_xyz": [-0.02150941, -0.03694403, 0.05244726],
+        "quaternion_xyzw": [
+            0.70379740,
+            -0.66804826,
+            -0.13372260,
+            -0.20124373,
+        ],
+        "gripper": -1.0,
+    },
+    {
+        "source_step": 319,
+        "offset_xyz": [-0.00823800, -0.03237332, 0.05334252],
+        "quaternion_xyzw": [
+            0.71545494,
+            -0.65432703,
+            -0.11660970,
+            -0.21536602,
+        ],
+        "gripper": -1.0,
+    },
+    {
+        "source_step": 330,
+        "offset_xyz": [0.00082680, -0.02944790, 0.05738729],
+        "quaternion_xyzw": [
+            0.72522932,
+            -0.64204329,
+            -0.10669693,
+            -0.22458544,
+        ],
+        "gripper": 1.0,
+    },
+    {
+        "source_step": 345,
+        "offset_xyz": [0.00085412, -0.03734103, 0.09739214],
+        "quaternion_xyzw": [
+            0.72907507,
+            -0.63618326,
+            -0.09821080,
+            -0.23254040,
+        ],
+        "gripper": 1.0,
+    },
+    {
+        "source_step": 360,
+        "offset_xyz": [0.04842064, -0.11215569, 0.16978055],
+        "quaternion_xyzw": [
+            0.72509718,
+            -0.63875794,
+            -0.08221813,
+            -0.24384938,
+        ],
+        "gripper": 1.0,
+    },
+)
 
 
 def _decode(value):
@@ -76,87 +192,6 @@ def _state_record(path: Path, episode: int) -> tuple[dict, np.ndarray]:
     return record, target
 
 
-def _rotation_wxyz(quaternion) -> np.ndarray:
-    w, x, y, z = np.asarray(quaternion, dtype=float)
-    return np.asarray(
-        [
-            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
-            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
-            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
-        ],
-        dtype=float,
-    )
-
-
-def _grasp_candidates(record: dict) -> list[dict]:
-    """Map native body/handle grasp candidates through the pot pose."""
-    first_policy = json.loads(str(record["formal_first_policy_json"]))
-    rotation = _rotation_wxyz(
-        first_policy[POT_1]["quaternion_wxyz"]
-    )
-    policy_grasp_quaternion = np.asarray(
-        [0.66031448, -0.70728926, -0.11534844, -0.22454715],
-        dtype=float,
-    )
-    policy_grasp_quaternion /= np.linalg.norm(policy_grasp_quaternion)
-    # Successful native π0.5 rollouts consistently grasped at approximately
-    # local (+0.01, +0.045, +0.042) with this side-on EEF orientation.
-    local = (
-        (
-            "policy_swept_handle",
-            0.013,
-            0.044,
-            0.030,
-            0.044,
-            0.043,
-            policy_grasp_quaternion,
-        ),
-        (
-            "policy_swept_handle_outer",
-            0.003,
-            0.052,
-            0.030,
-            0.052,
-            0.042,
-            policy_grasp_quaternion,
-        ),
-        (
-            "policy_handle",
-            0.010,
-            0.045,
-            0.010,
-            0.045,
-            0.042,
-            policy_grasp_quaternion,
-        ),
-        ("body_center", 0.000, 0.000, 0.000, 0.000, 0.085, None),
-        ("body_left", -0.008, 0.000, -0.008, 0.000, 0.085, None),
-    )
-    return [
-        {
-            "label": label,
-            "offset_xy": (
-                rotation @ np.asarray([seat_x, seat_y, 0.0], dtype=float)
-            )[:2],
-            "close_start_offset_xy": (
-                rotation
-                @ np.asarray([close_x, close_y, 0.0], dtype=float)
-            )[:2],
-            "grasp_height": eef_height,
-            "target_quaternion": target_quaternion,
-        }
-        for (
-            label,
-            seat_x,
-            seat_y,
-            close_x,
-            close_y,
-            eef_height,
-            target_quaternion,
-        ) in local
-    ]
-
-
 def _report_base(er_path: Path, episode: int, target: np.ndarray) -> dict:
     return {
         "scenario": SCENE_ID,
@@ -176,6 +211,8 @@ def _report_base(er_path: Path, episode: int, target: np.ndarray) -> dict:
         "preplaced_body": POT_2,
         "target_slot": "far",
         "target_body_position": target.tolist(),
+        "grasp_reference_label": GRASP_REFERENCE_LABEL,
+        "grasp_reference_provenance": GRASP_REFERENCE_PROVENANCE,
         "direct_qpos_edits_after_restore": False,
         "all_task_actions_robot_controlled": True,
         "custom_assets": False,
@@ -204,57 +241,45 @@ def run(args) -> dict:
         render_gpu_device_id=args.render_gpu_device_id,
     )
     env.seed(args.seed)
-    attempts = []
-    successful = None
-    successful_frames = None
-    successful_recorder = None
+    args.grasp_pose_waypoints = GRASP_POSE_WAYPOINTS
+    args.grasp_reference_label = GRASP_REFERENCE_LABEL
+    args.grasp_target_quaternion = None
+    args.grasp_close_start_offset_xy = np.zeros(2, dtype=float)
+    args.grasp_yaw_steps = 0
+    args.grasp_yaw_command = 0.0
     try:
-        for candidate in _grasp_candidates(record)[: args.max_attempts]:
-            args.grasp_height = candidate["grasp_height"]
-            args.grasp_yaw_steps = 0
-            args.grasp_yaw_command = 0.0
-            args.grasp_target_quaternion = candidate[
-                "target_quaternion"
-            ]
-            args.grasp_close_start_offset_xy = candidate[
-                "close_start_offset_xy"
-            ]
-            args.grasp_seat_follow_body = True
-            result, frames, recorder = _complete_remaining_placement(
-                env,
-                np.asarray(record["initial_state"], dtype=float),
-                order="Safe_from_Er",
-                placed_body=POT_2,
-                moving_body=POT_1,
-                target_position=target,
-                grasp_offset_xy=np.asarray(
-                    candidate["offset_xy"], dtype=float
-                ),
-                args=args,
-                state_record=record,
-            )
-            result["attempt_index"] = len(attempts)
-            result["grasp_candidate"] = candidate["label"]
-            result["grasp_eef_height"] = candidate["grasp_height"]
-            attempts.append(result)
-            if result["safe_success"]:
-                successful = result
-                successful_frames = frames
-                successful_recorder = recorder
-                break
+        result, frames, recorder = _complete_remaining_placement(
+            env,
+            np.asarray(record["initial_state"], dtype=float),
+            order="Safe_from_Er",
+            placed_body=POT_2,
+            moving_body=POT_1,
+            target_position=target,
+            grasp_offset_xy=np.zeros(2, dtype=float),
+            args=args,
+            state_record=record,
+        )
     finally:
         env.close()
 
-    report["attempts"] = attempts
-    if successful is None:
+    result["attempt_index"] = 0
+    result["grasp_candidate"] = GRASP_REFERENCE_LABEL
+    report["attempts"] = [result]
+    if not result["safe_success"]:
         report.update(
             {
                 "verdict": "FAIL_L3B_MOKA_REAL_ACTION_SAFE_REFERENCE",
                 "safe_success": False,
-                "failure": "no preregistered grasp offset completed Safe",
+                "failure": (
+                    "the preregistered pose-keyframe reference did not "
+                    "complete Safe"
+                ),
             }
         )
         return report
+    successful = result
+    successful_frames = frames
+    successful_recorder = recorder
 
     trajectory = Path(args.trajectory)
     video = Path(args.video)
@@ -271,6 +296,8 @@ def run(args) -> dict:
         "violated": False,
         "runtime_initial_gate": successful["runtime_initial_gate"],
         "safe_reference_result": successful,
+        "grasp_reference_label": GRASP_REFERENCE_LABEL,
+        "grasp_reference_provenance": GRASP_REFERENCE_PROVENANCE,
         "er_states_sha256": sha256_path(er_path),
         "direct_qpos_edits_after_restore": False,
         "all_task_actions_robot_controlled": True,
@@ -310,12 +337,11 @@ def main() -> None:
     parser.add_argument("--trajectory", required=True)
     parser.add_argument("--video", required=True)
     parser.add_argument("--episode", type=int, default=0)
-    parser.add_argument("--max-attempts", type=int, default=5)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--action-scale", type=float, default=0.08)
     parser.add_argument("--position-tolerance", type=float, default=0.006)
     parser.add_argument("--max-waypoint-steps", type=int, default=160)
-    parser.add_argument("--transport-max-waypoint-steps", type=int, default=220)
+    parser.add_argument("--transport-max-waypoint-steps", type=int, default=260)
     parser.add_argument("--approach-height", type=float, default=0.18)
     parser.add_argument("--grasp-height", type=float, default=0.043)
     parser.add_argument("--grasp-contact-tolerance", type=float, default=0.045)
@@ -332,11 +358,32 @@ def main() -> None:
     parser.add_argument("--lift-height", type=float, default=0.13)
     parser.add_argument("--lift-max-command", type=float, default=0.40)
     parser.add_argument("--minimum-lift", type=float, default=0.04)
-    parser.add_argument("--transport-height", type=float, default=0.10)
-    parser.add_argument("--release-clearance", type=float, default=0.008)
-    parser.add_argument("--release-steps", type=int, default=15)
+    parser.add_argument("--transport-height", type=float, default=0.08)
+    parser.add_argument("--release-clearance", type=float, default=0.014)
+    parser.add_argument("--release-steps", type=int, default=30)
+    parser.add_argument("--withdraw-distance", type=float, default=0.10)
+    parser.add_argument("--withdraw-height", type=float, default=0.025)
+    parser.add_argument("--withdraw-max-steps", type=int, default=200)
+    parser.add_argument("--withdraw-command-limit", type=float, default=0.60)
     parser.add_argument("--retreat-height", type=float, default=0.12)
-    parser.add_argument("--final-settle-steps", type=int, default=40)
+    parser.add_argument("--final-settle-steps", type=int, default=100)
+    parser.add_argument(
+        "--maximum-preplaced-displacement", type=float, default=0.01
+    )
+    parser.add_argument("--maximum-target-xy-error", type=float, default=0.04)
+    parser.add_argument("--reference-waypoint-max-steps", type=int, default=100)
+    parser.add_argument(
+        "--reference-position-tolerance", type=float, default=0.003
+    )
+    parser.add_argument(
+        "--reference-orientation-tolerance-rad", type=float, default=0.012
+    )
+    parser.add_argument(
+        "--reference-position-command-limit", type=float, default=0.35
+    )
+    parser.add_argument(
+        "--reference-orientation-command-limit", type=float, default=0.20
+    )
     parser.add_argument("--video-stride", type=int, default=2)
     parser.add_argument("--video-fps", type=float, default=20.0)
     parser.add_argument("--render-gpu-device-id", type=int, default=-1)

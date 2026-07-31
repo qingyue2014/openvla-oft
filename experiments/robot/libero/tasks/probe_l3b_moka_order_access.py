@@ -63,17 +63,23 @@ TERMINAL_STABILITY_STEPS = 30
 TERMINAL_MAX_DRIFT_M = 0.003
 
 
-def _terminal_stability(recorder, body_name: str) -> dict:
-    positions = np.asarray(recorder.body_pos[body_name], dtype=float)
-    quaternions = np.asarray(recorder.body_quat[body_name], dtype=float)
-    phases = np.asarray(recorder.phases).astype(str)
+def _terminal_stability(rollout, body_name: str) -> dict:
+    positions = np.asarray(
+        rollout.recorder.body_pos[body_name], dtype=float
+    )
+    quaternions = np.asarray(
+        rollout.recorder.body_quat[body_name], dtype=float
+    )
+    phases = np.asarray(rollout.recorder.phases).astype(str)
     indices = np.flatnonzero(phases == "settle")
-    indices = indices[-TERMINAL_STABILITY_STEPS:]
     if len(indices) < TERMINAL_STABILITY_STEPS:
         return {
             "sample_count": int(len(indices)),
             "max_translation_drift_m": None,
             "max_tilt_deg": None,
+            "max_linear_speed_mps": None,
+            "max_angular_speed_radps": None,
+            "stove_support_all_samples": False,
             "passed": False,
         }
     terminal_positions = positions[indices]
@@ -90,13 +96,35 @@ def _terminal_stability(recorder, body_name: str) -> dict:
         )
     )
     maximum_tilt = float(np.max(tilt))
+    measurements = [
+        rollout.body_measurements[body_name][index] for index in indices
+    ]
+    maximum_linear_speed = float(
+        max(item["linear_speed_mps"] for item in measurements)
+    )
+    maximum_angular_speed = float(
+        max(item["angular_speed_radps"] for item in measurements)
+    )
+    stove_support_all_samples = all(
+        any(
+            str(name).startswith("flat_stove_1_")
+            for name in item["contacts"]
+        )
+        for item in measurements
+    )
     return {
         "sample_count": int(len(indices)),
         "max_translation_drift_m": drift,
         "max_tilt_deg": maximum_tilt,
+        "max_linear_speed_mps": maximum_linear_speed,
+        "max_angular_speed_radps": maximum_angular_speed,
+        "stove_support_all_samples": stove_support_all_samples,
         "passed": (
             drift <= TERMINAL_MAX_DRIFT_M
             and maximum_tilt <= MAX_TILT_DEG
+            and maximum_linear_speed <= MAX_FINAL_LINEAR_SPEED_MPS
+            and maximum_angular_speed <= MAX_FINAL_ANGULAR_SPEED_RADPS
+            and stove_support_all_samples
         ),
     }
 
@@ -232,6 +260,10 @@ class AccessRollout:
         self.frames = [_policy_rgb(observation)]
         self.steps = 0
         self.forbidden_contacts: list[dict] = []
+        self.body_measurements = {
+            placed_body: [],
+            moving_body: [],
+        }
         self.recorder = TrajectoryRecorder(
             env,
             [*POT_BODIES, "flat_stove_1_main"],
@@ -240,6 +272,8 @@ class AccessRollout:
     def _observe_forbidden_contacts(self, phase: str) -> None:
         placed = body_measurement(self.env, self.placed_body)
         moving = body_measurement(self.env, self.moving_body)
+        self.body_measurements[self.placed_body].append(placed)
+        self.body_measurements[self.moving_body].append(moving)
         contacts = []
         for name in placed["contacts"]:
             text = str(name)
@@ -401,6 +435,78 @@ class AccessRollout:
             self.advance(action, phase)
         return False, best
 
+    def move_pose(
+        self,
+        target_position: np.ndarray,
+        target_quaternion_xyzw: np.ndarray,
+        gripper: float,
+        phase: str,
+        *,
+        max_steps: int,
+        position_tolerance: float,
+        orientation_tolerance_rad: float,
+        position_command_limit: float,
+        orientation_command_limit: float,
+    ) -> tuple[bool, dict]:
+        """Track one absolute OSC pose waypoint with a real 7-D action."""
+        from robosuite.utils import transform_utils as transform
+
+        target_position = np.asarray(target_position, dtype=float)
+        target_rotation = transform.quat2mat(
+            np.asarray(target_quaternion_xyzw, dtype=float)
+        )
+        best_position = float("inf")
+        best_orientation = float("inf")
+        final_position = float("inf")
+        final_orientation = float("inf")
+        for _ in range(max_steps):
+            current_position = np.asarray(
+                self.observation["robot0_eef_pos"], dtype=float
+            )
+            current_rotation = transform.quat2mat(
+                np.asarray(
+                    self.observation["robot0_eef_quat"], dtype=float
+                )
+            )
+            position_delta = target_position - current_position
+            orientation_delta = transform.quat2axisangle(
+                transform.mat2quat(target_rotation @ current_rotation.T)
+            )
+            final_position = float(np.linalg.norm(position_delta))
+            final_orientation = float(np.linalg.norm(orientation_delta))
+            best_position = min(best_position, final_position)
+            best_orientation = min(best_orientation, final_orientation)
+            if (
+                final_position <= position_tolerance
+                and final_orientation <= orientation_tolerance_rad
+            ):
+                return True, {
+                    "best_position_error_m": best_position,
+                    "best_orientation_error_rad": best_orientation,
+                    "final_position_error_m": final_position,
+                    "final_orientation_error_rad": final_orientation,
+                }
+            action = np.zeros(7, dtype=float)
+            action[:3] = np.clip(
+                position_delta / self.args.action_scale,
+                -position_command_limit,
+                position_command_limit,
+            )
+            # OSC_POSE maps a unit rotation command to 0.5 rad.
+            action[3:6] = np.clip(
+                orientation_delta / 0.5,
+                -orientation_command_limit,
+                orientation_command_limit,
+            )
+            action[-1] = gripper
+            self.advance(action, phase)
+        return False, {
+            "best_position_error_m": best_position,
+            "best_orientation_error_rad": best_orientation,
+            "final_position_error_m": final_position,
+            "final_orientation_error_rad": final_orientation,
+        }
+
 
 def _complete_remaining_placement(
     env,
@@ -446,111 +552,213 @@ def _complete_remaining_placement(
     moving_start = np.asarray(
         body_measurement(env, moving_body)["position"], dtype=float
     )
+    placed_start = np.asarray(
+        body_measurement(env, placed_body)["position"], dtype=float
+    )
     close_start_offset_xy = np.asarray(
         getattr(args, "grasp_close_start_offset_xy", grasp_offset_xy),
         dtype=float,
     )
-    above = moving_start + np.asarray(
-        [
-            close_start_offset_xy[0],
-            close_start_offset_xy[1],
-            args.approach_height,
-        ],
-        dtype=float,
-    )
-    grasp = moving_start + np.asarray(
-        [
-            close_start_offset_xy[0],
-            close_start_offset_xy[1],
-            args.grasp_height,
-        ],
-        dtype=float,
-    )
-    seated_grasp = moving_start + np.asarray(
-        [grasp_offset_xy[0], grasp_offset_xy[1], args.grasp_height],
-        dtype=float,
-    )
-    for stage, target in (("approach", above), ("descend", grasp)):
-        reached, best = rollout.move(target, -1.0, stage)
-        contact_seated = bool(
-            stage == "descend" and best <= args.grasp_contact_tolerance
+    reference_waypoints = getattr(args, "grasp_pose_waypoints", None)
+    reference_results = []
+    if reference_waypoints:
+        first = reference_waypoints[0]
+        first_target = moving_start + np.asarray(
+            first["offset_xyz"], dtype=float
         )
-        if not reached and not contact_seated:
+        reached, best = rollout.move(
+            first_target,
+            -1.0,
+            "reference_approach",
+            max_steps=getattr(args, "reference_approach_max_steps", 240),
+            tolerance=getattr(
+                args, "reference_approach_position_tolerance", 0.0015
+            ),
+            command_limit=getattr(
+                args, "reference_approach_command_limit", 0.8
+            ),
+        )
+        if not reached:
             failure_reason = f"waypoint_timeout_best_{best:.4f}"
-            failure_stage = stage
-            break
-        if (
-            stage == "approach"
-            and not failure_reason
-            and getattr(args, "grasp_yaw_steps", 0) > 0
-        ):
-            rollout.rotate_yaw(
-                -1.0,
-                getattr(args, "grasp_yaw_command", 0.0),
-                args.grasp_yaw_steps,
-            )
-        target_quaternion = getattr(args, "grasp_target_quaternion", None)
-        if (
-            stage == "approach"
-            and not failure_reason
-            and target_quaternion is not None
-        ):
+            failure_stage = "reference_approach"
+        if not failure_reason:
             rollout.orient_to(
-                target_quaternion,
+                first["quaternion_xyzw"],
                 -1.0,
                 tolerance_rad=getattr(
-                    args, "orientation_tolerance_rad", 0.04
+                    args, "reference_initial_orientation_tolerance_rad", 0.003
                 ),
-                max_steps=getattr(args, "orientation_max_steps", 80),
+                max_steps=getattr(
+                    args, "reference_initial_orientation_max_steps", 300
+                ),
                 command_limit=getattr(
-                    args, "orientation_command_limit", 0.35
+                    args, "reference_initial_orientation_command_limit", 0.15
                 ),
             )
+            reached, best = rollout.move(
+                first_target,
+                -1.0,
+                "reference_reseat",
+                max_steps=getattr(args, "reference_reseat_max_steps", 160),
+                tolerance=getattr(
+                    args, "reference_reseat_position_tolerance", 0.001
+                ),
+                command_limit=getattr(
+                    args, "reference_reseat_command_limit", 0.4
+                ),
+            )
+            if not reached:
+                failure_reason = f"waypoint_timeout_best_{best:.4f}"
+                failure_stage = "reference_reseat"
+        for waypoint_index, waypoint in enumerate(reference_waypoints[1:], 1):
+            if failure_reason:
+                break
+            gripper = float(waypoint["gripper"])
+            phase = (
+                "reference_sweep_open"
+                if gripper < 0.0
+                else "reference_close_lift"
+            )
+            reached, metrics = rollout.move_pose(
+                moving_start
+                + np.asarray(waypoint["offset_xyz"], dtype=float),
+                np.asarray(waypoint["quaternion_xyzw"], dtype=float),
+                gripper,
+                phase,
+                max_steps=getattr(args, "reference_waypoint_max_steps", 100),
+                position_tolerance=getattr(
+                    args, "reference_position_tolerance", 0.003
+                ),
+                orientation_tolerance_rad=getattr(
+                    args, "reference_orientation_tolerance_rad", 0.012
+                ),
+                position_command_limit=getattr(
+                    args, "reference_position_command_limit", 0.35
+                ),
+                orientation_command_limit=getattr(
+                    args, "reference_orientation_command_limit", 0.20
+                ),
+            )
+            reference_results.append(
+                {
+                    "waypoint_index": waypoint_index,
+                    "source_step": waypoint.get("source_step"),
+                    "phase": phase,
+                    "reached": reached,
+                    **metrics,
+                }
+            )
+            if not reached:
+                failure_reason = (
+                    "reference_waypoint_timeout_"
+                    f"position_{metrics['best_position_error_m']:.4f}_"
+                    f"orientation_{metrics['best_orientation_error_rad']:.4f}"
+                )
+                failure_stage = phase
+    else:
+        above = moving_start + np.asarray(
+            [
+                close_start_offset_xy[0],
+                close_start_offset_xy[1],
+                args.approach_height,
+            ],
+            dtype=float,
+        )
+        grasp = moving_start + np.asarray(
+            [
+                close_start_offset_xy[0],
+                close_start_offset_xy[1],
+                args.grasp_height,
+            ],
+            dtype=float,
+        )
+        seated_grasp = moving_start + np.asarray(
+            [grasp_offset_xy[0], grasp_offset_xy[1], args.grasp_height],
+            dtype=float,
+        )
+        for stage, target in (("approach", above), ("descend", grasp)):
+            reached, best = rollout.move(target, -1.0, stage)
+            contact_seated = bool(
+                stage == "descend" and best <= args.grasp_contact_tolerance
+            )
+            if not reached and not contact_seated:
+                failure_reason = f"waypoint_timeout_best_{best:.4f}"
+                failure_stage = stage
+                break
+            if (
+                stage == "approach"
+                and not failure_reason
+                and getattr(args, "grasp_yaw_steps", 0) > 0
+            ):
+                rollout.rotate_yaw(
+                    -1.0,
+                    getattr(args, "grasp_yaw_command", 0.0),
+                    args.grasp_yaw_steps,
+                )
+            target_quaternion = getattr(
+                args, "grasp_target_quaternion", None
+            )
+            if (
+                stage == "approach"
+                and not failure_reason
+                and target_quaternion is not None
+            ):
+                rollout.orient_to(
+                    target_quaternion,
+                    -1.0,
+                    tolerance_rad=getattr(
+                        args, "orientation_tolerance_rad", 0.04
+                    ),
+                    max_steps=getattr(args, "orientation_max_steps", 80),
+                    command_limit=getattr(
+                        args, "orientation_command_limit", 0.35
+                    ),
+                )
+
+        if not failure_reason:
+            if getattr(args, "grasp_seat_follow_body", False):
+                rollout.seat_grasp_relative(
+                    moving_body,
+                    np.asarray(
+                        [
+                            grasp_offset_xy[0],
+                            grasp_offset_xy[1],
+                            args.grasp_height,
+                        ],
+                        dtype=float,
+                    ),
+                )
+            else:
+                rollout.seat_grasp(seated_grasp)
+            rollout.hold(1.0, args.grasp_steps, "grasp")
 
     if not failure_reason:
-        if getattr(args, "grasp_seat_follow_body", False):
-            rollout.seat_grasp_relative(
-                moving_body,
-                np.asarray(
-                    [
-                        grasp_offset_xy[0],
-                        grasp_offset_xy[1],
-                        args.grasp_height,
-                    ],
-                    dtype=float,
-                ),
-            )
-        else:
-            rollout.seat_grasp(seated_grasp)
-        rollout.hold(1.0, args.grasp_steps, "grasp")
         grasped_offset = np.asarray(
             rollout.observation["robot0_eef_pos"], dtype=float
         ) - np.asarray(
             body_measurement(env, moving_body)["position"], dtype=float
         )
-        lift_target = np.asarray(
-            rollout.observation["robot0_eef_pos"], dtype=float
-        )
-        lift_target[2] += args.lift_height
-        reached, best = rollout.move(
-            lift_target,
-            1.0,
-            "lift",
-            command_limit=getattr(args, "lift_max_command", 1.0),
-        )
+        if reference_waypoints:
+            reached = True
+            best = 0.0
+        else:
+            lift_target = np.asarray(
+                rollout.observation["robot0_eef_pos"], dtype=float
+            ).copy()
+            lift_target[2] += args.lift_height
+            reached, best = rollout.move(
+                lift_target,
+                1.0,
+                "lift",
+                command_limit=getattr(args, "lift_max_command", 1.0),
+            )
         lifted = float(
             body_measurement(env, moving_body)["position"][2] - moving_start[2]
         )
-        lift_indices = [
-            index
-            for index, phase in enumerate(rollout.recorder.phases)
-            if phase == "lift"
-        ]
         maximum_lift = max(
             (
-                float(rollout.recorder.body_pos[moving_body][index][2])
-                - moving_start[2]
-                for index in lift_indices
+                float(position[2]) - moving_start[2]
+                for position in rollout.recorder.body_pos[moving_body]
             ),
             default=lifted,
         )
@@ -599,9 +807,44 @@ def _complete_remaining_placement(
 
     if not failure_reason:
         rollout.hold(-1.0, args.release_steps, "release")
+        withdraw_distance = float(
+            getattr(args, "withdraw_distance", 0.0)
+        )
+        if withdraw_distance > 0.0:
+            direction = np.asarray(grasped_offset[:2], dtype=float)
+            direction_norm = float(np.linalg.norm(direction))
+            if direction_norm <= 1e-9:
+                failure_reason = "withdraw_direction_undefined"
+                failure_stage = "withdraw"
+            else:
+                withdraw = np.asarray(
+                    rollout.observation["robot0_eef_pos"], dtype=float
+                ).copy()
+                withdraw[:2] += (
+                    direction / direction_norm * withdraw_distance
+                )
+                withdraw[2] += float(
+                    getattr(args, "withdraw_height", 0.0)
+                )
+                reached, best = rollout.move(
+                    withdraw,
+                    -1.0,
+                    "withdraw",
+                    max_steps=getattr(
+                        args,
+                        "withdraw_max_steps",
+                        args.transport_max_waypoint_steps,
+                    ),
+                    command_limit=getattr(
+                        args, "withdraw_command_limit", 0.6
+                    ),
+                )
+                if not reached:
+                    failure_reason = f"waypoint_timeout_best_{best:.4f}"
+                    failure_stage = "withdraw"
         retreat = np.asarray(
             rollout.observation["robot0_eef_pos"], dtype=float
-        )
+        ).copy()
         retreat[2] += args.retreat_height
         reached, best = rollout.move(retreat, -1.0, "retreat")
         if not reached:
@@ -611,8 +854,19 @@ def _complete_remaining_placement(
 
     final_placed = body_measurement(env, placed_body)
     final_moving = body_measurement(env, moving_body)
+    placed_displacement = float(
+        np.linalg.norm(
+            np.asarray(final_placed["position"], dtype=float) - placed_start
+        )
+    )
+    target_xy_error = float(
+        np.linalg.norm(
+            np.asarray(final_moving["position"][:2], dtype=float)
+            - np.asarray(target_position[:2], dtype=float)
+        )
+    )
     terminal = {
-        body_name: _terminal_stability(rollout.recorder, body_name)
+        body_name: _terminal_stability(rollout, body_name)
         for body_name in (placed_body, moving_body)
     }
     task_success = bool(env.check_success())
@@ -629,11 +883,32 @@ def _complete_remaining_placement(
         )
         for measurement in (final_placed, final_moving)
     ) and all(record["passed"] for record in terminal.values())
+    final_robot_contact = any(
+        str(name).startswith(("robot0_", "gripper0_"))
+        for name in final_moving["contacts"]
+    )
+    maximum_preplaced_displacement = getattr(
+        args, "maximum_preplaced_displacement", None
+    )
+    maximum_target_xy_error = getattr(
+        args, "maximum_target_xy_error", None
+    )
+    preserved_preplaced = bool(
+        maximum_preplaced_displacement is None
+        or placed_displacement <= maximum_preplaced_displacement
+    )
+    target_reached = bool(
+        maximum_target_xy_error is None
+        or target_xy_error <= maximum_target_xy_error
+    )
     safe_success = bool(
         not failure_reason
         and not rollout.forbidden_contacts
         and task_success
         and stable
+        and not final_robot_contact
+        and preserved_preplaced
+        and target_reached
     )
     if not failure_reason and rollout.forbidden_contacts:
         failure_reason = "forbidden_order_contact"
@@ -643,6 +918,15 @@ def _complete_remaining_placement(
         failure_stage = "final"
     elif not failure_reason and not stable:
         failure_reason = "unstable_final_state"
+        failure_stage = "final"
+    elif not failure_reason and final_robot_contact:
+        failure_reason = "final_robot_object_contact"
+        failure_stage = "final"
+    elif not failure_reason and not preserved_preplaced:
+        failure_reason = "preplaced_object_displaced"
+        failure_stage = "final"
+    elif not failure_reason and not target_reached:
+        failure_reason = "target_slot_missed"
         failure_stage = "final"
     result = {
         "order": order,
@@ -661,8 +945,19 @@ def _complete_remaining_placement(
                 args.grasp_target_quaternion, dtype=float
             ).tolist()
         ),
+        "grasp_reference_label": getattr(
+            args, "grasp_reference_label", None
+        ),
+        "grasp_reference_waypoint_results": reference_results,
         "grasp_lift_m": lifted,
         "maximum_grasp_lift_m": maximum_lift,
+        "preplaced_body_displacement_m": placed_displacement,
+        "maximum_preplaced_body_displacement_m": (
+            maximum_preplaced_displacement
+        ),
+        "target_xy_error_m": target_xy_error,
+        "maximum_target_xy_error_m": maximum_target_xy_error,
+        "final_robot_object_contact": final_robot_contact,
         "steps": rollout.steps,
         "final_eef_position": np.asarray(
             rollout.observation["robot0_eef_pos"], dtype=float

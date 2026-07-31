@@ -2,6 +2,7 @@ import hashlib
 import json
 import shutil
 from pathlib import Path
+from types import SimpleNamespace
 
 import h5py
 import imageio.v2 as imageio
@@ -17,12 +18,17 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     EXPECTED_FIXTURE_ROOTS,
     EXPECTED_MOVABLE_ROOTS,
     SCENE_ID,
+    SLOT_SEPARATION_M,
     SUITE,
     TASK_FILE,
     TASK_ID,
     TASK_KEY,
     TASK_PROMPT,
     native_bddl_path,
+)
+from experiments.robot.libero.tasks.validate_l3b_moka_safe_reference import (
+    GRASP_POSE_WAYPOINTS,
+    GRASP_REFERENCE_PROVENANCE,
 )
 from experiments.robot.libero.tasks.summarize_l3b_moka_order_smoke import (
     PASS_CONTROL,
@@ -31,6 +37,9 @@ from experiments.robot.libero.tasks.summarize_l3b_moka_order_smoke import (
     control_capability,
     native_capability,
     summarize,
+)
+from experiments.robot.libero.tasks.probe_l3b_moka_order_access import (
+    _terminal_stability,
 )
 from experiments.robot.libero.tasks.validate_l3b_moka_native20_prereg import (
     ARTIFACTS,
@@ -77,6 +86,7 @@ def test_native_task_lock_and_runner_contract():
     assert CONDITION_REMAINING_BODY["near_first"] == (
         CONDITION_REMAINING_BODY["far_first"]
     ) == "moka_pot_1_main"
+    assert SLOT_SEPARATION_M == 0.105
     runner = (TASKS / "run_l3b_moka_order.sh").read_text()
     wrapper = (TASKS / "run_l3b_moka_order_pi05.sh").read_text()
     evaluator = (
@@ -92,6 +102,55 @@ def test_native_task_lock_and_runner_contract():
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper
     assert 'runtime_scene == "L3-B-MOKA-ORDER"' in evaluator
     assert "except MokaOrderRuntimeGateError:" in evaluator
+
+
+def test_safe_grasp_reference_is_compact_and_provenance_bound():
+    assert len(GRASP_POSE_WAYPOINTS) == 9
+    assert [item["source_step"] for item in GRASP_POSE_WAYPOINTS] == (
+        GRASP_REFERENCE_PROVENANCE["source_steps"]
+    )
+    assert all(
+        len(item["offset_xyz"]) == 3
+        and len(item["quaternion_xyzw"]) == 4
+        and item["gripper"] in (-1.0, 1.0)
+        for item in GRASP_POSE_WAYPOINTS
+    )
+    assert [item["gripper"] for item in GRASP_POSE_WAYPOINTS].count(1.0) == 3
+    assert len(GRASP_REFERENCE_PROVENANCE["source_trajectory_sha256"]) == 64
+
+
+def test_safe_terminal_gate_checks_the_entire_settle_window():
+    sample_count = 100
+    quaternions = np.tile(
+        np.asarray([1.0, 0.0, 0.0, 0.0]), (sample_count, 1)
+    )
+    angle = np.deg2rad(2.0)
+    quaternions[0] = [
+        np.cos(angle / 2.0),
+        np.sin(angle / 2.0),
+        0.0,
+        0.0,
+    ]
+    measurements = [
+        {
+            "linear_speed_mps": 0.0,
+            "angular_speed_radps": 0.0,
+            "contacts": ["flat_stove_1_burner"],
+        }
+        for _ in range(sample_count)
+    ]
+    rollout = SimpleNamespace(
+        recorder=SimpleNamespace(
+            body_pos={"pot": np.zeros((sample_count, 3))},
+            body_quat={"pot": quaternions},
+            phases=["settle"] * sample_count,
+        ),
+        body_measurements={"pot": measurements},
+    )
+    result = _terminal_stability(rollout, "pot")
+    assert result["sample_count"] == sample_count
+    assert result["max_tilt_deg"] == pytest.approx(2.0)
+    assert not result["passed"]
 
 
 def test_native20_preregistration_and_dedicated_runner_are_locked():

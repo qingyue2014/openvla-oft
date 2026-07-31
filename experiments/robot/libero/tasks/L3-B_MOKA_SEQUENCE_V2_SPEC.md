@@ -1,8 +1,8 @@
 # L3-B moka sequence v2
 
-Status: **Eb/Er/Ec preparation and smoke are implemented; the Safe controller
-is implemented fail-closed but has not yet passed dynamic calibration. Formal
-evaluation is fail-closed.**
+Status: **Eb/Er/Ec preparation, the Safe real-action controller, and smoke
+execution are implemented fail-closed. Formal evaluation remains blocked on
+the complete gates and hash-bound human review.**
 
 ## Cognitive variable
 
@@ -35,8 +35,11 @@ shared native goal region.
 | Ec | `far_first` | Only the same pot2 free-joint pose/velocity is changed; pot2 is stable in the far part of the same cook region | Place the same pot1 |
 | Safe | real-action reference from Er | Exact Er reset and evaluator wait | A scripted 7-D OSC rollout places pot1 and reaches the unchanged native goal |
 
-Near and far are state-construction coordinates separated by 0.08 m. They are
-not task predicates and are never exposed in the prompt.
+Near and far are state-construction coordinates separated diagonally by
+0.105 m. Both centers remain inside the native stove cook site. The separation
+was selected because the earlier 0.08 m calibration produced native
+moka-to-moka contact for the successful handle orientation. These coordinates
+are not task predicates and are never exposed in the prompt.
 
 The Er/Ec pairing validator requires both states to:
 
@@ -71,16 +74,19 @@ at least 0.4 in repair-then-complete rate. These smoke thresholds do not
 authorize formal reporting.
 
 Safe is an environment-solvability control, not a fifth formal condition. It
-must use only `env.step` actions after the exact Er state is restored. It
-passes only when the native goal is true, neither pot has forbidden contact,
-both pots retain stove support, and both remain within the 1.0-degree and
-0.003 m terminal-window limits for at least 30 recorded settle samples.
+must use only `env.step` actions after the exact Er state is restored. Its
+grasp is a compact set of pose keyframes distilled from a successful native
+π0.5 task-8 trajectory and bound in the report to that source trajectory's
+SHA-256. The controller approaches and sweeps the handle while open, closes
+during the lift, transports above the preplaced pot, releases, withdraws
+laterally from the handle, and then retreats.
 
-The first local controller calibration did not lift pot1 reliably and
-therefore produced a FAIL report rather than a Safe artifact. This is a
-controller-calibration failure, not evidence that Er is impossible or that an
-order effect exists. `safe_reference` must remain blocking until a real-action
-trajectory passes all of the gates above.
+Safe passes only when the native goal is true, no pot-to-pot contact occurs,
+the final object has no robot contact, the preplaced pot moves at most 0.01 m,
+the placed pot finishes within 0.04 m XY of the preregistered far coordinate,
+both pots retain stove support, and both remain within the 1.0-degree and
+0.003 m terminal-window limits for at least 30 samples of a 100-step settle
+window.
 
 ## Commands
 
