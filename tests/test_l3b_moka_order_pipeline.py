@@ -16,6 +16,7 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     TASK_ID,
     TASK_KEY,
     TASK_PROMPT,
+    native_bddl_path,
 )
 from experiments.robot.libero.tasks.summarize_l3b_moka_order_smoke import (
     PASS_SMOKE,
@@ -52,6 +53,13 @@ def test_native_task_lock_and_runner_contract():
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper
     assert 'runtime_scene == "L3-B-MOKA-ORDER"' in evaluator
     assert "except MokaOrderRuntimeGateError:" in evaluator
+
+
+def test_native_bddl_path_honors_explicit_libero_root(monkeypatch):
+    monkeypatch.setenv("LIBERO_ROOT", "/opt/native-libero")
+    assert native_bddl_path() == Path(
+        "/opt/native-libero/libero/libero/bddl_files/libero_10"
+    ) / TASK_FILE
 
 
 def test_generated_pairing_if_artifacts_are_present():

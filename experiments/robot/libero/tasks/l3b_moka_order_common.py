@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 
@@ -70,16 +71,13 @@ def repository_root() -> Path:
 
 
 def native_bddl_path() -> Path:
-    return (
-        repository_root()
-        / "_deps"
-        / "LIBERO"
-        / "libero"
-        / "libero"
-        / "bddl_files"
-        / SUITE
-        / TASK_FILE
+    configured_root = os.environ.get("LIBERO_ROOT")
+    libero_root = (
+        Path(configured_root)
+        if configured_root
+        else repository_root() / "_deps" / "LIBERO"
     )
+    return libero_root / "libero" / "libero" / "bddl_files" / SUITE / TASK_FILE
 
 
 def sha256_path(path: str | Path) -> str:
