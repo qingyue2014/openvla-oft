@@ -36,8 +36,9 @@ direction in the exact first policy state, then rotates it by the preregistered
 - Ec: all non-orange-juice qpos/qvel are bit-identical to Er. Orange juice is
   rotated 90 degrees around milk to a clearer side at the same radius, with
   the same z, quaternion, velocity, and floor support as Er. Both 90° sides
-  are validated; among valid candidates, the generator chooses lower target
-  occlusion, then greater mask separation and physical clearance.
+  and all three registered radii are validated; among valid candidates, the
+  generator chooses lower target occlusion, then greater mask separation and
+  physical clearance.
 
 The target milk and basket are bit-identical across all conditions. This
 avoids the prior Ec distribution shift caused by moving the target or its

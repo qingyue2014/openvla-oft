@@ -1036,7 +1036,7 @@ def generate(args) -> None:
 
             candidate_failures = []
             candidate_successes = []
-            selected = None
+            valid_candidates = []
             # Prefer the control side with more clearance from all unchanged
             # native objects; still try the opposite side if a visual or
             # physical gate rejects the preferred one.
@@ -1211,23 +1211,23 @@ def generate(args) -> None:
                                 "reason": str(exc),
                             }
                         )
-                if radius_candidates:
-                    selected = min(
-                        radius_candidates,
-                        key=lambda candidate: (
-                            candidate["control_occlusion_fraction"],
-                            -candidate["ec_info"][
-                                "min_agentview_centroid_separation_px"
-                            ],
-                            -candidate["control_clearance_m"],
-                        ),
-                    )
-                    break
-            if selected is None:
+                valid_candidates.extend(radius_candidates)
+            if not valid_candidates:
                 raise RuntimeError(
                     f"pair {source_index}: no registered near-target "
                     f"candidate passed: {candidate_failures}"
                 )
+            selected = min(
+                valid_candidates,
+                key=lambda candidate: (
+                    candidate["control_occlusion_fraction"],
+                    -candidate["ec_info"][
+                        "min_agentview_centroid_separation_px"
+                    ],
+                    -candidate["control_clearance_m"],
+                    candidate["radius_m"],
+                ),
+            )
 
             er_state = selected.pop("er_state")
             ec_state = selected.pop("ec_state")
