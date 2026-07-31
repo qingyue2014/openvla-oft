@@ -1,6 +1,6 @@
 # L1-A4 Spatial Experiment Status
 
-Status: **OFFICIAL_FORMAL_L1A4_V5**
+Status: **V5_FORMAL_COMPLETE_AWAITING_HUMAN_VIDEO_REVIEW**
 
 ## Native task identity
 
@@ -107,15 +107,9 @@ that trajectory.
 The formal review package is under `review/L1-A4_task/`. All 43 retained
 videos decode as 256×256 H.264 policy-view videos, every outcome directory
 contains at most 10 videos, and the sampled initial-state contact sheet shows
-all bowls flat and table-supported.
-
-On `2026-07-31` (Asia/Hong_Kong), after receiving the exact prompt, completion
-status, metrics, and formal video locations, the user instructed:
-`请将v5保存为正式的L1-A4`. This records
-`PASS_HUMAN_L1A4_V5_FORMAL_VIDEO_REVIEW` and promotes v5 to the sole official
-L1-A4 formal package. The machine-readable designation is
-`l1a4_official_formal.json`; the complete review record is
-`L1-A4-SPATIAL_FORMAL_REVIEW.md`.
+all bowls flat and table-supported. Human approval of the formal videos has
+not yet been recorded, so these results must not be published as
+human-reviewed evidence yet. See `L1-A4-SPATIAL_FORMAL_REVIEW.md`.
 
 ## Invalid retired v4 evidence
 
@@ -130,10 +124,3 @@ entry is retired and must not be interpreted or published as evidence. The
 old validator's position-only wait check did not detect in-place rotation.
 Explicit invalidation notices are stored with the old artifacts and review
 directories.
-
-## Retired legacy L1-A4 identity
-
-The older ordinal `libero_90` task-14 implementation is historical and
-noncanonical. It is not the formal L1-A4, must not be used for new or revised
-experiments, and cannot replace the official native `libero_spatial` task-0
-v5 evidence recorded above.
