@@ -1087,6 +1087,7 @@ def _constraint_prioritized_outside_descent_action(
     gripper,
     position_action_scale,
     maximum_translation_action,
+    active_positive_z_brake=False,
 ):
     """Preserve compiled outside XY before allocating action norm to Z."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -1143,8 +1144,10 @@ def _constraint_prioritized_outside_descent_action(
                 )
             )
         )
-    requested_vertical_action = float(
-        maximum_descent_m / float(position_action_scale)
+    requested_vertical_action = (
+        remaining_vertical_action
+        if active_positive_z_brake
+        else float(maximum_descent_m / float(position_action_scale))
     )
     commanded_vertical_action = min(
         requested_vertical_action,
@@ -1152,7 +1155,9 @@ def _constraint_prioritized_outside_descent_action(
     )
     action = np.zeros(7, dtype=float)
     action[:2] = lateral_action
-    action[2] = -commanded_vertical_action
+    action[2] = commanded_vertical_action * (
+        1.0 if active_positive_z_brake else -1.0
+    )
     action[-1] = float(gripper)
     pre_rescale_translation_norm = float(
         np.linalg.norm(action[:3])
@@ -1187,7 +1192,12 @@ def _constraint_prioritized_outside_descent_action(
             "allocate the unchanged translation-action norm to the "
             "compiled outside XY target first, clamp its outward error at "
             "zero to prohibit inward commands, then allocate the remaining "
-            "Euclidean norm to vertical descent"
+            "Euclidean norm to "
+            + (
+                "positive-Z active braking"
+                if active_positive_z_brake
+                else "vertical descent"
+            )
         ),
         "compiled_outside_target_xy": outside_side_target[:2].tolist(),
         "raw_lateral_error_xy_m": lateral_error.tolist(),
@@ -1201,6 +1211,18 @@ def _constraint_prioritized_outside_descent_action(
         "requested_vertical_action": requested_vertical_action,
         "pre_rescale_vertical_action": commanded_vertical_action,
         "commanded_vertical_action": float(-action[2]),
+        "vertical_control_mode": (
+            "active_positive_z_brake"
+            if active_positive_z_brake
+            else "descent"
+        ),
+        "active_positive_z_brake": bool(active_positive_z_brake),
+        "commanded_positive_z_brake_action": float(
+            max(0.0, action[2])
+        ),
+        "commanded_positive_z_brake_world_step_m": float(
+            max(0.0, action[2]) * position_action_scale
+        ),
         "maximum_descent_m": float(maximum_descent_m),
         "pre_rescale_translation_action_norm": (
             pre_rescale_translation_norm
@@ -1232,6 +1254,7 @@ def _outside_side_geometry_feedback_action(
     maximum_translation_action,
     force_outward_recovery=False,
     force_lateral_settle=False,
+    previous_settle_vertical_step_progress_m=None,
 ):
     """Choose one bounded outward-recovery or vertical-descent OSC action."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -1249,6 +1272,18 @@ def _outside_side_geometry_feedback_action(
     live_clearance = float(guard["minimum_outside_clearance_m"])
     if current_eef.shape != (3,) or outside_side_target.shape != (3,):
         raise ValueError("current and outside-side EEF targets must be 3-D")
+    if force_lateral_settle and (
+        previous_settle_vertical_step_progress_m is None
+        or not np.isfinite(previous_settle_vertical_step_progress_m)
+    ):
+        raise ValueError(
+            "lateral settle requires the previous measured vertical "
+            "step response"
+        )
+    active_positive_z_brake = bool(
+        force_lateral_settle
+        and previous_settle_vertical_step_progress_m < 0.0
+    )
     if live_clearance < required_clearance or force_outward_recovery:
         clearance_deficit = max(
             0.0, required_clearance - live_clearance
@@ -1307,6 +1342,7 @@ def _outside_side_geometry_feedback_action(
                 maximum_translation_action=(
                     maximum_translation_action
                 ),
+                active_positive_z_brake=active_positive_z_brake,
             )
         )
         feedback_target = current_eef.copy()
@@ -1340,6 +1376,22 @@ def _outside_side_geometry_feedback_action(
         "clearance_deficit_m": float(clearance_deficit),
         "force_outward_recovery": bool(force_outward_recovery),
         "force_lateral_settle": bool(force_lateral_settle),
+        "previous_settle_vertical_step_progress_m": (
+            None
+            if previous_settle_vertical_step_progress_m is None
+            else float(previous_settle_vertical_step_progress_m)
+        ),
+        "active_positive_z_brake_requested": (
+            active_positive_z_brake
+        ),
+        "active_positive_z_brake_commanded": bool(
+            force_lateral_settle and action[2] > 0.0
+        ),
+        "commanded_positive_z_brake_action": float(
+            action[2]
+            if force_lateral_settle and action[2] > 0.0
+            else 0.0
+        ),
         "recovery_action_saturated": recovery_action_saturated,
         "descent_path_control": descent_path_control,
         "available_table_descent_m": available_table_descent,
@@ -1382,6 +1434,9 @@ def _outside_side_step_response_evidence(
     )
     return {
         "eef_outward_step_progress_m": eef_outward_progress,
+        "vertical_step_progress_m": float(
+            after_eef[2] - before_eef[2]
+        ),
         "outside_clearance_step_progress_m": float(
             clearance_progress
         ),
@@ -1408,7 +1463,9 @@ def _outside_side_lateral_settle_evidence(
         before_eef=before_eef,
         after_eef=after_eef,
     )
-    vertical_step_progress = float(after_eef[2] - before_eef[2])
+    vertical_step_progress = float(
+        step_response["vertical_step_progress_m"]
+    )
     required_clearance = float(
         after_guard["required_outside_clearance_m"]
     )
@@ -1432,10 +1489,11 @@ def _outside_side_lateral_settle_evidence(
         "settled": not violations,
         "violations": violations,
         "formula": (
-            "after an observed inward-coupled descent step, issue no Z "
-            "command until measured Z, EEF-outward, and live-clearance "
-            "step progress are all nonnegative and compiled clearance is "
-            "satisfied"
+            "after every descent step, preserve compiled outside XY and "
+            "actively brake in positive Z whenever the previous measured "
+            "Z response is negative; permit another descent only when "
+            "measured Z, EEF-outward, and live-clearance step progress are "
+            "all nonnegative and compiled clearance is satisfied"
         ),
         "vertical_step_progress_m": vertical_step_progress,
         "step_response": step_response,
@@ -1450,14 +1508,14 @@ def _outside_side_staircase_settle_trigger(
     guard_step,
     step_response,
 ):
-    """Require a no-Z settle phase after every commanded descent step."""
+    """Require an active-braking settle after every commanded descent."""
     if feedback_mode != "constraint_prioritized_vertical_descent":
         return None
     return {
         "policy": (
             "preventive staircase: every constraint-prioritized descent "
-            "step is followed by measured no-Z lateral settling before "
-            "another descent can be issued"
+            "step is followed by measured outside-XY-prioritized active "
+            "braking before another descent can be issued"
         ),
         "trigger_guard_step": int(guard_step),
         "trigger_step_response": step_response,
@@ -2544,6 +2602,20 @@ def _seek_stable_plate_contact(
         current_eef = np.asarray(
             rollout.obs["robot0_eef_pos"], dtype=float
         )
+        previous_settle_vertical_step_progress = None
+        if lateral_settle_state is not None:
+            if "trigger_step_response" in lateral_settle_state:
+                previous_settle_vertical_step_progress = float(
+                    lateral_settle_state["trigger_step_response"][
+                        "vertical_step_progress_m"
+                    ]
+                )
+            else:
+                previous_settle_vertical_step_progress = float(
+                    lateral_settle_state[
+                        "vertical_step_progress_m"
+                    ]
+                )
         try:
             action, feedback = _outside_side_geometry_feedback_action(
                 current_eef=current_eef,
@@ -2559,6 +2631,9 @@ def _seek_stable_plate_contact(
                 ),
                 force_lateral_settle=(
                     lateral_settle_state is not None
+                ),
+                previous_settle_vertical_step_progress_m=(
+                    previous_settle_vertical_step_progress
                 ),
             )
         except RuntimeError as exc:
@@ -2641,6 +2716,8 @@ def _seek_stable_plate_contact(
             )
             if lateral_settle_progress["settled"]:
                 lateral_settle_state = None
+            else:
+                lateral_settle_state = lateral_settle_progress
         else:
             staircase_trigger = (
                 _outside_side_staircase_settle_trigger(

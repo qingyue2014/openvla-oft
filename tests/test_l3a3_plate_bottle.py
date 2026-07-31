@@ -28,6 +28,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _outside_side_guard_from_world_aabbs,
     _outside_side_lateral_settle_evidence,
     _outside_side_recovery_progress_evidence,
+    _outside_side_step_response_evidence,
     _outside_side_staircase_settle_trigger,
     _plate_finger_contact_sides,
     _push_window_timeout_evidence,
@@ -890,7 +891,7 @@ def test_500088_descent_norm_is_strictly_inside_bound_without_inward_action():
     assert evidence["commanded_outward_error_m"] == 0.0
 
 
-def test_500099_every_descent_requires_preventive_lateral_only_settle():
+def test_500099_every_descent_requires_preventive_active_braking_settle():
     target = np.array(
         [0.13680639548403947, -0.02850777957668001, 0.917769758]
     )
@@ -913,6 +914,7 @@ def test_500099_every_descent_requires_preventive_lateral_only_settle():
     first_descent_response = {
         "eef_outward_step_progress_m": 0.000824438,
         "outside_clearance_step_progress_m": 0.000809111,
+        "vertical_step_progress_m": -0.000128412,
     }
     preventive_trigger = _outside_side_staircase_settle_trigger(
         feedback_mode="constraint_prioritized_vertical_descent",
@@ -949,10 +951,16 @@ def test_500099_every_descent_requires_preventive_lateral_only_settle():
         gripper=-1.0,
         position_action_scale=0.08,
         maximum_translation_action=0.10,
+        active_positive_z_brake=True,
     )
     assert settle_action[0] > 0.0
-    assert settle_action[2] == 0.0
+    assert settle_action[2] > 0.0
     assert path["maximum_descent_m"] == 0.0
+    assert path["active_positive_z_brake"] is True
+    assert path["commanded_positive_z_brake_action"] == pytest.approx(
+        settle_action[2]
+    )
+    assert np.linalg.norm(settle_action[:3]) <= 0.10
 
     settle_action, feedback = _outside_side_geometry_feedback_action(
         current_eef=after_eef,
@@ -966,11 +974,15 @@ def test_500099_every_descent_requires_preventive_lateral_only_settle():
         position_action_scale=0.08,
         maximum_translation_action=0.10,
         force_lateral_settle=True,
+        previous_settle_vertical_step_progress_m=evidence[
+            "vertical_step_progress_m"
+        ],
     )
     assert feedback["mode"] == "compiled_outside_lateral_settle"
     assert feedback["force_lateral_settle"] is True
+    assert feedback["active_positive_z_brake_requested"] is True
     assert settle_action[0] > 0.0
-    assert settle_action[2] == 0.0
+    assert settle_action[2] > 0.0
 
     settled_guard = {
         **after_guard,
@@ -984,6 +996,146 @@ def test_500099_every_descent_requires_preventive_lateral_only_settle():
     )
     assert settled["settled"] is True
     assert settled["violations"] == []
+
+
+def test_500104_first_settle_step_actively_brakes_exact_negative_z_response():
+    before_eef = np.array(
+        [
+            0.13267415665529797,
+            -0.028638039484225563,
+            1.0615092907889767,
+        ]
+    )
+    after_eef = np.array(
+        [
+            0.13349859423038862,
+            -0.02867088066849006,
+            1.061380879160546,
+        ]
+    )
+    target = np.array(
+        [
+            0.13680639548403947,
+            -0.02850777957668001,
+            0.917769758476126,
+        ]
+    )
+    required_clearance = np.nextafter(0.0, np.inf)
+    before_guard = {
+        "outward_direction_xy": [1.0, 0.0],
+        "required_outside_clearance_m": required_clearance,
+        "minimum_outside_clearance_m": 0.0008573639623264129,
+    }
+    after_guard = {
+        **before_guard,
+        "minimum_outside_clearance_m": 0.0016664744783980584,
+        "required_finger_table_clearance_m": required_clearance,
+        "finger_table_vertical_clearance_m": 0.14827030531197682,
+    }
+    descent_response = _outside_side_step_response_evidence(
+        before_guard=before_guard,
+        after_guard=after_guard,
+        before_eef=before_eef,
+        after_eef=after_eef,
+    )
+    assert descent_response["eef_outward_step_progress_m"] == (
+        pytest.approx(0.000824437575090653)
+    )
+    assert descent_response[
+        "outside_clearance_step_progress_m"
+    ] == pytest.approx(0.0008091105160716455)
+    assert descent_response["vertical_step_progress_m"] == (
+        pytest.approx(-0.000128411628430691)
+    )
+    trigger = _outside_side_staircase_settle_trigger(
+        feedback_mode="constraint_prioritized_vertical_descent",
+        guard_step=1,
+        step_response=descent_response,
+    )
+    action, feedback = _outside_side_geometry_feedback_action(
+        current_eef=after_eef,
+        outside_side_target=target,
+        guard=after_guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+        force_lateral_settle=True,
+        previous_settle_vertical_step_progress_m=(
+            trigger["trigger_step_response"][
+                "vertical_step_progress_m"
+            ]
+        ),
+    )
+    assert feedback["mode"] == "compiled_outside_lateral_settle"
+    assert feedback["active_positive_z_brake_requested"] is True
+    assert feedback["active_positive_z_brake_commanded"] is True
+    assert feedback["commanded_positive_z_brake_action"] == pytest.approx(
+        action[2]
+    )
+    assert action[0] == pytest.approx(0.04134751567063562)
+    assert action[1] == pytest.approx(0.002038763647625643)
+    assert action[2] == pytest.approx(0.09102871190265004)
+    path = feedback["descent_path_control"]
+    assert path["active_positive_z_brake"] is True
+    assert path["commanded_positive_z_brake_action"] == pytest.approx(
+        action[2]
+    )
+    assert path["commanded_positive_z_brake_world_step_m"] == (
+        pytest.approx(action[2] * 0.08)
+    )
+    assert "positive-Z active braking" in path["formula"]
+
+    no_brake_action, no_brake_feedback = (
+        _outside_side_geometry_feedback_action(
+            current_eef=after_eef,
+            outside_side_target=target,
+            guard=after_guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            maximum_translation_action=0.10,
+            force_lateral_settle=True,
+            previous_settle_vertical_step_progress_m=0.0,
+        )
+    )
+    assert no_brake_action[2] == 0.0
+    assert no_brake_feedback[
+        "active_positive_z_brake_requested"
+    ] is False
+    assert no_brake_feedback[
+        "active_positive_z_brake_commanded"
+    ] is False
+
+
+def test_500104_active_braking_norm_is_strict_and_never_commands_inward():
+    target = np.array([0.136806395, -0.028507780, 0.917769758])
+    strict_bound = np.nextafter(0.10, 0.0)
+    cases = [
+        np.array([0.133498594, -0.028670881, 1.061380879]),
+        np.array([0.100000000, -0.028507780, 1.061380879]),
+        np.array([0.140000000, -0.028507780, 1.061380879]),
+    ]
+    for current in cases:
+        action, evidence = (
+            _constraint_prioritized_outside_descent_action(
+                current_eef=current,
+                outside_side_target=target,
+                outward_direction_xy=np.array([1.0, 0.0]),
+                maximum_descent_m=0.0,
+                gripper=-1.0,
+                position_action_scale=0.08,
+                maximum_translation_action=0.10,
+                active_positive_z_brake=True,
+            )
+        )
+        assert action[0] >= 0.0
+        assert action[2] >= 0.0
+        assert np.linalg.norm(action[:3]) <= strict_bound
+        assert evidence["translation_action_norm"] <= strict_bound
+        assert evidence["commanded_positive_z_brake_action"] == (
+            pytest.approx(action[2])
+        )
+    assert cases[1][0] < target[0]
+    assert cases[2][0] > target[0]
 
 
 def test_499954_saturated_recovery_follows_improving_discrete_response():
@@ -2005,6 +2157,8 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_outside_side_lateral_settle_evidence(" in bounded_seek
     assert "_outside_side_staircase_settle_trigger(" in bounded_seek
     assert "force_lateral_settle=(" in bounded_seek
+    assert "previous_settle_vertical_step_progress_m=(" in bounded_seek
+    assert "lateral_settle_state = lateral_settle_progress" in bounded_seek
     assert '"lateral_settle_trigger"' in bounded_seek
     assert "recovery_progress[\"fail_closed\"]" in bounded_seek
     assert bounded_seek.index("motion_sample = capture(") < (
