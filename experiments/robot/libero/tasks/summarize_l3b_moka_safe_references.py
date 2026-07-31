@@ -51,6 +51,7 @@ def summarize(report_paths: list[str | Path], expected_count: int) -> dict:
         )
     episodes = []
     er_hashes = set()
+    saved_video_count = 0
     for path in paths:
         report = json.loads(path.read_text(encoding="utf-8"))
         if (
@@ -97,6 +98,12 @@ def summarize(report_paths: list[str | Path], expected_count: int) -> dict:
             raise ValueError(f"Safe full-window stability failed: {path}")
         episode = int(report["source_episode"])
         er_hashes.add(str(report["er_states_sha256"]))
+        review_video = None
+        if report.get("review_video_saved") is not False:
+            review_video = _bound_artifact(
+                report, "review_video", "review_video_sha256"
+            )
+            saved_video_count += 1
         episodes.append(
             {
                 "episode": episode,
@@ -107,9 +114,7 @@ def summarize(report_paths: list[str | Path], expected_count: int) -> dict:
                 "trajectory": _bound_artifact(
                     report, "trajectory", "trajectory_sha256"
                 ),
-                "review_video": _bound_artifact(
-                    report, "review_video", "review_video_sha256"
-                ),
+                "review_video": review_video,
                 "grasp_lift_m": float(result["grasp_lift_m"]),
                 "preplaced_body_displacement_m": float(
                     result["preplaced_body_displacement_m"]
@@ -126,7 +131,7 @@ def summarize(report_paths: list[str | Path], expected_count: int) -> dict:
         )
     if len(er_hashes) != 1:
         raise ValueError("Safe reports do not bind one Er state bundle")
-    if len(episodes) > 10:
+    if saved_video_count > 10:
         raise ValueError("Safe success-video category exceeds local limit 10")
     return {
         "scenario": SCENE_ID,
@@ -141,6 +146,7 @@ def summarize(report_paths: list[str | Path], expected_count: int) -> dict:
         "orientation_clearance_distance_m": ORIENTATION_CLEARANCE_DISTANCE_M,
         "count": len(episodes),
         "expected_count": expected_count,
+        "saved_review_video_count": saved_video_count,
         "er_states_sha256": next(iter(er_hashes)),
         "minimum_grasp_lift_m": min(
             item["grasp_lift_m"] for item in episodes

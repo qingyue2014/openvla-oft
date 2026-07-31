@@ -57,7 +57,7 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     validate_native_bddl,
     window_stats,
 )
-from experiments.robot.libero.tasks.validate_l3b_moka_v5_design import (
+from experiments.robot.libero.tasks.validate_l3b_moka_v6_design import (
     validate_spec as validate_design_preregistration,
 )
 from experiments.robot.pi05_utils import PI05_IMAGE_SIZE, resize_with_pad
@@ -667,7 +667,7 @@ def main() -> None:
         "--design-preregistration",
         default=(
             "experiments/robot/libero/tasks/"
-            "l3b_moka_v5_design_prereg.json"
+            "l3b_moka_v6_design_prereg.json"
         ),
     )
     parser.add_argument("--seed", type=int, default=42)

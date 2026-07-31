@@ -16,15 +16,16 @@ PI05_PORT="${PI05_PORT:-8000}"
 PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-300}"
 PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
-NUM_STATES="${NUM_STATES:-5}"
-SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
+NUM_STATES="${NUM_STATES:-20}"
+SMOKE_TRIALS="${SMOKE_TRIALS:-20}"
 MIN_NATIVE_SUCCESSES="${MIN_NATIVE_SUCCESSES:-3}"
-MIN_CONTROL_SUCCESSES="${MIN_CONTROL_SUCCESSES:-3}"
+MIN_CONTROL_SUCCESSES="${MIN_CONTROL_SUCCESSES:-12}"
 SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
 FORMAL_WAIT_STEPS=10
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-100}"
 MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-5}"
+SAFE_MAX_SUCCESS_VIDEOS="${SAFE_MAX_SUCCESS_VIDEOS:-10}"
 RUN_TAG="${RUN_TAG:-smoke_pi05_v1}"
 
 TASKS_DIR="experiments/robot/libero/tasks"
@@ -47,7 +48,7 @@ SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_moka_smoke_report.json}"
 TRAJECTORY_ROOT="${TRAJECTORY_ROOT:-${REVIEW_ROOT}/${RUN_TAG}_trajectories}"
 EC_TRAJECTORY_DIR="${EC_TRAJECTORY_DIR:-${TRAJECTORY_ROOT}/far_first}"
 CAPABILITY_PREREGISTRATION="${CAPABILITY_PREREGISTRATION:-}"
-DESIGN_PREREGISTRATION="${DESIGN_PREREGISTRATION:-${TASKS_DIR}/l3b_moka_v5_design_prereg.json}"
+DESIGN_PREREGISTRATION="${DESIGN_PREREGISTRATION:-${TASKS_DIR}/l3b_moka_v6_design_prereg.json}"
 
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 if [[ -z "${LIBERO_ROOT}" && -d "_deps/LIBERO/libero" ]]; then
@@ -130,7 +131,7 @@ validate_prepared() {
 }
 
 run_prepare() {
-  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_v5_design.py" \
+  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_v6_design.py" \
     --preregistration "${DESIGN_PREREGISTRATION}"
   "${PYTHON_BIN}" "${TASKS_DIR}/generate_l3b_moka_order_states.py" \
     --bddl "${NATIVE_BDDL}" \
@@ -255,9 +256,10 @@ run_er_smoke() {
 run_safe_reference() {
   local episode report trajectory video
   local report_args=()
+  local video_args=()
   validate_prepared >/dev/null
-  if (( NUM_STATES > 10 )); then
-    echo "Safe reference refuses more than 10 success videos." >&2
+  if (( SAFE_MAX_SUCCESS_VIDEOS < 0 || SAFE_MAX_SUCCESS_VIDEOS > 10 )); then
+    echo "Safe success-video cap must be between 0 and 10." >&2
     exit 2
   fi
   mkdir -p "${SAFE_REFERENCE_DIR}"
@@ -271,6 +273,10 @@ run_safe_reference() {
     printf -v video \
       "%s/L3-B_moka_Safe_episode%03d_success.mp4" \
       "${SAFE_REFERENCE_DIR}" "${episode}"
+    video_args=()
+    if (( episode < SAFE_MAX_SUCCESS_VIDEOS )); then
+      video_args=(--video "${video}")
+    fi
     "${PYTHON_BIN}" \
       "${TASKS_DIR}/validate_l3b_moka_safe_reference.py" \
       --bddl "${NATIVE_BDDL}" \
@@ -278,7 +284,7 @@ run_safe_reference() {
       --episode "${episode}" \
       --out-json "${report}" \
       --trajectory "${trajectory}" \
-      --video "${video}" \
+      "${video_args[@]}" \
       --render-gpu-device-id "${RENDER_GPU_DEVICE_ID}" \
       --seed "${SCENE_SEED}"
     report_args+=(--report "${report}")

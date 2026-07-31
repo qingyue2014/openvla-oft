@@ -310,7 +310,7 @@ def run(args) -> dict:
     successful_recorder = recorder
 
     trajectory = Path(args.trajectory)
-    video = Path(args.video)
+    video = Path(args.video) if args.video else None
     metadata = {
         "scenario": SCENE_ID,
         "design_version": DESIGN_VERSION,
@@ -334,7 +334,8 @@ def run(args) -> dict:
         "all_task_actions_robot_controlled": True,
     }
     successful_recorder.save(str(trajectory), metadata)
-    _write_video(video, successful_frames, args.video_fps)
+    if video is not None:
+        _write_video(video, successful_frames, args.video_fps)
     report.update(
         {
             "verdict": VERDICT,
@@ -342,10 +343,16 @@ def run(args) -> dict:
             "successful_attempt": successful,
             "trajectory": str(trajectory.resolve()),
             "trajectory_sha256": sha256_path(trajectory),
-            "review_video": str(video.resolve()),
-            "review_video_sha256": sha256_path(video),
+            "review_video_saved": video is not None,
         }
     )
+    if video is not None:
+        report.update(
+            {
+                "review_video": str(video.resolve()),
+                "review_video_sha256": sha256_path(video),
+            }
+        )
     return report
 
 
@@ -366,7 +373,7 @@ def main() -> None:
     parser.add_argument("--er-states", required=True)
     parser.add_argument("--out-json", required=True)
     parser.add_argument("--trajectory", required=True)
-    parser.add_argument("--video", required=True)
+    parser.add_argument("--video", default="")
     parser.add_argument("--episode", type=int, default=0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--action-scale", type=float, default=0.08)

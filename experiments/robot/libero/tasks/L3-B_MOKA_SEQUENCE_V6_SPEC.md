@@ -1,4 +1,4 @@
-# L3-B moka sequence v5
+# L3-B moka sequence v6
 
 Status: **Eb/Er/Ec preparation, the Safe real-action controller, and smoke
 execution are implemented fail-closed. Formal evaluation remains blocked on
@@ -35,8 +35,9 @@ shared native goal region.
 | Ec | `far_first` | Only the same pot1 free-joint pose/velocity is changed; pot1 is stable in the far part of the same cook region | Place the same pot2 |
 | Safe | real-action reference from Er | Exact Er reset and evaluator wait | A scripted 7-D OSC rollout places pot2 and reaches the unchanged native goal |
 
-The two state-construction coordinates remain separated by 0.145 m on the
-native cook site's local diagonal. Er preplaces pot1 on the `(+x,+y)` side,
+The v6 pool expansion leaves the v5 state-construction geometry unchanged.
+The two coordinates remain separated by 0.145 m on the native cook site's
+local diagonal. Er preplaces pot1 on the `(+x,+y)` side,
 which seven Ec-only π0.5 raw successes identified as its default pot2 landing
 side; Ec preplaces pot1 on the opposite `(-x,-y)` side. The fixed native
 diagonal has cosine similarity 0.995 with the observed mean landing direction
@@ -55,20 +56,18 @@ The Er/Ec pairing validator requires both states to:
 6. keep both moka pots upright within 1.0 degree with correct native support
    and no initial pot-to-pot contact.
 
-## Capability-conditioned state pool
+## Fixed native-20 state pool
 
-The matched v5 run uses official state indices `3, 5, 7, 17, 18`. They are
-all and only the `success && terminal_stable` episodes from the previously
-frozen 20-state native screen. The deterministic selection is locked in
-`l3b_moka_v5_design_prereg.json`, including the source preregistration,
-capability-report, and failed-v4 Ec-report hashes. The slot axis uses Ec-only
-landing calibration and no Er outcome.
+The matched v6 run uses the first 20 official state indices `0..19` in native
+file order. It does not select episodes from v5 Ec outcomes or earlier native
+successes. The order, count, no-substitution rule, unchanged v5 geometry, and
+Ec acceptance threshold are locked in `l3b_moka_v6_design_prereg.json`.
 
-This makes the v5 claim explicitly conditional: it asks about subgoal ordering
-where π0.5 already demonstrated stable native task competence. It does not
-estimate unconditional native success. Every HDF5 episode retains its original
-official state index, and generation refuses a different count, order, or
-substitution.
+Ec must achieve at least 12 strict terminal-stable successes out of 20, which
+preserves the earlier 60% control threshold. If it passes, Er runs on all and
+only the same 20 episode indices; selecting only Ec successes is prohibited.
+Every HDF5 episode retains its original official state index, and generation
+refuses a different count, order, or substitution.
 
 The v2 matched design preplaced pot2 and left pot1. Its preregistered Ec run
 failed at 0/5 strict stable successes: trajectory/video review found three
@@ -79,8 +78,11 @@ changing thresholds, task, prompt, or inventory. V3 then showed 4/5 raw Ec
 completions but 0/5 strict stable completions because the two pots were placed
 too close. V4 widened the separation to 0.145 m but its gripper-relative axis
 still shared one coordinate side with default landings, yielding 3/5 raw and
-0/5 strict stable Ec completions. V5 retains the distance and object roles but
-uses the native cook-site diagonal aligned with the default landing direction.
+0/5 strict stable Ec completions. V5 retained the distance and object roles
+but used the native cook-site diagonal aligned with the default landing
+direction. It reached the native goal in 5/5 Ec episodes, but only 2/5 were
+strictly stable. V6 changes only the fixed pool size so the unchanged 60% Ec
+gate is estimated over the 20 official states originally requested.
 
 ## Capability and interpretation
 
@@ -120,9 +122,9 @@ the final object has no robot contact, the preplaced pot moves at most 0.01 m,
 the placed pot finishes within 0.04 m XY of the preregistered far coordinate,
 both pots retain stove support, and both remain within the 1.0-degree and
 0.003 m terminal-window limits throughout a 100-step settle window.
-`safe_reference` runs this gate for every state in the selected pool
-and writes a hash-bound batch manifest; the default five-state run therefore
-stores five Safe-success videos, below the per-category limit of ten.
+`safe_reference` runs this gate for every state in the selected pool and
+writes a hash-bound batch manifest. It records all 20 reports and trajectories
+but caps saved Safe-success videos at ten.
 
 ## Commands
 
@@ -146,7 +148,7 @@ control, smoke, and an explicit hash-bound human review all pass.
 
 The completed `l3b_moka_native20_v1` result (raw 11/20, stable 5/20) remains a
 valid report about whole-task native performance. It used the older
-different-pot near/far pairing and cannot authorize or reject this v5 matched
+different-pot near/far pairing and cannot authorize or reject this v6 matched
 single-placement contrast. The v1 source is frozen at commit `6883655`; the
 current v1 runner refuses to overwrite its artifacts. The failed v2 Ec control
 is frozen at commit `313e5de` and report SHA-256
@@ -155,3 +157,5 @@ The failed v3 Ec control is frozen at commit `9931e46` and report SHA-256
 `f5cc2a208b4c304bef68359334d166006751caad453afd17c3525fb1c18dd329`.
 The failed v4 Ec control is frozen at commit `d94c70d` and report SHA-256
 `588ffc7697cc8fb44530a2a15b0ad0ed9b8f507f6828aa1b13e927a6371f4d3c`.
+The failed v5 Ec control is frozen at commit `e7fa984` and report SHA-256
+`84273adbed8c648ff700e10a10691b38f2a7852da604c278f2d42e77d4e75d49`.
