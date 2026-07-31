@@ -2324,7 +2324,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     )
     assert '"structural_route_order"' in bounded_seek
     assert (
-        '"native_center_high_to_reachable_outside_high_plane_hold",'
+        '"native_center_high_to_registered_corridor_high_"'
         in bounded_seek
     )
     assert (
@@ -3923,6 +3923,170 @@ def test_500240_headroom_refines_direction_without_gate_or_budget_changes():
         'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
         in controller
     )
+    assert (
+        '"--plate_contact_seek_max_translation_action",\n'
+        "        type=float,\n"
+        "        default=0.10,"
+        in controller
+    )
+
+
+def test_500251_registered_corridor_is_existing_step_high_prebuffer():
+    outside_high = np.array(
+        [0.13680639548403947, -0.02850777957668001, 1.062506338529415]
+    )
+    outside_side = np.array(
+        [0.13680639548403947, -0.02850777957668001, 0.917769758476126]
+    )
+    unchanged_outside_high = outside_high.copy()
+    strict_clearance = np.nextafter(0.0, np.inf)
+    position_action_scale = 0.08
+    maximum_translation_action = 0.10
+    existing_world_step = (
+        position_action_scale * maximum_translation_action
+    )
+    corridor_high, _, corridor = _compiled_vertical_staging_corridor(
+        outside_high_target=outside_high,
+        outside_side_target=outside_side,
+        geometry={
+            "outward_direction_xy": [1.0, 0.0],
+            "outside_clearance_m": 0.005,
+        },
+        required_outside_clearance_m=strict_clearance,
+        position_action_scale=position_action_scale,
+        maximum_translation_action=maximum_translation_action,
+    )
+    lateral_reserve = np.linalg.norm(
+        corridor_high[:2] - outside_high[:2]
+    )
+    assert np.array_equal(outside_high, unchanged_outside_high)
+    assert corridor["maximum_controller_world_step_m"] == pytest.approx(
+        existing_world_step
+    )
+    assert lateral_reserve == corridor["corridor_entry_lateral_travel_m"]
+    assert lateral_reserve > existing_world_step
+    assert lateral_reserve == pytest.approx(existing_world_step)
+
+    guard = {
+        "accepted": True,
+        "one_step_vertical_reserve_m": existing_world_step,
+        "pairs": [],
+    }
+    native_outside_gate = _overhead_outside_high_entry_evidence(
+        current_eef=outside_high,
+        outside_high_target=outside_high,
+        high_lateral_target=corridor_high,
+        overhead_horizontal_z=outside_high[2],
+        overhead_guard=guard,
+        position_tolerance=0.005,
+    )
+    assert native_outside_gate["accepted"] is False
+    assert native_outside_gate[
+        "high_lateral_target_role"
+    ] == "registered_corridor_high_anticooupling_prebuffer"
+    assert native_outside_gate["outside_high_target"] == outside_high.tolist()
+    assert native_outside_gate["high_lateral_target"] == corridor_high.tolist()
+
+    prebuffer_gate = _overhead_outside_high_entry_evidence(
+        current_eef=corridor_high,
+        outside_high_target=outside_high,
+        high_lateral_target=corridor_high,
+        overhead_horizontal_z=corridor_high[2],
+        overhead_guard=guard,
+        position_tolerance=0.005,
+    )
+    assert prebuffer_gate["accepted"] is True
+    assert prebuffer_gate["outside_high_target"] == outside_high.tolist()
+    assert prebuffer_gate["high_lateral_target"] == corridor_high.tolist()
+
+
+def test_500251_high_prebuffer_retains_all_55_pair_base8_checks():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    pairs = [
+        {
+            "gripper_geom": f"gripper_{index // 11}",
+            "counterpart_geom": f"native_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": 0.13332117746677247,
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    registered_corridor_xy = np.array(
+        [0.14480639548403948, -0.02850777957668001]
+    )
+    current_eef = np.array(
+        [0.05554037906914336, -0.029154933875409465, 1.0654223455054406]
+    )
+    action, evidence = _compiled_adaptive_high_plane_action(
+        current_eef=current_eef,
+        lateral_target_xy=registered_corridor_xy,
+        overhead_horizontal_z=current_eef[2],
+        measured_vertical_step_progress_m=0.0,
+        overhead_guard={
+            "accepted": True,
+            "one_step_vertical_reserve_m": 0.008,
+            "pairs": pairs,
+        },
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec={
+            "source": "env.action_spec",
+            "action_dimension": 7,
+            "low": [-1.0] * 7,
+            "high": [1.0] * 7,
+            "runtime_resolved": True,
+        },
+        expected_pair_count=55,
+    )
+    assert action[0] > 0.0
+    assert action[2] == 0.0
+    assert evidence["lateral_target_xy"] == registered_corridor_xy.tolist()
+    assert evidence["compiled_pair_count"] == 55
+    assert len(evidence["pair_identity_keys"]) == 55
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+
+
+def test_500251_manifest_records_true_high_target_without_gate_changes():
+    controller = CONTROLLER_REFERENCE.read_text()
+    bounded_seek = controller.split(
+        "def _seek_stable_plate_contact(", 1
+    )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    release = controller.split(
+        "def _compiled_adaptive_workspace_release_action(", 1
+    )[1].split("\ndef _compiled_adaptive_lateral_rebuffer_action", 1)[0]
+    assert "high_lateral_prebuffer_target = corridor_high_target.copy()" in (
+        bounded_seek
+    )
+    assert (
+        "lateral_target_xy=high_lateral_prebuffer_target[:2]"
+        in bounded_seek
+    )
+    assert "high_lateral_target=high_lateral_prebuffer_target" in bounded_seek
+    assert '"reachable_outside_high_target"' in bounded_seek
+    assert '"high_plane_anticooupling_lateral_target"' in bounded_seek
+    assert '"high_plane_anticooupling_lateral_reserve_m"' in bounded_seek
+    assert (
+        '"workspace_release_diagonal"\n            ]\n            == 0'
+        in bounded_seek
+    )
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+    assert (
+        'required_clearance_key = "required_clearance_with_base_reserve_m"'
+        in release
+    )
+    assert "pre_action_buffer16_surplus_after_inertia_m" in release
+    assert "clearance > record[required_clearance_key]" in release
+    assert "clearance >= record[required_clearance_key]" not in release
     assert (
         '"--plate_contact_seek_max_translation_action",\n'
         "        type=float,\n"

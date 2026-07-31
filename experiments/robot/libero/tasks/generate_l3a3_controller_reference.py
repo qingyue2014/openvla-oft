@@ -1767,25 +1767,34 @@ def _overhead_outside_high_entry_evidence(
     *,
     current_eef,
     outside_high_target,
+    high_lateral_target=None,
     overhead_horizontal_z,
     overhead_guard,
     position_tolerance,
 ):
-    """Gate the reachable outside-high point before workspace release."""
+    """Gate the registered high-lateral target before workspace release."""
     current_eef = np.asarray(current_eef, dtype=float)
     outside_high_target = np.asarray(outside_high_target, dtype=float)
+    high_lateral_target = np.asarray(
+        outside_high_target
+        if high_lateral_target is None
+        else high_lateral_target,
+        dtype=float,
+    )
     if (
         current_eef.shape != (3,)
         or outside_high_target.shape != (3,)
+        or high_lateral_target.shape != (3,)
         or not np.all(np.isfinite(current_eef))
         or not np.all(np.isfinite(outside_high_target))
+        or not np.all(np.isfinite(high_lateral_target))
         or not np.isfinite(overhead_horizontal_z)
         or not np.isfinite(position_tolerance)
         or position_tolerance <= 0.0
     ):
         raise ValueError("outside-high entry evidence is invalid")
     xy_error = float(
-        np.linalg.norm(current_eef[:2] - outside_high_target[:2])
+        np.linalg.norm(current_eef[:2] - high_lateral_target[:2])
     )
     z_error = float(abs(current_eef[2] - overhead_horizontal_z))
     violations = []
@@ -1800,6 +1809,15 @@ def _overhead_outside_high_entry_evidence(
         "violations": violations,
         "current_eef": current_eef.tolist(),
         "outside_high_target": outside_high_target.tolist(),
+        "high_lateral_target": high_lateral_target.tolist(),
+        "high_lateral_target_is_native_outside_high": bool(
+            np.array_equal(high_lateral_target, outside_high_target)
+        ),
+        "high_lateral_target_role": (
+            "native_outside_high"
+            if np.array_equal(high_lateral_target, outside_high_target)
+            else "registered_corridor_high_anticooupling_prebuffer"
+        ),
         "overhead_horizontal_z_m": float(overhead_horizontal_z),
         "outside_high_xy_error_m": xy_error,
         "outside_high_plane_z_error_m": z_error,
@@ -6078,16 +6096,32 @@ def _seek_stable_plate_contact(
             args.plate_contact_seek_max_translation_action
         ),
     )
+    high_lateral_prebuffer_target = corridor_high_target.copy()
+    high_lateral_anticooupling_reserve = float(
+        np.linalg.norm(
+            high_lateral_prebuffer_target[:2]
+            - overhead_outside_high_target[:2]
+        )
+    )
+    if not (
+        np.all(np.isfinite(high_lateral_prebuffer_target))
+        and high_lateral_anticooupling_reserve
+        > maximum_controller_world_step
+    ):
+        raise RuntimeError(
+            "registered high-plane corridor target lacks the strict existing "
+            "one-step anti-coupling lateral reserve"
+        )
     overhead_horizontal_travel = float(
         np.linalg.norm(
-            np.asarray(outside_high_target, dtype=float)[:2]
+            high_lateral_prebuffer_target[:2]
             - initial_eef[:2]
         )
     )
     workspace_release_xy_travel = float(
         np.linalg.norm(
             corridor_high_target[:2]
-            - np.asarray(outside_high_target, dtype=float)[:2]
+            - high_lateral_prebuffer_target[:2]
         )
     )
     native_low = np.asarray(native_action_spec["low"], dtype=float)
@@ -6152,11 +6186,27 @@ def _seek_stable_plate_contact(
             "reachable_outside_high_target": (
                 np.asarray(outside_high_target, dtype=float).tolist()
             ),
+            "high_plane_anticooupling_lateral_target": (
+                high_lateral_prebuffer_target.tolist()
+            ),
+            "high_plane_anticooupling_lateral_reserve_m": (
+                high_lateral_anticooupling_reserve
+            ),
+            "high_plane_anticooupling_lateral_reserve_source": (
+                "registered corridor_high_target minus unchanged native "
+                "outside_high_target; corridor target is compiled from the "
+                "native no-contact boundary, native outside clearance, "
+                "strict required clearance, and the existing maximum "
+                "controller world step"
+            ),
             "corridor_adaptive_descent_target": (
                 corridor_high_target.tolist()
             ),
             "structural_route_order": [
-                "native_center_high_to_reachable_outside_high_plane_hold",
+                (
+                    "native_center_high_to_registered_corridor_high_"
+                    "anticooupling_prebuffer"
+                ),
                 "outward_downward_workspace_release_diagonal",
                 "corridor_xy_adaptive_pure_z_descent",
                 "vertical_tail_brake_and_zero_confirmation",
@@ -6165,11 +6215,14 @@ def _seek_stable_plate_contact(
             ],
             "horizontal_sweep_formula": (
                 "from the exact native center-high first-policy state, command "
-                "XY plus nonnegative Z with zero rotation toward the compiled "
-                "reachable outside-high point while holding the initial "
-                "center-high Z plane; only after that point passes, command "
-                "outward XY plus nonpositive Z toward the original strict "
-                "corridor XY and outside-side Z to release the high workspace; "
+                "XY plus nonnegative Z with zero rotation toward the already "
+                "registered corridor-high target while holding the initial "
+                "center-high Z plane; this moves the existing geometry-derived "
+                "one-world-step corridor reserve to the safe high plane without "
+                "redefining the native outside-high target; only after that "
+                "target passes, command residual outward XY plus nonpositive Z "
+                "toward the same strict corridor XY and outside-side Z to "
+                "release the high workspace; "
                 "if the latest negative-dz inertia exhausts diagonal downward "
                 "capacity, prohibit negative Z and issue a 55-pair-proved pure "
                 "+Z recovery before recomputing the diagonal; "
@@ -6402,6 +6455,40 @@ def _seek_stable_plate_contact(
                         f"samples={json.dumps(samples, sort_keys=True)}"
                     )
                 break
+        if (
+            structural_stage == "workspace_release_diagonal"
+            and structural_stage_action_counts[
+                "workspace_release_diagonal"
+            ]
+            == 0
+        ):
+            pre_action_corridor_entry = _overhead_corridor_entry_evidence(
+                current_eef=current_eef,
+                corridor_high_target=corridor_high_target,
+                outside_side_guard=latest_outside_side_guard,
+                overhead_guard=latest_overhead_guard,
+                overhead_lateral_buffer=latest_overhead_lateral_buffer,
+                position_tolerance=args.position_tolerance,
+                strict_corridor_entry_clearance_m=(
+                    vertical_staging_corridor[
+                        "strict_corridor_entry_clearance_m"
+                    ]
+                ),
+                require_lateral_buffer=False,
+                minimum_eef_z=None,
+            )
+            if pre_action_corridor_entry["accepted"]:
+                structural_stage = "overhead_corridor_descent"
+                vertical_tail_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        "event": (
+                            "high_plane_anticooupling_prebuffer_passed_"
+                            "corridor_gate_before_workspace_action"
+                        ),
+                        **pre_action_corridor_entry,
+                    }
+                )
         stage_before_action = structural_stage
         prepared_high_lateral_action = None
         prepared_high_lateral_envelope = None
@@ -6411,9 +6498,7 @@ def _seek_stable_plate_contact(
                 prepared_high_lateral_envelope,
             ) = _compiled_adaptive_high_plane_action(
                 current_eef=current_eef,
-                lateral_target_xy=np.asarray(
-                    outside_high_target, dtype=float
-                )[:2],
+                lateral_target_xy=high_lateral_prebuffer_target[:2],
                 overhead_horizontal_z=overhead_horizontal_z,
                 measured_vertical_step_progress_m=(
                     latest_vertical_step_progress_m
@@ -6853,7 +6938,7 @@ def _seek_stable_plate_contact(
             )
         if stage_before_action in overhead_lateral_stages:
             lateral_feedback_target = (
-                np.asarray(outside_high_target, dtype=float)[:2]
+                high_lateral_prebuffer_target[:2]
                 if stage_before_action == "overhead_high_corridor_lateral"
                 else corridor_high_target[:2]
             )
@@ -6882,6 +6967,7 @@ def _seek_stable_plate_contact(
                 outside_high_target=np.asarray(
                     outside_high_target, dtype=float
                 ),
+                high_lateral_target=high_lateral_prebuffer_target,
                 overhead_horizontal_z=overhead_horizontal_z,
                 overhead_guard=latest_overhead_guard,
                 position_tolerance=args.position_tolerance,
