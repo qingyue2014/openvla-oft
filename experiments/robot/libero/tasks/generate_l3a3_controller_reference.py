@@ -502,6 +502,123 @@ def _compiled_geom_world_aabb(model, data, geom_id):
     return world_center, world_half_size
 
 
+def _compiled_collision_pair_clearance(model, geom1, geom2):
+    """Derive strict no-contact separation from compiled MuJoCo margins."""
+    geom1 = int(geom1)
+    geom2 = int(geom2)
+    if geom1 == geom2:
+        raise ValueError("collision pair requires two different geoms")
+    if not (
+        0 <= geom1 < int(model.ngeom)
+        and 0 <= geom2 < int(model.ngeom)
+    ):
+        raise ValueError("collision pair geom id is out of bounds")
+
+    explicit_pair_id = None
+    for pair_id in range(int(getattr(model, "npair", 0))):
+        compiled_pair = {
+            int(model.pair_geom1[pair_id]),
+            int(model.pair_geom2[pair_id]),
+        }
+        if compiled_pair == {geom1, geom2}:
+            explicit_pair_id = pair_id
+            break
+    if explicit_pair_id is not None:
+        contact_detection_margin = float(
+            model.pair_margin[explicit_pair_id]
+        )
+        solver_gap = float(model.pair_gap[explicit_pair_id])
+        parameter_source = "explicit_compiled_pair"
+    else:
+        collision_enabled = bool(
+            (
+                int(model.geom_contype[geom1])
+                & int(model.geom_conaffinity[geom2])
+            )
+            or (
+                int(model.geom_contype[geom2])
+                & int(model.geom_conaffinity[geom1])
+            )
+        )
+        if not collision_enabled:
+            return None
+        contact_detection_margin = float(
+            max(model.geom_margin[geom1], model.geom_margin[geom2])
+        )
+        solver_gap = float(
+            max(model.geom_gap[geom1], model.geom_gap[geom2])
+        )
+        parameter_source = "mixed_compiled_geom_parameters"
+    base_contact_detection_margin = contact_detection_margin
+    option = getattr(model, "opt", None)
+    contact_override_enabled = bool(
+        option is not None
+        and (int(getattr(option, "enableflags", 0)) & (1 << 0))
+    )
+    if contact_override_enabled:
+        contact_detection_margin = float(option.o_margin)
+        parameter_source += "_with_global_contact_override"
+    if (
+        not np.isfinite(base_contact_detection_margin)
+        or base_contact_detection_margin < 0.0
+        or not np.isfinite(contact_detection_margin)
+        or contact_detection_margin < 0.0
+        or not np.isfinite(solver_gap)
+    ):
+        raise RuntimeError("compiled collision margin or gap is invalid")
+
+    strict_clearance = float(
+        np.nextafter(contact_detection_margin, np.inf)
+    )
+    return {
+        "geom1": model.geom_id2name(geom1) or f"geom_{geom1}",
+        "geom2": model.geom_id2name(geom2) or f"geom_{geom2}",
+        "geom1_id": geom1,
+        "geom2_id": geom2,
+        "parameter_source": parameter_source,
+        "explicit_pair_id": explicit_pair_id,
+        "contact_override_enabled": contact_override_enabled,
+        "base_contact_detection_margin_m": float(
+            base_contact_detection_margin
+        ),
+        "contact_detection_margin_m": contact_detection_margin,
+        "solver_gap_m": solver_gap,
+        "numerical_guard_m": float(
+            strict_clearance - contact_detection_margin
+        ),
+        "strict_no_contact_clearance_m": strict_clearance,
+    }
+
+
+def _compiled_pair_set_clearance(model, first_geom_ids, second_geom_ids):
+    """Return the strictest compiled no-contact margin across two geom sets."""
+    pair_evidence = []
+    for geom1 in first_geom_ids:
+        for geom2 in second_geom_ids:
+            evidence = _compiled_collision_pair_clearance(
+                model, geom1, geom2
+            )
+            if evidence is not None:
+                pair_evidence.append(evidence)
+    if not pair_evidence:
+        raise RuntimeError("no applicable compiled collision pairs available")
+    required_clearance = max(
+        evidence["strict_no_contact_clearance_m"]
+        for evidence in pair_evidence
+    )
+    return {
+        "formula": (
+            "max(pair_contact_detection_margin) + one representable "
+            "floating-point step via nextafter; an explicit compiled pair "
+            "uses pair_margin, otherwise the two geom_margin values are "
+            "combined with MuJoCo's max mixing rule; an enabled global "
+            "contact override supersedes either value"
+        ),
+        "required_clearance_m": float(required_clearance),
+        "pairs": pair_evidence,
+    }
+
+
 def _outside_side_guard_from_world_aabbs(
     *,
     plate_position,
@@ -510,6 +627,9 @@ def _outside_side_guard_from_world_aabbs(
     finger_bounds,
     required_outside_clearance_m,
     table_bounds=(),
+    required_finger_table_clearance_m=None,
+    outside_clearance_derivation=None,
+    finger_table_clearance_derivation=None,
 ):
     """Validate a live no-contact side guard from native collision AABBs."""
     plate_position = np.asarray(plate_position, dtype=float)
@@ -524,6 +644,17 @@ def _outside_side_guard_from_world_aabbs(
         or required_outside_clearance_m <= 0
     ):
         raise ValueError("required outside clearance must be positive")
+    if required_finger_table_clearance_m is None:
+        required_finger_table_clearance_m = (
+            required_outside_clearance_m
+        )
+    if (
+        not np.isfinite(required_finger_table_clearance_m)
+        or required_finger_table_clearance_m <= 0
+    ):
+        raise ValueError(
+            "required finger-table clearance must be positive"
+        )
     outward /= outward_norm
     rim_bounds = list(rim_bounds)
     finger_bounds = list(finger_bounds)
@@ -593,7 +724,7 @@ def _outside_side_guard_from_world_aabbs(
             <= float(center[2] + half_size[2])
             for _, _, center, half_size in bounds
         )
-        if clearance + 1e-9 < required_outside_clearance_m:
+        if clearance < required_outside_clearance_m:
             violations.append(
                 f"{side}_finger_outside_clearance_below_requirement"
             )
@@ -640,6 +771,13 @@ def _outside_side_guard_from_world_aabbs(
         "required_outside_clearance_m": float(
             required_outside_clearance_m
         ),
+        "outside_clearance_derivation": outside_clearance_derivation,
+        "required_finger_table_clearance_m": float(
+            required_finger_table_clearance_m
+        ),
+        "finger_table_clearance_derivation": (
+            finger_table_clearance_derivation
+        ),
         "plate_outward_support_m": plate_outward_support,
         "minimum_outside_clearance_m": float(
             minimum_outside_clearance
@@ -661,44 +799,69 @@ def _live_outside_side_guard(env, geometry):
     """Measure the outside-side guard from the current compiled MuJoCo state."""
     model, data = env.sim.model, env.sim.data
     rim_bounds = []
+    rim_geom_ids = []
     for name in geometry["plate_rim_geoms"]:
         geom_id = int(model.geom_name2id(name))
+        rim_geom_ids.append(geom_id)
         center, half_size = _compiled_geom_world_aabb(
             model, data, geom_id
         )
         rim_bounds.append((name, center, half_size))
     finger_bounds = []
+    finger_geom_ids = []
     for record in geometry["finger_collision_geoms"]:
         side = record.get("semantic_side")
         if side not in {"left", "right"}:
             continue
         name = record["geom"]
         geom_id = int(model.geom_name2id(name))
+        finger_geom_ids.append(geom_id)
         center, half_size = _compiled_geom_world_aabb(
             model, data, geom_id
         )
         finger_bounds.append((name, side, center, half_size))
     table_bounds = []
+    table_geom_ids = []
     for geom_id in _compiled_body_geom_ids(model, TABLE_BODY):
         if (
             int(model.geom_contype[geom_id]) == 0
             and int(model.geom_conaffinity[geom_id]) == 0
         ):
             continue
+        table_geom_ids.append(geom_id)
         name = model.geom_id2name(geom_id) or f"table_geom_{geom_id}"
         center, half_size = _compiled_geom_world_aabb(
             model, data, geom_id
         )
         table_bounds.append((name, center, half_size))
+    outside_clearance_derivation = _compiled_pair_set_clearance(
+        model, finger_geom_ids, rim_geom_ids
+    )
+    finger_table_clearance_derivation = (
+        _compiled_pair_set_clearance(
+            model, finger_geom_ids, table_geom_ids
+        )
+    )
     return _outside_side_guard_from_world_aabbs(
         plate_position=body_pose(env, PLATE_BODY)[0],
         outward_direction_xy=geometry["outward_direction_xy"],
         rim_bounds=rim_bounds,
         finger_bounds=finger_bounds,
-        required_outside_clearance_m=geometry[
-            "outside_clearance_m"
-        ],
+        required_outside_clearance_m=(
+            outside_clearance_derivation["required_clearance_m"]
+        ),
         table_bounds=table_bounds,
+        required_finger_table_clearance_m=(
+            finger_table_clearance_derivation[
+                "required_clearance_m"
+            ]
+        ),
+        outside_clearance_derivation=(
+            outside_clearance_derivation
+        ),
+        finger_table_clearance_derivation=(
+            finger_table_clearance_derivation
+        ),
     )
 
 
@@ -718,10 +881,16 @@ def _outside_side_geometry_feedback_action(
     required_clearance = float(
         guard["required_outside_clearance_m"]
     )
+    required_table_clearance = float(
+        guard.get(
+            "required_finger_table_clearance_m",
+            required_clearance,
+        )
+    )
     live_clearance = float(guard["minimum_outside_clearance_m"])
     if current_eef.shape != (3,) or outside_side_target.shape != (3,):
         raise ValueError("current and outside-side EEF targets must be 3-D")
-    if live_clearance + 1e-9 < required_clearance:
+    if live_clearance < required_clearance:
         clearance_deficit = required_clearance - live_clearance
         feedback_target = current_eef.copy()
         feedback_target[:2] += outward * clearance_deficit
@@ -739,7 +908,7 @@ def _outside_side_geometry_feedback_action(
                 "native finger-table AABB clearance unavailable"
             )
         available_table_descent = float(
-            table_clearance - required_clearance
+            table_clearance - required_table_clearance
         )
         if vertical_remaining <= 1e-9:
             raise RuntimeError(
@@ -777,6 +946,9 @@ def _outside_side_geometry_feedback_action(
         "feedback_target": feedback_target.tolist(),
         "outside_side_target": outside_side_target.tolist(),
         "required_outside_clearance_m": required_clearance,
+        "required_finger_table_clearance_m": (
+            required_table_clearance
+        ),
         "live_minimum_outside_clearance_m": live_clearance,
         "clearance_deficit_m": float(clearance_deficit),
         "available_table_descent_m": available_table_descent,

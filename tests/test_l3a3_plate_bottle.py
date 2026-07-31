@@ -13,6 +13,8 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _bounded_side_contact_seek_action,
     _contact_depth_sample_validity,
     _contact_progress_saturation_evidence,
+    _compiled_collision_pair_clearance,
+    _compiled_pair_set_clearance,
     _compiled_trailing_side_contact_candidates,
     _derive_horizon_safe_push_increment,
     _environment_horizon_diagnostics,
@@ -631,6 +633,107 @@ def test_499866_outside_side_guard_uses_live_aabbs_not_exact_eef_center():
     assert "right_finger_does_not_cover_rim_center" in rejected[
         "violations"
     ]
+
+
+def test_499921_clearance_is_derived_from_compiled_collision_margins():
+    names = ["finger_collision", "plate_rim", "table_collision"]
+    model = SimpleNamespace(
+        ngeom=3,
+        npair=0,
+        geom_contype=np.array([1, 1, 1]),
+        geom_conaffinity=np.array([1, 1, 1]),
+        geom_margin=np.array([0.0002, 0.0003, 0.0001]),
+        geom_gap=np.array([0.00004, 0.00005, 0.00006]),
+        geom_id2name=lambda geom_id: names[geom_id],
+    )
+    evidence = _compiled_collision_pair_clearance(model, 0, 1)
+    detection_margin = 0.0003
+    assert evidence["parameter_source"] == (
+        "mixed_compiled_geom_parameters"
+    )
+    assert evidence["contact_detection_margin_m"] == pytest.approx(
+        detection_margin
+    )
+    assert evidence["solver_gap_m"] == pytest.approx(0.00005)
+    assert evidence["strict_no_contact_clearance_m"] == (
+        np.nextafter(detection_margin, np.inf)
+    )
+    assert evidence["numerical_guard_m"] == (
+        np.nextafter(detection_margin, np.inf) - detection_margin
+    )
+
+    aggregate = _compiled_pair_set_clearance(model, [0], [1, 2])
+    assert aggregate["required_clearance_m"] == (
+        evidence["strict_no_contact_clearance_m"]
+    )
+    assert len(aggregate["pairs"]) == 2
+    assert "nextafter" in aggregate["formula"]
+
+    explicit_model = SimpleNamespace(
+        **{
+            **model.__dict__,
+            "npair": 1,
+            "pair_geom1": np.array([1]),
+            "pair_geom2": np.array([0]),
+            "pair_margin": np.array([0.0007]),
+            "pair_gap": np.array([0.00008]),
+        }
+    )
+    explicit = _compiled_collision_pair_clearance(
+        explicit_model, 0, 1
+    )
+    assert explicit["parameter_source"] == "explicit_compiled_pair"
+    assert explicit["explicit_pair_id"] == 0
+    assert explicit["strict_no_contact_clearance_m"] == (
+        np.nextafter(0.0007, np.inf)
+    )
+    explicit_model.opt = SimpleNamespace(
+        enableflags=1,
+        o_margin=0.0009,
+    )
+    overridden = _compiled_collision_pair_clearance(
+        explicit_model, 0, 1
+    )
+    assert overridden["contact_override_enabled"] is True
+    assert overridden["base_contact_detection_margin_m"] == (
+        pytest.approx(0.0007)
+    )
+    assert overridden["contact_detection_margin_m"] == pytest.approx(
+        0.0009
+    )
+    assert overridden["strict_no_contact_clearance_m"] == (
+        np.nextafter(0.0009, np.inf)
+    )
+
+
+def test_499921_two_mm_live_clearance_proceeds_with_zero_compiled_margin():
+    current = np.array([0.13379, -0.028254, 0.97916])
+    target = np.array([0.136806, -0.028508, 0.898654])
+    strict_positive_clearance = np.nextafter(0.0, np.inf)
+    guard = {
+        "outward_direction_xy": [1.0, 0.0],
+        "required_outside_clearance_m": strict_positive_clearance,
+        "minimum_outside_clearance_m": 0.00205,
+        "required_finger_table_clearance_m": (
+            strict_positive_clearance
+        ),
+        "finger_table_vertical_clearance_m": 0.012,
+    }
+    action, feedback = _outside_side_geometry_feedback_action(
+        current_eef=current,
+        outside_side_target=target,
+        guard=guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    assert feedback["mode"] == "bounded_vertical_descent"
+    assert feedback["clearance_deficit_m"] == 0.0
+    assert feedback["required_outside_clearance_m"] == (
+        strict_positive_clearance
+    )
+    assert np.allclose(action[:2], [0.0, 0.0])
+    assert action[2] == pytest.approx(-0.10)
 
 
 def test_499888_feedback_recovers_x_before_bounded_z_and_stops_above_table():
@@ -1374,7 +1477,26 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         producer.index("def _compiled_native_side_contact_plan(") :
         producer.index("\ndef _body_contact_counterparts(")
     ]
+    compiled_clearance = producer[
+        producer.index("def _compiled_collision_pair_clearance(") :
+        producer.index("\ndef _outside_side_guard_from_world_aabbs(")
+    ]
+    live_guard = producer[
+        producer.index("def _live_outside_side_guard(") :
+        producer.index(
+            "\ndef _outside_side_geometry_feedback_action("
+        )
+    ]
     assert "model.geom_aabb" in producer
+    assert "model.pair_margin" in compiled_clearance
+    assert "max(model.geom_margin[geom1], model.geom_margin[geom2])" in (
+        compiled_clearance
+    )
+    assert "np.nextafter(contact_detection_margin, np.inf)" in (
+        compiled_clearance
+    )
+    assert "_compiled_pair_set_clearance(" in live_guard
+    assert 'geometry["outside_clearance_m"]' not in live_guard
     assert "plate_rim_geoms" in compiled_plan
     assert "finger_collision_geoms" in compiled_plan
     assert "_side_contact_targets_from_compiled_bounds(" in compiled_plan
