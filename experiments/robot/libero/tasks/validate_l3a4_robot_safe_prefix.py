@@ -2249,8 +2249,11 @@ def _compiled_target_door_sweep_clearance(
     target_geoms,
     candidate_target_position,
     current_target_position,
+    *,
+    stop_at_or_below=None,
+    cached_rejection_witness=None,
 ):
-    """Check the placed target against the entire compiled closing door arc."""
+    """Check the door arc, with an exact threshold-equivalent fail-fast."""
     model = env.sim.model
     door_geoms = _collision_compatible_geom_ids(
         model,
@@ -2291,22 +2294,86 @@ def _compiled_target_door_sweep_clearance(
     minimum = float("inf")
     limiting = None
     evaluations = 0
-    for door_geom in door_geoms:
-        initial_center = np.asarray(
-            env.sim.data.geom_xpos[door_geom], dtype=float
+    compatible_geom_pairs = [
+        (target_geom, door_geom)
+        for door_geom in door_geoms
+        for target_geom in collision_target_geoms
+        if collision_masks_compatible(
+            model.geom_contype[target_geom],
+            model.geom_conaffinity[target_geom],
+            model.geom_contype[door_geom],
+            model.geom_conaffinity[door_geom],
         )
-        initial_rotation = np.asarray(
-            env.sim.data.geom_xmat[door_geom], dtype=float
-        ).reshape(3, 3)
-        radial = initial_center - hinge_position
-        axial = hinge_axis * float(np.dot(radial, hinge_axis))
-        swept_radius = float(
-            np.linalg.norm(radial - axial)
-            + model.geom_rbound[door_geom]
+    ]
+    total_pair_evaluations = len(fractions) * len(
+        compatible_geom_pairs
+    )
+    threshold_rejection_seen = False
+    cached_witness_attempted = False
+    cached_witness_rejected = False
+    cached_witness_clearance = None
+
+    def limiting_record(
+        target_geom,
+        door_geom,
+        sample_index,
+        fraction,
+        angle,
+        continuous_guard,
+        clearance,
+        method,
+        clearance_components,
+    ):
+        return {
+            "sample_index": int(sample_index),
+            "sample_fraction": float(fraction),
+            "door_angle_rad": float(angle),
+            "target_geom_id": int(target_geom),
+            "target_geom_name": _geom_name(model, target_geom),
+            "door_geom_id": int(door_geom),
+            "door_geom_name": _geom_name(model, door_geom),
+            "clearance_m": float(clearance),
+            "continuous_guard_m": continuous_guard,
+            "method": method,
+            "clearance_components": clearance_components,
+        }
+
+    if (
+        stop_at_or_below is not None
+        and isinstance(cached_rejection_witness, dict)
+    ):
+        cached_target_geom = int(
+            cached_rejection_witness.get("target_geom_id", -1)
         )
-        continuous_guard = 0.5 * swept_radius * angular_spacing
-        for sample_index, fraction in enumerate(fractions):
+        cached_door_geom = int(
+            cached_rejection_witness.get("door_geom_id", -1)
+        )
+        cached_sample_index = int(
+            cached_rejection_witness.get("sample_index", -1)
+        )
+        cached_pair = (cached_target_geom, cached_door_geom)
+        if (
+            cached_pair in compatible_geom_pairs
+            and 0 <= cached_sample_index < len(fractions)
+        ):
+            cached_witness_attempted = True
+            fraction = fractions[cached_sample_index]
             angle = close_angle * float(fraction)
+            initial_center = np.asarray(
+                env.sim.data.geom_xpos[cached_door_geom], dtype=float
+            )
+            initial_rotation = np.asarray(
+                env.sim.data.geom_xmat[cached_door_geom], dtype=float
+            ).reshape(3, 3)
+            radial = initial_center - hinge_position
+            axial = hinge_axis * float(np.dot(radial, hinge_axis))
+            swept_radius = float(
+                np.linalg.norm(radial - axial)
+                + model.geom_rbound[cached_door_geom]
+            )
+            continuous_guard = (
+                0.5 * swept_radius * angular_spacing
+            )
             center = hinge_position + _rotation_about_axis(
                 radial, hinge_axis, angle
             )
@@ -2320,47 +2387,112 @@ def _compiled_target_door_sweep_clearance(
                     for axis in range(3)
                 ]
             )
-            for target_geom in collision_target_geoms:
-                if not collision_masks_compatible(
-                    model.geom_contype[target_geom],
-                    model.geom_conaffinity[target_geom],
-                    model.geom_contype[door_geom],
-                    model.geom_conaffinity[door_geom],
-                ):
-                    continue
-                evaluations += 1
-                (
+            (
+                clearance,
+                method,
+                clearance_components,
+            ) = _compiled_geom_pair_clearance(
+                env,
+                cached_target_geom,
+                cached_door_geom,
+                target_translation,
+                continuous_guard,
+                fixture_center_override=center,
+                fixture_rotation_override=rotation,
+            )
+            cached_witness_clearance = float(clearance)
+            if clearance <= float(stop_at_or_below):
+                cached_witness_rejected = True
+                threshold_rejection_seen = True
+                evaluations = 1
+                minimum = float(clearance)
+                limiting = limiting_record(
+                    cached_target_geom,
+                    cached_door_geom,
+                    cached_sample_index,
+                    fraction,
+                    angle,
+                    continuous_guard,
                     clearance,
                     method,
                     clearance_components,
-                ) = _compiled_geom_pair_clearance(
-                    env,
-                    target_geom,
-                    door_geom,
-                    target_translation,
-                    continuous_guard,
-                    fixture_center_override=center,
-                    fixture_rotation_override=rotation,
                 )
-                if clearance < minimum:
-                    minimum = clearance
-                    limiting = {
-                        "sample_index": int(sample_index),
-                        "sample_fraction": float(fraction),
-                        "door_angle_rad": float(angle),
-                        "target_geom_id": int(target_geom),
-                        "target_geom_name": _geom_name(
-                            model, target_geom
-                        ),
-                        "door_geom_id": int(door_geom),
-                        "door_geom_name": _geom_name(
-                            model, door_geom
-                        ),
-                        "clearance_m": float(clearance),
-                        "continuous_guard_m": continuous_guard,
-                        "method": method,
-                        "clearance_components": clearance_components,
-                    }
+
+    if not threshold_rejection_seen:
+        for door_geom in door_geoms:
+            initial_center = np.asarray(
+                env.sim.data.geom_xpos[door_geom], dtype=float
+            )
+            initial_rotation = np.asarray(
+                env.sim.data.geom_xmat[door_geom], dtype=float
+            ).reshape(3, 3)
+            radial = initial_center - hinge_position
+            axial = hinge_axis * float(np.dot(radial, hinge_axis))
+            swept_radius = float(
+                np.linalg.norm(radial - axial)
+                + model.geom_rbound[door_geom]
+            )
+            continuous_guard = 0.5 * swept_radius * angular_spacing
+            for sample_index, fraction in enumerate(fractions):
+                angle = close_angle * float(fraction)
+                center = hinge_position + _rotation_about_axis(
+                    radial, hinge_axis, angle
+                )
+                rotation = np.column_stack(
+                    [
+                        _rotation_about_axis(
+                            initial_rotation[:, axis],
+                            hinge_axis,
+                            angle,
+                        )
+                        for axis in range(3)
+                    ]
+                )
+                for target_geom in collision_target_geoms:
+                    if not collision_masks_compatible(
+                        model.geom_contype[target_geom],
+                        model.geom_conaffinity[target_geom],
+                        model.geom_contype[door_geom],
+                        model.geom_conaffinity[door_geom],
+                    ):
+                        continue
+                    evaluations += 1
+                    (
+                        clearance,
+                        method,
+                        clearance_components,
+                    ) = _compiled_geom_pair_clearance(
+                        env,
+                        target_geom,
+                        door_geom,
+                        target_translation,
+                        continuous_guard,
+                        fixture_center_override=center,
+                        fixture_rotation_override=rotation,
+                    )
+                    if clearance < minimum:
+                        minimum = clearance
+                        limiting = limiting_record(
+                            target_geom,
+                            door_geom,
+                            sample_index,
+                            fraction,
+                            angle,
+                            continuous_guard,
+                            clearance,
+                            method,
+                            clearance_components,
+                        )
+                    if (
+                        stop_at_or_below is not None
+                        and minimum <= float(stop_at_or_below)
+                    ):
+                        threshold_rejection_seen = True
+                        break
+                if threshold_rejection_seen:
+                    break
+            if threshold_rejection_seen:
+                break
     if evaluations == 0 or limiting is None:
         raise RuntimeError(
             "compiled target/door sweep produced no compatible evaluations"
@@ -2371,6 +2503,10 @@ def _compiled_target_door_sweep_clearance(
     limiting["door_compiled_geometry"] = _compiled_geom_evidence(
         model, limiting["door_geom_id"]
     )
+    full_sweep_evaluated = evaluations == total_pair_evaluations
+    terminated_early = bool(
+        threshold_rejection_seen and not full_sweep_evaluated
+    )
     return minimum, {
         "door_start_qpos": start_qpos,
         "door_closed_qpos": closed_qpos,
@@ -2379,6 +2515,27 @@ def _compiled_target_door_sweep_clearance(
         "hinge_axis": hinge_axis.tolist(),
         "samples": len(fractions),
         "compatible_pair_evaluations": evaluations,
+        "total_pair_evaluations_without_fail_fast": (
+            total_pair_evaluations
+        ),
+        "threshold_fail_fast_m": (
+            None
+            if stop_at_or_below is None
+            else float(stop_at_or_below)
+        ),
+        "threshold_rejection_seen": threshold_rejection_seen,
+        "full_sweep_evaluated": full_sweep_evaluated,
+        "terminated_early": terminated_early,
+        "cached_rejection_witness_attempted": (
+            cached_witness_attempted
+        ),
+        "cached_rejection_witness_rejected": cached_witness_rejected,
+        "cached_rejection_witness_clearance_m": (
+            cached_witness_clearance
+        ),
+        "cached_rejection_witness_fell_back_to_full_sweep": bool(
+            cached_witness_attempted and not cached_witness_rejected
+        ),
         "collision_filter": (
             "MuJoCo bidirectional contype/conaffinity compatibility; "
             "native visual-only 0/0 geoms are excluded"
@@ -3206,6 +3363,10 @@ def _compact_insertion_sweep_evidence(sweep) -> dict:
         "terminated_early",
         "threshold_rejection_seen",
         "full_sweep_evaluated",
+        "cached_rejection_witness_attempted",
+        "cached_rejection_witness_rejected",
+        "cached_rejection_witness_clearance_m",
+        "cached_rejection_witness_fell_back_to_full_sweep",
     )
     return {
         **{
@@ -3386,10 +3547,21 @@ def _compiled_target_insertion_plan(
     execution_endpoint = None
     representative_full_sweeps = {}
     best_gate_values = {}
+    door_rejection_witness = None
     lateral_rank_by_value = {
         value: index
         for index, value in enumerate(lateral_search_values)
     }
+    total_candidate_count = len(front_search_values) * len(
+        lateral_search_values
+    )
+    print(
+        "[L3-A4 insertion candidate progress] "
+        f"started total={total_candidate_count} "
+        f"front={len(front_search_values)} "
+        f"lateral={len(lateral_search_values)}",
+        flush=True,
+    )
     for front_index, front_distance in enumerate(front_search_values):
         for lateral_offset in lateral_search_values:
             candidate = (
@@ -3482,14 +3654,32 @@ def _compiled_target_insertion_plan(
                         target_geoms,
                         candidate,
                         current_target,
+                        stop_at_or_below=0.0,
+                        cached_rejection_witness=(
+                            door_rejection_witness
+                        ),
                     )
                 )
                 if door_clearance <= 0.0:
+                    limiting_door_pair = door_sweep["limiting_pair"]
+                    door_rejection_witness = {
+                        "sample_index": limiting_door_pair[
+                            "sample_index"
+                        ],
+                        "target_geom_id": limiting_door_pair[
+                            "target_geom_id"
+                        ],
+                        "door_geom_id": limiting_door_pair[
+                            "door_geom_id"
+                        ],
+                    }
                     rejection_stage = "target_door_sweep"
                     skipped_gates = [
                         "target_static_sweep",
                         "gripper_sweep",
                     ]
+                else:
+                    door_rejection_witness = None
             if rejection_stage is None:
                 target_clearance, target_sweep = (
                     _translated_swept_clearance(
@@ -3499,6 +3689,7 @@ def _compiled_target_insertion_plan(
                         portal_object,
                         candidate,
                         current_target,
+                        stop_at_or_below=0.0,
                     )
                 )
                 if target_clearance <= 0.0:
@@ -3513,6 +3704,7 @@ def _compiled_target_insertion_plan(
                         portal_eef,
                         candidate_eef,
                         current_eef,
+                        stop_at_or_below=0.0,
                     )
                 )
                 if gripper_clearance <= 0.0:
@@ -3625,6 +3817,24 @@ def _compiled_target_insertion_plan(
             if passed:
                 record.update(full_sweeps)
             trace.append(record)
+            completed_candidate_count = len(trace)
+            if (
+                completed_candidate_count == 1
+                or completed_candidate_count % 25 == 0
+                or passed
+                or completed_candidate_count == total_candidate_count
+            ):
+                print(
+                    "[L3-A4 insertion candidate progress] "
+                    f"completed={completed_candidate_count}/"
+                    f"{total_candidate_count} "
+                    f"front_index={front_index} "
+                    "lateral_index="
+                    f"{lateral_rank_by_value[lateral_offset]} "
+                    f"rejection_stage={rejection_stage!r} "
+                    f"passed={passed}",
+                    flush=True,
+                )
             if passed:
                 selected = record
                 execution_endpoint = record
@@ -3679,7 +3889,8 @@ def _compiled_target_insertion_plan(
             "explicit rejection stage, and null plus skipped_gates for "
             "unevaluated gates; only the selected point retains every full "
             "sweep; total failure reports per-gate-best and last-evaluated "
-            "full-sweep representatives"
+            "representative sweep evidence, with threshold-terminated "
+            "partials explicitly tagged"
         ),
         "lateral_direction_derivation": {
             "native_heating_site_lateral_axis": site_lateral.tolist(),
@@ -4784,6 +4995,15 @@ def _select_dynamically_reachable_target_grasp(
                 f"expected={boundary_sha256} "
                 f"actual={candidate_start['state_sha256']}"
             )
+        print(
+            "[L3-A4 grasp trial progress] "
+            f"started={dynamic_index + 1}/{len(geometry_candidates)} "
+            "candidate_trace_index="
+            f"{candidate['candidate_trace_index']} "
+            "outward_offset_m="
+            f"{candidate['record']['outward_offset_m']}",
+            flush=True,
+        )
         trial = None
         try:
             trial = _run_target_dynamic_reachability_trial(
@@ -4843,6 +5063,16 @@ def _select_dynamically_reachable_target_grasp(
         trace_record["trial_restored_sha256"] = restore_proof[
             "restored_sha256"
         ]
+        print(
+            "[L3-A4 grasp trial progress] "
+            f"completed={dynamic_index + 1}/{len(geometry_candidates)} "
+            f"contact={trial['contact_gate_passed']} "
+            f"closure={trial['grasp_closure_passed']} "
+            f"insertion={trial['insertion_plan_passed']} "
+            f"selected={trial['success']} "
+            f"restore={restore_proof.get('passed', False)}",
+            flush=True,
+        )
         if not trial["success"]:
             continue
 

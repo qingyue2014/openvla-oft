@@ -1703,6 +1703,156 @@ def test_l3a4_compiled_collision_filter_uses_bidirectional_masks():
         collision_masks_compatible(-1, 0, 1, 1)
 
 
+def test_l3a4_door_sweep_fail_fast_is_threshold_equivalent():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_compiled_target_door_sweep_clearance"
+    )
+
+    class Model:
+        geom_contype = np.ones(20, dtype=int)
+        geom_conaffinity = np.ones(20, dtype=int)
+        geom_rbound = np.full(20, 0.01, dtype=float)
+        jnt_qposadr = np.asarray([0], dtype=int)
+        jnt_range = np.asarray([[-1.0, 0.0]], dtype=float)
+        jnt_axis = np.asarray([[0.0, 0.0, 1.0]], dtype=float)
+
+        @staticmethod
+        def joint_name2id(name):
+            return 0
+
+    class Data:
+        qpos = np.asarray([-1.0], dtype=float)
+        geom_xpos = np.zeros((20, 3), dtype=float)
+        geom_xmat = np.tile(np.eye(3).reshape(1, 9), (20, 1))
+
+    env = type(
+        "Env",
+        (),
+        {"sim": type("Sim", (), {"model": Model(), "data": Data()})()},
+    )()
+    calls = []
+
+    def pair_clearance(*args, **kwargs):
+        value = -0.1 if not calls else 0.2
+        calls.append(value)
+        return value, "exact box-box", {"net_clearance_m": value}
+
+    namespace = {
+        "np": np,
+        "SAFE_PARK_DOOR_SWEEP_SAMPLES": 4,
+        "_collision_compatible_geom_ids": (
+            lambda model, candidates, references: sorted(candidates)
+        ),
+        "descendant_geom_ids": lambda model, body: {10},
+        "body_pose": lambda sim, body: (np.zeros(3), np.eye(3)),
+        "_rotation_about_axis": (
+            lambda vector, axis, angle: np.asarray(vector, dtype=float)
+        ),
+        "collision_masks_compatible": lambda *args: True,
+        "_compiled_geom_pair_clearance": pair_clearance,
+        "_geom_name": lambda model, geom_id: f"g{geom_id}",
+        "_compiled_geom_evidence": (
+            lambda model, geom_id: {"geom_id": int(geom_id)}
+        ),
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    door_sweep = namespace["_compiled_target_door_sweep_clearance"]
+    minimum, evidence = door_sweep(
+        env,
+        {"door_body": "door", "door_joint": "joint"},
+        [1, 2],
+        np.zeros(3),
+        np.zeros(3),
+        stop_at_or_below=0.0,
+    )
+    assert minimum == pytest.approx(-0.1)
+    assert len(calls) == 1
+    assert evidence["threshold_rejection_seen"]
+    assert evidence["terminated_early"]
+    assert not evidence["full_sweep_evaluated"]
+    assert evidence["compatible_pair_evaluations"] == 1
+    assert evidence["total_pair_evaluations_without_fail_fast"] == 8
+
+    calls.clear()
+    minimum, evidence = door_sweep(
+        env,
+        {"door_body": "door", "door_joint": "joint"},
+        [1, 2],
+        np.zeros(3),
+        np.zeros(3),
+        stop_at_or_below=0.0,
+        cached_rejection_witness={
+            "sample_index": 0,
+            "target_geom_id": 1,
+            "door_geom_id": 10,
+        },
+    )
+    assert minimum == pytest.approx(-0.1)
+    assert len(calls) == 1
+    assert evidence["cached_rejection_witness_attempted"]
+    assert evidence["cached_rejection_witness_rejected"]
+    assert evidence["terminated_early"]
+
+    calls.clear()
+
+    def positive_pair(*args, **kwargs):
+        calls.append(0.2)
+        return 0.2, "exact box-box", {"net_clearance_m": 0.2}
+
+    namespace["_compiled_geom_pair_clearance"] = positive_pair
+    minimum, evidence = door_sweep(
+        env,
+        {"door_body": "door", "door_joint": "joint"},
+        [1, 2],
+        np.zeros(3),
+        np.zeros(3),
+        stop_at_or_below=0.0,
+    )
+    assert minimum == pytest.approx(0.2)
+    assert len(calls) == 8
+    assert not evidence["threshold_rejection_seen"]
+    assert not evidence["terminated_early"]
+    assert evidence["full_sweep_evaluated"]
+
+    calls.clear()
+    minimum, evidence = door_sweep(
+        env,
+        {"door_body": "door", "door_joint": "joint"},
+        [1, 2],
+        np.zeros(3),
+        np.zeros(3),
+        stop_at_or_below=0.0,
+        cached_rejection_witness={
+            "sample_index": 0,
+            "target_geom_id": 1,
+            "door_geom_id": 10,
+        },
+    )
+    assert minimum == pytest.approx(0.2)
+    assert len(calls) == 9
+    assert evidence["cached_rejection_witness_attempted"]
+    assert not evidence["cached_rejection_witness_rejected"]
+    assert evidence[
+        "cached_rejection_witness_fell_back_to_full_sweep"
+    ]
+    assert evidence["full_sweep_evaluated"]
+    assert evidence["compatible_pair_evaluations"] == 8
+
+
 def test_l3a4_planar_park_clearance_checks_table_and_door_sweep():
     metrics = planar_park_clearances(
         candidate_xy=[0.0, -0.30],
@@ -2099,6 +2249,12 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "_rotation_about_axis(" in target_door_sweep
     assert "_compiled_geom_pair_clearance(" in target_door_sweep
     assert "continuous_guard" in target_door_sweep
+    assert "stop_at_or_below=None" in target_door_sweep
+    assert "threshold_rejection_seen" in target_door_sweep
+    assert "terminated_early" in target_door_sweep
+    assert "full_sweep_evaluated" in target_door_sweep
+    assert "total_pair_evaluations_without_fail_fast" in target_door_sweep
+    assert "cached_rejection_witness" in target_door_sweep
     assert '"target_compiled_geometry"' in target_door_sweep
     assert '"door_compiled_geometry"' in target_door_sweep
     assert "visual-only 0/0 geoms are excluded" in target_door_sweep
@@ -2170,6 +2326,8 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"candidate_count_evaluated"' in insertion_plan
     assert "representative_full_sweeps" in insertion_plan
     assert "record.update(full_sweeps)" in insertion_plan
+    assert insertion_plan.count("stop_at_or_below=0.0") >= 3
+    assert "[L3-A4 insertion candidate progress]" in insertion_plan
     insertion_candidate_loop = insertion_plan.split(
         "for front_index, front_distance", 1
     )[1].split("if selected is None", 1)[0]
@@ -2353,6 +2511,10 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     )[1].split("max_tilt =", 1)[0]
     assert "forbid_target_contact=True" in release_retreat_runtime
     assert "_target_insertion_plan_replay_proof(" in target_placement
+    dynamic_selector = ast.get_source_segment(
+        source, functions["_select_dynamically_reachable_target_grasp"]
+    )
+    assert "[L3-A4 grasp trial progress]" in dynamic_selector
     assert "native_site_contains_point(" in target_placement
     assert "final_door_clearance > 0.0" in target_placement
     assert "site_size[2]) - 0.015" not in target_placement
