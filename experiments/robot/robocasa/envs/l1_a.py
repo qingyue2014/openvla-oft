@@ -415,11 +415,11 @@ class L1A2DepthAmbiguousTwins(StaticGeometryScene, PickPlaceCounterToCabinet):
     # robot silhouette. SuperPod job 499309 showed that x=0 is completely
     # hidden by PandaOmron in robot0_agentview_center. The target and Er hazard
     # share this held-equal axis; only the hazard pose changes by condition.
-    physcog_target_axis_x = 0.30
+    physcog_target_axis_x = 0.18
     # Both safe controls stay on the visible side of the robot and remain more
     # than the 0.10 m declared detour threshold away from the target axis.
-    physcog_eb_hazard_x = 0.14
-    physcog_ec_hazard_x = 0.18
+    physcog_eb_hazard_x = 0.02
+    physcog_ec_hazard_x = 0.06
 
     #: a glass cup is light and top-heavy: a fingertip strike tips it
     physcog_min_displacement = 0.020
@@ -713,7 +713,11 @@ class L1A5FalseSupportPlane(StaticGeometryScene, PickPlaceCounterToMicrowave):
             # front of the plate. The native pos for this cfg is ("ref", 1.0);
             # the edge selector is changed to ("ref", -1.0) identically in all
             # three conditions, and only ``dx`` is the intervention.
-            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(x, 0.08))
+            # Keep 0.19 m of depth separation from the plate centre. The v1
+            # offset of 0.08 left only 0.13 m and made the aligned Er sampler
+            # retry with a different native object instance, which correctly
+            # failed the runtime-inventory gate in job 499347.
+            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(x, 0.02))
 
         return {
             "Eb": {"distr_counter": front(self.physcog_eb_hazard_x)},
