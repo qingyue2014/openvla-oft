@@ -64,6 +64,11 @@ from experiments.robot.libero.tasks.validate_l3b_moka_v3_design import (
     PREREGISTRATION_ID as V3_DESIGN_PREREGISTRATION_ID,
     validate_spec as validate_v3_design_spec,
 )
+from experiments.robot.libero.tasks.validate_l3b_moka_v4_design import (
+    OFFICIAL_STATE_INDICES as V4_OFFICIAL_STATE_INDICES,
+    PREREGISTRATION_ID as V4_DESIGN_PREREGISTRATION_ID,
+    validate_spec as validate_v4_design_spec,
+)
 from experiments.robot.libero.tasks.validate_l3b_moka_native_preflight import (
     verify_runtime_asset_inventory,
 )
@@ -87,7 +92,7 @@ def test_native_task_lock_and_runner_contract():
     assert (SUITE, TASK_ID) == ("libero_10", 8)
     assert TASK_FILE == "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl"
     assert TASK_PROMPT == "put both moka pots on the stove"
-    assert DESIGN_VERSION == 3
+    assert DESIGN_VERSION == 4
     assert CONDITION_LABEL == {
         "native": "Eb",
         "near_first": "Er",
@@ -101,7 +106,7 @@ def test_native_task_lock_and_runner_contract():
     assert CONDITION_REMAINING_BODY["near_first"] == (
         CONDITION_REMAINING_BODY["far_first"]
     ) == "moka_pot_2_main"
-    assert SLOT_SEPARATION_M == 0.105
+    assert SLOT_SEPARATION_M == 0.145
     runner = (TASKS / "run_l3b_moka_order.sh").read_text()
     wrapper = (TASKS / "run_l3b_moka_order_pi05.sh").read_text()
     evaluator = (
@@ -146,6 +151,16 @@ def test_v3_design_locks_role_swap_before_rerun():
         "remaining_body": "moka_pot_2_main",
         "slot": "near",
     }
+    assert len(result["failed_ec_report_sha256"]) == 64
+
+
+def test_v4_design_locks_wider_native_slots_before_rerun():
+    path = TASKS / "l3b_moka_v4_design_prereg.json"
+    result = validate_v4_design_spec(path)
+    assert result["preregistration_id"] == V4_DESIGN_PREREGISTRATION_ID
+    assert result["official_state_indices"] == [3, 5, 7, 17, 18]
+    assert result["official_state_indices"] == V4_OFFICIAL_STATE_INDICES
+    assert result["slot_separation_m"] == 0.145
     assert len(result["failed_ec_report_sha256"]) == 64
 
 

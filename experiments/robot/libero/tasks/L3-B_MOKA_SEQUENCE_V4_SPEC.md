@@ -1,4 +1,4 @@
-# L3-B moka sequence v3
+# L3-B moka sequence v4
 
 Status: **Eb/Er/Ec preparation, the Safe real-action controller, and smoke
 execution are implemented fail-closed. Formal evaluation remains blocked on
@@ -36,9 +36,11 @@ shared native goal region.
 | Safe | real-action reference from Er | Exact Er reset and evaluator wait | A scripted 7-D OSC rollout places pot2 and reaches the unchanged native goal |
 
 Near and far are state-construction coordinates separated diagonally by
-0.105 m. Both centers remain inside the native stove cook site. The separation
-was selected because the earlier 0.08 m calibration produced native
-moka-to-moka contact for the successful handle orientation. These coordinates
+0.145 m. Both centers remain strictly inside the native stove cook site for
+all five locked layouts, with at least 0.0175 m remaining to every coordinate
+boundary. The earlier 0.105 m v3 separation permitted π0.5 to complete Ec
+4/5 times but all raw completions tipped the preplaced pot through close
+placement. The wider spacing was locked before v4 execution. These coordinates
 are not task predicates and are never exposed in the prompt.
 
 The Er/Ec pairing validator requires both states to:
@@ -54,14 +56,14 @@ The Er/Ec pairing validator requires both states to:
 
 ## Capability-conditioned state pool
 
-The matched v3 run uses official state indices `3, 5, 7, 17, 18`. They are
+The matched v4 run uses official state indices `3, 5, 7, 17, 18`. They are
 all and only the `success && terminal_stable` episodes from the previously
 frozen 20-state native screen. The deterministic selection is locked in
-`l3b_moka_v3_design_prereg.json`, including the source preregistration,
-capability-report, and failed-v2 Ec-report hashes. It was not selected from
+`l3b_moka_v4_design_prereg.json`, including the source preregistration,
+capability-report, and failed-v3 Ec-report hashes. It was not selected from
 any Er/Ec outcome.
 
-This makes the v3 claim explicitly conditional: it asks about subgoal ordering
+This makes the v4 claim explicitly conditional: it asks about subgoal ordering
 where π0.5 already demonstrated stable native task competence. It does not
 estimate unconditional native success. Every HDF5 episode retains its original
 official state index, and generation refuses a different count, order, or
@@ -72,7 +74,10 @@ failed at 0/5 strict stable successes: trajectory/video review found three
 pot1 grasp topples, one missed pot1 grasp, and one raw completion that tipped
 the preplaced pot2. Er was never run. Before any v3 rollout, v3 therefore
 locked a role swap—preplace pot1 and leave the identical native pot2—without
-changing slots, thresholds, task, prompt, or inventory.
+changing thresholds, task, prompt, or inventory. V3 then showed 4/5 raw Ec
+completions but 0/5 strict stable completions because the two pots were placed
+too close. V4 changes only the symmetric slot separation from 0.105 m to
+0.145 m and retains the v3 object roles.
 
 ## Capability and interpretation
 
@@ -129,8 +134,10 @@ control, smoke, and an explicit hash-bound human review all pass.
 
 The completed `l3b_moka_native20_v1` result (raw 11/20, stable 5/20) remains a
 valid report about whole-task native performance. It used the older
-different-pot near/far pairing and cannot authorize or reject this v3 matched
+different-pot near/far pairing and cannot authorize or reject this v4 matched
 single-placement contrast. The v1 source is frozen at commit `6883655`; the
 current v1 runner refuses to overwrite its artifacts. The failed v2 Ec control
 is frozen at commit `313e5de` and report SHA-256
 `5147bb5a88efcce34a4284676a2686024c9dee10a5f099eec526ea6a9e341a1f`.
+The failed v3 Ec control is frozen at commit `9931e46` and report SHA-256
+`f5cc2a208b4c304bef68359334d166006751caad453afd17c3525fb1c18dd329`.

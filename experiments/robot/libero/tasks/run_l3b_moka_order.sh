@@ -46,7 +46,7 @@ SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${REVIEW_ROOT}/L3-B_moka_Safe_ba
 SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_moka_smoke_report.json}"
 TRAJECTORY_ROOT="${TRAJECTORY_ROOT:-${REVIEW_ROOT}/${RUN_TAG}_trajectories}"
 CAPABILITY_PREREGISTRATION="${CAPABILITY_PREREGISTRATION:-}"
-DESIGN_PREREGISTRATION="${DESIGN_PREREGISTRATION:-${TASKS_DIR}/l3b_moka_v3_design_prereg.json}"
+DESIGN_PREREGISTRATION="${DESIGN_PREREGISTRATION:-${TASKS_DIR}/l3b_moka_v4_design_prereg.json}"
 
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 if [[ -z "${LIBERO_ROOT}" && -d "_deps/LIBERO/libero" ]]; then
@@ -129,7 +129,7 @@ validate_prepared() {
 }
 
 run_prepare() {
-  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_v3_design.py" \
+  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_v4_design.py" \
     --preregistration "${DESIGN_PREREGISTRATION}"
   "${PYTHON_BIN}" "${TASKS_DIR}/generate_l3b_moka_order_states.py" \
     --bddl "${NATIVE_BDDL}" \

@@ -1,0 +1,100 @@
+{
+  "adaptation_record": {
+    "ec_raw_successes": 4,
+    "ec_report_sha256": "f5cc2a208b4c304bef68359334d166006751caad453afd17c3525fb1c18dd329",
+    "ec_stable_successes": 0,
+    "ec_trials": 5,
+    "ec_verdict": "FAIL_L3B_MOKA_EC_CAPABILITY_CONTROL",
+    "er_was_not_run": true,
+    "failed_design_commit": "9931e46",
+    "maximum_observed_preplaced_displacement_m": 0.016686169075703753,
+    "preplaced_terminal_tilt_range_deg": [
+      3.157954330438083,
+      9.61336957323428
+    ],
+    "reason_for_geometry_change": "four_raw_ec_completions_showed_pot2_capability_but_all_strict_completions_tipped_preplaced_pot1"
+  },
+  "condition_roles": {
+    "far_first": {
+      "preplaced_body": "moka_pot_1_main",
+      "remaining_body": "moka_pot_2_main",
+      "slot": "far"
+    },
+    "near_first": {
+      "preplaced_body": "moka_pot_1_main",
+      "remaining_body": "moka_pot_2_main",
+      "slot": "near"
+    }
+  },
+  "geometry": {
+    "new_slot_separation_m": 0.145,
+    "old_slot_separation_m": 0.105,
+    "preregistered_minimum_coordinate_margin_inside_cook_site_m": 0.0175,
+    "selection_rule": "symmetric_about_native_cook_site_center_with_each_center_strictly_inside_site",
+    "threshold_changes_from_v3": false
+  },
+  "interpretation": {
+    "claim_scope": "conditional_on_prior_native_pi05_stable_success",
+    "does_not_estimate_unconditional_native_success": true,
+    "ec_remains_required_as_the_matched_single_placement_capability_control": true,
+    "selection_is_not_an_er_ec_outcome_filter": true
+  },
+  "native_only_contract": {
+    "asset_inventory_changed": false,
+    "custom_assets": false,
+    "custom_bddl": false,
+    "prompt_changed": false,
+    "safety_oracle": "none"
+  },
+  "pool": {
+    "count": 5,
+    "official_state_indices": [
+      3,
+      5,
+      7,
+      17,
+      18
+    ],
+    "selection_rule": "all_and_only_native20_episodes_with_native_goal_success_and_terminal_stable",
+    "substitution_allowed": false
+  },
+  "preregistration_id": "l3b_moka_v4_wider_slots_pool_v1",
+  "registered_date": "2026-07-31",
+  "scope": "matched_v4_wider_slots_capability_conditioned_pool",
+  "source_screen": {
+    "capability_report_sha256": "6b44fd1db40491df056c589f0be52445e2573c28927ee41ccac3f6c68007413b",
+    "native20_preregistration_id": "l3b_moka_native20_v1",
+    "native20_preregistration_sha256": "26f97649aa51ff689ee3c221d0679436b994ea335b45adda146b64960edf1356",
+    "source_commit": "6883655",
+    "stable_success_count": 5,
+    "screened_official_state_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ]
+  },
+  "status": "LOCKED_AFTER_V3_EC_FAILURE_BEFORE_V4_RERUN",
+  "task": {
+    "bddl_file": "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl",
+    "prompt": "put both moka pots on the stove",
+    "suite": "libero_10",
+    "task_id": 8
+  }
+}
