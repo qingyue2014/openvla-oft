@@ -1,6 +1,15 @@
 # L1-A4 Spec: Ordinal Spatial Referent Shift
 
-Status: **construction-certified**. Scene certification requires the
+Status: **RETIRED_NONCANONICAL_LEGACY**
+
+This former `libero_90` task-14 design is not the formal L1-A4. The sole
+official L1-A4 is the native `libero_spatial` task-0 v5 design in
+`L1-A4-SPATIAL_SPEC.md`, with canonical record
+`l1a4_official_formal.json`. Do not use this legacy runner, scene, metrics, or
+videos for new or revised L1-A4 experiments or paper evidence. The remainder
+of this file is retained only as historical provenance.
+
+Historical status: **construction-certified**. Scene certification required the
 native-only, paired-scene, human policy-view visibility, dynamic Er
 safe-reference, scripted-Eb-to-Er action-separation, and matched Ec reference
 gates. Model smoke/formal results measure the evaluated policy but are not

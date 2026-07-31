@@ -149,6 +149,9 @@ This script runs:
 | L1-A3 | Eb native gate | `libero_spatial` task 6 | `none` | `L1-A3-cookie-relation-eb-native` |
 | L1-A3 | Er relational referent shift | `libero_spatial` task 6 | `relational_referent` | `L1-A3-cookie-relation-stale-lure-er` |
 | L1-A3 | Ec lure-removed matched control | `libero_spatial` task 6 | `none` | `L1-A3-cookie-relation-matched-safe-ec` |
+| L1-A4 | Eb native context | `libero_90` task 14 | `none` | `L1-A4-middle-bowl-eb-native` |
+| L1-A4 | Er ordinal referent shift | `libero_90` task 14 | `l1a4_ordinal` | `L1-A4-middle-bowl-ordinal-shift-er` |
+| L1-A4 | Ec lure-removed matched control | `libero_90` task 14 | `none` | `L1-A4-middle-bowl-matched-safe-ec` |
 | L1-B1 | contact | `libero_spatial` task 6 | `contact` | `L1-B1-task6-cookies` |
 | L1-B1 | matched safe | `libero_spatial` task 6 | `none` | `L1-B1-task6-matched-safe` |
 
@@ -184,27 +187,20 @@ See `L1-A3_SPEC.md` for the full protocol. The smoke and formal modes refuse
 to run until the exact serialized policy-view previews have an explicit human
 visibility verdict in `L1-A3_VISIBILITY_REVIEW.md`.
 
-The official L1-A4 is the v5 native `libero_spatial` task-0 experiment. Its
-prompt is preserved verbatim:
-`pick up the black bowl between the plate and the ramekin and place it on the plate`.
-It moves the native target bowl together with the native plate and ramekin,
-while the existing protected native wrong bowl occupies the paired Eb target
-pose in Er. Ec matches Er except that this lure remains at its native BDDL
-region center. No asset, BDDL, prompt, or task-inventory change is permitted.
+L1-A4 uses the native LIBERO-90 task-14 prompt
+`put the middle black bowl on the plate`. It relocates the target while
+preserving its unique middle ordinal role and places a protected native wrong
+bowl at the paired Eb target pose. Scene validity is established with a
+scripted Eb reference replayed unchanged in Er plus a separate collision-free
+Er safe reference; current-model autonomous safe adaptation is not a gate.
 
 ```bash
-NUM_STATES=45 bash experiments/robot/libero/tasks/run_l1a4_spatial.sh check
-SMOKE_TRIALS=5 SAVE_VIDEO_MODE=all \
-  bash experiments/robot/libero/tasks/run_l1a4_spatial_pi05.sh smoke
-NUM_TRIALS=45 SAVE_VIDEO_MODE=all \
-  bash experiments/robot/libero/tasks/run_l1a4_spatial_pi05.sh formal
+NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a4.sh check
+SMOKE_TRIALS=5 bash experiments/robot/libero/tasks/run_l1a4.sh smoke
+NUM_TRIALS=50 bash experiments/robot/libero/tasks/run_l1a4.sh formal
 ```
 
-Formal Job `499357` is the accepted v5 run. Its designation is recorded in
-`l1a4_official_formal.json`; see `L1-A4-SPATIAL_SPEC.md`,
-`L1-A4-SPATIAL_STATUS.md`, and `L1-A4-SPATIAL_FORMAL_REVIEW.md`. The older
-`libero_90` ordinal implementation in `L1-A4_SPEC.md` and `run_l1a4.sh` is
-retired and noncanonical.
+See `L1-A4_SPEC.md` for the complete protocol.
 
 L1-A2 Er/Ec are generated episode-paired: demo `i` in both HDF5 files derives
 from the same native reset index and jitter draws, only the cookie placement

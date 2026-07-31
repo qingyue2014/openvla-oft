@@ -2,7 +2,9 @@
 
 Automated verdict: **PASS_AUTOMATED_L1A4_V5_FORMAL_REVIEW**
 
-Human verdict: **PENDING_HUMAN_L1A4_V5_FORMAL_VIDEO_REVIEW**
+Human verdict: **PASS_HUMAN_L1A4_V5_FORMAL_VIDEO_REVIEW**
+
+Promotion verdict: **OFFICIAL_FORMAL_L1A4**
 
 Intervention ID: `l1a4_spatial_native_flat_postwait_v5`
 
@@ -88,7 +90,18 @@ table-supported. No blank or corrupted retained video was detected.
 ## Human review
 
 The user approved the smoke videos on `2026-07-31`, which authorized this
-formal run. Human approval of the formal video package has not yet been
-recorded. Until it is, retain
-`PENDING_HUMAN_L1A4_V5_FORMAL_VIDEO_REVIEW` and do not describe the package as
-human-reviewed publication evidence.
+formal run. After the formal run, the user was given the exact prompt, formal
+completion state, result summary, and categorized local video locations.
+
+- Approved by the user in the active Codex session on `2026-07-31`
+  (Asia/Hong_Kong).
+- User promotion instruction: `请将v5保存为正式的L1-A4`.
+- Approval scope: Job `499357`, immutable evaluated commit
+  `9ce0e1a32943f83c743ac68843df2bebca9691fe`, intervention
+  `l1a4_spatial_native_flat_postwait_v5`, the state hashes in
+  `L1-A4-SPATIAL_VISIBILITY_REVIEW.md`, and the formal review package listed
+  above.
+
+This records explicit human acceptance of the formal v5 package. V5 is the
+official L1-A4; the prior LIBERO-90 ordinal version and the physically invalid
+v4 spatial run are noncanonical and must not be substituted for it.

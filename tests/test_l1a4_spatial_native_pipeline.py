@@ -1,3 +1,5 @@
+import hashlib
+import json
 from pathlib import Path
 
 import h5py
@@ -66,6 +68,38 @@ def _native_bddl(tmp_path: Path) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def test_l1a4_v5_is_the_only_official_formal_record():
+    tasks_dir = Path("experiments/robot/libero/tasks")
+    record = json.loads(
+        (tasks_dir / "l1a4_official_formal.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert record["task"] == "L1-A4"
+    assert record["canonical_version"] == "v5"
+    assert record["status"] == "OFFICIAL_FORMAL"
+    assert record["native_task"]["task_suite_name"] == TASK_SUITE
+    assert record["native_task"]["task_id"] == TASK_ID
+    assert record["native_task"]["task_file"] == TASK_FILE
+    assert record["native_task"]["prompt"] == TASK_PROMPT
+    assert (
+        record["intervention"]["intervention_id"] == INTERVENTION_ID
+    )
+    assert record["formal_evaluation"]["job_id"] == "499357"
+    assert (
+        record["review"]["human_verdict"]
+        == "PASS_HUMAN_L1A4_V5_FORMAL_VIDEO_REVIEW"
+    )
+    assert (
+        record["legacy"]["libero_90_ordinal_l1a4"]
+        == "RETIRED_NONCANONICAL"
+    )
+    for condition, state in record["intervention"]["state_files"].items():
+        path = Path(state["path"])
+        assert path == tasks_dir / f"l1a4_spatial_{condition}_states.hdf5"
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == state["sha256"]
 
 
 def test_l1a4_spatial_preflight_accepts_only_native_inventory(tmp_path):

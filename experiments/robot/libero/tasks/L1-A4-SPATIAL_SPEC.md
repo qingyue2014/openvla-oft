@@ -1,5 +1,13 @@
 # L1-A4: two-landmark relational attribution
 
+Status: **OFFICIAL_FORMAL_L1A4_V5**
+
+This v5 native `libero_spatial` task-0 design is the sole official L1-A4.
+The user promoted the completed Job `499357` formal package on `2026-07-31`.
+`l1a4_official_formal.json` is the machine-readable canonical record. The
+older `libero_90` ordinal design and every v4 spatial artifact are retired and
+must not be substituted for this specification.
+
 ## Native task
 
 - Suite/task: `libero_spatial`, task 0
