@@ -127,8 +127,23 @@ def _plate_contact_candidate_diagnostics(
     ]
 
 
-def _robot_contacts_body(env, body_name):
-    """Return whether any native robot/gripper geom contacts ``body_name``."""
+def _robot_gripper_body_names(env):
+    """Return compiled robot/gripper body names used by contact detection."""
+    model = env.sim.model
+    names = []
+    for body_id in range(int(model.nbody)):
+        name = model.body_id2name(body_id) or ""
+        if (
+            name.startswith(("robot0_", "gripper0_"))
+            or "robot0" in name
+            or "gripper" in name
+        ):
+            names.append(name)
+    return sorted(set(names))
+
+
+def _body_contact_counterparts(env, body_name):
+    """Describe every current MuJoCo contact involving ``body_name``."""
     model, data = env.sim.model, env.sim.data
     root_id = int(model.body_name2id(body_name))
     descendants = {root_id}
@@ -147,21 +162,43 @@ def _robot_contacts_body(env, body_name):
         for geom_id in range(int(model.ngeom))
         if int(model.geom_bodyid[geom_id]) in descendants
     }
+    robot_bodies = set(_robot_gripper_body_names(env))
+    contacts = []
     for index in range(int(data.ncon)):
         contact = data.contact[index]
         geom1, geom2 = int(contact.geom1), int(contact.geom2)
         if geom1 in target_geoms:
+            target_geom = geom1
             other_geom = geom2
         elif geom2 in target_geoms:
+            target_geom = geom2
             other_geom = geom1
         else:
             continue
+        target_body = model.body_id2name(
+            int(model.geom_bodyid[target_geom])
+        ) or ""
         other_body = model.body_id2name(
             int(model.geom_bodyid[other_geom])
         ) or ""
-        if other_body.startswith(("robot0_", "gripper0_")):
-            return True
-    return False
+        contacts.append(
+            {
+                "target_geom": model.geom_id2name(target_geom) or "",
+                "target_body": target_body,
+                "counterpart_geom": model.geom_id2name(other_geom) or "",
+                "counterpart_body": other_body,
+                "counterpart_is_robot_or_gripper": other_body in robot_bodies,
+            }
+        )
+    return contacts
+
+
+def _robot_contacts_body(env, body_name):
+    """Return whether any compiled robot/gripper body contacts ``body_name``."""
+    return any(
+        item["counterpart_is_robot_or_gripper"]
+        for item in _body_contact_counterparts(env, body_name)
+    )
 
 
 def _load_er_episode(path: Path, episode: int):
@@ -387,7 +424,9 @@ def generate(args):
         # Cartesian target error, terminates this motion.
         contact_target[2] += args.plate_contact_seek_eef_height
         line_approach_target = contact_target.copy()
-        line_approach_target[2] += args.plate_approach_clearance
+        line_approach_target[2] = (
+            plate_start[2] + args.plate_approach_eef_height
+        )
         center_approach_target = line_approach_target.copy()
         center_approach_target[:2] = plate_start[:2]
         candidate_geometry = _plate_contact_candidate_diagnostics(
@@ -410,6 +449,10 @@ def generate(args):
                 "center_approach_target": center_approach_target.tolist(),
                 "line_approach_target": line_approach_target.tolist(),
                 "contact_seek_target": contact_target.tolist(),
+                "robot_gripper_body_names": _robot_gripper_body_names(env),
+                "plate_contact_counterparts": _body_contact_counterparts(
+                    env, PLATE_BODY
+                ),
             }
 
         print(
@@ -585,9 +628,17 @@ def main():
     # contact is still mandatory before any push.
     parser.add_argument("--plate_contact_backoff", type=float, default=0.010)
     parser.add_argument(
-        "--plate_contact_seek_eef_height", type=float, default=0.080
+        # Job 499573 reached an EEF-to-plate body-origin gap of 0.0843 m
+        # without any plate contact.  Target the plate body origin to cover the
+        # complete measured gap; physical contact must terminate the motion
+        # before this deliberately penetrating Cartesian target is reached.
+        "--plate_contact_seek_eef_height", type=float, default=0.000
     )
-    parser.add_argument("--plate_approach_clearance", type=float, default=0.080)
+    # Keep the high approach independently fixed at the Superpod-validated
+    # plate_z + 0.160 m while deepening only the contact seek.
+    parser.add_argument(
+        "--plate_approach_eef_height", type=float, default=0.160
+    )
     parser.add_argument("--pusher_close_steps", type=int, default=15)
     parser.add_argument("--push_increment", type=float, default=0.005)
     parser.add_argument("--maximum_push_distance", type=float, default=0.310)

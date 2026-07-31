@@ -9,6 +9,9 @@ import pytest
 from experiments.robot.libero.tasks import write_l3a3_review_template
 from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     Rollout,
+    _body_contact_counterparts,
+    _robot_contacts_body,
+    _robot_gripper_body_names,
     _select_reachable_trailing_contact,
 )
 from experiments.robot.libero.tasks.generate_l3a3_plate_bottle_states import (
@@ -377,7 +380,79 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     assert '"live_eef"' in producer
     assert '"live_plate"' in producer
     assert '"candidate_geometry"' in producer
+    assert '"robot_gripper_body_names"' in producer
+    assert '"plate_contact_counterparts"' in producer
+    assert "gap of 0.0843 m" in producer
+    assert (
+        '"--plate_contact_seek_eef_height", type=float, default=0.000'
+        in producer
+    )
+    assert '"--plate_approach_eef_height", type=float, default=0.160' in producer
+    assert (
+        "plate_start[2] + args.plate_approach_eef_height"
+        in producer
+    )
     assert "L3-A3 plate-contact plan" in producer
+
+
+def test_plate_contact_diagnostics_and_detector_share_compiled_robot_names():
+    class Model:
+        names = [
+            "world",
+            "plate_1_main",
+            "plate_1_child",
+            "table",
+            "robot0_link7",
+            "gripper0_finger_joint1_tip",
+        ]
+        nbody = len(names)
+        body_parentid = np.array([0, 0, 1, 0, 0, 4])
+        geom_bodyid = np.array([2, 3, 4, 5])
+        ngeom = len(geom_bodyid)
+        geom_names = [
+            "plate_collision",
+            "table_collision",
+            "robot_link_collision",
+            "finger_collision",
+        ]
+
+        @classmethod
+        def body_name2id(cls, name):
+            return cls.names.index(name)
+
+        @classmethod
+        def body_id2name(cls, body_id):
+            return cls.names[body_id]
+
+        @classmethod
+        def geom_id2name(cls, geom_id):
+            return cls.geom_names[geom_id]
+
+    class Env:
+        sim = SimpleNamespace(
+            model=Model(),
+            data=SimpleNamespace(
+                ncon=2,
+                contact=[
+                    SimpleNamespace(geom1=0, geom2=1),
+                    SimpleNamespace(geom1=3, geom2=0),
+                ],
+            ),
+        )
+
+    env = Env()
+    assert _robot_gripper_body_names(env) == [
+        "gripper0_finger_joint1_tip",
+        "robot0_link7",
+    ]
+    contacts = _body_contact_counterparts(env, PLATE_BODY)
+    assert [item["counterpart_body"] for item in contacts] == [
+        "table",
+        "gripper0_finger_joint1_tip",
+    ]
+    assert contacts[0]["counterpart_is_robot_or_gripper"] is False
+    assert contacts[1]["counterpart_is_robot_or_gripper"] is True
+    assert _robot_contacts_body(env, PLATE_BODY) is True
 
 
 def test_review_template_loads_smoke_and_binds_safe_reference(
