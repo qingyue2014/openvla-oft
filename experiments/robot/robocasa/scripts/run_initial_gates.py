@@ -278,6 +278,9 @@ def main():
                     ),
                 )
                 paired_probes[condition] = {
+                    "eef_position_after_initialization": np.asarray(
+                        obs["robot0_eef_pos"]
+                    ).tolist(),
                     "initial_max_penetration_m": initial_max_penetration(env),
                     "initial_contacts": initial_contact_report(env),
                     "G0": run_null_action_probe(
@@ -352,6 +355,15 @@ def main():
         manifest["gates"]["visibility"]["policy_initialization"] = (
             initialization_label
         )
+        manifest["gates"]["visibility"][
+            "eef_position_after_initialization"
+        ] = selected["eef_position_after_initialization"]
+        manifest["gates"]["visibility"][
+            "paired_eef_positions_after_initialization"
+        ] = {
+            condition: probe["eef_position_after_initialization"]
+            for condition, probe in paired_probes.items()
+        }
         manifest["gates"]["visibility"]["policy_cameras"] = [
             agent_camera,
             WRIST_CAMERA,
