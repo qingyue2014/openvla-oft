@@ -288,8 +288,20 @@ def generate(args):
             if env.check_success():
                 break
         if not env.check_success():
+            plate_final = body_pose(env, PLATE_BODY)[0]
+            eef_final = np.asarray(
+                rollout.obs["robot0_eef_pos"], dtype=float
+            )
             raise RuntimeError(
-                "OSC plate push did not satisfy the native stove-front predicate"
+                "OSC plate push did not satisfy the native stove-front "
+                f"predicate: plate_start={plate_start.tolist()} "
+                f"plate_final={plate_final.tolist()} "
+                f"plate_displacement_m="
+                f"{float(np.linalg.norm(plate_final - plate_start)):.5f} "
+                f"goal={goal.tolist()} "
+                f"goal_xy_error_m="
+                f"{float(np.linalg.norm(plate_final[:2] - goal[:2])):.5f} "
+                f"eef_final={eef_final.tolist()}"
             )
         rollout.hold(-1.0, args.final_settle_steps, "settle")
 

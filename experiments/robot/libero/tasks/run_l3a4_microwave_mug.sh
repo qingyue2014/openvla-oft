@@ -24,6 +24,7 @@ SAFE_REFERENCE_STATES="${SAFE_REFERENCE_STATES:-0}"
 
 LIBERO_ROOT="${LIBERO_ROOT:-_deps/LIBERO}"
 NATIVE_BDDL="${LIBERO_ROOT}/libero/libero/bddl_files/libero_10/KITCHEN_SCENE6_put_the_yellow_and_white_mug_in_the_microwave_and_close_it.bddl"
+NATIVE_INIT_STATES="${LIBERO_ROOT}/libero/libero/init_files/libero_10/KITCHEN_SCENE6_put_the_yellow_and_white_mug_in_the_microwave_and_close_it.pruned_init"
 TASK_PROMPT="put the yellow and white mug in the microwave and close it"
 TASK_DIR="experiments/robot/libero/tasks"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
@@ -76,12 +77,13 @@ manifest_for() {
 }
 
 prepare() {
-  [[ -f "${NATIVE_BDDL}" ]] || {
-    echo "Missing native LIBERO BDDL: ${NATIVE_BDDL}" >&2
+  [[ -f "${NATIVE_BDDL}" && -f "${NATIVE_INIT_STATES}" ]] || {
+    echo "Missing native LIBERO BDDL/init states under ${LIBERO_ROOT}" >&2
     return 2
   }
   local generator_args=(
     --bddl "${NATIVE_BDDL}"
+    --native_init_states "${NATIVE_INIT_STATES}"
     --eb_output "${EB_STATES}"
     --er_output "${ER_STATES}"
     --ec_output "${EC_STATES}"

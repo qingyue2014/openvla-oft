@@ -1154,6 +1154,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "review/L3-A3_task/L3-A3_controller_safe_reference.npz",
             "review/L3-A3_task/L3-A3_controller_safe_reference.mp4",
             "review/L3-A3_task/L3-A3_safe_reference.json",
+            "review/L3-A3_task",
         ),
     ),
     ("l3a3", "smoke"): PhaseSpec(

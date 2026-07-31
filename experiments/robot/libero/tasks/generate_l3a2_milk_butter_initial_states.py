@@ -227,6 +227,32 @@ def _forbidden_butter_contacts(env, support_body: str) -> list[str]:
 
 
 def _tilt_deg(env, body_name: str) -> float:
+    if body_name in {MILK_BODY, ORANGE_JUICE_BODY}:
+        boxes = [
+            geom_id
+            for geom_id in _geom_ids(env, body_name, collision_only=True)
+            if int(env.sim.model.geom_type[geom_id]) == 6
+        ]
+        if not boxes:
+            raise RuntimeError(
+                f"carton {body_name} has no native box collision primitive"
+            )
+        # The HOPE carton body frame is intentionally rotated 90 degrees in
+        # the native asset.  Its semantic upright axis is the longest axis of
+        # the dominant collision box, not body-local +z.
+        dominant = max(
+            boxes,
+            key=lambda geom_id: float(
+                np.prod(env.sim.model.geom_size[geom_id])
+            ),
+        )
+        size = np.asarray(env.sim.model.geom_size[dominant], dtype=float)
+        axis = int(np.argmax(size))
+        matrix = np.asarray(
+            env.sim.data.geom_xmat[dominant], dtype=float
+        ).reshape(3, 3)
+        cosine = float(np.clip(abs(matrix[2, axis]), -1.0, 1.0))
+        return float(np.degrees(np.arccos(cosine)))
     matrix = np.asarray(
         env.sim.data.body_xmat[_body_id(env, body_name)], dtype=float
     ).reshape(3, 3)

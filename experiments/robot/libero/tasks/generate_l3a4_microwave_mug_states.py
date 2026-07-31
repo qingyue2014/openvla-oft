@@ -13,6 +13,7 @@ door->mug contact / consequence in Ec.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -611,12 +612,14 @@ def _record(
     wait,
     response,
     safe_prefix,
+    native_init_state_index,
 ):
     return {
         "condition": condition,
         "state": np.asarray(state),
         "base_state": np.asarray(base_state),
         "reset_attempt": attempt,
+        "native_init_state_index": native_init_state_index,
         "porcelain_qpos_flat_start": qflat,
         "porcelain_qvel_flat_start": vflat,
         "fixture_root_body": fixture_root,
@@ -632,7 +635,13 @@ def _record(
     }
 
 
-def _write_hdf5(path: Path, records: list[dict], bddl: str, seed: int) -> None:
+def _write_hdf5(
+    path: Path,
+    records: list[dict],
+    bddl: str,
+    native_init_states: str,
+    seed: int,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with h5py.File(path, "w") as handle:
         group = handle.create_group(TASK_KEY)
@@ -641,6 +650,11 @@ def _write_hdf5(path: Path, records: list[dict], bddl: str, seed: int) -> None:
         group.attrs["l3a4_condition"] = condition
         group.attrs["seed"] = seed
         group.attrs["bddl"] = str(Path(bddl).resolve())
+        native_init_path = Path(native_init_states).resolve()
+        group.attrs["native_init_states"] = str(native_init_path)
+        group.attrs["native_init_states_sha256"] = hashlib.sha256(
+            native_init_path.read_bytes()
+        ).hexdigest()
         group.attrs["prompt"] = TASK_PROMPT
         group.attrs["pairing_method"] = "native_base_porcelain_pose_only"
         for index, record in enumerate(records):
@@ -650,6 +664,7 @@ def _write_hdf5(path: Path, records: list[dict], bddl: str, seed: int) -> None:
             episode.attrs["success"] = True
             for key in (
                 "reset_attempt",
+                "native_init_state_index",
                 "porcelain_qpos_flat_start",
                 "porcelain_qvel_flat_start",
                 "fixture_root_body",
@@ -744,6 +759,14 @@ def _write_hdf5(path: Path, records: list[dict], bddl: str, seed: int) -> None:
 
 
 def generate(args) -> dict[str, object]:
+    import torch
+
+    official_states = torch.load(args.native_init_states, weights_only=False)
+    if len(official_states) < args.num_states:
+        raise ValueError(
+            f"native init-state pool has {len(official_states)} states, "
+            f"requested {args.num_states}"
+        )
     env = OffScreenRenderEnv(
         bddl_file_name=args.bddl,
         camera_heights=args.resolution,
@@ -772,8 +795,17 @@ def generate(args) -> dict[str, object]:
     while len(records["er"]) < args.num_states and attempts < max_attempts:
         attempts += 1
         env.reset()
-        base_state = env.sim.get_state().flatten()
         root_position, root_quaternion = _fixture_model_pose(env.sim, fixture_root)
+        native_init_state_index = (attempts - 1) % len(official_states)
+        env.set_init_state(
+            np.asarray(official_states[native_init_state_index], dtype=float)
+        )
+        # Construct a pre-settled native base, then require that exact state
+        # to pass the evaluator's full wait again below.  Generator settling
+        # is never treated as evaluator evidence.
+        for _ in range(RUNTIME_WAIT_STEPS):
+            env.step(DUMMY_ACTION.tolist())
+        base_state = env.sim.get_state().flatten()
         eb_state = base_state.copy()
 
         _restore(env, eb_state, fixture_root, root_position, root_quaternion)
@@ -960,6 +992,7 @@ def generate(args) -> dict[str, object]:
                     exact_wait,
                     response,
                     safe_prefix if condition == "er" else None,
+                    native_init_state_index,
                 )
             )
         print(
@@ -979,7 +1012,13 @@ def generate(args) -> dict[str, object]:
         "ec": Path(args.ec_output),
     }
     for condition, path in output_paths.items():
-        _write_hdf5(path, records[condition], args.bddl, args.seed)
+        _write_hdf5(
+            path,
+            records[condition],
+            args.bddl,
+            args.native_init_states,
+            args.seed,
+        )
 
     # Supplemental scripted mechanism videos. These are deliberately not
     # labeled as policy smoke rollouts.
@@ -1025,6 +1064,10 @@ def generate(args) -> dict[str, object]:
         "scenario": SCENARIO,
         "prompt": TASK_PROMPT,
         "bddl": str(Path(args.bddl).resolve()),
+        "native_init_states": str(Path(args.native_init_states).resolve()),
+        "native_init_states_sha256": hashlib.sha256(
+            Path(args.native_init_states).read_bytes()
+        ).hexdigest(),
         "compiled_names": {
             **names,
             "table_support_body": table_support_body,
@@ -1046,6 +1089,7 @@ def generate(args) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bddl", required=True)
+    parser.add_argument("--native_init_states", required=True)
     parser.add_argument("--eb_output", required=True)
     parser.add_argument("--er_output", required=True)
     parser.add_argument("--ec_output", required=True)
