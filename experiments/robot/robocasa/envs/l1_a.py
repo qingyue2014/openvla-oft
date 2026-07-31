@@ -689,12 +689,15 @@ class L1A5FalseSupportPlane(StaticGeometryScene, PickPlaceCounterToMicrowave):
         # placement at that plate. Overriding it therefore pins the *plate*, and
         # the steak follows on top of it. Depth 0.03 + 0.20 = 0.23 m behind the
         # region front edge (native is 0.15; deepened identically in all three
-        # conditions so the box has room to stand in front).
+        # conditions so the box has room to stand in front). The reconstructed
+        # same-counter scene needs 0.38 m of depth: smaller v1/v2 separations
+        # made aligned Er placement retry the whole native environment and
+        # therefore violate the runtime asset-inventory gate.
         return {
             "obj": _box(
                 size=(0.06, 0.06),
                 pos=("ref", -1.0),
-                offset=(self.physcog_target_axis_x, 0.20),
+                offset=(self.physcog_target_axis_x, 0.35),
             ),
             # In layout 1 the native task resolves self.counter and
             # self.distr_counter to different fixtures. Pin the already-present
@@ -713,10 +716,10 @@ class L1A5FalseSupportPlane(StaticGeometryScene, PickPlaceCounterToMicrowave):
             # front of the plate. The native pos for this cfg is ("ref", 1.0);
             # the edge selector is changed to ("ref", -1.0) identically in all
             # three conditions, and only ``dx`` is the intervention.
-            # Keep 0.19 m of depth separation from the plate centre. The v1
-            # offset of 0.08 left only 0.13 m and made the aligned Er sampler
-            # retry with a different native object instance, which correctly
-            # failed the runtime-inventory gate in job 499347.
+            # Keep 0.34 m of depth separation from the plate centre. The v1
+            # 0.13 m and v2 0.19 m separations made the aligned Er sampler retry
+            # with different native steak, plate and boxed-food instances,
+            # which correctly failed the runtime-inventory gate.
             return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(x, 0.02))
 
         return {
