@@ -204,6 +204,19 @@ PY
       echo "L3-A2 OSC safe-reference is stale for current Er bytes" >&2
       return 2
     }
+  local controller_hash
+  controller_hash="$("${PYTHON_BIN}" - \
+    experiments/robot/libero/tasks/validate_l3a2_milk_butter_osc_reference.py <<'PY'
+from experiments.robot.libero.tasks.l3a2_milk_butter_contract import sha256_file
+import sys
+print(sha256_file(sys.argv[1]))
+PY
+)"
+  grep -Fq -- "- Controller source SHA-256: ${controller_hash}" \
+    "${OSC_REFERENCE_REPORT}" || {
+      echo "L3-A2 OSC safe-reference is stale for current controller bytes" >&2
+      return 2
+    }
   grep -Fq -- \
     "- Evaluation policy-step budget: ${EVALUATION_POLICY_STEP_BUDGET}" \
     "${OSC_REFERENCE_REPORT}" || {
@@ -228,6 +241,11 @@ PY
   head -n 1 "${OSC_REFERENCE_CSV}" \
     | grep -Fq "static_safe_plan_max_steps" || {
       echo "L3-A2 OSC safe-reference CSV lacks the static plan proof" >&2
+      return 2
+    }
+  head -n 1 "${OSC_REFERENCE_CSV}" \
+    | grep -Fq "controller_source_sha256" || {
+      echo "L3-A2 OSC safe-reference CSV lacks controller binding" >&2
       return 2
     }
   head -n 1 "${OSC_REFERENCE_CSV}" \

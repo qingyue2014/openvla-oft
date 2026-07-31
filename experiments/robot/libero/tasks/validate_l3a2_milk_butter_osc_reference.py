@@ -40,6 +40,7 @@ from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
     TASK_PROMPT,
     TASK_SUITE,
     artifact_binding,
+    sha256_file,
 )
 
 BUTTER = "butter_1_main"
@@ -51,6 +52,7 @@ MIN_STABILITY_CONFIRM_STEPS = 10
 FLOOR_PARK_SAMPLE_SPACING_M = 0.005
 FLOOR_PARK_XY_CLEARANCE_M = 0.010
 MIN_SAFE_PREFIX_DISPLACEMENT_M = 0.025
+CONTROLLER_SOURCE_SHA256 = sha256_file(Path(__file__).resolve())
 
 # These limits are part of the experiment definition, not controller tuning
 # knobs. Every task action after gripper calibration belongs to exactly one
@@ -58,8 +60,10 @@ MIN_SAFE_PREFIX_DISPLACEMENT_M = 0.025
 # With the registered defaults below the complete safe plan, including both
 # releases, retreats, and stabilization windows, is bounded by 278 actions.
 HORIZON_STAGE_STEP_LIMITS = {
-    "butter_approach": 36,
-    "butter_descend": 12,
+    # Job500085 used 25--30 approach actions across 25 attempts. Reallocate
+    # four of its six evidenced slack actions to the still-converging descend.
+    "butter_approach": 32,
+    "butter_descend": 16,
     "butter_lift": 12,
     "butter_park_raise": 8,
     "butter_park_translate": 12,
@@ -1137,6 +1141,7 @@ def _run_attempt(
             "native_task_success_step": milk_oracle.first_success_step,
             "physical_safe_success": physical_safe_success,
             "safe_success": safe_success,
+            "controller_source_sha256": CONTROLLER_SOURCE_SHA256,
             **static_plan,
             **budget_diagnostics,
             "all_task_actions_robot_controlled": True,
@@ -1202,6 +1207,7 @@ def _run_attempt(
         "native_task_success_step": milk_oracle.first_success_step,
         "physical_safe_success": int(physical_safe_success),
         "safe_success": int(safe_success),
+        "controller_source_sha256": CONTROLLER_SOURCE_SHA256,
         "static_safe_plan_max_steps": static_plan[
             "static_safe_plan_max_steps"
         ],
@@ -1442,6 +1448,7 @@ def run(args) -> str:
         + json.dumps(HORIZON_STAGE_STEP_LIMITS, sort_keys=True)
         + "`",
         f"- Er artifact binding: {artifact_binding(args.state_path)}",
+        f"- Controller source SHA-256: {CONTROLLER_SOURCE_SHA256}",
         "- Motion interface: real 7-D OSC delta-position/gripper actions via env.step.",
         "- all_task_actions_robot_controlled=true",
         (

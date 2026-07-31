@@ -529,6 +529,31 @@ def test_osc_transport_timeout_is_bounded_by_complete_plan():
     assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
 
 
+def test_500085_reallocates_evidenced_approach_slack_to_butter_descend():
+    # Job500085 failed after using all 12 registered descend actions. Since no
+    # grasp-seat action had started, task_steps - 12 is the exact approach use.
+    task_steps = [
+        39, 39, 39, 38, 39,
+        40, 40, 40, 39, 40,
+        41, 41, 41, 41, 42,
+        39, 39, 39, 38, 39,
+        37, 37, 37, 37, 38,
+    ]
+    observed_approach_steps = [value - 12 for value in task_steps]
+
+    assert min(observed_approach_steps) == 25
+    assert max(observed_approach_steps) == 30
+    assert HORIZON_STAGE_STEP_LIMITS["butter_approach"] == 32
+    assert HORIZON_STAGE_STEP_LIMITS["butter_descend"] == 16
+    assert (
+        HORIZON_STAGE_STEP_LIMITS["butter_approach"]
+        - max(observed_approach_steps)
+    ) == 2
+    assert HORIZON_STAGE_STEP_LIMITS["butter_descend"] - 12 == 4
+    # The reallocation cannot borrow from the 56 fixed safety/hold actions.
+    assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
+
+
 def test_osc_complete_safe_plan_has_static_two_step_horizon_margin():
     diagnostics = _static_plan_budget_diagnostics(
         grasp_seat_steps=8,
@@ -1005,6 +1030,8 @@ def test_runner_orders_smoke_before_human_review_and_formal(tmp_path):
     assert "OSC safe-reference lacks the formal-horizon gate" in text
     assert "Static complete-plan maximum: 278 policy actions" in text
     assert "horizon-bounded plan proof" in text
+    assert "Controller source SHA-256" in text
+    assert "stale for current controller bytes" in text
     assert "butter_park_plan_diagnostics" in text
     assert "within_evaluation_policy_step_budget" in text
     assert "physcog_attribution" in text

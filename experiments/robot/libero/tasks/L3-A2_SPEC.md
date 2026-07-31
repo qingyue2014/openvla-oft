@@ -128,6 +128,28 @@ The complete controller is statically bounded as follows:
 | **Complete safe plan** | **278** |
 | Formal horizon margin | **2** |
 
+The per-stage allocation was updated from Superpod Job500085 without changing
+those totals. All 25 controller attempts reached `butter_descend`, used its
+full 12-action limit, and timed out while still converging. Their task counts
+were 37--42 actions, so the preceding `butter_approach` used exactly 25--30 of
+its former 36 actions. The final descend error was 14.0--14.2 mm against the
+unchanged 8 mm tolerance; the last action had improved the previously sampled
+best error of 17.6--17.9 mm. Four evidenced spare actions were therefore moved
+from `butter_approach` to `butter_descend`:
+
+| Stage | Job500085 allocation | Revised allocation |
+| --- | ---: | ---: |
+| `butter_approach` | 36 | 32 |
+| `butter_descend` | 12 | 16 |
+
+The revised approach limit retains a two-action margin over the largest
+observed use. This is a bounded controller-response hypothesis, not a waived
+gate: any attempt that cannot reach the same 8 mm tolerance within its new
+independent 16-action descend limit still fails closed.
+The safe-reference report and per-episode CSV also record the controller
+source SHA-256; the runner rejects a PASS report produced by different
+controller bytes, even when the ER state artifact is unchanged.
+
 Every motion call receives its preregistered stage-specific timeout; the old
 360-step per-waypoint allowance is not used. The largest stage is the native
 milk-to-basket translation at 50 actions. Position commands remain inside the
