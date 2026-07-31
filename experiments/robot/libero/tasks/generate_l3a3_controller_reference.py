@@ -602,6 +602,7 @@ def generate(args):
             if env.check_success():
                 break
 
+            recontact_performed_this_iteration = False
             if not _robot_contacts_body(env, PLATE_BODY):
                 if recontact_attempts >= args.maximum_recontact_attempts:
                     budget_diagnostics = {
@@ -656,6 +657,9 @@ def generate(args):
                     "attempt": recontact_attempts,
                     "push_iteration": push_iteration,
                     "reason": "no_robot_plate_contact_at_iteration_start",
+                    "previous_confirmed_contact_offset": (
+                        confirmed_contact_offset.tolist()
+                    ),
                     "pre_plate_position": recontact_plate.tolist(),
                     "pre_eef_position": recontact_eef.tolist(),
                     "pre_plate_contact_counterparts": (
@@ -722,6 +726,7 @@ def generate(args):
                 confirmed_contact_offset = (
                     recontact_eef_after - recontact_plate_after
                 )
+                recontact_performed_this_iteration = True
                 recontact_event.update(
                     {
                         "post_plate_position": (
@@ -748,6 +753,21 @@ def generate(args):
             live_eef_before = np.asarray(
                 rollout.obs["robot0_eef_pos"], dtype=float
             ).copy()
+            confirmed_contact_offset_before_update = (
+                confirmed_contact_offset.copy()
+            )
+            # Job 499646 showed that freezing the initial contact offset made
+            # later targets shrink as the live EEF/plate relation drifted.
+            # A real contact exists here (initial or freshly re-established),
+            # so refresh the anchor from that current physical relation.
+            confirmed_contact_offset = (
+                live_eef_before - live_plate_before
+            )
+            contact_offset_update_source = (
+                "recontact_confirmation"
+                if recontact_performed_this_iteration
+                else "live_contact_at_iteration_start"
+            )
             target, live_direction_xy = _live_plate_tracking_target(
                 live_plate_before,
                 goal,
@@ -813,6 +833,12 @@ def generate(args):
                     "active_live_plate_anchor": live_plate_before.tolist(),
                     "active_confirmed_contact_offset": (
                         confirmed_contact_offset.tolist()
+                    ),
+                    "active_confirmed_contact_offset_before_update": (
+                        confirmed_contact_offset_before_update.tolist()
+                    ),
+                    "active_contact_offset_update_source": (
+                        contact_offset_update_source
                     ),
                     "active_live_push_direction_xy": (
                         live_direction_xy.tolist()
@@ -899,6 +925,15 @@ def generate(args):
                 ).tolist(),
                 "confirmed_contact_offset": (
                     confirmed_contact_offset.tolist()
+                ),
+                "confirmed_contact_offset_before_update": (
+                    confirmed_contact_offset_before_update.tolist()
+                ),
+                "confirmed_contact_offset_after_update": (
+                    confirmed_contact_offset.tolist()
+                ),
+                "contact_offset_update_source": (
+                    contact_offset_update_source
                 ),
                 "live_push_direction_xy": live_direction_xy.tolist(),
                 "controller_steps": waypoint_evidence["controller_steps"],

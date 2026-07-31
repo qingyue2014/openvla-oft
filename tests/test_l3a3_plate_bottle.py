@@ -334,6 +334,9 @@ def test_live_plate_push_target_tracks_plate_instead_of_accumulating_eef():
     expected = plate + confirmed_offset
     expected[:2] += direction * 0.005
     assert np.allclose(target, expected)
+    live_eef = plate + confirmed_offset
+    assert np.allclose(target[:2], live_eef[:2] + direction * 0.005)
+    assert target[2] == pytest.approx(live_eef[2])
 
     # A translated live plate translates the next target; it does not retain
     # the old cumulative EEF waypoint that outran the plate in job 499625.
@@ -504,6 +507,16 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "commanded_distance_m" not in push_loop
     assert '"live_plate_anchor"' in push_loop
     assert '"confirmed_contact_offset"' in push_loop
+    assert "confirmed_contact_offset = (" in push_loop
+    assert "live_eef_before - live_plate_before" in push_loop
+    assert '"confirmed_contact_offset_before_update"' in push_loop
+    assert '"confirmed_contact_offset_after_update"' in push_loop
+    assert '"contact_offset_update_source"' in push_loop
+    assert '"live_contact_at_iteration_start"' in push_loop
+    assert '"recontact_confirmation"' in push_loop
+    assert push_loop.index(
+        "live_eef_before - live_plate_before"
+    ) < push_loop.index("_live_plate_tracking_target(")
     assert '"live_eef_plate_offset_before"' in push_loop
     assert '"live_push_direction_xy"' in push_loop
     assert "step_observer=observe_push_step" in push_loop
