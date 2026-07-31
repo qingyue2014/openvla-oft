@@ -63,7 +63,9 @@ HORIZON_STAGE_STEP_LIMITS = {
     # Job500094 used 25--30 approach actions across 25 attempts. Its descend
     # then passed in 15 actions, while lift remained convergent at action 12.
     "butter_approach": 30,
-    "butter_descend": 16,
+    # Job500120 independently finished descend in exactly 15 actions in all
+    # 25 attempts, at 6.909--7.024 mm against the unchanged 8 mm tolerance.
+    "butter_descend": 15,
     "butter_lift": 14,
     # Job500107 proved that the exact swept-clearance target equals the
     # already-achieved lift height in all 25 registered state/offset attempts:
@@ -72,9 +74,12 @@ HORIZON_STAGE_STEP_LIMITS = {
     # descent, whose observed 67--69 mm residual requires the controller's
     # eight-action closed-loop tail to enter the unchanged 12 mm tolerance.
     "butter_park_raise": 0,
-    "butter_park_translate": 12,
+    # Job500120 used exactly 11 translate actions in all 25 attempts and
+    # finished at 9.660--9.837 mm against the unchanged 12 mm tolerance. Its
+    # spare action and descend's spare action fund the observed retreat tail.
+    "butter_park_translate": 11,
     "butter_park_descend": 20,
-    "butter_park_retreat": 8,
+    "butter_park_retreat": 10,
     "milk_approach": 20,
     "milk_descend": 12,
     "milk_lift": 12,

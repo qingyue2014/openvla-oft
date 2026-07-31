@@ -217,8 +217,40 @@ was 15.474 mm). The minimum evidenced repair
 therefore reallocates all eight never-used `butter_park_raise` actions to
 `butter_park_descend`: `0 + 20` replaces `8 + 12`. Motion remains 222 actions,
 the fixed safety/hold total remains 56, and the complete static bound remains
-278/280. This allocation remains a hypothesis until a fresh remote physical
-reference passes every dynamic and stability gate.
+278/280.
+
+Superpod Job500120 verified that allocation across all 25 attempts. Every
+`butter_park_descend` used its full 20-action bound and finished at
+10.683--11.139 mm, inside the unchanged 12 mm placement tolerance. Butter was
+then released with floor support, no forbidden contact, and 4.082--4.588 mm
+body-position error from the selected floor goal. The next and only failure
+was `butter_park_retreat`: all attempts used its former eight-action bound and
+reduced an 80 mm EEF error to 18.064--18.274 mm. The final action still gained
+4.354--4.383 mm, but one additional action is not an evidence-backed repair:
+even the smallest remaining excess above the 12 mm tolerance, 6.064 mm,
+exceeds the largest observed final-action gain. Because retreat failed before
+the ten-step floor-stability confirmation, the release pose remains invalid
+until that full window is executed and passes.
+
+The same Job500120 trajectories identify exactly two unused registered motion
+actions without touching safety waits. `butter_descend` completed in exactly
+15 actions in all attempts at 6.909--7.024 mm against its unchanged 8 mm
+tolerance, and `butter_park_translate` completed in exactly 11 actions at
+9.660--9.837 mm against its unchanged 12 mm tolerance. Their former one-action
+reserves are reassigned to retreat:
+
+| Stage | Job500120 allocation | Revised allocation |
+| --- | ---: | ---: |
+| `butter_descend` | 16 | 15 |
+| `butter_park_translate` | 12 | 11 |
+| `butter_park_retreat` | 8 | 10 |
+
+All position tolerances, position scales, action caps, grasp-seat actions,
+contact holds, releases, retreats' commanded height, and stabilization windows
+remain unchanged. Registered motion remains 222 actions, the fixed
+safety/hold total remains 56, and the complete static bound remains 278/280.
+The ten-action retreat is still a physical hypothesis until a fresh remote
+reference passes its post-final state and every subsequent stability gate.
 
 The safe-reference report and per-episode CSV also record the controller
 source SHA-256; the runner rejects a PASS report produced by different

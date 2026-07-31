@@ -548,7 +548,9 @@ def test_500094_reallocates_only_observed_approach_actions_to_lift():
     assert min(observed_approach_steps) == 25
     assert max(observed_approach_steps) == 30
     assert HORIZON_STAGE_STEP_LIMITS["butter_approach"] == 30
-    assert HORIZON_STAGE_STEP_LIMITS["butter_descend"] == 16
+    # Job500120 later fixed this exact observed maximum as the registered
+    # bound, with the post-final-action check preserving the same predicate.
+    assert HORIZON_STAGE_STEP_LIMITS["butter_descend"] == 15
     assert HORIZON_STAGE_STEP_LIMITS["butter_lift"] == 14
     # Descend is now solved under the unchanged precise 8 mm tolerance.
     assert 6.9092 < 8.0
@@ -592,6 +594,72 @@ def test_500107_reallocates_zero_use_sweep_raise_to_park_descend():
     assert 11.917 < 12.0
     assert HORIZON_STAGE_STEP_LIMITS["butter_park_raise"] == 0
     assert HORIZON_STAGE_STEP_LIMITS["butter_park_descend"] == 20
+    assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
+
+
+def test_500120_reallocates_exact_spares_to_butter_park_retreat():
+    # Exact Job500120 evidence, ordered episode-major then attempt-major.
+    # Descend and translate each completed one action below their registered
+    # limits in all 25 attempts. Park descend then passed using its full new
+    # bound, exposing only the still-converging eight-action retreat.
+    task_steps = [
+        112, 112, 112, 111, 112,
+        113, 113, 113, 112, 113,
+        115, 114, 115, 114, 115,
+        112, 112, 113, 111, 112,
+        110, 110, 110, 110, 111,
+    ]
+    descend_final_error_mm = [
+        6.947, 6.958, 6.936, 6.979, 7.004,
+        6.953, 6.964, 6.942, 6.980, 7.010,
+        6.962, 6.974, 6.949, 6.909, 6.937,
+        6.963, 6.975, 6.950, 6.990, 7.018,
+        7.010, 7.024, 6.996, 6.958, 6.977,
+    ]
+    translate_final_error_mm = [
+        9.766, 9.802, 9.731, 9.719, 9.789,
+        9.799, 9.837, 9.763, 9.766, 9.812,
+        9.732, 9.746, 9.696, 9.660, 9.732,
+        9.770, 9.808, 9.756, 9.735, 9.791,
+        9.793, 9.831, 9.757, 9.738, 9.801,
+    ]
+    park_descend_final_error_mm = [
+        10.705, 10.729, 10.683, 10.838, 10.774,
+        10.729, 10.753, 10.706, 10.890, 10.804,
+        11.139, 10.703, 11.115, 10.822, 10.749,
+        10.716, 10.740, 11.130, 10.877, 10.866,
+        10.752, 10.776, 10.729, 10.909, 10.819,
+    ]
+    retreat_final_error_mm = [
+        18.117, 18.064, 18.169, 18.118, 18.114,
+        18.132, 18.080, 18.185, 18.134, 18.129,
+        18.220, 18.167, 18.274, 18.223, 18.219,
+        18.160, 18.107, 18.213, 18.161, 18.158,
+        18.134, 18.082, 18.187, 18.137, 18.133,
+    ]
+    retreat_last_action_gain_mm = [
+        4.360, 4.354, 4.367, 4.361, 4.360,
+        4.363, 4.356, 4.370, 4.363, 4.362,
+        4.375, 4.367, 4.383, 4.375, 4.374,
+        4.366, 4.359, 4.374, 4.367, 4.366,
+        4.363, 4.356, 4.370, 4.363, 4.362,
+    ]
+
+    assert min(task_steps) == 110
+    assert max(task_steps) == 115
+    assert max(descend_final_error_mm) < 8.0
+    assert max(translate_final_error_mm) < 12.0
+    assert max(park_descend_final_error_mm) < 12.0
+    assert min(retreat_final_error_mm) > 12.0
+    # One action is not an evidence-backed repair: the smallest remaining
+    # excess over tolerance exceeds the largest observed final-action gain.
+    assert min(value - 12.0 for value in retreat_final_error_mm) > max(
+        retreat_last_action_gain_mm
+    )
+    assert HORIZON_STAGE_STEP_LIMITS["butter_descend"] == 15
+    assert HORIZON_STAGE_STEP_LIMITS["butter_park_translate"] == 11
+    assert HORIZON_STAGE_STEP_LIMITS["butter_park_retreat"] == 10
+    # No action is borrowed from grasp, hold, release, or stability windows.
     assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
 
 
