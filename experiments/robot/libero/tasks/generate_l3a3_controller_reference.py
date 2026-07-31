@@ -318,6 +318,8 @@ def generate(args):
         raise ValueError("--video_stride must be positive")
     if args.video_fps <= 0:
         raise ValueError("--video_fps must be positive")
+    if args.pusher_contact_confirm_steps < 1:
+        raise ValueError("--pusher_contact_confirm_steps must be positive")
     er_path = Path(args.er_states).resolve(strict=True)
     state, fixture_names, fixture_positions, fixture_quaternions = _load_er_episode(
         er_path, args.episode
@@ -455,6 +457,11 @@ def generate(args):
                 ),
             }
 
+        # Job 499604 established real plate contact with the open gripper.
+        # Keep that same aperture through contact confirmation and pushing:
+        # closing after the seek displaced the fingers and destroyed the
+        # verified contact before the first push action.
+        pusher_open_sign = -1.0
         print(
             "L3-A3 plate-contact plan "
             + json.dumps(plate_diagnostics(), sort_keys=True),
@@ -464,28 +471,30 @@ def generate(args):
         # offset and from the vertical contact seek.
         rollout.move(
             center_approach_target,
-            -1.0,
+            pusher_open_sign,
             "task",
             diagnostics=plate_diagnostics,
         )
         rollout.move(
             line_approach_target,
-            -1.0,
+            pusher_open_sign,
             "task",
             diagnostics=plate_diagnostics,
         )
         rollout.move(
             contact_target,
-            -1.0,
+            pusher_open_sign,
             "task",
             stop_when=lambda: _robot_contacts_body(env, PLATE_BODY),
             stop_label="robot-plate contact",
             diagnostics=plate_diagnostics,
         )
-        rollout.hold(1.0, args.pusher_close_steps, "task")
+        rollout.hold(
+            pusher_open_sign, args.pusher_contact_confirm_steps, "task"
+        )
         if not _robot_contacts_body(env, PLATE_BODY):
             raise RuntimeError(
-                "robot-plate contact was lost while closing the pusher"
+                "robot-plate contact was lost during open-gripper confirmation"
             )
 
         pusher_start = np.asarray(rollout.obs["robot0_eef_pos"], dtype=float).copy()
@@ -498,13 +507,19 @@ def generate(args):
             target[:2] += direction_xy * distance
             rollout.move(
                 target,
-                1.0,
+                pusher_open_sign,
                 "task",
                 tolerance=args.push_tracking_tolerance,
                 max_steps=args.push_tracking_steps,
             )
             if env.check_success():
                 break
+            if not _robot_contacts_body(env, PLATE_BODY):
+                raise RuntimeError(
+                    "robot-plate contact was lost during open-gripper push "
+                    f"before native success at distance_m={distance:.5f} "
+                    f"diagnostics={json.dumps(plate_diagnostics(), sort_keys=True)}"
+                )
         if not env.check_success():
             plate_final = body_pose(env, PLATE_BODY)[0]
             eef_final = np.asarray(
@@ -561,6 +576,8 @@ def generate(args):
             "er_artifact_binding": artifact_binding(er_path),
             "direct_qpos_edits_after_restore": False,
             "all_task_actions_robot_controlled": True,
+            "pusher_gripper_sign": pusher_open_sign,
+            "pusher_contact_confirm_steps": args.pusher_contact_confirm_steps,
             "task_success": True,
             "violated": False,
             "oracle_metrics": metrics,
@@ -639,7 +656,7 @@ def main():
     parser.add_argument(
         "--plate_approach_eef_height", type=float, default=0.160
     )
-    parser.add_argument("--pusher_close_steps", type=int, default=15)
+    parser.add_argument("--pusher_contact_confirm_steps", type=int, default=2)
     parser.add_argument("--push_increment", type=float, default=0.005)
     parser.add_argument("--maximum_push_distance", type=float, default=0.310)
     parser.add_argument("--push_tracking_tolerance", type=float, default=0.007)

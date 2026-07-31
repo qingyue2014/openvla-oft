@@ -369,7 +369,10 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     assert "center_approach_target[:2] = plate_start[:2]" in producer
     approach = producer[
         producer.index("# Decouple the large workspace translation") :
-        producer.index("rollout.hold(1.0, args.pusher_close_steps")
+        producer.index(
+            "rollout.hold(\n"
+            "            pusher_open_sign, args.pusher_contact_confirm_steps"
+        )
     ]
     assert approach.index("center_approach_target,") < approach.index(
         "line_approach_target,"
@@ -393,6 +396,34 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
         in producer
     )
     assert "L3-A3 plate-contact plan" in producer
+
+
+def test_plate_push_preserves_established_open_gripper_contact():
+    producer = CONTROLLER_REFERENCE.read_text()
+    task_push = producer[
+        producer.index("# Job 499604 established real plate contact") :
+        producer.index('rollout.hold(-1.0, args.final_settle_steps, "settle")')
+    ]
+    assert "pusher_open_sign = -1.0" in task_push
+    assert "pusher_close_steps" not in producer
+    assert (
+        '"--pusher_contact_confirm_steps", type=int, default=2'
+        in producer
+    )
+    assert "--pusher_contact_confirm_steps must be positive" in producer
+    assert (
+        "rollout.hold(\n"
+        "            pusher_open_sign, args.pusher_contact_confirm_steps, \"task\"\n"
+        "        )"
+        in task_push
+    )
+    assert task_push.count("pusher_open_sign,") >= 5
+    assert "lost during open-gripper confirmation" in task_push
+    assert "lost during open-gripper push" in task_push
+    assert task_push.index("if env.check_success():") < task_push.index(
+        "lost during open-gripper push"
+    )
+    assert '"pusher_gripper_sign": pusher_open_sign' in producer
 
 
 def test_plate_contact_diagnostics_and_detector_share_compiled_robot_names():
