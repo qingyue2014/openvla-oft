@@ -10,7 +10,7 @@ from experiments.robot.libero.tasks import write_l3a3_review_template
 from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     Rollout,
     _body_contact_counterparts,
-    _bounded_plate_contact_seek_action,
+    _bounded_side_contact_seek_action,
     _contact_depth_sample_validity,
     _contact_progress_saturation_evidence,
     _derive_horizon_safe_push_increment,
@@ -18,10 +18,12 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _gate_live_contact_offset_xy,
     _horizon_budget,
     _live_plate_tracking_target,
+    _plate_finger_contact_sides,
     _push_window_timeout_evidence,
     _robot_contacts_body,
     _robot_gripper_body_names,
     _select_reachable_trailing_contact,
+    _side_contact_targets_from_compiled_bounds,
 )
 from experiments.robot.libero.tasks.generate_l3a3_plate_bottle_states import (
     _free_joint_translation_for_world_target,
@@ -332,22 +334,44 @@ def test_plate_contact_uses_reachable_axis_aligned_trailing_line():
     assert float(np.dot(unit, plate - contact)) > 0.0
 
 
-def test_plate_contact_seek_caps_saturated_downward_osc_action():
-    current = np.array([0.0, 0.0, 1.0625])
-    target = np.array([0.04, -0.04, 0.9025])
-    bounded = _bounded_plate_contact_seek_action(
+def test_plate_side_contact_seek_caps_lateral_osc_action():
+    current = np.array([0.0, 0.0, 0.9225])
+    target = np.array([0.04, -0.04, 0.9225])
+    bounded = _bounded_side_contact_seek_action(
         current,
         target,
         gripper=-1.0,
         scale=0.08,
-        maximum_vertical_action=0.10,
+        maximum_translation_action=0.10,
     )
-    assert np.allclose(bounded[:3], [0.5, -0.5, -0.10])
+    assert np.linalg.norm(bounded[:3]) == pytest.approx(0.10)
+    assert bounded[0] == pytest.approx(np.sqrt(0.005))
+    assert bounded[1] == pytest.approx(-np.sqrt(0.005))
+    assert bounded[2] == pytest.approx(0.0)
     assert bounded[-1] == pytest.approx(-1.0)
-    with pytest.raises(ValueError, match="maximum vertical action"):
-        _bounded_plate_contact_seek_action(
+    with pytest.raises(ValueError, match="maximum translation action"):
+        _bounded_side_contact_seek_action(
             current, target, -1.0, 0.08, 0.0
         )
+
+
+def test_native_geometry_side_contact_targets_descend_outside_plate():
+    plate = np.array([0.052, -0.0285, 0.9025])
+    outside, contact, plan = _side_contact_targets_from_compiled_bounds(
+        plate_position=plate,
+        outward_direction_xy=np.array([0.0, -1.0]),
+        contact_xy=np.array([0.052, -0.0385]),
+        plate_outward_support_m=0.052,
+        finger_inward_extent_from_eef_m=-0.012,
+        plate_rim_center_z=0.9095,
+        finger_center_z_offset_from_eef=-0.013,
+        outside_clearance_m=0.005,
+    )
+    assert np.allclose(outside, [0.052, -0.0975, 0.9225])
+    assert np.allclose(contact, [0.052, -0.0385, 0.9225])
+    assert plan["outside_eef_offset_m"] == pytest.approx(0.069)
+    assert plan["side_eef_z"] - plate[2] == pytest.approx(0.020)
+    assert outside[1] < contact[1] < plate[1]
 
 
 def test_live_plate_push_target_tracks_plate_instead_of_accumulating_eef():
@@ -766,12 +790,16 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
         producer.index("initial_contact_depth_calibration =")
     ]
     assert approach.index("center_approach_target,") < approach.index(
-        "line_approach_target,"
+        "outside_high_target=outside_high_target,"
     )
-    assert approach.index("line_approach_target,") < approach.index(
-        "guard_target=contact_guard_target,"
+    assert approach.index(
+        "outside_high_target=outside_high_target,"
+    ) < approach.index(
+        "outside_side_target=outside_side_target,"
     )
-    assert approach.index("guard_target=contact_guard_target,") < approach.index(
+    assert approach.index(
+        "outside_side_target=outside_side_target,"
+    ) < approach.index(
         "contact_target=contact_target,"
     )
     assert '"live_eef"' in producer
@@ -779,11 +807,8 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     assert '"candidate_geometry"' in producer
     assert '"robot_gripper_body_names"' in producer
     assert '"plate_contact_counterparts"' in producer
-    assert "gap of 0.0843 m" in producer
-    assert (
-        '"--plate_contact_seek_eef_height", type=float, default=0.000'
-        in producer
-    )
+    assert '"compiled_side_contact_geometry"' in producer
+    assert '"plate_contact_seek_eef_height"' not in producer
     assert '"--plate_approach_eef_height", type=float, default=0.160' in producer
     assert (
         "plate_start[2] + args.plate_approach_eef_height"
@@ -917,8 +942,9 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "recontact_retreat_target" in push_loop
     assert "recontact_center_target" in push_loop
     assert "recontact_high_target" in push_loop
-    assert "recontact_guard_target" in push_loop
-    assert "recontact_seek_target" in push_loop
+    assert "recontact_outside_side_target" in push_loop
+    assert "recontact_side_contact_target" in push_loop
+    assert "recontact_compiled_geometry" in push_loop
     assert "_seek_stable_plate_contact(" in push_loop
     assert "L3-A3 plate recontact" in push_loop
     assert "closed-loop plate push exhausted recontact budget" in push_loop
@@ -933,13 +959,15 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         "recontact_center_target,"
     )
     assert recovery.index("recontact_center_target,") < recovery.index(
-        "recontact_high_target,"
+        "outside_high_target=recontact_high_target,"
     )
-    assert recovery.index("recontact_high_target,") < recovery.index(
-        "guard_target=recontact_guard_target"
+    assert recovery.index(
+        "outside_high_target=recontact_high_target,"
+    ) < recovery.index(
+        "outside_side_target=("
     )
-    assert recovery.index("guard_target=recontact_guard_target") < recovery.index(
-        "contact_target=recontact_seek_target,"
+    assert recovery.index("outside_side_target=(") < recovery.index(
+        "contact_target=recontact_side_contact_target,"
     )
     assert (
         "robot_plate_contact_observed_after_confirmation"
@@ -968,11 +996,11 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         in producer
     )
     assert (
-        '"--plate_contact_guard_eef_height", type=float, default=0.025'
+        '"--plate_contact_outside_clearance", type=float, default=0.005'
         in producer
     )
     assert (
-        '"--plate_contact_seek_max_vertical_action",\n'
+        '"--plate_contact_seek_max_translation_action",\n'
         "        type=float,\n"
         "        default=0.10,"
         in producer
@@ -1013,15 +1041,34 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         producer.index("def _seek_stable_plate_contact(") :
         producer.index("\ndef _calibrate_stable_plate_contact_depth(")
     ]
+    compiled_plan = producer[
+        producer.index("def _compiled_native_side_contact_plan(") :
+        producer.index("\ndef _body_contact_counterparts(")
+    ]
+    assert "model.geom_aabb" in producer
+    assert "plate_rim_geoms" in compiled_plan
+    assert "finger_collision_geoms" in compiled_plan
+    assert "_side_contact_targets_from_compiled_bounds(" in compiled_plan
+    assert "env.set_state" not in compiled_plan
+    assert "set_init_state" not in compiled_plan
     assert "rollout.move(" in bounded_seek
-    assert "guard_target" in bounded_seek
+    assert "outside_high_target" in bounded_seek
+    assert "outside_side_target" in bounded_seek
     assert "rollout.advance(action, \"task\")" in bounded_seek
-    assert "plate_contact_seek_max_vertical_action" in bounded_seek
-    assert '"bounded_contact_seek"' in bounded_seek
+    assert "plate_contact_seek_max_translation_action" in bounded_seek
+    assert '"bounded_lateral_contact_seek"' in bounded_seek
+    assert (
+        '"bounded_lateral_contact_seek",\n'
+        "            seek_index,\n"
+        "            contact_observed,\n"
+        "            contact_observed,"
+        in bounded_seek
+    )
     assert '"stable_contact_confirmation"' in bounded_seek
+    assert "two_finger_side_contact_not_sustained" in bounded_seek
     assert "require_contact" in bounded_seek
     assert "require_stable" in bounded_seek
-    assert "robot_plate_contact_before_bounded_seek" in bounded_seek
+    assert "robot_plate_contact_before_lateral_seek" in bounded_seek
     assert "env.set_state" not in bounded_seek
     assert "set_init_state" not in bounded_seek
     assert "rollout.advance(" in depth_calibration
@@ -1066,9 +1113,12 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "--minimum_saturated_waypoint_progress must be positive" in producer
     assert "--maximum_push_iterations must be positive" in producer
     assert "--maximum_recontact_attempts must be positive" in producer
-    assert "--plate_contact_guard_eef_height must be positive" in producer
     assert (
-        "--plate_contact_seek_max_vertical_action must be in (0, 0.2]"
+        "--plate_contact_outside_clearance must be in (0, 0.020]"
+        in producer
+    )
+    assert (
+        "--plate_contact_seek_max_translation_action must be in (0, 0.2]"
         in producer
     )
     assert "--plate_contact_seek_max_steps must be positive" in producer
@@ -1102,16 +1152,18 @@ def test_plate_contact_diagnostics_and_detector_share_compiled_robot_names():
             "table",
             "robot0_link7",
             "gripper0_finger_joint1_tip",
+            "gripper0_rightfinger",
         ]
         nbody = len(names)
-        body_parentid = np.array([0, 0, 1, 0, 0, 4])
-        geom_bodyid = np.array([2, 3, 4, 5])
+        body_parentid = np.array([0, 0, 1, 0, 0, 4, 4])
+        geom_bodyid = np.array([2, 3, 4, 5, 6])
         ngeom = len(geom_bodyid)
         geom_names = [
             "plate_collision",
             "table_collision",
             "robot_link_collision",
             "finger_collision",
+            "right_finger_collision",
         ]
 
         @classmethod
@@ -1130,10 +1182,11 @@ def test_plate_contact_diagnostics_and_detector_share_compiled_robot_names():
         sim = SimpleNamespace(
             model=Model(),
             data=SimpleNamespace(
-                ncon=2,
+                ncon=3,
                 contact=[
                     SimpleNamespace(geom1=0, geom2=1),
                     SimpleNamespace(geom1=3, geom2=0),
+                    SimpleNamespace(geom1=4, geom2=0),
                 ],
             ),
         )
@@ -1141,16 +1194,27 @@ def test_plate_contact_diagnostics_and_detector_share_compiled_robot_names():
     env = Env()
     assert _robot_gripper_body_names(env) == [
         "gripper0_finger_joint1_tip",
+        "gripper0_rightfinger",
         "robot0_link7",
     ]
     contacts = _body_contact_counterparts(env, PLATE_BODY)
     assert [item["counterpart_body"] for item in contacts] == [
         "table",
         "gripper0_finger_joint1_tip",
+        "gripper0_rightfinger",
     ]
     assert contacts[0]["counterpart_is_robot_or_gripper"] is False
     assert contacts[1]["counterpart_is_robot_or_gripper"] is True
+    assert contacts[2]["counterpart_is_robot_or_gripper"] is True
     assert _robot_contacts_body(env, PLATE_BODY) is True
+    assert _plate_finger_contact_sides(env) == {
+        "left": True,
+        "right": True,
+        "contact_bodies": [
+            "gripper0_finger_joint1_tip",
+            "gripper0_rightfinger",
+        ],
+    }
 
 
 def test_review_template_loads_smoke_and_binds_safe_reference(
