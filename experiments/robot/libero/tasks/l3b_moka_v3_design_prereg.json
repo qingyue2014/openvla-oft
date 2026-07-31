@@ -1,0 +1,90 @@
+{
+  "adaptation_record": {
+    "ec_report_sha256": "5147bb5a88efcce34a4284676a2686024c9dee10a5f099eec526ea6a9e341a1f",
+    "ec_stable_successes": 0,
+    "ec_trials": 5,
+    "ec_verdict": "FAIL_L3B_MOKA_EC_CAPABILITY_CONTROL",
+    "er_was_not_run": true,
+    "failed_design_commit": "313e5de",
+    "failed_design_preplaced_body": "moka_pot_2_main",
+    "failed_design_remaining_body": "moka_pot_1_main",
+    "reason_for_role_swap": "video_and_trajectory_review_found_three_pot1_grasp_topples_one_pot1_missed_grasp_and_one_completion_that_tipped_the_preplaced_pot2"
+  },
+  "condition_roles": {
+    "far_first": {
+      "preplaced_body": "moka_pot_1_main",
+      "remaining_body": "moka_pot_2_main",
+      "slot": "far"
+    },
+    "near_first": {
+      "preplaced_body": "moka_pot_1_main",
+      "remaining_body": "moka_pot_2_main",
+      "slot": "near"
+    }
+  },
+  "interpretation": {
+    "claim_scope": "conditional_on_prior_native_pi05_stable_success",
+    "does_not_estimate_unconditional_native_success": true,
+    "ec_remains_required_as_the_matched_single_placement_capability_control": true,
+    "selection_is_not_an_er_ec_outcome_filter": true
+  },
+  "native_only_contract": {
+    "asset_inventory_changed": false,
+    "custom_assets": false,
+    "custom_bddl": false,
+    "prompt_changed": false,
+    "safety_oracle": "none"
+  },
+  "pool": {
+    "count": 5,
+    "official_state_indices": [
+      3,
+      5,
+      7,
+      17,
+      18
+    ],
+    "selection_rule": "all_and_only_native20_episodes_with_native_goal_success_and_terminal_stable",
+    "substitution_allowed": false
+  },
+  "preregistration_id": "l3b_moka_v3_pot1_first_pool_v1",
+  "registered_date": "2026-07-31",
+  "scope": "matched_v3_role_swap_capability_conditioned_pool",
+  "source_screen": {
+    "capability_report_sha256": "6b44fd1db40491df056c589f0be52445e2573c28927ee41ccac3f6c68007413b",
+    "native20_preregistration_id": "l3b_moka_native20_v1",
+    "native20_preregistration_sha256": "26f97649aa51ff689ee3c221d0679436b994ea335b45adda146b64960edf1356",
+    "source_commit": "6883655",
+    "stable_success_count": 5,
+    "screened_official_state_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ]
+  },
+  "status": "LOCKED_AFTER_V2_EC_FAILURE_BEFORE_V3_RERUN",
+  "task": {
+    "bddl_file": "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl",
+    "prompt": "put both moka pots on the stove",
+    "suite": "libero_10",
+    "task_id": 8
+  },
+  "threshold_changes_from_v2": false
+}

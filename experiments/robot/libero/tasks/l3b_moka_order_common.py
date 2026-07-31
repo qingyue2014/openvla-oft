@@ -3,11 +3,11 @@
 The external four-scene interpretation is:
 
 * Eb = ``native``: the bit-exact official state;
-* Er = ``near_first``: moka pot 2 occupies the near stove slot;
-* Ec = ``far_first``: the same moka pot 2 occupies the far stove slot;
+* Er = ``near_first``: moka pot 1 occupies the near stove slot;
+* Ec = ``far_first``: the same moka pot 1 occupies the far stove slot;
 * Safe = a real-action reference starting from Er.
 
-Both partial conditions therefore leave moka pot 1 as the only unfinished
+Both partial conditions therefore leave moka pot 2 as the only unfinished
 object.  This removes object-instance identity from the Er/Ec contrast.
 """
 
@@ -24,7 +24,7 @@ import numpy as np
 
 
 SCENE_ID = "L3-B-MOKA-ORDER"
-DESIGN_VERSION = 2
+DESIGN_VERSION = 3
 SUITE = "libero_10"
 TASK_ID = 8
 TASK_FILE = "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl"
@@ -62,13 +62,13 @@ CONDITION_SLOT = {
 }
 CONDITION_INTERVENTION_BODY = {
     "native": None,
-    "near_first": POT_2,
-    "far_first": POT_2,
+    "near_first": POT_1,
+    "far_first": POT_1,
 }
 CONDITION_REMAINING_BODY = {
     "native": None,
-    "near_first": POT_1,
-    "far_first": POT_1,
+    "near_first": POT_2,
+    "far_first": POT_2,
 }
 
 DUMMY_ACTION = np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])

@@ -1,9 +1,9 @@
 """Generate Eb, Er, and Ec states for the native moka sequence probe.
 
 All three conditions use the exact native ``libero_10`` task and prompt.
-``near_first`` (Er) and ``far_first`` (Ec) both change only moka pot 2's
+``near_first`` (Er) and ``far_first`` (Ec) both change only moka pot 1's
 free-joint pose/velocity, placing that same pot in the near or far stove slot.
-Moka pot 1 remains on the table in both partial conditions. ``native`` (Eb) is
+Moka pot 2 remains on the table in both partial conditions. ``native`` (Eb) is
 the bit-exact official state.
 """
 
@@ -57,10 +57,10 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     validate_native_bddl,
     window_stats,
 )
-from experiments.robot.pi05_utils import PI05_IMAGE_SIZE, resize_with_pad
-from experiments.robot.libero.tasks.validate_l3b_moka_v2_pool import (
-    validate_spec as validate_pool_preregistration,
+from experiments.robot.libero.tasks.validate_l3b_moka_v3_design import (
+    validate_spec as validate_design_preregistration,
 )
+from experiments.robot.pi05_utils import PI05_IMAGE_SIZE, resize_with_pad
 
 
 TRACKED_BODIES = (*POT_BODIES, STOVE_BODY)
@@ -413,7 +413,7 @@ def generate(args) -> dict:
 
     _, task, runtime_bddl = _runtime_task()
     native_states, native_init_path = _trusted_native_states(task)
-    pool = validate_pool_preregistration(args.pool_preregistration)
+    pool = validate_design_preregistration(args.design_preregistration)
     native_state_indices = pool["official_state_indices"]
     if args.num_states != len(native_state_indices):
         raise ValueError(
@@ -469,7 +469,7 @@ def generate(args) -> dict:
                 _intervene_one_pot(
                     env,
                     base,
-                    body_name=POT_2,
+                    body_name=POT_1,
                     target_label="near",
                     target=slots["near"],
                     fixture_names=fixture_names,
@@ -481,7 +481,7 @@ def generate(args) -> dict:
                 _intervene_one_pot(
                     env,
                     base,
-                    body_name=POT_2,
+                    body_name=POT_1,
                     target_label="far",
                     target=slots["far"],
                     fixture_names=fixture_names,
@@ -665,10 +665,10 @@ def main() -> None:
     )
     parser.add_argument("--num-states", type=int, default=5)
     parser.add_argument(
-        "--pool-preregistration",
+        "--design-preregistration",
         default=(
             "experiments/robot/libero/tasks/"
-            "l3b_moka_v2_pool_prereg.json"
+            "l3b_moka_v3_design_prereg.json"
         ),
     )
     parser.add_argument("--seed", type=int, default=42)

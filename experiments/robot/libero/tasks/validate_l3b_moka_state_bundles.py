@@ -35,8 +35,8 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     TASK_PROMPT,
     sha256_path,
 )
-from experiments.robot.libero.tasks.validate_l3b_moka_v2_pool import (
-    validate_spec as validate_pool_preregistration,
+from experiments.robot.libero.tasks.validate_l3b_moka_v3_design import (
+    validate_spec as validate_design_preregistration,
 )
 
 
@@ -49,8 +49,8 @@ POLICY_IMAGE_SPECS = {
     "agentview_pi05_224": (224, 224),
     "wrist_pi05_224": (224, 224),
 }
-POOL_PREREGISTRATION = Path(__file__).with_name(
-    "l3b_moka_v2_pool_prereg.json"
+DESIGN_PREREGISTRATION = Path(__file__).with_name(
+    "l3b_moka_v3_design_prereg.json"
 )
 
 
@@ -145,7 +145,7 @@ def _validate_one(path: str | Path, condition: str) -> list[dict]:
     if condition not in CONDITIONS:
         raise ValueError(condition)
     path = Path(path).resolve(strict=True)
-    pool = validate_pool_preregistration(POOL_PREREGISTRATION)
+    pool = validate_design_preregistration(DESIGN_PREREGISTRATION)
     with h5py.File(path, "r") as handle:
         if set(handle) != {TASK_KEY}:
             raise ValueError(f"{path} has unexpected task keys: {sorted(handle)}")
@@ -319,7 +319,7 @@ def _validate_initial_manifest(
         or record.get("asset_inventory_changed") is not False
     ):
         raise ValueError("L3-B initial gate native-only identity mismatch")
-    pool = validate_pool_preregistration(POOL_PREREGISTRATION)
+    pool = validate_design_preregistration(DESIGN_PREREGISTRATION)
     if record.get("official_native_state_indices") != pool[
         "official_state_indices"
     ] or record.get("pool_preregistration") != pool:
@@ -402,7 +402,7 @@ def validate_pairing(
             raise ValueError(f"near/far target slots coincide at demo_{index}")
 
     initial = _validate_initial_manifest(initial_manifest, state_paths)
-    pool = validate_pool_preregistration(POOL_PREREGISTRATION)
+    pool = validate_design_preregistration(DESIGN_PREREGISTRATION)
     return {
         "scenario": SCENE_ID,
         "design_version": DESIGN_VERSION,

@@ -1,7 +1,7 @@
 """Run the L3-B Safe scene through LIBERO's real 7-D OSC interface.
 
-Safe starts from the exact Er bundle (moka pot 2 in the near stove slot) and
-uses robot actions to place the remaining moka pot 1 in the far slot.  The
+Safe starts from the exact Er bundle (moka pot 1 in the near stove slot) and
+uses robot actions to place the remaining moka pot 2 in the far slot.  The
 script never edits simulator state after the serialized Er restore.  It fails
 closed unless the evaluator-parity first-policy gate, native goal, contact
 checks, and final 1-degree receptacle-stability gate all pass.
@@ -22,9 +22,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from experiments.robot.libero.tasks.l3b_moka_order_common import (
+    CONDITION_INTERVENTION_BODY,
+    CONDITION_REMAINING_BODY,
     DESIGN_VERSION,
-    POT_1,
-    POT_2,
     SCENE_ID,
     SUITE,
     TASK_ID,
@@ -43,7 +43,9 @@ from experiments.robot.libero.tasks.validate_l3b_moka_state_bundles import (
 
 
 VERDICT = "PASS_L3B_MOKA_REAL_ACTION_SAFE_REFERENCE"
-GRASP_REFERENCE_LABEL = "pi05_native_ep000_pose_keyframes_v1"
+PREPLACED_BODY = CONDITION_INTERVENTION_BODY["near_first"]
+MOVING_BODY = CONDITION_REMAINING_BODY["near_first"]
+GRASP_REFERENCE_LABEL = "pi05_native_ep000_pose_keyframes_symmetry_transfer_v2"
 GRASP_REFERENCE_PROVENANCE = {
     "source_scene": "Eb",
     "source_condition": "native",
@@ -55,7 +57,13 @@ GRASP_REFERENCE_PROVENANCE = {
     "source_steps": [270, 280, 290, 300, 310, 319, 330, 345, 360],
     "representation": (
         "absolute OSC orientation plus EEF position offset from the "
-        "first-policy moka_pot_1 body position"
+        "first-policy moving moka-pot body position"
+    ),
+    "source_body": "moka_pot_1_main",
+    "runtime_body": MOVING_BODY,
+    "transfer_rule": (
+        "translation-equivariant reuse across the two identical native "
+        "moka_pot assets; no pose, waypoint, or threshold was fitted to Er"
     ),
 }
 GRASP_POSE_WAYPOINTS = (
@@ -178,7 +186,7 @@ def _state_record(path: Path, episode: int) -> tuple[dict, np.ndarray]:
             int(group.attrs.get("design_version", -1)) != DESIGN_VERSION
             or _decode(group.attrs.get("condition_label", "")) != "Er"
         ):
-            raise ValueError("Safe requires the v2 Er state bundle")
+            raise ValueError("Safe requires the active-design Er state bundle")
         demo = group[f"demo_{episode}"]
         record = {
             "initial_state": np.asarray(demo["initial_state"][:], dtype=float)
@@ -187,7 +195,7 @@ def _state_record(path: Path, episode: int) -> tuple[dict, np.ndarray]:
             record[name] = _decode(value)
     slots = json.loads(str(record["slot_targets_json"]))
     first_policy = json.loads(str(record["formal_first_policy_json"]))
-    target = np.asarray(first_policy[POT_2]["position"], dtype=float)
+    target = np.asarray(first_policy[PREPLACED_BODY]["position"], dtype=float)
     target[:2] = np.asarray(slots["far_xyz"][:2], dtype=float)
     return record, target
 
@@ -207,8 +215,8 @@ def _report_base(er_path: Path, episode: int, target: np.ndarray) -> dict:
         "native_bddl_sha256": sha256_path(native_bddl_path()),
         "er_states": str(er_path),
         "er_states_sha256": sha256_path(er_path),
-        "moving_body": POT_1,
-        "preplaced_body": POT_2,
+        "moving_body": MOVING_BODY,
+        "preplaced_body": PREPLACED_BODY,
         "target_slot": "far",
         "target_body_position": target.tolist(),
         "grasp_reference_label": GRASP_REFERENCE_LABEL,
@@ -252,8 +260,8 @@ def run(args) -> dict:
             env,
             np.asarray(record["initial_state"], dtype=float),
             order="Safe_from_Er",
-            placed_body=POT_2,
-            moving_body=POT_1,
+            placed_body=PREPLACED_BODY,
+            moving_body=MOVING_BODY,
             target_position=target,
             grasp_offset_xy=np.zeros(2, dtype=float),
             args=args,

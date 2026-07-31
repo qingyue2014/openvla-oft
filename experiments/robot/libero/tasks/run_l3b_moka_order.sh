@@ -46,7 +46,7 @@ SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${REVIEW_ROOT}/L3-B_moka_Safe_ba
 SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_moka_smoke_report.json}"
 TRAJECTORY_ROOT="${TRAJECTORY_ROOT:-${REVIEW_ROOT}/${RUN_TAG}_trajectories}"
 CAPABILITY_PREREGISTRATION="${CAPABILITY_PREREGISTRATION:-}"
-V2_POOL_PREREGISTRATION="${V2_POOL_PREREGISTRATION:-${TASKS_DIR}/l3b_moka_v2_pool_prereg.json}"
+DESIGN_PREREGISTRATION="${DESIGN_PREREGISTRATION:-${TASKS_DIR}/l3b_moka_v3_design_prereg.json}"
 
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 if [[ -z "${LIBERO_ROOT}" && -d "_deps/LIBERO/libero" ]]; then
@@ -129,8 +129,8 @@ validate_prepared() {
 }
 
 run_prepare() {
-  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_v2_pool.py" \
-    --preregistration "${V2_POOL_PREREGISTRATION}"
+  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_v3_design.py" \
+    --preregistration "${DESIGN_PREREGISTRATION}"
   "${PYTHON_BIN}" "${TASKS_DIR}/generate_l3b_moka_order_states.py" \
     --bddl "${NATIVE_BDDL}" \
     --native-output "${NATIVE_STATES}" \
@@ -139,7 +139,7 @@ run_prepare() {
     --manifest "${INITIAL_GATE}" \
     --review-dir "${REVIEW_ROOT}" \
     --num-states "${NUM_STATES}" \
-    --pool-preregistration "${V2_POOL_PREREGISTRATION}" \
+    --design-preregistration "${DESIGN_PREREGISTRATION}" \
     --seed "${SCENE_SEED}" \
     --render-gpu-device-id "${RENDER_GPU_DEVICE_ID}"
   validate_prepared
@@ -179,8 +179,8 @@ run_eval() {
     --initial_states_path "${state}" \
     --native_only_preflight_manifest "${preflight}" \
     --safety_oracle none \
-    --held_object_body moka_pot_1_main \
-    --distractor_body moka_pot_2_main \
+    --held_object_body moka_pot_2_main \
+    --distractor_body moka_pot_1_main \
     --trajectory_track_bodies \
       "moka_pot_1_main,moka_pot_2_main,flat_stove_1_main" \
     --save_trajectory True \
@@ -216,7 +216,18 @@ run_native_capability() {
     --minimum-native-successes "${MIN_NATIVE_SUCCESSES}" \
     --native-only \
     "${preregistration_args[@]}" \
-    --out-json "${NATIVE_CAPABILITY_REPORT}"
+      --out-json "${NATIVE_CAPABILITY_REPORT}"
+}
+
+run_ec_capability() {
+  validate_prepared >/dev/null
+  run_eval far_first
+  "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
+    --far-first "${TRAJECTORY_ROOT}/far_first" \
+    --expected-count "${SMOKE_TRIALS}" \
+    --minimum-control-successes "${MIN_CONTROL_SUCCESSES}" \
+    --control-only \
+    --out-json "${CONTROL_CAPABILITY_REPORT}"
 }
 
 run_safe_reference() {
@@ -306,6 +317,9 @@ case "${MODE}" in
   native_capability)
     run_native_capability
     ;;
+  ec_capability)
+    run_ec_capability
+    ;;
   safe_reference)
     run_safe_reference
     ;;
@@ -327,7 +341,7 @@ case "${MODE}" in
     exit 2
     ;;
   *)
-    echo "Usage: $0 prepare|check|native_capability|safe_reference|smoke|summarize|formal" >&2
+    echo "Usage: $0 prepare|check|native_capability|ec_capability|safe_reference|smoke|summarize|formal" >&2
     exit 2
     ;;
 esac

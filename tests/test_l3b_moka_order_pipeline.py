@@ -59,6 +59,11 @@ from experiments.robot.libero.tasks.validate_l3b_moka_v2_pool import (
     PREREGISTRATION_ID as V2_POOL_PREREGISTRATION_ID,
     validate_spec as validate_v2_pool_spec,
 )
+from experiments.robot.libero.tasks.validate_l3b_moka_v3_design import (
+    OFFICIAL_STATE_INDICES as V3_OFFICIAL_STATE_INDICES,
+    PREREGISTRATION_ID as V3_DESIGN_PREREGISTRATION_ID,
+    validate_spec as validate_v3_design_spec,
+)
 from experiments.robot.libero.tasks.validate_l3b_moka_native_preflight import (
     verify_runtime_asset_inventory,
 )
@@ -82,7 +87,7 @@ def test_native_task_lock_and_runner_contract():
     assert (SUITE, TASK_ID) == ("libero_10", 8)
     assert TASK_FILE == "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl"
     assert TASK_PROMPT == "put both moka pots on the stove"
-    assert DESIGN_VERSION == 2
+    assert DESIGN_VERSION == 3
     assert CONDITION_LABEL == {
         "native": "Eb",
         "near_first": "Er",
@@ -92,10 +97,10 @@ def test_native_task_lock_and_runner_contract():
     assert CONDITION_SLOT["far_first"] == "far"
     assert CONDITION_INTERVENTION_BODY["near_first"] == (
         CONDITION_INTERVENTION_BODY["far_first"]
-    ) == "moka_pot_2_main"
+    ) == "moka_pot_1_main"
     assert CONDITION_REMAINING_BODY["near_first"] == (
         CONDITION_REMAINING_BODY["far_first"]
-    ) == "moka_pot_1_main"
+    ) == "moka_pot_2_main"
     assert SLOT_SEPARATION_M == 0.105
     runner = (TASKS / "run_l3b_moka_order.sh").read_text()
     wrapper = (TASKS / "run_l3b_moka_order_pi05.sh").read_text()
@@ -110,7 +115,8 @@ def test_native_task_lock_and_runner_contract():
     assert "run_safe_reference" in runner
     assert "summarize_l3b_moka_safe_references.py" in runner
     assert "episode < NUM_STATES" in runner
-    assert "--pool-preregistration" in runner
+    assert "--design-preregistration" in runner
+    assert "run_ec_capability" in runner
     assert "--control-only" in runner
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper
     assert 'runtime_scene == "L3-B-MOKA-ORDER"' in evaluator
@@ -129,6 +135,20 @@ def test_v2_pool_is_locked_to_prior_native_stable_successes():
     assert len(result["sha256"]) == 64
 
 
+def test_v3_design_locks_role_swap_before_rerun():
+    path = TASKS / "l3b_moka_v3_design_prereg.json"
+    result = validate_v3_design_spec(path)
+    assert result["preregistration_id"] == V3_DESIGN_PREREGISTRATION_ID
+    assert result["official_state_indices"] == [3, 5, 7, 17, 18]
+    assert result["official_state_indices"] == V3_OFFICIAL_STATE_INDICES
+    assert result["condition_roles"]["near_first"] == {
+        "preplaced_body": "moka_pot_1_main",
+        "remaining_body": "moka_pot_2_main",
+        "slot": "near",
+    }
+    assert len(result["failed_ec_report_sha256"]) == 64
+
+
 def test_safe_grasp_reference_is_compact_and_provenance_bound():
     assert len(GRASP_POSE_WAYPOINTS) == 9
     assert [item["source_step"] for item in GRASP_POSE_WAYPOINTS] == (
@@ -142,6 +162,8 @@ def test_safe_grasp_reference_is_compact_and_provenance_bound():
     )
     assert [item["gripper"] for item in GRASP_POSE_WAYPOINTS].count(1.0) == 3
     assert len(GRASP_REFERENCE_PROVENANCE["source_trajectory_sha256"]) == 64
+    assert GRASP_REFERENCE_PROVENANCE["source_body"] == "moka_pot_1_main"
+    assert GRASP_REFERENCE_PROVENANCE["runtime_body"] == "moka_pot_2_main"
 
 
 def test_safe_terminal_gate_checks_the_entire_settle_window():
@@ -391,9 +413,9 @@ def _write_fake_trajectory(
 ):
     directory.mkdir(parents=True, exist_ok=True)
     if condition == "near_first":
-        target, occupant = "moka_pot_1_main", "moka_pot_2_main"
+        target, occupant = "moka_pot_2_main", "moka_pot_1_main"
     elif condition == "far_first":
-        target, occupant = "moka_pot_1_main", "moka_pot_2_main"
+        target, occupant = "moka_pot_2_main", "moka_pot_1_main"
     else:
         target = occupant = None
     bodies = {

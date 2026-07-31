@@ -1,4 +1,4 @@
-# L3-B moka sequence v2
+# L3-B moka sequence v3
 
 Status: **Eb/Er/Ec preparation, the Safe real-action controller, and smoke
 execution are implemented fail-closed. Formal evaluation remains blocked on
@@ -31,9 +31,9 @@ shared native goal region.
 | Scene | Internal condition | Initial state | Required policy work |
 | --- | --- | --- | --- |
 | Eb | `native` | Bit-exact official native state | Place both native moka pots |
-| Er | `near_first` | Only pot2's native free-joint pose/velocity is changed; pot2 is stable in the near part of the native cook region | Place pot1 while preserving or safely repairing prior progress |
-| Ec | `far_first` | Only the same pot2 free-joint pose/velocity is changed; pot2 is stable in the far part of the same cook region | Place the same pot1 |
-| Safe | real-action reference from Er | Exact Er reset and evaluator wait | A scripted 7-D OSC rollout places pot1 and reaches the unchanged native goal |
+| Er | `near_first` | Only pot1's native free-joint pose/velocity is changed; pot1 is stable in the near part of the native cook region | Place pot2 while preserving or safely repairing prior progress |
+| Ec | `far_first` | Only the same pot1 free-joint pose/velocity is changed; pot1 is stable in the far part of the same cook region | Place the same pot2 |
+| Safe | real-action reference from Er | Exact Er reset and evaluator wait | A scripted 7-D OSC rollout places pot2 and reaches the unchanged native goal |
 
 Near and far are state-construction coordinates separated diagonally by
 0.105 m. Both centers remain inside the native stove cook site. The separation
@@ -44,9 +44,9 @@ are not task predicates and are never exposed in the prompt.
 The Er/Ec pairing validator requires both states to:
 
 1. share the exact same official base state and fixed-fixture replay;
-2. modify the exact same pot2 qpos/qvel slices and nothing else;
-3. leave pot1 as the remaining object;
-4. bind pot2 to distinct near/far coordinates from the same native cook site;
+2. modify the exact same pot1 qpos/qvel slices and nothing else;
+3. leave pot2 as the remaining object;
+4. bind pot1 to distinct near/far coordinates from the same native cook site;
 5. pass the complete evaluator reset, 10-step wait, first-policy observation,
    and 100-step stability hold; and
 6. keep both moka pots upright within 1.0 degree with correct native support
@@ -54,23 +54,31 @@ The Er/Ec pairing validator requires both states to:
 
 ## Capability-conditioned state pool
 
-The matched v2 run uses official state indices `3, 5, 7, 17, 18`. They are
+The matched v3 run uses official state indices `3, 5, 7, 17, 18`. They are
 all and only the `success && terminal_stable` episodes from the previously
 frozen 20-state native screen. The deterministic selection is locked in
-`l3b_moka_v2_pool_prereg.json`, including the source preregistration and
-capability-report hashes. It was not selected from any Er/Ec outcome.
+`l3b_moka_v3_design_prereg.json`, including the source preregistration,
+capability-report, and failed-v2 Ec-report hashes. It was not selected from
+any Er/Ec outcome.
 
-This makes the v2 claim explicitly conditional: it asks about subgoal ordering
+This makes the v3 claim explicitly conditional: it asks about subgoal ordering
 where π0.5 already demonstrated stable native task competence. It does not
 estimate unconditional native success. Every HDF5 episode retains its original
 official state index, and generation refuses a different count, order, or
 substitution.
 
+The v2 matched design preplaced pot2 and left pot1. Its preregistered Ec run
+failed at 0/5 strict stable successes: trajectory/video review found three
+pot1 grasp topples, one missed pot1 grasp, and one raw completion that tipped
+the preplaced pot2. Er was never run. Before any v3 rollout, v3 therefore
+locked a role swap—preplace pot1 and leave the identical native pot2—without
+changing slots, thresholds, task, prompt, or inventory.
+
 ## Capability and interpretation
 
 Eb is an official-layout baseline and is reported descriptively. Its
 whole-task success rate does not reject the paired experiment because Eb
-requires two placements, whereas Er and Ec require the same single pot1
+requires two placements, whereas Er and Ec require the same single pot2
 placement.
 
 Ec is the matched capability control. Smoke execution therefore runs:
@@ -121,6 +129,8 @@ control, smoke, and an explicit hash-bound human review all pass.
 
 The completed `l3b_moka_native20_v1` result (raw 11/20, stable 5/20) remains a
 valid report about whole-task native performance. It used the older
-different-pot near/far pairing and cannot authorize or reject this v2 matched
+different-pot near/far pairing and cannot authorize or reject this v3 matched
 single-placement contrast. The v1 source is frozen at commit `6883655`; the
-current v1 runner refuses to overwrite its artifacts.
+current v1 runner refuses to overwrite its artifacts. The failed v2 Ec control
+is frozen at commit `313e5de` and report SHA-256
+`5147bb5a88efcce34a4284676a2686024c9dee10a5f099eec526ea6a9e341a1f`.
