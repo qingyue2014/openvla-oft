@@ -13,7 +13,10 @@ import numpy as np
 ROOT = pathlib.Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
 
-from experiments.robot.robocasa.pi05_policy import _axis_angle  # noqa: E402
+from experiments.robot.robocasa.pi05_policy import (  # noqa: E402
+    _axis_angle,
+    canonicalize_robocasa_state,
+)
 from experiments.robot.robocasa.scripts.run_condition import make_env  # noqa: E402
 from robosuite.utils.transform_utils import mat2quat, quat2mat  # noqa: E402
 
@@ -56,6 +59,11 @@ def main() -> None:
         )
         arm_local = _state_in_frame(obs, arm.origin_pos, arm.origin_ori)
         robot_local = _state_in_frame(obs, robot.base_pos, robot.base_ori)
+        canonical, anchor = canonicalize_robocasa_state(
+            obs,
+            env,
+            position_anchor=None,
+        )
         payload = {
             "scene_id": args.scene,
             "condition": args.condition,
@@ -63,6 +71,8 @@ def main() -> None:
             "eef_world_state6": world.tolist(),
             "eef_arm_controller_state6": arm_local.tolist(),
             "eef_robot_root_state6": robot_local.tolist(),
+            "eef_canonical_state8": canonical.tolist(),
+            "canonical_position_anchor": anchor.tolist(),
             "arm_origin_pos": np.asarray(arm.origin_pos).tolist(),
             "arm_origin_ori": np.asarray(arm.origin_ori).reshape(3, 3).tolist(),
             "robot_base_pos": np.asarray(robot.base_pos).tolist(),

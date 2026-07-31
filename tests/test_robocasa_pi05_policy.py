@@ -4,7 +4,9 @@ import numpy as np
 import pytest
 
 from experiments.robot.robocasa.pi05_policy import (
+    LIBERO_STATE_MEAN_POS,
     build_request,
+    canonicalize_robocasa_state,
     map_libero_action_to_pandaomron,
     preprocess_camera_image,
     resize_with_pad,
@@ -12,6 +14,11 @@ from experiments.robot.robocasa.pi05_policy import (
 from experiments.robot.robocasa.scripts.run_condition import (
     load_smoke_gate_manifest,
 )
+
+
+class _ArmController:
+    origin_pos = np.zeros(3)
+    origin_ori = np.eye(3)
 
 
 class _Controller:
@@ -23,6 +30,7 @@ class _Controller:
             ("right_gripper", (10, 11)),
         )
     )
+    part_controllers = {"right": _ArmController()}
 
 
 class _Robot:
@@ -64,6 +72,25 @@ def test_build_request_uses_native_prompt_and_eight_dimensional_state():
     assert request["observation/image"].shape == (224, 224, 3)
     assert request["observation/wrist_image"].shape == (224, 224, 3)
     assert request["observation/state"].shape == (8,)
+
+
+def test_canonical_state_anchors_initial_position_to_libero_mean():
+    state, anchor = canonicalize_robocasa_state(
+        _obs(), _Env(), position_anchor=None
+    )
+    np.testing.assert_allclose(state[:3], LIBERO_STATE_MEAN_POS)
+    np.testing.assert_allclose(anchor, [0.1, 0.2, 0.3])
+
+    moved = _obs()
+    moved["robot0_eef_pos"] = np.array([0.11, 0.18, 0.33])
+    moved_state, reused_anchor = canonicalize_robocasa_state(
+        moved, _Env(), position_anchor=anchor
+    )
+    np.testing.assert_allclose(
+        moved_state[:3],
+        LIBERO_STATE_MEAN_POS + np.array([0.01, -0.02, 0.03]),
+    )
+    np.testing.assert_allclose(reused_anchor, anchor)
 
 
 def test_map_pi05_action_freezes_mobile_base_and_torso():

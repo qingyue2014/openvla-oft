@@ -22,6 +22,10 @@ AGENT_CAMERA = "robot0_agentview_center"
 WRIST_CAMERA = "robot0_eye_in_hand"
 PI05_ACTION_DIM = 7
 ROBOCASA_ACTION_DIM = 12
+LIBERO_STATE_MEAN_POS = np.array(
+    [-0.043638702, 0.035254877, 0.76370335],
+    dtype=np.float32,
+)
 
 
 def resize_with_pad(image: np.ndarray, size: int = 224) -> np.ndarray:
@@ -74,7 +78,7 @@ def wait_for_server(host: str, port: int, timeout_s: float) -> None:
 
 
 def _axis_angle(quat: np.ndarray) -> np.ndarray:
-    """Convert a robosuite xyzw quaternion to a rotation vector."""
+    """Match OpenPI's released LIBERO xyzw quaternion conversion."""
 
     quat = np.asarray(quat, dtype=np.float64)
     if quat.shape != (4,):
@@ -83,18 +87,118 @@ def _axis_angle(quat: np.ndarray) -> np.ndarray:
     if norm == 0.0:
         raise ValueError("zero quaternion")
     quat = quat / norm
-    xyz = quat[:3]
     w = float(np.clip(quat[3], -1.0, 1.0))
-    sin_half = float(np.linalg.norm(xyz))
-    if sin_half < 1e-8:
+    denominator = float(np.sqrt(max(0.0, 1.0 - w * w)))
+    if denominator < 1e-8:
         return np.zeros(3, dtype=np.float32)
-    angle = 2.0 * np.arctan2(sin_half, w)
-    if angle > np.pi:
-        angle -= 2.0 * np.pi
-    return (xyz / sin_half * angle).astype(np.float32)
+    return (quat[:3] * (2.0 * np.arccos(w)) / denominator).astype(np.float32)
 
 
-def build_request(obs: Mapping[str, Any], lang: str) -> dict[str, Any]:
+def _quat_to_mat(quat: np.ndarray) -> np.ndarray:
+    quat = np.asarray(quat, dtype=np.float64)
+    quat = quat / np.linalg.norm(quat)
+    x, y, z, w = quat
+    return np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+            [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+            [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+        ]
+    )
+
+
+def _mat_to_quat(matrix: np.ndarray) -> np.ndarray:
+    """Convert a rotation matrix to a normalized xyzw quaternion."""
+
+    matrix = np.asarray(matrix, dtype=np.float64).reshape(3, 3)
+    trace = float(np.trace(matrix))
+    if trace > 0.0:
+        scale = 2.0 * np.sqrt(trace + 1.0)
+        quat = np.array(
+            [
+                (matrix[2, 1] - matrix[1, 2]) / scale,
+                (matrix[0, 2] - matrix[2, 0]) / scale,
+                (matrix[1, 0] - matrix[0, 1]) / scale,
+                0.25 * scale,
+            ]
+        )
+    else:
+        index = int(np.argmax(np.diag(matrix)))
+        if index == 0:
+            scale = 2.0 * np.sqrt(1.0 + matrix[0, 0] - matrix[1, 1] - matrix[2, 2])
+            quat = np.array(
+                [
+                    0.25 * scale,
+                    (matrix[0, 1] + matrix[1, 0]) / scale,
+                    (matrix[0, 2] + matrix[2, 0]) / scale,
+                    (matrix[2, 1] - matrix[1, 2]) / scale,
+                ]
+            )
+        elif index == 1:
+            scale = 2.0 * np.sqrt(1.0 + matrix[1, 1] - matrix[0, 0] - matrix[2, 2])
+            quat = np.array(
+                [
+                    (matrix[0, 1] + matrix[1, 0]) / scale,
+                    0.25 * scale,
+                    (matrix[1, 2] + matrix[2, 1]) / scale,
+                    (matrix[0, 2] - matrix[2, 0]) / scale,
+                ]
+            )
+        else:
+            scale = 2.0 * np.sqrt(1.0 + matrix[2, 2] - matrix[0, 0] - matrix[1, 1])
+            quat = np.array(
+                [
+                    (matrix[0, 2] + matrix[2, 0]) / scale,
+                    (matrix[1, 2] + matrix[2, 1]) / scale,
+                    0.25 * scale,
+                    (matrix[1, 0] - matrix[0, 1]) / scale,
+                ]
+            )
+    return quat / np.linalg.norm(quat)
+
+
+def canonicalize_robocasa_state(
+    obs: Mapping[str, Any],
+    env: Any,
+    *,
+    position_anchor: np.ndarray | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Express PandaOmron proprioception in a LIBERO-like arm-local frame."""
+
+    arm = env.robots[0].composite_controller.part_controllers["right"]
+    origin_pos = np.asarray(arm.origin_pos, dtype=np.float64)
+    origin_ori = np.asarray(arm.origin_ori, dtype=np.float64).reshape(3, 3)
+    world_pos = np.asarray(obs["robot0_eef_pos"], dtype=np.float64)
+    local_pos = origin_ori.T @ (world_pos - origin_pos)
+    anchor = local_pos.copy() if position_anchor is None else position_anchor
+    canonical_pos = LIBERO_STATE_MEAN_POS + (local_pos - anchor)
+
+    world_ori = _quat_to_mat(np.asarray(obs["robot0_eef_quat"], dtype=np.float64))
+    local_quat = _mat_to_quat(origin_ori.T @ world_ori)
+    # LIBERO's downward-facing initial pose is represented by a positive
+    # x-axis rotation near +pi. Select the equivalent quaternion branch that
+    # preserves that representation instead of jumping to approximately -pi.
+    if local_quat[0] < 0.0:
+        local_quat = -local_quat
+
+    state = np.concatenate(
+        (
+            canonical_pos.astype(np.float32),
+            _axis_angle(local_quat),
+            np.asarray(obs["robot0_gripper_qpos"], dtype=np.float32),
+        )
+    )
+    if state.shape != (8,):
+        raise ValueError(f"expected 8-D canonical pi0.5 state, got {state.shape}")
+    return state, anchor
+
+
+def build_request(
+    obs: Mapping[str, Any],
+    lang: str,
+    *,
+    state: np.ndarray | None = None,
+) -> dict[str, Any]:
     """Build the exact request expected by the released pi05_libero server."""
 
     center_key = f"{AGENT_CAMERA}_image"
@@ -110,13 +214,15 @@ def build_request(obs: Mapping[str, Any], lang: str) -> dict[str, Any]:
     if missing:
         raise KeyError(f"RoboCasa observation is missing pi0.5 inputs: {missing}")
 
-    state = np.concatenate(
-        (
-            np.asarray(obs["robot0_eef_pos"], dtype=np.float32),
-            _axis_angle(np.asarray(obs["robot0_eef_quat"])),
-            np.asarray(obs["robot0_gripper_qpos"], dtype=np.float32),
+    if state is None:
+        state = np.concatenate(
+            (
+                np.asarray(obs["robot0_eef_pos"], dtype=np.float32),
+                _axis_angle(np.asarray(obs["robot0_eef_quat"])),
+                np.asarray(obs["robot0_gripper_qpos"], dtype=np.float32),
+            )
         )
-    )
+    state = np.asarray(state, dtype=np.float32)
     if state.shape != (8,):
         raise ValueError(f"expected 8-D pi0.5 state, got {state.shape}")
     return {
@@ -164,7 +270,7 @@ class Pi05RoboCasaPolicy:
 
     requires_camera_obs = True
     camera_names = (AGENT_CAMERA, WRIST_CAMERA)
-    model_label = "pi05_libero_cross_sim"
+    model_label = "pi05_libero_cross_sim_arm_local_state"
 
     def __init__(self) -> None:
         self.host = os.environ.get("PI05_HOST", "127.0.0.1")
@@ -187,6 +293,7 @@ class Pi05RoboCasaPolicy:
         )
         self.metadata = self.client.get_server_metadata()
         self._queue: deque[np.ndarray] = deque()
+        self._position_anchor: np.ndarray | None = None
         print(
             "Connected to pi0.5 for cross-simulator RoboCasa smoke; "
             f"server=ws://{self.host}:{self.port} metadata={self.metadata}"
@@ -194,6 +301,7 @@ class Pi05RoboCasaPolicy:
 
     def reset(self) -> None:
         self._queue.clear()
+        self._position_anchor = None
 
     @staticmethod
     def policy_view_image(obs: Mapping[str, Any]) -> np.ndarray:
@@ -203,7 +311,12 @@ class Pi05RoboCasaPolicy:
 
     def __call__(self, obs: Mapping[str, Any], lang: str, env: Any) -> np.ndarray:
         if not self._queue:
-            response = self.client.infer(build_request(obs, lang))
+            state, self._position_anchor = canonicalize_robocasa_state(
+                obs,
+                env,
+                position_anchor=self._position_anchor,
+            )
+            response = self.client.infer(build_request(obs, lang, state=state))
             if "actions" not in response:
                 raise KeyError(
                     "pi0.5 response has no actions field: "

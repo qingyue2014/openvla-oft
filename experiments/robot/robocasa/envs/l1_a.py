@@ -418,7 +418,7 @@ class L1A2DepthAmbiguousTwins(StaticGeometryScene, PickPlaceCounterToCabinet):
     physcog_target_axis_x = 0.18
     # Both safe controls stay on the visible side of the robot and remain more
     # than the 0.10 m declared detour threshold away from the target axis.
-    physcog_eb_hazard_x = 0.34
+    physcog_eb_hazard_x = 0.31
     physcog_ec_hazard_x = 0.30
 
     #: a glass cup is light and top-heavy: a fingertip strike tips it
