@@ -150,7 +150,11 @@ def load_smoke_gate_manifest(
         "robot0_eye_in_hand",
     ),
     expected_policy_initialization: str = (
-        "pi05_libero_gripper_wait10_no_eef_alignment"
+        "pi05_libero_wait10_native_equivalent_gripper_no_eef_alignment"
+    ),
+    expected_initial_gripper_qpos: tuple[float, float] = (
+        0.03872,
+        -0.03872,
     ),
 ) -> dict | None:
     """Require reviewed initial-state gates before a dynamic smoke rollout."""
@@ -201,6 +205,29 @@ def load_smoke_gate_manifest(
     ) != {"Eb", "Er", "Ec"}:
         raise NativePreflightError(
             "smoke gate visibility lacks paired pi0.5 wrist-camera frames"
+        )
+    paired_gripper_qpos = (
+        visibility.get("paired_gripper_qpos_after_initialization") or {}
+    )
+    if set(paired_gripper_qpos) != {"Eb", "Er", "Ec"}:
+        raise NativePreflightError(
+            "smoke gate lacks paired post-initialization gripper state"
+        )
+    reference_qpos = np.asarray(expected_initial_gripper_qpos, dtype=np.float64)
+    mismatched_qpos = {
+        condition: qpos
+        for condition, qpos in paired_gripper_qpos.items()
+        if not np.allclose(
+            np.asarray(qpos, dtype=np.float64),
+            reference_qpos,
+            atol=0.005,
+            rtol=0.0,
+        )
+    }
+    if mismatched_qpos:
+        raise NativePreflightError(
+            "smoke gate post-initialization gripper state does not match "
+            f"native LIBERO wait: {mismatched_qpos}"
         )
     return payload
 
@@ -273,7 +300,19 @@ def main():
             expected_policy_initialization=getattr(
                 policy,
                 "policy_initialization",
-                "pi05_libero_gripper_wait10_no_eef_alignment",
+                (
+                    "pi05_libero_wait10_native_equivalent_gripper"
+                    "_no_eef_alignment"
+                ),
+            ),
+            expected_initial_gripper_qpos=tuple(
+                np.asarray(
+                    getattr(
+                        policy,
+                        "expected_initial_gripper_qpos",
+                        (0.03872, -0.03872),
+                    )
+                ).tolist()
             ),
         )
         formal_gates = (

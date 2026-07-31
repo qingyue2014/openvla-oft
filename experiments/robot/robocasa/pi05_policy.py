@@ -29,9 +29,11 @@ ROBOCASA_AGENT_CAMERAS = (
 )
 PI05_ACTION_DIM = 7
 ROBOCASA_ACTION_DIM = 12
-LIBERO_PANDA_GRIPPER_SPEED = 0.01
-ROBOCASA_PANDA_GRIPPER_SPEED = 0.2
 PI05_SETTLE_STEPS = 10
+LIBERO_POST_WAIT_GRIPPER_QPOS = np.array(
+    [0.03872, -0.03872],
+    dtype=np.float32,
+)
 # Mean first-policy pose after the official ten-step wait, measured over the
 # 20 native LIBERO task-8 trajectories in the validated pi0.5 capability run.
 # This is an initial-pose anchor, not the all-timestep dataset mean.
@@ -119,8 +121,11 @@ def pi05_preprocessing_label(mode: str) -> str:
 
 def pi05_initialization_label(align_initial_z: bool) -> str:
     if align_initial_z:
-        return "pi05_libero_gripper_wait10_align_eef_world_z_1.1756006"
-    return "pi05_libero_gripper_wait10_no_eef_alignment"
+        return (
+            "pi05_libero_wait10_native_equivalent_gripper"
+            "_align_eef_world_z_1.1756006"
+        )
+    return "pi05_libero_wait10_native_equivalent_gripper_no_eef_alignment"
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
@@ -320,45 +325,9 @@ def build_request(
     }
 
 
-def _apply_libero_gripper_timing(action: float, env: Any) -> None:
-    """Advance the current Panda gripper command with LIBERO 1.4.1 timing.
-
-    Both robosuite versions convert the scalar command to a binary direction,
-    then integrate an internal two-finger command. LIBERO 1.4.1 integrates by
-    0.01 per control step, whereas the RoboCasa Panda gripper integrates by
-    0.2. Merely scaling ``action`` cannot compensate because ``format_action``
-    discards its magnitude with ``sign(action)``.
-
-    Advance the existing native gripper's controller state by the old 0.01
-    increment and send a zero scalar below. The native formatter then preserves
-    this already-updated command, exactly reproducing the old state machine
-    without replacing or modifying the robot asset.
-    """
-
-    grippers = getattr(env.robots[0], "gripper", None)
-    if not isinstance(grippers, Mapping) or "right" not in grippers:
-        raise ValueError("PandaOmron right gripper is unavailable")
-    gripper = grippers["right"]
-    speed = float(gripper.speed)
-    if not np.isclose(speed, ROBOCASA_PANDA_GRIPPER_SPEED):
-        raise ValueError(
-            "unexpected RoboCasa Panda gripper speed: "
-            f"{speed}; expected {ROBOCASA_PANDA_GRIPPER_SPEED}"
-        )
-    current = np.asarray(gripper.current_action, dtype=np.float64)
-    direction = np.array([-1.0, 1.0]) * np.sign(float(action))
-    gripper.current_action = np.clip(
-        current + LIBERO_PANDA_GRIPPER_SPEED * direction,
-        -1.0,
-        1.0,
-    )
-
-
 def map_libero_action_to_pandaomron(
     action: np.ndarray,
     env: Any,
-    *,
-    emulate_libero_gripper: bool = False,
 ) -> np.ndarray:
     """Freeze the mobile body and map LIBERO's world-frame 7-D arm action.
 
@@ -401,13 +370,16 @@ def map_libero_action_to_pandaomron(
     # A rotation vector transforms between coordinate frames in the same way
     # as a translation vector (R.T @ rotvec).
     mapped[3:6] = world_to_controller @ action[3:6]
-    if emulate_libero_gripper:
-        _apply_libero_gripper_timing(float(action[6]), env)
-        # The native formatter uses sign(action). A zero input preserves the
-        # LIBERO-speed current_action installed above.
-        mapped[10] = 0.0
-    else:
-        mapped[10] = action[6]
+    # Use the current native scalar command directly. Although the legacy
+    # LIBERO PandaGripper advertises speed=0.01 and current RoboCasa advertises
+    # speed=0.2, the legacy formatter is advanced across the controller
+    # substeps of one environment step. The current formatter advances once.
+    # The observed environment-step response is therefore equivalent. A
+    # successful native LIBERO pi0.5 trace reaches qpos
+    # [0.03872, -0.03872] after its ten open-wait actions; direct RoboCasa
+    # commands reach [0.03871, -0.03868]. Manually applying 0.01 here caused a
+    # second 20x slowdown and left the policy at [0.0208, -0.0208].
+    mapped[10] = action[6]
     mapped[11] = -1.0  # HybridMobileBase arm-control mode.
     return np.clip(mapped, np.asarray(low), np.asarray(high))
 
@@ -440,7 +412,6 @@ def pi05_settle_action(
     return map_libero_action_to_pandaomron(
         raw,
         env,
-        emulate_libero_gripper=True,
     )
 
 
@@ -452,11 +423,12 @@ class Pi05RoboCasaPolicy:
     action_archive_space = "pi05_libero_7d"
     model_label = (
         "pi05_libero_cross_sim_initial_pose_world_delta_to_panda_base"
-        "_libero_gripper_timing"
+        "_native_equivalent_gripper"
     )
     # Match examples/libero/main.py: objects settle for ten simulator steps
     # under LIBERO_DUMMY_ACTION before the first policy request.
     settle_steps = PI05_SETTLE_STEPS
+    expected_initial_gripper_qpos = LIBERO_POST_WAIT_GRIPPER_QPOS
 
     def __init__(self) -> None:
         self.host = os.environ.get("PI05_HOST", "127.0.0.1")
@@ -476,7 +448,7 @@ class Pi05RoboCasaPolicy:
         )
         self.model_label = (
             "pi05_libero_cross_sim_initial_pose_world_delta_to_panda_base"
-            "_libero_gripper_timing"
+            "_native_equivalent_gripper"
             f"_camera_{self.agent_camera}_image_{self.image_mode}"
             f"_initialization_{self.policy_initialization}"
         )
@@ -575,7 +547,6 @@ class Pi05RoboCasaPolicy:
         return map_libero_action_to_pandaomron(
             raw_action,
             env,
-            emulate_libero_gripper=True,
         )
 
 

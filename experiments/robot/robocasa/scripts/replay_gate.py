@@ -231,7 +231,6 @@ def main():
                     act = map_libero_action_to_pandaomron(
                         act,
                         env,
-                        emulate_libero_gripper=True,
                     )
                 elif act.shape != (12,):
                     raise NativePreflightError(

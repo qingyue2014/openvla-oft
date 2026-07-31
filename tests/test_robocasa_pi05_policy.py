@@ -209,16 +209,10 @@ def test_map_rotates_libero_world_delta_into_pandaomron_base_frame():
 
 def test_pi05_policy_matches_official_ten_step_settling():
     assert Pi05RoboCasaPolicy.settle_steps == 10
-    env = _Env()
-    env.robots[0].gripper["right"].current_action = np.zeros(1)
-    for _ in range(10):
-        mapped = pi05_settle_action(env, _obs(), align_initial_z=False)
-    np.testing.assert_allclose(mapped[:11], 0.0)
+    mapped = pi05_settle_action(_Env(), _obs(), align_initial_z=False)
+    np.testing.assert_allclose(mapped[:10], 0.0)
+    assert mapped[10] == -1.0
     assert mapped[11] == -1.0
-    np.testing.assert_allclose(
-        env.robots[0].gripper["right"].current_action,
-        [0.1, -0.1],
-    )
 
 
 def test_pi05_initial_z_alignment_uses_world_down_action():
@@ -228,20 +222,15 @@ def test_pi05_initial_z_alignment_uses_world_down_action():
     obs["robot0_eef_pos"][2] = 1.30
     mapped = pi05_settle_action(env, obs, align_initial_z=True)
     assert mapped[2] == -1.0
-    assert mapped[10] == 0.0
+    assert mapped[10] == -1.0
 
 
-def test_libero_gripper_timing_reverses_at_old_robosuite_rate():
-    env = _Env()
-    gripper = env.robots[0].gripper["right"]
-    gripper.current_action = np.array([0.1, -0.1])
+def test_gripper_uses_native_environment_step_equivalent_command():
     mapped = map_libero_action_to_pandaomron(
         np.array([0.0] * 6 + [1.0]),
-        env,
-        emulate_libero_gripper=True,
+        _Env(),
     )
-    assert mapped[10] == 0.0
-    np.testing.assert_allclose(gripper.current_action, [0.09, -0.09])
+    assert mapped[10] == 1.0
 
 
 def test_map_rejects_unexpected_robot_interface():
@@ -263,7 +252,7 @@ def test_smoke_gate_manifest_requires_reviewed_initial_gates(tmp_path):
             "visibility": {
               "passed": true,
               "policy_preprocessing": "pi05_libero_rotate180_resize_with_pad_224",
-              "policy_initialization": "pi05_libero_gripper_wait10_no_eef_alignment",
+              "policy_initialization": "pi05_libero_wait10_native_equivalent_gripper_no_eef_alignment",
               "policy_cameras": [
                 "robot0_agentview_center",
                 "robot0_eye_in_hand"
@@ -273,6 +262,11 @@ def test_smoke_gate_manifest_requires_reviewed_initial_gates(tmp_path):
                 "Eb": "eb-wrist.png",
                 "Er": "er-wrist.png",
                 "Ec": "ec-wrist.png"
+              },
+              "paired_gripper_qpos_after_initialization": {
+                "Eb": [0.0387, -0.0387],
+                "Er": [0.0387, -0.0387],
+                "Ec": [0.0387, -0.0387]
               }
             }
           }
@@ -315,7 +309,7 @@ def test_smoke_gate_manifest_rejects_missing_wrist_camera_evidence(tmp_path):
             "visibility": {
               "passed": true,
               "policy_preprocessing": "pi05_libero_rotate180_resize_with_pad_224",
-              "policy_initialization": "pi05_libero_gripper_wait10_no_eef_alignment",
+              "policy_initialization": "pi05_libero_wait10_native_equivalent_gripper_no_eef_alignment",
               "policy_cameras": ["robot0_agentview_center"]
             }
           }
@@ -339,7 +333,7 @@ def test_smoke_gate_manifest_matches_explicit_vertical_policy_view(tmp_path):
             "visibility": {
               "passed": true,
               "policy_preprocessing": "pi05_robocasa_vertical_resize_with_pad_224",
-              "policy_initialization": "pi05_libero_gripper_wait10_no_eef_alignment",
+              "policy_initialization": "pi05_libero_wait10_native_equivalent_gripper_no_eef_alignment",
               "policy_cameras": [
                 "robot0_agentview_center",
                 "robot0_eye_in_hand"
@@ -349,6 +343,11 @@ def test_smoke_gate_manifest_matches_explicit_vertical_policy_view(tmp_path):
                 "Eb": "eb-wrist.png",
                 "Er": "er-wrist.png",
                 "Ec": "ec-wrist.png"
+              },
+              "paired_gripper_qpos_after_initialization": {
+                "Eb": [0.0387, -0.0387],
+                "Er": [0.0387, -0.0387],
+                "Ec": [0.0387, -0.0387]
               }
             }
           }
@@ -377,7 +376,7 @@ def test_smoke_gate_manifest_matches_native_side_camera(tmp_path):
             "visibility": {
               "passed": true,
               "policy_preprocessing": "pi05_robocasa_vertical_resize_with_pad_224",
-              "policy_initialization": "pi05_libero_gripper_wait10_no_eef_alignment",
+              "policy_initialization": "pi05_libero_wait10_native_equivalent_gripper_no_eef_alignment",
               "policy_cameras": [
                 "robot0_agentview_left",
                 "robot0_eye_in_hand"
@@ -387,6 +386,11 @@ def test_smoke_gate_manifest_matches_native_side_camera(tmp_path):
                 "Eb": "eb-wrist.png",
                 "Er": "er-wrist.png",
                 "Ec": "ec-wrist.png"
+              },
+              "paired_gripper_qpos_after_initialization": {
+                "Eb": [0.0387, -0.0387],
+                "Er": [0.0387, -0.0387],
+                "Ec": [0.0387, -0.0387]
               }
             }
           }

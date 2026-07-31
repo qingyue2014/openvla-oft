@@ -281,6 +281,9 @@ def main():
                     "eef_position_after_initialization": np.asarray(
                         obs["robot0_eef_pos"]
                     ).tolist(),
+                    "gripper_qpos_after_initialization": np.asarray(
+                        obs["robot0_gripper_qpos"]
+                    ).tolist(),
                     "initial_max_penetration_m": initial_max_penetration(env),
                     "initial_contacts": initial_contact_report(env),
                     "G0": run_null_action_probe(
@@ -362,6 +365,15 @@ def main():
             "paired_eef_positions_after_initialization"
         ] = {
             condition: probe["eef_position_after_initialization"]
+            for condition, probe in paired_probes.items()
+        }
+        manifest["gates"]["visibility"][
+            "gripper_qpos_after_initialization"
+        ] = selected["gripper_qpos_after_initialization"]
+        manifest["gates"]["visibility"][
+            "paired_gripper_qpos_after_initialization"
+        ] = {
+            condition: probe["gripper_qpos_after_initialization"]
             for condition, probe in paired_probes.items()
         }
         manifest["gates"]["visibility"]["policy_cameras"] = [
