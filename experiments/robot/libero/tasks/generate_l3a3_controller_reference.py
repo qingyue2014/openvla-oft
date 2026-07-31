@@ -864,6 +864,109 @@ def _live_outside_side_guard(env, geometry):
     )
 
 
+def _constraint_prioritized_outside_descent_action(
+    *,
+    current_eef,
+    outside_side_target,
+    outward_direction_xy,
+    maximum_descent_m,
+    gripper,
+    position_action_scale,
+    maximum_translation_action,
+):
+    """Preserve compiled outside XY before allocating action norm to Z."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    outside_side_target = np.asarray(outside_side_target, dtype=float)
+    outward = np.asarray(outward_direction_xy, dtype=float)
+    if current_eef.shape != (3,) or outside_side_target.shape != (3,):
+        raise ValueError("current and outside-side EEF targets must be 3-D")
+    if outward.shape != (2,):
+        raise ValueError("outward direction must be 2-D")
+    outward_norm = float(np.linalg.norm(outward))
+    if not np.isfinite(outward_norm) or outward_norm <= 1e-9:
+        raise ValueError("outward direction must be finite and nonzero")
+    if (
+        not np.isfinite(maximum_descent_m)
+        or maximum_descent_m <= 0.0
+        or not np.isfinite(position_action_scale)
+        or position_action_scale <= 0.0
+        or not np.isfinite(maximum_translation_action)
+        or not (0.0 < maximum_translation_action <= 1.0)
+    ):
+        raise ValueError("outside descent bounds must be finite and positive")
+    outward /= outward_norm
+    lateral_error = outside_side_target[:2] - current_eef[:2]
+    raw_outward_error = float(np.dot(lateral_error, outward))
+    safe_outward_error = max(0.0, raw_outward_error)
+    tangential_error = lateral_error - raw_outward_error * outward
+    safe_lateral_error = (
+        safe_outward_error * outward + tangential_error
+    )
+    requested_lateral_action = (
+        safe_lateral_error / float(position_action_scale)
+    )
+    requested_lateral_norm = float(
+        np.linalg.norm(requested_lateral_action)
+    )
+    if requested_lateral_norm >= maximum_translation_action:
+        lateral_action = (
+            requested_lateral_action
+            * float(maximum_translation_action)
+            / requested_lateral_norm
+        )
+        remaining_vertical_action = 0.0
+    else:
+        lateral_action = requested_lateral_action
+        remaining_vertical_action = float(
+            np.sqrt(
+                max(
+                    0.0,
+                    float(maximum_translation_action) ** 2
+                    - requested_lateral_norm**2,
+                )
+            )
+        )
+    requested_vertical_action = float(
+        maximum_descent_m / float(position_action_scale)
+    )
+    commanded_vertical_action = min(
+        requested_vertical_action,
+        remaining_vertical_action,
+    )
+    action = np.zeros(7, dtype=float)
+    action[:2] = lateral_action
+    action[2] = -commanded_vertical_action
+    action[-1] = float(gripper)
+    translation_norm = float(np.linalg.norm(action[:3]))
+    if translation_norm > maximum_translation_action:
+        raise RuntimeError(
+            "constraint-prioritized descent exceeded controller bound"
+        )
+    return action, {
+        "formula": (
+            "allocate the unchanged translation-action norm to the "
+            "compiled outside XY target first, clamp its outward error at "
+            "zero to prohibit inward commands, then allocate the remaining "
+            "Euclidean norm to vertical descent"
+        ),
+        "compiled_outside_target_xy": outside_side_target[:2].tolist(),
+        "raw_lateral_error_xy_m": lateral_error.tolist(),
+        "raw_outward_error_m": raw_outward_error,
+        "commanded_outward_error_m": safe_outward_error,
+        "tangential_error_xy_m": tangential_error.tolist(),
+        "requested_lateral_action": requested_lateral_action.tolist(),
+        "commanded_lateral_action": lateral_action.tolist(),
+        "remaining_vertical_action": remaining_vertical_action,
+        "requested_vertical_action": requested_vertical_action,
+        "commanded_vertical_action": commanded_vertical_action,
+        "maximum_descent_m": float(maximum_descent_m),
+        "translation_action_norm": translation_norm,
+        "maximum_translation_action": float(
+            maximum_translation_action
+        ),
+    }
+
+
 def _outside_side_geometry_feedback_action(
     *,
     current_eef,
@@ -903,6 +1006,8 @@ def _outside_side_geometry_feedback_action(
         mode = "recover_outside_clearance"
         available_table_descent = None
         recovery_action_saturated = True
+        descent_path_control = None
+        action = None
     else:
         vertical_remaining = float(
             current_eef[2] - outside_side_target[2]
@@ -927,27 +1032,38 @@ def _outside_side_geometry_feedback_action(
                 "outside-side geometry impossible before native table "
                 "clearance is exhausted"
             )
-        maximum_world_step = (
-            float(position_action_scale)
-            * float(maximum_translation_action)
-        )
-        commanded_descent = min(
-            vertical_remaining,
-            maximum_world_step,
-            available_table_descent,
+        action, descent_path_control = (
+            _constraint_prioritized_outside_descent_action(
+                current_eef=current_eef,
+                outside_side_target=outside_side_target,
+                outward_direction_xy=outward,
+                maximum_descent_m=min(
+                    vertical_remaining,
+                    available_table_descent,
+                ),
+                gripper=gripper,
+                position_action_scale=position_action_scale,
+                maximum_translation_action=(
+                    maximum_translation_action
+                ),
+            )
         )
         feedback_target = current_eef.copy()
-        feedback_target[2] -= commanded_descent
+        feedback_target += action[:3] * float(position_action_scale)
         clearance_deficit = 0.0
-        mode = "bounded_vertical_descent"
+        if action[2] < 0.0:
+            mode = "constraint_prioritized_vertical_descent"
+        else:
+            mode = "compiled_outside_xy_recovery"
         recovery_action_saturated = False
-    action = _bounded_side_contact_seek_action(
-        current_eef,
-        feedback_target,
-        gripper,
-        position_action_scale,
-        maximum_translation_action,
-    )
+    if action is None:
+        action = _bounded_side_contact_seek_action(
+            current_eef,
+            feedback_target,
+            gripper,
+            position_action_scale,
+            maximum_translation_action,
+        )
     return action, {
         "mode": mode,
         "current_eef": current_eef.tolist(),
@@ -961,6 +1077,7 @@ def _outside_side_geometry_feedback_action(
         "clearance_deficit_m": float(clearance_deficit),
         "force_outward_recovery": bool(force_outward_recovery),
         "recovery_action_saturated": recovery_action_saturated,
+        "descent_path_control": descent_path_control,
         "available_table_descent_m": available_table_descent,
         "action": action.tolist(),
     }

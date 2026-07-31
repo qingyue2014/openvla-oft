@@ -13,6 +13,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _bounded_side_contact_seek_action,
     _contact_depth_sample_validity,
     _contact_progress_saturation_evidence,
+    _constraint_prioritized_outside_descent_action,
     _compiled_collision_pair_clearance,
     _compiled_pair_set_clearance,
     _compiled_trailing_side_contact_candidates,
@@ -728,13 +729,57 @@ def test_499921_two_mm_live_clearance_proceeds_with_zero_compiled_margin():
         position_action_scale=0.08,
         maximum_translation_action=0.10,
     )
-    assert feedback["mode"] == "bounded_vertical_descent"
+    assert feedback["mode"] == "constraint_prioritized_vertical_descent"
     assert feedback["clearance_deficit_m"] == 0.0
     assert feedback["required_outside_clearance_m"] == (
         strict_positive_clearance
     )
-    assert np.allclose(action[:2], [0.0, 0.0])
+    assert action[0] > 0.0
+    assert action[2] < 0.0
+    assert np.linalg.norm(action[:3]) == pytest.approx(0.10)
+    assert feedback["descent_path_control"] is not None
+
+
+def test_500070_descent_prioritizes_compiled_outside_xy_without_inward_action():
+    current = np.array([0.132674157, -0.028638039, 1.061509291])
+    target = np.array([0.136806395, -0.028507780, 0.898654346])
+    action, evidence = _constraint_prioritized_outside_descent_action(
+        current_eef=current,
+        outside_side_target=target,
+        outward_direction_xy=np.array([1.0, 0.0]),
+        maximum_descent_m=current[2] - target[2],
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    expected_lateral = (target[:2] - current[:2]) / 0.08
+    assert np.allclose(action[:2], expected_lateral)
+    assert action[0] > 0.0
+    assert action[2] < 0.0
+    assert np.linalg.norm(action[:3]) == pytest.approx(0.10)
+    assert evidence["commanded_outward_error_m"] == pytest.approx(
+        target[0] - current[0]
+    )
+    assert evidence["translation_action_norm"] == pytest.approx(0.10)
+
+    # Overshooting the compiled outside target never produces an inward
+    # command; the freed controller norm is allocated to descent.
+    overshot = target.copy()
+    overshot[0] += 0.002
+    overshot[2] = current[2]
+    action, evidence = _constraint_prioritized_outside_descent_action(
+        current_eef=overshot,
+        outside_side_target=target,
+        outward_direction_xy=np.array([1.0, 0.0]),
+        maximum_descent_m=0.008,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    assert action[0] == 0.0
     assert action[2] == pytest.approx(-0.10)
+    assert evidence["raw_outward_error_m"] < 0.0
+    assert evidence["commanded_outward_error_m"] == 0.0
 
 
 def test_499954_saturated_recovery_follows_improving_discrete_response():
@@ -989,15 +1034,30 @@ def test_499888_feedback_recovers_x_before_bounded_z_and_stops_above_table():
         position_action_scale=0.08,
         maximum_translation_action=0.10,
     )
-    assert feedback["mode"] == "bounded_vertical_descent"
-    # Keep the existing 5 mm geometry clearance above the native table:
-    # 12 mm live table clearance permits at most a 7 mm Z target step.
+    assert feedback["mode"] == "compiled_outside_xy_recovery"
+    # The compiled outside XY target has priority when its requested lateral
+    # action consumes the unchanged controller norm.
     assert feedback["available_table_descent_m"] == pytest.approx(0.007)
-    assert feedback["feedback_target"][2] == pytest.approx(
-        current[2] - 0.007
+    assert action[0] > 0.0
+    assert action[2] == 0.0
+    assert np.linalg.norm(action[:3]) == pytest.approx(0.10)
+
+    near_outside = current.copy()
+    near_outside[:2] = target[:2] - np.array([0.001, 0.0])
+    action, feedback = _outside_side_geometry_feedback_action(
+        current_eef=near_outside,
+        outside_side_target=target,
+        guard=clearance_restored,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
     )
-    assert np.allclose(action[:2], [0.0, 0.0])
+    assert feedback["mode"] == "constraint_prioritized_vertical_descent"
+    assert action[0] == pytest.approx(0.0125)
     assert action[2] == pytest.approx(-0.0875)
+    assert feedback["feedback_target"][2] == pytest.approx(
+        near_outside[2] - 0.007
+    )
 
     table_margin_exhausted = {
         **clearance_restored,
