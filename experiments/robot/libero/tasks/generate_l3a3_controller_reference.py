@@ -3652,18 +3652,24 @@ def _compiled_adaptive_workspace_release_action(
         clearance = float(pair["vertical_clearance_m"])
         strict_clearance = float(pair["strict_no_contact_clearance_m"])
         required = float(strict_clearance + base_reserve)
-        nominal_capacity = float(clearance - required - inertial_tail_reserve)
+        current_surplus = float(clearance - required)
+        nominal_capacity = float(current_surplus - inertial_tail_reserve)
         if (
-            not np.isfinite(nominal_capacity)
-            or nominal_capacity <= 0.0
+            not np.isfinite(clearance)
+            or not np.isfinite(strict_clearance)
+            or strict_clearance < 0.0
+            or not np.isfinite(current_surplus)
+            or current_surplus <= 0.0
             or not pair.get("accepted", False)
         ):
             raise RuntimeError(
-                "workspace-release pair lacks positive base8/inertial "
+                "workspace-release pair lacks current strict base8 "
                 f"capacity: index={index}"
             )
-        strict_nominal_capacity = float(
-            np.nextafter(nominal_capacity, 0.0)
+        strict_nominal_capacity = (
+            float(np.nextafter(nominal_capacity, 0.0))
+            if nominal_capacity > 0.0
+            else 0.0
         )
         pair_envelopes.append(
             {
@@ -3676,10 +3682,14 @@ def _compiled_adaptive_workspace_release_action(
                 "strict_no_contact_clearance_m": strict_clearance,
                 "base_overhead_reserve_m": base_reserve,
                 "required_clearance_with_base_reserve_m": required,
+                "current_base8_surplus_m": current_surplus,
                 "measured_negative_inertial_tail_reserve_m": (
                     inertial_tail_reserve
                 ),
                 "strict_nominal_tail_capacity_m": strict_nominal_capacity,
+                "downward_capacity_exhausted_by_inertial_tail": bool(
+                    nominal_capacity <= 0.0
+                ),
                 "strict_safe_translation_action_norm_capacity": float(
                     strict_nominal_capacity / position_action_scale
                 ),
@@ -3702,10 +3712,67 @@ def _compiled_adaptive_workspace_release_action(
     }
     selected_source = min(capacities, key=capacities.get)
     selected_norm = float(capacities[selected_source])
-    translation = requested_direction * selected_norm
+    desired_route_norm = float(
+        min(requested_norm, strict_native_norm_bound)
+    )
+    recovery_required = bool(
+        selected_source == "compiled_pair_base8_nominal_tail_after_inertia"
+        and selected_norm < desired_route_norm
+    )
+    minimum_current_surplus = min(
+        record["current_base8_surplus_m"] for record in pair_envelopes
+    )
+    recovery_world_delta = 0.0
+    if recovery_required:
+        desired_route_tail = float(
+            position_action_scale * desired_route_norm
+            + inertial_tail_reserve
+        )
+        required_recovery = float(
+            max(
+                inertial_tail_reserve - minimum_current_surplus,
+                desired_route_tail - minimum_current_surplus,
+                0.0,
+            )
+        )
+        strict_required_recovery = float(
+            np.nextafter(required_recovery, np.inf)
+        )
+        strict_positive_z_action_bound = float(
+            np.nextafter(
+                min(native_high[2], native_norm_bound),
+                0.0,
+            )
+        )
+        recovery_z_action = float(
+            min(
+                strict_positive_z_action_bound,
+                strict_required_recovery / position_action_scale,
+            )
+        )
+        recovery_world_delta = float(
+            position_action_scale * recovery_z_action
+        )
+        if (
+            recovery_z_action <= 0.0
+            or not recovery_world_delta
+            > inertial_tail_reserve - minimum_current_surplus
+        ):
+            raise RuntimeError(
+                "workspace-release inertial recovery has no one-step strict "
+                "+Z/base8 interior"
+            )
+        translation = np.array([0.0, 0.0, recovery_z_action])
+        selected_source = "event_driven_positive_z_inertial_recovery"
+    else:
+        translation = requested_direction * selected_norm
     for _ in range(128):
         literal_norm = float(np.linalg.norm(translation))
-        nominal_tail = float(position_action_scale * literal_norm)
+        nominal_tail = (
+            0.0
+            if recovery_required
+            else float(position_action_scale * literal_norm)
+        )
         total_tail = float(nominal_tail + inertial_tail_reserve)
         literal_xy_delta = float(
             position_action_scale * np.linalg.norm(translation[:2])
@@ -3714,12 +3781,20 @@ def _compiled_adaptive_workspace_release_action(
             position_action_scale * max(0.0, -translation[2])
         )
         predicted = [
-            float(record["current_vertical_clearance_m"] - total_tail)
+            float(
+                record["current_vertical_clearance_m"]
+                + (recovery_world_delta if recovery_required else 0.0)
+                - total_tail
+            )
             for record in pair_envelopes
         ]
         if (
             0.0 < literal_norm < native_norm_bound
-            and translation[2] <= 0.0
+            and (
+                translation[2] > 0.0
+                if recovery_required
+                else translation[2] <= 0.0
+            )
             and literal_xy_delta <= xy_remaining
             and literal_downward_delta <= abs(downward_z_error)
             and all(
@@ -3733,6 +3808,11 @@ def _compiled_adaptive_workspace_release_action(
             )
         ):
             break
+        if recovery_required:
+            raise RuntimeError(
+                "workspace-release +Z inertial recovery failed literal "
+                "55-pair base8 proof"
+            )
         translation = np.nextafter(translation, 0.0)
     else:
         raise RuntimeError(
@@ -3756,12 +3836,18 @@ def _compiled_adaptive_workspace_release_action(
     action[-1] = float(gripper)
     return action, {
         "accepted": True,
-        "motion_kind": "outward_downward_workspace_release",
+        "motion_kind": (
+            "positive_z_inertial_recovery"
+            if recovery_required
+            else "outward_downward_workspace_release"
+        ),
         "formula": (
             "request [corridor XY error, min(0, outside-side Z minus current "
             "Z)] over position_action_scale; intersect the strict native 3-D "
             "norm with all 55 pair capacities after base8 and latest measured "
-            "negative-dz inertial reserve"
+            "negative-dz inertial reserve; if that reserve exhausts downward "
+            "capacity, prohibit negative Z and issue event-driven pure +Z "
+            "until every pair regains strict capacity"
         ),
         "current_eef": current_eef.tolist(),
         "corridor_target_xy": corridor_target_xy.tolist(),
@@ -3778,6 +3864,11 @@ def _compiled_adaptive_workspace_release_action(
         "selected_limiting_pair": dict(limiting_pair),
         "candidate_action_norm_capacities": capacities,
         "selected_envelope_source": selected_source,
+        "event_driven_positive_z_inertial_recovery": recovery_required,
+        "minimum_current_base8_surplus_m": minimum_current_surplus,
+        "commanded_positive_z_recovery_world_delta_m": (
+            recovery_world_delta
+        ),
         "commanded_translation_action_norm": literal_norm,
         "commanded_nominal_norm_downward_tail_m": nominal_tail,
         "commanded_worst_case_downward_world_tail_m": total_tail,
@@ -3785,7 +3876,12 @@ def _compiled_adaptive_workspace_release_action(
         "commanded_z_action": float(action[2]),
         "minimum_predicted_post_worst_case_base_surplus_m": minimum_surplus,
         "proof": {
-            "outward_xy_plus_nonpositive_z_zero_rotation": True,
+            "outward_xy_plus_nonpositive_z_zero_rotation": bool(
+                not recovery_required
+            ),
+            "pure_positive_z_zero_xy_rotation_recovery": bool(
+                recovery_required
+            ),
             "strictly_inside_native_3d_action_norm_bound": True,
             "does_not_cross_corridor_target_xy": bool(
                 literal_xy_delta <= xy_remaining
@@ -5723,6 +5819,9 @@ def _seek_stable_plate_contact(
                 "center-high Z plane; only after that point passes, command "
                 "outward XY plus nonpositive Z toward the original strict "
                 "corridor XY and outside-side Z to release the high workspace; "
+                "if the latest negative-dz inertia exhausts diagonal downward "
+                "capacity, prohibit negative Z and issue a 55-pair-proved pure "
+                "+Z recovery before recomputing the diagonal; "
                 "derive each 3-D translation-action norm from the strict "
                 "runtime native bound and all 55 live pairs' current clearance "
                 "minus strict+base8 and the latest measured negative-dz "
@@ -6441,6 +6540,29 @@ def _seek_stable_plate_contact(
                     }
                 )
         elif stage_before_action == "workspace_release_diagonal":
+            workspace_release_envelope = feedback[
+                "compiled_adaptive_workspace_release_envelope"
+            ]
+            if workspace_release_envelope[
+                "event_driven_positive_z_inertial_recovery"
+            ]:
+                vertical_tail_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        "event": (
+                            "workspace_release_event_driven_positive_z_"
+                            "inertial_recovery"
+                        ),
+                        "measured_vertical_step_progress_m": (
+                            measured_vertical_step_progress_m
+                        ),
+                        "commanded_positive_z_recovery_world_delta_m": (
+                            workspace_release_envelope[
+                                "commanded_positive_z_recovery_world_delta_m"
+                            ]
+                        ),
+                    }
+                )
             if measured_vertical_step_progress_m < 0.0:
                 vertical_tail_events.append(
                     {
@@ -6474,7 +6596,12 @@ def _seek_stable_plate_contact(
             feedback["corridor_entry_after_workspace_release"] = (
                 corridor_entry_after_action
             )
-            if corridor_entry_after_action["accepted"]:
+            if (
+                corridor_entry_after_action["accepted"]
+                and not workspace_release_envelope[
+                    "event_driven_positive_z_inertial_recovery"
+                ]
+            ):
                 structural_stage = "overhead_corridor_descent"
                 vertical_tail_events.append(
                     {

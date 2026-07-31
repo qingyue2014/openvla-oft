@@ -2810,6 +2810,7 @@ def test_500199_routes_reachable_outside_high_before_workspace_release():
     )
     assert evidence["proof"] == {
         "outward_xy_plus_nonpositive_z_zero_rotation": True,
+        "pure_positive_z_zero_xy_rotation_recovery": False,
         "strictly_inside_native_3d_action_norm_bound": True,
         "does_not_cross_corridor_target_xy": True,
         "does_not_cross_release_target_z": True,
@@ -2866,6 +2867,122 @@ def test_500199_workspace_release_stage_preserves_all_hard_thresholds():
     assert '"compiled_adaptive_workspace_release_envelope"' in bounded_seek
     assert "workspace_release_reached_strict_corridor_to_" in bounded_seek
     assert '"overhead_corridor_descent"' in bounded_seek
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+    assert (
+        '"--plate_contact_seek_max_translation_action",\n'
+        "        type=float,\n"
+        "        default=0.10,"
+        in controller
+    )
+
+
+def test_500206_exhausted_downward_capacity_triggers_positive_z_recovery():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    pairs = []
+    for index in range(55):
+        surplus = 0.0005 if index == 12 else 0.02
+        pairs.append(
+            {
+                "gripper_geom": f"gripper_{index // 11}",
+                "counterpart_geom": f"native_{index % 11}",
+                "counterpart_kind": (
+                    "table" if index % 11 == 10 else "plate"
+                ),
+                "strict_no_contact_clearance_m": strict_clearance,
+                "vertical_clearance_m": strict_clearance + 0.008 + surplus,
+                "accepted": True,
+            }
+        )
+    guard = {
+        "accepted": True,
+        "one_step_vertical_reserve_m": 0.008,
+        "pairs": pairs,
+    }
+    native = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "runtime_resolved": True,
+    }
+    action, evidence = _compiled_adaptive_workspace_release_action(
+        current_eef=np.array([0.1368063955, -0.0285077796, 1.0]),
+        corridor_target_xy=np.array([0.1448063955, -0.0285077796]),
+        release_target_z=0.898654346,
+        measured_vertical_step_progress_m=-0.0008,
+        overhead_guard=guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+    )
+    assert guard["accepted"] is True
+    assert evidence["event_driven_positive_z_inertial_recovery"] is True
+    assert evidence["motion_kind"] == "positive_z_inertial_recovery"
+    assert evidence["selected_envelope_source"] == (
+        "event_driven_positive_z_inertial_recovery"
+    )
+    assert np.array_equal(action[:2], np.zeros(2))
+    assert action[2] > 0.0
+    assert np.all(action[3:6] == 0.0)
+    assert evidence["pair_envelopes"][12][
+        "downward_capacity_exhausted_by_inertial_tail"
+    ] is True
+    assert evidence["commanded_positive_z_recovery_world_delta_m"] > 0.0
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+    assert evidence["proof"][
+        "pure_positive_z_zero_xy_rotation_recovery"
+    ] is True
+    authorization = _overhead_route_frame_authorization_evidence(
+        outside_side_guard={
+            "accepted": False,
+            "minimum_outside_clearance_m": 0.007,
+            "required_outside_clearance_m": strict_clearance,
+        },
+        overhead_guard=guard,
+        overhead_lateral_buffer=_overhead_lateral_buffer_evidence(
+            guard,
+            worst_case_controller_world_step_m=0.008,
+        ),
+        compiled_pairs=pairs,
+        expected_pair_count=55,
+        require_lateral_buffer=False,
+        adaptive_high_lateral_envelope=evidence,
+    )
+    assert authorization["accepted"] is True
+
+    restored_pairs = [
+        {**pair, "vertical_clearance_m": strict_clearance + 0.008 + 0.09}
+        for pair in pairs
+    ]
+    route_action, route_evidence = _compiled_adaptive_workspace_release_action(
+        current_eef=np.array([0.1368063955, -0.0285077796, 1.04]),
+        corridor_target_xy=np.array([0.1448063955, -0.0285077796]),
+        release_target_z=0.898654346,
+        measured_vertical_step_progress_m=0.001,
+        overhead_guard={**guard, "pairs": restored_pairs},
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+    )
+    assert route_evidence["event_driven_positive_z_inertial_recovery"] is False
+    assert route_action[0] > 0.0
+    assert route_action[2] < 0.0
+
+
+def test_500206_workspace_recovery_is_recorded_and_thresholds_unchanged():
+    controller = CONTROLLER_REFERENCE.read_text()
+    bounded_seek = controller.split("def _seek_stable_plate_contact(", 1)[1]
+    assert "workspace_release_event_driven_positive_z_" in bounded_seek
+    assert "event_driven_positive_z_inertial_recovery" in bounded_seek
+    assert '"workspace_release_diagonal": 0' in bounded_seek
     assert (
         'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
         in controller
