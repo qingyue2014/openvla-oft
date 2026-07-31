@@ -432,8 +432,8 @@ def test_generated_pairing_if_artifacts_are_present():
         initial_manifest=manifest,
     )
     assert result["verdict"] == "PASS_L3B_MOKA_EXACT_SERIALIZED_PAIRING"
-    assert result["count"] == 5
-    assert result["official_native_state_indices"] == [3, 5, 7, 17, 18]
+    assert result["count"] == 20
+    assert result["official_native_state_indices"] == list(range(20))
 
 
 def test_state_validator_rejects_non_target_serialized_edit(tmp_path):
