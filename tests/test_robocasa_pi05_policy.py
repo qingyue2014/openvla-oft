@@ -6,6 +6,7 @@ import pytest
 from experiments.robot.robocasa.pi05_policy import (
     build_request,
     map_libero_action_to_pandaomron,
+    preprocess_camera_image,
     resize_with_pad,
 )
 from experiments.robot.robocasa.scripts.run_condition import (
@@ -47,6 +48,14 @@ def test_resize_with_pad_has_official_shape():
     output = resize_with_pad(np.zeros((120, 240, 3), dtype=np.uint8))
     assert output.shape == (224, 224, 3)
     assert output.dtype == np.uint8
+
+
+def test_preprocess_camera_image_matches_official_180_degree_rotation():
+    image = np.zeros((2, 3, 3), dtype=np.uint8)
+    image[..., 0] = np.arange(6).reshape(2, 3)
+    output = preprocess_camera_image(image, size=3)
+    np.testing.assert_array_equal(output[0, :, 0], [5, 4, 3])
+    np.testing.assert_array_equal(output[1, :, 0], [2, 1, 0])
 
 
 def test_build_request_uses_native_prompt_and_eight_dimensional_state():

@@ -49,6 +49,15 @@ def resize_with_pad(image: np.ndarray, size: int = 224) -> np.ndarray:
     return np.asarray(padded)
 
 
+def preprocess_camera_image(image: np.ndarray, size: int = 224) -> np.ndarray:
+    """Match the released OpenPI LIBERO evaluation image transform exactly."""
+
+    # OpenPI examples/libero/main.py rotates each robosuite observation by
+    # 180 degrees before resize_with_pad. A vertical flip alone mirrors the
+    # scene horizontally relative to pi0.5's training distribution.
+    return resize_with_pad(np.asarray(image)[::-1, ::-1], size=size)
+
+
 def wait_for_server(host: str, port: int, timeout_s: float) -> None:
     deadline = time.monotonic() + timeout_s
     last_error: OSError | None = None
@@ -111,11 +120,8 @@ def build_request(obs: Mapping[str, Any], lang: str) -> dict[str, Any]:
     if state.shape != (8,):
         raise ValueError(f"expected 8-D pi0.5 state, got {state.shape}")
     return {
-        # Robosuite camera observations are vertically flipped.
-        "observation/image": resize_with_pad(np.asarray(obs[center_key])[::-1]),
-        "observation/wrist_image": resize_with_pad(
-            np.asarray(obs[wrist_key])[::-1]
-        ),
+        "observation/image": preprocess_camera_image(obs[center_key]),
+        "observation/wrist_image": preprocess_camera_image(obs[wrist_key]),
         "observation/state": state,
         "prompt": str(lang),
     }
@@ -188,6 +194,12 @@ class Pi05RoboCasaPolicy:
 
     def reset(self) -> None:
         self._queue.clear()
+
+    @staticmethod
+    def policy_view_image(obs: Mapping[str, Any]) -> np.ndarray:
+        """Return the exact center-camera pixels consumed by this policy."""
+
+        return preprocess_camera_image(obs[f"{AGENT_CAMERA}_image"])
 
     def __call__(self, obs: Mapping[str, Any], lang: str, env: Any) -> np.ndarray:
         if not self._queue:

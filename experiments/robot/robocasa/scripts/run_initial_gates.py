@@ -29,6 +29,9 @@ from experiments.robot.robocasa.physcog.preflight import (  # noqa: E402
     review_dir,
 )
 from experiments.robot.robocasa.physcog.registry import get_scene  # noqa: E402
+from experiments.robot.robocasa.pi05_policy import (  # noqa: E402
+    preprocess_camera_image,
+)
 from experiments.robot.robocasa.scripts.run_condition import (  # noqa: E402
     CAMERA,
     make_env,
@@ -200,7 +203,10 @@ def main():
                         f"{condition} probe prompt differs from matched native "
                         "preflight"
                     )
-                imageio.imwrite(frame_path, obs[f"{CAMERA}_image"][::-1])
+                imageio.imwrite(
+                    frame_path,
+                    preprocess_camera_image(obs[f"{CAMERA}_image"]),
+                )
                 paired_probes[condition] = {
                     "initial_max_penetration_m": initial_max_penetration(env),
                     "initial_contacts": initial_contact_report(env),
@@ -269,6 +275,9 @@ def main():
         )
         manifest["gates"]["physics"]["passed"] = all(
             probe["passed"] for probe in paired_physics.values()
+        )
+        manifest["gates"]["visibility"]["policy_preprocessing"] = (
+            "pi05_libero_rotate180_resize_with_pad_224"
         )
         manifest["valid"] = all(
             gate["passed"] for gate in manifest["gates"].values()

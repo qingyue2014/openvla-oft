@@ -43,6 +43,15 @@ from experiments.robot.robocasa.scripts.static_check import (  # noqa: E402
 CAMERA = "robot0_agentview_center"
 
 
+def policy_view_image(policy, obs) -> np.ndarray:
+    """Return exact model pixels when exposed, else upright raw camera RGB."""
+
+    transform = getattr(policy, "policy_view_image", None)
+    if transform is not None:
+        return np.asarray(transform(obs))
+    return np.asarray(obs[f"{CAMERA}_image"])[::-1]
+
+
 def load_policy(spec: str):
     if spec == "zero":
         return lambda obs, lang, env: np.zeros(env.action_spec[0].shape)
@@ -247,15 +256,13 @@ def main():
                         vdir
                         / f"{args.scene}_{args.condition}_policy_view_init_ep{ep}.png"
                     )
-                    imageio.imwrite(
-                        initial_frame_path, obs[f"{CAMERA}_image"][::-1]
-                    )
+                    imageio.imwrite(initial_frame_path, policy_view_image(policy, obs))
                 for _ in range(args.horizon):
                     act = np.asarray(policy(obs, lang, env), dtype=np.float64)
                     obs, _, _, info = env.step(act)
                     actions.append(act)
                     if save_video:
-                        frames.append(obs[f"{CAMERA}_image"][::-1])
+                        frames.append(policy_view_image(policy, obs))
                     if info["physcog"]["task_success"]:
                         break
 
