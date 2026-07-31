@@ -502,6 +502,83 @@ def _compiled_geom_world_aabb(model, data, geom_id):
     return world_center, world_half_size
 
 
+def _semantic_finger_side(body_name):
+    """Map a compiled gripper body name to its native left/right finger."""
+    body = str(body_name).lower()
+    if (
+        "leftfinger" in body
+        or "left_finger" in body
+        or "finger1" in body
+        or "joint1" in body
+    ):
+        return "left"
+    if (
+        "rightfinger" in body
+        or "right_finger" in body
+        or "finger2" in body
+        or "joint2" in body
+    ):
+        return "right"
+    return None
+
+
+def _finger_inward_extents_by_semantic_side(
+    finger_bounds,
+    eef_position,
+    outward_direction_xy,
+):
+    """Measure each native finger's plate-facing support independently."""
+    eef_position = np.asarray(eef_position, dtype=float)
+    outward = np.asarray(outward_direction_xy, dtype=float)
+    if eef_position.shape != (3,) or outward.shape != (2,):
+        raise ValueError("EEF position must be 3-D and outward direction 2-D")
+    outward_norm = float(np.linalg.norm(outward))
+    if not np.isfinite(outward_norm) or outward_norm <= 1e-9:
+        raise ValueError("outward direction must be finite and nonzero")
+    outward /= outward_norm
+    bounds_by_side = {
+        "left": [
+            bound
+            for bound in finger_bounds
+            if _semantic_finger_side(bound[1]) == "left"
+        ],
+        "right": [
+            bound
+            for bound in finger_bounds
+            if _semantic_finger_side(bound[1]) == "right"
+        ],
+    }
+    if not all(bounds_by_side.values()):
+        raise RuntimeError(
+            "compiled left/right finger collision geoms unavailable"
+        )
+    side_extents = {
+        side: min(
+            float(
+                np.dot(center[:2] - eef_position[:2], outward)
+                - np.dot(half_size[:2], np.abs(outward))
+            )
+            for _, _, center, half_size in bounds
+        )
+        for side, bounds in bounds_by_side.items()
+    }
+    shared_collision_free_extent = min(side_extents.values())
+    dual_finger_skew = abs(
+        side_extents["left"] - side_extents["right"]
+    )
+    semantic_bounds = [
+        bound
+        for bounds in bounds_by_side.values()
+        for bound in bounds
+    ]
+    return (
+        side_extents,
+        shared_collision_free_extent,
+        dual_finger_skew,
+        semantic_bounds,
+    )
+
+
 def _compiled_native_side_contact_plan(
     env,
     plate_position,
@@ -569,38 +646,22 @@ def _compiled_native_side_contact_plan(
         finger_bounds.append(
             (geom_id, body_name, center, half_size)
         )
-    finger_sides = {
-        "left": any(
-            (
-                "left" in body.lower()
-                or "finger1" in body.lower()
-                or "joint1" in body.lower()
-            )
-            for _, body, _, _ in finger_bounds
-        ),
-        "right": any(
-            (
-                "right" in body.lower()
-                or "finger2" in body.lower()
-                or "joint2" in body.lower()
-            )
-            for _, body, _, _ in finger_bounds
-        ),
-    }
-    if not all(finger_sides.values()):
-        raise RuntimeError(
-            "compiled left/right finger collision geoms unavailable"
-        )
-    finger_inward_extent = min(
-        float(
-            np.dot(center[:2] - eef_position[:2], outward)
-            - np.dot(half_size[:2], np.abs(outward))
-        )
-        for _, _, center, half_size in finger_bounds
+    (
+        finger_side_inward_extents,
+        finger_inward_extent,
+        dual_finger_contact_skew,
+        semantic_finger_bounds,
+    ) = _finger_inward_extents_by_semantic_side(
+        finger_bounds,
+        eef_position,
+        outward,
     )
     finger_center_z_offset = float(
         np.mean(
-            [center[2] - eef_position[2] for _, _, center, _ in finger_bounds]
+            [
+                center[2] - eef_position[2]
+                for _, _, center, _ in semantic_finger_bounds
+            ]
         )
     )
     outside_target, side_contact_target, plan = (
@@ -627,14 +688,156 @@ def _compiled_native_side_contact_plan(
                 {
                     "geom": model.geom_id2name(geom_id) or "",
                     "body": body_name,
+                    "semantic_side": _semantic_finger_side(body_name),
                 }
-                for geom_id, body_name, _, _ in finger_bounds
+                for geom_id, body_name, _, _ in semantic_finger_bounds
             ],
+            "finger_side_inward_extents_from_eef_m": {
+                side: float(extent)
+                for side, extent in finger_side_inward_extents.items()
+            },
+            "dual_finger_contact_skew_m": float(
+                dual_finger_contact_skew
+            ),
             "outside_target": outside_target.tolist(),
             "side_contact_target": side_contact_target.tolist(),
         }
     )
     return outside_target, side_contact_target, plan
+
+
+def _select_reachable_compiled_side_candidate(candidates):
+    """Select the least-demanding candidate that passed every native gate."""
+    candidates = list(candidates)
+    if not candidates:
+        raise RuntimeError("no semantically trailing native rim side candidate")
+    accepted = [
+        candidate
+        for candidate in candidates
+        if candidate["selection_eligible"]
+    ]
+    if not accepted:
+        raise RuntimeError(
+            "no compiled trailing side passed dual-finger and OSC "
+            "reachability gates: "
+            f"{json.dumps(candidates, sort_keys=True)}"
+        )
+    return min(
+        accepted,
+        key=lambda candidate: (
+            candidate["outside_high_action_peak"],
+            candidate["outside_high_action_norm"],
+            candidate["dual_finger_contact_skew_m"],
+            candidate["eef_xy_distance_m"],
+        ),
+    )
+
+
+def _compiled_trailing_side_contact_candidates(
+    env,
+    *,
+    plate_position,
+    push_direction_xy,
+    eef_position,
+    backoff,
+    outside_clearance_m,
+    plate_approach_eef_height,
+    position_action_scale,
+):
+    """Compile and gate every cardinal side that can push toward the goal."""
+    plate_position = np.asarray(plate_position, dtype=float)
+    eef_position = np.asarray(eef_position, dtype=float)
+    if plate_position.shape != (3,) or eef_position.shape != (3,):
+        raise ValueError("plate and EEF positions must be 3-D")
+    if (
+        not np.isfinite(position_action_scale)
+        or position_action_scale <= 0
+    ):
+        raise ValueError("position action scale must be positive")
+    candidates = []
+    for geometry in _plate_contact_candidate_diagnostics(
+        plate_position[:2],
+        push_direction_xy,
+        eef_position[:2],
+        backoff,
+    ):
+        if not geometry["trailing_eligible"]:
+            continue
+        outward = np.asarray(geometry["offset_xy"], dtype=float)
+        outward /= np.linalg.norm(outward)
+        outside_side, contact_target, compiled = (
+            _compiled_native_side_contact_plan(
+                env,
+                plate_position,
+                eef_position,
+                outward,
+                np.asarray(geometry["point_xy"], dtype=float),
+                outside_clearance_m,
+            )
+        )
+        outside_high = outside_side.copy()
+        outside_high[2] = (
+            plate_position[2] + plate_approach_eef_height
+        )
+        center_high = outside_high.copy()
+        center_high[:2] = plate_position[:2]
+        required_action = (
+            outside_high - center_high
+        ) / float(position_action_scale)
+        bounded_action = _position_action(
+            center_high,
+            outside_high,
+            0.0,
+            position_action_scale,
+        )[:3]
+        clipped_axes = [
+            int(axis)
+            for axis in np.flatnonzero(
+                np.abs(required_action) > 1.0 + 1e-9
+            )
+        ]
+        dual_finger_skew = float(
+            compiled["dual_finger_contact_skew_m"]
+        )
+        violations = []
+        if dual_finger_skew > outside_clearance_m:
+            violations.append(
+                "dual_finger_contact_skew_exceeds_outside_clearance"
+            )
+        if clipped_axes:
+            violations.append(
+                "outside_high_requires_clipped_osc_action_from_center"
+            )
+        candidates.append(
+            {
+                **geometry,
+                "outward_direction_xy": outward.tolist(),
+                "center_high_target": center_high.tolist(),
+                "outside_high_target": outside_high.tolist(),
+                "outside_side_target": outside_side.tolist(),
+                "side_contact_target": contact_target.tolist(),
+                "compiled_geometry": compiled,
+                "dual_finger_contact_skew_m": dual_finger_skew,
+                "maximum_dual_finger_contact_skew_m": float(
+                    outside_clearance_m
+                ),
+                "outside_high_required_action": (
+                    required_action.tolist()
+                ),
+                "outside_high_bounded_action": bounded_action.tolist(),
+                "outside_high_action_peak": float(
+                    np.max(np.abs(required_action))
+                ),
+                "outside_high_action_norm": float(
+                    np.linalg.norm(required_action)
+                ),
+                "outside_high_clipped_action_axes": clipped_axes,
+                "selection_violations": violations,
+                "selection_eligible": not violations,
+            }
+        )
+    selected = _select_reachable_compiled_side_candidate(candidates)
+    return selected, candidates
 
 
 def _body_contact_counterparts(env, body_name):
@@ -689,20 +892,10 @@ def _plate_finger_contact_sides(env):
     }
     return {
         "left": any(
-            (
-                "leftfinger" in body
-                or "finger1" in body
-                or "joint1" in body
-            )
-            for body in bodies
+            _semantic_finger_side(body) == "left" for body in bodies
         ),
         "right": any(
-            (
-                "rightfinger" in body
-                or "finger2" in body
-                or "joint2" in body
-            )
-            for body in bodies
+            _semantic_finger_side(body) == "right" for body in bodies
         ),
         "contact_bodies": sorted(bodies),
     }
@@ -1604,11 +1797,12 @@ def generate(args):
         if not rollout.oracle.safe_prefix_completed:
             raise RuntimeError("OSC bottle parking did not pass the causal safe-prefix gate")
 
-        # Select a cardinal trailing EEF line whose inward push component is
-        # positive and whose XY position is closest to the live EEF.  Keep the
-        # EEF origin inside the native plate footprint: the remote controller
-        # cannot reach the rim-centred (+X,-Y) or rear-rim waypoints, while the
-        # gripper fingers can still contact the plate from this inner line.
+        # Compile every cardinal trailing side from the native plate and
+        # semantic left/right finger collision bounds.  Reject a side if the
+        # two fingers would reach it at materially different depths or if the
+        # centre-high to outside-high OSC action would be clipped.  Job 499814
+        # showed that contact-line proximity alone selected an unreachable -Y
+        # outside target even though a dual-finger-compatible +X side existed.
         plate_start = body_pose(env, PLATE_BODY)[0]
         goal = np.asarray(
             env.sim.data.site_xpos[env.sim.model.site_name2id(GOAL_SITE)],
@@ -1616,37 +1810,39 @@ def generate(args):
         )
         direction_xy = goal[:2] - plate_start[:2]
         direction_xy /= np.linalg.norm(direction_xy)
-        contact_line_xy = _select_reachable_trailing_contact(
-            plate_start[:2],
-            direction_xy,
-            np.asarray(rollout.obs["robot0_eef_pos"], dtype=float)[:2],
-            args.plate_contact_backoff,
-        )
-        outward_direction_xy = contact_line_xy - plate_start[:2]
-        outward_direction_xy /= np.linalg.norm(outward_direction_xy)
         (
-            outside_side_target,
-            contact_target,
-            compiled_side_contact_geometry,
-        ) = _compiled_native_side_contact_plan(
+            selected_contact_candidate,
+            candidate_geometry,
+        ) = _compiled_trailing_side_contact_candidates(
             env,
-            plate_start,
-            np.asarray(rollout.obs["robot0_eef_pos"], dtype=float),
-            outward_direction_xy,
-            contact_line_xy,
-            args.plate_contact_outside_clearance,
+            plate_position=plate_start,
+            push_direction_xy=direction_xy,
+            eef_position=np.asarray(
+                rollout.obs["robot0_eef_pos"], dtype=float
+            ),
+            backoff=args.plate_contact_backoff,
+            outside_clearance_m=args.plate_contact_outside_clearance,
+            plate_approach_eef_height=args.plate_approach_eef_height,
+            position_action_scale=args.position_action_scale,
         )
-        outside_high_target = outside_side_target.copy()
-        outside_high_target[2] = (
-            plate_start[2] + args.plate_approach_eef_height
+        outside_high_target = np.asarray(
+            selected_contact_candidate["outside_high_target"],
+            dtype=float,
         )
-        center_approach_target = outside_high_target.copy()
-        center_approach_target[:2] = plate_start[:2]
-        candidate_geometry = _plate_contact_candidate_diagnostics(
-            plate_start[:2],
-            direction_xy,
-            np.asarray(rollout.obs["robot0_eef_pos"], dtype=float)[:2],
-            args.plate_contact_backoff,
+        outside_side_target = np.asarray(
+            selected_contact_candidate["outside_side_target"],
+            dtype=float,
+        )
+        contact_target = np.asarray(
+            selected_contact_candidate["side_contact_target"],
+            dtype=float,
+        )
+        compiled_side_contact_geometry = (
+            selected_contact_candidate["compiled_geometry"]
+        )
+        center_approach_target = np.asarray(
+            selected_contact_candidate["center_high_target"],
+            dtype=float,
         )
 
         def plate_diagnostics():
@@ -1658,6 +1854,9 @@ def generate(args):
                 "goal": goal.tolist(),
                 "push_direction_xy": direction_xy.tolist(),
                 "candidate_geometry": candidate_geometry,
+                "selected_contact_candidate": (
+                    selected_contact_candidate
+                ),
                 "selected_contact_line_xy": contact_target[:2].tolist(),
                 "center_approach_target": center_approach_target.tolist(),
                 "outside_high_target": outside_high_target.tolist(),
@@ -1848,42 +2047,54 @@ def generate(args):
                         f"{json.dumps(plate_diagnostics(), sort_keys=True)}"
                     )
                 recontact_direction /= recontact_direction_norm
-                recontact_xy = _select_reachable_trailing_contact(
-                    recontact_plate[:2],
-                    recontact_direction,
-                    recontact_eef[:2],
-                    args.plate_contact_backoff,
-                )
-                recontact_outward_direction = (
-                    recontact_xy - recontact_plate[:2]
-                )
-                recontact_outward_direction /= np.linalg.norm(
-                    recontact_outward_direction
-                )
                 (
-                    recontact_outside_side_target,
-                    recontact_side_contact_target,
-                    recontact_compiled_geometry,
-                ) = _compiled_native_side_contact_plan(
+                    recontact_selected_candidate,
+                    recontact_candidates,
+                ) = _compiled_trailing_side_contact_candidates(
                     env,
-                    recontact_plate,
-                    recontact_eef,
-                    recontact_outward_direction,
-                    recontact_xy,
-                    args.plate_contact_outside_clearance,
+                    plate_position=recontact_plate,
+                    push_direction_xy=recontact_direction,
+                    eef_position=recontact_eef,
+                    backoff=args.plate_contact_backoff,
+                    outside_clearance_m=(
+                        args.plate_contact_outside_clearance
+                    ),
+                    plate_approach_eef_height=(
+                        args.plate_approach_eef_height
+                    ),
+                    position_action_scale=args.position_action_scale,
                 )
-                recontact_high_target = (
-                    recontact_outside_side_target.copy()
+                recontact_high_target = np.asarray(
+                    recontact_selected_candidate[
+                        "outside_high_target"
+                    ],
+                    dtype=float,
                 )
-                recontact_high_target[2] = (
-                    recontact_plate[2] + args.plate_approach_eef_height
+                recontact_outside_side_target = np.asarray(
+                    recontact_selected_candidate[
+                        "outside_side_target"
+                    ],
+                    dtype=float,
+                )
+                recontact_side_contact_target = np.asarray(
+                    recontact_selected_candidate[
+                        "side_contact_target"
+                    ],
+                    dtype=float,
+                )
+                recontact_compiled_geometry = (
+                    recontact_selected_candidate["compiled_geometry"]
                 )
                 recontact_retreat_target = recontact_eef.copy()
                 recontact_retreat_target[2] = max(
                     recontact_eef[2], recontact_high_target[2]
                 )
-                recontact_center_target = recontact_high_target.copy()
-                recontact_center_target[:2] = recontact_plate[:2]
+                recontact_center_target = np.asarray(
+                    recontact_selected_candidate[
+                        "center_high_target"
+                    ],
+                    dtype=float,
+                )
                 recontact_event = {
                     "attempt": recontact_attempts,
                     "push_iteration": push_iteration,
@@ -1897,6 +2108,10 @@ def generate(args):
                         _body_contact_counterparts(env, PLATE_BODY)
                     ),
                     "live_push_direction_xy": recontact_direction.tolist(),
+                    "candidate_geometry": recontact_candidates,
+                    "selected_contact_candidate": (
+                        recontact_selected_candidate
+                    ),
                     "retreat_target": recontact_retreat_target.tolist(),
                     "center_target": recontact_center_target.tolist(),
                     "outside_high_target": (

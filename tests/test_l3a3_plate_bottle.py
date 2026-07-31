@@ -13,8 +13,10 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _bounded_side_contact_seek_action,
     _contact_depth_sample_validity,
     _contact_progress_saturation_evidence,
+    _compiled_trailing_side_contact_candidates,
     _derive_horizon_safe_push_increment,
     _environment_horizon_diagnostics,
+    _finger_inward_extents_by_semantic_side,
     _gate_live_contact_offset_xy,
     _horizon_budget,
     _live_plate_tracking_target,
@@ -22,6 +24,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _push_window_timeout_evidence,
     _robot_contacts_body,
     _robot_gripper_body_names,
+    _select_reachable_compiled_side_candidate,
     _select_reachable_trailing_contact,
     _side_contact_targets_from_compiled_bounds,
 )
@@ -372,6 +375,168 @@ def test_native_geometry_side_contact_targets_descend_outside_plate():
     assert plan["outside_eef_offset_m"] == pytest.approx(0.069)
     assert plan["side_eef_z"] - plate[2] == pytest.approx(0.020)
     assert outside[1] < contact[1] < plate[1]
+
+
+def test_native_finger_inward_extents_are_grouped_before_side_selection():
+    bounds = [
+        (
+            10,
+            "gripper0_leftfinger",
+            np.array([0.012, -0.034, 0.90]),
+            np.array([0.004, 0.005, 0.010]),
+        ),
+        (
+            11,
+            "gripper0_rightfinger",
+            np.array([0.013, 0.034, 0.90]),
+            np.array([0.004, 0.005, 0.010]),
+        ),
+    ]
+    side_x, shared_x, skew_x, semantic_x = (
+        _finger_inward_extents_by_semantic_side(
+            bounds,
+            eef_position=np.array([0.0, 0.0, 0.95]),
+            outward_direction_xy=np.array([1.0, 0.0]),
+        )
+    )
+    assert side_x == pytest.approx({"left": 0.008, "right": 0.009})
+    assert shared_x == pytest.approx(0.008)
+    assert skew_x == pytest.approx(0.001)
+    assert len(semantic_x) == 2
+
+    side_y, shared_y, skew_y, _ = (
+        _finger_inward_extents_by_semantic_side(
+            bounds,
+            eef_position=np.array([0.0, 0.0, 0.95]),
+            outward_direction_xy=np.array([0.0, -1.0]),
+        )
+    )
+    assert side_y == pytest.approx({"left": 0.029, "right": -0.039})
+    assert shared_y == pytest.approx(-0.039)
+    assert skew_y == pytest.approx(0.068)
+
+
+def test_compiled_side_selection_rejects_499814_saturated_one_finger_side():
+    unreachable_minus_y = {
+        "point_xy": [0.052, -0.0385],
+        "selection_eligible": False,
+        "selection_violations": [
+            "dual_finger_contact_skew_exceeds_outside_clearance",
+            "outside_high_requires_clipped_osc_action_from_center",
+        ],
+        "outside_high_action_peak": 1.773,
+        "outside_high_action_norm": 1.773,
+        "dual_finger_contact_skew_m": 0.068,
+        "eef_xy_distance_m": 0.030,
+    }
+    reachable_plus_x = {
+        "point_xy": [0.062, -0.0285],
+        "selection_eligible": True,
+        "selection_violations": [],
+        "outside_high_action_peak": 0.86,
+        "outside_high_action_norm": 0.86,
+        "dual_finger_contact_skew_m": 0.001,
+        "eef_xy_distance_m": 0.270,
+    }
+    selected = _select_reachable_compiled_side_candidate(
+        [unreachable_minus_y, reachable_plus_x]
+    )
+    assert selected is reachable_plus_x
+    with pytest.raises(
+        RuntimeError,
+        match="no compiled trailing side passed",
+    ):
+        _select_reachable_compiled_side_candidate(
+            [unreachable_minus_y]
+        )
+
+
+def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
+    class Model:
+        body_names = [
+            "world",
+            PLATE_BODY,
+            "gripper0_leftfinger",
+            "gripper0_rightfinger",
+        ]
+        geom_names = [
+            "plate_plus_x",
+            "plate_minus_x",
+            "plate_plus_y",
+            "plate_minus_y",
+            "left_finger_collision",
+            "right_finger_collision",
+        ]
+        nbody = len(body_names)
+        ngeom = len(geom_names)
+        body_parentid = np.array([0, 0, 0, 0])
+        geom_bodyid = np.array([1, 1, 1, 1, 2, 3])
+        geom_contype = np.ones(ngeom, dtype=int)
+        geom_conaffinity = np.ones(ngeom, dtype=int)
+        geom_aabb = np.array(
+            [
+                [0, 0, 0, 0.005, 0.005, 0.005],
+                [0, 0, 0, 0.005, 0.005, 0.005],
+                [0, 0, 0, 0.005, 0.005, 0.005],
+                [0, 0, 0, 0.005, 0.005, 0.005],
+                [0, 0, 0, 0.004, 0.005, 0.010],
+                [0, 0, 0, 0.004, 0.005, 0.010],
+            ],
+            dtype=float,
+        )
+
+        @classmethod
+        def body_name2id(cls, name):
+            return cls.body_names.index(name)
+
+        @classmethod
+        def body_id2name(cls, body_id):
+            return cls.body_names[body_id]
+
+        @classmethod
+        def geom_id2name(cls, geom_id):
+            return cls.geom_names[geom_id]
+
+    data = SimpleNamespace(
+        geom_xmat=np.tile(np.eye(3).reshape(1, 9), (Model.ngeom, 1)),
+        geom_xpos=np.array(
+            [
+                [0.100, 0.000, 0.910],
+                [0.000, 0.000, 0.910],
+                [0.050, 0.050, 0.910],
+                [0.050, -0.050, 0.910],
+                [0.012, -0.034, 0.900],
+                [0.013, 0.034, 0.900],
+            ],
+            dtype=float,
+        ),
+    )
+    env = SimpleNamespace(sim=SimpleNamespace(model=Model(), data=data))
+    selected, candidates = _compiled_trailing_side_contact_candidates(
+        env,
+        plate_position=np.array([0.050, 0.000, 0.900]),
+        push_direction_xy=np.array([-0.394, 0.919]),
+        eef_position=np.array([0.000, 0.000, 0.950]),
+        backoff=0.010,
+        outside_clearance_m=0.005,
+        plate_approach_eef_height=0.160,
+        position_action_scale=0.080,
+    )
+    assert len(candidates) == 2
+    assert selected["offset_xy"] == pytest.approx([0.010, 0.000])
+    assert selected["selection_eligible"] is True
+    rejected = next(
+        candidate
+        for candidate in candidates
+        if np.allclose(candidate["offset_xy"], [0.000, -0.010])
+    )
+    assert rejected["dual_finger_contact_skew_m"] == pytest.approx(0.068)
+    assert rejected["outside_high_action_peak"] > 1.0
+    assert rejected["selection_eligible"] is False
+    assert rejected["selection_violations"] == [
+        "dual_finger_contact_skew_exceeds_outside_clearance",
+        "outside_high_requires_clipped_osc_action_from_center",
+    ]
 
 
 def test_live_plate_push_target_tracks_plate_instead_of_accumulating_eef():
@@ -784,7 +949,11 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     producer = CONTROLLER_REFERENCE.read_text()
     assert 'default=0.010' in producer
     assert "0.025 m line stalled at y=-0.039149" in producer
-    assert "center_approach_target[:2] = plate_start[:2]" in producer
+    assert "_compiled_trailing_side_contact_candidates(" in producer
+    assert "selected_contact_candidate" in producer
+    assert "outside_high_required_action" in producer
+    assert "outside_high_requires_clipped_osc_action_from_center" in producer
+    assert "dual_finger_contact_skew_exceeds_outside_clearance" in producer
     approach = producer[
         producer.index("# Decouple the large workspace translation") :
         producer.index("initial_contact_depth_calibration =")
@@ -811,7 +980,7 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     assert '"plate_contact_seek_eef_height"' not in producer
     assert '"--plate_approach_eef_height", type=float, default=0.160' in producer
     assert (
-        "plate_start[2] + args.plate_approach_eef_height"
+        "plate_position[2] + plate_approach_eef_height"
         in producer
     )
     assert "L3-A3 plate-contact plan" in producer
