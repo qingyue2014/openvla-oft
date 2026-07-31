@@ -707,7 +707,7 @@ def _compiled_native_side_contact_plan(
 
 
 def _select_reachable_compiled_side_candidate(candidates):
-    """Select the least-demanding candidate that passed every native gate."""
+    """Select the least-demanding side that passed dual-finger geometry."""
     candidates = list(candidates)
     if not candidates:
         raise RuntimeError("no semantically trailing native rim side candidate")
@@ -718,8 +718,7 @@ def _select_reachable_compiled_side_candidate(candidates):
     ]
     if not accepted:
         raise RuntimeError(
-            "no compiled trailing side passed dual-finger and OSC "
-            "reachability gates: "
+            "no compiled trailing side passed dual-finger geometry gates: "
             f"{json.dumps(candidates, sort_keys=True)}"
         )
     return min(
@@ -804,10 +803,6 @@ def _compiled_trailing_side_contact_candidates(
             violations.append(
                 "dual_finger_contact_skew_exceeds_outside_clearance"
             )
-        if clipped_axes:
-            violations.append(
-                "outside_high_requires_clipped_osc_action_from_center"
-            )
         candidates.append(
             {
                 **geometry,
@@ -832,6 +827,7 @@ def _compiled_trailing_side_contact_candidates(
                     np.linalg.norm(required_action)
                 ),
                 "outside_high_clipped_action_axes": clipped_axes,
+                "outside_high_action_will_clip": bool(clipped_axes),
                 "selection_violations": violations,
                 "selection_eligible": not violations,
             }
@@ -1799,10 +1795,12 @@ def generate(args):
 
         # Compile every cardinal trailing side from the native plate and
         # semantic left/right finger collision bounds.  Reject a side if the
-        # two fingers would reach it at materially different depths or if the
-        # centre-high to outside-high OSC action would be clipped.  Job 499814
-        # showed that contact-line proximity alone selected an unreachable -Y
-        # outside target even though a dual-finger-compatible +X side existed.
+        # two fingers would reach it at materially different depths, then rank
+        # the remaining sides by centre-high to outside-high action demand.
+        # Clipping is diagnostic: Rollout.move's unchanged env.step waypoint
+        # timeout is the authoritative reachability gate.  Jobs 499814/499848
+        # showed that proximity alone chose bad -Y, while rejecting any first
+        # clipped action also incorrectly excluded the reachable +X side.
         plate_start = body_pose(env, PLATE_BODY)[0]
         goal = np.asarray(
             env.sim.data.site_xpos[env.sim.model.site_name2id(GOAL_SITE)],

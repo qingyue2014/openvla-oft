@@ -416,26 +416,25 @@ def test_native_finger_inward_extents_are_grouped_before_side_selection():
     assert skew_y == pytest.approx(0.068)
 
 
-def test_compiled_side_selection_rejects_499814_saturated_one_finger_side():
+def test_compiled_side_selection_accepts_499848_mild_action_clipping():
     unreachable_minus_y = {
         "point_xy": [0.052, -0.0385],
         "selection_eligible": False,
         "selection_violations": [
             "dual_finger_contact_skew_exceeds_outside_clearance",
-            "outside_high_requires_clipped_osc_action_from_center",
         ],
         "outside_high_action_peak": 1.773,
         "outside_high_action_norm": 1.773,
-        "dual_finger_contact_skew_m": 0.068,
+        "dual_finger_contact_skew_m": 0.10175,
         "eef_xy_distance_m": 0.030,
     }
     reachable_plus_x = {
         "point_xy": [0.062, -0.0285],
         "selection_eligible": True,
         "selection_violations": [],
-        "outside_high_action_peak": 0.86,
-        "outside_high_action_norm": 0.86,
-        "dual_finger_contact_skew_m": 0.001,
+        "outside_high_action_peak": 1.061872,
+        "outside_high_action_norm": 1.061872,
+        "dual_finger_contact_skew_m": 0.000213,
         "eef_xy_distance_m": 0.270,
     }
     selected = _select_reachable_compiled_side_candidate(
@@ -444,7 +443,7 @@ def test_compiled_side_selection_rejects_499814_saturated_one_finger_side():
     assert selected is reachable_plus_x
     with pytest.raises(
         RuntimeError,
-        match="no compiled trailing side passed",
+        match="no compiled trailing side passed dual-finger geometry",
     ):
         _select_reachable_compiled_side_candidate(
             [unreachable_minus_y]
@@ -505,8 +504,8 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
                 [0.000, 0.000, 0.910],
                 [0.050, 0.050, 0.910],
                 [0.050, -0.050, 0.910],
-                [0.012, -0.034, 0.900],
-                [0.013, 0.034, 0.900],
+                [-0.020950, -0.05000, 0.900],
+                [-0.020737, 0.05175, 0.900],
             ],
             dtype=float,
         ),
@@ -525,17 +524,25 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
     assert len(candidates) == 2
     assert selected["offset_xy"] == pytest.approx([0.010, 0.000])
     assert selected["selection_eligible"] is True
+    assert selected["dual_finger_contact_skew_m"] == pytest.approx(
+        0.000213
+    )
+    assert selected["outside_high_action_peak"] == pytest.approx(
+        1.061875
+    )
+    assert selected["outside_high_clipped_action_axes"] == [0]
+    assert selected["outside_high_action_will_clip"] is True
+    assert selected["selection_violations"] == []
     rejected = next(
         candidate
         for candidate in candidates
         if np.allclose(candidate["offset_xy"], [0.000, -0.010])
     )
-    assert rejected["dual_finger_contact_skew_m"] == pytest.approx(0.068)
+    assert rejected["dual_finger_contact_skew_m"] == pytest.approx(0.10175)
     assert rejected["outside_high_action_peak"] > 1.0
     assert rejected["selection_eligible"] is False
     assert rejected["selection_violations"] == [
         "dual_finger_contact_skew_exceeds_outside_clearance",
-        "outside_high_requires_clipped_osc_action_from_center",
     ]
 
 
@@ -952,7 +959,8 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     assert "_compiled_trailing_side_contact_candidates(" in producer
     assert "selected_contact_candidate" in producer
     assert "outside_high_required_action" in producer
-    assert "outside_high_requires_clipped_osc_action_from_center" in producer
+    assert '"outside_high_action_will_clip": bool(clipped_axes)' in producer
+    assert '"outside_high_clipped_action_axes": clipped_axes' in producer
     assert "dual_finger_contact_skew_exceeds_outside_clearance" in producer
     approach = producer[
         producer.index("# Decouple the large workspace translation") :
