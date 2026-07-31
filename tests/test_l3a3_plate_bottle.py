@@ -20,9 +20,11 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_trailing_side_contact_candidates,
     _compiled_vertical_staging_corridor,
     _derive_horizon_safe_push_increment,
+    _derive_overhead_staging_from_compiled_pairs,
     _environment_horizon_diagnostics,
     _finger_inward_extents_by_semantic_side,
     _fixed_z_lateral_approach_action,
+    _fixed_xy_vertical_approach_action,
     _gate_live_contact_offset_xy,
     _horizon_budget,
     _live_plate_tracking_target,
@@ -1454,21 +1456,19 @@ def test_500133_enters_compiled_high_corridor_directly_without_native_high_stop(
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
     )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    compiled_overhead = bounded_seek.index(
+        "_compiled_overhead_staging_geometry("
+    )
     compiled_corridor = bounded_seek.index(
         "_compiled_vertical_staging_corridor("
     )
-    direct_high_move = bounded_seek.index(
-        "rollout.move(\n        corridor_high_target,"
-    )
-    assert compiled_corridor < direct_high_move
+    assert compiled_overhead < compiled_corridor
+    assert "rollout.move(" not in bounded_seek
     assert "rollout.move(\n        outside_high_target," not in bounded_seek
-    assert "step_observer=observe_corridor_high_step" in bounded_seek
-    assert '"outside_corridor_high_transit"' in bounded_seek
-    assert (
-        'structural_stage = (\n        "vertical_corridor_descent"'
-        in bounded_seek
-    )
-    assert "else \"vertical_corridor_entry\"" in bounded_seek
+    assert 'structural_stage = "overhead_center_descent"' in bounded_seek
+    assert '"overhead_corridor_lateral"' in bounded_seek
+    assert "_fixed_xy_vertical_approach_action(" in bounded_seek
+    assert "_fixed_z_lateral_approach_action(" in bounded_seek
     fixed_z_stage = bounded_seek.index(
         'elif structural_stage == "fixed_safe_z_lateral_approach"'
     )
@@ -1476,6 +1476,150 @@ def test_500133_enters_compiled_high_corridor_directly_without_native_high_stop(
         "lateral_target_xy=np.asarray(\n                    outside_side_target",
         fixed_z_stage,
     ) > fixed_z_stage
+
+
+def test_500137_compiles_lowest_safe_overhead_sweeps_and_action_budget():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    selected_z, evidence = _derive_overhead_staging_from_compiled_pairs(
+        start_eef_position=np.array([0.051856632, -0.028507780, 1.062506339]),
+        compiled_pairs=[
+            {
+                "gripper_geom": "gripper_complete_lowest",
+                "counterpart_geom": "plate_complete_highest",
+                "counterpart_kind": "plate",
+                "gripper_lower_offset_from_eef_m": -0.030,
+                "counterpart_top_z_m": 0.920,
+                "strict_no_contact_clearance_m": strict_clearance,
+            },
+            {
+                "gripper_geom": "gripper_complete_lowest",
+                "counterpart_geom": "table_collision",
+                "counterpart_kind": "table",
+                "gripper_lower_offset_from_eef_m": -0.040,
+                "counterpart_top_z_m": 0.900,
+                "strict_no_contact_clearance_m": strict_clearance,
+            },
+        ],
+        one_step_vertical_reserve_m=0.08 * 0.10,
+    )
+    assert selected_z == np.nextafter(
+        evidence["binding_eef_z_lower_bound_m"], np.inf
+    )
+    assert evidence["binding_eef_z_lower_bound_m"] == pytest.approx(0.958)
+    assert evidence["one_step_vertical_reserve_m"] == pytest.approx(0.008)
+    assert evidence["limiting_pairs"] == [
+        {
+            "gripper_geom": "gripper_complete_lowest",
+            "counterpart_geom": "plate_complete_highest",
+            "counterpart_kind": "plate",
+        }
+    ]
+    assert all(
+        pair["selected_vertical_clearance_m"]
+        > pair["required_clearance_with_one_step_reserve_m"]
+        for pair in evidence["pairs"]
+    )
+    assert all(
+        pair["minimum_vertical_sweep_clearance_m"]
+        == pair["selected_vertical_clearance_m"]
+        for pair in evidence["pairs"]
+    )
+
+    vertical_action, vertical_path = _fixed_xy_vertical_approach_action(
+        current_eef=np.array([0.051856632, -0.028507780, 1.062506339]),
+        target_z=selected_z,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    assert np.array_equal(vertical_action[:2], np.zeros(2))
+    assert vertical_action[2] < 0.0
+    assert np.linalg.norm(vertical_action[:3]) < 0.10
+    assert vertical_path["commanded_xy_action"] == [0.0, 0.0]
+
+    corridor_xy = np.array([0.14480639548403948, -0.02850777957668001])
+    lateral_action, lateral_path = _fixed_z_lateral_approach_action(
+        current_eef=np.array([0.051856632, -0.028507780, selected_z]),
+        lateral_target_xy=corridor_xy,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    assert lateral_action[0] > 0.0
+    assert lateral_action[2] == 0.0
+    assert np.linalg.norm(lateral_action[:3]) < 0.10
+    assert lateral_path["commanded_z_action"] == 0.0
+
+    overhead_vertical = 1.062506338529415 - selected_z
+    overhead_horizontal = np.linalg.norm(
+        corridor_xy - np.array([0.051856632092207214, -0.02850777957668001])
+    )
+    corridor_vertical = selected_z - 0.917769758476126
+    fixed_z_lateral = 0.008000000000000007
+    action_equivalents = (
+        overhead_vertical
+        + overhead_horizontal
+        + corridor_vertical
+        + fixed_z_lateral
+    ) / (0.08 * 0.10)
+    assert action_equivalents == pytest.approx(30.71079293064015)
+    assert action_equivalents < 180
+
+    with pytest.raises(
+        RuntimeError,
+        match="no lower overhead staging Z",
+    ):
+        _derive_overhead_staging_from_compiled_pairs(
+            start_eef_position=np.array([0.0, 0.0, 0.950]),
+            compiled_pairs=[
+                {
+                    "gripper_geom": "gripper_complete_lowest",
+                    "counterpart_geom": "plate_complete_highest",
+                    "counterpart_kind": "plate",
+                    "gripper_lower_offset_from_eef_m": -0.030,
+                    "counterpart_top_z_m": 0.920,
+                    "strict_no_contact_clearance_m": strict_clearance,
+                }
+            ],
+            one_step_vertical_reserve_m=0.008,
+        )
+
+
+def test_500137_timeout_trace_is_replaced_by_auditable_overhead_state_machine():
+    target = np.array(
+        [0.14480639548403948, -0.02850777957668001, 1.062506338529415]
+    )
+    final_eef = np.array(
+        [0.13855715318827433, -0.028401464440970036, 1.0569541469848756]
+    )
+    compiled_boundary_x = 0.13180639548403947
+    assert np.linalg.norm(target - final_eef) == pytest.approx(
+        0.008360093487905222
+    )
+    assert final_eef[0] - compiled_boundary_x == pytest.approx(
+        0.006750757704234859
+    )
+    assert final_eef[0] - compiled_boundary_x < np.nextafter(0.008, np.inf)
+
+    bounded_seek = CONTROLLER_REFERENCE.read_text().split(
+        "def _seek_stable_plate_contact(", 1
+    )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    assert "rollout.move(\n        corridor_high_target," not in bounded_seek
+    assert 'structural_stage = "overhead_center_descent"' in bounded_seek
+    assert '"overhead_corridor_lateral"' in bounded_seek
+    assert "_live_compiled_overhead_guard(" in bounded_seek
+    assert '"compiled_overhead_guard"' in bounded_seek
+    assert "samples={json.dumps(samples, sort_keys=True)}" in bounded_seek
+    assert "overhead_geometry={json.dumps(" in bounded_seek
+    assert (
+        "for guard_step in range(1, args.max_waypoint_steps + 1)"
+        in bounded_seek
+    )
+    assert (
+        '"minimum_outside_clearance_m"\n                ]\n'
+        '                > vertical_staging_corridor['
+        in bounded_seek
+    )
 
 
 def test_499954_saturated_recovery_follows_improving_discrete_response():
@@ -2478,17 +2622,17 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "structurally decoupled outside-side approach" in bounded_seek
     assert "env.set_state" not in compiled_plan
     assert "set_init_state" not in compiled_plan
-    assert "rollout.move(" in bounded_seek
+    assert "rollout.move(" not in bounded_seek
     assert "outside_high_target" in bounded_seek
     assert "outside_side_target" in bounded_seek
     assert "_live_outside_side_guard(" in bounded_seek
     assert "_compiled_vertical_staging_corridor(" in bounded_seek
+    assert "_compiled_overhead_staging_geometry(" in bounded_seek
+    assert "_live_compiled_overhead_guard(" in bounded_seek
+    assert "_fixed_xy_vertical_approach_action(" in bounded_seek
     assert "_fixed_z_lateral_approach_action(" in bounded_seek
-    assert (
-        'structural_stage = (\n        "vertical_corridor_descent"'
-        in bounded_seek
-    )
-    assert 'else "vertical_corridor_entry"' in bounded_seek
+    assert 'structural_stage = "overhead_center_descent"' in bounded_seek
+    assert '"overhead_corridor_lateral"' in bounded_seek
     assert '"vertical_corridor_descent"' in bounded_seek
     assert '"vertical_corridor_settle"' in bounded_seek
     assert '"fixed_safe_z_lateral_approach"' in bounded_seek
@@ -2508,6 +2652,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert "one_controller_step_corridor_reserve_lost" in bounded_seek
     assert "compiled_safe_z_rim_coverage_not_sustained" in bounded_seek
+    assert "compiled_overhead_one_step_vertical_reserve_lost" in bounded_seek
     assert '"structural_waypoint_budget"' in bounded_seek
     assert 'stage.startswith("outside_")' in bounded_seek
     assert "tolerance=" not in bounded_seek

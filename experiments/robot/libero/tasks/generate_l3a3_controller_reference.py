@@ -832,6 +832,380 @@ def _compiled_pair_set_clearance(model, first_geom_ids, second_geom_ids):
     }
 
 
+def _compiled_rigid_gripper_collision_geom_ids(model):
+    """Return every collision geom in the native hand / gripper subtree."""
+    root_name = "robot0_right_hand"
+    try:
+        root_id = int(model.body_name2id(root_name))
+    except (KeyError, ValueError) as exc:
+        raise RuntimeError(
+            "compiled native rigid-gripper root is unavailable"
+        ) from exc
+    if root_id < 0:
+        raise RuntimeError(
+            "compiled native rigid-gripper root is unavailable"
+        )
+    geom_ids = [
+        geom_id
+        for geom_id in _compiled_body_geom_ids(model, root_name)
+        if (
+            int(model.geom_contype[geom_id]) != 0
+            or int(model.geom_conaffinity[geom_id]) != 0
+        )
+    ]
+    if not geom_ids:
+        raise RuntimeError(
+            "compiled native rigid-gripper collision geoms are unavailable"
+        )
+    return geom_ids
+
+
+def _derive_overhead_staging_from_compiled_pairs(
+    *,
+    start_eef_position,
+    compiled_pairs,
+    one_step_vertical_reserve_m,
+):
+    """Derive the lowest strict overhead EEF Z from every collision pair."""
+    start_eef = np.asarray(start_eef_position, dtype=float)
+    pairs = [dict(record) for record in compiled_pairs]
+    if start_eef.shape != (3,) or not np.all(np.isfinite(start_eef)):
+        raise ValueError("overhead staging start EEF must be finite 3-D")
+    if (
+        not np.isfinite(one_step_vertical_reserve_m)
+        or one_step_vertical_reserve_m <= 0.0
+    ):
+        raise ValueError("overhead one-step vertical reserve must be positive")
+    if not pairs:
+        raise RuntimeError(
+            "no applicable rigid-gripper plate/table collision pairs"
+        )
+
+    normalized_pairs = []
+    lower_bounds = []
+    for record in pairs:
+        lower_offset = float(
+            record["gripper_lower_offset_from_eef_m"]
+        )
+        counterpart_top = float(record["counterpart_top_z_m"])
+        required_clearance = float(
+            record["strict_no_contact_clearance_m"]
+        )
+        if (
+            not np.isfinite(lower_offset)
+            or not np.isfinite(counterpart_top)
+            or not np.isfinite(required_clearance)
+            or required_clearance <= 0.0
+            or record.get("counterpart_kind") not in {"plate", "table"}
+        ):
+            raise ValueError("compiled overhead pair record is invalid")
+        eef_z_lower_bound = float(
+            counterpart_top
+            + required_clearance
+            + one_step_vertical_reserve_m
+            - lower_offset
+        )
+        normalized = {
+            **record,
+            "gripper_lower_offset_from_eef_m": lower_offset,
+            "counterpart_top_z_m": counterpart_top,
+            "strict_no_contact_clearance_m": required_clearance,
+            "required_clearance_with_one_step_reserve_m": float(
+                required_clearance + one_step_vertical_reserve_m
+            ),
+            "eef_z_lower_bound_m": eef_z_lower_bound,
+        }
+        normalized_pairs.append(normalized)
+        lower_bounds.append(eef_z_lower_bound)
+
+    binding_lower_bound = float(max(lower_bounds))
+    selected_eef_z = float(np.nextafter(binding_lower_bound, np.inf))
+    if selected_eef_z >= float(start_eef[2]):
+        raise RuntimeError(
+            "compiled rigid-gripper geometry has no lower overhead staging Z"
+        )
+
+    limiting_pairs = []
+    swept_pair_evidence = []
+    for record in normalized_pairs:
+        selected_clearance = float(
+            selected_eef_z
+            + record["gripper_lower_offset_from_eef_m"]
+            - record["counterpart_top_z_m"]
+        )
+        start_clearance = float(
+            start_eef[2]
+            + record["gripper_lower_offset_from_eef_m"]
+            - record["counterpart_top_z_m"]
+        )
+        required_with_reserve = float(
+            record["required_clearance_with_one_step_reserve_m"]
+        )
+        if not selected_clearance > required_with_reserve:
+            raise RuntimeError(
+                "derived overhead staging Z lacks strict vertical reserve"
+            )
+        if record["eef_z_lower_bound_m"] == binding_lower_bound:
+            limiting_pairs.append(
+                {
+                    "gripper_geom": record["gripper_geom"],
+                    "counterpart_geom": record["counterpart_geom"],
+                    "counterpart_kind": record["counterpart_kind"],
+                }
+            )
+        swept_pair_evidence.append(
+            {
+                **record,
+                "start_vertical_clearance_m": start_clearance,
+                "selected_vertical_clearance_m": selected_clearance,
+                "selected_clearance_surplus_m": float(
+                    selected_clearance - required_with_reserve
+                ),
+                "minimum_vertical_sweep_clearance_m": selected_clearance,
+            }
+        )
+
+    return selected_eef_z, {
+        "formula": (
+            "for every applicable collision-enabled geom pair in the full "
+            "native robot0_right_hand subtree versus every native plate and "
+            "table collision geom, require gripper_lower_z > "
+            "counterpart_upper_z + compiled_strict_pair_clearance + one "
+            "full controller world step; the lowest safe EEF Z is one "
+            "representable floating-point step above the maximum pairwise "
+            "EEF-Z lower bound"
+        ),
+        "sweep_proof": (
+            "the center-overhead action commands only negative Z with zero "
+            "XY/rotation; each rigid gripper geom lower bound therefore "
+            "decreases monotonically and its minimum clearance over the "
+            "closed sweep occurs at the selected endpoint; every live frame "
+            "is remeasured from compiled world AABBs"
+        ),
+        "start_eef_position": start_eef.tolist(),
+        "selected_eef_z": selected_eef_z,
+        "binding_eef_z_lower_bound_m": binding_lower_bound,
+        "one_step_vertical_reserve_m": float(
+            one_step_vertical_reserve_m
+        ),
+        "vertical_sweep_distance_m": float(
+            start_eef[2] - selected_eef_z
+        ),
+        "limiting_pairs": limiting_pairs,
+        "pairs": swept_pair_evidence,
+    }
+
+
+def _compiled_overhead_staging_geometry(
+    env,
+    *,
+    start_eef_position,
+    one_step_vertical_reserve_m,
+):
+    """Compile the full rigid-gripper overhead proof from native geometry."""
+    model, data = env.sim.model, env.sim.data
+    start_eef = np.asarray(start_eef_position, dtype=float)
+    gripper_geom_ids = _compiled_rigid_gripper_collision_geom_ids(model)
+    plate_geom_ids = [
+        geom_id
+        for geom_id in _compiled_body_geom_ids(model, PLATE_BODY)
+        if (
+            int(model.geom_contype[geom_id]) != 0
+            or int(model.geom_conaffinity[geom_id]) != 0
+        )
+    ]
+    table_geom_ids = [
+        geom_id
+        for geom_id in _compiled_body_geom_ids(model, TABLE_BODY)
+        if (
+            int(model.geom_contype[geom_id]) != 0
+            or int(model.geom_conaffinity[geom_id]) != 0
+        )
+    ]
+    if not plate_geom_ids or not table_geom_ids:
+        raise RuntimeError(
+            "compiled native plate/table collision geoms are unavailable"
+        )
+
+    gripper_bounds = {}
+    for geom_id in gripper_geom_ids:
+        center, half_size = _compiled_geom_world_aabb(
+            model, data, geom_id
+        )
+        gripper_bounds[geom_id] = {
+            "geom": model.geom_id2name(geom_id) or f"geom_{geom_id}",
+            "body": model.body_id2name(
+                int(model.geom_bodyid[geom_id])
+            )
+            or "",
+            "lower_offset_from_eef_m": float(
+                center[2] - half_size[2] - start_eef[2]
+            ),
+            "upper_offset_from_eef_m": float(
+                center[2] + half_size[2] - start_eef[2]
+            ),
+        }
+    counterpart_bounds = {}
+    for kind, geom_ids in (
+        ("plate", plate_geom_ids),
+        ("table", table_geom_ids),
+    ):
+        for geom_id in geom_ids:
+            center, half_size = _compiled_geom_world_aabb(
+                model, data, geom_id
+            )
+            counterpart_bounds[(kind, geom_id)] = {
+                "geom": model.geom_id2name(geom_id)
+                or f"{kind}_geom_{geom_id}",
+                "top_z_m": float(center[2] + half_size[2]),
+            }
+
+    compiled_pairs = []
+    non_applicable_pairs = []
+    for gripper_geom_id in gripper_geom_ids:
+        for counterpart_kind, counterpart_geom_ids in (
+            ("plate", plate_geom_ids),
+            ("table", table_geom_ids),
+        ):
+            for counterpart_geom_id in counterpart_geom_ids:
+                pair = _compiled_collision_pair_clearance(
+                    model, gripper_geom_id, counterpart_geom_id
+                )
+                if pair is None:
+                    non_applicable_pairs.append(
+                        {
+                            "gripper_geom": gripper_bounds[
+                                gripper_geom_id
+                            ]["geom"],
+                            "counterpart_geom": counterpart_bounds[
+                                (counterpart_kind, counterpart_geom_id)
+                            ]["geom"],
+                            "counterpart_kind": counterpart_kind,
+                            "reason": "compiled_collision_masks_disable_pair",
+                        }
+                    )
+                    continue
+                compiled_pairs.append(
+                    {
+                        **pair,
+                        "gripper_geom_id": int(gripper_geom_id),
+                        "gripper_geom": gripper_bounds[
+                            gripper_geom_id
+                        ]["geom"],
+                        "gripper_body": gripper_bounds[
+                            gripper_geom_id
+                        ]["body"],
+                        "gripper_lower_offset_from_eef_m": (
+                            gripper_bounds[gripper_geom_id][
+                                "lower_offset_from_eef_m"
+                            ]
+                        ),
+                        "counterpart_geom": counterpart_bounds[
+                            (counterpart_kind, counterpart_geom_id)
+                        ]["geom"],
+                        "counterpart_geom_id": int(
+                            counterpart_geom_id
+                        ),
+                        "counterpart_kind": counterpart_kind,
+                        "counterpart_top_z_m": counterpart_bounds[
+                            (counterpart_kind, counterpart_geom_id)
+                        ]["top_z_m"],
+                    }
+                )
+    selected_z, evidence = _derive_overhead_staging_from_compiled_pairs(
+        start_eef_position=start_eef,
+        compiled_pairs=compiled_pairs,
+        one_step_vertical_reserve_m=one_step_vertical_reserve_m,
+    )
+    evidence.update(
+        {
+            "rigid_gripper_root_body": "robot0_right_hand",
+            "rigid_gripper_collision_geoms": [
+                {
+                    "geom_id": int(geom_id),
+                    **gripper_bounds[geom_id],
+                }
+                for geom_id in gripper_geom_ids
+            ],
+            "plate_collision_geoms": [
+                counterpart_bounds[("plate", geom_id)]["geom"]
+                for geom_id in plate_geom_ids
+            ],
+            "table_collision_geoms": [
+                counterpart_bounds[("table", geom_id)]["geom"]
+                for geom_id in table_geom_ids
+            ],
+            "non_applicable_pairs": non_applicable_pairs,
+        }
+    )
+    return selected_z, evidence
+
+
+def _live_compiled_overhead_guard(env, overhead_geometry):
+    """Remeasure every compiled overhead pair from the live MuJoCo state."""
+    model, data = env.sim.model, env.sim.data
+    reserve = float(overhead_geometry["one_step_vertical_reserve_m"])
+    pairs = []
+    violations = []
+    for compiled in overhead_geometry["pairs"]:
+        gripper_id = int(compiled["gripper_geom_id"])
+        counterpart_id = int(compiled["counterpart_geom_id"])
+        gripper_center, gripper_half = _compiled_geom_world_aabb(
+            model, data, gripper_id
+        )
+        counterpart_center, counterpart_half = _compiled_geom_world_aabb(
+            model, data, counterpart_id
+        )
+        vertical_clearance = float(
+            gripper_center[2]
+            - gripper_half[2]
+            - counterpart_center[2]
+            - counterpart_half[2]
+        )
+        strict_clearance = float(
+            compiled["strict_no_contact_clearance_m"]
+        )
+        required_with_reserve = float(strict_clearance + reserve)
+        accepted = bool(vertical_clearance > required_with_reserve)
+        if not accepted:
+            violations.append(
+                "rigid_gripper_overhead_vertical_reserve_lost:"
+                f"{compiled['gripper_geom']}:"
+                f"{compiled['counterpart_geom']}"
+            )
+        pairs.append(
+            {
+                "gripper_geom": compiled["gripper_geom"],
+                "counterpart_geom": compiled["counterpart_geom"],
+                "counterpart_kind": compiled["counterpart_kind"],
+                "vertical_clearance_m": vertical_clearance,
+                "strict_no_contact_clearance_m": strict_clearance,
+                "one_step_vertical_reserve_m": reserve,
+                "required_clearance_with_one_step_reserve_m": (
+                    required_with_reserve
+                ),
+                "reserve_surplus_m": float(
+                    vertical_clearance - required_with_reserve
+                ),
+                "accepted": accepted,
+            }
+        )
+    if not pairs:
+        raise RuntimeError("live compiled overhead pairs are unavailable")
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "one_step_vertical_reserve_m": reserve,
+        "minimum_vertical_clearance_m": min(
+            record["vertical_clearance_m"] for record in pairs
+        ),
+        "minimum_reserve_surplus_m": min(
+            record["reserve_surplus_m"] for record in pairs
+        ),
+        "pairs": pairs,
+    }
+
+
 def _outside_side_guard_from_world_aabbs(
     *,
     plate_position,
@@ -1594,6 +1968,61 @@ def _fixed_z_lateral_approach_action(
         "numeric_inward_rescale_applied": (
             numeric_inward_rescale_applied
         ),
+        "allocation_translation_action_bound": strict_bound,
+        "maximum_translation_action": float(
+            maximum_translation_action
+        ),
+    }
+
+
+def _fixed_xy_vertical_approach_action(
+    *,
+    current_eef,
+    target_z,
+    gripper,
+    position_action_scale,
+    maximum_translation_action,
+):
+    """Move only in Z under the unchanged strict translation-action bound."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    if current_eef.shape != (3,) or not np.all(np.isfinite(current_eef)):
+        raise ValueError("fixed-XY vertical current EEF is invalid")
+    if (
+        not np.isfinite(target_z)
+        or not np.isfinite(position_action_scale)
+        or position_action_scale <= 0.0
+        or not np.isfinite(maximum_translation_action)
+        or not (0.0 < maximum_translation_action <= 1.0)
+    ):
+        raise ValueError("fixed-XY vertical action bounds are invalid")
+    strict_bound = float(np.nextafter(maximum_translation_action, 0.0))
+    requested_z_action = float(
+        (float(target_z) - current_eef[2]) / position_action_scale
+    )
+    commanded_z_action = float(
+        np.clip(requested_z_action, -strict_bound, strict_bound)
+    )
+    action = np.zeros(7, dtype=float)
+    action[2] = commanded_z_action
+    action[-1] = float(gripper)
+    if (
+        action[0] != 0.0
+        or action[1] != 0.0
+        or abs(action[2]) > maximum_translation_action
+    ):
+        raise RuntimeError("fixed-XY vertical action violated its hard bound")
+    return action, {
+        "formula": (
+            "hold commanded XY exactly at zero and move toward the compiled "
+            "overhead staging Z under the strict inward floating-point "
+            "representation of the unchanged translation-action norm"
+        ),
+        "current_eef": current_eef.tolist(),
+        "target_z_m": float(target_z),
+        "requested_z_action": requested_z_action,
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_z_action": commanded_z_action,
+        "translation_action_norm": float(abs(commanded_z_action)),
         "allocation_translation_action_bound": strict_bound,
         "maximum_translation_action": float(
             maximum_translation_action
@@ -2735,6 +3164,7 @@ def _seek_stable_plate_contact(
     """Descend outside the plate, then establish two-finger side contact."""
     plate_reference = body_pose(env, PLATE_BODY)[0].copy()
     samples = []
+    structural_seek_context = {}
 
     def capture(
         stage,
@@ -2801,6 +3231,7 @@ def _seek_stable_plate_contact(
                     contact_target, dtype=float
                 ).tolist(),
                 "compiled_geometry": geometry,
+                "structural_seek_context": structural_seek_context,
                 "samples": samples,
                 "scene": diagnostics(),
             }
@@ -2811,13 +3242,57 @@ def _seek_stable_plate_contact(
             )
         return sample
 
+    initial_eef = np.asarray(
+        rollout.obs["robot0_eef_pos"], dtype=float
+    ).copy()
+    live_plate_center = body_pose(env, PLATE_BODY)[0]
+    center_xy_error = float(
+        np.linalg.norm(initial_eef[:2] - live_plate_center[:2])
+    )
+    if center_xy_error > args.position_tolerance:
+        raise RuntimeError(
+            "compiled overhead staging did not begin above the native plate "
+            "center within the unchanged waypoint tolerance: "
+            f"source={source} center_xy_error_m={center_xy_error} "
+            f"tolerance_m={args.position_tolerance} "
+            f"eef={initial_eef.tolist()} "
+            f"plate={live_plate_center.tolist()}"
+        )
+    maximum_controller_world_step = float(
+        args.position_action_scale
+        * args.plate_contact_seek_max_translation_action
+    )
+    overhead_staging_z, overhead_staging_geometry = (
+        _compiled_overhead_staging_geometry(
+            env,
+            start_eef_position=initial_eef,
+            one_step_vertical_reserve_m=(
+                maximum_controller_world_step
+            ),
+        )
+    )
+    if overhead_staging_z <= float(outside_side_target[2]):
+        raise RuntimeError(
+            "compiled overhead staging Z does not remain above the native "
+            "side-contact corridor: "
+            f"source={source} overhead_z={overhead_staging_z} "
+            f"side_z={float(outside_side_target[2])} "
+            f"geometry={json.dumps(overhead_staging_geometry, sort_keys=True)}"
+        )
+
     initial_outside_side_guard = _live_outside_side_guard(env, geometry)
+    overhead_center_target = initial_eef.copy()
+    overhead_center_target[2] = overhead_staging_z
+    overhead_outside_high_target = np.asarray(
+        outside_high_target, dtype=float
+    ).copy()
+    overhead_outside_high_target[2] = overhead_staging_z
     (
         corridor_high_target,
         corridor_side_target,
         vertical_staging_corridor,
     ) = _compiled_vertical_staging_corridor(
-        outside_high_target=outside_high_target,
+        outside_high_target=overhead_outside_high_target,
         outside_side_target=outside_side_target,
         geometry=geometry,
         required_outside_clearance_m=initial_outside_side_guard[
@@ -2828,71 +3303,98 @@ def _seek_stable_plate_contact(
             args.plate_contact_seek_max_translation_action
         ),
     )
-    initial_high_motion_steps = 0
-
-    def observe_corridor_high_step():
-        nonlocal initial_high_motion_steps
-        initial_high_motion_steps += 1
-        step_guard = _live_outside_side_guard(env, geometry)
-        capture(
-            "outside_corridor_high_transit",
-            initial_high_motion_steps,
-            False,
-            True,
-            extra={
-                "outside_side_guard": step_guard,
-                "corridor_high_target": np.asarray(
-                    corridor_high_target, dtype=float
-                ).tolist(),
-            },
+    overhead_horizontal_travel = float(
+        np.linalg.norm(
+            corridor_high_target[:2] - overhead_center_target[:2]
         )
-
-    # Enter the compiled 13 mm high corridor directly from center-high.  The
-    # former two-hop path first stopped at the native 5 mm outside target;
-    # Job500133 showed that its residual OSC response could then reverse a
-    # subsequent 8 mm correction back across the strict no-contact boundary.
-    # Rollout.move retains the existing bounded waypoint controller and actor
-    # cascade oracle, while the observer applies the plate/table/contact gate
-    # after every policy action in this high transit.
-    rollout.move(
-        corridor_high_target,
-        gripper,
-        "task",
-        diagnostics=diagnostics,
-        step_observer=observe_corridor_high_step,
     )
-    latest_outside_side_guard = _live_outside_side_guard(env, geometry)
+    total_structural_geometric_travel = float(
+        overhead_staging_geometry["vertical_sweep_distance_m"]
+        + overhead_horizontal_travel
+        + vertical_staging_corridor["vertical_staging_travel_m"]
+        + vertical_staging_corridor["fixed_z_lateral_travel_m"]
+    )
+    total_structural_action_equivalents = float(
+        total_structural_geometric_travel
+        / maximum_controller_world_step
+    )
+    if total_structural_action_equivalents >= args.max_waypoint_steps:
+        raise RuntimeError(
+            "compiled overhead route exceeds the unchanged structural "
+            "waypoint budget: "
+            f"source={source} action_equivalents="
+            f"{total_structural_action_equivalents} "
+            f"maximum_steps={args.max_waypoint_steps}"
+        )
+    overhead_staging_geometry.update(
+        {
+            "center_xy_error_m": center_xy_error,
+            "maximum_center_xy_error_m": float(
+                args.position_tolerance
+            ),
+            "overhead_center_target": overhead_center_target.tolist(),
+            "overhead_corridor_target": corridor_high_target.tolist(),
+            "horizontal_sweep_formula": (
+                "after the monotone pure-Z sweep, command pure XY with "
+                "zero Z/rotation at the compiled overhead height; the "
+                "compiled rigid-body vertical separation is invariant to "
+                "XY translation and every live frame is remeasured"
+            ),
+            "horizontal_sweep_distance_m": overhead_horizontal_travel,
+            "maximum_controller_world_step_m": (
+                maximum_controller_world_step
+            ),
+            "total_structural_geometric_travel_m": (
+                total_structural_geometric_travel
+            ),
+            "total_structural_full_scale_action_equivalents": (
+                total_structural_action_equivalents
+            ),
+            "maximum_structural_waypoint_steps": int(
+                args.max_waypoint_steps
+            ),
+        }
+    )
+    structural_seek_context.update(
+        {
+            "compiled_overhead_staging_geometry": (
+                overhead_staging_geometry
+            ),
+            "vertical_staging_corridor": vertical_staging_corridor,
+            "corridor_high_target": corridor_high_target.tolist(),
+            "corridor_side_target": corridor_side_target.tolist(),
+        }
+    )
+
+    latest_outside_side_guard = initial_outside_side_guard
+    latest_overhead_guard = _live_compiled_overhead_guard(
+        env, overhead_staging_geometry
+    )
+    outside_side_guard_checks = 1
+    overhead_guard_checks = 1
+    outside_side_motion_steps = 0
+    outside_side_feedback_steps = []
+    lateral_settle_state = None
+    structural_stage = "overhead_center_descent"
+    overhead_horizontal_z = None
+    fixed_safe_z = None
+    structural_stage_action_counts = {
+        "overhead_center_descent": 0,
+        "overhead_corridor_lateral": 0,
+        "vertical_corridor_descent": 0,
+        "vertical_corridor_settle": 0,
+        "fixed_safe_z_lateral_approach": 0,
+    }
     capture(
-        "outside_high",
+        "outside_overhead_center_start",
         0,
         False,
         True,
         extra={
             "outside_side_guard": latest_outside_side_guard,
-            "corridor_high_target": np.asarray(
-                corridor_high_target, dtype=float
-            ).tolist(),
+            "compiled_overhead_guard": latest_overhead_guard,
         },
     )
-    outside_side_guard_checks = initial_high_motion_steps + 2
-    outside_side_motion_steps = 0
-    outside_side_feedback_steps = []
-    lateral_settle_state = None
-    structural_stage = (
-        "vertical_corridor_descent"
-        if latest_outside_side_guard["minimum_outside_clearance_m"]
-        > vertical_staging_corridor[
-            "strict_corridor_entry_clearance_m"
-        ]
-        else "vertical_corridor_entry"
-    )
-    fixed_safe_z = None
-    structural_stage_action_counts = {
-        "vertical_corridor_entry": 0,
-        "vertical_corridor_descent": 0,
-        "vertical_corridor_settle": 0,
-        "fixed_safe_z_lateral_approach": 0,
-    }
     for guard_step in range(1, args.max_waypoint_steps + 1):
         pre_action_guard = latest_outside_side_guard
         current_eef = np.asarray(
@@ -2917,26 +3419,38 @@ def _seek_stable_plate_contact(
                     )
                 break
         stage_before_action = structural_stage
-        if structural_stage == "vertical_corridor_entry":
-            action, path_control = (
-                _constraint_prioritized_outside_descent_action(
-                    current_eef=current_eef,
-                    outside_side_target=corridor_side_target,
-                    outward_direction_xy=geometry[
-                        "outward_direction_xy"
-                    ],
-                    maximum_descent_m=0.0,
-                    gripper=gripper,
-                    position_action_scale=args.position_action_scale,
-                    maximum_translation_action=(
-                        args.plate_contact_seek_max_translation_action
-                    ),
-                )
+        if structural_stage == "overhead_center_descent":
+            action, path_control = _fixed_xy_vertical_approach_action(
+                current_eef=current_eef,
+                target_z=overhead_staging_z,
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                maximum_translation_action=(
+                    args.plate_contact_seek_max_translation_action
+                ),
             )
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
-                "descent_path_control": path_control,
+                "fixed_xy_vertical_path_control": path_control,
+            }
+        elif structural_stage == "overhead_corridor_lateral":
+            action, path_control = _fixed_z_lateral_approach_action(
+                current_eef=current_eef,
+                lateral_target_xy=corridor_high_target[:2],
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                maximum_translation_action=(
+                    args.plate_contact_seek_max_translation_action
+                ),
+            )
+            feedback = {
+                "mode": structural_stage,
+                "action": action.tolist(),
+                "fixed_z_lateral_path_control": path_control,
+                "overhead_horizontal_z_m": float(
+                    overhead_horizontal_z
+                ),
             }
         elif structural_stage == "vertical_corridor_descent":
             maximum_descent = max(
@@ -3046,6 +3560,17 @@ def _seek_stable_plate_contact(
         )
         outside_side_guard_checks += 1
         feedback["post_action_guard"] = latest_outside_side_guard
+        if stage_before_action in {
+            "overhead_center_descent",
+            "overhead_corridor_lateral",
+        }:
+            latest_overhead_guard = _live_compiled_overhead_guard(
+                env, overhead_staging_geometry
+            )
+            overhead_guard_checks += 1
+            feedback["post_action_overhead_guard"] = (
+                latest_overhead_guard
+            )
         current_step_response = (
             _outside_side_step_response_evidence(
                 before_guard=pre_action_guard,
@@ -3061,9 +3586,43 @@ def _seek_stable_plate_contact(
         feedback["vertical_staging_corridor"] = (
             vertical_staging_corridor
         )
+        feedback["compiled_overhead_staging_reference"] = {
+            "selected_eef_z": float(overhead_staging_z),
+            "one_step_vertical_reserve_m": float(
+                maximum_controller_world_step
+            ),
+        }
         feedback["stage_before_action"] = stage_before_action
         lateral_settle_progress = None
-        if stage_before_action == "vertical_corridor_settle":
+        if stage_before_action == "overhead_center_descent":
+            after_eef = np.asarray(
+                rollout.obs["robot0_eef_pos"], dtype=float
+            )
+            if after_eef[2] <= overhead_staging_z + args.position_tolerance:
+                structural_stage = "overhead_corridor_lateral"
+                overhead_horizontal_z = float(after_eef[2])
+        elif stage_before_action == "overhead_corridor_lateral":
+            after_eef = np.asarray(
+                rollout.obs["robot0_eef_pos"], dtype=float
+            )
+            lateral_error = float(
+                np.linalg.norm(
+                    after_eef[:2] - corridor_high_target[:2]
+                )
+            )
+            feedback["corridor_lateral_error_m"] = lateral_error
+            if (
+                lateral_error <= args.position_tolerance
+                and latest_outside_side_guard[
+                    "minimum_outside_clearance_m"
+                ]
+                > vertical_staging_corridor[
+                    "strict_corridor_entry_clearance_m"
+                ]
+                and latest_overhead_guard["accepted"]
+            ):
+                structural_stage = "vertical_corridor_descent"
+        elif stage_before_action == "vertical_corridor_settle":
             lateral_settle_progress = (
                 _outside_side_lateral_settle_evidence(
                     before_guard=pre_action_guard,
@@ -3093,16 +3652,6 @@ def _seek_stable_plate_contact(
                 )
             else:
                 lateral_settle_state = lateral_settle_progress
-        elif stage_before_action == "vertical_corridor_entry":
-            if (
-                latest_outside_side_guard[
-                    "minimum_outside_clearance_m"
-                ]
-                > vertical_staging_corridor[
-                    "strict_corridor_entry_clearance_m"
-                ]
-            ):
-                structural_stage = "vertical_corridor_descent"
         elif stage_before_action == "vertical_corridor_descent":
             after_eef = np.asarray(
                 rollout.obs["robot0_eef_pos"], dtype=float
@@ -3134,6 +3683,15 @@ def _seek_stable_plate_contact(
             extra={
                 "outside_side_feedback": feedback,
                 "outside_side_guard": latest_outside_side_guard,
+                **(
+                    {"compiled_overhead_guard": latest_overhead_guard}
+                    if stage_before_action
+                    in {
+                        "overhead_center_descent",
+                        "overhead_corridor_lateral",
+                    }
+                    else {}
+                ),
             },
         )
         structural_violations = []
@@ -3142,7 +3700,18 @@ def _seek_stable_plate_contact(
                 "required_outside_clearance_m"
             ]
         )
-        if (
+        if stage_before_action in {
+            "overhead_center_descent",
+            "overhead_corridor_lateral",
+        } and not latest_overhead_guard["accepted"]:
+            structural_violations.append(
+                "compiled_overhead_one_step_vertical_reserve_lost"
+            )
+        if stage_before_action in {
+            "vertical_corridor_descent",
+            "vertical_corridor_settle",
+            "fixed_safe_z_lateral_approach",
+        } and (
             latest_outside_side_guard[
                 "minimum_outside_clearance_m"
             ]
@@ -3151,7 +3720,11 @@ def _seek_stable_plate_contact(
             structural_violations.append(
                 "strict_outside_clearance_lost_in_structural_approach"
             )
-        if (
+        if stage_before_action in {
+            "vertical_corridor_descent",
+            "vertical_corridor_settle",
+            "fixed_safe_z_lateral_approach",
+        } and (
             latest_outside_side_guard[
                 "finger_table_vertical_clearance_m"
             ]
@@ -3204,6 +3777,8 @@ def _seek_stable_plate_contact(
             f"stage={structural_stage} "
             f"stage_action_counts={json.dumps(structural_stage_action_counts, sort_keys=True)} "
             f"guard={json.dumps(latest_outside_side_guard, sort_keys=True)} "
+            f"overhead_guard={json.dumps(latest_overhead_guard, sort_keys=True)} "
+            f"overhead_geometry={json.dumps(overhead_staging_geometry, sort_keys=True)} "
             f"samples={json.dumps(samples, sort_keys=True)} "
             f"scene={json.dumps(diagnostics(), sort_keys=True)}"
         )
@@ -3289,7 +3864,11 @@ def _seek_stable_plate_contact(
         "compiled_geometry": geometry,
         "outside_side_guard": final_outside_side_guard,
         "outside_side_guard_checks": outside_side_guard_checks,
-        "initial_high_motion_steps": int(initial_high_motion_steps),
+        "compiled_overhead_staging_geometry": (
+            overhead_staging_geometry
+        ),
+        "overhead_guard_checks": int(overhead_guard_checks),
+        "overhead_horizontal_z_m": float(overhead_horizontal_z),
         "outside_side_motion_steps": outside_side_motion_steps,
         "outside_side_feedback_steps": outside_side_feedback_steps,
         "vertical_staging_corridor": vertical_staging_corridor,
