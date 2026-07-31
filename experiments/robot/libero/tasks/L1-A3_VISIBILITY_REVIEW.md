@@ -1,8 +1,11 @@
 # L1-A3 Human Review
 
 - Active version: `milk_near_target_v1`
-- Policy-view verdict: **PENDING_HUMAN_POLICY_VIEW_VISIBILITY**
+- Policy-view verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
 - Smoke-video verdict: **PENDING_HUMAN_L1A3_SMOKE_VIDEO_REVIEW**
+- Human policy-view approval: user confirmed “看起来没问题” on
+  `2026-07-31` (Asia/Hong_Kong), after reviewing the archived Eb/Er/Ec
+  policy-view previews.
 - Automated paired-scene verdict: **PASS_L1A3_PAIRED_SCENE_GATE**
 - Check job / commit: `499746` / `ee1f09ec78684ef54ec02f7a5f1af714ce2e90c3`
 - Reviewed files:
