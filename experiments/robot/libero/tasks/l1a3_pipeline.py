@@ -109,6 +109,24 @@ def _task_and_suite():
     return suite, task, bddl
 
 
+def _load_native_init_states(task):
+    """Load the selected trusted native LIBERO state file on PyTorch 2.6+."""
+    import torch
+    from libero.libero import get_libero_path
+
+    path = (
+        Path(get_libero_path("init_states"))
+        / task.problem_folder
+        / task.init_states_file
+    ).resolve(strict=True)
+    if path.name != task.init_states_file or path.parent.name != TASK_SUITE:
+        raise ValueError(f"unexpected native LIBERO init-state source: {path}")
+    try:
+        return torch.load(path, weights_only=False)
+    except TypeError:
+        return torch.load(path)
+
+
 def _env(bddl: Path, *, control: bool = False, render: bool = True):
     _ensure_libero_importable()
     if control:
@@ -757,7 +775,7 @@ def generate(args) -> None:
     manifest_path = Path(args.preflight_manifest)
     preflight = write_preflight(manifest_path, Path(args.preflight_report))
     suite, task, bddl = _task_and_suite()
-    native_states = suite.get_task_init_states(TASK_ID)
+    native_states = _load_native_init_states(task)
     if args.num_states > len(native_states):
         raise ValueError(
             f"Requested {args.num_states} unique native states, but task {TASK_ID} "
