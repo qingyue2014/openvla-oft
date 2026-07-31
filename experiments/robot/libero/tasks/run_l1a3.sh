@@ -75,6 +75,11 @@ if [[ -z "${TRITON_CACHE_DIR:-}" ]]; then
   fi
 fi
 mkdir -p "${TRITON_CACHE_DIR}"
+# The SuperPOD login environment may expose NVIDIA nvc as the generic C
+# compiler. Triton's tiny CUDA driver extension passes GCC-compatible flags,
+# so pin its host compiler to the system GNU toolchain.
+export CC="${L1A3_TRITON_CC:-/usr/bin/gcc}"
+export CXX="${L1A3_TRITON_CXX:-/usr/bin/g++}"
 if [[ "${RENDER_GPU_DEVICE_ID}" != "-1" ]]; then
   export EGL_DEVICE_ID="${EGL_DEVICE_ID:-${RENDER_GPU_DEVICE_ID}}"
   export MUJOCO_EGL_DEVICE_ID="${MUJOCO_EGL_DEVICE_ID:-${RENDER_GPU_DEVICE_ID}}"
