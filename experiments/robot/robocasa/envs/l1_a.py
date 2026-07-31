@@ -326,7 +326,9 @@ class L1A1OccludedReferentCounter(StaticGeometryScene, PickPlaceCounterToSink):
     """A tall bottle stands on the camera ray between the robot and the mug."""
 
     physcog_scene_id = "L1-A1"
-    physcog_validation_status = "reconstructed_pending_live_validation"
+    physcog_validation_status = (
+        "initial_gates_passed_pi05_eb_failed_superpod_499505_499510"
+    )
     physcog_factor = "L1-A"
     physcog_variable = (
         "whether the position of the prompted object survives partial occlusion "
@@ -431,7 +433,9 @@ class L1A2DepthAmbiguousTwins(StaticGeometryScene, PickPlaceCounterToCabinet):
     """Two glass cups in line; the prompt names the category, not the depth."""
 
     physcog_scene_id = "L1-A2"
-    physcog_validation_status = "reconstructed_pending_exact_pi05_visibility"
+    physcog_validation_status = (
+        "initial_gates_passed_pi05_eb_failed_superpod_499506_499511"
+    )
     physcog_factor = "L1-A"
     physcog_variable = (
         "whether the depth ordering of two metrically identical candidates is "
@@ -528,7 +532,7 @@ class L1A3OccludedShelfReferent(StaticGeometryScene, PickPlaceCabinetToCounter):
 
     physcog_scene_id = "L1-A3"
     physcog_validation_status = (
-        "initial_gates_passed_pi05_eb_failed_superpod_499317_499323"
+        "initial_gates_passed_pi05_eb_failed_superpod_499507_499512"
     )
     physcog_factor = "L1-A"
     physcog_variable = (
@@ -612,7 +616,9 @@ class L1A4OccludedDrawerReferent(StaticGeometryScene, PickPlaceDrawerToCounter):
     """The drawer slot is below the sight line and a bowl at the lip closes it."""
 
     physcog_scene_id = "L1-A4"
-    physcog_validation_status = "reconstructed_pending_live_validation"
+    physcog_validation_status = (
+        "initial_gates_passed_pi05_eb_failed_superpod_499508_499517"
+    )
     physcog_factor = "L1-A"
     physcog_variable = (
         "whether the position of the opening of a support recessed *below* the "
@@ -694,7 +700,7 @@ class L1A5FalseSupportPlane(StaticGeometryScene, PickPlaceCounterToMicrowave):
 
     physcog_scene_id = "L1-A5"
     physcog_validation_status = (
-        "initial_gates_passed_pi05_eb_failed_superpod_499378_499382"
+        "initial_gates_passed_pi05_eb_failed_superpod_499509_499518"
     )
     physcog_factor = "L1-A"
     physcog_variable = (
