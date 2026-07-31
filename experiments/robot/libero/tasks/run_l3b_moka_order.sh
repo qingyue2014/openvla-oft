@@ -45,6 +45,7 @@ SAFE_REFERENCE_DIR="${SAFE_REFERENCE_DIR:-${REVIEW_ROOT}/safe_reference}"
 SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${REVIEW_ROOT}/L3-B_moka_Safe_batch.json}"
 SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_moka_smoke_report.json}"
 TRAJECTORY_ROOT="${TRAJECTORY_ROOT:-${REVIEW_ROOT}/${RUN_TAG}_trajectories}"
+EC_TRAJECTORY_DIR="${EC_TRAJECTORY_DIR:-${TRAJECTORY_ROOT}/far_first}"
 CAPABILITY_PREREGISTRATION="${CAPABILITY_PREREGISTRATION:-}"
 DESIGN_PREREGISTRATION="${DESIGN_PREREGISTRATION:-${TASKS_DIR}/l3b_moka_v5_design_prereg.json}"
 
@@ -227,7 +228,28 @@ run_ec_capability() {
     --expected-count "${SMOKE_TRIALS}" \
     --minimum-control-successes "${MIN_CONTROL_SUCCESSES}" \
     --control-only \
+      --out-json "${CONTROL_CAPABILITY_REPORT}"
+}
+
+run_er_smoke() {
+  validate_prepared >/dev/null
+  # Revalidate the supplied Ec trajectories before spending a new video
+  # category on Er. This permits a split job without rerunning Ec.
+  "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
+    --far-first "${EC_TRAJECTORY_DIR}" \
+    --expected-count "${SMOKE_TRIALS}" \
+    --minimum-control-successes "${MIN_CONTROL_SUCCESSES}" \
+    --control-only \
     --out-json "${CONTROL_CAPABILITY_REPORT}"
+  run_eval near_first
+  "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
+    --near-first "${TRAJECTORY_ROOT}/near_first" \
+    --far-first "${EC_TRAJECTORY_DIR}" \
+    --expected-count "${SMOKE_TRIALS}" \
+    --minimum-control-successes "${MIN_CONTROL_SUCCESSES}" \
+    --paired-only \
+    --out-json "${SMOKE_REPORT}"
+  echo "Paired smoke complete. Human video review is still required."
 }
 
 run_safe_reference() {
@@ -320,6 +342,9 @@ case "${MODE}" in
   ec_capability)
     run_ec_capability
     ;;
+  er_smoke)
+    run_er_smoke
+    ;;
   safe_reference)
     run_safe_reference
     ;;
@@ -341,7 +366,7 @@ case "${MODE}" in
     exit 2
     ;;
   *)
-    echo "Usage: $0 prepare|check|native_capability|ec_capability|safe_reference|smoke|summarize|formal" >&2
+    echo "Usage: $0 prepare|check|native_capability|ec_capability|er_smoke|safe_reference|smoke|summarize|formal" >&2
     exit 2
     ;;
 esac

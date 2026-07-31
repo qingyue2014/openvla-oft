@@ -338,6 +338,42 @@ def summarize(
             "far_first", far_dir, expected_count=expected_count
         ),
     }
+    return _paired_diagnostic(
+        conditions,
+        expected_count=expected_count,
+        minimum_control_successes=minimum_control_successes,
+    )
+
+
+def paired_smoke(
+    near_dir: str | Path,
+    far_dir: str | Path,
+    *,
+    expected_count: int,
+    minimum_control_successes: int = 3,
+) -> dict:
+    """Summarize Er/Ec without rerunning the descriptive native baseline."""
+    conditions = {
+        "near_first": summarize_condition(
+            "near_first", near_dir, expected_count=expected_count
+        ),
+        "far_first": summarize_condition(
+            "far_first", far_dir, expected_count=expected_count
+        ),
+    }
+    return _paired_diagnostic(
+        conditions,
+        expected_count=expected_count,
+        minimum_control_successes=minimum_control_successes,
+    )
+
+
+def _paired_diagnostic(
+    conditions: dict,
+    *,
+    expected_count: int,
+    minimum_control_successes: int,
+) -> dict:
     control_pass = (
         conditions["far_first"]["stable_successes"]
         >= minimum_control_successes
@@ -369,7 +405,6 @@ def summarize(
         "verdict": PASS_SMOKE if not failures else "FAIL_L3B_MOKA_POLICY_SMOKE",
         "candidate_status": candidate_status,
         "scene_labels": {
-            "Eb": "native",
             "Er": "near_first",
             "Ec": "far_first",
         },
@@ -392,6 +427,15 @@ def summarize(
         "conditions": conditions,
         "failures": failures,
     }
+    if "native" in conditions:
+        result["scene_labels"] = {
+            "Eb": "native",
+            **result["scene_labels"],
+        }
+    else:
+        result["native_baseline"] = (
+            "omitted_from_paired_summary; Eb is descriptive and is not a gate"
+        )
     return result
 
 
@@ -416,12 +460,16 @@ def main() -> None:
     parser.add_argument("--minimum-control-successes", type=int, default=3)
     parser.add_argument("--native-only", action="store_true")
     parser.add_argument("--control-only", action="store_true")
+    parser.add_argument("--paired-only", action="store_true")
     parser.add_argument("--preregistration")
     parser.add_argument("--out-json")
     args = parser.parse_args()
     try:
-        if args.native_only and args.control_only:
-            raise ValueError("--native-only and --control-only are exclusive")
+        if sum((args.native_only, args.control_only, args.paired_only)) > 1:
+            raise ValueError(
+                "--native-only, --control-only, and --paired-only are "
+                "exclusive"
+            )
         if args.native_only:
             if not args.native:
                 raise ValueError("--native is required with --native-only")
@@ -444,6 +492,18 @@ def main() -> None:
                 args.far_first,
                 expected_count=args.expected_count,
                 minimum_successes=args.minimum_control_successes,
+            )
+        elif args.paired_only:
+            if not args.near_first or not args.far_first:
+                raise ValueError(
+                    "--near-first and --far-first are required with "
+                    "--paired-only"
+                )
+            result = paired_smoke(
+                args.near_first,
+                args.far_first,
+                expected_count=args.expected_count,
+                minimum_control_successes=args.minimum_control_successes,
             )
         else:
             if not args.native or not args.near_first or not args.far_first:

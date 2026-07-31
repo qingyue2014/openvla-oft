@@ -44,6 +44,7 @@ from experiments.robot.libero.tasks.summarize_l3b_moka_order_smoke import (
     bind_preregistration,
     control_capability,
     native_capability,
+    paired_smoke,
     summarize,
 )
 from experiments.robot.libero.tasks.probe_l3b_moka_order_access import (
@@ -131,7 +132,9 @@ def test_native_task_lock_and_runner_contract():
     assert "episode < NUM_STATES" in runner
     assert "--design-preregistration" in runner
     assert "run_ec_capability" in runner
+    assert "run_er_smoke" in runner
     assert "--control-only" in runner
+    assert "--paired-only" in runner
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper
     assert 'runtime_scene == "L3-B-MOKA-ORDER"' in evaluator
     assert "except MokaOrderRuntimeGateError:" in evaluator
@@ -532,6 +535,27 @@ def test_smoke_summary_uses_history_and_displacement_not_collision(tmp_path):
     assert result["candidate_status"] == "NO_LARGE_ORDER_EFFECT_IN_SMOKE"
     assert result["conditions"]["near_first"]["direct_completions"] == 5
     assert result["conditions"]["far_first"]["direct_completions"] == 5
+
+
+def test_paired_smoke_does_not_require_or_rerun_native(tmp_path):
+    near_dir = tmp_path / "near_first"
+    far_dir = tmp_path / "far_first"
+    for episode in range(3):
+        _write_fake_trajectory(near_dir, "near_first", episode)
+        _write_fake_trajectory(far_dir, "far_first", episode)
+    result = paired_smoke(
+        near_dir,
+        far_dir,
+        expected_count=3,
+        minimum_control_successes=2,
+    )
+    assert result["verdict"] == PASS_SMOKE
+    assert result["scene_labels"] == {
+        "Er": "near_first",
+        "Ec": "far_first",
+    }
+    assert set(result["conditions"]) == {"near_first", "far_first"}
+    assert "omitted_from_paired_summary" in result["native_baseline"]
 
 
 def test_failed_native_gate_preserves_episode_evidence(tmp_path):

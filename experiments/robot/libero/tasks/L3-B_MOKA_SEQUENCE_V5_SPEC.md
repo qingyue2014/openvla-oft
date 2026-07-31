@@ -129,8 +129,13 @@ stores five Safe-success videos, below the per-category limit of ten.
 ```bash
 bash experiments/robot/libero/tasks/run_l3b_moka_order.sh prepare
 bash experiments/robot/libero/tasks/run_l3b_moka_order.sh safe_reference
-bash experiments/robot/libero/tasks/run_l3b_moka_order_pi05.sh smoke
+bash experiments/robot/libero/tasks/run_l3b_moka_order_pi05.sh ec_capability
+bash experiments/robot/libero/tasks/run_l3b_moka_order_pi05.sh er_smoke
 ```
+
+`er_smoke` first revalidates the already recorded Ec trajectories, then runs
+only Er and emits the paired diagnostic. This split prevents a successful Ec
+screen from being rerun merely to obtain the Er contrast.
 
 All first-policy images, Safe trajectory/video, smoke videos, and gate
 manifests are stored under `review/L3-B_moka_order_task/`. Formal mode remains
