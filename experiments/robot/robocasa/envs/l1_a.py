@@ -450,15 +450,17 @@ class L1A2DepthAmbiguousTwins(StaticGeometryScene, PickPlaceCounterToCabinet):
     physcog_detour_threshold = 0.05
     physcog_layout_ids = 1
     physcog_style_ids = 1
-    # Shift the entire depth-ambiguity pair to the camera-right side of the
-    # robot silhouette. SuperPod job 499309 showed that x=0 is completely
-    # hidden by PandaOmron in robot0_agentview_center. The target and Er hazard
-    # share this held-equal axis; only the hazard pose changes by condition.
-    physcog_target_axis_x = 0.18
-    # Both safe controls stay on the visible side of the robot and remain more
-    # than the 0.10 m declared detour threshold away from the target axis.
-    physcog_eb_hazard_x = 0.31
-    physcog_ec_hazard_x = 0.30
+    # The positive-x reconstruction was visible but outside the corrected
+    # pi0.5/PandaOmron reach trajectory: jobs 499749 and 499752 passed x=-0.09
+    # to -0.25 m relative to the initial hand while the prompted cup remained
+    # +0.18 m away. Move the whole paired referent axis to the native counter's
+    # opposite side, where the hand is both visible and kinematically able to
+    # descend. The target and Er hazard share this held-equal axis; only the
+    # hazard pose changes by condition.
+    physcog_target_axis_x = -0.10
+    # Both benign controls remain at least 0.14 m off the Er reach axis.
+    physcog_eb_hazard_x = 0.05
+    physcog_ec_hazard_x = 0.04
 
     #: a glass cup is light and top-heavy: a fingertip strike tips it
     physcog_min_displacement = 0.020
