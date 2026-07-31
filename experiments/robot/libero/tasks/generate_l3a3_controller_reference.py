@@ -976,11 +976,13 @@ def _derive_overhead_staging_from_compiled_pairs(
             "EEF-Z lower bound"
         ),
         "sweep_proof": (
-            "from the exact native center-high state, first command pure XY "
-            "with zero Z/rotation to the compiled corridor XY while deriving "
-            "every action norm from the runtime native bound and the full "
-            "live compiled-pair worst-case downward-tail capacity above "
-            "strict+base8, then rechecking base8 afterward; next command pure "
+            "from the exact native center-high state, first command XY plus "
+            "nonnegative Z plane-hold actions with zero rotation toward the "
+            "compiled corridor XY; derive every action norm from the runtime "
+            "native bound and the full live compiled-pair worst-case downward-"
+            "tail capacity above strict+base8 after reserving the latest "
+            "measured negative-dz inertia, then recheck base8 afterward; next "
+            "command pure "
             "negative Z with zero "
             "XY/rotation at corridor XY, where each rigid gripper geom lower "
             "bound decreases monotonically and its minimum vertical clearance "
@@ -1512,7 +1514,7 @@ def _overhead_route_frame_authorization_evidence(
             and np.isfinite(dynamic_action_norm)
             and dynamic_action_norm > 0.0
             and np.isfinite(dynamic_world_tail)
-            and dynamic_world_tail > 0.0
+            and dynamic_world_tail >= 0.0
             and np.isfinite(dynamic_minimum_surplus)
             and dynamic_minimum_surplus > 0.0
             and adaptive_high_lateral_envelope.get("proof", {}).get(
@@ -1605,7 +1607,8 @@ def _overhead_route_frame_authorization_evidence(
         "proof_scope": (
             (
                 "live pre/post world-AABB checks plus the per-pair dynamic "
-                "worst-case action tail and unchanged 8 mm base8 envelope"
+                "worst-case action tail, latest measured negative-dz inertial "
+                "reserve, and unchanged 8 mm base8 envelope"
                 if adaptive_high_lateral_envelope is not None
                 else (
                     "live pre/post world-AABB checks plus the unchanged 8 mm "
@@ -1627,6 +1630,7 @@ def _overhead_corridor_entry_evidence(
     position_tolerance,
     strict_corridor_entry_clearance_m,
     require_lateral_buffer=True,
+    minimum_eef_z=None,
 ):
     """Gate transition from the overhead route into side-corridor descent."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -1640,6 +1644,10 @@ def _overhead_corridor_entry_evidence(
         or position_tolerance <= 0.0
         or not np.isfinite(strict_corridor_entry_clearance_m)
         or strict_corridor_entry_clearance_m < 0.0
+        or (
+            minimum_eef_z is not None
+            and not np.isfinite(minimum_eef_z)
+        )
     ):
         raise ValueError("overhead corridor-entry inputs are invalid")
     lateral_error = float(
@@ -1659,6 +1667,8 @@ def _overhead_corridor_entry_evidence(
         violations.append("outside_corridor_entry_clearance_not_met")
     if not overhead_guard.get("accepted", False):
         violations.append("compiled_overhead_base8_not_accepted")
+    if minimum_eef_z is not None and current_eef[2] < float(minimum_eef_z):
+        violations.append("high_plane_hold_z_not_recovered")
     if require_lateral_buffer and not overhead_lateral_buffer.get(
         "accepted", False
     ):
@@ -1684,6 +1694,13 @@ def _overhead_corridor_entry_evidence(
             overhead_lateral_buffer.get("accepted", False)
         ),
         "overhead_buffer16_required": bool(require_lateral_buffer),
+        "minimum_eef_z_m": (
+            float(minimum_eef_z) if minimum_eef_z is not None else None
+        ),
+        "high_plane_hold_z_accepted": bool(
+            minimum_eef_z is None
+            or current_eef[2] >= float(minimum_eef_z)
+        ),
         "outside_authorization_rule": (
             "before rim-height descent, the full outside guard may remain "
             "false because rim vertical coverage is not yet expected; require "
@@ -3130,6 +3147,359 @@ def _compiled_adaptive_high_lateral_action(
             "does_not_cross_lateral_target": bool(
                 worst_case_world_tail <= lateral_remaining
             ),
+            "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": (
+                True
+            ),
+        },
+    }
+
+
+def _compiled_adaptive_high_plane_action(
+    *,
+    current_eef,
+    lateral_target_xy,
+    overhead_horizontal_z,
+    measured_vertical_step_progress_m,
+    overhead_guard,
+    gripper,
+    position_action_scale,
+    native_action_spec,
+    expected_pair_count,
+):
+    """Hold the initial high plane with XY/+Z under live pair reserves."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    lateral_target_xy = np.asarray(lateral_target_xy, dtype=float)
+    scalars = (
+        overhead_horizontal_z,
+        measured_vertical_step_progress_m,
+        position_action_scale,
+    )
+    if (
+        current_eef.shape != (3,)
+        or lateral_target_xy.shape != (2,)
+        or not np.all(np.isfinite(current_eef))
+        or not np.all(np.isfinite(lateral_target_xy))
+        or not all(np.isfinite(value) for value in scalars)
+        or position_action_scale <= 0.0
+    ):
+        raise ValueError("adaptive high-plane geometry is invalid")
+    if not isinstance(expected_pair_count, (int, np.integer)):
+        raise ValueError("expected compiled pair count must be an integer")
+    pairs = list(overhead_guard.get("pairs", ()))
+    if expected_pair_count <= 0 or len(pairs) != int(expected_pair_count):
+        raise RuntimeError(
+            "live compiled overhead pair inventory changed before adaptive "
+            f"high-plane action: expected={expected_pair_count} "
+            f"observed={len(pairs)}"
+        )
+    identities = [_overhead_pair_identity(pair) for pair in pairs]
+    if len(set(identities)) != len(identities):
+        raise RuntimeError(
+            "adaptive high-plane evidence contains duplicate pair identity"
+        )
+    if not overhead_guard.get("accepted", False):
+        raise RuntimeError(
+            "adaptive high-plane action cannot start after base8 is lost"
+        )
+    try:
+        native_low = np.asarray(native_action_spec["low"], dtype=float)
+        native_high = np.asarray(native_action_spec["high"], dtype=float)
+        native_source = str(native_action_spec["source"])
+    except Exception as exc:
+        raise RuntimeError(
+            "native OSC action-bound evidence is incomplete"
+        ) from exc
+    if (
+        not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(native_low < native_high)
+        or not np.all(native_low[:6] < 0.0)
+        or not np.all(native_high[:6] > 0.0)
+        or not (native_low[6] <= gripper <= native_high[6])
+    ):
+        raise RuntimeError(
+            "native OSC action bounds do not prove an XY/nonnegative-Z action"
+        )
+    native_norm_bound = float(
+        min(
+            -native_low[0],
+            native_high[0],
+            -native_low[1],
+            native_high[1],
+            native_high[2],
+        )
+    )
+    strict_native_norm_bound = float(
+        np.nextafter(native_norm_bound, 0.0)
+    )
+    if strict_native_norm_bound <= 0.0:
+        raise RuntimeError("native strict 3-D action norm is unavailable")
+    base_reserve = float(overhead_guard["one_step_vertical_reserve_m"])
+    if not np.isfinite(base_reserve) or base_reserve <= 0.0:
+        raise RuntimeError("compiled overhead base reserve is invalid")
+
+    lateral_delta = lateral_target_xy - current_eef[:2]
+    lateral_remaining = float(np.linalg.norm(lateral_delta))
+    plane_hold_z_error = float(
+        max(0.0, float(overhead_horizontal_z) - current_eef[2])
+    )
+    requested = np.array(
+        [
+            lateral_delta[0] / position_action_scale,
+            lateral_delta[1] / position_action_scale,
+            plane_hold_z_error / position_action_scale,
+        ],
+        dtype=float,
+    )
+    requested_norm = float(np.linalg.norm(requested))
+    if not np.isfinite(requested_norm) or requested_norm <= 0.0:
+        raise RuntimeError(
+            "adaptive high-plane action has no positive XY/Z-hold error"
+        )
+    requested_direction = requested / requested_norm
+    measured_negative_tail = float(
+        max(0.0, -float(measured_vertical_step_progress_m))
+    )
+    inertial_tail_reserve = (
+        float(np.nextafter(measured_negative_tail, np.inf))
+        if measured_negative_tail > 0.0
+        else 0.0
+    )
+
+    pair_envelopes = []
+    for index, (identity, pair) in enumerate(zip(identities, pairs)):
+        vertical_clearance = float(pair["vertical_clearance_m"])
+        strict_clearance = float(pair["strict_no_contact_clearance_m"])
+        required_clearance = float(strict_clearance + base_reserve)
+        current_surplus = float(vertical_clearance - required_clearance)
+        nominal_tail_capacity = float(
+            current_surplus - inertial_tail_reserve
+        )
+        if (
+            not np.isfinite(vertical_clearance)
+            or not np.isfinite(strict_clearance)
+            or strict_clearance < 0.0
+            or not np.isfinite(current_surplus)
+            or current_surplus <= 0.0
+            or not pair.get("accepted", False)
+        ):
+            raise RuntimeError(
+                "compiled overhead pair cannot prove positive adaptive "
+                f"high-plane capacity: index={index} pair="
+                f"{json.dumps(pair, sort_keys=True)}"
+            )
+        if nominal_tail_capacity <= 0.0:
+            raise RuntimeError(
+                "latest measured negative-dz inertial tail consumes the live "
+                f"base8 surplus before recovery: index={index}"
+            )
+        strict_nominal_tail_capacity = float(
+            np.nextafter(nominal_tail_capacity, 0.0)
+        )
+        pair_envelopes.append(
+            {
+                "pair_index": int(index),
+                "pair_identity": list(identity),
+                "gripper_geom": pair["gripper_geom"],
+                "counterpart_geom": pair["counterpart_geom"],
+                "counterpart_kind": pair["counterpart_kind"],
+                "current_vertical_clearance_m": vertical_clearance,
+                "strict_no_contact_clearance_m": strict_clearance,
+                "base_overhead_reserve_m": base_reserve,
+                "required_clearance_with_base_reserve_m": required_clearance,
+                "current_base8_surplus_m": current_surplus,
+                "measured_negative_inertial_tail_reserve_m": (
+                    inertial_tail_reserve
+                ),
+                "strict_nominal_tail_capacity_m": (
+                    strict_nominal_tail_capacity
+                ),
+                "strict_safe_translation_action_norm_capacity": float(
+                    strict_nominal_tail_capacity / position_action_scale
+                ),
+            }
+        )
+    limiting_pair = min(
+        pair_envelopes,
+        key=lambda record: record[
+            "strict_safe_translation_action_norm_capacity"
+        ],
+    )
+    pair_norm_capacity = float(
+        limiting_pair["strict_safe_translation_action_norm_capacity"]
+    )
+    capacities = {
+        "requested_xy_plus_plane_hold_action_norm": requested_norm,
+        "compiled_pair_base8_nominal_tail_after_inertia": pair_norm_capacity,
+        "native_strict_3d_translation_action_norm_bound": (
+            strict_native_norm_bound
+        ),
+    }
+    selected_source = min(capacities, key=capacities.get)
+    selected_norm = float(capacities[selected_source])
+    recovery_required = bool(
+        selected_source
+        == "compiled_pair_base8_nominal_tail_after_inertia"
+        and selected_norm
+        < min(requested_norm, strict_native_norm_bound)
+    )
+    minimum_current_surplus = min(
+        record["current_base8_surplus_m"] for record in pair_envelopes
+    )
+    if recovery_required:
+        requested_nominal_tail = float(
+            position_action_scale
+            * min(requested_norm, strict_native_norm_bound)
+        )
+        recovery_world_delta = float(
+            max(
+                plane_hold_z_error,
+                inertial_tail_reserve,
+                requested_nominal_tail
+                + inertial_tail_reserve
+                - minimum_current_surplus,
+            )
+        )
+        recovery_z_action = float(
+            min(
+                strict_native_norm_bound,
+                recovery_world_delta / position_action_scale,
+            )
+        )
+        if recovery_z_action <= 0.0:
+            raise RuntimeError(
+                "event-driven high-plane recovery has no positive +Z action"
+            )
+        translation = np.array([0.0, 0.0, recovery_z_action])
+        nominal_tail = 0.0
+        total_tail = inertial_tail_reserve
+        selected_source = "event_driven_positive_z_plane_recovery"
+    else:
+        translation = requested_direction * selected_norm
+        nominal_tail = float(
+            position_action_scale * np.linalg.norm(translation)
+        )
+        total_tail = float(nominal_tail + inertial_tail_reserve)
+
+    for _ in range(128):
+        literal_norm = float(np.linalg.norm(translation))
+        literal_xy_world_delta = float(
+            position_action_scale * np.linalg.norm(translation[:2])
+        )
+        predicted = [
+            float(record["current_vertical_clearance_m"] - total_tail)
+            for record in pair_envelopes
+        ]
+        if (
+            0.0 < literal_norm < native_norm_bound
+            and literal_xy_world_delta <= lateral_remaining
+            and translation[2] >= 0.0
+            and all(
+                native_low[index] < translation[index] < native_high[index]
+                for index in range(3)
+            )
+            and all(
+                clearance
+                > record["required_clearance_with_base_reserve_m"]
+                for clearance, record in zip(predicted, pair_envelopes)
+            )
+        ):
+            break
+        if recovery_required:
+            raise RuntimeError(
+                "event-driven +Z recovery cannot retain measured inertial "
+                "tail and base8"
+            )
+        translation = np.nextafter(translation, 0.0)
+        nominal_tail = float(
+            position_action_scale * np.linalg.norm(translation)
+        )
+        total_tail = float(nominal_tail + inertial_tail_reserve)
+    else:
+        raise RuntimeError(
+            "adaptive high-plane literal action lacks strict native/base8 "
+            "interior"
+        )
+
+    minimum_predicted_surplus = float("inf")
+    for clearance, record in zip(predicted, pair_envelopes):
+        record["predicted_post_worst_case_vertical_clearance_m"] = clearance
+        record["predicted_post_worst_case_base_reserve_surplus_m"] = float(
+            clearance - record["required_clearance_with_base_reserve_m"]
+        )
+        minimum_predicted_surplus = min(
+            minimum_predicted_surplus,
+            record[
+                "predicted_post_worst_case_base_reserve_surplus_m"
+            ],
+        )
+    action = np.zeros(7, dtype=float)
+    action[:3] = translation
+    action[-1] = float(gripper)
+    if (
+        action[2] < 0.0
+        or np.any(action[3:6] != 0.0)
+        or literal_norm >= native_norm_bound
+        or minimum_predicted_surplus <= 0.0
+    ):
+        raise RuntimeError(
+            "adaptive high-plane action violated its compiled hard proof"
+        )
+    return action, {
+        "accepted": True,
+        "formula": (
+            "request [XY error, max(0, initial center-high Z minus current Z)] "
+            "over position_action_scale; intersect its norm with the strict "
+            "runtime-native 3-D norm and every exact pair's strict+base8 "
+            "capacity after reserving at least the latest measured negative-dz "
+            "inertial tail; a pair-limited action becomes pure +Z recovery"
+        ),
+        "current_eef": current_eef.tolist(),
+        "lateral_target_xy": lateral_target_xy.tolist(),
+        "overhead_horizontal_z_m": float(overhead_horizontal_z),
+        "lateral_remaining_m": lateral_remaining,
+        "plane_hold_z_error_m": plane_hold_z_error,
+        "requested_translation_action": requested.tolist(),
+        "requested_translation_action_norm": requested_norm,
+        "position_action_scale_m_per_normalized_action": float(
+            position_action_scale
+        ),
+        "measured_vertical_step_progress_m": float(
+            measured_vertical_step_progress_m
+        ),
+        "measured_negative_inertial_tail_reserve_m": inertial_tail_reserve,
+        "native_action_spec_source": native_source,
+        "native_3d_translation_action_norm_bound": native_norm_bound,
+        "strict_native_3d_translation_action_norm_bound": (
+            strict_native_norm_bound
+        ),
+        "compiled_pair_count": len(pair_envelopes),
+        "pair_identity_keys": [list(identity) for identity in identities],
+        "pair_envelopes": pair_envelopes,
+        "selected_limiting_pair": dict(limiting_pair),
+        "candidate_action_norm_capacities": capacities,
+        "selected_envelope_source": selected_source,
+        "event_driven_positive_z_recovery": recovery_required,
+        "commanded_translation_action_norm": literal_norm,
+        "commanded_nominal_norm_downward_tail_m": nominal_tail,
+        "commanded_worst_case_downward_world_tail_m": total_tail,
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_z_action": float(action[2]),
+        "minimum_predicted_post_worst_case_base_surplus_m": (
+            minimum_predicted_surplus
+        ),
+        "proof": {
+            "xy_plus_nonnegative_z_zero_rotation": True,
+            "strictly_inside_native_3d_action_norm_bound": True,
+            "does_not_cross_lateral_target_xy": bool(
+                literal_xy_world_delta <= lateral_remaining
+            ),
+            "positive_z_static_geometry_does_not_reduce_clearance": True,
+            "latest_measured_negative_dz_reserved_as_inertial_tail": True,
             "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": (
                 True
             ),
@@ -5034,7 +5404,7 @@ def _seek_stable_plate_contact(
                 corridor_high_target.tolist()
             ),
             "structural_route_order": [
-                "native_center_high_pure_xy",
+                "native_center_high_xy_plus_nonnegative_z_plane_hold",
                 "corridor_xy_adaptive_pure_z_descent",
                 "vertical_tail_brake_and_zero_confirmation",
                 "live_corridor_entry_or_xy_drift_correction",
@@ -5042,20 +5412,22 @@ def _seek_stable_plate_contact(
             ],
             "horizontal_sweep_formula": (
                 "from the exact native center-high first-policy state, command "
-                "pure XY with zero Z/rotation to the compiled corridor XY; "
-                "derive each translation-action norm from the strict runtime "
-                "native XY bound and all 55 live pairs' current clearance "
-                "minus strict+base8, using position_action_scale times norm "
-                "as the worst-case downward tail plus an inward numerical "
-                "guard; remeasure post-action base8 and the empty structural "
-                "robot/native contact allowlist on every frame. The unchanged "
-                "0.10 bound remains exclusive to post-descent correction and "
-                "contact motion"
+                "XY plus nonnegative Z with zero rotation toward the compiled "
+                "corridor XY while holding the initial center-high Z plane; "
+                "derive each 3-D translation-action norm from the strict "
+                "runtime native bound and all 55 live pairs' current clearance "
+                "minus strict+base8 and the latest measured negative-dz "
+                "inertial reserve. If pair capacity is limiting, issue pure "
+                "+Z recovery instead of near-zero XY; remeasure post-action "
+                "base8 and the empty structural robot/native contact allowlist "
+                "on every frame. The unchanged 0.10 bound remains exclusive "
+                "to post-descent correction and contact motion"
             ),
             "measurement_scope": (
                 "live pre/post world-AABB and contact observations with the "
-                "unchanged 8/16 mm action envelopes; internal controller "
-                "substeps are not directly measured"
+                "dynamic high-plane base8 plus measured-inertial-tail envelope "
+                "and the unchanged later-stage 8/16 mm envelopes; internal "
+                "controller substeps are not directly measured"
             ),
             "horizontal_sweep_distance_m": overhead_horizontal_travel,
             "maximum_controller_world_step_m": (
@@ -5275,9 +5647,13 @@ def _seek_stable_plate_contact(
             (
                 prepared_high_lateral_action,
                 prepared_high_lateral_envelope,
-            ) = _compiled_adaptive_high_lateral_action(
+            ) = _compiled_adaptive_high_plane_action(
                 current_eef=current_eef,
                 lateral_target_xy=corridor_high_target[:2],
+                overhead_horizontal_z=overhead_horizontal_z,
+                measured_vertical_step_progress_m=(
+                    latest_vertical_step_progress_m
+                ),
                 overhead_guard=latest_overhead_guard,
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
@@ -5441,7 +5817,7 @@ def _seek_stable_plate_contact(
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
-                "compiled_adaptive_high_lateral_action_envelope": (
+                "compiled_adaptive_high_plane_action_envelope": (
                     path_control
                 ),
                 "lateral_route_phase": "native_center_high_first",
@@ -5696,6 +6072,9 @@ def _seek_stable_plate_contact(
                         ]
                     ),
                     require_lateral_buffer=False,
+                    minimum_eef_z=(
+                        overhead_horizontal_z - args.position_tolerance
+                    ),
                 )
             )
             feedback["corridor_entry_after_high_lateral"] = (
