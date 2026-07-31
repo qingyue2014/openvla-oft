@@ -43,10 +43,14 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     collision_masks_compatible,
     contact_body_names,
     contacts_between,
+    descendant_body_ids,
     descendant_geom_ids,
+    native_site_contains_point,
+    oriented_box_separating_clearance,
     planar_park_clearances,
     policy_image,
     resolve_microwave_names,
+    segment_aabb_distance,
 )
 from experiments.robot.libero.tasks.native_state_replay import (
     materialize_native_scene_state,
@@ -68,6 +72,8 @@ SAFE_PARK_TABLE_EDGE_MARGIN_M = 0.020
 SAFE_PARK_DOOR_SWEEP_MARGIN_M = 0.020
 SAFE_PARK_STATIC_MARGIN_M = 0.020
 SAFE_PARK_DOOR_SWEEP_SAMPLES = 49
+TARGET_INSERTION_SEARCH_STEP_M = 0.005
+TARGET_INSERTION_SWEEP_STEP_M = 0.005
 EEF_POSITION_TOLERANCE = 0.012
 MOVE_STEPS = 100
 GRIPPER_STEPS = 15
@@ -94,12 +100,11 @@ def _sha256(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def _eef_position(env) -> np.ndarray:
-    model = env.sim.model
+def _eef_body_name(model) -> str:
     for name in ("gripper0_eef", "robot0_gripper0_eef", "robot0_eef"):
         try:
-            body_id = int(model.body_name2id(name))
-            return np.asarray(env.sim.data.body_xpos[body_id], dtype=float).copy()
+            model.body_name2id(name)
+            return name
         except Exception:
             continue
     matches = [
@@ -109,27 +114,55 @@ def _eef_position(env) -> np.ndarray:
     ]
     if len(matches) != 1:
         raise RuntimeError(f"cannot resolve end-effector body; matches={matches}")
-    body_id = int(model.body_name2id(matches[0]))
+    return matches[0]
+
+
+def _eef_position(env) -> np.ndarray:
+    model = env.sim.model
+    body_id = int(model.body_name2id(_eef_body_name(model)))
     return np.asarray(env.sim.data.body_xpos[body_id], dtype=float).copy()
 
 
 def _robot_contact_body_names(env) -> set[str]:
+    return {
+        pair["other_body_name"]
+        for pair in _robot_contact_pairs(env)
+        if pair["other_body_name"]
+    }
+
+
+def _robot_contact_pairs(env) -> list[dict]:
     robot_geoms = _robot_geom_ids(env.sim.model)
-    contacts = set()
+    contacts = {}
     for index in range(int(env.sim.data.ncon)):
         contact = env.sim.data.contact[index]
         if contact.geom1 in robot_geoms:
+            robot = int(contact.geom1)
             other = int(contact.geom2)
         elif contact.geom2 in robot_geoms:
+            robot = int(contact.geom2)
             other = int(contact.geom1)
         else:
             continue
-        body_name = env.sim.model.body_id2name(
+        robot_body = env.sim.model.body_id2name(
+            int(env.sim.model.geom_bodyid[robot])
+        ) or ""
+        other_body = env.sim.model.body_id2name(
             int(env.sim.model.geom_bodyid[other])
-        )
-        if body_name and not body_name.startswith(("robot0_", "gripper0_")):
-            contacts.add(body_name)
-    return contacts
+        ) or ""
+        if other_body.startswith(("robot0_", "gripper0_")):
+            continue
+        key = (robot, other)
+        contacts[key] = {
+            "contact_index": int(index),
+            "robot_geom_id": robot,
+            "robot_geom_name": _geom_name(env.sim.model, robot),
+            "robot_body_name": str(robot_body),
+            "other_geom_id": other,
+            "other_geom_name": _geom_name(env.sim.model, other),
+            "other_body_name": str(other_body),
+        }
+    return [contacts[key] for key in sorted(contacts)]
 
 
 def _has_microwave_contact(body_names) -> bool:
@@ -671,6 +704,1027 @@ def _compiled_safe_outward_park(
     }
 
 
+def _compiled_target_support_geometry(env, desired_up):
+    """Measure the target body's native table-support offset from contacts."""
+    model = env.sim.model
+    desired_up = np.asarray(desired_up, dtype=float)
+    desired_up = desired_up / np.linalg.norm(desired_up)
+    target_geoms = descendant_geom_ids(model, TARGET_BODY)
+    target_position, _ = body_pose(env.sim, TARGET_BODY)
+    candidates = []
+    for index in range(int(env.sim.data.ncon)):
+        contact = env.sim.data.contact[index]
+        if contact.geom1 in target_geoms:
+            target_geom = int(contact.geom1)
+            support_geom = int(contact.geom2)
+        elif contact.geom2 in target_geoms:
+            target_geom = int(contact.geom2)
+            support_geom = int(contact.geom1)
+        else:
+            continue
+        support_body = model.body_id2name(
+            int(model.geom_bodyid[support_geom])
+        ) or ""
+        if (
+            support_body.startswith(("robot0_", "gripper0_"))
+            or "microwave" in support_body.lower()
+            or support_geom in target_geoms
+            or int(model.geom_type[support_geom]) != 6
+        ):
+            continue
+        rotation = np.asarray(
+            env.sim.data.geom_xmat[support_geom], dtype=float
+        ).reshape(3, 3)
+        half_size = np.asarray(
+            model.geom_size[support_geom], dtype=float
+        )
+        alignment = rotation.T @ desired_up
+        normal_axis = int(np.argmax(np.abs(alignment)))
+        normal = rotation[:, normal_axis] * (
+            1.0 if alignment[normal_axis] >= 0.0 else -1.0
+        )
+        normal_tilt_deg = float(
+            np.degrees(
+                np.arccos(
+                    np.clip(float(np.dot(normal, desired_up)), -1.0, 1.0)
+                )
+            )
+        )
+        surface = (
+            np.asarray(
+                env.sim.data.geom_xpos[support_geom], dtype=float
+            )
+            + normal * half_size[normal_axis]
+        )
+        support_offset = float(
+            np.dot(target_position - surface, normal)
+        )
+        tangent_axes = [
+            axis for axis in range(3) if axis != normal_axis
+        ]
+        candidates.append(
+            {
+                "contact_index": int(index),
+                "target_geom_id": target_geom,
+                "target_geom_name": _geom_name(model, target_geom),
+                "support_geom_id": support_geom,
+                "support_geom_name": _geom_name(model, support_geom),
+                "support_body": str(support_body),
+                "support_surface_position": surface.tolist(),
+                "support_normal": normal.tolist(),
+                "normal_axis": normal_axis,
+                "normal_tilt_deg": normal_tilt_deg,
+                "support_offset_m": support_offset,
+                "support_planar_area_m2": float(
+                    4.0
+                    * half_size[tangent_axes[0]]
+                    * half_size[tangent_axes[1]]
+                ),
+            }
+        )
+    level = [
+        candidate
+        for candidate in candidates
+        if candidate["normal_tilt_deg"] <= MAX_MUG_TILT_DEG
+    ]
+    if not level:
+        raise RuntimeError(
+            "target mug has no compiled level non-microwave support contact; "
+            f"contacts={candidates}"
+        )
+    selected = max(
+        level,
+        key=lambda item: (
+            item["support_planar_area_m2"],
+            -item["normal_tilt_deg"],
+            -item["support_geom_id"],
+        ),
+    )
+    selected_support = int(selected["support_geom_id"])
+    contacting_target_geoms = sorted(
+        {
+            int(candidate["target_geom_id"])
+            for candidate in level
+            if int(candidate["support_geom_id"]) == selected_support
+        }
+    )
+    selected_normal = np.asarray(
+        selected["support_normal"], dtype=float
+    )
+    bottom_candidates = []
+    for geom_id in sorted(target_geoms):
+        if not collision_masks_compatible(
+            model.geom_contype[geom_id],
+            model.geom_conaffinity[geom_id],
+            model.geom_contype[selected_support],
+            model.geom_conaffinity[selected_support],
+        ):
+            continue
+        center = np.asarray(
+            env.sim.data.geom_xpos[geom_id], dtype=float
+        )
+        rotation = np.asarray(
+            env.sim.data.geom_xmat[geom_id], dtype=float
+        ).reshape(3, 3)
+        if int(model.geom_type[geom_id]) == 6:
+            support_radius = float(
+                np.sum(
+                    np.asarray(model.geom_size[geom_id], dtype=float)
+                    * np.abs(rotation.T @ selected_normal)
+                )
+            )
+        else:
+            support_radius = float(model.geom_rbound[geom_id])
+        bottom_candidates.append(
+            {
+                "geom_id": int(geom_id),
+                "geom_name": _geom_name(model, geom_id),
+                "bottom_projection_m": float(
+                    np.dot(center, selected_normal) - support_radius
+                ),
+            }
+        )
+    if not bottom_candidates:
+        raise RuntimeError(
+            "target mug has no collision-compatible compiled bottom geoms"
+        )
+    minimum_bottom = min(
+        item["bottom_projection_m"] for item in bottom_candidates
+    )
+    compiled_bottom_tolerance = float(
+        getattr(model, "geom_margin", np.zeros(int(model.ngeom)))[
+            selected_support
+        ]
+    )
+    compiled_bottom_tolerance += max(
+        (
+            float(
+                getattr(
+                    model,
+                    "geom_margin",
+                    np.zeros(int(model.ngeom)),
+                )[item["geom_id"]]
+            )
+            for item in bottom_candidates
+        ),
+        default=0.0,
+    )
+    numerical_tolerance = (
+        64.0
+        * np.finfo(float).eps
+        * max(1.0, abs(minimum_bottom))
+    )
+    bottom_tolerance = max(
+        compiled_bottom_tolerance, numerical_tolerance
+    )
+    supporting_target_geoms = sorted(
+        {
+            *contacting_target_geoms,
+            *(
+                item["geom_id"]
+                for item in bottom_candidates
+                if item["bottom_projection_m"]
+                <= minimum_bottom + bottom_tolerance
+            ),
+        }
+    )
+    return {
+        "method": "actual compiled target-to-table support contacts",
+        "target_initial_position": target_position.tolist(),
+        "desired_up": desired_up.tolist(),
+        "selected": selected,
+        "contacting_target_geom_ids": contacting_target_geoms,
+        "supporting_target_geom_ids": supporting_target_geoms,
+        "compiled_bottom_tolerance_m": bottom_tolerance,
+        "bottom_geom_candidates": bottom_candidates,
+        "candidate_contacts": candidates,
+    }
+
+
+def _compiled_microwave_floor(
+    env,
+    names,
+    site_position,
+    site_rotation,
+    target_geom_ids,
+):
+    """Resolve the level compiled box surface directly below heating site."""
+    model = env.sim.model
+    site_position = np.asarray(site_position, dtype=float)
+    site_up = np.asarray(site_rotation, dtype=float)[:, 2]
+    static_geoms = (
+        descendant_geom_ids(model, names["fixture_root"])
+        - descendant_geom_ids(model, names["door_body"])
+    )
+    compatible = _collision_compatible_geom_ids(
+        model,
+        static_geoms,
+        target_geom_ids,
+    )
+    candidates = []
+    for geom_id in compatible:
+        if int(model.geom_type[geom_id]) != 6:
+            continue
+        center = np.asarray(
+            env.sim.data.geom_xpos[geom_id], dtype=float
+        )
+        rotation = np.asarray(
+            env.sim.data.geom_xmat[geom_id], dtype=float
+        ).reshape(3, 3)
+        half_size = np.asarray(model.geom_size[geom_id], dtype=float)
+        alignment = rotation.T @ site_up
+        normal_axis = int(np.argmax(np.abs(alignment)))
+        normal = rotation[:, normal_axis] * (
+            1.0 if alignment[normal_axis] >= 0.0 else -1.0
+        )
+        tilt_deg = float(
+            np.degrees(
+                np.arccos(
+                    np.clip(float(np.dot(normal, site_up)), -1.0, 1.0)
+                )
+            )
+        )
+        surface = center + normal * half_size[normal_axis]
+        below_site_m = float(np.dot(site_position - surface, site_up))
+        local_site = rotation.T @ (site_position - center)
+        tangent_axes = [
+            axis for axis in range(3) if axis != normal_axis
+        ]
+        covers_site_center = bool(
+            all(
+                abs(float(local_site[axis]))
+                <= float(half_size[axis])
+                for axis in tangent_axes
+            )
+        )
+        candidates.append(
+            {
+                "geom_id": int(geom_id),
+                "geom_name": _geom_name(model, geom_id),
+                "body_name": str(
+                    model.body_id2name(
+                        int(model.geom_bodyid[geom_id])
+                    )
+                    or ""
+                ),
+                "center": center.tolist(),
+                "rotation": rotation.tolist(),
+                "half_size": half_size.tolist(),
+                "normal_axis": normal_axis,
+                "normal": normal.tolist(),
+                "surface_position": surface.tolist(),
+                "normal_tilt_deg": tilt_deg,
+                "below_site_m": below_site_m,
+                "covers_site_center": covers_site_center,
+                "geom_contype": int(model.geom_contype[geom_id]),
+                "geom_conaffinity": int(
+                    model.geom_conaffinity[geom_id]
+                ),
+            }
+        )
+    floors = [
+        candidate
+        for candidate in candidates
+        if candidate["normal_tilt_deg"] <= MAX_MUG_TILT_DEG
+        and candidate["covers_site_center"]
+        and candidate["below_site_m"] > 0.0
+    ]
+    if not floors:
+        raise RuntimeError(
+            "cannot resolve compiled level microwave floor below native "
+            f"heating site; candidates={candidates}"
+        )
+    selected = min(
+        floors,
+        key=lambda item: (item["below_site_m"], item["geom_id"]),
+    )
+    return selected, {
+        "method": (
+            "nearest compiled target-compatible level box surface below "
+            "native heating-site center"
+        ),
+        "selected": selected,
+        "candidate_count": len(candidates),
+        "candidates": candidates,
+    }
+
+
+def _signed_point_box_clearance(point, center, rotation, half_size):
+    local = np.asarray(rotation, dtype=float).T @ (
+        np.asarray(point, dtype=float) - np.asarray(center, dtype=float)
+    )
+    outside = np.maximum(
+        np.abs(local) - np.asarray(half_size, dtype=float), 0.0
+    )
+    outside_distance = float(np.linalg.norm(outside))
+    if outside_distance > 0.0:
+        return outside_distance
+    return -float(
+        np.min(np.asarray(half_size, dtype=float) - np.abs(local))
+    )
+
+
+def _compiled_geom_pair_clearance(
+    env,
+    moving_geom,
+    fixture_geom,
+    translation,
+    guard_margin,
+    *,
+    fixture_center_override=None,
+    fixture_rotation_override=None,
+):
+    """Conservatively clear a translated geom against native fixture geom."""
+    model = env.sim.model
+    moving_geom = int(moving_geom)
+    fixture_geom = int(fixture_geom)
+    translation = np.asarray(translation, dtype=float)
+    moving_center = (
+        np.asarray(env.sim.data.geom_xpos[moving_geom], dtype=float)
+        + translation
+    )
+    moving_rotation = np.asarray(
+        env.sim.data.geom_xmat[moving_geom], dtype=float
+    ).reshape(3, 3)
+    fixture_center = (
+        np.asarray(
+            env.sim.data.geom_xpos[fixture_geom], dtype=float
+        )
+        if fixture_center_override is None
+        else np.asarray(fixture_center_override, dtype=float)
+    )
+    fixture_rotation = (
+        np.asarray(
+            env.sim.data.geom_xmat[fixture_geom], dtype=float
+        ).reshape(3, 3)
+        if fixture_rotation_override is None
+        else np.asarray(fixture_rotation_override, dtype=float).reshape(
+            3, 3
+        )
+    )
+    moving_type = int(model.geom_type[moving_geom])
+    fixture_type = int(model.geom_type[fixture_geom])
+    compiled_margin = float(guard_margin)
+    if hasattr(model, "geom_margin"):
+        compiled_margin += float(
+            model.geom_margin[moving_geom]
+            + model.geom_margin[fixture_geom]
+        )
+
+    if moving_type == 6 and fixture_type in (3, 5):
+        fixture_size = np.asarray(
+            model.geom_size[fixture_geom], dtype=float
+        )
+        fixture_axis = fixture_rotation[:, 2]
+        start = fixture_center - fixture_axis * fixture_size[1]
+        end = fixture_center + fixture_axis * fixture_size[1]
+        start_local = moving_rotation.T @ (start - moving_center)
+        end_local = moving_rotation.T @ (end - moving_center)
+        clearance = (
+            segment_aabb_distance(
+                start_local,
+                end_local,
+                np.asarray(model.geom_size[moving_geom], dtype=float),
+            )
+            - float(fixture_size[0])
+        )
+        method = (
+            "compiled box-capsule distance"
+            if fixture_type == 3
+            else "conservative compiled box-cylinder-as-capsule distance"
+        )
+    elif fixture_type != 6:
+        clearance = float(
+            np.linalg.norm(moving_center - fixture_center)
+            - model.geom_rbound[moving_geom]
+            - model.geom_rbound[fixture_geom]
+        )
+        method = "conservative compiled bounding spheres"
+    else:
+        fixture_half_size = np.asarray(
+            model.geom_size[fixture_geom], dtype=float
+        )
+        if moving_type == 6:
+            clearance = oriented_box_separating_clearance(
+                moving_center,
+                moving_rotation,
+                np.asarray(model.geom_size[moving_geom], dtype=float),
+                fixture_center,
+                fixture_rotation,
+                fixture_half_size,
+            )
+            method = "compiled box-box separating-axis gap"
+        elif moving_type in (3, 5):
+            moving_size = np.asarray(
+                model.geom_size[moving_geom], dtype=float
+            )
+            axis = moving_rotation[:, 2]
+            start = moving_center - axis * moving_size[1]
+            end = moving_center + axis * moving_size[1]
+            start_local = fixture_rotation.T @ (
+                start - fixture_center
+            )
+            end_local = fixture_rotation.T @ (end - fixture_center)
+            clearance = (
+                segment_aabb_distance(
+                    start_local,
+                    end_local,
+                    fixture_half_size,
+                )
+                - float(moving_size[0])
+            )
+            method = (
+                "compiled capsule-box distance"
+                if moving_type == 3
+                else "conservative compiled cylinder-as-capsule distance"
+            )
+        else:
+            clearance = (
+                _signed_point_box_clearance(
+                    moving_center,
+                    fixture_center,
+                    fixture_rotation,
+                    fixture_half_size,
+                )
+                - float(model.geom_rbound[moving_geom])
+            )
+            method = "conservative compiled bounding-sphere-to-box distance"
+    return float(clearance - compiled_margin), method
+
+
+def _compiled_target_door_sweep_clearance(
+    env,
+    names,
+    target_geoms,
+    candidate_target_position,
+    current_target_position,
+):
+    """Check the placed target against the entire compiled closing door arc."""
+    model = env.sim.model
+    door_geoms = _collision_compatible_geom_ids(
+        model,
+        descendant_geom_ids(model, names["door_body"]),
+        target_geoms,
+    )
+    collision_target_geoms = _collision_compatible_geom_ids(
+        model,
+        target_geoms,
+        door_geoms,
+    )
+    if not door_geoms or not collision_target_geoms:
+        raise RuntimeError(
+            "compiled target/door sweep has no compatible collision geoms"
+        )
+    joint_id = int(model.joint_name2id(names["door_joint"]))
+    qadr = int(model.jnt_qposadr[joint_id])
+    start_qpos = float(env.sim.data.qpos[qadr])
+    closed_qpos = float(model.jnt_range[joint_id][1])
+    close_angle = closed_qpos - start_qpos
+    hinge_position, hinge_rotation = body_pose(
+        env.sim, names["door_body"]
+    )
+    hinge_axis = hinge_rotation @ np.asarray(
+        model.jnt_axis[joint_id], dtype=float
+    )
+    hinge_axis = hinge_axis / np.linalg.norm(hinge_axis)
+    fractions = np.linspace(
+        0.0, 1.0, SAFE_PARK_DOOR_SWEEP_SAMPLES
+    )
+    angular_spacing = abs(float(close_angle)) / max(
+        len(fractions) - 1, 1
+    )
+    target_translation = (
+        np.asarray(candidate_target_position, dtype=float)
+        - np.asarray(current_target_position, dtype=float)
+    )
+    minimum = float("inf")
+    limiting = None
+    evaluations = 0
+    for door_geom in door_geoms:
+        initial_center = np.asarray(
+            env.sim.data.geom_xpos[door_geom], dtype=float
+        )
+        initial_rotation = np.asarray(
+            env.sim.data.geom_xmat[door_geom], dtype=float
+        ).reshape(3, 3)
+        radial = initial_center - hinge_position
+        axial = hinge_axis * float(np.dot(radial, hinge_axis))
+        swept_radius = float(
+            np.linalg.norm(radial - axial)
+            + model.geom_rbound[door_geom]
+        )
+        continuous_guard = 0.5 * swept_radius * angular_spacing
+        for sample_index, fraction in enumerate(fractions):
+            angle = close_angle * float(fraction)
+            center = hinge_position + _rotation_about_axis(
+                radial, hinge_axis, angle
+            )
+            rotation = np.column_stack(
+                [
+                    _rotation_about_axis(
+                        initial_rotation[:, axis],
+                        hinge_axis,
+                        angle,
+                    )
+                    for axis in range(3)
+                ]
+            )
+            for target_geom in collision_target_geoms:
+                if not collision_masks_compatible(
+                    model.geom_contype[target_geom],
+                    model.geom_conaffinity[target_geom],
+                    model.geom_contype[door_geom],
+                    model.geom_conaffinity[door_geom],
+                ):
+                    continue
+                evaluations += 1
+                clearance, method = _compiled_geom_pair_clearance(
+                    env,
+                    target_geom,
+                    door_geom,
+                    target_translation,
+                    continuous_guard,
+                    fixture_center_override=center,
+                    fixture_rotation_override=rotation,
+                )
+                if clearance < minimum:
+                    minimum = clearance
+                    limiting = {
+                        "sample_index": int(sample_index),
+                        "sample_fraction": float(fraction),
+                        "door_angle_rad": float(angle),
+                        "target_geom_id": int(target_geom),
+                        "target_geom_name": _geom_name(
+                            model, target_geom
+                        ),
+                        "door_geom_id": int(door_geom),
+                        "door_geom_name": _geom_name(
+                            model, door_geom
+                        ),
+                        "clearance_m": float(clearance),
+                        "continuous_guard_m": continuous_guard,
+                        "method": method,
+                    }
+    if evaluations == 0 or limiting is None:
+        raise RuntimeError(
+            "compiled target/door sweep produced no compatible evaluations"
+        )
+    return minimum, {
+        "door_start_qpos": start_qpos,
+        "door_closed_qpos": closed_qpos,
+        "door_close_angle_rad": close_angle,
+        "hinge_position": hinge_position.tolist(),
+        "hinge_axis": hinge_axis.tolist(),
+        "samples": len(fractions),
+        "compatible_pair_evaluations": evaluations,
+        "minimum_clearance_m": minimum,
+        "limiting_pair": limiting,
+    }
+
+
+def _translated_swept_clearance(
+    env,
+    moving_geoms,
+    fixture_geoms,
+    start_position,
+    end_position,
+    reference_position,
+):
+    """Bound the whole straight translation, inflating by half sample step."""
+    model = env.sim.model
+    start = np.asarray(start_position, dtype=float)
+    end = np.asarray(end_position, dtype=float)
+    reference = np.asarray(reference_position, dtype=float)
+    distance = float(np.linalg.norm(end - start))
+    intervals = max(
+        1, int(np.ceil(distance / TARGET_INSERTION_SWEEP_STEP_M))
+    )
+    spacing = distance / intervals
+    sweep_guard = 0.5 * spacing
+    minimum = float("inf")
+    limiting = None
+    compatible_pairs = 0
+    for sample_index, fraction in enumerate(
+        np.linspace(0.0, 1.0, intervals + 1)
+    ):
+        translated_position = (
+            start + (end - start) * float(fraction)
+        )
+        translation = translated_position - reference
+        for moving_geom in moving_geoms:
+            for fixture_geom in fixture_geoms:
+                if not collision_masks_compatible(
+                    model.geom_contype[moving_geom],
+                    model.geom_conaffinity[moving_geom],
+                    model.geom_contype[fixture_geom],
+                    model.geom_conaffinity[fixture_geom],
+                ):
+                    continue
+                compatible_pairs += 1
+                clearance, method = _compiled_geom_pair_clearance(
+                    env,
+                    moving_geom,
+                    fixture_geom,
+                    translation,
+                    sweep_guard,
+                )
+                if clearance < minimum:
+                    minimum = clearance
+                    limiting = {
+                        "sample_index": int(sample_index),
+                        "sample_fraction": float(fraction),
+                        "translated_reference_position": (
+                            translated_position.tolist()
+                        ),
+                        "moving_geom_id": int(moving_geom),
+                        "moving_geom_name": _geom_name(
+                            model, moving_geom
+                        ),
+                        "moving_body_name": str(
+                            model.body_id2name(
+                                int(model.geom_bodyid[moving_geom])
+                            )
+                            or ""
+                        ),
+                        "fixture_geom_id": int(fixture_geom),
+                        "fixture_geom_name": _geom_name(
+                            model, fixture_geom
+                        ),
+                        "fixture_body_name": str(
+                            model.body_id2name(
+                                int(model.geom_bodyid[fixture_geom])
+                            )
+                            or ""
+                        ),
+                        "clearance_m": float(clearance),
+                        "method": method,
+                    }
+    if compatible_pairs == 0 or limiting is None:
+        raise RuntimeError(
+            "compiled insertion sweep has no collision-compatible geom pairs"
+        )
+    return minimum, {
+        "path_start": start.tolist(),
+        "path_end": end.tolist(),
+        "path_length_m": distance,
+        "sample_intervals": intervals,
+        "sample_spacing_m": spacing,
+        "continuous_sweep_guard_m": sweep_guard,
+        "compatible_pair_evaluations": compatible_pairs,
+        "minimum_clearance_m": minimum,
+        "limiting_pair": limiting,
+    }
+
+
+def _compiled_rigid_gripper_fixture_geoms(env, names):
+    """Resolve collision geoms that translate rigidly with the controlled EEF."""
+    model = env.sim.model
+    eef_root = _eef_body_name(model)
+    eef_body_ids = descendant_body_ids(model, eef_root)
+    eef_body_ids.update(
+        body_id
+        for body_id in range(int(model.nbody))
+        if (
+            (
+                model.body_id2name(body_id) or ""
+            ).startswith(("robot0_", "gripper0_"))
+            and any(
+                token
+                in (model.body_id2name(body_id) or "").lower()
+                for token in ("gripper", "hand", "finger")
+            )
+        )
+    )
+    gripper_geoms = sorted(
+        geom_id
+        for geom_id in range(int(model.ngeom))
+        if int(model.geom_bodyid[geom_id]) in eef_body_ids
+    )
+    fixture_geoms = sorted(
+        descendant_geom_ids(model, names["fixture_root"])
+    )
+    collision_gripper_geoms = _collision_compatible_geom_ids(
+        model, gripper_geoms, fixture_geoms
+    )
+    collision_fixture_geoms = _collision_compatible_geom_ids(
+        model, fixture_geoms, collision_gripper_geoms
+    )
+    if not collision_gripper_geoms or not collision_fixture_geoms:
+        raise RuntimeError(
+            "compiled target path has no gripper/microwave collision "
+            f"geometry; eef_root={eef_root!r}; "
+            f"gripper_geoms={gripper_geoms}"
+        )
+    return (
+        collision_gripper_geoms,
+        collision_fixture_geoms,
+        {
+            "eef_root_body": eef_root,
+            "rigid_gripper_body_names": sorted(
+                str(model.body_id2name(body_id) or "")
+                for body_id in eef_body_ids
+            ),
+            "collision_gripper_geom_ids": collision_gripper_geoms,
+            "collision_fixture_geom_ids": collision_fixture_geoms,
+        },
+    )
+
+
+def _compiled_target_insertion_plan(
+    env,
+    names,
+    site_position,
+    site_rotation,
+    site_size,
+    held_eef_offset,
+    support_geometry,
+):
+    """Search front-to-back for the foremost native-In, collision-free pose."""
+    model = env.sim.model
+    site_position = np.asarray(site_position, dtype=float)
+    site_rotation = np.asarray(site_rotation, dtype=float)
+    site_size = np.asarray(site_size, dtype=float)
+    held_eef_offset = np.asarray(held_eef_offset, dtype=float)
+    site_up = site_rotation[:, 2]
+    front = -site_rotation[:, 1]
+    front = front / np.linalg.norm(front)
+    world_half_size = np.abs(site_rotation @ site_size)
+    front_extent = min(
+        float(world_half_size[axis] / abs(front[axis]))
+        for axis in range(3)
+        if abs(float(front[axis])) > np.finfo(float).eps
+    )
+    if not np.isfinite(front_extent) or front_extent <= 0.0:
+        raise RuntimeError("native heating site has no finite front extent")
+
+    target_geoms = sorted(descendant_geom_ids(model, TARGET_BODY))
+    floor, floor_geometry = _compiled_microwave_floor(
+        env,
+        names,
+        site_position,
+        site_rotation,
+        target_geoms,
+    )
+    floor_geom = int(floor["geom_id"])
+    floor_center = np.asarray(floor["center"], dtype=float)
+    floor_rotation = np.asarray(floor["rotation"], dtype=float)
+    floor_half_size = np.asarray(floor["half_size"], dtype=float)
+    floor_normal_axis = int(floor["normal_axis"])
+    floor_normal = np.asarray(floor["normal"], dtype=float)
+    floor_surface = np.asarray(
+        floor["surface_position"], dtype=float
+    )
+    support_offset = float(
+        support_geometry["selected"]["support_offset_m"]
+    )
+    current_target, _ = body_pose(env.sim, TARGET_BODY)
+    current_target_tilt = body_tilt_deg(env.sim, TARGET_BODY)
+    if current_target_tilt > MAX_MUG_TILT_DEG:
+        raise RuntimeError(
+            "target mug is already tilted before compiled insertion plan; "
+            f"tilt_deg={current_target_tilt}"
+        )
+    current_eef = _eef_position(env)
+
+    (
+        collision_gripper_geoms,
+        collision_fixture_geoms,
+        gripper_geometry,
+    ) = _compiled_rigid_gripper_fixture_geoms(env, names)
+    fixture_geoms = sorted(
+        descendant_geom_ids(model, names["fixture_root"])
+    )
+
+    portal_object = site_position + front * (2.0 * front_extent)
+    portal_object += floor_normal * float(
+        np.dot(
+            floor_surface + floor_normal * support_offset - portal_object,
+            floor_normal,
+        )
+    )
+    portal_eef = portal_object + held_eef_offset
+    portal_high_eef = (
+        portal_eef + site_up * (0.5 * float(site_size[2]))
+    )
+    support_target_geoms = support_geometry[
+        "supporting_target_geom_ids"
+    ]
+    floor_tangent_axes = [
+        axis for axis in range(3) if axis != floor_normal_axis
+    ]
+    target_fixture_geoms = [
+        geom_id
+        for geom_id in fixture_geoms
+        if geom_id != floor_geom
+    ]
+
+    search_values = np.arange(
+        np.nextafter(front_extent, 0.0),
+        -front_extent - 0.5 * TARGET_INSERTION_SEARCH_STEP_M,
+        -TARGET_INSERTION_SEARCH_STEP_M,
+    )
+    trace = []
+    selected = None
+    execution_endpoint = None
+    for front_distance in search_values:
+        candidate = site_position + front * float(front_distance)
+        candidate += floor_normal * float(
+            np.dot(
+                floor_surface + floor_normal * support_offset - candidate,
+                floor_normal,
+            )
+        )
+        native_inside = native_site_contains_point(
+            site_position,
+            site_rotation,
+            site_size,
+            candidate,
+        )
+        support_axis_clearances = []
+        for geom_id in support_target_geoms:
+            geom_center = (
+                np.asarray(
+                    env.sim.data.geom_xpos[geom_id], dtype=float
+                )
+                + candidate
+                - current_target
+            )
+            geom_rotation = np.asarray(
+                env.sim.data.geom_xmat[geom_id], dtype=float
+            ).reshape(3, 3)
+            floor_local = floor_rotation.T @ (
+                geom_center - floor_center
+            )
+            for axis in floor_tangent_axes:
+                if int(model.geom_type[geom_id]) == 6:
+                    extent = float(
+                        np.sum(
+                            np.asarray(model.geom_size[geom_id], dtype=float)
+                            * np.abs(
+                                geom_rotation.T
+                                @ floor_rotation[:, axis]
+                            )
+                        )
+                    )
+                else:
+                    extent = float(model.geom_rbound[geom_id])
+                support_axis_clearances.append(
+                    float(
+                        floor_half_size[axis]
+                        - abs(float(floor_local[axis]))
+                        - extent
+                    )
+                )
+        support_clearance = min(
+            support_axis_clearances, default=float("-inf")
+        )
+        candidate_eef = candidate + held_eef_offset
+        gripper_clearance, gripper_sweep = (
+            _translated_swept_clearance(
+                env,
+                collision_gripper_geoms,
+                collision_fixture_geoms,
+                portal_eef,
+                candidate_eef,
+                current_eef,
+            )
+        )
+        target_clearance, target_sweep = _translated_swept_clearance(
+            env,
+            target_geoms,
+            target_fixture_geoms,
+            portal_object,
+            candidate,
+            current_target,
+        )
+        door_clearance, door_sweep = (
+            _compiled_target_door_sweep_clearance(
+                env,
+                names,
+                target_geoms,
+                candidate,
+                current_target,
+            )
+        )
+        passed = bool(
+            native_inside
+            and support_clearance >= 0.0
+            and gripper_clearance > 0.0
+            and target_clearance > 0.0
+            and door_clearance > 0.0
+        )
+        record = {
+            "front_distance_from_site_center_m": float(
+                front_distance
+            ),
+            "candidate_target_position": candidate.tolist(),
+            "candidate_eef_position": candidate_eef.tolist(),
+            "native_in": native_inside,
+            "support_clearance_m": support_clearance,
+            "gripper_swept_clearance_m": gripper_clearance,
+            "target_swept_static_clearance_m": target_clearance,
+            "target_door_swept_clearance_m": door_clearance,
+            "gripper_sweep": gripper_sweep,
+            "target_sweep": target_sweep,
+            "door_sweep": door_sweep,
+            "passed": passed,
+        }
+        trace.append(record)
+        if passed:
+            if selected is None:
+                selected = record
+            required_endpoint_front_distance = (
+                selected["front_distance_from_site_center_m"]
+                - PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M
+            )
+            if (
+                record["front_distance_from_site_center_m"]
+                <= required_endpoint_front_distance
+            ):
+                execution_endpoint = record
+                break
+    if selected is None or execution_endpoint is None:
+        raise RuntimeError(
+            "no compiled foremost native-In target release pose has "
+            "continuous gripper/mug clearance plus an object-follow "
+            "execution reserve; "
+            f"candidates={trace}"
+        )
+    return {
+        "method": (
+            "front-to-back native heating-site search with compiled floor "
+            "support and continuous translated gripper/mug sweep clearance"
+        ),
+        "search_step_m": TARGET_INSERTION_SEARCH_STEP_M,
+        "sweep_step_m": TARGET_INSERTION_SWEEP_STEP_M,
+        "native_site_position": site_position.tolist(),
+        "native_site_rotation": site_rotation.tolist(),
+        "native_site_half_size": site_size.tolist(),
+        "native_site_world_aabb_half_size": world_half_size.tolist(),
+        "target_tilt_at_planning_deg": current_target_tilt,
+        "front_direction": front.tolist(),
+        "front_extent_m": front_extent,
+        "portal_object_position": portal_object.tolist(),
+        "portal_eef_position": portal_eef.tolist(),
+        "portal_high_eef_position": portal_high_eef.tolist(),
+        "compiled_floor": floor_geometry,
+        "source_support": support_geometry,
+        "eef_root_body": gripper_geometry["eef_root_body"],
+        "rigid_gripper_body_names": gripper_geometry[
+            "rigid_gripper_body_names"
+        ],
+        "collision_gripper_geom_ids": collision_gripper_geoms,
+        "collision_fixture_geom_ids": collision_fixture_geoms,
+        "selected": selected,
+        "execution_endpoint": execution_endpoint,
+        "execution_reserve_m": PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M,
+        "candidate_trace": trace,
+    }
+
+
+def _compiled_open_gripper_retreat_plan(env, names, waypoints):
+    """Validate the just-opened gripper's complete portal retreat sweep."""
+    (
+        gripper_geoms,
+        fixture_geoms,
+        geometry,
+    ) = _compiled_rigid_gripper_fixture_geoms(env, names)
+    reference = _eef_position(env)
+    start = reference.copy()
+    segments = []
+    minimum = float("inf")
+    for label, endpoint in waypoints:
+        endpoint = np.asarray(endpoint, dtype=float)
+        clearance, sweep = _translated_swept_clearance(
+            env,
+            gripper_geoms,
+            fixture_geoms,
+            start,
+            endpoint,
+            reference,
+        )
+        segments.append(
+            {
+                "label": str(label),
+                "clearance_m": clearance,
+                "sweep": sweep,
+            }
+        )
+        minimum = min(minimum, clearance)
+        start = endpoint
+    passed = bool(segments and minimum > 0.0)
+    return passed, {
+        "method": (
+            "compiled continuous translated sweep of the actual open "
+            "gripper through horizontal portal retreat and exit"
+        ),
+        "minimum_clearance_m": minimum,
+        "passed": passed,
+        "gripper_geometry": geometry,
+        "segments": segments,
+    }
+
+
 def _step(env, oracle, action, step, frames):
     obs, _, _, _ = env.step(np.asarray(action, dtype=float).tolist())
     status = oracle.check(env, obs, action, step)
@@ -695,6 +1749,13 @@ def _move_eef(
     initial_error = target - initial_eef
     error_norms = [float(np.linalg.norm(initial_error))]
     contact_bodies = _robot_contact_body_names(env)
+    contact_pairs = {
+        (
+            pair["robot_geom_id"],
+            pair["other_geom_id"],
+        ): pair
+        for pair in _robot_contact_pairs(env)
+    }
     trace = []
     reached = False
     status = None
@@ -719,6 +1780,10 @@ def _move_eef(
         error_norms.append(error_norm)
         current_contacts = _robot_contact_body_names(env)
         contact_bodies.update(current_contacts)
+        for pair in _robot_contact_pairs(env):
+            contact_pairs[
+                (pair["robot_geom_id"], pair["other_geom_id"])
+            ] = pair
         current_microwave_contact = _has_microwave_contact(current_contacts)
         trace.append(
             [
@@ -765,6 +1830,9 @@ def _move_eef(
         "reached": reached,
         "stalled": stalled,
         "robot_contact_bodies": sorted(contact_bodies),
+        "robot_contact_pairs": [
+            contact_pairs[key] for key in sorted(contact_pairs)
+        ],
         "porcelain_contact_seen": PORCELAIN_BODY in contact_bodies,
         "target_contact_seen": TARGET_BODY in contact_bodies,
         "microwave_contact_seen": _has_microwave_contact(contact_bodies),
@@ -1166,6 +2234,375 @@ def _close_gripper_on_target(env, oracle, step, frames):
     return success, reason, status, step, diagnostic
 
 
+def _insert_target_until_safe_release(
+    env,
+    oracle,
+    names,
+    endpoint_eef,
+    held_eef_offset,
+    site_position,
+    site_rotation,
+    site_size,
+    floor_geom_id,
+    front_direction,
+    maximum_safe_front_distance,
+    step,
+    frames,
+):
+    """Enter until the actual mug is native-In, floor-supported, door-clear."""
+    endpoint = np.asarray(endpoint_eef, dtype=float)
+    held_offset = np.asarray(held_eef_offset, dtype=float)
+    front = np.asarray(front_direction, dtype=float)
+    front = front / np.linalg.norm(front)
+    maximum_safe_front_distance = float(maximum_safe_front_distance)
+    target_geoms = sorted(
+        descendant_geom_ids(env.sim.model, TARGET_BODY)
+    )
+    floor_geoms = {int(floor_geom_id)}
+    initial_eef = _eef_position(env)
+    initial_target, _ = body_pose(env.sim, TARGET_BODY)
+    error_norms = [
+        float(np.linalg.norm(endpoint - initial_eef))
+    ]
+    contact_bodies = _robot_contact_body_names(env)
+    contact_pairs = {
+        (
+            pair["robot_geom_id"],
+            pair["other_geom_id"],
+        ): pair
+        for pair in _robot_contact_pairs(env)
+    }
+    microwave_contact = _has_microwave_contact(contact_bodies)
+    trace = []
+    status = None
+    success = False
+    final_door_clearance = float("nan")
+    final_follow_error = float("nan")
+    for iteration in range(0 if microwave_contact else MOVE_STEPS):
+        eef = _eef_position(env)
+        error = endpoint - eef
+        action = np.zeros(7, dtype=float)
+        action[:3] = np.clip(error * 20.0, -1.0, 1.0)
+        action[-1] = 1.0
+        _, status, step = _step(env, oracle, action, step, frames)
+        eef = _eef_position(env)
+        target_position, _ = body_pose(env.sim, TARGET_BODY)
+        post_error = endpoint - eef
+        error_norm = float(np.linalg.norm(post_error))
+        error_norms.append(error_norm)
+        contacts = _robot_contact_body_names(env)
+        contact_bodies.update(contacts)
+        for pair in _robot_contact_pairs(env):
+            contact_pairs[
+                (pair["robot_geom_id"], pair["other_geom_id"])
+            ] = pair
+        current_microwave = _has_microwave_contact(contacts)
+        microwave_contact = microwave_contact or current_microwave
+        expected_target = eef - held_offset
+        follow_error = float(
+            np.linalg.norm(target_position - expected_target)
+        )
+        final_follow_error = follow_error
+        target_tilt = body_tilt_deg(env.sim, TARGET_BODY)
+        target_linear, target_angular = body_speeds(
+            env.sim, TARGET_BODY
+        )
+        native_inside = native_site_contains_point(
+            site_position,
+            site_rotation,
+            site_size,
+            target_position,
+        )
+        floor_contact = contacts_between(
+            env.sim, target_geoms, floor_geoms
+        )
+        front_distance = float(
+            np.dot(
+                target_position
+                - np.asarray(site_position, dtype=float),
+                front,
+            )
+        )
+        foremost_pose_reached = bool(
+            front_distance
+            <= maximum_safe_front_distance
+            + 64.0 * np.finfo(float).eps
+        )
+        door_clearance, _ = _compiled_target_door_sweep_clearance(
+            env,
+            names,
+            target_geoms,
+            target_position,
+            target_position,
+        )
+        final_door_clearance = door_clearance
+        trace.append(
+            [
+                float(iteration),
+                float(step),
+                *endpoint.tolist(),
+                *eef.tolist(),
+                *target_position.tolist(),
+                *post_error.tolist(),
+                error_norm,
+                *action[:3].tolist(),
+                follow_error,
+                target_tilt,
+                target_linear,
+                target_angular,
+                float(native_inside),
+                float(floor_contact),
+                front_distance,
+                float(foremost_pose_reached),
+                door_clearance,
+                float(current_microwave),
+            ]
+        )
+        if current_microwave:
+            break
+        if status.violated:
+            break
+        if follow_error > PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M:
+            break
+        if (
+            native_inside
+            and floor_contact
+            and foremost_pose_reached
+            and door_clearance > 0.0
+            and target_tilt <= MAX_MUG_TILT_DEG
+            and target_linear <= MAX_WAIT_LINEAR_SPEED_MPS
+            and target_angular <= MAX_WAIT_ANGULAR_SPEED_RADPS
+        ):
+            success = True
+            break
+    final_eef = _eef_position(env)
+    final_target, _ = body_pose(env.sim, TARGET_BODY)
+    final_error = endpoint - final_eef
+    final_error_norm = float(np.linalg.norm(final_error))
+    final_contacts = _robot_contact_body_names(env)
+    contact_bodies.update(final_contacts)
+    for pair in _robot_contact_pairs(env):
+        contact_pairs[
+            (pair["robot_geom_id"], pair["other_geom_id"])
+        ] = pair
+    microwave_contact = bool(
+        microwave_contact or _has_microwave_contact(contact_bodies)
+    )
+    final_native_inside = native_site_contains_point(
+        site_position,
+        site_rotation,
+        site_size,
+        final_target,
+    )
+    final_floor_contact = contacts_between(
+        env.sim, target_geoms, floor_geoms
+    )
+    final_target_tilt = body_tilt_deg(env.sim, TARGET_BODY)
+    final_target_linear, final_target_angular = body_speeds(
+        env.sim, TARGET_BODY
+    )
+    final_front_distance = float(
+        np.dot(
+            final_target - np.asarray(site_position, dtype=float),
+            front,
+        )
+    )
+    final_foremost_pose_reached = bool(
+        final_front_distance
+        <= maximum_safe_front_distance
+        + 64.0 * np.finfo(float).eps
+    )
+    if not np.isfinite(final_door_clearance):
+        final_door_clearance, _ = (
+            _compiled_target_door_sweep_clearance(
+                env,
+                names,
+                target_geoms,
+                final_target,
+                final_target,
+            )
+        )
+    if not np.isfinite(final_follow_error):
+        final_follow_error = float(
+            np.linalg.norm(
+                final_target - (final_eef - held_offset)
+            )
+        )
+    success = bool(
+        success
+        and final_native_inside
+        and final_floor_contact
+        and final_foremost_pose_reached
+        and final_door_clearance > 0.0
+        and final_target_tilt <= MAX_MUG_TILT_DEG
+        and final_target_linear <= MAX_WAIT_LINEAR_SPEED_MPS
+        and final_target_angular <= MAX_WAIT_ANGULAR_SPEED_RADPS
+        and final_follow_error <= PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M
+        and not microwave_contact
+        and not (status is not None and status.violated)
+    )
+    tail = error_norms[-min(20, len(error_norms)):]
+    stalled = bool(
+        not success
+        and len(tail) >= 2
+        and max(tail) - min(tail) < 0.001
+    )
+    horizon_exhausted = bool(
+        len(trace) >= MOVE_STEPS
+        and not success
+        and not microwave_contact
+        and not (status is not None and status.violated)
+    )
+    diagnostic = {
+        "label": "target insertion",
+        "success": success,
+        "target_position": endpoint.tolist(),
+        "initial_eef_position": initial_eef.tolist(),
+        "final_eef_position": final_eef.tolist(),
+        "initial_target_position": initial_target.tolist(),
+        "final_target_position": final_target.tolist(),
+        "initial_error_m": error_norms[0],
+        "final_error_vector": final_error.tolist(),
+        "final_error_m": final_error_norm,
+        "min_error_m": min(error_norms),
+        "steps_executed": len(trace),
+        "reached": success,
+        "stalled": stalled,
+        "horizon_exhausted": horizon_exhausted,
+        "native_in_final": final_native_inside,
+        "floor_contact_final": final_floor_contact,
+        "front_distance_final_m": final_front_distance,
+        "maximum_safe_front_distance_m": maximum_safe_front_distance,
+        "foremost_pose_reached": final_foremost_pose_reached,
+        "door_swept_clearance_final_m": final_door_clearance,
+        "object_follow_error_final_m": final_follow_error,
+        "target_tilt_final_deg": final_target_tilt,
+        "target_linear_speed_final_mps": final_target_linear,
+        "target_angular_speed_final_radps": final_target_angular,
+        "robot_contact_bodies": sorted(contact_bodies),
+        "robot_contact_pairs": [
+            contact_pairs[key] for key in sorted(contact_pairs)
+        ],
+        "microwave_contact_seen": microwave_contact,
+        "forbid_microwave_contact": True,
+        "forbidden_microwave_contact": microwave_contact,
+        "trace_columns": (
+            "iteration,global_step,endpoint_x,endpoint_y,endpoint_z,eef_x,"
+            "eef_y,eef_z,target_x,target_y,target_z,error_x,error_y,error_z,"
+            "error_norm,action_x,action_y,action_z,object_follow_error,"
+            "target_tilt_deg,target_linear_speed,target_angular_speed,"
+            "native_in,floor_contact,front_distance,foremost_pose_reached,"
+            "door_swept_clearance,"
+            "microwave_contact"
+        ),
+        "trace": trace,
+    }
+    if microwave_contact:
+        reason = "robot contacted microwave during target insertion"
+    elif status is not None and status.violated:
+        reason = "oracle violation during target insertion"
+    elif final_follow_error > PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M:
+        reason = (
+            "target mug stopped following during target insertion; "
+            f"follow_error_m={final_follow_error}"
+        )
+    elif final_target_tilt > MAX_MUG_TILT_DEG:
+        reason = (
+            "target mug tilted before release; "
+            f"tilt_deg={final_target_tilt}"
+        )
+    elif (
+        final_target_linear > MAX_WAIT_LINEAR_SPEED_MPS
+        or final_target_angular > MAX_WAIT_ANGULAR_SPEED_RADPS
+    ):
+        reason = (
+            "target mug remained dynamic before release; "
+            f"linear_mps={final_target_linear}; "
+            f"angular_radps={final_target_angular}"
+        )
+    elif not success:
+        reason = (
+            "target insertion ended without a safe actual release state; "
+            f"native_in={final_native_inside}; "
+            f"floor_contact={final_floor_contact}; "
+            f"foremost_pose_reached={final_foremost_pose_reached}; "
+            f"door_clearance_m={final_door_clearance}; "
+            f"final_error_m={final_error_norm}; "
+            f"stalled={stalled}; horizon_exhausted={horizon_exhausted}"
+        )
+    else:
+        reason = ""
+    return success, reason, status, step, diagnostic
+
+
+def _release_target_without_microwave_contact(
+    env,
+    oracle,
+    step,
+    frames,
+):
+    """Open the gripper while any robot-microwave contact fails closed."""
+    initial_contacts = _robot_contact_body_names(env)
+    microwave_contact = _has_microwave_contact(initial_contacts)
+    contact_bodies = set(initial_contacts)
+    trace = []
+    status = None
+    if not microwave_contact:
+        action = np.zeros(7, dtype=float)
+        action[-1] = -1.0
+        for iteration in range(GRIPPER_STEPS):
+            _, status, step = _step(env, oracle, action, step, frames)
+            contacts = _robot_contact_body_names(env)
+            contact_bodies.update(contacts)
+            current_microwave = _has_microwave_contact(contacts)
+            microwave_contact = microwave_contact or current_microwave
+            trace.append(
+                [
+                    float(iteration),
+                    float(step),
+                    float(TARGET_BODY in contacts),
+                    float(current_microwave),
+                ]
+            )
+            if current_microwave or status.violated:
+                break
+    final_contacts = _robot_contact_body_names(env)
+    contact_bodies.update(final_contacts)
+    microwave_contact = bool(
+        microwave_contact or _has_microwave_contact(contact_bodies)
+    )
+    success = bool(
+        not microwave_contact
+        and not (status is not None and status.violated)
+        and len(trace) == GRIPPER_STEPS
+    )
+    diagnostic = {
+        "label": "target release",
+        "success": success,
+        "microwave_contact_initial": _has_microwave_contact(
+            initial_contacts
+        ),
+        "microwave_contact_seen": microwave_contact,
+        "target_contact_initial": TARGET_BODY in initial_contacts,
+        "target_contact_final": TARGET_BODY in final_contacts,
+        "robot_contact_bodies": sorted(contact_bodies),
+        "steps_executed": len(trace),
+        "trace_columns": (
+            "iteration,global_step,target_contact,microwave_contact"
+        ),
+        "trace": trace,
+    }
+    if microwave_contact:
+        reason = "robot contacted microwave before/during target release"
+    elif status is not None and status.violated:
+        reason = "oracle violation during target release"
+    elif len(trace) != GRIPPER_STEPS:
+        reason = "target release did not execute the full gripper command"
+    else:
+        reason = ""
+    return success, reason, status, step, diagnostic
+
+
 def _hold_gripper(env, oracle, command, count, step, frames):
     status = None
     action = np.zeros(7, dtype=float)
@@ -1493,16 +2930,17 @@ def _robot_place_target(env, oracle, names, frames, step):
         env.sim.data.site_xmat[site_id], dtype=float
     ).reshape(3, 3)
     site_size = np.asarray(env.sim.model.site_size[site_id], dtype=float)
-    target_base = site_pos - site_mat[:, 2] * max(
-        float(site_size[2]) - 0.015, 0.0
-    )
-    front = -site_mat[:, 1]
     status = None
     move_diagnostics = []
     contact_descend_diagnostic = {}
     closure_diagnostic = {}
+    release_diagnostic = {}
+    support_geometry = {}
+    insertion_plan = {}
+    retreat_plan = {}
     held_eef_offset = None
     target_grasp_point = None
+    target_base = None
     object_follow_trace = []
     moved_before_release = None
 
@@ -1510,9 +2948,15 @@ def _robot_place_target(env, oracle, names, frames, step):
         return {
             "target_initial_position": initial_target.tolist(),
             "target_nominal_grasp_point": grasp_point.tolist(),
-            "target_desired_base_position": target_base.tolist(),
+            "target_desired_base_position": (
+                None if target_base is None else target_base.tolist()
+            ),
             "target_contact_descend": contact_descend_diagnostic,
             "target_grasp_closure": closure_diagnostic,
+            "target_release": release_diagnostic,
+            "target_native_support_geometry": support_geometry,
+            "compiled_insertion_plan": insertion_plan,
+            "compiled_open_gripper_retreat_plan": retreat_plan,
             "held_eef_minus_target_offset": (
                 None
                 if held_eef_offset is None
@@ -1544,6 +2988,18 @@ def _robot_place_target(env, oracle, names, frames, step):
             f"contacts={diagnostic.get('robot_contact_bodies', [])}"
         )
 
+    try:
+        support_geometry = _compiled_target_support_geometry(
+            env, site_mat[:, 2]
+        )
+    except RuntimeError as error:
+        return (
+            False,
+            str(error),
+            status,
+            step,
+            target_metrics(),
+        )
     reached, status, step = _move_eef(
         env,
         oracle,
@@ -1596,17 +3052,45 @@ def _robot_place_target(env, oracle, names, frames, step):
     grasped_target_position, _ = body_pose(env.sim, TARGET_BODY)
     grasped_eef_position = _eef_position(env)
     held_eef_offset = grasped_eef_position - grasped_target_position
-    target_grasp_point = target_base + held_eef_offset
+    try:
+        insertion_plan = _compiled_target_insertion_plan(
+            env,
+            names,
+            site_pos,
+            site_mat,
+            site_size,
+            held_eef_offset,
+            support_geometry,
+        )
+    except RuntimeError as error:
+        return (
+            False,
+            str(error),
+            status,
+            step,
+            target_metrics(),
+        )
+    selected_insertion = insertion_plan["selected"]
+    target_base = np.asarray(
+        selected_insertion["candidate_target_position"], dtype=float
+    )
+    execution_endpoint = insertion_plan["execution_endpoint"]
+    target_grasp_point = np.asarray(
+        execution_endpoint["candidate_eef_position"], dtype=float
+    )
+    portal_eef = np.asarray(
+        insertion_plan["portal_eef_position"], dtype=float
+    )
+    portal_high_eef = np.asarray(
+        insertion_plan["portal_high_eef_position"], dtype=float
+    )
     for target, label in (
         (
             grasped_eef_position + [0.0, 0.0, APPROACH_HEIGHT],
             "target lift",
         ),
-        (
-            target_grasp_point + front * 0.16 + site_mat[:, 2] * 0.04,
-            "target pre-insertion",
-        ),
-        (target_grasp_point, "target insertion"),
+        (portal_high_eef, "target pre-insertion"),
+        (portal_eef, "target portal height alignment"),
     ):
         reached, status, step = _move_eef(
             env,
@@ -1617,6 +3101,7 @@ def _robot_place_target(env, oracle, names, frames, step):
             frames,
             label=label,
             diagnostics=move_diagnostics,
+            forbid_microwave_contact=True,
         )
         if not reached:
             return (
@@ -1654,6 +3139,59 @@ def _robot_place_target(env, oracle, names, frames, step):
                 step,
                 target_metrics(),
             )
+    (
+        insertion_ok,
+        insertion_reason,
+        status,
+        step,
+        insertion_diagnostic,
+    ) = _insert_target_until_safe_release(
+        env,
+        oracle,
+        names,
+        target_grasp_point,
+        held_eef_offset,
+        site_pos,
+        site_mat,
+        site_size,
+        insertion_plan["compiled_floor"]["selected"]["geom_id"],
+        np.asarray(insertion_plan["front_direction"], dtype=float),
+        float(
+            selected_insertion[
+                "front_distance_from_site_center_m"
+            ]
+        ),
+        step,
+        frames,
+    )
+    move_diagnostics.append(insertion_diagnostic)
+    if not insertion_ok:
+        return (
+            False,
+            insertion_reason,
+            status,
+            step,
+            target_metrics(),
+        )
+    current_eef = _eef_position(env)
+    current_target, _ = body_pose(env.sim, TARGET_BODY)
+    expected_target = current_eef - held_eef_offset
+    insertion_follow_error = float(
+        np.linalg.norm(current_target - expected_target)
+    )
+    object_follow_trace.append(
+        {
+            "label": "target insertion",
+            "eef_position": current_eef.tolist(),
+            "expected_target_position": expected_target.tolist(),
+            "actual_target_position": current_target.tolist(),
+            "error_m": insertion_follow_error,
+            "passed": (
+                insertion_follow_error
+                <= PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M
+            ),
+        }
+    )
     moved_target, _ = body_pose(env.sim, TARGET_BODY)
     moved_before_release = float(
         np.linalg.norm(moved_target - initial_target)
@@ -1666,36 +3204,64 @@ def _robot_place_target(env, oracle, names, frames, step):
             step,
             target_metrics(),
         )
-    status, step = _hold_gripper(
-        env, oracle, -1.0, GRIPPER_STEPS, step, frames
-    )
-    if status is not None and status.violated:
-        return (
-            False,
-            "oracle violation while releasing target mug",
-            status,
-            step,
-            target_metrics(),
-        )
-    retreat = target_grasp_point + front * 0.16 + site_mat[:, 2] * 0.04
-    reached, status, step = _move_eef(
-        env,
-        oracle,
-        retreat,
-        -1.0,
+    (
+        release_ok,
+        release_reason,
+        status,
         step,
-        frames,
-        label="target retreat",
-        diagnostics=move_diagnostics,
+        release_diagnostic,
+    ) = _release_target_without_microwave_contact(
+        env, oracle, step, frames
     )
-    if not reached:
+    if not release_ok:
         return (
             False,
-            move_failure_reason("target retreat"),
+            release_reason,
             status,
             step,
             target_metrics(),
         )
+    retreat_ok, retreat_plan = _compiled_open_gripper_retreat_plan(
+        env,
+        names,
+        (
+            ("target horizontal retreat", portal_eef),
+            ("target portal exit", portal_high_eef),
+        ),
+    )
+    if not retreat_ok:
+        return (
+            False,
+            "compiled open-gripper retreat has no collision-free sweep; "
+            f"minimum_clearance_m="
+            f"{retreat_plan.get('minimum_clearance_m', float('nan'))}",
+            status,
+            step,
+            target_metrics(),
+        )
+    for retreat, label in (
+        (portal_eef, "target horizontal retreat"),
+        (portal_high_eef, "target portal exit"),
+    ):
+        reached, status, step = _move_eef(
+            env,
+            oracle,
+            retreat,
+            -1.0,
+            step,
+            frames,
+            label=label,
+            diagnostics=move_diagnostics,
+            forbid_microwave_contact=True,
+        )
+        if not reached:
+            return (
+                False,
+                move_failure_reason(label),
+                status,
+                step,
+                target_metrics(),
+            )
     max_tilt = 0.0
     max_linear = 0.0
     max_angular = 0.0
@@ -1709,7 +3275,9 @@ def _robot_place_target(env, oracle, names, frames, step):
         current_pos, _ = body_pose(env.sim, TARGET_BODY)
         current_local = site_mat.T @ (current_pos - site_pos)
         looks_stable = bool(
-            np.all(np.abs(current_local) <= site_size)
+            native_site_contains_point(
+                site_pos, site_mat, site_size, current_pos
+            )
             and body_tilt_deg(env.sim, TARGET_BODY) <= MAX_MUG_TILT_DEG
             and linear <= MAX_WAIT_LINEAR_SPEED_MPS
             and angular <= MAX_WAIT_ANGULAR_SPEED_RADPS
@@ -1725,9 +3293,21 @@ def _robot_place_target(env, oracle, names, frames, step):
             )
     target_pos, _ = body_pose(env.sim, TARGET_BODY)
     target_local = site_mat.T @ (target_pos - site_pos)
-    inside = bool(np.all(np.abs(target_local) <= site_size))
+    inside = native_site_contains_point(
+        site_pos, site_mat, site_size, target_pos
+    )
+    final_door_clearance, final_door_sweep = (
+        _compiled_target_door_sweep_clearance(
+            env,
+            names,
+            sorted(descendant_geom_ids(env.sim.model, TARGET_BODY)),
+            target_pos,
+            target_pos,
+        )
+    )
     stable = bool(
         inside
+        and final_door_clearance > 0.0
         and max_tilt <= MAX_MUG_TILT_DEG
         and stable_streak >= 10
     )
@@ -1739,10 +3319,16 @@ def _robot_place_target(env, oracle, names, frames, step):
         "target_max_linear_speed_mps": max_linear,
         "target_max_angular_speed_radps": max_angular,
         "target_final_stable_streak": stable_streak,
+        "target_final_door_swept_clearance_m": final_door_clearance,
+        "target_final_door_sweep": final_door_sweep,
     })
     return (
         stable,
-        "" if stable else "target did not settle upright inside microwave",
+        (
+            ""
+            if stable
+            else "target did not settle upright, native-In, and door-clear"
+        ),
         status,
         step,
         metrics,
@@ -2042,6 +3628,30 @@ def main() -> None:
         target_grasp_closure = target_metrics.get(
             "target_grasp_closure", {}
         )
+        target_release = target_metrics.get("target_release", {})
+        target_insertion_plan = target_metrics.get(
+            "compiled_insertion_plan", {}
+        )
+        selected_target_insertion = target_insertion_plan.get(
+            "selected", {}
+        )
+        target_execution_endpoint = target_insertion_plan.get(
+            "execution_endpoint", {}
+        )
+        selected_target_floor = target_insertion_plan.get(
+            "compiled_floor", {}
+        ).get("selected", {})
+        target_retreat_plan = target_metrics.get(
+            "compiled_open_gripper_retreat_plan", {}
+        )
+        target_insertion_move = next(
+            (
+                segment
+                for segment in target_metrics.get("move_segments", [])
+                if segment.get("label") == "target insertion"
+            ),
+            {},
+        )
         target_held_eef_offset = target_metrics.get(
             "held_eef_minus_target_offset"
         ) or [float("nan")] * 3
@@ -2054,6 +3664,17 @@ def main() -> None:
                 for item in target_object_follow_trace
             ),
             default=float("nan"),
+        )
+        forbidden_target_contact = bool(
+            any(
+                segment.get("forbidden_microwave_contact", False)
+                for segment in target_metrics.get("move_segments", [])
+            )
+            or target_descend.get("microwave_contact_seen", False)
+            or target_grasp_closure.get(
+                "microwave_contact_seen", False
+            )
+            or target_release.get("microwave_contact_seen", False)
         )
         forbidden_prefix_contact = bool(
             any(
@@ -2326,6 +3947,97 @@ def main() -> None:
             "robot_target_max_object_follow_error_m": (
                 target_max_object_follow_error
             ),
+            "robot_target_insertion_plan_method": (
+                target_insertion_plan.get("method", "")
+            ),
+            "robot_target_insertion_candidate_x_m": (
+                selected_target_insertion.get(
+                    "candidate_target_position",
+                    [float("nan")] * 3,
+                )[0]
+            ),
+            "robot_target_insertion_candidate_y_m": (
+                selected_target_insertion.get(
+                    "candidate_target_position",
+                    [float("nan")] * 3,
+                )[1]
+            ),
+            "robot_target_insertion_candidate_z_m": (
+                selected_target_insertion.get(
+                    "candidate_target_position",
+                    [float("nan")] * 3,
+                )[2]
+            ),
+            "robot_target_insertion_front_distance_m": (
+                selected_target_insertion.get(
+                    "front_distance_from_site_center_m",
+                    float("nan"),
+                )
+            ),
+            "robot_target_insertion_execution_front_distance_m": (
+                target_execution_endpoint.get(
+                    "front_distance_from_site_center_m",
+                    float("nan"),
+                )
+            ),
+            "robot_target_insertion_native_in": int(
+                bool(selected_target_insertion.get("native_in", False))
+            ),
+            "robot_target_insertion_support_clearance_m": (
+                selected_target_insertion.get(
+                    "support_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_insertion_predicted_gripper_clearance_m": (
+                selected_target_insertion.get(
+                    "gripper_swept_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_insertion_predicted_mug_clearance_m": (
+                selected_target_insertion.get(
+                    "target_swept_static_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_insertion_predicted_door_clearance_m": (
+                selected_target_insertion.get(
+                    "target_door_swept_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_insertion_floor_geom": (
+                selected_target_floor.get("geom_name", "")
+            ),
+            "robot_target_insertion_actual_steps": (
+                target_insertion_move.get("steps_executed", 0)
+            ),
+            "robot_target_insertion_actual_microwave_contact": int(
+                bool(
+                    target_insertion_move.get(
+                        "microwave_contact_seen", False
+                    )
+                )
+            ),
+            "robot_target_insertion_actual_contact_pairs": json.dumps(
+                target_insertion_move.get("robot_contact_pairs", []),
+                sort_keys=True,
+            ),
+            "robot_target_release_success": int(
+                bool(target_release.get("success", False))
+            ),
+            "robot_target_release_microwave_contact_seen": int(
+                bool(
+                    target_release.get(
+                        "microwave_contact_seen", False
+                    )
+                )
+            ),
+            "robot_target_retreat_predicted_clearance_m": (
+                target_retreat_plan.get(
+                    "minimum_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_no_forbidden_microwave_contact": int(
+                target_ok and not forbidden_target_contact
+            ),
             "robot_door_close_completed": int(door_ok),
             "robot_door_reason": door_reason,
             "door_handle_contact_seen": int(
@@ -2343,6 +4055,9 @@ def main() -> None:
             ),
             "target_max_tilt_deg": target_metrics.get(
                 "target_max_tilt_deg", float("nan")
+            ),
+            "target_final_door_swept_clearance_m": target_metrics.get(
+                "target_final_door_swept_clearance_m", float("nan")
             ),
             "door_robot_driven_travel": door_metrics.get(
                 "door_robot_driven_travel", float("nan")
@@ -2422,6 +4137,16 @@ def main() -> None:
             "current target contact required before and after closure; "
             "any robot-microwave contact during table approach fails closed"
         ),
+        "target_insertion_gate": (
+            "foremost native-In release pose is searched from compiled "
+            "heating-site, support, gripper, mug, and microwave geometry; "
+            "portal alignment, insertion, release, and retreat all fail "
+            "on any robot-microwave contact"
+        ),
+        "target_insertion_search_step_m": (
+            TARGET_INSERTION_SEARCH_STEP_M
+        ),
+        "target_insertion_sweep_step_m": TARGET_INSERTION_SWEEP_STEP_M,
         "microwave_close_segment": "robot handle contact and OSC hinge-arc motion via env.step",
         "episode_diagnostics": episode_diagnostics,
         "input_artifacts": [

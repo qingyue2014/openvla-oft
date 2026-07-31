@@ -229,6 +229,161 @@ def closest_point_on_oriented_box(
     return center + rotation @ closest_local, inside
 
 
+def segment_aabb_distance(segment_start, segment_end, half_size) -> float:
+    """Return the exact distance between a segment and a centered AABB."""
+    start = np.asarray(segment_start, dtype=float)
+    end = np.asarray(segment_end, dtype=float)
+    half = np.asarray(half_size, dtype=float)
+    if start.shape != (3,) or end.shape != (3,) or half.shape != (3,):
+        raise ValueError("segment endpoints and half_size must have shape (3,)")
+    if (
+        not np.all(np.isfinite(start))
+        or not np.all(np.isfinite(end))
+        or not np.all(np.isfinite(half))
+        or np.any(half <= 0.0)
+    ):
+        raise ValueError("segment/AABB inputs must be finite with positive size")
+
+    direction = end - start
+    breakpoints = {0.0, 1.0}
+    for axis in range(3):
+        if abs(float(direction[axis])) <= np.finfo(float).eps:
+            continue
+        for face in (-half[axis], half[axis]):
+            value = float((face - start[axis]) / direction[axis])
+            if 0.0 < value < 1.0:
+                breakpoints.add(value)
+    ordered = sorted(breakpoints)
+    candidates = set(ordered)
+    for lower, upper in zip(ordered[:-1], ordered[1:]):
+        midpoint = 0.5 * (lower + upper)
+        position = start + direction * midpoint
+        active = []
+        for axis in range(3):
+            if position[axis] < -half[axis]:
+                boundary = -half[axis]
+            elif position[axis] > half[axis]:
+                boundary = half[axis]
+            else:
+                continue
+            active.append(
+                (
+                    float(direction[axis]),
+                    float(start[axis] - boundary),
+                )
+            )
+        denominator = sum(slope * slope for slope, _ in active)
+        if denominator > np.finfo(float).eps:
+            root = -sum(
+                slope * intercept for slope, intercept in active
+            ) / denominator
+            if lower <= root <= upper:
+                candidates.add(float(root))
+
+    minimum_squared = float("inf")
+    for parameter in candidates:
+        position = start + direction * float(parameter)
+        outside = np.maximum(np.abs(position) - half, 0.0)
+        minimum_squared = min(
+            minimum_squared, float(np.dot(outside, outside))
+        )
+    return float(np.sqrt(minimum_squared))
+
+
+def oriented_box_separating_clearance(
+    first_center,
+    first_rotation,
+    first_half_size,
+    second_center,
+    second_rotation,
+    second_half_size,
+) -> float:
+    """Return the largest SAT gap; positive means two OBBs are separate."""
+    center_a = np.asarray(first_center, dtype=float)
+    rotation_a = np.asarray(first_rotation, dtype=float)
+    half_a = np.asarray(first_half_size, dtype=float)
+    center_b = np.asarray(second_center, dtype=float)
+    rotation_b = np.asarray(second_rotation, dtype=float)
+    half_b = np.asarray(second_half_size, dtype=float)
+    if center_a.shape != (3,) or center_b.shape != (3,):
+        raise ValueError("oriented-box centers must have shape (3,)")
+    if rotation_a.shape != (3, 3) or rotation_b.shape != (3, 3):
+        raise ValueError("oriented-box rotations must have shape (3, 3)")
+    if half_a.shape != (3,) or half_b.shape != (3,):
+        raise ValueError("oriented-box half sizes must have shape (3,)")
+    arrays = (
+        center_a,
+        rotation_a,
+        half_a,
+        center_b,
+        rotation_b,
+        half_b,
+    )
+    if (
+        not all(np.all(np.isfinite(value)) for value in arrays)
+        or np.any(half_a <= 0.0)
+        or np.any(half_b <= 0.0)
+    ):
+        raise ValueError("oriented-box inputs must be finite with positive size")
+
+    axes = [rotation_a[:, index] for index in range(3)]
+    axes.extend(rotation_b[:, index] for index in range(3))
+    axes.extend(
+        np.cross(rotation_a[:, first], rotation_b[:, second])
+        for first in range(3)
+        for second in range(3)
+    )
+    delta = center_b - center_a
+    gaps = []
+    for raw_axis in axes:
+        norm = float(np.linalg.norm(raw_axis))
+        if norm <= 32.0 * np.finfo(float).eps:
+            continue
+        axis = raw_axis / norm
+        projected_a = float(
+            np.sum(half_a * np.abs(rotation_a.T @ axis))
+        )
+        projected_b = float(
+            np.sum(half_b * np.abs(rotation_b.T @ axis))
+        )
+        gaps.append(
+            abs(float(np.dot(delta, axis))) - projected_a - projected_b
+        )
+    if not gaps:
+        raise ValueError("oriented boxes produced no separating axes")
+    return float(max(gaps))
+
+
+def native_site_contains_point(
+    site_position,
+    site_rotation,
+    site_half_size,
+    point,
+) -> bool:
+    """Match LIBERO SiteObject.in_box's strict world-AABB predicate."""
+    position = np.asarray(site_position, dtype=float)
+    rotation = np.asarray(site_rotation, dtype=float)
+    half_size = np.asarray(site_half_size, dtype=float)
+    point = np.asarray(point, dtype=float)
+    if position.shape != (3,) or half_size.shape != (3,) or point.shape != (3,):
+        raise ValueError("site position, half size, and point need shape (3,)")
+    if rotation.shape != (3, 3):
+        raise ValueError("site rotation must have shape (3, 3)")
+    arrays = (position, rotation, half_size, point)
+    if (
+        not all(np.all(np.isfinite(value)) for value in arrays)
+        or np.any(half_size <= 0.0)
+    ):
+        raise ValueError("site geometry must be finite with positive size")
+    world_half_size = np.abs(rotation @ half_size)
+    lower = position - world_half_size
+    upper = position + world_half_size
+    # This is the native SiteObject.in_box lower-z allowance, preserved
+    # verbatim as geometry semantics rather than introduced as a task margin.
+    lower[2] -= 0.01
+    return bool(np.all(point > lower) and np.all(point < upper))
+
+
 def collision_masks_compatible(
     first_contype: int,
     first_conaffinity: int,

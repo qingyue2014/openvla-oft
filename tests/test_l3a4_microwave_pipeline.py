@@ -19,8 +19,11 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     closest_point_on_oriented_box,
     collision_masks_compatible,
     hinge_radius_m,
+    native_site_contains_point,
+    oriented_box_separating_clearance,
     planar_park_clearances,
     radially_adjusted_input_xy,
+    segment_aabb_distance,
 )
 from experiments.robot.libero.tasks.validate_l3a4_native_preflight import (
     build_manifest,
@@ -88,6 +91,66 @@ def test_l3a4_preflight_accepts_only_exact_native_task(tmp_path):
         validate_native_task(native, copied, TASK_PROMPT)
     with pytest.raises(ValueError, match="prompt mismatch"):
         validate_native_task(native, native, "modified prompt")
+
+
+def test_l3a4_compiled_insertion_geometry_primitives():
+    half = np.asarray([1.0, 1.0, 1.0])
+    assert segment_aabb_distance(
+        [-2.0, 0.0, 0.0], [2.0, 0.0, 0.0], half
+    ) == pytest.approx(0.0)
+    assert segment_aabb_distance(
+        [-2.0, 2.0, 0.0], [2.0, 2.0, 0.0], half
+    ) == pytest.approx(1.0)
+    assert segment_aabb_distance(
+        [2.0, 2.0, 0.0], [3.0, 3.0, 0.0], half
+    ) == pytest.approx(np.sqrt(2.0))
+
+    identity = np.eye(3)
+    assert oriented_box_separating_clearance(
+        [0.0, 0.0, 0.0],
+        identity,
+        half,
+        [3.0, 0.0, 0.0],
+        identity,
+        half,
+    ) == pytest.approx(1.0)
+    assert oriented_box_separating_clearance(
+        [0.0, 0.0, 0.0],
+        identity,
+        half,
+        [1.5, 0.0, 0.0],
+        identity,
+        half,
+    ) <= 0.0
+
+    angle = np.pi / 4.0
+    rotation = np.asarray(
+        [
+            [np.cos(angle), -np.sin(angle), 0.0],
+            [np.sin(angle), np.cos(angle), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    site_half = np.asarray([1.0, 0.5, 0.25])
+    world_half = np.abs(rotation @ site_half)
+    assert native_site_contains_point(
+        np.zeros(3), rotation, site_half, [world_half[0] * 0.9, 0.0, 0.0]
+    )
+    assert not native_site_contains_point(
+        np.zeros(3), rotation, site_half, [world_half[0], 0.0, 0.0]
+    )
+    assert native_site_contains_point(
+        np.zeros(3),
+        identity,
+        site_half,
+        [0.0, 0.0, -site_half[2] - 0.005],
+    )
+    assert not native_site_contains_point(
+        np.zeros(3),
+        identity,
+        site_half,
+        [0.0, 0.0, -site_half[2] - 0.01],
+    )
 
 
 def test_l3a4_preflight_binds_evaluated_state_bytes(tmp_path):
@@ -600,6 +663,7 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "microwave_contact_seen" in move
     assert "forbid_microwave_contact" in move
     assert "forbidden_microwave_contact" in move
+    assert "robot_contact_pairs" in move
     assert '"trace": trace' in move
     assert "EEF_POSITION_TOLERANCE" in move
 
@@ -688,6 +752,113 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "target_final" in target_closure
     assert "not microwave_contact" in target_closure
 
+    target_support = ast.get_source_segment(
+        source, functions["_compiled_target_support_geometry"]
+    )
+    assert "env.sim.data.contact" in target_support
+    assert "support_offset_m" in target_support
+    assert "supporting_target_geom_ids" in target_support
+    assert "bottom_projection_m" in target_support
+    assert "compiled_bottom_tolerance_m" in target_support
+    assert "MAX_MUG_TILT_DEG" in target_support
+
+    microwave_floor = ast.get_source_segment(
+        source, functions["_compiled_microwave_floor"]
+    )
+    assert "descendant_geom_ids(model, names[\"fixture_root\"])" in (
+        microwave_floor
+    )
+    assert "descendant_geom_ids(model, names[\"door_body\"])" in (
+        microwave_floor
+    )
+    assert "_collision_compatible_geom_ids(" in microwave_floor
+    assert "below_site_m" in microwave_floor
+    assert "covers_site_center" in microwave_floor
+
+    geom_clearance = ast.get_source_segment(
+        source, functions["_compiled_geom_pair_clearance"]
+    )
+    assert "oriented_box_separating_clearance(" in geom_clearance
+    assert "segment_aabb_distance(" in geom_clearance
+    assert "geom_margin" in geom_clearance
+
+    target_door_sweep = ast.get_source_segment(
+        source, functions["_compiled_target_door_sweep_clearance"]
+    )
+    assert "SAFE_PARK_DOOR_SWEEP_SAMPLES" in target_door_sweep
+    assert "_rotation_about_axis(" in target_door_sweep
+    assert "_compiled_geom_pair_clearance(" in target_door_sweep
+    assert "continuous_guard" in target_door_sweep
+    assert '"limiting_pair": limiting' in target_door_sweep
+
+    swept_clearance = ast.get_source_segment(
+        source, functions["_translated_swept_clearance"]
+    )
+    assert "TARGET_INSERTION_SWEEP_STEP_M" in swept_clearance
+    assert "sweep_guard = 0.5 * spacing" in swept_clearance
+    assert "collision_masks_compatible(" in swept_clearance
+    assert "_compiled_geom_pair_clearance(" in swept_clearance
+
+    insertion_plan = ast.get_source_segment(
+        source, functions["_compiled_target_insertion_plan"]
+    )
+    assert "native_site_contains_point(" in insertion_plan
+    assert "_compiled_microwave_floor(" in insertion_plan
+    assert "_translated_swept_clearance(" in insertion_plan
+    assert "support_clearance >= 0.0" in insertion_plan
+    assert "gripper_clearance > 0.0" in insertion_plan
+    assert "target_clearance > 0.0" in insertion_plan
+    assert "_compiled_target_door_sweep_clearance(" in insertion_plan
+    assert "door_clearance > 0.0" in insertion_plan
+    assert "current_target_tilt > MAX_MUG_TILT_DEG" in insertion_plan
+    assert "np.nextafter(front_extent, 0.0)" in insertion_plan
+    assert "execution_reserve_m" in insertion_plan
+    assert '"execution_endpoint": execution_endpoint' in insertion_plan
+    assert '"candidate_trace": trace' in insertion_plan
+    assert '"selected": selected' in insertion_plan
+    assert '"rigid_gripper_body_names"' in insertion_plan
+
+    rigid_gripper = ast.get_source_segment(
+        source, functions["_compiled_rigid_gripper_fixture_geoms"]
+    )
+    assert 'for token in ("gripper", "hand", "finger")' in rigid_gripper
+    assert "_collision_compatible_geom_ids(" in rigid_gripper
+
+    retreat_plan = ast.get_source_segment(
+        source, functions["_compiled_open_gripper_retreat_plan"]
+    )
+    assert "_compiled_rigid_gripper_fixture_geoms(" in retreat_plan
+    assert "_translated_swept_clearance(" in retreat_plan
+    assert "minimum > 0.0" in retreat_plan
+
+    target_release = ast.get_source_segment(
+        source, functions["_release_target_without_microwave_contact"]
+    )
+    assert "_step(env, oracle, action, step, frames)" in target_release
+    assert "_has_microwave_contact(" in target_release
+    assert "not microwave_contact" in target_release
+
+    target_insertion = ast.get_source_segment(
+        source, functions["_insert_target_until_safe_release"]
+    )
+    assert "_step(env, oracle, action, step, frames)" in target_insertion
+    assert "native_site_contains_point(" in target_insertion
+    assert "contacts_between(" in target_insertion
+    assert "_compiled_target_door_sweep_clearance(" in target_insertion
+    assert "current_microwave" in target_insertion
+    assert "PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M" in target_insertion
+    assert "MAX_MUG_TILT_DEG" in target_insertion
+    assert "MAX_WAIT_LINEAR_SPEED_MPS" in target_insertion
+    assert "MAX_WAIT_ANGULAR_SPEED_RADPS" in target_insertion
+    assert "native_inside" in target_insertion
+    assert "floor_contact" in target_insertion
+    assert "foremost_pose_reached" in target_insertion
+    assert "door_clearance > 0.0" in target_insertion
+    assert '"forbidden_microwave_contact": microwave_contact' in (
+        target_insertion
+    )
+    assert '"robot_contact_pairs"' in target_insertion
+
     prefix = ast.get_source_segment(
         source, functions["_robot_park_prefix"]
     )
@@ -721,14 +892,28 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
         "held_eef_offset = grasped_eef_position - grasped_target_position"
         in target_placement
     )
-    assert "target_grasp_point = target_base + held_eef_offset" in (
-        target_placement
-    )
+    assert "_compiled_target_support_geometry(" in target_placement
+    assert "_compiled_target_insertion_plan(" in target_placement
+    assert '"candidate_eef_position"' in target_placement
+    assert '"target portal height alignment"' in target_placement
+    assert '"target horizontal retreat"' in target_placement
+    assert "_insert_target_until_safe_release(" in target_placement
+    assert "_release_target_without_microwave_contact(" in target_placement
+    assert target_placement.count("forbid_microwave_contact=True") >= 3
+    assert "native_site_contains_point(" in target_placement
+    assert "final_door_clearance > 0.0" in target_placement
+    assert "site_size[2]) - 0.015" not in target_placement
+    assert "front * 0.16" not in target_placement
     assert "PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M" in target_placement
     assert '"target_contact_descend": contact_descend_diagnostic' in (
         target_placement
     )
     assert '"target_grasp_closure": closure_diagnostic' in target_placement
+    assert '"compiled_insertion_plan": insertion_plan' in target_placement
+    assert '"compiled_open_gripper_retreat_plan": retreat_plan' in (
+        target_placement
+    )
+    assert '"target_release": release_diagnostic' in target_placement
     assert '"object_follow_trace": object_follow_trace' in target_placement
 
     assert '"episode_diagnostics": episode_diagnostics' in source
@@ -749,6 +934,18 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"robot_target_closure_contact_initial"' in source
     assert '"robot_target_closure_contact_final"' in source
     assert '"robot_target_max_object_follow_error_m"' in source
+    assert '"robot_target_insertion_plan_method"' in source
+    assert '"robot_target_insertion_front_distance_m"' in source
+    assert '"robot_target_insertion_execution_front_distance_m"' in source
+    assert '"robot_target_insertion_native_in"' in source
+    assert '"robot_target_insertion_predicted_gripper_clearance_m"' in source
+    assert '"robot_target_insertion_predicted_door_clearance_m"' in source
+    assert '"robot_target_insertion_actual_microwave_contact"' in source
+    assert '"robot_target_insertion_actual_contact_pairs"' in source
+    assert '"robot_target_release_microwave_contact_seen"' in source
+    assert '"robot_target_retreat_predicted_clearance_m"' in source
+    assert '"robot_target_no_forbidden_microwave_contact"' in source
+    assert '"target_final_door_swept_clearance_m"' in source
     assert "GRASP_HEIGHT = 0.060" in source
     assert "PORCELAIN_GRASP_HEIGHT = 0.080" in source
     assert "PORCELAIN_GRASP_CLEARANCE_OFFSET = 0.040" in source
@@ -759,5 +956,7 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "SAFE_PARK_DOOR_SWEEP_MARGIN_M = 0.020" in source
     assert "SAFE_PARK_STATIC_MARGIN_M = 0.020" in source
     assert "SAFE_PARK_DOOR_SWEEP_SAMPLES = 49" in source
+    assert "TARGET_INSERTION_SEARCH_STEP_M = 0.005" in source
+    assert "TARGET_INSERTION_SWEEP_STEP_M = 0.005" in source
     assert "EEF_POSITION_TOLERANCE = 0.012" in source
     assert "MOVE_STEPS = 100" in source
