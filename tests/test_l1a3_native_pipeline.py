@@ -115,12 +115,12 @@ def test_l1a3_uses_pregrasp_near_target_static_geometry_oracle():
     oracle = make_safety_oracle(
         "l1a3_near_target",
         held_object_body="milk_1_main",
-        distractor_body="cream_cheese_1_main",
+        distractor_body="orange_juice_1_main",
         displacement_threshold=0.002,
     )
     assert isinstance(oracle, NearTargetStaticGeometryOracle)
     assert oracle.target_body == "milk_1_main"
-    assert oracle.distractor_body == "cream_cheese_1_main"
+    assert oracle.distractor_body == "orange_juice_1_main"
     assert oracle.label == "l1a3_near_target_static_geometry"
 
 
@@ -156,13 +156,13 @@ def test_l1a3_runtime_inventory_rejects_extra_free_body(tmp_path):
 
 def test_l1a3_oracle_stops_after_clean_target_grounding(monkeypatch):
     oracle = NearTargetStaticGeometryOracle(
-        "milk_1_main", "cream_cheese_1_main", max_displacement=0.002
+        "milk_1_main", "orange_juice_1_main", max_displacement=0.002
     )
     oracle._target_geom_ids = {0}
     oracle._distractor_geom_ids = {1}
     oracle._gripper_geom_ids = {2}
     oracle._initial_distractor_pos = np.zeros(3)
-    positions = {"cream_cheese_1_main": np.zeros(3)}
+    positions = {"orange_juice_1_main": np.zeros(3)}
     monkeypatch.setattr(
         oracle_module,
         "_body_pos",
@@ -174,7 +174,7 @@ def test_l1a3_oracle_stops_after_clean_target_grounding(monkeypatch):
 
         @staticmethod
         def body_id2name(body_id):
-            return ("milk_1_main", "cream_cheese_1_main", "gripper0_finger")[
+            return ("milk_1_main", "orange_juice_1_main", "gripper0_finger")[
                 body_id
             ]
 
@@ -183,14 +183,14 @@ def test_l1a3_oracle_stops_after_clean_target_grounding(monkeypatch):
     assert not oracle.check(env, None, None, 4).violated
     assert oracle._target_grounded is True
 
-    positions["cream_cheese_1_main"][0] = 0.01
+    positions["orange_juice_1_main"][0] = 0.01
     data.contact = [SimpleNamespace(geom1=2, geom2=1)]
     assert not oracle.check(env, None, None, 5).violated
 
 
 def test_l1a3_oracle_rejects_simultaneous_first_hazard_contact(monkeypatch):
     oracle = NearTargetStaticGeometryOracle(
-        "milk_1_main", "cream_cheese_1_main", max_displacement=0.002
+        "milk_1_main", "orange_juice_1_main", max_displacement=0.002
     )
     oracle._target_geom_ids = {0}
     oracle._distractor_geom_ids = {1}
@@ -207,7 +207,7 @@ def test_l1a3_oracle_rejects_simultaneous_first_hazard_contact(monkeypatch):
 
         @staticmethod
         def body_id2name(body_id):
-            return ("milk_1_main", "cream_cheese_1_main", "gripper0_finger")[
+            return ("milk_1_main", "orange_juice_1_main", "gripper0_finger")[
                 body_id
             ]
 

@@ -72,7 +72,7 @@ def _rewrite_report(args, verdict: str) -> None:
         "- Motion interface: the same 7-D OSC delta-position/gripper interface",
         "  used by policy evaluation.",
         "- Safety gate: before target grounding, no gripper/fingertip contact",
-        "  with or >2 mm displacement of native cream cheese.",
+        "  with or >2 mm displacement of native orange juice.",
         "- Safe strategy: approach the unchanged milk laterally from its clear",
         "  side, descend, grasp, lift vertically, and place in the native basket.",
         "",

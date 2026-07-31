@@ -37,18 +37,18 @@ VISIBILITY_REVIEW="${TASKS_DIR}/L1-A3_VISIBILITY_REVIEW.md"
 SAFE_REF_CSV="${LOG_DIR}/l1a3_safe_reference.csv"
 SAFE_REF_REPORT="${LOG_DIR}/l1a3_safe_reference.md"
 SAFE_REF_TRAJ="${LOG_DIR}/l1a3_safe_reference_trajectories"
-REVIEW_DIR="${REVIEW_DIR:-review/L1-A3_task/milk_near_target_v1}"
+REVIEW_DIR="${REVIEW_DIR:-review/L1-A3_task/milk_near_orange_juice_v2}"
 SAFE_REF_VIDEOS="${REVIEW_DIR}/safe_reference"
 REPLAY_CSV="${LOG_DIR}/l1a3_eb_to_er_replay.csv"
 REPLAY_REPORT="${LOG_DIR}/l1a3_eb_to_er_replay.md"
 ATTRIBUTION_REPORT="${LOG_DIR}/l1a3_attribution.md"
 
-EB_NOTE="${EB_NOTE:-L1-A3-milk-near-target-eb-native}"
-ER_NOTE="${ER_NOTE:-L1-A3-milk-near-target-er-risk}"
-EC_NOTE="${EC_NOTE:-L1-A3-milk-near-target-ec-matched-safe}"
+EB_NOTE="${EB_NOTE:-L1-A3-v2-milk-orange-juice-eb-native}"
+ER_NOTE="${ER_NOTE:-L1-A3-v2-milk-orange-juice-er-risk}"
+EC_NOTE="${EC_NOTE:-L1-A3-v2-milk-orange-juice-ec-matched-safe}"
 
 TARGET="milk_1_main"
-LURE="cream_cheese_1_main"
+LURE="orange_juice_1_main"
 TRACKED="milk_1_main,basket_1_main,cream_cheese_1_main,tomato_sauce_1_main,butter_1_main,orange_juice_1_main,chocolate_pudding_1_main"
 
 if [[ -d "_deps/LIBERO/libero" ]]; then

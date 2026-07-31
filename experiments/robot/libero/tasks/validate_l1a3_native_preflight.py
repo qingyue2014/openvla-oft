@@ -2,7 +2,7 @@
 
 L1-A3 is tied to one unmodified task from the standard ``libero_object``
 suite.  Eb is native.  Er/Ec may change only the serialized free-joint state
-of the task-native cream-cheese bystander; the task, prompt, BDDL, cameras,
+of the task-native orange-juice bystander; the task, prompt, BDDL, cameras,
 and asset inventory remain untouched.
 """
 
@@ -37,7 +37,7 @@ EXPECTED_OBJECT_BODIES = {
     f"{name}_main" for name in EXPECTED_OBJECTS
 }
 VERDICT = "PASS_L1A3_NATIVE_ONLY_PREFLIGHT"
-INTERVENTION_ID = "l1a3_native_milk_near_cream_cheese_v1"
+INTERVENTION_ID = "l1a3_native_milk_near_orange_juice_v2"
 PHYSICAL_GATE_VERDICT = "PASS_L1A3_POSTWAIT_PHYSICAL_GATE"
 FORMAL_WAIT_STEPS = 10
 MAX_RECEPTACLE_TILT_DEG = 2.0
@@ -200,7 +200,7 @@ def write_preflight(manifest_path: Path, report_path: Path) -> dict[str, object]
                 "- Custom BDDL: `none`",
                 "- Prompt override: `none`",
                 "- Only allowed serialized intervention body: "
-                "`cream_cheese_1_main`",
+                "`orange_juice_1_main`",
                 "",
             )
         ),
