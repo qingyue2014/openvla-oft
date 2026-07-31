@@ -191,12 +191,34 @@ raise EEF target is:
 
 Thus the controller never moves downward during raise and never adds an
 unjustified fixed clearance above an already-safe lift. If current height is
-insufficient, it still raises to the geometry-derived value and remains bound
-by the original independent 8-action timeout. Invalid bounds or an unresolved
-sweep fail closed. The trajectory and CSV record all expanded rectangles,
+insufficient, the preregistered zero-action raise stage fails closed rather
+than borrowing actions from another stage. Invalid bounds or an unresolved
+sweep likewise fail closed. The trajectory and CSV record all expanded rectangles,
 blocking native bodies, required and selected heights, achieved minimum
-vertical clearance, and additional commanded raise. No stage allocation was
-changed: motion remains 222 actions and the complete bound remains 278/280.
+vertical clearance, and additional commanded raise.
+
+Superpod Job500107 exercised the exact sweep and the following park descent
+for all five serialized Er episodes and five grasp offsets (25 attempts). The
+only swept XY blocker was the native `milk_1_main`. Geometry required butter
+body Z 219.940--220.178 mm; the post-lift body Z was already
+228.017--230.293 mm. Consequently every raise target was satisfied without an
+action, while the compiled minimum bottom clearance was 88.030--90.343 mm,
+strictly above the unchanged 80 mm requirement.
+
+All 25 attempts then used the former 12-action `butter_park_descend` limit.
+They reduced the EEF error monotonically from 209.045--211.315 mm to
+67.192--69.473 mm; the last action still improved it by
+13.362--13.392 mm. This is a timeout, not a collision or sweep-planning
+failure. A tail with the same position scale and a no-larger action cap
+elsewhere in the same 25 trajectories started at 58.212--67.349 mm and
+required eight further actions in every attempt to enter the same 12 mm
+position tolerance (9.187--11.917 mm final; the limiting seventh-action state
+was 15.474 mm). The minimum evidenced repair
+therefore reallocates all eight never-used `butter_park_raise` actions to
+`butter_park_descend`: `0 + 20` replaces `8 + 12`. Motion remains 222 actions,
+the fixed safety/hold total remains 56, and the complete static bound remains
+278/280. This allocation remains a hypothesis until a fresh remote physical
+reference passes every dynamic and stability gate.
 
 The safe-reference report and per-episode CSV also record the controller
 source SHA-256; the runner rejects a PASS report produced by different

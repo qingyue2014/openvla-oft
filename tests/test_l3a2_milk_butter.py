@@ -562,6 +562,39 @@ def test_500094_reallocates_only_observed_approach_actions_to_lift():
     assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
 
 
+def test_500107_reallocates_zero_use_sweep_raise_to_park_descend():
+    # Exact Job500107 trajectories: all 25 geometry-aware raise targets were
+    # already satisfied, while every 12-action park descend stopped at a
+    # monotonic 67--69 mm residual against the unchanged 12 mm tolerance.
+    raise_actions = [0] * 25
+    final_error_mm = [
+        67.297, 67.413, 67.192, 67.985, 67.596,
+        67.453, 67.569, 67.339, 68.284, 67.784,
+        69.473, 67.309, 69.358, 67.932, 67.497,
+        67.388, 67.502, 69.443, 68.213, 68.088,
+        67.581, 67.698, 67.468, 68.388, 67.872,
+    ]
+    minimum_clearance_mm = [
+        88.078, 88.105, 88.044, 88.574, 88.554,
+        88.070, 88.098, 88.032, 88.591, 88.579,
+        90.343, 88.066, 90.303, 88.597, 88.536,
+        88.065, 88.095, 90.228, 88.584, 88.759,
+        88.068, 88.101, 88.030, 88.554, 88.551,
+    ]
+
+    assert max(raise_actions) == 0
+    assert min(minimum_clearance_mm) > 80.0
+    assert min(final_error_mm) > 12.0
+    # An observed controller tail starting at 58--67 mm required eight more
+    # actions in all 25 attempts to finish at 9.19--11.92 mm. Preserve that
+    # full evidenced tail; seven was not sufficient in the limiting trace.
+    assert 15.474 > 12.0
+    assert 11.917 < 12.0
+    assert HORIZON_STAGE_STEP_LIMITS["butter_park_raise"] == 0
+    assert HORIZON_STAGE_STEP_LIMITS["butter_park_descend"] == 20
+    assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
+
+
 def test_registered_waypoint_accepts_exact_post_final_action_state():
     timeout = SimpleNamespace(reason="waypoint_timeout", stage="butter_lift")
 
@@ -598,6 +631,39 @@ def test_registered_waypoint_accepts_exact_post_final_action_state():
     assert Shared.calls == 1
     assert step == 14
     assert obs["eef"] == pytest.approx([0.0, 0.0, 0.0119])
+    assert failure is None
+
+
+def test_registered_zero_action_waypoint_accepts_already_satisfied_state():
+    timeout = SimpleNamespace(reason="waypoint_timeout", stage="park_raise")
+
+    class Shared:
+        @staticmethod
+        def _move_to(*args, **kwargs):
+            assert kwargs["max_steps"] == 0
+            return {"eef": np.array([0.0, 0.0, 0.23])}, 9, timeout
+
+        @staticmethod
+        def _eef_pos(obs):
+            return obs["eef"]
+
+    oracle = SimpleNamespace(_metrics=lambda env: {"gripper_contact": False})
+    env = SimpleNamespace(check_success=lambda: False)
+    _, step, failure = _move_to_with_final_state_check(
+        Shared,
+        env,
+        {},
+        oracle,
+        None,
+        np.array([0.0, 0.0, 0.23]),
+        1.0,
+        9,
+        SimpleNamespace(position_tolerance=0.012),
+        "butter_park_raise",
+        max_steps=0,
+    )
+
+    assert step == 9
     assert failure is None
 
 

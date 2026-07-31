@@ -65,9 +65,15 @@ HORIZON_STAGE_STEP_LIMITS = {
     "butter_approach": 30,
     "butter_descend": 16,
     "butter_lift": 14,
-    "butter_park_raise": 8,
+    # Job500107 proved that the exact swept-clearance target equals the
+    # already-achieved lift height in all 25 registered state/offset attempts:
+    # the raise stage consumed zero actions with 88--90 mm compiled clearance.
+    # Its former eight actions are assigned to the still-converging park
+    # descent, whose observed 67--69 mm residual requires the controller's
+    # eight-action closed-loop tail to enter the unchanged 12 mm tolerance.
+    "butter_park_raise": 0,
     "butter_park_translate": 12,
-    "butter_park_descend": 12,
+    "butter_park_descend": 20,
     "butter_park_retreat": 8,
     "milk_approach": 20,
     "milk_descend": 12,
