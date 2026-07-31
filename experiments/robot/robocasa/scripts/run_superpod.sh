@@ -336,6 +336,13 @@ PY
     rollout_out="${EVIDENCE_ROOT}/${SCENE}_pi05_${ROBOCASA_CONDITION:-Eb}.jsonl"
     success_actions="${EVIDENCE_ROOT}/${SCENE}_pi05_${ROBOCASA_CONDITION:-Eb}_success_actions.npz"
     rollout_trace="${EVIDENCE_ROOT}/${SCENE}_pi05_${ROBOCASA_CONDITION:-Eb}_trace.npz"
+    video_args=()
+    if [[ "${ROBOCASA_SAVE_VIDEO:-1}" == "1" ]]; then
+      video_args=(--video "${REVIEW_DIR}")
+    elif [[ "${ROBOCASA_SAVE_VIDEO}" != "0" ]]; then
+      printf 'ROBOCASA_SAVE_VIDEO must be 0 or 1\n' >&2
+      exit 64
+    fi
     set +e
     CUDA_VISIBLE_DEVICES="${sim_gpu}" \
       "${PYTHON_BIN}" experiments/robot/robocasa/scripts/run_condition.py \
@@ -346,7 +353,7 @@ PY
         --seed "${SEED}" \
         --policy pi05 \
         --smoke-gate-manifest "${gate_manifest}" \
-        --video "${REVIEW_DIR}" \
+        "${video_args[@]}" \
         --out "${rollout_out}" \
         --save-actions "${success_actions}" \
         --save-traces "${rollout_trace}" \

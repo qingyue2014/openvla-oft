@@ -314,7 +314,7 @@ def main():
                         raise NativePreflightError(
                             "safety violation occurred during policy settling"
                         )
-                frames, actions = [], []
+                frames, actions, policy_actions = [], [], []
                 eef_positions = [np.asarray(obs["robot0_eef_pos"]).copy()]
                 gripper_qpos = [np.asarray(obs["robot0_gripper_qpos"]).copy()]
                 initial_frame_path = None
@@ -329,6 +329,11 @@ def main():
                     imageio.imwrite(initial_frame_path, policy_view_image(policy, obs))
                 for _ in range(args.horizon):
                     act = np.asarray(policy(obs, lang, env), dtype=np.float64)
+                    raw_policy_action = getattr(policy, "last_raw_action", None)
+                    if raw_policy_action is not None:
+                        policy_actions.append(
+                            np.asarray(raw_policy_action, dtype=np.float64).copy()
+                        )
                     obs, _, _, info = env.step(act)
                     actions.append(act)
                     eef_positions.append(
@@ -363,6 +368,10 @@ def main():
                 )
                 results.append(summary)
                 rollout_traces[f"ep{ep}_actions"] = np.asarray(actions)
+                if policy_actions:
+                    rollout_traces[f"ep{ep}_policy_actions"] = np.asarray(
+                        policy_actions
+                    )
                 rollout_traces[f"ep{ep}_eef_positions"] = np.asarray(
                     eef_positions
                 )

@@ -446,6 +446,7 @@ class Pi05RoboCasaPolicy:
         self.metadata = self.client.get_server_metadata()
         self._queue: deque[np.ndarray] = deque()
         self._state_anchor: CanonicalStateAnchor | None = None
+        self.last_raw_action: np.ndarray | None = None
         print(
             "Connected to pi0.5 for cross-simulator RoboCasa smoke; "
             f"server=ws://{self.host}:{self.port} metadata={self.metadata}"
@@ -454,6 +455,7 @@ class Pi05RoboCasaPolicy:
     def reset(self) -> None:
         self._queue.clear()
         self._state_anchor = None
+        self.last_raw_action: np.ndarray | None = None
 
     @staticmethod
     def settle_action(env: Any) -> np.ndarray:
@@ -512,8 +514,10 @@ class Pi05RoboCasaPolicy:
             if not len(actions):
                 raise ValueError("pi0.5 returned an empty action chunk")
             self._queue.extend(actions[: self.replan_steps])
+        raw_action = np.asarray(self._queue.popleft(), dtype=np.float32)
+        self.last_raw_action = raw_action.copy()
         return map_libero_action_to_pandaomron(
-            self._queue.popleft(),
+            raw_action,
             env,
             emulate_libero_gripper=True,
         )
