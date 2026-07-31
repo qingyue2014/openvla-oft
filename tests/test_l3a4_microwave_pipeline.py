@@ -347,6 +347,90 @@ def test_l3a4_decodes_compiled_mujoco_convex_mesh_graph():
     assert evidence["mesh_vertex_count"] == 5
 
 
+def test_l3a4_compiled_portal_search_skips_touching_nearest_pose():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_compiled_safe_insertion_portal"
+    )
+    calls = []
+
+    def swept(
+        env,
+        moving_geoms,
+        fixture_geoms,
+        start_position,
+        end_position,
+        reference_position,
+    ):
+        start = np.asarray(start_position, dtype=float)
+        end = np.asarray(end_position, dtype=float)
+        calls.append(
+            {
+                "moving": tuple(moving_geoms),
+                "start": start.tolist(),
+                "end": end.tolist(),
+            }
+        )
+        nearest_portal_touches = bool(
+            tuple(moving_geoms) == (1,)
+            and (
+                np.isclose(start[0], 0.2)
+                or np.isclose(end[0], 0.2)
+            )
+        )
+        clearance = -0.001 if nearest_portal_touches else 0.01
+        return clearance, {"minimum_clearance_m": clearance}
+
+    namespace = {
+        "np": np,
+        "APPROACH_HEIGHT": 0.16,
+        "TARGET_INSERTION_SEARCH_STEP_M": 0.005,
+        "_translated_swept_clearance": swept,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    search = namespace["_compiled_safe_insertion_portal"]
+    portal_object, portal_eef, portal_high_eef, evidence = search(
+        object(),
+        np.zeros(3),
+        np.asarray([1.0, 0.0, 0.0]),
+        0.1,
+        np.zeros(3),
+        np.asarray([0.0, 0.0, 1.0]),
+        0.0,
+        np.asarray([0.0, 0.0, 0.1]),
+        np.asarray([0.21, 0.0, 0.0]),
+        np.asarray([0.21, 0.0, 0.1]),
+        [2],
+        [3],
+        [1],
+        [4],
+    )
+    assert portal_object.tolist() == pytest.approx([0.205, 0.0, 0.0])
+    assert portal_eef.tolist() == pytest.approx([0.205, 0.0, 0.1])
+    assert portal_high_eef.tolist() == pytest.approx(
+        [0.205, 0.0, 0.26]
+    )
+    assert evidence["candidate_trace"][0]["passed"] is False
+    assert evidence["selected"]["passed"] is True
+    assert evidence["selected"][
+        "front_distance_from_site_center_m"
+    ] == pytest.approx(0.205)
+    assert len(calls) == 10
+
+
 def test_l3a4_preflight_binds_evaluated_state_bytes(tmp_path):
     native = _native_path(tmp_path)
     states = tmp_path / "er.hdf5"
@@ -1024,6 +1108,9 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     )
     assert "geom_margin" in geom_clearance
     assert "env.sim.data.geom_xmat[moving_geom]" in geom_clearance
+    assert '"primitive_clearance_m"' in geom_clearance
+    assert '"native_geom_margin_m"' in geom_clearance
+    assert '"continuous_guard_m"' in geom_clearance
 
     convex_mesh = ast.get_source_segment(
         source, functions["_compiled_convex_mesh_geometry"]
@@ -1054,6 +1141,9 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "_rotation_about_axis(" in target_door_sweep
     assert "_compiled_geom_pair_clearance(" in target_door_sweep
     assert "continuous_guard" in target_door_sweep
+    assert '"target_compiled_geometry"' in target_door_sweep
+    assert '"door_compiled_geometry"' in target_door_sweep
+    assert "visual-only 0/0 geoms are excluded" in target_door_sweep
     assert '"limiting_pair": limiting' in target_door_sweep
 
     swept_clearance = ast.get_source_segment(
@@ -1065,12 +1155,32 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "_compiled_geom_pair_clearance(" in swept_clearance
     assert '"moving_compiled_geometry"' in swept_clearance
     assert '"fixture_compiled_geometry"' in swept_clearance
+    assert '"reference_position"' in swept_clearance
+    assert '"sample_zero_is_current_pose"' in swept_clearance
+    assert "synthetic translated path start" in swept_clearance
+
+    safe_portal = ast.get_source_segment(
+        source, functions["_compiled_safe_insertion_portal"]
+    )
+    assert "2.0 * float(front_extent)" in safe_portal
+    assert "_translated_swept_clearance(" in safe_portal
+    assert "current_eef" in safe_portal
+    assert "current_lifted_eef" in safe_portal
+    assert "portal_high_eef" in safe_portal
+    assert "lift_gripper_clearance" in safe_portal
+    assert "transport_gripper_clearance" in safe_portal
+    assert "alignment_gripper_clearance" in safe_portal
+    assert "all(value > 0.0 for value in clearances.values())" in (
+        safe_portal
+    )
+    assert "nearest outside front-axis portal" in safe_portal
 
     insertion_plan = ast.get_source_segment(
         source, functions["_compiled_target_insertion_plan"]
     )
     assert "native_site_contains_point(" in insertion_plan
     assert "_compiled_microwave_floor(" in insertion_plan
+    assert "_compiled_safe_insertion_portal(" in insertion_plan
     assert "_translated_swept_clearance(" in insertion_plan
     assert "support_clearance >= 0.0" in insertion_plan
     assert "gripper_clearance > 0.0" in insertion_plan
@@ -1089,7 +1199,11 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     )
     assert "np.nextafter(front_extent, 0.0)" in insertion_plan
     assert "execution_reserve_m" in insertion_plan
+    assert '"execution_reserve_m": 0.0' in insertion_plan
+    assert "fictional deeper overshoot" in insertion_plan
     assert '"execution_endpoint": execution_endpoint' in insertion_plan
+    assert "execution_endpoint = record" in insertion_plan
+    assert "required_endpoint_front_distance" not in insertion_plan
     assert '"candidate_trace": trace' in insertion_plan
     assert '"selected": selected' in insertion_plan
     assert '"rigid_gripper_body_names"' in insertion_plan
@@ -1113,6 +1227,17 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "_step(env, oracle, action, step, frames)" in target_release
     assert "_has_microwave_contact(" in target_release
     assert "not microwave_contact" in target_release
+
+    target_contact_seek = ast.get_source_segment(
+        source, functions["_seek_target_contact"]
+    )
+    assert "TARGET_CONTACT_SEEK_STEPS" in target_contact_seek
+    assert "TARGET_CONTACT_SEEK_ACTION_LIMIT" in target_contact_seek
+    assert "[0.0, 0.0, GRASP_HEIGHT]" in target_contact_seek
+    assert "_step(env, oracle, action, step, frames)" in target_contact_seek
+    assert "if current_microwave:" in target_contact_seek
+    assert "if current_target:" in target_contact_seek
+    assert "target lateral contact seek" in target_contact_seek
 
     target_insertion = ast.get_source_segment(
         source, functions["_insert_target_until_safe_release"]
@@ -1162,7 +1287,11 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     target_placement = ast.get_source_segment(
         source, functions["_robot_place_target"]
     )
-    assert "_descend_to_target_contact(" in target_placement
+    assert "_descend_to_target_contact(" not in target_placement
+    assert "_seek_target_contact(" in target_placement
+    assert "_compiled_microwave_clearance(" in target_placement
+    assert "TARGET_GRASP_CLEARANCE_OFFSET" in target_placement
+    assert '"target outside descend"' in target_placement
     assert "_close_gripper_on_target(" in target_placement
     assert "forbid_microwave_contact=True" in target_placement
     assert (
@@ -1185,6 +1314,10 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"target_contact_descend": contact_descend_diagnostic' in (
         target_placement
     )
+    assert '"target_contact_acquisition": contact_descend_diagnostic' in (
+        target_placement
+    )
+    assert '"compiled_target_clearance_geometry"' in target_placement
     assert '"target_grasp_closure": closure_diagnostic' in target_placement
     assert '"compiled_insertion_plan": insertion_plan' in target_placement
     assert '"compiled_open_gripper_retreat_plan": retreat_plan' in (
@@ -1214,6 +1347,9 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"robot_target_closure_tilt_final_deg"' in source
     assert '"robot_target_max_object_follow_error_m"' in source
     assert '"robot_target_insertion_plan_method"' in source
+    assert '"robot_target_contact_acquisition_method"' in source
+    assert '"robot_target_portal_method"' in source
+    assert '"robot_target_portal_front_distance_m"' in source
     assert '"robot_target_insertion_planning_tilt_deg"' in source
     assert '"robot_target_insertion_held_support_offset_m"' in source
     assert '"robot_target_insertion_held_support_method"' in source
@@ -1232,6 +1368,8 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"target_held_tilt_policy"' in source
     assert '"target_mesh_box_clearance_method"' in source
     assert '"target_mesh_box_clearance_gate"' in source
+    assert '"target_portal_gate"' in source
+    assert '"target_execution_endpoint_policy"' in source
     assert '"target_release_tilt_limit_deg": MAX_MUG_TILT_DEG' in source
     assert '"target_final_tilt_limit_deg": MAX_MUG_TILT_DEG' in source
     assert "GRASP_HEIGHT = 0.060" in source
@@ -1239,6 +1377,9 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "PORCELAIN_GRASP_CLEARANCE_OFFSET = 0.040" in source
     assert "PORCELAIN_CONTACT_SEEK_STEPS = 80" in source
     assert "PORCELAIN_CONTACT_SEEK_ACTION_LIMIT = 0.25" in source
+    assert "TARGET_GRASP_CLEARANCE_OFFSET = 0.040" in source
+    assert "TARGET_CONTACT_SEEK_STEPS = 80" in source
+    assert "TARGET_CONTACT_SEEK_ACTION_LIMIT = 0.25" in source
     assert "PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M = 0.030" in source
     assert "SAFE_PARK_TABLE_EDGE_MARGIN_M = 0.020" in source
     assert "SAFE_PARK_DOOR_SWEEP_MARGIN_M = 0.020" in source
