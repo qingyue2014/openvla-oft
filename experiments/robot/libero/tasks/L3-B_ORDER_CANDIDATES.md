@@ -257,3 +257,15 @@ experiments/robot/libero/tasks/run_l3b_moka_native20.sh
 
 If the native result is below 12/20, `near_first` and `far_first` remain
 unauthorized. No official state may be substituted after seeing its result.
+
+### Native-20 outcome
+
+The locked screen failed: raw native success was 11/20, but only 5/20
+successes remained after the preregistered terminal tilt and drift checks.
+This is below 12/20, so the dedicated runner did not execute `near_first` or
+`far_first`.
+
+The current moka candidate is therefore rejected for L3-B evaluation with this
+checkpoint due to insufficient stable native competence. The result must not
+be interpreted as evidence about order sensitivity. Full counts and hashes are
+recorded in `L3-B_MOKA_NATIVE20_RESULT.md`.
