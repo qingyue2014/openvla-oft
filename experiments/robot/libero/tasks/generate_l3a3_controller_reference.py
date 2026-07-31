@@ -203,6 +203,37 @@ def _contact_progress_saturation_evidence(
     }
 
 
+def _push_window_timeout_evidence(
+    *,
+    robot_contact_steps,
+    incremental_progress,
+    minimum_progress,
+    robot_contact_at_window_end,
+):
+    """Classify a full push window without treating loss or drift as success."""
+    progress_evidence = _contact_progress_saturation_evidence(
+        robot_contact_steps,
+        incremental_progress,
+        minimum_progress,
+    )
+    if progress_evidence is not None:
+        return progress_evidence
+    if robot_contact_at_window_end:
+        return None
+    return {
+        "status": "robot_contact_lost_recontact_required",
+        "exit_reason": (
+            "full tracking window ended without robot-plate contact or "
+            "acceptable contact-backed progress; explicit high recontact "
+            "is required"
+        ),
+        "robot_contact_steps": int(robot_contact_steps),
+        "incremental_plate_progress_m": float(incremental_progress),
+        "minimum_progress_above_noise_m": float(minimum_progress),
+        "robot_contact_at_window_end": False,
+    }
+
+
 def _environment_horizon_diagnostics(env):
     """Read horizon counters through common LIBERO wrapper layers."""
     queue = [env]
@@ -529,7 +560,6 @@ class Rollout:
         stop_label="stop condition",
         diagnostics=None,
         step_observer=None,
-        interruptor=None,
         timeout_acceptor=None,
     ):
         tolerance = self.args.position_tolerance if tolerance is None else tolerance
@@ -551,25 +581,6 @@ class Rollout:
             )
             if step_observer is not None:
                 step_observer()
-            if interruptor is not None:
-                interruption = interruptor()
-                if interruption is not None:
-                    current = np.asarray(
-                        self.obs["robot0_eef_pos"], dtype=float
-                    )
-                    return {
-                        "best_error_m": best,
-                        "final_error_m": float(
-                            np.linalg.norm(np.asarray(target) - current)
-                        ),
-                        "target": np.asarray(
-                            target, dtype=float
-                        ).tolist(),
-                        "final_eef": current.tolist(),
-                        "max_steps": int(max_steps),
-                        "controller_interrupted": True,
-                        **interruption,
-                    }
         if stop_when is not None:
             extra = diagnostics() if callable(diagnostics) else diagnostics
             raise RuntimeError(
@@ -625,18 +636,6 @@ def generate(args):
         raise ValueError("--maximum_push_iterations must be positive")
     if args.maximum_recontact_attempts < 1:
         raise ValueError("--maximum_recontact_attempts must be positive")
-    if args.push_contact_loss_confirm_steps < 1:
-        raise ValueError(
-            "--push_contact_loss_confirm_steps must be positive"
-        )
-    if (
-        args.push_contact_loss_confirm_steps
-        > args.push_tracking_steps
-    ):
-        raise ValueError(
-            "--push_contact_loss_confirm_steps must not exceed "
-            "--push_tracking_steps"
-        )
     if args.maximum_live_contact_offset_xy_drift <= 0:
         raise ValueError(
             "--maximum_live_contact_offset_xy_drift must be positive"
@@ -1229,8 +1228,6 @@ def generate(args):
                 "controller_steps": 0,
                 "robot_contact_steps": 0,
                 "robot_contact_bodies": set(),
-                "consecutive_contact_loss_steps": 0,
-                "maximum_consecutive_contact_loss_steps": 0,
                 "maximum_step_plate_progress_m": 0.0,
                 "maximum_incremental_plate_progress_m": 0.0,
             }
@@ -1247,23 +1244,6 @@ def generate(args):
                     waypoint_evidence["robot_contact_steps"] += 1
                     waypoint_evidence["robot_contact_bodies"].update(
                         item["counterpart_body"] for item in robot_contacts
-                    )
-                    waypoint_evidence[
-                        "consecutive_contact_loss_steps"
-                    ] = 0
-                else:
-                    waypoint_evidence[
-                        "consecutive_contact_loss_steps"
-                    ] += 1
-                    waypoint_evidence[
-                        "maximum_consecutive_contact_loss_steps"
-                    ] = max(
-                        waypoint_evidence[
-                            "maximum_consecutive_contact_loss_steps"
-                        ],
-                        waypoint_evidence[
-                            "consecutive_contact_loss_steps"
-                        ],
                     )
                 live_plate = body_pose(env, PLATE_BODY)[0]
                 progress = float(
@@ -1339,35 +1319,21 @@ def generate(args):
                     "active_push_waypoint_evidence": active,
                 }
 
-            def accept_contact_progress_saturation(_timeout_context):
-                return _contact_progress_saturation_evidence(
-                    waypoint_evidence["robot_contact_steps"],
-                    waypoint_evidence[
+            def classify_full_push_window_timeout(_timeout_context):
+                return _push_window_timeout_evidence(
+                    robot_contact_steps=waypoint_evidence[
+                        "robot_contact_steps"
+                    ],
+                    incremental_progress=waypoint_evidence[
                         "maximum_incremental_plate_progress_m"
                     ],
-                    args.minimum_saturated_waypoint_progress,
+                    minimum_progress=(
+                        args.minimum_saturated_waypoint_progress
+                    ),
+                    robot_contact_at_window_end=(
+                        _robot_contacts_body(env, PLATE_BODY)
+                    ),
                 )
-
-            def interrupt_push_on_contact_loss():
-                consecutive_loss = waypoint_evidence[
-                    "consecutive_contact_loss_steps"
-                ]
-                if (
-                    consecutive_loss
-                    < args.push_contact_loss_confirm_steps
-                ):
-                    return None
-                return {
-                    "status": "robot_contact_lost_recontact_required",
-                    "exit_reason": (
-                        "confirmed robot-plate contact loss; next push "
-                        "iteration must enter explicit high recontact"
-                    ),
-                    "consecutive_contact_loss_steps": consecutive_loss,
-                    "required_contact_loss_confirm_steps": (
-                        args.push_contact_loss_confirm_steps
-                    ),
-                }
 
             move_timeout = rollout.move(
                 target,
@@ -1377,8 +1343,7 @@ def generate(args):
                 max_steps=args.push_tracking_steps,
                 diagnostics=push_diagnostics,
                 step_observer=observe_push_step,
-                interruptor=interrupt_push_on_contact_loss,
-                timeout_acceptor=accept_contact_progress_saturation,
+                timeout_acceptor=classify_full_push_window_timeout,
             )
             move_status = (
                 "target_reached"
@@ -1476,11 +1441,6 @@ def generate(args):
                 "robot_contact_steps": waypoint_evidence[
                     "robot_contact_steps"
                 ],
-                "maximum_consecutive_contact_loss_steps": (
-                    waypoint_evidence[
-                        "maximum_consecutive_contact_loss_steps"
-                    ]
-                ),
                 "recontact_required_after_waypoint": (
                     move_status
                     == "robot_contact_lost_recontact_required"
@@ -1556,9 +1516,6 @@ def generate(args):
             ),
             "contact_offset_rejection_events": (
                 contact_offset_rejection_events
-            ),
-            "push_contact_loss_confirm_steps": (
-                args.push_contact_loss_confirm_steps
             ),
             "contact_loss_recontact_transitions": sum(
                 waypoint["recontact_required_after_waypoint"]
@@ -1787,9 +1744,6 @@ def main():
         "--maximum_live_contact_offset_xy_drift",
         type=float,
         default=0.005,
-    )
-    parser.add_argument(
-        "--push_contact_loss_confirm_steps", type=int, default=2
     )
     # Job 499691 measured 2.45--2.50 mm of plate progress per ten actions
     # from a 5 mm target.  Scale the live target against the native steps

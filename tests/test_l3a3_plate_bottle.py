@@ -16,6 +16,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _gate_live_contact_offset_xy,
     _horizon_budget,
     _live_plate_tracking_target,
+    _push_window_timeout_evidence,
     _robot_contacts_body,
     _robot_gripper_body_names,
     _select_reachable_trailing_contact,
@@ -426,6 +427,53 @@ def test_push_timeout_acceptance_requires_real_contact_and_progress():
     )
 
 
+def test_full_push_window_loss_requires_recontact_without_becoming_success():
+    # Job 499713's 2-step gap must not interrupt a ten-step tracking window.
+    # Contact-backed progress above the unchanged 0.05 mm noise threshold is
+    # still classified only as saturation evidence, never native success.
+    progressed = _push_window_timeout_evidence(
+        robot_contact_steps=4,
+        incremental_progress=0.000238,
+        minimum_progress=0.00005,
+        robot_contact_at_window_end=False,
+    )
+    assert progressed["status"] == "contact_progress_saturated"
+
+    lost = _push_window_timeout_evidence(
+        robot_contact_steps=4,
+        incremental_progress=0.000049,
+        minimum_progress=0.00005,
+        robot_contact_at_window_end=False,
+    )
+    assert lost["status"] == "robot_contact_lost_recontact_required"
+    assert lost["robot_contact_at_window_end"] is False
+
+    # Pure motion without a single real robot contact is not acceptable
+    # progress, even when it is numerically larger than the noise gate.
+    passive_motion = _push_window_timeout_evidence(
+        robot_contact_steps=0,
+        incremental_progress=0.001,
+        minimum_progress=0.00005,
+        robot_contact_at_window_end=False,
+    )
+    assert (
+        passive_motion["status"]
+        == "robot_contact_lost_recontact_required"
+    )
+
+    # Contact at the end but no contact-backed progress remains a real OSC
+    # timeout rather than being relabelled as recovery or success.
+    assert (
+        _push_window_timeout_evidence(
+            robot_contact_steps=2,
+            incremental_progress=0.000049,
+            minimum_progress=0.00005,
+            robot_contact_at_window_end=True,
+        )
+        is None
+    )
+
+
 def test_terminated_episode_is_fail_closed_with_horizon_and_progress():
     inner = SimpleNamespace(horizon=500, timestep=500)
     outer = SimpleNamespace(env=inner)
@@ -578,33 +626,29 @@ def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
     assert saturation["final_error_m"] == pytest.approx(np.sqrt(3.0))
     assert saturation["max_steps"] == 2
 
-    lost = FakeRollout()
-    timeout_called = []
-
-    def interrupt_after_confirmed_loss():
-        if lost.calls < 2:
-            return None
-        return {
-            "status": "robot_contact_lost_recontact_required",
-            "consecutive_contact_loss_steps": 2,
-        }
-
-    interruption = Rollout.move(
-        lost,
+    full_window = FakeRollout()
+    full_window_observations = []
+    loss = Rollout.move(
+        full_window,
         np.ones(3),
         -1.0,
         "task",
         max_steps=4,
-        interruptor=interrupt_after_confirmed_loss,
-        timeout_acceptor=lambda _context: timeout_called.append(True),
+        step_observer=lambda: full_window_observations.append(
+            full_window.calls
+        ),
+        timeout_acceptor=lambda _context: (
+            _push_window_timeout_evidence(
+                robot_contact_steps=0,
+                incremental_progress=0.0,
+                minimum_progress=0.00005,
+                robot_contact_at_window_end=False,
+            )
+        ),
     )
-    assert lost.calls == 2
-    assert timeout_called == []
-    assert interruption["controller_interrupted"] is True
-    assert (
-        interruption["status"]
-        == "robot_contact_lost_recontact_required"
-    )
+    assert full_window.calls == 4
+    assert full_window_observations == [1, 2, 3, 4]
+    assert loss["status"] == "robot_contact_lost_recontact_required"
 
     missing = FakeRollout()
     with pytest.raises(RuntimeError, match="robot-plate contact not observed"):
@@ -733,8 +777,13 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"source_job": "499691"' in push_loop
     assert "horizon-safe live push calibration failed" in push_loop
     assert "step_observer=observe_push_step" in push_loop
-    assert "interruptor=interrupt_push_on_contact_loss" in push_loop
-    assert "timeout_acceptor=accept_contact_progress_saturation" in push_loop
+    assert "interruptor=" not in push_loop
+    assert "push_contact_loss_confirm_steps" not in producer
+    assert (
+        "timeout_acceptor=classify_full_push_window_timeout"
+        in push_loop
+    )
+    assert "_push_window_timeout_evidence(" in push_loop
     assert "robot_contact_lost_recontact_required" in push_loop
     assert '"recontact_required_after_waypoint"' in push_loop
     assert push_loop.index(
@@ -810,10 +859,6 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         in producer
     )
     assert (
-        '"--push_contact_loss_confirm_steps", type=int, default=2'
-        in producer
-    )
-    assert (
         '"--observed_push_progress_per_tracking_window",\n'
         "        type=float,\n"
         "        default=0.00245,"
@@ -838,7 +883,6 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "--minimum_saturated_waypoint_progress must be positive" in producer
     assert "--maximum_push_iterations must be positive" in producer
     assert "--maximum_recontact_attempts must be positive" in producer
-    assert "--push_contact_loss_confirm_steps must be positive" in producer
     assert (
         "--maximum_live_contact_offset_xy_drift must be positive"
         in producer
