@@ -1,9 +1,10 @@
 # L1-A3 Human Review
 
 - Active version: `milk_near_orange_juice_v2`
-- Policy-view verdict: **PENDING_HUMAN_POLICY_VIEW_VISIBILITY**
+- Policy-view verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
 - Smoke-video verdict: **PENDING_HUMAN_L1A3_SMOKE_VIDEO_REVIEW**
-- Human policy-view approval: pending for v2; the v1 approval does not transfer.
+- Human policy-view approval: user confirmed “画面没问题” on `2026-07-31`
+  (Asia/Hong_Kong) after reviewing the final v2 Eb/Er/Ec contact sheets.
 - Automated paired-scene verdict: **PASS_L1A3_PAIRED_SCENE_GATE**
 - Check job / commit: `499807` /
   `95b65363af5439ed71492d02f053a4f80d3ec424`.
