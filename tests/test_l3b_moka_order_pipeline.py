@@ -20,6 +20,7 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
 )
 from experiments.robot.libero.tasks.summarize_l3b_moka_order_smoke import (
     PASS_SMOKE,
+    native_capability,
     summarize,
 )
 from experiments.robot.libero.tasks.validate_l3b_moka_native_preflight import (
@@ -215,3 +216,17 @@ def test_smoke_summary_uses_history_and_displacement_not_collision(tmp_path):
     assert result["candidate_status"] == "NO_LARGE_ORDER_EFFECT_IN_SMOKE"
     assert result["conditions"]["near_first"]["direct_completions"] == 5
     assert result["conditions"]["far_first"]["direct_completions"] == 5
+
+
+def test_failed_native_gate_preserves_episode_evidence(tmp_path):
+    native_dir = tmp_path / "native"
+    for episode in range(2):
+        _write_fake_trajectory(native_dir, "native", episode)
+    result = native_capability(
+        native_dir,
+        expected_count=2,
+        minimum_successes=3,
+    )
+    assert result["verdict"] == "FAIL_L3B_MOKA_NATIVE_CAPABILITY"
+    assert result["native"]["stable_successes"] == 2
+    assert len(result["native"]["episodes"]) == 2
