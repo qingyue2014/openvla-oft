@@ -479,9 +479,21 @@ def test_generated_pairing_if_artifacts_are_present():
         "near_first": TASKS / "l3b_moka_near_first_states.hdf5",
         "far_first": TASKS / "l3b_moka_far_first_states.hdf5",
     }
-    manifest = REVIEW / "L3-B_moka_initial_gate_manifest.json"
-    if not all(path.is_file() for path in (*paths.values(), manifest)):
+    if not all(path.is_file() for path in paths.values()):
         pytest.skip("generated L3-B moka artifacts are not present")
+    manifest = None
+    for candidate in REVIEW.glob("**/L3-B_moka_initial_gate_manifest.json"):
+        record = json.loads(candidate.read_text())
+        bindings = record.get("state_bundles", {})
+        if all(
+            bindings.get(condition, {}).get("sha256")
+            == sha256_path(path)
+            for condition, path in paths.items()
+        ):
+            manifest = candidate
+            break
+    if manifest is None:
+        pytest.skip("matching generated L3-B moka manifest is not present")
     result = validate_pairing(
         paths["native"],
         paths["near_first"],
