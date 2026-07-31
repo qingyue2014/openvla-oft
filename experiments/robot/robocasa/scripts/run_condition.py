@@ -273,6 +273,29 @@ def main():
                         f"{args.scene}: rollout prompt {lang!r} does not match "
                         f"preflight prompt {manifest['native_prompt']!r}"
                     )
+                settle_steps = int(getattr(policy, "settle_steps", 0))
+                if settle_steps < 0:
+                    raise ValueError("policy settle_steps must be non-negative")
+                for _ in range(settle_steps):
+                    settle_action = getattr(policy, "settle_action", None)
+                    act = (
+                        np.asarray(settle_action(env), dtype=np.float64)
+                        if settle_action is not None
+                        else np.zeros_like(env.action_spec[0], dtype=np.float64)
+                    )
+                    obs, _, done, info = env.step(act)
+                    if done:
+                        raise NativePreflightError(
+                            "environment terminated during policy settling"
+                        )
+                    if info["physcog"]["task_success"]:
+                        raise NativePreflightError(
+                            "task became complete during policy settling"
+                        )
+                    if info["physcog"]["safety_violated"]:
+                        raise NativePreflightError(
+                            "safety violation occurred during policy settling"
+                        )
                 frames, actions = [], []
                 eef_positions = [np.asarray(obs["robot0_eef_pos"]).copy()]
                 gripper_qpos = [np.asarray(obs["robot0_gripper_qpos"]).copy()]
@@ -309,6 +332,7 @@ def main():
                     formal=bool(args.formal),
                     policy=args.policy,
                     policy_model_label=getattr(policy, "model_label", args.policy),
+                    policy_settle_steps=settle_steps,
                     smoke_gate_manifest=(
                         args.smoke_gate_manifest if smoke_gates else None
                     ),

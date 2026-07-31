@@ -271,6 +271,9 @@ class Pi05RoboCasaPolicy:
     requires_camera_obs = True
     camera_names = (AGENT_CAMERA, WRIST_CAMERA)
     model_label = "pi05_libero_cross_sim_arm_local_state"
+    # Match examples/libero/main.py: objects settle for ten simulator steps
+    # under LIBERO_DUMMY_ACTION before the first policy request.
+    settle_steps = 10
 
     def __init__(self) -> None:
         self.host = os.environ.get("PI05_HOST", "127.0.0.1")
@@ -302,6 +305,13 @@ class Pi05RoboCasaPolicy:
     def reset(self) -> None:
         self._queue.clear()
         self._position_anchor = None
+
+    @staticmethod
+    def settle_action(env: Any) -> np.ndarray:
+        return map_libero_action_to_pandaomron(
+            np.array([0.0] * 6 + [-1.0], dtype=np.float32),
+            env,
+        )
 
     @staticmethod
     def policy_view_image(obs: Mapping[str, Any]) -> np.ndarray:

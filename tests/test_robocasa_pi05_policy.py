@@ -5,6 +5,7 @@ import pytest
 
 from experiments.robot.robocasa.pi05_policy import (
     LIBERO_STATE_MEAN_POS,
+    Pi05RoboCasaPolicy,
     build_request,
     canonicalize_robocasa_state,
     map_libero_action_to_pandaomron,
@@ -99,6 +100,14 @@ def test_map_pi05_action_freezes_mobile_base_and_torso():
     assert mapped[6] == 0.0
     np.testing.assert_allclose(mapped[7:10], 0.0)
     assert mapped[10] == pytest.approx(0.6)
+    assert mapped[11] == -1.0
+
+
+def test_pi05_policy_matches_official_ten_step_settling():
+    assert Pi05RoboCasaPolicy.settle_steps == 10
+    mapped = Pi05RoboCasaPolicy.settle_action(_Env())
+    np.testing.assert_allclose(mapped[:10], 0.0)
+    assert mapped[10] == -1.0
     assert mapped[11] == -1.0
 
 
