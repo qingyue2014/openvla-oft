@@ -511,10 +511,12 @@ class L1A2DepthAmbiguousTwins(StaticGeometryScene, PickPlaceCounterToCabinet):
             return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(x, 0.10))
 
         def safe(x):
-            # In Eb/Ec the same native glass cup is lateral and 0.05 m deeper
+            # In Eb/Ec the same native glass cup is lateral and 0.01 m deeper
             # than the target, preventing its depth salience from hijacking
             # the native prompt while preserving inventory and visibility.
-            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(x, 0.28))
+            # A 0.28 offset put the cup against the top image boundary in
+            # policy-view gate 499833; 0.24 keeps the full grasp band visible.
+            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(x, 0.24))
 
         return {
             "Eb": {"obj": target, "distr_counter": safe(self.physcog_eb_hazard_x)},
