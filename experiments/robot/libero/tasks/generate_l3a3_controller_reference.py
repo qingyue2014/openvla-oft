@@ -1514,9 +1514,9 @@ def _overhead_route_frame_authorization_evidence(
                 "minimum_predicted_post_worst_case_base_surplus_m"
             ]
         )
-        dynamic_minimum_buffer16_surplus = float(
+        dynamic_minimum_pre_action_buffer16_surplus = float(
             adaptive_high_lateral_envelope.get(
-                "minimum_predicted_post_worst_case_buffer16_surplus_m",
+                "minimum_pre_action_buffer16_surplus_after_inertia_m",
                 np.inf,
             )
         )
@@ -1532,8 +1532,10 @@ def _overhead_route_frame_authorization_evidence(
             and (
                 not dynamic_buffer16_required
                 or (
-                    np.isfinite(dynamic_minimum_buffer16_surplus)
-                    and dynamic_minimum_buffer16_surplus > 0.0
+                    np.isfinite(
+                        dynamic_minimum_pre_action_buffer16_surplus
+                    )
+                    and dynamic_minimum_pre_action_buffer16_surplus > 0.0
                 )
             )
             and adaptive_high_lateral_envelope.get("proof", {}).get(
@@ -1583,7 +1585,7 @@ def _overhead_route_frame_authorization_evidence(
                         )
                         and float(
                             adaptive_pair[
-                                "predicted_post_worst_case_buffer16_surplus_m"
+                                "pre_action_buffer16_surplus_after_inertia_m"
                             ]
                         )
                         > 0.0
@@ -3711,8 +3713,11 @@ def _compiled_adaptive_workspace_release_action(
         )
         current_base8_surplus = float(clearance - required_base8)
         current_buffer16_surplus = float(clearance - required_buffer16)
-        nominal_capacity = float(
+        pre_action_buffer16_capacity = float(
             current_buffer16_surplus - inertial_tail_reserve
+        )
+        post_base8_action_capacity = float(
+            current_base8_surplus - inertial_tail_reserve
         )
         if (
             not np.isfinite(clearance)
@@ -3726,9 +3731,9 @@ def _compiled_adaptive_workspace_release_action(
                 "workspace-release pair lacks current strict base8 "
                 f"capacity: index={index}"
             )
-        strict_nominal_capacity = (
-            float(np.nextafter(nominal_capacity, 0.0))
-            if nominal_capacity > 0.0
+        strict_post_base8_action_capacity = (
+            float(np.nextafter(post_base8_action_capacity, 0.0))
+            if post_base8_action_capacity > 0.0
             else 0.0
         )
         pair_envelopes.append(
@@ -3753,18 +3758,27 @@ def _compiled_adaptive_workspace_release_action(
                 "measured_negative_inertial_tail_reserve_m": (
                     inertial_tail_reserve
                 ),
-                "strict_nominal_tail_capacity_m": strict_nominal_capacity,
+                "pre_action_buffer16_surplus_after_inertia_m": (
+                    pre_action_buffer16_capacity
+                ),
+                "strict_nominal_tail_capacity_m": (
+                    strict_post_base8_action_capacity
+                ),
                 "nominal_negative_z_capacity_after_buffer16_and_inertia_m": (
-                    nominal_capacity
+                    pre_action_buffer16_capacity
+                ),
+                "nominal_post_base8_action_capacity_after_inertia_m": (
+                    post_base8_action_capacity
                 ),
                 "downward_capacity_exhausted_by_inertial_tail": bool(
-                    nominal_capacity <= 0.0
+                    pre_action_buffer16_capacity <= 0.0
                 ),
                 "negative_z_capacity_exhausted_by_buffer16_or_inertia": bool(
-                    nominal_capacity <= 0.0
+                    pre_action_buffer16_capacity <= 0.0
                 ),
                 "strict_safe_translation_action_norm_capacity": float(
-                    strict_nominal_capacity / position_action_scale
+                    strict_post_base8_action_capacity
+                    / position_action_scale
                 ),
             }
         )
@@ -3774,9 +3788,15 @@ def _compiled_adaptive_workspace_release_action(
             "strict_safe_translation_action_norm_capacity"
         ],
     )
+    pre_action_buffer16_limiting_pair = min(
+        pair_envelopes,
+        key=lambda record: record[
+            "pre_action_buffer16_surplus_after_inertia_m"
+        ],
+    )
     capacities = {
         "requested_outward_downward_action_norm": requested_norm,
-        "compiled_pair_buffer16_nominal_tail_after_inertia": float(
+        "compiled_pair_base8_post_tail_after_inertia": float(
             limiting_pair["strict_safe_translation_action_norm_capacity"]
         ),
         "native_strict_3d_translation_action_norm_bound": (
@@ -3794,6 +3814,10 @@ def _compiled_adaptive_workspace_release_action(
     )
     minimum_current_surplus = min(
         record["current_base8_surplus_m"] for record in pair_envelopes
+    )
+    minimum_pre_action_buffer16_surplus = min(
+        record["pre_action_buffer16_surplus_after_inertia_m"]
+        for record in pair_envelopes
     )
     if recovery_required:
         desired_route_tail = float(
@@ -3839,11 +3863,7 @@ def _compiled_adaptive_workspace_release_action(
         scalar_direction = requested_direction.copy()
         candidate_scalar_norm = selected_norm
 
-    required_clearance_key = (
-        "required_clearance_with_base_reserve_m"
-        if recovery_required
-        else "required_clearance_with_fixed_buffer16_m"
-    )
+    required_clearance_key = "required_clearance_with_base_reserve_m"
 
     def literal_scalar_evidence(scalar_norm):
         translation = scalar_direction * float(scalar_norm)
@@ -3898,11 +3918,7 @@ def _compiled_adaptive_workspace_release_action(
             for clearance, record in zip(predicted, pair_envelopes)
         ):
             failed_conditions.append(
-                (
-                    "all_55_pair_base8_strict_post_clearance"
-                    if recovery_required
-                    else "all_55_pair_buffer16_strict_post_clearance"
-                )
+                "all_55_pair_base8_strict_post_clearance"
             )
         return {
             "accepted": not failed_conditions,
@@ -3964,7 +3980,7 @@ def _compiled_adaptive_workspace_release_action(
                 if passing_lower is None:
                     raise RuntimeError(
                         "workspace-release has no representable positive "
-                        "scalar strict native/buffer16 interior: "
+                        "scalar strict native/base8 interior: "
                         f"{inward_literal['failed_conditions']}"
                     )
                 for scalar_bisection_iterations in range(1, 257):
@@ -4066,13 +4082,13 @@ def _compiled_adaptive_workspace_release_action(
         ),
         "formula": (
             "request corridor XY plus negative Z capped in world magnitude "
-            "by remaining corridor XY; authorize negative Z only through all "
-            "55 pair capacities after fixed buffer16 and latest measured "
-            "negative-dz inertial reserve; if any capacity is exhausted, "
-            "prohibit negative Z and issue event-driven pure +Z while the "
-            "unchanged base8 post-action gate remains strict; construct the "
-            "literal action by a scalar strict-interior solve along the "
-            "unchanged route direction"
+            "by remaining corridor XY; authorize negative Z only when every "
+            "current pair remains strictly above fixed buffer16 after the "
+            "latest measured negative-dz inertial reserve; size the literal "
+            "action against the unchanged post-action base8 clearance; if "
+            "pre-action buffer16 is exhausted, prohibit negative Z and issue "
+            "event-driven pure +Z; construct the literal action by a scalar "
+            "strict-interior solve along the unchanged route direction"
         ),
         "current_eef": current_eef.tolist(),
         "corridor_target_xy": corridor_target_xy.tolist(),
@@ -4094,6 +4110,9 @@ def _compiled_adaptive_workspace_release_action(
         "pair_identity_keys": [list(identity) for identity in identities],
         "pair_envelopes": pair_envelopes,
         "selected_limiting_pair": dict(limiting_pair),
+        "selected_pre_action_buffer16_limiting_pair": dict(
+            pre_action_buffer16_limiting_pair
+        ),
         "candidate_action_norm_capacities": capacities,
         "selected_envelope_source": selected_source,
         "event_driven_positive_z_inertial_recovery": recovery_required,
@@ -4101,6 +4120,9 @@ def _compiled_adaptive_workspace_release_action(
             not recovery_required
         ),
         "minimum_current_base8_surplus_m": minimum_current_surplus,
+        "minimum_pre_action_buffer16_surplus_after_inertia_m": (
+            minimum_pre_action_buffer16_surplus
+        ),
         "commanded_positive_z_recovery_world_delta_m": (
             recovery_world_delta
         ),
@@ -4128,6 +4150,9 @@ def _compiled_adaptive_workspace_release_action(
                 literal_downward_delta <= abs(downward_z_error)
             ),
             "latest_measured_negative_dz_reserved_as_inertial_tail": True,
+            "negative_z_pre_action_uses_strict_buffer16_plus_inertia": bool(
+                not recovery_required
+            ),
             "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": (
                 True
             ),

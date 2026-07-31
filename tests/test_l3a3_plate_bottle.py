@@ -2820,6 +2820,7 @@ def test_500199_routes_reachable_outside_high_before_workspace_release():
         "does_not_cross_corridor_target_xy": True,
         "does_not_cross_release_target_z": True,
         "latest_measured_negative_dz_reserved_as_inertial_tail": True,
+        "negative_z_pre_action_uses_strict_buffer16_plus_inertia": True,
         "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": True,
     }
     authorization = _overhead_route_frame_authorization_evidence(
@@ -3015,7 +3016,7 @@ def test_500207_positive_pair_capacity_scales_diagonal_without_recovery():
             ),
             "strict_no_contact_clearance_m": strict_clearance,
             "vertical_clearance_m": (
-                strict_clearance + 0.008 + 0.008 + nominal_world_capacity
+                strict_clearance + 0.008 + nominal_world_capacity
             ),
             "accepted": True,
         }
@@ -3062,10 +3063,10 @@ def test_500207_positive_pair_capacity_scales_diagonal_without_recovery():
         requested_norm
     )
     assert evidence["candidate_action_norm_capacities"][
-        "compiled_pair_buffer16_nominal_tail_after_inertia"
+        "compiled_pair_base8_post_tail_after_inertia"
     ] == pytest.approx(pair_action_capacity)
     assert evidence["selected_envelope_source"] == (
-        "compiled_pair_buffer16_nominal_tail_after_inertia"
+        "compiled_pair_base8_post_tail_after_inertia"
     )
     assert evidence["event_driven_positive_z_inertial_recovery"] is False
     assert np.linalg.norm(action[:3]) == pytest.approx(pair_action_capacity)
@@ -3087,7 +3088,7 @@ def test_500207_recovery_trigger_is_exhaustion_not_positive_pair_limiting():
         in release
     )
     assert (
-        'selected_source == "compiled_pair_buffer16_nominal_tail_after_inertia"'
+        'selected_source == "compiled_pair_base8_post_tail_after_inertia"'
         not in release
     )
     assert (
@@ -3248,12 +3249,12 @@ def test_500210_workspace_negative_z_uses_buffer16_without_threshold_changes():
 
 
 def test_500223_scalar_solver_resolves_component_nextafter_capacity_boundary():
-    strict_clearance = np.nextafter(0.0, np.inf)
+    strict_clearance = 1.0
     requested_action = np.array(
-        [0.13020551187733068, 0.49935000035702204, -0.28003382763809165]
+        [-0.23856772894808703, -0.5504374194032061, -0.5999132553750658]
     )
-    inertial_tail = 1.3987167587198066e-05
-    vertical_clearance = 0.016352130496025574
+    inertial_tail = 0.00027664922413134197
+    vertical_clearance = 1.0363101269580834
     pairs = [
         {
             "gripper_geom": f"gripper_{index // 11}",
@@ -3280,9 +3281,9 @@ def test_500223_scalar_solver_resolves_component_nextafter_capacity_boundary():
         "runtime_resolved": True,
     }
     action, evidence = _compiled_adaptive_workspace_release_action(
-        current_eef=np.array([0.0, 0.0, 1.0]),
+        current_eef=np.array([0.0, 0.0, 2.0]),
         corridor_target_xy=requested_action[:2] * 0.08,
-        release_target_z=float(1.0 + requested_action[2] * 0.08),
+        release_target_z=float(2.0 + requested_action[2] * 0.08),
         measured_vertical_step_progress_m=-inertial_tail,
         overhead_guard=guard,
         gripper=-1.0,
@@ -3294,7 +3295,7 @@ def test_500223_scalar_solver_resolves_component_nextafter_capacity_boundary():
     solver = evidence["literal_scalar_strict_interior_solver"]
     assert solver["candidate_accepted"] is False
     assert solver["candidate_failed_conditions"] == [
-        "all_55_pair_buffer16_strict_post_clearance"
+        "all_55_pair_base8_strict_post_clearance"
     ]
 
     literal_requested_action = np.asarray(
@@ -3314,13 +3315,13 @@ def test_500223_scalar_solver_resolves_component_nextafter_capacity_boundary():
             + evidence["measured_negative_inertial_tail_reserve_m"]
         )
     )
-    required_buffer16_clearance = strict_clearance + 0.008 + 0.008
-    assert not old_predicted_clearance > required_buffer16_clearance
+    required_base8_clearance = strict_clearance + 0.008
+    assert not old_predicted_clearance > required_base8_clearance
 
     assert solver["accepted"] is True
     assert solver["solver_mode"] == "halving_then_scalar_bisection"
     assert solver["limiting_condition"] == (
-        "compiled_pair_buffer16_nominal_tail_after_inertia"
+        "compiled_pair_base8_post_tail_after_inertia"
     )
     assert solver["candidate_to_solved_scalar_ulp_distance"] > 0
     assert solver["scalar_nextafter_iterations"] == 1
@@ -3334,7 +3335,7 @@ def test_500223_scalar_solver_resolves_component_nextafter_capacity_boundary():
         literal_requested_action / np.linalg.norm(literal_requested_action)
     )
     assert all(
-        pair["predicted_post_worst_case_buffer16_surplus_m"] > 0.0
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
         for pair in evidence["pair_envelopes"]
     )
 
@@ -3347,6 +3348,135 @@ def test_500223_scalar_solver_preserves_strict_gates_and_hard_thresholds():
     assert "literal_scalar_evidence" in release
     assert "halving_then_scalar_bisection" in release
     assert "candidate_to_solved_scalar_ulp_distance" in release
+    assert "clearance > record[required_clearance_key]" in release
+    assert "clearance >= record[required_clearance_key]" not in release
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+    assert (
+        '"--plate_contact_seek_max_translation_action",\n'
+        "        type=float,\n"
+        "        default=0.10,"
+        in controller
+    )
+
+
+def test_500224_pre_buffer16_authorizes_post_base8_capacity_from_trace():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    current_base8_surplus = 0.01744743290617297
+    measured_negative_dz = -0.0023620272083493266
+    vertical_clearance = (
+        strict_clearance + 0.008 + current_base8_surplus
+    )
+    pairs = [
+        {
+            "gripper_geom": f"gripper_{index // 11}",
+            "counterpart_geom": f"native_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": vertical_clearance,
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    guard = {
+        "accepted": True,
+        "one_step_vertical_reserve_m": 0.008,
+        "pairs": pairs,
+    }
+    native = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "runtime_resolved": True,
+    }
+    action, evidence = _compiled_adaptive_workspace_release_action(
+        current_eef=np.array(
+            [0.1325977585517547, -0.028345688864066708, 0.9572677865849051]
+        ),
+        corridor_target_xy=np.array(
+            [0.14480639548403948, -0.02850777957668001]
+        ),
+        release_target_z=0.917769758476126,
+        measured_vertical_step_progress_m=measured_negative_dz,
+        overhead_guard=guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
+    )
+    latest_tail = evidence["measured_negative_inertial_tail_reserve_m"]
+    old_post_buffer16_capacity = float(
+        (current_base8_surplus - 0.008 - latest_tail) / 0.08
+    )
+    post_base8_capacity = float(
+        (current_base8_surplus - latest_tail) / 0.08
+    )
+    assert old_post_buffer16_capacity == pytest.approx(
+        0.08856757122279552
+    )
+    assert evidence["candidate_action_norm_capacities"][
+        "compiled_pair_base8_post_tail_after_inertia"
+    ] == pytest.approx(post_base8_capacity)
+    assert post_base8_capacity == pytest.approx(0.1885675712227955)
+    assert evidence["selected_envelope_source"] == (
+        "compiled_pair_base8_post_tail_after_inertia"
+    )
+    assert evidence[
+        "minimum_pre_action_buffer16_surplus_after_inertia_m"
+    ] == pytest.approx(0.007085405697823642)
+    assert evidence["negative_z_action_requires_fixed_buffer16"] is True
+    assert action[0] > 0.0
+    assert action[2] < 0.0
+    assert np.linalg.norm(action[:3]) > old_post_buffer16_capacity
+    assert all(
+        pair["pre_action_buffer16_surplus_after_inertia_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+    assert all(
+        pair["predicted_post_worst_case_buffer16_surplus_m"] < 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+    authorization = _overhead_route_frame_authorization_evidence(
+        outside_side_guard={
+            "accepted": False,
+            "minimum_outside_clearance_m": 0.002,
+            "required_outside_clearance_m": strict_clearance,
+        },
+        overhead_guard=guard,
+        overhead_lateral_buffer=_overhead_lateral_buffer_evidence(
+            guard,
+            worst_case_controller_world_step_m=0.008,
+        ),
+        compiled_pairs=pairs,
+        expected_pair_count=55,
+        require_lateral_buffer=True,
+        adaptive_high_lateral_envelope=evidence,
+    )
+    assert authorization["accepted"] is True
+    assert authorization["buffer16_used_for_authorization"] is True
+
+
+def test_500224_post_gate_is_base8_not_post_buffer16_or_budget_change():
+    controller = CONTROLLER_REFERENCE.read_text()
+    release = controller.split(
+        "def _compiled_adaptive_workspace_release_action(", 1
+    )[1].split("\ndef _compiled_adaptive_lateral_rebuffer_action", 1)[0]
+    assert (
+        'required_clearance_key = "required_clearance_with_base_reserve_m"'
+        in release
+    )
+    assert "pre_action_buffer16_surplus_after_inertia_m" in release
+    assert "compiled_pair_base8_post_tail_after_inertia" in release
     assert "clearance > record[required_clearance_key]" in release
     assert "clearance >= record[required_clearance_key]" not in release
     assert (
