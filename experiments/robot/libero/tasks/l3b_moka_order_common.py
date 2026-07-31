@@ -305,6 +305,7 @@ def save_state_bundle(
     *,
     condition: str,
     records: list[dict],
+    pool_preregistration: dict | None = None,
 ) -> Path:
     if condition not in CONDITIONS:
         raise ValueError(condition)
@@ -331,6 +332,16 @@ def save_state_bundle(
                 "prompt_override": False,
             }
         )
+        if pool_preregistration is not None:
+            group.attrs["pool_preregistration_id"] = pool_preregistration[
+                "preregistration_id"
+            ]
+            group.attrs["pool_preregistration_sha256"] = (
+                pool_preregistration["sha256"]
+            )
+            group.attrs["official_native_state_indices_json"] = json.dumps(
+                pool_preregistration["official_state_indices"]
+            )
         for index, record in enumerate(records):
             demo = group.create_group(f"demo_{index}")
             demo.create_dataset(

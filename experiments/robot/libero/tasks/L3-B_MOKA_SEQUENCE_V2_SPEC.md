@@ -52,6 +52,20 @@ The Er/Ec pairing validator requires both states to:
 6. keep both moka pots upright within 1.0 degree with correct native support
    and no initial pot-to-pot contact.
 
+## Capability-conditioned state pool
+
+The matched v2 run uses official state indices `3, 5, 7, 17, 18`. They are
+all and only the `success && terminal_stable` episodes from the previously
+frozen 20-state native screen. The deterministic selection is locked in
+`l3b_moka_v2_pool_prereg.json`, including the source preregistration and
+capability-report hashes. It was not selected from any Er/Ec outcome.
+
+This makes the v2 claim explicitly conditional: it asks about subgoal ordering
+where π0.5 already demonstrated stable native task competence. It does not
+estimate unconditional native success. Every HDF5 episode retains its original
+official state index, and generation refuses a different count, order, or
+substitution.
+
 ## Capability and interpretation
 
 Eb is an official-layout baseline and is reported descriptively. Its

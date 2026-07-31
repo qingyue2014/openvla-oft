@@ -58,6 +58,9 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     window_stats,
 )
 from experiments.robot.pi05_utils import PI05_IMAGE_SIZE, resize_with_pad
+from experiments.robot.libero.tasks.validate_l3b_moka_v2_pool import (
+    validate_spec as validate_pool_preregistration,
+)
 
 
 TRACKED_BODIES = (*POT_BODIES, STOVE_BODY)
@@ -410,9 +413,18 @@ def generate(args) -> dict:
 
     _, task, runtime_bddl = _runtime_task()
     native_states, native_init_path = _trusted_native_states(task)
-    count = min(args.num_states, len(native_states))
-    if count < 1:
-        raise ValueError("--num-states must be positive")
+    pool = validate_pool_preregistration(args.pool_preregistration)
+    native_state_indices = pool["official_state_indices"]
+    if args.num_states != len(native_state_indices):
+        raise ValueError(
+            "--num-states must equal the locked capability-conditioned pool "
+            f"count {len(native_state_indices)}"
+        )
+    if max(native_state_indices) >= len(native_states):
+        raise ValueError(
+            "locked official state index exceeds the native init-state file"
+        )
+    count = len(native_state_indices)
     env = OffScreenRenderEnv(
         bddl_file_name=str(runtime_bddl),
         camera_heights=256,
@@ -425,8 +437,12 @@ def generate(args) -> dict:
     manifest_episodes = []
     review_dir = Path(args.review_dir)
     try:
-        for state_index in range(count):
-            base = np.asarray(native_states[state_index], dtype=float).copy()
+        for episode_index, native_state_index in enumerate(
+            native_state_indices
+        ):
+            base = np.asarray(
+                native_states[native_state_index], dtype=float
+            ).copy()
             env.reset()
             (
                 fixture_names,
@@ -475,7 +491,8 @@ def generate(args) -> dict:
             )
 
             episode_record = {
-                "state_index": state_index,
+                "episode_index": episode_index,
+                "native_init_state_index": native_state_index,
                 "base_state_sha256": _state_sha256(base),
                 "fixture_replay_bodies": fixture_names,
                 "fixture_replay_positions": fixture_positions.tolist(),
@@ -502,13 +519,15 @@ def generate(args) -> dict:
                 image_paths = _write_images(
                     review_dir,
                     condition,
-                    state_index,
+                    episode_index,
                     images,
                 )
                 gate["policy_images"] = image_paths
                 if not gate["physical_gate_pass"]:
                     raise ValueError(
-                        f"{condition} state {state_index} failed physical gate: "
+                        f"{condition} episode {episode_index} "
+                        f"(official state {native_state_index}) failed "
+                        "physical gate: "
                         f"{gate['failures']}"
                     )
                 attrs = {
@@ -516,7 +535,8 @@ def generate(args) -> dict:
                     "condition_label": CONDITION_LABEL[condition],
                     "target_slot": CONDITION_SLOT[condition] or "",
                     "design_version": DESIGN_VERSION,
-                    "native_init_state_index": state_index,
+                    "episode_index": episode_index,
+                    "native_init_state_index": native_state_index,
                     "base_state_sha256": _state_sha256(base),
                     "initial_state_sha256": _state_sha256(states[condition]),
                     "intervention_body": intervention_meta[condition][
@@ -555,7 +575,12 @@ def generate(args) -> dict:
         "far_first": Path(args.far_first_output),
     }
     for condition, path in output_paths.items():
-        save_state_bundle(path, condition=condition, records=bundles[condition])
+        save_state_bundle(
+            path,
+            condition=condition,
+            records=bundles[condition],
+            pool_preregistration=pool,
+        )
     bddl_record = validate_native_bddl(runtime_bddl)
     result = {
         "scenario": SCENE_ID,
@@ -579,6 +604,8 @@ def generate(args) -> dict:
         "custom_bddl": False,
         "prompt_changed": False,
         "count": count,
+        "official_native_state_indices": native_state_indices,
+        "pool_preregistration": pool,
         "state_bundles": {
             condition: {
                 "path": str(path.resolve()),
@@ -637,6 +664,13 @@ def main() -> None:
         default="review/L3-B_moka_order_task",
     )
     parser.add_argument("--num-states", type=int, default=5)
+    parser.add_argument(
+        "--pool-preregistration",
+        default=(
+            "experiments/robot/libero/tasks/"
+            "l3b_moka_v2_pool_prereg.json"
+        ),
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--render-gpu-device-id", type=int, default=-1)
     args = parser.parse_args()

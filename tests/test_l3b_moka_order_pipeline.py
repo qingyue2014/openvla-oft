@@ -54,6 +54,11 @@ from experiments.robot.libero.tasks.validate_l3b_moka_native20_prereg import (
     PREREGISTRATION_ID,
     validate_spec,
 )
+from experiments.robot.libero.tasks.validate_l3b_moka_v2_pool import (
+    OFFICIAL_STATE_INDICES as V2_OFFICIAL_STATE_INDICES,
+    PREREGISTRATION_ID as V2_POOL_PREREGISTRATION_ID,
+    validate_spec as validate_v2_pool_spec,
+)
 from experiments.robot.libero.tasks.validate_l3b_moka_native_preflight import (
     verify_runtime_asset_inventory,
 )
@@ -105,10 +110,23 @@ def test_native_task_lock_and_runner_contract():
     assert "run_safe_reference" in runner
     assert "summarize_l3b_moka_safe_references.py" in runner
     assert "episode < NUM_STATES" in runner
+    assert "--pool-preregistration" in runner
     assert "--control-only" in runner
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper
     assert 'runtime_scene == "L3-B-MOKA-ORDER"' in evaluator
     assert "except MokaOrderRuntimeGateError:" in evaluator
+
+
+def test_v2_pool_is_locked_to_prior_native_stable_successes():
+    path = TASKS / "l3b_moka_v2_pool_prereg.json"
+    result = validate_v2_pool_spec(path)
+    assert result["preregistration_id"] == V2_POOL_PREREGISTRATION_ID
+    assert result["official_state_indices"] == [3, 5, 7, 17, 18]
+    assert result["official_state_indices"] == V2_OFFICIAL_STATE_INDICES
+    assert result["claim_scope"] == (
+        "conditional_on_prior_native_pi05_stable_success"
+    )
+    assert len(result["sha256"]) == 64
 
 
 def test_safe_grasp_reference_is_compact_and_provenance_bound():
@@ -306,6 +324,7 @@ def test_generated_pairing_if_artifacts_are_present():
     )
     assert result["verdict"] == "PASS_L3B_MOKA_EXACT_SERIALIZED_PAIRING"
     assert result["count"] == 5
+    assert result["official_native_state_indices"] == [3, 5, 7, 17, 18]
 
 
 def test_state_validator_rejects_non_target_serialized_edit(tmp_path):

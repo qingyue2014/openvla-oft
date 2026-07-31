@@ -46,6 +46,7 @@ SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${REVIEW_ROOT}/L3-B_moka_Safe_ba
 SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_moka_smoke_report.json}"
 TRAJECTORY_ROOT="${TRAJECTORY_ROOT:-${REVIEW_ROOT}/${RUN_TAG}_trajectories}"
 CAPABILITY_PREREGISTRATION="${CAPABILITY_PREREGISTRATION:-}"
+V2_POOL_PREREGISTRATION="${V2_POOL_PREREGISTRATION:-${TASKS_DIR}/l3b_moka_v2_pool_prereg.json}"
 
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 if [[ -z "${LIBERO_ROOT}" && -d "_deps/LIBERO/libero" ]]; then
@@ -128,6 +129,8 @@ validate_prepared() {
 }
 
 run_prepare() {
+  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_v2_pool.py" \
+    --preregistration "${V2_POOL_PREREGISTRATION}"
   "${PYTHON_BIN}" "${TASKS_DIR}/generate_l3b_moka_order_states.py" \
     --bddl "${NATIVE_BDDL}" \
     --native-output "${NATIVE_STATES}" \
@@ -136,6 +139,7 @@ run_prepare() {
     --manifest "${INITIAL_GATE}" \
     --review-dir "${REVIEW_ROOT}" \
     --num-states "${NUM_STATES}" \
+    --pool-preregistration "${V2_POOL_PREREGISTRATION}" \
     --seed "${SCENE_SEED}" \
     --render-gpu-device-id "${RENDER_GPU_DEVICE_ID}"
   validate_prepared

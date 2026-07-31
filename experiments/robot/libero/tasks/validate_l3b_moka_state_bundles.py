@@ -35,6 +35,9 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     TASK_PROMPT,
     sha256_path,
 )
+from experiments.robot.libero.tasks.validate_l3b_moka_v2_pool import (
+    validate_spec as validate_pool_preregistration,
+)
 
 
 VERDICT = "PASS_L3B_MOKA_EXACT_SERIALIZED_PAIRING"
@@ -46,6 +49,9 @@ POLICY_IMAGE_SPECS = {
     "agentview_pi05_224": (224, 224),
     "wrist_pi05_224": (224, 224),
 }
+POOL_PREREGISTRATION = Path(__file__).with_name(
+    "l3b_moka_v2_pool_prereg.json"
+)
 
 
 def _decode(value):
@@ -139,6 +145,7 @@ def _validate_one(path: str | Path, condition: str) -> list[dict]:
     if condition not in CONDITIONS:
         raise ValueError(condition)
     path = Path(path).resolve(strict=True)
+    pool = validate_pool_preregistration(POOL_PREREGISTRATION)
     with h5py.File(path, "r") as handle:
         if set(handle) != {TASK_KEY}:
             raise ValueError(f"{path} has unexpected task keys: {sorted(handle)}")
@@ -164,8 +171,25 @@ def _validate_one(path: str | Path, condition: str) -> list[dict]:
         }
         if mismatches:
             raise ValueError(f"{path} metadata mismatch: {mismatches}")
+        expected_pool_attrs = {
+            "pool_preregistration_id": pool["preregistration_id"],
+            "pool_preregistration_sha256": pool["sha256"],
+            "official_native_state_indices_json": json.dumps(
+                pool["official_state_indices"]
+            ),
+        }
+        pool_mismatches = {
+            key: (_decode(group.attrs.get(key)), expected)
+            for key, expected in expected_pool_attrs.items()
+            if _decode(group.attrs.get(key)) != expected
+        }
+        if pool_mismatches:
+            raise ValueError(
+                f"{path} capability-conditioned pool mismatch: "
+                f"{pool_mismatches}"
+            )
         count = int(group.attrs.get("count", -1))
-        if count != len(group) or count < 1:
+        if count != len(group) or count != pool["count"]:
             raise ValueError(f"{path} has invalid demo count")
 
         records = []
@@ -183,6 +207,14 @@ def _validate_one(path: str | Path, condition: str) -> list[dict]:
                 raise ValueError(f"{context} state shapes are invalid")
             if _decode(demo.attrs.get("condition", "")) != condition:
                 raise ValueError(f"{context} condition attribute mismatch")
+            if int(demo.attrs.get("episode_index", -1)) != index:
+                raise ValueError(f"{context} episode index mismatch")
+            if int(demo.attrs.get("native_init_state_index", -1)) != (
+                pool["official_state_indices"][index]
+            ):
+                raise ValueError(
+                    f"{context} official native state index is not locked"
+                )
             if _decode(demo.attrs.get("base_state_sha256", "")) != _state_sha256(base):
                 raise ValueError(f"{context} has a stale base state hash")
             if _decode(demo.attrs.get("initial_state_sha256", "")) != _state_sha256(initial):
@@ -287,6 +319,13 @@ def _validate_initial_manifest(
         or record.get("asset_inventory_changed") is not False
     ):
         raise ValueError("L3-B initial gate native-only identity mismatch")
+    pool = validate_pool_preregistration(POOL_PREREGISTRATION)
+    if record.get("official_native_state_indices") != pool[
+        "official_state_indices"
+    ] or record.get("pool_preregistration") != pool:
+        raise ValueError(
+            "L3-B initial gate capability-conditioned pool mismatch"
+        )
     for condition, state_path in state_paths.items():
         binding = record.get("state_bundles", {}).get(condition, {})
         if Path(binding.get("path", "")).resolve() != state_path:
@@ -363,6 +402,7 @@ def validate_pairing(
             raise ValueError(f"near/far target slots coincide at demo_{index}")
 
     initial = _validate_initial_manifest(initial_manifest, state_paths)
+    pool = validate_pool_preregistration(POOL_PREREGISTRATION)
     return {
         "scenario": SCENE_ID,
         "design_version": DESIGN_VERSION,
@@ -373,6 +413,8 @@ def validate_pairing(
         },
         "verdict": VERDICT,
         "count": counts["native"],
+        "official_native_state_indices": pool["official_state_indices"],
+        "pool_preregistration": pool,
         "initial_manifest": {
             "path": str(Path(initial_manifest).resolve()),
             "sha256": sha256_path(initial_manifest),
