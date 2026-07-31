@@ -11,7 +11,9 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     Rollout,
     _body_contact_counterparts,
     _contact_progress_saturation_evidence,
+    _derive_horizon_safe_push_increment,
     _environment_horizon_diagnostics,
+    _horizon_budget,
     _live_plate_tracking_target,
     _refresh_confirmed_contact_offset_xy,
     _robot_contacts_body,
@@ -406,6 +408,7 @@ def test_terminated_episode_is_fail_closed_with_horizon_and_progress():
     class FakeTerminatedRollout:
         env = TerminatedEnv()
         step = 460
+        horizon_reserve_steps = 0
         termination_diagnostics = staticmethod(
             lambda: {
                 "plate_progress_m": 0.00066,
@@ -420,6 +423,71 @@ def test_terminated_episode_is_fail_closed_with_horizon_and_progress():
     assert "rollout_step=460" in message
     assert '"horizon": 500' in message
     assert '"plate_progress_m": 0.00066' in message
+
+
+def test_job_499691_calibration_fits_native_horizon_with_settle_reserve():
+    inner = SimpleNamespace(horizon=1000, timestep=330)
+    budget = _horizon_budget(
+        SimpleNamespace(env=inner),
+        reserved_steps=41 + 64,
+    )
+    assert budget == {
+        "horizon": 1000,
+        "timestep": 330,
+        "remaining_steps": 670,
+        "reserved_steps": 105,
+        "usable_steps": 565,
+    }
+    increment, calibration = _derive_horizon_safe_push_increment(
+        goal_distance=0.259,
+        usable_push_steps=budget["usable_steps"],
+        tracking_steps=10,
+        baseline_increment=0.005,
+        observed_progress_per_window=0.00245,
+        calibration_margin=1.15,
+        maximum_increment=0.015,
+    )
+    expected = 0.005 * (0.259 / 56) / 0.00245 * 1.15
+    assert increment == pytest.approx(expected)
+    assert 0.010 < increment < 0.011
+    assert calibration["tracking_windows"] == 56
+    assert calibration["feasible"] is True
+    with pytest.raises(RuntimeError, match="unsafe live push increment"):
+        _derive_horizon_safe_push_increment(
+            goal_distance=0.259,
+            usable_push_steps=565,
+            tracking_steps=10,
+            baseline_increment=0.005,
+            observed_progress_per_window=0.00245,
+            calibration_margin=1.15,
+            maximum_increment=0.008,
+        )
+
+
+def test_horizon_reserve_blocks_push_before_consuming_final_settle():
+    inner = SimpleNamespace(horizon=1000, timestep=959)
+
+    class ReserveEnv:
+        env = inner
+        calls = 0
+
+        @classmethod
+        def step(cls, _action):
+            cls.calls += 1
+            raise AssertionError("reserved final-settle step was consumed")
+
+    class FakeReserveRollout:
+        env = ReserveEnv()
+        step = 949
+        horizon_reserve_steps = 41
+        termination_diagnostics = staticmethod(
+            lambda: {"plate_progress_m": 0.125}
+        )
+        _horizon_reserve_error = Rollout._horizon_reserve_error
+
+    with pytest.raises(RuntimeError, match="horizon reserve reached"):
+        Rollout.advance(FakeReserveRollout(), np.zeros(7), "task")
+    assert ReserveEnv.calls == 0
 
 
 def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
@@ -576,6 +644,18 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "initial_vertical_contact_confirmation" in task_push
     assert "vertical_contact_confirmation" in push_loop
     assert '"live_push_direction_xy"' in push_loop
+    assert "_derive_horizon_safe_push_increment(" in push_loop
+    assert "effective_push_increment" in push_loop
+    tracking_call = push_loop[
+        push_loop.index("target, live_direction_xy =") :
+        push_loop.index("waypoint_evidence = {")
+    ]
+    assert "effective_push_increment," in tracking_call
+    assert "args.push_increment," not in tracking_call
+    assert '"baseline_commanded_increment_m": args.push_increment' in push_loop
+    assert '"horizon_calibration": horizon_calibration' in push_loop
+    assert '"source_job": "499691"' in push_loop
+    assert "horizon-safe live push calibration failed" in push_loop
     assert "step_observer=observe_push_step" in push_loop
     assert "timeout_acceptor=accept_contact_progress_saturation" in push_loop
     assert '"maximum_incremental_plate_progress_m"' in push_loop
@@ -634,6 +714,22 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"--maximum_recontact_attempts", type=int, default=20' in producer
     assert '"--push_tracking_tolerance", type=float, default=0.002' in producer
     assert (
+        '"--observed_push_progress_per_tracking_window",\n'
+        "        type=float,\n"
+        "        default=0.00245,"
+        in producer
+    )
+    assert (
+        '"--push_horizon_calibration_margin", type=float, default=1.15'
+        in producer
+    )
+    assert '"--maximum_live_push_increment", type=float, default=0.015' in producer
+    assert (
+        '"--planned_recontact_reserve_steps", type=int, default=64'
+        in producer
+    )
+    assert '"--horizon_guard_steps", type=int, default=1' in producer
+    assert (
         '"--minimum_saturated_waypoint_progress",\n'
         "        type=float,\n"
         "        default=0.00005,"
@@ -644,11 +740,18 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "--maximum_recontact_attempts must be positive" in producer
     assert "maximum_push_distance" not in producer
     assert "ignore_done=True" not in producer
+    assert "rollout.horizon_reserve_steps = final_horizon_reserve_steps" in task_push
+    assert "rollout.horizon_reserve_steps = 0" in task_push
+    assert '"horizon_budget_before_final_settle"' in task_push
+    assert '"horizon_budget_after_final_settle"' in producer
     assert "environment terminated episode; fail-closed" in producer
     assert '"plate_progress_m"' in producer
     assert '"completed_push_iterations"' in producer
     assert '"pusher_gripper_sign": pusher_open_sign' in producer
     assert '"push_evidence": push_summary' in producer
+    assert task_push.index("if not env.check_success():") < task_push.index(
+        "rollout.horizon_reserve_steps = 0"
+    )
 
 
 def test_plate_contact_diagnostics_and_detector_share_compiled_robot_names():

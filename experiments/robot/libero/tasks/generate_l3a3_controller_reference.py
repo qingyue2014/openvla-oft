@@ -188,6 +188,82 @@ def _environment_horizon_diagnostics(env):
     return diagnostics
 
 
+def _horizon_budget(env, reserved_steps):
+    """Return native-horizon capacity after a fail-closed step reserve."""
+    if reserved_steps < 0:
+        raise ValueError("reserved horizon steps must be nonnegative")
+    timing = _environment_horizon_diagnostics(env)
+    if "horizon" not in timing or "timestep" not in timing:
+        raise RuntimeError(
+            "native horizon/timestep unavailable: "
+            f"{json.dumps(timing, sort_keys=True)}"
+        )
+    remaining = int(timing["horizon"]) - int(timing["timestep"])
+    return {
+        **timing,
+        "remaining_steps": remaining,
+        "reserved_steps": int(reserved_steps),
+        "usable_steps": remaining - int(reserved_steps),
+    }
+
+
+def _derive_horizon_safe_push_increment(
+    *,
+    goal_distance,
+    usable_push_steps,
+    tracking_steps,
+    baseline_increment,
+    observed_progress_per_window,
+    calibration_margin,
+    maximum_increment,
+):
+    """Scale the live target using observed progress and remaining horizon."""
+    values = (
+        goal_distance,
+        baseline_increment,
+        observed_progress_per_window,
+        calibration_margin,
+        maximum_increment,
+    )
+    if not all(np.isfinite(value) and value > 0 for value in values):
+        raise ValueError("push horizon calibration values must be positive")
+    if usable_push_steps < 1 or tracking_steps < 1:
+        raise ValueError("push and tracking step budgets must be positive")
+    tracking_windows = int(usable_push_steps) // int(tracking_steps)
+    if tracking_windows < 1:
+        raise RuntimeError("native horizon has no complete push tracking window")
+    required_progress_per_window = float(goal_distance) / tracking_windows
+    derived_increment = (
+        float(baseline_increment)
+        * required_progress_per_window
+        / float(observed_progress_per_window)
+        * float(calibration_margin)
+    )
+    effective_increment = max(float(baseline_increment), derived_increment)
+    diagnostics = {
+        "goal_distance_m": float(goal_distance),
+        "usable_push_steps": int(usable_push_steps),
+        "tracking_steps": int(tracking_steps),
+        "tracking_windows": tracking_windows,
+        "baseline_increment_m": float(baseline_increment),
+        "observed_progress_per_window_m": float(
+            observed_progress_per_window
+        ),
+        "required_progress_per_window_m": required_progress_per_window,
+        "calibration_margin": float(calibration_margin),
+        "derived_increment_m": derived_increment,
+        "effective_increment_m": effective_increment,
+        "maximum_increment_m": float(maximum_increment),
+        "feasible": effective_increment <= float(maximum_increment),
+    }
+    if not diagnostics["feasible"]:
+        raise RuntimeError(
+            "native horizon requires an unsafe live push increment: "
+            f"{json.dumps(diagnostics, sort_keys=True)}"
+        )
+    return effective_increment, diagnostics
+
+
 def _plate_contact_candidate_diagnostics(
     plate_xy, push_direction_xy, eef_xy, backoff
 ):
@@ -332,6 +408,7 @@ class Rollout:
         self.step = 0
         self.video_frames = [self._policy_rgb(obs)]
         self.termination_diagnostics = None
+        self.horizon_reserve_steps = 0
 
     @staticmethod
     def _policy_rgb(obs):
@@ -341,6 +418,12 @@ class Rollout:
         return np.ascontiguousarray(image[::-1, ::-1]).copy()
 
     def advance(self, action, phase):
+        if self.horizon_reserve_steps:
+            budget = _horizon_budget(
+                self.env, self.horizon_reserve_steps
+            )
+            if budget["usable_steps"] <= 0:
+                raise self._horizon_reserve_error(phase, budget)
         try:
             self.obs, _, done, _ = self.env.step(
                 np.asarray(action, dtype=float).tolist()
@@ -374,6 +457,19 @@ class Rollout:
             f"phase={phase} rollout_step={self.step} "
             f"mechanism={mechanism} "
             f"horizon={json.dumps(_environment_horizon_diagnostics(self.env), sort_keys=True)} "
+            f"progress={json.dumps(progress, sort_keys=True)}"
+        )
+
+    def _horizon_reserve_error(self, phase, budget):
+        progress = (
+            self.termination_diagnostics()
+            if callable(self.termination_diagnostics)
+            else self.termination_diagnostics
+        )
+        return RuntimeError(
+            "native horizon reserve reached before success; fail-closed "
+            f"phase={phase} rollout_step={self.step} "
+            f"budget={json.dumps(budget, sort_keys=True)} "
             f"progress={json.dumps(progress, sort_keys=True)}"
         )
 
@@ -471,6 +567,24 @@ def generate(args):
         raise ValueError("--maximum_push_iterations must be positive")
     if args.maximum_recontact_attempts < 1:
         raise ValueError("--maximum_recontact_attempts must be positive")
+    if args.horizon_guard_steps < 1:
+        raise ValueError("--horizon_guard_steps must be positive")
+    if args.planned_recontact_reserve_steps < 0:
+        raise ValueError(
+            "--planned_recontact_reserve_steps must be nonnegative"
+        )
+    if args.observed_push_progress_per_tracking_window <= 0:
+        raise ValueError(
+            "--observed_push_progress_per_tracking_window must be positive"
+        )
+    if args.push_horizon_calibration_margin <= 0:
+        raise ValueError(
+            "--push_horizon_calibration_margin must be positive"
+        )
+    if args.maximum_live_push_increment < args.push_increment:
+        raise ValueError(
+            "--maximum_live_push_increment must be at least --push_increment"
+        )
     er_path = Path(args.er_states).resolve(strict=True)
     state, fixture_names, fixture_positions, fixture_quaternions = _load_er_episode(
         er_path, args.episode
@@ -668,6 +782,11 @@ def generate(args):
             np.linalg.norm(push_plate_start[:2] - goal[:2])
         )
         maximum_goal_distance_reduction = 0.0
+        final_horizon_reserve_steps = (
+            args.final_settle_steps + args.horizon_guard_steps
+        )
+        rollout.horizon_reserve_steps = final_horizon_reserve_steps
+        push_horizon_calibrations = []
 
         def push_termination_diagnostics():
             live_plate = body_pose(env, PLATE_BODY)[0]
@@ -689,6 +808,17 @@ def generate(args):
                 ),
                 "completed_push_iterations": len(push_waypoints),
                 "recontact_attempts": recontact_attempts,
+                "horizon_budget": _horizon_budget(
+                    env, final_horizon_reserve_steps
+                ),
+                "planned_recontact_reserve_steps": (
+                    args.planned_recontact_reserve_steps
+                ),
+                "latest_push_horizon_calibration": (
+                    push_horizon_calibrations[-1]
+                    if push_horizon_calibrations
+                    else None
+                ),
                 "confirmed_contact_z_offset_m": (
                     confirmed_contact_z_offset
                 ),
@@ -891,11 +1021,64 @@ def generate(args):
                 if recontact_performed_this_iteration
                 else "live_contact_xy_at_iteration_start"
             )
+            live_goal_distance = float(
+                np.linalg.norm(goal[:2] - live_plate_before[:2])
+            )
+            calibration_reserve_steps = (
+                final_horizon_reserve_steps
+                + args.planned_recontact_reserve_steps
+            )
+            calibration_budget = _horizon_budget(
+                env, calibration_reserve_steps
+            )
+            try:
+                effective_push_increment, horizon_calibration = (
+                    _derive_horizon_safe_push_increment(
+                        goal_distance=live_goal_distance,
+                        usable_push_steps=calibration_budget[
+                            "usable_steps"
+                        ],
+                        tracking_steps=args.push_tracking_steps,
+                        baseline_increment=args.push_increment,
+                        observed_progress_per_window=(
+                            args.observed_push_progress_per_tracking_window
+                        ),
+                        calibration_margin=(
+                            args.push_horizon_calibration_margin
+                        ),
+                        maximum_increment=(
+                            args.maximum_live_push_increment
+                        ),
+                    )
+                )
+            except (RuntimeError, ValueError) as exc:
+                calibration_failure = {
+                    "push_iteration": push_iteration,
+                    "live_goal_distance_m": live_goal_distance,
+                    "budget": calibration_budget,
+                    "completed_push_waypoints": push_waypoints,
+                    "recontact_attempts": recontact_attempts,
+                    "cause": str(exc),
+                    **plate_diagnostics(),
+                }
+                raise RuntimeError(
+                    "horizon-safe live push calibration failed before native "
+                    "success: "
+                    f"{json.dumps(calibration_failure, sort_keys=True)}"
+                ) from exc
+            horizon_calibration.update(
+                {
+                    "push_iteration": push_iteration,
+                    "budget": calibration_budget,
+                    "source_job": "499691",
+                }
+            )
+            push_horizon_calibrations.append(horizon_calibration)
             target, live_direction_xy = _live_plate_tracking_target(
                 live_plate_before,
                 goal,
                 confirmed_contact_offset,
-                args.push_increment,
+                effective_push_increment,
             )
             waypoint_evidence = {
                 "controller_steps": 0,
@@ -975,6 +1158,7 @@ def generate(args):
                     "active_live_push_direction_xy": (
                         live_direction_xy.tolist()
                     ),
+                    "active_horizon_calibration": horizon_calibration,
                     "minimum_saturated_waypoint_progress_m": (
                         args.minimum_saturated_waypoint_progress
                     ),
@@ -1048,7 +1232,9 @@ def generate(args):
             ]
             waypoint_record = {
                 "push_iteration": push_iteration,
-                "commanded_increment_m": args.push_increment,
+                "commanded_increment_m": effective_push_increment,
+                "baseline_commanded_increment_m": args.push_increment,
+                "horizon_calibration": horizon_calibration,
                 "commanded_target": target.tolist(),
                 "live_plate_anchor": live_plate_before.tolist(),
                 "live_eef_before": live_eef_before.tolist(),
@@ -1120,6 +1306,9 @@ def generate(args):
             )
             if waypoint_record["native_success"]:
                 break
+        horizon_budget_before_final_settle = _horizon_budget(
+            env, args.final_settle_steps
+        )
         push_summary = {
             "push_start_plate_position": push_plate_start.tolist(),
             "push_start_eef_position": push_eef_start.tolist(),
@@ -1153,6 +1342,26 @@ def generate(args):
                 maximum_goal_distance_reduction
             ),
             "minimum_required_plate_progress_m": args.minimum_push_progress,
+            "final_horizon_reserve_steps": final_horizon_reserve_steps,
+            "planned_recontact_reserve_steps": (
+                args.planned_recontact_reserve_steps
+            ),
+            "horizon_calibration_count": len(
+                push_horizon_calibrations
+            ),
+            "initial_horizon_calibration": (
+                push_horizon_calibrations[0]
+                if push_horizon_calibrations
+                else None
+            ),
+            "latest_horizon_calibration": (
+                push_horizon_calibrations[-1]
+                if push_horizon_calibrations
+                else None
+            ),
+            "horizon_budget_before_final_settle": (
+                horizon_budget_before_final_settle
+            ),
             "native_success": bool(env.check_success()),
         }
         if not env.check_success():
@@ -1186,7 +1395,19 @@ def generate(args):
                 "native success lacked positive goal-directed plate progress: "
                 f"{json.dumps(push_summary, sort_keys=True)}"
             )
+        if (
+            horizon_budget_before_final_settle["usable_steps"]
+            < args.horizon_guard_steps
+        ):
+            raise RuntimeError(
+                "native success left insufficient final-settle horizon guard: "
+                f"{json.dumps(push_summary, sort_keys=True)}"
+            )
+        rollout.horizon_reserve_steps = 0
         rollout.hold(-1.0, args.final_settle_steps, "settle")
+        push_summary["horizon_budget_after_final_settle"] = (
+            _horizon_budget(env, 0)
+        )
 
         metrics = rollout.oracle.metrics()
         final_linear, final_angular = body_velocity(env, BOTTLE_BODY)
@@ -1316,6 +1537,24 @@ def main():
     parser.add_argument("--maximum_recontact_attempts", type=int, default=20)
     parser.add_argument("--push_tracking_tolerance", type=float, default=0.002)
     parser.add_argument("--push_tracking_steps", type=int, default=10)
+    # Job 499691 measured 2.45--2.50 mm of plate progress per ten actions
+    # from a 5 mm target.  Scale the live target against the native steps
+    # remaining after a final-settle guard and one measured recontact reserve.
+    parser.add_argument(
+        "--observed_push_progress_per_tracking_window",
+        type=float,
+        default=0.00245,
+    )
+    parser.add_argument(
+        "--push_horizon_calibration_margin", type=float, default=1.15
+    )
+    parser.add_argument(
+        "--maximum_live_push_increment", type=float, default=0.015
+    )
+    parser.add_argument(
+        "--planned_recontact_reserve_steps", type=int, default=64
+    )
+    parser.add_argument("--horizon_guard_steps", type=int, default=1)
     parser.add_argument(
         "--minimum_saturated_waypoint_progress",
         type=float,
