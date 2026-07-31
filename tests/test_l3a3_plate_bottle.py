@@ -18,9 +18,11 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_pair_set_clearance,
     _compiled_side_contact_eef_z_feasibility,
     _compiled_trailing_side_contact_candidates,
+    _compiled_vertical_staging_corridor,
     _derive_horizon_safe_push_increment,
     _environment_horizon_diagnostics,
     _finger_inward_extents_by_semantic_side,
+    _fixed_z_lateral_approach_action,
     _gate_live_contact_offset_xy,
     _horizon_budget,
     _live_plate_tracking_target,
@@ -1275,6 +1277,130 @@ def test_500111_one_positive_brake_response_cannot_release_settle_state():
     ]
 
 
+def test_500121_vertical_descent_is_structurally_staged_outside_one_step_reserve():
+    outside_high = np.array(
+        [
+            0.13680639548403947,
+            -0.02850777957668001,
+            1.062506338529415,
+        ]
+    )
+    outside_side = np.array(
+        [
+            0.13680639548403947,
+            -0.02850777957668001,
+            0.917769758476126,
+        ]
+    )
+    strict_clearance = np.nextafter(0.0, np.inf)
+    corridor_high, corridor_side, evidence = (
+        _compiled_vertical_staging_corridor(
+            outside_high_target=outside_high,
+            outside_side_target=outside_side,
+            geometry={
+                "outward_direction_xy": [1.0, 0.0],
+                "outside_clearance_m": 0.005,
+            },
+            required_outside_clearance_m=strict_clearance,
+            position_action_scale=0.08,
+            maximum_translation_action=0.10,
+        )
+    )
+    assert evidence["maximum_controller_world_step_m"] == pytest.approx(
+        0.008
+    )
+    assert evidence["strict_corridor_entry_clearance_m"] > 0.008
+    assert evidence["corridor_clearance_m"] > 0.013
+    assert evidence[
+        "full_inward_step_residual_clearance_m"
+    ] > strict_clearance
+    assert evidence[
+        "full_inward_step_residual_clearance_m"
+    ] == pytest.approx(0.005)
+    assert corridor_high[0] > outside_high[0]
+    assert corridor_side[0] > outside_side[0]
+    assert corridor_high[0] - outside_high[0] == pytest.approx(0.008)
+    assert corridor_side[2] == outside_side[2]
+    assert corridor_high[2] == outside_high[2]
+    assert evidence["corridor_entry_lateral_travel_m"] == pytest.approx(
+        0.008
+    )
+    assert evidence["vertical_staging_travel_m"] == pytest.approx(
+        outside_high[2] - outside_side[2]
+    )
+    assert evidence["fixed_z_lateral_travel_m"] == pytest.approx(0.008)
+    assert evidence["geometric_full_scale_action_equivalents"] < 21.0
+    assert evidence["geometric_full_scale_action_equivalents"] < 180
+
+    # Job500121 began only 0.857 mm outside the plate and issued a descent.
+    # The derived corridor instead commands pure outward entry until live
+    # clearance exceeds one full 8 mm controller world step.
+    job500121_start = np.array(
+        [
+            0.13267415665529797,
+            -0.028638039484225563,
+            1.0615092907889767,
+        ]
+    )
+    job500121_live_clearance = 0.0008573639623264129
+    assert job500121_live_clearance < evidence[
+        "strict_corridor_entry_clearance_m"
+    ]
+    for old_near_plate_clearance in (
+        0.0022379574242499534,
+        0.002562943707493784,
+        0.002677226838124098,
+    ):
+        assert old_near_plate_clearance < evidence[
+            "strict_corridor_entry_clearance_m"
+        ]
+    entry_action, entry_path = (
+        _constraint_prioritized_outside_descent_action(
+            current_eef=job500121_start,
+            outside_side_target=corridor_side,
+            outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_descent_m=0.0,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            maximum_translation_action=0.10,
+        )
+    )
+    assert entry_action[0] > 0.0
+    assert entry_action[2] == 0.0
+    assert np.linalg.norm(entry_action[:3]) <= np.nextafter(0.10, 0.0)
+    assert entry_path["maximum_descent_m"] == 0.0
+
+    # Once staged at the corridor, the same bounded allocator produces one
+    # continuous vertical phase with no inward XY command.
+    descent_action, descent_path = (
+        _constraint_prioritized_outside_descent_action(
+            current_eef=corridor_high,
+            outside_side_target=corridor_side,
+            outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_descent_m=corridor_high[2] - corridor_side[2],
+            gripper=-1.0,
+            position_action_scale=0.08,
+            maximum_translation_action=0.10,
+        )
+    )
+    assert descent_action[0] == pytest.approx(0.0)
+    assert descent_action[2] < 0.0
+    assert np.linalg.norm(descent_action[:3]) <= np.nextafter(0.10, 0.0)
+    assert descent_path["commanded_outward_error_m"] == 0.0
+
+    lateral_action, lateral_path = _fixed_z_lateral_approach_action(
+        current_eef=corridor_side,
+        lateral_target_xy=outside_side[:2],
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    assert lateral_action[0] < 0.0
+    assert lateral_action[2] == 0.0
+    assert lateral_path["commanded_z_action"] == 0.0
+    assert np.linalg.norm(lateral_action[:3]) <= np.nextafter(0.10, 0.0)
+
+
 def test_499954_saturated_recovery_follows_improving_discrete_response():
     current = np.array([0.131429676, -0.029432244, 0.970336557])
     target = np.array([0.136806395, -0.028507780, 0.898654346])
@@ -2272,40 +2398,36 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_compiled_side_contact_eef_z_feasibility(" in compiled_plan
     assert "finger_vertical_bounds_from_eef" in compiled_plan
     assert "finger_table_clearance_derivation" in compiled_plan
-    assert "cause_type={type(exc).__name__}" in bounded_seek
-    assert "cause_message={str(exc)!r}" in bounded_seek
+    assert "structurally decoupled outside-side approach" in bounded_seek
     assert "env.set_state" not in compiled_plan
     assert "set_init_state" not in compiled_plan
     assert "rollout.move(" in bounded_seek
     assert "outside_high_target" in bounded_seek
     assert "outside_side_target" in bounded_seek
     assert "_live_outside_side_guard(" in bounded_seek
-    assert (
-        "_outside_side_geometry_feedback_action("
-        in bounded_seek
-    )
+    assert "_compiled_vertical_staging_corridor(" in bounded_seek
+    assert "_fixed_z_lateral_approach_action(" in bounded_seek
+    assert 'structural_stage = "vertical_corridor_entry"' in bounded_seek
+    assert '"vertical_corridor_descent"' in bounded_seek
+    assert '"vertical_corridor_settle"' in bounded_seek
+    assert '"fixed_safe_z_lateral_approach"' in bounded_seek
     assert (
         "for guard_step in range(1, args.max_waypoint_steps + 1)"
         in bounded_seek
     )
     assert '"outside_side_feedback"' in bounded_seek
     assert '"post_action_guard"' in bounded_seek
-    assert "_outside_side_recovery_progress_evidence(" in bounded_seek
     assert "_outside_side_lateral_settle_evidence(" in bounded_seek
     assert "_outside_side_staircase_settle_trigger(" in bounded_seek
-    assert "force_lateral_settle=(" in bounded_seek
-    assert "previous_settle_vertical_step_progress_m=(" in bounded_seek
     assert "previous_stable_response_count=int(" in bounded_seek
     assert "lateral_settle_state = lateral_settle_progress" in bounded_seek
     assert '"lateral_settle_trigger"' in bounded_seek
-    assert "recovery_progress[\"fail_closed\"]" in bounded_seek
     assert bounded_seek.index("motion_sample = capture(") < (
-        bounded_seek.index("recovery_progress[\"fail_closed\"]")
+        bounded_seek.index("if structural_violations:")
     )
-    assert (
-        "orientation is infeasible before table contact"
-        in bounded_seek
-    )
+    assert "one_controller_step_corridor_reserve_lost" in bounded_seek
+    assert "compiled_safe_z_rim_coverage_not_sustained" in bounded_seek
+    assert '"structural_waypoint_budget"' in bounded_seek
     assert 'stage.startswith("outside_")' in bounded_seek
     assert "tolerance=" not in bounded_seek
     assert "rollout.advance(action, \"task\")" in bounded_seek

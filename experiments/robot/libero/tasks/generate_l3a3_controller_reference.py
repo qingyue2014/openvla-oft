@@ -1399,6 +1399,208 @@ def _outside_side_geometry_feedback_action(
     }
 
 
+def _compiled_vertical_staging_corridor(
+    *,
+    outside_high_target,
+    outside_side_target,
+    geometry,
+    required_outside_clearance_m,
+    position_action_scale,
+    maximum_translation_action,
+):
+    """Derive a one-controller-step no-contact vertical corridor."""
+    outside_high_target = np.asarray(outside_high_target, dtype=float)
+    outside_side_target = np.asarray(outside_side_target, dtype=float)
+    outward = np.asarray(geometry["outward_direction_xy"], dtype=float)
+    if outside_high_target.shape != (3,) or outside_side_target.shape != (3,):
+        raise ValueError("outside staging targets must be 3-D")
+    if outward.shape != (2,):
+        raise ValueError("outside staging direction must be 2-D")
+    outward_norm = float(np.linalg.norm(outward))
+    native_outside_clearance = float(geometry["outside_clearance_m"])
+    if (
+        not np.isfinite(outward_norm)
+        or outward_norm <= 1e-9
+        or not np.isfinite(required_outside_clearance_m)
+        or required_outside_clearance_m < 0.0
+        or not np.isfinite(native_outside_clearance)
+        or native_outside_clearance <= required_outside_clearance_m
+        or not np.isfinite(position_action_scale)
+        or position_action_scale <= 0.0
+        or not np.isfinite(maximum_translation_action)
+        or not (0.0 < maximum_translation_action <= 1.0)
+    ):
+        raise ValueError("compiled vertical staging inputs are invalid")
+    outward /= outward_norm
+    maximum_controller_world_step = float(
+        position_action_scale * maximum_translation_action
+    )
+    corridor_clearance = float(
+        np.nextafter(
+            required_outside_clearance_m
+            + native_outside_clearance
+            + maximum_controller_world_step,
+            np.inf,
+        )
+    )
+    entry_clearance = float(
+        np.nextafter(
+            required_outside_clearance_m
+            + maximum_controller_world_step,
+            np.inf,
+        )
+    )
+    compiled_no_contact_boundary_xy = (
+        outside_side_target[:2]
+        - outward * native_outside_clearance
+    )
+    corridor_xy = (
+        compiled_no_contact_boundary_xy
+        + outward * corridor_clearance
+    )
+    corridor_high_target = outside_high_target.copy()
+    corridor_high_target[:2] = corridor_xy
+    corridor_side_target = outside_side_target.copy()
+    corridor_side_target[:2] = corridor_xy
+    full_inward_step_residual_clearance = float(
+        corridor_clearance - maximum_controller_world_step
+    )
+    corridor_entry_lateral_travel = float(
+        np.linalg.norm(corridor_high_target[:2] - outside_high_target[:2])
+    )
+    vertical_staging_travel = float(
+        abs(corridor_high_target[2] - corridor_side_target[2])
+    )
+    fixed_z_lateral_travel = float(
+        np.linalg.norm(corridor_side_target[:2] - outside_side_target[:2])
+    )
+    geometric_full_scale_action_equivalents = float(
+        (
+            corridor_entry_lateral_travel
+            + vertical_staging_travel
+            + fixed_z_lateral_travel
+        )
+        / maximum_controller_world_step
+    )
+    if not (
+        full_inward_step_residual_clearance
+        > required_outside_clearance_m
+        and corridor_clearance > entry_clearance
+    ):
+        raise RuntimeError(
+            "compiled vertical corridor lacks strict one-step clearance"
+        )
+    return corridor_high_target, corridor_side_target, {
+        "formula": (
+            "recover the compiled zero-clearance EEF boundary from the "
+            "native outside-side target, then stage at compiled required "
+            "clearance plus the native outside clearance plus one full "
+            "controller world step; vertical descent is permitted only "
+            "while live clearance remains beyond the strict one-step entry "
+            "clearance"
+        ),
+        "outward_direction_xy": outward.tolist(),
+        "compiled_no_contact_boundary_xy": (
+            compiled_no_contact_boundary_xy.tolist()
+        ),
+        "native_outside_clearance_m": native_outside_clearance,
+        "required_outside_clearance_m": float(
+            required_outside_clearance_m
+        ),
+        "maximum_translation_action": float(
+            maximum_translation_action
+        ),
+        "position_action_scale_m": float(position_action_scale),
+        "maximum_controller_world_step_m": (
+            maximum_controller_world_step
+        ),
+        "strict_corridor_entry_clearance_m": entry_clearance,
+        "corridor_clearance_m": corridor_clearance,
+        "full_inward_step_residual_clearance_m": (
+            full_inward_step_residual_clearance
+        ),
+        "corridor_entry_lateral_travel_m": (
+            corridor_entry_lateral_travel
+        ),
+        "vertical_staging_travel_m": vertical_staging_travel,
+        "fixed_z_lateral_travel_m": fixed_z_lateral_travel,
+        "geometric_full_scale_action_equivalents": (
+            geometric_full_scale_action_equivalents
+        ),
+        "corridor_high_target": corridor_high_target.tolist(),
+        "corridor_side_target": corridor_side_target.tolist(),
+        "fixed_safe_z_m": float(corridor_side_target[2]),
+    }
+
+
+def _fixed_z_lateral_approach_action(
+    *,
+    current_eef,
+    lateral_target_xy,
+    gripper,
+    position_action_scale,
+    maximum_translation_action,
+):
+    """Move only in XY under the strict controller action-norm bound."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    lateral_target_xy = np.asarray(lateral_target_xy, dtype=float)
+    if current_eef.shape != (3,) or lateral_target_xy.shape != (2,):
+        raise ValueError("fixed-Z lateral approach vectors are invalid")
+    if (
+        not np.isfinite(position_action_scale)
+        or position_action_scale <= 0.0
+        or not np.isfinite(maximum_translation_action)
+        or not (0.0 < maximum_translation_action <= 1.0)
+    ):
+        raise ValueError("fixed-Z lateral action bounds are invalid")
+    strict_bound = float(
+        np.nextafter(maximum_translation_action, 0.0)
+    )
+    requested_xy_action = (
+        lateral_target_xy - current_eef[:2]
+    ) / float(position_action_scale)
+    requested_norm = float(np.linalg.norm(requested_xy_action))
+    if requested_norm > strict_bound:
+        commanded_xy_action = (
+            requested_xy_action * strict_bound / requested_norm
+        )
+    else:
+        commanded_xy_action = requested_xy_action
+    action = np.zeros(7, dtype=float)
+    action[:2] = commanded_xy_action
+    action[-1] = float(gripper)
+    translation_norm = float(np.linalg.norm(action[:3]))
+    numeric_inward_rescale_applied = False
+    if translation_norm > strict_bound:
+        numeric_inward_rescale_applied = True
+        rescale_target = float(np.nextafter(strict_bound, 0.0))
+        action[:2] *= rescale_target / translation_norm
+        translation_norm = float(np.linalg.norm(action[:3]))
+    if action[2] != 0.0 or translation_norm > maximum_translation_action:
+        raise RuntimeError("fixed-Z lateral action violated its hard bound")
+    return action, {
+        "formula": (
+            "hold commanded Z exactly at zero and move toward the compiled "
+            "outside-side XY target under the strict inward floating-point "
+            "representation of the unchanged translation-action norm"
+        ),
+        "current_eef": current_eef.tolist(),
+        "lateral_target_xy": lateral_target_xy.tolist(),
+        "requested_xy_action": requested_xy_action.tolist(),
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_z_action": float(action[2]),
+        "requested_xy_action_norm": requested_norm,
+        "translation_action_norm": translation_norm,
+        "numeric_inward_rescale_applied": (
+            numeric_inward_rescale_applied
+        ),
+        "allocation_translation_action_bound": strict_bound,
+        "maximum_translation_action": float(
+            maximum_translation_action
+        ),
+    }
+
+
 def _outside_side_step_response_evidence(
     *,
     before_guard,
@@ -2621,68 +2823,180 @@ def _seek_stable_plate_contact(
     latest_outside_side_guard = _live_outside_side_guard(
         env, geometry
     )
+    (
+        corridor_high_target,
+        corridor_side_target,
+        vertical_staging_corridor,
+    ) = _compiled_vertical_staging_corridor(
+        outside_high_target=outside_high_target,
+        outside_side_target=outside_side_target,
+        geometry=geometry,
+        required_outside_clearance_m=latest_outside_side_guard[
+            "required_outside_clearance_m"
+        ],
+        position_action_scale=args.position_action_scale,
+        maximum_translation_action=(
+            args.plate_contact_seek_max_translation_action
+        ),
+    )
     outside_side_feedback_steps = []
-    recovery_response_state = None
     lateral_settle_state = None
-    previous_step_response = None
+    structural_stage = "vertical_corridor_entry"
+    fixed_safe_z = None
+    structural_stage_action_counts = {
+        "vertical_corridor_entry": 0,
+        "vertical_corridor_descent": 0,
+        "vertical_corridor_settle": 0,
+        "fixed_safe_z_lateral_approach": 0,
+    }
     for guard_step in range(1, args.max_waypoint_steps + 1):
-        if (
-            latest_outside_side_guard["accepted"]
-            and recovery_response_state is None
-            and lateral_settle_state is None
-        ):
-            break
         pre_action_guard = latest_outside_side_guard
         current_eef = np.asarray(
             rollout.obs["robot0_eef_pos"], dtype=float
         )
-        previous_settle_vertical_step_progress = None
-        if lateral_settle_state is not None:
+        if structural_stage == "fixed_safe_z_lateral_approach":
+            lateral_error = float(
+                np.linalg.norm(
+                    current_eef[:2]
+                    - np.asarray(outside_side_target, dtype=float)[:2]
+                )
+            )
+            if lateral_error <= args.position_tolerance:
+                if not pre_action_guard["accepted"]:
+                    raise RuntimeError(
+                        "fixed-safe-Z lateral approach reached the compiled "
+                        "outside XY target without sustaining the live "
+                        "outside-side guard: "
+                        f"source={source} guard_step={guard_step} "
+                        f"guard={json.dumps(pre_action_guard, sort_keys=True)} "
+                        f"samples={json.dumps(samples, sort_keys=True)}"
+                    )
+                break
+        stage_before_action = structural_stage
+        if structural_stage == "vertical_corridor_entry":
+            action, path_control = (
+                _constraint_prioritized_outside_descent_action(
+                    current_eef=current_eef,
+                    outside_side_target=corridor_side_target,
+                    outward_direction_xy=geometry[
+                        "outward_direction_xy"
+                    ],
+                    maximum_descent_m=0.0,
+                    gripper=gripper,
+                    position_action_scale=args.position_action_scale,
+                    maximum_translation_action=(
+                        args.plate_contact_seek_max_translation_action
+                    ),
+                )
+            )
+            feedback = {
+                "mode": structural_stage,
+                "action": action.tolist(),
+                "descent_path_control": path_control,
+            }
+        elif structural_stage == "vertical_corridor_descent":
+            maximum_descent = max(
+                0.0,
+                float(current_eef[2] - corridor_side_target[2]),
+            )
+            if maximum_descent <= 0.0 and not pre_action_guard["accepted"]:
+                raise RuntimeError(
+                    "vertical staging reached or crossed its compiled safe "
+                    "Z without live rim coverage: "
+                    f"source={source} guard_step={guard_step} "
+                    f"guard={json.dumps(pre_action_guard, sort_keys=True)} "
+                    f"samples={json.dumps(samples, sort_keys=True)}"
+                )
+            action, path_control = (
+                _constraint_prioritized_outside_descent_action(
+                    current_eef=current_eef,
+                    outside_side_target=corridor_side_target,
+                    outward_direction_xy=geometry[
+                        "outward_direction_xy"
+                    ],
+                    maximum_descent_m=maximum_descent,
+                    gripper=gripper,
+                    position_action_scale=args.position_action_scale,
+                    maximum_translation_action=(
+                        args.plate_contact_seek_max_translation_action
+                    ),
+                )
+            )
+            feedback = {
+                "mode": structural_stage,
+                "action": action.tolist(),
+                "descent_path_control": path_control,
+            }
+        elif structural_stage == "vertical_corridor_settle":
             if "trigger_step_response" in lateral_settle_state:
-                previous_settle_vertical_step_progress = float(
+                previous_vertical_step_progress = float(
                     lateral_settle_state["trigger_step_response"][
                         "vertical_step_progress_m"
                     ]
                 )
             else:
-                previous_settle_vertical_step_progress = float(
+                previous_vertical_step_progress = float(
                     lateral_settle_state[
                         "vertical_step_progress_m"
                     ]
                 )
-        try:
-            action, feedback = _outside_side_geometry_feedback_action(
+            active_brake = previous_vertical_step_progress < 0.0
+            action, path_control = (
+                _constraint_prioritized_outside_descent_action(
+                    current_eef=current_eef,
+                    outside_side_target=corridor_side_target,
+                    outward_direction_xy=geometry[
+                        "outward_direction_xy"
+                    ],
+                    maximum_descent_m=0.0,
+                    gripper=gripper,
+                    position_action_scale=args.position_action_scale,
+                    maximum_translation_action=(
+                        args.plate_contact_seek_max_translation_action
+                    ),
+                    active_positive_z_brake=active_brake,
+                )
+            )
+            feedback = {
+                "mode": structural_stage,
+                "action": action.tolist(),
+                "descent_path_control": path_control,
+                "previous_settle_vertical_step_progress_m": (
+                    previous_vertical_step_progress
+                ),
+                "active_positive_z_brake_requested": active_brake,
+                "active_positive_z_brake_commanded": bool(
+                    action[2] > 0.0
+                ),
+                "commanded_positive_z_brake_action": float(
+                    max(0.0, action[2])
+                ),
+            }
+        elif structural_stage == "fixed_safe_z_lateral_approach":
+            action, path_control = _fixed_z_lateral_approach_action(
                 current_eef=current_eef,
-                outside_side_target=outside_side_target,
-                guard=pre_action_guard,
+                lateral_target_xy=np.asarray(
+                    outside_side_target, dtype=float
+                )[:2],
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
                 maximum_translation_action=(
                     args.plate_contact_seek_max_translation_action
                 ),
-                force_outward_recovery=(
-                    recovery_response_state is not None
-                ),
-                force_lateral_settle=(
-                    lateral_settle_state is not None
-                ),
-                previous_settle_vertical_step_progress_m=(
-                    previous_settle_vertical_step_progress
-                ),
             )
-        except RuntimeError as exc:
+            feedback = {
+                "mode": structural_stage,
+                "action": action.tolist(),
+                "fixed_z_lateral_path_control": path_control,
+                "fixed_safe_z_m": float(fixed_safe_z),
+            }
+        else:
             raise RuntimeError(
-                "outside-side geometry feedback concluded the native "
-                "orientation is infeasible before table contact: "
-                f"source={source} guard_step={guard_step} "
-                f"cause_type={type(exc).__name__} "
-                f"cause_message={str(exc)!r} "
-                f"guard={json.dumps(latest_outside_side_guard, sort_keys=True)} "
-                f"samples={json.dumps(samples, sort_keys=True)} "
-                f"scene={json.dumps(diagnostics(), sort_keys=True)}"
-            ) from exc
+                f"unknown structural outside-side stage {structural_stage!r}"
+            )
         rollout.advance(action, "task")
         outside_side_motion_steps += 1
+        structural_stage_action_counts[stage_before_action] += 1
         latest_outside_side_guard = _live_outside_side_guard(
             env, geometry
         )
@@ -2700,40 +3014,12 @@ def _seek_stable_plate_contact(
             )
         )
         feedback["step_response"] = current_step_response
-        recovery_progress = None
+        feedback["vertical_staging_corridor"] = (
+            vertical_staging_corridor
+        )
+        feedback["stage_before_action"] = stage_before_action
         lateral_settle_progress = None
-        if feedback["mode"] == "recover_outside_clearance":
-            if recovery_response_state is None:
-                recovery_response_state = {
-                    "baseline_guard": pre_action_guard,
-                    "baseline_eef": current_eef.copy(),
-                }
-            recovery_progress = (
-                _outside_side_recovery_progress_evidence(
-                    baseline_guard=recovery_response_state[
-                        "baseline_guard"
-                    ],
-                    after_guard=latest_outside_side_guard,
-                    baseline_eef=recovery_response_state[
-                        "baseline_eef"
-                    ],
-                    before_guard=pre_action_guard,
-                    before_eef=current_eef,
-                    after_eef=np.asarray(
-                        rollout.obs["robot0_eef_pos"],
-                        dtype=float,
-                    ),
-                    action=action,
-                    maximum_translation_action=(
-                        args.plate_contact_seek_max_translation_action
-                    ),
-                    previous_step_response=previous_step_response,
-                )
-            )
-            feedback["recovery_progress"] = recovery_progress
-            if recovery_progress["progress_proven"]:
-                recovery_response_state = None
-        elif feedback["mode"] == "compiled_outside_lateral_settle":
+        if stage_before_action == "vertical_corridor_settle":
             lateral_settle_progress = (
                 _outside_side_lateral_settle_evidence(
                     before_guard=pre_action_guard,
@@ -2755,24 +3041,49 @@ def _seek_stable_plate_contact(
             )
             if lateral_settle_progress["settled"]:
                 lateral_settle_state = None
+                structural_stage = "fixed_safe_z_lateral_approach"
+                fixed_safe_z = float(
+                    np.asarray(
+                        rollout.obs["robot0_eef_pos"], dtype=float
+                    )[2]
+                )
             else:
                 lateral_settle_state = lateral_settle_progress
-        else:
-            staircase_trigger = (
-                _outside_side_staircase_settle_trigger(
-                    feedback_mode=feedback["mode"],
-                    guard_step=guard_step,
-                    step_response=current_step_response,
-                )
+        elif stage_before_action == "vertical_corridor_entry":
+            if (
+                latest_outside_side_guard[
+                    "minimum_outside_clearance_m"
+                ]
+                > vertical_staging_corridor[
+                    "strict_corridor_entry_clearance_m"
+                ]
+            ):
+                structural_stage = "vertical_corridor_descent"
+        elif stage_before_action == "vertical_corridor_descent":
+            after_eef = np.asarray(
+                rollout.obs["robot0_eef_pos"], dtype=float
             )
-            if staircase_trigger is not None:
-                lateral_settle_state = staircase_trigger
+            if (
+                after_eef[2] <= corridor_side_target[2]
+                and latest_outside_side_guard["accepted"]
+            ):
+                lateral_settle_state = (
+                    _outside_side_staircase_settle_trigger(
+                        feedback_mode=(
+                            "constraint_prioritized_vertical_descent"
+                        ),
+                        guard_step=guard_step,
+                        step_response=current_step_response,
+                    )
+                )
                 feedback["lateral_settle_trigger"] = (
                     lateral_settle_state
                 )
+                structural_stage = "vertical_corridor_settle"
+        feedback["stage_after_action"] = structural_stage
         outside_side_feedback_steps.append(feedback)
         motion_sample = capture(
-            "outside_side_motion",
+            f"outside_{stage_before_action}",
             outside_side_motion_steps,
             False,
             True,
@@ -2781,36 +3092,73 @@ def _seek_stable_plate_contact(
                 "outside_side_guard": latest_outside_side_guard,
             },
         )
+        structural_violations = []
+        required_clearance = float(
+            latest_outside_side_guard[
+                "required_outside_clearance_m"
+            ]
+        )
         if (
-            recovery_progress is not None
-            and recovery_progress["fail_closed"]
+            latest_outside_side_guard[
+                "minimum_outside_clearance_m"
+            ]
+            < required_clearance
         ):
-            motion_sample["accepted"] = False
-            motion_sample["violations"].extend(
-                recovery_progress["violations"]
+            structural_violations.append(
+                "strict_outside_clearance_lost_in_structural_approach"
             )
+        if (
+            latest_outside_side_guard[
+                "finger_table_vertical_clearance_m"
+            ]
+            < latest_outside_side_guard[
+                "required_finger_table_clearance_m"
+            ]
+        ):
+            structural_violations.append(
+                "strict_finger_table_clearance_lost_in_structural_approach"
+            )
+        if stage_before_action in {
+            "vertical_corridor_descent",
+            "vertical_corridor_settle",
+        } and (
+            latest_outside_side_guard[
+                "minimum_outside_clearance_m"
+            ]
+            <= vertical_staging_corridor[
+                "strict_corridor_entry_clearance_m"
+            ]
+        ):
+            structural_violations.append(
+                "one_controller_step_corridor_reserve_lost"
+            )
+        if stage_before_action in {
+            "vertical_corridor_settle",
+            "fixed_safe_z_lateral_approach",
+        } and not latest_outside_side_guard["accepted"]:
+            structural_violations.append(
+                "compiled_safe_z_rim_coverage_not_sustained"
+            )
+        if structural_violations:
+            motion_sample["accepted"] = False
+            motion_sample["violations"].extend(structural_violations)
             raise RuntimeError(
-                "saturated outward OSC recovery failed net live-clearance "
-                "progress and stopped improving its discrete response; "
-                "native side is dynamically unreachable under the "
-                "unchanged controller bound: "
+                "structurally decoupled outside-side approach lost a "
+                "compiled physical gate: "
                 f"source={source} guard_step={guard_step} "
+                f"stage={stage_before_action} "
+                f"violations={json.dumps(structural_violations)} "
                 f"feedback={json.dumps(feedback, sort_keys=True)} "
                 f"samples={json.dumps(samples, sort_keys=True)} "
                 f"scene={json.dumps(diagnostics(), sort_keys=True)}"
             )
-        previous_step_response = current_step_response
-        if (
-            latest_outside_side_guard["accepted"]
-            and recovery_response_state is None
-            and lateral_settle_state is None
-        ):
-            break
     else:
         raise RuntimeError(
-            "outside-side geometry feedback exhausted the unchanged OSC "
-            "waypoint budget: "
+            "structurally decoupled outside-side approach exhausted the "
+            "unchanged OSC waypoint budget: "
             f"source={source} max_steps={args.max_waypoint_steps} "
+            f"stage={structural_stage} "
+            f"stage_action_counts={json.dumps(structural_stage_action_counts, sort_keys=True)} "
             f"guard={json.dumps(latest_outside_side_guard, sort_keys=True)} "
             f"samples={json.dumps(samples, sort_keys=True)} "
             f"scene={json.dumps(diagnostics(), sort_keys=True)}"
@@ -2899,6 +3247,24 @@ def _seek_stable_plate_contact(
         "outside_side_guard_checks": outside_side_guard_checks,
         "outside_side_motion_steps": outside_side_motion_steps,
         "outside_side_feedback_steps": outside_side_feedback_steps,
+        "vertical_staging_corridor": vertical_staging_corridor,
+        "corridor_high_target": np.asarray(
+            corridor_high_target, dtype=float
+        ).tolist(),
+        "corridor_side_target": np.asarray(
+            corridor_side_target, dtype=float
+        ).tolist(),
+        "fixed_safe_z_m": float(fixed_safe_z),
+        "structural_stage_action_counts": (
+            structural_stage_action_counts
+        ),
+        "structural_waypoint_budget": {
+            "maximum_steps": int(args.max_waypoint_steps),
+            "used_steps": int(outside_side_motion_steps),
+            "remaining_steps": int(
+                args.max_waypoint_steps - outside_side_motion_steps
+            ),
+        },
         "maximum_translation_action": (
             args.plate_contact_seek_max_translation_action
         ),
