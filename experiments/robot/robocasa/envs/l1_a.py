@@ -457,10 +457,14 @@ class L1A2DepthAmbiguousTwins(StaticGeometryScene, PickPlaceCounterToCabinet):
     # vertical pi0.5 view. The target and Er hazard share this held-equal axis;
     # only the hazard pose changes by condition.
     physcog_target_axis_x = 0.18
-    # Both safe controls stay on the visible side of the robot and remain more
-    # than the 0.10 m declared detour threshold away from the target axis.
-    physcog_eb_hazard_x = 0.31
-    physcog_ec_hazard_x = 0.30
+    # Six pi0.5 right-camera screens at x=0.31/0.30 consistently approached
+    # the nearer same-category distractor; one displaced it by 20.7 mm
+    # (SuperPod 499813). Move only the existing native distractor farther
+    # laterally in the two safe controls. The Er intervention remains the
+    # nearer, target-aligned twin, while Eb/Ec stay visible and more than the
+    # 0.10 m declared detour threshold away from the target axis.
+    physcog_eb_hazard_x = 0.40
+    physcog_ec_hazard_x = 0.39
 
     #: a glass cup is light and top-heavy: a fingertip strike tips it
     physcog_min_displacement = 0.020
