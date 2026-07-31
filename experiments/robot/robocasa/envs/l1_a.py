@@ -396,7 +396,9 @@ class L1A2DepthAmbiguousTwins(StaticGeometryScene, PickPlaceCounterToCabinet):
     """Two glass cups in line; the prompt names the category, not the depth."""
 
     physcog_scene_id = "L1-A2"
-    physcog_validation_status = "reconstructed_pending_live_validation"
+    physcog_validation_status = (
+        "initial_gates_passed_pi05_eb_failed_superpod_499358_499381"
+    )
     physcog_factor = "L1-A"
     physcog_variable = (
         "whether the depth ordering of two metrically identical candidates is "
@@ -643,7 +645,9 @@ class L1A5FalseSupportPlane(StaticGeometryScene, PickPlaceCounterToMicrowave):
     """The target sits on a plate; a box in front offers a competing top plane."""
 
     physcog_scene_id = "L1-A5"
-    physcog_validation_status = "reconstructed_pending_live_validation"
+    physcog_validation_status = (
+        "initial_gates_passed_pi05_eb_failed_superpod_499378_499382"
+    )
     physcog_factor = "L1-A"
     physcog_variable = (
         "whether the height of the surface the referent actually rests on is "
@@ -687,7 +691,7 @@ class L1A5FalseSupportPlane(StaticGeometryScene, PickPlaceCounterToMicrowave):
         # Kitchen._create_objects (kitchen.py:875-914) copies this placement onto
         # the synthesised ``obj_container`` plate and re-points the steak's own
         # placement at that plate. Overriding it therefore pins the *plate*, and
-        # the steak follows on top of it. Depth 0.03 + 0.20 = 0.23 m behind the
+        # the steak follows on top of it. Depth 0.03 + 0.35 = 0.38 m behind the
         # region front edge (native is 0.15; deepened identically in all three
         # conditions so the box has room to stand in front). The reconstructed
         # same-counter scene needs 0.38 m of depth: smaller v1/v2 separations
@@ -712,7 +716,7 @@ class L1A5FalseSupportPlane(StaticGeometryScene, PickPlaceCounterToMicrowave):
 
     def _physcog_obj_overrides(self):
         def front(x):
-            # 0.02 + 0.08 = 0.10 m behind the region front edge, i.e. 0.13 m in
+            # 0.02 + 0.02 = 0.04 m behind the region front edge, i.e. 0.34 m in
             # front of the plate. The native pos for this cfg is ("ref", 1.0);
             # the edge selector is changed to ("ref", -1.0) identically in all
             # three conditions, and only ``dx`` is the intervention.
