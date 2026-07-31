@@ -1829,9 +1829,197 @@ def _compiled_rigid_gripper_fixture_geoms(env, names):
                 str(model.body_id2name(body_id) or "")
                 for body_id in eef_body_ids
             ),
+            "rigid_gripper_geom_ids": gripper_geoms,
             "collision_gripper_geom_ids": collision_gripper_geoms,
             "collision_fixture_geom_ids": collision_fixture_geoms,
         },
+    )
+
+
+def _compiled_target_grasp_clearance(
+    env,
+    names,
+    target_position,
+    outward_direction_xy,
+):
+    """Derive a no-contact outside grasp pose from compiled native geometry."""
+    model = env.sim.model
+    target_position = np.asarray(target_position, dtype=float)
+    outward = np.asarray(outward_direction_xy, dtype=float)
+    if outward.shape != (2,):
+        raise RuntimeError("target grasp outward direction is not planar")
+    outward_norm = float(np.linalg.norm(outward))
+    if outward_norm <= np.finfo(float).eps:
+        raise RuntimeError("target grasp outward direction is zero")
+    outward = outward / outward_norm
+    current_eef = _eef_position(env)
+    (
+        fixture_compatible_gripper_geoms,
+        fixture_geoms,
+        rigid_gripper_geometry,
+    ) = _compiled_rigid_gripper_fixture_geoms(env, names)
+    rigid_gripper_geoms = rigid_gripper_geometry[
+        "rigid_gripper_geom_ids"
+    ]
+    target_geoms = sorted(descendant_geom_ids(model, TARGET_BODY))
+    collision_target_geoms = _collision_compatible_geom_ids(
+        model,
+        target_geoms,
+        rigid_gripper_geoms,
+    )
+    collision_gripper_geoms = _collision_compatible_geom_ids(
+        model,
+        rigid_gripper_geoms,
+        collision_target_geoms,
+    )
+    if not collision_target_geoms or not collision_gripper_geoms:
+        raise RuntimeError(
+            "compiled target grasp has no gripper/target collision geometry"
+        )
+
+    gripper_origin_bound = max(
+        float(
+            np.linalg.norm(
+                np.asarray(env.sim.data.geom_xpos[geom_id], dtype=float)
+                - current_eef
+            )
+            + model.geom_rbound[geom_id]
+        )
+        for geom_id in collision_gripper_geoms
+    )
+    target_origin_bound = max(
+        float(
+            np.linalg.norm(
+                np.asarray(env.sim.data.geom_xpos[geom_id], dtype=float)
+                - target_position
+            )
+            + model.geom_rbound[geom_id]
+        )
+        for geom_id in collision_target_geoms
+    )
+    if (
+        not np.isfinite(gripper_origin_bound)
+        or not np.isfinite(target_origin_bound)
+        or gripper_origin_bound <= 0.0
+        or target_origin_bound <= 0.0
+    ):
+        raise RuntimeError("compiled target grasp has invalid origin bounds")
+
+    first_offset = TARGET_GRASP_CLEARANCE_OFFSET
+    last_offset = max(
+        first_offset + TARGET_INSERTION_SEARCH_STEP_M,
+        gripper_origin_bound
+        + target_origin_bound
+        + EEF_POSITION_TOLERANCE
+        + TARGET_INSERTION_SEARCH_STEP_M,
+    )
+    trace = []
+    for offset in np.arange(
+        first_offset,
+        last_offset + 0.5 * TARGET_INSERTION_SEARCH_STEP_M,
+        TARGET_INSERTION_SEARCH_STEP_M,
+    ):
+        clearance_eef = target_position + np.asarray(
+            [
+                outward[0] * float(offset),
+                outward[1] * float(offset),
+                GRASP_HEIGHT,
+            ]
+        )
+        clearance_high_eef = clearance_eef + np.asarray(
+            [0.0, 0.0, APPROACH_HEIGHT]
+        )
+        target_approach_clearance, target_approach_sweep = (
+            _translated_swept_clearance(
+                env,
+                collision_gripper_geoms,
+                collision_target_geoms,
+                current_eef,
+                clearance_high_eef,
+                current_eef,
+            )
+        )
+        target_descend_clearance, target_descend_sweep = (
+            _translated_swept_clearance(
+                env,
+                collision_gripper_geoms,
+                collision_target_geoms,
+                clearance_high_eef,
+                clearance_eef,
+                current_eef,
+            )
+        )
+        fixture_approach_clearance, fixture_approach_sweep = (
+            _translated_swept_clearance(
+                env,
+                fixture_compatible_gripper_geoms,
+                fixture_geoms,
+                current_eef,
+                clearance_high_eef,
+                current_eef,
+            )
+        )
+        fixture_descend_clearance, fixture_descend_sweep = (
+            _translated_swept_clearance(
+                env,
+                fixture_compatible_gripper_geoms,
+                fixture_geoms,
+                clearance_high_eef,
+                clearance_eef,
+                current_eef,
+            )
+        )
+        target_clearances = {
+            "target_approach_clearance_m": target_approach_clearance,
+            "target_descend_clearance_m": target_descend_clearance,
+        }
+        fixture_clearances = {
+            "fixture_approach_clearance_m": fixture_approach_clearance,
+            "fixture_descend_clearance_m": fixture_descend_clearance,
+        }
+        passed = bool(
+            all(
+                value > EEF_POSITION_TOLERANCE
+                for value in target_clearances.values()
+            )
+            and all(value > 0.0 for value in fixture_clearances.values())
+        )
+        record = {
+            "outward_offset_m": float(offset),
+            "clearance_eef_position": clearance_eef.tolist(),
+            "clearance_high_eef_position": clearance_high_eef.tolist(),
+            **target_clearances,
+            **fixture_clearances,
+            "passed": passed,
+        }
+        trace.append(record)
+        if passed:
+            return clearance_eef, {
+                "method": (
+                    "nearest compiled-geometry outward grasp pose whose "
+                    "complete approach and descend stay clear of the native "
+                    "target and microwave"
+                ),
+                "outward_direction_xy": outward.tolist(),
+                "minimum_outward_offset_m": first_offset,
+                "maximum_outward_offset_m": last_offset,
+                "search_step_m": TARGET_INSERTION_SEARCH_STEP_M,
+                "target_clearance_required_m": EEF_POSITION_TOLERANCE,
+                "gripper_origin_bound_m": gripper_origin_bound,
+                "target_origin_bound_m": target_origin_bound,
+                "rigid_gripper_geometry": rigid_gripper_geometry,
+                "collision_gripper_geom_ids": collision_gripper_geoms,
+                "collision_target_geom_ids": collision_target_geoms,
+                "selected": record,
+                "target_approach_sweep": target_approach_sweep,
+                "target_descend_sweep": target_descend_sweep,
+                "fixture_approach_sweep": fixture_approach_sweep,
+                "fixture_descend_sweep": fixture_descend_sweep,
+                "candidate_trace": trace,
+            }
+    raise RuntimeError(
+        "no compiled no-contact outside target grasp pose; "
+        f"candidates={trace}"
     )
 
 
@@ -2761,6 +2949,7 @@ def _seek_target_contact(env, oracle, step, frames):
     initial_eef = _eef_position(env)
     contact_bodies = _robot_contact_body_names(env)
     target_contact = TARGET_BODY in contact_bodies
+    target_contact_initial = target_contact
     microwave_contact = _has_microwave_contact(contact_bodies)
     trace = []
     error_norms = []
@@ -2840,11 +3029,13 @@ def _seek_target_contact(env, oracle, step, frames):
     )
     success = bool(
         target_contact
+        and not target_contact_initial
         and not microwave_contact
         and not (status is not None and status.violated)
     )
     diagnostic = {
         "label": "target lateral contact seek",
+        "success": success,
         "method": (
             "descend outside the mug, then seek laterally at the native "
             "target's nominal grasp height"
@@ -2857,6 +3048,7 @@ def _seek_target_contact(env, oracle, step, frames):
         "final_error_m": final_error_norm,
         "min_error_m": min(error_norms, default=final_error_norm),
         "steps_executed": len(trace),
+        "target_contact_initial": target_contact_initial,
         "target_contact": target_contact,
         "target_contact_final": TARGET_BODY in final_contacts,
         "microwave_contact_seen": microwave_contact,
@@ -2869,7 +3061,12 @@ def _seek_target_contact(env, oracle, step, frames):
         ),
         "trace": trace,
     }
-    if microwave_contact:
+    if target_contact_initial:
+        reason = (
+            "target was already in contact before lateral contact seek; "
+            "compiled outside grasp clearance was not realized"
+        )
+    elif microwave_contact:
         reason = "robot contacted microwave during target lateral contact seek"
     elif status is not None and status.violated:
         reason = "oracle violation during target lateral contact seek"
@@ -3665,6 +3862,7 @@ def _robot_place_target(env, oracle, names, frames, step):
     release_diagnostic = {}
     support_geometry = {}
     target_clearance_geometry = {}
+    target_grasp_clearance_derivation = {}
     insertion_plan = {}
     retreat_plan = {}
     held_eef_offset = None
@@ -3684,10 +3882,20 @@ def _robot_place_target(env, oracle, names, frames, step):
                 else clearance_grasp_point.tolist()
             ),
             "target_grasp_clearance_offset_m": (
+                None
+                if not target_grasp_clearance_derivation
+                else target_grasp_clearance_derivation["selected"][
+                    "outward_offset_m"
+                ]
+            ),
+            "target_grasp_minimum_clearance_offset_m": (
                 TARGET_GRASP_CLEARANCE_OFFSET
             ),
             "compiled_target_clearance_geometry": (
                 target_clearance_geometry
+            ),
+            "compiled_target_grasp_clearance_derivation": (
+                target_grasp_clearance_derivation
             ),
             "target_desired_base_position": (
                 None if target_base is None else target_base.tolist()
@@ -3740,6 +3948,15 @@ def _robot_place_target(env, oracle, names, frames, step):
         support_geometry = _compiled_target_support_geometry(
             env, site_mat[:, 2]
         )
+        (
+            clearance_grasp_point,
+            target_grasp_clearance_derivation,
+        ) = _compiled_target_grasp_clearance(
+            env,
+            names,
+            initial_target,
+            target_clearance_xy,
+        )
     except RuntimeError as error:
         return (
             False,
@@ -3748,13 +3965,6 @@ def _robot_place_target(env, oracle, names, frames, step):
             step,
             target_metrics(),
         )
-    clearance_grasp_point = initial_target + np.asarray(
-        [
-            target_clearance_xy[0] * TARGET_GRASP_CLEARANCE_OFFSET,
-            target_clearance_xy[1] * TARGET_GRASP_CLEARANCE_OFFSET,
-            GRASP_HEIGHT,
-        ]
-    )
     for target, label in (
         (
             clearance_grasp_point
@@ -4394,6 +4604,12 @@ def main() -> None:
         target_grasp_closure = target_metrics.get(
             "target_grasp_closure", {}
         )
+        target_grasp_clearance = target_metrics.get(
+            "compiled_target_grasp_clearance_derivation", {}
+        )
+        selected_target_grasp_clearance = target_grasp_clearance.get(
+            "selected", {}
+        )
         target_release = target_metrics.get("target_release", {})
         target_insertion_plan = target_metrics.get(
             "compiled_insertion_plan", {}
@@ -4659,6 +4875,38 @@ def main() -> None:
             ),
             "robot_target_descend_success": int(
                 bool(target_descend.get("success", False))
+            ),
+            "robot_target_pre_seek_contact": int(
+                bool(
+                    target_descend.get(
+                        "target_contact_initial", False
+                    )
+                )
+            ),
+            "robot_target_grasp_outward_offset_m": (
+                selected_target_grasp_clearance.get(
+                    "outward_offset_m", float("nan")
+                )
+            ),
+            "robot_target_grasp_target_approach_clearance_m": (
+                selected_target_grasp_clearance.get(
+                    "target_approach_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_grasp_target_descend_clearance_m": (
+                selected_target_grasp_clearance.get(
+                    "target_descend_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_grasp_fixture_approach_clearance_m": (
+                selected_target_grasp_clearance.get(
+                    "fixture_approach_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_grasp_fixture_descend_clearance_m": (
+                selected_target_grasp_clearance.get(
+                    "fixture_descend_clearance_m", float("nan")
+                )
             ),
             "robot_target_descend_final_error_m": target_descend.get(
                 "final_error_m", float("nan")
@@ -4957,13 +5205,23 @@ def main() -> None:
         ),
         "target_placement_segment": "robot OSC grasp/transport/release via env.step",
         "target_grasp_method": (
-            "compiled outward-clearance approach, outside vertical descend, "
-            "and lateral contact seek at the nominal grasp height"
+            "nearest compiled no-contact outward-clearance approach and "
+            "outside vertical descend, followed by lateral contact seek at "
+            "the nominal grasp height"
         ),
-        "target_grasp_clearance_offset_m": TARGET_GRASP_CLEARANCE_OFFSET,
+        "target_grasp_minimum_clearance_offset_m": (
+            TARGET_GRASP_CLEARANCE_OFFSET
+        ),
+        "target_grasp_clearance_search_step_m": (
+            TARGET_INSERTION_SEARCH_STEP_M
+        ),
+        "target_grasp_target_clearance_required_m": (
+            EEF_POSITION_TOLERANCE
+        ),
         "target_grasp_gate": (
-            "current target contact required before and after closure; "
-            "any robot-microwave contact during table approach fails closed"
+            "target contact must be absent before lateral seek and current "
+            "target contact is required before and after closure; any "
+            "robot-microwave contact during table approach fails closed"
         ),
         "target_insertion_gate": (
             "foremost native-In release pose is searched from compiled "

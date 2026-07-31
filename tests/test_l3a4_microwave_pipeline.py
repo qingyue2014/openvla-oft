@@ -431,6 +431,103 @@ def test_l3a4_compiled_portal_search_skips_touching_nearest_pose():
     assert len(calls) == 10
 
 
+def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_compiled_target_grasp_clearance"
+    )
+    calls = []
+
+    def swept(
+        env,
+        moving_geoms,
+        fixture_geoms,
+        start_position,
+        end_position,
+        reference_position,
+    ):
+        end = np.asarray(end_position, dtype=float)
+        calls.append((tuple(moving_geoms), tuple(fixture_geoms)))
+        if tuple(fixture_geoms) == (1,):
+            offset = float(np.linalg.norm(end[:2]))
+            clearance = 0.011 if offset < 0.045 else 0.013
+        else:
+            clearance = 0.020
+        return clearance, {"minimum_clearance_m": clearance}
+
+    class Model:
+        geom_rbound = np.asarray([0.020, 0.020, 0.10])
+
+    class Data:
+        geom_xpos = np.asarray(
+            [
+                [-0.10, 0.0, 0.20],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ]
+        )
+
+    class Sim:
+        model = Model()
+        data = Data()
+
+    class Env:
+        sim = Sim()
+
+    namespace = {
+        "np": np,
+        "TARGET_BODY": "white_yellow_mug_1_main",
+        "TARGET_GRASP_CLEARANCE_OFFSET": 0.040,
+        "TARGET_INSERTION_SEARCH_STEP_M": 0.005,
+        "EEF_POSITION_TOLERANCE": 0.012,
+        "GRASP_HEIGHT": 0.060,
+        "APPROACH_HEIGHT": 0.160,
+        "_eef_position": lambda env: np.asarray([-0.10, 0.0, 0.20]),
+        "_compiled_rigid_gripper_fixture_geoms": (
+            lambda env, names: (
+                [0],
+                [2],
+                {
+                    "eef_root_body": "eef",
+                    "rigid_gripper_geom_ids": [0],
+                },
+            )
+        ),
+        "descendant_geom_ids": lambda model, body: {1},
+        "_collision_compatible_geom_ids": (
+            lambda model, candidates, references: sorted(candidates)
+        ),
+        "_translated_swept_clearance": swept,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    search = namespace["_compiled_target_grasp_clearance"]
+    clearance_eef, evidence = search(
+        Env(),
+        {"fixture_root": "microwave_1"},
+        np.zeros(3),
+        np.asarray([1.0, 0.0]),
+    )
+    assert clearance_eef.tolist() == pytest.approx([0.045, 0.0, 0.060])
+    assert evidence["candidate_trace"][0]["passed"] is False
+    assert evidence["selected"]["passed"] is True
+    assert evidence["selected"]["outward_offset_m"] == pytest.approx(0.045)
+    assert evidence["target_clearance_required_m"] == pytest.approx(0.012)
+    assert len(calls) == 8
+
+
 def test_l3a4_preflight_binds_evaluated_state_bytes(tmp_path):
     native = _native_path(tmp_path)
     states = tmp_path / "er.hdf5"
@@ -1213,6 +1310,20 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     )
     assert 'for token in ("gripper", "hand", "finger")' in rigid_gripper
     assert "_collision_compatible_geom_ids(" in rigid_gripper
+    assert '"rigid_gripper_geom_ids": gripper_geoms' in rigid_gripper
+
+    target_grasp_clearance = ast.get_source_segment(
+        source, functions["_compiled_target_grasp_clearance"]
+    )
+    assert "_compiled_rigid_gripper_fixture_geoms(" in target_grasp_clearance
+    assert target_grasp_clearance.count("_translated_swept_clearance(") == 4
+    assert "gripper_origin_bound" in target_grasp_clearance
+    assert "target_origin_bound" in target_grasp_clearance
+    assert "value > EEF_POSITION_TOLERANCE" in target_grasp_clearance
+    assert "all(value > 0.0 for value in fixture_clearances.values())" in (
+        target_grasp_clearance
+    )
+    assert '"candidate_trace": trace' in target_grasp_clearance
 
     retreat_plan = ast.get_source_segment(
         source, functions["_compiled_open_gripper_retreat_plan"]
@@ -1237,6 +1348,13 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "_step(env, oracle, action, step, frames)" in target_contact_seek
     assert "if current_microwave:" in target_contact_seek
     assert "if current_target:" in target_contact_seek
+    assert "and not target_contact_initial" in target_contact_seek
+    assert '"target_contact_initial": target_contact_initial' in (
+        target_contact_seek
+    )
+    assert "already in contact before lateral contact seek" in (
+        target_contact_seek
+    )
     assert "target lateral contact seek" in target_contact_seek
 
     target_insertion = ast.get_source_segment(
@@ -1290,6 +1408,7 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "_descend_to_target_contact(" not in target_placement
     assert "_seek_target_contact(" in target_placement
     assert "_compiled_microwave_clearance(" in target_placement
+    assert "_compiled_target_grasp_clearance(" in target_placement
     assert "TARGET_GRASP_CLEARANCE_OFFSET" in target_placement
     assert '"target outside descend"' in target_placement
     assert "_close_gripper_on_target(" in target_placement
@@ -1318,6 +1437,9 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
         target_placement
     )
     assert '"compiled_target_clearance_geometry"' in target_placement
+    assert '"compiled_target_grasp_clearance_derivation"' in (
+        target_placement
+    )
     assert '"target_grasp_closure": closure_diagnostic' in target_placement
     assert '"compiled_insertion_plan": insertion_plan' in target_placement
     assert '"compiled_open_gripper_retreat_plan": retreat_plan' in (
@@ -1341,6 +1463,12 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"robot_target_descend_final_error_m"' in source
     assert '"robot_target_descend_horizon_exhausted"' in source
     assert '"robot_target_descend_contact"' in source
+    assert '"robot_target_pre_seek_contact"' in source
+    assert '"robot_target_grasp_outward_offset_m"' in source
+    assert '"robot_target_grasp_target_approach_clearance_m"' in source
+    assert '"robot_target_grasp_target_descend_clearance_m"' in source
+    assert '"robot_target_grasp_fixture_approach_clearance_m"' in source
+    assert '"robot_target_grasp_fixture_descend_clearance_m"' in source
     assert '"robot_target_closure_contact_initial"' in source
     assert '"robot_target_closure_contact_final"' in source
     assert '"robot_target_closure_tilt_initial_deg"' in source
