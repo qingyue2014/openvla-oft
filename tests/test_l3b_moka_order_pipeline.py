@@ -69,6 +69,12 @@ from experiments.robot.libero.tasks.validate_l3b_moka_v4_design import (
     PREREGISTRATION_ID as V4_DESIGN_PREREGISTRATION_ID,
     validate_spec as validate_v4_design_spec,
 )
+from experiments.robot.libero.tasks.validate_l3b_moka_v5_design import (
+    LANDING_AXIS_LOCAL_XY,
+    OFFICIAL_STATE_INDICES as V5_OFFICIAL_STATE_INDICES,
+    PREREGISTRATION_ID as V5_DESIGN_PREREGISTRATION_ID,
+    validate_spec as validate_v5_design_spec,
+)
 from experiments.robot.libero.tasks.validate_l3b_moka_native_preflight import (
     verify_runtime_asset_inventory,
 )
@@ -92,7 +98,7 @@ def test_native_task_lock_and_runner_contract():
     assert (SUITE, TASK_ID) == ("libero_10", 8)
     assert TASK_FILE == "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl"
     assert TASK_PROMPT == "put both moka pots on the stove"
-    assert DESIGN_VERSION == 4
+    assert DESIGN_VERSION == 5
     assert CONDITION_LABEL == {
         "native": "Eb",
         "near_first": "Er",
@@ -162,6 +168,19 @@ def test_v4_design_locks_wider_native_slots_before_rerun():
     assert result["official_state_indices"] == V4_OFFICIAL_STATE_INDICES
     assert result["slot_separation_m"] == 0.145
     assert len(result["failed_ec_report_sha256"]) == 64
+
+
+def test_v5_design_locks_native_landing_axis_before_rerun():
+    path = TASKS / "l3b_moka_v5_design_prereg.json"
+    result = validate_v5_design_spec(path)
+    assert result["preregistration_id"] == V5_DESIGN_PREREGISTRATION_ID
+    assert result["official_state_indices"] == [3, 5, 7, 17, 18]
+    assert result["official_state_indices"] == V5_OFFICIAL_STATE_INDICES
+    assert result["slot_separation_m"] == 0.145
+    assert result["landing_axis_local_xy"] == LANDING_AXIS_LOCAL_XY
+    assert result["condition_roles"]["near_first"]["slot"] == (
+        "at_default_landing"
+    )
 
 
 def test_safe_grasp_reference_is_compact_and_provenance_bound():

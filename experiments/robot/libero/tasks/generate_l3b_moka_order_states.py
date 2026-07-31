@@ -57,7 +57,7 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     validate_native_bddl,
     window_stats,
 )
-from experiments.robot.libero.tasks.validate_l3b_moka_v4_design import (
+from experiments.robot.libero.tasks.validate_l3b_moka_v5_design import (
     validate_spec as validate_design_preregistration,
 )
 from experiments.robot.pi05_utils import PI05_IMAGE_SIZE, resize_with_pad
@@ -192,23 +192,22 @@ def _slot_targets(
         env.sim.data.site_xmat[site_id], dtype=float
     ).reshape(3, 3)
     site_size = np.asarray(env.sim.model.site_size[site_id], dtype=float)
-    gripper_id = int(env.sim.model.body_name2id("gripper0_eef"))
-    gripper_xy = np.asarray(
-        env.sim.data.body_xpos[gripper_id][:2], dtype=float
+    landing_axis = (
+        np.asarray(site_matrix[:2, 0], dtype=float)
+        + np.asarray(site_matrix[:2, 1], dtype=float)
     )
-    toward_robot = gripper_xy - center[:2]
-    toward_robot /= max(float(np.linalg.norm(toward_robot)), 1e-9)
+    landing_axis /= max(float(np.linalg.norm(landing_axis)), 1e-9)
     targets = {
         "far": np.asarray(
             [
-                *(center[:2] - toward_robot * SLOT_SEPARATION_M / 2.0),
+                *(center[:2] - landing_axis * SLOT_SEPARATION_M / 2.0),
                 center[2],
             ],
             dtype=float,
         ),
         "near": np.asarray(
             [
-                *(center[:2] + toward_robot * SLOT_SEPARATION_M / 2.0),
+                *(center[:2] + landing_axis * SLOT_SEPARATION_M / 2.0),
                 center[2],
             ],
             dtype=float,
@@ -224,7 +223,7 @@ def _slot_targets(
         **targets,
         "center": center,
         "site_size": site_size,
-        "toward_robot_xy": toward_robot,
+        "landing_axis_xy": landing_axis,
     }
 
 
@@ -502,7 +501,7 @@ def generate(args) -> dict:
                     "near_xyz": slots["near"].tolist(),
                     "cook_center_xyz": slots["center"].tolist(),
                     "cook_half_size_xyz": slots["site_size"].tolist(),
-                    "toward_robot_xy": slots["toward_robot_xy"].tolist(),
+                    "landing_axis_xy": slots["landing_axis_xy"].tolist(),
                     "separation_m": SLOT_SEPARATION_M,
                 },
                 "conditions": {},
@@ -668,7 +667,7 @@ def main() -> None:
         "--design-preregistration",
         default=(
             "experiments/robot/libero/tasks/"
-            "l3b_moka_v4_design_prereg.json"
+            "l3b_moka_v5_design_prereg.json"
         ),
     )
     parser.add_argument("--seed", type=int, default=42)

@@ -24,7 +24,7 @@ import numpy as np
 
 
 SCENE_ID = "L3-B-MOKA-ORDER"
-DESIGN_VERSION = 4
+DESIGN_VERSION = 5
 SUITE = "libero_10"
 TASK_ID = 8
 TASK_FILE = "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl"
@@ -75,9 +75,8 @@ DUMMY_ACTION = np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
 FORMAL_WAIT_STEPS = 10
 CONSTRUCTION_SETTLE_STEPS = 80
 POST_WAIT_HOLD_STEPS = 100
-# The native cook site has 0.075 m half-extents.  A 0.145 m diagonal
-# separation keeps both centers strictly inside that site for the five locked
-# native layouts while adding 0.04 m over the contact-prone v3 center distance.
+# The native cook site has 0.075 m half-extents.  A 0.145 m local-diagonal
+# separation leaves 0.0237 m coordinate margin inside the site.
 SLOT_SEPARATION_M = 0.145
 
 MAX_RECEPTACLE_TILT_DEG = 1.0

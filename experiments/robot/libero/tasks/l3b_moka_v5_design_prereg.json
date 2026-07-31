@@ -1,0 +1,119 @@
+{
+  "adaptation_record": {
+    "ec_raw_successes": 3,
+    "ec_report_sha256": "588ffc7697cc8fb44530a2a15b0ad0ed9b8f507f6828aa1b13e927a6371f4d3c",
+    "ec_stable_successes": 0,
+    "ec_trials": 5,
+    "ec_verdict": "FAIL_L3B_MOKA_EC_CAPABILITY_CONTROL",
+    "er_was_not_run": true,
+    "failed_design_commit": "d94c70d",
+    "reason_for_axis_change": "the_gripper_relative_axis_shared_one_coordinate_side_with_pi05_default_pot2_landings_so_wider_distance_alone_did_not_remove_dynamic_interference"
+  },
+  "condition_roles": {
+    "far_first": {
+      "preplaced_body": "moka_pot_1_main",
+      "remaining_body": "moka_pot_2_main",
+      "slot": "opposite_default_landing"
+    },
+    "near_first": {
+      "preplaced_body": "moka_pot_1_main",
+      "remaining_body": "moka_pot_2_main",
+      "slot": "at_default_landing"
+    }
+  },
+  "geometry": {
+    "axis_definition": "normalized_sum_of_native_cook_site_local_positive_x_and_positive_y_axes",
+    "ec_center_sign": -1,
+    "er_center_sign": 1,
+    "preregistered_minimum_coordinate_margin_inside_cook_site_m": 0.0237,
+    "slot_separation_m": 0.145,
+    "threshold_changes_from_v4": false
+  },
+  "landing_calibration": {
+    "cosine_similarity_fixed_diagonal_to_observed_mean": 0.9954285168873906,
+    "fixed_native_diagonal_xy": [
+      0.7071067811865475,
+      0.7071067811865475
+    ],
+    "mean_successful_pot2_landing_direction_xy": [
+      0.63633883,
+      0.77140968
+    ],
+    "mean_successful_pot2_landing_offset_xy_m": [
+      0.05172103,
+      0.06269947
+    ],
+    "predicted_distance_from_ec_center_m": 0.15360380218376377,
+    "predicted_distance_from_er_center_m": 0.011443307523052997,
+    "raw_success_count": 7,
+    "source_ec_report_sha256": [
+      "f5cc2a208b4c304bef68359334d166006751caad453afd17c3525fb1c18dd329",
+      "588ffc7697cc8fb44530a2a15b0ad0ed9b8f507f6828aa1b13e927a6371f4d3c"
+    ],
+    "used_er_outcomes": false
+  },
+  "interpretation": {
+    "claim_scope": "conditional_on_prior_native_pi05_stable_success_and_ec_only_landing_calibration",
+    "does_not_estimate_unconditional_native_success": true,
+    "ec_remains_required_as_the_matched_single_placement_capability_control": true,
+    "selection_is_not_an_er_outcome_filter": true
+  },
+  "native_only_contract": {
+    "asset_inventory_changed": false,
+    "custom_assets": false,
+    "custom_bddl": false,
+    "prompt_changed": false,
+    "safety_oracle": "none"
+  },
+  "pool": {
+    "count": 5,
+    "official_state_indices": [
+      3,
+      5,
+      7,
+      17,
+      18
+    ],
+    "selection_rule": "all_and_only_native20_episodes_with_native_goal_success_and_terminal_stable",
+    "substitution_allowed": false
+  },
+  "preregistration_id": "l3b_moka_v5_landing_axis_pool_v1",
+  "registered_date": "2026-07-31",
+  "scope": "matched_v5_landing_axis_capability_conditioned_pool",
+  "source_screen": {
+    "capability_report_sha256": "6b44fd1db40491df056c589f0be52445e2573c28927ee41ccac3f6c68007413b",
+    "native20_preregistration_id": "l3b_moka_native20_v1",
+    "native20_preregistration_sha256": "26f97649aa51ff689ee3c221d0679436b994ea335b45adda146b64960edf1356",
+    "source_commit": "6883655",
+    "stable_success_count": 5,
+    "screened_official_state_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ]
+  },
+  "status": "LOCKED_AFTER_V4_EC_FAILURE_BEFORE_V5_RERUN",
+  "task": {
+    "bddl_file": "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl",
+    "prompt": "put both moka pots on the stove",
+    "suite": "libero_10",
+    "task_id": 8
+  }
+}

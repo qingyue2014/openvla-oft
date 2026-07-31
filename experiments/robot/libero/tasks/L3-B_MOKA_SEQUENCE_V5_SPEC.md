@@ -1,4 +1,4 @@
-# L3-B moka sequence v4
+# L3-B moka sequence v5
 
 Status: **Eb/Er/Ec preparation, the Safe real-action controller, and smoke
 execution are implemented fail-closed. Formal evaluation remains blocked on
@@ -35,13 +35,14 @@ shared native goal region.
 | Ec | `far_first` | Only the same pot1 free-joint pose/velocity is changed; pot1 is stable in the far part of the same cook region | Place the same pot2 |
 | Safe | real-action reference from Er | Exact Er reset and evaluator wait | A scripted 7-D OSC rollout places pot2 and reaches the unchanged native goal |
 
-Near and far are state-construction coordinates separated diagonally by
-0.145 m. Both centers remain strictly inside the native stove cook site for
-all five locked layouts, with at least 0.0175 m remaining to every coordinate
-boundary. The earlier 0.105 m v3 separation permitted π0.5 to complete Ec
-4/5 times but all raw completions tipped the preplaced pot through close
-placement. The wider spacing was locked before v4 execution. These coordinates
-are not task predicates and are never exposed in the prompt.
+The two state-construction coordinates remain separated by 0.145 m on the
+native cook site's local diagonal. Er preplaces pot1 on the `(+x,+y)` side,
+which seven Ec-only π0.5 raw successes identified as its default pot2 landing
+side; Ec preplaces pot1 on the opposite `(-x,-y)` side. The fixed native
+diagonal has cosine similarity 0.995 with the observed mean landing direction
+and leaves at least 0.0237 m to each cook-site coordinate boundary. No Er
+outcome was observed during this calibration. These coordinates are not task
+predicates and are never exposed in the prompt.
 
 The Er/Ec pairing validator requires both states to:
 
@@ -56,14 +57,14 @@ The Er/Ec pairing validator requires both states to:
 
 ## Capability-conditioned state pool
 
-The matched v4 run uses official state indices `3, 5, 7, 17, 18`. They are
+The matched v5 run uses official state indices `3, 5, 7, 17, 18`. They are
 all and only the `success && terminal_stable` episodes from the previously
 frozen 20-state native screen. The deterministic selection is locked in
-`l3b_moka_v4_design_prereg.json`, including the source preregistration,
-capability-report, and failed-v3 Ec-report hashes. It was not selected from
-any Er/Ec outcome.
+`l3b_moka_v5_design_prereg.json`, including the source preregistration,
+capability-report, and failed-v4 Ec-report hashes. The slot axis uses Ec-only
+landing calibration and no Er outcome.
 
-This makes the v4 claim explicitly conditional: it asks about subgoal ordering
+This makes the v5 claim explicitly conditional: it asks about subgoal ordering
 where π0.5 already demonstrated stable native task competence. It does not
 estimate unconditional native success. Every HDF5 episode retains its original
 official state index, and generation refuses a different count, order, or
@@ -76,8 +77,10 @@ the preplaced pot2. Er was never run. Before any v3 rollout, v3 therefore
 locked a role swap—preplace pot1 and leave the identical native pot2—without
 changing thresholds, task, prompt, or inventory. V3 then showed 4/5 raw Ec
 completions but 0/5 strict stable completions because the two pots were placed
-too close. V4 changes only the symmetric slot separation from 0.105 m to
-0.145 m and retains the v3 object roles.
+too close. V4 widened the separation to 0.145 m but its gripper-relative axis
+still shared one coordinate side with default landings, yielding 3/5 raw and
+0/5 strict stable Ec completions. V5 retains the distance and object roles but
+uses the native cook-site diagonal aligned with the default landing direction.
 
 ## Capability and interpretation
 
@@ -134,10 +137,12 @@ control, smoke, and an explicit hash-bound human review all pass.
 
 The completed `l3b_moka_native20_v1` result (raw 11/20, stable 5/20) remains a
 valid report about whole-task native performance. It used the older
-different-pot near/far pairing and cannot authorize or reject this v4 matched
+different-pot near/far pairing and cannot authorize or reject this v5 matched
 single-placement contrast. The v1 source is frozen at commit `6883655`; the
 current v1 runner refuses to overwrite its artifacts. The failed v2 Ec control
 is frozen at commit `313e5de` and report SHA-256
 `5147bb5a88efcce34a4284676a2686024c9dee10a5f099eec526ea6a9e341a1f`.
 The failed v3 Ec control is frozen at commit `9931e46` and report SHA-256
 `f5cc2a208b4c304bef68359334d166006751caad453afd17c3525fb1c18dd329`.
+The failed v4 Ec control is frozen at commit `d94c70d` and report SHA-256
+`588ffc7697cc8fb44530a2a15b0ad0ed9b8f507f6828aa1b13e927a6371f4d3c`.
