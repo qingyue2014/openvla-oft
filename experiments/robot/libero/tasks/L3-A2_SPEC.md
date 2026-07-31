@@ -128,24 +128,47 @@ The complete controller is statically bounded as follows:
 | **Complete safe plan** | **278** |
 | Formal horizon margin | **2** |
 
-The per-stage allocation was updated from Superpod Job500085 without changing
-those totals. All 25 controller attempts reached `butter_descend`, used its
-full 12-action limit, and timed out while still converging. Their task counts
-were 37--42 actions, so the preceding `butter_approach` used exactly 25--30 of
-its former 36 actions. The final descend error was 14.0--14.2 mm against the
-unchanged 8 mm tolerance; the last action had improved the previously sampled
-best error of 17.6--17.9 mm. Four evidenced spare actions were therefore moved
-from `butter_approach` to `butter_descend`:
+The per-stage allocation was updated from two Superpod controller probes
+without changing those totals. In Job500085 all 25 attempts used the former
+12-action `butter_descend` limit and remained at 14.0--14.2 mm against the
+unchanged 8 mm tolerance. Their preceding `butter_approach` used 25--30 of its
+former 36 actions, so four actions were first moved to descend.
 
-| Stage | Job500085 allocation | Revised allocation |
+Job500094 then reached `butter_lift` in all 25 attempts. The exact action
+breakdown was:
+
+| Stage | Observed actions per attempt |
+| --- | ---: |
+| `butter_approach` | 25--30 |
+| `butter_descend` | 15 |
+| grasp seat | 8 |
+| `butter_lift` before timeout | 12 |
+
+Descend finished at 6.909--7.024 mm, strictly inside its unchanged 8 mm
+tolerance. Lift remained monotonic but ended at 14.585--14.709 mm against its
+unchanged 12 mm tolerance; its twelfth action still reduced error by
+3.279--3.287 mm. Butter itself had lifted 85.465--86.388 mm and every terminal
+contact set contained only the four native gripper finger/tip bodies. The NPZ
+format did not serialize contacts at every action, so no earlier contact time
+is inferred; first butter motion greater than 0.5 mm occurred at task action
+46--53. Measured task use at failure was only 60--65 actions out of 280.
+
+Two more evidenced approach actions were therefore assigned to lift:
+
+| Stage | Job500094 allocation | Revised allocation |
 | --- | ---: | ---: |
-| `butter_approach` | 36 | 32 |
-| `butter_descend` | 12 | 16 |
+| `butter_approach` | 32 | 30 |
+| `butter_descend` | 16 | 16 |
+| `butter_lift` | 12 | 14 |
 
-The revised approach limit retains a two-action margin over the largest
-observed use. This is a bounded controller-response hypothesis, not a waived
-gate: any attempt that cannot reach the same 8 mm tolerance within its new
-independent 16-action descend limit still fails closed.
+The registered motion helper now also evaluates the exact state after its
+last permitted action. The shared primitive checks tolerance before each
+action, so a final action that enters tolerance was previously mislabeled as
+a timeout. This post-action check issues no extra action and accepts only the
+same registered position tolerance, gripper contact, or native-success
+predicate. Non-timeout safety failures are never cleared. A stage that still
+misses its predicate after its independent limit remains fail-closed.
+
 The safe-reference report and per-episode CSV also record the controller
 source SHA-256; the runner rejects a PASS report produced by different
 controller bytes, even when the ER state artifact is unchanged.

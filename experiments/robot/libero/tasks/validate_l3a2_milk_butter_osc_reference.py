@@ -60,11 +60,11 @@ CONTROLLER_SOURCE_SHA256 = sha256_file(Path(__file__).resolve())
 # With the registered defaults below the complete safe plan, including both
 # releases, retreats, and stabilization windows, is bounded by 278 actions.
 HORIZON_STAGE_STEP_LIMITS = {
-    # Job500085 used 25--30 approach actions across 25 attempts. Reallocate
-    # four of its six evidenced slack actions to the still-converging descend.
-    "butter_approach": 32,
+    # Job500094 used 25--30 approach actions across 25 attempts. Its descend
+    # then passed in 15 actions, while lift remained convergent at action 12.
+    "butter_approach": 30,
     "butter_descend": 16,
-    "butter_lift": 12,
+    "butter_lift": 14,
     "butter_park_raise": 8,
     "butter_park_translate": 12,
     "butter_park_descend": 12,
@@ -87,6 +87,74 @@ def _stage_step_limit(stage: str) -> int:
         return int(HORIZON_STAGE_STEP_LIMITS[stage])
     except KeyError as exc:
         raise ValueError(f"unregistered horizon stage: {stage}") from exc
+
+
+def _move_to_with_final_state_check(
+    shared,
+    env,
+    obs,
+    oracle,
+    recorder,
+    target,
+    gripper,
+    step,
+    args,
+    stage,
+    tolerance=None,
+    accept_gripper_target_contact=False,
+    max_steps=None,
+    max_position_command=None,
+    retained_body=None,
+    retained_offset=None,
+    accept_native_task_success=False,
+):
+    """Apply an independent action cap and judge its exact final state.
+
+    The shared motion primitive checks its tolerance before each action. If
+    the final registered action crosses the tolerance, it otherwise returns a
+    timeout without examining that post-action state. Accept only the same
+    pre-registered success predicates after that final action. No additional
+    action is issued and all non-timeout safety failures remain authoritative.
+    """
+
+    obs, step, failure = shared._move_to(
+        env,
+        obs,
+        oracle,
+        recorder,
+        target,
+        gripper,
+        step,
+        args,
+        stage,
+        tolerance,
+        accept_gripper_target_contact,
+        max_steps=max_steps,
+        max_position_command=max_position_command,
+        retained_body=retained_body,
+        retained_offset=retained_offset,
+        accept_native_task_success=accept_native_task_success,
+    )
+    if failure is None or str(getattr(failure, "reason", "")) != "waypoint_timeout":
+        return obs, step, failure
+
+    registered_tolerance = (
+        args.position_tolerance if tolerance is None else float(tolerance)
+    )
+    final_error = float(
+        np.linalg.norm(shared._eef_pos(obs) - np.asarray(target, dtype=float))
+    )
+    reached_position = bool(final_error <= registered_tolerance)
+    reached_contact = bool(
+        accept_gripper_target_contact
+        and oracle._metrics(env).get("gripper_contact", False)
+    )
+    reached_native_success = bool(
+        accept_native_task_success and env.check_success()
+    )
+    if reached_position or reached_contact or reached_native_success:
+        return obs, step, None
+    return obs, step, failure
 
 
 def _static_plan_budget_diagnostics(
@@ -511,7 +579,8 @@ def _grasp(
         ),
     ):
         if failure is None:
-            obs, step, failure = shared._move_to(
+            obs, step, failure = _move_to_with_final_state_check(
+                shared,
                 env,
                 obs,
                 oracle,
@@ -540,7 +609,8 @@ def _grasp(
     if failure is None:
         lifted = shared._body_pos(env, body).copy()
         lifted[2] += args.lift_height
-        obs, step, failure = shared._move_to(
+        obs, step, failure = _move_to_with_final_state_check(
+            shared,
             env,
             obs,
             oracle,
@@ -601,7 +671,8 @@ def _place(
     failure = None
     for stage, body_target in waypoints:
         if failure is None:
-            obs, step, failure = shared._move_to(
+            obs, step, failure = _move_to_with_final_state_check(
+                shared,
                 env,
                 obs,
                 oracle,
@@ -643,7 +714,8 @@ def _place(
     if failure is None:
         retreat = shared._eef_pos(obs).copy()
         retreat[2] += args.retreat_height
-        obs, step, failure = shared._move_to(
+        obs, step, failure = _move_to_with_final_state_check(
+            shared,
             env,
             obs,
             oracle,

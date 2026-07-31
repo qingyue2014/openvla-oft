@@ -52,6 +52,7 @@ from experiments.robot.libero.tasks.validate_l3a2_milk_butter_osc_reference impo
     _evaluation_budget_diagnostics,
     _failure_diagnostics,
     _load_records,
+    _move_to_with_final_state_check,
     _NativeSuccessTrackingOracle,
     _safe_reference_success,
     _static_plan_budget_diagnostics,
@@ -529,29 +530,109 @@ def test_osc_transport_timeout_is_bounded_by_complete_plan():
     assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
 
 
-def test_500085_reallocates_evidenced_approach_slack_to_butter_descend():
-    # Job500085 failed after using all 12 registered descend actions. Since no
-    # grasp-seat action had started, task_steps - 12 is the exact approach use.
+def test_500094_reallocates_only_observed_approach_actions_to_lift():
+    # Job500094 reached lift in all 25 attempts. Subtract its exact 15 descend,
+    # 8 seat, and 12 lift actions to recover per-attempt approach use.
     task_steps = [
-        39, 39, 39, 38, 39,
-        40, 40, 40, 39, 40,
-        41, 41, 41, 41, 42,
-        39, 39, 39, 38, 39,
-        37, 37, 37, 37, 38,
+        62, 62, 62, 61, 62,
+        63, 63, 63, 62, 63,
+        64, 64, 64, 64, 65,
+        62, 62, 62, 61, 62,
+        60, 60, 60, 60, 61,
     ]
-    observed_approach_steps = [value - 12 for value in task_steps]
+    observed_approach_steps = [value - 15 - 8 - 12 for value in task_steps]
 
     assert min(observed_approach_steps) == 25
     assert max(observed_approach_steps) == 30
-    assert HORIZON_STAGE_STEP_LIMITS["butter_approach"] == 32
+    assert HORIZON_STAGE_STEP_LIMITS["butter_approach"] == 30
     assert HORIZON_STAGE_STEP_LIMITS["butter_descend"] == 16
-    assert (
-        HORIZON_STAGE_STEP_LIMITS["butter_approach"]
-        - max(observed_approach_steps)
-    ) == 2
-    assert HORIZON_STAGE_STEP_LIMITS["butter_descend"] - 12 == 4
+    assert HORIZON_STAGE_STEP_LIMITS["butter_lift"] == 14
+    # Descend is now solved under the unchanged precise 8 mm tolerance.
+    assert 6.9092 < 8.0
+    assert 7.0238 < 8.0
+    # Lift remained above its unchanged 12 mm tolerance after action 12, but
+    # every final action still improved error by at least 3.2786 mm.
+    assert 14.5853 > 12.0
+    assert 14.7093 > 12.0
+    assert 3.2786 > 0.0
     # The reallocation cannot borrow from the 56 fixed safety/hold actions.
     assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
+
+
+def test_registered_waypoint_accepts_exact_post_final_action_state():
+    timeout = SimpleNamespace(reason="waypoint_timeout", stage="butter_lift")
+
+    class Shared:
+        calls = 0
+
+        @classmethod
+        def _move_to(cls, *args, **kwargs):
+            del args
+            cls.calls += 1
+            assert kwargs["max_steps"] == 14
+            return {"eef": np.array([0.0, 0.0, 0.0119])}, 14, timeout
+
+        @staticmethod
+        def _eef_pos(obs):
+            return obs["eef"]
+
+    oracle = SimpleNamespace(_metrics=lambda env: {"gripper_contact": False})
+    env = SimpleNamespace(check_success=lambda: False)
+    obs, step, failure = _move_to_with_final_state_check(
+        Shared,
+        env,
+        {},
+        oracle,
+        None,
+        np.zeros(3),
+        1.0,
+        0,
+        SimpleNamespace(position_tolerance=0.012),
+        "butter_lift",
+        max_steps=14,
+    )
+
+    assert Shared.calls == 1
+    assert step == 14
+    assert obs["eef"] == pytest.approx([0.0, 0.0, 0.0119])
+    assert failure is None
+
+
+def test_registered_waypoint_does_not_waive_timeout_or_safety_failure():
+    failures = [
+        SimpleNamespace(reason="waypoint_timeout", stage="butter_lift"),
+        SimpleNamespace(reason="grasp_slipped", stage="butter_lift"),
+    ]
+
+    class Shared:
+        @staticmethod
+        def _move_to(*args, **kwargs):
+            del args, kwargs
+            failure = failures.pop(0)
+            eef = 0.0121 if failure.reason == "waypoint_timeout" else 0.0
+            return {"eef": np.array([0.0, 0.0, eef])}, 14, failure
+
+        @staticmethod
+        def _eef_pos(obs):
+            return obs["eef"]
+
+    oracle = SimpleNamespace(_metrics=lambda env: {"gripper_contact": False})
+    env = SimpleNamespace(check_success=lambda: False)
+    for expected_reason in ("waypoint_timeout", "grasp_slipped"):
+        _, _, failure = _move_to_with_final_state_check(
+            Shared,
+            env,
+            {},
+            oracle,
+            None,
+            np.zeros(3),
+            1.0,
+            0,
+            SimpleNamespace(position_tolerance=0.012),
+            "butter_lift",
+            max_steps=14,
+        )
+        assert failure.reason == expected_reason
 
 
 def test_osc_complete_safe_plan_has_static_two_step_horizon_margin():
