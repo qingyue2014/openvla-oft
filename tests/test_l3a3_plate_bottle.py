@@ -10,6 +10,7 @@ from experiments.robot.libero.tasks import write_l3a3_review_template
 from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     Rollout,
     _body_contact_counterparts,
+    _contact_progress_saturation_evidence,
     _live_plate_tracking_target,
     _robot_contacts_body,
     _robot_gripper_body_names,
@@ -350,6 +351,27 @@ def test_live_plate_push_target_tracks_plate_instead_of_accumulating_eef():
         _live_plate_tracking_target(plate, goal, confirmed_offset, 0.0)
 
 
+def test_push_timeout_acceptance_requires_real_contact_and_progress():
+    accepted = _contact_progress_saturation_evidence(
+        robot_contact_steps=10,
+        incremental_progress=0.000174,
+        minimum_progress=0.00005,
+    )
+    assert accepted["status"] == "contact_progress_saturated"
+    assert accepted["robot_contact_steps"] == 10
+    assert accepted["incremental_plate_progress_m"] == pytest.approx(
+        0.000174
+    )
+    assert (
+        _contact_progress_saturation_evidence(0, 0.000174, 0.00005)
+        is None
+    )
+    assert (
+        _contact_progress_saturation_evidence(10, 0.000049, 0.00005)
+        is None
+    )
+
+
 def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
     class FakeRollout:
         args = SimpleNamespace(
@@ -379,6 +401,28 @@ def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
     )
     assert reached.calls == 2
     assert observed_steps == [1, 2]
+
+    saturated = FakeRollout()
+    saturation_observations = []
+    saturation = Rollout.move(
+        saturated,
+        np.ones(3),
+        -1.0,
+        "task",
+        max_steps=2,
+        step_observer=lambda: saturation_observations.append(
+            saturated.calls
+        ),
+        timeout_acceptor=lambda context: {
+            "status": "contact_progress_saturated",
+            "acceptance_reason": "unit-test contact and progress",
+        },
+    )
+    assert saturation_observations == [1, 2]
+    assert saturation["status"] == "contact_progress_saturated"
+    assert saturation["best_error_m"] == pytest.approx(np.sqrt(3.0))
+    assert saturation["final_error_m"] == pytest.approx(np.sqrt(3.0))
+    assert saturation["max_steps"] == 2
 
     missing = FakeRollout()
     with pytest.raises(RuntimeError, match="robot-plate contact not observed"):
@@ -463,6 +507,11 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"live_eef_plate_offset_before"' in push_loop
     assert '"live_push_direction_xy"' in push_loop
     assert "step_observer=observe_push_step" in push_loop
+    assert "timeout_acceptor=accept_contact_progress_saturation" in push_loop
+    assert '"maximum_incremental_plate_progress_m"' in push_loop
+    assert '"move_status": move_status' in push_loop
+    assert '"tracking_timeout": move_timeout' in push_loop
+    assert "contact_progress_saturated" in push_loop
     assert '"robot_contact_steps"' in push_loop
     assert '"plate_displacement_m"' in push_loop
     assert '"plate_total_displacement_m"' in push_loop
@@ -514,6 +563,13 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"--maximum_push_iterations", type=int, default=160' in producer
     assert '"--maximum_recontact_attempts", type=int, default=20' in producer
     assert '"--push_tracking_tolerance", type=float, default=0.002' in producer
+    assert (
+        '"--minimum_saturated_waypoint_progress",\n'
+        "        type=float,\n"
+        "        default=0.00005,"
+        in producer
+    )
+    assert "--minimum_saturated_waypoint_progress must be positive" in producer
     assert "--maximum_push_iterations must be positive" in producer
     assert "--maximum_recontact_attempts must be positive" in producer
     assert "maximum_push_distance" not in producer

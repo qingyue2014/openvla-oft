@@ -125,6 +125,31 @@ def _live_plate_tracking_target(
     return target, direction_xy
 
 
+def _contact_progress_saturation_evidence(
+    robot_contact_steps, incremental_progress, minimum_progress
+):
+    """Accept push timeout only when contact produced non-noise progress."""
+    if minimum_progress <= 0:
+        raise ValueError("minimum saturation progress must be positive")
+    if robot_contact_steps < 1:
+        return None
+    if (
+        not np.isfinite(incremental_progress)
+        or incremental_progress <= minimum_progress
+    ):
+        return None
+    return {
+        "status": "contact_progress_saturated",
+        "acceptance_reason": (
+            "controller budget saturated under real robot-plate contact "
+            "with positive plate progress above numerical noise"
+        ),
+        "robot_contact_steps": int(robot_contact_steps),
+        "incremental_plate_progress_m": float(incremental_progress),
+        "minimum_progress_above_noise_m": float(minimum_progress),
+    }
+
+
 def _plate_contact_candidate_diagnostics(
     plate_xy, push_direction_xy, eef_xy, backoff
 ):
@@ -304,6 +329,7 @@ class Rollout:
         stop_label="stop condition",
         diagnostics=None,
         step_observer=None,
+        timeout_acceptor=None,
     ):
         tolerance = self.args.position_tolerance if tolerance is None else tolerance
         max_steps = self.args.max_waypoint_steps if max_steps is None else max_steps
@@ -332,6 +358,25 @@ class Rollout:
                 f"final_eef={np.asarray(self.obs['robot0_eef_pos']).tolist()} "
                 f"diagnostics={json.dumps(extra, sort_keys=True)}"
             )
+        final_error = float(
+            np.linalg.norm(
+                np.asarray(target)
+                - np.asarray(self.obs["robot0_eef_pos"], dtype=float)
+            )
+        )
+        timeout_context = {
+            "best_error_m": best,
+            "final_error_m": final_error,
+            "target": np.asarray(target, dtype=float).tolist(),
+            "final_eef": np.asarray(
+                self.obs["robot0_eef_pos"], dtype=float
+            ).tolist(),
+            "max_steps": int(max_steps),
+        }
+        if timeout_acceptor is not None:
+            acceptance = timeout_acceptor(timeout_context)
+            if acceptance is not None:
+                return {**timeout_context, **acceptance}
         extra = diagnostics() if callable(diagnostics) else diagnostics
         raise RuntimeError(
             f"OSC waypoint timeout phase={phase} best_error_m={best:.5f} "
@@ -352,6 +397,10 @@ def generate(args):
         raise ValueError("--pusher_contact_confirm_steps must be positive")
     if args.minimum_push_progress <= 0:
         raise ValueError("--minimum_push_progress must be positive")
+    if args.minimum_saturated_waypoint_progress <= 0:
+        raise ValueError(
+            "--minimum_saturated_waypoint_progress must be positive"
+        )
     if args.maximum_push_iterations < 1:
         raise ValueError("--maximum_push_iterations must be positive")
     if args.maximum_recontact_attempts < 1:
@@ -544,6 +593,7 @@ def generate(args):
         push_contact_observed = False
         maximum_plate_progress = 0.0
         maximum_plate_displacement = 0.0
+        contact_progress_saturated_count = 0
         initial_goal_xy_error = float(
             np.linalg.norm(push_plate_start[:2] - goal[:2])
         )
@@ -709,6 +759,7 @@ def generate(args):
                 "robot_contact_steps": 0,
                 "robot_contact_bodies": set(),
                 "maximum_step_plate_progress_m": 0.0,
+                "maximum_incremental_plate_progress_m": 0.0,
             }
 
             def observe_push_step():
@@ -734,6 +785,20 @@ def generate(args):
                     waypoint_evidence["maximum_step_plate_progress_m"],
                     progress,
                 )
+                incremental_progress = float(
+                    np.dot(
+                        live_plate[:2] - live_plate_before[:2],
+                        live_direction_xy,
+                    )
+                )
+                waypoint_evidence[
+                    "maximum_incremental_plate_progress_m"
+                ] = max(
+                    waypoint_evidence[
+                        "maximum_incremental_plate_progress_m"
+                    ],
+                    incremental_progress,
+                )
 
             def push_diagnostics():
                 active = dict(waypoint_evidence)
@@ -752,10 +817,22 @@ def generate(args):
                     "active_live_push_direction_xy": (
                         live_direction_xy.tolist()
                     ),
+                    "minimum_saturated_waypoint_progress_m": (
+                        args.minimum_saturated_waypoint_progress
+                    ),
                     "active_push_waypoint_evidence": active,
                 }
 
-            rollout.move(
+            def accept_contact_progress_saturation(_timeout_context):
+                return _contact_progress_saturation_evidence(
+                    waypoint_evidence["robot_contact_steps"],
+                    waypoint_evidence[
+                        "maximum_incremental_plate_progress_m"
+                    ],
+                    args.minimum_saturated_waypoint_progress,
+                )
+
+            move_timeout = rollout.move(
                 target,
                 pusher_open_sign,
                 "task",
@@ -763,7 +840,15 @@ def generate(args):
                 max_steps=args.push_tracking_steps,
                 diagnostics=push_diagnostics,
                 step_observer=observe_push_step,
+                timeout_acceptor=accept_contact_progress_saturation,
             )
+            move_status = (
+                "target_reached"
+                if move_timeout is None
+                else move_timeout["status"]
+            )
+            if move_status == "contact_progress_saturated":
+                contact_progress_saturated_count += 1
             plate_now = body_pose(env, PLATE_BODY)[0]
             plate_displacement = float(
                 np.linalg.norm(plate_now[:2] - push_plate_start[:2])
@@ -817,6 +902,8 @@ def generate(args):
                 ),
                 "live_push_direction_xy": live_direction_xy.tolist(),
                 "controller_steps": waypoint_evidence["controller_steps"],
+                "move_status": move_status,
+                "tracking_timeout": move_timeout,
                 "robot_contact_steps": waypoint_evidence[
                     "robot_contact_steps"
                 ],
@@ -834,6 +921,9 @@ def generate(args):
                 ),
                 "maximum_step_plate_progress_m": waypoint_evidence[
                     "maximum_step_plate_progress_m"
+                ],
+                "maximum_incremental_plate_progress_m": waypoint_evidence[
+                    "maximum_incremental_plate_progress_m"
                 ],
                 "goal_xy_error_m": goal_xy_error,
                 "native_success": bool(env.check_success()),
@@ -862,6 +952,12 @@ def generate(args):
             "maximum_push_iterations": args.maximum_push_iterations,
             "recontact_attempts_used": recontact_attempts,
             "maximum_recontact_attempts": args.maximum_recontact_attempts,
+            "contact_progress_saturated_count": (
+                contact_progress_saturated_count
+            ),
+            "minimum_saturated_waypoint_progress_m": (
+                args.minimum_saturated_waypoint_progress
+            ),
             "robot_plate_contact_observed_after_confirmation": (
                 push_contact_observed
             ),
@@ -1034,6 +1130,11 @@ def main():
     parser.add_argument("--maximum_recontact_attempts", type=int, default=20)
     parser.add_argument("--push_tracking_tolerance", type=float, default=0.002)
     parser.add_argument("--push_tracking_steps", type=int, default=10)
+    parser.add_argument(
+        "--minimum_saturated_waypoint_progress",
+        type=float,
+        default=0.00005,
+    )
     parser.add_argument("--minimum_push_progress", type=float, default=0.001)
     parser.add_argument("--final_settle_steps", type=int, default=40)
     parser.add_argument("--displacement_threshold", type=float, default=0.020)
