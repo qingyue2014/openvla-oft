@@ -15,6 +15,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _contact_progress_saturation_evidence,
     _constraint_prioritized_outside_descent_action,
     _compiled_adaptive_lateral_rebuffer_action,
+    _compiled_adaptive_high_lateral_action,
     _compiled_adaptive_vertical_descent_action,
     _compiled_collision_pair_clearance,
     _compiled_pair_set_clearance,
@@ -1741,7 +1742,8 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert '"commanded_z_action": float(action[2])' in bounded_seek
     assert "measured_vertical_step_progress_m >= 0.0" in bounded_seek
     assert 'latest_overhead_lateral_buffer["accepted"]' in bounded_seek
-    assert "high_lateral_post_action_buffer_interlock_to_" in bounded_seek
+    assert "high_lateral_post_action_buffer_interlock_to_" not in bounded_seek
+    assert "adaptive_high_lateral_negative_tail_recorded" in bounded_seek
     assert "post_descent_lateral_buffer_interlock_to_" in bounded_seek
     assert "lateral_pre_action_buffer_interlock_to_brake" in bounded_seek
     assert "vertical_tail_events" in bounded_seek
@@ -1749,7 +1751,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         bounded_seek.index(
             'elif structural_stage == "vertical_tail_zero_confirmation"'
         ) : bounded_seek.index(
-            'elif structural_stage in {'
+            'elif structural_stage == "overhead_high_corridor_lateral"'
         )
     ]
 
@@ -2335,6 +2337,193 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     )
 
 
+def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    pairs = [
+        {
+            "gripper_geom": f"gripper_{index // 11}",
+            "counterpart_geom": f"native_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": 0.13332117746677247,
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    overhead_guard = {
+        "accepted": True,
+        "one_step_vertical_reserve_m": 0.008,
+        "pairs": pairs,
+    }
+    native_action_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "runtime_resolved": True,
+    }
+    start = np.array(
+        [0.05554037906914336, -0.029154933875409465, 1.0654223455054406]
+    )
+    corridor_xy = np.array(
+        [0.14480639548403948, -0.02850777957668001]
+    )
+    action, evidence = _compiled_adaptive_high_lateral_action(
+        current_eef=start,
+        lateral_target_xy=corridor_xy,
+        overhead_guard=overhead_guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native_action_spec,
+        expected_pair_count=55,
+    )
+    assert np.linalg.norm(action[:3]) > 0.10
+    assert np.linalg.norm(action[:3]) < 1.0
+    assert action[2] == 0.0
+    assert np.all(action[3:6] == 0.0)
+    assert evidence["compiled_pair_count"] == 55
+    assert evidence["selected_envelope_source"] == (
+        "native_xy_translation_action_norm_bound"
+    )
+    assert evidence["proof"] == {
+        "pure_xy_zero_z_rotation": True,
+        "strictly_inside_native_xy_action_norm_bound": True,
+        "does_not_cross_lateral_target": True,
+        "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": True,
+    }
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+    assert all(
+        pair["pair_identity"]
+        == [
+            pairs[index]["gripper_geom"],
+            pairs[index]["counterpart_geom"],
+            pairs[index]["counterpart_kind"],
+        ]
+        for index, pair in enumerate(evidence["pair_envelopes"])
+    )
+    fixed_buffer_audit = _overhead_lateral_buffer_evidence(
+        overhead_guard,
+        worst_case_controller_world_step_m=0.008,
+    )
+    authorization = _overhead_route_frame_authorization_evidence(
+        outside_side_guard={
+            "accepted": False,
+            "minimum_outside_clearance_m": -0.076,
+            "required_outside_clearance_m": strict_clearance,
+        },
+        overhead_guard=overhead_guard,
+        overhead_lateral_buffer=fixed_buffer_audit,
+        compiled_pairs=pairs,
+        expected_pair_count=55,
+        require_lateral_buffer=False,
+        adaptive_high_lateral_envelope=evidence,
+    )
+    assert authorization["accepted"] is True
+    assert authorization["buffer16_used_for_authorization"] is False
+    assert authorization[
+        "adaptive_high_lateral_envelope_used_for_authorization"
+    ] is True
+    assert authorization["adaptive_high_lateral_pair_count"] == 55
+    assert "dynamic worst-case action tail" in authorization["proof_scope"]
+
+    # Near base8, the same geometry—not a relaxed threshold—shrinks the
+    # high-lateral norm below the unchanged 0.10 contact/correction setting.
+    tight_pairs = [
+        {**pair, "vertical_clearance_m": strict_clearance + 0.008 + 0.004}
+        for pair in pairs
+    ]
+    tight_action, tight_evidence = _compiled_adaptive_high_lateral_action(
+        current_eef=start,
+        lateral_target_xy=corridor_xy,
+        overhead_guard={**overhead_guard, "pairs": tight_pairs},
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native_action_spec,
+        expected_pair_count=55,
+    )
+    assert np.linalg.norm(tight_action[:3]) < 0.05
+    assert tight_evidence["selected_envelope_source"] == (
+        "compiled_pair_base8_worst_case_tail"
+    )
+    assert tight_evidence["minimum_predicted_post_worst_case_base_surplus_m"] > (
+        0.0
+    )
+
+    with pytest.raises(RuntimeError, match="positive adaptive lateral"):
+        _compiled_adaptive_high_lateral_action(
+            current_eef=start,
+            lateral_target_xy=corridor_xy,
+            overhead_guard={
+                **overhead_guard,
+                "pairs": [{**tight_pairs[0], "accepted": False}]
+                + tight_pairs[1:],
+            },
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_action_spec,
+            expected_pair_count=55,
+        )
+
+    bounded_seek = CONTROLLER_REFERENCE.read_text().split(
+        "def _seek_stable_plate_contact(", 1
+    )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    high_action_branch = bounded_seek.split(
+        'elif structural_stage == "overhead_high_corridor_lateral":', 1
+    )[1].split(
+        'elif structural_stage == "overhead_post_descent_corridor_lateral":',
+        1,
+    )[0]
+    post_descent_correction_branch = bounded_seek.split(
+        'elif structural_stage == "overhead_post_descent_corridor_lateral":',
+        1,
+    )[1].split(
+        'elif structural_stage == "vertical_corridor_descent":', 1
+    )[0]
+    assert "_compiled_adaptive_high_lateral_action(" in bounded_seek
+    assert "prepared_high_lateral_action" in high_action_branch
+    assert "_fixed_z_lateral_approach_action(" not in high_action_branch
+    assert "plate_contact_seek_max_translation_action" not in (
+        high_action_branch
+    )
+    assert "_fixed_z_lateral_approach_action(" in (
+        post_descent_correction_branch
+    )
+    assert "plate_contact_seek_max_translation_action" in (
+        post_descent_correction_branch
+    )
+    assert "expected_overhead_pair_count" in bounded_seek
+
+
+def test_500193_fixed_point_one_trace_exhaustion_is_not_a_threshold_change():
+    observed_stage_counts = {
+        "overhead_high_corridor_lateral": 176,
+        "lateral_rebuffer_brake": 4,
+    }
+    assert sum(observed_stage_counts.values()) == 180
+    assert observed_stage_counts["overhead_high_corridor_lateral"] == 176
+    assert 0.138675 > 0.055540
+    assert 0.138675 < 0.144806
+    assert 1.065422 - 0.946566 > 0.118
+    controller = CONTROLLER_REFERENCE.read_text()
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+    assert (
+        '"--plate_contact_seek_max_translation_action",\n'
+        "        type=float,\n"
+        "        default=0.10,"
+        in controller
+    )
+    assert '"fixed_buffer16_used_for_action_authorization": False' in controller
+    assert '"compiled_adaptive_high_lateral_action_envelope"' in controller
+
+
 def test_high_first_route_fails_closed_and_rechecks_post_descent_drift():
     strict_clearance = np.nextafter(0.0, np.inf)
     pair = {
@@ -2469,11 +2658,12 @@ def test_high_first_route_fails_closed_and_rechecks_post_descent_drift():
     )
     assert 'if post_descent_corridor_entry["accepted"]:' in zero_transition
     correction_action = bounded_seek.split(
-        'elif structural_stage in {', 1
+        'elif structural_stage == "overhead_post_descent_corridor_lateral":',
+        1,
     )[1].split(
         'elif structural_stage == "vertical_corridor_descent":', 1
     )[0]
-    assert '"overhead_post_descent_corridor_lateral"' in correction_action
+    assert '"post_descent_xy_drift_correction"' in correction_action
     assert "_fixed_z_lateral_approach_action(" in correction_action
     assert 'latest_overhead_lateral_buffer["accepted"]' in bounded_seek
 

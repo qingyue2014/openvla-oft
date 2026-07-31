@@ -977,9 +977,10 @@ def _derive_overhead_staging_from_compiled_pairs(
         ),
         "sweep_proof": (
             "from the exact native center-high state, first command pure XY "
-            "with zero Z/rotation to the compiled corridor XY while requiring "
-            "the full live compiled-pair buffer16 envelope before every "
-            "action and the base8 envelope afterward; then command pure "
+            "with zero Z/rotation to the compiled corridor XY while deriving "
+            "every action norm from the runtime native bound and the full "
+            "live compiled-pair worst-case downward-tail capacity above "
+            "strict+base8, then rechecking base8 afterward; next command pure "
             "negative Z with zero "
             "XY/rotation at corridor XY, where each rigid gripper geom lower "
             "bound decreases monotonically and its minimum vertical clearance "
@@ -1345,6 +1346,7 @@ def _overhead_route_frame_authorization_evidence(
     compiled_pairs,
     expected_pair_count,
     require_lateral_buffer,
+    adaptive_high_lateral_envelope=None,
 ):
     """Authorize one overhead-route frame from its live compiled evidence."""
     if not isinstance(expected_pair_count, (int, np.integer)):
@@ -1463,6 +1465,88 @@ def _overhead_route_frame_authorization_evidence(
             "live buffer16 is not accepted before a pure-XY overhead route "
             "action"
         )
+    adaptive_pair_count = 0
+    if adaptive_high_lateral_envelope is not None:
+        if require_lateral_buffer:
+            raise RuntimeError(
+                "adaptive high-lateral and fixed buffer16 authorization "
+                "cannot be combined"
+            )
+        adaptive_pairs = list(
+            adaptive_high_lateral_envelope.get("pair_envelopes", ())
+        )
+        adaptive_identities = [
+            tuple(str(value) for value in pair.get("pair_identity", ()))
+            for pair in adaptive_pairs
+        ]
+        if (
+            len(adaptive_pairs) != int(expected_pair_count)
+            or len(set(adaptive_identities)) != len(adaptive_identities)
+            or adaptive_identities != identity_lists["compiled"]
+        ):
+            raise RuntimeError(
+                "adaptive high-lateral pair evidence diverged from the exact "
+                "precompiled ordered identity collection"
+            )
+        dynamic_base_reserve = float(
+            adaptive_pairs[0]["base_overhead_reserve_m"]
+        )
+        dynamic_action_norm = float(
+            adaptive_high_lateral_envelope[
+                "commanded_translation_action_norm"
+            ]
+        )
+        dynamic_world_tail = float(
+            adaptive_high_lateral_envelope[
+                "commanded_worst_case_downward_world_tail_m"
+            ]
+        )
+        dynamic_minimum_surplus = float(
+            adaptive_high_lateral_envelope[
+                "minimum_predicted_post_worst_case_base_surplus_m"
+            ]
+        )
+        if not (
+            adaptive_high_lateral_envelope.get("accepted", False)
+            and dynamic_base_reserve == base_reserve
+            and np.isfinite(dynamic_action_norm)
+            and dynamic_action_norm > 0.0
+            and np.isfinite(dynamic_world_tail)
+            and dynamic_world_tail > 0.0
+            and np.isfinite(dynamic_minimum_surplus)
+            and dynamic_minimum_surplus > 0.0
+            and adaptive_high_lateral_envelope.get("proof", {}).get(
+                "all_compiled_pairs_retain_strict_base8_after_worst_case_tail",
+                False,
+            )
+        ):
+            raise RuntimeError(
+                "adaptive high-lateral envelope is not accepted for this "
+                "live route frame"
+            )
+        for identity, overhead_pair, adaptive_pair in zip(
+            identity_lists["compiled"], overhead_pairs, adaptive_pairs
+        ):
+            if not (
+                tuple(adaptive_pair["pair_identity"]) == identity
+                and float(adaptive_pair["current_vertical_clearance_m"])
+                == float(overhead_pair["vertical_clearance_m"])
+                and float(adaptive_pair["strict_no_contact_clearance_m"])
+                == float(overhead_pair["strict_no_contact_clearance_m"])
+                and float(adaptive_pair["base_overhead_reserve_m"])
+                == base_reserve
+                and float(
+                    adaptive_pair[
+                        "predicted_post_worst_case_base_reserve_surplus_m"
+                    ]
+                )
+                > 0.0
+            ):
+                raise RuntimeError(
+                    "adaptive high-lateral pair item diverged from live "
+                    f"base8 evidence for {identity!r}"
+                )
+        adaptive_pair_count = len(adaptive_pairs)
     outside_clearance = float(
         outside_side_guard["minimum_outside_clearance_m"]
     )
@@ -1478,7 +1562,13 @@ def _overhead_route_frame_authorization_evidence(
             "live outside-side evidence is invalid for the overhead route"
         )
     outside_accepted = bool(outside_side_guard.get("accepted", False))
-    if outside_accepted:
+    if adaptive_high_lateral_envelope is not None:
+        basis = (
+            "compiled_dynamic_high_lateral_all_pair_base8_envelope"
+            if not outside_accepted
+            else "outside_and_compiled_dynamic_high_lateral_base8_envelope"
+        )
+    elif outside_accepted:
         basis = "outside_and_compiled_overhead_all_pair_envelopes"
     else:
         basis = (
@@ -1506,11 +1596,23 @@ def _overhead_route_frame_authorization_evidence(
                 "minimum_lateral_entry_buffer_surplus_m"
             ]
         ),
+        "buffer16_used_for_authorization": bool(require_lateral_buffer),
+        "adaptive_high_lateral_envelope_used_for_authorization": bool(
+            adaptive_high_lateral_envelope is not None
+        ),
+        "adaptive_high_lateral_pair_count": int(adaptive_pair_count),
         "internal_controller_substeps_measured": False,
         "proof_scope": (
-            "live pre/post world-AABB checks plus the unchanged 8 mm base8 "
-            "and 16 mm lateral-entry envelopes; not direct observations of "
-            "internal controller substeps"
+            (
+                "live pre/post world-AABB checks plus the per-pair dynamic "
+                "worst-case action tail and unchanged 8 mm base8 envelope"
+                if adaptive_high_lateral_envelope is not None
+                else (
+                    "live pre/post world-AABB checks plus the unchanged 8 mm "
+                    "base8 and 16 mm lateral-entry envelopes"
+                )
+            )
+            + "; not direct observations of internal controller substeps"
         ),
     }
 
@@ -1524,6 +1626,7 @@ def _overhead_corridor_entry_evidence(
     overhead_lateral_buffer,
     position_tolerance,
     strict_corridor_entry_clearance_m,
+    require_lateral_buffer=True,
 ):
     """Gate transition from the overhead route into side-corridor descent."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -1556,7 +1659,9 @@ def _overhead_corridor_entry_evidence(
         violations.append("outside_corridor_entry_clearance_not_met")
     if not overhead_guard.get("accepted", False):
         violations.append("compiled_overhead_base8_not_accepted")
-    if not overhead_lateral_buffer.get("accepted", False):
+    if require_lateral_buffer and not overhead_lateral_buffer.get(
+        "accepted", False
+    ):
         violations.append("compiled_overhead_buffer16_not_accepted")
     return {
         "accepted": not violations,
@@ -1578,11 +1683,17 @@ def _overhead_corridor_entry_evidence(
         "overhead_buffer16_accepted": bool(
             overhead_lateral_buffer.get("accepted", False)
         ),
+        "overhead_buffer16_required": bool(require_lateral_buffer),
         "outside_authorization_rule": (
             "before rim-height descent, the full outside guard may remain "
             "false because rim vertical coverage is not yet expected; require "
             "strict corridor-entry outside clearance together with the live "
-            "compiled overhead base8 and buffer16 envelopes"
+            "compiled overhead base8 envelope"
+            + (
+                " and the fixed-action buffer16 envelope"
+                if require_lateral_buffer
+                else ""
+            )
         ),
     }
 
@@ -2727,6 +2838,301 @@ def _compiled_adaptive_vertical_descent_action(
                 commanded_delta <= target_remaining
             ),
             "all_compiled_pairs_retain_strict_base8_after_command": True,
+        },
+    }
+
+
+def _compiled_adaptive_high_lateral_action(
+    *,
+    current_eef,
+    lateral_target_xy,
+    overhead_guard,
+    gripper,
+    position_action_scale,
+    native_action_spec,
+    expected_pair_count,
+):
+    """Derive one high pure-XY action from the live base8 pair envelope."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    lateral_target_xy = np.asarray(lateral_target_xy, dtype=float)
+    if (
+        current_eef.shape != (3,)
+        or lateral_target_xy.shape != (2,)
+        or not np.all(np.isfinite(current_eef))
+        or not np.all(np.isfinite(lateral_target_xy))
+        or not np.isfinite(position_action_scale)
+        or position_action_scale <= 0.0
+    ):
+        raise ValueError("adaptive high-lateral geometry is invalid")
+    if not isinstance(expected_pair_count, (int, np.integer)):
+        raise ValueError("expected compiled pair count must be an integer")
+    pairs = list(overhead_guard.get("pairs", ()))
+    if expected_pair_count <= 0 or len(pairs) != int(expected_pair_count):
+        raise RuntimeError(
+            "live compiled overhead pair inventory changed before adaptive "
+            f"high lateral: expected={expected_pair_count} "
+            f"observed={len(pairs)}"
+        )
+    identities = [_overhead_pair_identity(pair) for pair in pairs]
+    if len(set(identities)) != len(identities):
+        raise RuntimeError(
+            "adaptive high-lateral evidence contains a duplicate pair "
+            "identity"
+        )
+    if not overhead_guard.get("accepted", False):
+        raise RuntimeError(
+            "adaptive high lateral cannot start after the base overhead "
+            "reserve has already been lost"
+        )
+    try:
+        native_low = np.asarray(native_action_spec["low"], dtype=float)
+        native_high = np.asarray(native_action_spec["high"], dtype=float)
+        native_source = str(native_action_spec["source"])
+    except Exception as exc:
+        raise RuntimeError(
+            "native OSC action-bound evidence is incomplete"
+        ) from exc
+    if (
+        not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(native_low < native_high)
+        or not np.all(native_low[:6] < 0.0)
+        or not np.all(native_high[:6] > 0.0)
+        or not (native_low[6] <= gripper <= native_high[6])
+    ):
+        raise RuntimeError(
+            "native OSC action bounds do not prove the requested pure-XY "
+            "action"
+        )
+    native_xy_norm_bound = float(
+        min(
+            -native_low[0],
+            native_high[0],
+            -native_low[1],
+            native_high[1],
+        )
+    )
+    strict_native_xy_norm_bound = float(
+        np.nextafter(native_xy_norm_bound, 0.0)
+    )
+    if strict_native_xy_norm_bound <= 0.0:
+        raise RuntimeError(
+            "native OSC XY action-norm bound has no strict interior"
+        )
+    base_reserve = float(overhead_guard["one_step_vertical_reserve_m"])
+    if not np.isfinite(base_reserve) or base_reserve <= 0.0:
+        raise RuntimeError("compiled overhead base reserve is invalid")
+    lateral_delta = lateral_target_xy - current_eef[:2]
+    lateral_remaining = float(np.linalg.norm(lateral_delta))
+    if not np.isfinite(lateral_remaining) or lateral_remaining <= 0.0:
+        raise RuntimeError(
+            "adaptive high lateral has no finite positive target XY error"
+        )
+    direction = lateral_delta / lateral_remaining
+
+    pair_envelopes = []
+    for index, (identity, pair) in enumerate(zip(identities, pairs)):
+        vertical_clearance = float(pair["vertical_clearance_m"])
+        strict_clearance = float(pair["strict_no_contact_clearance_m"])
+        required_clearance = float(strict_clearance + base_reserve)
+        available_worst_case_tail = float(
+            vertical_clearance - required_clearance
+        )
+        if (
+            not np.isfinite(vertical_clearance)
+            or not np.isfinite(strict_clearance)
+            or strict_clearance < 0.0
+            or not np.isfinite(available_worst_case_tail)
+            or available_worst_case_tail <= 0.0
+            or not pair.get("accepted", False)
+        ):
+            raise RuntimeError(
+                "compiled overhead pair cannot prove positive adaptive "
+                f"lateral capacity: index={index} pair="
+                f"{json.dumps(pair, sort_keys=True)}"
+            )
+        strict_safe_world_tail = float(
+            np.nextafter(available_worst_case_tail, 0.0)
+        )
+        if strict_safe_world_tail <= 0.0:
+            raise RuntimeError(
+                "compiled overhead pair has no representable strict "
+                f"high-lateral capacity: index={index}"
+            )
+        pair_envelopes.append(
+            {
+                "pair_index": int(index),
+                "pair_identity": list(identity),
+                "gripper_geom": pair["gripper_geom"],
+                "counterpart_geom": pair["counterpart_geom"],
+                "counterpart_kind": pair["counterpart_kind"],
+                "current_vertical_clearance_m": vertical_clearance,
+                "strict_no_contact_clearance_m": strict_clearance,
+                "base_overhead_reserve_m": base_reserve,
+                "required_clearance_with_base_reserve_m": (
+                    required_clearance
+                ),
+                "available_worst_case_downward_tail_m": (
+                    available_worst_case_tail
+                ),
+                "strict_safe_worst_case_downward_tail_m": (
+                    strict_safe_world_tail
+                ),
+                "representable_inward_numerical_guard_m": float(
+                    available_worst_case_tail - strict_safe_world_tail
+                ),
+                "strict_safe_translation_action_norm_capacity": float(
+                    strict_safe_world_tail / position_action_scale
+                ),
+            }
+        )
+    limiting_pair = min(
+        pair_envelopes,
+        key=lambda record: record[
+            "strict_safe_translation_action_norm_capacity"
+        ],
+    )
+    pair_action_norm_capacity = float(
+        limiting_pair["strict_safe_translation_action_norm_capacity"]
+    )
+    remaining_action_norm = float(
+        lateral_remaining / position_action_scale
+    )
+    capacities = {
+        "lateral_target_remaining_action_norm": remaining_action_norm,
+        "compiled_pair_base8_worst_case_tail": pair_action_norm_capacity,
+        "native_xy_translation_action_norm_bound": (
+            strict_native_xy_norm_bound
+        ),
+    }
+    selected_source = min(capacities, key=capacities.get)
+    commanded_norm = float(capacities[selected_source])
+    if not np.isfinite(commanded_norm) or commanded_norm <= 0.0:
+        raise RuntimeError(
+            "adaptive high-lateral envelope selected no safe motion"
+        )
+
+    # Re-evaluate the literal floating-point command.  This guard covers norm
+    # reconstruction and subtraction rounding in addition to each pair's
+    # nextafter-inward tail.
+    for _ in range(128):
+        commanded_xy = direction * commanded_norm
+        literal_action_norm = float(np.linalg.norm(commanded_xy))
+        worst_case_world_tail = float(
+            position_action_scale * literal_action_norm
+        )
+        predicted = [
+            float(
+                record["current_vertical_clearance_m"]
+                - worst_case_world_tail
+            )
+            for record in pair_envelopes
+        ]
+        if (
+            0.0 < literal_action_norm < native_xy_norm_bound
+            and worst_case_world_tail <= lateral_remaining
+            and native_low[0] < commanded_xy[0] < native_high[0]
+            and native_low[1] < commanded_xy[1] < native_high[1]
+            and all(
+                clearance
+                > record["required_clearance_with_base_reserve_m"]
+                for clearance, record in zip(predicted, pair_envelopes)
+            )
+        ):
+            break
+        commanded_norm = float(np.nextafter(commanded_norm, 0.0))
+    else:
+        raise RuntimeError(
+            "adaptive high-lateral command has no directly provable strict "
+            "native-action/base8 interior"
+        )
+    if commanded_norm <= 0.0:
+        raise RuntimeError(
+            "adaptive high-lateral command collapsed to zero while proving "
+            "safety"
+        )
+
+    minimum_predicted_surplus = float("inf")
+    for clearance, record in zip(predicted, pair_envelopes):
+        record["predicted_post_worst_case_vertical_clearance_m"] = (
+            clearance
+        )
+        record["predicted_post_worst_case_base_reserve_surplus_m"] = float(
+            clearance - record["required_clearance_with_base_reserve_m"]
+        )
+        minimum_predicted_surplus = min(
+            minimum_predicted_surplus,
+            record[
+                "predicted_post_worst_case_base_reserve_surplus_m"
+            ],
+        )
+    action = np.zeros(7, dtype=float)
+    action[:2] = commanded_xy
+    action[-1] = float(gripper)
+    if (
+        action[2] != 0.0
+        or np.any(action[3:6] != 0.0)
+        or literal_action_norm >= native_xy_norm_bound
+        or minimum_predicted_surplus <= 0.0
+    ):
+        raise RuntimeError(
+            "adaptive high-lateral action violated its compiled hard proof"
+        )
+    return action, {
+        "accepted": True,
+        "formula": (
+            "for every exact live compiled gripper-versus-plate/table pair, "
+            "subtract strict pair clearance and the unchanged 8 mm base "
+            "reserve from current vertical clearance; after a nextafter "
+            "inward numerical guard, divide the limiting worst-case downward "
+            "tail by position_action_scale and intersect it with remaining "
+            "XY target error and the strict runtime-native XY action-norm "
+            "bound"
+        ),
+        "current_eef": current_eef.tolist(),
+        "lateral_target_xy": lateral_target_xy.tolist(),
+        "lateral_remaining_m": lateral_remaining,
+        "lateral_direction_xy": direction.tolist(),
+        "position_action_scale_m_per_normalized_action": float(
+            position_action_scale
+        ),
+        "native_action_spec_source": native_source,
+        "native_xy_component_bounds": {
+            "low": native_low[:2].tolist(),
+            "high": native_high[:2].tolist(),
+        },
+        "native_xy_translation_action_norm_bound": native_xy_norm_bound,
+        "strict_native_xy_translation_action_norm_bound": (
+            strict_native_xy_norm_bound
+        ),
+        "compiled_pair_count": len(pair_envelopes),
+        "pair_identity_keys": [list(identity) for identity in identities],
+        "pair_envelopes": pair_envelopes,
+        "selected_limiting_pair": dict(limiting_pair),
+        "candidate_action_norm_capacities": capacities,
+        "selected_envelope_source": selected_source,
+        "commanded_translation_action_norm": literal_action_norm,
+        "commanded_worst_case_downward_world_tail_m": (
+            worst_case_world_tail
+        ),
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_z_action": float(action[2]),
+        "minimum_predicted_post_worst_case_base_surplus_m": (
+            minimum_predicted_surplus
+        ),
+        "proof": {
+            "pure_xy_zero_z_rotation": True,
+            "strictly_inside_native_xy_action_norm_bound": True,
+            "does_not_cross_lateral_target": bool(
+                worst_case_world_tail <= lateral_remaining
+            ),
+            "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": (
+                True
+            ),
         },
     }
 
@@ -4566,15 +4972,40 @@ def _seek_stable_plate_contact(
             corridor_high_target[:2] - initial_eef[:2]
         )
     )
+    native_low = np.asarray(native_action_spec["low"], dtype=float)
+    native_high = np.asarray(native_action_spec["high"], dtype=float)
+    strict_native_high_lateral_action_norm_bound = float(
+        np.nextafter(
+            min(
+                -native_low[0],
+                native_high[0],
+                -native_low[1],
+                native_high[1],
+            ),
+            0.0,
+        )
+    )
+    maximum_native_high_lateral_world_step = float(
+        args.position_action_scale
+        * strict_native_high_lateral_action_norm_bound
+    )
+    if maximum_native_high_lateral_world_step <= 0.0:
+        raise RuntimeError(
+            "runtime native action spec has no positive high-lateral action "
+            "capacity"
+        )
     total_structural_geometric_travel = float(
         overhead_staging_geometry["vertical_sweep_distance_m"]
         + overhead_horizontal_travel
         + vertical_staging_corridor["vertical_staging_travel_m"]
         + vertical_staging_corridor["fixed_z_lateral_travel_m"]
     )
+    high_lateral_action_count_lower_bound = float(
+        overhead_horizontal_travel
+        / maximum_native_high_lateral_world_step
+    )
     total_structural_action_lower_bound = float(
-        total_structural_geometric_travel
-        / maximum_controller_world_step
+        high_lateral_action_count_lower_bound
     )
     minimum_full_scale_actions_from_geometry = int(
         np.ceil(total_structural_action_lower_bound)
@@ -4611,11 +5042,15 @@ def _seek_stable_plate_contact(
             ],
             "horizontal_sweep_formula": (
                 "from the exact native center-high first-policy state, command "
-                "pure XY with strict translation-action norm below 0.10 and "
-                "zero Z/rotation to the compiled corridor XY; when the full "
-                "outside guard is not yet accepted, explicitly authorize only "
-                "through all 55 live compiled overhead pairs, pre-action "
-                "buffer16, post-action base8, and collision/contact capture"
+                "pure XY with zero Z/rotation to the compiled corridor XY; "
+                "derive each translation-action norm from the strict runtime "
+                "native XY bound and all 55 live pairs' current clearance "
+                "minus strict+base8, using position_action_scale times norm "
+                "as the worst-case downward tail plus an inward numerical "
+                "guard; remeasure post-action base8 and the empty structural "
+                "robot/native contact allowlist on every frame. The unchanged "
+                "0.10 bound remains exclusive to post-descent correction and "
+                "contact motion"
             ),
             "measurement_scope": (
                 "live pre/post world-AABB and contact observations with the "
@@ -4626,19 +5061,31 @@ def _seek_stable_plate_contact(
             "maximum_controller_world_step_m": (
                 maximum_controller_world_step
             ),
+            "strict_native_high_lateral_action_norm_bound": (
+                strict_native_high_lateral_action_norm_bound
+            ),
+            "maximum_native_high_lateral_world_step_m": (
+                maximum_native_high_lateral_world_step
+            ),
             "total_structural_geometric_travel_m": (
                 total_structural_geometric_travel
             ),
             "total_structural_full_scale_action_lower_bound": (
                 total_structural_action_lower_bound
             ),
+            "high_lateral_action_count_lower_bound": (
+                high_lateral_action_count_lower_bound
+            ),
             "minimum_full_scale_actions_from_geometry": (
                 minimum_full_scale_actions_from_geometry
             ),
             "geometric_action_count_scope": (
-                "diagnostic lower bound only; adaptive responses, brakes, "
-                "zero confirmation, and XY drift correction are enforced "
-                "at runtime by the unchanged 180-step hard loop"
+                "diagnostic lower bound only, using only required high-XY "
+                "travel divided by the strict runtime-native maximum world "
+                "step; later stages are deliberately excluded because "
+                "controller coupling can change their remaining travel. "
+                "Adaptive responses, brakes, zero confirmation, and XY drift "
+                "correction are enforced at runtime by the unchanged 180-step hard loop"
             ),
             "maximum_structural_waypoint_steps": int(
                 args.max_waypoint_steps
@@ -4698,6 +5145,9 @@ def _seek_stable_plate_contact(
     }
     overhead_lateral_stages = {
         "overhead_high_corridor_lateral",
+        "overhead_post_descent_corridor_lateral",
+    }
+    fixed_buffer_lateral_stages = {
         "overhead_post_descent_corridor_lateral",
     }
     overhead_route_stages = {
@@ -4771,14 +5221,15 @@ def _seek_stable_plate_contact(
                     ),
                 }
             )
-            if lateral_resume_stage not in overhead_lateral_stages:
+            if lateral_resume_stage not in fixed_buffer_lateral_stages:
                 raise RuntimeError(
-                    "lateral rebuffer has no proved high/correction resume "
+                    "lateral rebuffer has no proved post-descent correction "
+                    "resume "
                     f"stage: {lateral_resume_stage!r}"
                 )
             structural_stage = lateral_resume_stage
             overhead_horizontal_z = float(current_eef[2])
-        if structural_stage in overhead_lateral_stages:
+        if structural_stage in fixed_buffer_lateral_stages:
             lateral_pre_action_interlock = (
                 _overhead_lateral_interlock_evidence(
                     latest_overhead_lateral_buffer,
@@ -4818,6 +5269,21 @@ def _seek_stable_plate_contact(
                     )
                 break
         stage_before_action = structural_stage
+        prepared_high_lateral_action = None
+        prepared_high_lateral_envelope = None
+        if stage_before_action == "overhead_high_corridor_lateral":
+            (
+                prepared_high_lateral_action,
+                prepared_high_lateral_envelope,
+            ) = _compiled_adaptive_high_lateral_action(
+                current_eef=current_eef,
+                lateral_target_xy=corridor_high_target[:2],
+                overhead_guard=latest_overhead_guard,
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                native_action_spec=native_action_spec,
+                expected_pair_count=expected_overhead_pair_count,
+            )
         pre_action_overhead_route_authorization = None
         if stage_before_action in overhead_route_stages:
             pre_action_overhead_route_authorization = (
@@ -4830,7 +5296,10 @@ def _seek_stable_plate_contact(
                     compiled_pairs=overhead_staging_geometry["pairs"],
                     expected_pair_count=expected_overhead_pair_count,
                     require_lateral_buffer=(
-                        stage_before_action in overhead_lateral_stages
+                        stage_before_action in fixed_buffer_lateral_stages
+                    ),
+                    adaptive_high_lateral_envelope=(
+                        prepared_high_lateral_envelope
                     ),
                 )
             )
@@ -4958,10 +5427,32 @@ def _seek_stable_plate_contact(
                     ),
                 },
             }
-        elif structural_stage in {
-            "overhead_high_corridor_lateral",
-            "overhead_post_descent_corridor_lateral",
-        }:
+        elif structural_stage == "overhead_high_corridor_lateral":
+            if (
+                prepared_high_lateral_action is None
+                or prepared_high_lateral_envelope is None
+            ):
+                raise RuntimeError(
+                    "high-lateral action lacks its live compiled adaptive "
+                    "envelope"
+                )
+            action = prepared_high_lateral_action
+            path_control = prepared_high_lateral_envelope
+            feedback = {
+                "mode": structural_stage,
+                "action": action.tolist(),
+                "compiled_adaptive_high_lateral_action_envelope": (
+                    path_control
+                ),
+                "lateral_route_phase": "native_center_high_first",
+                "overhead_horizontal_z_m": float(overhead_horizontal_z),
+                "pre_action_measured_vertical_step_progress_m": (
+                    latest_vertical_step_progress_m
+                ),
+                "fixed_buffer16_used_for_action_authorization": False,
+                "pre_action_overhead_guard": latest_overhead_guard,
+            }
+        elif structural_stage == "overhead_post_descent_corridor_lateral":
             action, path_control = _fixed_z_lateral_approach_action(
                 current_eef=current_eef,
                 lateral_target_xy=corridor_high_target[:2],
@@ -4975,12 +5466,7 @@ def _seek_stable_plate_contact(
                 "mode": structural_stage,
                 "action": action.tolist(),
                 "fixed_z_lateral_path_control": path_control,
-                "lateral_route_phase": (
-                    "native_center_high_first"
-                    if structural_stage
-                    == "overhead_high_corridor_lateral"
-                    else "post_descent_xy_drift_correction"
-                ),
+                "lateral_route_phase": "post_descent_xy_drift_correction",
                 "overhead_horizontal_z_m": float(
                     overhead_horizontal_z
                 ),
@@ -4995,6 +5481,7 @@ def _seek_stable_plate_contact(
                 "lateral_pre_action_interlock": (
                     lateral_pre_action_interlock
                 ),
+                "fixed_buffer16_used_for_action_authorization": True,
             }
         elif structural_stage == "vertical_corridor_descent":
             maximum_descent = max(
@@ -5163,7 +5650,7 @@ def _seek_stable_plate_contact(
         lateral_settle_progress = None
         lateral_post_action_interlock = None
         corridor_entry_after_action = None
-        if stage_before_action in overhead_lateral_stages:
+        if stage_before_action in fixed_buffer_lateral_stages:
             lateral_post_action_interlock = (
                 _overhead_lateral_interlock_evidence(
                     latest_overhead_lateral_buffer,
@@ -5175,73 +5662,57 @@ def _seek_stable_plate_contact(
             feedback["lateral_post_action_interlock"] = (
                 lateral_post_action_interlock
             )
+        if stage_before_action in overhead_lateral_stages:
             feedback["corridor_lateral_error_m"] = float(
-                np.linalg.norm(
-                    after_eef[:2] - corridor_high_target[:2]
-                )
+                np.linalg.norm(after_eef[:2] - corridor_high_target[:2])
             )
         if stage_before_action == "overhead_high_corridor_lateral":
-            if lateral_post_action_interlock[
-                "requires_positive_z_brake"
-            ]:
-                lateral_resume_stage = stage_before_action
-                structural_stage = "lateral_rebuffer_brake"
+            if measured_vertical_step_progress_m < 0.0:
+                vertical_tail_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        "event": "adaptive_high_lateral_negative_tail_recorded",
+                        "measured_vertical_step_progress_m": (
+                            measured_vertical_step_progress_m
+                        ),
+                        "post_action_base8_accepted": bool(
+                            latest_overhead_guard["accepted"]
+                        ),
+                    }
+                )
+            corridor_entry_after_action = (
+                _overhead_corridor_entry_evidence(
+                    current_eef=after_eef,
+                    corridor_high_target=corridor_high_target,
+                    outside_side_guard=latest_outside_side_guard,
+                    overhead_guard=latest_overhead_guard,
+                    overhead_lateral_buffer=(
+                        latest_overhead_lateral_buffer
+                    ),
+                    position_tolerance=args.position_tolerance,
+                    strict_corridor_entry_clearance_m=(
+                        vertical_staging_corridor[
+                            "strict_corridor_entry_clearance_m"
+                        ]
+                    ),
+                    require_lateral_buffer=False,
+                )
+            )
+            feedback["corridor_entry_after_high_lateral"] = (
+                corridor_entry_after_action
+            )
+            if corridor_entry_after_action["accepted"]:
+                structural_stage = "overhead_corridor_descent"
                 vertical_tail_events.append(
                     {
                         "guard_step": int(guard_step),
                         "event": (
-                            "high_lateral_post_action_buffer_interlock_to_"
-                            "rebuffer"
+                            "native_center_high_lateral_complete_to_"
+                            "adaptive_corridor_descent"
                         ),
-                        **lateral_post_action_interlock,
+                        **corridor_entry_after_action,
                     }
                 )
-            else:
-                if lateral_post_action_interlock[
-                    "negative_vertical_tail_observed"
-                ]:
-                    vertical_tail_events.append(
-                        {
-                            "guard_step": int(guard_step),
-                            "event": (
-                                "high_lateral_negative_vertical_tail_"
-                                "recorded_with_buffer_retained"
-                            ),
-                            **lateral_post_action_interlock,
-                        }
-                    )
-                corridor_entry_after_action = (
-                    _overhead_corridor_entry_evidence(
-                        current_eef=after_eef,
-                        corridor_high_target=corridor_high_target,
-                        outside_side_guard=latest_outside_side_guard,
-                        overhead_guard=latest_overhead_guard,
-                        overhead_lateral_buffer=(
-                            latest_overhead_lateral_buffer
-                        ),
-                        position_tolerance=args.position_tolerance,
-                        strict_corridor_entry_clearance_m=(
-                            vertical_staging_corridor[
-                                "strict_corridor_entry_clearance_m"
-                            ]
-                        ),
-                    )
-                )
-                feedback["corridor_entry_after_high_lateral"] = (
-                    corridor_entry_after_action
-                )
-                if corridor_entry_after_action["accepted"]:
-                    structural_stage = "overhead_corridor_descent"
-                    vertical_tail_events.append(
-                        {
-                            "guard_step": int(guard_step),
-                            "event": (
-                                "native_center_high_lateral_complete_to_"
-                                "adaptive_corridor_descent"
-                            ),
-                            **corridor_entry_after_action,
-                        }
-                    )
         elif stage_before_action == "overhead_corridor_descent":
             if after_eef[2] <= overhead_staging_z + args.position_tolerance:
                 structural_stage = "vertical_tail_brake"
@@ -5286,10 +5757,10 @@ def _seek_stable_plate_contact(
                 measured_vertical_step_progress_m >= 0.0
                 and latest_overhead_lateral_buffer["accepted"]
             ):
-                if lateral_resume_stage not in overhead_lateral_stages:
+                if lateral_resume_stage not in fixed_buffer_lateral_stages:
                     raise RuntimeError(
-                        "lateral rebuffer recovered without a proved high/"
-                        "correction resume stage"
+                        "lateral rebuffer recovered without a proved post-"
+                        "descent correction resume stage"
                     )
                 structural_stage = lateral_resume_stage
                 overhead_horizontal_z = float(after_eef[2])
