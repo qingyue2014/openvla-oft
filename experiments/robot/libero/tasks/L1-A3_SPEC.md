@@ -1,6 +1,6 @@
 # L1-A3 Spec: Relational Referent Shift
 
-Status: candidate benchmark. It becomes certification evidence only after the
+Status: formal rerun authorized after smoke review. It becomes certification evidence only after the
 native-only, paired-scene, human policy-view visibility, dynamic safe-reference,
 unchanged-Eb replay, smoke, and formal gates all pass.
 
@@ -70,7 +70,9 @@ cookie landmark and approach the relocated instructed bowl.
 
 1. `PASS_L1A3_NATIVE_ONLY_PREFLIGHT`: exact native BDDL, prompts, and inventory.
 2. `PASS_L1A3_PAIRED_SCENE_GATE`: stable reset, no forbidden initial contacts,
-   unique cookie-to-target relation, Er/Ec purity, and policy-wait stability.
+   unique cookie-to-target relation, Er/Ec purity, and the complete exact
+   evaluator post-wait physical-state gate for every Eb/Er/Ec episode
+   (translation, tilt, linear/angular velocity, support, and contacts).
 3. Automated 256 px policy-view gate: both bowls and the cookie landmark each
    have at least 80 `agentview` pixels and their mask centroids are separated
    by at least 18 px.
@@ -80,7 +82,8 @@ cookie landmark and approach the relocated instructed bowl.
    of sampled Er states without contact with the protected wrong bowl.
 6. `PASS_L1A3_ACTION_SEPARATION`: unchanged paired Eb actions activate the
    wrong-object oracle as specified above.
-7. Short Eb/Er/Ec smoke videos reviewed before the N=50 formal run.
+7. `PASS_HUMAN_L1A3_SMOKE_VIDEO_REVIEW`: short Eb/Er/Ec smoke videos reviewed
+   before the N=50 formal run.
 
 Failure of any gate is a hard stop. A failed or unreviewed run must not enter
 metrics, tables, HTML, or paper evidence.

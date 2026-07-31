@@ -171,7 +171,12 @@ def test_l1a3_registry_exposes_native_gated_pipeline():
     assert PHASES[("l1a3", "check")].count_env == "NUM_TRIALS"
     assert PHASES[("l1a3", "smoke")].count_env == "SMOKE_TRIALS"
     assert PHASES[("l1a3", "formal")].count_env == "NUM_TRIALS"
-    assert "SAVE_VIDEO_MODE=none" in PHASES[("l1a3", "formal")].command
+    formal = PHASES[("l1a3", "formal")]
+    assert "RENDER_GPU_DEVICE_ID=1" in formal.command
+    assert "SAVE_VIDEO_MODE=all" in formal.command
+    assert "MAX_VIOLATION_VIDEOS=10" in formal.command
+    assert "MAX_SUCCESS_VIDEOS=10" in formal.command
+    assert "MAX_FAILURE_VIDEOS=10" in formal.command
     assert (
         "experiments/robot/libero/tasks/l1a3_native_preflight.json"
         in PHASES[("l1a3", "check")].artifacts

@@ -1416,7 +1416,11 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1a3", "smoke"): PhaseSpec(
         command=(
             "env",
+            "RENDER_GPU_DEVICE_ID=1",
             "SAVE_VIDEO_MODE=all",
+            "MAX_VIOLATION_VIDEOS=10",
+            "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10",
             "bash",
             "experiments/robot/libero/tasks/run_l1a3.sh",
             "smoke",
@@ -1428,6 +1432,13 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1a3_safe_reference_smoke.md",
             "experiments/logs/l1a3_safe_reference_smoke.csv",
             "experiments/logs/l1a3_safe_reference_smoke_videos",
+            "experiments/logs/l1a3_native_preflight.md",
+            "experiments/robot/libero/tasks/l1a3_native_preflight.json",
+            "experiments/robot/libero/tasks/l1a3_pairing.json",
+            "experiments/robot/libero/tasks/l1a3_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1a3_er_states.hdf5",
+            "experiments/robot/libero/tasks/l1a3_ec_states.hdf5",
+            "experiments/robot/libero/tasks/l1a3_preview",
             "rollouts/libero_spatial/L1-A3-cookie-relation-eb-native-smoke",
             "rollouts/libero_spatial/L1-A3-cookie-relation-stale-lure-er-smoke",
             "rollouts/libero_spatial/L1-A3-cookie-relation-matched-safe-ec-smoke",
@@ -1436,11 +1447,11 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l1a3", "formal"): PhaseSpec(
         command=(
             "env",
-            # Formal evidence comes from trajectories and metrics.  The
-            # already-gated smoke phase supplies representative MP4s; forking
-            # ffmpeg repeatedly inside a long-lived MuJoCo EGL process can
-            # invalidate the renderer after a few episodes.
-            "SAVE_VIDEO_MODE=none",
+            "RENDER_GPU_DEVICE_ID=1",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIOLATION_VIDEOS=10",
+            "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10",
             "bash",
             "experiments/robot/libero/tasks/run_l1a3.sh",
             "formal",
@@ -1452,6 +1463,13 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l1a3_safe_reference.md",
             "experiments/logs/l1a3_safe_reference.csv",
             "experiments/logs/l1a3_safe_reference_videos",
+            "experiments/logs/l1a3_native_preflight.md",
+            "experiments/robot/libero/tasks/l1a3_native_preflight.json",
+            "experiments/robot/libero/tasks/l1a3_pairing.json",
+            "experiments/robot/libero/tasks/l1a3_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l1a3_er_states.hdf5",
+            "experiments/robot/libero/tasks/l1a3_ec_states.hdf5",
+            "experiments/robot/libero/tasks/l1a3_preview",
             "experiments/logs/l1a3_attribution.md",
             "experiments/logs/experiment_records.csv",
             "experiments/logs/experiment_records.md",

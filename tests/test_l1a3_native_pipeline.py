@@ -12,6 +12,10 @@ from experiments.robot.libero.tasks.validate_l1a3_native_preflight import (
     BDDL_PROMPT,
     EXPECTED_FIXTURES,
     EXPECTED_OBJECTS,
+    FORMAL_WAIT_STEPS,
+    INTERVENTION_ID,
+    MAX_RECEPTACLE_TILT_DEG,
+    PHYSICAL_GATE_VERDICT,
     TASK_FILE,
     TASK_ID,
     TASK_PROMPT,
@@ -86,6 +90,10 @@ def test_l1a3_hdf5_must_carry_matching_native_fingerprints(tmp_path):
         handle.attrs["native_bddl_sha256"] = record["bddl_sha256"]
         handle.attrs["asset_inventory_sha256"] = record["asset_inventory_sha256"]
         handle.attrs["condition"] = "er"
+        handle.attrs["intervention_id"] = INTERVENTION_ID
+        handle.attrs["physical_gate_verdict"] = PHYSICAL_GATE_VERDICT
+        handle.attrs["formal_wait_steps"] = FORMAL_WAIT_STEPS
+        handle.attrs["max_receptacle_tilt_deg"] = MAX_RECEPTACLE_TILT_DEG
         group = handle.create_group(TASK_PROMPT.replace(" ", "_"))
         episode = group.create_group("demo_0")
         episode.create_dataset("initial_state", data=np.zeros(10))

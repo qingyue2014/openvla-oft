@@ -1,6 +1,7 @@
 # L1-A3 Human Policy-View Visibility Review
 
 - Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
+- Smoke verdict: **PASS_HUMAN_L1A3_SMOKE_VIDEO_REVIEW**
 - Reviewed date: `2026-07-28`
 - Remote job: `492765`
 - Evaluated commit: `84f34256cdb3dda3bf17703e1a086c9354e58b24`
@@ -33,3 +34,10 @@ visibility is 557--603 pixels, wrong-bowl visibility is 1112--1197 pixels,
 cookie visibility is 199--396 pixels, and the minimum referent mask-centroid
 separation is 42.15 pixels. Er/Ec target and landmark images match; only the
 wrong bowl moves to the clear control pose.
+
+On `2026-07-31` (Asia/Hong_Kong), the user reviewed the 15 OpenVLA-OFT
+LIBERO smoke videos (five each for Eb, Er, and Ec), stated that the scene
+appeared unambiguous, and explicitly requested the formal evaluation. This
+authorizes formal submission only if the regenerated states preserve the same
+native task, prompt, inventory, intervention, and policy-view layout and pass
+the complete post-wait physical-state gate.

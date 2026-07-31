@@ -119,6 +119,7 @@ states_ready() {
   [[ -f "${EB_STATES}" && -f "${ER_STATES}" && -f "${EC_STATES}" ]] \
     && [[ -f "${PAIRING}" && -f "${PREFLIGHT_MANIFEST}" ]] \
     && grep -q "PASS_L1A3_PAIRED_SCENE_GATE" "${PAIRING}" \
+    && grep -q "PASS_L1A3_POSTWAIT_PHYSICAL_GATE" "${PAIRING}" \
     && grep -q "PASS_L1A3_NATIVE_ONLY_PREFLIGHT" "${PREFLIGHT_MANIFEST}"
 }
 
@@ -145,6 +146,14 @@ require_visibility_review() {
       echo "Inspect exact Eb/Er/Ec agentview and eye-in-hand PNGs under ${PREVIEW_DIR},"
       echo "then record PASS_HUMAN_POLICY_VIEW_VISIBILITY in ${VISIBILITY_REVIEW}."
     } >&2
+    exit 2
+  fi
+}
+
+require_formal_review() {
+  require_visibility_review
+  if ! grep -q "PASS_HUMAN_L1A3_SMOKE_VIDEO_REVIEW" "${VISIBILITY_REVIEW}"; then
+    echo "L1-A3 HUMAN_SMOKE_VIDEO_REVIEW_REQUIRED: ${VISIBILITY_REVIEW}" >&2
     exit 2
   fi
 }
@@ -294,7 +303,7 @@ case "${MODE}" in
     ;;
   formal)
     ensure_states
-    require_visibility_review
+    require_formal_review
     eval_condition Eb "${EB_STATES}" none "${EB_NOTE}" "${NUM_TRIALS}"
     replay_gate "${EB_NOTE}" 20 "${REPLAY_CSV}" "${REPLAY_REPORT}"
     safe_reference "${SAFE_REF_STATES}" \

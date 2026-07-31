@@ -31,6 +31,10 @@ if str(REPO_ROOT) not in sys.path:
 from experiments.robot.libero.physcog_oracles import DepthDisambiguationOracle
 from experiments.robot.libero.physcog_trajectory import load_trajectory
 from experiments.robot.libero.tasks.validate_l1a3_native_preflight import (
+    FORMAL_WAIT_STEPS,
+    INTERVENTION_ID,
+    MAX_RECEPTACLE_TILT_DEG,
+    PHYSICAL_GATE_VERDICT,
     TASK_FILE,
     TASK_ID,
     TASK_PROMPT,
@@ -65,12 +69,14 @@ EC_LURE_XY = np.array([0.24, -0.18])
 MAX_TARGET_LANDMARK_DISTANCE = 0.190
 MIN_RELATION_MARGIN = 0.060
 MIN_BOWL_DISTANCE = 0.160
-MAX_INITIAL_TILT_DEG = 12.0
-MAX_POLICY_WAIT_DRIFT = 0.010
+MAX_TRANSIENT_WAIT_TILT_DEG = 10.0
+MAX_POST_WAIT_LINEAR_SPEED_M_S = 1e-4
+MAX_POST_WAIT_ANGULAR_SPEED_RAD_S = 1e-3
+MAX_CONFIRM_DRIFT_M = 1e-4
+FORMAL_CONFIRM_STEPS = 5
 MIN_VISIBLE_PIXELS = 80
 MIN_MASK_CENTROID_SEPARATION = 18.0
 POLICY_RESOLUTION = 256
-POLICY_WAIT_STEPS = 10
 SETTLE_STEPS = 80
 STABILITY_CONFIRM_STEPS = 40
 PAIR_TOLERANCE = 1e-10
@@ -154,6 +160,17 @@ def _free_joint_addresses(sim, body: str) -> tuple[int, int]:
                 int(sim.model.jnt_dofadr[joint_id]),
             )
     raise RuntimeError(f"No native free joint for {body}")
+
+
+def _body_twist(env, body: str) -> tuple[float, float]:
+    _, dadr = _free_joint_addresses(env.sim, body)
+    velocity = np.asarray(
+        env.sim.data.qvel[dadr : dadr + 6], dtype=float
+    )
+    return (
+        float(np.linalg.norm(velocity[:3])),
+        float(np.linalg.norm(velocity[3:])),
+    )
 
 
 def _set_xy(sim, body: str, xy: np.ndarray) -> None:
@@ -241,6 +258,307 @@ def _negative_contact_between(env, first: str, second: str) -> bool:
     return False
 
 
+def _negative_contact_between_geom_sets(
+    env, first_geoms: set[int], second_geoms: set[int]
+) -> bool:
+    for index in range(env.sim.data.ncon):
+        contact = env.sim.data.contact[index]
+        if float(getattr(contact, "dist", -1.0)) >= 0.0:
+            continue
+        if (
+            contact.geom1 in first_geoms
+            and contact.geom2 in second_geoms
+        ) or (
+            contact.geom2 in first_geoms
+            and contact.geom1 in second_geoms
+        ):
+            return True
+    return False
+
+
+def _contact_between_geom_sets(
+    env, first_geoms: set[int], second_geoms: set[int]
+) -> bool:
+    for index in range(env.sim.data.ncon):
+        contact = env.sim.data.contact[index]
+        if (
+            contact.geom1 in first_geoms
+            and contact.geom2 in second_geoms
+        ) or (
+            contact.geom2 in first_geoms
+            and contact.geom1 in second_geoms
+        ):
+            return True
+    return False
+
+
+def _robot_geom_ids(env) -> set[int]:
+    geom_ids = set()
+    for geom_id in range(env.sim.model.ngeom):
+        body_id = int(env.sim.model.geom_bodyid[geom_id])
+        body_name = env.sim.model.body_id2name(body_id) or ""
+        lowered = body_name.lower()
+        if (
+            body_name.startswith(("robot0_", "gripper0_"))
+            or "finger" in lowered
+            or "hand" in lowered
+            or "eef" in lowered
+        ):
+            geom_ids.add(geom_id)
+    return geom_ids
+
+
+def _forbidden_contact_pairs(env) -> list[str]:
+    contact_bodies = MOVABLE_BODIES + (SIDE, PLATE, CABINET, STOVE)
+    pairs = []
+    for first_index, first in enumerate(contact_bodies):
+        for second in contact_bodies[first_index + 1 :]:
+            if _negative_contact_between(env, first, second):
+                pairs.append(f"{first}/{second}")
+    robot_geoms = _robot_geom_ids(env)
+    for body in MOVABLE_BODIES:
+        if _negative_contact_between_geom_sets(
+            env, robot_geoms, _geom_ids_for_body(env, body)
+        ):
+            pairs.append(f"robot/{body}")
+    return pairs
+
+
+def _physical_snapshot(env) -> dict[str, dict[str, object]]:
+    return {
+        body: {
+            "position": _body_pos(env, body),
+            "tilt_deg": _body_tilt_deg(env, body),
+            "linear_speed_m_s": _body_twist(env, body)[0],
+            "angular_speed_rad_s": _body_twist(env, body)[1],
+        }
+        for body in MOVABLE_BODIES
+    }
+
+
+def _serializable_snapshot(
+    snapshot: Mapping[str, Mapping[str, object]],
+) -> dict[str, dict[str, object]]:
+    return {
+        body: {
+            name: (
+                np.asarray(value, dtype=float).round(9).tolist()
+                if name == "position"
+                else float(value)
+            )
+            for name, value in values.items()
+        }
+        for body, values in snapshot.items()
+    }
+
+
+def _check_upright_tilts(
+    condition: str,
+    phase: str,
+    tilts: Mapping[str, float],
+) -> None:
+    excessive = {
+        body: float(tilt)
+        for body, tilt in tilts.items()
+        if float(tilt) > MAX_RECEPTACLE_TILT_DEG
+    }
+    if excessive:
+        raise RuntimeError(
+            f"{condition}: {phase} upright-object tilt exceeds "
+            f"{MAX_RECEPTACLE_TILT_DEG:.1f}deg: {excessive}"
+        )
+
+
+def _formal_policy_state_gate(
+    env, state, condition: str
+) -> dict[str, object]:
+    """Replay the evaluator reset/wait and gate its first policy frame."""
+    env.reset()
+    env.set_init_state(state)
+    env.sim.forward()
+    pre_wait = _physical_snapshot(env)
+    max_tilt = {
+        body: float(values["tilt_deg"])
+        for body, values in pre_wait.items()
+    }
+    wait_drift_origin = {
+        body: np.asarray(values["position"], dtype=float).copy()
+        for body, values in pre_wait.items()
+    }
+
+    for step in range(1, FORMAL_WAIT_STEPS + 1):
+        env.step(NOOP)
+        forbidden = _forbidden_contact_pairs(env)
+        if forbidden:
+            raise RuntimeError(
+                f"{condition}: forbidden contact during formal wait "
+                f"step {step}: {forbidden}"
+            )
+        step_tilts = {
+            body: _body_tilt_deg(env, body) for body in MOVABLE_BODIES
+        }
+        for body, tilt in step_tilts.items():
+            max_tilt[body] = max(max_tilt[body], tilt)
+        excessive_transient = {
+            body: tilt
+            for body, tilt in step_tilts.items()
+            if tilt > MAX_TRANSIENT_WAIT_TILT_DEG
+        }
+        if excessive_transient:
+            raise RuntimeError(
+                f"{condition}: formal-wait step {step} transient tilt "
+                f"exceeds {MAX_TRANSIENT_WAIT_TILT_DEG:.1f}deg: "
+                f"{excessive_transient}"
+            )
+
+    first_policy = _physical_snapshot(env)
+    _check_upright_tilts(
+        condition,
+        "first-policy-frame",
+        {
+            body: float(values["tilt_deg"])
+            for body, values in first_policy.items()
+        },
+    )
+    excessive_linear = {
+        body: float(values["linear_speed_m_s"])
+        for body, values in first_policy.items()
+        if float(values["linear_speed_m_s"])
+        > MAX_POST_WAIT_LINEAR_SPEED_M_S
+    }
+    excessive_angular = {
+        body: float(values["angular_speed_rad_s"])
+        for body, values in first_policy.items()
+        if float(values["angular_speed_rad_s"])
+        > MAX_POST_WAIT_ANGULAR_SPEED_RAD_S
+    }
+    if excessive_linear or excessive_angular:
+        raise RuntimeError(
+            f"{condition}: first-policy-frame velocity is unstable: "
+            f"linear={excessive_linear}, angular={excessive_angular}"
+        )
+
+    table_geoms = _geom_ids_for_body(env, "table")
+    unsupported = [
+        body
+        for body in MOVABLE_BODIES
+        if not _contact_between_geom_sets(
+            env, _geom_ids_for_body(env, body), table_geoms
+        )
+    ]
+    if unsupported:
+        raise RuntimeError(
+            f"{condition}: first-policy-frame objects lack table support: "
+            f"{unsupported}"
+        )
+
+    policy_stats = _mask_stats(env, "agentview")
+    for body, body_stats in policy_stats.items():
+        if int(body_stats["pixels"]) < MIN_VISIBLE_PIXELS:
+            raise RuntimeError(
+                f"{condition}: first-policy-frame {body} only "
+                f"{body_stats['pixels']} policy-view pixels"
+            )
+    centroids = [
+        np.asarray(policy_stats[body]["centroid"], dtype=float)
+        for body in VISUAL_REFERENTS
+    ]
+    centroid_separation = min(
+        float(np.linalg.norm(centroids[first] - centroids[second]))
+        for first in range(len(centroids))
+        for second in range(first + 1, len(centroids))
+    )
+    if centroid_separation < MIN_MASK_CENTROID_SEPARATION:
+        raise RuntimeError(
+            f"{condition}: first-policy-frame referent mask centroid "
+            f"separation={centroid_separation:.1f}px"
+        )
+
+    first_policy_positions = {
+        body: np.asarray(values["position"], dtype=float).copy()
+        for body, values in first_policy.items()
+    }
+    for step in range(1, FORMAL_CONFIRM_STEPS + 1):
+        env.step(NOOP)
+        forbidden = _forbidden_contact_pairs(env)
+        if forbidden:
+            raise RuntimeError(
+                f"{condition}: forbidden contact during post-wait "
+                f"confirmation step {step}: {forbidden}"
+            )
+        step_tilts = {
+            body: _body_tilt_deg(env, body) for body in MOVABLE_BODIES
+        }
+        for body, tilt in step_tilts.items():
+            max_tilt[body] = max(max_tilt[body], tilt)
+        _check_upright_tilts(
+            condition, f"post-wait confirmation step {step}", step_tilts
+        )
+
+    confirmed = _physical_snapshot(env)
+    confirm_drift = {
+        body: float(
+            np.linalg.norm(
+                np.asarray(values["position"], dtype=float)
+                - first_policy_positions[body]
+            )
+        )
+        for body, values in confirmed.items()
+    }
+    excessive_drift = {
+        body: drift
+        for body, drift in confirm_drift.items()
+        if drift > MAX_CONFIRM_DRIFT_M
+    }
+    if excessive_drift:
+        raise RuntimeError(
+            f"{condition}: post-wait confirmation drift exceeds "
+            f"{MAX_CONFIRM_DRIFT_M}m: {excessive_drift}"
+        )
+    _check_upright_tilts(
+        condition,
+        "post-wait-confirmed",
+        {
+            body: float(values["tilt_deg"])
+            for body, values in confirmed.items()
+        },
+    )
+
+    return {
+        "verdict": PHYSICAL_GATE_VERDICT,
+        "formal_wait_steps": FORMAL_WAIT_STEPS,
+        "confirmation_steps": FORMAL_CONFIRM_STEPS,
+        "max_receptacle_tilt_deg": MAX_RECEPTACLE_TILT_DEG,
+        "max_transient_wait_tilt_deg": MAX_TRANSIENT_WAIT_TILT_DEG,
+        "max_post_wait_linear_speed_m_s": (
+            MAX_POST_WAIT_LINEAR_SPEED_M_S
+        ),
+        "max_post_wait_angular_speed_rad_s": (
+            MAX_POST_WAIT_ANGULAR_SPEED_RAD_S
+        ),
+        "pre_wait": _serializable_snapshot(pre_wait),
+        "first_policy_frame": _serializable_snapshot(first_policy),
+        "confirmed": _serializable_snapshot(confirmed),
+        "max_tilt_during_wait_and_confirmation_deg": max_tilt,
+        "formal_wait_position_change_m": {
+            body: float(
+                np.linalg.norm(
+                    np.asarray(first_policy[body]["position"], dtype=float)
+                    - wait_drift_origin[body]
+                )
+            )
+            for body in MOVABLE_BODIES
+        },
+        "confirmation_drift_m": confirm_drift,
+        "table_supported_bodies": list(MOVABLE_BODIES),
+        "forbidden_contacts": [],
+        "first_policy_agentview_masks": policy_stats,
+        "first_policy_min_agentview_centroid_separation_px": (
+            centroid_separation
+        ),
+    }
+
+
 def _segmentation(env, camera: str) -> np.ndarray:
     seg = np.asarray(
         env.sim.render(
@@ -279,16 +597,22 @@ def _policy_images(obs: Mapping[str, object]) -> dict[str, np.ndarray]:
     return images
 
 
+def _fresh_observation(env):
+    state = env.sim.get_state().flatten()
+    return env.regenerate_obs_from_state(state)
+
+
 def _save_preview(env, state, out_dir: Path, condition: str, index: int) -> None:
     import imageio.v2 as imageio
 
     out_dir = out_dir / condition
     out_dir.mkdir(parents=True, exist_ok=True)
+    env.reset()
     obs = env.set_init_state(state)
-    env.sim.forward()
-    # set_init_state returns observations from the restored state. No direct
-    # qpos edit occurs afterwards, so this is the fresh policy observation
-    # rather than a stale reset frame.
+    for _ in range(FORMAL_WAIT_STEPS):
+        obs, _, _, _ = env.step(NOOP)
+    # Refresh from the exact state underlying the first policy observation.
+    obs = _fresh_observation(env)
     images = _policy_images(obs)
     for camera, image in images.items():
         imageio.imwrite(out_dir / f"{camera}_{index:03d}.png", image)
@@ -297,8 +621,14 @@ def _save_preview(env, state, out_dir: Path, condition: str, index: int) -> None
         "task_suite_name": TASK_SUITE,
         "task_id": TASK_ID,
         "prompt": TASK_PROMPT,
+        "formal_wait_steps": FORMAL_WAIT_STEPS,
+        "frame_role": "exact_first_policy_observation",
         "policy_preprocess": "observation rotated 180 degrees",
         "bodies": {body: _body_pos(env, body).round(6).tolist() for body in TRACKED_BODIES},
+        "upright_tilt_deg": {
+            body: _body_tilt_deg(env, body) for body in MOVABLE_BODIES
+        },
+        "forbidden_contacts": _forbidden_contact_pairs(env),
         "agentview_segmentation": _mask_stats(env, "agentview"),
     }
     (out_dir / f"state_{index:03d}.json").write_text(
@@ -338,59 +668,23 @@ def _validate_condition(env, state, condition: str) -> dict[str, object]:
         raise RuntimeError(
             f"{condition}: bowl clearance={min_bowl_distance:.4f}m"
         )
-    for bowl in BOWLS:
-        if _negative_contact_between(env, bowl, PLATE):
-            raise RuntimeError(f"{condition}: forbidden initial {bowl}/plate contact")
-        if _negative_contact_between(env, bowl, CABINET):
-            raise RuntimeError(f"{condition}: forbidden initial {bowl}/cabinet contact")
-        if _negative_contact_between(env, bowl, STOVE):
-            raise RuntimeError(f"{condition}: forbidden initial {bowl}/stove contact")
-        tilt = _body_tilt_deg(env, bowl)
-        if tilt > MAX_INITIAL_TILT_DEG:
-            raise RuntimeError(f"{condition}: {bowl} tilt={tilt:.2f}deg")
-    for first, second in (
-        (LURE, TARGET),
-        (LURE, LANDMARK),
-        (TARGET, LANDMARK),
-        (LANDMARK, SIDE),
-        (LANDMARK, PLATE),
-        (LANDMARK, CABINET),
-        (LANDMARK, STOVE),
-    ):
-        if _negative_contact_between(env, first, second):
-            raise RuntimeError(f"{condition}: forbidden initial {first}/{second} contact")
-
-    stats = _mask_stats(env, "agentview")
-    for body, body_stats in stats.items():
-        if int(body_stats["pixels"]) < MIN_VISIBLE_PIXELS:
-            raise RuntimeError(
-                f"{condition}: {body} only {body_stats['pixels']} policy-view pixels"
-            )
-    centroids = [
-        np.asarray(stats[body]["centroid"], dtype=float)
-        for body in VISUAL_REFERENTS
-    ]
-    min_centroid_sep = min(
-        float(np.linalg.norm(centroids[i] - centroids[j]))
-        for i in range(len(centroids))
-        for j in range(i + 1, len(centroids))
+    _check_upright_tilts(
+        condition,
+        "serialized-state",
+        {body: _body_tilt_deg(env, body) for body in MOVABLE_BODIES},
     )
-    if min_centroid_sep < MIN_MASK_CENTROID_SEPARATION:
+    forbidden_initial = _forbidden_contact_pairs(env)
+    if forbidden_initial:
         raise RuntimeError(
-            f"{condition}: bowl mask centroid separation={min_centroid_sep:.1f}px"
+            f"{condition}: forbidden serialized-state contacts: "
+            f"{forbidden_initial}"
         )
 
-    before = {body: _body_pos(env, body) for body in MOVABLE_BODIES}
-    for _ in range(POLICY_WAIT_STEPS):
-        env.step(NOOP)
-    drift = {
-        body: float(np.linalg.norm(_body_pos(env, body) - before[body]))
-        for body in MOVABLE_BODIES
-    }
-    if max(drift.values()) > MAX_POLICY_WAIT_DRIFT:
-        raise RuntimeError(
-            f"{condition}: policy-wait drift exceeds {MAX_POLICY_WAIT_DRIFT}m: {drift}"
-        )
+    formal_gate = _formal_policy_state_gate(env, state, condition)
+    stats = formal_gate["first_policy_agentview_masks"]
+    min_centroid_sep = formal_gate[
+        "first_policy_min_agentview_centroid_separation_px"
+    ]
     return {
         "positions": {body: value.round(6).tolist() for body, value in positions.items()},
         "min_bowl_distance_m": min_bowl_distance,
@@ -398,7 +692,7 @@ def _validate_condition(env, state, condition: str) -> dict[str, object]:
         "lure_landmark_distance_m": lure_landmark,
         "min_agentview_centroid_separation_px": min_centroid_sep,
         "agentview_masks": stats,
-        "policy_wait_drift_m": drift,
+        "formal_policy_state_gate": formal_gate,
     }
 
 
@@ -445,6 +739,12 @@ def _write_hdf5(
         handle.attrs["native_bddl_sha256"] = preflight["bddl_sha256"]
         handle.attrs["asset_inventory_sha256"] = preflight["asset_inventory_sha256"]
         handle.attrs["condition"] = condition
+        handle.attrs["intervention_id"] = INTERVENTION_ID
+        handle.attrs["physical_gate_verdict"] = PHYSICAL_GATE_VERDICT
+        handle.attrs["formal_wait_steps"] = FORMAL_WAIT_STEPS
+        handle.attrs["max_receptacle_tilt_deg"] = (
+            MAX_RECEPTACLE_TILT_DEG
+        )
         group = handle.create_group(key)
         for index, (state, source_index) in enumerate(zip(states, source_indices)):
             episode = group.create_group(f"demo_{index}")
@@ -509,6 +809,7 @@ def generate(args) -> None:
             shared_poses[LURE] = _capture_free_joint(env.sim, LURE)
             ec_state = _transplant_bowls(env, eb_state, shared_poses)
 
+            eb_info = _validate_condition(env, eb_state, "Eb")
             er_info = _validate_condition(env, er_state, "Er")
             ec_info = _validate_condition(env, ec_state, "Ec")
 
@@ -557,6 +858,7 @@ def generate(args) -> None:
                     "eb_er_unallowed_qvel_error": eb_er_qvel_error,
                     "er_settle_drift_m": er_settle_drift,
                     "ec_settle_drift_m": ec_settle_drift,
+                    "eb": eb_info,
                     "er": er_info,
                     "ec": ec_info,
                 }
@@ -595,6 +897,24 @@ def generate(args) -> None:
         "native_bddl": str(bddl),
         "native_bddl_sha256": preflight["bddl_sha256"],
         "asset_inventory_sha256": preflight["asset_inventory_sha256"],
+        "intervention_id": INTERVENTION_ID,
+        "physical_state_gate": {
+            "verdict": PHYSICAL_GATE_VERDICT,
+            "formal_wait_steps": FORMAL_WAIT_STEPS,
+            "confirmation_steps": FORMAL_CONFIRM_STEPS,
+            "max_receptacle_tilt_deg": MAX_RECEPTACLE_TILT_DEG,
+            "max_transient_wait_tilt_deg": (
+                MAX_TRANSIENT_WAIT_TILT_DEG
+            ),
+            "max_post_wait_linear_speed_m_s": (
+                MAX_POST_WAIT_LINEAR_SPEED_M_S
+            ),
+            "max_post_wait_angular_speed_rad_s": (
+                MAX_POST_WAIT_ANGULAR_SPEED_RAD_S
+            ),
+            "max_confirmation_drift_m": MAX_CONFIRM_DRIFT_M,
+            "per_episode_per_condition_metrics": True,
+        },
         "intervention": {
             "Eb": "exact native serialized state",
             "Er": "target and cookie landmark shift together; native wrong bowl at paired Eb target XY",

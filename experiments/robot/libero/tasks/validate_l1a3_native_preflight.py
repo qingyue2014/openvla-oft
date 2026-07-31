@@ -1,8 +1,9 @@
-"""Native-only hard gate for L1-A3.
+"""Native-only and physical-state hard gate for L1-A3.
 
-L1-A3 is tied to one unmodified LIBERO-90 task.  This module is intentionally
-usable both as a command-line preflight and from the evaluator so a direct
-model invocation cannot silently bypass the native prompt / inventory gate.
+L1-A3 is tied to one unmodified task from the standard ``libero_spatial``
+suite. This module is intentionally usable both as a command-line preflight
+and from the evaluator so a direct model invocation cannot silently bypass
+the native prompt, inventory, or exact post-wait physical-state gate.
 """
 
 from __future__ import annotations
@@ -40,6 +41,10 @@ EXPECTED_OBJECTS = {
     "plate_1": "plate",
 }
 VERDICT = "PASS_L1A3_NATIVE_ONLY_PREFLIGHT"
+INTERVENTION_ID = "l1a3_native_fixed_relation_postwait_v2"
+PHYSICAL_GATE_VERDICT = "PASS_L1A3_POSTWAIT_PHYSICAL_GATE"
+FORMAL_WAIT_STEPS = 10
+MAX_RECEPTACLE_TILT_DEG = 1.0
 
 
 def _sha256(path: Path) -> str:
@@ -229,6 +234,10 @@ def verify_state_file(state_path: Path, record: Mapping[str, object]) -> None:
             "native_bddl_sha256",
             "asset_inventory_sha256",
             "condition",
+            "intervention_id",
+            "physical_gate_verdict",
+            "formal_wait_steps",
+            "max_receptacle_tilt_deg",
         }
         missing = sorted(required - set(handle.attrs))
         if missing:
@@ -242,6 +251,10 @@ def verify_state_file(state_path: Path, record: Mapping[str, object]) -> None:
             "native_prompt": record["prompt"],
             "native_bddl_sha256": record["bddl_sha256"],
             "asset_inventory_sha256": record["asset_inventory_sha256"],
+            "intervention_id": INTERVENTION_ID,
+            "physical_gate_verdict": PHYSICAL_GATE_VERDICT,
+            "formal_wait_steps": FORMAL_WAIT_STEPS,
+            "max_receptacle_tilt_deg": MAX_RECEPTACLE_TILT_DEG,
         }
         mismatches = {
             name: (_read_attr(handle.attrs, name), value)
