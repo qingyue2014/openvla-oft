@@ -2796,6 +2796,7 @@ def test_500199_routes_reachable_outside_high_before_workspace_release():
         position_action_scale=0.08,
         native_action_spec=native,
         expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
     )
     assert action[0] > 0.0
     assert action[2] < 0.0
@@ -2806,6 +2807,10 @@ def test_500199_routes_reachable_outside_high_before_workspace_release():
     assert evidence["measured_negative_inertial_tail_reserve_m"] > 0.00000284
     assert all(
         pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+    assert all(
+        pair["predicted_post_worst_case_buffer16_surplus_m"] > 0.0
         for pair in evidence["pair_envelopes"]
     )
     assert evidence["proof"] == {
@@ -2830,11 +2835,11 @@ def test_500199_routes_reachable_outside_high_before_workspace_release():
         ),
         compiled_pairs=pairs,
         expected_pair_count=55,
-        require_lateral_buffer=False,
+        require_lateral_buffer=True,
         adaptive_high_lateral_envelope=evidence,
     )
     assert authorization["accepted"] is True
-    assert authorization["buffer16_used_for_authorization"] is False
+    assert authorization["buffer16_used_for_authorization"] is True
 
     released_corridor = _overhead_corridor_entry_evidence(
         current_eef=np.array([corridor_xy[0], corridor_xy[1], 1.0]),
@@ -2918,6 +2923,7 @@ def test_500206_exhausted_downward_capacity_triggers_positive_z_recovery():
         position_action_scale=0.08,
         native_action_spec=native,
         expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
     )
     assert guard["accepted"] is True
     assert evidence["event_driven_positive_z_inertial_recovery"] is True
@@ -2971,6 +2977,7 @@ def test_500206_exhausted_downward_capacity_triggers_positive_z_recovery():
         position_action_scale=0.08,
         native_action_spec=native,
         expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
     )
     assert route_evidence["event_driven_positive_z_inertial_recovery"] is False
     assert route_action[0] > 0.0
@@ -3008,7 +3015,7 @@ def test_500207_positive_pair_capacity_scales_diagonal_without_recovery():
             ),
             "strict_no_contact_clearance_m": strict_clearance,
             "vertical_clearance_m": (
-                strict_clearance + 0.008 + nominal_world_capacity
+                strict_clearance + 0.008 + 0.008 + nominal_world_capacity
             ),
             "accepted": True,
         }
@@ -3026,14 +3033,19 @@ def test_500207_positive_pair_capacity_scales_diagonal_without_recovery():
         "high": [1.0] * 7,
         "runtime_resolved": True,
     }
-    current = np.array([0.1232338, -0.0285932, 1.0197707])
     corridor_xy = np.array([0.1448063955, -0.0285077796])
     requested_norm = 1.3032
-    requested_xy_action = (corridor_xy - current[:2]) / 0.08
-    requested_z_action = -np.sqrt(
-        requested_norm**2 - np.linalg.norm(requested_xy_action) ** 2
+    requested_axis_world = float(
+        0.08 * requested_norm / np.sqrt(2.0)
     )
-    release_target_z = float(current[2] + 0.08 * requested_z_action)
+    current = np.array(
+        [
+            corridor_xy[0] - requested_axis_world,
+            corridor_xy[1],
+            1.0197707,
+        ]
+    )
+    release_target_z = float(current[2] - requested_axis_world)
     action, evidence = _compiled_adaptive_workspace_release_action(
         current_eef=current,
         corridor_target_xy=corridor_xy,
@@ -3044,15 +3056,16 @@ def test_500207_positive_pair_capacity_scales_diagonal_without_recovery():
         position_action_scale=0.08,
         native_action_spec=native,
         expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
     )
     assert evidence["requested_translation_action_norm"] == pytest.approx(
         requested_norm
     )
     assert evidence["candidate_action_norm_capacities"][
-        "compiled_pair_base8_nominal_tail_after_inertia"
+        "compiled_pair_buffer16_nominal_tail_after_inertia"
     ] == pytest.approx(pair_action_capacity)
     assert evidence["selected_envelope_source"] == (
-        "compiled_pair_base8_nominal_tail_after_inertia"
+        "compiled_pair_buffer16_nominal_tail_after_inertia"
     )
     assert evidence["event_driven_positive_z_inertial_recovery"] is False
     assert np.linalg.norm(action[:3]) == pytest.approx(pair_action_capacity)
@@ -3069,13 +3082,167 @@ def test_500207_recovery_trigger_is_exhaustion_not_positive_pair_limiting():
     release = controller.split(
         "def _compiled_adaptive_workspace_release_action(", 1
     )[1].split("\ndef _compiled_adaptive_lateral_rebuffer_action", 1)[0]
-    assert 'record["downward_capacity_exhausted_by_inertial_tail"]' in release
     assert (
-        'selected_source == "compiled_pair_base8_nominal_tail_after_inertia"'
+        'record["negative_z_capacity_exhausted_by_buffer16_or_inertia"]'
+        in release
+    )
+    assert (
+        'selected_source == "compiled_pair_buffer16_nominal_tail_after_inertia"'
         not in release
     )
     assert (
         'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+
+
+def test_500210_workspace_release_caps_z_and_recovers_before_base8_loss():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    current = np.array([0.122223, -0.028146, 0.942744])
+    corridor_xy = np.array([0.1448063955, -0.0285077796])
+    release_target_z = 0.898654346
+    latest_negative_dz = -0.004194
+    native = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "runtime_resolved": True,
+    }
+
+    def guard_with_base8_surplus(surplus):
+        pairs = [
+            {
+                "gripper_geom": f"gripper_{index // 11}",
+                "counterpart_geom": f"native_{index % 11}",
+                "counterpart_kind": (
+                    "table" if index % 11 == 10 else "plate"
+                ),
+                "strict_no_contact_clearance_m": strict_clearance,
+                "vertical_clearance_m": strict_clearance + 0.008 + surplus,
+                "accepted": True,
+            }
+            for index in range(55)
+        ]
+        return {
+            "accepted": True,
+            "one_step_vertical_reserve_m": 0.008,
+            "pairs": pairs,
+        }
+
+    roomy_guard = guard_with_base8_surplus(0.128)
+    action, evidence = _compiled_adaptive_workspace_release_action(
+        current_eef=current,
+        corridor_target_xy=corridor_xy,
+        release_target_z=release_target_z,
+        measured_vertical_step_progress_m=0.0,
+        overhead_guard=roomy_guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
+    )
+    xy_remaining = np.linalg.norm(corridor_xy - current[:2])
+    requested_z_world = abs(evidence["requested_translation_action"][2]) * 0.08
+    assert evidence["full_release_downward_z_error_m"] > xy_remaining
+    assert evidence["capped_downward_world_request_m"] == pytest.approx(
+        xy_remaining
+    )
+    assert requested_z_world == pytest.approx(xy_remaining)
+    assert evidence["downward_request_capped_by_xy_remaining"] is True
+    assert evidence["negative_z_action_requires_fixed_buffer16"] is True
+    assert action[0] > 0.0
+    assert action[2] < 0.0
+    assert all(
+        pair["predicted_post_worst_case_buffer16_surplus_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+    authorization = _overhead_route_frame_authorization_evidence(
+        outside_side_guard={
+            "accepted": False,
+            "minimum_outside_clearance_m": 0.002,
+            "required_outside_clearance_m": strict_clearance,
+        },
+        overhead_guard=roomy_guard,
+        overhead_lateral_buffer=_overhead_lateral_buffer_evidence(
+            roomy_guard,
+            worst_case_controller_world_step_m=0.008,
+        ),
+        compiled_pairs=roomy_guard["pairs"],
+        expected_pair_count=55,
+        require_lateral_buffer=True,
+        adaptive_high_lateral_envelope=evidence,
+    )
+    assert authorization["accepted"] is True
+    assert authorization["buffer16_used_for_authorization"] is True
+
+    late_guard = guard_with_base8_surplus(0.002792)
+    late_action, late = _compiled_adaptive_workspace_release_action(
+        current_eef=current,
+        corridor_target_xy=corridor_xy,
+        release_target_z=release_target_z,
+        measured_vertical_step_progress_m=latest_negative_dz,
+        overhead_guard=late_guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
+    )
+    assert late["minimum_current_base8_surplus_m"] == pytest.approx(0.002792)
+    assert late["pair_envelopes"][0]["current_buffer16_surplus_m"] < 0.0
+    assert late["event_driven_positive_z_inertial_recovery"] is True
+    assert late["negative_z_action_requires_fixed_buffer16"] is False
+    assert np.array_equal(late_action[:2], np.zeros(2))
+    assert late_action[2] > 0.0
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in late["pair_envelopes"]
+    )
+
+    early_guard = guard_with_base8_surplus(0.012)
+    early_action, early = _compiled_adaptive_workspace_release_action(
+        current_eef=current,
+        corridor_target_xy=corridor_xy,
+        release_target_z=release_target_z,
+        measured_vertical_step_progress_m=latest_negative_dz,
+        overhead_guard=early_guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
+    )
+    assert early["minimum_current_base8_surplus_m"] > early[
+        "measured_negative_inertial_tail_reserve_m"
+    ]
+    assert early["pair_envelopes"][0][
+        "nominal_negative_z_capacity_after_buffer16_and_inertia_m"
+    ] < 0.0
+    assert early["event_driven_positive_z_inertial_recovery"] is True
+    assert np.array_equal(early_action[:2], np.zeros(2))
+    assert early_action[2] > 0.0
+
+
+def test_500210_workspace_negative_z_uses_buffer16_without_threshold_changes():
+    controller = CONTROLLER_REFERENCE.read_text()
+    release = controller.split(
+        "def _compiled_adaptive_workspace_release_action(", 1
+    )[1].split("\ndef _compiled_adaptive_lateral_rebuffer_action", 1)[0]
+    bounded_seek = controller.split("def _seek_stable_plate_contact(", 1)[1]
+    assert "min(full_downward_z_error, xy_remaining)" in release
+    assert "required_clearance_with_fixed_buffer16_m" in release
+    assert "negative_z_capacity_exhausted_by_buffer16_or_inertia" in release
+    assert "or workspace_negative_z_action_requires_buffer16" in bounded_seek
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+    assert (
+        '"--plate_contact_seek_max_translation_action",\n'
+        "        type=float,\n"
+        "        default=0.10,"
         in controller
     )
 

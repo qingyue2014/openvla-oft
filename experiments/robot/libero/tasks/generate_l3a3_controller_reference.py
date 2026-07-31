@@ -1465,15 +1465,20 @@ def _overhead_route_frame_authorization_evidence(
         or not all(pair.get("accepted", False) for pair in buffer_pairs)
     ):
         raise RuntimeError(
-            "live buffer16 is not accepted before a pure-XY overhead route "
+            "live buffer16 is not accepted before a buffer16-required route "
             "action"
         )
     adaptive_pair_count = 0
     if adaptive_high_lateral_envelope is not None:
-        if require_lateral_buffer:
+        dynamic_buffer16_required = bool(
+            adaptive_high_lateral_envelope.get(
+                "negative_z_action_requires_fixed_buffer16", False
+            )
+        )
+        if dynamic_buffer16_required != bool(require_lateral_buffer):
             raise RuntimeError(
-                "adaptive high-lateral and fixed buffer16 authorization "
-                "cannot be combined"
+                "adaptive route buffer16 requirement diverged from its live "
+                "pre-action authorization"
             )
         adaptive_pairs = list(
             adaptive_high_lateral_envelope.get("pair_envelopes", ())
@@ -1509,6 +1514,12 @@ def _overhead_route_frame_authorization_evidence(
                 "minimum_predicted_post_worst_case_base_surplus_m"
             ]
         )
+        dynamic_minimum_buffer16_surplus = float(
+            adaptive_high_lateral_envelope.get(
+                "minimum_predicted_post_worst_case_buffer16_surplus_m",
+                np.inf,
+            )
+        )
         if not (
             adaptive_high_lateral_envelope.get("accepted", False)
             and dynamic_base_reserve == base_reserve
@@ -1518,6 +1529,13 @@ def _overhead_route_frame_authorization_evidence(
             and dynamic_world_tail >= 0.0
             and np.isfinite(dynamic_minimum_surplus)
             and dynamic_minimum_surplus > 0.0
+            and (
+                not dynamic_buffer16_required
+                or (
+                    np.isfinite(dynamic_minimum_buffer16_surplus)
+                    and dynamic_minimum_buffer16_surplus > 0.0
+                )
+            )
             and adaptive_high_lateral_envelope.get("proof", {}).get(
                 "all_compiled_pairs_retain_strict_base8_after_worst_case_tail",
                 False,
@@ -1544,6 +1562,33 @@ def _overhead_route_frame_authorization_evidence(
                     ]
                 )
                 > 0.0
+                and (
+                    not dynamic_buffer16_required
+                    or (
+                        float(
+                            adaptive_pair[
+                                "worst_case_controller_world_step_m"
+                            ]
+                        )
+                        == worst_case_step
+                        and float(
+                            adaptive_pair[
+                                "required_clearance_with_fixed_buffer16_m"
+                            ]
+                        )
+                        == float(
+                            overhead_strict
+                            + base_reserve
+                            + worst_case_step
+                        )
+                        and float(
+                            adaptive_pair[
+                                "predicted_post_worst_case_buffer16_surplus_m"
+                            ]
+                        )
+                        > 0.0
+                    )
+                )
             ):
                 raise RuntimeError(
                     "adaptive high-lateral pair item diverged from live "
@@ -3566,8 +3611,9 @@ def _compiled_adaptive_workspace_release_action(
     position_action_scale,
     native_action_spec,
     expected_pair_count,
+    worst_case_controller_world_step_m,
 ):
-    """Move outward and down while retaining every live pair's base8."""
+    """Move outward/down only with buffer16; recover while base8 remains."""
     current_eef = np.asarray(current_eef, dtype=float)
     corridor_target_xy = np.asarray(corridor_target_xy, dtype=float)
     if (
@@ -3579,6 +3625,8 @@ def _compiled_adaptive_workspace_release_action(
         or not np.isfinite(measured_vertical_step_progress_m)
         or not np.isfinite(position_action_scale)
         or position_action_scale <= 0.0
+        or not np.isfinite(worst_case_controller_world_step_m)
+        or worst_case_controller_world_step_m <= 0.0
     ):
         raise ValueError("workspace-release geometry is invalid")
     pairs = list(overhead_guard.get("pairs", ()))
@@ -3626,7 +3674,13 @@ def _compiled_adaptive_workspace_release_action(
 
     xy_error = corridor_target_xy - current_eef[:2]
     xy_remaining = float(np.linalg.norm(xy_error))
-    downward_z_error = float(min(0.0, release_target_z - current_eef[2]))
+    full_downward_z_error = float(
+        max(0.0, current_eef[2] - release_target_z)
+    )
+    downward_world_request = float(
+        min(full_downward_z_error, xy_remaining)
+    )
+    downward_z_error = float(-downward_world_request)
     requested = np.array(
         [
             xy_error[0] / position_action_scale,
@@ -3651,15 +3705,21 @@ def _compiled_adaptive_workspace_release_action(
     for index, (identity, pair) in enumerate(zip(identities, pairs)):
         clearance = float(pair["vertical_clearance_m"])
         strict_clearance = float(pair["strict_no_contact_clearance_m"])
-        required = float(strict_clearance + base_reserve)
-        current_surplus = float(clearance - required)
-        nominal_capacity = float(current_surplus - inertial_tail_reserve)
+        required_base8 = float(strict_clearance + base_reserve)
+        required_buffer16 = float(
+            required_base8 + worst_case_controller_world_step_m
+        )
+        current_base8_surplus = float(clearance - required_base8)
+        current_buffer16_surplus = float(clearance - required_buffer16)
+        nominal_capacity = float(
+            current_buffer16_surplus - inertial_tail_reserve
+        )
         if (
             not np.isfinite(clearance)
             or not np.isfinite(strict_clearance)
             or strict_clearance < 0.0
-            or not np.isfinite(current_surplus)
-            or current_surplus <= 0.0
+            or not np.isfinite(current_base8_surplus)
+            or current_base8_surplus <= 0.0
             or not pair.get("accepted", False)
         ):
             raise RuntimeError(
@@ -3681,13 +3741,26 @@ def _compiled_adaptive_workspace_release_action(
                 "current_vertical_clearance_m": clearance,
                 "strict_no_contact_clearance_m": strict_clearance,
                 "base_overhead_reserve_m": base_reserve,
-                "required_clearance_with_base_reserve_m": required,
-                "current_base8_surplus_m": current_surplus,
+                "worst_case_controller_world_step_m": float(
+                    worst_case_controller_world_step_m
+                ),
+                "required_clearance_with_base_reserve_m": required_base8,
+                "required_clearance_with_fixed_buffer16_m": (
+                    required_buffer16
+                ),
+                "current_base8_surplus_m": current_base8_surplus,
+                "current_buffer16_surplus_m": current_buffer16_surplus,
                 "measured_negative_inertial_tail_reserve_m": (
                     inertial_tail_reserve
                 ),
                 "strict_nominal_tail_capacity_m": strict_nominal_capacity,
+                "nominal_negative_z_capacity_after_buffer16_and_inertia_m": (
+                    nominal_capacity
+                ),
                 "downward_capacity_exhausted_by_inertial_tail": bool(
+                    nominal_capacity <= 0.0
+                ),
+                "negative_z_capacity_exhausted_by_buffer16_or_inertia": bool(
                     nominal_capacity <= 0.0
                 ),
                 "strict_safe_translation_action_norm_capacity": float(
@@ -3703,7 +3776,7 @@ def _compiled_adaptive_workspace_release_action(
     )
     capacities = {
         "requested_outward_downward_action_norm": requested_norm,
-        "compiled_pair_base8_nominal_tail_after_inertia": float(
+        "compiled_pair_buffer16_nominal_tail_after_inertia": float(
             limiting_pair["strict_safe_translation_action_norm_capacity"]
         ),
         "native_strict_3d_translation_action_norm_bound": (
@@ -3716,7 +3789,7 @@ def _compiled_adaptive_workspace_release_action(
         min(requested_norm, strict_native_norm_bound)
     )
     recovery_required = any(
-        record["downward_capacity_exhausted_by_inertial_tail"]
+        record["negative_z_capacity_exhausted_by_buffer16_or_inertia"]
         for record in pair_envelopes
     )
     minimum_current_surplus = min(
@@ -3731,7 +3804,12 @@ def _compiled_adaptive_workspace_release_action(
         required_recovery = float(
             max(
                 inertial_tail_reserve - minimum_current_surplus,
-                desired_route_tail - minimum_current_surplus,
+                worst_case_controller_world_step_m
+                + inertial_tail_reserve
+                - minimum_current_surplus,
+                worst_case_controller_world_step_m
+                + desired_route_tail
+                - minimum_current_surplus,
                 0.0,
             )
         )
@@ -3788,6 +3866,11 @@ def _compiled_adaptive_workspace_release_action(
             )
             for record in pair_envelopes
         ]
+        required_clearance_key = (
+            "required_clearance_with_base_reserve_m"
+            if recovery_required
+            else "required_clearance_with_fixed_buffer16_m"
+        )
         if (
             0.0 < literal_norm < native_norm_bound
             and (
@@ -3803,7 +3886,7 @@ def _compiled_adaptive_workspace_release_action(
             )
             and all(
                 clearance
-                > record["required_clearance_with_base_reserve_m"]
+                > record[required_clearance_key]
                 for clearance, record in zip(predicted, pair_envelopes)
             )
         ):
@@ -3820,16 +3903,24 @@ def _compiled_adaptive_workspace_release_action(
             "interior"
         )
     minimum_surplus = float("inf")
+    minimum_buffer16_surplus = float("inf")
     for clearance, record in zip(predicted, pair_envelopes):
         record["predicted_post_worst_case_vertical_clearance_m"] = clearance
         record["predicted_post_worst_case_base_reserve_surplus_m"] = float(
             clearance - record["required_clearance_with_base_reserve_m"]
+        )
+        record["predicted_post_worst_case_buffer16_surplus_m"] = float(
+            clearance - record["required_clearance_with_fixed_buffer16_m"]
         )
         minimum_surplus = min(
             minimum_surplus,
             record[
                 "predicted_post_worst_case_base_reserve_surplus_m"
             ],
+        )
+        minimum_buffer16_surplus = min(
+            minimum_buffer16_surplus,
+            record["predicted_post_worst_case_buffer16_surplus_m"],
         )
     action = np.zeros(7, dtype=float)
     action[:3] = translation
@@ -3842,16 +3933,22 @@ def _compiled_adaptive_workspace_release_action(
             else "outward_downward_workspace_release"
         ),
         "formula": (
-            "request [corridor XY error, min(0, outside-side Z minus current "
-            "Z)] over position_action_scale; intersect the strict native 3-D "
-            "norm with all 55 pair capacities after base8 and latest measured "
-            "negative-dz inertial reserve; if that reserve exhausts downward "
-            "capacity, prohibit negative Z and issue event-driven pure +Z "
-            "until every pair regains strict capacity"
+            "request corridor XY plus negative Z capped in world magnitude "
+            "by remaining corridor XY; authorize negative Z only through all "
+            "55 pair capacities after fixed buffer16 and latest measured "
+            "negative-dz inertial reserve; if any capacity is exhausted, "
+            "prohibit negative Z and issue event-driven pure +Z while the "
+            "unchanged base8 post-action gate remains strict"
         ),
         "current_eef": current_eef.tolist(),
         "corridor_target_xy": corridor_target_xy.tolist(),
         "release_target_z_m": float(release_target_z),
+        "xy_remaining_m": xy_remaining,
+        "full_release_downward_z_error_m": full_downward_z_error,
+        "capped_downward_world_request_m": downward_world_request,
+        "downward_request_capped_by_xy_remaining": bool(
+            downward_world_request <= xy_remaining
+        ),
         "requested_translation_action": requested.tolist(),
         "requested_translation_action_norm": requested_norm,
         "measured_vertical_step_progress_m": float(
@@ -3865,6 +3962,9 @@ def _compiled_adaptive_workspace_release_action(
         "candidate_action_norm_capacities": capacities,
         "selected_envelope_source": selected_source,
         "event_driven_positive_z_inertial_recovery": recovery_required,
+        "negative_z_action_requires_fixed_buffer16": bool(
+            not recovery_required
+        ),
         "minimum_current_base8_surplus_m": minimum_current_surplus,
         "commanded_positive_z_recovery_world_delta_m": (
             recovery_world_delta
@@ -3875,6 +3975,9 @@ def _compiled_adaptive_workspace_release_action(
         "commanded_xy_action": action[:2].tolist(),
         "commanded_z_action": float(action[2]),
         "minimum_predicted_post_worst_case_base_surplus_m": minimum_surplus,
+        "minimum_predicted_post_worst_case_buffer16_surplus_m": (
+            minimum_buffer16_surplus
+        ),
         "proof": {
             "outward_xy_plus_nonpositive_z_zero_rotation": bool(
                 not recovery_required
@@ -6089,7 +6192,17 @@ def _seek_stable_plate_contact(
                 position_action_scale=args.position_action_scale,
                 native_action_spec=native_action_spec,
                 expected_pair_count=expected_overhead_pair_count,
+                worst_case_controller_world_step_m=(
+                    maximum_controller_world_step
+                ),
             )
+        workspace_negative_z_action_requires_buffer16 = bool(
+            stage_before_action == "workspace_release_diagonal"
+            and prepared_high_lateral_envelope is not None
+            and prepared_high_lateral_envelope.get(
+                "negative_z_action_requires_fixed_buffer16", False
+            )
+        )
         pre_action_overhead_route_authorization = None
         if stage_before_action in overhead_route_stages:
             pre_action_overhead_route_authorization = (
@@ -6103,6 +6216,7 @@ def _seek_stable_plate_contact(
                     expected_pair_count=expected_overhead_pair_count,
                     require_lateral_buffer=(
                         stage_before_action in fixed_buffer_lateral_stages
+                        or workspace_negative_z_action_requires_buffer16
                     ),
                     adaptive_high_lateral_envelope=(
                         prepared_high_lateral_envelope
