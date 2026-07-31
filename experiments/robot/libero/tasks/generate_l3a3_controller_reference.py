@@ -3364,7 +3364,6 @@ def _compiled_adaptive_high_plane_action(
         if measured_negative_tail > 0.0
         else 0.0
     )
-
     pair_envelopes = []
     for index, (identity, pair) in enumerate(zip(identities, pairs)):
         vertical_clearance = float(pair["vertical_clearance_m"])
@@ -3688,6 +3687,9 @@ def _compiled_adaptive_workspace_release_action(
             worst_case_controller_world_step_m,
         )
     )
+    downward_world_request_before_live_buffer_headroom_cap = float(
+        downward_world_request
+    )
     downward_z_error = float(-downward_world_request)
     requested = np.array(
         [
@@ -3723,6 +3725,11 @@ def _compiled_adaptive_workspace_release_action(
         if measured_negative_tail > 0.0
         else 0.0
     )
+    if not np.isfinite(inertial_tail_reserve):
+        raise RuntimeError(
+            "workspace-release live pre-action buffer16 headroom input is "
+            "non-finite"
+        )
 
     pair_envelopes = []
     for index, (identity, pair) in enumerate(zip(identities, pairs)):
@@ -3746,6 +3753,8 @@ def _compiled_adaptive_workspace_release_action(
             or strict_clearance < 0.0
             or not np.isfinite(current_base8_surplus)
             or current_base8_surplus <= 0.0
+            or not np.isfinite(pre_action_buffer16_capacity)
+            or not np.isfinite(post_base8_action_capacity)
             or not pair.get("accepted", False)
         ):
             raise RuntimeError(
@@ -3815,6 +3824,48 @@ def _compiled_adaptive_workspace_release_action(
             "pre_action_buffer16_surplus_after_inertia_m"
         ],
     )
+    recovery_required = any(
+        record["negative_z_capacity_exhausted_by_buffer16_or_inertia"]
+        for record in pair_envelopes
+    )
+    minimum_current_surplus = min(
+        record["current_base8_surplus_m"] for record in pair_envelopes
+    )
+    minimum_pre_action_buffer16_surplus = min(
+        record["pre_action_buffer16_surplus_after_inertia_m"]
+        for record in pair_envelopes
+    )
+    if not np.isfinite(minimum_pre_action_buffer16_surplus):
+        raise RuntimeError(
+            "workspace-release live pre-action buffer16 headroom is "
+            "non-finite"
+        )
+    live_buffer_headroom_cap_applied = bool(
+        not recovery_required
+        and downward_world_request_before_live_buffer_headroom_cap > 0.0
+    )
+    if live_buffer_headroom_cap_applied:
+        downward_world_request = float(
+            min(
+                downward_world_request_before_live_buffer_headroom_cap,
+                minimum_pre_action_buffer16_surplus,
+            )
+        )
+        downward_z_error = float(-downward_world_request)
+        requested = np.array(
+            [
+                xy_error[0] / position_action_scale,
+                xy_error[1] / position_action_scale,
+                downward_z_error / position_action_scale,
+            ]
+        )
+        requested_norm = float(np.linalg.norm(requested))
+        if not np.isfinite(requested_norm) or requested_norm <= 0.0:
+            raise RuntimeError(
+                "workspace release has no positive finite headroom-capped "
+                "route error"
+            )
+        requested_direction = requested / requested_norm
     capacities = {
         "requested_outward_downward_action_norm": requested_norm,
         "compiled_pair_base8_post_tail_after_inertia": float(
@@ -3828,17 +3879,6 @@ def _compiled_adaptive_workspace_release_action(
     selected_norm = float(capacities[selected_source])
     desired_route_norm = float(
         min(recovery_route_requested_norm, strict_native_norm_bound)
-    )
-    recovery_required = any(
-        record["negative_z_capacity_exhausted_by_buffer16_or_inertia"]
-        for record in pair_envelopes
-    )
-    minimum_current_surplus = min(
-        record["current_base8_surplus_m"] for record in pair_envelopes
-    )
-    minimum_pre_action_buffer16_surplus = min(
-        record["pre_action_buffer16_surplus_after_inertia_m"]
-        for record in pair_envelopes
     )
     if recovery_required:
         desired_route_tail = float(
@@ -4104,13 +4144,14 @@ def _compiled_adaptive_workspace_release_action(
         "formula": (
             "request corridor XY plus negative Z capped in world magnitude "
             "by both remaining corridor XY and the existing one-step world "
-            "reserve; authorize negative Z only when every current pair "
-            "remains strictly above fixed buffer16 after the latest measured "
-            "negative-dz inertial reserve; size the literal action against "
-            "the unchanged post-action base8 clearance; if pre-action "
-            "buffer16 is exhausted, prohibit negative Z and issue "
-            "event-driven pure +Z; construct the literal action by a scalar "
-            "strict-interior solve along the unchanged route direction"
+            "reserve, then cap only its negative-Z direction component by "
+            "the live minimum all-55-pair pre-action buffer16 surplus after "
+            "the latest measured negative-dz inertial reserve; authorize "
+            "negative Z only when every current pair remains strictly above "
+            "that fixed buffer16; size and revalidate the literal scalar "
+            "action against every unchanged post-action base8 clearance; if "
+            "pre-action buffer16 is exhausted, prohibit negative Z and issue "
+            "event-driven pure +Z with the unchanged recovery route norm"
         ),
         "current_eef": current_eef.tolist(),
         "corridor_target_xy": corridor_target_xy.tolist(),
@@ -4120,12 +4161,24 @@ def _compiled_adaptive_workspace_release_action(
         "xy_coupled_downward_world_request_before_one_step_cap_m": (
             xy_coupled_downward_world_request
         ),
+        "downward_world_request_before_live_buffer16_headroom_cap_m": (
+            downward_world_request_before_live_buffer_headroom_cap
+        ),
         "capped_downward_world_request_m": downward_world_request,
         "downward_request_capped_by_xy_remaining": bool(
             downward_world_request <= xy_remaining
         ),
         "downward_request_capped_by_existing_one_step_world_reserve": bool(
-            downward_world_request <= worst_case_controller_world_step_m
+            downward_world_request_before_live_buffer_headroom_cap
+            <= worst_case_controller_world_step_m
+        ),
+        "live_pre_action_buffer16_headroom_cap_applied_to_negative_z": (
+            live_buffer_headroom_cap_applied
+        ),
+        "downward_request_within_live_pre_action_buffer16_headroom": bool(
+            recovery_required
+            or downward_world_request
+            <= minimum_pre_action_buffer16_surplus
         ),
         "requested_translation_action": requested.tolist(),
         "requested_translation_action_norm": requested_norm,
@@ -4184,6 +4237,10 @@ def _compiled_adaptive_workspace_release_action(
             "negative_z_pre_action_uses_strict_buffer16_plus_inertia": bool(
                 not recovery_required
             ),
+            "live_buffer16_headroom_only_refines_negative_z_direction": (
+                True
+            ),
+            "recovery_route_norm_unchanged_by_live_headroom_cap": True,
             "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": (
                 True
             ),

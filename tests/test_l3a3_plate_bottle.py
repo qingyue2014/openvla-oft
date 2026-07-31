@@ -2821,6 +2821,8 @@ def test_500199_routes_reachable_outside_high_before_workspace_release():
         "does_not_cross_release_target_z": True,
         "latest_measured_negative_dz_reserved_as_inertial_tail": True,
         "negative_z_pre_action_uses_strict_buffer16_plus_inertia": True,
+        "live_buffer16_headroom_only_refines_negative_z_direction": True,
+        "recovery_route_norm_unchanged_by_live_headroom_cap": True,
         "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": True,
     }
     authorization = _overhead_route_frame_authorization_evidence(
@@ -3469,10 +3471,21 @@ def test_500224_pre_buffer16_authorizes_post_base8_capacity_from_trace():
     assert evidence["negative_z_action_requires_fixed_buffer16"] is True
     assert action[0] > 0.0
     assert action[2] < 0.0
-    assert abs(action[2]) == pytest.approx(0.1)
-    assert evidence["capped_downward_world_request_m"] == pytest.approx(
-        0.008
+    assert abs(action[2]) == pytest.approx(
+        evidence[
+            "minimum_pre_action_buffer16_surplus_after_inertia_m"
+        ]
+        / 0.08
     )
+    assert evidence[
+        "downward_world_request_before_live_buffer16_headroom_cap_m"
+    ] == pytest.approx(0.008)
+    assert evidence["capped_downward_world_request_m"] == pytest.approx(
+        0.007085405697823642
+    )
+    assert evidence[
+        "live_pre_action_buffer16_headroom_cap_applied_to_negative_z"
+    ] is True
     old_equal_xy_z_requested_norm = 0.2158392697294268
     old_equal_xy_z_action_x = float(
         post_base8_capacity
@@ -3584,7 +3597,11 @@ def test_500234_trace_frame50_reallocates_safe_norm_toward_corridor_xy():
         worst_case_controller_world_step_m=0.008,
     )
     assert evidence["requested_translation_action"] == pytest.approx(
-        [0.14475286070532548, -0.0019898926442201564, -0.1]
+        [
+            0.14475286070532548,
+            -0.0019898926442201564,
+            -0.05244325799542244,
+        ]
     )
     assert evidence["selected_envelope_source"] == (
         "compiled_pair_base8_post_tail_after_inertia"
@@ -3592,14 +3609,17 @@ def test_500234_trace_frame50_reallocates_safe_norm_toward_corridor_xy():
     assert evidence[
         "minimum_pre_action_buffer16_surplus_after_inertia_m"
     ] == pytest.approx(0.004195460639633795)
+    assert evidence[
+        "downward_world_request_before_live_buffer16_headroom_cap_m"
+    ] == pytest.approx(0.008)
     assert evidence["capped_downward_world_request_m"] == pytest.approx(
-        0.008
+        0.004195460639633795
     )
     assert evidence["capped_downward_world_request_m"] <= evidence[
         "xy_remaining_m"
     ]
     old_equal_xy_z_action_x = 0.10778347774973417
-    assert action[0] == pytest.approx(0.12541616, abs=1e-8)
+    assert action[0] == pytest.approx(0.14331484007191872)
     assert action[0] > old_equal_xy_z_action_x
     assert abs(action[2]) < action[0]
     assert all(
@@ -3678,6 +3698,235 @@ def test_500234_z_cap_uses_existing_reserve_without_gate_or_budget_changes():
     assert "clearance >= record[required_clearance_key]" not in release
     assert (
         'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+
+
+def test_500240_trace_frame157_spends_tiny_headroom_on_z_not_corridor_xy():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    current_base8_surplus = 0.00817710559427283
+    pairs = [
+        {
+            "gripper_geom": f"gripper_{index // 11}",
+            "counterpart_geom": f"native_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": (
+                strict_clearance + 0.008 + current_base8_surplus
+            ),
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    current_eef = np.array(
+        [0.132415948569856, -0.02789013240409504, 0.9479879060895927]
+    )
+    corridor_target_xy = np.array(
+        [0.14480639548403948, -0.02850777957668001]
+    )
+    release_target_z = 0.917769758476126
+    action, evidence = _compiled_adaptive_workspace_release_action(
+        current_eef=current_eef,
+        corridor_target_xy=corridor_target_xy,
+        release_target_z=release_target_z,
+        measured_vertical_step_progress_m=0.00016154820993052876,
+        overhead_guard={
+            "accepted": True,
+            "one_step_vertical_reserve_m": 0.008,
+            "pairs": pairs,
+        },
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec={
+            "source": "env.action_spec",
+            "action_dimension": 7,
+            "low": [-1.0] * 7,
+            "high": [1.0] * 7,
+            "runtime_resolved": True,
+        },
+        expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
+    )
+    headroom = evidence[
+        "minimum_pre_action_buffer16_surplus_after_inertia_m"
+    ]
+    assert headroom == pytest.approx(0.00017710559427282918)
+    assert evidence[
+        "downward_world_request_before_live_buffer16_headroom_cap_m"
+    ] == pytest.approx(0.008)
+    assert evidence["capped_downward_world_request_m"] == pytest.approx(
+        headroom
+    )
+    assert evidence[
+        "live_pre_action_buffer16_headroom_cap_applied_to_negative_z"
+    ] is True
+    assert evidence[
+        "downward_request_within_live_pre_action_buffer16_headroom"
+    ] is True
+    assert action[:3] == pytest.approx(
+        [
+            0.10207665983569228,
+            -0.005088384686291023,
+            -0.0014590553211515911,
+        ]
+    )
+    job_500240_old_action_x = 0.08579526670320199
+    job_500240_old_action_z = -0.055394461424949075
+    assert action[0] > job_500240_old_action_x
+    assert abs(action[2]) < abs(job_500240_old_action_z) / 10.0
+    xy_error = corridor_target_xy - current_eef[:2]
+    expected_recovery_route_norm = np.linalg.norm(
+        [
+            xy_error[0] / 0.08,
+            xy_error[1] / 0.08,
+            -min(
+                current_eef[2] - release_target_z,
+                np.linalg.norm(xy_error),
+            )
+            / 0.08,
+        ]
+    )
+    assert evidence[
+        "recovery_route_requested_translation_action_norm_before_one_step_cap"
+    ] == pytest.approx(expected_recovery_route_norm)
+    assert evidence["compiled_pair_count"] == 55
+    assert all(
+        pair["pre_action_buffer16_surplus_after_inertia_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+    scalar = evidence["literal_scalar_strict_interior_solver"]
+    assert scalar["accepted"] is True
+    assert scalar["final_failed_conditions"] == []
+
+
+def test_500240_near_zero_positive_headroom_keeps_xy_and_tiny_negative_z():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    required_buffer16 = strict_clearance + 0.016
+    vertical_clearance = np.nextafter(required_buffer16, np.inf)
+    pairs = [
+        {
+            "gripper_geom": f"gripper_{index // 11}",
+            "counterpart_geom": f"native_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": vertical_clearance,
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    action, evidence = _compiled_adaptive_workspace_release_action(
+        current_eef=np.array([0.0, 0.0, 0.95]),
+        corridor_target_xy=np.array([0.02, 0.0]),
+        release_target_z=0.90,
+        measured_vertical_step_progress_m=0.0,
+        overhead_guard={
+            "accepted": True,
+            "one_step_vertical_reserve_m": 0.008,
+            "pairs": pairs,
+        },
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec={
+            "source": "env.action_spec",
+            "action_dimension": 7,
+            "low": [-1.0] * 7,
+            "high": [1.0] * 7,
+            "runtime_resolved": True,
+        },
+        expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
+    )
+    headroom = evidence[
+        "minimum_pre_action_buffer16_surplus_after_inertia_m"
+    ]
+    assert 0.0 < headroom < 1e-15
+    assert evidence["event_driven_positive_z_inertial_recovery"] is False
+    assert evidence["capped_downward_world_request_m"] == headroom
+    assert action[0] > 0.0
+    assert action[2] < 0.0
+    assert abs(action[2]) < 1e-15
+    assert all(
+        pair["pre_action_buffer16_surplus_after_inertia_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+
+
+def test_500240_nonfinite_live_headroom_input_fails_closed():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    pairs = [
+        {
+            "gripper_geom": f"gripper_{index // 11}",
+            "counterpart_geom": f"native_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": 0.1,
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    with np.errstate(over="ignore"):
+        with pytest.raises(RuntimeError, match="headroom input is non-finite"):
+            _compiled_adaptive_workspace_release_action(
+                current_eef=np.array([0.0, 0.0, 0.95]),
+                corridor_target_xy=np.array([0.02, 0.0]),
+                release_target_z=0.90,
+                measured_vertical_step_progress_m=-np.finfo(float).max,
+                overhead_guard={
+                    "accepted": True,
+                    "one_step_vertical_reserve_m": 0.008,
+                    "pairs": pairs,
+                },
+                gripper=-1.0,
+                position_action_scale=0.08,
+                native_action_spec={
+                    "source": "env.action_spec",
+                    "action_dimension": 7,
+                    "low": [-1.0] * 7,
+                    "high": [1.0] * 7,
+                    "runtime_resolved": True,
+                },
+                expected_pair_count=55,
+                worst_case_controller_world_step_m=0.008,
+            )
+
+
+def test_500240_headroom_refines_direction_without_gate_or_budget_changes():
+    controller = CONTROLLER_REFERENCE.read_text()
+    release = controller.split(
+        "def _compiled_adaptive_workspace_release_action(", 1
+    )[1].split("\ndef _compiled_adaptive_lateral_rebuffer_action", 1)[0]
+    assert "downward_world_request_before_live_buffer_headroom_cap" in release
+    assert "minimum_pre_action_buffer16_surplus" in release
+    assert "recovery_route_requested_norm" in release
+    assert (
+        'required_clearance_key = "required_clearance_with_base_reserve_m"'
+        in release
+    )
+    assert "for clearance, record in zip(predicted, pair_envelopes)" in release
+    assert "clearance > record[required_clearance_key]" in release
+    assert "clearance >= record[required_clearance_key]" not in release
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+    assert (
+        '"--plate_contact_seek_max_translation_action",\n'
+        "        type=float,\n"
+        "        default=0.10,"
         in controller
     )
 
