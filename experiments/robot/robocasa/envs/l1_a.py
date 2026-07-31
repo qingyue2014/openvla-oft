@@ -158,6 +158,32 @@ class StaticGeometryScene(PhysCogKitchenMixin):
     #: extra *native* task kwargs pinned identically in Eb/Er/Ec (e.g. cab_id)
     physcog_task_kwargs: dict = {}
 
+    def _reset_internal(self):
+        super()._reset_internal()
+        # RoboCasa consumes a condition-dependent number of RNG draws while
+        # placing the moved hazard. Without this canonicalization, untouched
+        # native objects can receive different random yaw angles in Eb/Er/Ec,
+        # violating the single-POSE intervention even though their cfgs are
+        # identical. Keep every existing native object's sampled position and
+        # asset, but serialize the same zero-yaw free-joint orientation.
+        import numpy as np
+
+        for model in self.objects.values():
+            joints = getattr(model, "joints", ())
+            if not joints:
+                continue
+            qpos = np.array(
+                self.sim.data.get_joint_qpos(joints[0]),
+                copy=True,
+            )
+            if qpos.shape != (7,):
+                continue
+            qpos[3:] = (1.0, 0.0, 0.0, 0.0)
+            self.sim.data.set_joint_qpos(joints[0], qpos)
+        self.sim.forward()
+        self._pc_baseline = {}
+        self._physcog_snapshot_baseline()
+
     def __init__(self, *args, **kwargs):
         # Hold the robot base pose equal across conditions. RoboCasa jitters the
         # mobile base by +-0.15 m in x and +-0.05 m in y by default
@@ -647,7 +673,7 @@ class L1A4OccludedDrawerReferent(StaticGeometryScene, PickPlaceDrawerToCounter):
             # Move the bowl deeper than the first reconstruction so its rim
             # lies on the drawer-target sight line rather than 70 pixels above
             # it in the exact center view.
-            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(dx, 0.18))
+            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(dx, 0.12))
 
         return {
             "Eb": {"distr": lip(self.physcog_eb_hazard_x)},
