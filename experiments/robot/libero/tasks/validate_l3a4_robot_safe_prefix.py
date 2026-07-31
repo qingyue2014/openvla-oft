@@ -1319,7 +1319,30 @@ def _compiled_convex_mesh_geometry(model, geom_id):
     }
 
 
-def _compiled_geom_evidence(model, geom_id):
+def _cached_compiled_convex_mesh_geometry(
+    model, geom_id, compiled_geometry_cache=None
+):
+    """Reuse immutable compiled hull decoding within one scene state."""
+    if compiled_geometry_cache is None:
+        return _compiled_convex_mesh_geometry(model, geom_id)
+    mesh_cache = compiled_geometry_cache.setdefault("convex_mesh", {})
+    mesh_cache_key = (id(model), int(geom_id))
+    if mesh_cache_key in mesh_cache:
+        compiled_geometry_cache["hits"] = int(
+            compiled_geometry_cache.get("hits", 0)
+        ) + 1
+        return mesh_cache[mesh_cache_key]
+    decoded_mesh = _compiled_convex_mesh_geometry(model, geom_id)
+    mesh_cache[mesh_cache_key] = decoded_mesh
+    compiled_geometry_cache["misses"] = int(
+        compiled_geometry_cache.get("misses", 0)
+    ) + 1
+    return decoded_mesh
+
+
+def _compiled_geom_evidence(
+    model, geom_id, compiled_geometry_cache=None
+):
     """Record the exact compiled shape inputs used by clearance."""
     geom_id = int(geom_id)
     evidence = {
@@ -1340,8 +1363,8 @@ def _compiled_geom_evidence(model, geom_id):
         ),
     }
     if evidence["geom_type"] == 7:
-        _, _, mesh_evidence = _compiled_convex_mesh_geometry(
-            model, geom_id
+        _, _, mesh_evidence = _cached_compiled_convex_mesh_geometry(
+            model, geom_id, compiled_geometry_cache
         )
         evidence["convex_mesh"] = mesh_evidence
     return evidence
@@ -1356,6 +1379,7 @@ def _compiled_geom_pair_clearance(
     *,
     fixture_center_override=None,
     fixture_rotation_override=None,
+    compiled_geometry_cache=None,
 ):
     """Conservatively clear a translated geom against native fixture geom."""
     model = env.sim.model
@@ -1445,11 +1469,13 @@ def _compiled_geom_pair_clearance(
                     "lower bound"
                 )
             else:
-                (
-                    mesh_vertices,
-                    mesh_faces,
-                    _,
-                ) = _compiled_convex_mesh_geometry(model, moving_geom)
+                mesh_vertices, mesh_faces, _ = (
+                    _cached_compiled_convex_mesh_geometry(
+                        model,
+                        moving_geom,
+                        compiled_geometry_cache,
+                    )
+                )
                 world_vertices = (
                     moving_center
                     + (moving_rotation @ mesh_vertices.T).T
@@ -1675,8 +1701,11 @@ def _translated_swept_clearance(
     start_position,
     end_position,
     reference_position,
+    *,
+    stop_at_or_below=None,
+    compiled_geometry_cache=None,
 ):
-    """Bound the whole straight translation, inflating by half sample step."""
+    """Bound a straight translation, with threshold-equivalent fail-fast."""
     model = env.sim.model
     start = np.asarray(start_position, dtype=float)
     end = np.asarray(end_position, dtype=float)
@@ -1687,78 +1716,97 @@ def _translated_swept_clearance(
     )
     spacing = distance / intervals
     sweep_guard = 0.5 * spacing
+    fractions = np.linspace(0.0, 1.0, intervals + 1)
+    compatible_geom_pairs = [
+        (moving_geom, fixture_geom)
+        for moving_geom in moving_geoms
+        for fixture_geom in fixture_geoms
+        if collision_masks_compatible(
+            model.geom_contype[moving_geom],
+            model.geom_conaffinity[moving_geom],
+            model.geom_contype[fixture_geom],
+            model.geom_conaffinity[fixture_geom],
+        )
+    ]
+    if not compatible_geom_pairs:
+        raise RuntimeError(
+            "compiled insertion sweep has no collision-compatible geom pairs"
+        )
+    total_pair_evaluations = len(fractions) * len(compatible_geom_pairs)
     minimum = float("inf")
     limiting = None
     compatible_pairs = 0
-    for sample_index, fraction in enumerate(
-        np.linspace(0.0, 1.0, intervals + 1)
-    ):
+    threshold_rejection_seen = False
+    for sample_index, fraction in enumerate(fractions):
         translated_position = (
             start + (end - start) * float(fraction)
         )
         translation = translated_position - reference
-        for moving_geom in moving_geoms:
-            for fixture_geom in fixture_geoms:
-                if not collision_masks_compatible(
-                    model.geom_contype[moving_geom],
-                    model.geom_conaffinity[moving_geom],
-                    model.geom_contype[fixture_geom],
-                    model.geom_conaffinity[fixture_geom],
-                ):
-                    continue
-                compatible_pairs += 1
-                (
-                    clearance,
-                    method,
-                    clearance_components,
-                ) = _compiled_geom_pair_clearance(
-                    env,
-                    moving_geom,
-                    fixture_geom,
-                    translation,
-                    sweep_guard,
-                )
-                if clearance < minimum:
-                    minimum = clearance
-                    limiting = {
-                        "sample_index": int(sample_index),
-                        "sample_fraction": float(fraction),
-                        "translated_reference_position": (
-                            translated_position.tolist()
-                        ),
-                        "moving_geom_id": int(moving_geom),
-                        "moving_geom_name": _geom_name(
-                            model, moving_geom
-                        ),
-                        "moving_body_name": str(
-                            model.body_id2name(
-                                int(model.geom_bodyid[moving_geom])
-                            )
-                            or ""
-                        ),
-                        "fixture_geom_id": int(fixture_geom),
-                        "fixture_geom_name": _geom_name(
-                            model, fixture_geom
-                        ),
-                        "fixture_body_name": str(
-                            model.body_id2name(
-                                int(model.geom_bodyid[fixture_geom])
-                            )
-                            or ""
-                        ),
-                        "clearance_m": float(clearance),
-                        "method": method,
-                        "clearance_components": clearance_components,
-                    }
-    if compatible_pairs == 0 or limiting is None:
+        for moving_geom, fixture_geom in compatible_geom_pairs:
+            compatible_pairs += 1
+            (
+                clearance,
+                method,
+                clearance_components,
+            ) = _compiled_geom_pair_clearance(
+                env,
+                moving_geom,
+                fixture_geom,
+                translation,
+                sweep_guard,
+                compiled_geometry_cache=compiled_geometry_cache,
+            )
+            if clearance < minimum:
+                minimum = clearance
+                limiting = {
+                    "sample_index": int(sample_index),
+                    "sample_fraction": float(fraction),
+                    "translated_reference_position": (
+                        translated_position.tolist()
+                    ),
+                    "moving_geom_id": int(moving_geom),
+                    "moving_geom_name": _geom_name(model, moving_geom),
+                    "moving_body_name": str(
+                        model.body_id2name(
+                            int(model.geom_bodyid[moving_geom])
+                        )
+                        or ""
+                    ),
+                    "fixture_geom_id": int(fixture_geom),
+                    "fixture_geom_name": _geom_name(model, fixture_geom),
+                    "fixture_body_name": str(
+                        model.body_id2name(
+                            int(model.geom_bodyid[fixture_geom])
+                        )
+                        or ""
+                    ),
+                    "clearance_m": float(clearance),
+                    "method": method,
+                    "clearance_components": clearance_components,
+                }
+            if (
+                stop_at_or_below is not None
+                and minimum <= float(stop_at_or_below)
+            ):
+                threshold_rejection_seen = True
+                break
+        if threshold_rejection_seen:
+            break
+    if limiting is None:
         raise RuntimeError(
             "compiled insertion sweep has no collision-compatible geom pairs"
         )
+    full_sweep_evaluated = compatible_pairs == total_pair_evaluations
+    terminated_early = threshold_rejection_seen and not full_sweep_evaluated
     limiting["moving_compiled_geometry"] = _compiled_geom_evidence(
-        model, limiting["moving_geom_id"]
+        model,
+        limiting["moving_geom_id"],
+        compiled_geometry_cache,
     )
     limiting["fixture_compiled_geometry"] = _compiled_geom_evidence(
-        model, limiting["fixture_geom_id"]
+        model,
+        limiting["fixture_geom_id"],
+        compiled_geometry_cache,
     )
     return minimum, {
         "path_start": start.tolist(),
@@ -1776,7 +1824,16 @@ def _translated_swept_clearance(
         "sample_spacing_m": spacing,
         "continuous_sweep_guard_m": sweep_guard,
         "compatible_pair_evaluations": compatible_pairs,
+        "total_pair_evaluations_without_fail_fast": total_pair_evaluations,
         "minimum_clearance_m": minimum,
+        "threshold_fail_fast_m": (
+            None
+            if stop_at_or_below is None
+            else float(stop_at_or_below)
+        ),
+        "terminated_early": terminated_early,
+        "threshold_rejection_seen": threshold_rejection_seen,
+        "full_sweep_evaluated": full_sweep_evaluated,
         "limiting_pair": limiting,
     }
 
@@ -1991,6 +2048,11 @@ def _compiled_target_grasp_clearance(
     nominal_eef = target_position + np.asarray(
         [0.0, 0.0, GRASP_HEIGHT]
     )
+    compiled_geometry_cache = {
+        "convex_mesh": {},
+        "hits": 0,
+        "misses": 0,
+    }
     trace = []
     for offset in np.arange(
         first_offset,
@@ -2013,117 +2075,138 @@ def _compiled_target_grasp_clearance(
             clearance_high_eef = clearance_eef + np.asarray(
                 [0.0, 0.0, APPROACH_HEIGHT]
             )
-            target_approach_clearance, target_approach_sweep = (
-                _translated_swept_clearance(
-                    env,
-                    collision_gripper_geoms,
-                    collision_target_geoms,
-                    current_eef,
-                    clearance_high_eef,
-                    current_eef,
-                )
-            )
-            target_descend_clearance, target_descend_sweep = (
-                _translated_swept_clearance(
-                    env,
+            sweep_specs = [
+                (
+                    "target_descend",
                     collision_gripper_geoms,
                     collision_target_geoms,
                     clearance_high_eef,
                     clearance_eef,
-                    current_eef,
-                )
-            )
-            fixture_approach_clearance, fixture_approach_sweep = (
-                _translated_swept_clearance(
-                    env,
-                    fixture_compatible_gripper_geoms,
-                    fixture_geoms,
+                    EEF_POSITION_TOLERANCE,
+                ),
+                (
+                    "target_approach",
+                    collision_gripper_geoms,
+                    collision_target_geoms,
                     current_eef,
                     clearance_high_eef,
-                    current_eef,
-                )
-            )
-            fixture_descend_clearance, fixture_descend_sweep = (
-                _translated_swept_clearance(
-                    env,
-                    fixture_compatible_gripper_geoms,
-                    fixture_geoms,
-                    clearance_high_eef,
-                    clearance_eef,
-                    current_eef,
-                )
-            )
-            fixture_lateral_clearance, fixture_lateral_sweep = (
-                _translated_swept_clearance(
-                    env,
-                    fixture_compatible_gripper_geoms,
-                    fixture_geoms,
-                    clearance_eef,
-                    nominal_eef,
-                    current_eef,
-                )
-            )
-            porcelain_approach_clearance, porcelain_approach_sweep = (
-                _translated_swept_clearance(
-                    env,
-                    porcelain_gripper_geoms,
-                    collision_porcelain_geoms,
-                    current_eef,
-                    clearance_high_eef,
-                    current_eef,
-                )
-            )
-            porcelain_descend_clearance, porcelain_descend_sweep = (
-                _translated_swept_clearance(
-                    env,
-                    porcelain_gripper_geoms,
-                    collision_porcelain_geoms,
-                    clearance_high_eef,
-                    clearance_eef,
-                    current_eef,
-                )
-            )
-            porcelain_lateral_clearance, porcelain_lateral_sweep = (
-                _translated_swept_clearance(
-                    env,
+                    EEF_POSITION_TOLERANCE,
+                ),
+                (
+                    "porcelain_lateral",
                     porcelain_gripper_geoms,
                     collision_porcelain_geoms,
                     clearance_eef,
                     nominal_eef,
+                    0.0,
+                ),
+                (
+                    "porcelain_descend",
+                    porcelain_gripper_geoms,
+                    collision_porcelain_geoms,
+                    clearance_high_eef,
+                    clearance_eef,
+                    0.0,
+                ),
+                (
+                    "porcelain_approach",
+                    porcelain_gripper_geoms,
+                    collision_porcelain_geoms,
                     current_eef,
+                    clearance_high_eef,
+                    0.0,
+                ),
+                (
+                    "fixture_lateral",
+                    fixture_compatible_gripper_geoms,
+                    fixture_geoms,
+                    clearance_eef,
+                    nominal_eef,
+                    0.0,
+                ),
+                (
+                    "fixture_descend",
+                    fixture_compatible_gripper_geoms,
+                    fixture_geoms,
+                    clearance_high_eef,
+                    clearance_eef,
+                    0.0,
+                ),
+                (
+                    "fixture_approach",
+                    fixture_compatible_gripper_geoms,
+                    fixture_geoms,
+                    current_eef,
+                    clearance_high_eef,
+                    0.0,
+                ),
+            ]
+            clearance_values = {
+                f"{sweep_name}_clearance_m": None
+                for sweep_name, *_ in sweep_specs
+            }
+            sweep_evidence = {}
+            rejection_stage = None
+            for (
+                sweep_name,
+                moving_geoms,
+                obstacle_geoms,
+                sweep_start,
+                sweep_end,
+                required_clearance,
+            ) in sweep_specs:
+                clearance, evidence = _translated_swept_clearance(
+                    env,
+                    moving_geoms,
+                    obstacle_geoms,
+                    sweep_start,
+                    sweep_end,
+                    current_eef,
+                    stop_at_or_below=required_clearance,
+                    compiled_geometry_cache=compiled_geometry_cache,
                 )
-            )
+                clearance_values[
+                    f"{sweep_name}_clearance_m"
+                ] = clearance
+                sweep_evidence[sweep_name] = evidence
+                if clearance <= required_clearance:
+                    rejection_stage = sweep_name
+                    break
             target_clearances = {
-                "target_approach_clearance_m": target_approach_clearance,
-                "target_descend_clearance_m": target_descend_clearance,
+                name: clearance_values[name]
+                for name in (
+                    "target_approach_clearance_m",
+                    "target_descend_clearance_m",
+                )
             }
             fixture_clearances = {
-                "fixture_approach_clearance_m": fixture_approach_clearance,
-                "fixture_descend_clearance_m": fixture_descend_clearance,
-                "fixture_lateral_clearance_m": fixture_lateral_clearance,
+                name: clearance_values[name]
+                for name in (
+                    "fixture_approach_clearance_m",
+                    "fixture_descend_clearance_m",
+                    "fixture_lateral_clearance_m",
+                )
             }
             porcelain_clearances = {
-                "porcelain_approach_clearance_m": (
-                    porcelain_approach_clearance
-                ),
-                "porcelain_descend_clearance_m": (
-                    porcelain_descend_clearance
-                ),
-                "porcelain_lateral_clearance_m": (
-                    porcelain_lateral_clearance
-                ),
+                name: clearance_values[name]
+                for name in (
+                    "porcelain_approach_clearance_m",
+                    "porcelain_descend_clearance_m",
+                    "porcelain_lateral_clearance_m",
+                )
             }
             passed = bool(
                 all(
-                    value > EEF_POSITION_TOLERANCE
+                    value is not None
+                    and value > EEF_POSITION_TOLERANCE
                     for value in target_clearances.values()
                 )
                 and all(
-                    value > 0.0
+                    value is not None and value > 0.0
                     for value in fixture_clearances.values()
                 )
                 and all(
-                    value > 0.0
+                    value is not None and value > 0.0
                     for value in porcelain_clearances.values()
                 )
             )
@@ -2139,6 +2222,13 @@ def _compiled_target_grasp_clearance(
                 **target_clearances,
                 **fixture_clearances,
                 **porcelain_clearances,
+                "evaluated_sweeps": list(sweep_evidence),
+                "skipped_sweeps": [
+                    sweep_name
+                    for sweep_name, *_ in sweep_specs
+                    if sweep_name not in sweep_evidence
+                ],
+                "rejection_stage": rejection_stage,
                 "passed": passed,
             }
             trace.append(record)
@@ -2167,6 +2257,13 @@ def _compiled_target_grasp_clearance(
                     "gripper_origin_bound_m": gripper_origin_bound,
                     "target_origin_bound_m": target_origin_bound,
                     "rigid_gripper_geometry": rigid_gripper_geometry,
+                    "compiled_geometry_cache": {
+                        "convex_mesh_entry_count": len(
+                            compiled_geometry_cache["convex_mesh"]
+                        ),
+                        "hits": int(compiled_geometry_cache["hits"]),
+                        "misses": int(compiled_geometry_cache["misses"]),
+                    },
                     "collision_gripper_geom_ids": (
                         collision_gripper_geoms
                     ),
@@ -2175,20 +2272,30 @@ def _compiled_target_grasp_clearance(
                         collision_porcelain_geoms
                     ),
                     "selected": record,
-                    "target_approach_sweep": target_approach_sweep,
-                    "target_descend_sweep": target_descend_sweep,
-                    "fixture_approach_sweep": fixture_approach_sweep,
-                    "fixture_descend_sweep": fixture_descend_sweep,
-                    "fixture_lateral_sweep": fixture_lateral_sweep,
-                    "porcelain_approach_sweep": (
-                        porcelain_approach_sweep
-                    ),
-                    "porcelain_descend_sweep": (
-                        porcelain_descend_sweep
-                    ),
-                    "porcelain_lateral_sweep": (
-                        porcelain_lateral_sweep
-                    ),
+                    "target_approach_sweep": sweep_evidence[
+                        "target_approach"
+                    ],
+                    "target_descend_sweep": sweep_evidence[
+                        "target_descend"
+                    ],
+                    "fixture_approach_sweep": sweep_evidence[
+                        "fixture_approach"
+                    ],
+                    "fixture_descend_sweep": sweep_evidence[
+                        "fixture_descend"
+                    ],
+                    "fixture_lateral_sweep": sweep_evidence[
+                        "fixture_lateral"
+                    ],
+                    "porcelain_approach_sweep": sweep_evidence[
+                        "porcelain_approach"
+                    ],
+                    "porcelain_descend_sweep": sweep_evidence[
+                        "porcelain_descend"
+                    ],
+                    "porcelain_lateral_sweep": sweep_evidence[
+                        "porcelain_lateral"
+                    ],
                     "candidate_trace": trace,
                 }
     raise RuntimeError(

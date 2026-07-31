@@ -431,6 +431,176 @@ def test_l3a4_compiled_portal_search_skips_touching_nearest_pose():
     assert len(calls) == 10
 
 
+def test_l3a4_translated_sweep_fail_fast_preserves_threshold_decision():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_translated_swept_clearance"
+    )
+    calls = []
+    force_pass = [False]
+
+    def pair_clearance(
+        env,
+        moving_geom,
+        fixture_geom,
+        translation,
+        guard_margin,
+        *,
+        compiled_geometry_cache=None,
+    ):
+        sample_index = len(calls)
+        clearance = (
+            0.020
+            if force_pass[0] or sample_index == 0
+            else -0.001 * sample_index
+        )
+        calls.append(
+            {
+                "translation": np.asarray(translation).tolist(),
+                "cache_id": id(compiled_geometry_cache),
+            }
+        )
+        return clearance, "stub exact pair", {"net_clearance_m": clearance}
+
+    class Model:
+        geom_contype = np.asarray([1, 1])
+        geom_conaffinity = np.asarray([1, 1])
+        geom_bodyid = np.asarray([0, 1])
+
+        @staticmethod
+        def body_id2name(body_id):
+            return ("moving", "fixture")[body_id]
+
+    class Sim:
+        model = Model()
+
+    class Env:
+        sim = Sim()
+
+    namespace = {
+        "np": np,
+        "TARGET_INSERTION_SWEEP_STEP_M": 0.001,
+        "collision_masks_compatible": lambda *args: True,
+        "_compiled_geom_pair_clearance": pair_clearance,
+        "_compiled_geom_evidence": (
+            lambda model, geom_id, compiled_geometry_cache=None: {
+                "geom_id": geom_id
+            }
+        ),
+        "_geom_name": lambda model, geom_id: ("moving", "fixture")[
+            geom_id
+        ],
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    sweep = namespace["_translated_swept_clearance"]
+    cache = {"convex_mesh": {}}
+    minimum, evidence = sweep(
+        Env(),
+        [0],
+        [1],
+        np.zeros(3),
+        np.asarray([0.004, 0.0, 0.0]),
+        np.zeros(3),
+        stop_at_or_below=0.0,
+        compiled_geometry_cache=cache,
+    )
+    assert minimum == pytest.approx(-0.001)
+    assert minimum <= 0.0
+    assert len(calls) == 2
+    assert evidence["terminated_early"] is True
+    assert evidence["full_sweep_evaluated"] is False
+    assert evidence["threshold_fail_fast_m"] == pytest.approx(0.0)
+    assert {call["cache_id"] for call in calls} == {id(cache)}
+
+    calls.clear()
+    force_pass[0] = True
+    passing_minimum, passing_evidence = sweep(
+        Env(),
+        [0],
+        [1],
+        np.zeros(3),
+        np.asarray([0.004, 0.0, 0.0]),
+        np.zeros(3),
+        stop_at_or_below=0.0,
+        compiled_geometry_cache=cache,
+    )
+    assert passing_minimum == pytest.approx(0.020)
+    assert len(calls) == 5
+    assert passing_evidence["terminated_early"] is False
+    assert passing_evidence["full_sweep_evaluated"] is True
+
+    calls.clear()
+    force_pass[0] = False
+    full_minimum, full_evidence = sweep(
+        Env(),
+        [0],
+        [1],
+        np.zeros(3),
+        np.asarray([0.004, 0.0, 0.0]),
+        np.zeros(3),
+        compiled_geometry_cache=cache,
+    )
+    assert full_minimum == pytest.approx(-0.004)
+    assert full_minimum <= 0.0
+    assert len(calls) == 5
+    assert full_evidence["terminated_early"] is False
+    assert full_evidence["full_sweep_evaluated"] is True
+
+
+def test_l3a4_compiled_convex_mesh_cache_reuses_exact_decoding():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_cached_compiled_convex_mesh_geometry"
+    )
+    decode_calls = []
+    decoded = (
+        np.asarray([[0.0, 0.0, 0.0]]),
+        np.asarray([[0, 0, 0]]),
+        {"geom_id": 7},
+    )
+
+    def decode(model, geom_id):
+        decode_calls.append((id(model), geom_id))
+        return decoded
+
+    namespace = {"_compiled_convex_mesh_geometry": decode}
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    cached_decode = namespace["_cached_compiled_convex_mesh_geometry"]
+    model = object()
+    cache = {"convex_mesh": {}, "hits": 0, "misses": 0}
+    assert cached_decode(model, 7, cache) is decoded
+    assert cached_decode(model, 7, cache) is decoded
+    assert decode_calls == [(id(model), 7)]
+    assert cache["misses"] == 1
+    assert cache["hits"] == 1
+
+
 def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
     source = ROBOT_SAFE_PREFIX.read_text()
     module = ast.parse(source)
@@ -449,10 +619,20 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
         start_position,
         end_position,
         reference_position,
+        *,
+        stop_at_or_below=None,
+        compiled_geometry_cache=None,
     ):
         start = np.asarray(start_position, dtype=float)
         end = np.asarray(end_position, dtype=float)
-        calls.append((tuple(moving_geoms), tuple(fixture_geoms)))
+        calls.append(
+            {
+                "moving": tuple(moving_geoms),
+                "fixture": tuple(fixture_geoms),
+                "threshold": stop_at_or_below,
+                "cache_id": id(compiled_geometry_cache),
+            }
+        )
         if tuple(fixture_geoms) == (1,):
             offset = float(np.linalg.norm(end[:2]))
             clearance = 0.011 if offset < 0.045 else 0.013
@@ -549,7 +729,32 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
         "target-to-parked-porcelain tangent"
     )
     assert evidence["selected"]["porcelain_lateral_clearance_m"] > 0.0
-    assert len(calls) == 40
+    assert evidence["candidate_trace"][0]["rejection_stage"] == (
+        "target_descend"
+    )
+    assert evidence["candidate_trace"][0]["evaluated_sweeps"] == [
+        "target_descend"
+    ]
+    assert evidence["candidate_trace"][3]["rejection_stage"] == (
+        "porcelain_lateral"
+    )
+    assert evidence["selected"]["evaluated_sweeps"] == [
+        "target_descend",
+        "target_approach",
+        "porcelain_lateral",
+        "porcelain_descend",
+        "porcelain_approach",
+        "fixture_lateral",
+        "fixture_descend",
+        "fixture_approach",
+    ]
+    assert evidence["selected"]["skipped_sweeps"] == []
+    assert len(calls) == 14
+    assert {call["cache_id"] for call in calls} == {
+        calls[0]["cache_id"]
+    }
+    assert calls[0]["threshold"] == pytest.approx(0.012)
+    assert any(call["threshold"] == 0.0 for call in calls)
 
 
 def test_l3a4_preflight_binds_evaluated_state_bytes(tmp_path):
@@ -1273,6 +1478,9 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     )
     assert "TARGET_INSERTION_SWEEP_STEP_M" in swept_clearance
     assert "sweep_guard = 0.5 * spacing" in swept_clearance
+    assert "stop_at_or_below" in swept_clearance
+    assert "terminated_early" in swept_clearance
+    assert "compiled_geometry_cache=compiled_geometry_cache" in swept_clearance
     assert "collision_masks_compatible(" in swept_clearance
     assert "_compiled_geom_pair_clearance(" in swept_clearance
     assert '"moving_compiled_geometry"' in swept_clearance
@@ -1341,11 +1549,19 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
         source, functions["_compiled_target_grasp_clearance"]
     )
     assert "_compiled_rigid_gripper_fixture_geoms(" in target_grasp_clearance
-    assert target_grasp_clearance.count("_translated_swept_clearance(") == 8
+    assert target_grasp_clearance.count("_translated_swept_clearance(") == 1
     assert "gripper_origin_bound" in target_grasp_clearance
     assert "target_origin_bound" in target_grasp_clearance
     assert "target_to_porcelain" in target_grasp_clearance
     assert "tangent_directions" in target_grasp_clearance
+    assert '"target_descend"' in target_grasp_clearance
+    assert '"porcelain_lateral"' in target_grasp_clearance
+    assert "stop_at_or_below=required_clearance" in target_grasp_clearance
+    assert "compiled_geometry_cache=compiled_geometry_cache" in (
+        target_grasp_clearance
+    )
+    assert '"rejection_stage": rejection_stage' in target_grasp_clearance
+    assert '"skipped_sweeps"' in target_grasp_clearance
     assert "value > EEF_POSITION_TOLERANCE" in target_grasp_clearance
     assert "for value in fixture_clearances.values()" in target_grasp_clearance
     assert "for value in porcelain_clearances.values()" in (
