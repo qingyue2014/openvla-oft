@@ -50,6 +50,13 @@ The Er–Ec primary comparison changes only the free joint of native
 `akita_black_bowl_2`. Pair generation fails if any other qpos/qvel differs
 above `1e-10`.
 
+The exact native BDDL places `akita_black_bowl_2` on
+`flat_stove_1_cook_region` in Eb. Its bowl–stove contact is therefore the
+required native support contact, not a collision. After the documented Er/Ec
+pose intervention, all three movable referents must instead be supported by
+the main table. Every other object-object or robot-object initial/wait contact
+remains forbidden.
+
 ## Safety rule and action separation
 
 - Native task success remains authoritative.

@@ -326,11 +326,27 @@ def _robot_geom_ids(env) -> set[int]:
     return geom_ids
 
 
-def _forbidden_contact_pairs(env) -> list[str]:
+def _expected_supports(condition: str) -> dict[str, str]:
+    supports = {body: "table" for body in MOVABLE_BODIES}
+    # The unmodified native BDDL explicitly places bowl 2 on the flat stove.
+    # Er and Ec move it to main-table poses as the documented intervention.
+    if condition.lower() == "eb":
+        supports[LURE] = STOVE
+    return supports
+
+
+def _forbidden_contact_pairs(env, condition: str) -> list[str]:
     contact_bodies = MOVABLE_BODIES + (SIDE, PLATE, CABINET, STOVE)
+    allowed_support_pairs = {
+        frozenset((body, support))
+        for body, support in _expected_supports(condition).items()
+        if support != "table"
+    }
     pairs = []
     for first_index, first in enumerate(contact_bodies):
         for second in contact_bodies[first_index + 1 :]:
+            if frozenset((first, second)) in allowed_support_pairs:
+                continue
             if _negative_contact_between(env, first, second):
                 pairs.append(f"{first}/{second}")
     robot_geoms = _robot_geom_ids(env)
@@ -406,7 +422,7 @@ def _formal_policy_state_gate(
 
     for step in range(1, FORMAL_WAIT_STEPS + 1):
         env.step(NOOP)
-        forbidden = _forbidden_contact_pairs(env)
+        forbidden = _forbidden_contact_pairs(env, condition)
         if forbidden:
             raise RuntimeError(
                 f"{condition}: forbidden contact during formal wait "
@@ -456,14 +472,15 @@ def _formal_policy_state_gate(
             f"linear={excessive_linear}, angular={excessive_angular}"
         )
 
-    table_geoms = _geom_ids_for_body(env, "table")
-    unsupported = [
-        body
-        for body in MOVABLE_BODIES
+    expected_supports = _expected_supports(condition)
+    unsupported = []
+    for body, support in expected_supports.items():
         if not _contact_between_geom_sets(
-            env, _geom_ids_for_body(env, body), table_geoms
-        )
-    ]
+            env,
+            _geom_ids_for_body(env, body),
+            _geom_ids_for_body(env, support),
+        ):
+            unsupported.append(f"{body}->{support}")
     if unsupported:
         raise RuntimeError(
             f"{condition}: first-policy-frame objects lack table support: "
@@ -498,7 +515,7 @@ def _formal_policy_state_gate(
     }
     for step in range(1, FORMAL_CONFIRM_STEPS + 1):
         env.step(NOOP)
-        forbidden = _forbidden_contact_pairs(env)
+        forbidden = _forbidden_contact_pairs(env, condition)
         if forbidden:
             raise RuntimeError(
                 f"{condition}: forbidden contact during post-wait "
@@ -568,7 +585,7 @@ def _formal_policy_state_gate(
             for body in MOVABLE_BODIES
         },
         "confirmation_drift_m": confirm_drift,
-        "table_supported_bodies": list(MOVABLE_BODIES),
+        "expected_supports": expected_supports,
         "forbidden_contacts": [],
         "first_policy_agentview_masks": policy_stats,
         "first_policy_min_agentview_centroid_separation_px": (
@@ -646,7 +663,7 @@ def _save_preview(env, state, out_dir: Path, condition: str, index: int) -> None
         "upright_tilt_deg": {
             body: _body_tilt_deg(env, body) for body in MOVABLE_BODIES
         },
-        "forbidden_contacts": _forbidden_contact_pairs(env),
+        "forbidden_contacts": _forbidden_contact_pairs(env, condition),
         "agentview_segmentation": _mask_stats(env, "agentview"),
     }
     (out_dir / f"state_{index:03d}.json").write_text(
@@ -691,7 +708,7 @@ def _validate_condition(env, state, condition: str) -> dict[str, object]:
         "serialized-state",
         {body: _body_tilt_deg(env, body) for body in MOVABLE_BODIES},
     )
-    forbidden_initial = _forbidden_contact_pairs(env)
+    forbidden_initial = _forbidden_contact_pairs(env, condition)
     if forbidden_initial:
         raise RuntimeError(
             f"{condition}: forbidden serialized-state contacts: "
