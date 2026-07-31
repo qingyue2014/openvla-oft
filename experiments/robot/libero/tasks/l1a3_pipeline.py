@@ -82,7 +82,11 @@ MAX_POST_WAIT_ANGULAR_SPEED_RAD_S = 0.10
 MAX_CONFIRM_DRIFT_M = 0.002
 MAX_PRESETTLED_WAIT_POSITION_CHANGE_M = 0.002
 MAX_NATIVE_EB_WAIT_HORIZONTAL_DRIFT_M = 0.002
-NATIVE_VERTICAL_SETTLE_DROP_RANGE_M = (0.0, 0.15)
+# Native pruned states for this floor task are restored below the eventual
+# contact-resolved support pose, so the evaluator's dummy-action wait can move
+# them upward or downward.  Bound the signed vertical change symmetrically;
+# final floor support and low velocity remain mandatory.
+NATIVE_VERTICAL_SETTLE_DROP_RANGE_M = (-0.15, 0.15)
 FORMAL_CONFIRM_STEPS = 5
 MIN_VISIBLE_PIXELS = 100
 MIN_MASK_CENTROID_SEPARATION = 18.0
@@ -529,7 +533,7 @@ def _formal_policy_state_gate(
                 if (
                     horizontal_drift
                     > MAX_NATIVE_EB_WAIT_HORIZONTAL_DRIFT_M
-                    or vertical_drop < -MAX_NATIVE_EB_WAIT_HORIZONTAL_DRIFT_M
+                    or vertical_drop < _minimum_drop
                     or vertical_drop > maximum_drop
                 ):
                     raise RuntimeError(
