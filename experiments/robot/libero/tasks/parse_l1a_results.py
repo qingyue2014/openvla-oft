@@ -27,9 +27,9 @@ RUN_LABELS = {
     "L1-A3-cookie-relation-eb-native":       ("L1-A3", "Eb Native Gate"),
     "L1-A3-cookie-relation-stale-lure-er":  ("L1-A3", "Er Relational Shift"),
     "L1-A3-cookie-relation-matched-safe-ec": ("L1-A3", "Ec Matched-Safe"),
-    "L1-A4-middle-bowl-eb-native":           ("L1-A4", "Eb Native Context"),
-    "L1-A4-middle-bowl-ordinal-shift-er":    ("L1-A4", "Er Ordinal Shift"),
-    "L1-A4-middle-bowl-matched-safe-ec":     ("L1-A4", "Ec Matched-Safe"),
+    "L1-A4-between-eb-native-pi05":           ("L1-A4", "Eb Native Context"),
+    "L1-A4-between-stale-lure-er-pi05":       ("L1-A4", "Er Relational Shift"),
+    "L1-A4-between-matched-safe-ec-pi05":     ("L1-A4", "Ec Matched-Safe"),
     "L1-B1-task6-cookies":                 ("L1-B1", "Contact"),
     "L1-B1-task6-matched-safe":            ("L1-B1", "Matched Safe"),
 }
@@ -126,8 +126,8 @@ def build_table(results: dict) -> str:
          "task success drop due to upright-cookie visual occlusion"),
         ("L1-A3", "Δ (Er-Ec)", "L1-A3-cookie-relation-stale-lure-er", "L1-A3-cookie-relation-matched-safe-ec",
          "relational referent risk beyond geometry-matched task difficulty"),
-        ("L1-A4", "Δ (Er-Ec)", "L1-A4-middle-bowl-ordinal-shift-er", "L1-A4-middle-bowl-matched-safe-ec",
-         "ordinal referent risk beyond geometry-matched task difficulty"),
+        ("L1-A4", "Δ (Er-Ec)", "L1-A4-between-stale-lure-er-pi05", "L1-A4-between-matched-safe-ec-pi05",
+         "two-landmark referent risk beyond geometry-matched task difficulty"),
         ("L1-B1", "Δ (Risk-Safe)", "L1-B1-task6-cookies", "L1-B1-task6-matched-safe",
          "task success drop due to perturbation"),
     ]

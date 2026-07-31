@@ -182,55 +182,8 @@ def test_l1a3_registry_exposes_native_gated_pipeline():
     )
 
 
-def test_l1a4_registry_exposes_single_process_model_videos():
-    expected = {
-        "eb_video": "rollouts/libero_90/L1-A4-middle-bowl-eb-native-model-video",
-        "er_video": "rollouts/libero_90/L1-A4-middle-bowl-ordinal-shift-er-model-video",
-        "ec_video": "rollouts/libero_90/L1-A4-middle-bowl-matched-safe-ec-model-video",
-    }
-    phases = {phase for scenario, phase in PHASES if scenario == "l1a4"}
-    assert expected.keys() <= phases
-    for name, artifact in expected.items():
-        phase = PHASES[("l1a4", name)]
-        assert "RENDER_GPU_DEVICE_ID=1" in phase.command
-        assert "SAVE_VIDEO_MODE=all" in phase.command
-        assert phase.command[-1] == name
-        assert phase.artifacts == (artifact,)
-    assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l1a4", "formal")].command
-
-
-def test_l1a4_registry_exposes_grpo_eb_capability_gate():
-    phase = PHASES[("l1a4", "eb_capability")]
-    assert phase.count_env == "EB_CAPABILITY_TRIALS"
-    assert "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-GRPO-LIBERO-90" in phase.command
-    assert "DO_SAMPLE=True" in phase.command
-    assert "TEMPERATURE=1.6" in phase.command
-    assert "TOP_P=1.0" in phase.command
-    assert "RENDER_GPU_DEVICE_ID=1" in phase.command
-    assert "SAVE_VIDEO_MODE=none" in phase.command
-    assert phase.command[-1] == "eb_capability"
-    phase_130 = PHASES[("l1a4", "eb_capability_130")]
-    assert phase_130.count_env == "EB_CAPABILITY_TRIALS"
-    assert "CHECKPOINT=RLinf/RLinf-OpenVLAOFT-LIBERO-130" in phase_130.command
-    assert "EB_CAPABILITY_NOTE_SUFFIX=libero130-capability" in phase_130.command
-    assert "UNNORM_KEY=libero_130_no_noops_trajall" in phase_130.command
-    assert "DO_SAMPLE=True" in phase_130.command
-    assert phase_130.command[-1] == "eb_capability"
-    phase_vq = PHASES[("l1a4", "eb_capability_vqvla")]
-    assert phase_vq.count_env == "EB_CAPABILITY_TRIALS"
-    assert "CHECKPOINT=VQ-VLA/openvla-7b-finetuned-libero-90" in phase_vq.command
-    assert "UNNORM_KEY=libero_90_no_noops" in phase_vq.command
-    assert "DO_SAMPLE=False" in phase_vq.command
-    assert "EB_CAPABILITY_NOTE_SUFFIX=vqvla-capability" in phase_vq.command
-    assert phase_vq.command[-1] == "eb_capability"
-    phase_pi05 = PHASES[("l1a4", "eb_capability_pi05")]
-    assert phase_pi05.count_env == "EB_CAPABILITY_TRIALS"
-    assert "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616" in phase_pi05.command
-    assert "experiments/robot/libero/tasks/run_l1a4_pi05_capability.sh" in phase_pi05.command
-    assert "experiments/logs/l1a4_pi05_server.log" in phase_pi05.artifacts
-
-
 def test_l1a4_spatial_replacement_phases_are_registered():
+    assert not any(scenario == "l1a4" for scenario, _ in PHASES)
     check = PHASES[("l1a4s", "check")]
     assert check.count_env == "NUM_STATES"
     assert "experiments/robot/libero/tasks/run_l1a4_spatial.sh" in check.command

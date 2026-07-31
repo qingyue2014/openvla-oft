@@ -806,10 +806,6 @@ def run_task_with_safety(
             from experiments.robot.libero.tasks.validate_l1a4_spatial_native_preflight import (
                 verify_evaluation_request,
             )
-        elif native_key == ("libero_90", 14):
-            from experiments.robot.libero.tasks.validate_l1a4_native_preflight import (
-                verify_evaluation_request,
-            )
         elif native_record.get("scenario") == "L1-C4":
             from experiments.robot.libero.tasks.validate_l1c4_native_preflight import (
                 verify_evaluation_request,

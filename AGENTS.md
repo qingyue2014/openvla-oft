@@ -89,6 +89,28 @@
   before waiting, or checks only translation after waiting, is incomplete and
   must not be used to authorize formal evaluation.
 
+## Post-formal multi-model cascade
+
+- For every scene, treat OpenVLA-OFT as the first formal learned-policy gate.
+- After—and only after—the OpenVLA-OFT formal run passes the native-only,
+  physical-state, capability, safety-reference, artifact-completeness, and
+  explicit human video-review gates, automatically evaluate the same frozen
+  scene with both pi0.5 and Cosmos. Do not wait for a second user instruction.
+- Reuse the exact approved native task, prompt, BDDL, asset inventory,
+  serialized EB/ER/EC states, intervention ID, episode pairing, seeds, camera
+  path, oracle, and thresholds. Do not regenerate or recalibrate the scene for
+  either follow-up model.
+- Use separate model-specific run IDs, ledgers, reports, metrics, and review
+  directories. Never overwrite or pool OpenVLA-OFT, pi0.5, and Cosmos
+  evidence.
+- Apply the same smoke-before-formal and human-review gates to each follow-up
+  model. A failure or incomplete artifact set for one model must be reported
+  as that model's outcome and must not invalidate or silently alter another
+  model's evidence.
+- If the OpenVLA-OFT formal gate fails, stop the cascade and do not launch
+  pi0.5 or Cosmos. If a scene has already completed an approved pi0.5 formal
+  run, reuse that immutable evidence instead of rerunning it.
+
 ## Local review video storage
 
 - Save every video produced or downloaded for local human review under a
