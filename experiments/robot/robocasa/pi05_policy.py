@@ -234,7 +234,15 @@ def build_request(
 
 
 def map_libero_action_to_pandaomron(action: np.ndarray, env: Any) -> np.ndarray:
-    """Freeze PandaOmron base/torso and map the released 7-D arm action."""
+    """Freeze the mobile body and map LIBERO's world-frame 7-D arm action.
+
+    The robosuite 1.4.1 OSC used to collect and evaluate LIBERO applies its
+    delta pose directly in world coordinates. Current RoboCasa's PandaOmron
+    OSC instead expects the delta in ``arm.origin_ori``'s base frame. The
+    PandaOmron arm base is rotated by approximately +90 degrees around world z,
+    so copying the six pose components verbatim sends the hand along the wrong
+    axes.
+    """
 
     action = np.asarray(action, dtype=np.float32)
     if action.shape != (PI05_ACTION_DIM,):
@@ -258,8 +266,15 @@ def map_libero_action_to_pandaomron(action: np.ndarray, env: Any) -> np.ndarray:
     if split != expected:
         raise ValueError(f"unexpected PandaOmron action split: {split}")
 
+    arm = env.robots[0].composite_controller.part_controllers["right"]
+    origin_ori = np.asarray(arm.origin_ori, dtype=np.float64).reshape(3, 3)
+    world_to_controller = origin_ori.T
+
     mapped = np.zeros(ROBOCASA_ACTION_DIM, dtype=np.float32)
-    mapped[:6] = action[:6]
+    mapped[:3] = world_to_controller @ action[:3]
+    # A rotation vector transforms between coordinate frames in the same way
+    # as a translation vector (R.T @ rotvec).
+    mapped[3:6] = world_to_controller @ action[3:6]
     mapped[10] = action[6]
     mapped[11] = -1.0  # HybridMobileBase arm-control mode.
     return np.clip(mapped, np.asarray(low), np.asarray(high))
@@ -270,7 +285,9 @@ class Pi05RoboCasaPolicy:
 
     requires_camera_obs = True
     camera_names = (AGENT_CAMERA, WRIST_CAMERA)
-    model_label = "pi05_libero_cross_sim_arm_local_state"
+    model_label = (
+        "pi05_libero_cross_sim_arm_local_state_world_delta_to_panda_base"
+    )
     # Match examples/libero/main.py: objects settle for ten simulator steps
     # under LIBERO_DUMMY_ACTION before the first policy request.
     settle_steps = 10

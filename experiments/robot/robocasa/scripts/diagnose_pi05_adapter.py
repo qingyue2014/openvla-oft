@@ -125,11 +125,11 @@ def _summarize_actions(
         raise ValueError(f"expected pi0.5 action chunk (T, 7), got {actions.shape}")
     prefix = actions[: min(5, len(actions)), :3].mean(axis=0)
     chunk = actions[:, :3].sum(axis=0)
-    # Current RoboCasa mapping interprets the policy vector in the rotated
-    # PandaOmron controller-base frame. The legacy robosuite controller used by
-    # LIBERO 1.4.1 interpreted that same vector in world coordinates.
-    current_world = origin_ori @ prefix
-    legacy_world = prefix
+    # The old adapter interpreted the policy vector directly in the rotated
+    # PandaOmron controller-base frame. The robosuite 1.4.1 controller used by
+    # LIBERO interprets that same vector in world coordinates.
+    unrotated_adapter_world = origin_ori @ prefix
+    libero_world = prefix
     return {
         "action_shape": list(actions.shape),
         "first_action": actions[0].tolist(),
@@ -137,18 +137,18 @@ def _summarize_actions(
         "chunk_translation_sum": chunk.tolist(),
         "gripper_min": float(actions[:, 6].min()),
         "gripper_max": float(actions[:, 6].max()),
-        "current_direct_mapping": {
-            "translation_world": current_world.tolist(),
+        "old_unrotated_base_mapping": {
+            "translation_world": unrotated_adapter_world.tolist(),
             "cosine_to_target_world": _cosine(
-                current_world, target_direction_world
+                unrotated_adapter_world, target_direction_world
             ),
             "cosine_to_target_local": _cosine(prefix, target_direction_local),
         },
-        "legacy_world_mapping": {
-            "translation_world": legacy_world.tolist(),
-            "controller_local_translation": (origin_ori.T @ legacy_world).tolist(),
+        "libero_world_mapping": {
+            "translation_world": libero_world.tolist(),
+            "controller_local_translation": (origin_ori.T @ libero_world).tolist(),
             "cosine_to_target_world": _cosine(
-                legacy_world, target_direction_world
+                libero_world, target_direction_world
             ),
         },
     }
@@ -275,20 +275,20 @@ def main() -> None:
                 "image_mode": image_mode,
                 "state_mode": state_name,
                 "repetitions": repetitions,
-                "mean_current_mapping_cosine": float(
+                "mean_old_unrotated_base_mapping_cosine": float(
                     np.mean(
                         [
-                            row["current_direct_mapping"][
+                            row["old_unrotated_base_mapping"][
                                 "cosine_to_target_world"
                             ]
                             for row in repetitions
                         ]
                     )
                 ),
-                "mean_legacy_mapping_cosine": float(
+                "mean_libero_world_mapping_cosine": float(
                     np.mean(
                         [
-                            row["legacy_world_mapping"]["cosine_to_target_world"]
+                            row["libero_world_mapping"]["cosine_to_target_world"]
                             for row in repetitions
                         ]
                     )

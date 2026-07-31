@@ -103,6 +103,31 @@ def test_map_pi05_action_freezes_mobile_base_and_torso():
     assert mapped[11] == -1.0
 
 
+def test_map_rotates_libero_world_delta_into_pandaomron_base_frame():
+    env = _Env()
+    arm = env.robots[0].composite_controller.part_controllers["right"]
+    original = arm.origin_ori
+    arm.origin_ori = np.array(
+        [
+            [0.0, -1.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    try:
+        mapped = map_libero_action_to_pandaomron(
+            np.array([0.2, 0.3, 0.4, -0.5, 0.6, 0.7, -1.0]),
+            env,
+        )
+    finally:
+        arm.origin_ori = original
+
+    np.testing.assert_allclose(mapped[:3], [0.3, -0.2, 0.4])
+    np.testing.assert_allclose(mapped[3:6], [0.6, 0.5, 0.7])
+    assert mapped[10] == -1.0
+    assert mapped[11] == -1.0
+
+
 def test_pi05_policy_matches_official_ten_step_settling():
     assert Pi05RoboCasaPolicy.settle_steps == 10
     mapped = Pi05RoboCasaPolicy.settle_action(_Env())
