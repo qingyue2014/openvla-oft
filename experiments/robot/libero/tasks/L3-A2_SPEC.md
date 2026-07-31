@@ -169,6 +169,35 @@ same registered position tolerance, gripper contact, or native-success
 predicate. Non-timeout safety failures are never cleared. A stage that still
 misses its predicate after its independent limit remains fail-closed.
 
+Superpod Job500102 verified that lift passed and exposed a geometric
+redundancy in `butter_park_raise`. Across 25 attempts, the stages before that
+raise used 25--30 approach, 15 descend, 8 seat, and 13--14 lift actions.
+Butter had already lifted 88.134--90.410 mm. The old placement formula then
+requested another fixed 80 mm above the current butter body pose; after all 8
+raise actions, its EEF error was still 18.187--18.261 mm against the unchanged
+12 mm placement tolerance. Task use at failure was 69--74 actions out of 280.
+
+The fixed extra raise is replaced by an exact per-attempt compiled-geometry
+calculation. At the post-lift state, the current butter collision AABB is
+translated along the straight XY segment to the selected floor goal. A slab
+test intersects that segment with every other native object's XY AABB after
+Minkowski expansion by butter's asymmetric current AABB offsets and the
+registered 10 mm XY clearance. For every intersected native object, the
+required transport body height keeps butter's compiled bottom at least the
+unchanged 80 mm transport clearance above that object's compiled top. The
+raise EEF target is:
+
+`max(current_eef_z, geometry_required_transport_eef_z, destination_eef_z)`.
+
+Thus the controller never moves downward during raise and never adds an
+unjustified fixed clearance above an already-safe lift. If current height is
+insufficient, it still raises to the geometry-derived value and remains bound
+by the original independent 8-action timeout. Invalid bounds or an unresolved
+sweep fail closed. The trajectory and CSV record all expanded rectangles,
+blocking native bodies, required and selected heights, achieved minimum
+vertical clearance, and additional commanded raise. No stage allocation was
+changed: motion remains 222 actions and the complete bound remains 278/280.
+
 The safe-reference report and per-episode CSV also record the controller
 source SHA-256; the runner rejects a PASS report produced by different
 controller bytes, even when the ER state artifact is unchanged.

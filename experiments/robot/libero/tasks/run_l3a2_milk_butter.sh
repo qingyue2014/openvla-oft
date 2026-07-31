@@ -254,6 +254,11 @@ PY
       return 2
     }
   head -n 1 "${OSC_REFERENCE_CSV}" \
+    | grep -Fq "butter_transport_clearance_diagnostics" || {
+      echo "L3-A2 OSC safe-reference CSV lacks swept-clearance evidence" >&2
+      return 2
+    }
+  head -n 1 "${OSC_REFERENCE_CSV}" \
     | grep -Fq "butter_park_confirmation_trace" || {
       echo "L3-A2 OSC safe-reference CSV lacks stability-window evidence" >&2
       return 2

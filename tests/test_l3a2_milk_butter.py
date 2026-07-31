@@ -52,9 +52,12 @@ from experiments.robot.libero.tasks.validate_l3a2_milk_butter_osc_reference impo
     _evaluation_budget_diagnostics,
     _failure_diagnostics,
     _load_records,
+    _minimum_swept_transport_body_z,
     _move_to_with_final_state_check,
     _NativeSuccessTrackingOracle,
+    _place,
     _safe_reference_success,
+    _segment_intersects_xy_rectangle,
     _static_plan_budget_diagnostics,
 )
 from experiments.robot.libero.tasks import (
@@ -726,6 +729,132 @@ def test_closest_floor_park_candidate_fails_when_segment_is_blocked():
                 )
             },
         )
+
+
+def test_swept_transport_height_reuses_existing_safe_lift():
+    required_z, diagnostics = _minimum_swept_transport_body_z(
+        current_body_xyz=np.array([0.0, 0.0, 0.23]),
+        destination_body_xyz=np.array([0.08, 0.0, 0.01]),
+        moving_collision_bounds=(
+            np.array([-0.038, -0.020, 0.221]),
+            np.array([0.038, 0.020, 0.239]),
+        ),
+        obstacle_collision_bounds={
+            "milk_1_main": (
+                np.array([-0.03, -0.03, 0.0]),
+                np.array([0.03, 0.03, 0.131]),
+            ),
+            "off_path_tall_object_main": (
+                np.array([0.0, 0.30, 0.0]),
+                np.array([0.10, 0.40, 0.50]),
+            ),
+        },
+        vertical_clearance_m=0.08,
+    )
+
+    assert required_z == pytest.approx(0.220)
+    assert diagnostics["selected_transport_body_z"] == pytest.approx(0.23)
+    assert diagnostics["current_height_satisfies_swept_clearance"] is True
+    assert diagnostics["minimum_selected_vertical_clearance_m"] == pytest.approx(
+        0.09
+    )
+    assert [
+        row["body"] for row in diagnostics["swept_xy_blockers"]
+    ] == ["milk_1_main"]
+
+
+def test_swept_transport_height_raises_only_to_compiled_geometry_requirement():
+    required_z, diagnostics = _minimum_swept_transport_body_z(
+        current_body_xyz=np.array([0.0, 0.0, 0.20]),
+        destination_body_xyz=np.array([0.08, 0.0, 0.01]),
+        moving_collision_bounds=(
+            np.array([-0.02, -0.02, 0.19]),
+            np.array([0.02, 0.02, 0.21]),
+        ),
+        obstacle_collision_bounds={
+            "native_obstacle_main": (
+                np.array([0.03, -0.03, 0.0]),
+                np.array([0.05, 0.03, 0.25]),
+            )
+        },
+        vertical_clearance_m=0.08,
+    )
+
+    assert required_z == pytest.approx(0.34)
+    assert diagnostics["selected_transport_body_z"] == pytest.approx(0.34)
+    assert diagnostics["current_height_satisfies_swept_clearance"] is False
+
+
+def test_swept_xy_test_does_not_use_coarse_union_aabb():
+    # The rectangle is inside the segment's union AABB but outside y=x.
+    assert not _segment_intersects_xy_rectangle(
+        np.array([0.0, 0.0]),
+        np.array([1.0, 1.0]),
+        np.array([0.0, 0.8]),
+        np.array([0.2, 1.0]),
+    )
+    assert _segment_intersects_xy_rectangle(
+        np.array([0.0, 0.0]),
+        np.array([1.0, 1.0]),
+        np.array([0.4, 0.4]),
+        np.array([0.6, 0.6]),
+    )
+
+
+def test_butter_place_raise_never_adds_redundant_clearance():
+    class Shared:
+        targets = []
+
+        @staticmethod
+        def _body_pos(env, body):
+            del env, body
+            return np.array([0.0, 0.0, 0.23])
+
+        @staticmethod
+        def _eef_pos(obs):
+            del obs
+            return np.array([0.0, 0.0, 0.30])
+
+        @classmethod
+        def _move_to(cls, *args, **kwargs):
+            cls.targets.append(np.asarray(args[4], dtype=float))
+            return args[1], args[6], None
+
+        @staticmethod
+        def _hold(env, obs, oracle, recorder, gripper, count, step):
+            del env, oracle, recorder, gripper, count
+            return obs, step, None
+
+    args = SimpleNamespace(
+        transport_clearance=0.08,
+        release_clearance=0.01,
+        place_position_tolerance=0.012,
+        transport_max_position_command=1.0,
+        contact_hold_steps=2,
+        release_steps=8,
+        retreat_height=0.08,
+        settle_steps=10,
+        position_tolerance=0.012,
+    )
+    _place(
+        Shared,
+        object(),
+        {},
+        SimpleNamespace(),
+        None,
+        "butter_1_main",
+        np.array([0.08, 0.0, 0.01]),
+        grasped_offset=np.array([0.0, 0.0, 0.07]),
+        close_sign=1.0,
+        open_sign=-1.0,
+        step=0,
+        args=args,
+        stage_prefix="butter_park",
+        geometry_required_transport_body_z=0.22,
+    )
+
+    assert Shared.targets[0][2] == pytest.approx(0.30)
+    assert Shared.targets[1][2] == pytest.approx(0.30)
 
 
 def test_osc_safe_reference_must_fit_formal_policy_horizon():

@@ -250,6 +250,168 @@ def _aabb_conflicts_with_xy_clearance(
     return bool(z_overlap and not (separated_x or separated_y))
 
 
+def _segment_intersects_xy_rectangle(
+    start_xy: np.ndarray,
+    end_xy: np.ndarray,
+    rectangle_low_xy: np.ndarray,
+    rectangle_high_xy: np.ndarray,
+) -> bool:
+    """Exact slab test for a closed 2-D segment and axis-aligned rectangle."""
+
+    start = np.asarray(start_xy, dtype=float)
+    end = np.asarray(end_xy, dtype=float)
+    low = np.asarray(rectangle_low_xy, dtype=float)
+    high = np.asarray(rectangle_high_xy, dtype=float)
+    if any(value.shape != (2,) for value in (start, end, low, high)):
+        raise ValueError("swept-clearance XY inputs must be two-vectors")
+    if not all(
+        np.all(np.isfinite(value)) for value in (start, end, low, high)
+    ):
+        raise ValueError("swept-clearance XY inputs must be finite")
+    if np.any(low > high):
+        raise ValueError("swept-clearance rectangle low exceeds high")
+
+    direction = end - start
+    t_low, t_high = 0.0, 1.0
+    for axis in range(2):
+        if abs(float(direction[axis])) <= 1e-12:
+            if start[axis] < low[axis] or start[axis] > high[axis]:
+                return False
+            continue
+        first = float((low[axis] - start[axis]) / direction[axis])
+        second = float((high[axis] - start[axis]) / direction[axis])
+        entry, exit_ = min(first, second), max(first, second)
+        t_low = max(t_low, entry)
+        t_high = min(t_high, exit_)
+        if t_low > t_high + 1e-12:
+            return False
+    return True
+
+
+def _minimum_swept_transport_body_z(
+    *,
+    current_body_xyz: np.ndarray,
+    destination_body_xyz: np.ndarray,
+    moving_collision_bounds: tuple[np.ndarray, np.ndarray],
+    obstacle_collision_bounds: dict[
+        str, tuple[np.ndarray, np.ndarray]
+    ],
+    vertical_clearance_m: float,
+    xy_clearance_m: float = FLOOR_PARK_XY_CLEARANCE_M,
+) -> tuple[float, dict[str, Any]]:
+    """Resolve a conservative Z target from the exact translational XY sweep.
+
+    The segment test is exact for the current compiled moving-object AABB
+    translated without rotation. Obstacles are expanded by the moving AABB's
+    asymmetric XY offsets and the registered XY clearance. For every
+    intersected obstacle, require the moving AABB bottom to clear its compiled
+    top by the unchanged transport clearance.
+    """
+
+    current = np.asarray(current_body_xyz, dtype=float)
+    destination = np.asarray(destination_body_xyz, dtype=float)
+    moving_low = np.asarray(moving_collision_bounds[0], dtype=float)
+    moving_high = np.asarray(moving_collision_bounds[1], dtype=float)
+    if any(
+        value.shape != (3,)
+        for value in (current, destination, moving_low, moving_high)
+    ):
+        raise ValueError("swept-clearance positions and bounds must be 3-vectors")
+    if not all(
+        np.all(np.isfinite(value))
+        for value in (current, destination, moving_low, moving_high)
+    ):
+        raise ValueError("swept-clearance positions and bounds must be finite")
+    if np.any(moving_low > moving_high):
+        raise ValueError("moving collision AABB low exceeds high")
+    if not np.isfinite(vertical_clearance_m) or vertical_clearance_m < 0.0:
+        raise ValueError("transport vertical clearance must be nonnegative")
+    if not np.isfinite(xy_clearance_m) or xy_clearance_m < 0.0:
+        raise ValueError("transport XY clearance must be nonnegative")
+
+    low_offset = moving_low - current
+    high_offset = moving_high - current
+    required_body_z = float(destination[2])
+    blockers: list[dict[str, Any]] = []
+    for body_name, bounds in sorted(obstacle_collision_bounds.items()):
+        obstacle_low = np.asarray(bounds[0], dtype=float)
+        obstacle_high = np.asarray(bounds[1], dtype=float)
+        if (
+            obstacle_low.shape != (3,)
+            or obstacle_high.shape != (3,)
+            or not np.all(np.isfinite(obstacle_low))
+            or not np.all(np.isfinite(obstacle_high))
+            or np.any(obstacle_low > obstacle_high)
+        ):
+            raise ValueError(
+                f"invalid swept-clearance obstacle bounds: {body_name}"
+            )
+        expanded_low = (
+            obstacle_low[:2] - high_offset[:2] - xy_clearance_m
+        )
+        expanded_high = (
+            obstacle_high[:2] - low_offset[:2] + xy_clearance_m
+        )
+        intersects = _segment_intersects_xy_rectangle(
+            current[:2],
+            destination[:2],
+            expanded_low,
+            expanded_high,
+        )
+        if not intersects:
+            continue
+        body_z_for_clearance = float(
+            obstacle_high[2] + vertical_clearance_m - low_offset[2]
+        )
+        required_body_z = max(required_body_z, body_z_for_clearance)
+        blockers.append(
+            {
+                "body": body_name,
+                "collision_bounds": [
+                    obstacle_low.tolist(),
+                    obstacle_high.tolist(),
+                ],
+                "expanded_center_path_xy_rectangle": [
+                    expanded_low.tolist(),
+                    expanded_high.tolist(),
+                ],
+                "required_transport_body_z": body_z_for_clearance,
+                "current_bottom_clearance_m": float(
+                    moving_low[2] - obstacle_high[2]
+                ),
+            }
+        )
+
+    selected_body_z = max(float(current[2]), required_body_z)
+    selected_bottom_z = selected_body_z + float(low_offset[2])
+    selected_clearances = [
+        selected_bottom_z - float(row["collision_bounds"][1][2])
+        for row in blockers
+    ]
+    diagnostics = {
+        "swept_path_start_body_xyz": current.tolist(),
+        "swept_path_destination_body_xyz": destination.tolist(),
+        "moving_collision_bounds_at_start": [
+            moving_low.tolist(),
+            moving_high.tolist(),
+        ],
+        "transport_xy_clearance_m": float(xy_clearance_m),
+        "transport_vertical_clearance_m": float(vertical_clearance_m),
+        "swept_xy_blockers": blockers,
+        "geometry_required_transport_body_z": required_body_z,
+        "selected_transport_body_z": selected_body_z,
+        "current_height_satisfies_swept_clearance": bool(
+            current[2] + 1e-12 >= required_body_z
+        ),
+        "minimum_selected_vertical_clearance_m": (
+            float(min(selected_clearances))
+            if selected_clearances
+            else None
+        ),
+    }
+    return required_body_z, diagnostics
+
+
 def _closest_floor_park_candidate(
     *,
     source_body_xyz: np.ndarray,
@@ -649,11 +811,35 @@ def _place(
     args,
     stage_prefix: str,
     accept_native_success: bool = False,
+    geometry_required_transport_body_z: float | None = None,
     settle_probe=None,
     settle_trace: list[dict[str, Any]] | None = None,
 ) -> tuple[Any, int, Any]:
     current = shared._body_pos(env, body)
-    transit_z = max(current[2], desired_body_position[2]) + args.transport_clearance
+    if geometry_required_transport_body_z is None:
+        transit_z = (
+            max(current[2], desired_body_position[2])
+            + args.transport_clearance
+        )
+    else:
+        required_body_z = float(geometry_required_transport_body_z)
+        if not np.isfinite(required_body_z):
+            raise ValueError("geometry-required transport body Z must be finite")
+        # Never command the held-object EEF downward during the raise stage.
+        current_eef_z = float(shared._eef_pos(obs)[2])
+        required_eef_z = required_body_z + float(grasped_offset[2])
+        destination_eef_z = float(
+            desired_body_position[2] + grasped_offset[2]
+        )
+        transit_eef_z = max(
+            current_eef_z,
+            required_eef_z,
+            destination_eef_z,
+        )
+        transit_z = max(
+            float(current[2]),
+            transit_eef_z - float(grasped_offset[2]),
+        )
     waypoints = []
     raised = current.copy()
     raised[2] = transit_z
@@ -912,6 +1098,67 @@ def _run_attempt(
             stage_prefix="butter",
         )
 
+    butter_transport_required_body_z = float("nan")
+    butter_transport_clearance_diagnostics: dict[str, Any] = {
+        "swept_clearance_plan_error": "",
+    }
+    if failure is None:
+        try:
+            current_butter = shared._body_pos(env, BUTTER)
+            current_butter_bounds = _collision_world_bounds(env, BUTTER)
+            current_obstacle_bounds = {
+                body_name: _collision_world_bounds(env, body_name)
+                for body_name in sorted(EXPECTED_OBJECT_BODIES - {BUTTER})
+            }
+            (
+                butter_transport_required_body_z,
+                butter_transport_clearance_diagnostics,
+            ) = _minimum_swept_transport_body_z(
+                current_body_xyz=current_butter,
+                destination_body_xyz=butter_park_goal,
+                moving_collision_bounds=current_butter_bounds,
+                obstacle_collision_bounds=current_obstacle_bounds,
+                vertical_clearance_m=args.transport_clearance,
+            )
+            current_eef_z = float(shared._eef_pos(obs)[2])
+            required_eef_z = float(
+                butter_transport_required_body_z + butter_offset[2]
+            )
+            destination_eef_z = float(
+                butter_park_goal[2] + butter_offset[2]
+            )
+            selected_eef_z = max(
+                current_eef_z,
+                required_eef_z,
+                destination_eef_z,
+            )
+            selected_body_z = max(
+                float(current_butter[2]),
+                selected_eef_z - float(butter_offset[2]),
+            )
+            butter_transport_clearance_diagnostics.update(
+                {
+                    "swept_clearance_plan_error": "",
+                    "current_transport_eef_z": current_eef_z,
+                    "geometry_required_transport_eef_z": required_eef_z,
+                    "selected_transport_eef_z": selected_eef_z,
+                    "selected_transport_body_z_with_eef_guard": (
+                        selected_body_z
+                    ),
+                    "additional_commanded_raise_m": max(
+                        0.0, selected_eef_z - current_eef_z
+                    ),
+                }
+            )
+        except (RuntimeError, ValueError) as exc:
+            butter_transport_clearance_diagnostics = {
+                "swept_clearance_plan_error": str(exc),
+            }
+            failure = shared.MotionFailure(
+                reason="butter_transport_clearance_planning_failed",
+                stage="plan_butter_transport_clearance",
+            )
+
     butter_park_confirmation_trace: list[dict[str, Any]] = []
     if failure is None:
         obs, step, failure = _place(
@@ -928,6 +1175,9 @@ def _run_attempt(
             step=step,
             args=args,
             stage_prefix="butter_park",
+            geometry_required_transport_body_z=(
+                butter_transport_required_body_z
+            ),
             settle_probe=butter_floor_snapshot,
             settle_trace=butter_park_confirmation_trace,
         )
@@ -1169,6 +1419,9 @@ def _run_attempt(
             ),
             "butter_park_goal_body_xyz": butter_park_goal.tolist(),
             "butter_park_plan_diagnostics": butter_park_plan_diagnostics,
+            "butter_transport_clearance_diagnostics": (
+                butter_transport_clearance_diagnostics
+            ),
             "butter_park_final_body_xyz": parked_position.tolist(),
             "butter_park_final_goal_error_xyz": (
                 butter_park_final_goal_error.tolist()
@@ -1238,6 +1491,9 @@ def _run_attempt(
         "butter_park_goal_body_xyz": json.dumps(butter_park_goal.tolist()),
         "butter_park_plan_diagnostics": json.dumps(
             butter_park_plan_diagnostics, sort_keys=True
+        ),
+        "butter_transport_clearance_diagnostics": json.dumps(
+            butter_transport_clearance_diagnostics, sort_keys=True
         ),
         "butter_park_final_body_xyz": json.dumps(parked_position.tolist()),
         "butter_park_final_goal_error_xyz": json.dumps(
@@ -1538,6 +1794,12 @@ def run(args) -> str:
             "window and every subsequent native-task action must retain "
             "floor support, contain no non-floor contact, and satisfy the "
             "registered tilt, velocity, and 5 mm drift thresholds."
+        ),
+        (
+            "- Butter transport height: exact fixed-AABB segment sweep over "
+            "all other native objects, preserving 10 mm XY and 80 mm "
+            "vertical clearance; the raise target never moves the EEF below "
+            "its current height."
         ),
         "- Teleport after reset: false.",
         (
