@@ -10,6 +10,7 @@ from experiments.robot.libero.tasks import write_l3a3_review_template
 from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     Rollout,
     _body_contact_counterparts,
+    _live_plate_tracking_target,
     _robot_contacts_body,
     _robot_gripper_body_names,
     _select_reachable_trailing_contact,
@@ -322,6 +323,33 @@ def test_plate_contact_uses_reachable_axis_aligned_trailing_line():
     assert float(np.dot(unit, plate - contact)) > 0.0
 
 
+def test_live_plate_push_target_tracks_plate_instead_of_accumulating_eef():
+    plate = np.array([-0.0197, 0.1426, 0.9086])
+    goal = np.array([-0.05, 0.21, 0.895])
+    confirmed_offset = np.array([0.001, -0.008, 0.014])
+    target, direction = _live_plate_tracking_target(
+        plate, goal, confirmed_offset, push_increment=0.005
+    )
+    expected = plate + confirmed_offset
+    expected[:2] += direction * 0.005
+    assert np.allclose(target, expected)
+
+    # A translated live plate translates the next target; it does not retain
+    # the old cumulative EEF waypoint that outran the plate in job 499625.
+    translation = np.array([-0.004, 0.009, 0.0])
+    translated_goal = goal + translation
+    translated_target, translated_direction = _live_plate_tracking_target(
+        plate + translation,
+        translated_goal,
+        confirmed_offset,
+        push_increment=0.005,
+    )
+    assert np.allclose(translated_direction, direction)
+    assert np.allclose(translated_target - target, translation)
+    with pytest.raises(ValueError, match="push increment must be positive"):
+        _live_plate_tracking_target(plate, goal, confirmed_offset, 0.0)
+
+
 def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
     class FakeRollout:
         args = SimpleNamespace(
@@ -423,18 +451,53 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert task_push.count("pusher_open_sign,") >= 5
     assert "lost during open-gripper confirmation" in task_push
     push_loop = task_push[
-        task_push.index("for distance in np.arange(") :
+        task_push.index("for push_iteration in range(") :
         task_push.index("push_summary = {")
     ]
     assert "lost during open-gripper push" not in push_loop
+    assert "_live_plate_tracking_target(" in push_loop
+    assert "pusher_start" not in push_loop
+    assert "commanded_distance_m" not in push_loop
+    assert '"live_plate_anchor"' in push_loop
+    assert '"confirmed_contact_offset"' in push_loop
+    assert '"live_eef_plate_offset_before"' in push_loop
+    assert '"live_push_direction_xy"' in push_loop
     assert "step_observer=observe_push_step" in push_loop
     assert '"robot_contact_steps"' in push_loop
     assert '"plate_displacement_m"' in push_loop
     assert '"plate_total_displacement_m"' in push_loop
     assert '"plate_progress_m"' in push_loop
+    assert '"goal_distance_reduction_m"' in push_loop
     assert '"maximum_step_plate_progress_m"' in push_loop
-    assert '"plate_contact_counterparts_at_end"' in push_loop
+    assert '"robot_plate_contact_counterparts_at_end"' in push_loop
     assert "L3-A3 push waypoint" in push_loop
+    assert "no_robot_plate_contact_at_iteration_start" in push_loop
+    assert "recontact_retreat_target" in push_loop
+    assert "recontact_center_target" in push_loop
+    assert "recontact_high_target" in push_loop
+    assert "recontact_seek_target" in push_loop
+    assert 'stop_label="robot-plate recontact"' in push_loop
+    assert "L3-A3 plate recontact" in push_loop
+    assert "closed-loop plate push exhausted recontact budget" in push_loop
+    recovery_start = push_loop.index(
+        "# Every recovery waypoint uses OSC env.step"
+    )
+    recovery = push_loop[
+        recovery_start :
+        push_loop.index(
+            "if not _robot_contacts_body(env, PLATE_BODY):",
+            recovery_start,
+        )
+    ]
+    assert recovery.index("recontact_retreat_target,") < recovery.index(
+        "recontact_center_target,"
+    )
+    assert recovery.index("recontact_center_target,") < recovery.index(
+        "recontact_high_target,"
+    )
+    assert recovery.index("recontact_high_target,") < recovery.index(
+        "recontact_seek_target,"
+    )
     assert (
         "robot_plate_contact_observed_after_confirmation"
         in task_push
@@ -448,6 +511,12 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert '"--minimum_push_progress", type=float, default=0.001' in producer
     assert "--minimum_push_progress must be positive" in producer
+    assert '"--maximum_push_iterations", type=int, default=160' in producer
+    assert '"--maximum_recontact_attempts", type=int, default=20' in producer
+    assert '"--push_tracking_tolerance", type=float, default=0.002' in producer
+    assert "--maximum_push_iterations must be positive" in producer
+    assert "--maximum_recontact_attempts must be positive" in producer
+    assert "maximum_push_distance" not in producer
     assert '"pusher_gripper_sign": pusher_open_sign' in producer
     assert '"push_evidence": push_summary' in producer
 
