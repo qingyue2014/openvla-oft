@@ -250,8 +250,6 @@ def native_capability(
             ]
         ),
     }
-    if not passed:
-        raise ValueError(result["failures"][0])
     return result
 
 
@@ -322,8 +320,6 @@ def summarize(
         "conditions": conditions,
         "failures": failures,
     }
-    if failures:
-        raise ValueError("; ".join(failures))
     return result
 
 
@@ -381,6 +377,8 @@ def main() -> None:
     print(result["verdict"])
     if not args.native_only:
         print(result["candidate_status"])
+    if str(result.get("verdict", "")).startswith("FAIL_"):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
