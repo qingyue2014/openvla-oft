@@ -7,6 +7,7 @@ PI05_PORT="${PI05_PORT:-8000}"
 PI05_SERVER_GPU="${PI05_SERVER_GPU:-0}"
 SERVER_PYTHON="${OPENPI_ROOT}/.venv/bin/python"
 SERVER_LOG="${SERVER_LOG:-experiments/logs/l1a4_spatial_pi05_server.log}"
+RUNTIME_CACHE_ROOT="${RUNTIME_CACHE_ROOT:-${TMPDIR:-/tmp}/l1a4-spatial-${SLURM_JOB_ID:-local}}"
 
 if [[ ! -x "${SERVER_PYTHON}" ]] || [[ ! -f "${OPENPI_ROOT}/scripts/serve_policy.py" ]]; then
   echo "Missing official OpenPI server environment under ${OPENPI_ROOT}" >&2
@@ -14,6 +15,12 @@ if [[ ! -x "${SERVER_PYTHON}" ]] || [[ ! -f "${OPENPI_ROOT}/scripts/serve_policy
 fi
 
 mkdir -p "$(dirname "${SERVER_LOG}")"
+mkdir -p "${RUNTIME_CACHE_ROOT}/numba"
+# Numba otherwise attempts to cache robosuite kernels beside the conda
+# environment under /home. A full or read-only home filesystem then aborts
+# before the first episode. Bind the cache to compute-local scratch so this
+# infrastructure condition cannot be mistaken for a scene/evaluation result.
+export NUMBA_CACHE_DIR="${NUMBA_CACHE_DIR:-${RUNTIME_CACHE_ROOT}/numba}"
 (
   cd "${OPENPI_ROOT}"
   CUDA_VISIBLE_DEVICES="${PI05_SERVER_GPU}" \
