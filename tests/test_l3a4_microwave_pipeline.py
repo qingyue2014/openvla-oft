@@ -19,6 +19,7 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     closest_point_on_oriented_box,
     collision_masks_compatible,
     hinge_radius_m,
+    planar_park_clearances,
     radially_adjusted_input_xy,
 )
 from experiments.robot.libero.tasks.validate_l3a4_native_preflight import (
@@ -404,6 +405,30 @@ def test_l3a4_compiled_collision_filter_uses_bidirectional_masks():
         collision_masks_compatible(-1, 0, 1, 1)
 
 
+def test_l3a4_planar_park_clearance_checks_table_and_door_sweep():
+    metrics = planar_park_clearances(
+        candidate_xy=[0.0, -0.30],
+        table_center_xy=[0.0, 0.0],
+        table_rotation_xy=np.eye(2),
+        table_half_size_xy=[0.50, 0.60],
+        object_radius_xy=0.05,
+        obstacle_centers_xy=[[0.0, 0.0]],
+        obstacle_radii_xy=[0.15],
+    )
+    assert metrics["table_edge_clearance_m"] == pytest.approx(0.25)
+    assert metrics["obstacle_clearance_m"] == pytest.approx(0.10)
+    near_door = planar_park_clearances(
+        candidate_xy=[0.0, -0.10],
+        table_center_xy=[0.0, 0.0],
+        table_rotation_xy=np.eye(2),
+        table_half_size_xy=[0.50, 0.60],
+        object_radius_xy=0.05,
+        obstacle_centers_xy=[[0.0, 0.0]],
+        obstacle_radii_xy=[0.15],
+    )
+    assert near_door["obstacle_clearance_m"] < 0.0
+
+
 def _write_index(path: Path, rows):
     path.mkdir(parents=True)
     (path / "index.jsonl").write_text(
@@ -587,8 +612,7 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "geom_group" in geometry
     assert "geom_contype" in geometry
     assert "geom_conaffinity" in geometry
-    assert "collision_masks_compatible(" in geometry
-    assert "for robot_geom_id in robot_geoms" in geometry
+    assert "_collision_compatible_geom_ids(" in geometry
     assert "geom_group is diagnostic only" in geometry
     assert "int(model.geom_group[geom_id]) == 0" not in geometry
     assert "int(model.geom_contype[geom_id]) != 0" not in geometry
@@ -596,6 +620,12 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "nearest_compiled_static_microwave_collision_surface" in geometry
     assert "predicted_eef_surface_horizontal_clearance_m" in geometry
     assert "hinge_away_direction_xy" in geometry
+
+    compatibility = ast.get_source_segment(
+        source, functions["_collision_compatible_geom_ids"]
+    )
+    assert "collision_masks_compatible(" in compatibility
+    assert "for reference_id in references" in compatibility
 
     closest = ast.get_source_segment(
         source, functions["_closest_point_on_compiled_geom"]
@@ -605,6 +635,19 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "geom_size" in closest
     assert "geom_rbound" in closest
     assert "closest_point_on_oriented_box(" in closest
+
+    safe_park = ast.get_source_segment(
+        source, functions["_compiled_safe_outward_park"]
+    )
+    assert "_support_contact_box(" in safe_park
+    assert "_compiled_mug_horizontal_radius(" in safe_park
+    assert "_compiled_door_sweep_samples(" in safe_park
+    assert "planar_park_clearances(" in safe_park
+    assert "_closest_point_on_compiled_geom(" in safe_park
+    assert "SAFE_PARK_TABLE_EDGE_MARGIN_M" in safe_park
+    assert "SAFE_PARK_DOOR_SWEEP_MARGIN_M" in safe_park
+    assert "SAFE_PARK_STATIC_MARGIN_M" in safe_park
+    assert "start[:2] + outward * float(distance)" in safe_park
 
     seek = ast.get_source_segment(
         source, functions["_seek_porcelain_contact"]
@@ -630,14 +673,19 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "PORCELAIN_GRASP_HEIGHT" in prefix
     assert "PORCELAIN_GRASP_CLEARANCE_OFFSET" in prefix
     assert "_compiled_microwave_clearance(" in prefix
+    assert "_compiled_safe_outward_park(" in prefix
     assert "_seek_porcelain_contact(" in prefix
     assert "_close_gripper_on_porcelain(" in prefix
     assert "forbid_microwave_contact=True" in prefix
     assert "held_eef_offset = grasped_eef_position - grasped_mug_position" in prefix
     assert "park_grasp_point = park_mug_position + held_eef_offset" in prefix
+    assert '"outward corridor"' in prefix
+    assert '"paired_counterfactual_park_position_not_used_for_path"' in prefix
+    assert "(park_grasp_point + [0.0, 0.0, APPROACH_HEIGHT], \"transport\")" not in prefix
     assert "PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M" in prefix
     assert '"object_follow_trace": object_follow_trace' in prefix
     assert "final_park_error <= PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M" in prefix
+    assert "and support_body in contacts" in prefix
     assert "move_diagnostics" in prefix
     assert "final_error_vector" in prefix
     assert "robot_contact_bodies" in prefix
@@ -650,6 +698,8 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"robot_prefix_closure_porcelain_contact_final"' in source
     assert '"robot_prefix_max_object_follow_error_m"' in source
     assert '"robot_prefix_final_park_error_m"' in source
+    assert '"robot_prefix_safe_park_door_sweep_clearance_m"' in source
+    assert '"robot_prefix_safe_park_table_edge_clearance_m"' in source
     assert '"robot_prefix_no_forbidden_microwave_contact"' in source
     assert "GRASP_HEIGHT = 0.060" in source
     assert "PORCELAIN_GRASP_HEIGHT = 0.080" in source
@@ -657,5 +707,9 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "PORCELAIN_CONTACT_SEEK_STEPS = 80" in source
     assert "PORCELAIN_CONTACT_SEEK_ACTION_LIMIT = 0.25" in source
     assert "PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M = 0.030" in source
+    assert "SAFE_PARK_TABLE_EDGE_MARGIN_M = 0.020" in source
+    assert "SAFE_PARK_DOOR_SWEEP_MARGIN_M = 0.020" in source
+    assert "SAFE_PARK_STATIC_MARGIN_M = 0.020" in source
+    assert "SAFE_PARK_DOOR_SWEEP_SAMPLES = 49" in source
     assert "EEF_POSITION_TOLERANCE = 0.012" in source
     assert "MOVE_STEPS = 100" in source

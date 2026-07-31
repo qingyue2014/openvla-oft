@@ -44,6 +44,7 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     contact_body_names,
     contacts_between,
     descendant_geom_ids,
+    planar_park_clearances,
     policy_image,
     resolve_microwave_names,
 )
@@ -60,6 +61,13 @@ PORCELAIN_CONTACT_SEEK_STEPS = 80
 PORCELAIN_CONTACT_SEEK_GAIN = 12.0
 PORCELAIN_CONTACT_SEEK_ACTION_LIMIT = 0.25
 PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M = 0.030
+SAFE_PARK_MIN_OUTWARD_DISTANCE_M = 0.060
+SAFE_PARK_MAX_OUTWARD_DISTANCE_M = 0.400
+SAFE_PARK_SEARCH_STEP_M = 0.010
+SAFE_PARK_TABLE_EDGE_MARGIN_M = 0.020
+SAFE_PARK_DOOR_SWEEP_MARGIN_M = 0.020
+SAFE_PARK_STATIC_MARGIN_M = 0.020
+SAFE_PARK_DOOR_SWEEP_SAMPLES = 49
 EEF_POSITION_TOLERANCE = 0.012
 MOVE_STEPS = 100
 GRIPPER_STEPS = 15
@@ -218,6 +226,23 @@ def _closest_point_on_compiled_geom(env, geom_id: int, point):
     return closest, inside
 
 
+def _collision_compatible_geom_ids(model, candidates, references) -> list[int]:
+    references = tuple(int(geom_id) for geom_id in references)
+    return sorted(
+        int(geom_id)
+        for geom_id in candidates
+        if any(
+            collision_masks_compatible(
+                model.geom_contype[geom_id],
+                model.geom_conaffinity[geom_id],
+                model.geom_contype[reference_id],
+                model.geom_conaffinity[reference_id],
+            )
+            for reference_id in references
+        )
+    )
+
+
 def _compiled_microwave_clearance(env, names, mug_position):
     """Resolve an outward XY direction from the compiled static microwave."""
     model = env.sim.model
@@ -227,18 +252,10 @@ def _compiled_microwave_clearance(env, names, mug_position):
     robot_geoms = sorted(_robot_geom_ids(model))
     if not robot_geoms:
         raise RuntimeError("compiled model has no robot geoms")
-    collision_geoms = sorted(
-        geom_id
-        for geom_id in static_fixture_geoms
-        if any(
-            collision_masks_compatible(
-                model.geom_contype[geom_id],
-                model.geom_conaffinity[geom_id],
-                model.geom_contype[robot_geom_id],
-                model.geom_conaffinity[robot_geom_id],
-            )
-            for robot_geom_id in robot_geoms
-        )
+    collision_geoms = _collision_compatible_geom_ids(
+        model,
+        static_fixture_geoms,
+        robot_geoms,
     )
     if not collision_geoms:
         fixture_masks = sorted(
@@ -348,6 +365,308 @@ def _compiled_microwave_clearance(env, names, mug_position):
         "predicted_eef_surface_horizontal_clearance_m": (
             selected["horizontal_distance_m"]
             + PORCELAIN_GRASP_CLEARANCE_OFFSET
+        ),
+    }
+
+
+def _support_contact_box(env, support_body: str):
+    model = env.sim.model
+    mug_geoms = descendant_geom_ids(model, PORCELAIN_BODY)
+    support_geoms = descendant_geom_ids(model, support_body)
+    contacted_support_geoms = set()
+    for index in range(int(env.sim.data.ncon)):
+        contact = env.sim.data.contact[index]
+        if contact.geom1 in mug_geoms and contact.geom2 in support_geoms:
+            contacted_support_geoms.add(int(contact.geom2))
+        elif contact.geom2 in mug_geoms and contact.geom1 in support_geoms:
+            contacted_support_geoms.add(int(contact.geom1))
+    boxes = [
+        geom_id
+        for geom_id in contacted_support_geoms
+        if int(model.geom_type[geom_id]) == 6
+    ]
+    if not boxes:
+        raise RuntimeError(
+            "porcelain mug has no compiled box contact with its recorded "
+            f"support body {support_body!r}"
+        )
+    geom_id = max(
+        boxes,
+        key=lambda candidate: (
+            float(
+                model.geom_size[candidate][0]
+                * model.geom_size[candidate][1]
+            ),
+            -int(candidate),
+        ),
+    )
+    rotation = np.asarray(
+        env.sim.data.geom_xmat[geom_id], dtype=float
+    ).reshape(3, 3)
+    normal = rotation[:, 2]
+    normal_tilt_deg = float(
+        np.degrees(
+            np.arccos(np.clip(float(normal[2]), -1.0, 1.0))
+        )
+    )
+    if normal_tilt_deg > MAX_MUG_TILT_DEG:
+        raise RuntimeError(
+            "compiled support contact is not an upright table top; "
+            f"normal_tilt_deg={normal_tilt_deg}"
+        )
+    return geom_id, {
+        "support_body": support_body,
+        "geom_id": int(geom_id),
+        "geom_name": _geom_name(model, geom_id),
+        "geom_group": int(model.geom_group[geom_id]),
+        "geom_contype": int(model.geom_contype[geom_id]),
+        "geom_conaffinity": int(model.geom_conaffinity[geom_id]),
+        "center": np.asarray(
+            env.sim.data.geom_xpos[geom_id], dtype=float
+        ).tolist(),
+        "rotation": rotation.tolist(),
+        "half_size": np.asarray(
+            model.geom_size[geom_id], dtype=float
+        ).tolist(),
+        "normal_tilt_deg": normal_tilt_deg,
+        "selection": "largest compiled box in the actual mug-support contact",
+    }
+
+
+def _compiled_mug_horizontal_radius(env, mug_position) -> tuple[float, list[int]]:
+    model = env.sim.model
+    mug_geoms = sorted(
+        geom_id
+        for geom_id in descendant_geom_ids(model, PORCELAIN_BODY)
+        if int(model.geom_contype[geom_id]) != 0
+        or int(model.geom_conaffinity[geom_id]) != 0
+    )
+    if not mug_geoms:
+        raise RuntimeError("porcelain mug has no collision-capable compiled geoms")
+    mug_position = np.asarray(mug_position, dtype=float)
+    radius = max(
+        float(
+            np.linalg.norm(
+                np.asarray(
+                    env.sim.data.geom_xpos[geom_id], dtype=float
+                )[:2]
+                - mug_position[:2]
+            )
+            + model.geom_rbound[geom_id]
+        )
+        for geom_id in mug_geoms
+    )
+    if not np.isfinite(radius) or radius <= 0.0:
+        raise RuntimeError("invalid compiled porcelain horizontal radius")
+    return radius, mug_geoms
+
+
+def _compiled_door_sweep_samples(env, names):
+    model = env.sim.model
+    robot_geoms = _robot_geom_ids(model)
+    door_geoms = _collision_compatible_geom_ids(
+        model,
+        descendant_geom_ids(model, names["door_body"]),
+        robot_geoms,
+    )
+    if not door_geoms:
+        raise RuntimeError("compiled door has no robot-compatible collision geoms")
+    joint_id = int(model.joint_name2id(names["door_joint"]))
+    qadr = int(model.jnt_qposadr[joint_id])
+    start_qpos = float(env.sim.data.qpos[qadr])
+    closed_qpos = float(model.jnt_range[joint_id][1])
+    close_angle = closed_qpos - start_qpos
+    hinge_position, hinge_rotation = body_pose(
+        env.sim, names["door_body"]
+    )
+    hinge_axis = hinge_rotation @ np.asarray(
+        model.jnt_axis[joint_id], dtype=float
+    )
+    centers = []
+    radii = []
+    geom_records = []
+    fractions = np.linspace(0.0, 1.0, SAFE_PARK_DOOR_SWEEP_SAMPLES)
+    for geom_id in door_geoms:
+        initial_center = np.asarray(
+            env.sim.data.geom_xpos[geom_id], dtype=float
+        )
+        radius = float(model.geom_rbound[geom_id])
+        if not np.isfinite(radius) or radius <= 0.0:
+            raise RuntimeError(
+                f"compiled door geom {_geom_name(model, geom_id)!r} "
+                "has invalid bounding radius"
+            )
+        radial_vector = initial_center - hinge_position
+        for fraction in fractions:
+            center = hinge_position + _rotation_about_axis(
+                radial_vector,
+                hinge_axis,
+                close_angle * float(fraction),
+            )
+            centers.append(center[:2])
+            radii.append(radius)
+        geom_records.append(
+            {
+                "geom_id": int(geom_id),
+                "geom_name": _geom_name(model, geom_id),
+                "geom_type": int(model.geom_type[geom_id]),
+                "geom_rbound_m": radius,
+                "geom_contype": int(model.geom_contype[geom_id]),
+                "geom_conaffinity": int(
+                    model.geom_conaffinity[geom_id]
+                ),
+            }
+        )
+    return np.asarray(centers), np.asarray(radii), {
+        "door_body": names["door_body"],
+        "door_start_qpos": start_qpos,
+        "door_closed_qpos": closed_qpos,
+        "door_close_angle": close_angle,
+        "hinge_position": hinge_position.tolist(),
+        "hinge_axis": hinge_axis.tolist(),
+        "samples_per_geom": SAFE_PARK_DOOR_SWEEP_SAMPLES,
+        "door_collision_geoms": geom_records,
+    }
+
+
+def _compiled_safe_outward_park(
+    env,
+    names,
+    support_body,
+    start_mug_position,
+    outward_direction_xy,
+):
+    """Find the nearest table-supported point outside the compiled door sweep."""
+    model = env.sim.model
+    start = np.asarray(start_mug_position, dtype=float)
+    outward = np.asarray(outward_direction_xy, dtype=float)
+    outward_norm = float(np.linalg.norm(outward))
+    if outward.shape != (2,) or outward_norm <= np.finfo(float).eps:
+        raise RuntimeError("safe-park outward direction is invalid")
+    outward = outward / outward_norm
+    support_geom, support_record = _support_contact_box(env, support_body)
+    table_center = np.asarray(
+        env.sim.data.geom_xpos[support_geom], dtype=float
+    )
+    table_rotation = np.asarray(
+        env.sim.data.geom_xmat[support_geom], dtype=float
+    ).reshape(3, 3)
+    table_half_size = np.asarray(
+        model.geom_size[support_geom], dtype=float
+    )
+    table_normal = table_rotation[:, 2]
+    table_top = table_center + table_normal * table_half_size[2]
+    support_offset = float(np.dot(start - table_top, table_normal))
+    mug_radius, mug_geoms = _compiled_mug_horizontal_radius(env, start)
+    door_centers, door_radii, door_record = _compiled_door_sweep_samples(
+        env, names
+    )
+    fixture_geoms = descendant_geom_ids(model, names["fixture_root"])
+    door_geoms = descendant_geom_ids(model, names["door_body"])
+    static_geoms = _collision_compatible_geom_ids(
+        model,
+        fixture_geoms - door_geoms,
+        mug_geoms,
+    )
+    if not static_geoms:
+        raise RuntimeError(
+            "compiled microwave has no mug-compatible static collision geoms"
+        )
+
+    trace = []
+    distances = np.arange(
+        SAFE_PARK_MIN_OUTWARD_DISTANCE_M,
+        SAFE_PARK_MAX_OUTWARD_DISTANCE_M
+        + 0.5 * SAFE_PARK_SEARCH_STEP_M,
+        SAFE_PARK_SEARCH_STEP_M,
+    )
+    selected = None
+    for distance in distances:
+        candidate_xy = start[:2] + outward * float(distance)
+        plane_rhs = (
+            support_offset
+            + float(np.dot(table_normal, table_top))
+            - float(np.dot(table_normal[:2], candidate_xy))
+        )
+        if abs(float(table_normal[2])) <= np.finfo(float).eps:
+            raise RuntimeError("compiled table top has a vertical normal")
+        candidate = np.asarray(
+            [
+                candidate_xy[0],
+                candidate_xy[1],
+                plane_rhs / float(table_normal[2]),
+            ]
+        )
+        planar = planar_park_clearances(
+            candidate_xy,
+            table_center[:2],
+            table_rotation[:2, :2],
+            table_half_size[:2],
+            mug_radius,
+            door_centers,
+            door_radii,
+        )
+        static_candidates = []
+        for geom_id in static_geoms:
+            closest, inside = _closest_point_on_compiled_geom(
+                env, geom_id, candidate
+            )
+            clearance = (
+                -float("inf")
+                if inside
+                else float(np.linalg.norm(candidate - closest)) - mug_radius
+            )
+            static_candidates.append((clearance, int(geom_id)))
+        static_clearance, closest_static_geom = min(static_candidates)
+        passed = bool(
+            planar["table_edge_clearance_m"]
+            >= SAFE_PARK_TABLE_EDGE_MARGIN_M
+            and planar["obstacle_clearance_m"]
+            >= SAFE_PARK_DOOR_SWEEP_MARGIN_M
+            and static_clearance >= SAFE_PARK_STATIC_MARGIN_M
+        )
+        record = {
+            "outward_distance_m": float(distance),
+            "candidate_position": candidate.tolist(),
+            "table_edge_clearance_m": planar["table_edge_clearance_m"],
+            "door_sweep_clearance_m": planar["obstacle_clearance_m"],
+            "static_microwave_clearance_m": static_clearance,
+            "closest_static_geom_id": closest_static_geom,
+            "closest_static_geom_name": _geom_name(
+                model, closest_static_geom
+            ),
+            "passed": passed,
+        }
+        trace.append(record)
+        if passed:
+            selected = record
+            break
+    if selected is None:
+        raise RuntimeError(
+            "no compiled table-supported outward park point clears the "
+            f"door sweep within {SAFE_PARK_MAX_OUTWARD_DISTANCE_M} m; "
+            f"last_candidate={trace[-1] if trace else None}"
+        )
+    return np.asarray(selected["candidate_position"], dtype=float), {
+        "method": (
+            "nearest outward point inside actual compiled support box and "
+            "outside sampled compiled door sweep/static microwave"
+        ),
+        "outward_direction_xy": outward.tolist(),
+        "selected": selected,
+        "mug_horizontal_radius_bound_m": mug_radius,
+        "support_offset_along_normal_m": support_offset,
+        "support_geometry": support_record,
+        "door_sweep_geometry": door_record,
+        "table_edge_margin_m": SAFE_PARK_TABLE_EDGE_MARGIN_M,
+        "door_sweep_margin_m": SAFE_PARK_DOOR_SWEEP_MARGIN_M,
+        "static_microwave_margin_m": SAFE_PARK_STATIC_MARGIN_M,
+        "search_min_outward_m": SAFE_PARK_MIN_OUTWARD_DISTANCE_M,
+        "search_max_outward_m": SAFE_PARK_MAX_OUTWARD_DISTANCE_M,
+        "search_step_m": SAFE_PARK_SEARCH_STEP_M,
+        "candidate_trace": trace,
+        "reachability_gate": (
+            "bounded outward corridor plus real OSC env.step waypoint"
         ),
     }
 
@@ -647,16 +966,28 @@ def _hold_gripper(env, oracle, command, count, step, frames):
 def _robot_park_prefix(
     env,
     oracle,
-    park_mug_position,
+    paired_counterfactual_park_position,
     names,
+    support_body,
     frames,
     step,
 ):
     initial_mug, _ = body_pose(env.sim, PORCELAIN_BODY)
-    park_mug_position = np.asarray(park_mug_position, dtype=float)
+    paired_counterfactual_park_position = np.asarray(
+        paired_counterfactual_park_position, dtype=float
+    )
     try:
         clearance_xy, clearance_geometry = _compiled_microwave_clearance(
             env, names, initial_mug
+        )
+        park_mug_position, safe_park_geometry = (
+            _compiled_safe_outward_park(
+                env,
+                names,
+                support_body,
+                initial_mug,
+                clearance_xy,
+            )
         )
     except RuntimeError as error:
         return False, str(error), None, step, {}
@@ -681,6 +1012,9 @@ def _robot_park_prefix(
         return {
             "porcelain_initial_position": initial_mug.tolist(),
             "porcelain_park_position": park_mug_position.tolist(),
+            "paired_counterfactual_park_position_not_used_for_path": (
+                paired_counterfactual_park_position.tolist()
+            ),
             "porcelain_clearance_grasp_target": (
                 clearance_grasp_point.tolist()
             ),
@@ -690,6 +1024,7 @@ def _robot_park_prefix(
             ),
             "porcelain_grasp_clearance_direction_xy": clearance_xy.tolist(),
             "compiled_clearance_geometry": clearance_geometry,
+            "compiled_safe_park_geometry": safe_park_geometry,
             "contact_seek": contact_seek_diagnostic,
             "grasp_closure": closure_diagnostic,
             "held_eef_minus_mug_offset": (
@@ -796,7 +1131,10 @@ def _robot_park_prefix(
             grasped_eef_position + [0.0, 0.0, APPROACH_HEIGHT],
             "lift",
         ),
-        (park_grasp_point + [0.0, 0.0, APPROACH_HEIGHT], "transport"),
+        (
+            park_grasp_point + [0.0, 0.0, APPROACH_HEIGHT],
+            "outward corridor",
+        ),
         (park_grasp_point, "lower"),
     ):
         reached, status, step = _move_eef(
@@ -860,7 +1198,7 @@ def _robot_park_prefix(
     if park_error_before_release > PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M:
         return (
             False,
-            "porcelain mug did not reach the paired safe park pose; "
+            "porcelain mug did not reach the compiled safe park pose; "
             f"park_error_m={park_error_before_release}",
             status,
             step,
@@ -916,6 +1254,7 @@ def _robot_park_prefix(
     stable = bool(
         np.linalg.norm(final_mug - initial_mug) >= 0.025
         and final_park_error <= PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M
+        and support_body in contacts
         and body_tilt_deg(env.sim, PORCELAIN_BODY) <= MAX_MUG_TILT_DEG
         and final_linear <= MAX_WAIT_LINEAR_SPEED_MPS
         and final_angular <= MAX_WAIT_ANGULAR_SPEED_RADPS
@@ -1255,6 +1594,7 @@ def main() -> None:
             oracle,
             park_position,
             names,
+            table_contacts[0],
             frames,
             step,
         )
@@ -1298,6 +1638,10 @@ def main() -> None:
             "compiled_clearance_geometry", {}
         )
         selected_clearance_geom = clearance_geometry.get("selected", {})
+        safe_park_geometry = prefix_metrics.get(
+            "compiled_safe_park_geometry", {}
+        )
+        selected_safe_park = safe_park_geometry.get("selected", {})
         contact_seek = prefix_metrics.get("contact_seek", {})
         grasp_closure = prefix_metrics.get("grasp_closure", {})
         held_eef_offset = prefix_metrics.get(
@@ -1423,6 +1767,44 @@ def main() -> None:
                     [float("nan")] * 2,
                 )[1]
             ),
+            "robot_prefix_safe_park_method": safe_park_geometry.get(
+                "method", ""
+            ),
+            "robot_prefix_safe_park_outward_distance_m": (
+                selected_safe_park.get(
+                    "outward_distance_m", float("nan")
+                )
+            ),
+            "robot_prefix_safe_park_table_edge_clearance_m": (
+                selected_safe_park.get(
+                    "table_edge_clearance_m", float("nan")
+                )
+            ),
+            "robot_prefix_safe_park_door_sweep_clearance_m": (
+                selected_safe_park.get(
+                    "door_sweep_clearance_m", float("nan")
+                )
+            ),
+            "robot_prefix_safe_park_static_clearance_m": (
+                selected_safe_park.get(
+                    "static_microwave_clearance_m", float("nan")
+                )
+            ),
+            "robot_prefix_safe_park_candidate_x": (
+                selected_safe_park.get(
+                    "candidate_position", [float("nan")] * 3
+                )[0]
+            ),
+            "robot_prefix_safe_park_candidate_y": (
+                selected_safe_park.get(
+                    "candidate_position", [float("nan")] * 3
+                )[1]
+            ),
+            "robot_prefix_safe_park_candidate_z": (
+                selected_safe_park.get(
+                    "candidate_position", [float("nan")] * 3
+                )[2]
+            ),
             "robot_prefix_contact_seek_steps": contact_seek.get(
                 "steps_executed", 0
             ),
@@ -1542,7 +1924,8 @@ def main() -> None:
         "all_task_actions_robot_controlled": True,
         "porcelain_prefix_segment": (
             "compiled-geometry clearance descend, lateral contact seek, "
-            "closure, and object-following transport via env.step"
+            "closure, outward safe-park corridor, and vertical placement "
+            "via env.step"
         ),
         "porcelain_clearance_offset_m": PORCELAIN_GRASP_CLEARANCE_OFFSET,
         "porcelain_contact_seek_steps": PORCELAIN_CONTACT_SEEK_STEPS,
@@ -1552,6 +1935,15 @@ def main() -> None:
         "porcelain_object_follow_tolerance_m": (
             PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M
         ),
+        "porcelain_safe_park_search": {
+            "min_outward_m": SAFE_PARK_MIN_OUTWARD_DISTANCE_M,
+            "max_outward_m": SAFE_PARK_MAX_OUTWARD_DISTANCE_M,
+            "step_m": SAFE_PARK_SEARCH_STEP_M,
+            "table_edge_margin_m": SAFE_PARK_TABLE_EDGE_MARGIN_M,
+            "door_sweep_margin_m": SAFE_PARK_DOOR_SWEEP_MARGIN_M,
+            "static_microwave_margin_m": SAFE_PARK_STATIC_MARGIN_M,
+            "door_sweep_samples": SAFE_PARK_DOOR_SWEEP_SAMPLES,
+        },
         "porcelain_grasp_gate": (
             "current porcelain contact required; any robot-microwave "
             "contact fails closed"

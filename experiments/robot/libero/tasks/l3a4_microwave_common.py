@@ -250,6 +250,69 @@ def collision_masks_compatible(
     )
 
 
+def planar_park_clearances(
+    candidate_xy,
+    table_center_xy,
+    table_rotation_xy,
+    table_half_size_xy,
+    object_radius_xy: float,
+    obstacle_centers_xy,
+    obstacle_radii_xy,
+) -> dict[str, float]:
+    """Measure table-edge and sampled-obstacle clearance for a park point."""
+    candidate = np.asarray(candidate_xy, dtype=float)
+    table_center = np.asarray(table_center_xy, dtype=float)
+    table_rotation = np.asarray(table_rotation_xy, dtype=float)
+    table_half_size = np.asarray(table_half_size_xy, dtype=float)
+    obstacle_centers = np.asarray(obstacle_centers_xy, dtype=float)
+    obstacle_radii = np.asarray(obstacle_radii_xy, dtype=float)
+    object_radius = float(object_radius_xy)
+    if candidate.shape != (2,) or table_center.shape != (2,):
+        raise ValueError("candidate and table center must have shape (2,)")
+    if table_rotation.shape != (2, 2) or table_half_size.shape != (2,):
+        raise ValueError("table rotation and half size have invalid shape")
+    if obstacle_centers.ndim != 2 or obstacle_centers.shape[1:] != (2,):
+        raise ValueError("obstacle centers must have shape (N, 2)")
+    if obstacle_radii.shape != (len(obstacle_centers),):
+        raise ValueError("obstacle radii must have shape (N,)")
+    arrays = (
+        candidate,
+        table_center,
+        table_rotation,
+        table_half_size,
+        obstacle_centers,
+        obstacle_radii,
+    )
+    if (
+        not all(np.all(np.isfinite(array)) for array in arrays)
+        or not np.isfinite(object_radius)
+        or object_radius < 0.0
+        or np.any(table_half_size <= 0.0)
+        or np.any(obstacle_radii < 0.0)
+    ):
+        raise ValueError("planar park geometry must be finite and nonnegative")
+    table_local = table_rotation.T @ (candidate - table_center)
+    table_axis_clearance = (
+        table_half_size - np.abs(table_local) - object_radius
+    )
+    if len(obstacle_centers):
+        obstacle_clearance = float(
+            np.min(
+                np.linalg.norm(
+                    obstacle_centers - candidate[None, :], axis=1
+                )
+                - obstacle_radii
+                - object_radius
+            )
+        )
+    else:
+        obstacle_clearance = float("inf")
+    return {
+        "table_edge_clearance_m": float(np.min(table_axis_clearance)),
+        "obstacle_clearance_m": obstacle_clearance,
+    }
+
+
 def fixture_local_position(sim, fixture_root: str, world_position) -> np.ndarray:
     root_pos, root_mat = body_pose(sim, fixture_root)
     return root_mat.T @ (np.asarray(world_position, dtype=float) - root_pos)
