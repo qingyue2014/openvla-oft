@@ -233,3 +233,27 @@ bash experiments/robot/libero/tasks/run_l3b_moka_order_pi05.sh smoke
 All initial frames, runtime gates, trajectories, and smoke videos are retained
 under `review/L3-B_moka_order_task/`. Formal mode exits non-zero until an order
 effect has survived smoke and a hash-bound human review has been recorded.
+
+## 2026-07-31 native-20 capability extension
+
+The first five-state π0.5 capability screen produced only one stable native
+success and therefore did not run either partial-history condition. To reduce
+the uncertainty from that small pool, `l3b_moka_native20_v1` preregisters
+exactly official native state indices 0 through 19 and a preserved 60% gate:
+at least 12 stable successes are required.
+
+This is explicitly a pool extension, not an independent blinded replication:
+indices 0 through 4 and their one stable success were already observed.
+Indices 5 through 19 are new. Raw LIBERO success is reported separately;
+stable success additionally requires 30 terminal settle samples, at most 1.0
+degree tilt for both pots, and at most 0.003 m terminal-window drift.
+
+The machine-readable protocol and dedicated capability-only runner are:
+
+```text
+experiments/robot/libero/tasks/l3b_moka_native20_prereg.json
+experiments/robot/libero/tasks/run_l3b_moka_native20.sh
+```
+
+If the native result is below 12/20, `near_first` and `far_first` remain
+unauthorized. No official state may be substituted after seeing its result.

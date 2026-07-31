@@ -1,0 +1,114 @@
+{
+  "acceptance": {
+    "minimum_stable_success_rate": 0.6,
+    "minimum_stable_successes": 12,
+    "near_far_authorized_only_if_pass": true,
+    "raw_libero_success_reported_separately": true,
+    "stable_success_requires": {
+      "both_pots_terminal_max_drift_m_lte": 0.003,
+      "both_pots_terminal_max_tilt_deg_lte": 1.0,
+      "minimum_settle_samples_per_pot": 30,
+      "native_libero_goal_success": true
+    }
+  },
+  "artifacts": {
+    "far_states": "experiments/robot/libero/tasks/l3b_moka_native20_far_first_states.hdf5",
+    "native_states": "experiments/robot/libero/tasks/l3b_moka_native20_native_states.hdf5",
+    "near_states": "experiments/robot/libero/tasks/l3b_moka_native20_near_first_states.hdf5",
+    "review_root": "review/L3-B_moka_order_task/native20_pi05_v1"
+  },
+  "checkpoint": {
+    "model_family": "pi05",
+    "openpi_checkpoint": "gs://openpi-assets/checkpoints/pi05_libero",
+    "replan_steps": 5
+  },
+  "native_only_contract": {
+    "asset_inventory_changed": false,
+    "custom_assets": false,
+    "custom_bddl": false,
+    "prompt_changed": false,
+    "safety_oracle": "none"
+  },
+  "pool": {
+    "count": 20,
+    "official_init_state_file": "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.pruned_init",
+    "official_state_indices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "selection_rule": "first_20_official_states_in_native_file_order",
+    "substitution_allowed": false
+  },
+  "prior_observation_disclosure": {
+    "independent_blinded_replication": false,
+    "newly_unobserved_state_indices": [
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19
+    ],
+    "previously_observed_state_indices": [
+      0,
+      1,
+      2,
+      3,
+      4
+    ],
+    "previously_observed_stable_successes": 1,
+    "previously_observed_trials": 5
+  },
+  "preregistration_id": "l3b_moka_native20_v1",
+  "protocol": {
+    "evaluation_seed": 42,
+    "formal_noop_wait_steps": 10,
+    "max_saved_episode_pairs_per_outcome": 5,
+    "post_success_settle_steps": 100,
+    "scene_seed": 42
+  },
+  "registered_date": "2026-07-31",
+  "scope": "native_capability_screen_only",
+  "status": "LOCKED_BEFORE_NATIVE20_RUN",
+  "task": {
+    "bddl_file": "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl",
+    "fixtures": {
+      "flat_stove_1": "flat_stove",
+      "kitchen_table": "kitchen_table"
+    },
+    "objects": {
+      "moka_pot_1": "moka_pot",
+      "moka_pot_2": "moka_pot"
+    },
+    "prompt": "put both moka pots on the stove",
+    "suite": "libero_10",
+    "task_id": 8
+  }
+}

@@ -253,6 +253,34 @@ def native_capability(
     return result
 
 
+def bind_preregistration(
+    result: dict,
+    preregistration_path: str | Path,
+    *,
+    expected_count: int,
+    minimum_successes: int,
+) -> None:
+    path = Path(preregistration_path).resolve(strict=True)
+    record = json.loads(path.read_text(encoding="utf-8"))
+    pool = record.get("pool", {})
+    acceptance = record.get("acceptance", {})
+    if (
+        record.get("status") != "LOCKED_BEFORE_NATIVE20_RUN"
+        or record.get("scope") != "native_capability_screen_only"
+        or pool.get("count") != expected_count
+        or pool.get("official_state_indices") != list(range(expected_count))
+        or acceptance.get("minimum_stable_successes") != minimum_successes
+    ):
+        raise ValueError(
+            "capability arguments differ from the locked preregistration"
+        )
+    result["preregistration"] = {
+        "preregistration_id": record.get("preregistration_id"),
+        "path": str(path),
+        "sha256": sha256_path(path),
+    }
+
+
 def summarize(
     native_dir: str | Path,
     near_dir: str | Path,
@@ -342,6 +370,7 @@ def main() -> None:
     parser.add_argument("--expected-count", type=int, default=5)
     parser.add_argument("--minimum-native-successes", type=int, default=3)
     parser.add_argument("--native-only", action="store_true")
+    parser.add_argument("--preregistration")
     parser.add_argument("--out-json")
     args = parser.parse_args()
     try:
@@ -351,6 +380,13 @@ def main() -> None:
                 expected_count=args.expected_count,
                 minimum_successes=args.minimum_native_successes,
             )
+            if args.preregistration:
+                bind_preregistration(
+                    result,
+                    args.preregistration,
+                    expected_count=args.expected_count,
+                    minimum_successes=args.minimum_native_successes,
+                )
         else:
             if not args.near_first or not args.far_first:
                 raise ValueError(

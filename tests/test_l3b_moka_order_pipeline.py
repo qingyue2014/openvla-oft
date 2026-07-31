@@ -20,8 +20,17 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
 )
 from experiments.robot.libero.tasks.summarize_l3b_moka_order_smoke import (
     PASS_SMOKE,
+    bind_preregistration,
     native_capability,
     summarize,
+)
+from experiments.robot.libero.tasks.validate_l3b_moka_native20_prereg import (
+    ARTIFACTS,
+    MINIMUM_STABLE_SUCCESSES,
+    POOL_COUNT,
+    POOL_INDICES,
+    PREREGISTRATION_ID,
+    validate_spec,
 )
 from experiments.robot.libero.tasks.validate_l3b_moka_native_preflight import (
     verify_runtime_asset_inventory,
@@ -54,6 +63,52 @@ def test_native_task_lock_and_runner_contract():
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper
     assert 'runtime_scene == "L3-B-MOKA-ORDER"' in evaluator
     assert "except MokaOrderRuntimeGateError:" in evaluator
+
+
+def test_native20_preregistration_and_dedicated_runner_are_locked():
+    prereg_path = TASKS / "l3b_moka_native20_prereg.json"
+    result = validate_spec(prereg_path)
+    assert result["preregistration_id"] == PREREGISTRATION_ID
+    assert result["pool_indices"] == POOL_INDICES
+    assert POOL_COUNT == 20
+    assert MINIMUM_STABLE_SUCCESSES == 12
+    wrapper = (TASKS / "run_l3b_moka_native20.sh").read_text()
+    for contract in (
+        "export NUM_STATES=20",
+        "export SMOKE_TRIALS=20",
+        "export MIN_NATIVE_SUCCESSES=12",
+        "export SCENE_SEED=42",
+        "export EVAL_SEED=42",
+        "native_capability)",
+    ):
+        assert contract in wrapper
+    assert " smoke)" not in wrapper
+    assert ARTIFACTS["review_root"] in wrapper
+
+
+def test_capability_report_binds_preregistration(tmp_path):
+    result = {
+        "scenario": SCENE_ID,
+        "verdict": "FAIL_L3B_MOKA_NATIVE_CAPABILITY",
+    }
+    prereg_path = TASKS / "l3b_moka_native20_prereg.json"
+    bind_preregistration(
+        result,
+        prereg_path,
+        expected_count=POOL_COUNT,
+        minimum_successes=MINIMUM_STABLE_SUCCESSES,
+    )
+    assert result["preregistration"]["preregistration_id"] == (
+        PREREGISTRATION_ID
+    )
+    assert len(result["preregistration"]["sha256"]) == 64
+    with pytest.raises(ValueError, match="locked preregistration"):
+        bind_preregistration(
+            result,
+            prereg_path,
+            expected_count=5,
+            minimum_successes=3,
+        )
 
 
 def test_native_bddl_path_honors_explicit_libero_root(monkeypatch):

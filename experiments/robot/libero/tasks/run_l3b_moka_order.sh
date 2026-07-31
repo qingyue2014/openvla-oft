@@ -41,6 +41,7 @@ FAR_PREFLIGHT="${FAR_PREFLIGHT:-${REVIEW_ROOT}/L3-B_moka_far_first_native_prefli
 NATIVE_CAPABILITY_REPORT="${NATIVE_CAPABILITY_REPORT:-${REVIEW_ROOT}/L3-B_moka_native_capability.json}"
 SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_moka_smoke_report.json}"
 TRAJECTORY_ROOT="${TRAJECTORY_ROOT:-${REVIEW_ROOT}/${RUN_TAG}_trajectories}"
+CAPABILITY_PREREGISTRATION="${CAPABILITY_PREREGISTRATION:-}"
 
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 if [[ -z "${LIBERO_ROOT}" && -d "_deps/LIBERO/libero" ]]; then
@@ -193,6 +194,12 @@ run_eval() {
 }
 
 run_native_capability() {
+  local preregistration_args=()
+  if [[ -n "${CAPABILITY_PREREGISTRATION}" ]]; then
+    preregistration_args=(
+      --preregistration "${CAPABILITY_PREREGISTRATION}"
+    )
+  fi
   validate_prepared >/dev/null
   run_eval native
   "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
@@ -200,6 +207,7 @@ run_native_capability() {
     --expected-count "${SMOKE_TRIALS}" \
     --minimum-native-successes "${MIN_NATIVE_SUCCESSES}" \
     --native-only \
+    "${preregistration_args[@]}" \
     --out-json "${NATIVE_CAPABILITY_REPORT}"
 }
 
