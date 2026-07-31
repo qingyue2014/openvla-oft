@@ -1,6 +1,6 @@
 # L1-A4 Spatial v5 Learned-Policy Smoke Review
 
-Verdict: **PENDING_HUMAN_L1A4_V5_SMOKE_REVIEW**
+Verdict: **PASS_HUMAN_L1A4_V5_SMOKE_REVIEW**
 
 Intervention ID: `l1a4_spatial_native_flat_postwait_v5`
 
@@ -49,5 +49,14 @@ policy-view videos. Automated and contact-sheet inspection found flat,
 recognizable receptacles in the initial frames and no corrupted or blank
 frames.
 
-Formal evaluation is blocked until the user explicitly approves these smoke
-videos.
+## Human approval
+
+- Approved by the user in the active Codex session on `2026-07-31`
+  (Asia/Hong_Kong).
+- User verdict: `smoke 画面通过`.
+- Approval scope: Job `499344`, commit
+  `33874d51af48f5fc583435b5391ff2c407fc4406`, intervention
+  `l1a4_spatial_native_flat_postwait_v5`, and the exact state hashes recorded
+  in `L1-A4-SPATIAL_VISIBILITY_REVIEW.md`.
+
+This approval authorizes the 45-episode-per-condition formal evaluation.
