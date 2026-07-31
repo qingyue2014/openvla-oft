@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 
 import h5py
+import imageio.v2 as imageio
 import numpy as np
 import pytest
 
@@ -34,6 +35,11 @@ from experiments.robot.libero.tasks.validate_l3b_moka_native20_prereg import (
 )
 from experiments.robot.libero.tasks.validate_l3b_moka_native_preflight import (
     verify_runtime_asset_inventory,
+)
+from experiments.robot.libero.tasks.validate_l3b_moka_runtime_replay import (
+    MAX_MEAN_ABSOLUTE_PIXEL_ERROR,
+    MAX_P99_ABSOLUTE_PIXEL_ERROR,
+    _compare_images,
 )
 from experiments.robot.libero.tasks.validate_l3b_moka_state_bundles import (
     _validate_one,
@@ -108,6 +114,30 @@ def test_capability_report_binds_preregistration(tmp_path):
             prereg_path,
             expected_count=5,
             minimum_successes=3,
+        )
+
+
+def test_render_replay_tolerates_only_small_antialiasing_tail(tmp_path):
+    assert MAX_MEAN_ABSOLUTE_PIXEL_ERROR == 1.0
+    assert MAX_P99_ABSOLUTE_PIXEL_ERROR == 8.0
+    expected = np.zeros((100, 100, 3), dtype=np.uint8)
+    expected_path = tmp_path / "expected.png"
+    imageio.imwrite(expected_path, expected)
+
+    small_edge_tail = expected.copy()
+    small_edge_tail[:2, :, :] = 6
+    result = _compare_images(
+        {"agentview_raw_256": small_edge_tail},
+        {"agentview_raw_256": str(expected_path)},
+    )
+    assert result["agentview_raw_256"]["p99_absolute_pixel_error"] == 6.0
+
+    excessive_tail = expected.copy()
+    excessive_tail[:2, :, :] = 9
+    with pytest.raises(ValueError, match="replay mismatch"):
+        _compare_images(
+            {"agentview_raw_256": excessive_tail},
+            {"agentview_raw_256": str(expected_path)},
         )
 
 
