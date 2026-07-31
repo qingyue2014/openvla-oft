@@ -13,6 +13,7 @@ from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
     BASE_STATE_SOURCE,
     CONDITION_LABEL,
     CONDITION_SUPPORT,
+    EVALUATOR_ENV_SEED,
     EXPECTED_OBJECT_BODIES,
     PAIRING_METHOD,
     SCENE_ID,
@@ -20,6 +21,7 @@ from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
     TASK_KEY,
     TASK_PROMPT,
     TASK_SUITE,
+    SOURCE_TO_BASE_WAIT_STEPS,
     build_preflight_manifest,
     sha256_file,
     validate_human_approval,
@@ -36,6 +38,7 @@ from experiments.robot.libero.tasks.validate_l3a2_milk_butter_smoke import (
 from experiments.robot.libero.tasks.generate_l3a2_milk_butter_initial_states import (
     _basket_milk_goal,
     _collision_vertical_bounds,
+    _settle_official_source_to_paired_base,
     _stack_butter_on,
     _validated_official_init_state_rows,
 )
@@ -92,6 +95,12 @@ def _write_artifact(path, condition, bases, *, illegal_initial=False):
             "base_state_source": BASE_STATE_SOURCE,
             "pairing_method": PAIRING_METHOD,
             "construction_settle_method": "controller_dummy_action",
+            "environment_seed": EVALUATOR_ENV_SEED,
+            "environment_hard_reset": False,
+            "source_to_base_wait_steps": SOURCE_TO_BASE_WAIT_STEPS,
+            "source_to_base_wait_method": (
+                "formal_evaluator_controller_dummy_action"
+            ),
             "seed": 42,
             "formal_wait_steps": 10,
             "intervention_body": "butter_1_main",
@@ -102,6 +111,8 @@ def _write_artifact(path, condition, bases, *, illegal_initial=False):
             group.attrs[name] = value
         for index, base in enumerate(bases):
             demo = group.create_group(f"demo_{index}")
+            source = base.copy()
+            source[0] -= 0.125
             intervention = base.copy()
             evaluated = base.copy()
             if condition in {"er", "ec"}:
@@ -111,7 +122,7 @@ def _write_artifact(path, condition, bases, *, illegal_initial=False):
                 evaluated[40:46] = 0.0
             if illegal_initial:
                 evaluated[25] += 1.0
-            demo.create_dataset("native_source_state", data=base)
+            demo.create_dataset("native_source_state", data=source)
             demo.create_dataset("base_reset_state", data=base)
             demo.create_dataset("intervention_state", data=intervention)
             demo.create_dataset("initial_state", data=evaluated)
@@ -119,7 +130,7 @@ def _write_artifact(path, condition, bases, *, illegal_initial=False):
             demo.attrs["butter_qvel_flat_start"] = 40
             demo.attrs["native_init_state_index"] = index
             demo.attrs["source_state_sha256"] = (
-                l3a2_generator.sha256_array(base)
+                l3a2_generator.sha256_array(source)
             )
             demo.attrs["base_state_sha256"] = (
                 l3a2_generator.sha256_array(base)
@@ -129,6 +140,13 @@ def _write_artifact(path, condition, bases, *, illegal_initial=False):
             )
             demo.attrs["initial_state_sha256"] = (
                 l3a2_generator.sha256_array(evaluated)
+            )
+            demo.attrs["source_to_base_restored_state_sha256"] = (
+                l3a2_generator.sha256_array(source)
+            )
+            demo.attrs["source_to_base_wait_state_sha256"] = json.dumps(
+                [l3a2_generator.sha256_array(base)]
+                * SOURCE_TO_BASE_WAIT_STEPS
             )
             demo.attrs["native_butter_body_position"] = (
                 base[10:13] + np.array([0.125, -0.25, 0.375])
@@ -211,6 +229,56 @@ def test_stack_construction_uses_controller_steps_not_raw_simulation():
     assert "env.set_init_state" in source
 
 
+def test_official_source_is_settled_with_exact_evaluator_sequence():
+    class Sim:
+        def __init__(self):
+            self.state = np.zeros(4, dtype=float)
+
+        def get_state(self):
+            return self.state
+
+    class Env:
+        def __init__(self):
+            self.sim = Sim()
+            self.events = []
+
+        def reset(self):
+            self.events.append("reset")
+
+        def set_init_state(self, state):
+            self.events.append("set_init_state")
+            self.sim.state = np.asarray(state, dtype=float).copy()
+
+        def step(self, action):
+            self.events.append(("step", list(action)))
+            self.sim.state += 0.01
+            return {}, 0.0, False, {}
+
+    env = Env()
+    source = np.array([0.0, 1.0, 2.0, 3.0])
+    base, evidence = _settle_official_source_to_paired_base(env, source)
+
+    assert env.events[:2] == ["reset", "set_init_state"]
+    assert len(env.events[2:]) == SOURCE_TO_BASE_WAIT_STEPS
+    assert all(
+        event == ("step", [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+        for event in env.events[2:]
+    )
+    np.testing.assert_allclose(
+        base, source + 0.01 * SOURCE_TO_BASE_WAIT_STEPS
+    )
+    assert not np.array_equal(base, source)
+    assert evidence["environment_hard_reset"] is False
+    assert evidence["environment_seed"] == EVALUATOR_ENV_SEED
+    assert evidence["wait_steps"] == SOURCE_TO_BASE_WAIT_STEPS
+    assert evidence["restored_source_state_sha256"] == (
+        l3a2_generator.sha256_array(source)
+    )
+    assert evidence["wait_state_sha256"][-1] == (
+        l3a2_generator.sha256_array(base)
+    )
+
+
 def test_paired_artifacts_allow_only_butter_in_exact_loaded_state(tmp_path):
     paths = _triplet(tmp_path)
     result = validate_state_artifacts(
@@ -252,13 +320,15 @@ def test_pairing_rejects_mismatched_native_butter_body_position(tmp_path):
         )
 
 
-def test_pairing_rejects_base_that_differs_from_official_source(tmp_path):
+def test_pairing_allows_settled_base_but_rejects_eb_not_equal_to_base(
+    tmp_path,
+):
     paths = _triplet(tmp_path)
     with h5py.File(paths["eb"], "r+") as handle:
         demo = handle[TASK_KEY]["demo_0"]
-        demo["base_reset_state"][0] += 0.01
-        demo.attrs["base_state_sha256"] = l3a2_generator.sha256_array(
-            demo["base_reset_state"][:]
+        assert not np.array_equal(
+            demo["native_source_state"][:],
+            demo["base_reset_state"][:],
         )
         demo["initial_state"][0] += 0.01
         demo.attrs["initial_state_sha256"] = l3a2_generator.sha256_array(
@@ -268,7 +338,9 @@ def test_pairing_rejects_base_that_differs_from_official_source(tmp_path):
         demo.attrs["intervention_state_sha256"] = (
             l3a2_generator.sha256_array(demo["intervention_state"][:])
         )
-    with pytest.raises(ValueError, match="base differs from official"):
+    with pytest.raises(
+        ValueError, match="evaluated initial_state differs from paired base"
+    ):
         validate_state_artifacts(
             paths["eb"],
             paths["er"],
@@ -313,6 +385,18 @@ def test_generation_manifest_binds_official_source_rows_to_hdf5(tmp_path):
                 "native_init_state_index": index,
                 "source_state_sha256": source_hash,
                 "base_state_sha256": base_hash,
+                "source_to_base": {
+                    "method": (
+                        "formal_evaluator_controller_dummy_action"
+                    ),
+                    "wait_steps": SOURCE_TO_BASE_WAIT_STEPS,
+                    "environment_hard_reset": False,
+                    "environment_seed": EVALUATOR_ENV_SEED,
+                    "restored_source_state_sha256": source_hash,
+                    "wait_state_sha256": [base_hash]
+                    * SOURCE_TO_BASE_WAIT_STEPS,
+                    "paired_base_state_sha256": base_hash,
+                },
                 "conditions": conditions,
             }
         )
@@ -321,6 +405,12 @@ def test_generation_manifest_binds_official_source_rows_to_hdf5(tmp_path):
         "verdict": "PASS_L3A2_GENERATION_AND_REFERENCE_GATES",
         "base_state_source": BASE_STATE_SOURCE,
         "pairing_method": PAIRING_METHOD,
+        "environment_seed": EVALUATOR_ENV_SEED,
+        "environment_hard_reset": False,
+        "source_to_base_wait_steps": SOURCE_TO_BASE_WAIT_STEPS,
+        "source_to_base_wait_method": (
+            "formal_evaluator_controller_dummy_action"
+        ),
         "native_init_states": str(NATIVE_INIT_STATES.resolve()),
         "native_init_states_sha256": sha256_file(NATIVE_INIT_STATES),
         "artifacts": {
@@ -346,7 +436,9 @@ def test_generation_manifest_binds_official_source_rows_to_hdf5(tmp_path):
     )
 
     manifest["episodes"][0]["source_state_sha256"] = "0" * 64
-    manifest["episodes"][0]["base_state_sha256"] = "0" * 64
+    manifest["episodes"][0]["source_to_base"][
+        "restored_source_state_sha256"
+    ] = "0" * 64
     manifest_path.write_text(json.dumps(manifest))
     with pytest.raises(ValueError, match="source state hash differs from HDF5"):
         validate_generation_manifest(
@@ -696,7 +788,10 @@ def test_generator_and_osc_reference_encode_required_hard_gates():
     assert "official_states[native_init_state_index]" in generator
     assert '"native_source_state"' in generator
     assert '"source_state_sha256"' in generator
-    assert "env.set_init_state(source_state)" in generator
+    assert "_settle_official_source_to_paired_base" in generator
+    assert "hard_reset=False" in generator
+    assert "env.seed(EVALUATOR_ENV_SEED)" in generator
+    assert '"source_to_base_wait_state_sha256"' in generator
     assert "PASS_L3A2_GENERATION_AND_REFERENCE_GATES" in generator
     assert "env.step" in osc
     assert "PASS_L3A2_REAL_ACTION_SAFE_REFERENCE" in osc

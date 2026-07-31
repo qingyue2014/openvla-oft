@@ -33,8 +33,14 @@ NATIVE_INIT_FILE = (
 )
 TASK_PROMPT = "Pick the milk and place it in the basket"
 TASK_KEY = TASK_PROMPT.replace(" ", "_")
-BASE_STATE_SOURCE = "official_libero_pruned_init_row_exact"
-PAIRING_METHOD = "official_native_init_row_butter_free_joint_only"
+EVALUATOR_ENV_SEED = 0
+SOURCE_TO_BASE_WAIT_STEPS = 10
+BASE_STATE_SOURCE = (
+    "official_libero_pruned_init_after_evaluator_controller_wait"
+)
+PAIRING_METHOD = (
+    "official_settled_native_base_butter_free_joint_only"
+)
 
 EXPECTED_FIXTURES = {"floor": "floor"}
 EXPECTED_OBJECTS = {
@@ -271,6 +277,19 @@ def verify_evaluation_request(
             )
         if _decode_attr(group.attrs.get("pairing_method")) != PAIRING_METHOD:
             raise ValueError("L3-A2 state artifact pairing method mismatch")
+        runtime_environment = {
+            "environment_seed": EVALUATOR_ENV_SEED,
+            "environment_hard_reset": False,
+            "source_to_base_wait_steps": SOURCE_TO_BASE_WAIT_STEPS,
+            "source_to_base_wait_method": (
+                "formal_evaluator_controller_dummy_action"
+            ),
+        }
+        for name, wanted in runtime_environment.items():
+            if _decode_attr(group.attrs.get(name)) != wanted:
+                raise ValueError(
+                    f"L3-A2 state artifact {name} mismatch"
+                )
         source = validate_native_init_states_source(
             _decode_attr(group.attrs.get("native_init_states", ""))
         )
@@ -377,6 +396,18 @@ def artifact_binding(path: str | Path) -> str:
             "pairing_method": _decode_attr(
                 group.attrs.get("pairing_method")
             ),
+            "environment_seed": _decode_attr(
+                group.attrs.get("environment_seed")
+            ),
+            "environment_hard_reset": _decode_attr(
+                group.attrs.get("environment_hard_reset")
+            ),
+            "source_to_base_wait_steps": _decode_attr(
+                group.attrs.get("source_to_base_wait_steps")
+            ),
+            "source_to_base_wait_method": _decode_attr(
+                group.attrs.get("source_to_base_wait_method")
+            ),
         }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
@@ -401,6 +432,12 @@ def _assert_condition_group(
         "base_state_source": BASE_STATE_SOURCE,
         "pairing_method": PAIRING_METHOD,
         "construction_settle_method": "controller_dummy_action",
+        "environment_seed": EVALUATOR_ENV_SEED,
+        "environment_hard_reset": False,
+        "source_to_base_wait_steps": SOURCE_TO_BASE_WAIT_STEPS,
+        "source_to_base_wait_method": (
+            "formal_evaluator_controller_dummy_action"
+        ),
     }
     for name, wanted in expected.items():
         got = _decode_attr(group.attrs.get(name))
@@ -507,6 +544,42 @@ def validate_state_artifacts(
                             f"{condition}/demo_{index}: {attribute} "
                             "does not bind dataset bytes"
                         )
+                restored_source_hash = _decode_attr(
+                    demo.attrs.get(
+                        "source_to_base_restored_state_sha256"
+                    )
+                )
+                if restored_source_hash != sha256_array(
+                    demo["native_source_state"][:]
+                ):
+                    raise ValueError(
+                        f"{condition}/demo_{index}: restored official "
+                        "source hash mismatch"
+                    )
+                source_wait_hashes = read_json_attr(
+                    demo, "source_to_base_wait_state_sha256"
+                )
+                if (
+                    not isinstance(source_wait_hashes, list)
+                    or len(source_wait_hashes)
+                    != SOURCE_TO_BASE_WAIT_STEPS
+                    or any(
+                        not isinstance(value, str)
+                        or not re.fullmatch(r"[0-9a-f]{64}", value)
+                        for value in source_wait_hashes
+                    )
+                ):
+                    raise ValueError(
+                        f"{condition}/demo_{index}: invalid "
+                        "source-to-base wait hash trace"
+                    )
+                if source_wait_hashes[-1] != sha256_array(
+                    demo["base_reset_state"][:]
+                ):
+                    raise ValueError(
+                        f"{condition}/demo_{index}: source-to-base wait "
+                        "does not end at paired base"
+                    )
                 if "native_butter_body_position" not in demo.attrs:
                     raise ValueError(
                         f"{condition}/demo_{index}: missing "
@@ -558,11 +631,9 @@ def validate_state_artifacts(
 
             source = demos["eb"]["native_source_state"][:]
             base = demos["eb"]["base_reset_state"][:]
-            if not np.array_equal(base, source):
-                raise ValueError(
-                    f"eb/demo_{index}: paired base differs from official "
-                    "native source row"
-                )
+            eb_source_wait = read_json_attr(
+                demos["eb"], "source_to_base_wait_state_sha256"
+            )
             for condition in ("er", "ec"):
                 other_source = demos[condition]["native_source_state"][:]
                 if not np.array_equal(source, other_source):
@@ -574,6 +645,15 @@ def validate_state_artifacts(
                 if not np.array_equal(base, other):
                     raise ValueError(
                         f"demo_{index}: paired base_reset_state differs in {condition}"
+                    )
+                other_source_wait = read_json_attr(
+                    demos[condition],
+                    "source_to_base_wait_state_sha256",
+                )
+                if other_source_wait != eb_source_wait:
+                    raise ValueError(
+                        f"demo_{index}: source-to-base wait trace differs "
+                        f"in {condition}"
                     )
             native_butter_position = np.asarray(
                 demos["eb"].attrs["native_butter_body_position"], dtype=float
@@ -769,6 +849,19 @@ def validate_generation_manifest(
         )
     if record.get("pairing_method") != PAIRING_METHOD:
         raise ValueError("generation manifest pairing method mismatch")
+    manifest_environment = {
+        "environment_seed": EVALUATOR_ENV_SEED,
+        "environment_hard_reset": False,
+        "source_to_base_wait_steps": SOURCE_TO_BASE_WAIT_STEPS,
+        "source_to_base_wait_method": (
+            "formal_evaluator_controller_dummy_action"
+        ),
+    }
+    for name, wanted in manifest_environment.items():
+        if record.get(name) != wanted:
+            raise ValueError(
+                f"generation manifest {name} does not match evaluator"
+            )
     native_source = validate_native_init_states_source(
         record.get("native_init_states", "")
     )
@@ -827,9 +920,40 @@ def validate_generation_manifest(
                 raise ValueError(
                     f"generation manifest {hash_name} missing/invalid"
                 )
-        if episode["source_state_sha256"] != episode["base_state_sha256"]:
+        source_to_base = episode.get("source_to_base")
+        if not isinstance(source_to_base, dict):
             raise ValueError(
-                "generation manifest Eb base is not the exact official row"
+                "generation manifest source-to-base evidence missing"
+            )
+        expected_source_to_base = {
+            "method": "formal_evaluator_controller_dummy_action",
+            "wait_steps": SOURCE_TO_BASE_WAIT_STEPS,
+            "environment_hard_reset": False,
+            "environment_seed": EVALUATOR_ENV_SEED,
+            "restored_source_state_sha256": episode[
+                "source_state_sha256"
+            ],
+            "paired_base_state_sha256": episode["base_state_sha256"],
+        }
+        for name, wanted in expected_source_to_base.items():
+            if source_to_base.get(name) != wanted:
+                raise ValueError(
+                    "generation manifest source-to-base evidence "
+                    f"mismatch: {name}"
+                )
+        source_wait_hashes = source_to_base.get("wait_state_sha256")
+        if (
+            not isinstance(source_wait_hashes, list)
+            or len(source_wait_hashes) != SOURCE_TO_BASE_WAIT_STEPS
+            or source_wait_hashes[-1] != episode["base_state_sha256"]
+            or any(
+                not isinstance(value, str)
+                or not re.fullmatch(r"[0-9a-f]{64}", value)
+                for value in source_wait_hashes
+            )
+        ):
+            raise ValueError(
+                "generation manifest source-to-base wait trace invalid"
             )
         with h5py.File(expected_paths["eb"], "r") as handle:
             demo = handle[TASK_KEY][f"demo_{episode_index}"]
@@ -853,6 +977,13 @@ def validate_generation_manifest(
             ):
                 raise ValueError(
                     "generation manifest base state hash differs from HDF5"
+                )
+            if source_wait_hashes != read_json_attr(
+                demo, "source_to_base_wait_state_sha256"
+            ):
+                raise ValueError(
+                    "generation manifest source-to-base wait trace "
+                    "differs from HDF5"
                 )
         conditions = episode.get("conditions")
         if not isinstance(conditions, dict):

@@ -7,10 +7,12 @@ alter only the free-joint state of the native ``butter_1``:
 * Er: butter upright on target ``milk_1``;
 * Ec: butter upright on non-target ``orange_juice_1``.
 
-The generator settles a candidate stack only through controller-backed dummy
-actions, then copies *only* the settled butter qpos/qvel slice into the paired
-official source row.  Consequently Eb is bit-identical to that official row,
-and the exact Er/Ec state loaded by evaluation is bit-identical outside butter.
+Each raw official row is first replayed through the evaluator's controller
+dummy-action wait to create a shared, pre-settled paired base.  The generator
+then settles a candidate stack only through controller-backed dummy actions
+and copies *only* its butter qpos/qvel slice into that base.  Consequently Eb
+is bit-identical to the paired base, while Er/Ec are bit-identical outside
+butter.  Raw source and paired base remain separately stored and hash-bound.
 Every accepted state is then replayed through the evaluator's reset,
 ``set_init_state``, forward, ten dummy-action wait, observation refresh, and
 first-policy-frame sequence.  Pre-wait, every wait step, and post-wait
@@ -50,6 +52,7 @@ from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
     BASE_STATE_SOURCE,
     CONDITION_LABEL,
     CONDITION_SUPPORT,
+    EVALUATOR_ENV_SEED,
     EXPECTED_OBJECT_BODIES,
     PAIRING_METHOD,
     SCENE_ID,
@@ -57,6 +60,7 @@ from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
     TASK_KEY,
     TASK_PROMPT,
     TASK_SUITE,
+    SOURCE_TO_BASE_WAIT_STEPS,
     artifact_binding,
     sha256_array,
     sha256_file,
@@ -65,7 +69,7 @@ from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
 )
 
 
-DUMMY_ACTION = np.asarray([0, 0, 0, 0, 0, 0, -1], dtype=float)
+DUMMY_ACTION = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 BUTTER_BODY = "butter_1_main"
 MILK_BODY = "milk_1_main"
 ORANGE_JUICE_BODY = "orange_juice_1_main"
@@ -120,6 +124,39 @@ def _validated_official_init_state_rows(
     if not np.all(np.isfinite(states)):
         raise ValueError("official init-state pool contains non-finite values")
     return states.copy()
+
+
+def _settle_official_source_to_paired_base(
+    env,
+    source_state: np.ndarray,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Materialize the exact base seen after the evaluator's dummy wait."""
+
+    source = np.asarray(source_state, dtype=float).copy()
+    env.reset()
+    env.set_init_state(source)
+    restored = env.sim.get_state().flatten().copy()
+    if not np.array_equal(restored, source):
+        raise RuntimeError(
+            "env.set_init_state did not preserve the official source row"
+        )
+
+    wait_state_sha256 = []
+    for _ in range(SOURCE_TO_BASE_WAIT_STEPS):
+        env.step(DUMMY_ACTION)
+        wait_state_sha256.append(
+            sha256_array(env.sim.get_state().flatten())
+        )
+    base_state = env.sim.get_state().flatten().copy()
+    return base_state, {
+        "method": "formal_evaluator_controller_dummy_action",
+        "wait_steps": SOURCE_TO_BASE_WAIT_STEPS,
+        "environment_hard_reset": False,
+        "environment_seed": EVALUATOR_ENV_SEED,
+        "restored_source_state_sha256": sha256_array(restored),
+        "wait_state_sha256": wait_state_sha256,
+        "paired_base_state_sha256": sha256_array(base_state),
+    }
 
 
 def _import_offscreen_env():
@@ -1049,6 +1086,12 @@ def _write_hdf5(
             "native_init_states_sha256": native_init_states_sha256,
             "base_state_source": BASE_STATE_SOURCE,
             "seed": seed,
+            "environment_seed": EVALUATOR_ENV_SEED,
+            "environment_hard_reset": False,
+            "source_to_base_wait_steps": SOURCE_TO_BASE_WAIT_STEPS,
+            "source_to_base_wait_method": (
+                "formal_evaluator_controller_dummy_action"
+            ),
             "formal_wait_steps": FORMAL_WAIT_STEPS,
             "construction_settle_steps": CONSTRUCTION_SETTLE_STEPS,
             "construction_settle_method": "controller_dummy_action",
@@ -1106,6 +1149,12 @@ def _write_hdf5(
             demo.attrs["native_init_state_index"] = record[
                 "native_init_state_index"
             ]
+            demo.attrs["source_to_base_restored_state_sha256"] = record[
+                "source_to_base"
+            ]["restored_source_state_sha256"]
+            demo.attrs["source_to_base_wait_state_sha256"] = _json(
+                record["source_to_base"]["wait_state_sha256"]
+            )
             demo.attrs["reset_attempt"] = record["reset_attempt"]
             demo.attrs["butter_qpos_flat_start"] = record["butter_qpos_flat"]
             demo.attrs["butter_qvel_flat_start"] = record["butter_qvel_flat"]
@@ -1171,9 +1220,9 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         camera_heights=args.resolution,
         camera_widths=args.resolution,
         render_gpu_device_id=args.render_gpu_device_id,
+        hard_reset=False,
     )
-    env.seed(args.seed)
-    env.reset()
+    env.seed(EVALUATOR_ENV_SEED)
     expected_state_size = int(env.sim.get_state().flatten().size)
     official_states = _validated_official_init_state_rows(
         loaded_official_states,
@@ -1221,18 +1270,12 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         source_state = np.asarray(
             official_states[native_init_state_index], dtype=float
         ).copy()
-        # Load the exact official row through the same public restoration path
-        # used by native evaluation before deriving any paired intervention.
-        env.reset()
-        env.set_init_state(source_state)
-        env.sim.forward()
-        restored_source = env.sim.get_state().flatten().copy()
-        if not np.array_equal(restored_source, source_state):
-            raise RuntimeError(
-                "env.set_init_state did not preserve the official source row "
-                f"exactly at index {native_init_state_index}"
-            )
-        base_state = source_state.copy()
+        # The raw official row is source evidence, not the policy's accepted
+        # initial state.  Reproduce the evaluator's reset, restoration, and
+        # ten controller dummy actions to obtain the shared paired base.
+        base_state, source_to_base = (
+            _settle_official_source_to_paired_base(env, source_state)
+        )
         butter_qadr, butter_vadr = _find_free_joint(env, BUTTER_BODY)
         butter_qpos_flat = 1 + butter_qadr
         butter_qvel_flat = 1 + int(env.sim.model.nq) + butter_vadr
@@ -1331,6 +1374,7 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
                     "native_init_state_index": native_init_state_index,
                     "source_state": source_state,
                     "base_state": base_state,
+                    "source_to_base": source_to_base,
                     "states": states,
                     "intervention_states": intervention_states,
                     "butter_qpos_flat": butter_qpos_flat,
@@ -1397,6 +1441,12 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         "native_init_states_sha256": native_init_source["sha256"],
         "base_state_source": BASE_STATE_SOURCE,
         "pairing_method": PAIRING_METHOD,
+        "environment_seed": EVALUATOR_ENV_SEED,
+        "environment_hard_reset": False,
+        "source_to_base_wait_steps": SOURCE_TO_BASE_WAIT_STEPS,
+        "source_to_base_wait_method": (
+            "formal_evaluator_controller_dummy_action"
+        ),
         "asset_inventory": sorted(EXPECTED_OBJECT_BODIES),
         "compiled_floor_support_bodies": sorted(
             {
@@ -1449,6 +1499,7 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
                     record["source_state"]
                 ),
                 "base_state_sha256": sha256_array(record["base_state"]),
+                "source_to_base": record["source_to_base"],
                 "conditions": {
                     condition: {
                         "intervention_state_sha256": sha256_array(

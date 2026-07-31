@@ -36,15 +36,19 @@ confirmation window. Merely touching or holding butter does not count.
 
 `generate_l3a2_milk_butter_initial_states.py` creates each paired triplet from
 one exact, uniquely indexed row of the task's official LIBERO
-`pick_up_the_milk_and_place_it_in_the_basket.pruned_init` file. Eb remains
-bit-identical to that row. Candidate stacks are settled only through
-controller-backed dummy actions; the evaluated Er/Ec state is then built by
-copying only butter's seven qpos and six qvel values into the official row.
-The source, immediate intervention, and evaluated states are stored and
-SHA-256-bound separately. Er/Ec must remain bit-identical to Eb outside the
-butter slices.
+`pick_up_the_milk_and_place_it_in_the_basket.pruned_init` file. The raw row is
+restored with the formal evaluator's environment parity (`hard_reset=False`,
+seed `0`) and advanced by the same ten controller-backed dummy actions. The
+result is the shared, pre-settled paired base; raw source and paired base are
+stored and SHA-256-bound separately. Eb is bit-identical to the paired base.
+Candidate stacks are settled only through controller-backed dummy actions;
+the evaluated Er/Ec state is then built by copying only butter's seven qpos
+and six qvel values into the paired base. Immediate intervention and evaluated
+states are also stored and SHA-256-bound separately. Er/Ec must remain
+bit-identical to Eb outside the butter slices.
 
-For every episode and condition, generation replays:
+After constructing that paired base, every episode and condition independently
+replays:
 
 1. `env.reset()`;
 2. `env.set_init_state(exact_serialized_state)`;
