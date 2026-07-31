@@ -1401,6 +1401,83 @@ def test_500121_vertical_descent_is_structurally_staged_outside_one_step_reserve
     assert np.linalg.norm(lateral_action[:3]) <= np.nextafter(0.10, 0.0)
 
 
+def test_500133_enters_compiled_high_corridor_directly_without_native_high_stop():
+    # Exact Job500133 trace: all commands were pure outward at the unchanged
+    # 0.10 action bound, yet the two-hop controller never reached the strict
+    # one-world-step (>8 mm) corridor.  Its residual response reversed after
+    # frame 6 and crossed the compiled no-contact boundary at frame 12.
+    initial_clearance = 0.0008573639623264129
+    clearances = np.array(
+        [
+            0.0018938727902981373,
+            0.0028298351969778396,
+            0.0035513036618791544,
+            0.004044439732490773,
+            0.004298270702040891,
+            0.004309318094654457,
+            0.004081105379950101,
+            0.003623199535032845,
+            0.0029514669494543067,
+            0.0020881353908475814,
+            0.001061380420857988,
+            -0.00009563150067076753,
+        ]
+    )
+    exact_progress = np.diff(
+        np.concatenate(([initial_clearance], clearances))
+    )
+    recorded_progress = np.array(
+        [
+            0.0010365088279717244,
+            0.0009359624066797023,
+            0.0007214684649013148,
+            0.0004931360706116189,
+            0.0002538309695501173,
+            0.000011047392613566798,
+            -0.00022821271470435667,
+            -0.0004579058449172557,
+            -0.0006717325855785383,
+            -0.0008633315586067253,
+            -0.0010267549699895934,
+            -0.0011570119215287555,
+        ]
+    )
+    strict_entry_clearance = np.nextafter(0.008, np.inf)
+    assert np.allclose(
+        exact_progress, recorded_progress, rtol=0.0, atol=1e-18
+    )
+    assert np.argmax(clearances) == 5
+    assert np.all(exact_progress[6:] < 0.0)
+    assert np.max(clearances) < strict_entry_clearance
+    assert clearances[-1] < np.nextafter(0.0, np.inf)
+
+    bounded_seek = CONTROLLER_REFERENCE.read_text().split(
+        "def _seek_stable_plate_contact(", 1
+    )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    compiled_corridor = bounded_seek.index(
+        "_compiled_vertical_staging_corridor("
+    )
+    direct_high_move = bounded_seek.index(
+        "rollout.move(\n        corridor_high_target,"
+    )
+    assert compiled_corridor < direct_high_move
+    assert "rollout.move(\n        outside_high_target," not in bounded_seek
+    assert "step_observer=observe_corridor_high_step" in bounded_seek
+    assert '"outside_corridor_high_transit"' in bounded_seek
+    assert (
+        'structural_stage = (\n        "vertical_corridor_descent"'
+        in bounded_seek
+    )
+    assert "else \"vertical_corridor_entry\"" in bounded_seek
+    fixed_z_stage = bounded_seek.index(
+        'elif structural_stage == "fixed_safe_z_lateral_approach"'
+    )
+    assert bounded_seek.index(
+        "lateral_target_xy=np.asarray(\n                    outside_side_target",
+        fixed_z_stage,
+    ) > fixed_z_stage
+
+
 def test_499954_saturated_recovery_follows_improving_discrete_response():
     current = np.array([0.131429676, -0.029432244, 0.970336557])
     target = np.array([0.136806395, -0.028507780, 0.898654346])
@@ -2407,7 +2484,11 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_live_outside_side_guard(" in bounded_seek
     assert "_compiled_vertical_staging_corridor(" in bounded_seek
     assert "_fixed_z_lateral_approach_action(" in bounded_seek
-    assert 'structural_stage = "vertical_corridor_entry"' in bounded_seek
+    assert (
+        'structural_stage = (\n        "vertical_corridor_descent"'
+        in bounded_seek
+    )
+    assert 'else "vertical_corridor_entry"' in bounded_seek
     assert '"vertical_corridor_descent"' in bounded_seek
     assert '"vertical_corridor_settle"' in bounded_seek
     assert '"fixed_safe_z_lateral_approach"' in bounded_seek

@@ -2811,18 +2811,7 @@ def _seek_stable_plate_contact(
             )
         return sample
 
-    rollout.move(
-        outside_high_target,
-        gripper,
-        "task",
-        diagnostics=diagnostics,
-    )
-    capture("outside_high", 0, False, True)
-    outside_side_guard_checks = 1
-    outside_side_motion_steps = 0
-    latest_outside_side_guard = _live_outside_side_guard(
-        env, geometry
-    )
+    initial_outside_side_guard = _live_outside_side_guard(env, geometry)
     (
         corridor_high_target,
         corridor_side_target,
@@ -2831,7 +2820,7 @@ def _seek_stable_plate_contact(
         outside_high_target=outside_high_target,
         outside_side_target=outside_side_target,
         geometry=geometry,
-        required_outside_clearance_m=latest_outside_side_guard[
+        required_outside_clearance_m=initial_outside_side_guard[
             "required_outside_clearance_m"
         ],
         position_action_scale=args.position_action_scale,
@@ -2839,9 +2828,64 @@ def _seek_stable_plate_contact(
             args.plate_contact_seek_max_translation_action
         ),
     )
+    initial_high_motion_steps = 0
+
+    def observe_corridor_high_step():
+        nonlocal initial_high_motion_steps
+        initial_high_motion_steps += 1
+        step_guard = _live_outside_side_guard(env, geometry)
+        capture(
+            "outside_corridor_high_transit",
+            initial_high_motion_steps,
+            False,
+            True,
+            extra={
+                "outside_side_guard": step_guard,
+                "corridor_high_target": np.asarray(
+                    corridor_high_target, dtype=float
+                ).tolist(),
+            },
+        )
+
+    # Enter the compiled 13 mm high corridor directly from center-high.  The
+    # former two-hop path first stopped at the native 5 mm outside target;
+    # Job500133 showed that its residual OSC response could then reverse a
+    # subsequent 8 mm correction back across the strict no-contact boundary.
+    # Rollout.move retains the existing bounded waypoint controller and actor
+    # cascade oracle, while the observer applies the plate/table/contact gate
+    # after every policy action in this high transit.
+    rollout.move(
+        corridor_high_target,
+        gripper,
+        "task",
+        diagnostics=diagnostics,
+        step_observer=observe_corridor_high_step,
+    )
+    latest_outside_side_guard = _live_outside_side_guard(env, geometry)
+    capture(
+        "outside_high",
+        0,
+        False,
+        True,
+        extra={
+            "outside_side_guard": latest_outside_side_guard,
+            "corridor_high_target": np.asarray(
+                corridor_high_target, dtype=float
+            ).tolist(),
+        },
+    )
+    outside_side_guard_checks = initial_high_motion_steps + 2
+    outside_side_motion_steps = 0
     outside_side_feedback_steps = []
     lateral_settle_state = None
-    structural_stage = "vertical_corridor_entry"
+    structural_stage = (
+        "vertical_corridor_descent"
+        if latest_outside_side_guard["minimum_outside_clearance_m"]
+        > vertical_staging_corridor[
+            "strict_corridor_entry_clearance_m"
+        ]
+        else "vertical_corridor_entry"
+    )
     fixed_safe_z = None
     structural_stage_action_counts = {
         "vertical_corridor_entry": 0,
@@ -3245,6 +3289,7 @@ def _seek_stable_plate_contact(
         "compiled_geometry": geometry,
         "outside_side_guard": final_outside_side_guard,
         "outside_side_guard_checks": outside_side_guard_checks,
+        "initial_high_motion_steps": int(initial_high_motion_steps),
         "outside_side_motion_steps": outside_side_motion_steps,
         "outside_side_feedback_steps": outside_side_feedback_steps,
         "vertical_staging_corridor": vertical_staging_corridor,
