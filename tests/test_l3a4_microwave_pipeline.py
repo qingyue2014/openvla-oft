@@ -672,6 +672,8 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
         "TARGET_BODY": "white_yellow_mug_1_main",
         "PORCELAIN_BODY": "porcelain_mug_1_main",
         "TARGET_GRASP_CLEARANCE_OFFSET": 0.040,
+        "TARGET_CONTACT_SEEK_STEPS": 80,
+        "TARGET_DYNAMIC_AXIS_PROGRESS_EPS_M": 1e-6,
         "TARGET_INSERTION_SEARCH_STEP_M": 0.005,
         "EEF_POSITION_TOLERANCE": 0.012,
         "GRASP_HEIGHT": 0.060,
@@ -714,21 +716,25 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
         namespace,
     )
     search = namespace["_compiled_target_grasp_clearance"]
-    clearance_eef, evidence = search(
+    geometry_candidates, evidence = search(
         Env(),
         {"fixture_root": "microwave_1"},
         np.zeros(3),
         np.asarray([1.0, 0.0]),
     )
-    assert clearance_eef.tolist() == pytest.approx([0.0, 0.045, 0.060])
+    first_candidate = geometry_candidates[0]
+    assert first_candidate["clearance_eef_position"].tolist() == pytest.approx(
+        [0.0, 0.045, 0.060]
+    )
     assert evidence["candidate_trace"][0]["passed"] is False
-    assert evidence["selected"]["passed"] is True
-    assert evidence["selected"]["outward_offset_m"] == pytest.approx(0.045)
+    assert evidence["selected"] is None
+    assert first_candidate["record"]["passed"] is True
+    assert first_candidate["record"]["outward_offset_m"] == pytest.approx(0.045)
     assert evidence["target_clearance_required_m"] == pytest.approx(0.012)
-    assert evidence["selected"]["direction_source"].startswith(
+    assert first_candidate["record"]["direction_source"].startswith(
         "target-to-parked-porcelain tangent"
     )
-    assert evidence["selected"]["porcelain_lateral_clearance_m"] > 0.0
+    assert first_candidate["record"]["porcelain_lateral_clearance_m"] > 0.0
     assert evidence["candidate_trace"][0]["rejection_stage"] == (
         "target_descend"
     )
@@ -738,7 +744,7 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
     assert evidence["candidate_trace"][3]["rejection_stage"] == (
         "porcelain_lateral"
     )
-    assert evidence["selected"]["evaluated_sweeps"] == [
+    assert first_candidate["record"]["evaluated_sweeps"] == [
         "target_descend",
         "target_approach",
         "porcelain_lateral",
@@ -748,13 +754,265 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
         "fixture_descend",
         "fixture_approach",
     ]
-    assert evidence["selected"]["skipped_sweeps"] == []
-    assert len(calls) == 14
+    assert first_candidate["record"]["skipped_sweeps"] == []
+    assert len(geometry_candidates) >= 1
+    assert len(calls) > 14
     assert {call["cache_id"] for call in calls} == {
         calls[0]["cache_id"]
     }
     assert calls[0]["threshold"] == pytest.approx(0.012)
     assert any(call["threshold"] == 0.0 for call in calls)
+
+
+def test_l3a4_job500143_exact_dynamic_contact_regression():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selected = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name in {
+            "_target_contact_axis_progress",
+            "_target_dynamic_contact_gate",
+        }
+    ]
+    namespace = {
+        "np": np,
+        "TARGET_CONTACT_SEEK_STEPS": 80,
+        "TARGET_DYNAMIC_AXIS_PROGRESS_EPS_M": 1e-6,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=selected, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    waypoint = np.asarray(
+        [-0.01960335, -0.01942357, 0.96009407]
+    )
+    initial_eef = np.asarray(
+        [0.1145615, -0.1162928, 0.9701748]
+    )
+    final_eef = np.asarray(
+        [0.1055460, -0.0202310, 0.9742598]
+    )
+    initial_error = waypoint - initial_eef
+    final_error = waypoint - final_eef
+    job500143_errors = np.linspace(initial_error, final_error, 81)
+    progress = namespace["_target_contact_axis_progress"](
+        initial_error, job500143_errors
+    )
+    assert progress["passed_by_axis"] == [True, True, False]
+    assert progress["passed"] is False
+
+    exact_failure = {
+        "steps_executed": 80,
+        "target_contact_final": False,
+        "porcelain_contact_seen": False,
+        "microwave_contact_seen": False,
+        "horizon_exhausted": True,
+        "final_error_m": 0.12595110025347256,
+        "axis_progress": progress,
+    }
+    assert not namespace["_target_dynamic_contact_gate"](exact_failure)
+    accepted = dict(exact_failure)
+    accepted.update({
+        "steps_executed": 79,
+        "target_contact_final": True,
+        "axis_progress": {"passed": True},
+    })
+    assert namespace["_target_dynamic_contact_gate"](accepted)
+
+
+def _dynamic_selector_fixture(restore_raises=False):
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selector = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_select_dynamically_reachable_target_grasp"
+    )
+
+    class RestoreFailure(RuntimeError):
+        pass
+
+    calls = []
+    restores = []
+
+    def snapshot(env, oracle, names):
+        return {"state_sha256": "job500143-post-park-sha256"}
+
+    def trial(env, oracle, clearance_eef, step):
+        calls.append(np.asarray(clearance_eef, dtype=float).copy())
+        failed = len(calls) == 1
+        return {
+            "success": not failed,
+            "reason": (
+                "fixed 80-step seek ended without current target contact"
+                if failed
+                else ""
+            ),
+            "steps_executed": 80 if failed else 61,
+            "contact_seek": {
+                "steps_executed": 80 if failed else 12,
+                "target_contact_final": not failed,
+                "axis_progress": {"passed": not failed},
+            },
+        }
+
+    def restore(env, oracle, names, snapshot_record):
+        restores.append(snapshot_record["state_sha256"])
+        if restore_raises:
+            raise RestoreFailure("qvel restore mismatch")
+        return {
+            "passed": True,
+            "snapshot_sha256": snapshot_record["state_sha256"],
+            "restored_sha256": snapshot_record["state_sha256"],
+        }
+
+    namespace = {
+        "np": np,
+        "DeterministicRestoreError": RestoreFailure,
+        "_snapshot_target_trial_state": snapshot,
+        "_run_target_dynamic_reachability_trial": trial,
+        "_restore_target_trial_state": restore,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[selector], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    sweep_names = (
+        "target_approach",
+        "target_descend",
+        "fixture_approach",
+        "fixture_descend",
+        "fixture_lateral",
+        "porcelain_approach",
+        "porcelain_descend",
+        "porcelain_lateral",
+    )
+    geometry_records = [
+        {
+            "direction_index": 1,
+            "direction_source": "target-to-parked-porcelain tangent 0",
+            "outward_offset_m": 0.170,
+            "passed": True,
+        },
+        {
+            "direction_index": 2,
+            "direction_source": "target-to-parked-porcelain tangent 1",
+            "outward_offset_m": 0.175,
+            "passed": True,
+        },
+    ]
+    records = [
+        {"passed": False, "rejection_stage": "target_descend"}
+        for _ in range(79)
+    ] + geometry_records
+    candidates = [
+        {
+            "candidate_trace_index": 79 + index,
+            "clearance_eef_position": position,
+            "record": geometry_records[index],
+            "sweep_evidence": {
+                name: {"minimum_clearance_m": 0.013}
+                for name in sweep_names
+            },
+        }
+        for index, position in enumerate(
+            (
+                [-0.01960335, -0.01942357, 0.96009407],
+                [0.030, -0.010, 0.960],
+            )
+        )
+    ]
+    evidence = {
+        "candidate_trace": records,
+        "dynamic_candidate_trials": [],
+        "selected": None,
+    }
+    return (
+        namespace["_select_dynamically_reachable_target_grasp"],
+        candidates,
+        evidence,
+        calls,
+        restores,
+        RestoreFailure,
+    )
+
+
+def test_l3a4_job500143_unreachable_candidate_continues_after_restore():
+    selector, candidates, evidence, calls, restores, _ = (
+        _dynamic_selector_fixture()
+    )
+    position, selected = selector(
+        object(), object(), {}, candidates, evidence, 400
+    )
+    assert len(calls) == 2
+    assert len(restores) == 2
+    assert position.tolist() == pytest.approx([0.030, -0.010, 0.960])
+    assert selected["candidate_trace"][79][
+        "dynamic_reachability_passed"
+    ] is False
+    assert selected["selected"]["outward_offset_m"] == pytest.approx(0.175)
+    assert selected["selected_dynamic_trial"]["restore_proof"][
+        "snapshot_sha256"
+    ] == selected["selected_dynamic_trial"]["restore_proof"][
+        "restored_sha256"
+    ]
+
+
+def test_l3a4_dynamic_restore_failure_is_fail_closed():
+    selector, candidates, evidence, calls, restores, restore_error = (
+        _dynamic_selector_fixture(restore_raises=True)
+    )
+    with pytest.raises(restore_error, match="qvel restore mismatch"):
+        selector(object(), object(), {}, candidates, evidence, 400)
+    assert len(calls) == 1
+    assert len(restores) == 1
+    assert evidence["dynamic_candidate_trials"] == []
+
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    restore_helpers = [
+        node
+        for node in module.body
+        if (
+            isinstance(node, ast.ClassDef)
+            and node.name == "DeterministicRestoreError"
+        )
+        or (
+            isinstance(node, ast.FunctionDef)
+            and node.name == "_snapshot_plain_state"
+        )
+    ]
+    namespace = {"np": np, "_PLAIN_SCALARS": (str, bytes, bool, int, float, type(None))}
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=restore_helpers, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    with pytest.raises(
+        namespace["DeterministicRestoreError"],
+        match="unsupported mutable state",
+    ):
+        namespace["_snapshot_plain_state"](object(), "controller.unknown")
 
 
 def test_l3a4_preflight_binds_evaluated_state_bytes(tmp_path):
@@ -1568,7 +1826,8 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
         target_grasp_clearance
     )
     assert '"candidate_trace": trace' in target_grasp_clearance
-    assert '"porcelain_lateral_sweep"' in target_grasp_clearance
+    assert "geometry_passes.append(" in target_grasp_clearance
+    assert "return geometry_passes" in target_grasp_clearance
 
     retreat_plan = ast.get_source_segment(
         source, functions["_compiled_open_gripper_retreat_plan"]

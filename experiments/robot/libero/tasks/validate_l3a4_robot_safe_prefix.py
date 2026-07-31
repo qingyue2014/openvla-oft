@@ -9,6 +9,7 @@ must never write task-object qpos, fixture-joint qpos, or model fixture poses.
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import hashlib
 import json
@@ -70,6 +71,7 @@ TARGET_GRASP_CLEARANCE_OFFSET = 0.040
 TARGET_CONTACT_SEEK_STEPS = 80
 TARGET_CONTACT_SEEK_GAIN = 12.0
 TARGET_CONTACT_SEEK_ACTION_LIMIT = 0.25
+TARGET_DYNAMIC_AXIS_PROGRESS_EPS_M = 1e-6
 SAFE_PARK_MIN_OUTWARD_DISTANCE_M = 0.060
 SAFE_PARK_MAX_OUTWARD_DISTANCE_M = 0.400
 SAFE_PARK_SEARCH_STEP_M = 0.010
@@ -86,6 +88,133 @@ PARK_SETTLE_STEPS = 40
 TARGET_SETTLE_STEPS = 60
 DOOR_ARC_WAYPOINTS = 24
 POST_CLOSE_STEPS = 60
+
+
+class DeterministicRestoreError(RuntimeError):
+    """A counterfactual trial could not restore its exact start state."""
+
+
+_PLAIN_SCALARS = (str, bytes, bool, int, float, type(None))
+
+
+def _snapshot_plain_state(value, field_path="state"):
+    """Copy state without silently accepting simulator-backed objects."""
+    if isinstance(value, np.ndarray):
+        return value.copy()
+    if isinstance(value, np.generic):
+        return value.copy()
+    if isinstance(value, _PLAIN_SCALARS):
+        return value
+    if isinstance(value, list):
+        return [
+            _snapshot_plain_state(child, f"{field_path}[{index}]")
+            for index, child in enumerate(value)
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            _snapshot_plain_state(child, f"{field_path}[{index}]")
+            for index, child in enumerate(value)
+        )
+    if isinstance(value, dict):
+        copied = {}
+        for key, child in value.items():
+            if not isinstance(key, _PLAIN_SCALARS[:-1]):
+                raise DeterministicRestoreError(
+                    f"unsupported state key at {field_path}: {type(key)!r}"
+                )
+            copied[key] = _snapshot_plain_state(
+                child, f"{field_path}[{key!r}]"
+            )
+        return copied
+    if isinstance(value, set):
+        return {
+            _snapshot_plain_state(child, f"{field_path}[]")
+            for child in value
+        }
+    raise DeterministicRestoreError(
+        f"unsupported mutable state at {field_path}: {type(value)!r}"
+    )
+
+
+def _plain_state_equal(expected, actual) -> bool:
+    if isinstance(expected, np.ndarray):
+        return bool(
+            isinstance(actual, np.ndarray)
+            and expected.dtype == actual.dtype
+            and expected.shape == actual.shape
+            and np.array_equal(expected, actual)
+        )
+    if isinstance(expected, np.generic):
+        return bool(
+            isinstance(actual, np.generic)
+            and expected.dtype == actual.dtype
+            and expected == actual
+        )
+    if isinstance(expected, _PLAIN_SCALARS):
+        return type(expected) is type(actual) and expected == actual
+    if isinstance(expected, (list, tuple)):
+        return bool(
+            type(expected) is type(actual)
+            and len(expected) == len(actual)
+            and all(
+                _plain_state_equal(left, right)
+                for left, right in zip(expected, actual)
+            )
+        )
+    if isinstance(expected, dict):
+        return bool(
+            isinstance(actual, dict)
+            and set(expected) == set(actual)
+            and all(
+                _plain_state_equal(expected[key], actual[key])
+                for key in expected
+            )
+        )
+    if isinstance(expected, set):
+        return expected == actual
+    return False
+
+
+def _update_state_digest(digest, value) -> None:
+    """Feed a type- and shape-stable plain-state encoding to SHA-256."""
+    if isinstance(value, np.ndarray):
+        digest.update(b"array\0")
+        digest.update(value.dtype.str.encode())
+        digest.update(repr(value.shape).encode())
+        digest.update(np.ascontiguousarray(value).tobytes())
+        return
+    if isinstance(value, np.generic):
+        _update_state_digest(digest, np.asarray(value))
+        return
+    if isinstance(value, _PLAIN_SCALARS):
+        digest.update(type(value).__name__.encode() + b"\0")
+        digest.update(repr(value).encode())
+        return
+    if isinstance(value, (list, tuple)):
+        digest.update(type(value).__name__.encode() + b"\0")
+        for child in value:
+            _update_state_digest(digest, child)
+        return
+    if isinstance(value, dict):
+        digest.update(b"dict\0")
+        for key in sorted(value, key=lambda item: repr(item)):
+            _update_state_digest(digest, key)
+            _update_state_digest(digest, value[key])
+        return
+    if isinstance(value, set):
+        digest.update(b"set\0")
+        for child in sorted(value, key=lambda item: repr(item)):
+            _update_state_digest(digest, child)
+        return
+    raise DeterministicRestoreError(
+        f"cannot hash unsupported state type {type(value)!r}"
+    )
+
+
+def _plain_state_sha256(value) -> str:
+    digest = hashlib.sha256()
+    _update_state_digest(digest, value)
+    return digest.hexdigest()
 
 
 def _record_from_demo(demo) -> dict:
@@ -172,6 +301,473 @@ def _robot_contact_pairs(env) -> list[dict]:
 
 def _has_microwave_contact(body_names) -> bool:
     return any("microwave" in name.lower() for name in body_names)
+
+
+_SIM_RUNTIME_ARRAY_FIELDS = (
+    "qpos",
+    "qvel",
+    "act",
+    "ctrl",
+    "qacc_warmstart",
+    "qfrc_applied",
+    "xfrc_applied",
+    "mocap_pos",
+    "mocap_quat",
+    "userdata",
+    "eq_active",
+)
+_ROBOT_RUNTIME_ARRAY_FIELDS = ("torques",)
+_ROBOT_RUNTIME_BUFFER_FIELDS = (
+    "recent_qpos",
+    "recent_actions",
+    "recent_torques",
+    "recent_ee_forcetorques",
+    "recent_ee_pose",
+    "recent_ee_vel",
+    "recent_ee_vel_buffer",
+    "recent_ee_acc",
+)
+_OBSERVABLE_STATIC_FIELDS = (
+    "_sensor",
+    "_corrupter",
+    "_filter",
+    "_delayer",
+)
+_OSC_REQUIRED_RESTORE_FIELDS = {
+    "goal_pos",
+    "goal_ori",
+    "relative_ori",
+    "ori_ref",
+    "initial_joint",
+    "new_update",
+}
+
+
+def _snapshot_object_fields(obj, *, skip=(), label="object") -> dict:
+    if not hasattr(obj, "__dict__"):
+        raise DeterministicRestoreError(
+            f"{label} has no inspectable Python state"
+        )
+    skipped = set(skip)
+    return {
+        key: _snapshot_plain_state(value, f"{label}.{key}")
+        for key, value in sorted(obj.__dict__.items())
+        if key not in skipped
+    }
+
+
+def _restore_object_fields(
+    obj, snapshot: dict, *, skip=(), label="object"
+) -> None:
+    live_keys = set(obj.__dict__) - set(skip)
+    if live_keys != set(snapshot):
+        raise DeterministicRestoreError(
+            f"{label} state fields changed during trial: "
+            f"expected={sorted(snapshot)} live={sorted(live_keys)}"
+        )
+    for key, value in snapshot.items():
+        obj.__dict__[key] = _snapshot_plain_state(
+            value, f"{label}.{key}.restore"
+        )
+
+
+def _all_contact_signature(env) -> tuple[tuple[int, int], ...]:
+    pairs = []
+    for index in range(int(env.sim.data.ncon)):
+        contact = env.sim.data.contact[index]
+        geom1, geom2 = int(contact.geom1), int(contact.geom2)
+        pairs.append((min(geom1, geom2), max(geom1, geom2)))
+    return tuple(sorted(pairs))
+
+
+def _trial_physical_signature(env, names) -> dict:
+    body_states = {}
+    for body_name in (TARGET_BODY, PORCELAIN_BODY, names["door_body"]):
+        body_id = int(env.sim.model.body_name2id(body_name))
+        body_states[body_name] = {
+            "position": np.asarray(
+                env.sim.data.body_xpos[body_id], dtype=float
+            ).copy(),
+            "rotation": np.asarray(
+                env.sim.data.body_xmat[body_id], dtype=float
+            ).reshape(3, 3).copy(),
+            "quaternion": np.asarray(
+                env.sim.data.body_xquat[body_id], dtype=float
+            ).copy(),
+        }
+    door_joint_id = int(
+        env.sim.model.joint_name2id(names["door_joint"])
+    )
+    door_qpos_address = int(env.sim.model.jnt_qposadr[door_joint_id])
+    door_qvel_address = int(env.sim.model.jnt_dofadr[door_joint_id])
+    eef_body_id = int(
+        env.sim.model.body_name2id(_eef_body_name(env.sim.model))
+    )
+    return {
+        "bodies": body_states,
+        "door_joint_qpos": float(env.sim.data.qpos[door_qpos_address]),
+        "door_joint_qvel": float(env.sim.data.qvel[door_qvel_address]),
+        "eef_position": np.asarray(
+            env.sim.data.body_xpos[eef_body_id], dtype=float
+        ).copy(),
+        "eef_rotation": np.asarray(
+            env.sim.data.body_xmat[eef_body_id], dtype=float
+        ).reshape(3, 3).copy(),
+        "all_contact_geom_pairs": _all_contact_signature(env),
+        "robot_contact_pairs": tuple(
+            (
+                pair["robot_geom_id"],
+                pair["other_geom_id"],
+            )
+            for pair in _robot_contact_pairs(env)
+        ),
+    }
+
+
+def _target_trial_state_sha256(snapshot) -> str:
+    """Hash state values while excluding process-local object identities."""
+    payload = {
+        key: value
+        for key, value in snapshot.items()
+        if key not in {"state_sha256", "controller_static_ids"}
+    }
+    payload["robot_buffers"] = {
+        field: {
+            "class_name": record["class_name"],
+            "state": record["state"],
+        }
+        for field, record in snapshot["robot_buffers"].items()
+    }
+    payload["observable_state"] = {
+        name: record["state"]
+        for name, record in snapshot["observable_state"].items()
+    }
+    return _plain_state_sha256(payload)
+
+
+def _snapshot_target_trial_state(env, oracle, names) -> dict:
+    """Capture the complete deterministic boundary for one candidate trial."""
+    if len(env.robots) != 1:
+        raise DeterministicRestoreError(
+            f"dynamic reachability requires one robot, got {len(env.robots)}"
+        )
+    robot = env.robots[0]
+    controller = getattr(robot, "controller", None)
+    if controller is None or getattr(controller, "name", None) != "OSC_POSE":
+        raise DeterministicRestoreError(
+            "dynamic reachability requires the native OSC_POSE controller"
+        )
+    if (
+        getattr(controller, "interpolator_pos", None) is not None
+        or getattr(controller, "interpolator_ori", None) is not None
+    ):
+        raise DeterministicRestoreError(
+            "cannot deterministically restore non-native OSC interpolators"
+        )
+
+    controller_state = _snapshot_object_fields(
+        controller, skip=("sim",), label="controller"
+    )
+    missing_controller_fields = (
+        _OSC_REQUIRED_RESTORE_FIELDS - set(controller_state)
+    )
+    if missing_controller_fields:
+        raise DeterministicRestoreError(
+            "OSC restore fields missing: "
+            f"{sorted(missing_controller_fields)}"
+        )
+    controller_static_ids = {"sim": id(controller.sim)}
+    robot_arrays = {}
+    for field in _ROBOT_RUNTIME_ARRAY_FIELDS:
+        if not hasattr(robot, field):
+            raise DeterministicRestoreError(
+                f"robot runtime field missing: {field}"
+            )
+        robot_arrays[field] = _snapshot_plain_state(
+            getattr(robot, field), f"robot.{field}"
+        )
+    robot_buffers = {}
+    for field in _ROBOT_RUNTIME_BUFFER_FIELDS:
+        buffer = getattr(robot, field, None)
+        if buffer is None:
+            raise DeterministicRestoreError(
+                f"robot runtime buffer missing: {field}"
+            )
+        robot_buffers[field] = {
+            "object_id": id(buffer),
+            "class_name": type(buffer).__name__,
+            "state": _snapshot_object_fields(
+                buffer, label=f"robot.{field}"
+            ),
+        }
+
+    inner_env = getattr(env, "env", None)
+    if inner_env is None:
+        raise DeterministicRestoreError(
+            "LIBERO wrapper does not expose its robosuite environment"
+        )
+    env_state = {
+        field: _snapshot_plain_state(
+            getattr(inner_env, field), f"env.{field}"
+        )
+        for field in ("cur_time", "timestep", "done", "_obs_cache")
+        if hasattr(inner_env, field)
+    }
+    if set(env_state) != {"cur_time", "timestep", "done", "_obs_cache"}:
+        raise DeterministicRestoreError(
+            "robosuite environment runtime counters are incomplete"
+        )
+    observables = getattr(inner_env, "_observables", None)
+    if not isinstance(observables, dict):
+        raise DeterministicRestoreError(
+            "robosuite observable registry is not inspectable"
+        )
+    observable_state = {}
+    for observable_name, observable in sorted(observables.items()):
+        observable_state[observable_name] = {
+            "object_id": id(observable),
+            "static_ids": {
+                field: id(getattr(observable, field))
+                for field in _OBSERVABLE_STATIC_FIELDS
+            },
+            "state": _snapshot_object_fields(
+                observable,
+                skip=_OBSERVABLE_STATIC_FIELDS,
+                label=f"observable.{observable_name}",
+            ),
+        }
+
+    sim_arrays = {}
+    for field in _SIM_RUNTIME_ARRAY_FIELDS:
+        if hasattr(env.sim.data, field):
+            sim_arrays[field] = np.asarray(
+                getattr(env.sim.data, field)
+            ).copy()
+    for required in ("qpos", "qvel", "act", "ctrl"):
+        if required not in sim_arrays:
+            raise DeterministicRestoreError(
+                f"MuJoCo runtime field missing: {required}"
+            )
+    snapshot = {
+        "sim_flat": np.asarray(
+            env.sim.get_state().flatten(), dtype=float
+        ).copy(),
+        "sim_time": float(env.sim.data.time),
+        "sim_arrays": sim_arrays,
+        "controller_state": controller_state,
+        "controller_static_ids": controller_static_ids,
+        "robot_arrays": robot_arrays,
+        "robot_buffers": robot_buffers,
+        "env_state": env_state,
+        "observable_state": observable_state,
+        "oracle_state": _snapshot_object_fields(oracle, label="oracle"),
+        "numpy_random_state": _snapshot_plain_state(
+            np.random.get_state(), "numpy_random_state"
+        ),
+        "physical": _trial_physical_signature(env, names),
+    }
+    snapshot["state_sha256"] = _target_trial_state_sha256(snapshot)
+    return snapshot
+
+
+def _array_restore_evidence(expected, actual) -> dict:
+    expected = np.asarray(expected)
+    actual = np.asarray(actual)
+    same_shape = expected.shape == actual.shape
+    exact = bool(same_shape and np.array_equal(expected, actual))
+    max_error = None
+    if same_shape and expected.size and np.issubdtype(expected.dtype, np.number):
+        max_error = float(
+            np.max(
+                np.abs(
+                    expected.astype(float, copy=False)
+                    - actual.astype(float, copy=False)
+                )
+            )
+        )
+    return {
+        "exact": exact,
+        "shape": list(expected.shape),
+        "max_abs_error": max_error,
+    }
+
+
+def _restore_target_trial_state(env, oracle, names, snapshot) -> dict:
+    """Restore a trial and prove every dynamics/controller field matches."""
+    robot = env.robots[0]
+    controller = robot.controller
+    if id(controller.sim) != snapshot["controller_static_ids"]["sim"]:
+        raise DeterministicRestoreError(
+            "OSC simulator reference changed during candidate trial"
+        )
+    env.sim.set_state_from_flattened(snapshot["sim_flat"])
+    env.sim.data.time = snapshot["sim_time"]
+    for field, values in snapshot["sim_arrays"].items():
+        live = getattr(env.sim.data, field, None)
+        if live is None or np.asarray(live).shape != values.shape:
+            raise DeterministicRestoreError(
+                f"MuJoCo field cannot be restored exactly: {field}"
+            )
+        live[...] = values
+    env.sim.forward()
+    # Forward recomputes derived quantities. Reapply every non-configuration
+    # runtime input so the next mj_step starts from the exact saved boundary.
+    env.sim.data.time = snapshot["sim_time"]
+    for field, values in snapshot["sim_arrays"].items():
+        getattr(env.sim.data, field)[...] = values
+
+    _restore_object_fields(
+        controller,
+        snapshot["controller_state"],
+        skip=("sim",),
+        label="controller",
+    )
+    for field, values in snapshot["robot_arrays"].items():
+        setattr(
+            robot,
+            field,
+            _snapshot_plain_state(values, f"robot.{field}.restore"),
+        )
+    for field, record in snapshot["robot_buffers"].items():
+        buffer = getattr(robot, field, None)
+        if (
+            buffer is None
+            or id(buffer) != record["object_id"]
+            or type(buffer).__name__ != record["class_name"]
+        ):
+            raise DeterministicRestoreError(
+                f"robot buffer identity changed during trial: {field}"
+            )
+        _restore_object_fields(
+            buffer, record["state"], label=f"robot.{field}"
+        )
+
+    inner_env = env.env
+    for field, value in snapshot["env_state"].items():
+        setattr(
+            inner_env,
+            field,
+            _snapshot_plain_state(value, f"env.{field}.restore"),
+        )
+    live_observables = inner_env._observables
+    if set(live_observables) != set(snapshot["observable_state"]):
+        raise DeterministicRestoreError(
+            "observable inventory changed during candidate trial"
+        )
+    for observable_name, record in snapshot["observable_state"].items():
+        observable = live_observables[observable_name]
+        if id(observable) != record["object_id"]:
+            raise DeterministicRestoreError(
+                f"observable identity changed: {observable_name}"
+            )
+        for field, expected_id in record["static_ids"].items():
+            if id(getattr(observable, field)) != expected_id:
+                raise DeterministicRestoreError(
+                    f"observable callable changed: {observable_name}.{field}"
+                )
+        _restore_object_fields(
+            observable,
+            record["state"],
+            skip=_OBSERVABLE_STATIC_FIELDS,
+            label=f"observable.{observable_name}",
+        )
+    _restore_object_fields(
+        oracle, snapshot["oracle_state"], label="oracle"
+    )
+    np.random.set_state(copy.deepcopy(snapshot["numpy_random_state"]))
+
+    restored = _snapshot_target_trial_state(env, oracle, names)
+    sim_field_evidence = {
+        "flat_state": _array_restore_evidence(
+            snapshot["sim_flat"], restored["sim_flat"]
+        ),
+        "time": {
+            "exact": snapshot["sim_time"] == restored["sim_time"],
+            "expected": snapshot["sim_time"],
+            "actual": restored["sim_time"],
+        },
+    }
+    for field, values in snapshot["sim_arrays"].items():
+        sim_field_evidence[field] = _array_restore_evidence(
+            values, restored["sim_arrays"][field]
+        )
+    physical_field_evidence = {}
+    for body_name, body_state in snapshot["physical"]["bodies"].items():
+        for field, values in body_state.items():
+            physical_field_evidence[f"{body_name}.{field}"] = (
+                _array_restore_evidence(
+                    values,
+                    restored["physical"]["bodies"][body_name][field],
+                )
+            )
+    for field in ("eef_position", "eef_rotation"):
+        physical_field_evidence[field] = _array_restore_evidence(
+            snapshot["physical"][field], restored["physical"][field]
+        )
+    for field in (
+        "door_joint_qpos",
+        "door_joint_qvel",
+        "all_contact_geom_pairs",
+        "robot_contact_pairs",
+    ):
+        physical_field_evidence[field] = {
+            "exact": _plain_state_equal(
+                snapshot["physical"][field], restored["physical"][field]
+            )
+        }
+    controller_fields = {
+        field: {
+            "exact": _plain_state_equal(
+                value, restored["controller_state"].get(field)
+            )
+        }
+        for field, value in snapshot["controller_state"].items()
+    }
+    aggregate_fields = {
+        "robot_arrays": _plain_state_equal(
+            snapshot["robot_arrays"], restored["robot_arrays"]
+        ),
+        "robot_buffers": _plain_state_equal(
+            snapshot["robot_buffers"], restored["robot_buffers"]
+        ),
+        "environment": _plain_state_equal(
+            snapshot["env_state"], restored["env_state"]
+        ),
+        "observables": _plain_state_equal(
+            snapshot["observable_state"], restored["observable_state"]
+        ),
+        "oracle": _plain_state_equal(
+            snapshot["oracle_state"], restored["oracle_state"]
+        ),
+        "numpy_random_state": _plain_state_equal(
+            snapshot["numpy_random_state"],
+            restored["numpy_random_state"],
+        ),
+    }
+    passed = bool(
+        all(record["exact"] for record in sim_field_evidence.values())
+        and all(
+            record["exact"] for record in physical_field_evidence.values()
+        )
+        and all(record["exact"] for record in controller_fields.values())
+        and all(aggregate_fields.values())
+        and snapshot["state_sha256"] == restored["state_sha256"]
+    )
+    proof = {
+        "passed": passed,
+        "snapshot_sha256": snapshot["state_sha256"],
+        "restored_sha256": restored["state_sha256"],
+        "sim_fields": sim_field_evidence,
+        "physical_fields": physical_field_evidence,
+        "controller_fields": controller_fields,
+        "aggregate_fields": aggregate_fields,
+    }
+    if not passed:
+        raise DeterministicRestoreError(
+            "candidate trial exact restore proof failed: "
+            f"{proof}"
+        )
+    return proof
 
 
 def _geom_name(model, geom_id: int) -> str:
@@ -2054,6 +2650,7 @@ def _compiled_target_grasp_clearance(
         "misses": 0,
     }
     trace = []
+    geometry_passes = []
     for offset in np.arange(
         first_offset,
         last_offset + 0.5 * TARGET_INSERTION_SEARCH_STEP_M,
@@ -2233,75 +2830,59 @@ def _compiled_target_grasp_clearance(
             }
             trace.append(record)
             if passed:
-                return clearance_eef, {
-                    "method": (
-                        "nearest compiled-geometry grasp corridor whose "
-                        "approach, descend, and lateral seek stay clear of "
-                        "the native porcelain mug and microwave"
-                    ),
-                    "outward_direction_xy": outward.tolist(),
-                    "direction_candidates": direction_records,
-                    "target_to_porcelain_xy": (
-                        target_to_porcelain.tolist()
-                    ),
-                    "target_to_porcelain_distance_m": (
-                        target_to_porcelain_norm
-                    ),
-                    "porcelain_position": porcelain_position.tolist(),
-                    "minimum_outward_offset_m": first_offset,
-                    "maximum_outward_offset_m": last_offset,
-                    "search_step_m": TARGET_INSERTION_SEARCH_STEP_M,
-                    "target_clearance_required_m": (
-                        EEF_POSITION_TOLERANCE
-                    ),
-                    "gripper_origin_bound_m": gripper_origin_bound,
-                    "target_origin_bound_m": target_origin_bound,
-                    "rigid_gripper_geometry": rigid_gripper_geometry,
-                    "compiled_geometry_cache": {
-                        "convex_mesh_entry_count": len(
-                            compiled_geometry_cache["convex_mesh"]
-                        ),
-                        "hits": int(compiled_geometry_cache["hits"]),
-                        "misses": int(compiled_geometry_cache["misses"]),
-                    },
-                    "collision_gripper_geom_ids": (
-                        collision_gripper_geoms
-                    ),
-                    "collision_target_geom_ids": collision_target_geoms,
-                    "collision_porcelain_geom_ids": (
-                        collision_porcelain_geoms
-                    ),
-                    "selected": record,
-                    "target_approach_sweep": sweep_evidence[
-                        "target_approach"
-                    ],
-                    "target_descend_sweep": sweep_evidence[
-                        "target_descend"
-                    ],
-                    "fixture_approach_sweep": sweep_evidence[
-                        "fixture_approach"
-                    ],
-                    "fixture_descend_sweep": sweep_evidence[
-                        "fixture_descend"
-                    ],
-                    "fixture_lateral_sweep": sweep_evidence[
-                        "fixture_lateral"
-                    ],
-                    "porcelain_approach_sweep": sweep_evidence[
-                        "porcelain_approach"
-                    ],
-                    "porcelain_descend_sweep": sweep_evidence[
-                        "porcelain_descend"
-                    ],
-                    "porcelain_lateral_sweep": sweep_evidence[
-                        "porcelain_lateral"
-                    ],
-                    "candidate_trace": trace,
-                }
-    raise RuntimeError(
-        "no compiled no-contact outside target grasp pose; "
-        f"candidates={trace}"
-    )
+                geometry_passes.append(
+                    {
+                        "candidate_trace_index": len(trace) - 1,
+                        "clearance_eef_position": clearance_eef.copy(),
+                        "record": record,
+                        "sweep_evidence": sweep_evidence,
+                    }
+                )
+    if not geometry_passes:
+        raise RuntimeError(
+            "no compiled no-contact outside target grasp pose; "
+            f"candidates={trace}"
+        )
+    return geometry_passes, {
+        "method": (
+            "ordered compiled-geometry grasp corridors gated by exact "
+            "robot-controlled dynamic approach, descend, and lateral seek"
+        ),
+        "outward_direction_xy": outward.tolist(),
+        "direction_candidates": direction_records,
+        "target_to_porcelain_xy": target_to_porcelain.tolist(),
+        "target_to_porcelain_distance_m": target_to_porcelain_norm,
+        "porcelain_position": porcelain_position.tolist(),
+        "minimum_outward_offset_m": first_offset,
+        "maximum_outward_offset_m": last_offset,
+        "search_step_m": TARGET_INSERTION_SEARCH_STEP_M,
+        "target_clearance_required_m": EEF_POSITION_TOLERANCE,
+        "gripper_origin_bound_m": gripper_origin_bound,
+        "target_origin_bound_m": target_origin_bound,
+        "rigid_gripper_geometry": rigid_gripper_geometry,
+        "compiled_geometry_cache": {
+            "convex_mesh_entry_count": len(
+                compiled_geometry_cache["convex_mesh"]
+            ),
+            "hits": int(compiled_geometry_cache["hits"]),
+            "misses": int(compiled_geometry_cache["misses"]),
+        },
+        "collision_gripper_geom_ids": collision_gripper_geoms,
+        "collision_target_geom_ids": collision_target_geoms,
+        "collision_porcelain_geom_ids": collision_porcelain_geoms,
+        "geometry_pass_count": len(geometry_passes),
+        "geometry_pass_trace_indices": [
+            candidate["candidate_trace_index"]
+            for candidate in geometry_passes
+        ],
+        "dynamic_trial_horizon_steps": TARGET_CONTACT_SEEK_STEPS,
+        "dynamic_axis_progress_epsilon_m": (
+            TARGET_DYNAMIC_AXIS_PROGRESS_EPS_M
+        ),
+        "selected": None,
+        "candidate_trace": trace,
+        "dynamic_candidate_trials": [],
+    }
 
 
 def _compiled_safe_insertion_portal(
@@ -2789,7 +3370,8 @@ def _compiled_open_gripper_retreat_plan(env, names, waypoints):
 def _step(env, oracle, action, step, frames):
     obs, _, _, _ = env.step(np.asarray(action, dtype=float).tolist())
     status = oracle.check(env, obs, action, step)
-    frames.append(policy_image(obs))
+    if frames is not None:
+        frames.append(policy_image(obs))
     return obs, status, step + 1
 
 
@@ -2804,6 +3386,8 @@ def _move_eef(
     label="",
     diagnostics=None,
     forbid_microwave_contact=False,
+    forbid_target_contact=False,
+    forbid_porcelain_contact=False,
 ):
     target = np.asarray(target, dtype=float)
     initial_eef = _eef_position(env)
@@ -2821,8 +3405,15 @@ def _move_eef(
     reached = False
     status = None
     forbidden_contact = bool(
-        forbid_microwave_contact
-        and _has_microwave_contact(contact_bodies)
+        (
+            forbid_microwave_contact
+            and _has_microwave_contact(contact_bodies)
+        )
+        or (forbid_target_contact and TARGET_BODY in contact_bodies)
+        or (
+            forbid_porcelain_contact
+            and PORCELAIN_BODY in contact_bodies
+        )
     )
     for iteration in range(0 if forbidden_contact else MOVE_STEPS):
         error = target - _eef_position(env)
@@ -2846,6 +3437,8 @@ def _move_eef(
                 (pair["robot_geom_id"], pair["other_geom_id"])
             ] = pair
         current_microwave_contact = _has_microwave_contact(current_contacts)
+        current_target_contact = TARGET_BODY in current_contacts
+        current_porcelain_contact = PORCELAIN_BODY in current_contacts
         trace.append(
             [
                 float(iteration),
@@ -2854,12 +3447,19 @@ def _move_eef(
                 *post_error.tolist(),
                 error_norm,
                 *action[:3].tolist(),
-                float(PORCELAIN_BODY in current_contacts),
-                float(TARGET_BODY in current_contacts),
+                float(current_porcelain_contact),
+                float(current_target_contact),
                 float(current_microwave_contact),
             ]
         )
-        if forbid_microwave_contact and current_microwave_contact:
+        if (
+            (forbid_microwave_contact and current_microwave_contact)
+            or (forbid_target_contact and current_target_contact)
+            or (
+                forbid_porcelain_contact
+                and current_porcelain_contact
+            )
+        ):
             forbidden_contact = True
             break
         if status.violated:
@@ -2898,7 +3498,18 @@ def _move_eef(
         "target_contact_seen": TARGET_BODY in contact_bodies,
         "microwave_contact_seen": _has_microwave_contact(contact_bodies),
         "forbid_microwave_contact": forbid_microwave_contact,
-        "forbidden_microwave_contact": forbidden_contact,
+        "forbid_target_contact": forbid_target_contact,
+        "forbid_porcelain_contact": forbid_porcelain_contact,
+        "forbidden_microwave_contact": bool(
+            forbid_microwave_contact
+            and _has_microwave_contact(contact_bodies)
+        ),
+        "forbidden_target_contact": bool(
+            forbid_target_contact and TARGET_BODY in contact_bodies
+        ),
+        "forbidden_porcelain_contact": bool(
+            forbid_porcelain_contact and PORCELAIN_BODY in contact_bodies
+        ),
         "trace_columns": (
             "iteration,global_step,eef_x,eef_y,eef_z,error_x,error_y,"
             "error_z,error_norm,action_x,action_y,action_z,"
@@ -3138,7 +3749,6 @@ def _descend_to_target_contact(env, oracle, step, frames):
                 error_norm,
                 *action[:3].tolist(),
                 float(current_target),
-                float(current_porcelain),
                 float(current_microwave),
             ]
         )
@@ -3226,9 +3836,38 @@ def _descend_to_target_contact(env, oracle, step, frames):
     return success, reason, status, step, diagnostic
 
 
+def _target_contact_axis_progress(initial_error, error_vectors) -> dict:
+    """Require measurable motion toward every nonzero target axis."""
+    initial_error = np.asarray(initial_error, dtype=float)
+    errors = np.asarray(error_vectors, dtype=float)
+    if initial_error.shape != (3,) or errors.ndim != 2 or errors.shape[1:] != (3,):
+        raise RuntimeError("target contact progress vectors must have shape (*, 3)")
+    minimum_absolute_error = np.min(np.abs(errors), axis=0)
+    progress = np.abs(initial_error) - minimum_absolute_error
+    required = np.abs(initial_error) > TARGET_DYNAMIC_AXIS_PROGRESS_EPS_M
+    passed_by_axis = np.logical_or(
+        ~required, progress > TARGET_DYNAMIC_AXIS_PROGRESS_EPS_M
+    )
+    return {
+        "axis_labels": ["x", "y", "z"],
+        "epsilon_m": TARGET_DYNAMIC_AXIS_PROGRESS_EPS_M,
+        "initial_absolute_error_m": np.abs(initial_error).tolist(),
+        "minimum_absolute_error_m": minimum_absolute_error.tolist(),
+        "progress_m": progress.tolist(),
+        "required_by_axis": required.tolist(),
+        "passed_by_axis": passed_by_axis.tolist(),
+        "passed": bool(np.all(passed_by_axis)),
+    }
+
+
 def _seek_target_contact(env, oracle, step, frames):
     """Approach the native target laterally at its nominal grasp height."""
     initial_eef = _eef_position(env)
+    initial_target, _ = body_pose(env.sim, TARGET_BODY)
+    initial_waypoint = initial_target + np.asarray(
+        [0.0, 0.0, GRASP_HEIGHT]
+    )
+    initial_error = initial_waypoint - initial_eef
     contact_bodies = _robot_contact_body_names(env)
     target_contact = TARGET_BODY in contact_bodies
     target_contact_initial = target_contact
@@ -3240,6 +3879,7 @@ def _seek_target_contact(env, oracle, step, frames):
     }
     trace = []
     error_norms = []
+    error_vectors = [initial_error.copy()]
     status = None
     for iteration in range(
         0
@@ -3268,6 +3908,7 @@ def _seek_target_contact(env, oracle, step, frames):
         post_error = waypoint - eef
         error_norm = float(np.linalg.norm(post_error))
         error_norms.append(error_norm)
+        error_vectors.append(post_error.copy())
         current_contacts = _robot_contact_body_names(env)
         contact_bodies.update(current_contacts)
         for pair in _robot_contact_pairs(env):
@@ -3287,6 +3928,7 @@ def _seek_target_contact(env, oracle, step, frames):
                 error_norm,
                 *action[:3].tolist(),
                 float(current_target),
+                float(current_porcelain),
                 float(current_microwave),
             ]
         )
@@ -3330,12 +3972,16 @@ def _seek_target_contact(env, oracle, step, frames):
         and not microwave_contact
         and not (status is not None and status.violated)
     )
+    axis_progress = _target_contact_axis_progress(
+        initial_error, error_vectors
+    )
     success = bool(
         target_contact
         and not target_contact_initial
         and not porcelain_contact
         and not microwave_contact
         and not (status is not None and status.violated)
+        and axis_progress["passed"]
     )
     diagnostic = {
         "label": "target lateral contact seek",
@@ -3345,7 +3991,9 @@ def _seek_target_contact(env, oracle, step, frames):
             "target's nominal grasp height"
         ),
         "nominal_grasp_height_m": GRASP_HEIGHT,
+        "initial_target_waypoint": initial_waypoint.tolist(),
         "initial_eef_position": initial_eef.tolist(),
+        "initial_error_vector": initial_error.tolist(),
         "final_eef_position": final_eef.tolist(),
         "final_target_waypoint": final_waypoint.tolist(),
         "final_error_vector": final_error.tolist(),
@@ -3358,6 +4006,7 @@ def _seek_target_contact(env, oracle, step, frames):
         "porcelain_contact_seen": porcelain_contact,
         "microwave_contact_seen": microwave_contact,
         "horizon_exhausted": horizon_exhausted,
+        "axis_progress": axis_progress,
         "robot_contact_bodies": sorted(contact_bodies),
         "robot_contact_pairs": [
             contact_pairs[key] for key in sorted(contact_pairs)
@@ -3383,6 +4032,11 @@ def _seek_target_contact(env, oracle, step, frames):
         )
     elif status is not None and status.violated:
         reason = "oracle violation during target lateral contact seek"
+    elif target_contact and not axis_progress["passed"]:
+        reason = (
+            "target contact lacked progress toward every nonzero axis; "
+            f"axis_progress={axis_progress}"
+        )
     elif not target_contact:
         reason = (
             "target lateral contact seek ended without current mug contact; "
@@ -3393,6 +4047,216 @@ def _seek_target_contact(env, oracle, step, frames):
     else:
         reason = ""
     return success, reason, status, step, diagnostic
+
+
+def _run_target_dynamic_reachability_trial(
+    env, oracle, clearance_eef, step
+) -> dict:
+    """Execute one throwaway approach/descend/80-step contact trial."""
+    clearance_eef = np.asarray(clearance_eef, dtype=float)
+    start_step = int(step)
+    move_diagnostics = []
+    status = None
+    failure_reason = ""
+    for target, label in (
+        (
+            clearance_eef + np.asarray([0.0, 0.0, APPROACH_HEIGHT]),
+            "dynamic target outside approach",
+        ),
+        (clearance_eef, "dynamic target outside descend"),
+    ):
+        reached, status, step = _move_eef(
+            env,
+            oracle,
+            target,
+            -1.0,
+            step,
+            None,
+            label=label,
+            diagnostics=move_diagnostics,
+            forbid_microwave_contact=True,
+            forbid_target_contact=True,
+            forbid_porcelain_contact=True,
+        )
+        diagnostic = move_diagnostics[-1]
+        forbidden_contact = bool(
+            diagnostic["target_contact_seen"]
+            or diagnostic["porcelain_contact_seen"]
+            or diagnostic["microwave_contact_seen"]
+        )
+        if forbidden_contact:
+            failure_reason = (
+                f"{label} violated the per-frame no-contact gate; "
+                f"contacts={diagnostic['robot_contact_bodies']}"
+            )
+            break
+        if status is not None and status.violated:
+            failure_reason = f"oracle violation during {label}"
+            break
+        if not reached:
+            failure_reason = (
+                f"{label} was dynamically unreachable; "
+                f"final_error_m={diagnostic['final_error_m']}; "
+                f"final_error_vector={diagnostic['final_error_vector']}; "
+                f"stalled={diagnostic['stalled']}"
+            )
+            break
+
+    contact_diagnostic = {}
+    contact_ok = False
+    if not failure_reason:
+        (
+            contact_ok,
+            contact_reason,
+            status,
+            step,
+            contact_diagnostic,
+        ) = _seek_target_contact(env, oracle, step, None)
+        if not contact_ok:
+            failure_reason = contact_reason
+    success = bool(
+        contact_ok
+        and not failure_reason
+        and _target_dynamic_contact_gate(
+            contact_diagnostic,
+            status_violated=(status is not None and status.violated),
+        )
+    )
+    return {
+        "success": success,
+        "reason": "" if success else failure_reason,
+        "clearance_eef_position": clearance_eef.tolist(),
+        "start_step": start_step,
+        "end_step": int(step),
+        "steps_executed": int(step - start_step),
+        "move_segments": move_diagnostics,
+        "contact_seek": contact_diagnostic,
+        "fixed_contact_seek_horizon_steps": TARGET_CONTACT_SEEK_STEPS,
+        "per_frame_forbidden_contacts": [
+            TARGET_BODY,
+            PORCELAIN_BODY,
+            "native microwave fixture bodies",
+        ],
+        "dynamic_distance_cache_used": False,
+    }
+
+
+def _target_dynamic_contact_gate(
+    contact_diagnostic, *, status_violated=False
+) -> bool:
+    """Pure fixed-horizon decision used by trials and exact regressions."""
+    steps_executed = int(contact_diagnostic.get("steps_executed", 0))
+    return bool(
+        1 <= steps_executed <= TARGET_CONTACT_SEEK_STEPS
+        and contact_diagnostic.get("target_contact_final", False)
+        and contact_diagnostic.get("axis_progress", {}).get(
+            "passed", False
+        )
+        and not contact_diagnostic.get("porcelain_contact_seen", True)
+        and not contact_diagnostic.get("microwave_contact_seen", True)
+        and not status_violated
+    )
+
+
+def _select_dynamically_reachable_target_grasp(
+    env,
+    oracle,
+    names,
+    geometry_candidates,
+    geometry_evidence,
+    step,
+):
+    """Select the first geometry-pass corridor that the real OSC can reach."""
+    boundary_sha256 = None
+    for dynamic_index, candidate in enumerate(geometry_candidates):
+        snapshot = _snapshot_target_trial_state(env, oracle, names)
+        if boundary_sha256 is None:
+            boundary_sha256 = snapshot["state_sha256"]
+        elif snapshot["state_sha256"] != boundary_sha256:
+            raise DeterministicRestoreError(
+                "candidate trials did not start from one exact post-park "
+                "state: "
+                f"expected={boundary_sha256} "
+                f"actual={snapshot['state_sha256']}"
+            )
+        trial = None
+        try:
+            trial = _run_target_dynamic_reachability_trial(
+                env,
+                oracle,
+                candidate["clearance_eef_position"],
+                step,
+            )
+        finally:
+            restore_proof = _restore_target_trial_state(
+                env, oracle, names, snapshot
+            )
+        trial["dynamic_candidate_index"] = int(dynamic_index)
+        trial["candidate_trace_index"] = int(
+            candidate["candidate_trace_index"]
+        )
+        trial["direction_index"] = int(
+            candidate["record"]["direction_index"]
+        )
+        trial["direction_source"] = candidate["record"][
+            "direction_source"
+        ]
+        trial["outward_offset_m"] = candidate["record"][
+            "outward_offset_m"
+        ]
+        trial["restore_proof"] = restore_proof
+        geometry_evidence["dynamic_candidate_trials"].append(trial)
+        trace_record = geometry_evidence["candidate_trace"][
+            candidate["candidate_trace_index"]
+        ]
+        trace_record["dynamic_trial_index"] = int(dynamic_index)
+        trace_record["dynamic_reachability_passed"] = trial["success"]
+        trace_record["dynamic_reachability_reason"] = trial["reason"]
+        trace_record["trial_snapshot_sha256"] = restore_proof[
+            "snapshot_sha256"
+        ]
+        trace_record["trial_restored_sha256"] = restore_proof[
+            "restored_sha256"
+        ]
+        if not trial["success"]:
+            continue
+
+        sweep_evidence = candidate["sweep_evidence"]
+        geometry_evidence["selected"] = trace_record
+        geometry_evidence["selected_dynamic_trial"] = trial
+        geometry_evidence["post_park_boundary_sha256"] = boundary_sha256
+        for sweep_name in (
+            "target_approach",
+            "target_descend",
+            "fixture_approach",
+            "fixture_descend",
+            "fixture_lateral",
+            "porcelain_approach",
+            "porcelain_descend",
+            "porcelain_lateral",
+        ):
+            geometry_evidence[f"{sweep_name}_sweep"] = (
+                sweep_evidence[sweep_name]
+            )
+        return (
+            np.asarray(
+                candidate["clearance_eef_position"], dtype=float
+            ).copy(),
+            geometry_evidence,
+        )
+    geometry_evidence["post_park_boundary_sha256"] = boundary_sha256
+    last_reason = (
+        geometry_evidence["dynamic_candidate_trials"][-1]["reason"]
+        if geometry_evidence["dynamic_candidate_trials"]
+        else "no dynamic trial was executed"
+    )
+    raise RuntimeError(
+        "no geometry-safe target grasp candidate passed exact dynamic "
+        "reachability; "
+        f"attempted={len(geometry_evidence['dynamic_candidate_trials'])}; "
+        f"post_park_boundary_sha256={boundary_sha256}; "
+        f"last_reason={last_reason}"
+    )
 
 
 def _close_gripper_on_target(env, oracle, step, frames):
@@ -4225,7 +5089,7 @@ def _robot_place_target(env, oracle, names, frames, step):
             ),
             "target_grasp_clearance_offset_m": (
                 None
-                if not target_grasp_clearance_derivation
+                if not target_grasp_clearance_derivation.get("selected")
                 else target_grasp_clearance_derivation["selected"][
                     "outward_offset_m"
                 ]
@@ -4291,7 +5155,7 @@ def _robot_place_target(env, oracle, names, frames, step):
             env, site_mat[:, 2]
         )
         (
-            clearance_grasp_point,
+            geometry_candidates,
             target_grasp_clearance_derivation,
         ) = _compiled_target_grasp_clearance(
             env,
@@ -4299,6 +5163,28 @@ def _robot_place_target(env, oracle, names, frames, step):
             initial_target,
             target_clearance_xy,
         )
+    except RuntimeError as error:
+        return (
+            False,
+            str(error),
+            status,
+            step,
+            target_metrics(),
+        )
+    try:
+        (
+            clearance_grasp_point,
+            target_grasp_clearance_derivation,
+        ) = _select_dynamically_reachable_target_grasp(
+            env,
+            oracle,
+            names,
+            geometry_candidates,
+            target_grasp_clearance_derivation,
+            step,
+        )
+    except DeterministicRestoreError:
+        raise
     except RuntimeError as error:
         return (
             False,
@@ -4328,6 +5214,8 @@ def _robot_place_target(env, oracle, names, frames, step):
             label=label,
             diagnostics=move_diagnostics,
             forbid_microwave_contact=True,
+            forbid_target_contact=True,
+            forbid_porcelain_contact=True,
         )
         if not reached:
             return (
@@ -4968,7 +5856,7 @@ def main() -> None:
         )
         selected_target_grasp_clearance = target_grasp_clearance.get(
             "selected", {}
-        )
+        ) or {}
         target_release = target_metrics.get("target_release", {})
         target_insertion_plan = target_metrics.get(
             "compiled_insertion_plan", {}
@@ -5014,6 +5902,19 @@ def main() -> None:
                 for item in target_object_follow_trace
             ),
             default=float("nan"),
+        )
+        dynamic_target_trials = target_grasp_clearance.get(
+            "dynamic_candidate_trials", []
+        )
+        selected_dynamic_target_trial = target_grasp_clearance.get(
+            "selected_dynamic_trial", {}
+        )
+        selected_restore_proof = selected_dynamic_target_trial.get(
+            "restore_proof", {}
+        )
+        dynamic_target_trial_steps = sum(
+            int(trial.get("steps_executed", 0))
+            for trial in dynamic_target_trials
         )
         forbidden_target_contact = bool(
             any(
@@ -5255,6 +6156,41 @@ def main() -> None:
                 selected_target_grasp_clearance.get(
                     "direction_source", ""
                 )
+            ),
+            "robot_target_geometry_pass_candidates": int(
+                target_grasp_clearance.get("geometry_pass_count", 0)
+            ),
+            "robot_target_dynamic_candidates_attempted": len(
+                dynamic_target_trials
+            ),
+            "robot_target_dynamic_trial_steps": (
+                dynamic_target_trial_steps
+            ),
+            "robot_target_dynamic_selected_index": (
+                selected_dynamic_target_trial.get(
+                    "dynamic_candidate_index", -1
+                )
+            ),
+            "robot_target_dynamic_selected_seek_steps": (
+                selected_dynamic_target_trial.get(
+                    "contact_seek", {}
+                ).get("steps_executed", 0)
+            ),
+            "robot_target_dynamic_selected_axis_progress": int(
+                bool(
+                    selected_dynamic_target_trial.get(
+                        "contact_seek", {}
+                    ).get("axis_progress", {}).get("passed", False)
+                )
+            ),
+            "robot_target_dynamic_restore_passed": int(
+                bool(selected_restore_proof.get("passed", False))
+            ),
+            "robot_target_dynamic_snapshot_sha256": (
+                selected_restore_proof.get("snapshot_sha256", "")
+            ),
+            "robot_target_dynamic_restored_sha256": (
+                selected_restore_proof.get("restored_sha256", "")
             ),
             "robot_target_grasp_target_approach_clearance_m": (
                 selected_target_grasp_clearance.get(
@@ -5607,9 +6543,9 @@ def main() -> None:
         ),
         "target_placement_segment": "robot OSC grasp/transport/release via env.step",
         "target_grasp_method": (
-            "nearest compiled no-contact approach/descend/lateral corridor "
-            "from microwave-outward or target-to-parked-porcelain tangent "
-            "directions, followed by target contact seek"
+            "first ordered compiled no-contact corridor that also passes "
+            "an exact-state robot OSC approach, descend, and fixed-horizon "
+            "target-contact trial"
         ),
         "target_grasp_minimum_clearance_offset_m": (
             TARGET_GRASP_CLEARANCE_OFFSET
@@ -5619,6 +6555,20 @@ def main() -> None:
         ),
         "target_grasp_target_clearance_required_m": (
             EEF_POSITION_TOLERANCE
+        ),
+        "target_dynamic_contact_seek_horizon_steps": (
+            TARGET_CONTACT_SEEK_STEPS
+        ),
+        "target_dynamic_axis_progress_epsilon_m": (
+            TARGET_DYNAMIC_AXIS_PROGRESS_EPS_M
+        ),
+        "target_dynamic_distance_cache_used": False,
+        "target_dynamic_restore_gate": (
+            "every counterfactual candidate restores exact MuJoCo qpos, "
+            "qvel, act, time and runtime inputs; object, door, EEF and "
+            "contact state; OSC fields and robot buffers; robosuite "
+            "counters/observables; oracle and NumPy RNG state before the "
+            "next candidate or independent real execution"
         ),
         "target_grasp_gate": (
             "target contact must be absent before lateral seek and current "
