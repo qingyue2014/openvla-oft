@@ -125,6 +125,21 @@ def _live_plate_tracking_target(
     return target, direction_xy
 
 
+def _refresh_confirmed_contact_offset_xy(
+    confirmed_contact_offset, live_contact_offset
+):
+    """Refresh in-plane contact while preserving seek-confirmed depth."""
+    confirmed = np.asarray(confirmed_contact_offset, dtype=float)
+    live = np.asarray(live_contact_offset, dtype=float)
+    if confirmed.shape != (3,) or live.shape != (3,):
+        raise ValueError("confirmed and live contact offsets must be 3-D")
+    if not np.all(np.isfinite(confirmed)) or not np.all(np.isfinite(live)):
+        raise ValueError("confirmed and live contact offsets must be finite")
+    refreshed = confirmed.copy()
+    refreshed[:2] = live[:2]
+    return refreshed
+
+
 def _contact_progress_saturation_evidence(
     robot_contact_steps, incremental_progress, minimum_progress
 ):
@@ -148,6 +163,29 @@ def _contact_progress_saturation_evidence(
         "incremental_plate_progress_m": float(incremental_progress),
         "minimum_progress_above_noise_m": float(minimum_progress),
     }
+
+
+def _environment_horizon_diagnostics(env):
+    """Read horizon counters through common LIBERO wrapper layers."""
+    queue = [env]
+    visited = set()
+    diagnostics = {}
+    while queue and len(visited) < 8:
+        current = queue.pop(0)
+        if current is None or id(current) in visited:
+            continue
+        visited.add(id(current))
+        for name in ("horizon", "_horizon", "timestep", "_timestep"):
+            if name in diagnostics or not hasattr(current, name):
+                continue
+            value = getattr(current, name)
+            if isinstance(value, (int, np.integer)):
+                diagnostics[name] = int(value)
+        for name in ("env", "_env"):
+            child = getattr(current, name, None)
+            if child is not None:
+                queue.append(child)
+    return diagnostics
 
 
 def _plate_contact_candidate_diagnostics(
@@ -293,6 +331,7 @@ class Rollout:
         self.recorder = TrajectoryRecorder(env, [PLATE_BODY, BOTTLE_BODY, TABLE_BODY])
         self.step = 0
         self.video_frames = [self._policy_rgb(obs)]
+        self.termination_diagnostics = None
 
     @staticmethod
     def _policy_rgb(obs):
@@ -302,7 +341,16 @@ class Rollout:
         return np.ascontiguousarray(image[::-1, ::-1]).copy()
 
     def advance(self, action, phase):
-        self.obs, _, _, _ = self.env.step(np.asarray(action, dtype=float).tolist())
+        try:
+            self.obs, _, done, _ = self.env.step(
+                np.asarray(action, dtype=float).tolist()
+            )
+        except ValueError as exc:
+            if "terminated episode" not in str(exc):
+                raise
+            raise self._episode_termination_error(
+                phase, "env.step rejected action in terminated episode"
+            ) from exc
         self.recorder.record(self.obs, action, self.step, phase=phase)
         if self.step % self.args.video_stride == 0:
             self.video_frames.append(self._policy_rgb(self.obs))
@@ -310,6 +358,24 @@ class Rollout:
         self.step += 1
         if status.violated:
             raise RuntimeError(f"oracle violation at step {self.step}: {status.reason}")
+        if done:
+            raise self._episode_termination_error(
+                phase, "env.step returned done=True"
+            )
+
+    def _episode_termination_error(self, phase, mechanism):
+        progress = (
+            self.termination_diagnostics()
+            if callable(self.termination_diagnostics)
+            else self.termination_diagnostics
+        )
+        return RuntimeError(
+            "environment terminated episode; fail-closed without ignore_done "
+            f"phase={phase} rollout_step={self.step} "
+            f"mechanism={mechanism} "
+            f"horizon={json.dumps(_environment_horizon_diagnostics(self.env), sort_keys=True)} "
+            f"progress={json.dumps(progress, sort_keys=True)}"
+        )
 
     def hold(self, gripper, count, phase):
         for _ in range(count):
@@ -587,6 +653,10 @@ def generate(args):
         ).copy()
         push_plate_start = body_pose(env, PLATE_BODY)[0].copy()
         confirmed_contact_offset = push_eef_start - push_plate_start
+        confirmed_contact_z_offset = float(confirmed_contact_offset[2])
+        confirmed_contact_z_offset_source = (
+            "initial_vertical_contact_confirmation"
+        )
         push_waypoints = []
         recontact_events = []
         recontact_attempts = 0
@@ -598,6 +668,39 @@ def generate(args):
             np.linalg.norm(push_plate_start[:2] - goal[:2])
         )
         maximum_goal_distance_reduction = 0.0
+
+        def push_termination_diagnostics():
+            live_plate = body_pose(env, PLATE_BODY)[0]
+            return {
+                "plate_position": live_plate.tolist(),
+                "plate_displacement_m": float(
+                    np.linalg.norm(
+                        live_plate[:2] - push_plate_start[:2]
+                    )
+                ),
+                "plate_progress_m": float(
+                    np.dot(
+                        live_plate[:2] - push_plate_start[:2],
+                        direction_xy,
+                    )
+                ),
+                "goal_xy_error_m": float(
+                    np.linalg.norm(live_plate[:2] - goal[:2])
+                ),
+                "completed_push_iterations": len(push_waypoints),
+                "recontact_attempts": recontact_attempts,
+                "confirmed_contact_z_offset_m": (
+                    confirmed_contact_z_offset
+                ),
+                "confirmed_contact_z_offset_source": (
+                    confirmed_contact_z_offset_source
+                ),
+                "plate_contact_counterparts": (
+                    _body_contact_counterparts(env, PLATE_BODY)
+                ),
+            }
+
+        rollout.termination_diagnostics = push_termination_diagnostics
         for push_iteration in range(1, args.maximum_push_iterations + 1):
             if env.check_success():
                 break
@@ -726,6 +829,13 @@ def generate(args):
                 confirmed_contact_offset = (
                     recontact_eef_after - recontact_plate_after
                 )
+                confirmed_contact_z_offset = float(
+                    confirmed_contact_offset[2]
+                )
+                confirmed_contact_z_offset_source = (
+                    f"recontact_{recontact_attempts}_"
+                    "vertical_contact_confirmation"
+                )
                 recontact_performed_this_iteration = True
                 recontact_event.update(
                     {
@@ -735,6 +845,12 @@ def generate(args):
                         "post_eef_position": recontact_eef_after.tolist(),
                         "confirmed_contact_offset": (
                             confirmed_contact_offset.tolist()
+                        ),
+                        "confirmed_contact_z_offset_m": (
+                            confirmed_contact_z_offset
+                        ),
+                        "confirmed_contact_z_offset_source": (
+                            confirmed_contact_z_offset_source
                         ),
                         "post_plate_contact_counterparts": (
                             _body_contact_counterparts(env, PLATE_BODY)
@@ -759,14 +875,21 @@ def generate(args):
             # Job 499646 showed that freezing the initial contact offset made
             # later targets shrink as the live EEF/plate relation drifted.
             # A real contact exists here (initial or freshly re-established),
-            # so refresh the anchor from that current physical relation.
+            # so refresh XY from that current relation.  Keep Z at the depth
+            # measured by the latest explicit vertical seek + confirmation;
+            # push-induced EEF lift must not ratchet the next target upward.
+            live_contact_offset = live_eef_before - live_plate_before
             confirmed_contact_offset = (
-                live_eef_before - live_plate_before
+                _refresh_confirmed_contact_offset_xy(
+                    confirmed_contact_offset,
+                    live_contact_offset,
+                )
             )
+            confirmed_contact_offset[2] = confirmed_contact_z_offset
             contact_offset_update_source = (
-                "recontact_confirmation"
+                "recontact_confirmation_xy"
                 if recontact_performed_this_iteration
-                else "live_contact_at_iteration_start"
+                else "live_contact_xy_at_iteration_start"
             )
             target, live_direction_xy = _live_plate_tracking_target(
                 live_plate_before,
@@ -837,8 +960,17 @@ def generate(args):
                     "active_confirmed_contact_offset_before_update": (
                         confirmed_contact_offset_before_update.tolist()
                     ),
+                    "active_live_contact_offset_before": (
+                        live_contact_offset.tolist()
+                    ),
                     "active_contact_offset_update_source": (
                         contact_offset_update_source
+                    ),
+                    "active_confirmed_contact_z_offset_m": (
+                        confirmed_contact_z_offset
+                    ),
+                    "active_confirmed_contact_z_offset_source": (
+                        confirmed_contact_z_offset_source
                     ),
                     "active_live_push_direction_xy": (
                         live_direction_xy.tolist()
@@ -921,7 +1053,7 @@ def generate(args):
                 "live_plate_anchor": live_plate_before.tolist(),
                 "live_eef_before": live_eef_before.tolist(),
                 "live_eef_plate_offset_before": (
-                    live_eef_before - live_plate_before
+                    live_contact_offset
                 ).tolist(),
                 "confirmed_contact_offset": (
                     confirmed_contact_offset.tolist()
@@ -935,6 +1067,19 @@ def generate(args):
                 "contact_offset_update_source": (
                     contact_offset_update_source
                 ),
+                "confirmed_contact_z_offset_m": (
+                    confirmed_contact_z_offset
+                ),
+                "confirmed_contact_z_offset_source": (
+                    confirmed_contact_z_offset_source
+                ),
+                "commanded_target_z_anchor": {
+                    "live_plate_z": float(live_plate_before[2]),
+                    "confirmed_contact_z_offset_m": (
+                        confirmed_contact_z_offset
+                    ),
+                    "target_z": float(target[2]),
+                },
                 "live_push_direction_xy": live_direction_xy.tolist(),
                 "controller_steps": waypoint_evidence["controller_steps"],
                 "move_status": move_status,
@@ -981,6 +1126,12 @@ def generate(args):
             "initial_confirmed_contact_offset": (
                 push_eef_start - push_plate_start
             ).tolist(),
+            "final_confirmed_contact_z_offset_m": (
+                confirmed_contact_z_offset
+            ),
+            "final_confirmed_contact_z_offset_source": (
+                confirmed_contact_z_offset_source
+            ),
             "waypoints": push_waypoints,
             "recontact_events": recontact_events,
             "push_iterations_used": len(push_waypoints),

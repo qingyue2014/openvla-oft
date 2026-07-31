@@ -11,7 +11,9 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     Rollout,
     _body_contact_counterparts,
     _contact_progress_saturation_evidence,
+    _environment_horizon_diagnostics,
     _live_plate_tracking_target,
+    _refresh_confirmed_contact_offset_xy,
     _robot_contacts_body,
     _robot_gripper_body_names,
     _select_reachable_trailing_contact,
@@ -354,6 +356,17 @@ def test_live_plate_push_target_tracks_plate_instead_of_accumulating_eef():
         _live_plate_tracking_target(plate, goal, confirmed_offset, 0.0)
 
 
+def test_live_contact_refresh_updates_xy_but_preserves_seek_depth():
+    seek_confirmed = np.array([-0.00211, -0.00637, 0.01949])
+    live_after_push = np.array([-0.00260, -0.00246, 0.02104])
+    refreshed = _refresh_confirmed_contact_offset_xy(
+        seek_confirmed, live_after_push
+    )
+    assert np.allclose(refreshed[:2], live_after_push[:2])
+    assert refreshed[2] == pytest.approx(seek_confirmed[2])
+    assert refreshed[2] != pytest.approx(live_after_push[2])
+
+
 def test_push_timeout_acceptance_requires_real_contact_and_progress():
     accepted = _contact_progress_saturation_evidence(
         robot_contact_steps=10,
@@ -373,6 +386,40 @@ def test_push_timeout_acceptance_requires_real_contact_and_progress():
         _contact_progress_saturation_evidence(10, 0.000049, 0.00005)
         is None
     )
+
+
+def test_terminated_episode_is_fail_closed_with_horizon_and_progress():
+    inner = SimpleNamespace(horizon=500, timestep=500)
+    outer = SimpleNamespace(env=inner)
+    assert _environment_horizon_diagnostics(outer) == {
+        "horizon": 500,
+        "timestep": 500,
+    }
+
+    class TerminatedEnv:
+        env = inner
+
+        @staticmethod
+        def step(_action):
+            raise ValueError("executing action in terminated episode")
+
+    class FakeTerminatedRollout:
+        env = TerminatedEnv()
+        step = 460
+        termination_diagnostics = staticmethod(
+            lambda: {
+                "plate_progress_m": 0.00066,
+                "completed_push_iterations": 22,
+            }
+        )
+        _episode_termination_error = Rollout._episode_termination_error
+
+    with pytest.raises(RuntimeError, match="fail-closed without ignore_done") as exc:
+        Rollout.advance(FakeTerminatedRollout(), np.zeros(7), "task")
+    message = str(exc.value)
+    assert "rollout_step=460" in message
+    assert '"horizon": 500' in message
+    assert '"plate_progress_m": 0.00066' in message
 
 
 def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
@@ -507,17 +554,27 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "commanded_distance_m" not in push_loop
     assert '"live_plate_anchor"' in push_loop
     assert '"confirmed_contact_offset"' in push_loop
-    assert "confirmed_contact_offset = (" in push_loop
+    assert "live_contact_offset = live_eef_before - live_plate_before" in push_loop
+    assert "_refresh_confirmed_contact_offset_xy(" in push_loop
+    assert (
+        "confirmed_contact_offset[2] = confirmed_contact_z_offset"
+        in push_loop
+    )
     assert "live_eef_before - live_plate_before" in push_loop
     assert '"confirmed_contact_offset_before_update"' in push_loop
     assert '"confirmed_contact_offset_after_update"' in push_loop
     assert '"contact_offset_update_source"' in push_loop
-    assert '"live_contact_at_iteration_start"' in push_loop
-    assert '"recontact_confirmation"' in push_loop
+    assert '"live_contact_xy_at_iteration_start"' in push_loop
+    assert '"recontact_confirmation_xy"' in push_loop
     assert push_loop.index(
         "live_eef_before - live_plate_before"
     ) < push_loop.index("_live_plate_tracking_target(")
     assert '"live_eef_plate_offset_before"' in push_loop
+    assert '"confirmed_contact_z_offset_m"' in push_loop
+    assert '"confirmed_contact_z_offset_source"' in push_loop
+    assert '"commanded_target_z_anchor"' in push_loop
+    assert "initial_vertical_contact_confirmation" in task_push
+    assert "vertical_contact_confirmation" in push_loop
     assert '"live_push_direction_xy"' in push_loop
     assert "step_observer=observe_push_step" in push_loop
     assert "timeout_acceptor=accept_contact_progress_saturation" in push_loop
@@ -586,6 +643,10 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "--maximum_push_iterations must be positive" in producer
     assert "--maximum_recontact_attempts must be positive" in producer
     assert "maximum_push_distance" not in producer
+    assert "ignore_done=True" not in producer
+    assert "environment terminated episode; fail-closed" in producer
+    assert '"plate_progress_m"' in producer
+    assert '"completed_push_iterations"' in producer
     assert '"pusher_gripper_sign": pusher_open_sign' in producer
     assert '"push_evidence": push_summary' in producer
 
