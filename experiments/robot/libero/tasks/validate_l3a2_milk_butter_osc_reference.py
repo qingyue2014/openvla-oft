@@ -42,6 +42,8 @@ from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
 BUTTER = "butter_1_main"
 MILK = "milk_1_main"
 BASKET = "basket_1_main"
+TRANSPORT_MAX_WAYPOINT_STEPS = 360
+TIMEOUT_PROGRESS_EPSILON_M = 0.001
 
 
 def _load_records(path: str, count: int) -> list[dict[str, Any]]:
@@ -86,6 +88,77 @@ def _status_reason(failure: Any) -> tuple[str, str]:
         str(getattr(failure, "reason", failure)),
         str(getattr(failure, "stage", "")),
     )
+
+
+def _failure_diagnostics(failure: Any) -> dict[str, Any]:
+    """Preserve motion-error evidence without treating progress as reachability."""
+
+    diagnostics: dict[str, Any] = {
+        "failure_initial_error_m": float("nan"),
+        "failure_best_error_m": float("nan"),
+        "failure_final_error_m": float("nan"),
+        "failure_progress_m": float("nan"),
+        "failure_progress_fraction": float("nan"),
+        "failure_final_eef_xyz": [],
+        "failure_target_eef_xyz": [],
+        "failure_progressing_at_budget_limit": False,
+    }
+    if failure is None:
+        return diagnostics
+
+    def _finite_scalar(name: str) -> float:
+        try:
+            value = float(getattr(failure, name, float("nan")))
+        except (TypeError, ValueError):
+            return float("nan")
+        return value if np.isfinite(value) else float("nan")
+
+    def _finite_xyz(name: str) -> list[float]:
+        try:
+            value = np.asarray(getattr(failure, name, ()), dtype=float)
+        except (TypeError, ValueError):
+            return []
+        if value.shape != (3,) or not np.all(np.isfinite(value)):
+            return []
+        return value.tolist()
+
+    initial = _finite_scalar("initial_error_m")
+    best = _finite_scalar("best_error_m")
+    final = _finite_scalar("final_error_m")
+    progress = (
+        initial - best
+        if np.isfinite(initial) and np.isfinite(best)
+        else float("nan")
+    )
+    progress_fraction = (
+        progress / initial
+        if np.isfinite(progress) and initial > 0.0
+        else float("nan")
+    )
+    reason = str(getattr(failure, "reason", failure))
+    progressing_at_budget_limit = bool(
+        reason == "waypoint_timeout"
+        and np.isfinite(progress)
+        and progress > TIMEOUT_PROGRESS_EPSILON_M
+        and np.isfinite(final)
+        and np.isfinite(best)
+        and final <= best + TIMEOUT_PROGRESS_EPSILON_M
+    )
+    diagnostics.update(
+        {
+            "failure_initial_error_m": initial,
+            "failure_best_error_m": best,
+            "failure_final_error_m": final,
+            "failure_progress_m": progress,
+            "failure_progress_fraction": progress_fraction,
+            "failure_final_eef_xyz": _finite_xyz("final_eef_xyz"),
+            "failure_target_eef_xyz": _finite_xyz("target_eef_xyz"),
+            "failure_progressing_at_budget_limit": (
+                progressing_at_budget_limit
+            ),
+        }
+    )
+    return diagnostics
 
 
 def _grasp(
@@ -355,7 +428,9 @@ def _run_attempt(
     native_butter_xyz = np.asarray(
         record["native_butter_body_position"], dtype=float
     )
+    butter_park_start = np.full(3, np.nan)
     if failure is None:
+        butter_park_start = shared._body_pos(env, BUTTER)
         obs, step, failure = _place(
             shared,
             env,
@@ -468,6 +543,11 @@ def _run_attempt(
         reason, stage = "native_goal_not_satisfied", "verify_native_goal"
     if not reason and butter_drift > args.max_parked_butter_drift:
         reason, stage = "parked_butter_moved", "verify_safe_terminal"
+    failure_diagnostics = _failure_diagnostics(failure)
+    butter_park_required_xy_translation = float(
+        np.linalg.norm(butter_park_start[:2] - native_butter_xyz[:2])
+    )
+    butter_park_final_goal_error = parked_position - native_butter_xyz
 
     video_path = ""
     if safe_success and capture_video:
@@ -491,6 +571,15 @@ def _run_attempt(
             "attempt": attempt,
             "grasp_offset_xy": grasp_offset.tolist(),
             "butter_grasp_lift_m": butter_lift,
+            "butter_park_start_body_xyz": butter_park_start.tolist(),
+            "butter_park_goal_body_xyz": native_butter_xyz.tolist(),
+            "butter_park_final_body_xyz": parked_position.tolist(),
+            "butter_park_final_goal_error_xyz": (
+                butter_park_final_goal_error.tolist()
+            ),
+            "butter_park_required_xy_translation_m": (
+                butter_park_required_xy_translation
+            ),
             "butter_parked_stable": parked_stable,
             "butter_parked_contacts": ",".join(parked_contacts),
             "butter_post_park_drift_m": butter_drift,
@@ -512,6 +601,7 @@ def _run_attempt(
             "failure_reason": reason,
             "failure_stage": stage,
             "video_path": video_path,
+            **failure_diagnostics,
         },
     )
     return {
@@ -520,6 +610,17 @@ def _run_attempt(
         "grasp_offset_x_m": float(grasp_offset[0]),
         "grasp_offset_y_m": float(grasp_offset[1]),
         "butter_grasp_lift_m": butter_lift,
+        "butter_park_start_body_xyz": json.dumps(
+            butter_park_start.tolist()
+        ),
+        "butter_park_goal_body_xyz": json.dumps(native_butter_xyz.tolist()),
+        "butter_park_final_body_xyz": json.dumps(parked_position.tolist()),
+        "butter_park_final_goal_error_xyz": json.dumps(
+            butter_park_final_goal_error.tolist()
+        ),
+        "butter_park_required_xy_translation_m": (
+            butter_park_required_xy_translation
+        ),
         "butter_parked_stable": int(parked_stable),
         "butter_parked_contacts": ",".join(parked_contacts),
         "butter_post_park_drift_m": butter_drift,
@@ -536,6 +637,28 @@ def _run_attempt(
         "all_task_actions_robot_controlled": 1,
         "failure_reason": reason,
         "failure_stage": stage,
+        "failure_initial_error_m": failure_diagnostics[
+            "failure_initial_error_m"
+        ],
+        "failure_best_error_m": failure_diagnostics[
+            "failure_best_error_m"
+        ],
+        "failure_final_error_m": failure_diagnostics[
+            "failure_final_error_m"
+        ],
+        "failure_progress_m": failure_diagnostics["failure_progress_m"],
+        "failure_progress_fraction": failure_diagnostics[
+            "failure_progress_fraction"
+        ],
+        "failure_final_eef_xyz": json.dumps(
+            failure_diagnostics["failure_final_eef_xyz"]
+        ),
+        "failure_target_eef_xyz": json.dumps(
+            failure_diagnostics["failure_target_eef_xyz"]
+        ),
+        "failure_progressing_at_budget_limit": int(
+            failure_diagnostics["failure_progressing_at_budget_limit"]
+        ),
         "steps": step,
         "gripper_close_sign": close_sign,
         "gripper_open_sign": open_sign,
@@ -621,7 +744,14 @@ def run(args) -> str:
                     f"episode={episode:03d} attempt={attempt:02d} "
                     f"safe={row['safe_success']} "
                     f"stage={row['failure_stage'] or '-'} "
-                    f"reason={row['failure_reason'] or '-'}"
+                    f"reason={row['failure_reason'] or '-'} "
+                    f"error_initial={row['failure_initial_error_m']:.4f} "
+                    f"error_best={row['failure_best_error_m']:.4f} "
+                    f"error_final={row['failure_final_error_m']:.4f} "
+                    "progressing_at_budget_limit="
+                    f"{row['failure_progressing_at_budget_limit']} "
+                    f"target_eef={row['failure_target_eef_xyz']} "
+                    f"final_eef={row['failure_final_eef_xyz']}"
                 )
                 if row["safe_success"]:
                     videos_saved += int(bool(row["video_path"]))
@@ -654,7 +784,29 @@ def run(args) -> str:
         "- all_task_actions_robot_controlled=true",
         "- Required order: grasp/release butter stably on floor, then grasp/place milk in native basket.",
         "- Teleport after reset: false.",
+        (
+            "- Timeout diagnostic semantics: progressing_at_budget_limit is "
+            "trajectory evidence only; it does not assert geometric "
+            "reachability or waive any gate."
+        ),
+        "",
+        "## Selected-attempt motion diagnostics",
+        "",
     ]
+    for row in rows:
+        report.append(
+            f"- Episode {row['episode']:03d}, attempt {row['attempt']:02d}: "
+            f"stage={row['failure_stage'] or '-'}, "
+            f"reason={row['failure_reason'] or '-'}, "
+            f"initial_error_m={row['failure_initial_error_m']:.6f}, "
+            f"best_error_m={row['failure_best_error_m']:.6f}, "
+            f"final_error_m={row['failure_final_error_m']:.6f}, "
+            f"progress_m={row['failure_progress_m']:.6f}, "
+            "progressing_at_budget_limit="
+            f"{row['failure_progressing_at_budget_limit']}, "
+            f"target_eef_xyz={row['failure_target_eef_xyz']}, "
+            f"final_eef_xyz={row['failure_final_eef_xyz']}."
+        )
     report_path = Path(args.out_report)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text("\n".join(report) + "\n", encoding="utf-8")
@@ -678,7 +830,11 @@ def main() -> None:
     parser.add_argument("--precise_position_tolerance", type=float, default=0.008)
     parser.add_argument("--place_position_tolerance", type=float, default=0.012)
     parser.add_argument("--max_waypoint_steps", type=int, default=80)
-    parser.add_argument("--transport_max_waypoint_steps", type=int, default=100)
+    parser.add_argument(
+        "--transport_max_waypoint_steps",
+        type=int,
+        default=TRANSPORT_MAX_WAYPOINT_STEPS,
+    )
     parser.add_argument("--gripper_probe_steps", type=int, default=6)
     parser.add_argument("--approach_height", type=float, default=0.10)
     parser.add_argument("--grasp_height", type=float, default=0.0)

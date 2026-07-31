@@ -33,6 +33,8 @@ from experiments.robot.libero.tasks.generate_l3a2_milk_butter_initial_states imp
     _collision_vertical_bounds,
 )
 from experiments.robot.libero.tasks.validate_l3a2_milk_butter_osc_reference import (
+    TRANSPORT_MAX_WAYPOINT_STEPS,
+    _failure_diagnostics,
     _load_records,
 )
 from experiments.robot.libero.tasks import (
@@ -203,6 +205,56 @@ def test_osc_loader_uses_saved_world_body_position_not_free_qpos(tmp_path):
                 record["native_butter_body_position"],
                 free_qpos_translation,
             )
+
+
+def test_osc_timeout_diagnostics_preserve_progress_and_target():
+    failure = SimpleNamespace(
+        reason="waypoint_timeout",
+        stage="butter_park_translate",
+        initial_error_m=0.2163,
+        best_error_m=0.0361,
+        final_error_m=0.0364,
+        final_eef_xyz=(0.0643, -0.2034, 0.3497),
+        target_eef_xyz=(0.1008, -0.2034, 0.3497),
+    )
+    diagnostics = _failure_diagnostics(failure)
+
+    assert diagnostics["failure_initial_error_m"] == pytest.approx(0.2163)
+    assert diagnostics["failure_best_error_m"] == pytest.approx(0.0361)
+    assert diagnostics["failure_final_error_m"] == pytest.approx(0.0364)
+    assert diagnostics["failure_progress_m"] == pytest.approx(0.1802)
+    assert diagnostics["failure_progress_fraction"] == pytest.approx(
+        0.1802 / 0.2163
+    )
+    assert diagnostics["failure_final_eef_xyz"] == pytest.approx(
+        [0.0643, -0.2034, 0.3497]
+    )
+    assert diagnostics["failure_target_eef_xyz"] == pytest.approx(
+        [0.1008, -0.2034, 0.3497]
+    )
+    assert diagnostics["failure_progressing_at_budget_limit"] is True
+
+
+def test_osc_timeout_diagnostics_do_not_invent_missing_motion_evidence():
+    diagnostics = _failure_diagnostics(None)
+
+    assert np.isnan(diagnostics["failure_initial_error_m"])
+    assert np.isnan(diagnostics["failure_best_error_m"])
+    assert np.isnan(diagnostics["failure_final_error_m"])
+    assert np.isnan(diagnostics["failure_progress_m"])
+    assert np.isnan(diagnostics["failure_progress_fraction"])
+    assert diagnostics["failure_final_eef_xyz"] == []
+    assert diagnostics["failure_target_eef_xyz"] == []
+    assert diagnostics["failure_progressing_at_budget_limit"] is False
+
+
+def test_osc_transport_horizon_covers_observed_long_safe_transfers():
+    # Job 499607 advanced about 1.8 mm per controller step.  The native
+    # milk-to-basket transfer can span about 0.51 m, requiring roughly 284
+    # steps while retaining the low 0.15 transport command cap.
+    estimated_steps = int(np.ceil(0.51 / 0.0018))
+    assert TRANSPORT_MAX_WAYPOINT_STEPS == 360
+    assert TRANSPORT_MAX_WAYPOINT_STEPS >= estimated_steps
 
 
 def test_move_body_linear_converts_world_body_target_to_free_qpos(monkeypatch):
@@ -577,6 +629,12 @@ def test_basket_goal_uses_compiled_floor_and_milk_collision_offset():
     )
     assert diagnostics["milk_goal_predicate_inside"] is True
     assert diagnostics["milk_goal_collision_xy_inside"] is True
+    assert diagnostics["basket_contain_predicate_lower"] == pytest.approx(
+        [-0.061, -0.061, -0.012]
+    )
+    assert diagnostics["basket_contain_predicate_upper"] == pytest.approx(
+        [0.061, 0.061, 0.136]
+    )
 
     # The raw contain-site centre would penetrate the native floor, which is
     # exactly the remote failure mode this target calculation prevents.
