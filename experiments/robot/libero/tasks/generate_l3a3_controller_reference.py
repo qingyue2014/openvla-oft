@@ -125,19 +125,57 @@ def _live_plate_tracking_target(
     return target, direction_xy
 
 
-def _refresh_confirmed_contact_offset_xy(
-    confirmed_contact_offset, live_contact_offset
+def _gate_live_contact_offset_xy(
+    explicit_contact_anchor,
+    live_contact_offset,
+    push_direction_xy,
+    maximum_xy_drift,
 ):
-    """Refresh in-plane contact while preserving seek-confirmed depth."""
-    confirmed = np.asarray(confirmed_contact_offset, dtype=float)
+    """Use a live XY offset only while it remains near the trailing anchor."""
+    anchor = np.asarray(explicit_contact_anchor, dtype=float)
     live = np.asarray(live_contact_offset, dtype=float)
-    if confirmed.shape != (3,) or live.shape != (3,):
-        raise ValueError("confirmed and live contact offsets must be 3-D")
-    if not np.all(np.isfinite(confirmed)) or not np.all(np.isfinite(live)):
-        raise ValueError("confirmed and live contact offsets must be finite")
-    refreshed = confirmed.copy()
-    refreshed[:2] = live[:2]
-    return refreshed
+    direction = np.asarray(push_direction_xy, dtype=float)
+    if anchor.shape != (3,) or live.shape != (3,):
+        raise ValueError("anchor and live contact offsets must be 3-D")
+    if direction.shape != (2,):
+        raise ValueError("push direction must be 2-D")
+    if not np.all(np.isfinite(anchor)) or not np.all(np.isfinite(live)):
+        raise ValueError("anchor and live contact offsets must be finite")
+    direction_norm = float(np.linalg.norm(direction))
+    if direction_norm <= 1e-9 or not np.isfinite(direction_norm):
+        raise ValueError("push direction must be finite and nonzero")
+    if maximum_xy_drift <= 0 or not np.isfinite(maximum_xy_drift):
+        raise ValueError("maximum live contact XY drift must be positive")
+    direction /= direction_norm
+    xy_drift = float(np.linalg.norm(live[:2] - anchor[:2]))
+    anchor_trailing_projection = float(-np.dot(anchor[:2], direction))
+    live_trailing_projection = float(-np.dot(live[:2], direction))
+    trailing_side = live_trailing_projection > 0.0
+    within_anchor_gate = xy_drift <= float(maximum_xy_drift)
+    accepted = trailing_side and within_anchor_gate
+    selected = anchor.copy()
+    if accepted:
+        selected[:2] = live[:2]
+    if not trailing_side:
+        reason = "live_offset_not_on_trailing_side"
+    elif not within_anchor_gate:
+        reason = "live_offset_exceeds_explicit_anchor_gate"
+    else:
+        reason = "bounded_live_offset_accepted"
+    diagnostics = {
+        "accepted": accepted,
+        "reason": reason,
+        "explicit_anchor_offset": anchor.tolist(),
+        "live_contact_offset": live.tolist(),
+        "selected_contact_offset": selected.tolist(),
+        "push_direction_xy": direction.tolist(),
+        "xy_drift_from_explicit_anchor_m": xy_drift,
+        "maximum_xy_drift_m": float(maximum_xy_drift),
+        "anchor_trailing_projection_m": anchor_trailing_projection,
+        "live_trailing_projection_m": live_trailing_projection,
+        "live_offset_on_trailing_side": trailing_side,
+    }
+    return selected, diagnostics
 
 
 def _contact_progress_saturation_evidence(
@@ -491,6 +529,7 @@ class Rollout:
         stop_label="stop condition",
         diagnostics=None,
         step_observer=None,
+        interruptor=None,
         timeout_acceptor=None,
     ):
         tolerance = self.args.position_tolerance if tolerance is None else tolerance
@@ -512,6 +551,25 @@ class Rollout:
             )
             if step_observer is not None:
                 step_observer()
+            if interruptor is not None:
+                interruption = interruptor()
+                if interruption is not None:
+                    current = np.asarray(
+                        self.obs["robot0_eef_pos"], dtype=float
+                    )
+                    return {
+                        "best_error_m": best,
+                        "final_error_m": float(
+                            np.linalg.norm(np.asarray(target) - current)
+                        ),
+                        "target": np.asarray(
+                            target, dtype=float
+                        ).tolist(),
+                        "final_eef": current.tolist(),
+                        "max_steps": int(max_steps),
+                        "controller_interrupted": True,
+                        **interruption,
+                    }
         if stop_when is not None:
             extra = diagnostics() if callable(diagnostics) else diagnostics
             raise RuntimeError(
@@ -567,6 +625,22 @@ def generate(args):
         raise ValueError("--maximum_push_iterations must be positive")
     if args.maximum_recontact_attempts < 1:
         raise ValueError("--maximum_recontact_attempts must be positive")
+    if args.push_contact_loss_confirm_steps < 1:
+        raise ValueError(
+            "--push_contact_loss_confirm_steps must be positive"
+        )
+    if (
+        args.push_contact_loss_confirm_steps
+        > args.push_tracking_steps
+    ):
+        raise ValueError(
+            "--push_contact_loss_confirm_steps must not exceed "
+            "--push_tracking_steps"
+        )
+    if args.maximum_live_contact_offset_xy_drift <= 0:
+        raise ValueError(
+            "--maximum_live_contact_offset_xy_drift must be positive"
+        )
     if args.horizon_guard_steps < 1:
         raise ValueError("--horizon_guard_steps must be positive")
     if args.planned_recontact_reserve_steps < 0:
@@ -767,13 +841,19 @@ def generate(args):
         ).copy()
         push_plate_start = body_pose(env, PLATE_BODY)[0].copy()
         confirmed_contact_offset = push_eef_start - push_plate_start
+        explicit_contact_anchor_offset = confirmed_contact_offset.copy()
+        explicit_contact_anchor_source = (
+            "initial_vertical_contact_confirmation"
+        )
         confirmed_contact_z_offset = float(confirmed_contact_offset[2])
         confirmed_contact_z_offset_source = (
             "initial_vertical_contact_confirmation"
         )
         push_waypoints = []
         recontact_events = []
+        contact_offset_rejection_events = []
         recontact_attempts = 0
+        recontact_required_reason = None
         push_contact_observed = False
         maximum_plate_progress = 0.0
         maximum_plate_displacement = 0.0
@@ -808,6 +888,10 @@ def generate(args):
                 ),
                 "completed_push_iterations": len(push_waypoints),
                 "recontact_attempts": recontact_attempts,
+                "recontact_required_reason": recontact_required_reason,
+                "contact_offset_rejection_events": (
+                    contact_offset_rejection_events
+                ),
                 "horizon_budget": _horizon_budget(
                     env, final_horizon_reserve_steps
                 ),
@@ -825,6 +909,12 @@ def generate(args):
                 "confirmed_contact_z_offset_source": (
                     confirmed_contact_z_offset_source
                 ),
+                "explicit_contact_anchor_offset": (
+                    explicit_contact_anchor_offset.tolist()
+                ),
+                "explicit_contact_anchor_source": (
+                    explicit_contact_anchor_source
+                ),
                 "plate_contact_counterparts": (
                     _body_contact_counterparts(env, PLATE_BODY)
                 ),
@@ -836,7 +926,14 @@ def generate(args):
                 break
 
             recontact_performed_this_iteration = False
-            if not _robot_contacts_body(env, PLATE_BODY):
+            if (
+                recontact_required_reason is not None
+                or not _robot_contacts_body(env, PLATE_BODY)
+            ):
+                recontact_trigger_reason = (
+                    recontact_required_reason
+                    or "no_robot_plate_contact_at_iteration_start"
+                )
                 if recontact_attempts >= args.maximum_recontact_attempts:
                     budget_diagnostics = {
                         "push_iteration": push_iteration,
@@ -889,7 +986,7 @@ def generate(args):
                 recontact_event = {
                     "attempt": recontact_attempts,
                     "push_iteration": push_iteration,
-                    "reason": "no_robot_plate_contact_at_iteration_start",
+                    "reason": recontact_trigger_reason,
                     "previous_confirmed_contact_offset": (
                         confirmed_contact_offset.tolist()
                     ),
@@ -959,12 +1056,18 @@ def generate(args):
                 confirmed_contact_offset = (
                     recontact_eef_after - recontact_plate_after
                 )
+                explicit_contact_anchor_offset = (
+                    confirmed_contact_offset.copy()
+                )
+                explicit_contact_anchor_source = (
+                    f"recontact_{recontact_attempts}_"
+                    "vertical_contact_confirmation"
+                )
                 confirmed_contact_z_offset = float(
                     confirmed_contact_offset[2]
                 )
                 confirmed_contact_z_offset_source = (
-                    f"recontact_{recontact_attempts}_"
-                    "vertical_contact_confirmation"
+                    explicit_contact_anchor_source
                 )
                 recontact_performed_this_iteration = True
                 recontact_event.update(
@@ -982,6 +1085,12 @@ def generate(args):
                         "confirmed_contact_z_offset_source": (
                             confirmed_contact_z_offset_source
                         ),
+                        "explicit_contact_anchor_offset": (
+                            explicit_contact_anchor_offset.tolist()
+                        ),
+                        "explicit_contact_anchor_source": (
+                            explicit_contact_anchor_source
+                        ),
                         "post_plate_contact_counterparts": (
                             _body_contact_counterparts(env, PLATE_BODY)
                         ),
@@ -989,6 +1098,7 @@ def generate(args):
                     }
                 )
                 recontact_events.append(recontact_event)
+                recontact_required_reason = None
                 print(
                     "L3-A3 plate recontact "
                     + json.dumps(recontact_event, sort_keys=True),
@@ -1002,25 +1112,60 @@ def generate(args):
             confirmed_contact_offset_before_update = (
                 confirmed_contact_offset.copy()
             )
-            # Job 499646 showed that freezing the initial contact offset made
-            # later targets shrink as the live EEF/plate relation drifted.
-            # A real contact exists here (initial or freshly re-established),
-            # so refresh XY from that current relation.  Keep Z at the depth
-            # measured by the latest explicit vertical seek + confirmation;
-            # push-induced EEF lift must not ratchet the next target upward.
             live_contact_offset = live_eef_before - live_plate_before
-            confirmed_contact_offset = (
-                _refresh_confirmed_contact_offset_xy(
-                    confirmed_contact_offset,
-                    live_contact_offset,
-                )
+            live_direction_for_contact_gate = (
+                goal[:2] - live_plate_before[:2]
+            )
+            # Job 499646 requires some live XY correction, but Job 499699
+            # showed that copying every contact pose lets a slipped
+            # single-finger / wrong-side touch ratchet the anchor by 31 mm.
+            # Gate every live correction against the latest explicit
+            # vertical-seek confirmation.  A rejected candidate never becomes
+            # the next anchor.
+            (
+                confirmed_contact_offset,
+                contact_offset_gate,
+            ) = _gate_live_contact_offset_xy(
+                explicit_contact_anchor_offset,
+                live_contact_offset,
+                live_direction_for_contact_gate,
+                args.maximum_live_contact_offset_xy_drift,
             )
             confirmed_contact_offset[2] = confirmed_contact_z_offset
-            contact_offset_update_source = (
-                "recontact_confirmation_xy"
-                if recontact_performed_this_iteration
-                else "live_contact_xy_at_iteration_start"
-            )
+            if recontact_performed_this_iteration:
+                contact_offset_update_source = (
+                    "explicit_recontact_anchor"
+                )
+            elif contact_offset_gate["accepted"]:
+                contact_offset_update_source = (
+                    "bounded_live_contact_xy"
+                )
+            else:
+                contact_offset_update_source = (
+                    "explicit_contact_anchor_retained"
+                )
+                rejection_event = {
+                    "push_iteration": push_iteration,
+                    "reason": "live_contact_offset_gate_rejected",
+                    "gate": contact_offset_gate,
+                    "plate_contact_counterparts": (
+                        _body_contact_counterparts(env, PLATE_BODY)
+                    ),
+                    "explicit_contact_anchor_source": (
+                        explicit_contact_anchor_source
+                    ),
+                }
+                contact_offset_rejection_events.append(rejection_event)
+                recontact_required_reason = rejection_event["reason"]
+                print(
+                    "L3-A3 live contact offset rejected "
+                    + json.dumps(rejection_event, sort_keys=True),
+                    flush=True,
+                )
+                # The current robot contact may be only a slipped fingertip or
+                # wrong-side touch.  Do not issue a direct push from it; the
+                # next loop iteration is forced through high recontact.
+                continue
             live_goal_distance = float(
                 np.linalg.norm(goal[:2] - live_plate_before[:2])
             )
@@ -1084,6 +1229,8 @@ def generate(args):
                 "controller_steps": 0,
                 "robot_contact_steps": 0,
                 "robot_contact_bodies": set(),
+                "consecutive_contact_loss_steps": 0,
+                "maximum_consecutive_contact_loss_steps": 0,
                 "maximum_step_plate_progress_m": 0.0,
                 "maximum_incremental_plate_progress_m": 0.0,
             }
@@ -1100,6 +1247,23 @@ def generate(args):
                     waypoint_evidence["robot_contact_steps"] += 1
                     waypoint_evidence["robot_contact_bodies"].update(
                         item["counterpart_body"] for item in robot_contacts
+                    )
+                    waypoint_evidence[
+                        "consecutive_contact_loss_steps"
+                    ] = 0
+                else:
+                    waypoint_evidence[
+                        "consecutive_contact_loss_steps"
+                    ] += 1
+                    waypoint_evidence[
+                        "maximum_consecutive_contact_loss_steps"
+                    ] = max(
+                        waypoint_evidence[
+                            "maximum_consecutive_contact_loss_steps"
+                        ],
+                        waypoint_evidence[
+                            "consecutive_contact_loss_steps"
+                        ],
                     )
                 live_plate = body_pose(env, PLATE_BODY)[0]
                 progress = float(
@@ -1135,6 +1299,9 @@ def generate(args):
                     **plate_diagnostics(),
                     "completed_push_waypoints": push_waypoints,
                     "completed_recontact_events": recontact_events,
+                    "completed_contact_offset_rejection_events": (
+                        contact_offset_rejection_events
+                    ),
                     "active_push_iteration": push_iteration,
                     "active_live_plate_anchor": live_plate_before.tolist(),
                     "active_confirmed_contact_offset": (
@@ -1146,6 +1313,13 @@ def generate(args):
                     "active_live_contact_offset_before": (
                         live_contact_offset.tolist()
                     ),
+                    "active_explicit_contact_anchor_offset": (
+                        explicit_contact_anchor_offset.tolist()
+                    ),
+                    "active_explicit_contact_anchor_source": (
+                        explicit_contact_anchor_source
+                    ),
+                    "active_contact_offset_gate": contact_offset_gate,
                     "active_contact_offset_update_source": (
                         contact_offset_update_source
                     ),
@@ -1174,6 +1348,27 @@ def generate(args):
                     args.minimum_saturated_waypoint_progress,
                 )
 
+            def interrupt_push_on_contact_loss():
+                consecutive_loss = waypoint_evidence[
+                    "consecutive_contact_loss_steps"
+                ]
+                if (
+                    consecutive_loss
+                    < args.push_contact_loss_confirm_steps
+                ):
+                    return None
+                return {
+                    "status": "robot_contact_lost_recontact_required",
+                    "exit_reason": (
+                        "confirmed robot-plate contact loss; next push "
+                        "iteration must enter explicit high recontact"
+                    ),
+                    "consecutive_contact_loss_steps": consecutive_loss,
+                    "required_contact_loss_confirm_steps": (
+                        args.push_contact_loss_confirm_steps
+                    ),
+                }
+
             move_timeout = rollout.move(
                 target,
                 pusher_open_sign,
@@ -1182,6 +1377,7 @@ def generate(args):
                 max_steps=args.push_tracking_steps,
                 diagnostics=push_diagnostics,
                 step_observer=observe_push_step,
+                interruptor=interrupt_push_on_contact_loss,
                 timeout_acceptor=accept_contact_progress_saturation,
             )
             move_status = (
@@ -1241,6 +1437,12 @@ def generate(args):
                 "live_eef_plate_offset_before": (
                     live_contact_offset
                 ).tolist(),
+                "explicit_contact_anchor_offset": (
+                    explicit_contact_anchor_offset.tolist()
+                ),
+                "explicit_contact_anchor_source": (
+                    explicit_contact_anchor_source
+                ),
                 "confirmed_contact_offset": (
                     confirmed_contact_offset.tolist()
                 ),
@@ -1253,6 +1455,7 @@ def generate(args):
                 "contact_offset_update_source": (
                     contact_offset_update_source
                 ),
+                "contact_offset_gate": contact_offset_gate,
                 "confirmed_contact_z_offset_m": (
                     confirmed_contact_z_offset
                 ),
@@ -1273,6 +1476,15 @@ def generate(args):
                 "robot_contact_steps": waypoint_evidence[
                     "robot_contact_steps"
                 ],
+                "maximum_consecutive_contact_loss_steps": (
+                    waypoint_evidence[
+                        "maximum_consecutive_contact_loss_steps"
+                    ]
+                ),
+                "recontact_required_after_waypoint": (
+                    move_status
+                    == "robot_contact_lost_recontact_required"
+                ),
                 "robot_contact_observed": waypoint_contact_observed,
                 "robot_contact_at_end": robot_contact_at_end,
                 "robot_contact_bodies": sorted(
@@ -1306,6 +1518,15 @@ def generate(args):
             )
             if waypoint_record["native_success"]:
                 break
+            if waypoint_record["recontact_required_after_waypoint"]:
+                # No action occurs between this branch and the next loop-head
+                # recovery check.  Its explicit reason forces the existing
+                # high-retreat recontact path even if a slipped fingertip
+                # happens to touch the plate again.
+                recontact_required_reason = (
+                    "confirmed_robot_plate_contact_loss_during_push"
+                )
+                continue
         horizon_budget_before_final_settle = _horizon_budget(
             env, args.final_settle_steps
         )
@@ -1320,6 +1541,28 @@ def generate(args):
             ),
             "final_confirmed_contact_z_offset_source": (
                 confirmed_contact_z_offset_source
+            ),
+            "final_explicit_contact_anchor_offset": (
+                explicit_contact_anchor_offset.tolist()
+            ),
+            "final_explicit_contact_anchor_source": (
+                explicit_contact_anchor_source
+            ),
+            "maximum_live_contact_offset_xy_drift_m": (
+                args.maximum_live_contact_offset_xy_drift
+            ),
+            "rejected_live_contact_offset_count": len(
+                contact_offset_rejection_events
+            ),
+            "contact_offset_rejection_events": (
+                contact_offset_rejection_events
+            ),
+            "push_contact_loss_confirm_steps": (
+                args.push_contact_loss_confirm_steps
+            ),
+            "contact_loss_recontact_transitions": sum(
+                waypoint["recontact_required_after_waypoint"]
+                for waypoint in push_waypoints
             ),
             "waypoints": push_waypoints,
             "recontact_events": recontact_events,
@@ -1537,6 +1780,17 @@ def main():
     parser.add_argument("--maximum_recontact_attempts", type=int, default=20)
     parser.add_argument("--push_tracking_tolerance", type=float, default=0.002)
     parser.add_argument("--push_tracking_steps", type=int, default=10)
+    # Job 499699: a slipped contact displaced the live EEF/plate XY offset by
+    # 31 mm from the latest explicit recontact anchor.  Permit the 3.94 mm
+    # correction observed in Job 499646, but never ratchet the explicit anchor.
+    parser.add_argument(
+        "--maximum_live_contact_offset_xy_drift",
+        type=float,
+        default=0.005,
+    )
+    parser.add_argument(
+        "--push_contact_loss_confirm_steps", type=int, default=2
+    )
     # Job 499691 measured 2.45--2.50 mm of plate progress per ten actions
     # from a 5 mm target.  Scale the live target against the native steps
     # remaining after a final-settle guard and one measured recontact reserve.

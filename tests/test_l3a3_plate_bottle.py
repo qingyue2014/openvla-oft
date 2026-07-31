@@ -13,9 +13,9 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _contact_progress_saturation_evidence,
     _derive_horizon_safe_push_increment,
     _environment_horizon_diagnostics,
+    _gate_live_contact_offset_xy,
     _horizon_budget,
     _live_plate_tracking_target,
-    _refresh_confirmed_contact_offset_xy,
     _robot_contacts_body,
     _robot_gripper_body_names,
     _select_reachable_trailing_contact,
@@ -358,15 +358,51 @@ def test_live_plate_push_target_tracks_plate_instead_of_accumulating_eef():
         _live_plate_tracking_target(plate, goal, confirmed_offset, 0.0)
 
 
-def test_live_contact_refresh_updates_xy_but_preserves_seek_depth():
+def test_live_contact_gate_accepts_bounded_trailing_xy_and_preserves_depth():
     seek_confirmed = np.array([-0.00211, -0.00637, 0.01949])
     live_after_push = np.array([-0.00260, -0.00246, 0.02104])
-    refreshed = _refresh_confirmed_contact_offset_xy(
-        seek_confirmed, live_after_push
+    refreshed, diagnostics = _gate_live_contact_offset_xy(
+        seek_confirmed,
+        live_after_push,
+        push_direction_xy=np.array([1.0, 0.0]),
+        maximum_xy_drift=0.005,
     )
     assert np.allclose(refreshed[:2], live_after_push[:2])
     assert refreshed[2] == pytest.approx(seek_confirmed[2])
     assert refreshed[2] != pytest.approx(live_after_push[2])
+    assert diagnostics["accepted"] is True
+    assert diagnostics["reason"] == "bounded_live_offset_accepted"
+    assert diagnostics["xy_drift_from_explicit_anchor_m"] < 0.005
+
+
+def test_job_499699_slipped_offset_cannot_replace_explicit_anchor():
+    explicit_recontact = np.array([-0.00160, -0.00582, 0.01949])
+    slipped_live = np.array([-0.01086, 0.02383, 0.02104])
+    selected, diagnostics = _gate_live_contact_offset_xy(
+        explicit_recontact,
+        slipped_live,
+        push_direction_xy=np.array([0.0, 1.0]),
+        maximum_xy_drift=0.005,
+    )
+    assert np.allclose(selected, explicit_recontact)
+    assert diagnostics["accepted"] is False
+    assert diagnostics["reason"] == "live_offset_not_on_trailing_side"
+    assert diagnostics["xy_drift_from_explicit_anchor_m"] > 0.030
+
+    # A large drift remains rejected even if its EEF centre is still on the
+    # nominal trailing half-plane.
+    trailing_slip = np.array([-0.00160, -0.02383, 0.02104])
+    selected, diagnostics = _gate_live_contact_offset_xy(
+        explicit_recontact,
+        trailing_slip,
+        push_direction_xy=np.array([0.0, 1.0]),
+        maximum_xy_drift=0.005,
+    )
+    assert np.allclose(selected, explicit_recontact)
+    assert diagnostics["accepted"] is False
+    assert diagnostics["reason"] == (
+        "live_offset_exceeds_explicit_anchor_gate"
+    )
 
 
 def test_push_timeout_acceptance_requires_real_contact_and_progress():
@@ -542,6 +578,34 @@ def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
     assert saturation["final_error_m"] == pytest.approx(np.sqrt(3.0))
     assert saturation["max_steps"] == 2
 
+    lost = FakeRollout()
+    timeout_called = []
+
+    def interrupt_after_confirmed_loss():
+        if lost.calls < 2:
+            return None
+        return {
+            "status": "robot_contact_lost_recontact_required",
+            "consecutive_contact_loss_steps": 2,
+        }
+
+    interruption = Rollout.move(
+        lost,
+        np.ones(3),
+        -1.0,
+        "task",
+        max_steps=4,
+        interruptor=interrupt_after_confirmed_loss,
+        timeout_acceptor=lambda _context: timeout_called.append(True),
+    )
+    assert lost.calls == 2
+    assert timeout_called == []
+    assert interruption["controller_interrupted"] is True
+    assert (
+        interruption["status"]
+        == "robot_contact_lost_recontact_required"
+    )
+
     missing = FakeRollout()
     with pytest.raises(RuntimeError, match="robot-plate contact not observed"):
         Rollout.move(
@@ -623,7 +687,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"live_plate_anchor"' in push_loop
     assert '"confirmed_contact_offset"' in push_loop
     assert "live_contact_offset = live_eef_before - live_plate_before" in push_loop
-    assert "_refresh_confirmed_contact_offset_xy(" in push_loop
+    assert "_gate_live_contact_offset_xy(" in push_loop
     assert (
         "confirmed_contact_offset[2] = confirmed_contact_z_offset"
         in push_loop
@@ -632,8 +696,20 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"confirmed_contact_offset_before_update"' in push_loop
     assert '"confirmed_contact_offset_after_update"' in push_loop
     assert '"contact_offset_update_source"' in push_loop
-    assert '"live_contact_xy_at_iteration_start"' in push_loop
-    assert '"recontact_confirmation_xy"' in push_loop
+    assert '"bounded_live_contact_xy"' in push_loop
+    assert '"explicit_recontact_anchor"' in push_loop
+    assert '"explicit_contact_anchor_retained"' in push_loop
+    assert "explicit_contact_anchor_offset" in push_loop
+    assert "contact_offset_gate" in push_loop
+    gate_rejection = push_loop[
+        push_loop.index(
+            'reason": "live_contact_offset_gate_rejected"'
+        ) :
+        push_loop.index("live_goal_distance = float(")
+    ]
+    assert "recontact_required_reason = rejection_event" in gate_rejection
+    assert "continue" in gate_rejection
+    assert "_live_plate_tracking_target(" not in gate_rejection
     assert push_loop.index(
         "live_eef_before - live_plate_before"
     ) < push_loop.index("_live_plate_tracking_target(")
@@ -657,7 +733,15 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"source_job": "499691"' in push_loop
     assert "horizon-safe live push calibration failed" in push_loop
     assert "step_observer=observe_push_step" in push_loop
+    assert "interruptor=interrupt_push_on_contact_loss" in push_loop
     assert "timeout_acceptor=accept_contact_progress_saturation" in push_loop
+    assert "robot_contact_lost_recontact_required" in push_loop
+    assert '"recontact_required_after_waypoint"' in push_loop
+    assert push_loop.index(
+        "robot_contact_lost_recontact_required"
+    ) < push_loop.index(
+        'if waypoint_record["recontact_required_after_waypoint"]'
+    )
     assert '"maximum_incremental_plate_progress_m"' in push_loop
     assert '"move_status": move_status' in push_loop
     assert '"tracking_timeout": move_timeout' in push_loop
@@ -671,6 +755,12 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"robot_plate_contact_counterparts_at_end"' in push_loop
     assert "L3-A3 push waypoint" in push_loop
     assert "no_robot_plate_contact_at_iteration_start" in push_loop
+    assert "recontact_required_reason is not None" in push_loop
+    assert (
+        "confirmed_robot_plate_contact_loss_during_push"
+        in push_loop
+    )
+    assert '"reason": recontact_trigger_reason' in push_loop
     assert "recontact_retreat_target" in push_loop
     assert "recontact_center_target" in push_loop
     assert "recontact_high_target" in push_loop
@@ -714,6 +804,16 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"--maximum_recontact_attempts", type=int, default=20' in producer
     assert '"--push_tracking_tolerance", type=float, default=0.002' in producer
     assert (
+        '"--maximum_live_contact_offset_xy_drift",\n'
+        "        type=float,\n"
+        "        default=0.005,"
+        in producer
+    )
+    assert (
+        '"--push_contact_loss_confirm_steps", type=int, default=2'
+        in producer
+    )
+    assert (
         '"--observed_push_progress_per_tracking_window",\n'
         "        type=float,\n"
         "        default=0.00245,"
@@ -738,6 +838,12 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "--minimum_saturated_waypoint_progress must be positive" in producer
     assert "--maximum_push_iterations must be positive" in producer
     assert "--maximum_recontact_attempts must be positive" in producer
+    assert "--push_contact_loss_confirm_steps must be positive" in producer
+    assert (
+        "--maximum_live_contact_offset_xy_drift must be positive"
+        in producer
+    )
+    assert 'default=0.00005' in producer
     assert "maximum_push_distance" not in producer
     assert "ignore_done=True" not in producer
     assert "rollout.horizon_reserve_steps = final_horizon_reserve_steps" in task_push
