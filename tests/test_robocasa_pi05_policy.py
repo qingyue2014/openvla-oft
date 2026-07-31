@@ -38,6 +38,13 @@ class _Controller:
 
 class _Robot:
     composite_controller = _Controller()
+    gripper = {
+        "right": type(
+            "_Gripper",
+            (),
+            {"speed": 0.2, "current_action": np.zeros(1)},
+        )()
+    }
 
 
 class _Env:
@@ -197,10 +204,29 @@ def test_map_rotates_libero_world_delta_into_pandaomron_base_frame():
 
 def test_pi05_policy_matches_official_ten_step_settling():
     assert Pi05RoboCasaPolicy.settle_steps == 10
-    mapped = Pi05RoboCasaPolicy.settle_action(_Env())
-    np.testing.assert_allclose(mapped[:10], 0.0)
-    assert mapped[10] == -1.0
+    env = _Env()
+    env.robots[0].gripper["right"].current_action = np.zeros(1)
+    for _ in range(10):
+        mapped = Pi05RoboCasaPolicy.settle_action(env)
+    np.testing.assert_allclose(mapped[:11], 0.0)
     assert mapped[11] == -1.0
+    np.testing.assert_allclose(
+        env.robots[0].gripper["right"].current_action,
+        [0.1, -0.1],
+    )
+
+
+def test_libero_gripper_timing_reverses_at_old_robosuite_rate():
+    env = _Env()
+    gripper = env.robots[0].gripper["right"]
+    gripper.current_action = np.array([0.1, -0.1])
+    mapped = map_libero_action_to_pandaomron(
+        np.array([0.0] * 6 + [1.0]),
+        env,
+        emulate_libero_gripper=True,
+    )
+    assert mapped[10] == 0.0
+    np.testing.assert_allclose(gripper.current_action, [0.09, -0.09])
 
 
 def test_map_rejects_unexpected_robot_interface():

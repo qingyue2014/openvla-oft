@@ -28,6 +28,8 @@ ROBOCASA_AGENT_CAMERAS = (
 )
 PI05_ACTION_DIM = 7
 ROBOCASA_ACTION_DIM = 12
+LIBERO_PANDA_GRIPPER_SPEED = 0.01
+ROBOCASA_PANDA_GRIPPER_SPEED = 0.2
 # Mean first-policy pose after the official ten-step wait, measured over the
 # 20 native LIBERO task-8 trajectories in the validated pi0.5 capability run.
 # This is an initial-pose anchor, not the all-timestep dataset mean.
@@ -303,7 +305,46 @@ def build_request(
     }
 
 
-def map_libero_action_to_pandaomron(action: np.ndarray, env: Any) -> np.ndarray:
+def _apply_libero_gripper_timing(action: float, env: Any) -> None:
+    """Advance the current Panda gripper command with LIBERO 1.4.1 timing.
+
+    Both robosuite versions convert the scalar command to a binary direction,
+    then integrate an internal two-finger command. LIBERO 1.4.1 integrates by
+    0.01 per control step, whereas the RoboCasa Panda gripper integrates by
+    0.2. Merely scaling ``action`` cannot compensate because ``format_action``
+    discards its magnitude with ``sign(action)``.
+
+    Advance the existing native gripper's controller state by the old 0.01
+    increment and send a zero scalar below. The native formatter then preserves
+    this already-updated command, exactly reproducing the old state machine
+    without replacing or modifying the robot asset.
+    """
+
+    grippers = getattr(env.robots[0], "gripper", None)
+    if not isinstance(grippers, Mapping) or "right" not in grippers:
+        raise ValueError("PandaOmron right gripper is unavailable")
+    gripper = grippers["right"]
+    speed = float(gripper.speed)
+    if not np.isclose(speed, ROBOCASA_PANDA_GRIPPER_SPEED):
+        raise ValueError(
+            "unexpected RoboCasa Panda gripper speed: "
+            f"{speed}; expected {ROBOCASA_PANDA_GRIPPER_SPEED}"
+        )
+    current = np.asarray(gripper.current_action, dtype=np.float64)
+    direction = np.array([-1.0, 1.0]) * np.sign(float(action))
+    gripper.current_action = np.clip(
+        current + LIBERO_PANDA_GRIPPER_SPEED * direction,
+        -1.0,
+        1.0,
+    )
+
+
+def map_libero_action_to_pandaomron(
+    action: np.ndarray,
+    env: Any,
+    *,
+    emulate_libero_gripper: bool = False,
+) -> np.ndarray:
     """Freeze the mobile body and map LIBERO's world-frame 7-D arm action.
 
     The robosuite 1.4.1 OSC used to collect and evaluate LIBERO applies its
@@ -345,7 +386,13 @@ def map_libero_action_to_pandaomron(action: np.ndarray, env: Any) -> np.ndarray:
     # A rotation vector transforms between coordinate frames in the same way
     # as a translation vector (R.T @ rotvec).
     mapped[3:6] = world_to_controller @ action[3:6]
-    mapped[10] = action[6]
+    if emulate_libero_gripper:
+        _apply_libero_gripper_timing(float(action[6]), env)
+        # The native formatter uses sign(action). A zero input preserves the
+        # LIBERO-speed current_action installed above.
+        mapped[10] = 0.0
+    else:
+        mapped[10] = action[6]
     mapped[11] = -1.0  # HybridMobileBase arm-control mode.
     return np.clip(mapped, np.asarray(low), np.asarray(high))
 
@@ -357,6 +404,7 @@ class Pi05RoboCasaPolicy:
     camera_names = (AGENT_CAMERA, WRIST_CAMERA)
     model_label = (
         "pi05_libero_cross_sim_initial_pose_world_delta_to_panda_base"
+        "_libero_gripper_timing"
     )
     # Match examples/libero/main.py: objects settle for ten simulator steps
     # under LIBERO_DUMMY_ACTION before the first policy request.
@@ -376,6 +424,7 @@ class Pi05RoboCasaPolicy:
         self.policy_preprocessing = pi05_preprocessing_label(self.image_mode)
         self.model_label = (
             "pi05_libero_cross_sim_initial_pose_world_delta_to_panda_base"
+            "_libero_gripper_timing"
             f"_camera_{self.agent_camera}_image_{self.image_mode}"
         )
         self.replan_steps = int(os.environ.get("PI05_REPLAN_STEPS", "5"))
@@ -411,6 +460,7 @@ class Pi05RoboCasaPolicy:
         return map_libero_action_to_pandaomron(
             np.array([0.0] * 6 + [-1.0], dtype=np.float32),
             env,
+            emulate_libero_gripper=True,
         )
 
     def policy_view_image(self, obs: Mapping[str, Any]) -> np.ndarray:
@@ -462,7 +512,11 @@ class Pi05RoboCasaPolicy:
             if not len(actions):
                 raise ValueError("pi0.5 returned an empty action chunk")
             self._queue.extend(actions[: self.replan_steps])
-        return map_libero_action_to_pandaomron(self._queue.popleft(), env)
+        return map_libero_action_to_pandaomron(
+            self._queue.popleft(),
+            env,
+            emulate_libero_gripper=True,
+        )
 
 
 def make_policy() -> Pi05RoboCasaPolicy:
