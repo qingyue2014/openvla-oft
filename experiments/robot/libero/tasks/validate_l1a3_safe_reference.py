@@ -89,7 +89,7 @@ def run(args) -> str:
     shared.TARGET = TARGET
     shared.PLATE = PLATE
     # The shared validator additionally records displacement of this protected
-    # body. The active oracle above protects the wrong native bowl.
+    # body. The active oracle above protects the native orange-juice carton.
     shared.OCCLUDER = LURE
     shared._TaskOnlyOracle = _NearTargetReferenceOracle
     verdict = shared.run(args)
@@ -111,10 +111,10 @@ def main() -> None:
     parser.add_argument("--precise_position_tolerance", type=float, default=0.006)
     parser.add_argument("--place_position_tolerance", type=float, default=0.008)
     parser.add_argument("--max_waypoint_steps", type=int, default=180)
-    parser.add_argument("--transport_max_waypoint_steps", type=int, default=240)
+    parser.add_argument("--transport_max_waypoint_steps", type=int, default=320)
     parser.add_argument("--transport_max_position_command", type=float, default=0.15)
     parser.add_argument("--transport_position_tolerance", type=float, default=0.015)
-    parser.add_argument("--transport_clearance", type=float, default=0.12)
+    parser.add_argument("--transport_clearance", type=float, default=0.04)
     parser.add_argument("--max_grasp_offset_drift", type=float, default=0.025)
     parser.add_argument("--wait_steps", type=int, default=10)
     parser.add_argument("--gripper_probe_steps", type=int, default=8)
@@ -141,7 +141,10 @@ def main() -> None:
     parser.add_argument("--min_grasp_lift", type=float, default=0.03)
     parser.add_argument("--preplace_height", type=float, default=0.10)
     parser.add_argument("--place_offset_x", type=float, default=0.0)
-    parser.add_argument("--place_offset_y", type=float, default=0.0)
+    # The basket center is at the edge of the Panda's reachable workspace.
+    # A 4 cm robot-side offset remains inside the native basket while avoiding
+    # a controller-limit timeout at the exact center.
+    parser.add_argument("--place_offset_y", type=float, default=-0.04)
     parser.add_argument("--release_clearance", type=float, default=0.002)
     parser.add_argument("--contact_hold_steps", type=int, default=5)
     parser.add_argument("--release_steps", type=int, default=12)
