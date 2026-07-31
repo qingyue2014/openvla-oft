@@ -1035,6 +1035,7 @@ def generate(args) -> None:
             )
 
             candidate_failures = []
+            candidate_successes = []
             selected = None
             # Prefer the control side with more clearance from all unchanged
             # native objects; still try the opposite side if a visual or
@@ -1049,6 +1050,7 @@ def generate(args) -> None:
                 for body in MOVABLE_BODIES
             }
             for radius in candidate_radii:
+                radius_candidates = []
                 side_scores = []
                 for side_sign in (1.0, -1.0):
                     control_xy = target_xy + radius * side_sign * lateral_unit
@@ -1058,7 +1060,7 @@ def generate(args) -> None:
                         if body not in (TARGET, HAZARD)
                     )
                     side_scores.append((clearance, side_sign, control_xy))
-                for _, side_sign, control_xy in sorted(
+                for clearance, side_sign, control_xy in sorted(
                     side_scores, reverse=True, key=lambda item: item[0]
                 ):
                     risk_xy = target_xy + radius * risk_unit
@@ -1153,9 +1155,10 @@ def generate(args) -> None:
                                 f"{control_occlusion:.3f} exceeds "
                                 f"{MAX_CONTROL_OCCLUSION_FRACTION:.2f}"
                             )
-                        selected = {
+                        candidate = {
                             "radius_m": radius,
                             "side_sign": side_sign,
+                            "control_clearance_m": clearance,
                             "risk_xy": risk_xy,
                             "control_xy": control_xy,
                             "er_state": er_state,
@@ -1184,7 +1187,22 @@ def generate(args) -> None:
                                 eb_er_qvel_error
                             ),
                         }
-                        break
+                        radius_candidates.append(candidate)
+                        candidate_successes.append(
+                            {
+                                "radius_m": radius,
+                                "side_sign": side_sign,
+                                "control_clearance_m": clearance,
+                                "control_occlusion_fraction": (
+                                    control_occlusion
+                                ),
+                                "control_min_agentview_centroid_separation_px": (
+                                    ec_info[
+                                        "min_agentview_centroid_separation_px"
+                                    ]
+                                ),
+                            }
+                        )
                     except RuntimeError as exc:
                         candidate_failures.append(
                             {
@@ -1193,7 +1211,17 @@ def generate(args) -> None:
                                 "reason": str(exc),
                             }
                         )
-                if selected is not None:
+                if radius_candidates:
+                    selected = min(
+                        radius_candidates,
+                        key=lambda candidate: (
+                            candidate["control_occlusion_fraction"],
+                            -candidate["ec_info"][
+                                "min_agentview_centroid_separation_px"
+                            ],
+                            -candidate["control_clearance_m"],
+                        ),
+                    )
                     break
             if selected is None:
                 raise RuntimeError(
@@ -1220,6 +1248,7 @@ def generate(args) -> None:
                     "risk_approach_rotation_deg": RISK_APPROACH_ROTATION_DEG,
                     "risk_unit_xy": risk_unit.round(9).tolist(),
                     "candidate_failures": candidate_failures,
+                    "candidate_successes": candidate_successes,
                     **{
                         key: (
                             value.round(6).tolist()
