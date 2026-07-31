@@ -74,6 +74,10 @@ from experiments.robot.libero.video_retention import (
 from experiments.robot.libero.tasks.native_state_replay import (
     materialize_native_scene_state,
 )
+from experiments.robot.libero.tasks.l3b_moka_runtime_gate import (
+    MokaOrderRuntimeGate,
+    MokaOrderRuntimeGateError,
+)
 from experiments.robot.libero.physcog_l3c import L3CConfig, TemporalSharedSpaceIntervention
 from experiments.robot.libero.run_libero_eval import (
     GenerateConfig as LiberoGenerateConfig,
@@ -285,12 +289,35 @@ def run_episode_with_safety(
     # LIBERO's OffScreenRenderEnv has no get_observation(); reset() and
     # set_init_state() both return the robosuite observation dict.
     obs = env.reset()
+    initial_state_record = (
+        initial_state if isinstance(initial_state, dict) else None
+    )
     if initial_state is not None:
         if isinstance(initial_state, dict):
             initial_state = materialize_native_scene_state(env, initial_state)
         obs = env.set_init_state(initial_state)
     if cfg.model_family == "pi05":
         model.reset()
+
+    runtime_initial_gate = {}
+    moka_runtime_gate = None
+    if cfg.native_only_preflight_manifest:
+        with open(
+            cfg.native_only_preflight_manifest, encoding="utf-8"
+        ) as handle:
+            runtime_preflight = json.load(handle)
+        runtime_scene = (
+            runtime_preflight.get("scenario")
+            or runtime_preflight.get("scene_id")
+        )
+        if runtime_scene == "L3-B-MOKA-ORDER":
+            if initial_state_record is None:
+                raise MokaOrderRuntimeGateError(
+                    "L3-B moka evaluation requires a bound HDF5 state record"
+                )
+            moka_runtime_gate = MokaOrderRuntimeGate(
+                env, initial_state_record
+            )
 
     l3c = None
     if cfg.l3c_condition != "off":
@@ -458,10 +485,22 @@ def run_episode_with_safety(
                 obs, reward, done, info = env.step(dummy_action)
                 if recorder is not None:
                     recorder.record(obs, dummy_action, t, phase="wait")
+                if moka_runtime_gate is not None:
+                    moka_runtime_gate.observe()
                 if cfg.support_check_during_wait:
                     check_safety(obs, dummy_action, t)
                 t += 1
                 continue
+
+            if (
+                moka_runtime_gate is not None
+                and not moka_runtime_gate.finalized
+            ):
+                runtime_initial_gate = moka_runtime_gate.finalize()
+                log_message(
+                    "L3-B moka exact first-policy physical gate: PASS",
+                    log_file,
+                )
 
             if not oracle_ready:
                 oracle.reset(env, obs)
@@ -571,6 +610,10 @@ def run_episode_with_safety(
                         break
                 break
             t += 1
+    except MokaOrderRuntimeGateError:
+        # Scene validity errors invalidate the whole job.  They must never be
+        # converted into ordinary policy failures and included in metrics.
+        raise
     except Exception as exc:
         log_message(f"Episode error: {exc}", log_file)
 
@@ -751,6 +794,7 @@ def run_episode_with_safety(
         "trajectory_recorder": recorder,
         "wrist_images": wrist_images,
         "l3c_metrics": {} if l3c is None else l3c.metrics(),
+        "runtime_initial_gate": runtime_initial_gate,
         "oracle_metrics": oracle.metrics(),
         "gripper_metrics": gripper_metrics,
     }
@@ -835,6 +879,15 @@ def run_task_with_safety(
             native_record.get("scenario") or native_record.get("scene_id")
         ) == "L3-A4":
             from experiments.robot.libero.tasks.validate_l3a4_native_preflight import (
+                verify_evaluation_request,
+                verify_runtime_asset_inventory,
+            )
+
+            native_runtime_inventory_check = verify_runtime_asset_inventory
+        elif (
+            native_record.get("scenario") or native_record.get("scene_id")
+        ) == "L3-B-MOKA-ORDER":
+            from experiments.robot.libero.tasks.validate_l3b_moka_native_preflight import (
                 verify_evaluation_request,
                 verify_runtime_asset_inventory,
             )
@@ -1090,6 +1143,10 @@ def _save_episode_trajectory(
         "model_collapse": bool(diagnostics.get("model_collapse", False)),
     }
     metadata.update(diagnostics.get("l3c_metrics", {}))
+    if diagnostics.get("runtime_initial_gate"):
+        metadata["runtime_initial_gate"] = diagnostics[
+            "runtime_initial_gate"
+        ]
     metadata.update(diagnostics.get("oracle_metrics", {}))
     metadata.update(diagnostics.get("gripper_metrics", {}))
     try:
