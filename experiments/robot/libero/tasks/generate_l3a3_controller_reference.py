@@ -1108,6 +1108,9 @@ def _constraint_prioritized_outside_descent_action(
         or not (0.0 < maximum_translation_action <= 1.0)
     ):
         raise ValueError("outside descent bounds must be finite and positive")
+    allocation_translation_action_bound = float(
+        np.nextafter(maximum_translation_action, 0.0)
+    )
     outward /= outward_norm
     lateral_error = outside_side_target[:2] - current_eef[:2]
     raw_outward_error = float(np.dot(lateral_error, outward))
@@ -1122,10 +1125,10 @@ def _constraint_prioritized_outside_descent_action(
     requested_lateral_norm = float(
         np.linalg.norm(requested_lateral_action)
     )
-    if requested_lateral_norm >= maximum_translation_action:
+    if requested_lateral_norm >= allocation_translation_action_bound:
         lateral_action = (
             requested_lateral_action
-            * float(maximum_translation_action)
+            * allocation_translation_action_bound
             / requested_lateral_norm
         )
         remaining_vertical_action = 0.0
@@ -1135,7 +1138,7 @@ def _constraint_prioritized_outside_descent_action(
             np.sqrt(
                 max(
                     0.0,
-                    float(maximum_translation_action) ** 2
+                    allocation_translation_action_bound**2
                     - requested_lateral_norm**2,
                 )
             )
@@ -1151,10 +1154,33 @@ def _constraint_prioritized_outside_descent_action(
     action[:2] = lateral_action
     action[2] = -commanded_vertical_action
     action[-1] = float(gripper)
+    pre_rescale_translation_norm = float(
+        np.linalg.norm(action[:3])
+    )
+    numeric_inward_rescale_applied = False
+    if (
+        pre_rescale_translation_norm
+        > allocation_translation_action_bound
+    ):
+        numeric_inward_rescale_applied = True
+        inward_rescale_target = float(
+            np.nextafter(
+                allocation_translation_action_bound,
+                0.0,
+            )
+        )
+        action[:3] *= (
+            inward_rescale_target / pre_rescale_translation_norm
+        )
     translation_norm = float(np.linalg.norm(action[:3]))
     if translation_norm > maximum_translation_action:
         raise RuntimeError(
-            "constraint-prioritized descent exceeded controller bound"
+            "constraint-prioritized descent exceeded controller bound "
+            f"after strict inward numerical allocation: configured_bound="
+            f"{maximum_translation_action!r} allocation_bound="
+            f"{allocation_translation_action_bound!r} pre_rescale_norm="
+            f"{pre_rescale_translation_norm!r} final_norm="
+            f"{translation_norm!r}"
         )
     return action, {
         "formula": (
@@ -1169,12 +1195,27 @@ def _constraint_prioritized_outside_descent_action(
         "commanded_outward_error_m": safe_outward_error,
         "tangential_error_xy_m": tangential_error.tolist(),
         "requested_lateral_action": requested_lateral_action.tolist(),
-        "commanded_lateral_action": lateral_action.tolist(),
+        "pre_rescale_lateral_action": lateral_action.tolist(),
+        "commanded_lateral_action": action[:2].tolist(),
         "remaining_vertical_action": remaining_vertical_action,
         "requested_vertical_action": requested_vertical_action,
-        "commanded_vertical_action": commanded_vertical_action,
+        "pre_rescale_vertical_action": commanded_vertical_action,
+        "commanded_vertical_action": float(-action[2]),
         "maximum_descent_m": float(maximum_descent_m),
+        "pre_rescale_translation_action_norm": (
+            pre_rescale_translation_norm
+        ),
         "translation_action_norm": translation_norm,
+        "allocation_translation_action_bound": (
+            allocation_translation_action_bound
+        ),
+        "allocation_numeric_guard": float(
+            maximum_translation_action
+            - allocation_translation_action_bound
+        ),
+        "numeric_inward_rescale_applied": (
+            numeric_inward_rescale_applied
+        ),
         "maximum_translation_action": float(
             maximum_translation_action
         ),
@@ -2430,6 +2471,8 @@ def _seek_stable_plate_contact(
                 "outside-side geometry feedback concluded the native "
                 "orientation is infeasible before table contact: "
                 f"source={source} guard_step={guard_step} "
+                f"cause_type={type(exc).__name__} "
+                f"cause_message={str(exc)!r} "
                 f"guard={json.dumps(latest_outside_side_guard, sort_keys=True)} "
                 f"samples={json.dumps(samples, sort_keys=True)} "
                 f"scene={json.dumps(diagnostics(), sort_keys=True)}"

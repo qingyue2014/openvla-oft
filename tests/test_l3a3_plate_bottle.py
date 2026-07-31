@@ -794,9 +794,26 @@ def test_499921_two_mm_live_clearance_proceeds_with_zero_compiled_margin():
     assert feedback["descent_path_control"] is not None
 
 
-def test_500070_descent_prioritizes_compiled_outside_xy_without_inward_action():
-    current = np.array([0.132674157, -0.028638039, 1.061509291])
-    target = np.array([0.136806395, -0.028507780, 0.898654346])
+def test_500088_descent_norm_is_strictly_inside_bound_without_inward_action():
+    current = np.array(
+        [
+            0.13267415665529797,
+            -0.028638039484225563,
+            1.0615092907889767,
+        ]
+    )
+    target = np.array(
+        [0.13680639548403947, -0.02850777957668001, 0.917769758]
+    )
+    requested_lateral = (target[:2] - current[:2]) / 0.08
+    old_vertical = np.sqrt(
+        0.10**2 - np.linalg.norm(requested_lateral) ** 2
+    )
+    old_translation_norm = np.linalg.norm(
+        [requested_lateral[0], requested_lateral[1], old_vertical]
+    )
+    assert old_translation_norm > 0.10
+
     action, evidence = _constraint_prioritized_outside_descent_action(
         current_eef=current,
         outside_side_target=target,
@@ -814,7 +831,42 @@ def test_500070_descent_prioritizes_compiled_outside_xy_without_inward_action():
     assert evidence["commanded_outward_error_m"] == pytest.approx(
         target[0] - current[0]
     )
-    assert evidence["translation_action_norm"] == pytest.approx(0.10)
+    strict_allocation_bound = np.nextafter(0.10, 0.0)
+    assert evidence["allocation_translation_action_bound"] == (
+        strict_allocation_bound
+    )
+    assert evidence["allocation_numeric_guard"] == (
+        0.10 - strict_allocation_bound
+    )
+    assert evidence["pre_rescale_translation_action_norm"] <= (
+        strict_allocation_bound
+    )
+    assert evidence["translation_action_norm"] <= (
+        strict_allocation_bound
+    )
+    assert np.linalg.norm(action[:3]) <= 0.10
+
+    # A second representable construction can round back up to 0.10 even
+    # after using nextafter; the strict inward fallback rescales it.
+    action, rounding_evidence = (
+        _constraint_prioritized_outside_descent_action(
+            current_eef=np.array([0.0, 0.0, 1.0]),
+            outside_side_target=np.array([1.6e-8, 0.0, 0.9]),
+            outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_descent_m=0.1,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            maximum_translation_action=0.10,
+        )
+    )
+    assert rounding_evidence[
+        "pre_rescale_translation_action_norm"
+    ] > strict_allocation_bound
+    assert rounding_evidence["numeric_inward_rescale_applied"] is True
+    assert rounding_evidence["translation_action_norm"] <= (
+        strict_allocation_bound
+    )
+    assert np.linalg.norm(action[:3]) <= 0.10
 
     # Overshooting the compiled outside target never produces an inward
     # command; the freed controller norm is allocated to descent.
@@ -1833,6 +1885,8 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_compiled_side_contact_eef_z_feasibility(" in compiled_plan
     assert "finger_vertical_bounds_from_eef" in compiled_plan
     assert "finger_table_clearance_derivation" in compiled_plan
+    assert "cause_type={type(exc).__name__}" in bounded_seek
+    assert "cause_message={str(exc)!r}" in bounded_seek
     assert "env.set_state" not in compiled_plan
     assert "set_init_state" not in compiled_plan
     assert "rollout.move(" in bounded_seek
