@@ -14,6 +14,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _contact_depth_sample_validity,
     _contact_progress_saturation_evidence,
     _constraint_prioritized_outside_descent_action,
+    _compiled_adaptive_lateral_rebuffer_action,
     _compiled_adaptive_vertical_descent_action,
     _compiled_collision_pair_clearance,
     _compiled_pair_set_clearance,
@@ -1976,6 +1977,229 @@ def test_adaptive_descent_fails_closed_without_runtime_native_action_spec():
         match="native OSC action bounds unavailable",
     ):
         _native_osc_action_spec_evidence(SimpleNamespace())
+
+
+def test_500174_lateral_rebuffer_is_adaptive_and_skips_repeat_zero():
+    class NativeEnv:
+        action_spec = (
+            -np.ones(7, dtype=float),
+            np.ones(7, dtype=float),
+        )
+
+    native_spec = _native_osc_action_spec_evidence(
+        SimpleNamespace(env=NativeEnv())
+    )
+    strict_clearance = np.nextafter(0.0, np.inf)
+    worst_observed_buffer_deficit_m = 0.0007891997997737984
+    pairs = [
+        {
+            "gripper_geom": f"gripper_collision_{index // 11}",
+            "counterpart_geom": f"native_counterpart_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": (
+                strict_clearance
+                + 0.016
+                - (worst_observed_buffer_deficit_m if index == 0 else 0.0)
+            ),
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    overhead_guard = {
+        "accepted": True,
+        "one_step_vertical_reserve_m": 0.008,
+        "pairs": pairs,
+    }
+    lateral_buffer = _overhead_lateral_buffer_evidence(
+        overhead_guard,
+        worst_case_controller_world_step_m=0.008,
+    )
+    assert lateral_buffer["accepted"] is False
+    outside_guard = {
+        "minimum_outside_clearance_m": -0.03,
+        "required_outside_clearance_m": strict_clearance,
+        "finger_table_vertical_clearance_m": 0.05,
+        "required_finger_table_clearance_m": strict_clearance,
+    }
+
+    action, proof = _compiled_adaptive_lateral_rebuffer_action(
+        current_eef=np.array([0.10, -0.03, 0.96]),
+        overhead_guard=overhead_guard,
+        overhead_lateral_buffer=lateral_buffer,
+        outside_side_guard=outside_guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native_spec,
+        expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
+    )
+    assert np.array_equal(action[:2], np.zeros(2))
+    assert 0.10 < action[2] < 1.0
+    assert proof["compiled_pair_count"] == 55
+    assert proof["native_action_spec_source"] == "env.env.action_spec"
+    assert proof["maximum_live_buffer_deficit_m"] == pytest.approx(
+        worst_observed_buffer_deficit_m
+    )
+    assert proof["requested_positive_world_delta_m"] == pytest.approx(
+        0.008 + worst_observed_buffer_deficit_m
+    )
+    assert proof["commanded_positive_world_delta_m"] == pytest.approx(
+        0.008 + worst_observed_buffer_deficit_m
+    )
+    assert proof["minimum_predicted_post_command_base8_surplus_m"] > 0.0
+    assert proof["minimum_predicted_post_command_buffer16_surplus_m"] > 0.0
+    assert len(proof["pair_envelopes"]) == 55
+    assert proof["proof"] == {
+        "pure_positive_z": True,
+        "strictly_inside_native_z_action_bound": True,
+        "outside_xy_clearance_not_worsened_by_pure_z": True,
+        "all_compiled_pairs_retain_strict_no_contact": True,
+        "all_compiled_pairs_retain_strict_base8": True,
+        "all_compiled_pairs_reach_strict_buffer16": True,
+    }
+
+    # A delayed negative tail may survive after buffer16 has already become
+    # positive.  Rebuffer must keep braking until measured dz is nonnegative,
+    # without inserting a zero-confirm action or failing merely because the
+    # buffer is already recovered.
+    recovered_pairs = [
+        {
+            **pair,
+            "vertical_clearance_m": (
+                pair["strict_no_contact_clearance_m"] + 0.017
+            ),
+        }
+        for pair in pairs
+    ]
+    recovered_guard = {**overhead_guard, "pairs": recovered_pairs}
+    recovered_buffer = _overhead_lateral_buffer_evidence(
+        recovered_guard,
+        worst_case_controller_world_step_m=0.008,
+    )
+    assert recovered_buffer["accepted"] is True
+    tail_brake_action, tail_brake_proof = (
+        _compiled_adaptive_lateral_rebuffer_action(
+            current_eef=np.array([0.10, -0.03, 0.97]),
+            overhead_guard=recovered_guard,
+            overhead_lateral_buffer=recovered_buffer,
+            outside_side_guard=outside_guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_spec,
+            expected_pair_count=55,
+            worst_case_controller_world_step_m=0.008,
+        )
+    )
+    assert np.array_equal(tail_brake_action[:2], np.zeros(2))
+    assert tail_brake_action[2] > 0.10
+    assert tail_brake_proof["maximum_live_buffer_deficit_m"] == 0.0
+    assert tail_brake_proof["requested_positive_world_delta_m"] == (
+        pytest.approx(0.008)
+    )
+    assert tail_brake_proof[
+        "minimum_predicted_post_command_buffer16_surplus_m"
+    ] > 0.008
+
+    bounded_seek = CONTROLLER_REFERENCE.read_text().split(
+        "def _seek_stable_plate_contact(", 1
+    )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    assert '"lateral_rebuffer_brake": 0' in bounded_seek
+    assert "_compiled_adaptive_lateral_rebuffer_action(" in bounded_seek
+    assert bounded_seek.count(
+        'structural_stage = "lateral_rebuffer_brake"'
+    ) >= 2
+    initial_descent_transition = bounded_seek.split(
+        'if stage_before_action == "overhead_center_descent":', 1
+    )[1].split('elif stage_before_action == "vertical_tail_brake":', 1)[0]
+    assert 'structural_stage = "vertical_tail_brake"' in (
+        initial_descent_transition
+    )
+    initial_brake_transition = bounded_seek.split(
+        'elif stage_before_action == "vertical_tail_brake":', 1
+    )[1].split(
+        'elif stage_before_action == "lateral_rebuffer_brake":', 1
+    )[0]
+    assert 'structural_stage = "vertical_tail_zero_confirmation"' in (
+        initial_brake_transition
+    )
+    lateral_rebuffer_transition = bounded_seek.split(
+        'elif stage_before_action == "lateral_rebuffer_brake":', 1
+    )[1].split(
+        'elif stage_before_action == "vertical_tail_zero_confirmation":', 1
+    )[0]
+    assert 'structural_stage = "overhead_corridor_lateral"' in (
+        lateral_rebuffer_transition
+    )
+    assert "measured_vertical_step_progress_m >= 0.0" in (
+        lateral_rebuffer_transition
+    )
+    assert 'latest_overhead_lateral_buffer["accepted"]' in (
+        lateral_rebuffer_transition
+    )
+    assert "vertical_tail_zero_confirmation" not in (
+        lateral_rebuffer_transition
+    )
+    assert "compiled_overhead_one_step_vertical_reserve_lost" in bounded_seek
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in CONTROLLER_REFERENCE.read_text()
+    )
+
+
+def test_adaptive_lateral_rebuffer_fails_closed_on_invalid_live_geometry():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    strict_clearance = np.nextafter(0.0, np.inf)
+    pair = {
+        "gripper_geom": "gripper0_hand_collision",
+        "counterpart_geom": "plate_1_g0",
+        "counterpart_kind": "plate",
+        "strict_no_contact_clearance_m": strict_clearance,
+        "vertical_clearance_m": 0.015,
+        "accepted": True,
+    }
+    guard = {
+        "accepted": True,
+        "one_step_vertical_reserve_m": 0.008,
+        "pairs": [pair],
+    }
+    buffer = _overhead_lateral_buffer_evidence(
+        guard,
+        worst_case_controller_world_step_m=0.008,
+    )
+    kwargs = {
+        "current_eef": np.array([0.10, -0.03, 0.96]),
+        "overhead_guard": guard,
+        "overhead_lateral_buffer": buffer,
+        "outside_side_guard": {
+            "minimum_outside_clearance_m": -0.03,
+            "required_outside_clearance_m": strict_clearance,
+        },
+        "gripper": -1.0,
+        "position_action_scale": 0.08,
+        "native_action_spec": native_spec,
+        "expected_pair_count": 1,
+        "worst_case_controller_world_step_m": 0.008,
+    }
+    with pytest.raises(RuntimeError, match="base overhead reserve"):
+        _compiled_adaptive_lateral_rebuffer_action(
+            **{
+                **kwargs,
+                "overhead_guard": {**guard, "accepted": False},
+            }
+        )
+    with pytest.raises(RuntimeError, match="pair inventory changed"):
+        _compiled_adaptive_lateral_rebuffer_action(
+            **{**kwargs, "expected_pair_count": 55}
+        )
 
 
 def test_499954_saturated_recovery_follows_improving_discrete_response():

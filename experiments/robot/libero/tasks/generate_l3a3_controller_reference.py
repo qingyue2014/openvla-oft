@@ -2455,6 +2455,299 @@ def _compiled_adaptive_vertical_descent_action(
     }
 
 
+def _compiled_adaptive_lateral_rebuffer_action(
+    *,
+    current_eef,
+    overhead_guard,
+    overhead_lateral_buffer,
+    outside_side_guard,
+    gripper,
+    position_action_scale,
+    native_action_spec,
+    expected_pair_count,
+    worst_case_controller_world_step_m,
+):
+    """Lift in pure Z from every live pair's exact buffer deficit."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    if current_eef.shape != (3,) or not np.all(np.isfinite(current_eef)):
+        raise ValueError("adaptive lateral-rebuffer current EEF is invalid")
+    if (
+        not np.isfinite(position_action_scale)
+        or position_action_scale <= 0.0
+        or not np.isfinite(worst_case_controller_world_step_m)
+        or worst_case_controller_world_step_m <= 0.0
+    ):
+        raise ValueError("adaptive lateral-rebuffer scales are invalid")
+    if not isinstance(expected_pair_count, (int, np.integer)):
+        raise ValueError("expected compiled pair count must be an integer")
+    overhead_pairs = list(overhead_guard.get("pairs", ()))
+    buffer_pairs = list(overhead_lateral_buffer.get("pairs", ()))
+    if (
+        expected_pair_count <= 0
+        or len(overhead_pairs) != int(expected_pair_count)
+        or len(buffer_pairs) != int(expected_pair_count)
+    ):
+        raise RuntimeError(
+            "live compiled overhead pair inventory changed before adaptive "
+            "lateral rebuffer: "
+            f"expected={expected_pair_count} "
+            f"overhead={len(overhead_pairs)} buffer={len(buffer_pairs)}"
+        )
+    if not overhead_guard.get("accepted", False):
+        raise RuntimeError(
+            "adaptive lateral rebuffer cannot start after the base overhead "
+            "reserve has already been lost"
+        )
+    try:
+        native_low = np.asarray(native_action_spec["low"], dtype=float)
+        native_high = np.asarray(native_action_spec["high"], dtype=float)
+        native_source = str(native_action_spec["source"])
+    except Exception as exc:
+        raise RuntimeError(
+            "native OSC action-bound evidence is incomplete"
+        ) from exc
+    if (
+        not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(native_low < native_high)
+        or native_high[2] <= 0.0
+        or not (native_low[6] <= gripper <= native_high[6])
+    ):
+        raise RuntimeError(
+            "native OSC action bounds do not prove the requested pure +Z "
+            "lateral rebuffer"
+        )
+
+    base_reserve = float(overhead_guard["one_step_vertical_reserve_m"])
+    buffer_base_reserve = float(
+        overhead_lateral_buffer["base_overhead_reserve_m"]
+    )
+    buffer_world_step = float(
+        overhead_lateral_buffer["worst_case_controller_world_step_m"]
+    )
+    if (
+        not np.isfinite(base_reserve)
+        or base_reserve <= 0.0
+        or buffer_base_reserve != base_reserve
+        or buffer_world_step != float(worst_case_controller_world_step_m)
+    ):
+        raise RuntimeError(
+            "live lateral-buffer derivation no longer matches the unchanged "
+            "base8/controller-step envelope"
+        )
+
+    pair_envelopes = []
+    maximum_buffer_deficit = 0.0
+    for index, (pair, buffer_pair) in enumerate(
+        zip(overhead_pairs, buffer_pairs)
+    ):
+        strict_clearance = float(pair["strict_no_contact_clearance_m"])
+        vertical_clearance = float(pair["vertical_clearance_m"])
+        required_base = float(strict_clearance + base_reserve)
+        required_buffer = float(
+            required_base + worst_case_controller_world_step_m
+        )
+        if (
+            pair.get("gripper_geom") != buffer_pair.get("gripper_geom")
+            or pair.get("counterpart_geom")
+            != buffer_pair.get("counterpart_geom")
+            or pair.get("counterpart_kind")
+            != buffer_pair.get("counterpart_kind")
+            or float(buffer_pair["vertical_clearance_m"])
+            != vertical_clearance
+            or float(buffer_pair["strict_no_contact_clearance_m"])
+            != strict_clearance
+            or float(buffer_pair["required_lateral_entry_clearance_m"])
+            != required_buffer
+        ):
+            raise RuntimeError(
+                "live overhead and lateral-buffer pair evidence diverged: "
+                f"index={index}"
+            )
+        current_base_surplus = float(vertical_clearance - required_base)
+        current_buffer_surplus = float(vertical_clearance - required_buffer)
+        if (
+            not np.isfinite(strict_clearance)
+            or strict_clearance < 0.0
+            or not np.isfinite(vertical_clearance)
+            or not pair.get("accepted", False)
+            or current_base_surplus <= 0.0
+        ):
+            raise RuntimeError(
+                "compiled pair cannot prove strict contact/base8 safety for "
+                f"adaptive lateral rebuffer: index={index}"
+            )
+        buffer_deficit = float(max(0.0, -current_buffer_surplus))
+        maximum_buffer_deficit = max(
+            maximum_buffer_deficit, buffer_deficit
+        )
+        pair_envelopes.append(
+            {
+                "pair_index": int(index),
+                "gripper_geom": pair["gripper_geom"],
+                "counterpart_geom": pair["counterpart_geom"],
+                "counterpart_kind": pair["counterpart_kind"],
+                "current_vertical_clearance_m": vertical_clearance,
+                "strict_no_contact_clearance_m": strict_clearance,
+                "required_clearance_with_base8_m": required_base,
+                "required_clearance_with_buffer16_m": required_buffer,
+                "current_base8_surplus_m": current_base_surplus,
+                "current_buffer16_surplus_m": current_buffer_surplus,
+                "live_buffer16_deficit_m": buffer_deficit,
+            }
+        )
+    # Refill the exact worst live deficit and one unchanged controller-step
+    # tail.  If buffer16 is already positive but a delayed negative dz remains,
+    # the deficit is zero and this still supplies the unchanged +Z tail brake.
+    # The tail is not a relaxed threshold: it is the same 8 mm term already
+    # used to derive buffer16 and protects the immediately resumed XY action
+    # against its proved worst-case downward response.
+    requested_delta = float(
+        np.nextafter(
+            maximum_buffer_deficit
+            + float(worst_case_controller_world_step_m),
+            np.inf,
+        )
+    )
+    strict_native_positive_z_action = float(
+        np.nextafter(float(native_high[2]), 0.0)
+    )
+    native_world_capacity = float(
+        strict_native_positive_z_action * position_action_scale
+    )
+    if (
+        strict_native_positive_z_action <= 0.0
+        or native_world_capacity < requested_delta
+    ):
+        raise RuntimeError(
+            "runtime native +Z action bound cannot prove one-step recovery "
+            "of the live buffer16 deficit plus the unchanged lateral tail: "
+            f"requested_m={requested_delta} capacity_m={native_world_capacity}"
+        )
+    commanded_delta = requested_delta
+    commanded_z_action = float(commanded_delta / position_action_scale)
+    if not 0.0 < commanded_z_action < native_high[2]:
+        raise RuntimeError(
+            "adaptive lateral-rebuffer command has no strict native +Z "
+            "interior"
+        )
+
+    minimum_contact_surplus = float("inf")
+    minimum_base_surplus = float("inf")
+    minimum_buffer_surplus = float("inf")
+    for record in pair_envelopes:
+        predicted_clearance = float(
+            record["current_vertical_clearance_m"] + commanded_delta
+        )
+        contact_surplus = float(
+            predicted_clearance
+            - record["strict_no_contact_clearance_m"]
+        )
+        base_surplus = float(
+            predicted_clearance
+            - record["required_clearance_with_base8_m"]
+        )
+        buffer_surplus = float(
+            predicted_clearance
+            - record["required_clearance_with_buffer16_m"]
+        )
+        record.update(
+            {
+                "predicted_post_command_vertical_clearance_m": (
+                    predicted_clearance
+                ),
+                "predicted_post_command_strict_contact_surplus_m": (
+                    contact_surplus
+                ),
+                "predicted_post_command_base8_surplus_m": base_surplus,
+                "predicted_post_command_buffer16_surplus_m": buffer_surplus,
+            }
+        )
+        minimum_contact_surplus = min(
+            minimum_contact_surplus, contact_surplus
+        )
+        minimum_base_surplus = min(minimum_base_surplus, base_surplus)
+        minimum_buffer_surplus = min(
+            minimum_buffer_surplus, buffer_surplus
+        )
+    if (
+        minimum_contact_surplus <= 0.0
+        or minimum_base_surplus <= 0.0
+        or minimum_buffer_surplus <= 0.0
+    ):
+        raise RuntimeError(
+            "adaptive lateral-rebuffer action violated its direct all-pair "
+            "contact/base8/buffer16 proof"
+        )
+
+    outside_clearance = float(
+        outside_side_guard["minimum_outside_clearance_m"]
+    )
+    required_outside_clearance = float(
+        outside_side_guard["required_outside_clearance_m"]
+    )
+    if not (
+        np.isfinite(outside_clearance)
+        and np.isfinite(required_outside_clearance)
+    ):
+        raise RuntimeError(
+            "live outside-side evidence is invalid before lateral rebuffer"
+        )
+    action = np.zeros(7, dtype=float)
+    action[2] = commanded_z_action
+    action[-1] = float(gripper)
+    return action, {
+        "formula": (
+            "take the maximum live deficit to the unchanged strict+base8+"
+            "one-controller-step buffer16 envelope over every compiled pair, "
+            "add that same unchanged controller-step tail for the immediately "
+            "resumed XY action, and require the resulting pure +Z command to "
+            "remain strictly inside the runtime native action bound"
+        ),
+        "current_eef": current_eef.tolist(),
+        "position_action_scale_m_per_normalized_action": float(
+            position_action_scale
+        ),
+        "native_action_spec_source": native_source,
+        "native_z_action_bounds": [
+            float(native_low[2]),
+            float(native_high[2]),
+        ],
+        "strict_native_positive_z_world_delta_capacity_m": (
+            native_world_capacity
+        ),
+        "compiled_pair_count": len(pair_envelopes),
+        "pair_envelopes": pair_envelopes,
+        "maximum_live_buffer_deficit_m": maximum_buffer_deficit,
+        "requested_positive_world_delta_m": requested_delta,
+        "commanded_positive_world_delta_m": commanded_delta,
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_z_action": commanded_z_action,
+        "pre_action_outside_side_guard": dict(outside_side_guard),
+        "minimum_predicted_post_command_contact_surplus_m": (
+            minimum_contact_surplus
+        ),
+        "minimum_predicted_post_command_base8_surplus_m": (
+            minimum_base_surplus
+        ),
+        "minimum_predicted_post_command_buffer16_surplus_m": (
+            minimum_buffer_surplus
+        ),
+        "proof": {
+            "pure_positive_z": True,
+            "strictly_inside_native_z_action_bound": True,
+            "outside_xy_clearance_not_worsened_by_pure_z": True,
+            "all_compiled_pairs_retain_strict_no_contact": True,
+            "all_compiled_pairs_retain_strict_base8": True,
+            "all_compiled_pairs_reach_strict_buffer16": True,
+        },
+    }
+
+
 def _fixed_xy_vertical_approach_action(
     *,
     current_eef,
@@ -3877,6 +4170,7 @@ def _seek_stable_plate_contact(
     structural_stage_action_counts = {
         "overhead_center_descent": 0,
         "vertical_tail_brake": 0,
+        "lateral_rebuffer_brake": 0,
         "vertical_tail_zero_confirmation": 0,
         "overhead_corridor_lateral": 0,
         "vertical_corridor_descent": 0,
@@ -3925,6 +4219,30 @@ def _seek_stable_plate_contact(
                 }
             )
             structural_stage = "vertical_tail_zero_confirmation"
+        if (
+            structural_stage == "lateral_rebuffer_brake"
+            and latest_vertical_step_progress_m is not None
+            and latest_vertical_step_progress_m >= 0.0
+            and latest_overhead_lateral_buffer["accepted"]
+        ):
+            vertical_tail_events.append(
+                {
+                    "guard_step": int(guard_step),
+                    "event": (
+                        "lateral_rebuffer_pre_action_recovered_directly_to_xy"
+                    ),
+                    "measured_vertical_step_progress_m": (
+                        latest_vertical_step_progress_m
+                    ),
+                    "minimum_lateral_entry_buffer_surplus_m": (
+                        latest_overhead_lateral_buffer[
+                            "minimum_lateral_entry_buffer_surplus_m"
+                        ]
+                    ),
+                }
+            )
+            structural_stage = "overhead_corridor_lateral"
+            overhead_horizontal_z = float(current_eef[2])
         if structural_stage == "overhead_corridor_lateral":
             lateral_pre_action_interlock = (
                 _overhead_lateral_interlock_evidence(
@@ -3944,7 +4262,7 @@ def _seek_stable_plate_contact(
                         **lateral_pre_action_interlock,
                     }
                 )
-                structural_stage = "vertical_tail_brake"
+                structural_stage = "lateral_rebuffer_brake"
         if structural_stage == "fixed_safe_z_lateral_approach":
             lateral_error = float(
                 np.linalg.norm(
@@ -4012,6 +4330,50 @@ def _seek_stable_plate_contact(
                         latest_overhead_lateral_buffer
                     )
                 ),
+                **(
+                    {
+                        "lateral_pre_action_interlock": (
+                            lateral_pre_action_interlock
+                        )
+                    }
+                    if lateral_pre_action_interlock is not None
+                    else {}
+                ),
+            }
+        elif structural_stage == "lateral_rebuffer_brake":
+            action, path_control = (
+                _compiled_adaptive_lateral_rebuffer_action(
+                    current_eef=current_eef,
+                    overhead_guard=latest_overhead_guard,
+                    overhead_lateral_buffer=(
+                        latest_overhead_lateral_buffer
+                    ),
+                    outside_side_guard=pre_action_guard,
+                    gripper=gripper,
+                    position_action_scale=args.position_action_scale,
+                    native_action_spec=native_action_spec,
+                    expected_pair_count=len(
+                        overhead_staging_geometry["pairs"]
+                    ),
+                    worst_case_controller_world_step_m=(
+                        maximum_controller_world_step
+                    ),
+                )
+            )
+            feedback = {
+                "mode": structural_stage,
+                "action": action.tolist(),
+                "compiled_adaptive_lateral_rebuffer_envelope": path_control,
+                "pre_action_measured_vertical_step_progress_m": (
+                    latest_vertical_step_progress_m
+                ),
+                "pre_action_overhead_guard": latest_overhead_guard,
+                "pre_action_overhead_lateral_buffer": (
+                    _overhead_lateral_buffer_frame_summary(
+                        latest_overhead_lateral_buffer
+                    )
+                ),
+                "pre_action_outside_side_guard": pre_action_guard,
                 **(
                     {
                         "lateral_pre_action_interlock": (
@@ -4200,6 +4562,7 @@ def _seek_stable_plate_contact(
         if stage_before_action in {
             "overhead_center_descent",
             "vertical_tail_brake",
+            "lateral_rebuffer_brake",
             "vertical_tail_zero_confirmation",
             "overhead_corridor_lateral",
         }:
@@ -4280,6 +4643,45 @@ def _seek_stable_plate_contact(
                         ),
                     }
                 )
+        elif stage_before_action == "lateral_rebuffer_brake":
+            if (
+                measured_vertical_step_progress_m >= 0.0
+                and latest_overhead_lateral_buffer["accepted"]
+            ):
+                structural_stage = "overhead_corridor_lateral"
+                overhead_horizontal_z = float(after_eef[2])
+                vertical_tail_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        "event": (
+                            "lateral_rebuffer_recovered_directly_to_xy"
+                        ),
+                        "measured_vertical_step_progress_m": (
+                            measured_vertical_step_progress_m
+                        ),
+                        "minimum_lateral_entry_buffer_surplus_m": (
+                            latest_overhead_lateral_buffer[
+                                "minimum_lateral_entry_buffer_surplus_m"
+                            ]
+                        ),
+                    }
+                )
+            else:
+                structural_stage = "lateral_rebuffer_brake"
+                vertical_tail_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        "event": "lateral_rebuffer_continues_fail_closed",
+                        "measured_vertical_step_progress_m": (
+                            measured_vertical_step_progress_m
+                        ),
+                        "minimum_lateral_entry_buffer_surplus_m": (
+                            latest_overhead_lateral_buffer[
+                                "minimum_lateral_entry_buffer_surplus_m"
+                            ]
+                        ),
+                    }
+                )
         elif stage_before_action == "vertical_tail_zero_confirmation":
             if (
                 measured_vertical_step_progress_m >= 0.0
@@ -4338,7 +4740,7 @@ def _seek_stable_plate_contact(
             if lateral_post_action_interlock[
                 "requires_positive_z_brake"
             ]:
-                structural_stage = "vertical_tail_brake"
+                structural_stage = "lateral_rebuffer_brake"
                 vertical_tail_events.append(
                     {
                         "guard_step": int(guard_step),
@@ -4438,6 +4840,7 @@ def _seek_stable_plate_contact(
                     in {
                         "overhead_center_descent",
                         "vertical_tail_brake",
+                        "lateral_rebuffer_brake",
                         "vertical_tail_zero_confirmation",
                         "overhead_corridor_lateral",
                     }
@@ -4455,6 +4858,7 @@ def _seek_stable_plate_contact(
                     in {
                         "overhead_center_descent",
                         "vertical_tail_brake",
+                        "lateral_rebuffer_brake",
                         "vertical_tail_zero_confirmation",
                         "overhead_corridor_lateral",
                     }
@@ -4471,6 +4875,7 @@ def _seek_stable_plate_contact(
         if stage_before_action in {
             "overhead_center_descent",
             "vertical_tail_brake",
+            "lateral_rebuffer_brake",
             "vertical_tail_zero_confirmation",
             "overhead_corridor_lateral",
         } and not latest_overhead_guard["accepted"]:
