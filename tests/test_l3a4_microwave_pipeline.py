@@ -153,6 +153,56 @@ def test_l3a4_compiled_insertion_geometry_primitives():
     )
 
 
+def test_l3a4_compiled_geom_support_radius_primitives():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_compiled_geom_support_radius"
+    )
+    namespace = {"np": np}
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    support_radius = namespace["_compiled_geom_support_radius"]
+
+    class Model:
+        geom_type = np.asarray([2, 3, 4, 5, 6, 7])
+        geom_size = np.asarray(
+            [
+                [0.2, 0.0, 0.0],
+                [0.1, 0.3, 0.0],
+                [0.2, 0.3, 0.4],
+                [0.1, 0.3, 0.0],
+                [0.1, 0.2, 0.3],
+                [0.0, 0.0, 0.0],
+            ]
+        )
+        geom_rbound = np.asarray([0.2, 0.4, 0.4, 0.4, 0.4, 0.7])
+
+    model = Model()
+    identity = np.eye(3)
+    expected_z = [0.2, 0.4, 0.4, 0.3, 0.3, 0.7]
+    for geom_id, expected in enumerate(expected_z):
+        radius, _ = support_radius(
+            model, geom_id, identity, [0.0, 0.0, 1.0]
+        )
+        assert radius == pytest.approx(expected)
+    cylinder_x, _ = support_radius(
+        model, 3, identity, [1.0, 0.0, 0.0]
+    )
+    assert cylinder_x == pytest.approx(0.1)
+
+
 def test_l3a4_preflight_binds_evaluated_state_bytes(tmp_path):
     native = _native_path(tmp_path)
     states = tmp_path / "er.hdf5"
@@ -750,7 +800,21 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "_step(env, oracle, action, step, frames)" in target_closure
     assert "target_initial" in target_closure
     assert "target_final" in target_closure
+    assert "target_tilt_initial_deg" in target_closure
+    assert "target_tilt_final_deg" in target_closure
+    assert "current_tilt = body_tilt_deg" in target_closure
     assert "not microwave_contact" in target_closure
+
+    geom_support = ast.get_source_segment(
+        source, functions["_compiled_geom_support_radius"]
+    )
+    assert "local_direction = rotation.T @ direction" in geom_support
+    assert "geom_type == 2" in geom_support
+    assert "geom_type == 3" in geom_support
+    assert "geom_type == 4" in geom_support
+    assert "geom_type == 5" in geom_support
+    assert "geom_type == 6" in geom_support
+    assert "model.geom_rbound[geom_id]" in geom_support
 
     target_support = ast.get_source_segment(
         source, functions["_compiled_target_support_geometry"]
@@ -761,6 +825,29 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "bottom_projection_m" in target_support
     assert "compiled_bottom_tolerance_m" in target_support
     assert "MAX_MUG_TILT_DEG" in target_support
+    assert "_compiled_geom_support_radius(" in target_support
+    assert '"center_relative_to_target"' in target_support
+    assert '"rotation": rotation.tolist()' in target_support
+
+    held_support = ast.get_source_segment(
+        source, functions["_compiled_held_target_support_geometry"]
+    )
+    assert "collision_masks_compatible(" in held_support
+    assert "_compiled_geom_support_radius(" in held_support
+    assert 'source["center_relative_to_target"]' in held_support
+    assert 'source["rotation"]' in held_support
+    assert "env.sim.data.geom_xpos[geom_id]" in held_support
+    assert "env.sim.data.geom_xmat[geom_id]" in held_support
+    assert "initial_relative_bottom" in held_support
+    assert "held_relative_bottom" in held_support
+    assert "source_support_offset" in held_support
+    assert (
+        "source_support_offset\n"
+        "        + initial_relative_bottom\n"
+        "        - held_relative_bottom"
+    ) in held_support
+    assert '"held_support_offset_m": held_support_offset' in held_support
+    assert "normal_mismatch_deg > MAX_MUG_TILT_DEG" in held_support
 
     microwave_floor = ast.get_source_segment(
         source, functions["_compiled_microwave_floor"]
@@ -781,6 +868,7 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "oriented_box_separating_clearance(" in geom_clearance
     assert "segment_aabb_distance(" in geom_clearance
     assert "geom_margin" in geom_clearance
+    assert "env.sim.data.geom_xmat[moving_geom]" in geom_clearance
 
     target_door_sweep = ast.get_source_segment(
         source, functions["_compiled_target_door_sweep_clearance"]
@@ -810,7 +898,16 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "target_clearance > 0.0" in insertion_plan
     assert "_compiled_target_door_sweep_clearance(" in insertion_plan
     assert "door_clearance > 0.0" in insertion_plan
-    assert "current_target_tilt > MAX_MUG_TILT_DEG" in insertion_plan
+    assert "current_target_tilt > MAX_MUG_TILT_DEG" not in insertion_plan
+    assert "_compiled_held_target_support_geometry(" in insertion_plan
+    assert 'held_support_geometry["held_support_offset_m"]' in (
+        insertion_plan
+    )
+    assert '"target_rotation_at_planning"' in insertion_plan
+    assert '"held_tilt_policy"' in insertion_plan
+    assert '"held_pose_floor_support": held_support_geometry' in (
+        insertion_plan
+    )
     assert "np.nextafter(front_extent, 0.0)" in insertion_plan
     assert "execution_reserve_m" in insertion_plan
     assert '"execution_endpoint": execution_endpoint' in insertion_plan
@@ -850,6 +947,7 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "MAX_MUG_TILT_DEG" in target_insertion
     assert "MAX_WAIT_LINEAR_SPEED_MPS" in target_insertion
     assert "MAX_WAIT_ANGULAR_SPEED_RADPS" in target_insertion
+    assert "final_target_tilt <= MAX_MUG_TILT_DEG" in target_insertion
     assert "native_inside" in target_insertion
     assert "floor_contact" in target_insertion
     assert "foremost_pose_reached" in target_insertion
@@ -933,8 +1031,13 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"robot_target_descend_contact"' in source
     assert '"robot_target_closure_contact_initial"' in source
     assert '"robot_target_closure_contact_final"' in source
+    assert '"robot_target_closure_tilt_initial_deg"' in source
+    assert '"robot_target_closure_tilt_final_deg"' in source
     assert '"robot_target_max_object_follow_error_m"' in source
     assert '"robot_target_insertion_plan_method"' in source
+    assert '"robot_target_insertion_planning_tilt_deg"' in source
+    assert '"robot_target_insertion_held_support_offset_m"' in source
+    assert '"robot_target_insertion_held_support_method"' in source
     assert '"robot_target_insertion_front_distance_m"' in source
     assert '"robot_target_insertion_execution_front_distance_m"' in source
     assert '"robot_target_insertion_native_in"' in source
@@ -942,10 +1045,14 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"robot_target_insertion_predicted_door_clearance_m"' in source
     assert '"robot_target_insertion_actual_microwave_contact"' in source
     assert '"robot_target_insertion_actual_contact_pairs"' in source
+    assert '"robot_target_insertion_actual_release_tilt_deg"' in source
     assert '"robot_target_release_microwave_contact_seen"' in source
     assert '"robot_target_retreat_predicted_clearance_m"' in source
     assert '"robot_target_no_forbidden_microwave_contact"' in source
     assert '"target_final_door_swept_clearance_m"' in source
+    assert '"target_held_tilt_policy"' in source
+    assert '"target_release_tilt_limit_deg": MAX_MUG_TILT_DEG' in source
+    assert '"target_final_tilt_limit_deg": MAX_MUG_TILT_DEG' in source
     assert "GRASP_HEIGHT = 0.060" in source
     assert "PORCELAIN_GRASP_HEIGHT = 0.080" in source
     assert "PORCELAIN_GRASP_CLEARANCE_OFFSET = 0.040" in source

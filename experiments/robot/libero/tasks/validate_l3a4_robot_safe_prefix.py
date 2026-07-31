@@ -704,6 +704,47 @@ def _compiled_safe_outward_park(
     }
 
 
+def _compiled_geom_support_radius(
+    model,
+    geom_id,
+    rotation,
+    direction,
+):
+    """Return the compiled geom's support radius along a world direction."""
+    geom_id = int(geom_id)
+    rotation = np.asarray(rotation, dtype=float).reshape(3, 3)
+    direction = np.asarray(direction, dtype=float)
+    direction = direction / np.linalg.norm(direction)
+    local_direction = rotation.T @ direction
+    geom_type = int(model.geom_type[geom_id])
+    size = np.asarray(model.geom_size[geom_id], dtype=float)
+    if geom_type == 2:
+        radius = float(size[0])
+        method = "compiled sphere support"
+    elif geom_type == 3:
+        radius = float(
+            size[0] + size[1] * abs(float(local_direction[2]))
+        )
+        method = "compiled capsule support"
+    elif geom_type == 4:
+        radius = float(np.linalg.norm(size * local_direction))
+        method = "compiled ellipsoid support"
+    elif geom_type == 5:
+        axial = abs(float(local_direction[2]))
+        radial = float(
+            np.sqrt(max(0.0, 1.0 - axial * axial))
+        )
+        radius = float(size[1] * axial + size[0] * radial)
+        method = "compiled cylinder support"
+    elif geom_type == 6:
+        radius = float(np.sum(size * np.abs(local_direction)))
+        method = "compiled box support"
+    else:
+        radius = float(model.geom_rbound[geom_id])
+        method = "conservative compiled bounding-sphere support"
+    return radius, method
+
+
 def _compiled_target_support_geometry(env, desired_up):
     """Measure the target body's native table-support offset from contacts."""
     model = env.sim.model
@@ -826,19 +867,23 @@ def _compiled_target_support_geometry(env, desired_up):
         rotation = np.asarray(
             env.sim.data.geom_xmat[geom_id], dtype=float
         ).reshape(3, 3)
-        if int(model.geom_type[geom_id]) == 6:
-            support_radius = float(
-                np.sum(
-                    np.asarray(model.geom_size[geom_id], dtype=float)
-                    * np.abs(rotation.T @ selected_normal)
-                )
-            )
-        else:
-            support_radius = float(model.geom_rbound[geom_id])
+        support_radius, support_method = _compiled_geom_support_radius(
+            model,
+            geom_id,
+            rotation,
+            selected_normal,
+        )
         bottom_candidates.append(
             {
                 "geom_id": int(geom_id),
                 "geom_name": _geom_name(model, geom_id),
+                "geom_type": int(model.geom_type[geom_id]),
+                "center_relative_to_target": (
+                    center - target_position
+                ).tolist(),
+                "rotation": rotation.tolist(),
+                "support_radius_m": support_radius,
+                "support_radius_method": support_method,
                 "bottom_projection_m": float(
                     np.dot(center, selected_normal) - support_radius
                 ),
@@ -898,6 +943,144 @@ def _compiled_target_support_geometry(env, desired_up):
         "compiled_bottom_tolerance_m": bottom_tolerance,
         "bottom_geom_candidates": bottom_candidates,
         "candidate_contacts": candidates,
+    }
+
+
+def _compiled_held_target_support_geometry(
+    env,
+    support_geometry,
+    floor_geom_id,
+    floor_normal,
+):
+    """Calibrate floor height for the target's actual held orientation."""
+    model = env.sim.model
+    floor_geom_id = int(floor_geom_id)
+    floor_normal = np.asarray(floor_normal, dtype=float)
+    floor_normal = floor_normal / np.linalg.norm(floor_normal)
+    source_normal = np.asarray(
+        support_geometry["selected"]["support_normal"], dtype=float
+    )
+    normal_alignment = float(np.dot(source_normal, floor_normal))
+    normal_mismatch_deg = float(
+        np.degrees(
+            np.arccos(np.clip(normal_alignment, -1.0, 1.0))
+        )
+    )
+    if normal_mismatch_deg > MAX_MUG_TILT_DEG:
+        raise RuntimeError(
+            "native table support and compiled microwave floor normals "
+            f"differ by {normal_mismatch_deg}deg"
+        )
+
+    current_target, current_target_rotation = body_pose(
+        env.sim, TARGET_BODY
+    )
+    initial_candidates = []
+    held_candidates = []
+    for source in support_geometry["bottom_geom_candidates"]:
+        geom_id = int(source["geom_id"])
+        if not collision_masks_compatible(
+            model.geom_contype[geom_id],
+            model.geom_conaffinity[geom_id],
+            model.geom_contype[floor_geom_id],
+            model.geom_conaffinity[floor_geom_id],
+        ):
+            continue
+        initial_rotation = np.asarray(
+            source["rotation"], dtype=float
+        ).reshape(3, 3)
+        initial_radius, initial_method = (
+            _compiled_geom_support_radius(
+                model,
+                geom_id,
+                initial_rotation,
+                floor_normal,
+            )
+        )
+        initial_relative_center = np.asarray(
+            source["center_relative_to_target"], dtype=float
+        )
+        initial_relative_bottom = float(
+            np.dot(initial_relative_center, floor_normal)
+            - initial_radius
+        )
+
+        held_center = np.asarray(
+            env.sim.data.geom_xpos[geom_id], dtype=float
+        )
+        held_rotation = np.asarray(
+            env.sim.data.geom_xmat[geom_id], dtype=float
+        ).reshape(3, 3)
+        held_radius, held_method = _compiled_geom_support_radius(
+            model,
+            geom_id,
+            held_rotation,
+            floor_normal,
+        )
+        held_relative_center = held_center - current_target
+        held_relative_bottom = float(
+            np.dot(held_relative_center, floor_normal) - held_radius
+        )
+        initial_candidates.append(
+            {
+                "geom_id": geom_id,
+                "geom_name": _geom_name(model, geom_id),
+                "relative_bottom_m": initial_relative_bottom,
+                "support_radius_m": initial_radius,
+                "support_radius_method": initial_method,
+            }
+        )
+        held_candidates.append(
+            {
+                "geom_id": geom_id,
+                "geom_name": _geom_name(model, geom_id),
+                "relative_center": held_relative_center.tolist(),
+                "rotation": held_rotation.tolist(),
+                "relative_bottom_m": held_relative_bottom,
+                "support_radius_m": held_radius,
+                "support_radius_method": held_method,
+            }
+        )
+    if not initial_candidates or not held_candidates:
+        raise RuntimeError(
+            "target has no compiled collision geom compatible with the "
+            "microwave floor"
+        )
+    initial_relative_bottom = min(
+        item["relative_bottom_m"] for item in initial_candidates
+    )
+    held_relative_bottom = min(
+        item["relative_bottom_m"] for item in held_candidates
+    )
+    source_support_offset = float(
+        support_geometry["selected"]["support_offset_m"]
+    )
+    held_support_offset = float(
+        source_support_offset
+        + initial_relative_bottom
+        - held_relative_bottom
+    )
+    return {
+        "method": (
+            "actual held-pose compiled geom centers and rotations, "
+            "calibrated to native table support contact"
+        ),
+        "floor_geom_id": floor_geom_id,
+        "floor_geom_name": _geom_name(model, floor_geom_id),
+        "floor_normal": floor_normal.tolist(),
+        "source_support_normal": source_normal.tolist(),
+        "support_normal_mismatch_deg": normal_mismatch_deg,
+        "source_support_offset_m": source_support_offset,
+        "initial_relative_bottom_m": initial_relative_bottom,
+        "held_relative_bottom_m": held_relative_bottom,
+        "held_support_offset_m": held_support_offset,
+        "target_position_at_planning": current_target.tolist(),
+        "target_rotation_at_planning": current_target_rotation.tolist(),
+        "target_tilt_at_planning_deg": body_tilt_deg(
+            env.sim, TARGET_BODY
+        ),
+        "initial_geom_candidates": initial_candidates,
+        "held_geom_candidates": held_candidates,
     }
 
 
@@ -1474,16 +1657,19 @@ def _compiled_target_insertion_plan(
     floor_surface = np.asarray(
         floor["surface_position"], dtype=float
     )
-    support_offset = float(
-        support_geometry["selected"]["support_offset_m"]
+    current_target, current_target_rotation = body_pose(
+        env.sim, TARGET_BODY
     )
-    current_target, _ = body_pose(env.sim, TARGET_BODY)
     current_target_tilt = body_tilt_deg(env.sim, TARGET_BODY)
-    if current_target_tilt > MAX_MUG_TILT_DEG:
-        raise RuntimeError(
-            "target mug is already tilted before compiled insertion plan; "
-            f"tilt_deg={current_target_tilt}"
-        )
+    held_support_geometry = _compiled_held_target_support_geometry(
+        env,
+        support_geometry,
+        floor_geom,
+        floor_normal,
+    )
+    support_offset = float(
+        held_support_geometry["held_support_offset_m"]
+    )
     current_eef = _eef_position(env)
 
     (
@@ -1662,6 +1848,12 @@ def _compiled_target_insertion_plan(
         "native_site_half_size": site_size.tolist(),
         "native_site_world_aabb_half_size": world_half_size.tolist(),
         "target_tilt_at_planning_deg": current_target_tilt,
+        "target_rotation_at_planning": current_target_rotation.tolist(),
+        "held_tilt_policy": (
+            "transient tilt while grasped is diagnostic; actual compiled "
+            "geom orientation is used for support and swept clearance; "
+            "release still requires the mug at or below MAX_MUG_TILT_DEG"
+        ),
         "front_direction": front.tolist(),
         "front_extent_m": front_extent,
         "portal_object_position": portal_object.tolist(),
@@ -1669,6 +1861,7 @@ def _compiled_target_insertion_plan(
         "portal_high_eef_position": portal_high_eef.tolist(),
         "compiled_floor": floor_geometry,
         "source_support": support_geometry,
+        "held_pose_floor_support": held_support_geometry,
         "eef_root_body": gripper_geometry["eef_root_body"],
         "rigid_gripper_body_names": gripper_geometry[
             "rigid_gripper_body_names"
@@ -2167,6 +2360,7 @@ def _descend_to_target_contact(env, oracle, step, frames):
 def _close_gripper_on_target(env, oracle, step, frames):
     """Close only from real target contact and retain it after closure."""
     initial_contacts = _robot_contact_body_names(env)
+    initial_tilt = body_tilt_deg(env.sim, TARGET_BODY)
     target_initial = TARGET_BODY in initial_contacts
     microwave_contact = _has_microwave_contact(initial_contacts)
     target_seen = target_initial
@@ -2182,6 +2376,7 @@ def _close_gripper_on_target(env, oracle, step, frames):
             contact_bodies.update(contacts)
             current_target = TARGET_BODY in contacts
             current_microwave = _has_microwave_contact(contacts)
+            current_tilt = body_tilt_deg(env.sim, TARGET_BODY)
             target_seen = target_seen or current_target
             microwave_contact = microwave_contact or current_microwave
             trace.append(
@@ -2190,6 +2385,7 @@ def _close_gripper_on_target(env, oracle, step, frames):
                     float(step),
                     float(current_target),
                     float(current_microwave),
+                    current_tilt,
                 ]
             )
             if current_microwave or status.violated:
@@ -2197,6 +2393,7 @@ def _close_gripper_on_target(env, oracle, step, frames):
     final_contacts = _robot_contact_body_names(env)
     contact_bodies.update(final_contacts)
     target_final = TARGET_BODY in final_contacts
+    final_tilt = body_tilt_deg(env.sim, TARGET_BODY)
     microwave_contact = bool(
         microwave_contact or _has_microwave_contact(contact_bodies)
     )
@@ -2213,11 +2410,14 @@ def _close_gripper_on_target(env, oracle, step, frames):
         "target_contact_initial": target_initial,
         "target_contact_seen": target_seen,
         "target_contact_final": target_final,
+        "target_tilt_initial_deg": initial_tilt,
+        "target_tilt_final_deg": final_tilt,
         "microwave_contact_seen": microwave_contact,
         "robot_contact_bodies": sorted(contact_bodies),
         "steps_executed": len(trace),
         "trace_columns": (
-            "iteration,global_step,target_contact,microwave_contact"
+            "iteration,global_step,target_contact,microwave_contact,"
+            "target_tilt_deg"
         ),
         "trace": trace,
     }
@@ -3641,6 +3841,9 @@ def main() -> None:
         selected_target_floor = target_insertion_plan.get(
             "compiled_floor", {}
         ).get("selected", {})
+        target_held_support = target_insertion_plan.get(
+            "held_pose_floor_support", {}
+        )
         target_retreat_plan = target_metrics.get(
             "compiled_open_gripper_retreat_plan", {}
         )
@@ -3941,6 +4144,16 @@ def main() -> None:
                     )
                 )
             ),
+            "robot_target_closure_tilt_initial_deg": (
+                target_grasp_closure.get(
+                    "target_tilt_initial_deg", float("nan")
+                )
+            ),
+            "robot_target_closure_tilt_final_deg": (
+                target_grasp_closure.get(
+                    "target_tilt_final_deg", float("nan")
+                )
+            ),
             "robot_target_held_offset_x_m": target_held_eef_offset[0],
             "robot_target_held_offset_y_m": target_held_eef_offset[1],
             "robot_target_held_offset_z_m": target_held_eef_offset[2],
@@ -3949,6 +4162,19 @@ def main() -> None:
             ),
             "robot_target_insertion_plan_method": (
                 target_insertion_plan.get("method", "")
+            ),
+            "robot_target_insertion_planning_tilt_deg": (
+                target_insertion_plan.get(
+                    "target_tilt_at_planning_deg", float("nan")
+                )
+            ),
+            "robot_target_insertion_held_support_offset_m": (
+                target_held_support.get(
+                    "held_support_offset_m", float("nan")
+                )
+            ),
+            "robot_target_insertion_held_support_method": (
+                target_held_support.get("method", "")
             ),
             "robot_target_insertion_candidate_x_m": (
                 selected_target_insertion.get(
@@ -4019,6 +4245,11 @@ def main() -> None:
             "robot_target_insertion_actual_contact_pairs": json.dumps(
                 target_insertion_move.get("robot_contact_pairs", []),
                 sort_keys=True,
+            ),
+            "robot_target_insertion_actual_release_tilt_deg": (
+                target_insertion_move.get(
+                    "target_tilt_final_deg", float("nan")
+                )
             ),
             "robot_target_release_success": int(
                 bool(target_release.get("success", False))
@@ -4143,6 +4374,13 @@ def main() -> None:
             "portal alignment, insertion, release, and retreat all fail "
             "on any robot-microwave contact"
         ),
+        "target_held_tilt_policy": (
+            "grasp-induced transient tilt is recorded but is not a planning "
+            "failure; actual held geom rotations determine calibrated floor "
+            "support and all swept clearances"
+        ),
+        "target_release_tilt_limit_deg": MAX_MUG_TILT_DEG,
+        "target_final_tilt_limit_deg": MAX_MUG_TILT_DEG,
         "target_insertion_search_step_m": (
             TARGET_INSERTION_SEARCH_STEP_M
         ),
