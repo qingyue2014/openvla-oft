@@ -403,7 +403,7 @@ def main():
     parser.add_argument("--release_steps", type=int, default=35)
     parser.add_argument("--retreat_height", type=float, default=0.120)
     parser.add_argument("--prefix_settle_steps", type=int, default=40)
-    parser.add_argument("--plate_contact_backoff", type=float, default=0.025)
+    parser.add_argument("--plate_contact_backoff", type=float, default=0.075)
     parser.add_argument("--plate_contact_eef_height", type=float, default=0.130)
     parser.add_argument(
         "--plate_contact_stall_tolerance", type=float, default=0.040

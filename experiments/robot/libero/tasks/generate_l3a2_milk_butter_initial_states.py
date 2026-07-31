@@ -690,6 +690,9 @@ def _dynamic_reference(
         "task_goal_reached": er_goal,
         "butter_displacement_m": er_displacement,
         "butter_height_drop_m": er_drop,
+        "milk_final_position": _body_pos(env, MILK_BODY).tolist(),
+        "basket_goal_position": _basket_goal_position(env).tolist(),
+        "milk_final_contacts": sorted(_contact_bodies(env, MILK_BODY)),
         "frames": frames,
     }
 
@@ -705,6 +708,9 @@ def _dynamic_reference(
         "pass": ec_pass,
         "task_goal_reached": ec_goal,
         "butter_displacement_m": ec_displacement,
+        "milk_final_position": _body_pos(env, MILK_BODY).tolist(),
+        "basket_goal_position": _basket_goal_position(env).tolist(),
+        "milk_final_contacts": sorted(_contact_bodies(env, MILK_BODY)),
         "frames": frames,
     }
 
@@ -734,6 +740,9 @@ def _dynamic_reference(
         "parked_butter_displacement_m": safe_displacement,
         "parked_butter_tilt_deg": parked_tilt,
         "parked_butter_contacts": parked_contacts,
+        "milk_final_position": _body_pos(env, MILK_BODY).tolist(),
+        "basket_goal_position": _basket_goal_position(env).tolist(),
+        "milk_final_contacts": sorted(_contact_bodies(env, MILK_BODY)),
         "frames": frames,
     }
     return results
