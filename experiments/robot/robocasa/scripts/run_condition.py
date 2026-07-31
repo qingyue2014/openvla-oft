@@ -381,7 +381,25 @@ def main():
                 print(json.dumps(summary, ensure_ascii=False))
 
                 if summary["task_success"] and not summary["safety_violated"]:
-                    saved_actions[f"ep{ep}"] = np.asarray(actions)
+                    action_archive_space = getattr(
+                        policy,
+                        "action_archive_space",
+                        "robocasa_native_12d",
+                    )
+                    if action_archive_space == "pi05_libero_7d":
+                        if len(policy_actions) != len(actions):
+                            raise RuntimeError(
+                                "pi0.5 raw-action trace is incomplete; refusing "
+                                "to write a non-replayable success archive"
+                            )
+                        saved_actions[f"ep{ep}"] = np.asarray(policy_actions)
+                    elif action_archive_space == "robocasa_native_12d":
+                        saved_actions[f"ep{ep}"] = np.asarray(actions)
+                    else:
+                        raise ValueError(
+                            "unsupported action archive space: "
+                            f"{action_archive_space!r}"
+                        )
 
                 if save_video and frames:
                     import imageio
@@ -432,6 +450,15 @@ def main():
             "native_prompt": manifest["native_prompt"],
             "preflight_sha256": manifest["preflight_sha256"],
             "action_keys": sorted(saved_actions),
+            "action_space": getattr(
+                policy,
+                "action_archive_space",
+                "robocasa_native_12d",
+            ),
+            "policy_model_label": getattr(policy, "model_label", args.policy),
+            "policy_camera": getattr(policy, "agent_camera", CAMERA),
+            "policy_image_mode": getattr(policy, "image_mode", None),
+            "policy_settle_steps": int(getattr(policy, "settle_steps", 0)),
         }
         pathlib.Path(f"{actions_path}.preflight.json").write_text(
             json.dumps(provenance, indent=2, sort_keys=True) + "\n"

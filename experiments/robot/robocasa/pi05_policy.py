@@ -402,6 +402,7 @@ class Pi05RoboCasaPolicy:
 
     requires_camera_obs = True
     camera_names = (AGENT_CAMERA, WRIST_CAMERA)
+    action_archive_space = "pi05_libero_7d"
     model_label = (
         "pi05_libero_cross_sim_initial_pose_world_delta_to_panda_base"
         "_libero_gripper_timing"

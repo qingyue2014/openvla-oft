@@ -34,6 +34,14 @@ from experiments.robot.robocasa.scripts.run_condition import (  # noqa: E402
     run_native_preflight,
     save_preflight_manifest,
 )
+from experiments.robot.robocasa.pi05_policy import (  # noqa: E402
+    AGENT_CAMERA,
+    ROBOCASA_AGENT_CAMERAS,
+    WRIST_CAMERA,
+    Pi05RoboCasaPolicy,
+    map_libero_action_to_pandaomron,
+    preprocess_camera_image_for_mode,
+)
 from experiments.robot.robocasa.physcog.preflight import (  # noqa: E402
     NativePreflightError,
     initial_max_penetration,
@@ -118,7 +126,27 @@ def main():
             raise NativePreflightError(
                 "action archive keys do not match its provenance sidecar"
             )
-        env = make_env(args.scene, "Er", args.seed, render=args.video is not None)
+        action_space = provenance.get(
+            "action_space",
+            "robocasa_native_12d",
+        )
+        if action_space not in {"robocasa_native_12d", "pi05_libero_7d"}:
+            raise NativePreflightError(
+                f"unsupported replay action space: {action_space!r}"
+            )
+        policy_camera = provenance.get("policy_camera", AGENT_CAMERA)
+        if policy_camera not in ROBOCASA_AGENT_CAMERAS:
+            raise NativePreflightError(
+                f"action provenance has invalid policy camera: {policy_camera!r}"
+            )
+        policy_image_mode = provenance.get("policy_image_mode") or "vertical"
+        env = make_env(
+            args.scene,
+            "Er",
+            args.seed,
+            render=args.video is not None,
+            camera_names=(policy_camera, WRIST_CAMERA),
+        )
     except Exception as exc:
         marker = invalidate_artifacts(
             args.scene,
@@ -140,6 +168,24 @@ def main():
                 raise NativePreflightError(
                     f"replay prompt {env.native_lang!r} differs from native preflight"
                 )
+            if action_space == "pi05_libero_7d":
+                settle_steps = int(provenance.get("policy_settle_steps", 0))
+                if settle_steps != Pi05RoboCasaPolicy.settle_steps:
+                    raise NativePreflightError(
+                        "pi0.5 replay provenance has unexpected settle steps: "
+                        f"{settle_steps}"
+                    )
+                for _ in range(settle_steps):
+                    settle_action = Pi05RoboCasaPolicy.settle_action(env)
+                    obs, _, done, info = env.step(settle_action)
+                    if (
+                        done
+                        or info["physcog"]["task_success"]
+                        or info["physcog"]["safety_violated"]
+                    ):
+                        raise NativePreflightError(
+                            "Er changed outcome during pi0.5 replay settling"
+                        )
             frames = []
             initial_frame_path = None
             if args.video:
@@ -151,16 +197,40 @@ def main():
                 )
                 imageio.imwrite(
                     initial_frame_path,
-                    obs["robot0_agentview_center_image"][::-1],
+                    preprocess_camera_image_for_mode(
+                        obs[f"{policy_camera}_image"],
+                        mode=policy_image_mode,
+                    ),
                 )
             for act in actions:
-                obs, _, _, info = env.step(np.asarray(act, dtype=np.float64))
+                act = np.asarray(act, dtype=np.float64)
+                if action_space == "pi05_libero_7d":
+                    if act.shape != (7,):
+                        raise NativePreflightError(
+                            f"pi0.5 replay action must be 7-D, got {act.shape}"
+                        )
+                    act = map_libero_action_to_pandaomron(
+                        act,
+                        env,
+                        emulate_libero_gripper=True,
+                    )
+                elif act.shape != (12,):
+                    raise NativePreflightError(
+                        f"native RoboCasa replay action must be 12-D, got {act.shape}"
+                    )
+                obs, _, _, info = env.step(act)
                 if args.video:
-                    frames.append(obs["robot0_agentview_center_image"][::-1])
+                    frames.append(
+                        preprocess_camera_image_for_mode(
+                            obs[f"{policy_camera}_image"],
+                            mode=policy_image_mode,
+                        )
+                    )
             row = env.physcog_episode_summary()
             row.update(
                 source=key,
                 replayed_steps=int(len(actions)),
+                action_space=action_space,
                 preflight_sha256=manifest["preflight_sha256"],
                 formal=bool(args.formal),
                 formal_gate_manifest=args.gate_manifest if formal_gates else None,
