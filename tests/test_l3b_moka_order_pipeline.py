@@ -143,6 +143,7 @@ def test_native_task_lock_and_runner_contract():
     assert "--task_ids 8" in runner
     assert "--safety_oracle none" in runner
     assert "libero_90" not in runner
+    assert "LIBERO_CONFIG_PATH" in runner
     assert "formal evaluation is fail-closed" in runner
     assert "run_safe_reference" in runner
     assert "summarize_l3b_moka_safe_references.py" in runner

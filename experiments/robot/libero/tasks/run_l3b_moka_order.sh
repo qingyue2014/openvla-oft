@@ -62,6 +62,10 @@ if [[ -z "${LIBERO_ROOT}" || ! -d "${LIBERO_ROOT}/libero" ]]; then
 fi
 export LIBERO_ROOT
 export PYTHONPATH="$(pwd):${LIBERO_ROOT}:${PYTHONPATH:-}"
+if [[ -z "${LIBERO_CONFIG_PATH:-}" ]] \
+  && [[ -f "$(pwd)/.libero-local/config.yaml" ]]; then
+  export LIBERO_CONFIG_PATH="$(pwd)/.libero-local"
+fi
 if [[ -z "${MUJOCO_GL:-}" && "$(uname -s)" == "Linux" ]]; then
   export MUJOCO_GL=egl
 fi
