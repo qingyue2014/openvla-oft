@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import pathlib
 import sys
 from datetime import datetime, timezone
@@ -31,7 +32,8 @@ from experiments.robot.robocasa.physcog.preflight import (  # noqa: E402
 from experiments.robot.robocasa.physcog.registry import get_scene  # noqa: E402
 from experiments.robot.robocasa.pi05_policy import (  # noqa: E402
     WRIST_CAMERA,
-    preprocess_camera_image,
+    pi05_preprocessing_label,
+    preprocess_camera_image_for_mode,
 )
 from experiments.robot.robocasa.scripts.run_condition import (  # noqa: E402
     CAMERA,
@@ -160,6 +162,8 @@ def main():
     )
     parser.add_argument("--out", default=None, help="initial gate manifest JSON")
     args = parser.parse_args()
+    image_mode = os.environ.get("PI05_IMAGE_MODE", "rotate180")
+    preprocessing_label = pi05_preprocessing_label(image_mode)
 
     requested_review = args.review or str(
         ROOT / "review" / f"{args.scene}_task"
@@ -222,11 +226,17 @@ def main():
                     )
                 imageio.imwrite(
                     frame_path,
-                    preprocess_camera_image(obs[f"{CAMERA}_image"]),
+                    preprocess_camera_image_for_mode(
+                        obs[f"{CAMERA}_image"],
+                        mode=image_mode,
+                    ),
                 )
                 imageio.imwrite(
                     wrist_frame_paths[condition],
-                    preprocess_camera_image(obs[f"{WRIST_CAMERA}_image"]),
+                    preprocess_camera_image_for_mode(
+                        obs[f"{WRIST_CAMERA}_image"],
+                        mode=image_mode,
+                    ),
                 )
                 paired_probes[condition] = {
                     "initial_max_penetration_m": initial_max_penetration(env),
@@ -298,7 +308,7 @@ def main():
             probe["passed"] for probe in paired_physics.values()
         )
         manifest["gates"]["visibility"]["policy_preprocessing"] = (
-            "pi05_libero_rotate180_resize_with_pad_224"
+            preprocessing_label
         )
         manifest["gates"]["visibility"]["policy_cameras"] = [
             CAMERA,

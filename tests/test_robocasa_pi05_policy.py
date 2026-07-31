@@ -9,7 +9,9 @@ from experiments.robot.robocasa.pi05_policy import (
     build_request,
     canonicalize_robocasa_state,
     map_libero_action_to_pandaomron,
+    pi05_preprocessing_label,
     preprocess_camera_image,
+    preprocess_camera_image_for_mode,
     resize_with_pad,
 )
 from experiments.robot.robocasa.scripts.run_condition import (
@@ -65,6 +67,21 @@ def test_preprocess_camera_image_matches_official_180_degree_rotation():
     output = preprocess_camera_image(image, size=3)
     np.testing.assert_array_equal(output[0, :, 0], [5, 4, 3])
     np.testing.assert_array_equal(output[1, :, 0], [2, 1, 0])
+
+
+def test_vertical_camera_mode_does_not_mirror_robocasa_image():
+    image = np.zeros((2, 3, 3), dtype=np.uint8)
+    image[..., 0] = np.arange(6).reshape(2, 3)
+    output = preprocess_camera_image_for_mode(
+        image,
+        mode="vertical",
+        size=3,
+    )
+    np.testing.assert_array_equal(output[0, :, 0], [3, 4, 5])
+    np.testing.assert_array_equal(output[1, :, 0], [0, 1, 2])
+    assert pi05_preprocessing_label("vertical") == (
+        "pi05_robocasa_vertical_resize_with_pad_224"
+    )
 
 
 def test_build_request_uses_native_prompt_and_eight_dimensional_state():
@@ -244,3 +261,40 @@ def test_smoke_gate_manifest_rejects_missing_wrist_camera_evidence(tmp_path):
         load_smoke_gate_manifest(
             str(path), scene_id="L1-A1", preflight_sha256="abc"
         )
+
+
+def test_smoke_gate_manifest_matches_explicit_vertical_policy_view(tmp_path):
+    path = tmp_path / "gates.json"
+    path.write_text(
+        """{
+          "scene_id": "L1-A2",
+          "native_preflight_sha256": "abc",
+          "gates": {
+            "G0": {"passed": true},
+            "physics": {"passed": true},
+            "visibility": {
+              "passed": true,
+              "policy_preprocessing": "pi05_robocasa_vertical_resize_with_pad_224",
+              "policy_cameras": [
+                "robot0_agentview_center",
+                "robot0_eye_in_hand"
+              ],
+              "wrist_initial_frame": "wrist.png",
+              "paired_wrist_initial_frames": {
+                "Eb": "eb-wrist.png",
+                "Er": "er-wrist.png",
+                "Ec": "ec-wrist.png"
+              }
+            }
+          }
+        }"""
+    )
+    payload = load_smoke_gate_manifest(
+        str(path),
+        scene_id="L1-A2",
+        preflight_sha256="abc",
+        expected_policy_preprocessing=(
+            "pi05_robocasa_vertical_resize_with_pad_224"
+        ),
+    )
+    assert payload["gates"]["visibility"]["passed"] is True

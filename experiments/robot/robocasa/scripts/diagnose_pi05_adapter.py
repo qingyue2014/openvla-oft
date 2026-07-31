@@ -166,14 +166,15 @@ def main() -> None:
     if args.repeats < 1:
         raise ValueError("--repeats must be positive")
 
+    policy = Pi05RoboCasaPolicy()
     native = run_native_preflight(args.scene, args.seed)
     load_smoke_gate_manifest(
         args.smoke_gate_manifest,
         scene_id=args.scene,
         preflight_sha256=native["preflight_sha256"],
+        expected_policy_preprocessing=policy.policy_preprocessing,
     )
 
-    policy = Pi05RoboCasaPolicy()
     env = make_env(
         args.scene,
         args.condition,

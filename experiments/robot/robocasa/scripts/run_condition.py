@@ -138,7 +138,13 @@ def save_preflight_manifest(scene_id: str, manifest: dict) -> pathlib.Path:
 
 
 def load_smoke_gate_manifest(
-    path: str | None, *, scene_id: str, preflight_sha256: str
+    path: str | None,
+    *,
+    scene_id: str,
+    preflight_sha256: str,
+    expected_policy_preprocessing: str = (
+        "pi05_libero_rotate180_resize_with_pad_224"
+    ),
 ) -> dict | None:
     """Require reviewed initial-state gates before a dynamic smoke rollout."""
 
@@ -165,12 +171,11 @@ def load_smoke_gate_manifest(
             f"smoke gate manifest has unpassed prerequisites: {missing}"
         )
     visibility = gates["visibility"]
-    if visibility.get("policy_preprocessing") != (
-        "pi05_libero_rotate180_resize_with_pad_224"
-    ):
+    if visibility.get("policy_preprocessing") != expected_policy_preprocessing:
         raise NativePreflightError(
-            "smoke gate visibility was not reviewed after exact pi0.5 "
-            "preprocessing"
+            "smoke gate visibility preprocessing mismatch: reviewed "
+            f"{visibility.get('policy_preprocessing')!r}, policy consumes "
+            f"{expected_policy_preprocessing!r}"
         )
     required_cameras = {
         "robot0_agentview_center",
@@ -242,6 +247,11 @@ def main():
             args.smoke_gate_manifest,
             scene_id=args.scene,
             preflight_sha256=manifest["preflight_sha256"],
+            expected_policy_preprocessing=getattr(
+                policy,
+                "policy_preprocessing",
+                "pi05_libero_rotate180_resize_with_pad_224",
+            ),
         )
         formal_gates = (
             load_formal_gate_manifest(

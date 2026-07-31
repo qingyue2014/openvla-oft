@@ -72,6 +72,35 @@ def preprocess_camera_image(image: np.ndarray, size: int = 224) -> np.ndarray:
     return resize_with_pad(np.asarray(image)[::-1, ::-1], size=size)
 
 
+def preprocess_camera_image_for_mode(
+    image: np.ndarray,
+    *,
+    mode: str,
+    size: int = 224,
+) -> np.ndarray:
+    """Preprocess a RoboCasa image under an explicit camera convention."""
+
+    if mode == "rotate180":
+        return preprocess_camera_image(image, size=size)
+    if mode == "vertical":
+        return resize_with_pad(np.asarray(image)[::-1], size=size)
+    raise ValueError(
+        "PI05_IMAGE_MODE must be 'rotate180' or 'vertical', "
+        f"got {mode!r}"
+    )
+
+
+def pi05_preprocessing_label(mode: str) -> str:
+    if mode == "rotate180":
+        return "pi05_libero_rotate180_resize_with_pad_224"
+    if mode == "vertical":
+        return "pi05_robocasa_vertical_resize_with_pad_224"
+    raise ValueError(
+        "PI05_IMAGE_MODE must be 'rotate180' or 'vertical', "
+        f"got {mode!r}"
+    )
+
+
 def wait_for_server(host: str, port: int, timeout_s: float) -> None:
     deadline = time.monotonic() + timeout_s
     last_error: OSError | None = None
@@ -321,6 +350,12 @@ class Pi05RoboCasaPolicy:
     def __init__(self) -> None:
         self.host = os.environ.get("PI05_HOST", "127.0.0.1")
         self.port = int(os.environ.get("PI05_PORT", "8000"))
+        self.image_mode = os.environ.get("PI05_IMAGE_MODE", "rotate180")
+        self.policy_preprocessing = pi05_preprocessing_label(self.image_mode)
+        self.model_label = (
+            "pi05_libero_cross_sim_world_delta_state_and_action_to_panda_base"
+            f"_image_{self.image_mode}"
+        )
         self.replan_steps = int(os.environ.get("PI05_REPLAN_STEPS", "5"))
         timeout_s = float(os.environ.get("PI05_CONNECT_TIMEOUT_S", "900"))
         if self.replan_steps < 1:
@@ -356,11 +391,13 @@ class Pi05RoboCasaPolicy:
             env,
         )
 
-    @staticmethod
-    def policy_view_image(obs: Mapping[str, Any]) -> np.ndarray:
+    def policy_view_image(self, obs: Mapping[str, Any]) -> np.ndarray:
         """Return the exact center-camera pixels consumed by this policy."""
 
-        return preprocess_camera_image(obs[f"{AGENT_CAMERA}_image"])
+        return preprocess_camera_image_for_mode(
+            obs[f"{AGENT_CAMERA}_image"],
+            mode=self.image_mode,
+        )
 
     def __call__(self, obs: Mapping[str, Any], lang: str, env: Any) -> np.ndarray:
         if not self._queue:
@@ -369,7 +406,19 @@ class Pi05RoboCasaPolicy:
                 env,
                 state_anchor=self._state_anchor,
             )
-            response = self.client.infer(build_request(obs, lang, state=state))
+            request = build_request(obs, lang, state=state)
+            if self.image_mode != "rotate180":
+                request["observation/image"] = preprocess_camera_image_for_mode(
+                    obs[f"{AGENT_CAMERA}_image"],
+                    mode=self.image_mode,
+                )
+                request["observation/wrist_image"] = (
+                    preprocess_camera_image_for_mode(
+                        obs[f"{WRIST_CAMERA}_image"],
+                        mode=self.image_mode,
+                    )
+                )
+            response = self.client.infer(request)
             if "actions" not in response:
                 raise KeyError(
                     "pi0.5 response has no actions field: "
