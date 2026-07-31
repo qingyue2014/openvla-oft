@@ -660,6 +660,46 @@ def _run_episode(
         grasp_eef[:2] += grasp_xy_offset
 
         stages = []
+        clear_side_body = getattr(
+            args, "auto_pregrasp_clear_side_body", ""
+        )
+        if clear_side_body:
+            protected = _body_pos(env, clear_side_body)
+            clear_direction = source[:2] - protected[:2]
+            clear_norm = float(np.linalg.norm(clear_direction))
+            if clear_norm < 1e-6:
+                failure = MotionFailure(
+                    reason="degenerate_clear_side_direction",
+                    stage="pregrasp_clear_side",
+                )
+            else:
+                clear_direction /= clear_norm
+                raised = _eef_pos(obs).copy()
+                raised[2] += getattr(
+                    args, "auto_pregrasp_vertical_clearance", 0.12
+                )
+                detour = raised.copy()
+                detour[:2] = source[:2] + clear_direction * getattr(
+                    args, "auto_pregrasp_lateral_offset", 0.10
+                )
+                stages.extend(
+                    [
+                        (
+                            "pregrasp_vertical_clearance",
+                            raised,
+                            open_sign,
+                            args.position_tolerance,
+                            False,
+                        ),
+                        (
+                            "pregrasp_clear_side_detour",
+                            detour,
+                            open_sign,
+                            args.position_tolerance,
+                            False,
+                        ),
+                    ]
+                )
         detour_x = getattr(args, "pregrasp_detour_x", None)
         detour_y = getattr(args, "pregrasp_detour_y", None)
         if detour_x is not None or detour_y is not None:

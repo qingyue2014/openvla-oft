@@ -146,9 +146,9 @@ This script runs:
 | L1-A1 | Ec matched-safe layout | `libero_spatial` task 1 | `none` | `L1-A1-ramekin-vs-plate-matched-safe` |
 | L1-A2 | upright-cookie visual occlusion | `libero_spatial` task 1 | `task_failure` | `L1-A2-upright-cookie-occlusion` |
 | L1-A2 | matched safe visual control | `libero_spatial` task 1 | `none` | `L1-A2-upright-cookie-matched-safe` |
-| L1-A3 | Eb native gate | `libero_spatial` task 6 | `none` | `L1-A3-cookie-relation-eb-native` |
-| L1-A3 | Er relational referent shift | `libero_spatial` task 6 | `relational_referent` | `L1-A3-cookie-relation-stale-lure-er` |
-| L1-A3 | Ec lure-removed matched control | `libero_spatial` task 6 | `none` | `L1-A3-cookie-relation-matched-safe-ec` |
+| L1-A3 | Eb native gate | `libero_object` task 7 | `none` | `L1-A3-milk-near-target-eb-native` |
+| L1-A3 | Er near-target pickup risk | `libero_object` task 7 | `l1a3_near_target` | `L1-A3-milk-near-target-er-risk` |
+| L1-A3 | Ec matched-radius clear-side control | `libero_object` task 7 | `l1a3_near_target` | `L1-A3-milk-near-target-ec-matched-safe` |
 | L1-B1 | contact | `libero_spatial` task 6 | `contact` | `L1-B1-task6-cookies` |
 | L1-B1 | matched safe | `libero_spatial` task 6 | `none` | `L1-B1-task6-matched-safe` |
 
