@@ -31,6 +31,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _outside_side_geometry_feedback_action,
     _outside_side_guard_from_world_aabbs,
     _outside_side_lateral_settle_evidence,
+    _overhead_lateral_buffer_evidence,
     _outside_side_recovery_progress_evidence,
     _outside_side_step_response_evidence,
     _outside_side_staircase_settle_trigger,
@@ -1466,6 +1467,8 @@ def test_500133_enters_compiled_high_corridor_directly_without_native_high_stop(
     assert "rollout.move(" not in bounded_seek
     assert "rollout.move(\n        outside_high_target," not in bounded_seek
     assert 'structural_stage = "overhead_center_descent"' in bounded_seek
+    assert '"vertical_tail_brake"' in bounded_seek
+    assert '"vertical_tail_zero_confirmation"' in bounded_seek
     assert '"overhead_corridor_lateral"' in bounded_seek
     assert "_fixed_xy_vertical_approach_action(" in bounded_seek
     assert "_fixed_z_lateral_approach_action(" in bounded_seek
@@ -1620,6 +1623,116 @@ def test_500137_timeout_trace_is_replaced_by_auditable_overhead_state_machine():
         '                > vertical_staging_corridor['
         in bounded_seek
     )
+
+
+def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    base_guard = {
+        "one_step_vertical_reserve_m": 0.008,
+        "pairs": [
+            {
+                "gripper_geom": "gripper0_finger2_collision",
+                "counterpart_geom": "plate_1_g8",
+                "counterpart_kind": "plate",
+                "strict_no_contact_clearance_m": strict_clearance,
+                "vertical_clearance_m": 0.012304936815258969,
+            }
+        ],
+    }
+    transition_buffer = _overhead_lateral_buffer_evidence(
+        base_guard,
+        worst_case_controller_world_step_m=0.08 * 0.10,
+    )
+    assert transition_buffer["base_overhead_reserve_m"] == pytest.approx(
+        0.008
+    )
+    assert transition_buffer[
+        "worst_case_controller_world_step_m"
+    ] == pytest.approx(0.008)
+    assert transition_buffer[
+        "required_reserve_beyond_strict_clearance_m"
+    ] == pytest.approx(0.016)
+    assert transition_buffer["accepted"] is False
+    assert transition_buffer[
+        "minimum_lateral_entry_buffer_surplus_m"
+    ] == pytest.approx(-0.0036950631847410315)
+
+    # Exact Job500146 endpoint of overhead-center descent.  The measured
+    # response was still downward, so the next action must be pure +Z brake,
+    # not the old pure-XY action observed at frame 90.
+    before_transition_z = 0.9453538149129818
+    transition_eef = np.array(
+        [0.0458628425888722, -0.029186391480972046, 0.9443449236168449]
+    )
+    measured_dz = transition_eef[2] - before_transition_z
+    assert measured_dz == pytest.approx(-0.0010088912961369045)
+    brake_action, brake_evidence = _fixed_xy_vertical_approach_action(
+        current_eef=transition_eef,
+        target_z=transition_eef[2] + 0.08 * 0.10,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    old_first_lateral_action = np.array(
+        [0.09999764807955064, 0.0006858414965135461, 0.0]
+    )
+    assert np.array_equal(brake_action[:2], np.zeros(2))
+    assert brake_action[2] > 0.0
+    assert np.linalg.norm(brake_action[:3]) < 0.10
+    assert old_first_lateral_action[0] > 0.0
+    assert old_first_lateral_action[2] == 0.0
+    assert brake_evidence["commanded_xy_action"] == [0.0, 0.0]
+
+    recovered_guard = {
+        **base_guard,
+        "pairs": [
+            {
+                **base_guard["pairs"][0],
+                "vertical_clearance_m": np.nextafter(0.016, np.inf),
+            }
+        ],
+    }
+    recovered_buffer = _overhead_lateral_buffer_evidence(
+        recovered_guard,
+        worst_case_controller_world_step_m=0.008,
+    )
+    assert recovered_buffer["accepted"] is True
+    assert recovered_buffer[
+        "minimum_lateral_entry_buffer_surplus_m"
+    ] > 0.0
+
+    bounded_seek = CONTROLLER_REFERENCE.read_text().split(
+        "def _seek_stable_plate_contact(", 1
+    )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    descent_transition = bounded_seek[
+        bounded_seek.index(
+            'if stage_before_action == "overhead_center_descent"'
+        ) : bounded_seek.index(
+            'elif stage_before_action == "vertical_tail_brake"'
+        )
+    ]
+    assert 'structural_stage = "vertical_tail_brake"' in descent_transition
+    assert 'structural_stage = "overhead_corridor_lateral"' not in (
+        descent_transition
+    )
+    assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
+    assert (
+        'elif structural_stage == "vertical_tail_zero_confirmation"'
+        in bounded_seek
+    )
+    assert '"commanded_z_action": float(action[2])' in bounded_seek
+    assert "measured_vertical_step_progress_m >= 0.0" in bounded_seek
+    assert 'latest_overhead_lateral_buffer["accepted"]' in bounded_seek
+    assert "lateral_tail_or_buffer_interlock_to_brake" in bounded_seek
+    assert "lateral_pre_action_interlock_to_brake" in bounded_seek
+    assert "vertical_tail_events" in bounded_seek
+    assert "for confirm" not in bounded_seek[
+        bounded_seek.index(
+            'elif structural_stage == "vertical_tail_zero_confirmation"'
+        ) : bounded_seek.index(
+            'elif structural_stage == "overhead_corridor_lateral"'
+        )
+    ]
 
 
 def test_499954_saturated_recovery_follows_improving_discrete_response():
@@ -2653,6 +2766,8 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "one_controller_step_corridor_reserve_lost" in bounded_seek
     assert "compiled_safe_z_rim_coverage_not_sustained" in bounded_seek
     assert "compiled_overhead_one_step_vertical_reserve_lost" in bounded_seek
+    assert "_overhead_lateral_buffer_evidence(" in bounded_seek
+    assert '"vertical_tail_events"' in bounded_seek
     assert '"structural_waypoint_budget"' in bounded_seek
     assert 'stage.startswith("outside_")' in bounded_seek
     assert "tolerance=" not in bounded_seek
