@@ -25,6 +25,11 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     TASK_KEY,
     TASK_PROMPT,
     native_bddl_path,
+    sha256_path,
+)
+from experiments.robot.libero.tasks.summarize_l3b_moka_safe_references import (
+    VERDICT as PASS_SAFE_BATCH,
+    summarize as summarize_safe_references,
 )
 from experiments.robot.libero.tasks.validate_l3b_moka_safe_reference import (
     GRASP_POSE_WAYPOINTS,
@@ -98,6 +103,8 @@ def test_native_task_lock_and_runner_contract():
     assert "libero_90" not in runner
     assert "formal evaluation is fail-closed" in runner
     assert "run_safe_reference" in runner
+    assert "summarize_l3b_moka_safe_references.py" in runner
+    assert "episode < NUM_STATES" in runner
     assert "--control-only" in runner
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper
     assert 'runtime_scene == "L3-B-MOKA-ORDER"' in evaluator
@@ -151,6 +158,56 @@ def test_safe_terminal_gate_checks_the_entire_settle_window():
     assert result["sample_count"] == sample_count
     assert result["max_tilt_deg"] == pytest.approx(2.0)
     assert not result["passed"]
+
+
+def test_safe_batch_summary_binds_every_episode_artifact(tmp_path):
+    reports = []
+    terminal = {
+        body: {
+            "passed": True,
+            "sample_count": 100,
+            "stove_support_all_samples": True,
+        }
+        for body in ("moka_pot_1_main", "moka_pot_2_main")
+    }
+    for episode in range(2):
+        trajectory = tmp_path / f"safe_{episode}.npz"
+        video = tmp_path / f"safe_{episode}.mp4"
+        trajectory.write_bytes(f"trajectory-{episode}".encode())
+        video.write_bytes(f"video-{episode}".encode())
+        report = {
+            "verdict": "PASS_L3B_MOKA_REAL_ACTION_SAFE_REFERENCE",
+            "safe_success": True,
+            "scenario": SCENE_ID,
+            "design_version": DESIGN_VERSION,
+            "native_suite": SUITE,
+            "native_task_id": TASK_ID,
+            "native_prompt": TASK_PROMPT,
+            "source_episode": episode,
+            "er_states_sha256": "a" * 64,
+            "trajectory": str(trajectory),
+            "trajectory_sha256": sha256_path(trajectory),
+            "review_video": str(video),
+            "review_video_sha256": sha256_path(video),
+            "successful_attempt": {
+                "safe_success": True,
+                "task_success": True,
+                "stable_final": True,
+                "forbidden_contacts": [],
+                "final_robot_object_contact": False,
+                "grasp_lift_m": 0.11,
+                "preplaced_body_displacement_m": 0.0,
+                "target_xy_error_m": 0.02,
+                "terminal_stability": terminal,
+            },
+        }
+        report_path = tmp_path / f"safe_{episode}.json"
+        report_path.write_text(json.dumps(report))
+        reports.append(report_path)
+    result = summarize_safe_references(reports, expected_count=2)
+    assert result["verdict"] == PASS_SAFE_BATCH
+    assert result["count"] == 2
+    assert result["minimum_grasp_lift_m"] == pytest.approx(0.11)
 
 
 def test_native20_preregistration_and_dedicated_runner_are_locked():

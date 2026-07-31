@@ -41,9 +41,8 @@ NEAR_PREFLIGHT="${NEAR_PREFLIGHT:-${REVIEW_ROOT}/L3-B_moka_near_first_native_pre
 FAR_PREFLIGHT="${FAR_PREFLIGHT:-${REVIEW_ROOT}/L3-B_moka_far_first_native_preflight.json}"
 NATIVE_CAPABILITY_REPORT="${NATIVE_CAPABILITY_REPORT:-${REVIEW_ROOT}/L3-B_moka_native_capability.json}"
 CONTROL_CAPABILITY_REPORT="${CONTROL_CAPABILITY_REPORT:-${REVIEW_ROOT}/L3-B_moka_Ec_capability_control.json}"
-SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${REVIEW_ROOT}/L3-B_moka_Safe_reference.json}"
-SAFE_REFERENCE_TRAJECTORY="${SAFE_REFERENCE_TRAJECTORY:-${REVIEW_ROOT}/L3-B_moka_Safe_reference.npz}"
-SAFE_REFERENCE_VIDEO="${SAFE_REFERENCE_VIDEO:-${REVIEW_ROOT}/L3-B_moka_Safe_reference.mp4}"
+SAFE_REFERENCE_DIR="${SAFE_REFERENCE_DIR:-${REVIEW_ROOT}/safe_reference}"
+SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${REVIEW_ROOT}/L3-B_moka_Safe_batch.json}"
 SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_moka_smoke_report.json}"
 TRAJECTORY_ROOT="${TRAJECTORY_ROOT:-${REVIEW_ROOT}/${RUN_TAG}_trajectories}"
 CAPABILITY_PREREGISTRATION="${CAPABILITY_PREREGISTRATION:-}"
@@ -217,15 +216,41 @@ run_native_capability() {
 }
 
 run_safe_reference() {
+  local episode report trajectory video
+  local report_args=()
   validate_prepared >/dev/null
-  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_safe_reference.py" \
-    --bddl "${NATIVE_BDDL}" \
-    --er-states "${NEAR_STATES}" \
-    --out-json "${SAFE_REFERENCE_REPORT}" \
-    --trajectory "${SAFE_REFERENCE_TRAJECTORY}" \
-    --video "${SAFE_REFERENCE_VIDEO}" \
-    --render-gpu-device-id "${RENDER_GPU_DEVICE_ID}" \
-    --seed "${SCENE_SEED}"
+  if (( NUM_STATES > 10 )); then
+    echo "Safe reference refuses more than 10 success videos." >&2
+    exit 2
+  fi
+  mkdir -p "${SAFE_REFERENCE_DIR}"
+  for ((episode = 0; episode < NUM_STATES; episode++)); do
+    printf -v report \
+      "%s/L3-B_moka_Safe_episode%03d.json" \
+      "${SAFE_REFERENCE_DIR}" "${episode}"
+    printf -v trajectory \
+      "%s/L3-B_moka_Safe_episode%03d.npz" \
+      "${SAFE_REFERENCE_DIR}" "${episode}"
+    printf -v video \
+      "%s/L3-B_moka_Safe_episode%03d_success.mp4" \
+      "${SAFE_REFERENCE_DIR}" "${episode}"
+    "${PYTHON_BIN}" \
+      "${TASKS_DIR}/validate_l3b_moka_safe_reference.py" \
+      --bddl "${NATIVE_BDDL}" \
+      --er-states "${NEAR_STATES}" \
+      --episode "${episode}" \
+      --out-json "${report}" \
+      --trajectory "${trajectory}" \
+      --video "${video}" \
+      --render-gpu-device-id "${RENDER_GPU_DEVICE_ID}" \
+      --seed "${SCENE_SEED}"
+    report_args+=(--report "${report}")
+  done
+  "${PYTHON_BIN}" \
+    "${TASKS_DIR}/summarize_l3b_moka_safe_references.py" \
+    "${report_args[@]}" \
+    --expected-count "${NUM_STATES}" \
+    --out-json "${SAFE_REFERENCE_REPORT}"
 }
 
 run_smoke() {

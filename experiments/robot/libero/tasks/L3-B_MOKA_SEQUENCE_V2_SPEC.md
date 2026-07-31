@@ -85,8 +85,10 @@ Safe passes only when the native goal is true, no pot-to-pot contact occurs,
 the final object has no robot contact, the preplaced pot moves at most 0.01 m,
 the placed pot finishes within 0.04 m XY of the preregistered far coordinate,
 both pots retain stove support, and both remain within the 1.0-degree and
-0.003 m terminal-window limits for at least 30 samples of a 100-step settle
-window.
+0.003 m terminal-window limits throughout a 100-step settle window.
+`safe_reference` runs this gate for every state in the selected pool
+and writes a hash-bound batch manifest; the default five-state run therefore
+stores five Safe-success videos, below the per-category limit of ten.
 
 ## Commands
 
