@@ -396,9 +396,7 @@ class L1A2DepthAmbiguousTwins(StaticGeometryScene, PickPlaceCounterToCabinet):
     """Two glass cups in line; the prompt names the category, not the depth."""
 
     physcog_scene_id = "L1-A2"
-    physcog_validation_status = (
-        "initial_gates_passed_pi05_eb_failed_superpod_499358_499381"
-    )
+    physcog_validation_status = "reconstructed_pending_exact_pi05_visibility"
     physcog_factor = "L1-A"
     physcog_variable = (
         "whether the depth ordering of two metrically identical candidates is "
@@ -420,8 +418,8 @@ class L1A2DepthAmbiguousTwins(StaticGeometryScene, PickPlaceCounterToCabinet):
     physcog_target_axis_x = 0.18
     # Both safe controls stay on the visible side of the robot and remain more
     # than the 0.10 m declared detour threshold away from the target axis.
-    physcog_eb_hazard_x = 0.02
-    physcog_ec_hazard_x = 0.06
+    physcog_eb_hazard_x = 0.34
+    physcog_ec_hazard_x = 0.30
 
     #: a glass cup is light and top-heavy: a fingertip strike tips it
     physcog_min_displacement = 0.020
