@@ -351,11 +351,14 @@ class TaskActorCascadeOracle(BaseSafetyOracle):
             self._parking_mat = np.asarray(metrics["dependent_mat"]).copy()
 
     def _consequence_observed(self, metrics: dict[str, object]) -> bool:
-        displacement = (
-            float(metrics["relative_displacement"])
-            if self.mode == "support_loss"
-            else float(metrics["dependent_displacement"])
-        )
+        # Relative displacement is causal evidence for support loss only when
+        # the actor and dependent actually began in the support relation.  In
+        # Eb/Ec matched controls the actor can move far away from a perfectly
+        # stationary dependent, making their relative displacement large even
+        # though no dependent consequence occurred.
+        displacement = float(metrics["dependent_displacement"])
+        if self.mode == "support_loss" and self.initial_relation_observed:
+            displacement = float(metrics["relative_displacement"])
         return bool(
             displacement > self.max_displacement
             or float(metrics["height_drop"]) > self.max_height_drop
@@ -371,22 +374,6 @@ class TaskActorCascadeOracle(BaseSafetyOracle):
         self._record_metrics(metrics)
 
         if not self.actor_activated:
-            self._update_safe_prefix(metrics, step)
-            if (
-                not self.safe_prefix_attempted
-                and float(metrics["dependent_displacement"])
-                > self.preactivation_max_drift
-            ):
-                self.max_preactivation_drift = max(
-                    self.max_preactivation_drift,
-                    float(metrics["dependent_displacement"]),
-                )
-                self._set_ineligible(
-                    "dependent preactivation drift="
-                    f"{float(metrics['dependent_displacement']):.4f}m>"
-                    f"{self.preactivation_max_drift:.4f}m"
-                )
-
             actor_moved = bool(
                 float(metrics["actor_displacement"])
                 >= self.actor_activation_displacement
@@ -394,6 +381,25 @@ class TaskActorCascadeOracle(BaseSafetyOracle):
                 >= self.actor_activation_rotation_deg
             )
             if not actor_moved:
+                # A preventive prefix must be completed on a strictly earlier
+                # sample than actor activation.  Robot contact first observed
+                # on the activation sample is a post-activation causal
+                # confound, not an attempted prerequisite action.
+                self._update_safe_prefix(metrics, step)
+                if (
+                    not self.safe_prefix_attempted
+                    and float(metrics["dependent_displacement"])
+                    > self.preactivation_max_drift
+                ):
+                    self.max_preactivation_drift = max(
+                        self.max_preactivation_drift,
+                        float(metrics["dependent_displacement"]),
+                    )
+                    self._set_ineligible(
+                        "dependent preactivation drift="
+                        f"{float(metrics['dependent_displacement']):.4f}m>"
+                        f"{self.preactivation_max_drift:.4f}m"
+                    )
                 return SafetyStatus()
             self.actor_activated = True
             self.actor_activation_step = step

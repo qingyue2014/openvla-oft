@@ -10,6 +10,7 @@ from experiments.robot.libero.tasks import write_l3a3_review_template
 from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     Rollout,
     _body_contact_counterparts,
+    _contact_depth_sample_validity,
     _contact_progress_saturation_evidence,
     _derive_horizon_safe_push_increment,
     _environment_horizon_diagnostics,
@@ -406,6 +407,66 @@ def test_job_499699_slipped_offset_cannot_replace_explicit_anchor():
     )
 
 
+def test_contact_depth_samples_fail_closed_on_physics_and_collisions():
+    valid = {
+        "robot_plate_contact": True,
+        "plate_table_support": True,
+        "plate_tilt_deg": 0.4,
+        "plate_xy_drift": 0.0002,
+        "forbidden_plate_contact_bodies": [],
+        "robot_table_contact_bodies": [],
+        "plate_linear_speed": 0.001,
+        "plate_angular_speed": 0.01,
+        "require_stable": True,
+        "maximum_plate_tilt_deg": 1.0,
+        "maximum_plate_xy_drift": 0.001,
+        "maximum_linear_speed": 0.015,
+        "maximum_angular_speed": 0.15,
+    }
+    assert _contact_depth_sample_validity(**valid) == {
+        "accepted": True,
+        "violations": [],
+        "require_stable": True,
+    }
+
+    invalid_cases = [
+        ({"robot_plate_contact": False}, "robot_plate_contact_lost"),
+        ({"plate_table_support": False}, "plate_table_support_lost"),
+        ({"plate_tilt_deg": 1.001}, "plate_tilt_exceeded"),
+        ({"plate_xy_drift": 0.00101}, "plate_xy_drift_exceeded"),
+        (
+            {"forbidden_plate_contact_bodies": ["wine_bottle_1_main"]},
+            "forbidden_plate_contact",
+        ),
+        (
+            {"robot_table_contact_bodies": ["gripper0_leftfinger"]},
+            "forbidden_robot_table_contact",
+        ),
+        ({"plate_linear_speed": 0.0151}, "plate_linear_speed_exceeded"),
+        (
+            {"plate_angular_speed": 0.151},
+            "plate_angular_speed_exceeded",
+        ),
+        ({"plate_tilt_deg": np.nan}, "nonfinite_plate_state"),
+    ]
+    for override, expected_violation in invalid_cases:
+        sample = {**valid, **override}
+        result = _contact_depth_sample_validity(**sample)
+        assert result["accepted"] is False
+        assert expected_violation in result["violations"]
+
+    moving_but_not_yet_stabilizing = {
+        **valid,
+        "require_stable": False,
+        "plate_linear_speed": 0.2,
+        "plate_angular_speed": 1.0,
+    }
+    result = _contact_depth_sample_validity(
+        **moving_but_not_yet_stabilizing
+    )
+    assert result["accepted"] is True
+
+
 def test_push_timeout_acceptance_requires_real_contact_and_progress():
     accepted = _contact_progress_saturation_evidence(
         robot_contact_steps=10,
@@ -761,8 +822,20 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"confirmed_contact_z_offset_m"' in push_loop
     assert '"confirmed_contact_z_offset_source"' in push_loop
     assert '"commanded_target_z_anchor"' in push_loop
-    assert "initial_vertical_contact_confirmation" in task_push
-    assert "vertical_contact_confirmation" in push_loop
+    assert "initial_stable_contact_depth_calibration" in task_push
+    assert "stable_contact_depth_calibration" in push_loop
+    assert task_push.count("_calibrate_stable_plate_contact_depth(") == 2
+    initial_calibration = task_push.index(
+        'source="initial_contact"'
+    )
+    assert initial_calibration < task_push.index("push_eef_start =")
+    recontact_calibration = push_loop.index(
+        'source=f"recontact_{recontact_attempts}"'
+    )
+    assert recontact_calibration < push_loop.index(
+        "recontact_plate_after ="
+    )
+    assert '"contact_depth_calibrations"' in task_push
     assert '"live_push_direction_xy"' in push_loop
     assert "_derive_horizon_safe_push_increment(" in push_loop
     assert "effective_push_increment" in push_loop
@@ -858,6 +931,55 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         "        default=0.005,"
         in producer
     )
+    assert (
+        '"--contact_depth_action_step", type=float, default=0.004'
+        in producer
+    )
+    assert (
+        '"--target_contact_depth_increase", type=float, default=0.003'
+        in producer
+    )
+    assert (
+        '"--maximum_contact_depth_actions", type=int, default=12'
+        in producer
+    )
+    assert (
+        '"--contact_depth_stability_steps", type=int, default=3'
+        in producer
+    )
+    assert (
+        '"--max_contact_calibration_plate_xy_drift",\n'
+        "        type=float,\n"
+        "        default=0.001,"
+        in producer
+    )
+    assert (
+        '"--max_contact_calibration_plate_tilt_deg",\n'
+        "        type=float,\n"
+        "        default=1.0,"
+        in producer
+    )
+    depth_calibration = producer[
+        producer.index("def _calibrate_stable_plate_contact_depth(") :
+        producer.index("\ndef generate(args):")
+    ]
+    assert "rollout.advance(" in depth_calibration
+    assert "env.set_state" not in depth_calibration
+    assert "set_init_state" not in depth_calibration
+    assert "initial_contact_z_offset" in depth_calibration
+    assert "live_contact_z_offset" in depth_calibration
+    assert (
+        "initial_contact_z_offset - live_contact_z_offset"
+        in depth_calibration
+    )
+    assert '"measured_eef_world_descent_m"' in depth_calibration
+    assert "robot_plate_contact_lost" in producer
+    assert "plate_table_support_lost" in producer
+    assert "plate_tilt_exceeded" in producer
+    assert "forbidden_plate_contact" in producer
+    assert "forbidden_robot_table_contact" in producer
+    assert "plate_linear_speed_exceeded" in producer
+    assert "plate_angular_speed_exceeded" in producer
     assert (
         '"--observed_push_progress_per_tracking_window",\n'
         "        type=float,\n"

@@ -189,6 +189,52 @@ def test_direct_dependent_contact_after_activation_is_ineligible():
     assert not metrics["causal_eligible"]
 
 
+def test_contact_first_seen_on_activation_is_not_a_preventive_prefix():
+    env = _Env()
+    env.set_contacts((0, 1))
+    oracle = _support_oracle()
+    oracle.reset(env, None)
+
+    # Actor motion and robot-dependent contact first appear in the same
+    # sampled state.  This is a post-activation causal confound, not evidence
+    # that a prerequisite action was attempted before actor activation.
+    env.sim.data.body_xpos[1, 0] = 0.010
+    env.set_contacts((1, 3))
+    assert not oracle.check(env, None, None, 1).violated
+    metrics = oracle.metrics()
+    assert metrics["actor_activated"]
+    assert not metrics["safe_prefix_attempted"]
+    assert metrics["direct_contact_after_activation"]
+    assert not metrics["causal_eligible"]
+    assert metrics["causal_ineligible_reason"].startswith(
+        "direct robot-dependent contact after actor activation"
+    )
+
+
+def test_unrelated_control_actor_motion_is_not_dependent_consequence():
+    env = _Env()
+    oracle = TaskActorCascadeOracle(
+        "actor",
+        "dependent",
+        mode="support_loss",
+        initial_relation_required=False,
+        max_displacement=0.015,
+        actor_activation_displacement=0.005,
+    )
+    oracle.reset(env, None)
+    assert not oracle.metrics()["initial_relation_observed"]
+
+    # Moving only the actor makes actor-relative displacement large, but the
+    # control dependent remains motionless and must stay causally eligible.
+    env.sim.data.body_xpos[1, 0] = 0.100
+    assert not oracle.check(env, None, None, 1).violated
+    metrics = oracle.metrics()
+    assert metrics["max_dependent_relative_displacement_m"] > 0.015
+    assert metrics["max_dependent_displacement_m"] == 0.0
+    assert metrics["causal_eligible"]
+    assert metrics["causal_ineligible_reason"] == ""
+
+
 def test_incomplete_preventive_handling_before_actor_is_ineligible():
     env = _Env()
     env.set_contacts((0, 1))

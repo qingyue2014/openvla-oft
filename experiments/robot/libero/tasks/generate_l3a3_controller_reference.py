@@ -436,6 +436,131 @@ def _robot_contacts_body(env, body_name):
     )
 
 
+def _contact_depth_sample_validity(
+    *,
+    robot_plate_contact,
+    plate_table_support,
+    plate_tilt_deg,
+    plate_xy_drift,
+    forbidden_plate_contact_bodies,
+    robot_table_contact_bodies,
+    plate_linear_speed,
+    plate_angular_speed,
+    require_stable,
+    maximum_plate_tilt_deg,
+    maximum_plate_xy_drift,
+    maximum_linear_speed,
+    maximum_angular_speed,
+):
+    """Fail-closed semantic gates for one measured depth-calibration sample."""
+    violations = []
+    measured_values = (
+        plate_tilt_deg,
+        plate_xy_drift,
+        plate_linear_speed,
+        plate_angular_speed,
+    )
+    if not all(np.isfinite(value) for value in measured_values):
+        violations.append("nonfinite_plate_state")
+    if not robot_plate_contact:
+        violations.append("robot_plate_contact_lost")
+    if not plate_table_support:
+        violations.append("plate_table_support_lost")
+    if plate_tilt_deg > maximum_plate_tilt_deg:
+        violations.append("plate_tilt_exceeded")
+    if plate_xy_drift > maximum_plate_xy_drift:
+        violations.append("plate_xy_drift_exceeded")
+    if forbidden_plate_contact_bodies:
+        violations.append("forbidden_plate_contact")
+    if robot_table_contact_bodies:
+        violations.append("forbidden_robot_table_contact")
+    if require_stable and plate_linear_speed > maximum_linear_speed:
+        violations.append("plate_linear_speed_exceeded")
+    if require_stable and plate_angular_speed > maximum_angular_speed:
+        violations.append("plate_angular_speed_exceeded")
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "require_stable": bool(require_stable),
+    }
+
+
+def _contact_depth_state_diagnostics(
+    env,
+    plate_reference_position,
+    *,
+    require_stable,
+    maximum_plate_tilt_deg,
+    maximum_plate_xy_drift,
+    maximum_linear_speed,
+    maximum_angular_speed,
+):
+    """Measure physical and collision gates at the policy-observed state."""
+    plate_position = body_pose(env, PLATE_BODY)[0]
+    plate_tilt = body_tilt_deg(env, PLATE_BODY)
+    plate_linear, plate_angular = body_velocity(env, PLATE_BODY)
+    plate_contacts = _body_contact_counterparts(env, PLATE_BODY)
+    forbidden_plate_contacts = sorted(
+        {
+            item["counterpart_body"]
+            for item in plate_contacts
+            if (
+                item["counterpart_body"] != TABLE_BODY
+                and not item["counterpart_is_robot_or_gripper"]
+            )
+        }
+    )
+    table_contacts = _body_contact_counterparts(env, TABLE_BODY)
+    robot_table_contacts = sorted(
+        {
+            item["counterpart_body"]
+            for item in table_contacts
+            if item["counterpart_is_robot_or_gripper"]
+        }
+    )
+    plate_table_support = any(
+        item["counterpart_body"] == TABLE_BODY for item in plate_contacts
+    )
+    robot_plate_contact = any(
+        item["counterpart_is_robot_or_gripper"]
+        for item in plate_contacts
+    )
+    plate_xy_drift = float(
+        np.linalg.norm(
+            plate_position[:2]
+            - np.asarray(plate_reference_position, dtype=float)[:2]
+        )
+    )
+    validity = _contact_depth_sample_validity(
+        robot_plate_contact=robot_plate_contact,
+        plate_table_support=plate_table_support,
+        plate_tilt_deg=plate_tilt,
+        plate_xy_drift=plate_xy_drift,
+        forbidden_plate_contact_bodies=forbidden_plate_contacts,
+        robot_table_contact_bodies=robot_table_contacts,
+        plate_linear_speed=plate_linear,
+        plate_angular_speed=plate_angular,
+        require_stable=require_stable,
+        maximum_plate_tilt_deg=maximum_plate_tilt_deg,
+        maximum_plate_xy_drift=maximum_plate_xy_drift,
+        maximum_linear_speed=maximum_linear_speed,
+        maximum_angular_speed=maximum_angular_speed,
+    )
+    return {
+        **validity,
+        "plate_position": plate_position.tolist(),
+        "plate_tilt_deg": plate_tilt,
+        "plate_xy_drift_m": plate_xy_drift,
+        "plate_linear_speed_mps": plate_linear,
+        "plate_angular_speed_radps": plate_angular,
+        "robot_plate_contact": robot_plate_contact,
+        "plate_table_support": plate_table_support,
+        "forbidden_plate_contact_bodies": forbidden_plate_contacts,
+        "robot_table_contact_bodies": robot_table_contacts,
+        "plate_contacts": plate_contacts,
+    }
+
+
 def _load_er_episode(path: Path, episode: int):
     with h5py.File(path, "r") as handle:
         group = handle[TASK_KEY]
@@ -617,6 +742,202 @@ class Rollout:
         )
 
 
+def _calibrate_stable_plate_contact_depth(
+    rollout,
+    env,
+    args,
+    *,
+    gripper,
+    source,
+    diagnostics,
+):
+    """Deepen a first-touch contact with measured, gated OSC actions."""
+    initial_eef = np.asarray(
+        rollout.obs["robot0_eef_pos"], dtype=float
+    ).copy()
+    plate_reference = body_pose(env, PLATE_BODY)[0].copy()
+    initial_contact_z_offset = float(
+        initial_eef[2] - plate_reference[2]
+    )
+    samples = []
+
+    def capture(stage, index, require_stable):
+        current_eef = np.asarray(
+            rollout.obs["robot0_eef_pos"], dtype=float
+        ).copy()
+        state = _contact_depth_state_diagnostics(
+            env,
+            plate_reference,
+            require_stable=require_stable,
+            maximum_plate_tilt_deg=(
+                args.max_contact_calibration_plate_tilt_deg
+            ),
+            maximum_plate_xy_drift=(
+                args.max_contact_calibration_plate_xy_drift
+            ),
+            maximum_linear_speed=args.max_stable_linear_speed,
+            maximum_angular_speed=args.max_stable_angular_speed,
+        )
+        live_plate = np.asarray(state["plate_position"], dtype=float)
+        live_contact_z_offset = float(
+            current_eef[2] - live_plate[2]
+        )
+        measured_depth_increase = float(
+            initial_contact_z_offset - live_contact_z_offset
+        )
+        sample = {
+            "stage": stage,
+            "index": int(index),
+            "eef_position": current_eef.tolist(),
+            "initial_contact_z_offset_m": initial_contact_z_offset,
+            "live_contact_z_offset_m": live_contact_z_offset,
+            "measured_contact_depth_increase_m": (
+                measured_depth_increase
+            ),
+            "measured_eef_world_descent_m": float(
+                initial_eef[2] - current_eef[2]
+            ),
+            **state,
+        }
+        samples.append(sample)
+        maximum_safe_depth_increase = min(
+            args.target_contact_depth_increase
+            + args.contact_depth_action_step,
+            0.005,
+        )
+        sample["maximum_safe_contact_depth_increase_m"] = (
+            maximum_safe_depth_increase
+        )
+        if measured_depth_increase > maximum_safe_depth_increase:
+            sample["accepted"] = False
+            sample["violations"].append(
+                "contact_depth_overshoot_exceeded"
+            )
+        if not sample["accepted"]:
+            failure = {
+                "source": source,
+                "initial_eef": initial_eef.tolist(),
+                "plate_reference": plate_reference.tolist(),
+                "samples": samples,
+                "scene": diagnostics(),
+            }
+            raise RuntimeError(
+                "stable plate contact-depth calibration violated a physical "
+                "or collision gate: "
+                f"{json.dumps(failure, sort_keys=True)}"
+            )
+        return sample
+
+    capture("pre_depth", 0, True)
+    for action_index in range(1, args.maximum_contact_depth_actions + 1):
+        current_eef = np.asarray(
+            rollout.obs["robot0_eef_pos"], dtype=float
+        )
+        current_plate = body_pose(env, PLATE_BODY)[0]
+        current_contact_z_offset = float(
+            current_eef[2] - current_plate[2]
+        )
+        measured_depth_increase = float(
+            initial_contact_z_offset - current_contact_z_offset
+        )
+        if (
+            measured_depth_increase
+            >= args.target_contact_depth_increase
+        ):
+            break
+        target = current_eef.copy()
+        target[2] -= args.contact_depth_action_step
+        rollout.advance(
+            _position_action(
+                current_eef,
+                target,
+                gripper,
+                args.position_action_scale,
+            ),
+            "task",
+        )
+        capture("depth_action", action_index, False)
+
+    reached_eef = np.asarray(
+        rollout.obs["robot0_eef_pos"], dtype=float
+    ).copy()
+    reached_plate = body_pose(env, PLATE_BODY)[0]
+    reached_contact_z_offset = float(
+        reached_eef[2] - reached_plate[2]
+    )
+    reached_depth_increase = float(
+        initial_contact_z_offset - reached_contact_z_offset
+    )
+    if reached_depth_increase < args.target_contact_depth_increase:
+        raise RuntimeError(
+            "stable plate contact-depth calibration did not reach its "
+            "measured descent target: "
+            f"source={source} "
+            f"reached_depth_increase_m={reached_depth_increase:.6f} "
+            f"target_depth_increase_m="
+            f"{args.target_contact_depth_increase:.6f} "
+            f"samples={json.dumps(samples, sort_keys=True)}"
+        )
+
+    for confirm_index in range(
+        1, args.contact_depth_stability_steps + 1
+    ):
+        action = np.zeros(7, dtype=float)
+        action[-1] = gripper
+        rollout.advance(action, "task")
+        capture("stability_confirmation", confirm_index, True)
+
+    final_eef = np.asarray(
+        rollout.obs["robot0_eef_pos"], dtype=float
+    ).copy()
+    final_plate = body_pose(env, PLATE_BODY)[0].copy()
+    final_contact_z_offset = float(final_eef[2] - final_plate[2])
+    final_depth_increase = float(
+        initial_contact_z_offset - final_contact_z_offset
+    )
+    if final_depth_increase < args.target_contact_depth_increase:
+        raise RuntimeError(
+            "stable plate contact depth rebounded above the measured target "
+            "during confirmation: "
+            f"source={source} "
+            f"final_depth_increase_m={final_depth_increase:.6f} "
+            f"target_depth_increase_m="
+            f"{args.target_contact_depth_increase:.6f} "
+            f"samples={json.dumps(samples, sort_keys=True)}"
+        )
+    result = {
+        "source": source,
+        "initial_eef_position": initial_eef.tolist(),
+        "final_eef_position": final_eef.tolist(),
+        "plate_reference_position": plate_reference.tolist(),
+        "final_plate_position": final_plate.tolist(),
+        "target_contact_depth_increase_m": (
+            args.target_contact_depth_increase
+        ),
+        "initial_contact_z_offset_m": initial_contact_z_offset,
+        "final_contact_z_offset_m": final_contact_z_offset,
+        "measured_contact_depth_increase_m": final_depth_increase,
+        "measured_eef_world_descent_m": float(
+            initial_eef[2] - final_eef[2]
+        ),
+        "measured_contact_offset": (
+            final_eef - final_plate
+        ).tolist(),
+        "depth_actions_used": sum(
+            sample["stage"] == "depth_action" for sample in samples
+        ),
+        "stability_steps": args.contact_depth_stability_steps,
+        "samples": samples,
+        "accepted": True,
+    }
+    print(
+        "L3-A3 stable contact-depth calibration "
+        + json.dumps(result, sort_keys=True),
+        flush=True,
+    )
+    return result
+
+
 def generate(args):
     from libero.libero.envs import OffScreenRenderEnv
 
@@ -626,6 +947,58 @@ def generate(args):
         raise ValueError("--video_fps must be positive")
     if args.pusher_contact_confirm_steps < 1:
         raise ValueError("--pusher_contact_confirm_steps must be positive")
+    if (
+        not np.isfinite(args.contact_depth_action_step)
+        or args.contact_depth_action_step <= 0
+        or args.contact_depth_action_step > 0.005
+    ):
+        raise ValueError(
+            "--contact_depth_action_step must be in (0, 0.005]"
+        )
+    if (
+        not np.isfinite(args.target_contact_depth_increase)
+        or args.target_contact_depth_increase <= 0
+        or args.target_contact_depth_increase > 0.005
+    ):
+        raise ValueError(
+            "--target_contact_depth_increase must be in (0, 0.005]"
+        )
+    if args.maximum_contact_depth_actions < 1:
+        raise ValueError(
+            "--maximum_contact_depth_actions must be positive"
+        )
+    if (
+        args.target_contact_depth_increase
+        > args.contact_depth_action_step
+        * args.maximum_contact_depth_actions
+    ):
+        raise ValueError(
+            "contact depth target exceeds the commanded calibration budget"
+        )
+    if args.contact_depth_stability_steps < 1:
+        raise ValueError(
+            "--contact_depth_stability_steps must be positive"
+        )
+    if (
+        not np.isfinite(
+            args.max_contact_calibration_plate_xy_drift
+        )
+        or args.max_contact_calibration_plate_xy_drift <= 0
+    ):
+        raise ValueError(
+            "--max_contact_calibration_plate_xy_drift must be positive"
+        )
+    if (
+        not np.isfinite(
+            args.max_contact_calibration_plate_tilt_deg
+        )
+        or not (
+            0 < args.max_contact_calibration_plate_tilt_deg <= 1.0
+        )
+    ):
+        raise ValueError(
+            "--max_contact_calibration_plate_tilt_deg must be in (0, 1]"
+        )
     if args.minimum_push_progress <= 0:
         raise ValueError("--minimum_push_progress must be positive")
     if args.minimum_saturated_waypoint_progress <= 0:
@@ -834,6 +1207,19 @@ def generate(args):
             raise RuntimeError(
                 "robot-plate contact was lost during open-gripper confirmation"
             )
+        initial_contact_depth_calibration = (
+            _calibrate_stable_plate_contact_depth(
+                rollout,
+                env,
+                args,
+                gripper=pusher_open_sign,
+                source="initial_contact",
+                diagnostics=plate_diagnostics,
+            )
+        )
+        contact_depth_calibrations = [
+            initial_contact_depth_calibration
+        ]
 
         push_eef_start = np.asarray(
             rollout.obs["robot0_eef_pos"], dtype=float
@@ -842,11 +1228,11 @@ def generate(args):
         confirmed_contact_offset = push_eef_start - push_plate_start
         explicit_contact_anchor_offset = confirmed_contact_offset.copy()
         explicit_contact_anchor_source = (
-            "initial_vertical_contact_confirmation"
+            "initial_stable_contact_depth_calibration"
         )
         confirmed_contact_z_offset = float(confirmed_contact_offset[2])
         confirmed_contact_z_offset_source = (
-            "initial_vertical_contact_confirmation"
+            "initial_stable_contact_depth_calibration"
         )
         push_waypoints = []
         recontact_events = []
@@ -890,6 +1276,9 @@ def generate(args):
                 "recontact_required_reason": recontact_required_reason,
                 "contact_offset_rejection_events": (
                     contact_offset_rejection_events
+                ),
+                "latest_contact_depth_calibration": (
+                    contact_depth_calibrations[-1]
                 ),
                 "horizon_budget": _horizon_budget(
                     env, final_horizon_reserve_steps
@@ -1048,6 +1437,19 @@ def generate(args):
                         "robot-plate recontact was lost during open-gripper "
                         f"confirmation: {json.dumps(recontact_diagnostics(), sort_keys=True)}"
                     )
+                recontact_depth_calibration = (
+                    _calibrate_stable_plate_contact_depth(
+                        rollout,
+                        env,
+                        args,
+                        gripper=pusher_open_sign,
+                        source=f"recontact_{recontact_attempts}",
+                        diagnostics=recontact_diagnostics,
+                    )
+                )
+                contact_depth_calibrations.append(
+                    recontact_depth_calibration
+                )
                 recontact_plate_after = body_pose(env, PLATE_BODY)[0].copy()
                 recontact_eef_after = np.asarray(
                     rollout.obs["robot0_eef_pos"], dtype=float
@@ -1060,7 +1462,7 @@ def generate(args):
                 )
                 explicit_contact_anchor_source = (
                     f"recontact_{recontact_attempts}_"
-                    "vertical_contact_confirmation"
+                    "stable_contact_depth_calibration"
                 )
                 confirmed_contact_z_offset = float(
                     confirmed_contact_offset[2]
@@ -1089,6 +1491,9 @@ def generate(args):
                         ),
                         "explicit_contact_anchor_source": (
                             explicit_contact_anchor_source
+                        ),
+                        "stable_contact_depth_calibration": (
+                            recontact_depth_calibration
                         ),
                         "post_plate_contact_counterparts": (
                             _body_contact_counterparts(env, PLATE_BODY)
@@ -1517,6 +1922,10 @@ def generate(args):
             "contact_offset_rejection_events": (
                 contact_offset_rejection_events
             ),
+            "contact_depth_calibrations": contact_depth_calibrations,
+            "contact_depth_calibration_count": len(
+                contact_depth_calibrations
+            ),
             "contact_loss_recontact_transitions": sum(
                 waypoint["recontact_required_after_waypoint"]
                 for waypoint in push_waypoints
@@ -1729,6 +2138,34 @@ def main():
         "--plate_approach_eef_height", type=float, default=0.160
     )
     parser.add_argument("--pusher_contact_confirm_steps", type=int, default=2)
+    # Job 499726 showed that first contact at EEF-minus-plate Z ~= 19.5 mm
+    # was an unstable upper-edge touch: lateral pushing lifted the EEF by
+    # about 2.3 mm and moved the plate less than 1 mm.  After first contact,
+    # use bounded OSC actions to measure a 3 mm deeper contact and accept that
+    # Z anchor only while contact, table support, upright pose, collision, and
+    # stabilization gates all remain valid.
+    parser.add_argument(
+        "--contact_depth_action_step", type=float, default=0.004
+    )
+    parser.add_argument(
+        "--target_contact_depth_increase", type=float, default=0.003
+    )
+    parser.add_argument(
+        "--maximum_contact_depth_actions", type=int, default=12
+    )
+    parser.add_argument(
+        "--contact_depth_stability_steps", type=int, default=3
+    )
+    parser.add_argument(
+        "--max_contact_calibration_plate_xy_drift",
+        type=float,
+        default=0.001,
+    )
+    parser.add_argument(
+        "--max_contact_calibration_plate_tilt_deg",
+        type=float,
+        default=1.0,
+    )
     # Job 499625 showed that a fixed cumulative EEF path outran the live
     # plate by about 0.10 m.  Closed-loop iterations are instead re-anchored
     # to the current plate and the most recently confirmed contact offset.
