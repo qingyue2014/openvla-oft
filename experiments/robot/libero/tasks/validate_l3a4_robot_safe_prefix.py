@@ -3155,6 +3155,72 @@ def _compiled_safe_insertion_portal(
     )
 
 
+def _deterministic_signed_lateral_offsets(extent, step) -> list[float]:
+    """Enumerate 0,+step,-step,+2step,-2step without edge overflow."""
+    extent = float(extent)
+    step = float(step)
+    if not np.isfinite(extent) or extent <= 0.0:
+        raise ValueError("lateral search extent must be finite and positive")
+    if not np.isfinite(step) or step <= 0.0:
+        raise ValueError("lateral search step must be finite and positive")
+    count = int(np.floor(np.nextafter(extent, 0.0) / step))
+    values = [0.0]
+    for index in range(1, count + 1):
+        value = float(index * step)
+        values.extend((value, -value))
+    return values
+
+
+def _compact_insertion_sweep_evidence(sweep) -> dict:
+    """Keep audit-critical sweep scalars without per-candidate geometry bulk."""
+    limiting = sweep.get("limiting_pair") or {}
+    limiting_fields = (
+        "sample_index",
+        "sample_fraction",
+        "translated_reference_position",
+        "door_angle_rad",
+        "moving_geom_id",
+        "moving_geom_name",
+        "moving_body_name",
+        "fixture_geom_id",
+        "fixture_geom_name",
+        "fixture_body_name",
+        "target_geom_id",
+        "target_geom_name",
+        "door_geom_id",
+        "door_geom_name",
+        "clearance_m",
+        "continuous_guard_m",
+        "method",
+        "clearance_components",
+    )
+    summary_fields = (
+        "path_length_m",
+        "sample_intervals",
+        "sample_spacing_m",
+        "samples",
+        "compatible_pair_evaluations",
+        "total_pair_evaluations_without_fail_fast",
+        "minimum_clearance_m",
+        "threshold_fail_fast_m",
+        "terminated_early",
+        "threshold_rejection_seen",
+        "full_sweep_evaluated",
+    )
+    return {
+        **{
+            field: sweep[field]
+            for field in summary_fields
+            if field in sweep
+        },
+        "limiting_pair": {
+            field: limiting[field]
+            for field in limiting_fields
+            if field in limiting
+        },
+    }
+
+
 def _compiled_target_insertion_plan(
     env,
     names,
@@ -3228,6 +3294,61 @@ def _compiled_target_insertion_plan(
     floor_tangent_axes = [
         axis for axis in range(3) if axis != floor_normal_axis
     ]
+    site_lateral = np.asarray(site_rotation[:, 0], dtype=float)
+    site_lateral = site_lateral / np.linalg.norm(site_lateral)
+    floor_lateral_candidates = []
+    for axis in floor_tangent_axes:
+        raw_direction = np.asarray(
+            floor_rotation[:, axis], dtype=float
+        )
+        projected = raw_direction.copy()
+        projected -= floor_normal * float(
+            np.dot(projected, floor_normal)
+        )
+        projected -= front * float(np.dot(projected, front))
+        norm = float(np.linalg.norm(projected))
+        if norm <= np.finfo(float).eps:
+            continue
+        direction = projected / norm
+        floor_lateral_candidates.append(
+            {
+                "floor_tangent_axis": int(axis),
+                "direction": direction,
+                "site_lateral_alignment": abs(
+                    float(np.dot(direction, site_lateral))
+                ),
+            }
+        )
+    if not floor_lateral_candidates:
+        raise RuntimeError(
+            "compiled microwave floor has no tangent direction lateral "
+            "to the native heating-site front axis"
+        )
+    floor_lateral_candidates.sort(
+        key=lambda record: (
+            -record["site_lateral_alignment"],
+            record["floor_tangent_axis"],
+        )
+    )
+    lateral_choice = floor_lateral_candidates[0]
+    lateral_direction = lateral_choice["direction"].copy()
+    if float(np.dot(lateral_direction, site_lateral)) < 0.0:
+        lateral_direction *= -1.0
+    local_lateral_direction = site_rotation.T @ lateral_direction
+    lateral_extent = min(
+        float(site_size[axis] / abs(local_lateral_direction[axis]))
+        for axis in range(3)
+        if abs(float(local_lateral_direction[axis]))
+        > np.finfo(float).eps
+    )
+    if not np.isfinite(lateral_extent) or lateral_extent <= 0.0:
+        raise RuntimeError(
+            "native heating site has no finite compiled lateral extent"
+        )
+    lateral_search_values = _deterministic_signed_lateral_offsets(
+        lateral_extent,
+        TARGET_INSERTION_SEARCH_STEP_M,
+    )
     target_fixture_geoms = [
         geom_id
         for geom_id in fixture_geoms
@@ -3255,7 +3376,7 @@ def _compiled_target_insertion_plan(
         collision_fixture_geoms,
     )
 
-    search_values = np.arange(
+    front_search_values = np.arange(
         np.nextafter(front_extent, 0.0),
         -front_extent - 0.5 * TARGET_INSERTION_SEARCH_STEP_M,
         -TARGET_INSERTION_SEARCH_STEP_M,
@@ -3263,126 +3384,270 @@ def _compiled_target_insertion_plan(
     trace = []
     selected = None
     execution_endpoint = None
-    for front_distance in search_values:
-        candidate = site_position + front * float(front_distance)
-        candidate += floor_normal * float(
-            np.dot(
-                floor_surface + floor_normal * support_offset - candidate,
-                floor_normal,
+    representative_full_sweeps = {}
+    best_gate_values = {}
+    lateral_rank_by_value = {
+        value: index
+        for index, value in enumerate(lateral_search_values)
+    }
+    for front_index, front_distance in enumerate(front_search_values):
+        for lateral_offset in lateral_search_values:
+            candidate = (
+                site_position
+                + front * float(front_distance)
+                + lateral_direction * float(lateral_offset)
             )
-        )
-        native_inside = native_site_contains_point(
-            site_position,
-            site_rotation,
-            site_size,
-            candidate,
-        )
-        support_axis_clearances = []
-        for geom_id in support_target_geoms:
-            geom_center = (
-                np.asarray(
-                    env.sim.data.geom_xpos[geom_id], dtype=float
+            candidate += floor_normal * float(
+                np.dot(
+                    floor_surface
+                    + floor_normal * support_offset
+                    - candidate,
+                    floor_normal,
                 )
-                + candidate
-                - current_target
             )
-            geom_rotation = np.asarray(
-                env.sim.data.geom_xmat[geom_id], dtype=float
-            ).reshape(3, 3)
-            floor_local = floor_rotation.T @ (
-                geom_center - floor_center
+            native_inside = native_site_contains_point(
+                site_position,
+                site_rotation,
+                site_size,
+                candidate,
             )
-            for axis in floor_tangent_axes:
-                if int(model.geom_type[geom_id]) == 6:
-                    extent = float(
-                        np.sum(
-                            np.asarray(model.geom_size[geom_id], dtype=float)
-                            * np.abs(
-                                geom_rotation.T
-                                @ floor_rotation[:, axis]
+            support_axis_clearances = []
+            for geom_id in support_target_geoms:
+                geom_center = (
+                    np.asarray(
+                        env.sim.data.geom_xpos[geom_id], dtype=float
+                    )
+                    + candidate
+                    - current_target
+                )
+                geom_rotation = np.asarray(
+                    env.sim.data.geom_xmat[geom_id], dtype=float
+                ).reshape(3, 3)
+                floor_local = floor_rotation.T @ (
+                    geom_center - floor_center
+                )
+                for axis in floor_tangent_axes:
+                    if int(model.geom_type[geom_id]) == 6:
+                        extent = float(
+                            np.sum(
+                                np.asarray(
+                                    model.geom_size[geom_id], dtype=float
+                                )
+                                * np.abs(
+                                    geom_rotation.T
+                                    @ floor_rotation[:, axis]
+                                )
                             )
                         )
+                    else:
+                        extent = float(model.geom_rbound[geom_id])
+                    support_axis_clearances.append(
+                        float(
+                            floor_half_size[axis]
+                            - abs(float(floor_local[axis]))
+                            - extent
+                        )
                     )
-                else:
-                    extent = float(model.geom_rbound[geom_id])
-                support_axis_clearances.append(
-                    float(
-                        floor_half_size[axis]
-                        - abs(float(floor_local[axis]))
-                        - extent
+            support_clearance = min(
+                support_axis_clearances, default=float("-inf")
+            )
+            candidate_eef = candidate + held_eef_offset
+            door_clearance = None
+            target_clearance = None
+            gripper_clearance = None
+            door_sweep = None
+            target_sweep = None
+            gripper_sweep = None
+            rejection_stage = None
+            skipped_gates = []
+            if not native_inside:
+                rejection_stage = "native_in"
+                skipped_gates = [
+                    "target_door_sweep",
+                    "target_static_sweep",
+                    "gripper_sweep",
+                ]
+            elif support_clearance <= 0.0:
+                rejection_stage = "support_clearance"
+                skipped_gates = [
+                    "target_door_sweep",
+                    "target_static_sweep",
+                    "gripper_sweep",
+                ]
+            if rejection_stage is None:
+                door_clearance, door_sweep = (
+                    _compiled_target_door_sweep_clearance(
+                        env,
+                        names,
+                        target_geoms,
+                        candidate,
+                        current_target,
                     )
                 )
-        support_clearance = min(
-            support_axis_clearances, default=float("-inf")
-        )
-        candidate_eef = candidate + held_eef_offset
-        gripper_clearance, gripper_sweep = (
-            _translated_swept_clearance(
-                env,
-                collision_gripper_geoms,
-                collision_fixture_geoms,
-                portal_eef,
-                candidate_eef,
-                current_eef,
+                if door_clearance <= 0.0:
+                    rejection_stage = "target_door_sweep"
+                    skipped_gates = [
+                        "target_static_sweep",
+                        "gripper_sweep",
+                    ]
+            if rejection_stage is None:
+                target_clearance, target_sweep = (
+                    _translated_swept_clearance(
+                        env,
+                        target_geoms,
+                        target_fixture_geoms,
+                        portal_object,
+                        candidate,
+                        current_target,
+                    )
+                )
+                if target_clearance <= 0.0:
+                    rejection_stage = "target_static_sweep"
+                    skipped_gates = ["gripper_sweep"]
+            if rejection_stage is None:
+                gripper_clearance, gripper_sweep = (
+                    _translated_swept_clearance(
+                        env,
+                        collision_gripper_geoms,
+                        collision_fixture_geoms,
+                        portal_eef,
+                        candidate_eef,
+                        current_eef,
+                    )
+                )
+                if gripper_clearance <= 0.0:
+                    rejection_stage = "gripper_sweep"
+            passed = bool(
+                rejection_stage is None
+                and native_inside
+                and support_clearance > 0.0
+                and door_clearance is not None
+                and door_clearance > 0.0
+                and target_clearance is not None
+                and target_clearance > 0.0
+                and gripper_clearance is not None
+                and gripper_clearance > 0.0
             )
-        )
-        target_clearance, target_sweep = _translated_swept_clearance(
-            env,
-            target_geoms,
-            target_fixture_geoms,
-            portal_object,
-            candidate,
-            current_target,
-        )
-        door_clearance, door_sweep = (
-            _compiled_target_door_sweep_clearance(
-                env,
-                names,
-                target_geoms,
-                candidate,
-                current_target,
-            )
-        )
-        passed = bool(
-            native_inside
-            and support_clearance >= 0.0
-            and gripper_clearance > 0.0
-            and target_clearance > 0.0
-            and door_clearance > 0.0
-        )
-        record = {
-            "front_distance_from_site_center_m": float(
-                front_distance
-            ),
-            "candidate_target_position": candidate.tolist(),
-            "candidate_eef_position": candidate_eef.tolist(),
-            "native_in": native_inside,
-            "support_clearance_m": support_clearance,
-            "gripper_swept_clearance_m": gripper_clearance,
-            "target_swept_static_clearance_m": target_clearance,
-            "target_door_swept_clearance_m": door_clearance,
-            "gripper_sweep": gripper_sweep,
-            "target_sweep": target_sweep,
-            "door_sweep": door_sweep,
-            "passed": passed,
-        }
-        trace.append(record)
-        if passed:
-            selected = record
-            execution_endpoint = record
+            search_index = len(trace)
+            record = {
+                "search_index": int(search_index),
+                "front_search_index": int(front_index),
+                "lateral_search_index": int(
+                    lateral_rank_by_value[lateral_offset]
+                ),
+                "front_distance_from_site_center_m": float(
+                    front_distance
+                ),
+                "lateral_offset_from_site_center_m": float(
+                    lateral_offset
+                ),
+                "candidate_target_position": candidate.tolist(),
+                "candidate_eef_position": candidate_eef.tolist(),
+                "native_in": native_inside,
+                "support_clearance_m": support_clearance,
+                "gripper_swept_clearance_m": gripper_clearance,
+                "target_swept_static_clearance_m": target_clearance,
+                "target_door_swept_clearance_m": door_clearance,
+                "gripper_sweep_summary": (
+                    None
+                    if gripper_sweep is None
+                    else _compact_insertion_sweep_evidence(
+                        gripper_sweep
+                    )
+                ),
+                "target_sweep_summary": (
+                    None
+                    if target_sweep is None
+                    else _compact_insertion_sweep_evidence(target_sweep)
+                ),
+                "door_sweep_summary": (
+                    None
+                    if door_sweep is None
+                    else _compact_insertion_sweep_evidence(door_sweep)
+                ),
+                "rejection_stage": rejection_stage,
+                "skipped_gates": skipped_gates,
+                "passed": passed,
+            }
+            full_sweeps = {
+                key: value
+                for key, value in {
+                    "gripper_sweep": gripper_sweep,
+                    "target_sweep": target_sweep,
+                    "door_sweep": door_sweep,
+                }.items()
+                if value is not None
+            }
+            representative_record = {
+                key: record[key]
+                for key in (
+                    "search_index",
+                    "front_search_index",
+                    "lateral_search_index",
+                    "front_distance_from_site_center_m",
+                    "lateral_offset_from_site_center_m",
+                    "candidate_target_position",
+                    "candidate_eef_position",
+                    "native_in",
+                    "support_clearance_m",
+                    "gripper_swept_clearance_m",
+                    "target_swept_static_clearance_m",
+                    "target_door_swept_clearance_m",
+                    "rejection_stage",
+                    "skipped_gates",
+                    "passed",
+                )
+            }
+            gate_values = {
+                "native_in": float(native_inside),
+                "support_clearance": support_clearance,
+                "gripper_clearance": gripper_clearance,
+                "target_static_clearance": target_clearance,
+                "target_door_clearance": door_clearance,
+            }
+            for gate_name, gate_value in gate_values.items():
+                if gate_value is None:
+                    continue
+                if (
+                    gate_name not in best_gate_values
+                    or gate_value > best_gate_values[gate_name]
+                ):
+                    best_gate_values[gate_name] = gate_value
+                    representative_full_sweeps[gate_name] = {
+                        "gate_value": gate_value,
+                        "candidate": representative_record,
+                        **full_sweeps,
+                    }
+            representative_full_sweeps["last_evaluated"] = {
+                "candidate": representative_record,
+                **full_sweeps,
+            }
+            if passed:
+                record.update(full_sweeps)
+            trace.append(record)
+            if passed:
+                selected = record
+                execution_endpoint = record
+                break
+        if selected is not None:
             break
     if selected is None or execution_endpoint is None:
         raise RuntimeError(
-            "no compiled foremost native-In target release pose has "
-            "continuous positive gripper/mug/door clearance; "
-            f"candidates={trace}"
+            "no compiled 2D native-In target release pose has positive "
+            "support/gripper/mug/door clearance; "
+            f"candidate_count={len(trace)}; candidates={trace}; "
+            "representative_full_sweeps="
+            f"{representative_full_sweeps}"
         )
     return {
         "method": (
-            "front-to-back native heating-site search with compiled floor "
-            "support and continuous translated gripper/mug sweep clearance"
+            "deterministic 2D native heating-site search: foremost-to-back "
+            "front distance, then zero/positive/negative lateral offset by "
+            "magnitude, with compiled floor support and continuous "
+            "translated gripper/mug sweep clearance"
         ),
         "search_step_m": TARGET_INSERTION_SEARCH_STEP_M,
+        "front_search_values_m": front_search_values.tolist(),
         "sweep_step_m": TARGET_INSERTION_SWEEP_STEP_M,
         "native_site_position": site_position.tolist(),
         "native_site_rotation": site_rotation.tolist(),
@@ -3397,6 +3662,47 @@ def _compiled_target_insertion_plan(
         ),
         "front_direction": front.tolist(),
         "front_extent_m": front_extent,
+        "lateral_direction": lateral_direction.tolist(),
+        "lateral_extent_m": lateral_extent,
+        "lateral_search_values_m": lateral_search_values,
+        "candidate_count_evaluated": len(trace),
+        "candidate_gate_evaluation_order": [
+            "native_in",
+            "support_clearance",
+            "target_door_sweep",
+            "target_static_sweep",
+            "gripper_sweep",
+        ],
+        "rejected_candidate_trace_policy": (
+            "strict-AND fail-fast: every point retains order, evaluated gate "
+            "scalars, sampling counts/spacing, limiting-pair summaries, an "
+            "explicit rejection stage, and null plus skipped_gates for "
+            "unevaluated gates; only the selected point retains every full "
+            "sweep; total failure reports per-gate-best and last-evaluated "
+            "full-sweep representatives"
+        ),
+        "lateral_direction_derivation": {
+            "native_heating_site_lateral_axis": site_lateral.tolist(),
+            "selected_floor_tangent_axis": lateral_choice[
+                "floor_tangent_axis"
+            ],
+            "selected_site_lateral_alignment": lateral_choice[
+                "site_lateral_alignment"
+            ],
+            "candidate_floor_tangents": [
+                {
+                    "floor_tangent_axis": record[
+                        "floor_tangent_axis"
+                    ],
+                    "direction": record["direction"].tolist(),
+                    "site_lateral_alignment": record[
+                        "site_lateral_alignment"
+                    ],
+                }
+                for record in floor_lateral_candidates
+            ],
+            "sign_aligned_to_native_site_axis": True,
+        },
         "portal_object_position": portal_object.tolist(),
         "portal_eef_position": portal_eef.tolist(),
         "portal_high_eef_position": portal_high_eef.tolist(),
@@ -3422,20 +3728,113 @@ def _compiled_target_insertion_plan(
     }
 
 
+def _target_insertion_plan_selection_evidence(insertion_plan) -> dict:
+    """Freeze the deterministic geometry evidence that selected a release."""
+    fields = (
+        "method",
+        "native_site_position",
+        "native_site_rotation",
+        "native_site_half_size",
+        "target_tilt_at_planning_deg",
+        "target_rotation_at_planning",
+        "front_direction",
+        "lateral_direction",
+        "lateral_extent_m",
+        "lateral_search_values_m",
+        "lateral_direction_derivation",
+        "portal_object_position",
+        "portal_eef_position",
+        "portal_high_eef_position",
+        "held_pose_floor_support",
+        "selected",
+        "execution_endpoint",
+    )
+    missing = [field for field in fields if field not in insertion_plan]
+    if missing:
+        raise RuntimeError(
+            "compiled target insertion plan lacks selection evidence: "
+            f"missing={missing}"
+        )
+    return _snapshot_plain_state(
+        {field: insertion_plan[field] for field in fields},
+        "target_insertion_plan_selection_evidence",
+    )
+
+
+def _target_insertion_plan_replay_proof(
+    selected_dynamic_trial,
+    actual_held_eef_offset,
+    actual_insertion_plan,
+) -> dict:
+    """Require independent execution to reproduce trial plan selection exactly."""
+    expected_offset = np.asarray(
+        selected_dynamic_trial["held_eef_minus_target_offset"],
+        dtype=float,
+    )
+    actual_offset = np.asarray(actual_held_eef_offset, dtype=float)
+    expected_selection = selected_dynamic_trial[
+        "insertion_plan_selection_evidence"
+    ]
+    actual_selection = _target_insertion_plan_selection_evidence(
+        actual_insertion_plan
+    )
+    expected_sha256 = selected_dynamic_trial[
+        "insertion_plan_selection_sha256"
+    ]
+    expected_evidence_sha256 = _plain_state_sha256(expected_selection)
+    actual_sha256 = _plain_state_sha256(actual_selection)
+    held_offset_exact = bool(
+        expected_offset.dtype == actual_offset.dtype
+        and expected_offset.shape == actual_offset.shape
+        and np.array_equal(expected_offset, actual_offset)
+    )
+    selection_exact = _plain_state_equal(
+        expected_selection, actual_selection
+    )
+    expected_hash_self_consistent = bool(
+        expected_sha256 == expected_evidence_sha256
+    )
+    selection_hash_exact = bool(expected_sha256 == actual_sha256)
+    passed = bool(
+        held_offset_exact
+        and selection_exact
+        and expected_hash_self_consistent
+        and selection_hash_exact
+    )
+    return {
+        "passed": passed,
+        "comparison": "bitwise_exact_no_tolerance",
+        "held_offset_bitwise_exact": held_offset_exact,
+        "expected_held_eef_minus_target_offset": expected_offset.tolist(),
+        "actual_held_eef_minus_target_offset": actual_offset.tolist(),
+        "selection_evidence_bitwise_exact": selection_exact,
+        "expected_hash_self_consistent": expected_hash_self_consistent,
+        "selection_sha256_exact": selection_hash_exact,
+        "expected_selection_sha256": expected_sha256,
+        "expected_evidence_sha256": expected_evidence_sha256,
+        "actual_selection_sha256": actual_sha256,
+        "expected_selection_evidence": expected_selection,
+        "actual_selection_evidence": actual_selection,
+    }
+
+
 def _compiled_open_gripper_retreat_plan(env, names, waypoints):
-    """Validate the just-opened gripper's complete portal retreat sweep."""
+    """Validate retreat against fixture and the stationary released mug."""
     (
         gripper_geoms,
         fixture_geoms,
         geometry,
     ) = _compiled_rigid_gripper_fixture_geoms(env, names)
     reference = _eef_position(env)
+    released_target_geoms = sorted(
+        descendant_geom_ids(env.sim.model, TARGET_BODY)
+    )
     start = reference.copy()
     segments = []
     minimum = float("inf")
     for label, endpoint in waypoints:
         endpoint = np.asarray(endpoint, dtype=float)
-        clearance, sweep = _translated_swept_clearance(
+        fixture_clearance, fixture_sweep = _translated_swept_clearance(
             env,
             gripper_geoms,
             fixture_geoms,
@@ -3443,24 +3842,44 @@ def _compiled_open_gripper_retreat_plan(env, names, waypoints):
             endpoint,
             reference,
         )
+        released_target_clearance, released_target_sweep = (
+            _translated_swept_clearance(
+                env,
+                gripper_geoms,
+                released_target_geoms,
+                start,
+                endpoint,
+                reference,
+            )
+        )
         segments.append(
             {
                 "label": str(label),
-                "clearance_m": clearance,
-                "sweep": sweep,
+                "fixture_clearance_m": fixture_clearance,
+                "released_target_clearance_m": (
+                    released_target_clearance
+                ),
+                "fixture_sweep": fixture_sweep,
+                "released_target_sweep": released_target_sweep,
             }
         )
-        minimum = min(minimum, clearance)
+        minimum = min(
+            minimum,
+            fixture_clearance,
+            released_target_clearance,
+        )
         start = endpoint
     passed = bool(segments and minimum > 0.0)
     return passed, {
         "method": (
             "compiled continuous translated sweep of the actual open "
-            "gripper through horizontal portal retreat and exit"
+            "gripper against the microwave and stationary released target "
+            "through horizontal portal retreat and exit"
         ),
         "minimum_clearance_m": minimum,
         "passed": passed,
         "gripper_geometry": geometry,
+        "released_target_geom_ids": released_target_geoms,
         "segments": segments,
     }
 
@@ -4148,9 +4567,17 @@ def _seek_target_contact(env, oracle, step, frames):
 
 
 def _run_target_dynamic_reachability_trial(
-    env, oracle, clearance_eef, step
+    env,
+    oracle,
+    names,
+    clearance_eef,
+    step,
+    site_position,
+    site_rotation,
+    site_size,
+    support_geometry,
 ) -> dict:
-    """Execute one throwaway approach/descend/80-step contact trial."""
+    """Try contact, closure, held offset, and insertion from one snapshot."""
     clearance_eef = np.asarray(clearance_eef, dtype=float)
     start_step = int(step)
     move_diagnostics = []
@@ -4201,6 +4628,11 @@ def _run_target_dynamic_reachability_trial(
             break
 
     contact_diagnostic = {}
+    closure_diagnostic = {}
+    insertion_plan = {}
+    insertion_plan_selection_evidence = None
+    insertion_plan_selection_sha256 = None
+    held_eef_offset = None
     contact_ok = False
     if not failure_reason:
         (
@@ -4212,7 +4644,7 @@ def _run_target_dynamic_reachability_trial(
         ) = _seek_target_contact(env, oracle, step, None)
         if not contact_ok:
             failure_reason = contact_reason
-    success = bool(
+    contact_gate_passed = bool(
         contact_ok
         and not failure_reason
         and _target_dynamic_contact_gate(
@@ -4220,6 +4652,57 @@ def _run_target_dynamic_reachability_trial(
             status_violated=(status is not None and status.violated),
         )
     )
+    closure_ok = False
+    if contact_gate_passed:
+        (
+            closure_ok,
+            closure_reason,
+            status,
+            step,
+            closure_diagnostic,
+        ) = _close_gripper_on_target(env, oracle, step, None)
+        if not closure_ok:
+            failure_reason = closure_reason
+    insertion_plan_passed = False
+    insertion_plan_failure_reason = ""
+    if closure_ok:
+        grasped_target_position, _ = body_pose(env.sim, TARGET_BODY)
+        grasped_eef_position = _eef_position(env)
+        held_eef_offset = grasped_eef_position - grasped_target_position
+        try:
+            insertion_plan = _compiled_target_insertion_plan(
+                env,
+                names,
+                site_position,
+                site_rotation,
+                site_size,
+                held_eef_offset,
+                support_geometry,
+            )
+            insertion_plan_selection_evidence = (
+                _target_insertion_plan_selection_evidence(insertion_plan)
+            )
+            insertion_plan_selection_sha256 = _plain_state_sha256(
+                insertion_plan_selection_evidence
+            )
+            insertion_plan_passed = True
+        except RuntimeError as error:
+            insertion_plan_failure_reason = str(error)
+            failure_reason = (
+                "candidate grasp has no compiled insertion plan: "
+                f"{insertion_plan_failure_reason}"
+            )
+    success = bool(
+        contact_gate_passed
+        and closure_ok
+        and insertion_plan_passed
+        and not failure_reason
+    )
+    if not success and not failure_reason:
+        failure_reason = (
+            "candidate grasp did not pass contact, closure, and insertion "
+            "planning as one dynamic gate"
+        )
     return {
         "success": success,
         "reason": "" if success else failure_reason,
@@ -4229,6 +4712,23 @@ def _run_target_dynamic_reachability_trial(
         "steps_executed": int(step - start_step),
         "move_segments": move_diagnostics,
         "contact_seek": contact_diagnostic,
+        "contact_gate_passed": contact_gate_passed,
+        "grasp_closure": closure_diagnostic,
+        "grasp_closure_passed": closure_ok,
+        "held_eef_minus_target_offset": (
+            None
+            if held_eef_offset is None
+            else held_eef_offset.tolist()
+        ),
+        "insertion_plan_passed": insertion_plan_passed,
+        "insertion_plan_failure_reason": insertion_plan_failure_reason,
+        "compiled_insertion_plan": insertion_plan,
+        "insertion_plan_selection_evidence": (
+            insertion_plan_selection_evidence
+        ),
+        "insertion_plan_selection_sha256": (
+            insertion_plan_selection_sha256
+        ),
         "fixed_contact_seek_horizon_steps": TARGET_CONTACT_SEEK_STEPS,
         "per_frame_forbidden_contacts": [
             TARGET_BODY,
@@ -4263,8 +4763,12 @@ def _select_dynamically_reachable_target_grasp(
     geometry_candidates,
     geometry_evidence,
     step,
+    site_position,
+    site_rotation,
+    site_size,
+    support_geometry,
 ):
-    """Select the first geometry-pass corridor that the real OSC can reach."""
+    """Select the first exact-restored grasp with a realizable insertion."""
     common_snapshot = _snapshot_target_trial_state(env, oracle, names)
     boundary_sha256 = common_snapshot["state_sha256"]
     for dynamic_index, candidate in enumerate(geometry_candidates):
@@ -4285,8 +4789,13 @@ def _select_dynamically_reachable_target_grasp(
             trial = _run_target_dynamic_reachability_trial(
                 env,
                 oracle,
+                names,
                 candidate["clearance_eef_position"],
                 step,
+                site_position,
+                site_rotation,
+                site_size,
+                support_geometry,
             )
         finally:
             restore_proof = _restore_target_trial_state(
@@ -4316,6 +4825,18 @@ def _select_dynamically_reachable_target_grasp(
         trace_record["dynamic_trial_index"] = int(dynamic_index)
         trace_record["dynamic_reachability_passed"] = trial["success"]
         trace_record["dynamic_reachability_reason"] = trial["reason"]
+        trace_record["dynamic_contact_gate_passed"] = trial[
+            "contact_gate_passed"
+        ]
+        trace_record["dynamic_grasp_closure_passed"] = trial[
+            "grasp_closure_passed"
+        ]
+        trace_record["dynamic_insertion_plan_passed"] = trial[
+            "insertion_plan_passed"
+        ]
+        trace_record["dynamic_candidate_gate_passed"] = trial[
+            "success"
+        ]
         trace_record["trial_snapshot_sha256"] = restore_proof[
             "snapshot_sha256"
         ]
@@ -4379,7 +4900,7 @@ def _select_dynamically_reachable_target_grasp(
     )
     raise RuntimeError(
         "no geometry-safe target grasp candidate passed exact dynamic "
-        "reachability; "
+        "contact, closure, and compiled insertion feasibility; "
         f"attempted={len(geometry_evidence['dynamic_candidate_trials'])}; "
         f"post_park_boundary_sha256={boundary_sha256}; "
         f"last_reason={last_reason}"
@@ -4831,6 +5352,7 @@ def _release_target_without_microwave_contact(
     )
     success = bool(
         not microwave_contact
+        and TARGET_BODY not in final_contacts
         and not (status is not None and status.violated)
         and len(trace) == GRIPPER_STEPS
     )
@@ -4852,6 +5374,10 @@ def _release_target_without_microwave_contact(
     }
     if microwave_contact:
         reason = "robot contacted microwave before/during target release"
+    elif TARGET_BODY in final_contacts:
+        reason = (
+            "open gripper retained contact with the released target mug"
+        )
     elif status is not None and status.violated:
         reason = "oracle violation during target release"
     elif len(trace) != GRIPPER_STEPS:
@@ -5197,6 +5723,7 @@ def _robot_place_target(env, oracle, names, frames, step):
     target_clearance_geometry = {}
     target_grasp_clearance_derivation = {}
     insertion_plan = {}
+    insertion_plan_replay_proof = {}
     retreat_plan = {}
     held_eef_offset = None
     clearance_grasp_point = None
@@ -5239,6 +5766,9 @@ def _robot_place_target(env, oracle, names, frames, step):
             "target_release": release_diagnostic,
             "target_native_support_geometry": support_geometry,
             "compiled_insertion_plan": insertion_plan,
+            "independent_insertion_plan_replay_proof": (
+                insertion_plan_replay_proof
+            ),
             "compiled_open_gripper_retreat_plan": retreat_plan,
             "held_eef_minus_target_offset": (
                 None
@@ -5309,6 +5839,10 @@ def _robot_place_target(env, oracle, names, frames, step):
             geometry_candidates,
             target_grasp_clearance_derivation,
             step,
+            site_pos,
+            site_mat,
+            site_size,
+            support_geometry,
         )
     except DeterministicRestoreError:
         raise
@@ -5413,9 +5947,46 @@ def _robot_place_target(env, oracle, names, frames, step):
             support_geometry,
         )
     except RuntimeError as error:
+        selected_trial = target_grasp_clearance_derivation[
+            "selected_dynamic_trial"
+        ]
+        insertion_plan_replay_proof = {
+            "passed": False,
+            "comparison": "bitwise_exact_no_tolerance",
+            "reason": (
+                "independent execution could not rederive the trial's "
+                "compiled insertion plan"
+            ),
+            "expected_selection_sha256": selected_trial.get(
+                "insertion_plan_selection_sha256"
+            ),
+            "actual_planner_error": str(error),
+        }
         return (
             False,
-            str(error),
+            (
+                "independent execution could not rederive selected "
+                f"insertion plan: {error}"
+            ),
+            status,
+            step,
+            target_metrics(),
+        )
+    insertion_plan_replay_proof = _target_insertion_plan_replay_proof(
+        target_grasp_clearance_derivation["selected_dynamic_trial"],
+        held_eef_offset,
+        insertion_plan,
+    )
+    target_grasp_clearance_derivation["selected_dynamic_trial"][
+        "independent_execution_insertion_plan_proof"
+    ] = insertion_plan_replay_proof
+    if not insertion_plan_replay_proof["passed"]:
+        return (
+            False,
+            (
+                "independent execution did not exactly reproduce the "
+                "selected trial held offset and insertion-plan evidence"
+            ),
             status,
             step,
             target_metrics(),
@@ -5603,6 +6174,7 @@ def _robot_place_target(env, oracle, names, frames, step):
             label=label,
             diagnostics=move_diagnostics,
             forbid_microwave_contact=True,
+            forbid_target_contact=True,
         )
         if not reached:
             return (
@@ -6009,6 +6581,9 @@ def main() -> None:
         target_retreat_plan = target_metrics.get(
             "compiled_open_gripper_retreat_plan", {}
         )
+        target_insertion_replay_proof = target_metrics.get(
+            "independent_insertion_plan_replay_proof", {}
+        )
         target_insertion_move = next(
             (
                 segment
@@ -6046,6 +6621,7 @@ def main() -> None:
         forbidden_target_contact = bool(
             any(
                 segment.get("forbidden_microwave_contact", False)
+                or segment.get("forbidden_target_contact", False)
                 for segment in target_metrics.get("move_segments", [])
             )
             or target_descend.get("microwave_contact_seen", False)
@@ -6310,6 +6886,32 @@ def main() -> None:
                     ).get("axis_progress", {}).get("passed", False)
                 )
             ),
+            "robot_target_dynamic_selected_contact_gate": int(
+                bool(
+                    selected_dynamic_target_trial.get(
+                        "contact_gate_passed", False
+                    )
+                )
+            ),
+            "robot_target_dynamic_selected_closure_gate": int(
+                bool(
+                    selected_dynamic_target_trial.get(
+                        "grasp_closure_passed", False
+                    )
+                )
+            ),
+            "robot_target_dynamic_selected_insertion_gate": int(
+                bool(
+                    selected_dynamic_target_trial.get(
+                        "insertion_plan_passed", False
+                    )
+                )
+            ),
+            "robot_target_dynamic_selected_plan_sha256": (
+                selected_dynamic_target_trial.get(
+                    "insertion_plan_selection_sha256", ""
+                )
+            ),
             "robot_target_dynamic_restore_passed": int(
                 bool(selected_restore_proof.get("passed", False))
             ),
@@ -6505,6 +7107,23 @@ def main() -> None:
                     float("nan"),
                 )
             ),
+            "robot_target_insertion_lateral_offset_m": (
+                selected_target_insertion.get(
+                    "lateral_offset_from_site_center_m",
+                    float("nan"),
+                )
+            ),
+            "robot_target_insertion_candidates_evaluated": (
+                target_insertion_plan.get("candidate_count_evaluated", 0)
+            ),
+            "robot_target_insertion_replay_passed": int(
+                bool(target_insertion_replay_proof.get("passed", False))
+            ),
+            "robot_target_insertion_replay_actual_sha256": (
+                target_insertion_replay_proof.get(
+                    "actual_selection_sha256", ""
+                )
+            ),
             "robot_target_insertion_execution_front_distance_m": (
                 target_execution_endpoint.get(
                     "front_distance_from_site_center_m",
@@ -6566,10 +7185,25 @@ def main() -> None:
                     )
                 )
             ),
+            "robot_target_release_target_contact_final": int(
+                bool(target_release.get("target_contact_final", False))
+            ),
             "robot_target_retreat_predicted_clearance_m": (
                 target_retreat_plan.get(
                     "minimum_clearance_m", float("nan")
                 )
+            ),
+            "robot_target_retreat_released_target_clearance_m": min(
+                (
+                    float(
+                        segment.get(
+                            "released_target_clearance_m",
+                            float("nan"),
+                        )
+                    )
+                    for segment in target_retreat_plan.get("segments", [])
+                ),
+                default=float("nan"),
             ),
             "robot_target_no_forbidden_microwave_contact": int(
                 target_ok and not forbidden_target_contact

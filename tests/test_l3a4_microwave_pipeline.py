@@ -1030,21 +1030,38 @@ def _dynamic_selector_fixture(restore_raises=False):
             },
         }
 
-    def trial(env, oracle, clearance_eef, step):
+    def trial(
+        env,
+        oracle,
+        names,
+        clearance_eef,
+        step,
+        site_position,
+        site_rotation,
+        site_size,
+        support_geometry,
+    ):
         calls.append(np.asarray(clearance_eef, dtype=float).copy())
         failed = len(calls) == 1
         return {
             "success": not failed,
             "reason": (
-                "fixed 80-step seek ended without current target contact"
+                "candidate grasp has no compiled insertion plan: "
+                "right-wall gripper clearance is negative"
                 if failed
                 else ""
             ),
-            "steps_executed": 80 if failed else 61,
+            "contact_gate_passed": True,
+            "grasp_closure_passed": True,
+            "insertion_plan_passed": not failed,
+            "insertion_plan_selection_sha256": (
+                None if failed else "selected-plan-sha256"
+            ),
+            "steps_executed": 76,
             "contact_seek": {
-                "steps_executed": 80 if failed else 12,
-                "target_contact_final": not failed,
-                "axis_progress": {"passed": not failed},
+                "steps_executed": 12,
+                "target_contact_final": True,
+                "axis_progress": {"passed": True},
             },
         }
 
@@ -1141,7 +1158,16 @@ def test_l3a4_job500143_unreachable_candidate_continues_after_restore():
         _dynamic_selector_fixture()
     )
     position, selected = selector(
-        object(), object(), {}, candidates, evidence, 400
+        object(),
+        object(),
+        {},
+        candidates,
+        evidence,
+        400,
+        np.zeros(3),
+        np.eye(3),
+        np.ones(3),
+        {"native": "support"},
     )
     assert len(calls) == 2
     assert len(restores) == 2
@@ -1150,6 +1176,12 @@ def test_l3a4_job500143_unreachable_candidate_continues_after_restore():
     assert position.tolist() == pytest.approx([0.030, -0.010, 0.960])
     assert selected["candidate_trace"][79][
         "dynamic_reachability_passed"
+    ] is False
+    assert selected["candidate_trace"][79][
+        "dynamic_contact_gate_passed"
+    ] is True
+    assert selected["candidate_trace"][79][
+        "dynamic_insertion_plan_passed"
     ] is False
     assert selected["selected"]["outward_offset_m"] == pytest.approx(0.175)
     assert selected["selected_dynamic_trial"]["restore_proof"][
@@ -1166,6 +1198,134 @@ def test_l3a4_job500143_unreachable_candidate_continues_after_restore():
     assert selected["common_boundary_canonical_refresh"]["passed"]
 
 
+def test_l3a4_insertion_plan_replay_proof_is_bitwise_and_fail_closed():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    helper_names = {
+        "_snapshot_plain_state",
+        "_plain_state_equal",
+        "_update_state_digest",
+        "_plain_state_sha256",
+        "_target_insertion_plan_selection_evidence",
+        "_target_insertion_plan_replay_proof",
+    }
+    helpers = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name in helper_names
+    ]
+    assert {node.name for node in helpers} == helper_names
+    namespace = {
+        "np": np,
+        "hashlib": __import__("hashlib"),
+        "DeterministicRestoreError": RuntimeError,
+        "_PLAIN_SCALARS": (str, bytes, bool, int, float, type(None)),
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=helpers, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    plan = {
+        "method": "native insertion",
+        "native_site_position": [0.0, 0.0, 1.0],
+        "native_site_rotation": np.eye(3).tolist(),
+        "native_site_half_size": [0.12, 0.0835, 0.08],
+        "target_tilt_at_planning_deg": 3.0,
+        "target_rotation_at_planning": np.eye(3).tolist(),
+        "front_direction": [0.0, -1.0, 0.0],
+        "lateral_direction": [1.0, 0.0, 0.0],
+        "lateral_extent_m": 0.12,
+        "lateral_search_values_m": [0.0, 0.005, -0.005],
+        "lateral_direction_derivation": {
+            "selected_floor_tangent_axis": 0
+        },
+        "portal_object_position": [0.1, 0.2, 0.3],
+        "portal_eef_position": [0.2, 0.2, 0.4],
+        "portal_high_eef_position": [0.2, 0.2, 0.5],
+        "held_pose_floor_support": {"held_support_offset_m": 0.03},
+        "selected": {
+            "front_distance_from_site_center_m": 0.0185,
+            "candidate_target_position": [0.0, 0.0185, 1.0],
+            "candidate_eef_position": [0.06, 0.0185, 1.06],
+            "passed": True,
+        },
+        "execution_endpoint": {
+            "front_distance_from_site_center_m": 0.0185,
+            "candidate_target_position": [0.0, 0.0185, 1.0],
+            "candidate_eef_position": [0.06, 0.0185, 1.06],
+            "passed": True,
+        },
+    }
+    selection = namespace[
+        "_target_insertion_plan_selection_evidence"
+    ](plan)
+    trial = {
+        "held_eef_minus_target_offset": [0.06, 0.0, 0.06],
+        "insertion_plan_selection_evidence": selection,
+        "insertion_plan_selection_sha256": namespace[
+            "_plain_state_sha256"
+        ](selection),
+    }
+    proof = namespace["_target_insertion_plan_replay_proof"](
+        trial,
+        np.asarray([0.06, 0.0, 0.06]),
+        plan,
+    )
+    assert proof["passed"]
+    assert proof["held_offset_bitwise_exact"]
+    assert proof["selection_evidence_bitwise_exact"]
+
+    changed_plan = json.loads(json.dumps(plan))
+    changed_plan["selected"][
+        "front_distance_from_site_center_m"
+    ] = 0.0135
+    changed = namespace["_target_insertion_plan_replay_proof"](
+        trial,
+        np.asarray([0.06, 0.0, 0.06]),
+        changed_plan,
+    )
+    assert not changed["passed"]
+    assert not changed["selection_evidence_bitwise_exact"]
+
+
+def test_l3a4_lateral_offsets_are_zero_then_signed_by_magnitude():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    helper = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_deterministic_signed_lateral_offsets"
+    )
+    namespace = {"np": np}
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[helper], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    offsets = namespace["_deterministic_signed_lateral_offsets"](
+        0.012, 0.005
+    )
+    assert offsets == [0.0, 0.005, -0.005, 0.01, -0.01]
+    assert [abs(value) for value in offsets] == sorted(
+        abs(value) for value in offsets
+    )
+    assert all(abs(value) < 0.012 for value in offsets)
+    with pytest.raises(ValueError, match="finite and positive"):
+        namespace["_deterministic_signed_lateral_offsets"](0.012, 0.0)
+
+
 def test_l3a4_dynamic_restore_failure_is_fail_closed():
     (
         selector,
@@ -1179,7 +1339,18 @@ def test_l3a4_dynamic_restore_failure_is_fail_closed():
         _dynamic_selector_fixture(restore_raises=True)
     )
     with pytest.raises(restore_error, match="qvel restore mismatch"):
-        selector(object(), object(), {}, candidates, evidence, 400)
+        selector(
+            object(),
+            object(),
+            {},
+            candidates,
+            evidence,
+            400,
+            np.zeros(3),
+            np.eye(3),
+            np.ones(3),
+            {"native": "support"},
+        )
     assert len(calls) == 1
     assert len(restores) == 1
     assert len(snapshots) == 1
@@ -1972,7 +2143,7 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "_compiled_microwave_floor(" in insertion_plan
     assert "_compiled_safe_insertion_portal(" in insertion_plan
     assert "_translated_swept_clearance(" in insertion_plan
-    assert "support_clearance >= 0.0" in insertion_plan
+    assert "support_clearance > 0.0" in insertion_plan
     assert "gripper_clearance > 0.0" in insertion_plan
     assert "target_clearance > 0.0" in insertion_plan
     assert "_compiled_target_door_sweep_clearance(" in insertion_plan
@@ -1988,6 +2159,33 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
         insertion_plan
     )
     assert "np.nextafter(front_extent, 0.0)" in insertion_plan
+    assert "site_rotation[:, 0]" in insertion_plan
+    assert "floor_tangent_axes" in insertion_plan
+    assert "for lateral_offset in lateral_search_values" in insertion_plan
+    assert '"lateral_offset_from_site_center_m"' in insertion_plan
+    assert '"lateral_direction"' in insertion_plan
+    assert '"lateral_search_values_m"' in insertion_plan
+    assert "_compact_insertion_sweep_evidence(" in insertion_plan
+    assert '"gripper_sweep_summary"' in insertion_plan
+    assert '"candidate_count_evaluated"' in insertion_plan
+    assert "representative_full_sweeps" in insertion_plan
+    assert "record.update(full_sweeps)" in insertion_plan
+    insertion_candidate_loop = insertion_plan.split(
+        "for front_index, front_distance", 1
+    )[1].split("if selected is None", 1)[0]
+    assert insertion_candidate_loop.index(
+        "door_clearance, door_sweep"
+    ) < insertion_candidate_loop.index(
+        "target_clearance, target_sweep"
+    )
+    assert insertion_candidate_loop.index(
+        "target_clearance, target_sweep"
+    ) < insertion_candidate_loop.index(
+        "gripper_clearance, gripper_sweep"
+    )
+    assert '"rejection_stage": rejection_stage' in insertion_candidate_loop
+    assert '"skipped_gates": skipped_gates' in insertion_candidate_loop
+    assert "if rejection_stage is None" in insertion_candidate_loop
     assert "execution_reserve_m" in insertion_plan
     assert '"execution_reserve_m": 0.0' in insertion_plan
     assert "fictional deeper overshoot" in insertion_plan
@@ -2036,6 +2234,9 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     )
     assert "_compiled_rigid_gripper_fixture_geoms(" in retreat_plan
     assert "_translated_swept_clearance(" in retreat_plan
+    assert "released_target_geoms" in retreat_plan
+    assert "released_target_clearance" in retreat_plan
+    assert retreat_plan.count("_translated_swept_clearance(") == 2
     assert "minimum > 0.0" in retreat_plan
 
     target_release = ast.get_source_segment(
@@ -2044,6 +2245,15 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "_step(env, oracle, action, step, frames)" in target_release
     assert "_has_microwave_contact(" in target_release
     assert "not microwave_contact" in target_release
+    assert "TARGET_BODY not in final_contacts" in target_release
+
+    dynamic_trial = ast.get_source_segment(
+        source, functions["_run_target_dynamic_reachability_trial"]
+    )
+    assert "_close_gripper_on_target(" in dynamic_trial
+    assert "held_eef_offset =" in dynamic_trial
+    assert "_compiled_target_insertion_plan(" in dynamic_trial
+    assert "insertion_plan_passed" in dynamic_trial
 
     target_contact_seek = ast.get_source_segment(
         source, functions["_seek_target_contact"]
@@ -2138,6 +2348,11 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "_insert_target_until_safe_release(" in target_placement
     assert "_release_target_without_microwave_contact(" in target_placement
     assert target_placement.count("forbid_microwave_contact=True") >= 3
+    release_retreat_runtime = target_placement.split(
+        "for retreat, label in", 1
+    )[1].split("max_tilt =", 1)[0]
+    assert "forbid_target_contact=True" in release_retreat_runtime
+    assert "_target_insertion_plan_replay_proof(" in target_placement
     assert "native_site_contains_point(" in target_placement
     assert "final_door_clearance > 0.0" in target_placement
     assert "site_size[2]) - 0.015" not in target_placement
