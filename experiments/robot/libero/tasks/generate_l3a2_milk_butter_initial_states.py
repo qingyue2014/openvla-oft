@@ -464,6 +464,48 @@ def _find_site(env, instance: str, suffix: str) -> int:
     return int(candidates[0][1])
 
 
+def _collision_vertical_bounds(env, body_name: str) -> tuple[float, float]:
+    """Return exact world-z bounds for the native collision primitives.
+
+    LIBERO's ``MujocoXMLObject`` keeps the asset's placement-only
+    ``top_site`` / ``bottom_site`` outside the compiled object subtree.  They
+    are therefore unavailable in ``sim.model`` even though they are present
+    in the native XML.  Use the compiled native collision geometry observed
+    by MuJoCo instead of guessing an asset-local offset.
+    """
+
+    lows: list[float] = []
+    highs: list[float] = []
+    for geom_id in sorted(_geom_ids(env, body_name, collision_only=True)):
+        geom_type = int(env.sim.model.geom_type[geom_id])
+        size = np.asarray(env.sim.model.geom_size[geom_id], dtype=float)
+        rotation = np.asarray(
+            env.sim.data.geom_xmat[geom_id], dtype=float
+        ).reshape(3, 3)
+        center_z = float(env.sim.data.geom_xpos[geom_id][2])
+        if geom_type == 2:  # mjGEOM_SPHERE
+            radius_z = float(size[0])
+        elif geom_type == 3:  # mjGEOM_CAPSULE
+            axis_z = abs(float(rotation[2, 2]))
+            radius_z = float(size[0] + axis_z * size[1])
+        elif geom_type == 5:  # mjGEOM_CYLINDER
+            axis_z = abs(float(rotation[2, 2]))
+            radial_z = float(np.linalg.norm(rotation[2, :2]))
+            radius_z = float(axis_z * size[1] + radial_z * size[0])
+        elif geom_type == 6:  # mjGEOM_BOX
+            radius_z = float(np.abs(rotation[2]) @ size[:3])
+        else:
+            raise RuntimeError(
+                f"unsupported native collision geom type {geom_type} "
+                f"for {body_name}; cannot compute a fail-closed stack pose"
+            )
+        lows.append(center_z - radius_z)
+        highs.append(center_z + radius_z)
+    if not lows:
+        raise RuntimeError(f"no native collision primitives found for {body_name}")
+    return min(lows), max(highs)
+
+
 def _stack_butter_on(
     env,
     base_state: np.ndarray,
@@ -478,13 +520,13 @@ def _stack_butter_on(
     butter_qadr, butter_vadr = _find_free_joint(env, BUTTER_BODY)
     qpos_flat = 1 + butter_qadr
     qvel_flat = 1 + int(env.sim.model.nq) + butter_vadr
-    support_instance = support_body.replace("_main", "")
-    top_site = _find_site(env, support_instance, "top_site")
-    bottom_site = _find_site(env, "butter_1", "bottom_site")
-    support_top = np.asarray(env.sim.data.site_xpos[top_site], dtype=float)
-    butter_bottom = np.asarray(env.sim.data.site_xpos[bottom_site], dtype=float)
-    delta = support_top - butter_bottom
-    delta[2] += clearance
+    _, support_top_z = _collision_vertical_bounds(env, support_body)
+    butter_bottom_z, _ = _collision_vertical_bounds(env, BUTTER_BODY)
+    support_center = _body_pos(env, support_body)
+    butter_center = _body_pos(env, BUTTER_BODY)
+    delta = np.zeros(3, dtype=float)
+    delta[:2] = support_center[:2] - butter_center[:2]
+    delta[2] = support_top_z - butter_bottom_z + clearance
     env.sim.data.qpos[butter_qadr : butter_qadr + 3] += delta
     env.sim.data.qvel[butter_vadr : butter_vadr + 6] = 0.0
     env.sim.forward()

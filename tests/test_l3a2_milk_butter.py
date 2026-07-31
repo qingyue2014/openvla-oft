@@ -2,6 +2,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import h5py
 import numpy as np
@@ -26,6 +27,9 @@ from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
 )
 from experiments.robot.libero.tasks.validate_l3a2_milk_butter_smoke import (
     validate as validate_smoke,
+)
+from experiments.robot.libero.tasks.generate_l3a2_milk_butter_initial_states import (
+    _collision_vertical_bounds,
 )
 
 
@@ -353,6 +357,33 @@ def test_generator_and_osc_reference_encode_required_hard_gates():
     assert "Teleport after reset: false." in osc
     assert "all_task_actions_robot_controlled=true" in osc
     assert "sim.data.qpos" not in osc
+
+
+def test_compiled_native_box_geometry_replaces_uncompiled_placement_sites():
+    model = SimpleNamespace(
+        nbody=2,
+        ngeom=1,
+        body_parentid=np.array([0, 0]),
+        geom_bodyid=np.array([1]),
+        geom_group=np.array([0]),
+        geom_type=np.array([6]),
+        geom_size=np.array([[0.1, 0.2, 0.3]]),
+        body_name2id=lambda name: 1,
+    )
+    # The local y half-extent becomes the world-z half-extent.
+    rotation = np.array(
+        [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]]
+    )
+    data = SimpleNamespace(
+        geom_xmat=np.array([rotation.reshape(-1)]),
+        geom_xpos=np.array([[0.0, 0.0, 1.0]]),
+    )
+    low, high = _collision_vertical_bounds(
+        SimpleNamespace(sim=SimpleNamespace(model=model, data=data)),
+        "milk_1_main",
+    )
+    assert low == pytest.approx(0.8)
+    assert high == pytest.approx(1.2)
 
 
 def test_runner_fails_closed_before_formal_when_artifacts_missing(tmp_path):

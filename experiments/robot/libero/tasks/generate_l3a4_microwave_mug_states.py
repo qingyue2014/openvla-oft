@@ -554,10 +554,45 @@ def _find_layout(
                 "response": response,
             }
         )
+    summaries = []
+    for failure in failures[:8]:
+        wait = failure["wait"]
+        response = failure["response"] or {}
+        summaries.append(
+            {
+                "xy": failure["xy"],
+                "wait_passed": bool(wait.get("passed")),
+                "wait_tilt_deg": float(wait.get("max_tilt_deg", np.inf)),
+                "wait_translation_m": float(
+                    wait.get("max_translation_m", np.inf)
+                ),
+                "wait_linear_speed_mps": float(
+                    wait.get("max_linear_speed_mps", np.inf)
+                ),
+                "wait_angular_speed_radps": float(
+                    wait.get("max_angular_speed_radps", np.inf)
+                ),
+                "wait_support": list(
+                    wait.get("post_support_contacts", [])
+                ),
+                "wait_forbidden": list(
+                    wait.get("post_forbidden_contacts", [])
+                ),
+                "door_contact": bool(response.get("door_contact_seen")),
+                "consequence": bool(response.get("consequence")),
+                "displacement_m": float(
+                    response.get("max_mug_displacement_m", 0.0)
+                ),
+                "tilt_change_deg": float(
+                    response.get("max_mug_tilt_change_deg", 0.0)
+                ),
+            }
+        )
     raise RuntimeError(
         "no dynamically qualified "
         + ("Er" if expect_risk else "Ec")
         + f" location found across {len(failures)} candidates"
+        + f"; first_failures={summaries!r}"
     )
 
 
@@ -808,9 +843,13 @@ def generate(args) -> dict[str, object]:
             )
             if not ec_ok:
                 continue
-        except RuntimeError:
+        except RuntimeError as exc:
             if args.risk_local_xy or args.ec_local_xy:
                 raise
+            print(
+                f"[reject attempt {attempts}] {type(exc).__name__}: {exc}",
+                flush=True,
+            )
             continue
 
         index = len(records["er"])

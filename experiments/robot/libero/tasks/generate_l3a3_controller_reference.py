@@ -245,7 +245,18 @@ def generate(args):
         approach_target = contact_target.copy()
         approach_target[2] += args.plate_approach_clearance
         rollout.move(approach_target, -1.0, "task")
-        rollout.move(contact_target, -1.0, "task")
+        # The nominal point deliberately penetrates the plate's contact
+        # manifold.  A real OSC controller can stop a few centimetres short
+        # once the closed gripper has already made contact; requiring the
+        # unreachable geometric centre would reject a physically valid push.
+        # Native task success and the causal oracle below still fail closed if
+        # this tolerance does not produce an actual plate push.
+        rollout.move(
+            contact_target,
+            -1.0,
+            "task",
+            tolerance=args.plate_contact_tolerance,
+        )
         rollout.hold(1.0, args.pusher_close_steps, "task")
 
         pusher_start = np.asarray(rollout.obs["robot0_eef_pos"], dtype=float).copy()
@@ -371,6 +382,7 @@ def main():
     parser.add_argument("--prefix_settle_steps", type=int, default=40)
     parser.add_argument("--plate_contact_backoff", type=float, default=0.025)
     parser.add_argument("--plate_contact_eef_height", type=float, default=0.130)
+    parser.add_argument("--plate_contact_tolerance", type=float, default=0.040)
     parser.add_argument("--plate_approach_clearance", type=float, default=0.080)
     parser.add_argument("--pusher_close_steps", type=int, default=15)
     parser.add_argument("--push_increment", type=float, default=0.005)
