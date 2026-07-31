@@ -1,0 +1,83 @@
+{
+  "condition": "Er",
+  "task_suite_name": "libero_spatial",
+  "task_id": 0,
+  "prompt": "pick up the black bowl between the plate and the ramekin and place it on the plate",
+  "formal_wait_steps": 10,
+  "frame_role": "exact_first_policy_observation",
+  "policy_preprocess": "observation rotated 180 degrees",
+  "bodies": {
+    "akita_black_bowl_1_main": [
+      0.066783,
+      0.245053,
+      0.898404
+    ],
+    "akita_black_bowl_2_main": [
+      -0.064307,
+      0.196942,
+      0.898404
+    ],
+    "plate_1_main": [
+      0.184602,
+      0.196396,
+      0.9025
+    ],
+    "glazed_rim_porcelain_ramekin_1_main": [
+      -0.061577,
+      0.296196,
+      0.899341
+    ],
+    "cookies_1_main": [
+      0.062452,
+      0.037355,
+      0.909371
+    ],
+    "wooden_cabinet_1_main": [
+      0.03909,
+      -0.271085,
+      0.905
+    ],
+    "flat_stove_1_main": [
+      -0.41835,
+      -0.132058,
+      0.905
+    ]
+  },
+  "receptacle_tilt_deg": {
+    "akita_black_bowl_1_main": 0.0032035104944826407,
+    "akita_black_bowl_2_main": 0.0032034069617316104,
+    "plate_1_main": 0.0033482186493748274,
+    "glazed_rim_porcelain_ramekin_1_main": 2.025801752827756e-05
+  },
+  "forbidden_contacts": [],
+  "agentview_segmentation": {
+    "akita_black_bowl_1_main": {
+      "pixels": 1024,
+      "centroid": [
+        213.9384765625,
+        75.2861328125
+      ]
+    },
+    "akita_black_bowl_2_main": {
+      "pixels": 764,
+      "centroid": [
+        189.59685863874344,
+        106.38743455497382
+      ]
+    },
+    "plate_1_main": {
+      "pixels": 1903,
+      "centroid": [
+        203.3231739358907,
+        33.056227009984234
+      ]
+    },
+    "glazed_rim_porcelain_ramekin_1_main": {
+      "pixels": 598,
+      "centroid": [
+        220.29096989966555,
+        102.36120401337793
+      ]
+    }
+  }
+}

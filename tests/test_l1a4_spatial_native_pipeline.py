@@ -9,22 +9,27 @@ from experiments.robot.libero.tasks.l1a4_spatial_pipeline import (
     LURE,
     MAX_EC_NATIVE_CENTER_DISPLACEMENT_M,
     MAX_LAYOUT_POSITION_ERROR_M,
+    MAX_RECEPTACLE_TILT_DEG,
     NATIVE_LURE_XY,
     NATIVE_PLATE_XY,
     NATIVE_RAMEKIN_XY,
     NATIVE_TARGET_XY,
     PLATE,
     RAMEKIN,
-    RELATION_TRANSLATION_CANDIDATES_XY,
+    RELATION_TRANSFORM_CANDIDATES,
     TARGET,
     _between_metrics,
+    _check_receptacle_tilts,
     _decode_segmentation_rgb,
+    _relation_positions,
 )
 from experiments.robot.libero.tasks.validate_l1a4_spatial_native_preflight import (
     BDDL_PROMPT,
     EXPECTED_FIXTURES,
     EXPECTED_OBJECTS,
+    FORMAL_WAIT_STEPS,
     INTERVENTION_ID,
+    PHYSICAL_GATE_VERDICT,
     TASK_FILE,
     TASK_ID,
     TASK_PROMPT,
@@ -103,6 +108,11 @@ def test_l1a4_spatial_state_file_carries_native_fingerprints(tmp_path):
         ]
         handle.attrs["condition"] = "er"
         handle.attrs["intervention_id"] = INTERVENTION_ID
+        handle.attrs["physical_gate_verdict"] = PHYSICAL_GATE_VERDICT
+        handle.attrs["formal_wait_steps"] = FORMAL_WAIT_STEPS
+        handle.attrs["max_receptacle_tilt_deg"] = (
+            MAX_RECEPTACLE_TILT_DEG
+        )
     verify_state_file(state_path, record)
 
     with h5py.File(state_path, "r+") as handle:
@@ -127,6 +137,11 @@ def test_l1a4_spatial_state_file_rejects_stale_intervention(tmp_path):
         ]
         handle.attrs["condition"] = "ec"
         handle.attrs["intervention_id"] = "retired_fixed_layout"
+        handle.attrs["physical_gate_verdict"] = PHYSICAL_GATE_VERDICT
+        handle.attrs["formal_wait_steps"] = FORMAL_WAIT_STEPS
+        handle.attrs["max_receptacle_tilt_deg"] = (
+            MAX_RECEPTACLE_TILT_DEG
+        )
     with pytest.raises(ValueError, match="intervention_id"):
         verify_state_file(state_path, record)
 
@@ -134,24 +149,68 @@ def test_l1a4_spatial_state_file_rejects_stale_intervention(tmp_path):
 def test_l1a4_spatial_ec_stays_near_native_distribution():
     assert np.allclose(EC_LURE_XY, NATIVE_LURE_XY)
     native_axis = NATIVE_PLATE_XY - NATIVE_RAMEKIN_XY
-    assert len(RELATION_TRANSLATION_CANDIDATES_XY) == 12
-    primary_max_norm = np.linalg.norm(np.array([0.12, -0.11]))
-    for translation in RELATION_TRANSLATION_CANDIDATES_XY:
-        target = NATIVE_TARGET_XY + translation
-        plate = NATIVE_PLATE_XY + translation
-        ramekin = NATIVE_RAMEKIN_XY + translation
-        assert np.allclose(plate - ramekin, native_axis)
-        assert np.linalg.norm(translation) < (
-            MAX_EC_NATIVE_CENTER_DISPLACEMENT_M
+    native_target_plate = np.linalg.norm(
+        NATIVE_TARGET_XY - NATIVE_PLATE_XY
+    )
+    native_target_ramekin = np.linalg.norm(
+        NATIVE_TARGET_XY - NATIVE_RAMEKIN_XY
+    )
+    assert len(RELATION_TRANSFORM_CANDIDATES) == 12
+    for transform in RELATION_TRANSFORM_CANDIDATES:
+        positions = _relation_positions(transform)
+        target = positions[TARGET]
+        plate = positions[PLATE]
+        ramekin = positions[RAMEKIN]
+        assert np.linalg.norm(plate - ramekin) == pytest.approx(
+            np.linalg.norm(native_axis)
         )
-        assert np.linalg.norm(translation) <= primary_max_norm
-        assert translation[0] > 0
-        assert translation[1] < 0
-        assert np.linalg.norm(target - NATIVE_TARGET_XY) == pytest.approx(
-            np.linalg.norm(translation)
+        assert np.linalg.norm(target - plate) == pytest.approx(
+            native_target_plate
         )
+        assert np.linalg.norm(target - ramekin) == pytest.approx(
+            native_target_ramekin
+        )
+        for body, position in positions.items():
+            assert np.linalg.norm(
+                position
+                - {
+                    TARGET: NATIVE_TARGET_XY,
+                    PLATE: NATIVE_PLATE_XY,
+                    RAMEKIN: NATIVE_RAMEKIN_XY,
+                }[body]
+            ) < MAX_EC_NATIVE_CENTER_DISPLACEMENT_M
+        assert transform[0] > 0
+        assert transform[1] > 0
+        assert transform[2] < 0
     assert MAX_LAYOUT_POSITION_ERROR_M == pytest.approx(0.02)
     assert MAX_EC_NATIVE_CENTER_DISPLACEMENT_M == pytest.approx(0.17)
+
+
+def test_l1a4_rejects_in_place_post_wait_tipping():
+    assert FORMAL_WAIT_STEPS == 10
+    assert MAX_RECEPTACLE_TILT_DEG == pytest.approx(1.0)
+    _check_receptacle_tilts(
+        "Er",
+        "first-policy-frame",
+        {TARGET: 0.2, LURE: 0.1, PLATE: 0.3, RAMEKIN: 0.1},
+    )
+    with pytest.raises(RuntimeError, match="first-policy-frame"):
+        _check_receptacle_tilts(
+            "Er",
+            "first-policy-frame",
+            {TARGET: 15.57, LURE: 0.1, PLATE: 0.3, RAMEKIN: 0.1},
+        )
+
+
+def test_l1a4_runner_reuses_physical_gate_for_review_and_evaluation():
+    runner = (
+        Path("experiments/robot/libero/tasks/run_l1a4_spatial.sh")
+        .read_text(encoding="utf-8")
+    )
+    assert '--num_steps_wait "${FORMAL_WAIT_STEPS}"' in runner
+    assert "physical_review)" in runner
+    assert 'python "${PIPELINE}" physical_review' in runner
+    assert 'REVIEW_DIR="${REVIEW_DIR:-review/L1-A4_task}"' in runner
 
 
 class _SegGeom:

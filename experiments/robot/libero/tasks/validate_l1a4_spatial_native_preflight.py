@@ -44,7 +44,10 @@ EXPECTED_OBJECTS = {
     "plate_1": "plate",
 }
 VERDICT = "PASS_L1A4_SPATIAL_NATIVE_ONLY_PREFLIGHT"
-INTERVENTION_ID = "l1a4_spatial_native_near_adaptive_v4"
+INTERVENTION_ID = "l1a4_spatial_native_flat_postwait_v5"
+PHYSICAL_GATE_VERDICT = "PASS_L1A4_SPATIAL_POSTWAIT_PHYSICAL_GATE"
+FORMAL_WAIT_STEPS = 10
+MAX_RECEPTACLE_TILT_DEG = 1.0
 
 
 def resolve_native_bddl() -> Path:
@@ -173,6 +176,9 @@ def verify_state_file(
             "asset_inventory_sha256",
             "condition",
             "intervention_id",
+            "physical_gate_verdict",
+            "formal_wait_steps",
+            "max_receptacle_tilt_deg",
         }
         missing = sorted(required - set(handle.attrs))
         if missing:
@@ -189,6 +195,9 @@ def verify_state_file(
             "native_bddl_sha256": record["bddl_sha256"],
             "asset_inventory_sha256": record["asset_inventory_sha256"],
             "intervention_id": INTERVENTION_ID,
+            "physical_gate_verdict": PHYSICAL_GATE_VERDICT,
+            "formal_wait_steps": FORMAL_WAIT_STEPS,
+            "max_receptacle_tilt_deg": MAX_RECEPTACLE_TILT_DEG,
         }
         mismatches = {
             name: (_read_attr(handle.attrs, name), value)

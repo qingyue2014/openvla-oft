@@ -5,7 +5,9 @@ MODE="${1:-check}"
 TASKS_DIR="experiments/robot/libero/tasks"
 LOG_DIR="${LOG_DIR:-experiments/logs}"
 PIPELINE="${TASKS_DIR}/l1a4_spatial_pipeline.py"
-INTERVENTION_ID="l1a4_spatial_native_near_adaptive_v4"
+INTERVENTION_ID="l1a4_spatial_native_flat_postwait_v5"
+PHYSICAL_GATE_VERDICT="PASS_L1A4_SPATIAL_POSTWAIT_PHYSICAL_GATE"
+FORMAL_WAIT_STEPS="${FORMAL_WAIT_STEPS:-10}"
 
 # Require 45 valid pairs from the 50 native initial states. The generator
 # scans all native states, rejects any post-settle/contact/visibility failure,
@@ -50,6 +52,7 @@ SAFE_REF_CSV="${LOG_DIR}/l1a4_spatial_safe_reference.csv"
 SAFE_REF_REPORT="${LOG_DIR}/l1a4_spatial_safe_reference.md"
 SAFE_REF_TRAJ="${LOG_DIR}/l1a4_spatial_safe_reference_trajectories"
 SAFE_REF_VIDEOS="${REVIEW_DIR}/er_safe_reference"
+PHYSICAL_REVIEW_DIR="${REVIEW_DIR}/v5_physical_stability"
 PREFIX_SAFE_REF_CSV="${LOG_DIR}/l1a4_spatial_prefix_safe_reference.csv"
 PREFIX_SAFE_REF_REPORT="${LOG_DIR}/l1a4_spatial_prefix_safe_reference.md"
 PREFIX_SAFE_REF_TRAJ="${LOG_DIR}/l1a4_spatial_prefix_safe_reference_trajectories"
@@ -117,6 +120,7 @@ states_ready() {
   [[ -f "${EB_STATES}" && -f "${ER_STATES}" && -f "${EC_STATES}" ]] \
     && [[ -f "${PAIRING}" && -f "${PREFLIGHT_MANIFEST}" ]] \
     && grep -q "PASS_L1A4_SPATIAL_PAIRED_SCENE_GATE" "${PAIRING}" \
+    && grep -q "\"verdict\": \"${PHYSICAL_GATE_VERDICT}\"" "${PAIRING}" \
     && grep -q "\"intervention_id\": \"${INTERVENTION_ID}\"" "${PAIRING}" \
     && grep -q "PASS_L1A4_SPATIAL_NATIVE_ONLY_PREFLIGHT" "${PREFLIGHT_MANIFEST}"
 }
@@ -136,6 +140,20 @@ preview() {
     --ec_states "${EC_STATES}" \
     --out_dir "${PREVIEW_DIR}" \
     --num_states 3
+}
+
+physical_review() {
+  ensure_states
+  log "L1-A4 spatial post-wait physical-stability review videos"
+  python "${PIPELINE}" physical_review \
+    --eb_states "${EB_STATES}" \
+    --er_states "${ER_STATES}" \
+    --ec_states "${EC_STATES}" \
+    --out_dir "${PHYSICAL_REVIEW_DIR}" \
+    --num_states "${PHYSICAL_REVIEW_STATES:-2}" \
+    --video_steps "${PHYSICAL_REVIEW_STEPS:-30}" \
+    --video_fps "${PHYSICAL_REVIEW_FPS:-10}" \
+    --seed "${SEED}"
 }
 
 require_visibility_review() {
@@ -177,6 +195,7 @@ eval_condition() {
     --save_trajectory "${SAVE_TRAJECTORY}" \
     --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --num_trials_per_task "${trials}" \
+    --num_steps_wait "${FORMAL_WAIT_STEPS}" \
     --seed "${EVAL_SEED}" \
     --do_sample "${DO_SAMPLE}" \
     --temperature "${TEMPERATURE}" \
@@ -366,6 +385,9 @@ case "${MODE}" in
   preview)
     preview
     ;;
+  physical_review)
+    physical_review
+    ;;
   eb_capability)
     eb_capability
     ;;
@@ -493,7 +515,7 @@ case "${MODE}" in
       --fail_on_invalid
     ;;
   *)
-    echo "Usage: $0 preflight|check|preview|eb_capability|er_probe|smoke|formal|complete_run|attribution|safe_reference|safe_reference_debug|prefix_safe_reference|capability_pair" >&2
+    echo "Usage: $0 preflight|check|preview|physical_review|eb_capability|er_probe|smoke|formal|complete_run|attribution|safe_reference|safe_reference_debug|prefix_safe_reference|capability_pair" >&2
     exit 2
     ;;
 esac

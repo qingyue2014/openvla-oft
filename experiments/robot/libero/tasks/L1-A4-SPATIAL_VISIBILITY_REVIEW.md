@@ -2,60 +2,59 @@
 
 Verdict: **PASS_HUMAN_POLICY_VIEW_VISIBILITY**
 
-Intervention ID: `l1a4_spatial_native_near_adaptive_v4`
+Intervention ID: `l1a4_spatial_native_flat_postwait_v5`
 
-## Audited state pool
+## Audited v5 state pool
 
-- Remote generation: `20260730T063532Z-l1a4s-check`
-- Git base: `add758113d63071e5b62e6c0d9bc3c9c1ae7dcd1`
-- Pipeline SHA-256:
-  `09893328e4de77a244f033790118eb46607b3c936b6822af0dcfe6ddeefa7af3`
+- Accepted pairs: 45
+- Rejected native source states: 2, 3, and 5
 - Pairing manifest SHA-256:
-  `8f3e98cc9ee891ef28301e48f9cc70ab3f0a412cf562dda53922a4ddde9ccf4a`
+  `889f564430320b6136cadde5dd36e11a919c924ae1bdab51b9fb60eceaa5cd95`
 - EB HDF5 SHA-256:
-  `916db567a76c73dcb940cfd5ff0af8fb4deb268d0b560f0825ad0579aa93de57`
+  `c98c4bc1770fd49eca206bb47ecee5dbe4a228b6df59cc0861071baab58f26f9`
 - ER HDF5 SHA-256:
-  `0597edfbf580e50f0a733282d1ae913cfbd60d99397477aec1649bb0e59f0805`
+  `7557ab34112cc9f03b85f8425c189792ee8dcda4f3ae4d94507c71b88d62da9b`
 - EC HDF5 SHA-256:
-  `aa9add3ea5d3f8fb0699bfee06aaeb48b381dc1ca90b7b03e317766890c90cf6`
-- Paired scene verdict: `PASS_L1A4_SPATIAL_PAIRED_SCENE_GATE`
-- Accepted pairs: 45; rejected native source states: 3, 4, and 7.
+  `d10c7b002d32762165d47fa1ecab36725241dd9cccba1ff9a89d2760b364b086`
+- Native-only preflight: `PASS_L1A4_SPATIAL_NATIVE_ONLY_PREFLIGHT`
+- Paired-scene gate: `PASS_L1A4_SPATIAL_PAIRED_SCENE_GATE`
+- Post-wait physical gate:
+  `PASS_L1A4_SPATIAL_POSTWAIT_PHYSICAL_GATE`
 
-## Human policy-view inspection
+## Materials awaiting human approval
 
-The exact post-settle serialized states for episodes 0, 1, and 2 were
-regenerated through the LIBERO wrapper and inspected in both simultaneous
-256-pixel RGB streams consumed by the policy.
+- Exact first-policy `agentview` frames for EB/ER/EC episodes 0–2:
+  `review/L1-A4_task/v5_initial_policy_frames/`
+- Post-wait physical-stability videos for EB/ER/EC episodes 0–1:
+  `review/L1-A4_task/v5_physical_stability/`
+- Physical-review manifest:
+  `review/L1-A4_task/v5_physical_stability/L1-A4_v5_physical-review_manifest.json`
 
-- `agentview`: both native black bowls, the plate, and the ramekin are
-  recognizable in every EB/ER/EC frame. In ER and EC, the relocated target is
-  visually between the ramekin and plate. ER and EC match except for the native
-  lure pose.
-- The plate remains clearly recognizable in ER/EC and has at least 1779
-  segmentation pixels.
-- `robot0_eye_in_hand`: frames are sharp and uncorrupted. This crop does not
-  always contain every landmark simultaneously, but the paired `agentview`
-  resolves the full relation.
-- No reviewed frame is blank, corrupted, dominated by robot occlusion, or
-  dependent on an oracle-only camera.
+Every image is captured after the exact formal 10-step no-op wait. Every
+video starts on that same first policy-visible frame and records 30 additional
+no-op steps. Across the six videos, the maximum recorded receptacle tilt is
+`0.003349°`, maximum final drift is `2.646e-7 m`, and forbidden contacts are
+zero.
 
-## Automatic physical and visual evidence
+The smoke gate required confirmation that both native bowls, the plate, and
+the ramekin are recognizable, the intended relation is visible, and all
+receptacles appear physically flat. That confirmation is recorded below.
 
-- ER minimum `agentview` pixels: target 848, lure 763, plate 1779,
-  ramekin 554.
-- EC minimum `agentview` pixels: target 848, lure 622, plate 1779,
-  ramekin 554.
-- Minimum centroid separation: ER 30.092 px; EC 30.123 px (gate: 12 px).
-- Maximum post-settle layout error: 0.019785 m (gate: 0.020 m).
-- Maximum settle drift: 0.001692 m.
-- Maximum policy-wait drift: 0.009734 m (gate: 0.010 m).
-- Maximum EC displacement from native region centers: 0.158286 m
-  (gate: 0.170 m).
-- Maximum stale-location pairing error: 0.008272 m (gate: 0.012 m).
-- Maximum unallowed ER/EC qpos and qvel difference: 0.
+## Human approval
 
-This verdict authorized dynamic reference and smoke testing for the state
-hashes above. Dynamic feasibility, action separation, EB/EC capability, and
-smoke gates subsequently passed, so the same reviewed state pool was used for
-the formal run `20260730T065043Z-l1a4s-formal_pi05`. Review videos are stored
-under `review/L1-A4_task/`.
+- Approved by the user in the active Codex session on `2026-07-31`
+  (Asia/Hong_Kong).
+- User verdict: the current v5 frames have no visual problem.
+- Scope: the exact v5 state hashes and intervention ID recorded above.
+- The bowls, plate, and ramekin are recognizable; the relational layout is
+  visible; all receptacles appear physically flat.
+
+This approval authorizes the short learned-policy smoke test only. Formal
+evaluation remains blocked until the resulting EB/ER/EC smoke videos and
+dynamic gates are reviewed.
+
+## Retired review
+
+The prior v4 approval is revoked. Its exact evaluator replay showed target
+bowl tipping in all 45 ER and all 45 EC scenes. The v4 state hashes, videos,
+metrics, and approval cannot authorize v5 or any future run.

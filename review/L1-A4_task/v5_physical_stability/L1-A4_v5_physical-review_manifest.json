@@ -1,0 +1,174 @@
+{
+  "verdict": "PASS_L1A4_SPATIAL_PHYSICAL_REVIEW",
+  "intervention_id": "l1a4_spatial_native_flat_postwait_v5",
+  "native_task": {
+    "task_suite_name": "libero_spatial",
+    "task_id": 0,
+    "task_file": "pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate.bddl",
+    "prompt": "pick up the black bowl between the plate and the ramekin and place it on the plate",
+    "native_bddl": "/Users/qingyuewang/Documents/Submit/openvla-oft/_deps/LIBERO/libero/libero/bddl_files/libero_spatial/pick_up_the_black_bowl_between_the_plate_and_the_ramekin_and_place_it_on_the_plate.bddl",
+    "native_bddl_sha256": "9b59eb1287802868ad9bc78d58e6d36d4ba31134e679cfdbdf4b0feb660c959b",
+    "asset_inventory_sha256": "4571d6609472535f9815fb132e965febe0f97c992334518a6f03b7e126bbe425"
+  },
+  "physical_gate": {
+    "verdict": "PASS_L1A4_SPATIAL_POSTWAIT_PHYSICAL_GATE",
+    "formal_wait_steps": 10,
+    "max_receptacle_tilt_deg": 1.0,
+    "max_confirmation_drift_m": 0.0001
+  },
+  "state_files": {
+    "Eb": {
+      "path": "experiments/robot/libero/tasks/l1a4_spatial_eb_states.hdf5",
+      "sha256": "c98c4bc1770fd49eca206bb47ecee5dbe4a228b6df59cc0861071baab58f26f9"
+    },
+    "Er": {
+      "path": "experiments/robot/libero/tasks/l1a4_spatial_er_states.hdf5",
+      "sha256": "7557ab34112cc9f03b85f8425c189792ee8dcda4f3ae4d94507c71b88d62da9b"
+    },
+    "Ec": {
+      "path": "experiments/robot/libero/tasks/l1a4_spatial_ec_states.hdf5",
+      "sha256": "d10c7b002d32762165d47fa1ecab36725241dd9cccba1ff9a89d2760b364b086"
+    }
+  },
+  "videos_per_condition": 2,
+  "videos": [
+    {
+      "condition": "Eb",
+      "episode": 0,
+      "reset_seed": 42,
+      "video": "L1-A4_v5_Eb_physical-stability_PASS_ep000.mp4",
+      "frame_role": "exact first policy observation followed by post-wait no-op stability frames",
+      "formal_gate_verdict": "PASS_L1A4_SPATIAL_POSTWAIT_PHYSICAL_GATE",
+      "formal_wait_steps_before_first_frame": 10,
+      "recorded_noop_steps": 30,
+      "max_tilt_during_recording_deg": {
+        "akita_black_bowl_1_main": 0.003203408895890598,
+        "akita_black_bowl_2_main": 0.003203408895890598,
+        "plate_1_main": 0.003348167487923036,
+        "glazed_rim_porcelain_ramekin_1_main": 2.025801752827756e-05
+      },
+      "final_drift_m": {
+        "akita_black_bowl_1_main": 2.6450475249708647e-07,
+        "akita_black_bowl_2_main": 2.645047524970606e-07,
+        "plate_1_main": 2.4096301056505724e-07,
+        "glazed_rim_porcelain_ramekin_1_main": 2.3747600160609814e-07
+      },
+      "forbidden_contacts": []
+    },
+    {
+      "condition": "Er",
+      "episode": 0,
+      "reset_seed": 42,
+      "video": "L1-A4_v5_Er_physical-stability_PASS_ep000.mp4",
+      "frame_role": "exact first policy observation followed by post-wait no-op stability frames",
+      "formal_gate_verdict": "PASS_L1A4_SPATIAL_POSTWAIT_PHYSICAL_GATE",
+      "formal_wait_steps_before_first_frame": 10,
+      "recorded_noop_steps": 30,
+      "max_tilt_during_recording_deg": {
+        "akita_black_bowl_1_main": 0.003203510266941802,
+        "akita_black_bowl_2_main": 0.003203408895890598,
+        "plate_1_main": 0.0033482186493748274,
+        "glazed_rim_porcelain_ramekin_1_main": 2.029396789822208e-05
+      },
+      "final_drift_m": {
+        "akita_black_bowl_1_main": 6.099172730996263e-10,
+        "akita_black_bowl_2_main": 5.30171171713573e-10,
+        "plate_1_main": 4.3494139941423766e-10,
+        "glazed_rim_porcelain_ramekin_1_main": 5.438529346056626e-10
+      },
+      "forbidden_contacts": []
+    },
+    {
+      "condition": "Ec",
+      "episode": 0,
+      "reset_seed": 42,
+      "video": "L1-A4_v5_Ec_physical-stability_PASS_ep000.mp4",
+      "frame_role": "exact first policy observation followed by post-wait no-op stability frames",
+      "formal_gate_verdict": "PASS_L1A4_SPATIAL_POSTWAIT_PHYSICAL_GATE",
+      "formal_wait_steps_before_first_frame": 10,
+      "recorded_noop_steps": 30,
+      "max_tilt_during_recording_deg": {
+        "akita_black_bowl_1_main": 0.003203510266941802,
+        "akita_black_bowl_2_main": 0.003203408895890598,
+        "plate_1_main": 0.0033482186493748274,
+        "glazed_rim_porcelain_ramekin_1_main": 2.029396789822208e-05
+      },
+      "final_drift_m": {
+        "akita_black_bowl_1_main": 6.099172730996263e-10,
+        "akita_black_bowl_2_main": 5.742167895257725e-10,
+        "plate_1_main": 4.3494139941423766e-10,
+        "glazed_rim_porcelain_ramekin_1_main": 5.438529346056626e-10
+      },
+      "forbidden_contacts": []
+    },
+    {
+      "condition": "Eb",
+      "episode": 1,
+      "reset_seed": 43,
+      "video": "L1-A4_v5_Eb_physical-stability_PASS_ep001.mp4",
+      "frame_role": "exact first policy observation followed by post-wait no-op stability frames",
+      "formal_gate_verdict": "PASS_L1A4_SPATIAL_POSTWAIT_PHYSICAL_GATE",
+      "formal_wait_steps_before_first_frame": 10,
+      "recorded_noop_steps": 30,
+      "max_tilt_during_recording_deg": {
+        "akita_black_bowl_1_main": 0.003203408895890598,
+        "akita_black_bowl_2_main": 0.003203408895890598,
+        "plate_1_main": 0.003348167487923036,
+        "glazed_rim_porcelain_ramekin_1_main": 2.025801752827756e-05
+      },
+      "final_drift_m": {
+        "akita_black_bowl_1_main": 2.6450475249708647e-07,
+        "akita_black_bowl_2_main": 2.645047524970606e-07,
+        "plate_1_main": 2.4096301056505724e-07,
+        "glazed_rim_porcelain_ramekin_1_main": 2.3747600160609814e-07
+      },
+      "forbidden_contacts": []
+    },
+    {
+      "condition": "Er",
+      "episode": 1,
+      "reset_seed": 43,
+      "video": "L1-A4_v5_Er_physical-stability_PASS_ep001.mp4",
+      "frame_role": "exact first policy observation followed by post-wait no-op stability frames",
+      "formal_gate_verdict": "PASS_L1A4_SPATIAL_POSTWAIT_PHYSICAL_GATE",
+      "formal_wait_steps_before_first_frame": 10,
+      "recorded_noop_steps": 30,
+      "max_tilt_during_recording_deg": {
+        "akita_black_bowl_1_main": 0.0032035104944826407,
+        "akita_black_bowl_2_main": 0.003203408895890598,
+        "plate_1_main": 0.0033482186493748274,
+        "glazed_rim_porcelain_ramekin_1_main": 2.025801752827756e-05
+      },
+      "final_drift_m": {
+        "akita_black_bowl_1_main": 6.095950958558962e-10,
+        "akita_black_bowl_2_main": 5.74244212063092e-10,
+        "plate_1_main": 4.3495948661931265e-10,
+        "glazed_rim_porcelain_ramekin_1_main": 5.161554518397818e-10
+      },
+      "forbidden_contacts": []
+    },
+    {
+      "condition": "Ec",
+      "episode": 1,
+      "reset_seed": 43,
+      "video": "L1-A4_v5_Ec_physical-stability_PASS_ep001.mp4",
+      "frame_role": "exact first policy observation followed by post-wait no-op stability frames",
+      "formal_gate_verdict": "PASS_L1A4_SPATIAL_POSTWAIT_PHYSICAL_GATE",
+      "formal_wait_steps_before_first_frame": 10,
+      "recorded_noop_steps": 30,
+      "max_tilt_during_recording_deg": {
+        "akita_black_bowl_1_main": 0.0032035104944826407,
+        "akita_black_bowl_2_main": 0.003203408895890598,
+        "plate_1_main": 0.0033482186493748274,
+        "glazed_rim_porcelain_ramekin_1_main": 2.025801752827756e-05
+      },
+      "final_drift_m": {
+        "akita_black_bowl_1_main": 6.095950958558962e-10,
+        "akita_black_bowl_2_main": 5.742442120463851e-10,
+        "plate_1_main": 4.3495948661931265e-10,
+        "glazed_rim_porcelain_ramekin_1_main": 5.161554518397818e-10
+      },
+      "forbidden_contacts": []
+    }
+  ]
+}
