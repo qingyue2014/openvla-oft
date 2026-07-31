@@ -9,10 +9,14 @@ import numpy as np
 import pytest
 
 from experiments.robot.libero.tasks.l3a4_microwave_common import (
+    EC_RADIUS_CALIBRATION_TARGET_M,
+    MAX_HINGE_RADIUS_ERROR_M,
     SCENARIO,
     TASK_FILE,
     TASK_KEY,
     TASK_PROMPT,
+    corrected_radial_input_xy,
+    hinge_radius_m,
 )
 from experiments.robot.libero.tasks.validate_l3a4_native_preflight import (
     build_manifest,
@@ -171,7 +175,13 @@ def test_l3a4_runtime_preflight_rejects_extra_movable_object(tmp_path):
         verify_runtime_asset_inventory(manifest, Model(extra=True))
 
 
-def _write_states(path: Path, condition: str, *, mutate_other=False):
+def _write_states(
+    path: Path,
+    condition: str,
+    *,
+    mutate_other=False,
+    post_wait_mug=None,
+):
     base = np.arange(40, dtype=float)
     state = base.copy()
     if condition in {"er", "ec"}:
@@ -184,9 +194,14 @@ def _write_states(path: Path, condition: str, *, mutate_other=False):
         "er": np.asarray([0.1, 0.0, 0.0]),
         "ec": np.asarray([-0.1, 0.0, 0.0]),
     }[condition]
+    post_wait_mug = (
+        mug
+        if post_wait_mug is None
+        else np.asarray(post_wait_mug, dtype=float)
+    )
     trace = np.zeros((10, 13), dtype=float)
     trace[:, 0] = np.arange(10)
-    trace[:, 1:4] = mug
+    trace[:, 1:4] = post_wait_mug
     trace[:, 4] = 1.0
     trace[:, 11] = 1.0
     with h5py.File(path, "w") as handle:
@@ -206,12 +221,14 @@ def _write_states(path: Path, condition: str, *, mutate_other=False):
         demo.attrs["fixture_root_position"] = [0.0, 0.3, 0.8]
         demo.attrs["fixture_root_quaternion"] = [1.0, 0.0, 0.0, 0.0]
         demo.attrs["door_hinge_fixture_local_position"] = hinge
-        demo.attrs["porcelain_fixture_local_position"] = mug
+        demo.attrs["porcelain_fixture_local_position"] = post_wait_mug
+        demo.attrs["porcelain_serialized_fixture_local_position"] = mug
+        demo.attrs["porcelain_post_wait_fixture_local_position"] = post_wait_mug
         demo.attrs["porcelain_world_quaternion"] = [1.0, 0.0, 0.0, 0.0]
         demo.attrs["porcelain_world_qvel"] = np.zeros(6)
         demo.attrs["wait_pre_position"] = mug
         demo.attrs["wait_pre_quaternion"] = [1.0, 0.0, 0.0, 0.0]
-        demo.attrs["wait_post_position"] = mug
+        demo.attrs["wait_post_position"] = post_wait_mug
         demo.attrs["wait_post_quaternion"] = [1.0, 0.0, 0.0, 0.0]
         for field in (
             "wait_pre_tilt_deg",
@@ -240,6 +257,13 @@ def _write_states(path: Path, condition: str, *, mutate_other=False):
         if condition == "ec":
             demo.attrs["scripted_door_contact_seen"] = False
             demo.attrs["scripted_consequence"] = False
+            calibration = demo.create_dataset(
+                "ec_hinge_radius_calibration_trace",
+                data=np.asarray(
+                    [[0.0, *mug[:2], *post_wait_mug[:2], 0.1, 0.1, 0.0, 1.0]]
+                ),
+            )
+            calibration.attrs["columns"] = "test"
 
 
 def test_l3a4_pairing_allows_only_porcelain_state_and_gates_dynamics(tmp_path):
@@ -252,6 +276,38 @@ def test_l3a4_pairing_allows_only_porcelain_state_and_gates_dynamics(tmp_path):
     _write_states(paths["er"], "er", mutate_other=True)
     with pytest.raises(ValueError, match="non-porcelain"):
         validate_pairing(paths["eb"], paths["er"], paths["ec"])
+
+
+def test_l3a4_pairing_uses_exact_post_wait_hinge_radius(tmp_path):
+    paths = {name: tmp_path / f"{name}.hdf5" for name in ("eb", "er", "ec")}
+    _write_states(paths["eb"], "eb")
+    _write_states(paths["er"], "er")
+    _write_states(
+        paths["ec"],
+        "ec",
+        post_wait_mug=np.asarray([-0.1021, 0.0, 0.0]),
+    )
+    with pytest.raises(ValueError, match="hinge-distance mismatch"):
+        validate_pairing(paths["eb"], paths["er"], paths["ec"])
+
+
+def test_l3a4_post_wait_radial_correction_compensates_observed_drift():
+    hinge = np.asarray([0.0, 0.0])
+    input_xy = np.asarray([-0.12, 0.0])
+    observed_post_wait_xy = np.asarray([-0.1024, 0.0])
+    target_radius = 0.1
+    corrected = corrected_radial_input_xy(
+        input_xy,
+        observed_post_wait_xy,
+        hinge,
+        target_radius,
+    )
+    drift = observed_post_wait_xy - input_xy
+    corrected_post_wait_xy = corrected + drift
+    assert hinge_radius_m(corrected_post_wait_xy, hinge) == pytest.approx(
+        target_radius
+    )
+    assert EC_RADIUS_CALIBRATION_TARGET_M < MAX_HINGE_RADIUS_ERROR_M
 
 
 def _write_index(path: Path, rows):
@@ -295,8 +351,10 @@ def test_l3a4_generator_and_runner_encode_blocking_gates(tmp_path):
     text = GENERATOR.read_text()
     assert '"formal_wait_trace"' in text
     assert '"kinematic_safe_order_park_wait_trace"' in text
+    assert '"ec_hinge_radius_calibration_trace"' in text
     assert "env.check_success()" in text
-    assert "policy_image(exact_wait" in text
+    assert 'policy_image(evaluation["wait"]["last_obs"])' in text
+    assert "exact post-wait Er/Ec hinge-distance mismatch" in text
     runner = RUNNER.read_text()
     assert "--task_ids 9" in runner
     assert "--safety_oracle task_actor_cascade" in runner

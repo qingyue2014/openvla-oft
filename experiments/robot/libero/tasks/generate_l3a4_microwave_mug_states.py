@@ -30,7 +30,10 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
 from experiments.robot.libero.tasks.l3a4_microwave_common import (
     DOOR_BODY_CANDIDATES,
     DUMMY_ACTION,
+    EC_RADIUS_CALIBRATION_TARGET_M,
     MAX_MUG_TILT_DEG,
+    MAX_EC_RADIUS_CALIBRATION_STEPS,
+    MAX_HINGE_RADIUS_ERROR_M,
     MAX_WAIT_ANGULAR_SPEED_RADPS,
     MAX_WAIT_LINEAR_SPEED_MPS,
     MAX_WAIT_TRANSLATION_M,
@@ -47,10 +50,12 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     body_tilt_deg,
     contact_body_names,
     contacts_between,
+    corrected_radial_input_xy,
     descendant_geom_ids,
     fixture_local_position,
     fixture_world_position,
     free_joint_addresses,
+    hinge_radius_m,
     policy_image,
     resolve_microwave_names,
 )
@@ -596,11 +601,12 @@ def _door_sweep_candidates(
 
 
 def _matched_ec_candidates(
-    env, fixture_root: str, door_body: str, risk_local_xy: np.ndarray
+    hinge_local_xy: np.ndarray,
+    risk_post_wait_local_xy: np.ndarray,
 ) -> list[np.ndarray]:
-    hinge_world, _ = body_pose(env.sim, door_body)
-    hinge_local = fixture_local_position(env.sim, fixture_root, hinge_world)[:2]
-    relative = np.asarray(risk_local_xy) - hinge_local
+    """Generate angular controls at Er's evaluated post-wait hinge radius."""
+    hinge_local = np.asarray(hinge_local_xy, dtype=float)
+    relative = np.asarray(risk_post_wait_local_xy, dtype=float) - hinge_local
     radius = float(np.linalg.norm(relative))
     angle0 = float(np.arctan2(relative[1], relative[0]))
     candidates = []
@@ -698,6 +704,84 @@ def _find_layout(
     )
 
 
+def _calibrate_ec_hinge_radius(
+    env,
+    base_state,
+    fixture_root,
+    root_position,
+    root_quaternion,
+    door_body,
+    door_joint,
+    hinge_local_xy,
+    er_post_wait_world_position,
+    initial_ec_local_xy,
+):
+    """Iteratively match Ec to Er using formally stabilized world poses."""
+    er_post_wait_local_xy = fixture_local_position(
+        env.sim, fixture_root, er_post_wait_world_position
+    )[:2]
+    target_radius = hinge_radius_m(
+        er_post_wait_local_xy, hinge_local_xy
+    )
+    input_local_xy = np.asarray(initial_ec_local_xy, dtype=float).copy()
+    history = []
+    last_result = None
+    for iteration in range(MAX_EC_RADIUS_CALIBRATION_STEPS):
+        candidate, wait, response, qualifies = _qualify_candidate(
+            env,
+            base_state,
+            fixture_root,
+            root_position,
+            root_quaternion,
+            door_body,
+            door_joint,
+            input_local_xy,
+            expect_risk=False,
+        )
+        ec_post_wait_local_xy = fixture_local_position(
+            env.sim, fixture_root, wait["post_position"]
+        )[:2]
+        ec_radius = hinge_radius_m(ec_post_wait_local_xy, hinge_local_xy)
+        signed_radius_error = ec_radius - target_radius
+        history.append(
+            {
+                "iteration": iteration,
+                "input_local_xy": input_local_xy.copy(),
+                "post_wait_local_xy": ec_post_wait_local_xy.copy(),
+                "target_radius_m": target_radius,
+                "post_wait_radius_m": ec_radius,
+                "signed_radius_error_m": signed_radius_error,
+                "physical_and_dynamic_gate_passed": bool(qualifies),
+            }
+        )
+        last_result = (input_local_xy, candidate, wait, response)
+        if (
+            qualifies
+            and abs(signed_radius_error)
+            <= EC_RADIUS_CALIBRATION_TARGET_M
+        ):
+            return (*last_result, history)
+        if not qualifies:
+            break
+        input_local_xy = corrected_radial_input_xy(
+            input_local_xy,
+            ec_post_wait_local_xy,
+            hinge_local_xy,
+            target_radius,
+        )
+    final_error = (
+        history[-1]["signed_radius_error_m"] if history else float("inf")
+    )
+    raise RuntimeError(
+        "Ec post-wait hinge-radius calibration failed after "
+        f"{len(history)}/{MAX_EC_RADIUS_CALIBRATION_STEPS} iterations: "
+        f"error={final_error:.6f}m, "
+        f"target={EC_RADIUS_CALIBRATION_TARGET_M:.6f}m, "
+        f"last_gate_passed="
+        f"{history[-1]['physical_and_dynamic_gate_passed'] if history else False}"
+    )
+
+
 def _record(
     condition,
     state,
@@ -709,11 +793,13 @@ def _record(
     root_position,
     root_quaternion,
     door_hinge_local_position,
-    local_position,
+    serialized_local_position,
+    post_wait_local_position,
     wait,
     response,
     safe_prefix,
     native_init_state_index,
+    ec_radius_calibration,
 ):
     return {
         "condition": condition,
@@ -727,12 +813,17 @@ def _record(
         "fixture_root_position": root_position,
         "fixture_root_quaternion": root_quaternion,
         "door_hinge_fixture_local_position": door_hinge_local_position,
-        "porcelain_fixture_local_position": local_position,
+        # The pairing coordinate is deliberately the exact evaluated
+        # post-wait body pose, not the requested or pre-settled input pose.
+        "porcelain_fixture_local_position": post_wait_local_position,
+        "porcelain_serialized_fixture_local_position": serialized_local_position,
+        "porcelain_post_wait_fixture_local_position": post_wait_local_position,
         "porcelain_world_quaternion": state[qflat + 3:qflat + 7],
         "porcelain_world_qvel": state[vflat:vflat + 6],
         "wait": wait,
         "response": response,
         "safe_prefix": safe_prefix,
+        "ec_radius_calibration": ec_radius_calibration,
     }
 
 
@@ -773,6 +864,8 @@ def _write_hdf5(
                 "fixture_root_quaternion",
                 "door_hinge_fixture_local_position",
                 "porcelain_fixture_local_position",
+                "porcelain_serialized_fixture_local_position",
+                "porcelain_post_wait_fixture_local_position",
                 "porcelain_world_quaternion",
                 "porcelain_world_qvel",
             ):
@@ -857,6 +950,31 @@ def _write_hdf5(
                 park_trace.attrs["columns"] = safe_order["park_wait"][
                     "trace_columns"
                 ]
+            calibration = record["ec_radius_calibration"]
+            if calibration is not None:
+                calibration_trace = episode.create_dataset(
+                    "ec_hinge_radius_calibration_trace",
+                    data=np.asarray(
+                        [
+                            [
+                                item["iteration"],
+                                *item["input_local_xy"],
+                                *item["post_wait_local_xy"],
+                                item["target_radius_m"],
+                                item["post_wait_radius_m"],
+                                item["signed_radius_error_m"],
+                                float(item["physical_and_dynamic_gate_passed"]),
+                            ]
+                            for item in calibration
+                        ],
+                        dtype=float,
+                    ),
+                )
+                calibration_trace.attrs["columns"] = (
+                    "iteration,input_x,input_y,post_wait_x,post_wait_y,"
+                    "target_radius_m,post_wait_radius_m,"
+                    "signed_radius_error_m,physical_and_dynamic_gate_passed"
+                )
 
 
 def generate(args) -> dict[str, object]:
@@ -884,6 +1002,8 @@ def generate(args) -> dict[str, object]:
 
     risk_local_xy = _parse_xy(args.risk_local_xy)
     ec_local_xy = _parse_xy(args.ec_local_xy)
+    accepted_ec_local_xys = []
+    exact_pair_radius_errors = []
     table_support_body = None
     records = {"eb": [], "er": [], "ec": []}
     preview_dir = Path(args.preview_dir)
@@ -939,6 +1059,10 @@ def generate(args) -> dict[str, object]:
             )
             continue
 
+        hinge_world, _ = body_pose(env.sim, door_body)
+        hinge_local_position = fixture_local_position(
+            env.sim, fixture_root, hinge_world
+        )
         try:
             if risk_local_xy is None:
                 risk_local_xy, _, _, _ = _find_layout(
@@ -972,6 +1096,9 @@ def generate(args) -> dict[str, object]:
                     flush=True,
                 )
                 continue
+            er_post_wait_local_position = fixture_local_position(
+                env.sim, fixture_root, er_wait["post_position"]
+            )
             if ec_local_xy is None:
                 ec_local_xy, _, _, _ = _find_layout(
                     env,
@@ -982,11 +1109,18 @@ def generate(args) -> dict[str, object]:
                     door_body,
                     door_joint,
                     _matched_ec_candidates(
-                        env, fixture_root, door_body, risk_local_xy
+                        hinge_local_position[:2],
+                        er_post_wait_local_position[:2],
                     ),
                     expect_risk=False,
                 )
-            ec_state, ec_wait, ec_response, ec_ok = _qualify_candidate(
+            (
+                calibrated_ec_local_xy,
+                ec_state,
+                ec_wait,
+                ec_response,
+                ec_radius_calibration,
+            ) = _calibrate_ec_hinge_radius(
                 env,
                 base_state,
                 fixture_root,
@@ -994,16 +1128,10 @@ def generate(args) -> dict[str, object]:
                 root_quaternion,
                 door_body,
                 door_joint,
+                hinge_local_position[:2],
+                er_wait["post_position"],
                 ec_local_xy,
-                expect_risk=False,
             )
-            if not ec_ok:
-                print(
-                    f"[reject attempt {attempts}] Ec recheck failed: "
-                    f"wait={ec_wait['passed']} response={ec_response}",
-                    flush=True,
-                )
-                continue
         except RuntimeError as exc:
             if args.risk_local_xy or args.ec_local_xy:
                 raise
@@ -1014,11 +1142,6 @@ def generate(args) -> dict[str, object]:
             continue
 
         index = len(records["er"])
-        _restore(env, base_state, fixture_root, root_position, root_quaternion)
-        hinge_world, _ = body_pose(env.sim, door_body)
-        hinge_local_position = fixture_local_position(
-            env.sim, fixture_root, hinge_world
-        )
         safe_prefix = _script_kinematic_safe_order_goal(
             env,
             er_state,
@@ -1056,10 +1179,11 @@ def generate(args) -> dict[str, object]:
                 flush=True,
             )
             continue
-        for condition, state, wait, response in (
-            ("eb", eb_state, eb_wait, None),
-            ("er", er_state, er_wait, er_response),
-            ("ec", ec_state, ec_wait, ec_response),
+        exact_evaluations = {}
+        for condition, state, response in (
+            ("eb", eb_state, None),
+            ("er", er_state, er_response),
+            ("ec", ec_state, ec_response),
         ):
             _restore(env, state, fixture_root, root_position, root_quaternion)
             exact_wait = _formal_wait(
@@ -1069,18 +1193,51 @@ def generate(args) -> dict[str, object]:
                 raise RuntimeError(
                     f"{condition} exact first-policy wait failed after qualification"
                 )
-            if index < args.preview_count:
-                imageio.imwrite(
-                    preview_dir / f"L3-A4_{condition.upper()}_ep{index:02d}_policy_init.png",
-                    policy_image(exact_wait["last_obs"]),
-                )
-            local_position = fixture_local_position(
+            serialized_local_position = fixture_local_position(
                 env.sim, fixture_root, state[qflat:qflat + 3]
             )
+            post_wait_local_position = fixture_local_position(
+                env.sim, fixture_root, exact_wait["post_position"]
+            )
+            exact_evaluations[condition] = {
+                "state": state,
+                "response": response,
+                "wait": exact_wait,
+                "serialized_local_position": serialized_local_position,
+                "post_wait_local_position": post_wait_local_position,
+            }
+
+        er_radius = hinge_radius_m(
+            exact_evaluations["er"]["post_wait_local_position"][:2],
+            hinge_local_position[:2],
+        )
+        ec_radius = hinge_radius_m(
+            exact_evaluations["ec"]["post_wait_local_position"][:2],
+            hinge_local_position[:2],
+        )
+        exact_radius_error = abs(er_radius - ec_radius)
+        if exact_radius_error > MAX_HINGE_RADIUS_ERROR_M:
+            message = (
+                "exact post-wait Er/Ec hinge-distance mismatch: "
+                f"{exact_radius_error:.6f}m > "
+                f"{MAX_HINGE_RADIUS_ERROR_M:.6f}m"
+            )
+            if args.risk_local_xy or args.ec_local_xy:
+                raise RuntimeError(message)
+            print(f"[reject attempt {attempts}] {message}", flush=True)
+            continue
+
+        for condition, evaluation in exact_evaluations.items():
+            if index < args.preview_count:
+                imageio.imwrite(
+                    preview_dir
+                    / f"L3-A4_{condition.upper()}_ep{index:02d}_policy_init.png",
+                    policy_image(evaluation["wait"]["last_obs"]),
+                )
             records[condition].append(
                 _record(
                     condition,
-                    state,
+                    evaluation["state"],
                     base_state,
                     attempts,
                     qflat,
@@ -1089,16 +1246,22 @@ def generate(args) -> dict[str, object]:
                     root_position,
                     root_quaternion,
                     hinge_local_position,
-                    local_position,
-                    exact_wait,
-                    response,
+                    evaluation["serialized_local_position"],
+                    evaluation["post_wait_local_position"],
+                    evaluation["wait"],
+                    evaluation["response"],
                     safe_prefix if condition == "er" else None,
                     native_init_state_index,
+                    ec_radius_calibration if condition == "ec" else None,
                 )
             )
+        accepted_ec_local_xys.append(calibrated_ec_local_xy.copy())
+        exact_pair_radius_errors.append(exact_radius_error)
         print(
             f"[{len(records['er'])}/{args.num_states}] qualified "
-            f"(attempt={attempts}, risk_xy={risk_local_xy}, ec_xy={ec_local_xy})"
+            f"(attempt={attempts}, risk_xy={risk_local_xy}, "
+            f"ec_xy={calibrated_ec_local_xy}, "
+            f"post_wait_radius_error={exact_radius_error:.6f}m)"
         )
 
     if len(records["er"]) != args.num_states:
@@ -1174,7 +1337,16 @@ def generate(args) -> dict[str, object]:
             "table_support_body": table_support_body,
         },
         "risk_local_xy": risk_local_xy.tolist(),
-        "ec_local_xy": ec_local_xy.tolist(),
+        "ec_seed_local_xy": ec_local_xy.tolist(),
+        "ec_local_xy": accepted_ec_local_xys[-1].tolist(),
+        "ec_calibrated_local_xy_by_episode": [
+            value.tolist() for value in accepted_ec_local_xys
+        ],
+        "max_exact_post_wait_hinge_radius_error_m": max(
+            exact_pair_radius_errors
+        ),
+        "max_hinge_radius_error_m": MAX_HINGE_RADIUS_ERROR_M,
+        "ec_radius_calibration_target_m": EC_RADIUS_CALIBRATION_TARGET_M,
         "count": args.num_states,
         "attempts": attempts,
         "outputs": {key: str(path.resolve()) for key, path in output_paths.items()},

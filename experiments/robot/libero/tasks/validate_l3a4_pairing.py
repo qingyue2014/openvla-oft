@@ -11,6 +11,9 @@ import h5py
 import numpy as np
 
 from experiments.robot.libero.tasks.l3a4_microwave_common import (
+    EC_RADIUS_CALIBRATION_TARGET_M,
+    MAX_EC_RADIUS_CALIBRATION_STEPS,
+    MAX_HINGE_RADIUS_ERROR_M,
     MAX_MUG_TILT_DEG,
     MAX_WAIT_ANGULAR_SPEED_RADPS,
     MAX_WAIT_LINEAR_SPEED_MPS,
@@ -170,6 +173,8 @@ def validate_pairing(
                     ("fixture_root_quaternion", 4),
                     ("door_hinge_fixture_local_position", 3),
                     ("porcelain_fixture_local_position", 3),
+                    ("porcelain_serialized_fixture_local_position", 3),
+                    ("porcelain_post_wait_fixture_local_position", 3),
                     ("porcelain_world_quaternion", 4),
                     ("porcelain_world_qvel", 6),
                 ):
@@ -211,6 +216,32 @@ def validate_pairing(
                 raise ValueError(f"Ec has door->mug contact at demo_{index}")
             if bool(ec.attrs.get("scripted_consequence", True)):
                 raise ValueError(f"Ec has cascade consequence at demo_{index}")
+            if "ec_hinge_radius_calibration_trace" not in ec:
+                raise ValueError(
+                    f"Ec hinge-radius calibration trace missing at demo_{index}"
+                )
+            calibration = ec["ec_hinge_radius_calibration_trace"][:]
+            if (
+                calibration.ndim != 2
+                or calibration.shape[0] < 1
+                or calibration.shape[0] > MAX_EC_RADIUS_CALIBRATION_STEPS
+                or calibration.shape[1] != 9
+                or not np.all(np.isfinite(calibration))
+            ):
+                raise ValueError(
+                    f"Ec invalid hinge-radius calibration trace at demo_{index}: "
+                    f"{calibration.shape}"
+                )
+            if calibration[-1, 8] < 0.5:
+                raise ValueError(
+                    f"Ec final hinge-radius calibration candidate failed "
+                    f"physical/dynamic gates at demo_{index}"
+                )
+            if abs(float(calibration[-1, 7])) > EC_RADIUS_CALIBRATION_TARGET_M:
+                raise ValueError(
+                    f"Ec final hinge-radius calibration misses target at "
+                    f"demo_{index}: {calibration[-1, 7]:.6f}m"
+                )
             if not bool(er.attrs.get("kinematic_safe_order_passed", False)):
                 raise ValueError(f"Er kinematic safe-order path failed at demo_{index}")
             if not bool(
@@ -224,14 +255,31 @@ def validate_pairing(
                     f"Er kinematic safe-order park trace missing at demo_{index}"
                 )
             hinge = np.asarray(er.attrs["door_hinge_fixture_local_position"])[:2]
-            er_xy = np.asarray(er.attrs["porcelain_fixture_local_position"])[:2]
-            ec_xy = np.asarray(ec.attrs["porcelain_fixture_local_position"])[:2]
+            for condition in ("er", "ec"):
+                demo = demos[condition]
+                paired_position = np.asarray(
+                    demo.attrs["porcelain_fixture_local_position"]
+                )
+                post_wait_position = np.asarray(
+                    demo.attrs["porcelain_post_wait_fixture_local_position"]
+                )
+                if not np.array_equal(paired_position, post_wait_position):
+                    raise ValueError(
+                        f"{condition} pairing pose is not exact post-wait pose "
+                        f"at demo_{index}"
+                    )
+            er_xy = np.asarray(
+                er.attrs["porcelain_post_wait_fixture_local_position"]
+            )[:2]
+            ec_xy = np.asarray(
+                ec.attrs["porcelain_post_wait_fixture_local_position"]
+            )[:2]
             radius_error = abs(
                 float(np.linalg.norm(er_xy - hinge))
                 - float(np.linalg.norm(ec_xy - hinge))
             )
             matched_radius_errors.append(radius_error)
-            if radius_error > 0.002:
+            if radius_error > MAX_HINGE_RADIUS_ERROR_M:
                 raise ValueError(
                     f"Er/Ec hinge-distance mismatch at demo_{index}: {radius_error:.4f}m"
                 )
