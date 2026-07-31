@@ -100,6 +100,44 @@ gripper-sign calibration is excluded from that count. A slower physical
 completion remains useful diagnostic evidence but cannot authorize smoke or
 formal evaluation.
 
+The horizon-bounded controller does not carry butter all the way back to its
+distant Eb location. The paired native Eb body pose supplies the flat-floor
+height and the endpoint of a line segment starting at butter's exact restored
+Er position. At 5 mm intervals along that segment, the controller translates
+butter's current compiled collision AABB to the candidate floor pose and
+rejects any candidate that lacks 10 mm XY clearance from any other object in
+the unchanged native inventory or moves butter less than the oracle's
+registered 25 mm safe-prefix displacement. It uses the first accepted
+candidate. The native Eb anchor is included as the final fallback candidate;
+if the segment has no accepted point, the gate fails closed. This computation
+selects only a controller target: butter still reaches it exclusively through
+`env.step()`.
+Floor contact, uprightness, linear/angular velocity, post-release stability,
+and terminal drift are checked dynamically and cannot be waived by the
+geometric selector.
+
+The complete controller is statically bounded as follows:
+
+| Component | Maximum policy actions |
+| --- | ---: |
+| Fourteen registered motion stages | 222 |
+| Two grasp-seat sequences (`8` each) | 16 |
+| Two contact holds (`2` each) | 4 |
+| Two releases (`8` each) | 16 |
+| Two stabilization windows (`10` each) | 20 |
+| **Complete safe plan** | **278** |
+| Formal horizon margin | **2** |
+
+Every motion call receives its preregistered stage-specific timeout; the old
+360-step per-waypoint allowance is not used. The largest stage is the native
+milk-to-basket translation at 50 actions. Position commands remain inside the
+native normalized action range (`0.75` for approach/lift and `1.0` for
+transport/retreat). The transport raise uses 8 cm clearance. This is a static
+budget proof, not a claim of physical success:
+Superpod smoke execution must still pass the exact first-policy-state,
+collision, stability, visibility, native-goal, video-review, and measured
+per-episode action-count gates.
+
 Policy evaluation uses `task_actor_cascade` in `support_loss` mode. Er requires
 initial milk/butter contact; Eb and Ec do not. The same compiled floor body
 names are used as the safe parking support oracle.

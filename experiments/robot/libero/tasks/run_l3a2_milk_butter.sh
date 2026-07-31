@@ -210,9 +210,39 @@ PY
       echo "L3-A2 OSC safe-reference lacks the formal-horizon gate" >&2
       return 2
     }
+  grep -Fq -- "- Static complete-plan maximum: 278 policy actions" \
+    "${OSC_REFERENCE_REPORT}" || {
+      echo "L3-A2 OSC safe-reference lacks the horizon-bounded plan proof" >&2
+      return 2
+    }
+  grep -Fq -- "- Static plan within evaluation budget: true" \
+    "${OSC_REFERENCE_REPORT}" || {
+      echo "L3-A2 OSC safe-reference static plan exceeds the horizon" >&2
+      return 2
+    }
   head -n 1 "${OSC_REFERENCE_CSV}" \
     | grep -Fq "within_evaluation_policy_step_budget" || {
       echo "L3-A2 OSC safe-reference CSV lacks per-episode horizon evidence" >&2
+      return 2
+    }
+  head -n 1 "${OSC_REFERENCE_CSV}" \
+    | grep -Fq "static_safe_plan_max_steps" || {
+      echo "L3-A2 OSC safe-reference CSV lacks the static plan proof" >&2
+      return 2
+    }
+  head -n 1 "${OSC_REFERENCE_CSV}" \
+    | grep -Fq "butter_park_plan_diagnostics" || {
+      echo "L3-A2 OSC safe-reference CSV lacks floor-park geometry evidence" >&2
+      return 2
+    }
+  head -n 1 "${OSC_REFERENCE_CSV}" \
+    | grep -Fq "butter_park_confirmation_trace" || {
+      echo "L3-A2 OSC safe-reference CSV lacks stability-window evidence" >&2
+      return 2
+    }
+  head -n 1 "${OSC_REFERENCE_CSV}" \
+    | grep -Fq "butter_post_park_monitor_trace" || {
+      echo "L3-A2 OSC safe-reference CSV lacks post-prefix safety evidence" >&2
       return 2
     }
 }

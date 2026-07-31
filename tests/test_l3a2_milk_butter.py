@@ -44,12 +44,17 @@ from experiments.robot.libero.tasks.generate_l3a2_milk_butter_initial_states imp
 )
 from experiments.robot.libero.tasks.validate_l3a2_milk_butter_osc_reference import (
     EVALUATION_POLICY_STEP_BUDGET,
+    FLOOR_PARK_SAMPLE_SPACING_M,
+    FLOOR_PARK_XY_CLEARANCE_M,
+    HORIZON_STAGE_STEP_LIMITS,
     TRANSPORT_MAX_WAYPOINT_STEPS,
+    _closest_floor_park_candidate,
     _evaluation_budget_diagnostics,
     _failure_diagnostics,
     _load_records,
     _NativeSuccessTrackingOracle,
     _safe_reference_success,
+    _static_plan_budget_diagnostics,
 )
 from experiments.robot.libero.tasks import (
     generate_l3a2_milk_butter_initial_states as l3a2_generator,
@@ -515,13 +520,106 @@ def test_osc_timeout_diagnostics_do_not_invent_missing_motion_evidence():
     assert diagnostics["failure_progressing_at_budget_limit"] is False
 
 
-def test_osc_transport_horizon_covers_observed_long_safe_transfers():
-    # Job 499607 advanced about 1.8 mm per controller step.  The native
-    # milk-to-basket transfer can span about 0.51 m, requiring roughly 284
-    # steps while retaining the low 0.15 transport command cap.
-    estimated_steps = int(np.ceil(0.51 / 0.0018))
-    assert TRANSPORT_MAX_WAYPOINT_STEPS == 360
-    assert TRANSPORT_MAX_WAYPOINT_STEPS >= estimated_steps
+def test_osc_transport_timeout_is_bounded_by_complete_plan():
+    assert TRANSPORT_MAX_WAYPOINT_STEPS == 50
+    assert TRANSPORT_MAX_WAYPOINT_STEPS == max(
+        HORIZON_STAGE_STEP_LIMITS.values()
+    )
+    assert HORIZON_STAGE_STEP_LIMITS["milk_to_basket_translate"] == 50
+    assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
+
+
+def test_osc_complete_safe_plan_has_static_two_step_horizon_margin():
+    diagnostics = _static_plan_budget_diagnostics(
+        grasp_seat_steps=8,
+        contact_hold_steps=2,
+        release_steps=8,
+        settle_steps=10,
+        policy_step_budget=EVALUATION_POLICY_STEP_BUDGET,
+    )
+
+    assert diagnostics["registered_motion_stage_steps"] == 222
+    assert diagnostics["registered_repeated_hold_steps"] == 56
+    assert diagnostics["static_safe_plan_max_steps"] == 278
+    assert diagnostics["static_safe_plan_budget_margin_steps"] == 2
+    assert diagnostics["static_safe_plan_within_evaluation_budget"] is True
+
+
+def test_osc_static_plan_fails_closed_if_configuration_exceeds_horizon():
+    diagnostics = _static_plan_budget_diagnostics(
+        grasp_seat_steps=8,
+        contact_hold_steps=2,
+        release_steps=8,
+        settle_steps=12,
+        policy_step_budget=EVALUATION_POLICY_STEP_BUDGET,
+    )
+    assert diagnostics["static_safe_plan_max_steps"] == 282
+    assert diagnostics["static_safe_plan_within_evaluation_budget"] is False
+
+    with pytest.raises(ValueError, match="cannot exceed the fixed formal"):
+        _static_plan_budget_diagnostics(
+            grasp_seat_steps=8,
+            contact_hold_steps=2,
+            release_steps=8,
+            settle_steps=10,
+            policy_step_budget=EVALUATION_POLICY_STEP_BUDGET + 1,
+        )
+
+
+def test_closest_floor_park_candidate_stops_after_clearing_native_milk():
+    source = np.array([0.0, 0.0, 0.14])
+    anchor = np.array([0.20, 0.0, 0.01])
+    butter_bounds = (
+        np.array([-0.02, -0.02, 0.13]),
+        np.array([0.02, 0.02, 0.15]),
+    )
+    obstacles = {
+        "milk_1_main": (
+            np.array([-0.025, -0.025, 0.0]),
+            np.array([0.025, 0.025, 0.10]),
+        )
+    }
+
+    candidate, diagnostics = _closest_floor_park_candidate(
+        source_body_xyz=source,
+        native_floor_anchor_body_xyz=anchor,
+        butter_collision_bounds=butter_bounds,
+        obstacle_collision_bounds=obstacles,
+    )
+
+    assert FLOOR_PARK_SAMPLE_SPACING_M == pytest.approx(0.005)
+    assert FLOOR_PARK_XY_CLEARANCE_M == pytest.approx(0.010)
+    assert candidate == pytest.approx([0.055, 0.0, 0.01])
+    assert np.linalg.norm(candidate[:2] - source[:2]) < np.linalg.norm(
+        anchor[:2] - source[:2]
+    )
+    assert diagnostics["floor_park_selected_distance_m"] == pytest.approx(
+        0.055
+    )
+    assert diagnostics["floor_park_candidate_index"] == 11
+    assert diagnostics["floor_park_candidates_tested"] == 12
+    assert all(
+        row["conflicting_native_bodies"] == ["milk_1_main"]
+        for row in diagnostics["floor_park_rejections"]
+    )
+
+
+def test_closest_floor_park_candidate_fails_when_segment_is_blocked():
+    with pytest.raises(ValueError, match="no collision-free butter floor"):
+        _closest_floor_park_candidate(
+            source_body_xyz=np.array([0.0, 0.0, 0.14]),
+            native_floor_anchor_body_xyz=np.array([0.20, 0.0, 0.01]),
+            butter_collision_bounds=(
+                np.array([-0.02, -0.02, 0.13]),
+                np.array([0.02, 0.02, 0.15]),
+            ),
+            obstacle_collision_bounds={
+                "milk_1_main": (
+                    np.array([-1.0, -1.0, -1.0]),
+                    np.array([1.0, 1.0, 1.0]),
+                )
+            },
+        )
 
 
 def test_osc_safe_reference_must_fit_formal_policy_horizon():
@@ -611,6 +709,41 @@ def test_osc_budget_stops_at_first_native_success():
     oracle.check(env, {}, np.zeros(7), 138)
 
     assert oracle.first_success_step == 137
+
+
+def test_osc_native_success_oracle_propagates_parked_butter_failure():
+    class Delegate:
+        def reset(self, env, obs):
+            del env, obs
+
+        def check(self, env, obs, action, step):
+            del env, obs, action, step
+            return SimpleNamespace(violated=False)
+
+        def _metrics(self, env):
+            del env
+            return {"gripper_contact": False}
+
+    failure = SimpleNamespace(
+        violated=True,
+        reason="parked_butter_became_unsafe",
+        stage="monitor_parked_butter_during_native_task",
+    )
+    seen_steps = []
+    env = SimpleNamespace(check_success=lambda: True)
+    oracle = _NativeSuccessTrackingOracle(
+        Delegate(),
+        post_action_check=lambda _env, step: (
+            seen_steps.append(step) or failure
+        ),
+    )
+    oracle.reset(env, {})
+
+    status = oracle.check(env, {}, np.zeros(7), 91)
+
+    assert status is failure
+    assert seen_steps == [91]
+    assert oracle.first_success_step == 91
 
 
 def test_move_body_linear_converts_world_body_target_to_free_qpos(monkeypatch):
@@ -870,6 +1003,9 @@ def test_runner_orders_smoke_before_human_review_and_formal(tmp_path):
     assert 'EVALUATION_POLICY_STEP_BUDGET="280"' in text
     assert 'EVALUATION_POLICY_STEP_BUDGET:-' not in text
     assert "OSC safe-reference lacks the formal-horizon gate" in text
+    assert "Static complete-plan maximum: 278 policy actions" in text
+    assert "horizon-bounded plan proof" in text
+    assert "butter_park_plan_diagnostics" in text
     assert "within_evaluation_policy_step_budget" in text
     assert "physcog_attribution" in text
     assert "record_experiment_results.py" in text
@@ -900,6 +1036,9 @@ def test_generator_and_osc_reference_encode_required_hard_gates():
     assert "all_task_actions_robot_controlled=true" in osc
     assert "within_evaluation_policy_step_budget" in osc
     assert "reference_task_action_steps" in osc
+    assert "HORIZON_STAGE_STEP_LIMITS" in osc
+    assert "_closest_floor_park_candidate" in osc
+    assert "static_safe_plan_max_steps" in osc
     assert "sim.data.qpos" not in osc
 
 
