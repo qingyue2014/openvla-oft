@@ -56,13 +56,14 @@ def _position_action(current, target, gripper, scale):
 def _select_reachable_trailing_contact(
     plate_xy, push_direction_xy, eef_xy, backoff
 ):
-    """Choose a reachable cardinal rim point that the push moves inward from.
+    """Choose a reachable trailing EEF line that the push moves inward from.
 
     A point exactly opposite the diagonal goal direction is geometrically
     natural but unnecessarily couples both workspace axes.  In this native
     task that point moves the Franka toward its difficult +X reach limit.
-    Cardinal rim candidates preserve a positive inward component of the
-    requested push while allowing the closest reachable trailing side.
+    Cardinal candidates preserve a positive inward component of the requested
+    push.  ``backoff`` locates the EEF centre inside the native plate footprint;
+    the fingers, not the EEF origin, establish the physical contact.
     """
     plate_xy = np.asarray(plate_xy, dtype=float)
     direction = np.asarray(push_direction_xy, dtype=float)
@@ -95,6 +96,35 @@ def _select_reachable_trailing_contact(
         ),
     )
     return plate_xy + offset
+
+
+def _plate_contact_candidate_diagnostics(
+    plate_xy, push_direction_xy, eef_xy, backoff
+):
+    plate_xy = np.asarray(plate_xy, dtype=float)
+    direction = np.asarray(push_direction_xy, dtype=float)
+    direction = direction / np.linalg.norm(direction)
+    eef_xy = np.asarray(eef_xy, dtype=float)
+    offsets = (
+        np.array([backoff, 0.0]),
+        np.array([-backoff, 0.0]),
+        np.array([0.0, backoff]),
+        np.array([0.0, -backoff]),
+    )
+    return [
+        {
+            "point_xy": (plate_xy + offset).tolist(),
+            "offset_xy": offset.tolist(),
+            "inward_component_m": float(np.dot(direction, -offset)),
+            "eef_xy_distance_m": float(
+                np.linalg.norm((plate_xy + offset) - eef_xy)
+            ),
+            "trailing_eligible": bool(
+                float(np.dot(direction, -offset)) > 1e-6
+            ),
+        }
+        for offset in offsets
+    ]
 
 
 def _robot_contacts_body(env, body_name):
@@ -208,6 +238,7 @@ class Rollout:
         max_steps=None,
         stop_when=None,
         stop_label="stop condition",
+        diagnostics=None,
     ):
         tolerance = self.args.position_tolerance if tolerance is None else tolerance
         max_steps = self.args.max_waypoint_steps if max_steps is None else max_steps
@@ -227,13 +258,19 @@ class Rollout:
                 phase,
             )
         if stop_when is not None:
+            extra = diagnostics() if callable(diagnostics) else diagnostics
             raise RuntimeError(
                 f"OSC {stop_label} not observed phase={phase} "
-                f"best_error_m={best:.5f} target={np.asarray(target).tolist()}"
+                f"best_error_m={best:.5f} target={np.asarray(target).tolist()} "
+                f"final_eef={np.asarray(self.obs['robot0_eef_pos']).tolist()} "
+                f"diagnostics={json.dumps(extra, sort_keys=True)}"
             )
+        extra = diagnostics() if callable(diagnostics) else diagnostics
         raise RuntimeError(
             f"OSC waypoint timeout phase={phase} best_error_m={best:.5f} "
-            f"target={np.asarray(target).tolist()}"
+            f"target={np.asarray(target).tolist()} "
+            f"final_eef={np.asarray(self.obs['robot0_eef_pos']).tolist()} "
+            f"diagnostics={json.dumps(extra, sort_keys=True)}"
         )
 
 
@@ -327,10 +364,11 @@ def generate(args):
         if not rollout.oracle.safe_prefix_completed:
             raise RuntimeError("OSC bottle parking did not pass the causal safe-prefix gate")
 
-        # Select a cardinal trailing rim point whose inward push component is
-        # positive and whose XY position is closest to the live EEF.  For this
-        # native diagonal goal this selects the rear (-Y) rim rather than the
-        # hard-to-reach diagonal (+X,-Y) point.
+        # Select a cardinal trailing EEF line whose inward push component is
+        # positive and whose XY position is closest to the live EEF.  Keep the
+        # EEF origin inside the native plate footprint: the remote controller
+        # cannot reach the rim-centred (+X,-Y) or rear-rim waypoints, while the
+        # gripper fingers can still contact the plate from this inner line.
         plate_start = body_pose(env, PLATE_BODY)[0]
         goal = np.asarray(
             env.sim.data.site_xpos[env.sim.model.site_name2id(GOAL_SITE)],
@@ -348,15 +386,58 @@ def generate(args):
         # Seek below the nominal fingertip height.  Physical contact, not
         # Cartesian target error, terminates this motion.
         contact_target[2] += args.plate_contact_seek_eef_height
-        approach_target = contact_target.copy()
-        approach_target[2] += args.plate_approach_clearance
-        rollout.move(approach_target, -1.0, "task")
+        line_approach_target = contact_target.copy()
+        line_approach_target[2] += args.plate_approach_clearance
+        center_approach_target = line_approach_target.copy()
+        center_approach_target[:2] = plate_start[:2]
+        candidate_geometry = _plate_contact_candidate_diagnostics(
+            plate_start[:2],
+            direction_xy,
+            np.asarray(rollout.obs["robot0_eef_pos"], dtype=float)[:2],
+            args.plate_contact_backoff,
+        )
+
+        def plate_diagnostics():
+            return {
+                "live_eef": np.asarray(
+                    rollout.obs["robot0_eef_pos"], dtype=float
+                ).tolist(),
+                "live_plate": body_pose(env, PLATE_BODY)[0].tolist(),
+                "goal": goal.tolist(),
+                "push_direction_xy": direction_xy.tolist(),
+                "candidate_geometry": candidate_geometry,
+                "selected_contact_line_xy": contact_target[:2].tolist(),
+                "center_approach_target": center_approach_target.tolist(),
+                "line_approach_target": line_approach_target.tolist(),
+                "contact_seek_target": contact_target.tolist(),
+            }
+
+        print(
+            "L3-A3 plate-contact plan "
+            + json.dumps(plate_diagnostics(), sort_keys=True),
+            flush=True,
+        )
+        # Decouple the large workspace translation from the small trailing
+        # offset and from the vertical contact seek.
+        rollout.move(
+            center_approach_target,
+            -1.0,
+            "task",
+            diagnostics=plate_diagnostics,
+        )
+        rollout.move(
+            line_approach_target,
+            -1.0,
+            "task",
+            diagnostics=plate_diagnostics,
+        )
         rollout.move(
             contact_target,
             -1.0,
             "task",
             stop_when=lambda: _robot_contacts_body(env, PLATE_BODY),
             stop_label="robot-plate contact",
+            diagnostics=plate_diagnostics,
         )
         rollout.hold(1.0, args.pusher_close_steps, "task")
         if not _robot_contacts_body(env, PLATE_BODY):
@@ -497,7 +578,7 @@ def main():
     parser.add_argument("--release_steps", type=int, default=35)
     parser.add_argument("--retreat_height", type=float, default=0.120)
     parser.add_argument("--prefix_settle_steps", type=int, default=40)
-    parser.add_argument("--plate_contact_backoff", type=float, default=0.065)
+    parser.add_argument("--plate_contact_backoff", type=float, default=0.025)
     parser.add_argument(
         "--plate_contact_seek_eef_height", type=float, default=0.080
     )
