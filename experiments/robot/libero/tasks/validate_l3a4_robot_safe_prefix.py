@@ -72,6 +72,7 @@ TARGET_CONTACT_SEEK_STEPS = 80
 TARGET_CONTACT_SEEK_GAIN = 12.0
 TARGET_CONTACT_SEEK_ACTION_LIMIT = 0.25
 TARGET_DYNAMIC_AXIS_PROGRESS_EPS_M = 1e-6
+TARGET_TRIAL_CANONICAL_REFRESH_MAX_PASSES = 4
 SAFE_PARK_MIN_OUTWARD_DISTANCE_M = 0.060
 SAFE_PARK_MAX_OUTWARD_DISTANCE_M = 0.400
 SAFE_PARK_SEARCH_STEP_M = 0.010
@@ -424,29 +425,8 @@ def _trial_physical_signature(env, names) -> dict:
     }
 
 
-def _target_trial_state_sha256(snapshot) -> str:
-    """Hash state values while excluding process-local object identities."""
-    payload = {
-        key: value
-        for key, value in snapshot.items()
-        if key not in {"state_sha256", "controller_static_ids"}
-    }
-    payload["robot_buffers"] = {
-        field: {
-            "class_name": record["class_name"],
-            "state": record["state"],
-        }
-        for field, record in snapshot["robot_buffers"].items()
-    }
-    payload["observable_state"] = {
-        name: record["state"]
-        for name, record in snapshot["observable_state"].items()
-    }
-    return _plain_state_sha256(payload)
-
-
-def _snapshot_target_trial_state(env, oracle, names) -> dict:
-    """Capture the complete deterministic boundary for one candidate trial."""
+def _target_trial_native_runtime(env):
+    """Return the one native OSC runtime or fail before trial mutation."""
     if len(env.robots) != 1:
         raise DeterministicRestoreError(
             f"dynamic reachability requires one robot, got {len(env.robots)}"
@@ -464,6 +444,127 @@ def _snapshot_target_trial_state(env, oracle, names) -> dict:
         raise DeterministicRestoreError(
             "cannot deterministically restore non-native OSC interpolators"
         )
+    return robot, controller
+
+
+def _target_trial_canonical_fingerprint(env, names) -> dict:
+    """Capture fields changed or derived by MuJoCo / OSC refresh."""
+    robot, controller = _target_trial_native_runtime(env)
+    sim_arrays = {
+        field: np.asarray(getattr(env.sim.data, field)).copy()
+        for field in _SIM_RUNTIME_ARRAY_FIELDS
+        if hasattr(env.sim.data, field)
+    }
+    for required in ("qpos", "qvel", "act", "ctrl"):
+        if required not in sim_arrays:
+            raise DeterministicRestoreError(
+                f"MuJoCo runtime field missing: {required}"
+            )
+    robot_arrays = {}
+    for field in _ROBOT_RUNTIME_ARRAY_FIELDS:
+        if not hasattr(robot, field):
+            raise DeterministicRestoreError(
+                f"robot runtime field missing: {field}"
+            )
+        robot_arrays[field] = _snapshot_plain_state(
+            getattr(robot, field), f"robot.{field}.canonical"
+        )
+    robot_buffers = {}
+    for field in _ROBOT_RUNTIME_BUFFER_FIELDS:
+        buffer = getattr(robot, field, None)
+        if buffer is None:
+            raise DeterministicRestoreError(
+                f"robot runtime buffer missing: {field}"
+            )
+        robot_buffers[field] = {
+            "class_name": type(buffer).__name__,
+            "state": _snapshot_object_fields(
+                buffer, label=f"robot.{field}.canonical"
+            ),
+        }
+    return {
+        "sim_flat": np.asarray(
+            env.sim.get_state().flatten(), dtype=float
+        ).copy(),
+        "sim_time": float(env.sim.data.time),
+        "sim_arrays": sim_arrays,
+        "controller_state": _snapshot_object_fields(
+            controller, skip=("sim",), label="controller.canonical"
+        ),
+        "robot_arrays": robot_arrays,
+        "robot_buffers": robot_buffers,
+        "physical": _trial_physical_signature(env, names),
+    }
+
+
+def _canonical_refresh_target_trial_state(env, names) -> dict:
+    """Reach and prove an exact idempotent MuJoCo / OSC boundary.
+
+    Every source snapshot and every restore runs this identical refresh.  The
+    fixed-point gate is deliberately bitwise: a merely close EEF or body pose
+    cannot authorize a counterfactual trial.
+    """
+    _, controller = _target_trial_native_runtime(env)
+    previous = None
+    fingerprint_sha256 = []
+    for refresh_pass in range(
+        1, TARGET_TRIAL_CANONICAL_REFRESH_MAX_PASSES + 1
+    ):
+        env.sim.forward()
+        controller.update(force=True)
+        current = _target_trial_canonical_fingerprint(env, names)
+        current_sha256 = _plain_state_sha256(current)
+        fingerprint_sha256.append(current_sha256)
+        if previous is not None and _plain_state_equal(previous, current):
+            return {
+                "passed": True,
+                "comparison": "bitwise_exact",
+                "refresh_sequence": [
+                    "sim.forward",
+                    "controller.update(force=True)",
+                ],
+                "passes_executed": int(refresh_pass),
+                "stable_fingerprint_sha256": current_sha256,
+                "fingerprint_sha256": fingerprint_sha256,
+            }
+        previous = current
+    raise DeterministicRestoreError(
+        "MuJoCo / OSC candidate boundary did not reach an exact canonical "
+        "fixed point; no tolerance fallback is permitted; "
+        f"fingerprint_sha256={fingerprint_sha256}"
+    )
+
+
+def _target_trial_state_sha256(snapshot) -> str:
+    """Hash state values while excluding process-local object identities."""
+    payload = {
+        key: value
+        for key, value in snapshot.items()
+        if key
+        not in {
+            "state_sha256",
+            "controller_static_ids",
+            "canonical_refresh",
+        }
+    }
+    payload["robot_buffers"] = {
+        field: {
+            "class_name": record["class_name"],
+            "state": record["state"],
+        }
+        for field, record in snapshot["robot_buffers"].items()
+    }
+    payload["observable_state"] = {
+        name: record["state"]
+        for name, record in snapshot["observable_state"].items()
+    }
+    return _plain_state_sha256(payload)
+
+
+def _snapshot_target_trial_state(env, oracle, names) -> dict:
+    """Capture the complete deterministic boundary for one candidate trial."""
+    robot, controller = _target_trial_native_runtime(env)
+    canonical_refresh = _canonical_refresh_target_trial_state(env, names)
 
     controller_state = _snapshot_object_fields(
         controller, skip=("sim",), label="controller"
@@ -565,6 +666,7 @@ def _snapshot_target_trial_state(env, oracle, names) -> dict:
             np.random.get_state(), "numpy_random_state"
         ),
         "physical": _trial_physical_signature(env, names),
+        "canonical_refresh": canonical_refresh,
     }
     snapshot["state_sha256"] = _target_trial_state_sha256(snapshot)
     return snapshot
@@ -609,12 +711,6 @@ def _restore_target_trial_state(env, oracle, names, snapshot) -> dict:
                 f"MuJoCo field cannot be restored exactly: {field}"
             )
         live[...] = values
-    env.sim.forward()
-    # Forward recomputes derived quantities. Reapply every non-configuration
-    # runtime input so the next mj_step starts from the exact saved boundary.
-    env.sim.data.time = snapshot["sim_time"]
-    for field, values in snapshot["sim_arrays"].items():
-        getattr(env.sim.data, field)[...] = values
 
     _restore_object_fields(
         controller,
@@ -761,6 +857,8 @@ def _restore_target_trial_state(env, oracle, names, snapshot) -> dict:
         "physical_fields": physical_field_evidence,
         "controller_fields": controller_fields,
         "aggregate_fields": aggregate_fields,
+        "snapshot_canonical_refresh": snapshot["canonical_refresh"],
+        "restored_canonical_refresh": restored["canonical_refresh"],
     }
     if not passed:
         raise DeterministicRestoreError(
@@ -4167,17 +4265,20 @@ def _select_dynamically_reachable_target_grasp(
     step,
 ):
     """Select the first geometry-pass corridor that the real OSC can reach."""
-    boundary_sha256 = None
+    common_snapshot = _snapshot_target_trial_state(env, oracle, names)
+    boundary_sha256 = common_snapshot["state_sha256"]
     for dynamic_index, candidate in enumerate(geometry_candidates):
-        snapshot = _snapshot_target_trial_state(env, oracle, names)
-        if boundary_sha256 is None:
-            boundary_sha256 = snapshot["state_sha256"]
-        elif snapshot["state_sha256"] != boundary_sha256:
+        candidate_start = (
+            common_snapshot
+            if dynamic_index == 0
+            else _snapshot_target_trial_state(env, oracle, names)
+        )
+        if candidate_start["state_sha256"] != boundary_sha256:
             raise DeterministicRestoreError(
                 "candidate trials did not start from one exact post-park "
                 "state: "
                 f"expected={boundary_sha256} "
-                f"actual={snapshot['state_sha256']}"
+                f"actual={candidate_start['state_sha256']}"
             )
         trial = None
         try:
@@ -4189,7 +4290,7 @@ def _select_dynamically_reachable_target_grasp(
             )
         finally:
             restore_proof = _restore_target_trial_state(
-                env, oracle, names, snapshot
+                env, oracle, names, common_snapshot
             )
         trial["dynamic_candidate_index"] = int(dynamic_index)
         trial["candidate_trace_index"] = int(
@@ -4203,6 +4304,9 @@ def _select_dynamically_reachable_target_grasp(
         ]
         trial["outward_offset_m"] = candidate["record"][
             "outward_offset_m"
+        ]
+        trial["candidate_start_sha256"] = candidate_start[
+            "state_sha256"
         ]
         trial["restore_proof"] = restore_proof
         geometry_evidence["dynamic_candidate_trials"].append(trial)
@@ -4221,10 +4325,30 @@ def _select_dynamically_reachable_target_grasp(
         if not trial["success"]:
             continue
 
+        independent_start = _snapshot_target_trial_state(
+            env, oracle, names
+        )
+        if independent_start["state_sha256"] != boundary_sha256:
+            raise DeterministicRestoreError(
+                "selected candidate independent execution did not start "
+                "from the exact common post-park state: "
+                f"expected={boundary_sha256} "
+                f"actual={independent_start['state_sha256']}"
+            )
+        trial["independent_execution_start_sha256"] = independent_start[
+            "state_sha256"
+        ]
+        trial["independent_execution_canonical_refresh"] = (
+            independent_start["canonical_refresh"]
+        )
+
         sweep_evidence = candidate["sweep_evidence"]
         geometry_evidence["selected"] = trace_record
         geometry_evidence["selected_dynamic_trial"] = trial
         geometry_evidence["post_park_boundary_sha256"] = boundary_sha256
+        geometry_evidence["common_boundary_canonical_refresh"] = (
+            common_snapshot["canonical_refresh"]
+        )
         for sweep_name in (
             "target_approach",
             "target_descend",
@@ -4245,6 +4369,9 @@ def _select_dynamically_reachable_target_grasp(
             geometry_evidence,
         )
     geometry_evidence["post_park_boundary_sha256"] = boundary_sha256
+    geometry_evidence["common_boundary_canonical_refresh"] = (
+        common_snapshot["canonical_refresh"]
+    )
     last_reason = (
         geometry_evidence["dynamic_candidate_trials"][-1]["reason"]
         if geometry_evidence["dynamic_candidate_trials"]

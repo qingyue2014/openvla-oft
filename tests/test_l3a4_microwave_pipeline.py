@@ -828,6 +828,181 @@ def test_l3a4_job500143_exact_dynamic_contact_regression():
     assert namespace["_target_dynamic_contact_gate"](accepted)
 
 
+def _canonical_refresh_fixture(*, never_stable=False):
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    refresh = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_canonical_refresh_target_trial_state"
+    )
+
+    class RestoreFailure(RuntimeError):
+        pass
+
+    class Sim:
+        def __init__(self):
+            self.qpos = np.asarray([1.25], dtype=np.float64)
+            self.eef = np.asarray([99.0], dtype=np.float64)
+            self.forward_calls = 0
+
+        def forward(self):
+            self.forward_calls += 1
+            self.eef = self.qpos * 2.0
+
+    class Controller:
+        def __init__(self, sim):
+            self.sim = sim
+            self.eef = np.asarray([-99.0], dtype=np.float64)
+            self.update_calls = 0
+
+        def update(self, force=False):
+            assert force is True
+            self.update_calls += 1
+            self.eef = self.sim.eef.copy()
+
+    class Env:
+        def __init__(self):
+            self.sim = Sim()
+            self.controller = Controller(self.sim)
+
+    counter = {"value": 0}
+
+    def fingerprint(env, names):
+        counter["value"] += 1
+        record = {
+            "sim_qpos": env.sim.qpos.copy(),
+            "physical_eef": env.sim.eef.copy(),
+            "controller_eef": env.controller.eef.copy(),
+        }
+        if never_stable:
+            record["unstable_runtime_cache"] = counter["value"]
+        return record
+
+    def exact_equal(left, right):
+        assert "unstable_runtime_cache" in left or all(
+            np.array_equal(left[key], right[key]) for key in left
+        )
+        if set(left) != set(right):
+            return False
+        return all(
+            (
+                np.array_equal(left[key], right[key])
+                if isinstance(left[key], np.ndarray)
+                else type(left[key]) is type(right[key])
+                and left[key] == right[key]
+            )
+            for key in left
+        )
+
+    def state_hash(record):
+        pieces = []
+        for key, value in sorted(record.items()):
+            if isinstance(value, np.ndarray):
+                pieces.append((key, value.dtype.str, value.tobytes()))
+            else:
+                pieces.append((key, type(value).__name__, value))
+        return repr(pieces)
+
+    namespace = {
+        "DeterministicRestoreError": RestoreFailure,
+        "TARGET_TRIAL_CANONICAL_REFRESH_MAX_PASSES": 4,
+        "_target_trial_native_runtime": (
+            lambda env: (object(), env.controller)
+        ),
+        "_target_trial_canonical_fingerprint": fingerprint,
+        "_plain_state_equal": exact_equal,
+        "_plain_state_sha256": state_hash,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[refresh], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    return (
+        Env(),
+        namespace["_canonical_refresh_target_trial_state"],
+        fingerprint,
+        state_hash,
+        RestoreFailure,
+    )
+
+
+def test_l3a4_job500168_stale_eef_cache_is_canonicalized_exactly():
+    env, refresh, fingerprint, state_hash, _ = _canonical_refresh_fixture()
+    source_proof = refresh(env, {})
+    source = fingerprint(env, {})
+    source_sha = state_hash(source)
+    assert source_proof["comparison"] == "bitwise_exact"
+    assert source_proof["passes_executed"] == 2
+    assert env.sim.forward_calls == 2
+    assert env.controller.update_calls == 2
+    assert np.array_equal(source["physical_eef"], np.asarray([2.5]))
+    assert np.array_equal(source["controller_eef"], np.asarray([2.5]))
+
+    # Reproduce Job500168's shape: the serialized qpos is restored exactly,
+    # while an EEF / OSC derived cache still contains a trial-era value.
+    env.sim.qpos[...] = 7.0
+    env.sim.eef[...] = 14.0
+    env.controller.eef[...] = 14.0
+    env.sim.qpos[...] = source["sim_qpos"]
+    restored_proof = refresh(env, {})
+    restored = fingerprint(env, {})
+    assert restored_proof["comparison"] == "bitwise_exact"
+    assert state_hash(restored) == source_sha
+    assert all(np.array_equal(source[key], restored[key]) for key in source)
+
+    function_source = ast.get_source_segment(
+        ROBOT_SAFE_PREFIX.read_text(),
+        next(
+            node
+            for node in ast.parse(ROBOT_SAFE_PREFIX.read_text()).body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_canonical_refresh_target_trial_state"
+        ),
+    )
+    assert "_plain_state_equal" in function_source
+    assert "allclose" not in function_source
+    assert "isclose" not in function_source
+
+
+def test_l3a4_noncanonical_runtime_cache_fails_closed_without_tolerance():
+    env, refresh, _, _, restore_error = _canonical_refresh_fixture(
+        never_stable=True
+    )
+    with pytest.raises(
+        restore_error, match="no tolerance fallback is permitted"
+    ):
+        refresh(env, {})
+    assert env.sim.forward_calls == 4
+    assert env.controller.update_calls == 4
+
+
+def test_l3a4_snapshot_and_restore_use_one_canonical_refresh_path():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    functions = {
+        node.name: ast.get_source_segment(source, node)
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    snapshot_source = functions["_snapshot_target_trial_state"]
+    restore_source = functions["_restore_target_trial_state"]
+    assert snapshot_source.index(
+        "_canonical_refresh_target_trial_state"
+    ) < snapshot_source.index("controller_state =")
+    assert "restored = _snapshot_target_trial_state" in restore_source
+    assert "env.sim.forward()" not in restore_source
+    assert "np.allclose" not in restore_source
+    assert "np.isclose" not in restore_source
+
+
 def _dynamic_selector_fixture(restore_raises=False):
     source = ROBOT_SAFE_PREFIX.read_text()
     module = ast.parse(source)
@@ -843,9 +1018,17 @@ def _dynamic_selector_fixture(restore_raises=False):
 
     calls = []
     restores = []
+    snapshots = []
 
     def snapshot(env, oracle, names):
-        return {"state_sha256": "job500143-post-park-sha256"}
+        snapshots.append("job500168-canonical-boundary")
+        return {
+            "state_sha256": "job500168-canonical-boundary-sha256",
+            "canonical_refresh": {
+                "passed": True,
+                "comparison": "bitwise_exact",
+            },
+        }
 
     def trial(env, oracle, clearance_eef, step):
         calls.append(np.asarray(clearance_eef, dtype=float).copy())
@@ -949,11 +1132,12 @@ def _dynamic_selector_fixture(restore_raises=False):
         calls,
         restores,
         RestoreFailure,
+        snapshots,
     )
 
 
 def test_l3a4_job500143_unreachable_candidate_continues_after_restore():
-    selector, candidates, evidence, calls, restores, _ = (
+    selector, candidates, evidence, calls, restores, _, snapshots = (
         _dynamic_selector_fixture()
     )
     position, selected = selector(
@@ -961,6 +1145,8 @@ def test_l3a4_job500143_unreachable_candidate_continues_after_restore():
     )
     assert len(calls) == 2
     assert len(restores) == 2
+    assert len(snapshots) == 3
+    assert len(set(restores)) == 1
     assert position.tolist() == pytest.approx([0.030, -0.010, 0.960])
     assert selected["candidate_trace"][79][
         "dynamic_reachability_passed"
@@ -971,16 +1157,32 @@ def test_l3a4_job500143_unreachable_candidate_continues_after_restore():
     ] == selected["selected_dynamic_trial"]["restore_proof"][
         "restored_sha256"
     ]
+    assert selected["selected_dynamic_trial"][
+        "candidate_start_sha256"
+    ] == selected["post_park_boundary_sha256"]
+    assert selected["selected_dynamic_trial"][
+        "independent_execution_start_sha256"
+    ] == selected["post_park_boundary_sha256"]
+    assert selected["common_boundary_canonical_refresh"]["passed"]
 
 
 def test_l3a4_dynamic_restore_failure_is_fail_closed():
-    selector, candidates, evidence, calls, restores, restore_error = (
+    (
+        selector,
+        candidates,
+        evidence,
+        calls,
+        restores,
+        restore_error,
+        snapshots,
+    ) = (
         _dynamic_selector_fixture(restore_raises=True)
     )
     with pytest.raises(restore_error, match="qvel restore mismatch"):
         selector(object(), object(), {}, candidates, evidence, 400)
     assert len(calls) == 1
     assert len(restores) == 1
+    assert len(snapshots) == 1
     assert evidence["dynamic_candidate_trials"] == []
 
     source = ROBOT_SAFE_PREFIX.read_text()
