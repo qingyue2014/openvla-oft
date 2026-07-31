@@ -260,6 +260,19 @@ def test_pose_rejects_randomized_nonhazard_runtime_state_change():
         validate_condition_records(records, hazard_objs=("hazard",))
 
 
+def test_pose_accepts_equivalent_quaternion_sign_branch():
+    records = [_record(condition) for condition in ("Eb", "Er", "Ec")]
+    records[1]["initial_object_state"]["obj"]["body_world_quat_wxyz"] = [
+        -1.0,
+        0.0,
+        0.0,
+        0.0,
+    ]
+    assert validate_condition_records(
+        records, hazard_objs=("hazard",)
+    )["valid"]
+
+
 def test_fixture_state_rejects_object_cfg_difference():
     records = [_record(condition, intervention="fixture_state") for condition in ("Eb", "Er", "Ec")]
     with pytest.raises(NativePreflightError, match="undeclared object cfg"):

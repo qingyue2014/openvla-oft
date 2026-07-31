@@ -670,10 +670,7 @@ class L1A4OccludedDrawerReferent(StaticGeometryScene, PickPlaceDrawerToCounter):
             # The original 0.04 m depth left the native bowl unsupported and it
             # dropped 0.209 m in job 499318. At 0.10 m behind the front edge it
             # remains at the lip but is fully supported.
-            # Move the bowl deeper than the first reconstruction so its rim
-            # lies on the drawer-target sight line rather than 70 pixels above
-            # it in the exact center view.
-            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(dx, 0.12))
+            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(dx, 0.08))
 
         return {
             "Eb": {"distr": lip(self.physcog_eb_hazard_x)},

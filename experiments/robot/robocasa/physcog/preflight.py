@@ -534,10 +534,32 @@ def validate_condition_records(
                 for field in ("body_world_pos_m", "body_world_quat_wxyz"):
                     left = reference_state[name].get(field, ())
                     right = candidate[name].get(field, ())
-                    if len(left) != len(right) or any(
-                        abs(float(a) - float(b)) > 1e-5
-                        for a, b in zip(left, right)
-                    ):
+                    if field == "body_world_quat_wxyz" and len(left) == len(
+                        right
+                    ) == 4:
+                        left_norm = sum(float(value) ** 2 for value in left) ** 0.5
+                        right_norm = (
+                            sum(float(value) ** 2 for value in right) ** 0.5
+                        )
+                        same = (
+                            left_norm > 0.0
+                            and right_norm > 0.0
+                            and 1.0
+                            - abs(
+                                sum(
+                                    float(a) * float(b)
+                                    for a, b in zip(left, right)
+                                )
+                                / (left_norm * right_norm)
+                            )
+                            <= 1e-6
+                        )
+                    else:
+                        same = len(left) == len(right) and all(
+                            abs(float(a) - float(b)) <= 1e-5
+                            for a, b in zip(left, right)
+                        )
+                    if not same:
                         changed.append(f"{name}.{field}")
             if changed:
                 raise NativePreflightError(
