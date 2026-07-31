@@ -3247,6 +3247,120 @@ def test_500210_workspace_negative_z_uses_buffer16_without_threshold_changes():
     )
 
 
+def test_500223_scalar_solver_resolves_component_nextafter_capacity_boundary():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    requested_action = np.array(
+        [0.13020551187733068, 0.49935000035702204, -0.28003382763809165]
+    )
+    inertial_tail = 1.3987167587198066e-05
+    vertical_clearance = 0.016352130496025574
+    pairs = [
+        {
+            "gripper_geom": f"gripper_{index // 11}",
+            "counterpart_geom": f"native_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": vertical_clearance,
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    guard = {
+        "accepted": True,
+        "one_step_vertical_reserve_m": 0.008,
+        "pairs": pairs,
+    }
+    native = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "runtime_resolved": True,
+    }
+    action, evidence = _compiled_adaptive_workspace_release_action(
+        current_eef=np.array([0.0, 0.0, 1.0]),
+        corridor_target_xy=requested_action[:2] * 0.08,
+        release_target_z=float(1.0 + requested_action[2] * 0.08),
+        measured_vertical_step_progress_m=-inertial_tail,
+        overhead_guard=guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+        worst_case_controller_world_step_m=0.008,
+    )
+    solver = evidence["literal_scalar_strict_interior_solver"]
+    assert solver["candidate_accepted"] is False
+    assert solver["candidate_failed_conditions"] == [
+        "all_55_pair_buffer16_strict_post_clearance"
+    ]
+
+    literal_requested_action = np.asarray(
+        evidence["requested_translation_action"], dtype=float
+    )
+    old_translation = (
+        literal_requested_action
+        / np.linalg.norm(literal_requested_action)
+        * solver["candidate_scalar_action_norm"]
+    )
+    for _ in range(32):
+        old_translation = np.nextafter(old_translation, 0.0)
+    old_predicted_clearance = float(
+        vertical_clearance
+        - (
+            0.08 * np.linalg.norm(old_translation)
+            + evidence["measured_negative_inertial_tail_reserve_m"]
+        )
+    )
+    required_buffer16_clearance = strict_clearance + 0.008 + 0.008
+    assert not old_predicted_clearance > required_buffer16_clearance
+
+    assert solver["accepted"] is True
+    assert solver["solver_mode"] == "halving_then_scalar_bisection"
+    assert solver["limiting_condition"] == (
+        "compiled_pair_buffer16_nominal_tail_after_inertia"
+    )
+    assert solver["candidate_to_solved_scalar_ulp_distance"] > 0
+    assert solver["scalar_nextafter_iterations"] == 1
+    assert solver["scalar_halving_iterations"] > 0
+    assert solver["scalar_bisection_iterations"] > 0
+    assert solver["final_failed_conditions"] == []
+    assert np.linalg.norm(action[:3]) == pytest.approx(
+        solver["solved_literal_action_norm"]
+    )
+    assert action[:3] / np.linalg.norm(action[:3]) == pytest.approx(
+        literal_requested_action / np.linalg.norm(literal_requested_action)
+    )
+    assert all(
+        pair["predicted_post_worst_case_buffer16_surplus_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+
+
+def test_500223_scalar_solver_preserves_strict_gates_and_hard_thresholds():
+    controller = CONTROLLER_REFERENCE.read_text()
+    release = controller.split(
+        "def _compiled_adaptive_workspace_release_action(", 1
+    )[1].split("\ndef _compiled_adaptive_lateral_rebuffer_action", 1)[0]
+    assert "literal_scalar_evidence" in release
+    assert "halving_then_scalar_bisection" in release
+    assert "candidate_to_solved_scalar_ulp_distance" in release
+    assert "clearance > record[required_clearance_key]" in release
+    assert "clearance >= record[required_clearance_key]" not in release
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+    assert (
+        '"--plate_contact_seek_max_translation_action",\n'
+        "        type=float,\n"
+        "        default=0.10,"
+        in controller
+    )
+
+
 def test_high_first_route_fails_closed_and_rechecks_post_descent_drift():
     strict_clearance = np.nextafter(0.0, np.inf)
     pair = {

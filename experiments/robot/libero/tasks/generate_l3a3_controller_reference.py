@@ -3795,7 +3795,6 @@ def _compiled_adaptive_workspace_release_action(
     minimum_current_surplus = min(
         record["current_base8_surplus_m"] for record in pair_envelopes
     )
-    recovery_world_delta = 0.0
     if recovery_required:
         desired_route_tail = float(
             position_action_scale * desired_route_norm
@@ -3813,9 +3812,6 @@ def _compiled_adaptive_workspace_release_action(
                 0.0,
             )
         )
-        strict_required_recovery = float(
-            np.nextafter(required_recovery, np.inf)
-        )
         strict_positive_z_action_bound = float(
             np.nextafter(
                 min(native_high[2], native_norm_bound),
@@ -3825,26 +3821,32 @@ def _compiled_adaptive_workspace_release_action(
         recovery_z_action = float(
             min(
                 strict_positive_z_action_bound,
-                strict_required_recovery / position_action_scale,
+                np.nextafter(
+                    required_recovery / position_action_scale,
+                    np.inf,
+                ),
             )
         )
-        recovery_world_delta = float(
-            position_action_scale * recovery_z_action
-        )
-        if (
-            recovery_z_action <= 0.0
-            or not recovery_world_delta
-            > inertial_tail_reserve - minimum_current_surplus
-        ):
+        if recovery_z_action <= 0.0:
             raise RuntimeError(
                 "workspace-release inertial recovery has no one-step strict "
                 "+Z/base8 interior"
             )
-        translation = np.array([0.0, 0.0, recovery_z_action])
+        scalar_direction = np.array([0.0, 0.0, 1.0])
+        candidate_scalar_norm = recovery_z_action
         selected_source = "event_driven_positive_z_inertial_recovery"
     else:
-        translation = requested_direction * selected_norm
-    for _ in range(128):
+        scalar_direction = requested_direction.copy()
+        candidate_scalar_norm = selected_norm
+
+    required_clearance_key = (
+        "required_clearance_with_base_reserve_m"
+        if recovery_required
+        else "required_clearance_with_fixed_buffer16_m"
+    )
+
+    def literal_scalar_evidence(scalar_norm):
+        translation = scalar_direction * float(scalar_norm)
         literal_norm = float(np.linalg.norm(translation))
         nominal_tail = (
             0.0
@@ -3858,6 +3860,11 @@ def _compiled_adaptive_workspace_release_action(
         literal_downward_delta = float(
             position_action_scale * max(0.0, -translation[2])
         )
+        recovery_world_delta = (
+            float(position_action_scale * translation[2])
+            if recovery_required
+            else 0.0
+        )
         predicted = [
             float(
                 record["current_vertical_clearance_m"]
@@ -3866,42 +3873,167 @@ def _compiled_adaptive_workspace_release_action(
             )
             for record in pair_envelopes
         ]
-        required_clearance_key = (
-            "required_clearance_with_base_reserve_m"
+        failed_conditions = []
+        if not (np.isfinite(literal_norm) and literal_norm > 0.0):
+            failed_conditions.append("positive_finite_literal_norm")
+        if not literal_norm < native_norm_bound:
+            failed_conditions.append("strict_native_translation_norm")
+        if not (
+            translation[2] > 0.0
             if recovery_required
-            else "required_clearance_with_fixed_buffer16_m"
-        )
-        if (
-            0.0 < literal_norm < native_norm_bound
-            and (
-                translation[2] > 0.0
-                if recovery_required
-                else translation[2] <= 0.0
-            )
-            and literal_xy_delta <= xy_remaining
-            and literal_downward_delta <= abs(downward_z_error)
-            and all(
-                native_low[index] < translation[index] < native_high[index]
-                for index in range(3)
-            )
-            and all(
-                clearance
-                > record[required_clearance_key]
-                for clearance, record in zip(predicted, pair_envelopes)
-            )
+            else translation[2] <= 0.0
         ):
-            break
-        if recovery_required:
-            raise RuntimeError(
-                "workspace-release +Z inertial recovery failed literal "
-                "55-pair base8 proof"
+            failed_conditions.append("workspace_release_z_direction")
+        if not literal_xy_delta <= xy_remaining:
+            failed_conditions.append("corridor_xy_no_overshoot")
+        if not literal_downward_delta <= abs(downward_z_error):
+            failed_conditions.append("release_z_no_overshoot")
+        if not all(
+            native_low[index] < translation[index] < native_high[index]
+            for index in range(3)
+        ):
+            failed_conditions.append("strict_native_component_interior")
+        if not all(
+            clearance > record[required_clearance_key]
+            for clearance, record in zip(predicted, pair_envelopes)
+        ):
+            failed_conditions.append(
+                (
+                    "all_55_pair_base8_strict_post_clearance"
+                    if recovery_required
+                    else "all_55_pair_buffer16_strict_post_clearance"
+                )
             )
-        translation = np.nextafter(translation, 0.0)
-    else:
+        return {
+            "accepted": not failed_conditions,
+            "failed_conditions": failed_conditions,
+            "translation": translation,
+            "literal_norm": literal_norm,
+            "nominal_tail": nominal_tail,
+            "total_tail": total_tail,
+            "literal_xy_delta": literal_xy_delta,
+            "literal_downward_delta": literal_downward_delta,
+            "recovery_world_delta": recovery_world_delta,
+            "predicted": predicted,
+        }
+
+    candidate_scalar_norm = float(candidate_scalar_norm)
+    candidate_literal = literal_scalar_evidence(candidate_scalar_norm)
+    solved_scalar_norm = candidate_scalar_norm
+    solved_literal = candidate_literal
+    scalar_solver_mode = "candidate_already_strict"
+    scalar_nextafter_iterations = 0
+    scalar_halving_iterations = 0
+    scalar_bisection_iterations = 0
+    if not candidate_literal["accepted"]:
+        if recovery_required:
+            solved_scalar_norm = strict_positive_z_action_bound
+            solved_literal = literal_scalar_evidence(solved_scalar_norm)
+            scalar_solver_mode = "recovery_strict_native_upper_probe"
+            if not solved_literal["accepted"]:
+                raise RuntimeError(
+                    "workspace-release +Z recovery has no positive scalar "
+                    "strict native/base8 interior: "
+                    f"candidate={candidate_literal['failed_conditions']} "
+                    f"upper={solved_literal['failed_conditions']}"
+                )
+        else:
+            inward_scalar = float(
+                np.nextafter(candidate_scalar_norm, 0.0)
+            )
+            scalar_nextafter_iterations = 1
+            inward_literal = literal_scalar_evidence(inward_scalar)
+            if inward_literal["accepted"]:
+                solved_scalar_norm = inward_scalar
+                solved_literal = inward_literal
+                scalar_solver_mode = "single_scalar_nextafter"
+            else:
+                failing_upper = inward_scalar
+                passing_lower = None
+                probe = float(failing_upper * 0.5)
+                for scalar_halving_iterations in range(1, 2049):
+                    if not (0.0 < probe < failing_upper):
+                        break
+                    probe_literal = literal_scalar_evidence(probe)
+                    if probe_literal["accepted"]:
+                        passing_lower = probe
+                        solved_literal = probe_literal
+                        break
+                    failing_upper = probe
+                    probe = float(probe * 0.5)
+                if passing_lower is None:
+                    raise RuntimeError(
+                        "workspace-release has no representable positive "
+                        "scalar strict native/buffer16 interior: "
+                        f"{inward_literal['failed_conditions']}"
+                    )
+                for scalar_bisection_iterations in range(1, 257):
+                    midpoint = float(
+                        passing_lower
+                        + (failing_upper - passing_lower) * 0.5
+                    )
+                    if midpoint in (passing_lower, failing_upper):
+                        break
+                    midpoint_literal = literal_scalar_evidence(midpoint)
+                    if midpoint_literal["accepted"]:
+                        passing_lower = midpoint
+                        solved_literal = midpoint_literal
+                    else:
+                        failing_upper = midpoint
+                solved_scalar_norm = passing_lower
+                scalar_solver_mode = "halving_then_scalar_bisection"
+
+    if not solved_literal["accepted"]:
         raise RuntimeError(
-            "workspace-release literal action lacks strict native/base8 "
-            "interior"
+            "workspace-release scalar solver returned a non-interior action"
         )
+    translation = solved_literal["translation"]
+    literal_norm = solved_literal["literal_norm"]
+    nominal_tail = solved_literal["nominal_tail"]
+    total_tail = solved_literal["total_tail"]
+    literal_xy_delta = solved_literal["literal_xy_delta"]
+    literal_downward_delta = solved_literal["literal_downward_delta"]
+    recovery_world_delta = solved_literal["recovery_world_delta"]
+    predicted = solved_literal["predicted"]
+
+    def positive_float_ulp_distance(first, second):
+        if not (
+            np.isfinite(first)
+            and np.isfinite(second)
+            and first >= 0.0
+            and second >= 0.0
+        ):
+            raise RuntimeError(
+                "workspace-release scalar ULP distance is undefined"
+            )
+        first_bits = int(np.float64(first).view(np.uint64))
+        second_bits = int(np.float64(second).view(np.uint64))
+        return abs(first_bits - second_bits)
+
+    scalar_solver_evidence = {
+        "accepted": True,
+        "solver_mode": scalar_solver_mode,
+        "limiting_condition": selected_source,
+        "candidate_scalar_action_norm": candidate_scalar_norm,
+        "candidate_literal_action_norm": candidate_literal["literal_norm"],
+        "candidate_accepted": bool(candidate_literal["accepted"]),
+        "candidate_failed_conditions": list(
+            candidate_literal["failed_conditions"]
+        ),
+        "solved_scalar_action_norm": solved_scalar_norm,
+        "solved_literal_action_norm": literal_norm,
+        "candidate_to_solved_scalar_ulp_distance": (
+            positive_float_ulp_distance(
+                candidate_scalar_norm, solved_scalar_norm
+            )
+        ),
+        "scalar_nextafter_iterations": scalar_nextafter_iterations,
+        "scalar_halving_iterations": scalar_halving_iterations,
+        "scalar_bisection_iterations": scalar_bisection_iterations,
+        "direction_preserved_exactly_by_scalar_construction": True,
+        "final_failed_conditions": list(solved_literal["failed_conditions"]),
+        "strict_pair_clearance_condition": required_clearance_key,
+    }
     minimum_surplus = float("inf")
     minimum_buffer16_surplus = float("inf")
     for clearance, record in zip(predicted, pair_envelopes):
@@ -3938,7 +4070,9 @@ def _compiled_adaptive_workspace_release_action(
             "55 pair capacities after fixed buffer16 and latest measured "
             "negative-dz inertial reserve; if any capacity is exhausted, "
             "prohibit negative Z and issue event-driven pure +Z while the "
-            "unchanged base8 post-action gate remains strict"
+            "unchanged base8 post-action gate remains strict; construct the "
+            "literal action by a scalar strict-interior solve along the "
+            "unchanged route direction"
         ),
         "current_eef": current_eef.tolist(),
         "corridor_target_xy": corridor_target_xy.tolist(),
@@ -3951,6 +4085,7 @@ def _compiled_adaptive_workspace_release_action(
         ),
         "requested_translation_action": requested.tolist(),
         "requested_translation_action_norm": requested_norm,
+        "literal_scalar_strict_interior_solver": scalar_solver_evidence,
         "measured_vertical_step_progress_m": float(
             measured_vertical_step_progress_m
         ),
