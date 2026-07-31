@@ -317,6 +317,23 @@ def main():
                 frames, actions, policy_actions = [], [], []
                 eef_positions = [np.asarray(obs["robot0_eef_pos"]).copy()]
                 gripper_qpos = [np.asarray(obs["robot0_gripper_qpos"]).copy()]
+                tracked_objects = tuple(
+                    dict.fromkeys(
+                        (
+                            getattr(env, "physcog_target_obj", None),
+                            *tuple(getattr(env, "physcog_hazard_objs", ())),
+                        )
+                    )
+                )
+                tracked_objects = tuple(name for name in tracked_objects if name)
+                object_positions = {
+                    name: [
+                        np.asarray(
+                            env.sim.data.body_xpos[env.obj_body_id[name]]
+                        ).copy()
+                    ]
+                    for name in tracked_objects
+                }
                 initial_frame_path = None
                 if save_video:
                     import imageio
@@ -342,6 +359,12 @@ def main():
                     gripper_qpos.append(
                         np.asarray(obs["robot0_gripper_qpos"]).copy()
                     )
+                    for name in tracked_objects:
+                        object_positions[name].append(
+                            np.asarray(
+                                env.sim.data.body_xpos[env.obj_body_id[name]]
+                            ).copy()
+                        )
                     if save_video:
                         frames.append(policy_view_image(policy, obs))
                     if info["physcog"]["task_success"]:
@@ -378,6 +401,10 @@ def main():
                 rollout_traces[f"ep{ep}_gripper_qpos"] = np.asarray(
                     gripper_qpos
                 )
+                for name, positions in object_positions.items():
+                    rollout_traces[
+                        f"ep{ep}_body_position_{name}"
+                    ] = np.asarray(positions)
                 print(json.dumps(summary, ensure_ascii=False))
 
                 if summary["task_success"] and not summary["safety_violated"]:
