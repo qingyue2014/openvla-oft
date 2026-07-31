@@ -179,6 +179,11 @@ def main():
     ap.add_argument("--out", default=None, help="jsonl results path")
     ap.add_argument("--save-actions", default=None, help="npz of successful actions")
     ap.add_argument(
+        "--save-traces",
+        default=None,
+        help="diagnostic npz of every rollout's actions and end-effector states",
+    )
+    ap.add_argument(
         "--formal",
         action="store_true",
         help="publication run: require passed G0/physics/visibility/G1/G2/G3",
@@ -197,7 +202,7 @@ def main():
 
     artifacts = [
         path
-        for path in (args.video, args.out, args.save_actions)
+        for path in (args.video, args.out, args.save_actions, args.save_traces)
         if path is not None
     ]
     try:
@@ -233,7 +238,7 @@ def main():
             camera_names=policy_cameras,
         )
 
-        results, saved_actions = [], {}
+        results, saved_actions, rollout_traces = [], {}, {}
         try:
             for ep in range(args.episodes):
                 obs = env.reset()
@@ -247,6 +252,8 @@ def main():
                         f"preflight prompt {manifest['native_prompt']!r}"
                     )
                 frames, actions = [], []
+                eef_positions = [np.asarray(obs["robot0_eef_pos"]).copy()]
+                gripper_qpos = [np.asarray(obs["robot0_gripper_qpos"]).copy()]
                 initial_frame_path = None
                 if save_video:
                     import imageio
@@ -261,6 +268,12 @@ def main():
                     act = np.asarray(policy(obs, lang, env), dtype=np.float64)
                     obs, _, _, info = env.step(act)
                     actions.append(act)
+                    eef_positions.append(
+                        np.asarray(obs["robot0_eef_pos"]).copy()
+                    )
+                    gripper_qpos.append(
+                        np.asarray(obs["robot0_gripper_qpos"]).copy()
+                    )
                     if save_video:
                         frames.append(policy_view_image(policy, obs))
                     if info["physcog"]["task_success"]:
@@ -285,6 +298,13 @@ def main():
                     ),
                 )
                 results.append(summary)
+                rollout_traces[f"ep{ep}_actions"] = np.asarray(actions)
+                rollout_traces[f"ep{ep}_eef_positions"] = np.asarray(
+                    eef_positions
+                )
+                rollout_traces[f"ep{ep}_gripper_qpos"] = np.asarray(
+                    gripper_qpos
+                )
                 print(json.dumps(summary, ensure_ascii=False))
 
                 if summary["task_success"] and not summary["safety_violated"]:
@@ -344,6 +364,29 @@ def main():
             json.dumps(provenance, indent=2, sort_keys=True) + "\n"
         )
         print(f"saved {len(saved_actions)} clean action sequences -> {args.save_actions}")
+
+    if args.save_traces:
+        trace_path = pathlib.Path(args.save_traces)
+        trace_path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(trace_path, **rollout_traces)
+        pathlib.Path(f"{trace_path}.json").write_text(
+            json.dumps(
+                {
+                    "valid": True,
+                    "scene_id": args.scene,
+                    "condition": args.condition,
+                    "seed": args.seed,
+                    "native_prompt": manifest["native_prompt"],
+                    "preflight_sha256": manifest["preflight_sha256"],
+                    "episodes": results,
+                    "trace_keys": sorted(rollout_traces),
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        print(f"saved {len(results)} rollout traces -> {args.save_traces}")
 
     n = len(results)
     task = sum(r["task_success"] for r in results)

@@ -308,6 +308,8 @@ PY
     # in CUDA_VISIBLE_DEVICES, rather than renumbering a singleton mask to 0.
     export MUJOCO_EGL_DEVICE_ID="${MUJOCO_EGL_DEVICE_ID:-${sim_gpu}}"
     rollout_out="${EVIDENCE_ROOT}/${SCENE}_pi05_${ROBOCASA_CONDITION:-Eb}.jsonl"
+    success_actions="${EVIDENCE_ROOT}/${SCENE}_pi05_${ROBOCASA_CONDITION:-Eb}_success_actions.npz"
+    rollout_trace="${EVIDENCE_ROOT}/${SCENE}_pi05_${ROBOCASA_CONDITION:-Eb}_trace.npz"
     set +e
     CUDA_VISIBLE_DEVICES="${sim_gpu}" \
       "${PYTHON_BIN}" experiments/robot/robocasa/scripts/run_condition.py \
@@ -320,6 +322,8 @@ PY
         --smoke-gate-manifest "${gate_manifest}" \
         --video "${REVIEW_DIR}" \
         --out "${rollout_out}" \
+        --save-actions "${success_actions}" \
+        --save-traces "${rollout_trace}" \
         >"${EVIDENCE_ROOT}/pi05_smoke.txt" 2>&1
     smoke_rc="$?"
     set -e
