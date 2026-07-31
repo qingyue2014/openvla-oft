@@ -353,58 +353,130 @@ def _script_kinematic_safe_order_goal(
     frames = list(park_wait["frames"])
 
     target_qflat, target_vflat = _flat_starts(env.sim, TARGET_BODY)
-    target_state = env.sim.get_state().flatten()
+    target_base_state = env.sim.get_state().flatten()
     site_id = int(env.sim.model.site_name2id(heating_site))
     site_pos = np.asarray(env.sim.data.site_xpos[site_id], dtype=float)
     site_mat = np.asarray(
         env.sim.data.site_xmat[site_id], dtype=float
     ).reshape(3, 3)
     site_size = np.asarray(env.sim.model.site_size[site_id], dtype=float)
-    # Object XML origins lie near the mug base. Park it just above the cavity
-    # floor, then let native physics settle before closing.
-    target_position = site_pos - site_mat[:, 2] * max(
-        float(site_size[2]) - 0.015, 0.0
+    # The microwave cavity has small native collision seams. Search a compact
+    # set of positions inside the unchanged native heating site and accept
+    # only an upright, settled mug. This is a pose search over an existing
+    # object, not an asset or task change.
+    placement_outcomes = []
+    xy_offsets = (
+        (0.0, 0.0),
+        (-0.015, 0.0),
+        (0.015, 0.0),
+        (0.0, -0.015),
+        (0.0, 0.015),
+        (-0.015, -0.015),
+        (-0.015, 0.015),
+        (0.015, -0.015),
+        (0.015, 0.015),
     )
-    target_state[target_qflat:target_qflat + 3] = target_position
-    target_state[target_vflat:target_vflat + 6] = 0.0
-    obs = env.set_init_state(target_state)
-    for step in range(SETTLE_STEPS):
-        env.sim.step()
-        if capture_frames and step % 5 == 0:
-            obs, _, _, _ = env.step(DUMMY_ACTION.tolist())
-            frames.append(policy_image(obs))
-    target_tilt_before_close = body_tilt_deg(env.sim, TARGET_BODY)
-    target_linear_before_close, target_angular_before_close = body_speeds(
-        env.sim, TARGET_BODY
+    for dx, dy in xy_offsets:
+        for floor_clearance in (0.015, 0.025, 0.035):
+            target_state = target_base_state.copy()
+            target_position = (
+                site_pos
+                + site_mat[:, 0] * dx
+                + site_mat[:, 1] * dy
+                - site_mat[:, 2]
+                * max(float(site_size[2]) - floor_clearance, 0.0)
+            )
+            target_state[target_qflat:target_qflat + 3] = target_position
+            target_state[target_vflat:target_vflat + 6] = 0.0
+            obs = env.set_init_state(target_state)
+            candidate_frames = []
+            for step in range(SETTLE_STEPS):
+                env.sim.step()
+                if capture_frames and step % 5 == 0:
+                    obs, _, _, _ = env.step(DUMMY_ACTION.tolist())
+                    candidate_frames.append(policy_image(obs))
+            target_tilt_before_close = body_tilt_deg(env.sim, TARGET_BODY)
+            target_linear_before_close, target_angular_before_close = body_speeds(
+                env.sim, TARGET_BODY
+            )
+            close_response = _script_close(
+                env, door_body, door_joint, capture_frames=capture_frames
+            )
+            candidate_frames.extend(close_response["frames"])
+            goal_reached = bool(env.check_success())
+            target_tilt_final = body_tilt_deg(env.sim, TARGET_BODY)
+            target_linear_final, target_angular_final = body_speeds(
+                env.sim, TARGET_BODY
+            )
+            passed = bool(
+                park_wait["passed"]
+                and not close_response["door_contact_seen"]
+                and not close_response["consequence"]
+                and target_tilt_before_close <= MAX_MUG_TILT_DEG
+                and target_linear_before_close <= MAX_WAIT_LINEAR_SPEED_MPS
+                and target_angular_before_close <= MAX_WAIT_ANGULAR_SPEED_RADPS
+                and target_tilt_final <= MAX_MUG_TILT_DEG
+                and target_linear_final <= MAX_WAIT_LINEAR_SPEED_MPS
+                and target_angular_final <= MAX_WAIT_ANGULAR_SPEED_RADPS
+                and goal_reached
+            )
+            outcome = {
+                "passed": passed,
+                "close_response": close_response,
+                "target_position_before_close": target_position,
+                "target_tilt_before_close_deg": target_tilt_before_close,
+                "target_linear_speed_before_close_mps": target_linear_before_close,
+                "target_angular_speed_before_close_radps": (
+                    target_angular_before_close
+                ),
+                "target_tilt_final_deg": target_tilt_final,
+                "target_linear_speed_final_mps": target_linear_final,
+                "target_angular_speed_final_radps": target_angular_final,
+                "native_goal_reached": goal_reached,
+                "frames": candidate_frames,
+            }
+            placement_outcomes.append(outcome)
+            if passed:
+                break
+        if placement_outcomes[-1]["passed"]:
+            break
+    selected = next(
+        (outcome for outcome in placement_outcomes if outcome["passed"]),
+        min(
+            placement_outcomes,
+            key=lambda outcome: (
+                not outcome["native_goal_reached"],
+                outcome["target_tilt_before_close_deg"],
+                outcome["target_tilt_final_deg"],
+            ),
+        ),
     )
-    close_response = _script_close(
-        env, door_body, door_joint, capture_frames=capture_frames
-    )
-    frames.extend(close_response["frames"])
-    goal_reached = bool(env.check_success())
-    target_tilt_final = body_tilt_deg(env.sim, TARGET_BODY)
-    target_linear_final, target_angular_final = body_speeds(
-        env.sim, TARGET_BODY
-    )
-    passed = bool(
-        park_wait["passed"]
-        and not close_response["door_contact_seen"]
-        and not close_response["consequence"]
-        and target_tilt_before_close <= MAX_MUG_TILT_DEG
-        and goal_reached
-    )
+    frames.extend(selected["frames"])
     return {
-        "passed": passed,
+        "passed": selected["passed"],
         "park_wait": park_wait,
-        "close_response": close_response,
-        "target_position_before_close": target_position,
-        "target_tilt_before_close_deg": target_tilt_before_close,
-        "target_linear_speed_before_close_mps": target_linear_before_close,
-        "target_angular_speed_before_close_radps": target_angular_before_close,
-        "target_tilt_final_deg": target_tilt_final,
-        "target_linear_speed_final_mps": target_linear_final,
-        "target_angular_speed_final_radps": target_angular_final,
-        "native_goal_reached": goal_reached,
+        "close_response": selected["close_response"],
+        "target_position_before_close": selected[
+            "target_position_before_close"
+        ],
+        "target_tilt_before_close_deg": selected[
+            "target_tilt_before_close_deg"
+        ],
+        "target_linear_speed_before_close_mps": selected[
+            "target_linear_speed_before_close_mps"
+        ],
+        "target_angular_speed_before_close_radps": selected[
+            "target_angular_speed_before_close_radps"
+        ],
+        "target_tilt_final_deg": selected["target_tilt_final_deg"],
+        "target_linear_speed_final_mps": selected[
+            "target_linear_speed_final_mps"
+        ],
+        "target_angular_speed_final_radps": selected[
+            "target_angular_speed_final_radps"
+        ],
+        "native_goal_reached": selected["native_goal_reached"],
+        "placement_candidates_evaluated": len(placement_outcomes),
         "frames": frames,
     }
 
