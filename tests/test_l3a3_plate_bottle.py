@@ -14,6 +14,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _contact_depth_sample_validity,
     _contact_progress_saturation_evidence,
     _constraint_prioritized_outside_descent_action,
+    _compiled_adaptive_vertical_descent_action,
     _compiled_collision_pair_clearance,
     _compiled_pair_set_clearance,
     _compiled_side_contact_eef_z_feasibility,
@@ -28,6 +29,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _gate_live_contact_offset_xy,
     _horizon_budget,
     _live_plate_tracking_target,
+    _native_osc_action_spec_evidence,
     _outside_side_geometry_feedback_action,
     _outside_side_guard_from_world_aabbs,
     _outside_side_lateral_settle_evidence,
@@ -1829,6 +1831,151 @@ def test_500154_negative_lateral_tail_continues_until_buffer_is_exhausted():
     )
     assert np.array_equal(brake_action[:2], np.zeros(2))
     assert brake_action[2] > 0.0
+
+
+def test_500161_adaptive_descent_uses_native_bound_then_tightens_near_base8():
+    class NativeEnv:
+        action_spec = (
+            -np.ones(7, dtype=float),
+            np.ones(7, dtype=float),
+        )
+
+    native_spec = _native_osc_action_spec_evidence(
+        SimpleNamespace(env=NativeEnv())
+    )
+    assert native_spec["source"] == "env.env.action_spec"
+    assert native_spec["action_dimension"] == 7
+    strict_clearance = np.nextafter(0.0, np.inf)
+
+    def guard(vertical_clearance):
+        pairs = [
+            {
+                "gripper_geom": f"gripper_collision_{index // 11}",
+                "counterpart_geom": f"native_counterpart_{index % 11}",
+                "counterpart_kind": (
+                    "table" if index % 11 == 10 else "plate"
+                ),
+                "strict_no_contact_clearance_m": strict_clearance,
+                "vertical_clearance_m": vertical_clearance,
+                "accepted": True,
+            }
+            for index in range(55)
+        ]
+        return {
+            "accepted": True,
+            "one_step_vertical_reserve_m": 0.008,
+            "pairs": pairs,
+        }
+
+    # Exact Job500161 initial frame. The native -1 Z bound, not the former
+    # 0.10 contact-seek cap, limits this far-field command.
+    far_eef = np.array(
+        [0.05554037906914336, -0.029154933875409465, 1.0654223455054406]
+    )
+    target_z = 0.9401011680386682
+    far_action, far_proof = _compiled_adaptive_vertical_descent_action(
+        current_eef=far_eef,
+        target_z=target_z,
+        overhead_guard=guard(0.13332117746677247),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native_spec,
+        expected_pair_count=55,
+    )
+    assert np.array_equal(far_action[:2], np.zeros(2))
+    assert far_action[2] < -0.10
+    assert -1.0 < far_action[2] < 0.0
+    assert far_proof["compiled_pair_count"] == 55
+    assert far_proof["selected_envelope_source"] == (
+        "native_negative_z_action_bound"
+    )
+    assert far_proof["commanded_negative_world_delta_m"] == pytest.approx(
+        0.08
+    )
+    assert len(far_proof["pair_envelopes"]) == 55
+    assert all(
+        pair["predicted_post_command_base_reserve_surplus_m"] > 0.0
+        for pair in far_proof["pair_envelopes"]
+    )
+
+    # Exact Job500161 frame 88. Remaining target error tightens the action
+    # below 0.10 and its direct all-pair proof remains strictly above base8.
+    near_eef = np.array(
+        [0.04590381377149573, -0.029190681243599335, 0.9453538149129818]
+    )
+    near_action, near_proof = _compiled_adaptive_vertical_descent_action(
+        current_eef=near_eef,
+        target_z=target_z,
+        overhead_guard=guard(0.013306316723598785),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native_spec,
+        expected_pair_count=55,
+    )
+    assert np.array_equal(near_action[:2], np.zeros(2))
+    assert near_action[2] == pytest.approx(-0.06565808592891992)
+    assert abs(near_action[2]) < 0.10
+    assert near_proof["selected_envelope_source"] == (
+        "target_remaining_z_error"
+    )
+    assert near_proof[
+        "minimum_predicted_post_command_base_reserve_surplus_m"
+    ] > 0.0
+    assert near_proof["proof"] == {
+        "pure_negative_z": True,
+        "strictly_inside_native_z_action_bound": True,
+        "does_not_cross_target_z": True,
+        "all_compiled_pairs_retain_strict_base8_after_command": True,
+    }
+
+    # When pair geometry is tighter than both the target and native bounds,
+    # the compiled pair envelope itself shrinks the pure-Z command.
+    pair_action, pair_proof = _compiled_adaptive_vertical_descent_action(
+        current_eef=np.array([0.0, 0.0, 0.950]),
+        target_z=0.940,
+        overhead_guard=guard(0.010),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native_spec,
+        expected_pair_count=55,
+    )
+    assert pair_proof["selected_envelope_source"] == (
+        "compiled_pair_base8_envelope"
+    )
+    assert 0.0 < abs(pair_action[2]) < 0.10
+    assert pair_proof[
+        "minimum_predicted_post_command_base_reserve_surplus_m"
+    ] > 0.0
+
+    bounded_seek = CONTROLLER_REFERENCE.read_text().split(
+        "def _seek_stable_plate_contact(", 1
+    )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    descent_branch = bounded_seek.split(
+        'if structural_stage == "overhead_center_descent":', 1
+    )[1].split('elif structural_stage == "vertical_tail_brake":', 1)[0]
+    assert "_compiled_adaptive_vertical_descent_action(" in descent_branch
+    assert "_fixed_xy_vertical_approach_action(" not in descent_branch
+    assert '"compiled_adaptive_vertical_action_envelope"' in descent_branch
+    assert "native_action_spec = _native_osc_action_spec_evidence(env)" in (
+        bounded_seek
+    )
+    assert "compiled_overhead_one_step_vertical_reserve_lost" in bounded_seek
+    assert (
+        "for guard_step in range(1, args.max_waypoint_steps + 1)"
+        in bounded_seek
+    )
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in CONTROLLER_REFERENCE.read_text()
+    )
+
+
+def test_adaptive_descent_fails_closed_without_runtime_native_action_spec():
+    with pytest.raises(
+        RuntimeError,
+        match="native OSC action bounds unavailable",
+    ):
+        _native_osc_action_spec_evidence(SimpleNamespace())
 
 
 def test_499954_saturated_recovery_follows_improving_discrete_response():

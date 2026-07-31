@@ -2130,6 +2130,331 @@ def _fixed_z_lateral_approach_action(
     }
 
 
+def _native_osc_action_spec_evidence(env):
+    """Resolve the live environment's native 7-D action bounds or fail closed."""
+    queue = [(env, "env")]
+    visited = set()
+    rejected = []
+    while queue and len(visited) < 8:
+        current, source = queue.pop(0)
+        if current is None or id(current) in visited:
+            continue
+        visited.add(id(current))
+        try:
+            spec = getattr(current, "action_spec", None)
+        except Exception as exc:
+            rejected.append(
+                {
+                    "source": source,
+                    "reason": f"action_spec access failed: {exc}",
+                }
+            )
+            spec = None
+        if callable(spec):
+            try:
+                spec = spec()
+            except Exception as exc:
+                rejected.append(
+                    {
+                        "source": source,
+                        "reason": f"action_spec call failed: {exc}",
+                    }
+                )
+                spec = None
+        if spec is not None:
+            try:
+                low, high = spec
+                low = np.asarray(low, dtype=float)
+                high = np.asarray(high, dtype=float)
+            except Exception as exc:
+                rejected.append(
+                    {
+                        "source": source,
+                        "reason": f"action_spec unpack failed: {exc}",
+                    }
+                )
+            else:
+                valid = bool(
+                    low.shape == (7,)
+                    and high.shape == (7,)
+                    and np.all(np.isfinite(low))
+                    and np.all(np.isfinite(high))
+                    and np.all(low < high)
+                    and np.all(low <= 0.0)
+                    and np.all(high >= 0.0)
+                    and low[2] < 0.0
+                    and high[2] > 0.0
+                )
+                if valid:
+                    return {
+                        "source": f"{source}.action_spec",
+                        "action_dimension": 7,
+                        "low": low.tolist(),
+                        "high": high.tolist(),
+                        "translation_indices": [0, 1, 2],
+                        "z_action_index": 2,
+                        "gripper_action_index": 6,
+                        "runtime_resolved": True,
+                        "rejected_candidates": rejected,
+                    }
+                rejected.append(
+                    {
+                        "source": source,
+                        "reason": "action_spec is not a finite signed 7-D bound",
+                        "low": low.tolist(),
+                        "high": high.tolist(),
+                    }
+                )
+        for attribute in ("env", "_env"):
+            try:
+                child = getattr(current, attribute, None)
+            except Exception:
+                child = None
+            if child is not None:
+                queue.append((child, f"{source}.{attribute}"))
+    raise RuntimeError(
+        "native OSC action bounds unavailable; adaptive vertical motion "
+        "cannot be proved and is stopped fail-closed: "
+        f"{json.dumps(rejected, sort_keys=True)}"
+    )
+
+
+def _compiled_adaptive_vertical_descent_action(
+    *,
+    current_eef,
+    target_z,
+    overhead_guard,
+    gripper,
+    position_action_scale,
+    native_action_spec,
+    expected_pair_count,
+):
+    """Derive one pure-Z descent from every live compiled overhead pair."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    if current_eef.shape != (3,) or not np.all(np.isfinite(current_eef)):
+        raise ValueError("adaptive vertical current EEF is invalid")
+    if (
+        not np.isfinite(target_z)
+        or not np.isfinite(position_action_scale)
+        or position_action_scale <= 0.0
+    ):
+        raise ValueError("adaptive vertical target or action scale is invalid")
+    if not isinstance(expected_pair_count, (int, np.integer)):
+        raise ValueError("expected compiled pair count must be an integer")
+    pairs = list(overhead_guard.get("pairs", ()))
+    if expected_pair_count <= 0 or len(pairs) != int(expected_pair_count):
+        raise RuntimeError(
+            "live compiled overhead pair inventory changed before adaptive "
+            f"descent: expected={expected_pair_count} observed={len(pairs)}"
+        )
+    if not overhead_guard.get("accepted", False):
+        raise RuntimeError(
+            "adaptive vertical descent cannot start after the base overhead "
+            "reserve has already been lost"
+        )
+    try:
+        native_low = np.asarray(native_action_spec["low"], dtype=float)
+        native_high = np.asarray(native_action_spec["high"], dtype=float)
+        native_source = str(native_action_spec["source"])
+    except Exception as exc:
+        raise RuntimeError(
+            "native OSC action-bound evidence is incomplete"
+        ) from exc
+    if (
+        not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(native_low < native_high)
+        or native_low[2] >= 0.0
+        or not (native_low[6] <= gripper <= native_high[6])
+    ):
+        raise RuntimeError(
+            "native OSC action bounds do not prove the requested pure-Z action"
+        )
+    base_reserve = float(overhead_guard["one_step_vertical_reserve_m"])
+    if not np.isfinite(base_reserve) or base_reserve <= 0.0:
+        raise RuntimeError("compiled overhead base reserve is invalid")
+    target_remaining = float(current_eef[2] - float(target_z))
+    if not np.isfinite(target_remaining) or target_remaining <= 0.0:
+        raise RuntimeError(
+            "adaptive vertical descent has no finite positive target Z error"
+        )
+
+    pair_envelopes = []
+    for index, pair in enumerate(pairs):
+        vertical_clearance = float(pair["vertical_clearance_m"])
+        strict_clearance = float(pair["strict_no_contact_clearance_m"])
+        required_clearance = float(strict_clearance + base_reserve)
+        available_descent = float(vertical_clearance - required_clearance)
+        if (
+            not np.isfinite(vertical_clearance)
+            or not np.isfinite(strict_clearance)
+            or strict_clearance < 0.0
+            or not np.isfinite(available_descent)
+            or available_descent <= 0.0
+            or not pair.get("accepted", False)
+        ):
+            raise RuntimeError(
+                "compiled overhead pair cannot prove positive adaptive "
+                f"descent capacity: index={index} pair="
+                f"{json.dumps(pair, sort_keys=True)}"
+            )
+        strict_safe_delta = float(np.nextafter(available_descent, 0.0))
+        if strict_safe_delta <= 0.0:
+            raise RuntimeError(
+                "compiled overhead pair has no representable strict descent "
+                f"capacity: index={index}"
+            )
+        pair_envelopes.append(
+            {
+                "pair_index": int(index),
+                "gripper_geom": pair["gripper_geom"],
+                "counterpart_geom": pair["counterpart_geom"],
+                "counterpart_kind": pair["counterpart_kind"],
+                "current_vertical_clearance_m": vertical_clearance,
+                "strict_no_contact_clearance_m": strict_clearance,
+                "base_overhead_reserve_m": base_reserve,
+                "required_clearance_with_base_reserve_m": required_clearance,
+                "available_descent_before_strict_guard_m": available_descent,
+                "strict_safe_negative_world_delta_m": strict_safe_delta,
+            }
+        )
+    limiting_pair = min(
+        pair_envelopes,
+        key=lambda record: record["strict_safe_negative_world_delta_m"],
+    )
+    pair_world_capacity = float(
+        limiting_pair["strict_safe_negative_world_delta_m"]
+    )
+    native_negative_z_action_capacity = float(-native_low[2])
+    strict_native_negative_z_action = float(
+        np.nextafter(native_negative_z_action_capacity, 0.0)
+    )
+    native_world_capacity = float(
+        strict_native_negative_z_action * position_action_scale
+    )
+    if strict_native_negative_z_action <= 0.0 or native_world_capacity <= 0.0:
+        raise RuntimeError(
+            "native OSC negative-Z action bound has no strict interior"
+        )
+    capacities = {
+        "target_remaining_z_error": target_remaining,
+        "compiled_pair_base8_envelope": pair_world_capacity,
+        "native_negative_z_action_bound": native_world_capacity,
+    }
+    selected_source = min(capacities, key=capacities.get)
+    commanded_delta = float(capacities[selected_source])
+    if not np.isfinite(commanded_delta) or commanded_delta <= 0.0:
+        raise RuntimeError("adaptive vertical envelope selected no safe motion")
+
+    # Subtraction can round an algebraically strict nextafter result back onto
+    # the boundary. Tighten inward until the direct per-pair proof is strict.
+    for _ in range(128):
+        commanded_z_action = float(
+            -commanded_delta / float(position_action_scale)
+        )
+        predicted = [
+            float(
+                record["current_vertical_clearance_m"] - commanded_delta
+            )
+            for record in pair_envelopes
+        ]
+        if (
+            native_low[2] < commanded_z_action < 0.0
+            and commanded_delta <= target_remaining
+            and all(
+                clearance
+                > record["required_clearance_with_base_reserve_m"]
+                for clearance, record in zip(predicted, pair_envelopes)
+            )
+        ):
+            break
+        commanded_delta = float(np.nextafter(commanded_delta, 0.0))
+    else:
+        raise RuntimeError(
+            "adaptive vertical command has no directly provable strict "
+            "native-action/base8 interior"
+        )
+    if commanded_delta <= 0.0:
+        raise RuntimeError(
+            "adaptive vertical command collapsed to zero while proving safety"
+        )
+    commanded_z_action = float(
+        -commanded_delta / float(position_action_scale)
+    )
+    minimum_predicted_surplus = float("inf")
+    for clearance, record in zip(predicted, pair_envelopes):
+        record["predicted_post_command_vertical_clearance_m"] = clearance
+        record["predicted_post_command_base_reserve_surplus_m"] = float(
+            clearance - record["required_clearance_with_base_reserve_m"]
+        )
+        minimum_predicted_surplus = min(
+            minimum_predicted_surplus,
+            record["predicted_post_command_base_reserve_surplus_m"],
+        )
+    action = np.zeros(7, dtype=float)
+    action[2] = commanded_z_action
+    action[-1] = float(gripper)
+    if (
+        action[0] != 0.0
+        or action[1] != 0.0
+        or not native_low[2] < action[2] < 0.0
+        or action[2] > native_high[2]
+        or minimum_predicted_surplus <= 0.0
+    ):
+        raise RuntimeError(
+            "adaptive vertical action violated its compiled hard proof"
+        )
+    return action, {
+        "formula": (
+            "for every live compiled gripper-versus-plate/table pair, subtract "
+            "strict pair clearance and the unchanged 8 mm base reserve from "
+            "current vertical clearance; select the strict minimum of all-pair "
+            "capacity, remaining target-Z error, and the runtime-resolved native "
+            "negative-Z action capacity times position_action_scale"
+        ),
+        "current_eef": current_eef.tolist(),
+        "target_z_m": float(target_z),
+        "target_remaining_z_error_m": target_remaining,
+        "position_action_scale_m_per_normalized_action": float(
+            position_action_scale
+        ),
+        "native_action_spec_source": native_source,
+        "native_z_action_bounds": [
+            float(native_low[2]),
+            float(native_high[2]),
+        ],
+        "strict_native_negative_z_action_capacity": (
+            strict_native_negative_z_action
+        ),
+        "strict_native_negative_z_world_delta_capacity_m": (
+            native_world_capacity
+        ),
+        "compiled_pair_count": len(pair_envelopes),
+        "pair_envelopes": pair_envelopes,
+        "selected_limiting_pair": dict(limiting_pair),
+        "candidate_capacities_m": capacities,
+        "selected_envelope_source": selected_source,
+        "commanded_negative_world_delta_m": commanded_delta,
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_z_action": commanded_z_action,
+        "minimum_predicted_post_command_base_reserve_surplus_m": (
+            minimum_predicted_surplus
+        ),
+        "proof": {
+            "pure_negative_z": True,
+            "strictly_inside_native_z_action_bound": True,
+            "does_not_cross_target_z": bool(
+                commanded_delta <= target_remaining
+            ),
+            "all_compiled_pairs_retain_strict_base8_after_command": True,
+        },
+    }
+
+
 def _fixed_xy_vertical_approach_action(
     *,
     current_eef,
@@ -3319,7 +3644,10 @@ def _seek_stable_plate_contact(
     """Descend outside the plate, then establish two-finger side contact."""
     plate_reference = body_pose(env, PLATE_BODY)[0].copy()
     samples = []
-    structural_seek_context = {}
+    native_action_spec = _native_osc_action_spec_evidence(env)
+    structural_seek_context = {
+        "native_osc_action_spec": native_action_spec,
+    }
 
     def capture(
         stage,
@@ -3637,19 +3965,23 @@ def _seek_stable_plate_contact(
                 break
         stage_before_action = structural_stage
         if structural_stage == "overhead_center_descent":
-            action, path_control = _fixed_xy_vertical_approach_action(
-                current_eef=current_eef,
-                target_z=overhead_staging_z,
-                gripper=gripper,
-                position_action_scale=args.position_action_scale,
-                maximum_translation_action=(
-                    args.plate_contact_seek_max_translation_action
-                ),
+            action, path_control = (
+                _compiled_adaptive_vertical_descent_action(
+                    current_eef=current_eef,
+                    target_z=overhead_staging_z,
+                    overhead_guard=latest_overhead_guard,
+                    gripper=gripper,
+                    position_action_scale=args.position_action_scale,
+                    native_action_spec=native_action_spec,
+                    expected_pair_count=len(
+                        overhead_staging_geometry["pairs"]
+                    ),
+                )
             )
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
-                "fixed_xy_vertical_path_control": path_control,
+                "compiled_adaptive_vertical_action_envelope": path_control,
             }
         elif structural_stage == "vertical_tail_brake":
             action, path_control = _fixed_xy_vertical_approach_action(
