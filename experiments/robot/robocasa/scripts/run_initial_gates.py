@@ -30,6 +30,7 @@ from experiments.robot.robocasa.physcog.preflight import (  # noqa: E402
 )
 from experiments.robot.robocasa.physcog.registry import get_scene  # noqa: E402
 from experiments.robot.robocasa.pi05_policy import (  # noqa: E402
+    WRIST_CAMERA,
     preprocess_camera_image,
 )
 from experiments.robot.robocasa.scripts.run_condition import (  # noqa: E402
@@ -176,7 +177,15 @@ def main():
         )
         for condition in ("Eb", "Er", "Ec")
     }
-    artifacts = [output, *frame_paths.values()]
+    wrist_frame_paths = {
+        condition: directory
+        / (
+            f"{args.scene}_{condition}_wrist_policy_view_init_seed{args.seed}_"
+            f"{run_id}.png"
+        )
+        for condition in ("Eb", "Er", "Ec")
+    }
+    artifacts = [output, *frame_paths.values(), *wrist_frame_paths.values()]
 
     try:
         directory = review_dir(args.scene, requested_review)
@@ -195,7 +204,13 @@ def main():
 
         paired_probes = {}
         for condition, frame_path in frame_paths.items():
-            env = make_env(args.scene, condition, args.seed, render=True)
+            env = make_env(
+                args.scene,
+                condition,
+                args.seed,
+                render=True,
+                camera_names=(CAMERA, WRIST_CAMERA),
+            )
             try:
                 obs = env.reset()
                 if env.native_lang != native["native_prompt"]:
@@ -206,6 +221,10 @@ def main():
                 imageio.imwrite(
                     frame_path,
                     preprocess_camera_image(obs[f"{CAMERA}_image"]),
+                )
+                imageio.imwrite(
+                    wrist_frame_paths[condition],
+                    preprocess_camera_image(obs[f"{WRIST_CAMERA}_image"]),
                 )
                 paired_probes[condition] = {
                     "initial_max_penetration_m": initial_max_penetration(env),
@@ -279,6 +298,17 @@ def main():
         manifest["gates"]["visibility"]["policy_preprocessing"] = (
             "pi05_libero_rotate180_resize_with_pad_224"
         )
+        manifest["gates"]["visibility"]["policy_cameras"] = [
+            CAMERA,
+            WRIST_CAMERA,
+        ]
+        manifest["gates"]["visibility"]["wrist_initial_frame"] = str(
+            wrist_frame_paths[args.condition]
+        )
+        manifest["gates"]["visibility"]["paired_wrist_initial_frames"] = {
+            condition: str(path)
+            for condition, path in wrist_frame_paths.items()
+        }
         manifest["valid"] = all(
             gate["passed"] for gate in manifest["gates"].values()
         )

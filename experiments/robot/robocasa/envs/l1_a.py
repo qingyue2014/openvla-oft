@@ -331,14 +331,15 @@ class L1A1OccludedReferentCounter(StaticGeometryScene, PickPlaceCounterToSink):
         # mug: graspable + washable (the counter-to-sink cfg demands washable),
         # objaverse registry, short enough that a 0.20 m bottle 0.11 m in front
         # of it genuinely covers it at the agentview depression angle.
-        # water_bottle: graspable, objaverse registry, a tall upright drink
-        # container -- deliberately NOT the wine bottle used by L1-B4, so the
-        # two pictures are not confusable.
+        # wine: graspable, objaverse registry, and reliably upright. The
+        # original water_bottle instance lay nearly horizontal and changed
+        # tilt by 7.98 degrees in reconstructed job 499418, so it could not be
+        # interpreted as a stable tall occluder.
         # sponge: washable (the sink cfg forces washable=True in
         # EnvUtils.create_obj:1465), pinned only to fix the asset inventory.
         pin_categories(
             cfgs,
-            {"obj": "mug", "distr_counter": "water_bottle", "distr_sink": "sponge"},
+            {"obj": "mug", "distr_counter": "wine", "distr_sink": "sponge"},
         )
 
     def _physcog_shared_placements(self):
@@ -359,12 +360,12 @@ class L1A1OccludedReferentCounter(StaticGeometryScene, PickPlaceCounterToSink):
         target = _box(
             size=(0.06, 0.06),
             pos=("ref", -1.0),
-            offset=(self.physcog_target_axis_x, 0.22),
+            offset=(self.physcog_target_axis_x, 0.35),
         )
 
         def front(dx):
             # Keep the native bottle 0.12 m behind the region front edge so it
-            # is fully supported; the target remains 0.13 m behind it.
+            # is fully supported; the target remains 0.26 m behind it.
             return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(dx, 0.10))
 
         return {
@@ -600,9 +601,12 @@ class L1A4OccludedDrawerReferent(StaticGeometryScene, PickPlaceDrawerToCounter):
     physcog_detour_threshold = 0.10
     physcog_layout_ids = 1
     physcog_style_ids = 1
-    physcog_target_axis_x = 0.10
-    physcog_eb_hazard_x = 0.24
-    physcog_ec_hazard_x = 0.22
+    # The positive-x reconstruction was entirely hidden behind PandaOmron in
+    # the exact pi0.5 center view (job 499420). Mirror the whole paired layout
+    # to the clear side while keeping the same distances from the Er axis.
+    physcog_target_axis_x = -0.10
+    physcog_eb_hazard_x = -0.24
+    physcog_ec_hazard_x = -0.22
 
     #: swept off a 0.92 m counter the bowl reaches the floor, so 0.30 m of drop
     #: cannot be produced by anything except leaving the counter

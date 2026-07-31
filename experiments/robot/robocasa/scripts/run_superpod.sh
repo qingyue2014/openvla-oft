@@ -241,6 +241,8 @@ manifest = json.loads(manifest_path.read_text())
 visibility = manifest.get("gates", {}).get("visibility", {})
 paths = [visibility.get("initial_frame")]
 paths.extend((visibility.get("paired_initial_frames") or {}).values())
+paths.append(visibility.get("wrist_initial_frame"))
+paths.extend((visibility.get("paired_wrist_initial_frames") or {}).values())
 for raw_path in paths:
     if not raw_path:
         continue

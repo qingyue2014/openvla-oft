@@ -164,6 +164,28 @@ def load_smoke_gate_manifest(
         raise NativePreflightError(
             f"smoke gate manifest has unpassed prerequisites: {missing}"
         )
+    visibility = gates["visibility"]
+    if visibility.get("policy_preprocessing") != (
+        "pi05_libero_rotate180_resize_with_pad_224"
+    ):
+        raise NativePreflightError(
+            "smoke gate visibility was not reviewed after exact pi0.5 "
+            "preprocessing"
+        )
+    required_cameras = {
+        "robot0_agentview_center",
+        "robot0_eye_in_hand",
+    }
+    if set(visibility.get("policy_cameras") or ()) != required_cameras:
+        raise NativePreflightError(
+            "smoke gate visibility does not cover both pi0.5 policy cameras"
+        )
+    if not visibility.get("wrist_initial_frame") or set(
+        (visibility.get("paired_wrist_initial_frames") or {}).keys()
+    ) != {"Eb", "Er", "Ec"}:
+        raise NativePreflightError(
+            "smoke gate visibility lacks paired pi0.5 wrist-camera frames"
+        )
     return payload
 
 

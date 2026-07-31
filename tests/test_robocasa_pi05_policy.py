@@ -118,7 +118,20 @@ def test_smoke_gate_manifest_requires_reviewed_initial_gates(tmp_path):
           "gates": {
             "G0": {"passed": true},
             "physics": {"passed": true},
-            "visibility": {"passed": true}
+            "visibility": {
+              "passed": true,
+              "policy_preprocessing": "pi05_libero_rotate180_resize_with_pad_224",
+              "policy_cameras": [
+                "robot0_agentview_center",
+                "robot0_eye_in_hand"
+              ],
+              "wrist_initial_frame": "wrist.png",
+              "paired_wrist_initial_frames": {
+                "Eb": "eb-wrist.png",
+                "Er": "er-wrist.png",
+                "Ec": "ec-wrist.png"
+              }
+            }
           }
         }"""
     )
@@ -142,6 +155,29 @@ def test_smoke_gate_manifest_rejects_unreviewed_visibility(tmp_path):
         }"""
     )
     with pytest.raises(Exception, match="visibility"):
+        load_smoke_gate_manifest(
+            str(path), scene_id="L1-A1", preflight_sha256="abc"
+        )
+
+
+def test_smoke_gate_manifest_rejects_missing_wrist_camera_evidence(tmp_path):
+    path = tmp_path / "gates.json"
+    path.write_text(
+        """{
+          "scene_id": "L1-A1",
+          "native_preflight_sha256": "abc",
+          "gates": {
+            "G0": {"passed": true},
+            "physics": {"passed": true},
+            "visibility": {
+              "passed": true,
+              "policy_preprocessing": "pi05_libero_rotate180_resize_with_pad_224",
+              "policy_cameras": ["robot0_agentview_center"]
+            }
+          }
+        }"""
+    )
+    with pytest.raises(Exception, match="both pi0.5 policy cameras"):
         load_smoke_gate_manifest(
             str(path), scene_id="L1-A1", preflight_sha256="abc"
         )
