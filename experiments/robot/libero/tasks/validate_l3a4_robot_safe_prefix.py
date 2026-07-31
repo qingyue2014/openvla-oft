@@ -1842,7 +1842,7 @@ def _compiled_target_grasp_clearance(
     target_position,
     outward_direction_xy,
 ):
-    """Derive a no-contact outside grasp pose from compiled native geometry."""
+    """Derive a no-contact grasp corridor around every native scene object."""
     model = env.sim.model
     target_position = np.asarray(target_position, dtype=float)
     outward = np.asarray(outward_direction_xy, dtype=float)
@@ -1872,9 +1872,84 @@ def _compiled_target_grasp_clearance(
         rigid_gripper_geoms,
         collision_target_geoms,
     )
-    if not collision_target_geoms or not collision_gripper_geoms:
+    porcelain_position, _ = body_pose(env.sim, PORCELAIN_BODY)
+    porcelain_geoms = sorted(
+        descendant_geom_ids(model, PORCELAIN_BODY)
+    )
+    collision_porcelain_geoms = _collision_compatible_geom_ids(
+        model,
+        porcelain_geoms,
+        rigid_gripper_geoms,
+    )
+    porcelain_gripper_geoms = _collision_compatible_geom_ids(
+        model,
+        rigid_gripper_geoms,
+        collision_porcelain_geoms,
+    )
+    if (
+        not collision_target_geoms
+        or not collision_gripper_geoms
+        or not collision_porcelain_geoms
+        or not porcelain_gripper_geoms
+    ):
         raise RuntimeError(
-            "compiled target grasp has no gripper/target collision geometry"
+            "compiled target grasp has no gripper/target/porcelain "
+            "collision geometry"
+        )
+
+    direction_records = [
+        {
+            "source": "compiled microwave outward direction",
+            "direction_xy": outward.tolist(),
+        }
+    ]
+    target_to_porcelain = (
+        np.asarray(porcelain_position, dtype=float)[:2]
+        - target_position[:2]
+    )
+    target_to_porcelain_norm = float(
+        np.linalg.norm(target_to_porcelain)
+    )
+    if target_to_porcelain_norm <= np.finfo(float).eps:
+        raise RuntimeError(
+            "native target and parked porcelain have coincident XY origins"
+        )
+    target_to_porcelain /= target_to_porcelain_norm
+    tangent_directions = [
+        np.asarray(
+            [-target_to_porcelain[1], target_to_porcelain[0]],
+            dtype=float,
+        ),
+        np.asarray(
+            [target_to_porcelain[1], -target_to_porcelain[0]],
+            dtype=float,
+        ),
+    ]
+    tangent_directions.sort(
+        key=lambda direction: -float(np.dot(direction, outward))
+    )
+    for tangent_index, direction in enumerate(tangent_directions):
+        if any(
+            np.allclose(
+                direction,
+                np.asarray(record["direction_xy"], dtype=float),
+                rtol=0.0,
+                atol=1e-12,
+            )
+            for record in direction_records
+        ):
+            continue
+        direction_records.append(
+            {
+                "source": (
+                    "target-to-parked-porcelain tangent "
+                    f"{tangent_index}"
+                ),
+                "direction_xy": direction.tolist(),
+                "microwave_outward_dot": float(
+                    np.dot(direction, outward)
+                ),
+            }
         )
 
     gripper_origin_bound = max(
@@ -1913,110 +1988,209 @@ def _compiled_target_grasp_clearance(
         + EEF_POSITION_TOLERANCE
         + TARGET_INSERTION_SEARCH_STEP_M,
     )
+    nominal_eef = target_position + np.asarray(
+        [0.0, 0.0, GRASP_HEIGHT]
+    )
     trace = []
     for offset in np.arange(
         first_offset,
         last_offset + 0.5 * TARGET_INSERTION_SEARCH_STEP_M,
         TARGET_INSERTION_SEARCH_STEP_M,
     ):
-        clearance_eef = target_position + np.asarray(
-            [
-                outward[0] * float(offset),
-                outward[1] * float(offset),
-                GRASP_HEIGHT,
-            ]
-        )
-        clearance_high_eef = clearance_eef + np.asarray(
-            [0.0, 0.0, APPROACH_HEIGHT]
-        )
-        target_approach_clearance, target_approach_sweep = (
-            _translated_swept_clearance(
-                env,
-                collision_gripper_geoms,
-                collision_target_geoms,
-                current_eef,
-                clearance_high_eef,
-                current_eef,
+        for direction_index, direction_record in enumerate(
+            direction_records
+        ):
+            direction = np.asarray(
+                direction_record["direction_xy"], dtype=float
             )
-        )
-        target_descend_clearance, target_descend_sweep = (
-            _translated_swept_clearance(
-                env,
-                collision_gripper_geoms,
-                collision_target_geoms,
-                clearance_high_eef,
-                clearance_eef,
-                current_eef,
+            clearance_eef = target_position + np.asarray(
+                [
+                    direction[0] * float(offset),
+                    direction[1] * float(offset),
+                    GRASP_HEIGHT,
+                ]
             )
-        )
-        fixture_approach_clearance, fixture_approach_sweep = (
-            _translated_swept_clearance(
-                env,
-                fixture_compatible_gripper_geoms,
-                fixture_geoms,
-                current_eef,
-                clearance_high_eef,
-                current_eef,
+            clearance_high_eef = clearance_eef + np.asarray(
+                [0.0, 0.0, APPROACH_HEIGHT]
             )
-        )
-        fixture_descend_clearance, fixture_descend_sweep = (
-            _translated_swept_clearance(
-                env,
-                fixture_compatible_gripper_geoms,
-                fixture_geoms,
-                clearance_high_eef,
-                clearance_eef,
-                current_eef,
+            target_approach_clearance, target_approach_sweep = (
+                _translated_swept_clearance(
+                    env,
+                    collision_gripper_geoms,
+                    collision_target_geoms,
+                    current_eef,
+                    clearance_high_eef,
+                    current_eef,
+                )
             )
-        )
-        target_clearances = {
-            "target_approach_clearance_m": target_approach_clearance,
-            "target_descend_clearance_m": target_descend_clearance,
-        }
-        fixture_clearances = {
-            "fixture_approach_clearance_m": fixture_approach_clearance,
-            "fixture_descend_clearance_m": fixture_descend_clearance,
-        }
-        passed = bool(
-            all(
-                value > EEF_POSITION_TOLERANCE
-                for value in target_clearances.values()
+            target_descend_clearance, target_descend_sweep = (
+                _translated_swept_clearance(
+                    env,
+                    collision_gripper_geoms,
+                    collision_target_geoms,
+                    clearance_high_eef,
+                    clearance_eef,
+                    current_eef,
+                )
             )
-            and all(value > 0.0 for value in fixture_clearances.values())
-        )
-        record = {
-            "outward_offset_m": float(offset),
-            "clearance_eef_position": clearance_eef.tolist(),
-            "clearance_high_eef_position": clearance_high_eef.tolist(),
-            **target_clearances,
-            **fixture_clearances,
-            "passed": passed,
-        }
-        trace.append(record)
-        if passed:
-            return clearance_eef, {
-                "method": (
-                    "nearest compiled-geometry outward grasp pose whose "
-                    "complete approach and descend stay clear of the native "
-                    "target and microwave"
-                ),
-                "outward_direction_xy": outward.tolist(),
-                "minimum_outward_offset_m": first_offset,
-                "maximum_outward_offset_m": last_offset,
-                "search_step_m": TARGET_INSERTION_SEARCH_STEP_M,
-                "target_clearance_required_m": EEF_POSITION_TOLERANCE,
-                "gripper_origin_bound_m": gripper_origin_bound,
-                "target_origin_bound_m": target_origin_bound,
-                "rigid_gripper_geometry": rigid_gripper_geometry,
-                "collision_gripper_geom_ids": collision_gripper_geoms,
-                "collision_target_geom_ids": collision_target_geoms,
-                "selected": record,
-                "target_approach_sweep": target_approach_sweep,
-                "target_descend_sweep": target_descend_sweep,
-                "fixture_approach_sweep": fixture_approach_sweep,
-                "fixture_descend_sweep": fixture_descend_sweep,
-                "candidate_trace": trace,
+            fixture_approach_clearance, fixture_approach_sweep = (
+                _translated_swept_clearance(
+                    env,
+                    fixture_compatible_gripper_geoms,
+                    fixture_geoms,
+                    current_eef,
+                    clearance_high_eef,
+                    current_eef,
+                )
+            )
+            fixture_descend_clearance, fixture_descend_sweep = (
+                _translated_swept_clearance(
+                    env,
+                    fixture_compatible_gripper_geoms,
+                    fixture_geoms,
+                    clearance_high_eef,
+                    clearance_eef,
+                    current_eef,
+                )
+            )
+            fixture_lateral_clearance, fixture_lateral_sweep = (
+                _translated_swept_clearance(
+                    env,
+                    fixture_compatible_gripper_geoms,
+                    fixture_geoms,
+                    clearance_eef,
+                    nominal_eef,
+                    current_eef,
+                )
+            )
+            porcelain_approach_clearance, porcelain_approach_sweep = (
+                _translated_swept_clearance(
+                    env,
+                    porcelain_gripper_geoms,
+                    collision_porcelain_geoms,
+                    current_eef,
+                    clearance_high_eef,
+                    current_eef,
+                )
+            )
+            porcelain_descend_clearance, porcelain_descend_sweep = (
+                _translated_swept_clearance(
+                    env,
+                    porcelain_gripper_geoms,
+                    collision_porcelain_geoms,
+                    clearance_high_eef,
+                    clearance_eef,
+                    current_eef,
+                )
+            )
+            porcelain_lateral_clearance, porcelain_lateral_sweep = (
+                _translated_swept_clearance(
+                    env,
+                    porcelain_gripper_geoms,
+                    collision_porcelain_geoms,
+                    clearance_eef,
+                    nominal_eef,
+                    current_eef,
+                )
+            )
+            target_clearances = {
+                "target_approach_clearance_m": target_approach_clearance,
+                "target_descend_clearance_m": target_descend_clearance,
             }
+            fixture_clearances = {
+                "fixture_approach_clearance_m": fixture_approach_clearance,
+                "fixture_descend_clearance_m": fixture_descend_clearance,
+                "fixture_lateral_clearance_m": fixture_lateral_clearance,
+            }
+            porcelain_clearances = {
+                "porcelain_approach_clearance_m": (
+                    porcelain_approach_clearance
+                ),
+                "porcelain_descend_clearance_m": (
+                    porcelain_descend_clearance
+                ),
+                "porcelain_lateral_clearance_m": (
+                    porcelain_lateral_clearance
+                ),
+            }
+            passed = bool(
+                all(
+                    value > EEF_POSITION_TOLERANCE
+                    for value in target_clearances.values()
+                )
+                and all(
+                    value > 0.0
+                    for value in fixture_clearances.values()
+                )
+                and all(
+                    value > 0.0
+                    for value in porcelain_clearances.values()
+                )
+            )
+            record = {
+                "direction_index": int(direction_index),
+                "direction_source": direction_record["source"],
+                "direction_xy": direction.tolist(),
+                "outward_offset_m": float(offset),
+                "clearance_eef_position": clearance_eef.tolist(),
+                "clearance_high_eef_position": (
+                    clearance_high_eef.tolist()
+                ),
+                **target_clearances,
+                **fixture_clearances,
+                **porcelain_clearances,
+                "passed": passed,
+            }
+            trace.append(record)
+            if passed:
+                return clearance_eef, {
+                    "method": (
+                        "nearest compiled-geometry grasp corridor whose "
+                        "approach, descend, and lateral seek stay clear of "
+                        "the native porcelain mug and microwave"
+                    ),
+                    "outward_direction_xy": outward.tolist(),
+                    "direction_candidates": direction_records,
+                    "target_to_porcelain_xy": (
+                        target_to_porcelain.tolist()
+                    ),
+                    "target_to_porcelain_distance_m": (
+                        target_to_porcelain_norm
+                    ),
+                    "porcelain_position": porcelain_position.tolist(),
+                    "minimum_outward_offset_m": first_offset,
+                    "maximum_outward_offset_m": last_offset,
+                    "search_step_m": TARGET_INSERTION_SEARCH_STEP_M,
+                    "target_clearance_required_m": (
+                        EEF_POSITION_TOLERANCE
+                    ),
+                    "gripper_origin_bound_m": gripper_origin_bound,
+                    "target_origin_bound_m": target_origin_bound,
+                    "rigid_gripper_geometry": rigid_gripper_geometry,
+                    "collision_gripper_geom_ids": (
+                        collision_gripper_geoms
+                    ),
+                    "collision_target_geom_ids": collision_target_geoms,
+                    "collision_porcelain_geom_ids": (
+                        collision_porcelain_geoms
+                    ),
+                    "selected": record,
+                    "target_approach_sweep": target_approach_sweep,
+                    "target_descend_sweep": target_descend_sweep,
+                    "fixture_approach_sweep": fixture_approach_sweep,
+                    "fixture_descend_sweep": fixture_descend_sweep,
+                    "fixture_lateral_sweep": fixture_lateral_sweep,
+                    "porcelain_approach_sweep": (
+                        porcelain_approach_sweep
+                    ),
+                    "porcelain_descend_sweep": (
+                        porcelain_descend_sweep
+                    ),
+                    "porcelain_lateral_sweep": (
+                        porcelain_lateral_sweep
+                    ),
+                    "candidate_trace": trace,
+                }
     raise RuntimeError(
         "no compiled no-contact outside target grasp pose; "
         f"candidates={trace}"
@@ -2857,6 +3031,7 @@ def _descend_to_target_contact(env, oracle, step, frames):
                 error_norm,
                 *action[:3].tolist(),
                 float(current_target),
+                float(current_porcelain),
                 float(current_microwave),
             ]
         )
@@ -2950,13 +3125,18 @@ def _seek_target_contact(env, oracle, step, frames):
     contact_bodies = _robot_contact_body_names(env)
     target_contact = TARGET_BODY in contact_bodies
     target_contact_initial = target_contact
+    porcelain_contact = PORCELAIN_BODY in contact_bodies
     microwave_contact = _has_microwave_contact(contact_bodies)
+    contact_pairs = {
+        (pair["robot_geom_id"], pair["other_geom_id"]): pair
+        for pair in _robot_contact_pairs(env)
+    }
     trace = []
     error_norms = []
     status = None
     for iteration in range(
         0
-        if target_contact or microwave_contact
+        if target_contact or porcelain_contact or microwave_contact
         else TARGET_CONTACT_SEEK_STEPS
     ):
         target_position, _ = body_pose(env.sim, TARGET_BODY)
@@ -2983,7 +3163,12 @@ def _seek_target_contact(env, oracle, step, frames):
         error_norms.append(error_norm)
         current_contacts = _robot_contact_body_names(env)
         contact_bodies.update(current_contacts)
+        for pair in _robot_contact_pairs(env):
+            contact_pairs[
+                (pair["robot_geom_id"], pair["other_geom_id"])
+            ] = pair
         current_target = TARGET_BODY in current_contacts
+        current_porcelain = PORCELAIN_BODY in current_contacts
         current_microwave = _has_microwave_contact(current_contacts)
         trace.append(
             [
@@ -3001,6 +3186,9 @@ def _seek_target_contact(env, oracle, step, frames):
         if current_microwave:
             microwave_contact = True
             break
+        if current_porcelain:
+            porcelain_contact = True
+            break
         if status.violated:
             break
         if current_target:
@@ -3015,21 +3203,30 @@ def _seek_target_contact(env, oracle, step, frames):
     final_error_norm = float(np.linalg.norm(final_error))
     final_contacts = _robot_contact_body_names(env)
     contact_bodies.update(final_contacts)
+    for pair in _robot_contact_pairs(env):
+        contact_pairs[
+            (pair["robot_geom_id"], pair["other_geom_id"])
+        ] = pair
     target_contact = bool(
         target_contact and TARGET_BODY in final_contacts
     )
     microwave_contact = bool(
         microwave_contact or _has_microwave_contact(contact_bodies)
     )
+    porcelain_contact = bool(
+        porcelain_contact or PORCELAIN_BODY in contact_bodies
+    )
     horizon_exhausted = bool(
         len(trace) >= TARGET_CONTACT_SEEK_STEPS
         and not target_contact
+        and not porcelain_contact
         and not microwave_contact
         and not (status is not None and status.violated)
     )
     success = bool(
         target_contact
         and not target_contact_initial
+        and not porcelain_contact
         and not microwave_contact
         and not (status is not None and status.violated)
     )
@@ -3051,23 +3248,32 @@ def _seek_target_contact(env, oracle, step, frames):
         "target_contact_initial": target_contact_initial,
         "target_contact": target_contact,
         "target_contact_final": TARGET_BODY in final_contacts,
+        "porcelain_contact_seen": porcelain_contact,
         "microwave_contact_seen": microwave_contact,
         "horizon_exhausted": horizon_exhausted,
         "robot_contact_bodies": sorted(contact_bodies),
+        "robot_contact_pairs": [
+            contact_pairs[key] for key in sorted(contact_pairs)
+        ],
         "trace_columns": (
             "iteration,global_step,target_x,target_y,target_z,eef_x,eef_y,"
             "eef_z,error_x,error_y,error_z,error_norm,action_x,action_y,"
-            "action_z,target_contact,microwave_contact"
+            "action_z,target_contact,porcelain_contact,microwave_contact"
         ),
         "trace": trace,
     }
-    if target_contact_initial:
+    if microwave_contact:
+        reason = "robot contacted microwave during target lateral contact seek"
+    elif porcelain_contact:
+        reason = (
+            "robot contacted the parked porcelain mug during target "
+            "lateral contact seek"
+        )
+    elif target_contact_initial:
         reason = (
             "target was already in contact before lateral contact seek; "
             "compiled outside grasp clearance was not realized"
         )
-    elif microwave_contact:
-        reason = "robot contacted microwave during target lateral contact seek"
     elif status is not None and status.violated:
         reason = "oracle violation during target lateral contact seek"
     elif not target_contact:
@@ -3087,45 +3293,65 @@ def _close_gripper_on_target(env, oracle, step, frames):
     initial_contacts = _robot_contact_body_names(env)
     initial_tilt = body_tilt_deg(env.sim, TARGET_BODY)
     target_initial = TARGET_BODY in initial_contacts
+    porcelain_contact = PORCELAIN_BODY in initial_contacts
     microwave_contact = _has_microwave_contact(initial_contacts)
     target_seen = target_initial
     contact_bodies = set(initial_contacts)
+    contact_pairs = {
+        (pair["robot_geom_id"], pair["other_geom_id"]): pair
+        for pair in _robot_contact_pairs(env)
+    }
     trace = []
     status = None
-    if target_initial and not microwave_contact:
+    if target_initial and not porcelain_contact and not microwave_contact:
         action = np.zeros(7, dtype=float)
         action[-1] = 1.0
         for iteration in range(GRIPPER_STEPS):
             _, status, step = _step(env, oracle, action, step, frames)
             contacts = _robot_contact_body_names(env)
             contact_bodies.update(contacts)
+            for pair in _robot_contact_pairs(env):
+                contact_pairs[
+                    (pair["robot_geom_id"], pair["other_geom_id"])
+                ] = pair
             current_target = TARGET_BODY in contacts
+            current_porcelain = PORCELAIN_BODY in contacts
             current_microwave = _has_microwave_contact(contacts)
             current_tilt = body_tilt_deg(env.sim, TARGET_BODY)
             target_seen = target_seen or current_target
             microwave_contact = microwave_contact or current_microwave
+            porcelain_contact = porcelain_contact or current_porcelain
             trace.append(
                 [
                     float(iteration),
                     float(step),
                     float(current_target),
+                    float(current_porcelain),
                     float(current_microwave),
                     current_tilt,
                 ]
             )
-            if current_microwave or status.violated:
+            if current_porcelain or current_microwave or status.violated:
                 break
     final_contacts = _robot_contact_body_names(env)
     contact_bodies.update(final_contacts)
+    for pair in _robot_contact_pairs(env):
+        contact_pairs[
+            (pair["robot_geom_id"], pair["other_geom_id"])
+        ] = pair
     target_final = TARGET_BODY in final_contacts
     final_tilt = body_tilt_deg(env.sim, TARGET_BODY)
     microwave_contact = bool(
         microwave_contact or _has_microwave_contact(contact_bodies)
     )
+    porcelain_contact = bool(
+        porcelain_contact or PORCELAIN_BODY in contact_bodies
+    )
     success = bool(
         target_initial
         and target_seen
         and target_final
+        and not porcelain_contact
         and not microwave_contact
         and not (status is not None and status.violated)
     )
@@ -3137,17 +3363,26 @@ def _close_gripper_on_target(env, oracle, step, frames):
         "target_contact_final": target_final,
         "target_tilt_initial_deg": initial_tilt,
         "target_tilt_final_deg": final_tilt,
+        "porcelain_contact_seen": porcelain_contact,
         "microwave_contact_seen": microwave_contact,
         "robot_contact_bodies": sorted(contact_bodies),
+        "robot_contact_pairs": [
+            contact_pairs[key] for key in sorted(contact_pairs)
+        ],
         "steps_executed": len(trace),
         "trace_columns": (
-            "iteration,global_step,target_contact,microwave_contact,"
-            "target_tilt_deg"
+            "iteration,global_step,target_contact,porcelain_contact,"
+            "microwave_contact,target_tilt_deg"
         ),
         "trace": trace,
     }
     if microwave_contact:
         reason = "robot contacted microwave before/during target closure"
+    elif porcelain_contact:
+        reason = (
+            "robot contacted the parked porcelain mug before/during "
+            "target closure"
+        )
     elif not target_initial:
         reason = "target closure attempted without initial mug contact"
     elif status is not None and status.violated:
@@ -3995,6 +4230,23 @@ def _robot_place_target(env, oracle, names, frames, step):
                 step,
                 target_metrics(),
             )
+        move_diagnostic = move_diagnostics[-1]
+        if (
+            move_diagnostic.get("porcelain_contact_seen", False)
+            or move_diagnostic.get("target_contact_seen", False)
+        ):
+            return (
+                False,
+                (
+                    f"forbidden native object contact during {label}; "
+                    "target and parked porcelain must remain untouched "
+                    "before lateral target seek; contacts="
+                    f"{move_diagnostic.get('robot_contact_bodies', [])}"
+                ),
+                status,
+                step,
+                target_metrics(),
+            )
     (
         contact_ok,
         contact_reason,
@@ -4662,8 +4914,12 @@ def main() -> None:
                 for segment in target_metrics.get("move_segments", [])
             )
             or target_descend.get("microwave_contact_seen", False)
+            or target_descend.get("porcelain_contact_seen", False)
             or target_grasp_closure.get(
                 "microwave_contact_seen", False
+            )
+            or target_grasp_closure.get(
+                "porcelain_contact_seen", False
             )
             or target_release.get("microwave_contact_seen", False)
         )
@@ -4888,6 +5144,11 @@ def main() -> None:
                     "outward_offset_m", float("nan")
                 )
             ),
+            "robot_target_grasp_direction_source": (
+                selected_target_grasp_clearance.get(
+                    "direction_source", ""
+                )
+            ),
             "robot_target_grasp_target_approach_clearance_m": (
                 selected_target_grasp_clearance.get(
                     "target_approach_clearance_m", float("nan")
@@ -4906,6 +5167,26 @@ def main() -> None:
             "robot_target_grasp_fixture_descend_clearance_m": (
                 selected_target_grasp_clearance.get(
                     "fixture_descend_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_grasp_fixture_lateral_clearance_m": (
+                selected_target_grasp_clearance.get(
+                    "fixture_lateral_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_grasp_porcelain_approach_clearance_m": (
+                selected_target_grasp_clearance.get(
+                    "porcelain_approach_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_grasp_porcelain_descend_clearance_m": (
+                selected_target_grasp_clearance.get(
+                    "porcelain_descend_clearance_m", float("nan")
+                )
+            ),
+            "robot_target_grasp_porcelain_lateral_clearance_m": (
+                selected_target_grasp_clearance.get(
+                    "porcelain_lateral_clearance_m", float("nan")
                 )
             ),
             "robot_target_descend_final_error_m": target_descend.get(
@@ -4937,6 +5218,13 @@ def main() -> None:
                     )
                 )
             ),
+            "robot_target_descend_porcelain_contact_seen": int(
+                bool(
+                    target_descend.get(
+                        "porcelain_contact_seen", False
+                    )
+                )
+            ),
             "robot_target_descend_contact_bodies": ",".join(
                 target_descend.get("robot_contact_bodies", [])
             ),
@@ -4961,6 +5249,13 @@ def main() -> None:
                 bool(
                     target_grasp_closure.get(
                         "microwave_contact_seen", False
+                    )
+                )
+            ),
+            "robot_target_closure_porcelain_contact_seen": int(
+                bool(
+                    target_grasp_closure.get(
+                        "porcelain_contact_seen", False
                     )
                 )
             ),
@@ -5205,9 +5500,9 @@ def main() -> None:
         ),
         "target_placement_segment": "robot OSC grasp/transport/release via env.step",
         "target_grasp_method": (
-            "nearest compiled no-contact outward-clearance approach and "
-            "outside vertical descend, followed by lateral contact seek at "
-            "the nominal grasp height"
+            "nearest compiled no-contact approach/descend/lateral corridor "
+            "from microwave-outward or target-to-parked-porcelain tangent "
+            "directions, followed by target contact seek"
         ),
         "target_grasp_minimum_clearance_offset_m": (
             TARGET_GRASP_CLEARANCE_OFFSET
@@ -5221,7 +5516,8 @@ def main() -> None:
         "target_grasp_gate": (
             "target contact must be absent before lateral seek and current "
             "target contact is required before and after closure; any "
-            "robot-microwave contact during table approach fails closed"
+            "contact with the parked porcelain mug or microwave during "
+            "target approach/acquisition/closure fails closed"
         ),
         "target_insertion_gate": (
             "foremost native-In release pose is searched from compiled "
