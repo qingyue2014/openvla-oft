@@ -55,8 +55,10 @@ MAX_WAIT_ANGULAR_SPEED_RADPS = 0.15
 MIN_CASCADE_DISPLACEMENT_M = 0.015
 MIN_CASCADE_TILT_CHANGE_DEG = 10.0
 MAX_HINGE_RADIUS_ERROR_M = 0.002
-EC_RADIUS_CALIBRATION_TARGET_M = 0.001
-MAX_EC_RADIUS_CALIBRATION_STEPS = 4
+EC_RADIUS_INITIAL_STEP_M = 0.0005
+EC_RADIUS_MAX_OFFSET_M = 0.002
+EC_RADIUS_MIN_BRACKET_M = 0.000015625
+MAX_EC_RADIUS_CALIBRATION_STEPS = 16
 
 
 def all_model_names(model, kind: str) -> list[str]:
@@ -207,34 +209,34 @@ def hinge_radius_m(local_xy, hinge_local_xy) -> float:
     return float(np.linalg.norm(local - hinge))
 
 
-def corrected_radial_input_xy(
+def radially_adjusted_input_xy(
     input_local_xy,
-    observed_post_wait_local_xy,
     hinge_local_xy,
-    target_radius_m: float,
+    signed_post_wait_radius_error_m: float,
+    radial_offset_m: float,
 ) -> np.ndarray:
-    """Compensate an intervention input using its measured post-wait drift.
-
-    The correction preserves the observed Ec angular direction around the
-    native door hinge and shifts the next serialized input by the world-pose
-    residual needed to reach ``target_radius_m`` after formal stabilization.
-    """
+    """Move a local intervention by a bounded amount along its original ray."""
     input_xy = np.asarray(input_local_xy, dtype=float)
-    observed_xy = np.asarray(observed_post_wait_local_xy, dtype=float)
     hinge_xy = np.asarray(hinge_local_xy, dtype=float)
     if input_xy.shape != (2,):
         raise ValueError("input_local_xy must have shape (2,)")
-    observed_radius = hinge_radius_m(observed_xy, hinge_xy)
-    target_radius = float(target_radius_m)
-    if not np.isfinite(target_radius) or target_radius < 0.0:
-        raise ValueError("target_radius_m must be finite and non-negative")
-    if observed_radius <= np.finfo(float).eps:
-        raise ValueError("cannot radially calibrate an observation at the hinge")
-    desired_post_wait_xy = (
-        hinge_xy
-        + (observed_xy - hinge_xy) * (target_radius / observed_radius)
-    )
-    return input_xy + desired_post_wait_xy - observed_xy
+    input_radius = hinge_radius_m(input_xy, hinge_xy)
+    signed_error = float(signed_post_wait_radius_error_m)
+    offset = float(radial_offset_m)
+    if not np.isfinite(signed_error):
+        raise ValueError("signed_post_wait_radius_error_m must be finite")
+    if (
+        not np.isfinite(offset)
+        or offset < 0.0
+        or offset > EC_RADIUS_MAX_OFFSET_M
+    ):
+        raise ValueError(
+            "radial_offset_m must be finite and within the calibration bound"
+        )
+    if input_radius <= np.finfo(float).eps:
+        raise ValueError("cannot radially calibrate an input at the hinge")
+    radial_unit = (input_xy - hinge_xy) / input_radius
+    return input_xy - np.sign(signed_error) * offset * radial_unit
 
 
 def policy_image(obs: dict) -> np.ndarray:

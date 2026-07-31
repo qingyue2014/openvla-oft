@@ -9,14 +9,14 @@ import numpy as np
 import pytest
 
 from experiments.robot.libero.tasks.l3a4_microwave_common import (
-    EC_RADIUS_CALIBRATION_TARGET_M,
+    EC_RADIUS_INITIAL_STEP_M,
     MAX_HINGE_RADIUS_ERROR_M,
     SCENARIO,
     TASK_FILE,
     TASK_KEY,
     TASK_PROMPT,
-    corrected_radial_input_xy,
     hinge_radius_m,
+    radially_adjusted_input_xy,
 )
 from experiments.robot.libero.tasks.validate_l3a4_native_preflight import (
     build_manifest,
@@ -260,7 +260,18 @@ def _write_states(
             calibration = demo.create_dataset(
                 "ec_hinge_radius_calibration_trace",
                 data=np.asarray(
-                    [[0.0, *mug[:2], *post_wait_mug[:2], 0.1, 0.1, 0.0, 1.0]]
+                    [
+                        [
+                            0.0,
+                            0.0,
+                            *mug[:2],
+                            *post_wait_mug[:2],
+                            0.1,
+                            0.1,
+                            0.0,
+                            1.0,
+                        ]
+                    ]
                 ),
             )
             calibration.attrs["columns"] = "test"
@@ -291,23 +302,25 @@ def test_l3a4_pairing_uses_exact_post_wait_hinge_radius(tmp_path):
         validate_pairing(paths["eb"], paths["er"], paths["ec"])
 
 
-def test_l3a4_post_wait_radial_correction_compensates_observed_drift():
+def test_l3a4_radial_calibration_uses_a_bounded_original_angle_step():
     hinge = np.asarray([0.0, 0.0])
     input_xy = np.asarray([-0.12, 0.0])
-    observed_post_wait_xy = np.asarray([-0.1024, 0.0])
-    target_radius = 0.1
-    corrected = corrected_radial_input_xy(
+    adjusted = radially_adjusted_input_xy(
         input_xy,
-        observed_post_wait_xy,
         hinge,
-        target_radius,
+        0.0024,
+        EC_RADIUS_INITIAL_STEP_M,
     )
-    drift = observed_post_wait_xy - input_xy
-    corrected_post_wait_xy = corrected + drift
-    assert hinge_radius_m(corrected_post_wait_xy, hinge) == pytest.approx(
-        target_radius
+    assert hinge_radius_m(input_xy, hinge) - hinge_radius_m(
+        adjusted, hinge
+    ) == pytest.approx(
+        EC_RADIUS_INITIAL_STEP_M
     )
-    assert EC_RADIUS_CALIBRATION_TARGET_M < MAX_HINGE_RADIUS_ERROR_M
+    assert np.allclose(
+        (adjusted - hinge) / hinge_radius_m(adjusted, hinge),
+        (input_xy - hinge) / hinge_radius_m(input_xy, hinge),
+    )
+    assert EC_RADIUS_INITIAL_STEP_M < MAX_HINGE_RADIUS_ERROR_M
 
 
 def _write_index(path: Path, rows):
@@ -430,3 +443,24 @@ def test_l3a4_terminal_diagnostic_refresh_does_not_skip_formal_wait():
     # prior candidate's wrapper-level terminal state.
     assert safe_order.count("_restore(") >= 2
     assert "set_init_state alone does not clear" in safe_order
+
+
+def test_l3a4_ec_calibration_brackets_only_fully_gated_candidates():
+    source = GENERATOR.read_text()
+    module = ast.parse(source)
+    functions = {
+        node.name: node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    calibration = ast.get_source_segment(
+        source, functions["_calibrate_ec_hinge_radius"]
+    )
+    assert "_qualify_candidate(" in calibration
+    assert "EC_RADIUS_INITIAL_STEP_M" in calibration
+    assert "EC_RADIUS_MAX_OFFSET_M" in calibration
+    assert "EC_RADIUS_MIN_BRACKET_M" in calibration
+    assert "smallest_unsafe_offset" in calibration
+    assert "largest_safe_offset" in calibration
+    assert "[EC hinge-radius calibration]" in calibration
+    assert "corrected_radial_input_xy" not in calibration

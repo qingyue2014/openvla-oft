@@ -30,7 +30,9 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
 from experiments.robot.libero.tasks.l3a4_microwave_common import (
     DOOR_BODY_CANDIDATES,
     DUMMY_ACTION,
-    EC_RADIUS_CALIBRATION_TARGET_M,
+    EC_RADIUS_INITIAL_STEP_M,
+    EC_RADIUS_MAX_OFFSET_M,
+    EC_RADIUS_MIN_BRACKET_M,
     MAX_MUG_TILT_DEG,
     MAX_EC_RADIUS_CALIBRATION_STEPS,
     MAX_HINGE_RADIUS_ERROR_M,
@@ -50,13 +52,13 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     body_tilt_deg,
     contact_body_names,
     contacts_between,
-    corrected_radial_input_xy,
     descendant_geom_ids,
     fixture_local_position,
     fixture_world_position,
     free_joint_addresses,
     hinge_radius_m,
     policy_image,
+    radially_adjusted_input_xy,
     resolve_microwave_names,
 )
 
@@ -716,17 +718,29 @@ def _calibrate_ec_hinge_radius(
     er_post_wait_world_position,
     initial_ec_local_xy,
 ):
-    """Iteratively match Ec to Er using formally stabilized world poses."""
+    """Bracket a safe, radius-matched Ec near the original angular seed."""
     er_post_wait_local_xy = fixture_local_position(
         env.sim, fixture_root, er_post_wait_world_position
     )[:2]
     target_radius = hinge_radius_m(
         er_post_wait_local_xy, hinge_local_xy
     )
-    input_local_xy = np.asarray(initial_ec_local_xy, dtype=float).copy()
+    seed_local_xy = np.asarray(initial_ec_local_xy, dtype=float).copy()
     history = []
-    last_result = None
+    initial_signed_error = None
+    largest_safe_offset = 0.0
+    smallest_unsafe_offset = None
+    probe_offset = 0.0
     for iteration in range(MAX_EC_RADIUS_CALIBRATION_STEPS):
+        if iteration == 0:
+            input_local_xy = seed_local_xy.copy()
+        else:
+            input_local_xy = radially_adjusted_input_xy(
+                seed_local_xy,
+                hinge_local_xy,
+                initial_signed_error,
+                probe_offset,
+            )
         candidate, wait, response, qualifies = _qualify_candidate(
             env,
             base_state,
@@ -738,6 +752,16 @@ def _calibrate_ec_hinge_radius(
             input_local_xy,
             expect_risk=False,
         )
+        qflat, _ = _flat_starts(env.sim, PORCELAIN_BODY)
+        serialized_world_position = np.asarray(
+            candidate[qflat:qflat + 3], dtype=float
+        )
+        serialized_local_position = fixture_local_position(
+            env.sim, fixture_root, serialized_world_position
+        )
+        pre_wait_local_position = fixture_local_position(
+            env.sim, fixture_root, wait["pre_position"]
+        )
         ec_post_wait_local_xy = fixture_local_position(
             env.sim, fixture_root, wait["post_position"]
         )[:2]
@@ -746,29 +770,106 @@ def _calibrate_ec_hinge_radius(
         history.append(
             {
                 "iteration": iteration,
+                "radial_offset_m": probe_offset,
                 "input_local_xy": input_local_xy.copy(),
+                "serialized_world_position": serialized_world_position.copy(),
+                "serialized_local_position": serialized_local_position.copy(),
+                "pre_wait_world_position": np.asarray(
+                    wait["pre_position"], dtype=float
+                ).copy(),
+                "pre_wait_local_position": pre_wait_local_position.copy(),
+                "post_wait_world_position": np.asarray(
+                    wait["post_position"], dtype=float
+                ).copy(),
                 "post_wait_local_xy": ec_post_wait_local_xy.copy(),
+                "hinge_local_xy": np.asarray(
+                    hinge_local_xy, dtype=float
+                ).copy(),
+                "er_post_wait_world_position": np.asarray(
+                    er_post_wait_world_position, dtype=float
+                ).copy(),
+                "er_post_wait_local_xy": er_post_wait_local_xy.copy(),
                 "target_radius_m": target_radius,
                 "post_wait_radius_m": ec_radius,
                 "signed_radius_error_m": signed_radius_error,
+                "wait": {
+                    key: value
+                    for key, value in wait.items()
+                    if key not in {"trace", "frames", "last_obs"}
+                },
+                "response": (
+                    None
+                    if response is None
+                    else {
+                        key: value
+                        for key, value in response.items()
+                        if key != "frames"
+                    }
+                ),
                 "physical_and_dynamic_gate_passed": bool(qualifies),
             }
         )
-        last_result = (input_local_xy, candidate, wait, response)
+        print(
+            "[EC hinge-radius calibration] "
+            + json.dumps(
+                history[-1],
+                sort_keys=True,
+                default=lambda value: (
+                    value.tolist()
+                    if isinstance(value, np.ndarray)
+                    else value.item()
+                    if isinstance(value, np.generic)
+                    else str(value)
+                ),
+            ),
+            flush=True,
+        )
         if (
             qualifies
             and abs(signed_radius_error)
-            <= EC_RADIUS_CALIBRATION_TARGET_M
+            <= MAX_HINGE_RADIUS_ERROR_M
         ):
-            return (*last_result, history)
-        if not qualifies:
-            break
-        input_local_xy = corrected_radial_input_xy(
-            input_local_xy,
-            ec_post_wait_local_xy,
-            hinge_local_xy,
-            target_radius,
-        )
+            return input_local_xy, candidate, wait, response, history
+
+        if iteration == 0:
+            if not qualifies:
+                break
+            initial_signed_error = signed_radius_error
+            probe_offset = min(
+                EC_RADIUS_INITIAL_STEP_M,
+                EC_RADIUS_MAX_OFFSET_M,
+            )
+            continue
+
+        if qualifies:
+            largest_safe_offset = probe_offset
+            if smallest_unsafe_offset is None:
+                next_offset = min(
+                    probe_offset * 2.0,
+                    EC_RADIUS_MAX_OFFSET_M,
+                )
+                if next_offset <= probe_offset:
+                    break
+                probe_offset = next_offset
+            else:
+                if (
+                    smallest_unsafe_offset - largest_safe_offset
+                    <= EC_RADIUS_MIN_BRACKET_M
+                ):
+                    break
+                probe_offset = (
+                    largest_safe_offset + smallest_unsafe_offset
+                ) / 2.0
+        else:
+            smallest_unsafe_offset = probe_offset
+            if (
+                smallest_unsafe_offset - largest_safe_offset
+                <= EC_RADIUS_MIN_BRACKET_M
+            ):
+                break
+            probe_offset = (
+                largest_safe_offset + smallest_unsafe_offset
+            ) / 2.0
     final_error = (
         history[-1]["signed_radius_error_m"] if history else float("inf")
     )
@@ -776,7 +877,9 @@ def _calibrate_ec_hinge_radius(
         "Ec post-wait hinge-radius calibration failed after "
         f"{len(history)}/{MAX_EC_RADIUS_CALIBRATION_STEPS} iterations: "
         f"error={final_error:.6f}m, "
-        f"target={EC_RADIUS_CALIBRATION_TARGET_M:.6f}m, "
+        f"acceptance={MAX_HINGE_RADIUS_ERROR_M:.6f}m, "
+        f"safe_offset={largest_safe_offset:.6f}m, "
+        f"unsafe_offset={smallest_unsafe_offset!r}, "
         f"last_gate_passed="
         f"{history[-1]['physical_and_dynamic_gate_passed'] if history else False}"
     )
@@ -958,6 +1061,7 @@ def _write_hdf5(
                         [
                             [
                                 item["iteration"],
+                                item["radial_offset_m"],
                                 *item["input_local_xy"],
                                 *item["post_wait_local_xy"],
                                 item["target_radius_m"],
@@ -971,7 +1075,8 @@ def _write_hdf5(
                     ),
                 )
                 calibration_trace.attrs["columns"] = (
-                    "iteration,input_x,input_y,post_wait_x,post_wait_y,"
+                    "iteration,radial_offset_m,input_x,input_y,"
+                    "post_wait_x,post_wait_y,"
                     "target_radius_m,post_wait_radius_m,"
                     "signed_radius_error_m,physical_and_dynamic_gate_passed"
                 )
@@ -1346,7 +1451,9 @@ def generate(args) -> dict[str, object]:
             exact_pair_radius_errors
         ),
         "max_hinge_radius_error_m": MAX_HINGE_RADIUS_ERROR_M,
-        "ec_radius_calibration_target_m": EC_RADIUS_CALIBRATION_TARGET_M,
+        "ec_radius_initial_step_m": EC_RADIUS_INITIAL_STEP_M,
+        "ec_radius_max_offset_m": EC_RADIUS_MAX_OFFSET_M,
+        "ec_radius_min_bracket_m": EC_RADIUS_MIN_BRACKET_M,
         "count": args.num_states,
         "attempts": attempts,
         "outputs": {key: str(path.resolve()) for key, path in output_paths.items()},

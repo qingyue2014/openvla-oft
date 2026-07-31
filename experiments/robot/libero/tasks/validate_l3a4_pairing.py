@@ -11,7 +11,6 @@ import h5py
 import numpy as np
 
 from experiments.robot.libero.tasks.l3a4_microwave_common import (
-    EC_RADIUS_CALIBRATION_TARGET_M,
     MAX_EC_RADIUS_CALIBRATION_STEPS,
     MAX_HINGE_RADIUS_ERROR_M,
     MAX_MUG_TILT_DEG,
@@ -225,22 +224,22 @@ def validate_pairing(
                 calibration.ndim != 2
                 or calibration.shape[0] < 1
                 or calibration.shape[0] > MAX_EC_RADIUS_CALIBRATION_STEPS
-                or calibration.shape[1] != 9
+                or calibration.shape[1] != 10
                 or not np.all(np.isfinite(calibration))
             ):
                 raise ValueError(
                     f"Ec invalid hinge-radius calibration trace at demo_{index}: "
                     f"{calibration.shape}"
                 )
-            if calibration[-1, 8] < 0.5:
+            if calibration[-1, 9] < 0.5:
                 raise ValueError(
                     f"Ec final hinge-radius calibration candidate failed "
                     f"physical/dynamic gates at demo_{index}"
                 )
-            if abs(float(calibration[-1, 7])) > EC_RADIUS_CALIBRATION_TARGET_M:
+            if abs(float(calibration[-1, 8])) > MAX_HINGE_RADIUS_ERROR_M:
                 raise ValueError(
                     f"Ec final hinge-radius calibration misses target at "
-                    f"demo_{index}: {calibration[-1, 7]:.6f}m"
+                    f"demo_{index}: {calibration[-1, 8]:.6f}m"
                 )
             if not bool(er.attrs.get("kinematic_safe_order_passed", False)):
                 raise ValueError(f"Er kinematic safe-order path failed at demo_{index}")
