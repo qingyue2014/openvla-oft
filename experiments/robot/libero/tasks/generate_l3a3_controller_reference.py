@@ -976,11 +976,16 @@ def _derive_overhead_staging_from_compiled_pairs(
             "EEF-Z lower bound"
         ),
         "sweep_proof": (
-            "the center-overhead action commands only negative Z with zero "
-            "XY/rotation; each rigid gripper geom lower bound therefore "
-            "decreases monotonically and its minimum clearance over the "
-            "closed sweep occurs at the selected endpoint; every live frame "
-            "is remeasured from compiled world AABBs"
+            "from the exact native center-high state, first command pure XY "
+            "with zero Z/rotation to the compiled corridor XY while requiring "
+            "the full live compiled-pair buffer16 envelope before every "
+            "action and the base8 envelope afterward; then command pure "
+            "negative Z with zero "
+            "XY/rotation at corridor XY, where each rigid gripper geom lower "
+            "bound decreases monotonically and its minimum vertical clearance "
+            "occurs at the selected endpoint; these are live pre/post world-"
+            "AABB checks plus the unchanged 8/16 mm action envelopes, not "
+            "direct observations of internal controller substeps"
         ),
         "start_eef_position": start_eef.tolist(),
         "selected_eef_z": selected_eef_z,
@@ -1307,6 +1312,277 @@ def _overhead_lateral_buffer_frame_summary(evidence):
         ),
         "minimum_lateral_entry_buffer_surplus_m": float(
             evidence["minimum_lateral_entry_buffer_surplus_m"]
+        ),
+    }
+
+
+def _overhead_pair_identity(record):
+    """Return the immutable compiled key for one overhead collision pair."""
+    identity = tuple(
+        str(record.get(key, ""))
+        for key in (
+            "gripper_geom",
+            "counterpart_geom",
+            "counterpart_kind",
+        )
+    )
+    if (
+        not all(identity)
+        or identity[2] not in {"plate", "table"}
+    ):
+        raise RuntimeError(
+            "overhead pair evidence diverged: invalid compiled pair identity "
+            f"{identity!r}"
+        )
+    return identity
+
+
+def _overhead_route_frame_authorization_evidence(
+    *,
+    outside_side_guard,
+    overhead_guard,
+    overhead_lateral_buffer,
+    compiled_pairs,
+    expected_pair_count,
+    require_lateral_buffer,
+):
+    """Authorize one overhead-route frame from its live compiled evidence."""
+    if not isinstance(expected_pair_count, (int, np.integer)):
+        raise ValueError("expected overhead pair count must be an integer")
+    compiled_pairs = list(compiled_pairs)
+    overhead_pairs = list(overhead_guard.get("pairs", ()))
+    buffer_pairs = list(overhead_lateral_buffer.get("pairs", ()))
+    if (
+        expected_pair_count <= 0
+        or len(compiled_pairs) != int(expected_pair_count)
+        or len(overhead_pairs) != int(expected_pair_count)
+        or len(buffer_pairs) != int(expected_pair_count)
+    ):
+        raise RuntimeError(
+            "live compiled overhead pair inventory changed before route "
+            f"action: expected={expected_pair_count} "
+            f"compiled={len(compiled_pairs)} overhead={len(overhead_pairs)} "
+            f"buffer={len(buffer_pairs)}"
+        )
+    identity_lists = {
+        "compiled": [
+            _overhead_pair_identity(pair) for pair in compiled_pairs
+        ],
+        "overhead": [
+            _overhead_pair_identity(pair) for pair in overhead_pairs
+        ],
+        "buffer": [
+            _overhead_pair_identity(pair) for pair in buffer_pairs
+        ],
+    }
+    for source, identities in identity_lists.items():
+        if len(set(identities)) != len(identities):
+            raise RuntimeError(
+                "overhead duplicate pair identity in "
+                f"{source} evidence: {identities!r}"
+            )
+    if not (
+        identity_lists["compiled"]
+        == identity_lists["overhead"]
+        == identity_lists["buffer"]
+    ):
+        raise RuntimeError(
+            "overhead pair evidence diverged from the precompiled identity "
+            "and ordered key collection: "
+            f"{identity_lists!r}"
+        )
+
+    base_reserve = float(overhead_guard["one_step_vertical_reserve_m"])
+    buffer_base_reserve = float(
+        overhead_lateral_buffer["base_overhead_reserve_m"]
+    )
+    worst_case_step = float(
+        overhead_lateral_buffer["worst_case_controller_world_step_m"]
+    )
+    if not (
+        np.isfinite(base_reserve)
+        and base_reserve > 0.0
+        and buffer_base_reserve == base_reserve
+        and np.isfinite(worst_case_step)
+        and worst_case_step > 0.0
+    ):
+        raise RuntimeError(
+            "overhead pair evidence diverged: invalid or mismatched base8/"
+            "buffer16 aggregate reserves"
+        )
+    for identity, overhead_pair, buffer_pair in zip(
+        identity_lists["compiled"], overhead_pairs, buffer_pairs
+    ):
+        overhead_vertical = float(overhead_pair["vertical_clearance_m"])
+        buffer_vertical = float(buffer_pair["vertical_clearance_m"])
+        overhead_strict = float(
+            overhead_pair["strict_no_contact_clearance_m"]
+        )
+        buffer_strict = float(
+            buffer_pair["strict_no_contact_clearance_m"]
+        )
+        pair_base_reserve = float(
+            buffer_pair["base_overhead_reserve_m"]
+        )
+        pair_worst_case_step = float(
+            buffer_pair["worst_case_controller_world_step_m"]
+        )
+        pair_required = float(
+            buffer_pair["required_lateral_entry_clearance_m"]
+        )
+        expected_required = float(
+            overhead_strict + base_reserve + worst_case_step
+        )
+        if not (
+            np.isfinite(overhead_vertical)
+            and overhead_vertical == buffer_vertical
+            and np.isfinite(overhead_strict)
+            and overhead_strict > 0.0
+            and overhead_strict == buffer_strict
+            and pair_base_reserve == base_reserve
+            and pair_worst_case_step == worst_case_step
+            and pair_required == expected_required
+        ):
+            raise RuntimeError(
+                "overhead pair evidence diverged between the live base8 and "
+                f"buffer16 item for {identity!r}"
+            )
+    if (
+        not overhead_guard.get("accepted", False)
+        or not all(pair.get("accepted", False) for pair in overhead_pairs)
+    ):
+        raise RuntimeError(
+            "overhead all-pair base8 envelope is not accepted for the live "
+            "route frame"
+        )
+    if require_lateral_buffer and (
+        not overhead_lateral_buffer.get("accepted", False)
+        or not all(pair.get("accepted", False) for pair in buffer_pairs)
+    ):
+        raise RuntimeError(
+            "live buffer16 is not accepted before a pure-XY overhead route "
+            "action"
+        )
+    outside_clearance = float(
+        outside_side_guard["minimum_outside_clearance_m"]
+    )
+    required_outside_clearance = float(
+        outside_side_guard["required_outside_clearance_m"]
+    )
+    if not (
+        np.isfinite(outside_clearance)
+        and np.isfinite(required_outside_clearance)
+        and required_outside_clearance >= 0.0
+    ):
+        raise RuntimeError(
+            "live outside-side evidence is invalid for the overhead route"
+        )
+    outside_accepted = bool(outside_side_guard.get("accepted", False))
+    if outside_accepted:
+        basis = "outside_and_compiled_overhead_all_pair_envelopes"
+    else:
+        basis = (
+            "compiled_overhead_all_pair_envelope_while_outside_guard_not_"
+            "accepted"
+        )
+    return {
+        "accepted": True,
+        "authorization_basis": basis,
+        "outside_side_guard_accepted": outside_accepted,
+        "minimum_outside_clearance_m": outside_clearance,
+        "required_outside_clearance_m": required_outside_clearance,
+        "compiled_overhead_guard_accepted": True,
+        "compiled_pair_count": len(overhead_pairs),
+        "compiled_pair_identity_keys": [
+            list(identity) for identity in identity_lists["compiled"]
+        ],
+        "base8_reserve_m": base_reserve,
+        "buffer16_required_for_action": bool(require_lateral_buffer),
+        "buffer16_accepted": bool(
+            overhead_lateral_buffer.get("accepted", False)
+        ),
+        "minimum_buffer16_surplus_m": float(
+            overhead_lateral_buffer[
+                "minimum_lateral_entry_buffer_surplus_m"
+            ]
+        ),
+        "internal_controller_substeps_measured": False,
+        "proof_scope": (
+            "live pre/post world-AABB checks plus the unchanged 8 mm base8 "
+            "and 16 mm lateral-entry envelopes; not direct observations of "
+            "internal controller substeps"
+        ),
+    }
+
+
+def _overhead_corridor_entry_evidence(
+    *,
+    current_eef,
+    corridor_high_target,
+    outside_side_guard,
+    overhead_guard,
+    overhead_lateral_buffer,
+    position_tolerance,
+    strict_corridor_entry_clearance_m,
+):
+    """Gate transition from the overhead route into side-corridor descent."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    corridor_high_target = np.asarray(corridor_high_target, dtype=float)
+    if (
+        current_eef.shape != (3,)
+        or corridor_high_target.shape != (3,)
+        or not np.all(np.isfinite(current_eef))
+        or not np.all(np.isfinite(corridor_high_target))
+        or not np.isfinite(position_tolerance)
+        or position_tolerance <= 0.0
+        or not np.isfinite(strict_corridor_entry_clearance_m)
+        or strict_corridor_entry_clearance_m < 0.0
+    ):
+        raise ValueError("overhead corridor-entry inputs are invalid")
+    lateral_error = float(
+        np.linalg.norm(current_eef[:2] - corridor_high_target[:2])
+    )
+    outside_clearance = float(
+        outside_side_guard["minimum_outside_clearance_m"]
+    )
+    if not np.isfinite(outside_clearance):
+        raise RuntimeError(
+            "live outside clearance is invalid at overhead corridor entry"
+        )
+    violations = []
+    if lateral_error > position_tolerance:
+        violations.append("corridor_xy_tolerance_not_met")
+    if outside_clearance <= strict_corridor_entry_clearance_m:
+        violations.append("outside_corridor_entry_clearance_not_met")
+    if not overhead_guard.get("accepted", False):
+        violations.append("compiled_overhead_base8_not_accepted")
+    if not overhead_lateral_buffer.get("accepted", False):
+        violations.append("compiled_overhead_buffer16_not_accepted")
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "current_eef": current_eef.tolist(),
+        "corridor_high_target": corridor_high_target.tolist(),
+        "corridor_lateral_error_m": lateral_error,
+        "position_tolerance_m": float(position_tolerance),
+        "minimum_outside_clearance_m": outside_clearance,
+        "strict_corridor_entry_clearance_m": float(
+            strict_corridor_entry_clearance_m
+        ),
+        "outside_full_guard_accepted": bool(
+            outside_side_guard.get("accepted", False)
+        ),
+        "overhead_base8_accepted": bool(
+            overhead_guard.get("accepted", False)
+        ),
+        "overhead_buffer16_accepted": bool(
+            overhead_lateral_buffer.get("accepted", False)
+        ),
+        "outside_authorization_rule": (
+            "before rim-height descent, the full outside guard may remain "
+            "false because rim vertical coverage is not yet expected; require "
+            "strict corridor-entry outside clearance together with the live "
+            "compiled overhead base8 and buffer16 envelopes"
         ),
     }
 
@@ -3583,6 +3859,172 @@ def _body_contact_counterparts(env, body_name):
     return contacts
 
 
+def _compiled_collision_body_inventories(env):
+    """Enumerate native collision bodies on both sides of the robot boundary."""
+    model = env.sim.model
+    robot_bodies = set(_robot_gripper_body_names(env))
+    robot_collision_bodies = set()
+    nonrobot_native_collision_bodies = set()
+    geom_contype = getattr(model, "geom_contype", None)
+    geom_conaffinity = getattr(model, "geom_conaffinity", None)
+    for geom_id in range(int(model.ngeom)):
+        collision_enabled = bool(
+            geom_contype is None
+            or geom_conaffinity is None
+            or int(geom_contype[geom_id]) != 0
+            or int(geom_conaffinity[geom_id]) != 0
+        )
+        if not collision_enabled:
+            continue
+        body_name = model.body_id2name(
+            int(model.geom_bodyid[geom_id])
+        ) or ""
+        if body_name in robot_bodies:
+            robot_collision_bodies.add(body_name)
+        else:
+            nonrobot_native_collision_bodies.add(body_name)
+    return (
+        sorted(robot_collision_bodies),
+        sorted(nonrobot_native_collision_bodies),
+    )
+
+
+def _robot_nonrobot_contact_evidence(env, *, allowed_body_pairs):
+    """Reject every robot/native contact outside an exact body-pair allowlist."""
+    model, data = env.sim.model, env.sim.data
+    (
+        robot_collision_bodies,
+        nonrobot_native_collision_bodies,
+    ) = _compiled_collision_body_inventories(env)
+    robot_body_set = set(robot_collision_bodies)
+    native_body_set = set(nonrobot_native_collision_bodies)
+    normalized_allowlist = []
+    for pair in allowed_body_pairs:
+        if not isinstance(pair, (tuple, list)) or len(pair) != 2:
+            raise ValueError(
+                "robot/native contact allowlist entries must be body pairs"
+            )
+        normalized = (str(pair[0]), str(pair[1]))
+        if (
+            not all(normalized)
+            or normalized[0] not in robot_body_set
+            or normalized[1] not in native_body_set
+        ):
+            raise RuntimeError(
+                "robot/native contact allowlist is not bound to compiled "
+                f"collision bodies: {normalized!r}"
+            )
+        normalized_allowlist.append(normalized)
+    if len(set(normalized_allowlist)) != len(normalized_allowlist):
+        raise RuntimeError(
+            "robot/native contact allowlist contains a duplicate exact body "
+            "pair"
+        )
+    allowed = set(normalized_allowlist)
+    contacts = []
+    for index in range(int(data.ncon)):
+        contact = data.contact[index]
+        geom1, geom2 = int(contact.geom1), int(contact.geom2)
+        body1 = model.body_id2name(
+            int(model.geom_bodyid[geom1])
+        ) or ""
+        body2 = model.body_id2name(
+            int(model.geom_bodyid[geom2])
+        ) or ""
+        body1_is_robot = body1 in robot_body_set
+        body2_is_robot = body2 in robot_body_set
+        if body1_is_robot == body2_is_robot:
+            continue
+        if body1_is_robot:
+            robot_geom, robot_body = geom1, body1
+            native_geom, native_body = geom2, body2
+        else:
+            robot_geom, robot_body = geom2, body2
+            native_geom, native_body = geom1, body1
+        pair = (robot_body, native_body)
+        contacts.append(
+            {
+                "contact_index": int(index),
+                "robot_geom": model.geom_id2name(robot_geom) or "",
+                "robot_body": robot_body,
+                "native_geom": model.geom_id2name(native_geom) or "",
+                "native_body": native_body,
+                "allowed": pair in allowed,
+            }
+        )
+    unexpected = [record for record in contacts if not record["allowed"]]
+    return {
+        "accepted": not unexpected,
+        "allowlist_policy": (
+            "empty during every structural precontact frame; during contact "
+            "seek/calibration only exact compiled plate-finger body pairs are "
+            "allowed"
+        ),
+        "robot_collision_bodies": robot_collision_bodies,
+        "nonrobot_native_collision_bodies": (
+            nonrobot_native_collision_bodies
+        ),
+        "allowed_body_pairs": [
+            list(pair) for pair in sorted(normalized_allowlist)
+        ],
+        "contacts": contacts,
+        "unexpected_contacts": unexpected,
+    }
+
+
+def _compiled_plate_finger_allowed_body_pairs(
+    env, *, finger_body_names=None
+):
+    """Compile the only robot/native contacts allowed during plate seeking."""
+    model = env.sim.model
+    (
+        robot_collision_bodies,
+        nonrobot_native_collision_bodies,
+    ) = _compiled_collision_body_inventories(env)
+    robot_collision_set = set(robot_collision_bodies)
+    native_collision_set = set(nonrobot_native_collision_bodies)
+    if finger_body_names is None:
+        finger_bodies = {
+            name
+            for name in robot_collision_bodies
+            if _semantic_finger_side(name) in {"left", "right"}
+        }
+    else:
+        finger_bodies = {str(name) for name in finger_body_names}
+    if (
+        not finger_bodies
+        or not finger_bodies <= robot_collision_set
+        or {
+            _semantic_finger_side(name) for name in finger_bodies
+        }
+        != {"left", "right"}
+    ):
+        raise RuntimeError(
+            "compiled semantic left/right finger collision bodies are "
+            "unavailable for the exact plate-contact allowlist"
+        )
+    plate_bodies = {
+        model.body_id2name(int(model.geom_bodyid[geom_id])) or ""
+        for geom_id in _compiled_body_geom_ids(model, PLATE_BODY)
+        if (
+            (getattr(model, "geom_contype", None) is None)
+            or (getattr(model, "geom_conaffinity", None) is None)
+            or int(model.geom_contype[geom_id]) != 0
+            or int(model.geom_conaffinity[geom_id]) != 0
+        )
+    }
+    if not plate_bodies or not plate_bodies <= native_collision_set:
+        raise RuntimeError(
+            "compiled native plate collision bodies are unavailable for the "
+            "exact contact allowlist"
+        )
+    return tuple(
+        (finger_body, plate_body)
+        for finger_body in sorted(finger_bodies)
+        for plate_body in sorted(plate_bodies)
+    )
+
+
 def _robot_contacts_body(env, body_name):
     """Return whether any compiled robot/gripper body contacts ``body_name``."""
     return any(
@@ -3666,6 +4108,7 @@ def _contact_depth_state_diagnostics(
     env,
     plate_reference_position,
     *,
+    allowed_robot_nonrobot_body_pairs,
     require_robot_plate_contact=True,
     require_stable,
     maximum_plate_tilt_deg,
@@ -3725,6 +4168,15 @@ def _contact_depth_state_diagnostics(
         maximum_linear_speed=maximum_linear_speed,
         maximum_angular_speed=maximum_angular_speed,
     )
+    robot_nonrobot_contact_gate = _robot_nonrobot_contact_evidence(
+        env,
+        allowed_body_pairs=allowed_robot_nonrobot_body_pairs,
+    )
+    if not robot_nonrobot_contact_gate["accepted"]:
+        validity["accepted"] = False
+        validity["violations"].append(
+            "unexpected_robot_nonrobot_contact"
+        )
     return {
         **validity,
         "plate_position": plate_position.tolist(),
@@ -3737,6 +4189,7 @@ def _contact_depth_state_diagnostics(
         "forbidden_plate_contact_bodies": forbidden_plate_contacts,
         "robot_table_contact_bodies": robot_table_contacts,
         "plate_contacts": plate_contacts,
+        "robot_nonrobot_contact_gate": robot_nonrobot_contact_gate,
     }
 
 
@@ -3938,8 +4391,21 @@ def _seek_stable_plate_contact(
     plate_reference = body_pose(env, PLATE_BODY)[0].copy()
     samples = []
     native_action_spec = _native_osc_action_spec_evidence(env)
+    plate_finger_allowed_body_pairs = (
+        _compiled_plate_finger_allowed_body_pairs(
+            env,
+            finger_body_names=[
+                record["body"]
+                for record in geometry["finger_collision_geoms"]
+            ],
+        )
+    )
     structural_seek_context = {
         "native_osc_action_spec": native_action_spec,
+        "structural_precontact_robot_native_allowlist": [],
+        "contact_seek_plate_finger_allowed_body_pairs": [
+            list(pair) for pair in plate_finger_allowed_body_pairs
+        ],
     }
 
     def capture(
@@ -3959,6 +4425,15 @@ def _seek_stable_plate_contact(
             **_contact_depth_state_diagnostics(
                 env,
                 plate_reference,
+                allowed_robot_nonrobot_body_pairs=(
+                    plate_finger_allowed_body_pairs
+                    if stage
+                    in {
+                        "bounded_lateral_contact_seek",
+                        "stable_contact_confirmation",
+                    }
+                    else ()
+                ),
                 require_robot_plate_contact=require_contact,
                 require_stable=require_stable,
                 maximum_plate_tilt_deg=(
@@ -4047,6 +4522,15 @@ def _seek_stable_plate_contact(
             ),
         )
     )
+    expected_overhead_pair_count = 55
+    if len(overhead_staging_geometry["pairs"]) != (
+        expected_overhead_pair_count
+    ):
+        raise RuntimeError(
+            "native L3-A3 compiled overhead pair inventory changed: "
+            f"expected={expected_overhead_pair_count} "
+            f"observed={len(overhead_staging_geometry['pairs'])}"
+        )
     if overhead_staging_z <= float(outside_side_target[2]):
         raise RuntimeError(
             "compiled overhead staging Z does not remain above the native "
@@ -4057,8 +4541,6 @@ def _seek_stable_plate_contact(
         )
 
     initial_outside_side_guard = _live_outside_side_guard(env, geometry)
-    overhead_center_target = initial_eef.copy()
-    overhead_center_target[2] = overhead_staging_z
     overhead_outside_high_target = np.asarray(
         outside_high_target, dtype=float
     ).copy()
@@ -4081,7 +4563,7 @@ def _seek_stable_plate_contact(
     )
     overhead_horizontal_travel = float(
         np.linalg.norm(
-            corridor_high_target[:2] - overhead_center_target[:2]
+            corridor_high_target[:2] - initial_eef[:2]
         )
     )
     total_structural_geometric_travel = float(
@@ -4090,16 +4572,21 @@ def _seek_stable_plate_contact(
         + vertical_staging_corridor["vertical_staging_travel_m"]
         + vertical_staging_corridor["fixed_z_lateral_travel_m"]
     )
-    total_structural_action_equivalents = float(
+    total_structural_action_lower_bound = float(
         total_structural_geometric_travel
         / maximum_controller_world_step
     )
-    if total_structural_action_equivalents >= args.max_waypoint_steps:
+    minimum_full_scale_actions_from_geometry = int(
+        np.ceil(total_structural_action_lower_bound)
+    )
+    if minimum_full_scale_actions_from_geometry > args.max_waypoint_steps:
         raise RuntimeError(
-            "compiled overhead route exceeds the unchanged structural "
-            "waypoint budget: "
-            f"source={source} action_equivalents="
-            f"{total_structural_action_equivalents} "
+            "compiled overhead route geometric lower bound alone exceeds "
+            "the unchanged structural waypoint hard loop: "
+            f"source={source} lower_bound_action_equivalents="
+            f"{total_structural_action_lower_bound} "
+            f"minimum_full_scale_actions="
+            f"{minimum_full_scale_actions_from_geometry} "
             f"maximum_steps={args.max_waypoint_steps}"
         )
     overhead_staging_geometry.update(
@@ -4108,13 +4595,32 @@ def _seek_stable_plate_contact(
             "maximum_center_xy_error_m": float(
                 args.position_tolerance
             ),
-            "overhead_center_target": overhead_center_target.tolist(),
-            "overhead_corridor_target": corridor_high_target.tolist(),
+            "expected_compiled_overhead_pair_count": (
+                expected_overhead_pair_count
+            ),
+            "native_center_high_start": initial_eef.tolist(),
+            "corridor_adaptive_descent_target": (
+                corridor_high_target.tolist()
+            ),
+            "structural_route_order": [
+                "native_center_high_pure_xy",
+                "corridor_xy_adaptive_pure_z_descent",
+                "vertical_tail_brake_and_zero_confirmation",
+                "live_corridor_entry_or_xy_drift_correction",
+                "vertical_side_corridor_and_contact",
+            ],
             "horizontal_sweep_formula": (
-                "after the monotone pure-Z sweep, command pure XY with "
-                "zero Z/rotation at the compiled overhead height; the "
-                "compiled rigid-body vertical separation is invariant to "
-                "XY translation and every live frame is remeasured"
+                "from the exact native center-high first-policy state, command "
+                "pure XY with strict translation-action norm below 0.10 and "
+                "zero Z/rotation to the compiled corridor XY; when the full "
+                "outside guard is not yet accepted, explicitly authorize only "
+                "through all 55 live compiled overhead pairs, pre-action "
+                "buffer16, post-action base8, and collision/contact capture"
+            ),
+            "measurement_scope": (
+                "live pre/post world-AABB and contact observations with the "
+                "unchanged 8/16 mm action envelopes; internal controller "
+                "substeps are not directly measured"
             ),
             "horizontal_sweep_distance_m": overhead_horizontal_travel,
             "maximum_controller_world_step_m": (
@@ -4123,8 +4629,16 @@ def _seek_stable_plate_contact(
             "total_structural_geometric_travel_m": (
                 total_structural_geometric_travel
             ),
-            "total_structural_full_scale_action_equivalents": (
-                total_structural_action_equivalents
+            "total_structural_full_scale_action_lower_bound": (
+                total_structural_action_lower_bound
+            ),
+            "minimum_full_scale_actions_from_geometry": (
+                minimum_full_scale_actions_from_geometry
+            ),
+            "geometric_action_count_scope": (
+                "diagnostic lower bound only; adaptive responses, brakes, "
+                "zero confirmation, and XY drift correction are enforced "
+                "at runtime by the unchanged 180-step hard loop"
             ),
             "maximum_structural_waypoint_steps": int(
                 args.max_waypoint_steps
@@ -4139,6 +4653,9 @@ def _seek_stable_plate_contact(
             "vertical_staging_corridor": vertical_staging_corridor,
             "corridor_high_target": corridor_high_target.tolist(),
             "corridor_side_target": corridor_side_target.tolist(),
+            "structural_route_order": list(
+                overhead_staging_geometry["structural_route_order"]
+            ),
         }
     )
 
@@ -4162,23 +4679,36 @@ def _seek_stable_plate_contact(
     outside_side_motion_steps = 0
     outside_side_feedback_steps = []
     lateral_settle_state = None
-    structural_stage = "overhead_center_descent"
-    overhead_horizontal_z = None
-    latest_vertical_step_progress_m = None
+    structural_stage = "overhead_high_corridor_lateral"
+    overhead_horizontal_z = float(initial_eef[2])
+    latest_vertical_step_progress_m = 0.0
+    lateral_resume_stage = None
     vertical_tail_events = []
     fixed_safe_z = None
     structural_stage_action_counts = {
-        "overhead_center_descent": 0,
+        "overhead_high_corridor_lateral": 0,
+        "overhead_corridor_descent": 0,
         "vertical_tail_brake": 0,
         "lateral_rebuffer_brake": 0,
         "vertical_tail_zero_confirmation": 0,
-        "overhead_corridor_lateral": 0,
+        "overhead_post_descent_corridor_lateral": 0,
         "vertical_corridor_descent": 0,
         "vertical_corridor_settle": 0,
         "fixed_safe_z_lateral_approach": 0,
     }
+    overhead_lateral_stages = {
+        "overhead_high_corridor_lateral",
+        "overhead_post_descent_corridor_lateral",
+    }
+    overhead_route_stages = {
+        *overhead_lateral_stages,
+        "overhead_corridor_descent",
+        "vertical_tail_brake",
+        "lateral_rebuffer_brake",
+        "vertical_tail_zero_confirmation",
+    }
     capture(
-        "outside_overhead_center_start",
+        "outside_native_center_high_start",
         0,
         False,
         True,
@@ -4241,9 +4771,14 @@ def _seek_stable_plate_contact(
                     ),
                 }
             )
-            structural_stage = "overhead_corridor_lateral"
+            if lateral_resume_stage not in overhead_lateral_stages:
+                raise RuntimeError(
+                    "lateral rebuffer has no proved high/correction resume "
+                    f"stage: {lateral_resume_stage!r}"
+                )
+            structural_stage = lateral_resume_stage
             overhead_horizontal_z = float(current_eef[2])
-        if structural_stage == "overhead_corridor_lateral":
+        if structural_stage in overhead_lateral_stages:
             lateral_pre_action_interlock = (
                 _overhead_lateral_interlock_evidence(
                     latest_overhead_lateral_buffer,
@@ -4262,6 +4797,7 @@ def _seek_stable_plate_contact(
                         **lateral_pre_action_interlock,
                     }
                 )
+                lateral_resume_stage = structural_stage
                 structural_stage = "lateral_rebuffer_brake"
         if structural_stage == "fixed_safe_z_lateral_approach":
             lateral_error = float(
@@ -4282,7 +4818,23 @@ def _seek_stable_plate_contact(
                     )
                 break
         stage_before_action = structural_stage
-        if structural_stage == "overhead_center_descent":
+        pre_action_overhead_route_authorization = None
+        if stage_before_action in overhead_route_stages:
+            pre_action_overhead_route_authorization = (
+                _overhead_route_frame_authorization_evidence(
+                    outside_side_guard=pre_action_guard,
+                    overhead_guard=latest_overhead_guard,
+                    overhead_lateral_buffer=(
+                        latest_overhead_lateral_buffer
+                    ),
+                    compiled_pairs=overhead_staging_geometry["pairs"],
+                    expected_pair_count=expected_overhead_pair_count,
+                    require_lateral_buffer=(
+                        stage_before_action in overhead_lateral_stages
+                    ),
+                )
+            )
+        if structural_stage == "overhead_corridor_descent":
             action, path_control = (
                 _compiled_adaptive_vertical_descent_action(
                     current_eef=current_eef,
@@ -4291,9 +4843,7 @@ def _seek_stable_plate_contact(
                     gripper=gripper,
                     position_action_scale=args.position_action_scale,
                     native_action_spec=native_action_spec,
-                    expected_pair_count=len(
-                        overhead_staging_geometry["pairs"]
-                    ),
+                    expected_pair_count=expected_overhead_pair_count,
                 )
             )
             feedback = {
@@ -4352,9 +4902,7 @@ def _seek_stable_plate_contact(
                     gripper=gripper,
                     position_action_scale=args.position_action_scale,
                     native_action_spec=native_action_spec,
-                    expected_pair_count=len(
-                        overhead_staging_geometry["pairs"]
-                    ),
+                    expected_pair_count=expected_overhead_pair_count,
                     worst_case_controller_world_step_m=(
                         maximum_controller_world_step
                     ),
@@ -4410,7 +4958,10 @@ def _seek_stable_plate_contact(
                     ),
                 },
             }
-        elif structural_stage == "overhead_corridor_lateral":
+        elif structural_stage in {
+            "overhead_high_corridor_lateral",
+            "overhead_post_descent_corridor_lateral",
+        }:
             action, path_control = _fixed_z_lateral_approach_action(
                 current_eef=current_eef,
                 lateral_target_xy=corridor_high_target[:2],
@@ -4424,6 +4975,12 @@ def _seek_stable_plate_contact(
                 "mode": structural_stage,
                 "action": action.tolist(),
                 "fixed_z_lateral_path_control": path_control,
+                "lateral_route_phase": (
+                    "native_center_high_first"
+                    if structural_stage
+                    == "overhead_high_corridor_lateral"
+                    else "post_descent_xy_drift_correction"
+                ),
                 "overhead_horizontal_z_m": float(
                     overhead_horizontal_z
                 ),
@@ -4539,6 +5096,10 @@ def _seek_stable_plate_contact(
             raise RuntimeError(
                 f"unknown structural outside-side stage {structural_stage!r}"
             )
+        if pre_action_overhead_route_authorization is not None:
+            feedback["pre_action_overhead_route_authorization"] = (
+                pre_action_overhead_route_authorization
+            )
         rollout.advance(action, "task")
         outside_side_motion_steps += 1
         structural_stage_action_counts[stage_before_action] += 1
@@ -4559,13 +5120,7 @@ def _seek_stable_plate_contact(
         )
         outside_side_guard_checks += 1
         feedback["post_action_guard"] = latest_outside_side_guard
-        if stage_before_action in {
-            "overhead_center_descent",
-            "vertical_tail_brake",
-            "lateral_rebuffer_brake",
-            "vertical_tail_zero_confirmation",
-            "overhead_corridor_lateral",
-        }:
+        if stage_before_action in overhead_route_stages:
             latest_overhead_guard = _live_compiled_overhead_guard(
                 env, overhead_staging_geometry
             )
@@ -4606,13 +5161,96 @@ def _seek_stable_plate_contact(
         }
         feedback["stage_before_action"] = stage_before_action
         lateral_settle_progress = None
-        if stage_before_action == "overhead_center_descent":
+        lateral_post_action_interlock = None
+        corridor_entry_after_action = None
+        if stage_before_action in overhead_lateral_stages:
+            lateral_post_action_interlock = (
+                _overhead_lateral_interlock_evidence(
+                    latest_overhead_lateral_buffer,
+                    measured_vertical_step_progress_m=(
+                        measured_vertical_step_progress_m
+                    ),
+                )
+            )
+            feedback["lateral_post_action_interlock"] = (
+                lateral_post_action_interlock
+            )
+            feedback["corridor_lateral_error_m"] = float(
+                np.linalg.norm(
+                    after_eef[:2] - corridor_high_target[:2]
+                )
+            )
+        if stage_before_action == "overhead_high_corridor_lateral":
+            if lateral_post_action_interlock[
+                "requires_positive_z_brake"
+            ]:
+                lateral_resume_stage = stage_before_action
+                structural_stage = "lateral_rebuffer_brake"
+                vertical_tail_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        "event": (
+                            "high_lateral_post_action_buffer_interlock_to_"
+                            "rebuffer"
+                        ),
+                        **lateral_post_action_interlock,
+                    }
+                )
+            else:
+                if lateral_post_action_interlock[
+                    "negative_vertical_tail_observed"
+                ]:
+                    vertical_tail_events.append(
+                        {
+                            "guard_step": int(guard_step),
+                            "event": (
+                                "high_lateral_negative_vertical_tail_"
+                                "recorded_with_buffer_retained"
+                            ),
+                            **lateral_post_action_interlock,
+                        }
+                    )
+                corridor_entry_after_action = (
+                    _overhead_corridor_entry_evidence(
+                        current_eef=after_eef,
+                        corridor_high_target=corridor_high_target,
+                        outside_side_guard=latest_outside_side_guard,
+                        overhead_guard=latest_overhead_guard,
+                        overhead_lateral_buffer=(
+                            latest_overhead_lateral_buffer
+                        ),
+                        position_tolerance=args.position_tolerance,
+                        strict_corridor_entry_clearance_m=(
+                            vertical_staging_corridor[
+                                "strict_corridor_entry_clearance_m"
+                            ]
+                        ),
+                    )
+                )
+                feedback["corridor_entry_after_high_lateral"] = (
+                    corridor_entry_after_action
+                )
+                if corridor_entry_after_action["accepted"]:
+                    structural_stage = "overhead_corridor_descent"
+                    vertical_tail_events.append(
+                        {
+                            "guard_step": int(guard_step),
+                            "event": (
+                                "native_center_high_lateral_complete_to_"
+                                "adaptive_corridor_descent"
+                            ),
+                            **corridor_entry_after_action,
+                        }
+                    )
+        elif stage_before_action == "overhead_corridor_descent":
             if after_eef[2] <= overhead_staging_z + args.position_tolerance:
                 structural_stage = "vertical_tail_brake"
                 vertical_tail_events.append(
                     {
                         "guard_step": int(guard_step),
-                        "event": "overhead_descent_complete_to_brake",
+                        "event": (
+                            "corridor_xy_adaptive_descent_complete_to_brake"
+                        ),
                         "measured_vertical_step_progress_m": (
                             measured_vertical_step_progress_m
                         ),
@@ -4648,7 +5286,12 @@ def _seek_stable_plate_contact(
                 measured_vertical_step_progress_m >= 0.0
                 and latest_overhead_lateral_buffer["accepted"]
             ):
-                structural_stage = "overhead_corridor_lateral"
+                if lateral_resume_stage not in overhead_lateral_stages:
+                    raise RuntimeError(
+                        "lateral rebuffer recovered without a proved high/"
+                        "correction resume stage"
+                    )
+                structural_stage = lateral_resume_stage
                 overhead_horizontal_z = float(after_eef[2])
                 vertical_tail_events.append(
                     {
@@ -4687,22 +5330,65 @@ def _seek_stable_plate_contact(
                 measured_vertical_step_progress_m >= 0.0
                 and latest_overhead_lateral_buffer["accepted"]
             ):
-                structural_stage = "overhead_corridor_lateral"
-                overhead_horizontal_z = float(after_eef[2])
-                vertical_tail_events.append(
-                    {
-                        "guard_step": int(guard_step),
-                        "event": "zero_confirmation_passed_to_lateral",
-                        "measured_vertical_step_progress_m": (
-                            measured_vertical_step_progress_m
+                post_descent_corridor_entry = (
+                    _overhead_corridor_entry_evidence(
+                        current_eef=after_eef,
+                        corridor_high_target=corridor_high_target,
+                        outside_side_guard=latest_outside_side_guard,
+                        overhead_guard=latest_overhead_guard,
+                        overhead_lateral_buffer=(
+                            latest_overhead_lateral_buffer
                         ),
-                        "minimum_lateral_entry_buffer_surplus_m": (
-                            latest_overhead_lateral_buffer[
-                                "minimum_lateral_entry_buffer_surplus_m"
+                        position_tolerance=args.position_tolerance,
+                        strict_corridor_entry_clearance_m=(
+                            vertical_staging_corridor[
+                                "strict_corridor_entry_clearance_m"
                             ]
                         ),
-                    }
+                    )
                 )
+                feedback["post_descent_corridor_entry"] = (
+                    post_descent_corridor_entry
+                )
+                if post_descent_corridor_entry["accepted"]:
+                    structural_stage = "vertical_corridor_descent"
+                    vertical_tail_events.append(
+                        {
+                            "guard_step": int(guard_step),
+                            "event": (
+                                "zero_confirmation_passed_directly_to_"
+                                "vertical_corridor"
+                            ),
+                            "measured_vertical_step_progress_m": (
+                                measured_vertical_step_progress_m
+                            ),
+                            **post_descent_corridor_entry,
+                        }
+                    )
+                elif (
+                    latest_overhead_guard["accepted"]
+                    and latest_overhead_lateral_buffer["accepted"]
+                ):
+                    structural_stage = "overhead_post_descent_corridor_lateral"
+                    overhead_horizontal_z = float(after_eef[2])
+                    vertical_tail_events.append(
+                        {
+                            "guard_step": int(guard_step),
+                            "event": (
+                                "zero_confirmation_passed_but_live_corridor_"
+                                "xy_requires_overhead_correction"
+                            ),
+                            "measured_vertical_step_progress_m": (
+                                measured_vertical_step_progress_m
+                            ),
+                            **post_descent_corridor_entry,
+                        }
+                    )
+                else:
+                    raise RuntimeError(
+                        "post-descent corridor correction lacks the live "
+                        "compiled overhead base8/buffer16 envelope"
+                    )
             else:
                 structural_stage = "vertical_tail_brake"
                 vertical_tail_events.append(
@@ -4719,32 +5405,19 @@ def _seek_stable_plate_contact(
                         ),
                     }
                 )
-        elif stage_before_action == "overhead_corridor_lateral":
-            lateral_error = float(
-                np.linalg.norm(
-                    after_eef[:2] - corridor_high_target[:2]
-                )
-            )
-            feedback["corridor_lateral_error_m"] = lateral_error
-            lateral_post_action_interlock = (
-                _overhead_lateral_interlock_evidence(
-                    latest_overhead_lateral_buffer,
-                    measured_vertical_step_progress_m=(
-                        measured_vertical_step_progress_m
-                    ),
-                )
-            )
-            feedback["lateral_post_action_interlock"] = (
-                lateral_post_action_interlock
-            )
+        elif stage_before_action == "overhead_post_descent_corridor_lateral":
             if lateral_post_action_interlock[
                 "requires_positive_z_brake"
             ]:
+                lateral_resume_stage = stage_before_action
                 structural_stage = "lateral_rebuffer_brake"
                 vertical_tail_events.append(
                     {
                         "guard_step": int(guard_step),
-                        "event": "lateral_post_action_buffer_interlock_to_brake",
+                        "event": (
+                            "post_descent_lateral_buffer_interlock_to_"
+                            "rebuffer"
+                        ),
                         **lateral_post_action_interlock,
                     }
                 )
@@ -4756,22 +5429,33 @@ def _seek_stable_plate_contact(
                         {
                             "guard_step": int(guard_step),
                             "event": (
-                                "lateral_negative_vertical_tail_recorded_"
-                                "with_buffer_retained"
+                                "post_descent_lateral_negative_vertical_tail_"
+                                "recorded_with_buffer_retained"
                             ),
                             **lateral_post_action_interlock,
                         }
                     )
-                if (
-                    lateral_error <= args.position_tolerance
-                    and latest_outside_side_guard[
-                        "minimum_outside_clearance_m"
-                    ]
-                    > vertical_staging_corridor[
-                        "strict_corridor_entry_clearance_m"
-                    ]
-                    and latest_overhead_guard["accepted"]
-                ):
+                corridor_entry_after_action = (
+                    _overhead_corridor_entry_evidence(
+                        current_eef=after_eef,
+                        corridor_high_target=corridor_high_target,
+                        outside_side_guard=latest_outside_side_guard,
+                        overhead_guard=latest_overhead_guard,
+                        overhead_lateral_buffer=(
+                            latest_overhead_lateral_buffer
+                        ),
+                        position_tolerance=args.position_tolerance,
+                        strict_corridor_entry_clearance_m=(
+                            vertical_staging_corridor[
+                                "strict_corridor_entry_clearance_m"
+                            ]
+                        ),
+                    )
+                )
+                feedback["corridor_entry_after_drift_correction"] = (
+                    corridor_entry_after_action
+                )
+                if corridor_entry_after_action["accepted"]:
                     structural_stage = "vertical_corridor_descent"
         elif stage_before_action == "vertical_corridor_settle":
             lateral_settle_progress = (
@@ -4836,14 +5520,7 @@ def _seek_stable_plate_contact(
                 "outside_side_guard": latest_outside_side_guard,
                 **(
                     {"compiled_overhead_guard": latest_overhead_guard}
-                    if stage_before_action
-                    in {
-                        "overhead_center_descent",
-                        "vertical_tail_brake",
-                        "lateral_rebuffer_brake",
-                        "vertical_tail_zero_confirmation",
-                        "overhead_corridor_lateral",
-                    }
+                    if stage_before_action in overhead_route_stages
                     else {}
                 ),
                 **(
@@ -4854,14 +5531,7 @@ def _seek_stable_plate_contact(
                             )
                         )
                     }
-                    if stage_before_action
-                    in {
-                        "overhead_center_descent",
-                        "vertical_tail_brake",
-                        "lateral_rebuffer_brake",
-                        "vertical_tail_zero_confirmation",
-                        "overhead_corridor_lateral",
-                    }
+                    if stage_before_action in overhead_route_stages
                     else {}
                 ),
             },
@@ -4872,13 +5542,10 @@ def _seek_stable_plate_contact(
                 "required_outside_clearance_m"
             ]
         )
-        if stage_before_action in {
-            "overhead_center_descent",
-            "vertical_tail_brake",
-            "lateral_rebuffer_brake",
-            "vertical_tail_zero_confirmation",
-            "overhead_corridor_lateral",
-        } and not latest_overhead_guard["accepted"]:
+        if (
+            stage_before_action in overhead_route_stages
+            and not latest_overhead_guard["accepted"]
+        ):
             structural_violations.append(
                 "compiled_overhead_one_step_vertical_reserve_lost"
             )
@@ -5107,6 +5774,9 @@ def _calibrate_stable_plate_contact_depth(
     initial_contact_z_offset = float(
         initial_eef[2] - plate_reference[2]
     )
+    plate_finger_allowed_body_pairs = (
+        _compiled_plate_finger_allowed_body_pairs(env)
+    )
     samples = []
 
     def capture(stage, index, require_stable):
@@ -5116,6 +5786,9 @@ def _calibrate_stable_plate_contact_depth(
         state = _contact_depth_state_diagnostics(
             env,
             plate_reference,
+            allowed_robot_nonrobot_body_pairs=(
+                plate_finger_allowed_body_pairs
+            ),
             require_stable=require_stable,
             maximum_plate_tilt_deg=(
                 args.max_contact_calibration_plate_tilt_deg
