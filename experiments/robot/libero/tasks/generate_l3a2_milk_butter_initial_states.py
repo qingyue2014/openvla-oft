@@ -278,6 +278,8 @@ def _refresh_observation(env):
         env._update_observables(force=True)
     if hasattr(env, "_get_observations"):
         return env._get_observations()
+    if hasattr(env, "env") and hasattr(env.env, "_get_observations"):
+        return env.env._get_observations()
     raise RuntimeError(
         "environment cannot refresh the exact post-state policy observation"
     )

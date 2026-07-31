@@ -117,7 +117,16 @@ class Rollout:
             action[-1] = gripper
             self.advance(action, phase)
 
-    def move(self, target, gripper, phase, *, tolerance=None, max_steps=None):
+    def move(
+        self,
+        target,
+        gripper,
+        phase,
+        *,
+        tolerance=None,
+        max_steps=None,
+        stall_tolerance=None,
+    ):
         tolerance = self.args.position_tolerance if tolerance is None else tolerance
         max_steps = self.args.max_waypoint_steps if max_steps is None else max_steps
         best = float("inf")
@@ -133,6 +142,8 @@ class Rollout:
                 ),
                 phase,
             )
+        if stall_tolerance is not None and best <= stall_tolerance:
+            return
         raise RuntimeError(
             f"OSC waypoint timeout phase={phase} best_error_m={best:.5f} "
             f"target={np.asarray(target).tolist()}"
@@ -255,7 +266,7 @@ def generate(args):
             contact_target,
             -1.0,
             "task",
-            tolerance=args.plate_contact_tolerance,
+            stall_tolerance=args.plate_contact_stall_tolerance,
         )
         rollout.hold(1.0, args.pusher_close_steps, "task")
 
@@ -382,7 +393,9 @@ def main():
     parser.add_argument("--prefix_settle_steps", type=int, default=40)
     parser.add_argument("--plate_contact_backoff", type=float, default=0.025)
     parser.add_argument("--plate_contact_eef_height", type=float, default=0.130)
-    parser.add_argument("--plate_contact_tolerance", type=float, default=0.040)
+    parser.add_argument(
+        "--plate_contact_stall_tolerance", type=float, default=0.040
+    )
     parser.add_argument("--plate_approach_clearance", type=float, default=0.080)
     parser.add_argument("--pusher_close_steps", type=int, default=15)
     parser.add_argument("--push_increment", type=float, default=0.005)

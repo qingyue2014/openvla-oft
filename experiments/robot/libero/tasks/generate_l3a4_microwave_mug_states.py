@@ -779,13 +779,31 @@ def generate(args) -> dict[str, object]:
         _restore(env, eb_state, fixture_root, root_position, root_quaternion)
         eb_wait = _formal_wait(env, door_body)
         if not eb_wait["passed"]:
+            print(
+                f"[reject attempt {attempts}] Eb formal wait failed: "
+                f"tilt={eb_wait['max_tilt_deg']:.4f}deg "
+                f"translation={eb_wait['max_translation_m']:.5f}m "
+                f"support={eb_wait['post_support_contacts']} "
+                f"forbidden={eb_wait['post_forbidden_contacts']}",
+                flush=True,
+            )
             continue
         episode_supports = eb_wait["post_support_contacts"]
         if len(episode_supports) != 1:
+            print(
+                f"[reject attempt {attempts}] Eb support count "
+                f"{len(episode_supports)}: {episode_supports}",
+                flush=True,
+            )
             continue
         if table_support_body is None:
             table_support_body = episode_supports[0]
         elif table_support_body != episode_supports[0]:
+            print(
+                f"[reject attempt {attempts}] support body changed from "
+                f"{table_support_body} to {episode_supports[0]}",
+                flush=True,
+            )
             continue
 
         try:
@@ -815,6 +833,11 @@ def generate(args) -> dict[str, object]:
                 expect_risk=True,
             )
             if not er_ok:
+                print(
+                    f"[reject attempt {attempts}] Er recheck failed: "
+                    f"wait={er_wait['passed']} response={er_response}",
+                    flush=True,
+                )
                 continue
             if ec_local_xy is None:
                 ec_local_xy, _, _, _ = _find_layout(
@@ -842,6 +865,11 @@ def generate(args) -> dict[str, object]:
                 expect_risk=False,
             )
             if not ec_ok:
+                print(
+                    f"[reject attempt {attempts}] Ec recheck failed: "
+                    f"wait={ec_wait['passed']} response={ec_response}",
+                    flush=True,
+                )
                 continue
         except RuntimeError as exc:
             if args.risk_local_xy or args.ec_local_xy:
@@ -871,6 +899,29 @@ def generate(args) -> dict[str, object]:
             capture_frames=index == 0,
         )
         if not safe_prefix["passed"]:
+            compact_safe_prefix = {
+                "passed": safe_prefix["passed"],
+                "park_wait_passed": safe_prefix["park_wait"]["passed"],
+                "park_wait_tilt_deg": safe_prefix["park_wait"]["max_tilt_deg"],
+                "park_wait_translation_m": safe_prefix["park_wait"][
+                    "max_translation_m"
+                ],
+                "close_contact": safe_prefix["close_response"][
+                    "door_contact_seen"
+                ],
+                "close_consequence": safe_prefix["close_response"][
+                    "consequence"
+                ],
+                "target_tilt_before_close_deg": safe_prefix[
+                    "target_tilt_before_close_deg"
+                ],
+                "native_goal_reached": safe_prefix["native_goal_reached"],
+            }
+            print(
+                f"[reject attempt {attempts}] kinematic safe-order gate "
+                f"failed: {compact_safe_prefix}",
+                flush=True,
+            )
             continue
         for condition, state, wait, response in (
             ("eb", eb_state, eb_wait, None),
