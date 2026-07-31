@@ -737,7 +737,7 @@ def test_499921_two_mm_live_clearance_proceeds_with_zero_compiled_margin():
     assert action[2] == pytest.approx(-0.10)
 
 
-def test_499935_submillimetre_deficit_uses_bounded_monotonic_recovery():
+def test_499954_saturated_recovery_follows_improving_discrete_response():
     current = np.array([0.131429676, -0.029432244, 0.970336557])
     target = np.array([0.136806395, -0.028507780, 0.898654346])
     strict_positive_clearance = np.nextafter(0.0, np.inf)
@@ -770,25 +770,8 @@ def test_499935_submillimetre_deficit_uses_bounded_monotonic_recovery():
     assert np.allclose(action[:3], [0.10, 0.0, 0.0])
     assert feedback["recovery_action_saturated"] is True
 
-    delayed_guard = {
-        **before_guard,
-        "minimum_outside_clearance_m": -0.00040,
-    }
-    pending = _outside_side_recovery_progress_evidence(
-        baseline_guard=before_guard,
-        after_guard=delayed_guard,
-        baseline_eef=current,
-        after_eef=current + np.array([-0.00002, 0.0, -0.0005]),
-        actions=[action],
-        maximum_translation_action=0.10,
-    )
-    assert pending["accepted"] is True
-    assert pending["fail_closed"] is False
-    assert pending["pending_controller_response"] is True
-    assert pending["window_exhausted"] is False
-
-    # A positive clearance after the transient does not bypass the response
-    # proof: the second command remains outward until the window resolves.
+    # A positive clearance during an unresolved response does not bypass its
+    # proof: the next command remains saturated outward.
     forced_action, forced_feedback = (
         _outside_side_geometry_feedback_action(
             current_eef=current,
@@ -807,21 +790,116 @@ def test_499935_submillimetre_deficit_uses_bounded_monotonic_recovery():
     assert forced_feedback["clearance_deficit_m"] == 0.0
     assert np.allclose(forced_action[:3], [0.10, 0.0, 0.0])
 
-    recovered_guard = {
+    previous_vertical_response = {
+        "eef_outward_step_progress_m": -0.000958830,
+        "outside_clearance_step_progress_m": -0.000927832,
+    }
+    trace_baseline_eef = np.array(
+        [0.130983948, -0.028638039, 1.050138420]
+    )
+    trace_baseline_guard = {
         **before_guard,
-        "minimum_outside_clearance_m": 0.0017,
+        "minimum_outside_clearance_m": -0.000797953,
+    }
+    first_after_eef = np.array(
+        [0.130254591, -0.028638039, 1.048332081]
+    )
+    first_after_guard = {
+        **before_guard,
+        "minimum_outside_clearance_m": -0.001442891,
+    }
+    first_response = _outside_side_recovery_progress_evidence(
+        baseline_guard=trace_baseline_guard,
+        after_guard=first_after_guard,
+        baseline_eef=trace_baseline_eef,
+        before_guard=trace_baseline_guard,
+        before_eef=trace_baseline_eef,
+        after_eef=first_after_eef,
+        action=action,
+        maximum_translation_action=0.10,
+        previous_step_response=previous_vertical_response,
+    )
+    assert first_response["fail_closed"] is False
+    assert first_response["pending_controller_response"] is True
+    assert first_response["response_improving"] is True
+    assert first_response[
+        "eef_response_acceleration_m_per_step"
+    ] > 0.0
+    assert first_response[
+        "clearance_response_acceleration_m_per_step"
+    ] > 0.0
+
+    second_after_eef = np.array(
+        [0.129548314, -0.028638039, 1.046556656]
+    )
+    second_after_guard = {
+        **before_guard,
+        "minimum_outside_clearance_m": -0.002079783,
+    }
+    second_response = _outside_side_recovery_progress_evidence(
+        baseline_guard=trace_baseline_guard,
+        after_guard=second_after_guard,
+        baseline_eef=trace_baseline_eef,
+        before_guard=first_after_guard,
+        before_eef=first_after_eef,
+        after_eef=second_after_eef,
+        action=action,
+        maximum_translation_action=0.10,
+        previous_step_response=first_response["step_response"],
+    )
+    assert second_response["fail_closed"] is False
+    assert second_response["pending_controller_response"] is True
+    assert second_response["response_improving"] is True
+
+    # Once a signed response has reversed outward it remains valid even if
+    # its positive velocity is smaller than the prior positive velocity.
+    outward_but_decelerating = (
+        _outside_side_recovery_progress_evidence(
+            baseline_guard={
+                **before_guard,
+                "minimum_outside_clearance_m": -0.001,
+            },
+            after_guard={
+                **before_guard,
+                "minimum_outside_clearance_m": -0.0026,
+            },
+            baseline_eef=np.array([0.130, 0.0, 1.0]),
+            before_guard={
+                **before_guard,
+                "minimum_outside_clearance_m": -0.003,
+            },
+            before_eef=np.array([0.128, 0.0, 0.999]),
+            after_eef=np.array([0.1285, 0.0, 0.998]),
+            action=action,
+            maximum_translation_action=0.10,
+            previous_step_response={
+                "eef_outward_step_progress_m": 0.0006,
+                "outside_clearance_step_progress_m": 0.0005,
+            },
+        )
+    )
+    assert outward_but_decelerating["progress_proven"] is False
+    assert outward_but_decelerating["response_improving"] is True
+    assert outward_but_decelerating["fail_closed"] is False
+
+    recovered_guard = {
+        **trace_baseline_guard,
+        "minimum_outside_clearance_m": 0.0002,
     }
     evidence = _outside_side_recovery_progress_evidence(
-        baseline_guard=before_guard,
+        baseline_guard=trace_baseline_guard,
         after_guard=recovered_guard,
-        baseline_eef=current,
-        after_eef=current + np.array([0.002, 0.0, -0.0005]),
-        actions=[action, action],
+        baseline_eef=trace_baseline_eef,
+        before_guard=second_after_guard,
+        before_eef=second_after_eef,
+        after_eef=trace_baseline_eef + np.array([0.001, 0.0, -0.005]),
+        action=action,
         maximum_translation_action=0.10,
+        previous_step_response=second_response["step_response"],
     )
     assert evidence["accepted"] is True
     assert evidence["progress_proven"] is True
-    assert evidence["actions_saturated"] is True
+    assert evidence["action_saturated"] is True
     assert evidence["net_clearance_progress_m"] > 0.0
     assert evidence["net_eef_outward_progress_m"] > 0.0
 
@@ -834,8 +912,10 @@ def test_499935_submillimetre_deficit_uses_bounded_monotonic_recovery():
         baseline_guard=before_guard,
         after_guard=regressed_guard,
         baseline_eef=current,
+        before_guard=before_guard,
+        before_eef=current,
         after_eef=current + np.array([-3.6e-7, 0.0, -7.3e-6]),
-        actions=[weak_action],
+        action=weak_action,
         maximum_translation_action=0.10,
     )
     assert rejected["accepted"] is False
@@ -843,19 +923,31 @@ def test_499935_submillimetre_deficit_uses_bounded_monotonic_recovery():
         "outward_recovery_action_not_at_controller_bound",
     ]
 
+    stalled_after_eef = second_after_eef + np.array(
+        [-0.000710, 0.0, -0.001]
+    )
+    stalled_after_guard = {
+        **before_guard,
+        "minimum_outside_clearance_m": (
+            second_after_guard["minimum_outside_clearance_m"]
+            - 0.000640
+        ),
+    }
     saturated_but_stalled = _outside_side_recovery_progress_evidence(
-        baseline_guard=before_guard,
-        after_guard=regressed_guard,
-        baseline_eef=current,
-        after_eef=current + np.array([-3.6e-7, 0.0, -7.3e-6]),
-        actions=[action, action],
+        baseline_guard=trace_baseline_guard,
+        after_guard=stalled_after_guard,
+        baseline_eef=trace_baseline_eef,
+        before_guard=second_after_guard,
+        before_eef=second_after_eef,
+        after_eef=stalled_after_eef,
+        action=action,
         maximum_translation_action=0.10,
+        previous_step_response=second_response["step_response"],
     )
     assert saturated_but_stalled["fail_closed"] is True
-    assert saturated_but_stalled["window_exhausted"] is True
     assert saturated_but_stalled["violations"] == [
-        "eef_outward_position_lacked_net_window_progress",
-        "live_outside_clearance_lacked_net_window_progress",
+        "eef_outward_response_neither_moved_nor_accelerated_outward_under_saturation",
+        "live_outside_clearance_response_neither_moved_nor_accelerated_outward_under_saturation",
     ]
 
 
