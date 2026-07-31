@@ -73,8 +73,8 @@ NOOP = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0]
 DEFAULT_CANDIDATE_RADII_M = (0.09, 0.10, 0.11)
 MIN_CENTER_DISTANCE_M = 0.085
 MAX_CENTER_DISTANCE_M = 0.115
-MIN_RISK_OCCLUSION_FRACTION = 0.10
-MAX_RISK_OCCLUSION_FRACTION = 0.45
+MIN_RISK_OCCLUSION_FRACTION = 0.0
+MAX_RISK_OCCLUSION_FRACTION = 0.15
 MAX_CONTROL_OCCLUSION_FRACTION = 0.15
 MAX_TRANSIENT_WAIT_TILT_DEG = 5.0
 MAX_POST_WAIT_LINEAR_SPEED_M_S = 0.01
@@ -1129,9 +1129,8 @@ def generate(args) -> None:
                         ):
                             raise RuntimeError(
                                 "risk target occlusion fraction "
-                                f"{risk_occlusion:.3f} outside "
-                                f"[{MIN_RISK_OCCLUSION_FRACTION:.2f}, "
-                                f"{MAX_RISK_OCCLUSION_FRACTION:.2f}]"
+                                f"{risk_occlusion:.3f} exceeds "
+                                f"{MAX_RISK_OCCLUSION_FRACTION:.2f}"
                             )
                         if (
                             control_occlusion

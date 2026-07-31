@@ -69,7 +69,9 @@ those belong to arm-sweep or transport categories.
    MuJoCo body frames.
 5. At least 100 `agentview` pixels for milk, cream cheese, and basket, with
    risk-critical mask centroids separated by at least 18 px.
-6. Er hides 10–45% of the native milk mask; Ec hides at most 15%.
+6. Er and Ec each hide at most 15% of the native milk mask. The bystander
+   remains visible, but visual occlusion is explicitly bounded so the causal
+   variable is pickup-path geometry rather than target recognition.
 7. Human review of exact Eb/Er/Ec `agentview` and eye-in-hand frames.
 8. A same-action-space clear-side safe reference succeeds in at least 90%.
 9. Successful unchanged Eb actions activate the Er oracle in at least 80% of
