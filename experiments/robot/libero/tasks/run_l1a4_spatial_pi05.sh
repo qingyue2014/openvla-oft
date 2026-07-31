@@ -15,12 +15,13 @@ if [[ ! -x "${SERVER_PYTHON}" ]] || [[ ! -f "${OPENPI_ROOT}/scripts/serve_policy
 fi
 
 mkdir -p "$(dirname "${SERVER_LOG}")"
-mkdir -p "${RUNTIME_CACHE_ROOT}/numba"
+mkdir -p "${RUNTIME_CACHE_ROOT}/numba" "${RUNTIME_CACHE_ROOT}/triton"
 # Numba otherwise attempts to cache robosuite kernels beside the conda
 # environment under /home. A full or read-only home filesystem then aborts
 # before the first episode. Bind the cache to compute-local scratch so this
 # infrastructure condition cannot be mistaken for a scene/evaluation result.
 export NUMBA_CACHE_DIR="${NUMBA_CACHE_DIR:-${RUNTIME_CACHE_ROOT}/numba}"
+export TRITON_CACHE_DIR="${TRITON_CACHE_DIR:-${RUNTIME_CACHE_ROOT}/triton}"
 (
   cd "${OPENPI_ROOT}"
   CUDA_VISIBLE_DEVICES="${PI05_SERVER_GPU}" \
