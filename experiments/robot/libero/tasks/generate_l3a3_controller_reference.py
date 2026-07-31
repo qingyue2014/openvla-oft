@@ -978,11 +978,12 @@ def _derive_overhead_staging_from_compiled_pairs(
         "sweep_proof": (
             "from the exact native center-high state, first command XY plus "
             "nonnegative Z plane-hold actions with zero rotation toward the "
-            "compiled corridor XY; derive every action norm from the runtime "
-            "native bound and the full live compiled-pair worst-case downward-"
-            "tail capacity above strict+base8 after reserving the latest "
-            "measured negative-dz inertia, then recheck base8 afterward; next "
-            "command pure "
+            "reachable outside-high point; then command a constrained outward-"
+            "and-downward diagonal to the strict corridor before the remaining "
+            "pure-Z descent. Derive every action norm from the runtime native "
+            "bound and the full live compiled-pair worst-case downward-tail "
+            "capacity above strict+base8 after reserving the latest measured "
+            "negative-dz inertia, and recheck base8 afterward; next command pure "
             "negative Z with zero "
             "XY/rotation at corridor XY, where each rigid gripper geom lower "
             "bound decreases monotonically and its minimum vertical clearance "
@@ -1711,6 +1712,53 @@ def _overhead_corridor_entry_evidence(
                 if require_lateral_buffer
                 else ""
             )
+        ),
+    }
+
+
+def _overhead_outside_high_entry_evidence(
+    *,
+    current_eef,
+    outside_high_target,
+    overhead_horizontal_z,
+    overhead_guard,
+    position_tolerance,
+):
+    """Gate the reachable outside-high point before workspace release."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    outside_high_target = np.asarray(outside_high_target, dtype=float)
+    if (
+        current_eef.shape != (3,)
+        or outside_high_target.shape != (3,)
+        or not np.all(np.isfinite(current_eef))
+        or not np.all(np.isfinite(outside_high_target))
+        or not np.isfinite(overhead_horizontal_z)
+        or not np.isfinite(position_tolerance)
+        or position_tolerance <= 0.0
+    ):
+        raise ValueError("outside-high entry evidence is invalid")
+    xy_error = float(
+        np.linalg.norm(current_eef[:2] - outside_high_target[:2])
+    )
+    z_error = float(abs(current_eef[2] - overhead_horizontal_z))
+    violations = []
+    if xy_error > position_tolerance:
+        violations.append("outside_high_xy_tolerance_not_met")
+    if z_error > position_tolerance:
+        violations.append("outside_high_plane_hold_tolerance_not_met")
+    if not overhead_guard.get("accepted", False):
+        violations.append("compiled_overhead_base8_not_accepted")
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "current_eef": current_eef.tolist(),
+        "outside_high_target": outside_high_target.tolist(),
+        "overhead_horizontal_z_m": float(overhead_horizontal_z),
+        "outside_high_xy_error_m": xy_error,
+        "outside_high_plane_z_error_m": z_error,
+        "position_tolerance_m": float(position_tolerance),
+        "compiled_overhead_base8_accepted": bool(
+            overhead_guard.get("accepted", False)
         ),
     }
 
@@ -3499,6 +3547,252 @@ def _compiled_adaptive_high_plane_action(
                 literal_xy_world_delta <= lateral_remaining
             ),
             "positive_z_static_geometry_does_not_reduce_clearance": True,
+            "latest_measured_negative_dz_reserved_as_inertial_tail": True,
+            "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": (
+                True
+            ),
+        },
+    }
+
+
+def _compiled_adaptive_workspace_release_action(
+    *,
+    current_eef,
+    corridor_target_xy,
+    release_target_z,
+    measured_vertical_step_progress_m,
+    overhead_guard,
+    gripper,
+    position_action_scale,
+    native_action_spec,
+    expected_pair_count,
+):
+    """Move outward and down while retaining every live pair's base8."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    corridor_target_xy = np.asarray(corridor_target_xy, dtype=float)
+    if (
+        current_eef.shape != (3,)
+        or corridor_target_xy.shape != (2,)
+        or not np.all(np.isfinite(current_eef))
+        or not np.all(np.isfinite(corridor_target_xy))
+        or not np.isfinite(release_target_z)
+        or not np.isfinite(measured_vertical_step_progress_m)
+        or not np.isfinite(position_action_scale)
+        or position_action_scale <= 0.0
+    ):
+        raise ValueError("workspace-release geometry is invalid")
+    pairs = list(overhead_guard.get("pairs", ()))
+    if (
+        not isinstance(expected_pair_count, (int, np.integer))
+        or expected_pair_count <= 0
+        or len(pairs) != int(expected_pair_count)
+    ):
+        raise RuntimeError(
+            "live compiled pair inventory changed before workspace release"
+        )
+    identities = [_overhead_pair_identity(pair) for pair in pairs]
+    if len(set(identities)) != len(identities):
+        raise RuntimeError("workspace-release pair identity is duplicated")
+    if not overhead_guard.get("accepted", False):
+        raise RuntimeError("workspace release cannot start after base8 is lost")
+    native_low = np.asarray(native_action_spec["low"], dtype=float)
+    native_high = np.asarray(native_action_spec["high"], dtype=float)
+    if (
+        not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(native_low < native_high)
+        or not (native_low[6] <= gripper <= native_high[6])
+    ):
+        raise RuntimeError("native OSC action bounds are invalid for release")
+    native_norm_bound = float(
+        min(
+            -native_low[0],
+            native_high[0],
+            -native_low[1],
+            native_high[1],
+            -native_low[2],
+        )
+    )
+    strict_native_norm_bound = float(
+        np.nextafter(native_norm_bound, 0.0)
+    )
+    base_reserve = float(overhead_guard["one_step_vertical_reserve_m"])
+    if strict_native_norm_bound <= 0.0 or base_reserve <= 0.0:
+        raise RuntimeError("workspace-release native/base8 bound is invalid")
+
+    xy_error = corridor_target_xy - current_eef[:2]
+    xy_remaining = float(np.linalg.norm(xy_error))
+    downward_z_error = float(min(0.0, release_target_z - current_eef[2]))
+    requested = np.array(
+        [
+            xy_error[0] / position_action_scale,
+            xy_error[1] / position_action_scale,
+            downward_z_error / position_action_scale,
+        ]
+    )
+    requested_norm = float(np.linalg.norm(requested))
+    if not np.isfinite(requested_norm) or requested_norm <= 0.0:
+        raise RuntimeError("workspace release has no positive route error")
+    requested_direction = requested / requested_norm
+    measured_negative_tail = float(
+        max(0.0, -float(measured_vertical_step_progress_m))
+    )
+    inertial_tail_reserve = (
+        float(np.nextafter(measured_negative_tail, np.inf))
+        if measured_negative_tail > 0.0
+        else 0.0
+    )
+
+    pair_envelopes = []
+    for index, (identity, pair) in enumerate(zip(identities, pairs)):
+        clearance = float(pair["vertical_clearance_m"])
+        strict_clearance = float(pair["strict_no_contact_clearance_m"])
+        required = float(strict_clearance + base_reserve)
+        nominal_capacity = float(clearance - required - inertial_tail_reserve)
+        if (
+            not np.isfinite(nominal_capacity)
+            or nominal_capacity <= 0.0
+            or not pair.get("accepted", False)
+        ):
+            raise RuntimeError(
+                "workspace-release pair lacks positive base8/inertial "
+                f"capacity: index={index}"
+            )
+        strict_nominal_capacity = float(
+            np.nextafter(nominal_capacity, 0.0)
+        )
+        pair_envelopes.append(
+            {
+                "pair_index": int(index),
+                "pair_identity": list(identity),
+                "gripper_geom": pair["gripper_geom"],
+                "counterpart_geom": pair["counterpart_geom"],
+                "counterpart_kind": pair["counterpart_kind"],
+                "current_vertical_clearance_m": clearance,
+                "strict_no_contact_clearance_m": strict_clearance,
+                "base_overhead_reserve_m": base_reserve,
+                "required_clearance_with_base_reserve_m": required,
+                "measured_negative_inertial_tail_reserve_m": (
+                    inertial_tail_reserve
+                ),
+                "strict_nominal_tail_capacity_m": strict_nominal_capacity,
+                "strict_safe_translation_action_norm_capacity": float(
+                    strict_nominal_capacity / position_action_scale
+                ),
+            }
+        )
+    limiting_pair = min(
+        pair_envelopes,
+        key=lambda record: record[
+            "strict_safe_translation_action_norm_capacity"
+        ],
+    )
+    capacities = {
+        "requested_outward_downward_action_norm": requested_norm,
+        "compiled_pair_base8_nominal_tail_after_inertia": float(
+            limiting_pair["strict_safe_translation_action_norm_capacity"]
+        ),
+        "native_strict_3d_translation_action_norm_bound": (
+            strict_native_norm_bound
+        ),
+    }
+    selected_source = min(capacities, key=capacities.get)
+    selected_norm = float(capacities[selected_source])
+    translation = requested_direction * selected_norm
+    for _ in range(128):
+        literal_norm = float(np.linalg.norm(translation))
+        nominal_tail = float(position_action_scale * literal_norm)
+        total_tail = float(nominal_tail + inertial_tail_reserve)
+        literal_xy_delta = float(
+            position_action_scale * np.linalg.norm(translation[:2])
+        )
+        literal_downward_delta = float(
+            position_action_scale * max(0.0, -translation[2])
+        )
+        predicted = [
+            float(record["current_vertical_clearance_m"] - total_tail)
+            for record in pair_envelopes
+        ]
+        if (
+            0.0 < literal_norm < native_norm_bound
+            and translation[2] <= 0.0
+            and literal_xy_delta <= xy_remaining
+            and literal_downward_delta <= abs(downward_z_error)
+            and all(
+                native_low[index] < translation[index] < native_high[index]
+                for index in range(3)
+            )
+            and all(
+                clearance
+                > record["required_clearance_with_base_reserve_m"]
+                for clearance, record in zip(predicted, pair_envelopes)
+            )
+        ):
+            break
+        translation = np.nextafter(translation, 0.0)
+    else:
+        raise RuntimeError(
+            "workspace-release literal action lacks strict native/base8 "
+            "interior"
+        )
+    minimum_surplus = float("inf")
+    for clearance, record in zip(predicted, pair_envelopes):
+        record["predicted_post_worst_case_vertical_clearance_m"] = clearance
+        record["predicted_post_worst_case_base_reserve_surplus_m"] = float(
+            clearance - record["required_clearance_with_base_reserve_m"]
+        )
+        minimum_surplus = min(
+            minimum_surplus,
+            record[
+                "predicted_post_worst_case_base_reserve_surplus_m"
+            ],
+        )
+    action = np.zeros(7, dtype=float)
+    action[:3] = translation
+    action[-1] = float(gripper)
+    return action, {
+        "accepted": True,
+        "motion_kind": "outward_downward_workspace_release",
+        "formula": (
+            "request [corridor XY error, min(0, outside-side Z minus current "
+            "Z)] over position_action_scale; intersect the strict native 3-D "
+            "norm with all 55 pair capacities after base8 and latest measured "
+            "negative-dz inertial reserve"
+        ),
+        "current_eef": current_eef.tolist(),
+        "corridor_target_xy": corridor_target_xy.tolist(),
+        "release_target_z_m": float(release_target_z),
+        "requested_translation_action": requested.tolist(),
+        "requested_translation_action_norm": requested_norm,
+        "measured_vertical_step_progress_m": float(
+            measured_vertical_step_progress_m
+        ),
+        "measured_negative_inertial_tail_reserve_m": inertial_tail_reserve,
+        "compiled_pair_count": len(pair_envelopes),
+        "pair_identity_keys": [list(identity) for identity in identities],
+        "pair_envelopes": pair_envelopes,
+        "selected_limiting_pair": dict(limiting_pair),
+        "candidate_action_norm_capacities": capacities,
+        "selected_envelope_source": selected_source,
+        "commanded_translation_action_norm": literal_norm,
+        "commanded_nominal_norm_downward_tail_m": nominal_tail,
+        "commanded_worst_case_downward_world_tail_m": total_tail,
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_z_action": float(action[2]),
+        "minimum_predicted_post_worst_case_base_surplus_m": minimum_surplus,
+        "proof": {
+            "outward_xy_plus_nonpositive_z_zero_rotation": True,
+            "strictly_inside_native_3d_action_norm_bound": True,
+            "does_not_cross_corridor_target_xy": bool(
+                literal_xy_delta <= xy_remaining
+            ),
+            "does_not_cross_release_target_z": bool(
+                literal_downward_delta <= abs(downward_z_error)
+            ),
             "latest_measured_negative_dz_reserved_as_inertial_tail": True,
             "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": (
                 True
@@ -5339,7 +5633,14 @@ def _seek_stable_plate_contact(
     )
     overhead_horizontal_travel = float(
         np.linalg.norm(
-            corridor_high_target[:2] - initial_eef[:2]
+            np.asarray(outside_high_target, dtype=float)[:2]
+            - initial_eef[:2]
+        )
+    )
+    workspace_release_xy_travel = float(
+        np.linalg.norm(
+            corridor_high_target[:2]
+            - np.asarray(outside_high_target, dtype=float)[:2]
         )
     )
     native_low = np.asarray(native_action_spec["low"], dtype=float)
@@ -5367,6 +5668,7 @@ def _seek_stable_plate_contact(
     total_structural_geometric_travel = float(
         overhead_staging_geometry["vertical_sweep_distance_m"]
         + overhead_horizontal_travel
+        + workspace_release_xy_travel
         + vertical_staging_corridor["vertical_staging_travel_m"]
         + vertical_staging_corridor["fixed_z_lateral_travel_m"]
     )
@@ -5400,11 +5702,15 @@ def _seek_stable_plate_contact(
                 expected_overhead_pair_count
             ),
             "native_center_high_start": initial_eef.tolist(),
+            "reachable_outside_high_target": (
+                np.asarray(outside_high_target, dtype=float).tolist()
+            ),
             "corridor_adaptive_descent_target": (
                 corridor_high_target.tolist()
             ),
             "structural_route_order": [
-                "native_center_high_xy_plus_nonnegative_z_plane_hold",
+                "native_center_high_to_reachable_outside_high_plane_hold",
+                "outward_downward_workspace_release_diagonal",
                 "corridor_xy_adaptive_pure_z_descent",
                 "vertical_tail_brake_and_zero_confirmation",
                 "live_corridor_entry_or_xy_drift_correction",
@@ -5413,7 +5719,10 @@ def _seek_stable_plate_contact(
             "horizontal_sweep_formula": (
                 "from the exact native center-high first-policy state, command "
                 "XY plus nonnegative Z with zero rotation toward the compiled "
-                "corridor XY while holding the initial center-high Z plane; "
+                "reachable outside-high point while holding the initial "
+                "center-high Z plane; only after that point passes, command "
+                "outward XY plus nonpositive Z toward the original strict "
+                "corridor XY and outside-side Z to release the high workspace; "
                 "derive each 3-D translation-action norm from the strict "
                 "runtime native bound and all 55 live pairs' current clearance "
                 "minus strict+base8 and the latest measured negative-dz "
@@ -5430,6 +5739,7 @@ def _seek_stable_plate_contact(
                 "controller substeps are not directly measured"
             ),
             "horizontal_sweep_distance_m": overhead_horizontal_travel,
+            "workspace_release_xy_travel_m": workspace_release_xy_travel,
             "maximum_controller_world_step_m": (
                 maximum_controller_world_step
             ),
@@ -5506,6 +5816,7 @@ def _seek_stable_plate_contact(
     fixed_safe_z = None
     structural_stage_action_counts = {
         "overhead_high_corridor_lateral": 0,
+        "workspace_release_diagonal": 0,
         "overhead_corridor_descent": 0,
         "vertical_tail_brake": 0,
         "lateral_rebuffer_brake": 0,
@@ -5517,6 +5828,7 @@ def _seek_stable_plate_contact(
     }
     overhead_lateral_stages = {
         "overhead_high_corridor_lateral",
+        "workspace_release_diagonal",
         "overhead_post_descent_corridor_lateral",
     }
     fixed_buffer_lateral_stages = {
@@ -5649,8 +5961,27 @@ def _seek_stable_plate_contact(
                 prepared_high_lateral_envelope,
             ) = _compiled_adaptive_high_plane_action(
                 current_eef=current_eef,
-                lateral_target_xy=corridor_high_target[:2],
+                lateral_target_xy=np.asarray(
+                    outside_high_target, dtype=float
+                )[:2],
                 overhead_horizontal_z=overhead_horizontal_z,
+                measured_vertical_step_progress_m=(
+                    latest_vertical_step_progress_m
+                ),
+                overhead_guard=latest_overhead_guard,
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                native_action_spec=native_action_spec,
+                expected_pair_count=expected_overhead_pair_count,
+            )
+        elif stage_before_action == "workspace_release_diagonal":
+            (
+                prepared_high_lateral_action,
+                prepared_high_lateral_envelope,
+            ) = _compiled_adaptive_workspace_release_action(
+                current_eef=current_eef,
+                corridor_target_xy=corridor_high_target[:2],
+                release_target_z=float(outside_side_target[2]),
                 measured_vertical_step_progress_m=(
                     latest_vertical_step_progress_m
                 ),
@@ -5822,6 +6153,27 @@ def _seek_stable_plate_contact(
                 ),
                 "lateral_route_phase": "native_center_high_first",
                 "overhead_horizontal_z_m": float(overhead_horizontal_z),
+                "pre_action_measured_vertical_step_progress_m": (
+                    latest_vertical_step_progress_m
+                ),
+                "fixed_buffer16_used_for_action_authorization": False,
+                "pre_action_overhead_guard": latest_overhead_guard,
+            }
+        elif structural_stage == "workspace_release_diagonal":
+            if (
+                prepared_high_lateral_action is None
+                or prepared_high_lateral_envelope is None
+            ):
+                raise RuntimeError(
+                    "workspace-release action lacks its live compiled envelope"
+                )
+            action = prepared_high_lateral_action
+            path_control = prepared_high_lateral_envelope
+            feedback = {
+                "mode": structural_stage,
+                "action": action.tolist(),
+                "compiled_adaptive_workspace_release_envelope": path_control,
+                "lateral_route_phase": "outward_downward_workspace_release",
                 "pre_action_measured_vertical_step_progress_m": (
                     latest_vertical_step_progress_m
                 ),
@@ -6039,8 +6391,16 @@ def _seek_stable_plate_contact(
                 lateral_post_action_interlock
             )
         if stage_before_action in overhead_lateral_stages:
+            lateral_feedback_target = (
+                np.asarray(outside_high_target, dtype=float)[:2]
+                if stage_before_action == "overhead_high_corridor_lateral"
+                else corridor_high_target[:2]
+            )
             feedback["corridor_lateral_error_m"] = float(
-                np.linalg.norm(after_eef[:2] - corridor_high_target[:2])
+                np.linalg.norm(after_eef[:2] - lateral_feedback_target)
+            )
+            feedback["stage_lateral_target_xy"] = (
+                lateral_feedback_target.tolist()
             )
         if stage_before_action == "overhead_high_corridor_lateral":
             if measured_vertical_step_progress_m < 0.0:
@@ -6056,8 +6416,45 @@ def _seek_stable_plate_contact(
                         ),
                     }
                 )
-            corridor_entry_after_action = (
-                _overhead_corridor_entry_evidence(
+            outside_high_entry = _overhead_outside_high_entry_evidence(
+                current_eef=after_eef,
+                outside_high_target=np.asarray(
+                    outside_high_target, dtype=float
+                ),
+                overhead_horizontal_z=overhead_horizontal_z,
+                overhead_guard=latest_overhead_guard,
+                position_tolerance=args.position_tolerance,
+            )
+            feedback["outside_high_entry_after_high_lateral"] = (
+                outside_high_entry
+            )
+            if outside_high_entry["accepted"]:
+                structural_stage = "workspace_release_diagonal"
+                vertical_tail_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        "event": (
+                            "reachable_outside_high_complete_to_workspace_"
+                            "release_diagonal"
+                        ),
+                        **outside_high_entry,
+                    }
+                )
+        elif stage_before_action == "workspace_release_diagonal":
+            if measured_vertical_step_progress_m < 0.0:
+                vertical_tail_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        "event": "workspace_release_negative_z_progress",
+                        "measured_vertical_step_progress_m": (
+                            measured_vertical_step_progress_m
+                        ),
+                        "post_action_base8_accepted": bool(
+                            latest_overhead_guard["accepted"]
+                        ),
+                    }
+                )
+            corridor_entry_after_action = _overhead_corridor_entry_evidence(
                     current_eef=after_eef,
                     corridor_high_target=corridor_high_target,
                     outside_side_guard=latest_outside_side_guard,
@@ -6072,12 +6469,9 @@ def _seek_stable_plate_contact(
                         ]
                     ),
                     require_lateral_buffer=False,
-                    minimum_eef_z=(
-                        overhead_horizontal_z - args.position_tolerance
-                    ),
-                )
+                    minimum_eef_z=None,
             )
-            feedback["corridor_entry_after_high_lateral"] = (
+            feedback["corridor_entry_after_workspace_release"] = (
                 corridor_entry_after_action
             )
             if corridor_entry_after_action["accepted"]:
@@ -6086,8 +6480,8 @@ def _seek_stable_plate_contact(
                     {
                         "guard_step": int(guard_step),
                         "event": (
-                            "native_center_high_lateral_complete_to_"
-                            "adaptive_corridor_descent"
+                            "workspace_release_reached_strict_corridor_to_"
+                            "adaptive_overhead_descent"
                         ),
                         **corridor_entry_after_action,
                     }

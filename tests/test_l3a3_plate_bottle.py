@@ -17,6 +17,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_adaptive_lateral_rebuffer_action,
     _compiled_adaptive_high_lateral_action,
     _compiled_adaptive_high_plane_action,
+    _compiled_adaptive_workspace_release_action,
     _compiled_adaptive_vertical_descent_action,
     _compiled_collision_pair_clearance,
     _compiled_pair_set_clearance,
@@ -37,6 +38,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _outside_side_guard_from_world_aabbs,
     _outside_side_lateral_settle_evidence,
     _overhead_corridor_entry_evidence,
+    _overhead_outside_high_entry_evidence,
     _overhead_lateral_buffer_evidence,
     _overhead_lateral_interlock_evidence,
     _overhead_route_frame_authorization_evidence,
@@ -2322,7 +2324,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     )
     assert '"structural_route_order"' in bounded_seek
     assert (
-        '"native_center_high_xy_plus_nonnegative_z_plane_hold",'
+        '"native_center_high_to_reachable_outside_high_plane_hold",'
         in bounded_seek
     )
     assert (
@@ -2725,6 +2727,145 @@ def test_500195_regression_is_dynamic_tail_not_contact_or_threshold_change():
     assert "measured_vertical_step_progress_m=(" in bounded_seek
     assert "overhead_horizontal_z=overhead_horizontal_z" in bounded_seek
     assert '"overhead_post_descent_corridor_lateral"' in bounded_seek
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+    assert (
+        '"--plate_contact_seek_max_translation_action",\n'
+        "        type=float,\n"
+        "        default=0.10,"
+        in controller
+    )
+
+
+def test_500199_routes_reachable_outside_high_before_workspace_release():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    hold_z = 1.0654223455
+    outside_high = np.array([0.1368063955, -0.0285077796, hold_z])
+    corridor_xy = np.array([0.1448063955, -0.0285077796])
+    failed_final = np.array([0.1384933384, -0.0283591799, 1.0597920005])
+    assert np.linalg.norm(failed_final[:2] - outside_high[:2]) < 0.005
+    assert np.linalg.norm(failed_final[:2] - corridor_xy) == pytest.approx(
+        0.0063148055,
+        abs=2e-7,
+    )
+    assert 0.0069407 < 0.008
+
+    pairs = [
+        {
+            "gripper_geom": f"gripper_{index // 11}",
+            "counterpart_geom": f"native_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": 0.13332117746677247,
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    guard = {
+        "accepted": True,
+        "one_step_vertical_reserve_m": 0.008,
+        "pairs": pairs,
+    }
+    native = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "runtime_resolved": True,
+    }
+    outside_gate = _overhead_outside_high_entry_evidence(
+        current_eef=outside_high,
+        outside_high_target=outside_high,
+        overhead_horizontal_z=hold_z,
+        overhead_guard=guard,
+        position_tolerance=0.005,
+    )
+    assert outside_gate["accepted"] is True
+
+    action, evidence = _compiled_adaptive_workspace_release_action(
+        current_eef=outside_high,
+        corridor_target_xy=corridor_xy,
+        release_target_z=0.898654346,
+        measured_vertical_step_progress_m=-0.00000284,
+        overhead_guard=guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+    )
+    assert action[0] > 0.0
+    assert action[2] < 0.0
+    assert np.all(action[3:6] == 0.0)
+    assert np.linalg.norm(action[:3]) < 1.0
+    assert evidence["motion_kind"] == "outward_downward_workspace_release"
+    assert evidence["compiled_pair_count"] == 55
+    assert evidence["measured_negative_inertial_tail_reserve_m"] > 0.00000284
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+    assert evidence["proof"] == {
+        "outward_xy_plus_nonpositive_z_zero_rotation": True,
+        "strictly_inside_native_3d_action_norm_bound": True,
+        "does_not_cross_corridor_target_xy": True,
+        "does_not_cross_release_target_z": True,
+        "latest_measured_negative_dz_reserved_as_inertial_tail": True,
+        "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": True,
+    }
+    authorization = _overhead_route_frame_authorization_evidence(
+        outside_side_guard={
+            "accepted": False,
+            "minimum_outside_clearance_m": 0.0069407,
+            "required_outside_clearance_m": strict_clearance,
+        },
+        overhead_guard=guard,
+        overhead_lateral_buffer=_overhead_lateral_buffer_evidence(
+            guard,
+            worst_case_controller_world_step_m=0.008,
+        ),
+        compiled_pairs=pairs,
+        expected_pair_count=55,
+        require_lateral_buffer=False,
+        adaptive_high_lateral_envelope=evidence,
+    )
+    assert authorization["accepted"] is True
+    assert authorization["buffer16_used_for_authorization"] is False
+
+    released_corridor = _overhead_corridor_entry_evidence(
+        current_eef=np.array([corridor_xy[0], corridor_xy[1], 1.0]),
+        corridor_high_target=np.array([corridor_xy[0], corridor_xy[1], 0.94]),
+        outside_side_guard={
+            "accepted": False,
+            "minimum_outside_clearance_m": 0.009,
+            "required_outside_clearance_m": strict_clearance,
+        },
+        overhead_guard=guard,
+        overhead_lateral_buffer=_overhead_lateral_buffer_evidence(
+            guard,
+            worst_case_controller_world_step_m=0.008,
+        ),
+        position_tolerance=0.005,
+        strict_corridor_entry_clearance_m=0.008,
+        require_lateral_buffer=False,
+        minimum_eef_z=None,
+    )
+    assert released_corridor["accepted"] is True
+    assert released_corridor["minimum_eef_z_m"] is None
+
+
+def test_500199_workspace_release_stage_preserves_all_hard_thresholds():
+    controller = CONTROLLER_REFERENCE.read_text()
+    bounded_seek = controller.split("def _seek_stable_plate_contact(", 1)[1]
+    assert '"workspace_release_diagonal": 0' in bounded_seek
+    assert "_compiled_adaptive_workspace_release_action(" in bounded_seek
+    assert 'structural_stage = "workspace_release_diagonal"' in bounded_seek
+    assert '"compiled_adaptive_workspace_release_envelope"' in bounded_seek
+    assert "workspace_release_reached_strict_corridor_to_" in bounded_seek
+    assert '"overhead_corridor_descent"' in bounded_seek
     assert (
         'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
         in controller
