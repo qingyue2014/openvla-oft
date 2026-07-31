@@ -773,9 +773,9 @@ def test_500128_reallocates_exact_milk_approach_spare_to_lift():
         assert evidence["floor_support_samples"] == evidence["samples"]
         assert evidence["forbidden_contact_samples"] == 0
 
-    # Job500138 subsequently draws three more of the same observed approach
-    # reserve; the Job500128 one-action lift funding remains intact.
-    assert HORIZON_STAGE_STEP_LIMITS["milk_approach"] == 16
+    # Jobs 500138 and 500144 subsequently draw six more of the same observed
+    # approach reserve; the Job500128 one-action lift funding remains intact.
+    assert HORIZON_STAGE_STEP_LIMITS["milk_approach"] == 13
     assert HORIZON_STAGE_STEP_LIMITS["milk_lift"] == 13
     # No action is borrowed from grasp, hold, release, or stability windows.
     assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
@@ -967,9 +967,207 @@ def test_500138_funds_three_action_basket_raise_tail_from_approach():
         assert stability_evidence["floor_support_samples"] == samples
         assert stability_evidence["forbidden_contact_samples"] == 0
 
-    assert HORIZON_STAGE_STEP_LIMITS["milk_approach"] == 16
+    # Job500144 subsequently draws three more approach reserves for the
+    # basket-retreat tail; the Job500138 raise funding remains intact.
+    assert HORIZON_STAGE_STEP_LIMITS["milk_approach"] == 13
     assert HORIZON_STAGE_STEP_LIMITS["milk_lift"] == 13
     assert HORIZON_STAGE_STEP_LIMITS["milk_to_basket_raise"] == 11
+    assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
+    budget = _static_plan_budget_diagnostics(
+        grasp_seat_steps=8,
+        contact_hold_steps=2,
+        release_steps=8,
+        settle_steps=10,
+        policy_step_budget=EVALUATION_POLICY_STEP_BUDGET,
+    )
+    assert budget["registered_repeated_hold_steps"] == 56
+    assert budget["static_safe_plan_max_steps"] == 278
+    assert budget["static_safe_plan_budget_margin_steps"] == 2
+
+
+def test_500144_funds_three_action_basket_retreat_tail_from_approach():
+    # Exact Job500144 evidence, ordered episode-major then attempt-major.
+    # All 25 attempts reached native task success; the sole failure was the
+    # post-release eight-action retreat remaining just outside tolerance.
+    task_steps = [
+        228, 228, 229, 227, 228,
+        229, 229, 229, 228, 229,
+        229, 228, 230, 228, 229,
+        228, 228, 230, 227, 228,
+        224, 224, 224, 224, 225,
+    ]
+    basket_translate_steps = [
+        43, 43, 43, 43, 43,
+        43, 43, 43, 43, 43,
+        41, 41, 41, 41, 41,
+        43, 43, 43, 43, 43,
+        41, 41, 41, 41, 41,
+    ]
+    native_success_steps = [
+        255, 255, 256, 254, 255,
+        256, 256, 256, 255, 256,
+        256, 255, 257, 255, 256,
+        255, 255, 257, 254, 255,
+        251, 251, 251, 251, 252,
+    ]
+    milk_final_goal_error_mm = [
+        6.438043, 7.908955, 3.440940, 6.576896, 3.930710,
+        5.810189, 10.719940, 4.451719, 6.319299, 5.816380,
+        4.545548, 9.330823, 6.840451, 4.444510, 4.529547,
+        3.592564, 5.387928, 10.608092, 7.259988, 13.278472,
+        5.067925, 6.901032, 4.231518, 5.089182, 5.161109,
+    ]
+    retreat_final_error_mm = [
+        18.611292, 18.591055, 18.627191, 18.610825, 18.611441,
+        18.578541, 18.582189, 18.576543, 18.579909, 18.578680,
+        18.561739, 18.560295, 18.566863, 18.561446, 18.561639,
+        18.579927, 18.582343, 18.594890, 18.580526, 18.576936,
+        18.549359, 18.550557, 18.547355, 18.549169, 18.549427,
+    ]
+    retreat_last_action_gain_mm = [
+        4.308885, 4.292216, 4.309179, 4.308881, 4.308438,
+        4.316650, 4.316116, 4.316483, 4.316374, 4.316635,
+        4.315771, 4.315308, 4.315314, 4.315740, 4.315658,
+        4.314183, 4.314358, 4.314031, 4.314040, 4.312027,
+        4.311946, 4.311969, 4.312075, 4.311939, 4.311930,
+    ]
+    final_observed_gain_retention = [
+        0.807301628, 0.807517983, 0.807400258, 0.807296632,
+        0.807312440, 0.807615829, 0.807658282, 0.807595522,
+        0.807631212, 0.807615188, 0.807565834, 0.807603177,
+        0.807652485, 0.807567437, 0.807571317, 0.807521489,
+        0.807508524, 0.807604883, 0.807500982, 0.807509817,
+        0.807286141, 0.807301450, 0.807255844, 0.807283254,
+        0.807285429,
+    ]
+
+    assert min(task_steps) == 224
+    assert max(task_steps) == 230
+    assert set(basket_translate_steps) == {41, 43}
+    observed_fixed_stage_steps = {
+        "milk_approach": {12},
+        "milk_descend": {7, 8},
+        "milk_lift": {13},
+        "milk_to_basket_raise": {11},
+        "milk_to_basket_descend": {10},
+        "contact_hold": {2},
+        "release": {8},
+        "milk_to_basket_retreat": {8},
+    }
+    assert observed_fixed_stage_steps["milk_to_basket_raise"] == {11}
+    assert observed_fixed_stage_steps["milk_to_basket_descend"] == {10}
+    assert observed_fixed_stage_steps["contact_hold"] == {2}
+    assert observed_fixed_stage_steps["release"] == {8}
+    assert observed_fixed_stage_steps["milk_to_basket_retreat"] == {8}
+
+    # Native success occurred in every trace before the retreat failure. The
+    # native in-basket predicate, rather than Euclidean body-goal tolerance,
+    # is authoritative for task success.
+    native_success = [True] * 25
+    within_evaluation_budget = [True] * 25
+    assert all(native_success)
+    assert min(native_success_steps) == 251
+    assert max(native_success_steps) == 257
+    assert all(within_evaluation_budget)
+    assert min(milk_final_goal_error_mm) == pytest.approx(3.440940)
+    assert max(milk_final_goal_error_mm) == pytest.approx(13.278472)
+
+    assert min(retreat_final_error_mm) > 12.0
+    # One extra action is impossible: every residual excess is larger than
+    # the largest observed eighth-action gain.
+    assert min(error - 12.0 for error in retreat_final_error_mm) > max(
+        retreat_last_action_gain_mm
+    )
+
+    # Across the last three gain transitions in all 25 retreat traces, gain
+    # retention ranged from 0.807255844 to 0.814130374. The most optimistic
+    # observed two-action extrapolation still misses tolerance; three actions
+    # pass for every trace under the conservative observed retention.
+    min_late_gain_retention = min(final_observed_gain_retention)
+    max_late_gain_retention = 0.814130374
+    optimistic_two_action_error = min(retreat_final_error_mm) - max(
+        retreat_last_action_gain_mm
+    ) * (
+        max_late_gain_retention + max_late_gain_retention**2
+    )
+    conservative_two_action_errors = [
+        error - gain * sum(min_late_gain_retention**power for power in (1, 2))
+        for error, gain in zip(
+            retreat_final_error_mm,
+            retreat_last_action_gain_mm,
+        )
+    ]
+    conservative_three_action_errors = [
+        error
+        - gain
+        * sum(min_late_gain_retention**power for power in (1, 2, 3))
+        for error, gain in zip(
+            retreat_final_error_mm,
+            retreat_last_action_gain_mm,
+        )
+    ]
+    assert optimistic_two_action_error == pytest.approx(12.171928, abs=1e-5)
+    assert optimistic_two_action_error > 12.0
+    assert min(conservative_two_action_errors) == pytest.approx(
+        12.256392, abs=1e-5
+    )
+    assert max(conservative_two_action_errors) == pytest.approx(
+        12.340453, abs=1e-5
+    )
+    assert min(conservative_two_action_errors) > 12.0
+    assert min(conservative_three_action_errors) == pytest.approx(
+        9.987990, abs=1e-5
+    )
+    assert max(conservative_three_action_errors) == pytest.approx(
+        10.073575, abs=1e-5
+    )
+    assert max(conservative_three_action_errors) < 12.0
+
+    # Lock all butter evidence through native success, release, and the full
+    # eight-action failed retreat.
+    confirmation_steps = [10] * 25
+    post_park_monitor_steps = [
+        122, 122, 123, 122, 122,
+        122, 122, 122, 122, 122,
+        120, 120, 121, 120, 120,
+        122, 122, 123, 122, 122,
+        120, 120, 120, 120, 120,
+    ]
+    assert sum(confirmation_steps) == 250
+    assert sum(post_park_monitor_steps) == 3033
+    confirmation_evidence = {
+        "samples": 250,
+        "max_drift_m": 0.0,
+        "max_tilt_deg": 3.1945284701301985e-06,
+        "max_linear_speed_mps": 3.0085449419112237e-16,
+        "max_angular_speed_radps": 1.4546898636689465e-15,
+        "contact_sets": {("floor",)},
+        "floor_support_samples": 250,
+        "forbidden_contact_samples": 0,
+    }
+    post_park_evidence = {
+        "samples": 3033,
+        "max_drift_m": 3.469446951953614e-18,
+        "max_tilt_deg": 3.1945284701301985e-06,
+        "max_linear_speed_mps": 4.789564782125783e-16,
+        "max_angular_speed_radps": 1.31124127483488e-14,
+        "contact_sets": {("floor",)},
+        "floor_support_samples": 3033,
+        "forbidden_contact_samples": 0,
+    }
+    for evidence in (confirmation_evidence, post_park_evidence):
+        assert evidence["max_drift_m"] <= 0.005
+        assert evidence["max_tilt_deg"] <= 2.0
+        assert evidence["max_linear_speed_mps"] <= 0.01
+        assert evidence["max_angular_speed_radps"] <= 0.10
+        assert evidence["contact_sets"] == {("floor",)}
+        assert evidence["floor_support_samples"] == evidence["samples"]
+        assert evidence["forbidden_contact_samples"] == 0
+
+    assert HORIZON_STAGE_STEP_LIMITS["milk_approach"] == 13
+    assert HORIZON_STAGE_STEP_LIMITS["milk_lift"] == 13
+    assert HORIZON_STAGE_STEP_LIMITS["milk_to_basket_raise"] == 11
+    assert HORIZON_STAGE_STEP_LIMITS["milk_to_basket_retreat"] == 11
     assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
     budget = _static_plan_budget_diagnostics(
         grasp_seat_steps=8,

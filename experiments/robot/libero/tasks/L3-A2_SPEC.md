@@ -351,6 +351,59 @@ Registered motion remains 222 actions, the fixed safety/hold total remains
 and every downstream basket stage remain physical hypotheses until a fresh
 remote reference passes them.
 
+Superpod Job500144 tested the eleven-action basket raise across all 25
+registered episode/offset attempts on committed controller `dc35d9de`. Native
+generation and reference gates passed. Every attempt completed milk approach
+in 12 actions, milk descend in 7--8 contact-accepted actions, milk lift in 13
+actions, basket raise in 11 actions, basket translate in 41--43 actions, and
+basket descend in 10 actions. All 25 then reached native in-basket success,
+completed the unchanged two-action contact hold and eight-action release, and
+entered basket retreat. Native success was first observed at recorder policy
+steps 251--257. The final milk body-to-goal distance was
+3.441--13.278 mm and its bottom gap to the basket floor was between
+-0.03184 and -0.00373 mm; the native predicate, not Euclidean body-goal
+distance, is authoritative for task success.
+
+The sole terminal failure was
+`milk_to_basket_retreat/waypoint_timeout`. The retreat started at exactly
+80 mm error. Its full former eight-action allocation reduced that error
+monotonically to 18.547--18.627 mm, with a final-action gain of
+4.292--4.317 mm. One additional action is insufficient because the smallest
+remaining excess above the unchanged 12 mm tolerance, 6.547 mm, exceeds the
+largest observed final-action gain. Across the final three gain transitions
+in all 25 traces, gain retention was `0.807255844`--`0.814130374`. Even the
+most optimistic observed two-action extrapolation remains at 12.172 mm;
+applying the minimum observed retention per trace gives 12.256--12.340 mm
+after two actions and 9.988--10.074 mm after three. Three additional actions
+are therefore the minimum 25-trace-supported retreat repair.
+
+Job500144 also reconfirmed the remaining donor: every attempt used exactly 12
+milk-approach actions against the then-registered 16-action limit. Three of
+those four observed reserves fund retreat, leaving one registered reserve:
+
+| Stage | Job500144 allocation | Revised allocation |
+| --- | ---: | ---: |
+| `milk_approach` | 16 | 13 |
+| `milk_to_basket_retreat` | 8 | 11 |
+
+All partial safe-reference trajectories used 224--230 task actions and were
+within the evaluator horizon. More importantly, the complete static plan
+remains bounded independently of early success: registered motion remains
+222 actions, fixed safety/hold actions remain 56, and the complete bound
+remains 278/280. All tolerances, position scales, normalized action caps,
+grasp-seat actions, contact holds, releases, stabilization windows, and every
+other stage allocation remain unchanged.
+
+The butter safety invariant remained valid through native success, release,
+and every failed-retreat action. All 250 confirmation samples and all 3,033
+post-park samples had floor-only support and zero forbidden contacts. Maximum
+drift was `3.469446951953614e-18` m, maximum tilt was
+`3.1945284701301985e-06` degrees, maximum linear speed was
+`4.789564782125783e-16` m/s, and maximum angular speed was
+`1.31124127483488e-14` rad/s. Job500144 proves native success but not physical
+safe success: the eleven-action retreat remains a physical hypothesis until
+a fresh remote reference completes it and passes the terminal safety gate.
+
 The safe-reference report and per-episode CSV also record the controller
 source SHA-256; the runner rejects a PASS report produced by different
 controller bytes, even when the ER state artifact is unchanged.

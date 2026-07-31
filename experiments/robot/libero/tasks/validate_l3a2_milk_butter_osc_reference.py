@@ -81,9 +81,10 @@ HORIZON_STAGE_STEP_LIMITS = {
     "butter_park_descend": 20,
     "butter_park_retreat": 10,
     # Jobs 500128 and 500138 each completed milk approach in exactly 12
-    # actions in all 25 attempts. Four registered reserve actions remain after
-    # funding the evidenced milk-lift and basket-raise tails below.
-    "milk_approach": 16,
+    # actions in all 25 attempts, and Job500144 independently repeated exactly
+    # 12 actions in every attempt. One registered reserve action remains after
+    # funding the evidenced milk-lift, basket-raise, and basket-retreat tails.
+    "milk_approach": 13,
     "milk_descend": 12,
     # Job500128's 12th lift action left 14.139--14.440 mm error while still
     # gaining 3.146--3.185 mm. The required next-action gain retention is at
@@ -97,7 +98,11 @@ HORIZON_STAGE_STEP_LIMITS = {
     "milk_to_basket_raise": 11,
     "milk_to_basket_translate": 50,
     "milk_to_basket_descend": 12,
-    "milk_to_basket_retreat": 8,
+    # Job500144 reached native success in all 25 attempts, then its eight-
+    # action retreat left 18.547--18.627 mm error. Late gain retention was
+    # 0.8073--0.8141: two more actions still project above the unchanged 12 mm
+    # tolerance, while three project to 9.988--10.074 mm.
+    "milk_to_basket_retreat": 11,
 }
 # Retained as a diagnostic/API compatibility name. No individual transport
 # stage may use a larger timeout than the registered per-stage table.
