@@ -1,4 +1,5 @@
 import json
+import inspect
 import subprocess
 import sys
 from pathlib import Path
@@ -9,9 +10,11 @@ import numpy as np
 import pytest
 
 from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
+    BASE_STATE_SOURCE,
     CONDITION_LABEL,
     CONDITION_SUPPORT,
     EXPECTED_OBJECT_BODIES,
+    PAIRING_METHOD,
     SCENE_ID,
     TASK_ID,
     TASK_KEY,
@@ -20,7 +23,9 @@ from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
     build_preflight_manifest,
     sha256_file,
     validate_human_approval,
+    validate_generation_manifest,
     validate_native_task,
+    validate_native_init_states_source,
     validate_state_artifacts,
     verify_evaluation_request,
     verify_runtime_asset_inventory,
@@ -31,6 +36,8 @@ from experiments.robot.libero.tasks.validate_l3a2_milk_butter_smoke import (
 from experiments.robot.libero.tasks.generate_l3a2_milk_butter_initial_states import (
     _basket_milk_goal,
     _collision_vertical_bounds,
+    _stack_butter_on,
+    _validated_official_init_state_rows,
 )
 from experiments.robot.libero.tasks.validate_l3a2_milk_butter_osc_reference import (
     TRANSPORT_MAX_WAYPOINT_STEPS,
@@ -47,6 +54,11 @@ NATIVE_BDDL = (
     REPO_ROOT
     / "_deps/LIBERO/libero/libero/bddl_files/libero_object"
     / "pick_up_the_milk_and_place_it_in_the_basket.bddl"
+)
+NATIVE_INIT_STATES = (
+    REPO_ROOT
+    / "_deps/LIBERO/libero/libero/init_files/libero_object"
+    / "pick_up_the_milk_and_place_it_in_the_basket.pruned_init"
 )
 RUNNER = (
     REPO_ROOT
@@ -75,6 +87,11 @@ def _write_artifact(path, condition, bases, *, illegal_initial=False):
             "task_id": TASK_ID,
             "task_prompt": TASK_PROMPT,
             "bddl_sha256": sha256_file(NATIVE_BDDL),
+            "native_init_states": str(NATIVE_INIT_STATES.resolve()),
+            "native_init_states_sha256": sha256_file(NATIVE_INIT_STATES),
+            "base_state_source": BASE_STATE_SOURCE,
+            "pairing_method": PAIRING_METHOD,
+            "construction_settle_method": "controller_dummy_action",
             "seed": 42,
             "formal_wait_steps": 10,
             "intervention_body": "butter_1_main",
@@ -94,11 +111,25 @@ def _write_artifact(path, condition, bases, *, illegal_initial=False):
                 evaluated[40:46] = 0.0
             if illegal_initial:
                 evaluated[25] += 1.0
+            demo.create_dataset("native_source_state", data=base)
             demo.create_dataset("base_reset_state", data=base)
             demo.create_dataset("intervention_state", data=intervention)
             demo.create_dataset("initial_state", data=evaluated)
             demo.attrs["butter_qpos_flat_start"] = 10
             demo.attrs["butter_qvel_flat_start"] = 40
+            demo.attrs["native_init_state_index"] = index
+            demo.attrs["source_state_sha256"] = (
+                l3a2_generator.sha256_array(base)
+            )
+            demo.attrs["base_state_sha256"] = (
+                l3a2_generator.sha256_array(base)
+            )
+            demo.attrs["intervention_state_sha256"] = (
+                l3a2_generator.sha256_array(intervention)
+            )
+            demo.attrs["initial_state_sha256"] = (
+                l3a2_generator.sha256_array(evaluated)
+            )
             demo.attrs["native_butter_body_position"] = (
                 base[10:13] + np.array([0.125, -0.25, 0.375])
             )
@@ -146,6 +177,40 @@ def test_native_preflight_accepts_only_exact_native_task(tmp_path):
         validate_native_task(NATIVE_BDDL, copied, TASK_PROMPT)
 
 
+def test_official_init_source_and_rows_fail_closed(tmp_path):
+    source = validate_native_init_states_source(NATIVE_INIT_STATES)
+    assert source["path"] == str(NATIVE_INIT_STATES.resolve())
+    assert source["sha256"] == sha256_file(NATIVE_INIT_STATES)
+
+    copied = tmp_path / NATIVE_INIT_STATES.name
+    copied.write_bytes(NATIVE_INIT_STATES.read_bytes())
+    with pytest.raises(ValueError, match="unexpected native init-state"):
+        validate_native_init_states_source(copied)
+
+    raw = np.arange(24, dtype=float).reshape(3, 8)
+    rows = _validated_official_init_state_rows(
+        raw, requested_count=2, expected_state_size=8
+    )
+    np.testing.assert_array_equal(rows, raw)
+    assert not np.shares_memory(rows, raw)
+    with pytest.raises(ValueError, match="pool has 3 rows"):
+        _validated_official_init_state_rows(
+            raw, requested_count=4, expected_state_size=8
+        )
+    with pytest.raises(ValueError, match="width 8"):
+        _validated_official_init_state_rows(
+            raw, requested_count=2, expected_state_size=9
+        )
+
+
+def test_stack_construction_uses_controller_steps_not_raw_simulation():
+    source = inspect.getsource(_stack_butter_on)
+    assert "env.step(DUMMY_ACTION)" in source
+    assert "env.sim.step()" not in source
+    assert "env.reset()" in source
+    assert "env.set_init_state" in source
+
+
 def test_paired_artifacts_allow_only_butter_in_exact_loaded_state(tmp_path):
     paths = _triplet(tmp_path)
     result = validate_state_artifacts(
@@ -184,6 +249,112 @@ def test_pairing_rejects_mismatched_native_butter_body_position(tmp_path):
             paths["er"],
             paths["ec"],
             native_bddl=NATIVE_BDDL,
+        )
+
+
+def test_pairing_rejects_base_that_differs_from_official_source(tmp_path):
+    paths = _triplet(tmp_path)
+    with h5py.File(paths["eb"], "r+") as handle:
+        demo = handle[TASK_KEY]["demo_0"]
+        demo["base_reset_state"][0] += 0.01
+        demo.attrs["base_state_sha256"] = l3a2_generator.sha256_array(
+            demo["base_reset_state"][:]
+        )
+        demo["initial_state"][0] += 0.01
+        demo.attrs["initial_state_sha256"] = l3a2_generator.sha256_array(
+            demo["initial_state"][:]
+        )
+        demo["intervention_state"][0] += 0.01
+        demo.attrs["intervention_state_sha256"] = (
+            l3a2_generator.sha256_array(demo["intervention_state"][:])
+        )
+    with pytest.raises(ValueError, match="base differs from official"):
+        validate_state_artifacts(
+            paths["eb"],
+            paths["er"],
+            paths["ec"],
+            native_bddl=NATIVE_BDDL,
+        )
+
+
+def test_generation_manifest_binds_official_source_rows_to_hdf5(tmp_path):
+    paths = _triplet(tmp_path)
+    episodes = []
+    for index in range(2):
+        conditions = {}
+        for condition in ("eb", "er", "ec"):
+            preview = tmp_path / f"{condition}_{index}.png"
+            preview.write_bytes(f"{condition}-{index}".encode())
+            with h5py.File(paths[condition], "r") as handle:
+                demo = handle[TASK_KEY][f"demo_{index}"]
+                conditions[condition] = {
+                    "intervention_state_sha256": (
+                        l3a2_generator.sha256_array(
+                            demo["intervention_state"][:]
+                        )
+                    ),
+                    "initial_state_sha256": l3a2_generator.sha256_array(
+                        demo["initial_state"][:]
+                    ),
+                    "first_policy_frame": str(preview),
+                    "first_policy_frame_file_sha256": sha256_file(preview),
+                }
+        with h5py.File(paths["eb"], "r") as handle:
+            demo = handle[TASK_KEY][f"demo_{index}"]
+            source_hash = l3a2_generator.sha256_array(
+                demo["native_source_state"][:]
+            )
+            base_hash = l3a2_generator.sha256_array(
+                demo["base_reset_state"][:]
+            )
+        episodes.append(
+            {
+                "episode": index,
+                "native_init_state_index": index,
+                "source_state_sha256": source_hash,
+                "base_state_sha256": base_hash,
+                "conditions": conditions,
+            }
+        )
+    manifest = {
+        "scene_id": SCENE_ID,
+        "verdict": "PASS_L3A2_GENERATION_AND_REFERENCE_GATES",
+        "base_state_source": BASE_STATE_SOURCE,
+        "pairing_method": PAIRING_METHOD,
+        "native_init_states": str(NATIVE_INIT_STATES.resolve()),
+        "native_init_states_sha256": sha256_file(NATIVE_INIT_STATES),
+        "artifacts": {
+            condition: {
+                "path": str(path.resolve()),
+                "sha256": sha256_file(path),
+            }
+            for condition, path in paths.items()
+        },
+        "episodes": episodes,
+    }
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+    result = validate_generation_manifest(
+        manifest_path,
+        eb_path=paths["eb"],
+        er_path=paths["er"],
+        ec_path=paths["ec"],
+        minimum_count=2,
+    )
+    assert result["native_init_states_sha256"] == sha256_file(
+        NATIVE_INIT_STATES
+    )
+
+    manifest["episodes"][0]["source_state_sha256"] = "0" * 64
+    manifest["episodes"][0]["base_state_sha256"] = "0" * 64
+    manifest_path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="source state hash differs from HDF5"):
+        validate_generation_manifest(
+            manifest_path,
+            eb_path=paths["eb"],
+            er_path=paths["er"],
+            ec_path=paths["ec"],
+            minimum_count=2,
         )
 
 
@@ -501,6 +672,8 @@ def test_runner_orders_smoke_before_human_review_and_formal(tmp_path):
         "require_human_review"
     )
     assert "--native_only_preflight_manifest" in text
+    assert "--native_init_states" in text
+    assert "pick_up_the_milk_and_place_it_in_the_basket.pruned_init" in text
     assert "--safety_oracle task_actor_cascade" in text
     assert "--cascade_initial_relation_required" in text
     assert "compiled_floor_support_bodies" in text
@@ -520,6 +693,10 @@ def test_generator_and_osc_reference_encode_required_hard_gates():
     assert '"post_wait_metrics"' in generator
     assert "first_policy_frame" in generator
     assert "evaluated_state = np.asarray(base_state).copy()" in generator
+    assert "official_states[native_init_state_index]" in generator
+    assert '"native_source_state"' in generator
+    assert '"source_state_sha256"' in generator
+    assert "env.set_init_state(source_state)" in generator
     assert "PASS_L3A2_GENERATION_AND_REFERENCE_GATES" in generator
     assert "env.step" in osc
     assert "PASS_L3A2_REAL_ACTION_SAFE_REFERENCE" in osc

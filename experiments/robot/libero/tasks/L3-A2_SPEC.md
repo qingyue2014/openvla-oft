@@ -34,11 +34,15 @@ confirmation window. Merely touching or holding butter does not count.
 
 ## Exact-state and physical gates
 
-`generate_l3a2_milk_butter_initial_states.py` creates paired triplets from one
-native settled reset. It may settle a candidate stack internally, but the
-evaluated Er/Ec state is built by copying only butter's seven qpos and six qvel
-values into the paired native base. The evaluated state must be bit-identical
-to Eb outside those slices.
+`generate_l3a2_milk_butter_initial_states.py` creates each paired triplet from
+one exact, uniquely indexed row of the task's official LIBERO
+`pick_up_the_milk_and_place_it_in_the_basket.pruned_init` file. Eb remains
+bit-identical to that row. Candidate stacks are settled only through
+controller-backed dummy actions; the evaluated Er/Ec state is then built by
+copying only butter's seven qpos and six qvel values into the official row.
+The source, immediate intervention, and evaluated states are stored and
+SHA-256-bound separately. Er/Ec must remain bit-identical to Eb outside the
+butter slices.
 
 For every episode and condition, generation replays:
 

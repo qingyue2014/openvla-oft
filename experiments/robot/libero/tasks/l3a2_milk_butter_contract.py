@@ -28,8 +28,13 @@ SCENE_ID = "L3-A2"
 TASK_SUITE = "libero_object"
 TASK_ID = 7
 TASK_FILE = "pick_up_the_milk_and_place_it_in_the_basket.bddl"
+NATIVE_INIT_FILE = (
+    "pick_up_the_milk_and_place_it_in_the_basket.pruned_init"
+)
 TASK_PROMPT = "Pick the milk and place it in the basket"
 TASK_KEY = TASK_PROMPT.replace(" ", "_")
+BASE_STATE_SOURCE = "official_libero_pruned_init_row_exact"
+PAIRING_METHOD = "official_native_init_row_butter_free_joint_only"
 
 EXPECTED_FIXTURES = {"floor": "floor"}
 EXPECTED_OBJECTS = {
@@ -73,6 +78,24 @@ def sha256_file(path: str | Path) -> str:
 
 def sha256_array(value: np.ndarray) -> str:
     return hashlib.sha256(np.ascontiguousarray(value).tobytes()).hexdigest()
+
+
+def validate_native_init_states_source(
+    native_init_states: str | Path,
+) -> dict[str, str]:
+    """Bind generation to the selected suite's official serialized states."""
+
+    path = Path(native_init_states).resolve(strict=True)
+    if path.name != NATIVE_INIT_FILE or path.parent.name != TASK_SUITE:
+        raise ValueError(f"unexpected native init-state source: {path}")
+    if "init_files" not in path.parts:
+        raise ValueError(
+            f"native init states are not under LIBERO init_files: {path}"
+        )
+    return {
+        "path": str(path),
+        "sha256": sha256_file(path),
+    }
 
 
 def _section(text: str, name: str) -> str:
@@ -240,6 +263,23 @@ def verify_evaluation_request(
             "bddl_sha256"
         ):
             raise ValueError("L3-A2 state artifact BDDL binding mismatch")
+        if _decode_attr(group.attrs.get("base_state_source")) != (
+            BASE_STATE_SOURCE
+        ):
+            raise ValueError(
+                "L3-A2 state artifact is not based on official init rows"
+            )
+        if _decode_attr(group.attrs.get("pairing_method")) != PAIRING_METHOD:
+            raise ValueError("L3-A2 state artifact pairing method mismatch")
+        source = validate_native_init_states_source(
+            _decode_attr(group.attrs.get("native_init_states", ""))
+        )
+        if source["sha256"] != _decode_attr(
+            group.attrs.get("native_init_states_sha256")
+        ):
+            raise ValueError(
+                "L3-A2 official init-state source changed after generation"
+            )
     return record
 
 
@@ -328,6 +368,15 @@ def artifact_binding(path: str | Path) -> str:
             "formal_wait_steps": _decode_attr(
                 group.attrs.get("formal_wait_steps")
             ),
+            "base_state_source": _decode_attr(
+                group.attrs.get("base_state_source")
+            ),
+            "native_init_states_sha256": _decode_attr(
+                group.attrs.get("native_init_states_sha256")
+            ),
+            "pairing_method": _decode_attr(
+                group.attrs.get("pairing_method")
+            ),
         }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
@@ -349,6 +398,9 @@ def _assert_condition_group(
         "bddl_sha256": bddl_sha256,
         "intervention_body": "butter_1_main",
         "intervention_support": CONDITION_SUPPORT[condition],
+        "base_state_source": BASE_STATE_SOURCE,
+        "pairing_method": PAIRING_METHOD,
+        "construction_settle_method": "controller_dummy_action",
     }
     for name, wanted in expected.items():
         got = _decode_attr(group.attrs.get(name))
@@ -393,13 +445,36 @@ def validate_state_artifacts(
                 bddl_sha256=bddl_sha,
                 minimum_count=minimum_count,
             )
+        native_sources = {}
+        for condition, group in groups.items():
+            source = validate_native_init_states_source(
+                _decode_attr(group.attrs.get("native_init_states", ""))
+            )
+            recorded_sha = _decode_attr(
+                group.attrs.get("native_init_states_sha256")
+            )
+            if recorded_sha != source["sha256"]:
+                raise ValueError(
+                    f"{condition}: official init-state source hash mismatch"
+                )
+            native_sources[condition] = source
+        if len({source["path"] for source in native_sources.values()}) != 1:
+            raise ValueError(
+                "paired artifacts use different official init-state sources"
+            )
+        if len({source["sha256"] for source in native_sources.values()}) != 1:
+            raise ValueError(
+                "paired artifacts use different official init-state bytes"
+            )
 
         count = min(len(group) for group in groups.values())
         required_datasets = (
+            "native_source_state",
             "initial_state",
             "base_reset_state",
             "intervention_state",
         )
+        seen_native_indices: set[int] = set()
         for index in range(count):
             demos = {
                 condition: group[f"demo_{index}"]
@@ -419,6 +494,19 @@ def validate_state_artifacts(
                     raise ValueError(
                         f"{condition}/demo_{index}: policy visibility gate not PASS"
                     )
+                for dataset, attribute in (
+                    ("native_source_state", "source_state_sha256"),
+                    ("base_reset_state", "base_state_sha256"),
+                    ("intervention_state", "intervention_state_sha256"),
+                    ("initial_state", "initial_state_sha256"),
+                ):
+                    recorded = _decode_attr(demo.attrs.get(attribute))
+                    actual = sha256_array(demo[dataset][:])
+                    if recorded != actual:
+                        raise ValueError(
+                            f"{condition}/demo_{index}: {attribute} "
+                            "does not bind dataset bytes"
+                        )
                 if "native_butter_body_position" not in demo.attrs:
                     raise ValueError(
                         f"{condition}/demo_{index}: missing "
@@ -443,8 +531,45 @@ def validate_state_artifacts(
                         f"{condition}/demo_{index}: incomplete pre/post/trace metrics"
                     )
 
+            native_indices = {
+                condition: int(
+                    _decode_attr(
+                        demo.attrs.get("native_init_state_index", -1)
+                    )
+                )
+                for condition, demo in demos.items()
+            }
+            if len(set(native_indices.values())) != 1:
+                raise ValueError(
+                    f"demo_{index}: paired native init row differs: "
+                    f"{native_indices}"
+                )
+            native_index = native_indices["eb"]
+            if native_index < 0:
+                raise ValueError(
+                    f"demo_{index}: invalid native init-state row index"
+                )
+            if native_index in seen_native_indices:
+                raise ValueError(
+                    f"demo_{index}: duplicate native init-state row "
+                    f"{native_index}"
+                )
+            seen_native_indices.add(native_index)
+
+            source = demos["eb"]["native_source_state"][:]
             base = demos["eb"]["base_reset_state"][:]
+            if not np.array_equal(base, source):
+                raise ValueError(
+                    f"eb/demo_{index}: paired base differs from official "
+                    "native source row"
+                )
             for condition in ("er", "ec"):
+                other_source = demos[condition]["native_source_state"][:]
+                if not np.array_equal(source, other_source):
+                    raise ValueError(
+                        f"demo_{index}: native_source_state differs in "
+                        f"{condition}"
+                    )
                 other = demos[condition]["base_reset_state"][:]
                 if not np.array_equal(base, other):
                     raise ValueError(
@@ -638,6 +763,19 @@ def validate_generation_manifest(
         raise ValueError("generation manifest scene_id mismatch")
     if record.get("verdict") != "PASS_L3A2_GENERATION_AND_REFERENCE_GATES":
         raise ValueError("generation manifest verdict missing/failed")
+    if record.get("base_state_source") != BASE_STATE_SOURCE:
+        raise ValueError(
+            "generation manifest is not based on official init rows"
+        )
+    if record.get("pairing_method") != PAIRING_METHOD:
+        raise ValueError("generation manifest pairing method mismatch")
+    native_source = validate_native_init_states_source(
+        record.get("native_init_states", "")
+    )
+    if record.get("native_init_states_sha256") != native_source["sha256"]:
+        raise ValueError(
+            "generation manifest official init-state hash mismatch"
+        )
     expected_paths = {
         "eb": Path(eb_path).resolve(strict=True),
         "er": Path(er_path).resolve(strict=True),
@@ -665,7 +803,57 @@ def validate_generation_manifest(
         raise ValueError(
             f"generation manifest expected >= {minimum_count} episodes"
         )
-    for episode in episodes[:minimum_count]:
+    native_indices: set[int] = set()
+    for episode_index, episode in enumerate(episodes[:minimum_count]):
+        if episode.get("episode") != episode_index:
+            raise ValueError(
+                "generation manifest episode ordering/index mismatch"
+            )
+        native_index = episode.get("native_init_state_index")
+        if not isinstance(native_index, int) or native_index < 0:
+            raise ValueError(
+                "generation manifest native init-state row index invalid"
+            )
+        if native_index in native_indices:
+            raise ValueError(
+                "generation manifest reuses a native init-state row"
+            )
+        native_indices.add(native_index)
+        for hash_name in ("source_state_sha256", "base_state_sha256"):
+            value = episode.get(hash_name)
+            if not isinstance(value, str) or not re.fullmatch(
+                r"[0-9a-f]{64}", value
+            ):
+                raise ValueError(
+                    f"generation manifest {hash_name} missing/invalid"
+                )
+        if episode["source_state_sha256"] != episode["base_state_sha256"]:
+            raise ValueError(
+                "generation manifest Eb base is not the exact official row"
+            )
+        with h5py.File(expected_paths["eb"], "r") as handle:
+            demo = handle[TASK_KEY][f"demo_{episode_index}"]
+            if native_index != int(
+                _decode_attr(
+                    demo.attrs.get("native_init_state_index", -1)
+                )
+            ):
+                raise ValueError(
+                    "generation manifest native init-state row differs "
+                    "from HDF5"
+                )
+            if episode["source_state_sha256"] != sha256_array(
+                demo["native_source_state"][:]
+            ):
+                raise ValueError(
+                    "generation manifest source state hash differs from HDF5"
+                )
+            if episode["base_state_sha256"] != sha256_array(
+                demo["base_reset_state"][:]
+            ):
+                raise ValueError(
+                    "generation manifest base state hash differs from HDF5"
+                )
         conditions = episode.get("conditions")
         if not isinstance(conditions, dict):
             raise ValueError("generation manifest episode conditions missing")
@@ -675,6 +863,34 @@ def validate_generation_manifest(
                 raise ValueError(
                     f"generation manifest preview missing for {condition}"
                 )
+            for hash_name in (
+                "intervention_state_sha256",
+                "initial_state_sha256",
+            ):
+                value = entry.get(hash_name)
+                if not isinstance(value, str) or not re.fullmatch(
+                    r"[0-9a-f]{64}", value
+                ):
+                    raise ValueError(
+                        "generation manifest condition state hash "
+                        f"missing/invalid: {condition}/{hash_name}"
+                    )
+            with h5py.File(expected_paths[condition], "r") as handle:
+                demo = handle[TASK_KEY][f"demo_{episode_index}"]
+                if entry["intervention_state_sha256"] != sha256_array(
+                    demo["intervention_state"][:]
+                ):
+                    raise ValueError(
+                        "generation manifest intervention state hash "
+                        f"differs from HDF5: {condition}"
+                    )
+                if entry["initial_state_sha256"] != sha256_array(
+                    demo["initial_state"][:]
+                ):
+                    raise ValueError(
+                        "generation manifest evaluated state hash differs "
+                        f"from HDF5: {condition}"
+                    )
             preview = Path(entry["first_policy_frame"]).resolve(strict=True)
             if sha256_file(preview) != entry.get(
                 "first_policy_frame_file_sha256"

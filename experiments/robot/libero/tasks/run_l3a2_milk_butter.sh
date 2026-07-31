@@ -72,8 +72,13 @@ export PYOPENGL_PLATFORM="${PYOPENGL_PLATFORM:-${MUJOCO_GL}}"
 [[ "${RENDER_GPU}" == "-1" ]] || export EGL_DEVICE_ID="${RENDER_GPU}"
 
 NATIVE_BDDL="${LIBERO_ROOT}/libero/libero/bddl_files/libero_object/pick_up_the_milk_and_place_it_in_the_basket.bddl"
+NATIVE_INIT_STATES="${LIBERO_ROOT}/libero/libero/init_files/libero_object/pick_up_the_milk_and_place_it_in_the_basket.pruned_init"
 [[ -f "${NATIVE_BDDL}" ]] || {
   echo "L3-A2 native BDDL missing: ${NATIVE_BDDL}" >&2
+  exit 2
+}
+[[ -f "${NATIVE_INIT_STATES}" ]] || {
+  echo "L3-A2 official native init states missing: ${NATIVE_INIT_STATES}" >&2
   exit 2
 }
 
@@ -149,6 +154,7 @@ run_prepare() {
   mkdir -p "${REVIEW_ROOT}" "${LOG_DIR}"
   "${PYTHON_BIN}" experiments/robot/libero/tasks/generate_l3a2_milk_butter_initial_states.py \
     --bddl "${NATIVE_BDDL}" \
+    --native_init_states "${NATIVE_INIT_STATES}" \
     --eb_output "${EB_STATES}" \
     --er_output "${ER_STATES}" \
     --ec_output "${EC_STATES}" \

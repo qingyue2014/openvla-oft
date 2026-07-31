@@ -1,15 +1,16 @@
 """Generate and hard-gate native LIBERO L3-A2 Eb/Er/Ec states.
 
 The selected task and prompt are never modified.  Each triplet begins from one
-settled native reset.  Er and Ec alter only the free-joint state of the native
-``butter_1``:
+exact row of the task's official LIBERO ``.pruned_init`` file.  Er and Ec
+alter only the free-joint state of the native ``butter_1``:
 
 * Er: butter upright on target ``milk_1``;
 * Ec: butter upright on non-target ``orange_juice_1``.
 
-The generator first settles a candidate stack, then copies *only* the settled
-butter qpos/qvel slice into the paired native base state.  Consequently the
-exact serialized state loaded by evaluation is bit-identical outside butter.
+The generator settles a candidate stack only through controller-backed dummy
+actions, then copies *only* the settled butter qpos/qvel slice into the paired
+official source row.  Consequently Eb is bit-identical to that official row,
+and the exact Er/Ec state loaded by evaluation is bit-identical outside butter.
 Every accepted state is then replayed through the evaluator's reset,
 ``set_init_state``, forward, ten dummy-action wait, observation refresh, and
 first-policy-frame sequence.  Pre-wait, every wait step, and post-wait
@@ -46,9 +47,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
+    BASE_STATE_SOURCE,
     CONDITION_LABEL,
     CONDITION_SUPPORT,
     EXPECTED_OBJECT_BODIES,
+    PAIRING_METHOD,
     SCENE_ID,
     TASK_ID,
     TASK_KEY,
@@ -57,6 +60,7 @@ from experiments.robot.libero.tasks.l3a2_milk_butter_contract import (
     artifact_binding,
     sha256_array,
     sha256_file,
+    validate_native_init_states_source,
     validate_native_task,
 )
 
@@ -86,6 +90,36 @@ BASKET_FLOOR_CLEARANCE_M = 0.001
 BASKET_WALL_CLEARANCE_M = 0.001
 BASKET_PREDICATE_MARGIN_M = 0.0001
 MAX_NON_BUTTER_CONSTRUCTION_DRIFT_M = 0.002
+
+
+def _validated_official_init_state_rows(
+    value: Any,
+    *,
+    requested_count: int,
+    expected_state_size: int,
+) -> np.ndarray:
+    """Validate an already-loaded official init-state tensor fail closed."""
+
+    if requested_count < 1:
+        raise ValueError("requested_count must be positive")
+    states = np.asarray(value, dtype=float)
+    if states.ndim != 2:
+        raise ValueError(
+            f"official init states must be a 2-D array, got {states.shape}"
+        )
+    if states.shape[0] < requested_count:
+        raise ValueError(
+            f"official init-state pool has {states.shape[0]} rows, "
+            f"requested {requested_count}"
+        )
+    if states.shape[1] != expected_state_size:
+        raise ValueError(
+            f"official init-state width {states.shape[1]} does not match "
+            f"compiled state width {expected_state_size}"
+        )
+    if not np.all(np.isfinite(states)):
+        raise ValueError("official init-state pool contains non-finite values")
+    return states.copy()
 
 
 def _import_offscreen_env():
@@ -568,7 +602,11 @@ def _stack_butter_on(
 ) -> tuple[np.ndarray, np.ndarray, int, int]:
     """Return intervention and evaluated state, changing only butter slices."""
 
-    env.sim.set_state_from_flattened(np.asarray(base_state))
+    # Match the evaluator's state restoration path.  In particular, never
+    # integrate an uncontrolled robot with raw sim.step() while constructing
+    # a base or an intervention.
+    env.reset()
+    env.set_init_state(np.asarray(base_state))
     env.sim.forward()
     butter_qadr, butter_vadr = _find_free_joint(env, BUTTER_BODY)
     qpos_flat = 1 + butter_qadr
@@ -586,7 +624,7 @@ def _stack_butter_on(
     intervention_state = env.sim.get_state().flatten().copy()
 
     for _ in range(CONSTRUCTION_SETTLE_STEPS):
-        env.sim.step()
+        env.step(DUMMY_ACTION)
     settled_state = env.sim.get_state().flatten().copy()
 
     # Enforce the native-only intervention contract on the exact state that
@@ -990,6 +1028,8 @@ def _write_hdf5(
     *,
     condition: str,
     bddl: Path,
+    native_init_states: Path,
+    native_init_states_sha256: str,
     seed: int,
     records: list[dict[str, Any]],
 ) -> None:
@@ -1005,15 +1045,19 @@ def _write_hdf5(
             "task_prompt": TASK_PROMPT,
             "native_bddl": str(bddl.resolve()),
             "bddl_sha256": sha256_file(bddl),
+            "native_init_states": str(native_init_states),
+            "native_init_states_sha256": native_init_states_sha256,
+            "base_state_source": BASE_STATE_SOURCE,
             "seed": seed,
             "formal_wait_steps": FORMAL_WAIT_STEPS,
             "construction_settle_steps": CONSTRUCTION_SETTLE_STEPS,
+            "construction_settle_method": "controller_dummy_action",
             "basket_floor_clearance_m": BASKET_FLOOR_CLEARANCE_M,
             "basket_wall_clearance_m": BASKET_WALL_CLEARANCE_M,
             "basket_predicate_margin_m": BASKET_PREDICATE_MARGIN_M,
             "intervention_body": BUTTER_BODY,
             "intervention_support": CONDITION_SUPPORT[condition],
-            "pairing_method": "exact_native_base_butter_free_joint_only",
+            "pairing_method": PAIRING_METHOD,
             "custom_bddl": False,
             "custom_assets": False,
             "floor_support_bodies": _json(
@@ -1034,6 +1078,9 @@ def _write_hdf5(
         for index, record in enumerate(records):
             demo = group.create_group(f"demo_{index}")
             demo.create_dataset(
+                "native_source_state", data=record["source_state"]
+            )
+            demo.create_dataset(
                 "initial_state", data=record["states"][condition]
             )
             demo.create_dataset(
@@ -1047,9 +1094,18 @@ def _write_hdf5(
             demo.attrs["base_state_sha256"] = sha256_array(
                 record["base_state"]
             )
+            demo.attrs["source_state_sha256"] = sha256_array(
+                record["source_state"]
+            )
+            demo.attrs["intervention_state_sha256"] = sha256_array(
+                record["intervention_states"][condition]
+            )
             demo.attrs["initial_state_sha256"] = sha256_array(
                 record["states"][condition]
             )
+            demo.attrs["native_init_state_index"] = record[
+                "native_init_state_index"
+            ]
             demo.attrs["reset_attempt"] = record["reset_attempt"]
             demo.attrs["butter_qpos_flat_start"] = record["butter_qpos_flat"]
             demo.attrs["butter_qvel_flat_start"] = record["butter_qvel_flat"]
@@ -1097,6 +1153,18 @@ def _write_hdf5(
 def generate(args: argparse.Namespace) -> dict[str, Any]:
     bddl = Path(args.bddl).resolve(strict=True)
     validate_native_task(bddl, bddl, TASK_PROMPT)
+    native_init_source = validate_native_init_states_source(
+        args.native_init_states
+    )
+    native_init_states = Path(native_init_source["path"])
+    import torch
+
+    try:
+        loaded_official_states = torch.load(
+            native_init_states, weights_only=False
+        )
+    except TypeError:
+        loaded_official_states = torch.load(native_init_states)
     OffScreenRenderEnv = _import_offscreen_env()
     env = OffScreenRenderEnv(
         bddl_file_name=str(bddl),
@@ -1105,6 +1173,13 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         render_gpu_device_id=args.render_gpu_device_id,
     )
     env.seed(args.seed)
+    env.reset()
+    expected_state_size = int(env.sim.get_state().flatten().size)
+    official_states = _validated_official_init_state_rows(
+        loaded_official_states,
+        requested_count=args.num_states,
+        expected_state_size=expected_state_size,
+    )
     for body in EXPECTED_OBJECT_BODIES:
         _body_id(env, body)
     floor_body_ids = {
@@ -1133,13 +1208,31 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
     review_dir = Path(args.review_dir)
     records: list[dict[str, Any]] = []
     attempts = 0
-    max_attempts = args.max_attempts or max(25 * args.num_states, 25)
-    while len(records) < args.num_states and attempts < max_attempts:
+    max_attempts = min(
+        len(official_states),
+        args.max_attempts
+        if args.max_attempts is not None
+        else len(official_states),
+    )
+    for native_init_state_index in range(max_attempts):
+        if len(records) >= args.num_states:
+            break
         attempts += 1
+        source_state = np.asarray(
+            official_states[native_init_state_index], dtype=float
+        ).copy()
+        # Load the exact official row through the same public restoration path
+        # used by native evaluation before deriving any paired intervention.
         env.reset()
-        for _ in range(CONSTRUCTION_SETTLE_STEPS):
-            env.sim.step()
-        base_state = env.sim.get_state().flatten().copy()
+        env.set_init_state(source_state)
+        env.sim.forward()
+        restored_source = env.sim.get_state().flatten().copy()
+        if not np.array_equal(restored_source, source_state):
+            raise RuntimeError(
+                "env.set_init_state did not preserve the official source row "
+                f"exactly at index {native_init_state_index}"
+            )
+        base_state = source_state.copy()
         butter_qadr, butter_vadr = _find_free_joint(env, BUTTER_BODY)
         butter_qpos_flat = 1 + butter_qadr
         butter_qvel_flat = 1 + int(env.sim.model.nq) + butter_vadr
@@ -1235,6 +1328,8 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             records.append(
                 {
                     "reset_attempt": attempts,
+                    "native_init_state_index": native_init_state_index,
+                    "source_state": source_state,
                     "base_state": base_state,
                     "states": states,
                     "intervention_states": intervention_states,
@@ -1284,6 +1379,8 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             output,
             condition=condition,
             bddl=bddl,
+            native_init_states=native_init_states,
+            native_init_states_sha256=native_init_source["sha256"],
             seed=args.seed,
             records=records,
         )
@@ -1296,6 +1393,10 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
         "prompt": TASK_PROMPT,
         "native_bddl": str(bddl),
         "bddl_sha256": sha256_file(bddl),
+        "native_init_states": str(native_init_states),
+        "native_init_states_sha256": native_init_source["sha256"],
+        "base_state_source": BASE_STATE_SOURCE,
+        "pairing_method": PAIRING_METHOD,
         "asset_inventory": sorted(EXPECTED_OBJECT_BODIES),
         "compiled_floor_support_bodies": sorted(
             {
@@ -1341,9 +1442,18 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             {
                 "episode": index,
                 "reset_attempt": record["reset_attempt"],
+                "native_init_state_index": record[
+                    "native_init_state_index"
+                ],
+                "source_state_sha256": sha256_array(
+                    record["source_state"]
+                ),
                 "base_state_sha256": sha256_array(record["base_state"]),
                 "conditions": {
                     condition: {
+                        "intervention_state_sha256": sha256_array(
+                            record["intervention_states"][condition]
+                        ),
                         "initial_state_sha256": sha256_array(
                             record["states"][condition]
                         ),
@@ -1404,6 +1514,7 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--bddl", required=True)
+    parser.add_argument("--native_init_states", required=True)
     parser.add_argument("--eb_output", required=True)
     parser.add_argument("--er_output", required=True)
     parser.add_argument("--ec_output", required=True)
