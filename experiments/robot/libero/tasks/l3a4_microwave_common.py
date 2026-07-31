@@ -290,6 +290,249 @@ def segment_aabb_distance(segment_start, segment_end, half_size) -> float:
     return float(np.sqrt(minimum_squared))
 
 
+def point_triangle_distance(point, first, second, third) -> float:
+    """Return the exact distance from a point to a nondegenerate triangle."""
+    point = np.asarray(point, dtype=float)
+    first = np.asarray(first, dtype=float)
+    second = np.asarray(second, dtype=float)
+    third = np.asarray(third, dtype=float)
+    if any(value.shape != (3,) for value in (point, first, second, third)):
+        raise ValueError("point and triangle vertices must have shape (3,)")
+    if not all(
+        np.all(np.isfinite(value))
+        for value in (point, first, second, third)
+    ):
+        raise ValueError("point/triangle inputs must be finite")
+
+    first_second = second - first
+    first_third = third - first
+    first_point = point - first
+    d1 = float(np.dot(first_second, first_point))
+    d2 = float(np.dot(first_third, first_point))
+    if d1 <= 0.0 and d2 <= 0.0:
+        return float(np.linalg.norm(first_point))
+
+    second_point = point - second
+    d3 = float(np.dot(first_second, second_point))
+    d4 = float(np.dot(first_third, second_point))
+    if d3 >= 0.0 and d4 <= d3:
+        return float(np.linalg.norm(second_point))
+
+    vc = d1 * d4 - d3 * d2
+    if vc <= 0.0 and d1 >= 0.0 and d3 <= 0.0:
+        parameter = d1 / (d1 - d3)
+        closest = first + parameter * first_second
+        return float(np.linalg.norm(point - closest))
+
+    third_point = point - third
+    d5 = float(np.dot(first_second, third_point))
+    d6 = float(np.dot(first_third, third_point))
+    if d6 >= 0.0 and d5 <= d6:
+        return float(np.linalg.norm(third_point))
+
+    vb = d5 * d2 - d1 * d6
+    if vb <= 0.0 and d2 >= 0.0 and d6 <= 0.0:
+        parameter = d2 / (d2 - d6)
+        closest = first + parameter * first_third
+        return float(np.linalg.norm(point - closest))
+
+    va = d3 * d6 - d5 * d4
+    if va <= 0.0 and (d4 - d3) >= 0.0 and (d5 - d6) >= 0.0:
+        parameter = (d4 - d3) / (
+            (d4 - d3) + (d5 - d6)
+        )
+        closest = second + parameter * (third - second)
+        return float(np.linalg.norm(point - closest))
+
+    denominator = va + vb + vc
+    scale = max(
+        1.0,
+        float(np.linalg.norm(first_second)),
+        float(np.linalg.norm(first_third)),
+    )
+    if abs(float(denominator)) <= (
+        64.0 * np.finfo(float).eps * scale * scale
+    ):
+        raise ValueError("triangle must be nondegenerate")
+    inverse = 1.0 / denominator
+    parameter_second = vb * inverse
+    parameter_third = vc * inverse
+    closest = (
+        first
+        + first_second * parameter_second
+        + first_third * parameter_third
+    )
+    return float(np.linalg.norm(point - closest))
+
+
+def triangle_aabb_distance(first, second, third, half_size) -> float:
+    """Return the exact distance between a triangle and a centered AABB."""
+    triangle = np.asarray([first, second, third], dtype=float)
+    half = np.asarray(half_size, dtype=float)
+    if triangle.shape != (3, 3) or half.shape != (3,):
+        raise ValueError("triangle must be (3, 3) and half_size must be (3,)")
+    if (
+        not np.all(np.isfinite(triangle))
+        or not np.all(np.isfinite(half))
+        or np.any(half <= 0.0)
+    ):
+        raise ValueError("triangle/AABB inputs must be finite and positive")
+    edges = (
+        triangle[1] - triangle[0],
+        triangle[2] - triangle[1],
+        triangle[0] - triangle[2],
+    )
+    normal = np.cross(edges[0], triangle[2] - triangle[0])
+    scale = max(
+        1.0,
+        float(np.max(np.abs(triangle))),
+        float(np.max(half)),
+    )
+    numerical_tolerance = 64.0 * np.finfo(float).eps * scale
+    if float(np.linalg.norm(normal)) <= numerical_tolerance:
+        raise ValueError("triangle must be nondegenerate")
+
+    box_axes = np.eye(3)
+    axes = [*box_axes, normal]
+    axes.extend(
+        np.cross(edge, axis)
+        for edge in edges
+        for axis in box_axes
+    )
+    separated = False
+    for raw_axis in axes:
+        norm = float(np.linalg.norm(raw_axis))
+        if norm <= numerical_tolerance:
+            continue
+        axis = raw_axis / norm
+        triangle_projection = triangle @ axis
+        box_radius = float(np.dot(half, np.abs(axis)))
+        if (
+            float(np.min(triangle_projection))
+            > box_radius + numerical_tolerance
+            or float(np.max(triangle_projection))
+            < -box_radius - numerical_tolerance
+        ):
+            separated = True
+            break
+    if not separated:
+        return 0.0
+
+    vertex_outside = np.maximum(np.abs(triangle) - half, 0.0)
+    minimum = float(np.min(np.linalg.norm(vertex_outside, axis=1)))
+    box_vertices = np.asarray(
+        [
+            [x_sign * half[0], y_sign * half[1], z_sign * half[2]]
+            for x_sign in (-1.0, 1.0)
+            for y_sign in (-1.0, 1.0)
+            for z_sign in (-1.0, 1.0)
+        ],
+        dtype=float,
+    )
+    for vertex in box_vertices:
+        minimum = min(
+            minimum,
+            point_triangle_distance(vertex, *triangle),
+        )
+    for start, end in (
+        (triangle[0], triangle[1]),
+        (triangle[1], triangle[2]),
+        (triangle[2], triangle[0]),
+    ):
+        minimum = min(
+            minimum,
+            segment_aabb_distance(start, end, half),
+        )
+    return float(minimum)
+
+
+def convex_mesh_aabb_distance(vertices, faces, half_size) -> float:
+    """Return exact MuJoCo-convex-hull distance to a centered AABB."""
+    vertices = np.asarray(vertices, dtype=float)
+    faces = np.asarray(faces, dtype=int)
+    half = np.asarray(half_size, dtype=float)
+    if (
+        vertices.ndim != 2
+        or vertices.shape[1:] != (3,)
+        or faces.ndim != 2
+        or faces.shape[1:] != (3,)
+        or half.shape != (3,)
+    ):
+        raise ValueError(
+            "vertices/faces/half_size must be (N,3)/(M,3)/(3,)"
+        )
+    if (
+        len(vertices) < 4
+        or len(faces) < 4
+        or not np.all(np.isfinite(vertices))
+        or not np.all(np.isfinite(half))
+        or np.any(half <= 0.0)
+        or np.any(faces < 0)
+        or np.any(faces >= len(vertices))
+    ):
+        raise ValueError("invalid finite convex mesh/AABB inputs")
+    if np.any(np.all(np.abs(vertices) <= half, axis=1)):
+        return 0.0
+
+    minimum = float("inf")
+    for face in faces:
+        distance = triangle_aabb_distance(
+            vertices[face[0]],
+            vertices[face[1]],
+            vertices[face[2]],
+            half,
+        )
+        if distance == 0.0:
+            return 0.0
+        minimum = min(minimum, distance)
+
+    box_vertices = np.asarray(
+        [
+            [x_sign * half[0], y_sign * half[1], z_sign * half[2]]
+            for x_sign in (-1.0, 1.0)
+            for y_sign in (-1.0, 1.0)
+            for z_sign in (-1.0, 1.0)
+        ],
+        dtype=float,
+    )
+    scale = max(
+        1.0,
+        float(np.max(np.abs(vertices))),
+        float(np.max(half)),
+    )
+    tolerance = 64.0 * np.finfo(float).eps * scale
+    for point in box_vertices:
+        inside = True
+        for face in faces:
+            triangle = vertices[face]
+            normal = np.cross(
+                triangle[1] - triangle[0],
+                triangle[2] - triangle[0],
+            )
+            norm = float(np.linalg.norm(normal))
+            if norm <= tolerance:
+                raise ValueError("convex hull contains a degenerate face")
+            signed_vertices = (
+                vertices - triangle[0]
+            ) @ normal
+            signed_point = float(
+                np.dot(point - triangle[0], normal)
+            )
+            if float(np.max(signed_vertices)) <= tolerance:
+                if signed_point > tolerance:
+                    inside = False
+                    break
+            elif float(np.min(signed_vertices)) >= -tolerance:
+                if signed_point < -tolerance:
+                    inside = False
+                    break
+            else:
+                raise ValueError("mesh faces do not describe a convex hull")
+        if inside:
+            return 0.0
+    return minimum
+
+
 def oriented_box_separating_clearance(
     first_center,
     first_rotation,

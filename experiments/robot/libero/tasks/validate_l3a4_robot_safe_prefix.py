@@ -43,6 +43,7 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     collision_masks_compatible,
     contact_body_names,
     contacts_between,
+    convex_mesh_aabb_distance,
     descendant_body_ids,
     descendant_geom_ids,
     native_site_contains_point,
@@ -1207,6 +1208,141 @@ def _signed_point_box_clearance(point, center, rotation, half_size):
     )
 
 
+def _compiled_convex_mesh_geometry(model, geom_id):
+    """Decode the exact convex hull used by MuJoCo mesh collision."""
+    geom_id = int(geom_id)
+    if int(model.geom_type[geom_id]) != 7:
+        raise RuntimeError(
+            f"geom {_geom_name(model, geom_id)!r} is not a mesh"
+        )
+    mesh_id = int(model.geom_dataid[geom_id])
+    if mesh_id < 0:
+        raise RuntimeError(
+            f"mesh geom {_geom_name(model, geom_id)!r} has no data id"
+        )
+    graph_address = int(model.mesh_graphadr[mesh_id])
+    if graph_address < 0:
+        raise RuntimeError(
+            f"mesh geom {_geom_name(model, geom_id)!r} has no compiled "
+            "MuJoCo convex hull"
+        )
+    graph = np.asarray(model.mesh_graph, dtype=int).reshape(-1)
+    if graph_address + 2 > len(graph):
+        raise RuntimeError(
+            f"compiled convex hull header for mesh {mesh_id} is truncated"
+        )
+    hull_vertex_count = int(graph[graph_address])
+    hull_face_count = int(graph[graph_address + 1])
+    if hull_vertex_count < 4 or hull_face_count < 4:
+        raise RuntimeError(
+            f"invalid compiled convex hull for {_geom_name(model, geom_id)!r}"
+        )
+    edge_record_count = hull_vertex_count + 3 * hull_face_count
+    face_address = (
+        graph_address
+        + 2
+        + 2 * hull_vertex_count
+        + edge_record_count
+    )
+    graph_end = face_address + 3 * hull_face_count
+    if graph_end > len(graph):
+        raise RuntimeError(
+            f"compiled convex hull record for mesh {mesh_id} is truncated"
+        )
+    face_ids = np.asarray(
+        graph[face_address:graph_end],
+        dtype=int,
+    ).reshape(hull_face_count, 3)
+    vertex_address = int(model.mesh_vertadr[mesh_id])
+    vertex_count = int(model.mesh_vertnum[mesh_id])
+    hull_id_address = graph_address + 2 + hull_vertex_count
+    hull_global_ids = np.asarray(
+        graph[hull_id_address : hull_id_address + hull_vertex_count],
+        dtype=int,
+    )
+    if (
+        vertex_address < 0
+        or vertex_count < 4
+        or vertex_address + vertex_count > len(model.mesh_vert)
+        or np.any(hull_global_ids < 0)
+        or np.any(hull_global_ids >= vertex_count)
+        or len(set(int(index) for index in hull_global_ids))
+        != hull_vertex_count
+        or np.any(face_ids < 0)
+        or np.any(face_ids >= vertex_count)
+    ):
+        raise RuntimeError(
+            f"compiled convex hull vertices are invalid for mesh {mesh_id}"
+        )
+    full_vertices = np.asarray(
+        model.mesh_vert[
+            vertex_address : vertex_address + vertex_count
+        ],
+        dtype=float,
+    ).reshape(vertex_count, 3)
+    global_to_hull = {
+        int(global_id): hull_id
+        for hull_id, global_id in enumerate(hull_global_ids)
+    }
+    if any(
+        int(index) not in global_to_hull for index in face_ids.reshape(-1)
+    ):
+        raise RuntimeError(
+            f"compiled convex hull faces reference non-hull vertices "
+            f"for mesh {mesh_id}"
+        )
+    hull_vertices = full_vertices[hull_global_ids]
+    hull_faces = np.asarray(
+        [
+            [global_to_hull[int(index)] for index in face]
+            for face in face_ids
+        ],
+        dtype=int,
+    )
+    return hull_vertices, hull_faces, {
+        "geom_id": geom_id,
+        "geom_name": _geom_name(model, geom_id),
+        "geom_type": int(model.geom_type[geom_id]),
+        "geom_size": np.asarray(
+            model.geom_size[geom_id], dtype=float
+        ).tolist(),
+        "geom_rbound": float(model.geom_rbound[geom_id]),
+        "mesh_id": mesh_id,
+        "mesh_vertex_count": vertex_count,
+        "convex_hull_vertex_count": len(hull_vertices),
+        "convex_hull_face_count": len(hull_faces),
+        "mesh_graph_address": graph_address,
+    }
+
+
+def _compiled_geom_evidence(model, geom_id):
+    """Record the exact compiled shape inputs used by clearance."""
+    geom_id = int(geom_id)
+    evidence = {
+        "geom_id": geom_id,
+        "geom_name": _geom_name(model, geom_id),
+        "geom_type": int(model.geom_type[geom_id]),
+        "geom_size": np.asarray(
+            model.geom_size[geom_id], dtype=float
+        ).tolist(),
+        "geom_rbound": float(model.geom_rbound[geom_id]),
+        "geom_dataid": int(model.geom_dataid[geom_id]),
+        "geom_margin": float(
+            getattr(
+                model,
+                "geom_margin",
+                np.zeros(int(model.ngeom)),
+            )[geom_id]
+        ),
+    }
+    if evidence["geom_type"] == 7:
+        _, _, mesh_evidence = _compiled_convex_mesh_geometry(
+            model, geom_id
+        )
+        evidence["convex_mesh"] = mesh_evidence
+    return evidence
+
+
 def _compiled_geom_pair_clearance(
     env,
     moving_geom,
@@ -1287,7 +1423,45 @@ def _compiled_geom_pair_clearance(
         fixture_half_size = np.asarray(
             model.geom_size[fixture_geom], dtype=float
         )
-        if moving_type == 6:
+        if moving_type == 7:
+            sphere_lower_bound = (
+                _signed_point_box_clearance(
+                    moving_center,
+                    fixture_center,
+                    fixture_rotation,
+                    fixture_half_size,
+                )
+                - float(model.geom_rbound[moving_geom])
+            )
+            if sphere_lower_bound > compiled_margin:
+                clearance = sphere_lower_bound
+                method = (
+                    "certified compiled bounding-sphere-to-box positive "
+                    "lower bound"
+                )
+            else:
+                (
+                    mesh_vertices,
+                    mesh_faces,
+                    _,
+                ) = _compiled_convex_mesh_geometry(model, moving_geom)
+                world_vertices = (
+                    moving_center
+                    + (moving_rotation @ mesh_vertices.T).T
+                )
+                fixture_local_vertices = (
+                    fixture_rotation.T
+                    @ (world_vertices - fixture_center).T
+                ).T
+                clearance = convex_mesh_aabb_distance(
+                    fixture_local_vertices,
+                    mesh_faces,
+                    fixture_half_size,
+                )
+                method = (
+                    "exact compiled MuJoCo convex-mesh-to-box distance"
+                )
+        elif moving_type == 6:
             clearance = oriented_box_separating_clearance(
                 moving_center,
                 moving_rotation,
@@ -1546,6 +1720,12 @@ def _translated_swept_clearance(
         raise RuntimeError(
             "compiled insertion sweep has no collision-compatible geom pairs"
         )
+    limiting["moving_compiled_geometry"] = _compiled_geom_evidence(
+        model, limiting["moving_geom_id"]
+    )
+    limiting["fixture_compiled_geometry"] = _compiled_geom_evidence(
+        model, limiting["fixture_geom_id"]
+    )
     return minimum, {
         "path_start": start.tolist(),
         "path_end": end.tolist(),
@@ -4373,6 +4553,17 @@ def main() -> None:
             "heating-site, support, gripper, mug, and microwave geometry; "
             "portal alignment, insertion, release, and retreat all fail "
             "on any robot-microwave contact"
+        ),
+        "target_mesh_box_clearance_method": (
+            "a bounding sphere may certify already-positive separation; "
+            "otherwise MuJoCo type-7 collision meshes use their compiled "
+            "mesh_graph convex-hull vertices and faces for exact distance "
+            "to native type-6 microwave collision boxes"
+        ),
+        "target_mesh_box_clearance_gate": (
+            "positive primitive-aware mesh-to-box clearance remains "
+            "required after native geom margins and the continuous-sweep "
+            "guard"
         ),
         "target_held_tilt_policy": (
             "grasp-induced transient tilt is recorded but is not a planning "

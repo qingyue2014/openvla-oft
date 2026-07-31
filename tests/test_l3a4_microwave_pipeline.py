@@ -18,12 +18,15 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     TASK_PROMPT,
     closest_point_on_oriented_box,
     collision_masks_compatible,
+    convex_mesh_aabb_distance,
     hinge_radius_m,
     native_site_contains_point,
     oriented_box_separating_clearance,
     planar_park_clearances,
+    point_triangle_distance,
     radially_adjusted_input_xy,
     segment_aabb_distance,
+    triangle_aabb_distance,
 )
 from experiments.robot.libero.tasks.validate_l3a4_native_preflight import (
     build_manifest,
@@ -201,6 +204,147 @@ def test_l3a4_compiled_geom_support_radius_primitives():
         model, 3, identity, [1.0, 0.0, 0.0]
     )
     assert cylinder_x == pytest.approx(0.1)
+
+
+def test_l3a4_exact_convex_mesh_box_distance_primitives():
+    half = np.asarray([0.5, 0.5, 0.5])
+    triangle = np.asarray(
+        [
+            [2.0, -0.25, -0.25],
+            [2.0, 0.25, -0.25],
+            [2.0, 0.0, 0.25],
+        ]
+    )
+    assert point_triangle_distance(
+        [0.0, 0.0, 0.0], *triangle
+    ) == pytest.approx(2.0)
+    assert triangle_aabb_distance(*triangle, half) == pytest.approx(1.5)
+    crossing = triangle.copy()
+    crossing[:, 0] = 0.0
+    assert triangle_aabb_distance(*crossing, half) == pytest.approx(0.0)
+
+    cube = np.asarray(
+        [
+            [-0.5, -0.5, -0.5],
+            [0.5, -0.5, -0.5],
+            [0.5, 0.5, -0.5],
+            [-0.5, 0.5, -0.5],
+            [-0.5, -0.5, 0.5],
+            [0.5, -0.5, 0.5],
+            [0.5, 0.5, 0.5],
+            [-0.5, 0.5, 0.5],
+        ]
+    )
+    faces = np.asarray(
+        [
+            [0, 2, 1],
+            [0, 3, 2],
+            [4, 5, 6],
+            [4, 6, 7],
+            [0, 1, 5],
+            [0, 5, 4],
+            [1, 2, 6],
+            [1, 6, 5],
+            [2, 3, 7],
+            [2, 7, 6],
+            [3, 0, 4],
+            [3, 4, 7],
+        ]
+    )
+    separated = cube + np.asarray([2.0, 0.0, 0.0])
+    assert convex_mesh_aabb_distance(
+        separated, faces, half
+    ) == pytest.approx(1.0)
+    overlapping = cube + np.asarray([0.75, 0.0, 0.0])
+    assert convex_mesh_aabb_distance(
+        overlapping, faces, half
+    ) == pytest.approx(0.0)
+    enclosing = cube * 4.0
+    assert convex_mesh_aabb_distance(
+        enclosing, faces, half
+    ) == pytest.approx(0.0)
+
+
+def test_l3a4_decodes_compiled_mujoco_convex_mesh_graph():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_compiled_convex_mesh_geometry"
+    )
+    namespace = {
+        "np": np,
+        "_geom_name": lambda model, geom_id: model.geom_names[geom_id],
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    decode = namespace["_compiled_convex_mesh_geometry"]
+
+    hull_vertex_ids = [1, 2, 3, 4]
+    faces = [
+        1, 3, 2,
+        1, 2, 4,
+        2, 3, 4,
+        3, 1, 4,
+    ]
+    edge_records = [0] * (len(hull_vertex_ids) + len(faces))
+
+    class Model:
+        geom_names = ["gripper0_hand_collision"]
+        geom_type = np.asarray([7])
+        geom_dataid = np.asarray([0])
+        geom_size = np.asarray([[0.03, 0.05, 0.10]])
+        geom_rbound = np.asarray([0.12])
+        mesh_graphadr = np.asarray([0])
+        mesh_graph = np.asarray(
+            [
+                len(hull_vertex_ids),
+                len(faces) // 3,
+                0, 4, 8, 12,
+                *hull_vertex_ids,
+                *edge_records,
+                *faces,
+            ]
+        )
+        mesh_vertadr = np.asarray([1])
+        mesh_vertnum = np.asarray([5])
+        mesh_vert = np.asarray(
+            [
+                [99.0, 99.0, 99.0],
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 0.0, 1.0],
+                [0.2, 0.2, 0.2],
+            ]
+        )
+
+    vertices, decoded_faces, evidence = decode(Model(), 0)
+    assert vertices.tolist() == [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [0.2, 0.2, 0.2],
+    ]
+    assert decoded_faces.tolist() == [
+        [0, 2, 1],
+        [0, 1, 3],
+        [1, 2, 3],
+        [2, 0, 3],
+    ]
+    assert evidence["convex_hull_vertex_count"] == 4
+    assert evidence["convex_hull_face_count"] == 4
+    assert evidence["mesh_vertex_count"] == 5
 
 
 def test_l3a4_preflight_binds_evaluated_state_bytes(tmp_path):
@@ -867,8 +1011,41 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     )
     assert "oriented_box_separating_clearance(" in geom_clearance
     assert "segment_aabb_distance(" in geom_clearance
+    assert "moving_type == 7" in geom_clearance
+    assert "sphere_lower_bound > compiled_margin" in geom_clearance
+    assert "certified compiled bounding-sphere-to-box positive" in (
+        geom_clearance
+    )
+    assert '"lower bound"' in geom_clearance
+    assert "_compiled_convex_mesh_geometry(" in geom_clearance
+    assert "convex_mesh_aabb_distance(" in geom_clearance
+    assert "exact compiled MuJoCo convex-mesh-to-box distance" in (
+        geom_clearance
+    )
     assert "geom_margin" in geom_clearance
     assert "env.sim.data.geom_xmat[moving_geom]" in geom_clearance
+
+    convex_mesh = ast.get_source_segment(
+        source, functions["_compiled_convex_mesh_geometry"]
+    )
+    assert "model.mesh_graphadr[mesh_id]" in convex_mesh
+    assert "model.mesh_graph" in convex_mesh
+    assert "hull_vertex_count + 3 * hull_face_count" in convex_mesh
+    assert "hull_global_ids" in convex_mesh
+    assert "compiled convex hull record" in convex_mesh
+    assert "model.mesh_vertadr[mesh_id]" in convex_mesh
+    assert "model.mesh_vertnum[mesh_id]" in convex_mesh
+    assert "model.mesh_vert[" in convex_mesh
+    assert '"convex_hull_face_count"' in convex_mesh
+
+    geom_evidence = ast.get_source_segment(
+        source, functions["_compiled_geom_evidence"]
+    )
+    assert '"geom_type"' in geom_evidence
+    assert '"geom_size"' in geom_evidence
+    assert '"geom_rbound"' in geom_evidence
+    assert '"geom_dataid"' in geom_evidence
+    assert '"convex_mesh"' in geom_evidence
 
     target_door_sweep = ast.get_source_segment(
         source, functions["_compiled_target_door_sweep_clearance"]
@@ -886,6 +1063,8 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "sweep_guard = 0.5 * spacing" in swept_clearance
     assert "collision_masks_compatible(" in swept_clearance
     assert "_compiled_geom_pair_clearance(" in swept_clearance
+    assert '"moving_compiled_geometry"' in swept_clearance
+    assert '"fixture_compiled_geometry"' in swept_clearance
 
     insertion_plan = ast.get_source_segment(
         source, functions["_compiled_target_insertion_plan"]
@@ -1051,6 +1230,8 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"robot_target_no_forbidden_microwave_contact"' in source
     assert '"target_final_door_swept_clearance_m"' in source
     assert '"target_held_tilt_policy"' in source
+    assert '"target_mesh_box_clearance_method"' in source
+    assert '"target_mesh_box_clearance_gate"' in source
     assert '"target_release_tilt_limit_deg": MAX_MUG_TILT_DEG' in source
     assert '"target_final_tilt_limit_deg": MAX_MUG_TILT_DEG' in source
     assert "GRASP_HEIGHT = 0.060" in source
