@@ -82,6 +82,7 @@ def _side_contact_targets_from_compiled_bounds(
     plate_rim_center_z,
     finger_center_z_offset_from_eef,
     outside_clearance_m,
+    side_eef_z=None,
 ):
     """Construct a no-contact outside pose and rim-centred side-contact pose."""
     plate_position = np.asarray(plate_position, dtype=float)
@@ -115,9 +116,16 @@ def _side_contact_targets_from_compiled_bounds(
     )
     if outside_eef_offset <= 0:
         raise ValueError("compiled outside EEF offset must be positive")
-    side_eef_z = float(
-        plate_rim_center_z - finger_center_z_offset_from_eef
-    )
+    if side_eef_z is None:
+        side_eef_z = float(
+            plate_rim_center_z - finger_center_z_offset_from_eef
+        )
+        side_eef_z_source = "rim_center_minus_mean_finger_center_offset"
+    elif not np.isfinite(side_eef_z):
+        raise ValueError("compiled side-contact EEF z must be finite")
+    else:
+        side_eef_z = float(side_eef_z)
+        side_eef_z_source = "compiled_vertical_feasible_interval_midpoint"
     outside_target = plate_position.copy()
     outside_target[:2] += outward * outside_eef_offset
     outside_target[2] = side_eef_z
@@ -137,6 +145,212 @@ def _side_contact_targets_from_compiled_bounds(
             finger_center_z_offset_from_eef
         ),
         "side_eef_z": side_eef_z,
+        "side_eef_z_source": side_eef_z_source,
+    }
+
+
+def _compiled_side_contact_eef_z_feasibility(
+    *,
+    rim_vertical_interval,
+    rim_center_z,
+    finger_vertical_bounds_from_eef,
+    table_top_z,
+    required_finger_table_clearance_m,
+):
+    """Intersect dual-finger rim coverage with strict table clearance."""
+    rim_vertical_interval = np.asarray(
+        rim_vertical_interval, dtype=float
+    )
+    bounds = list(finger_vertical_bounds_from_eef)
+    if (
+        rim_vertical_interval.shape != (2,)
+        or not np.all(np.isfinite(rim_vertical_interval))
+        or rim_vertical_interval[0] >= rim_vertical_interval[1]
+        or not np.isfinite(rim_center_z)
+        or not (
+            rim_vertical_interval[0]
+            <= rim_center_z
+            <= rim_vertical_interval[1]
+        )
+        or not np.isfinite(table_top_z)
+        or not np.isfinite(required_finger_table_clearance_m)
+        or required_finger_table_clearance_m <= 0.0
+    ):
+        raise ValueError("compiled vertical feasibility inputs are invalid")
+    normalized_bounds = []
+    for record in bounds:
+        name = str(record[0])
+        side = str(record[1])
+        lower_offset = float(record[2])
+        upper_offset = float(record[3])
+        if (
+            side not in {"left", "right"}
+            or not np.isfinite(lower_offset)
+            or not np.isfinite(upper_offset)
+            or lower_offset >= upper_offset
+        ):
+            raise ValueError("compiled finger vertical bound is invalid")
+        normalized_bounds.append(
+            (name, side, lower_offset, upper_offset)
+        )
+    if not normalized_bounds:
+        raise RuntimeError("compiled finger vertical bounds unavailable")
+    by_side = {
+        side: [
+            record
+            for record in normalized_bounds
+            if record[1] == side
+        ]
+        for side in ("left", "right")
+    }
+    if not all(by_side.values()):
+        raise RuntimeError(
+            "compiled left/right finger vertical bounds unavailable"
+        )
+    minimum_finger_lower_offset = min(
+        record[2] for record in normalized_bounds
+    )
+    table_eef_lower_bound = float(
+        table_top_z
+        + required_finger_table_clearance_m
+        - minimum_finger_lower_offset
+    )
+    side_coverage_intervals = {}
+    for side, side_bounds in by_side.items():
+        side_coverage_intervals[side] = [
+            {
+                "geom": name,
+                "finger_vertical_offsets_from_eef_m": [
+                    lower_offset,
+                    upper_offset,
+                ],
+                "eef_z_interval_covering_rim_center_m": [
+                    float(rim_center_z - upper_offset),
+                    float(rim_center_z - lower_offset),
+                ],
+            }
+            for name, _, lower_offset, upper_offset in side_bounds
+        ]
+    feasible_intervals = []
+    for left in side_coverage_intervals["left"]:
+        for right in side_coverage_intervals["right"]:
+            lower = max(
+                table_eef_lower_bound,
+                left["eef_z_interval_covering_rim_center_m"][0],
+                right["eef_z_interval_covering_rim_center_m"][0],
+            )
+            upper = min(
+                left["eef_z_interval_covering_rim_center_m"][1],
+                right["eef_z_interval_covering_rim_center_m"][1],
+            )
+            width = float(upper - lower)
+            if width <= 0.0:
+                continue
+            selected_z = float(0.5 * (lower + upper))
+            selected_finger_intervals = {
+                "left": [
+                    selected_z
+                    + left[
+                        "finger_vertical_offsets_from_eef_m"
+                    ][0],
+                    selected_z
+                    + left[
+                        "finger_vertical_offsets_from_eef_m"
+                    ][1],
+                ],
+                "right": [
+                    selected_z
+                    + right[
+                        "finger_vertical_offsets_from_eef_m"
+                    ][0],
+                    selected_z
+                    + right[
+                        "finger_vertical_offsets_from_eef_m"
+                    ][1],
+                ],
+            }
+            feasible_intervals.append(
+                {
+                    "left_geom": left["geom"],
+                    "right_geom": right["geom"],
+                    "eef_z_interval_m": [float(lower), float(upper)],
+                    "interval_width_m": width,
+                    "interval_midpoint_m": selected_z,
+                    "selected_finger_world_intervals_m": (
+                        selected_finger_intervals
+                    ),
+                }
+            )
+    if not feasible_intervals:
+        raise RuntimeError(
+            "compiled dual-finger rim coverage has no EEF-z interval above "
+            "the strict native table-clearance bound"
+        )
+    selected = max(
+        feasible_intervals,
+        key=lambda record: (
+            record["interval_width_m"],
+            record["interval_midpoint_m"],
+        ),
+    )
+    selected_z = float(selected["interval_midpoint_m"])
+    selected_finger_lowest_z = float(
+        selected_z + minimum_finger_lower_offset
+    )
+    selected_rim_overlap_by_side = {}
+    for side, finger_interval in selected[
+        "selected_finger_world_intervals_m"
+    ].items():
+        overlap = float(
+            min(finger_interval[1], rim_vertical_interval[1])
+            - max(finger_interval[0], rim_vertical_interval[0])
+        )
+        center_covered = bool(
+            finger_interval[0]
+            <= rim_center_z
+            <= finger_interval[1]
+        )
+        if overlap <= 0.0 or not center_covered:
+            raise RuntimeError(
+                "selected EEF-z midpoint lacks dual-finger rim coverage"
+            )
+        selected_rim_overlap_by_side[side] = {
+            "overlap_m": overlap,
+            "rim_center_covered": center_covered,
+        }
+    selected_table_clearance = float(
+        selected_finger_lowest_z - table_top_z
+    )
+    if selected_table_clearance < required_finger_table_clearance_m:
+        raise RuntimeError(
+            "selected EEF-z midpoint violates compiled table clearance"
+        )
+    return {
+        "formula": (
+            "intersect each left/right finger geom's EEF-z interval that "
+            "covers the native rim center with EEF_z >= table_top + "
+            "compiled_pair_clearance - minimum_finger_lower_offset; select "
+            "the widest nonempty interval and use its midpoint"
+        ),
+        "rim_vertical_interval_m": rim_vertical_interval.tolist(),
+        "rim_center_z": float(rim_center_z),
+        "table_top_z": float(table_top_z),
+        "required_finger_table_clearance_m": float(
+            required_finger_table_clearance_m
+        ),
+        "minimum_finger_lower_offset_from_eef_m": float(
+            minimum_finger_lower_offset
+        ),
+        "table_eef_z_lower_bound_m": table_eef_lower_bound,
+        "side_coverage_intervals": side_coverage_intervals,
+        "feasible_intervals": feasible_intervals,
+        "selected_interval": selected,
+        "selected_eef_z": selected_z,
+        "selected_finger_lowest_z": selected_finger_lowest_z,
+        "selected_rim_overlap_by_side": (
+            selected_rim_overlap_by_side
+        ),
+        "selected_finger_table_clearance_m": selected_table_clearance,
     }
 
 
@@ -1408,6 +1622,16 @@ def _compiled_native_side_contact_plan(
     plate_rim_center_z = float(
         np.median([center[2] for _, center, _ in rim_bounds])
     )
+    plate_rim_vertical_interval = [
+        min(
+            float(center[2] - half_size[2])
+            for _, center, half_size in rim_bounds
+        ),
+        max(
+            float(center[2] + half_size[2])
+            for _, center, half_size in rim_bounds
+        ),
+    ]
 
     finger_bounds = []
     for geom_id in range(int(model.ngeom)):
@@ -1445,6 +1669,64 @@ def _compiled_native_side_contact_plan(
             ]
         )
     )
+    finger_vertical_bounds_from_eef = [
+        (
+            model.geom_id2name(geom_id) or f"geom_{geom_id}",
+            _semantic_finger_side(body_name),
+            float(
+                center[2] - half_size[2] - eef_position[2]
+            ),
+            float(
+                center[2] + half_size[2] - eef_position[2]
+            ),
+        )
+        for geom_id, body_name, center, half_size in (
+            semantic_finger_bounds
+        )
+    ]
+    table_geom_ids = [
+        geom_id
+        for geom_id in _compiled_body_geom_ids(model, TABLE_BODY)
+        if (
+            int(model.geom_contype[geom_id]) != 0
+            or int(model.geom_conaffinity[geom_id]) != 0
+        )
+    ]
+    if not table_geom_ids:
+        raise RuntimeError("compiled native table collision geoms unavailable")
+    table_bounds = [
+        (geom_id, *_compiled_geom_world_aabb(model, data, geom_id))
+        for geom_id in table_geom_ids
+    ]
+    table_top_z = max(
+        float(center[2] + half_size[2])
+        for _, center, half_size in table_bounds
+    )
+    finger_table_clearance_derivation = (
+        _compiled_pair_set_clearance(
+            model,
+            [
+                geom_id
+                for geom_id, _, _, _ in semantic_finger_bounds
+            ],
+            table_geom_ids,
+        )
+    )
+    vertical_feasibility = (
+        _compiled_side_contact_eef_z_feasibility(
+            rim_vertical_interval=plate_rim_vertical_interval,
+            rim_center_z=plate_rim_center_z,
+            finger_vertical_bounds_from_eef=(
+                finger_vertical_bounds_from_eef
+            ),
+            table_top_z=table_top_z,
+            required_finger_table_clearance_m=(
+                finger_table_clearance_derivation[
+                    "required_clearance_m"
+                ]
+            ),
+        )
+    )
     outside_target, side_contact_target, plan = (
         _side_contact_targets_from_compiled_bounds(
             plate_position=plate_position,
@@ -1457,6 +1739,7 @@ def _compiled_native_side_contact_plan(
                 finger_center_z_offset
             ),
             outside_clearance_m=outside_clearance_m,
+            side_eef_z=vertical_feasibility["selected_eef_z"],
         )
     )
     plan.update(
@@ -1480,6 +1763,27 @@ def _compiled_native_side_contact_plan(
             "dual_finger_contact_skew_m": float(
                 dual_finger_contact_skew
             ),
+            "plate_rim_vertical_interval_m": (
+                plate_rim_vertical_interval
+            ),
+            "finger_vertical_bounds_from_eef_m": [
+                {
+                    "geom": name,
+                    "semantic_side": side,
+                    "interval_m": [lower, upper],
+                }
+                for name, side, lower, upper in (
+                    finger_vertical_bounds_from_eef
+                )
+            ],
+            "table_geoms": [
+                model.geom_id2name(geom_id) or f"geom_{geom_id}"
+                for geom_id in table_geom_ids
+            ],
+            "finger_table_clearance_derivation": (
+                finger_table_clearance_derivation
+            ),
+            "vertical_feasibility": vertical_feasibility,
             "outside_target": outside_target.tolist(),
             "side_contact_target": side_contact_target.tolist(),
         }

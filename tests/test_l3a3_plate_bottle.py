@@ -16,6 +16,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _constraint_prioritized_outside_descent_action,
     _compiled_collision_pair_clearance,
     _compiled_pair_set_clearance,
+    _compiled_side_contact_eef_z_feasibility,
     _compiled_trailing_side_contact_candidates,
     _derive_horizon_safe_push_increment,
     _environment_horizon_diagnostics,
@@ -383,6 +384,52 @@ def test_native_geometry_side_contact_targets_descend_outside_plate():
     assert outside[1] < contact[1] < plate[1]
 
 
+def test_500079_compiled_eef_z_intersects_rim_coverage_and_table_clearance():
+    required_clearance = np.nextafter(0.0, np.inf)
+    feasibility = _compiled_side_contact_eef_z_feasibility(
+        rim_vertical_interval=np.array([0.900, 0.919]),
+        rim_center_z=0.9095,
+        finger_vertical_bounds_from_eef=[
+            ("left_finger", "left", -0.013, 0.025),
+            ("right_finger", "right", -0.012, 0.024),
+        ],
+        table_top_z=0.900,
+        required_finger_table_clearance_m=required_clearance,
+    )
+    assert feasibility["table_eef_z_lower_bound_m"] == pytest.approx(
+        0.913
+    )
+    assert feasibility["selected_interval"]["eef_z_interval_m"] == (
+        pytest.approx([0.913, 0.9215])
+    )
+    assert feasibility["selected_eef_z"] == pytest.approx(0.91725)
+    assert feasibility["selected_finger_lowest_z"] > 0.900
+    assert feasibility["selected_finger_table_clearance_m"] > (
+        required_clearance
+    )
+    for interval in feasibility["selected_interval"][
+        "selected_finger_world_intervals_m"
+    ].values():
+        assert interval[0] <= 0.9095 <= interval[1]
+    for overlap in feasibility[
+        "selected_rim_overlap_by_side"
+    ].values():
+        assert overlap["overlap_m"] > 0.0
+        assert overlap["rim_center_covered"] is True
+
+    with pytest.raises(RuntimeError, match="no EEF-z interval"):
+        _compiled_side_contact_eef_z_feasibility(
+            rim_vertical_interval=np.array([0.900, 0.919]),
+            rim_center_z=0.9095,
+            finger_vertical_bounds_from_eef=[
+                ("left_finger", "left", -0.013, 0.025),
+                ("right_finger", "right", -0.012, 0.024),
+            ],
+            table_top_z=0.950,
+            required_finger_table_clearance_m=required_clearance,
+        )
+
+
 def test_native_finger_inward_extents_are_grouped_before_side_selection():
     bounds = [
         (
@@ -463,6 +510,7 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
             PLATE_BODY,
             "gripper0_leftfinger",
             "gripper0_rightfinger",
+            TABLE_BODY,
         ]
         geom_names = [
             "plate_plus_x",
@@ -471,13 +519,17 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
             "plate_minus_y",
             "left_finger_collision",
             "right_finger_collision",
+            "table_collision",
         ]
         nbody = len(body_names)
         ngeom = len(geom_names)
-        body_parentid = np.array([0, 0, 0, 0])
-        geom_bodyid = np.array([1, 1, 1, 1, 2, 3])
+        body_parentid = np.array([0, 0, 0, 0, 0])
+        geom_bodyid = np.array([1, 1, 1, 1, 2, 3, 4])
         geom_contype = np.ones(ngeom, dtype=int)
         geom_conaffinity = np.ones(ngeom, dtype=int)
+        geom_margin = np.zeros(ngeom, dtype=float)
+        geom_gap = np.zeros(ngeom, dtype=float)
+        npair = 0
         geom_aabb = np.array(
             [
                 [0, 0, 0, 0.005, 0.005, 0.005],
@@ -486,6 +538,7 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
                 [0, 0, 0, 0.005, 0.005, 0.005],
                 [0, 0, 0, 0.004, 0.005, 0.010],
                 [0, 0, 0, 0.004, 0.005, 0.010],
+                [0, 0, 0, 0.500, 0.500, 0.005],
             ],
             dtype=float,
         )
@@ -512,6 +565,7 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
                 [0.050, -0.050, 0.910],
                 [-0.020950, -0.05000, 0.900],
                 [-0.020737, 0.05175, 0.900],
+                [0.000, 0.000, 0.875],
             ],
             dtype=float,
         ),
@@ -1776,6 +1830,9 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "plate_rim_geoms" in compiled_plan
     assert "finger_collision_geoms" in compiled_plan
     assert "_side_contact_targets_from_compiled_bounds(" in compiled_plan
+    assert "_compiled_side_contact_eef_z_feasibility(" in compiled_plan
+    assert "finger_vertical_bounds_from_eef" in compiled_plan
+    assert "finger_table_clearance_derivation" in compiled_plan
     assert "env.set_state" not in compiled_plan
     assert "set_init_state" not in compiled_plan
     assert "rollout.move(" in bounded_seek
