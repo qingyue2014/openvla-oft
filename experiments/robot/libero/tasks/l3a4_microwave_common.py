@@ -190,6 +190,45 @@ def contact_body_names(sim, root_name: str) -> set[str]:
     return names
 
 
+def closest_point_on_oriented_box(
+    point,
+    center,
+    rotation,
+    half_size,
+) -> tuple[np.ndarray, bool]:
+    """Return a box-surface point using only compiled pose and half extents."""
+    point = np.asarray(point, dtype=float)
+    center = np.asarray(center, dtype=float)
+    rotation = np.asarray(rotation, dtype=float)
+    half_size = np.asarray(half_size, dtype=float)
+    if point.shape != (3,) or center.shape != (3,) or half_size.shape != (3,):
+        raise ValueError("box point, center, and half_size must have shape (3,)")
+    if rotation.shape != (3, 3):
+        raise ValueError("box rotation must have shape (3, 3)")
+    if (
+        not np.all(np.isfinite(point))
+        or not np.all(np.isfinite(center))
+        or not np.all(np.isfinite(rotation))
+        or not np.all(np.isfinite(half_size))
+        or np.any(half_size <= 0.0)
+    ):
+        raise ValueError("compiled box inputs must be finite with positive size")
+    local = rotation.T @ (point - center)
+    inside = bool(np.all(np.abs(local) <= half_size))
+    if inside:
+        distance_to_face = half_size - np.abs(local)
+        axis = int(np.argmin(distance_to_face))
+        closest_local = local.copy()
+        closest_local[axis] = (
+            half_size[axis]
+            if local[axis] >= 0.0
+            else -half_size[axis]
+        )
+    else:
+        closest_local = np.clip(local, -half_size, half_size)
+    return center + rotation @ closest_local, inside
+
+
 def fixture_local_position(sim, fixture_root: str, world_position) -> np.ndarray:
     root_pos, root_mat = body_pose(sim, fixture_root)
     return root_mat.T @ (np.asarray(world_position, dtype=float) - root_pos)

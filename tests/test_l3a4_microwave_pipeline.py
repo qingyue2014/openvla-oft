@@ -16,6 +16,7 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     TASK_FILE,
     TASK_KEY,
     TASK_PROMPT,
+    closest_point_on_oriented_box,
     hinge_radius_m,
     radially_adjusted_input_xy,
 )
@@ -357,6 +358,37 @@ def test_l3a4_radial_calibration_uses_a_bounded_original_angle_step():
     assert EC_RADIUS_INITIAL_STEP_M < MAX_HINGE_RADIUS_ERROR_M
 
 
+def test_l3a4_compiled_box_clearance_uses_world_pose_and_half_extents():
+    angle = np.deg2rad(90.0)
+    rotation = np.asarray(
+        [
+            [np.cos(angle), -np.sin(angle), 0.0],
+            [np.sin(angle), np.cos(angle), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    center = np.asarray([0.4, -0.2, 0.9])
+    half_size = np.asarray([0.2, 0.1, 0.3])
+    outside_local = np.asarray([0.5, 0.05, 0.1])
+    point = center + rotation @ outside_local
+    closest, inside = closest_point_on_oriented_box(
+        point, center, rotation, half_size
+    )
+    expected = center + rotation @ np.asarray([0.2, 0.05, 0.1])
+    assert not inside
+    assert np.allclose(closest, expected)
+
+    closest_inside, inside = closest_point_on_oriented_box(
+        center, center, rotation, half_size
+    )
+    assert inside
+    # The closest face is the y face because its half extent is smallest.
+    assert np.allclose(
+        rotation.T @ (closest_inside - center),
+        [0.0, 0.1, 0.0],
+    )
+
+
 def _write_index(path: Path, rows):
     path.mkdir(parents=True)
     (path / "index.jsonl").write_text(
@@ -511,7 +543,7 @@ def test_l3a4_ec_calibration_brackets_only_fully_gated_candidates():
     assert "selected_as_calibration_seed" in angular_scan
 
 
-def test_l3a4_robot_prefix_records_blocked_descend_without_relaxing_gates():
+def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     source = ROBOT_SAFE_PREFIX.read_text()
     module = ast.parse(source)
     functions = {
@@ -526,15 +558,65 @@ def test_l3a4_robot_prefix_records_blocked_descend_without_relaxing_gates():
     assert "robot_contact_bodies" in move
     assert "porcelain_contact_seen" in move
     assert "microwave_contact_seen" in move
+    assert "forbid_microwave_contact" in move
+    assert "forbidden_microwave_contact" in move
     assert '"trace": trace' in move
     assert "EEF_POSITION_TOLERANCE" in move
+
+    geometry = ast.get_source_segment(
+        source, functions["_compiled_microwave_clearance"]
+    )
+    assert "descendant_geom_ids(model, names[\"fixture_root\"])" in geometry
+    assert "descendant_geom_ids(model, names[\"door_body\"])" in geometry
+    assert "fixture_geoms - door_geoms" in geometry
+    assert "geom_group" in geometry
+    assert "geom_contype" in geometry
+    assert "_closest_point_on_compiled_geom(" in geometry
+    assert "nearest_compiled_static_microwave_collision_surface" in geometry
+    assert "predicted_eef_surface_horizontal_clearance_m" in geometry
+    assert "hinge_away_direction_xy" in geometry
+
+    closest = ast.get_source_segment(
+        source, functions["_closest_point_on_compiled_geom"]
+    )
+    assert "geom_xpos" in closest
+    assert "geom_xmat" in closest
+    assert "geom_size" in closest
+    assert "geom_rbound" in closest
+    assert "closest_point_on_oriented_box(" in closest
+
+    seek = ast.get_source_segment(
+        source, functions["_seek_porcelain_contact"]
+    )
+    assert "_step(env, oracle, action, step, frames)" in seek
+    assert "PORCELAIN_CONTACT_SEEK_ACTION_LIMIT" in seek
+    assert "if current_microwave:" in seek
+    assert "if current_porcelain:" in seek
+    assert "porcelain_contact" in seek
+    assert "and not microwave_contact" in seek
+
+    closure = ast.get_source_segment(
+        source, functions["_close_gripper_on_porcelain"]
+    )
+    assert "_step(env, oracle, action, step, frames)" in closure
+    assert "porcelain_initial" in closure
+    assert "porcelain_final" in closure
+    assert "not microwave_contact" in closure
 
     prefix = ast.get_source_segment(
         source, functions["_robot_park_prefix"]
     )
     assert "PORCELAIN_GRASP_HEIGHT" in prefix
     assert "PORCELAIN_GRASP_CLEARANCE_OFFSET" in prefix
-    assert "hinge_position" in prefix
+    assert "_compiled_microwave_clearance(" in prefix
+    assert "_seek_porcelain_contact(" in prefix
+    assert "_close_gripper_on_porcelain(" in prefix
+    assert "forbid_microwave_contact=True" in prefix
+    assert "held_eef_offset = grasped_eef_position - grasped_mug_position" in prefix
+    assert "park_grasp_point = park_mug_position + held_eef_offset" in prefix
+    assert "PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M" in prefix
+    assert '"object_follow_trace": object_follow_trace' in prefix
+    assert "final_park_error <= PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M" in prefix
     assert "move_diagnostics" in prefix
     assert "final_error_vector" in prefix
     assert "robot_contact_bodies" in prefix
@@ -542,7 +624,17 @@ def test_l3a4_robot_prefix_records_blocked_descend_without_relaxing_gates():
     assert '"episode_diagnostics": episode_diagnostics' in source
     assert '"robot_prefix_descend_final_error_m"' in source
     assert '"robot_prefix_descend_contact_bodies"' in source
+    assert '"robot_prefix_contact_seek_porcelain_contact"' in source
+    assert '"robot_prefix_contact_seek_microwave_contact_seen"' in source
+    assert '"robot_prefix_closure_porcelain_contact_final"' in source
+    assert '"robot_prefix_max_object_follow_error_m"' in source
+    assert '"robot_prefix_final_park_error_m"' in source
+    assert '"robot_prefix_no_forbidden_microwave_contact"' in source
     assert "GRASP_HEIGHT = 0.060" in source
     assert "PORCELAIN_GRASP_HEIGHT = 0.080" in source
+    assert "PORCELAIN_GRASP_CLEARANCE_OFFSET = 0.040" in source
+    assert "PORCELAIN_CONTACT_SEEK_STEPS = 80" in source
+    assert "PORCELAIN_CONTACT_SEEK_ACTION_LIMIT = 0.25" in source
+    assert "PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M = 0.030" in source
     assert "EEF_POSITION_TOLERANCE = 0.012" in source
     assert "MOVE_STEPS = 100" in source
