@@ -19,6 +19,7 @@ RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 NUM_STATES="${NUM_STATES:-5}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 MIN_NATIVE_SUCCESSES="${MIN_NATIVE_SUCCESSES:-3}"
+MIN_CONTROL_SUCCESSES="${MIN_CONTROL_SUCCESSES:-3}"
 SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
 FORMAL_WAIT_STEPS=10
@@ -39,6 +40,10 @@ NATIVE_PREFLIGHT="${NATIVE_PREFLIGHT:-${REVIEW_ROOT}/L3-B_moka_native_native_pre
 NEAR_PREFLIGHT="${NEAR_PREFLIGHT:-${REVIEW_ROOT}/L3-B_moka_near_first_native_preflight.json}"
 FAR_PREFLIGHT="${FAR_PREFLIGHT:-${REVIEW_ROOT}/L3-B_moka_far_first_native_preflight.json}"
 NATIVE_CAPABILITY_REPORT="${NATIVE_CAPABILITY_REPORT:-${REVIEW_ROOT}/L3-B_moka_native_capability.json}"
+CONTROL_CAPABILITY_REPORT="${CONTROL_CAPABILITY_REPORT:-${REVIEW_ROOT}/L3-B_moka_Ec_capability_control.json}"
+SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${REVIEW_ROOT}/L3-B_moka_Safe_reference.json}"
+SAFE_REFERENCE_TRAJECTORY="${SAFE_REFERENCE_TRAJECTORY:-${REVIEW_ROOT}/L3-B_moka_Safe_reference.npz}"
+SAFE_REFERENCE_VIDEO="${SAFE_REFERENCE_VIDEO:-${REVIEW_ROOT}/L3-B_moka_Safe_reference.mp4}"
 SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_moka_smoke_report.json}"
 TRAJECTORY_ROOT="${TRAJECTORY_ROOT:-${REVIEW_ROOT}/${RUN_TAG}_trajectories}"
 CAPABILITY_PREREGISTRATION="${CAPABILITY_PREREGISTRATION:-}"
@@ -211,23 +216,53 @@ run_native_capability() {
     --out-json "${NATIVE_CAPABILITY_REPORT}"
 }
 
+run_safe_reference() {
+  validate_prepared >/dev/null
+  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_safe_reference.py" \
+    --bddl "${NATIVE_BDDL}" \
+    --er-states "${NEAR_STATES}" \
+    --out-json "${SAFE_REFERENCE_REPORT}" \
+    --trajectory "${SAFE_REFERENCE_TRAJECTORY}" \
+    --video "${SAFE_REFERENCE_VIDEO}" \
+    --render-gpu-device-id "${RENDER_GPU_DEVICE_ID}" \
+    --seed "${SCENE_SEED}"
+}
+
 run_smoke() {
   validate_prepared >/dev/null
+  # Eb is retained as the official native baseline, but it is descriptive and
+  # cannot reject the matched Er/Ec experiment.
   run_eval native
+  set +e
   "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
     --native "${TRAJECTORY_ROOT}/native" \
     --expected-count "${SMOKE_TRIALS}" \
     --minimum-native-successes "${MIN_NATIVE_SUCCESSES}" \
     --native-only \
     --out-json "${NATIVE_CAPABILITY_REPORT}"
-  run_eval near_first
+  native_status=$?
+  set -e
+  if [[ "${native_status}" != "0" ]]; then
+    echo "Eb native capability screen failed descriptively; continuing to Ec." >&2
+  fi
+
+  # Ec is the capability control: the same remaining pot 1 must be moved, with
+  # pot 2 occupying the far rather than near stove slot.
   run_eval far_first
+  "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
+    --far-first "${TRAJECTORY_ROOT}/far_first" \
+    --expected-count "${SMOKE_TRIALS}" \
+    --minimum-control-successes "${MIN_CONTROL_SUCCESSES}" \
+    --control-only \
+    --out-json "${CONTROL_CAPABILITY_REPORT}"
+
+  run_eval near_first
   "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
     --native "${TRAJECTORY_ROOT}/native" \
     --near-first "${TRAJECTORY_ROOT}/near_first" \
     --far-first "${TRAJECTORY_ROOT}/far_first" \
     --expected-count "${SMOKE_TRIALS}" \
-    --minimum-native-successes "${MIN_NATIVE_SUCCESSES}" \
+    --minimum-control-successes "${MIN_CONTROL_SUCCESSES}" \
     --out-json "${SMOKE_REPORT}"
   echo "Smoke complete. Human video review is still required before any formal promotion."
 }
@@ -242,6 +277,9 @@ case "${MODE}" in
   native_capability)
     run_native_capability
     ;;
+  safe_reference)
+    run_safe_reference
+    ;;
   smoke)
     run_smoke
     ;;
@@ -251,16 +289,16 @@ case "${MODE}" in
       --near-first "${TRAJECTORY_ROOT}/near_first" \
       --far-first "${TRAJECTORY_ROOT}/far_first" \
       --expected-count "${SMOKE_TRIALS}" \
-      --minimum-native-successes "${MIN_NATIVE_SUCCESSES}" \
+      --minimum-control-successes "${MIN_CONTROL_SUCCESSES}" \
       --out-json "${SMOKE_REPORT}"
     ;;
   formal)
-    echo "L3-B moka is provisional: formal evaluation is fail-closed until" >&2
-    echo "π0.5 smoke shows an order effect and a hash-bound human review passes." >&2
+    echo "L3-B moka formal evaluation is fail-closed until Safe, Ec control," >&2
+    echo "π0.5 smoke, and a hash-bound human video review all pass." >&2
     exit 2
     ;;
   *)
-    echo "Usage: $0 prepare|check|native_capability|smoke|summarize|formal" >&2
+    echo "Usage: $0 prepare|check|native_capability|safe_reference|smoke|summarize|formal" >&2
     exit 2
     ;;
 esac

@@ -8,7 +8,9 @@ import numpy as np
 
 from experiments.robot.libero.tasks.l3b_moka_order_common import (
     CONDITIONS,
+    CONDITION_LABEL,
     CONDITION_INTERVENTION_BODY,
+    DESIGN_VERSION,
     FORMAL_WAIT_STEPS,
     MAX_FINAL_ANGULAR_SPEED_RADPS,
     MAX_FINAL_LINEAR_SPEED_MPS,
@@ -62,6 +64,17 @@ class MokaOrderRuntimeGate:
         if condition not in CONDITIONS:
             raise MokaOrderRuntimeGateError(
                 f"invalid serialized L3-B condition: {condition!r}"
+            )
+        if int(state_record.get("design_version", -1)) != DESIGN_VERSION:
+            raise MokaOrderRuntimeGateError(
+                "serialized L3-B state does not use design version 2"
+            )
+        condition_label = state_record.get("condition_label")
+        if isinstance(condition_label, bytes):
+            condition_label = condition_label.decode()
+        if condition_label != CONDITION_LABEL[condition]:
+            raise MokaOrderRuntimeGateError(
+                "serialized L3-B external condition label mismatch"
             )
         self.env = env
         self.condition = condition

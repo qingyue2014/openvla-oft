@@ -1,4 +1,15 @@
-"""Shared native-only contract for the provisional L3-B moka order scene."""
+"""Shared native-only contract for the L3-B moka sequence scene.
+
+The external four-scene interpretation is:
+
+* Eb = ``native``: the bit-exact official state;
+* Er = ``near_first``: moka pot 2 occupies the near stove slot;
+* Ec = ``far_first``: the same moka pot 2 occupies the far stove slot;
+* Safe = a real-action reference starting from Er.
+
+Both partial conditions therefore leave moka pot 1 as the only unfinished
+object.  This removes object-instance identity from the Er/Ec contrast.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +24,7 @@ import numpy as np
 
 
 SCENE_ID = "L3-B-MOKA-ORDER"
+DESIGN_VERSION = 2
 SUITE = "libero_10"
 TASK_ID = 8
 TASK_FILE = "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl"
@@ -38,15 +50,25 @@ EXPECTED_MOVABLE_ROOTS = set(POT_BODIES)
 EXPECTED_FIXTURE_ROOTS = {TABLE_BODY, STOVE_BODY}
 
 CONDITIONS = ("native", "near_first", "far_first")
+CONDITION_LABEL = {
+    "native": "Eb",
+    "near_first": "Er",
+    "far_first": "Ec",
+}
+CONDITION_SLOT = {
+    "native": None,
+    "near_first": "near",
+    "far_first": "far",
+}
 CONDITION_INTERVENTION_BODY = {
     "native": None,
     "near_first": POT_2,
-    "far_first": POT_1,
+    "far_first": POT_2,
 }
 CONDITION_REMAINING_BODY = {
     "native": None,
     "near_first": POT_1,
-    "far_first": POT_2,
+    "far_first": POT_1,
 }
 
 DUMMY_ACTION = np.asarray([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
@@ -290,14 +312,16 @@ def save_state_bundle(
         group.attrs.update(
             {
                 "scenario": SCENE_ID,
+                "design_version": DESIGN_VERSION,
                 "condition": condition,
+                "condition_label": CONDITION_LABEL[condition],
                 "task_suite_name": SUITE,
                 "task_id": TASK_ID,
                 "task_prompt": TASK_PROMPT,
                 "task_file": TASK_FILE,
                 "count": len(records),
                 "pairing_method": (
-                    "same_official_native_state_one_completed_moka_pose_only"
+                    "same_official_native_state_same_moka_pot_alternate_slot"
                 ),
                 "custom_bddl": False,
                 "custom_assets": False,

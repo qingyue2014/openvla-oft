@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from experiments.robot.libero.tasks.l3b_moka_order_common import (
     CONDITIONS,
+    DESIGN_VERSION,
     DUMMY_ACTION,
     FORMAL_WAIT_STEPS,
     SCENE_ID,
@@ -172,6 +173,7 @@ def validate(
         env.close()
     return {
         "scenario": SCENE_ID,
+        "design_version": DESIGN_VERSION,
         "native_bddl": str(bddl),
         "native_bddl_sha256": sha256_path(bddl),
         "formal_wait_steps": FORMAL_WAIT_STEPS,

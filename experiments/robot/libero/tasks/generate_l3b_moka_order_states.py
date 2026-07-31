@@ -1,8 +1,10 @@
-"""Generate native, near-first, and far-first moka order states.
+"""Generate Eb, Er, and Ec states for the native moka sequence probe.
 
 All three conditions use the exact native ``libero_10`` task and prompt.
-``near_first`` changes only moka pot 2's free-joint pose/velocity; ``far_first``
-changes only moka pot 1's.  ``native`` is the bit-exact official state.
+``near_first`` (Er) and ``far_first`` (Ec) both change only moka pot 2's
+free-joint pose/velocity, placing that same pot in the near or far stove slot.
+Moka pot 1 remains on the table in both partial conditions. ``native`` (Eb) is
+the bit-exact official state.
 """
 
 from __future__ import annotations
@@ -17,9 +19,12 @@ import numpy as np
 
 from experiments.robot.libero.tasks.l3b_moka_order_common import (
     CONDITION_INTERVENTION_BODY,
+    CONDITION_LABEL,
+    CONDITION_SLOT,
     CONDITIONS,
     CONSTRUCTION_SETTLE_STEPS,
     COOK_SITE,
+    DESIGN_VERSION,
     DUMMY_ACTION,
     FORMAL_WAIT_STEPS,
     MAX_FINAL_ANGULAR_SPEED_RADPS,
@@ -225,6 +230,7 @@ def _intervene_one_pot(
     base_state: np.ndarray,
     *,
     body_name: str,
+    target_label: str,
     target: np.ndarray,
     fixture_names: list[str],
     fixture_positions: np.ndarray,
@@ -260,6 +266,7 @@ def _intervene_one_pot(
         raise ValueError("intervention changed non-target serialized state")
     return candidate, {
         "intervention_body": body_name,
+        "target_slot": target_label,
         "target_xy": np.asarray(target[:2], dtype=float).tolist(),
         "spawn_z": spawn_z,
         "qpos_flat_start": qpos_slice.start,
@@ -437,6 +444,7 @@ def generate(args) -> dict:
             intervention_meta = {
                 "native": {
                     "intervention_body": "",
+                    "target_slot": "",
                     "target_xy": [],
                     "construction_settle_steps": 0,
                 }
@@ -446,6 +454,7 @@ def generate(args) -> dict:
                     env,
                     base,
                     body_name=POT_2,
+                    target_label="near",
                     target=slots["near"],
                     fixture_names=fixture_names,
                     fixture_positions=fixture_positions,
@@ -456,7 +465,8 @@ def generate(args) -> dict:
                 _intervene_one_pot(
                     env,
                     base,
-                    body_name=POT_1,
+                    body_name=POT_2,
+                    target_label="far",
                     target=slots["far"],
                     fixture_names=fixture_names,
                     fixture_positions=fixture_positions,
@@ -503,6 +513,9 @@ def generate(args) -> dict:
                     )
                 attrs = {
                     "condition": condition,
+                    "condition_label": CONDITION_LABEL[condition],
+                    "target_slot": CONDITION_SLOT[condition] or "",
+                    "design_version": DESIGN_VERSION,
                     "native_init_state_index": state_index,
                     "base_state_sha256": _state_sha256(base),
                     "initial_state_sha256": _state_sha256(states[condition]),
@@ -546,6 +559,13 @@ def generate(args) -> dict:
     bddl_record = validate_native_bddl(runtime_bddl)
     result = {
         "scenario": SCENE_ID,
+        "design_version": DESIGN_VERSION,
+        "scene_labels": {
+            "Eb": "native",
+            "Er": "near_first",
+            "Ec": "far_first",
+            "Safe": "real_action_reference_from_Er",
+        },
         "diagnostic_only": True,
         "formal_authorized": False,
         "native_suite": SUITE,

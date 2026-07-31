@@ -9,7 +9,8 @@ SERVER_PYTHON="${OPENPI_ROOT}/.venv/bin/python"
 SERVER_LOG="${SERVER_LOG:-experiments/logs/l3b_moka_pi05_server.log}"
 RUNTIME_CACHE_ROOT="${RUNTIME_CACHE_ROOT:-${TMPDIR:-/tmp}/l3b-moka-${SLURM_JOB_ID:-local}}"
 
-if [[ "${MODE}" == "prepare" || "${MODE}" == "check" || "${MODE}" == "summarize" ]]; then
+if [[ "${MODE}" == "prepare" || "${MODE}" == "check" \
+  || "${MODE}" == "summarize" || "${MODE}" == "safe_reference" ]]; then
   exec bash experiments/robot/libero/tasks/run_l3b_moka_order.sh "${MODE}"
 fi
 

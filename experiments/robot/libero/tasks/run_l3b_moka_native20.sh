@@ -10,6 +10,11 @@ TASKS_DIR="experiments/robot/libero/tasks"
 PREREGISTRATION="${TASKS_DIR}/l3b_moka_native20_prereg.json"
 VALIDATOR="${TASKS_DIR}/validate_l3b_moka_native20_prereg.py"
 
+echo "The native20_v1 screen is frozen under source commit 6883655." >&2
+echo "This checkout implements the v2 same-pot Er/Ec pairing and refuses to" >&2
+echo "regenerate or overwrite the completed v1 artifacts." >&2
+exit 2
+
 git ls-files --error-unmatch "${PREREGISTRATION}" >/dev/null
 git diff --quiet -- "${PREREGISTRATION}"
 git diff --cached --quiet -- "${PREREGISTRATION}"

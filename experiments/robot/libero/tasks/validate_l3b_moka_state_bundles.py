@@ -16,7 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from experiments.robot.libero.tasks.l3b_moka_order_common import (
     CONDITIONS,
+    CONDITION_LABEL,
     CONDITION_INTERVENTION_BODY,
+    CONDITION_SLOT,
+    DESIGN_VERSION,
     EXPECTED_FIXTURE_ROOTS,
     MAX_RECEPTACLE_TILT_DEG,
     POT_1,
@@ -36,7 +39,7 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
 
 VERDICT = "PASS_L3B_MOKA_EXACT_SERIALIZED_PAIRING"
 INITIAL_GATE_VERDICT = "PASS_L3B_MOKA_INITIAL_PHYSICAL_GATES"
-PAIRING_METHOD = "same_official_native_state_one_completed_moka_pose_only"
+PAIRING_METHOD = "same_official_native_state_same_moka_pot_alternate_slot"
 POLICY_IMAGE_SPECS = {
     "agentview_raw_256": (256, 256),
     "wrist_raw_256": (256, 256),
@@ -142,7 +145,9 @@ def _validate_one(path: str | Path, condition: str) -> list[dict]:
         group = handle[TASK_KEY]
         expected_group = {
             "scenario": SCENE_ID,
+            "design_version": DESIGN_VERSION,
             "condition": condition,
+            "condition_label": CONDITION_LABEL[condition],
             "task_suite_name": SUITE,
             "task_id": TASK_ID,
             "task_prompt": TASK_PROMPT,
@@ -188,10 +193,21 @@ def _validate_one(path: str | Path, condition: str) -> list[dict]:
 
             intervention = _json_attr(demo.attrs, "intervention_json")
             expected_body = CONDITION_INTERVENTION_BODY[condition] or ""
+            expected_slot = CONDITION_SLOT[condition] or ""
+            if int(demo.attrs.get("design_version", -1)) != DESIGN_VERSION:
+                raise ValueError(f"{context} design version mismatch")
+            if _decode(demo.attrs.get("condition_label", "")) != (
+                CONDITION_LABEL[condition]
+            ):
+                raise ValueError(f"{context} external condition label mismatch")
+            if _decode(demo.attrs.get("target_slot", "")) != expected_slot:
+                raise ValueError(f"{context} target slot mismatch")
             if _decode(demo.attrs.get("intervention_body", "")) != expected_body:
                 raise ValueError(f"{context} intervention body mismatch")
             if intervention.get("intervention_body", "") != expected_body:
                 raise ValueError(f"{context} intervention metadata mismatch")
+            if intervention.get("target_slot", "") != expected_slot:
+                raise ValueError(f"{context} intervention slot mismatch")
             if condition == "native":
                 if not np.array_equal(initial, base):
                     raise ValueError(f"{context} native state is not bit-exact")
@@ -233,6 +249,10 @@ def _validate_one(path: str | Path, condition: str) -> list[dict]:
                     "base": base,
                     "qpos_start": qpos_start,
                     "qvel_start": qvel_start,
+                    "target_xy": np.asarray(
+                        intervention.get("target_xy", []), dtype=float
+                    ),
+                    "slots": _json_attr(demo.attrs, "slot_targets_json"),
                     "fixture_names": fixtures,
                     "fixture_positions": fixture_positions,
                     "fixture_quaternions": fixture_quaternions,
@@ -257,6 +277,7 @@ def _validate_initial_manifest(
         raise ValueError("L3-B initial physical gate verdict is missing")
     if (
         record.get("scenario") != SCENE_ID
+        or int(record.get("design_version", -1)) != DESIGN_VERSION
         or record.get("native_suite") != SUITE
         or int(record.get("native_task_id", -1)) != TASK_ID
         or record.get("native_prompt") != TASK_PROMPT
@@ -323,12 +344,33 @@ def validate_pairing(
                 native[field], far[field]
             ):
                 raise ValueError(f"paired {field} mismatch at demo_{index}")
-        if near["qpos_start"] == far["qpos_start"]:
-            raise ValueError(f"near/far modify the same body at demo_{index}")
+        if (
+            near["qpos_start"] != far["qpos_start"]
+            or near["qvel_start"] != far["qvel_start"]
+        ):
+            raise ValueError(
+                f"near/far do not modify the same moka pot at demo_{index}"
+            )
+        if near["target_xy"].shape != (2,) or far["target_xy"].shape != (2,):
+            raise ValueError(f"near/far target metadata invalid at demo_{index}")
+        expected_near = np.asarray(near["slots"]["near_xyz"][:2], dtype=float)
+        expected_far = np.asarray(far["slots"]["far_xyz"][:2], dtype=float)
+        if not np.allclose(near["target_xy"], expected_near, atol=1e-12):
+            raise ValueError(f"near target binding mismatch at demo_{index}")
+        if not np.allclose(far["target_xy"], expected_far, atol=1e-12):
+            raise ValueError(f"far target binding mismatch at demo_{index}")
+        if np.allclose(near["target_xy"], far["target_xy"], atol=1e-9):
+            raise ValueError(f"near/far target slots coincide at demo_{index}")
 
     initial = _validate_initial_manifest(initial_manifest, state_paths)
     return {
         "scenario": SCENE_ID,
+        "design_version": DESIGN_VERSION,
+        "scene_labels": {
+            "Eb": "native",
+            "Er": "near_first",
+            "Ec": "far_first",
+        },
         "verdict": VERDICT,
         "count": counts["native"],
         "initial_manifest": {

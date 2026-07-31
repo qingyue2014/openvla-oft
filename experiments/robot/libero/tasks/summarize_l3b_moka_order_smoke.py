@@ -1,4 +1,9 @@
-"""Summarize π0.5 moka-order smoke runs without a collision oracle."""
+"""Summarize π0.5 moka-sequence smoke runs without a collision oracle.
+
+Eb (native) is descriptive.  Ec (far-first) is the matched capability
+control because it leaves the same moka pot 1 manipulation as Er while
+placing moka pot 2 in the less obstructive far slot.
+"""
 
 from __future__ import annotations
 
@@ -29,6 +34,7 @@ from experiments.robot.libero.physcog_trajectory import load_trajectory
 
 
 PASS_NATIVE = "PASS_L3B_MOKA_NATIVE_CAPABILITY_SMOKE"
+PASS_CONTROL = "PASS_L3B_MOKA_EC_CAPABILITY_CONTROL"
 PASS_SMOKE = "PASS_L3B_MOKA_POLICY_SMOKE_DIAGNOSTIC"
 MIN_TARGET_MOTION_M = 0.03
 DIRECT_OCCUPANT_MAX_DISPLACEMENT_M = 0.015
@@ -253,6 +259,37 @@ def native_capability(
     return result
 
 
+def control_capability(
+    far_dir: str | Path,
+    *,
+    expected_count: int,
+    minimum_successes: int,
+) -> dict:
+    control = summarize_condition(
+        "far_first", far_dir, expected_count=expected_count
+    )
+    passed = control["stable_successes"] >= minimum_successes
+    return {
+        "scenario": SCENE_ID,
+        "scene": "Ec",
+        "verdict": (
+            PASS_CONTROL
+            if passed
+            else "FAIL_L3B_MOKA_EC_CAPABILITY_CONTROL"
+        ),
+        "minimum_successes": minimum_successes,
+        "control": control,
+        "failures": (
+            []
+            if passed
+            else [
+                "Ec stable successes "
+                f"{control['stable_successes']} < {minimum_successes}"
+            ]
+        ),
+    }
+
+
 def bind_preregistration(
     result: dict,
     preregistration_path: str | Path,
@@ -287,7 +324,8 @@ def summarize(
     far_dir: str | Path,
     *,
     expected_count: int,
-    minimum_native_successes: int,
+    minimum_control_successes: int = 3,
+    minimum_native_successes: int | None = None,
 ) -> dict:
     conditions = {
         "native": summarize_condition(
@@ -300,9 +338,9 @@ def summarize(
             "far_first", far_dir, expected_count=expected_count
         ),
     }
-    native_pass = (
-        conditions["native"]["stable_successes"]
-        >= minimum_native_successes
+    control_pass = (
+        conditions["far_first"]["stable_successes"]
+        >= minimum_control_successes
     )
     near_rate = conditions["near_first"]["stable_success_rate"]
     far_rate = conditions["far_first"]["stable_success_rate"]
@@ -311,18 +349,18 @@ def summarize(
         conditions["near_first"]["repair_then_complete"]
         - conditions["far_first"]["repair_then_complete"]
     ) / expected_count
-    if not native_pass:
-        candidate_status = "INCONCLUSIVE_NATIVE_CAPABILITY_FAIL"
-    elif abs(gap) >= 0.4 or abs(repair_gap) >= 0.4:
+    if not control_pass:
+        candidate_status = "INCONCLUSIVE_EC_CAPABILITY_CONTROL_FAIL"
+    elif gap >= 0.4 or repair_gap >= 0.4:
         candidate_status = "POTENTIAL_ORDER_EFFECT_REQUIRES_FORMAL_REVIEW"
     else:
         candidate_status = "NO_LARGE_ORDER_EFFECT_IN_SMOKE"
     failures = []
-    if not native_pass:
+    if not control_pass:
         failures.append(
-            "native stable successes "
-            f"{conditions['native']['stable_successes']} "
-            f"< {minimum_native_successes}"
+            "Ec stable successes "
+            f"{conditions['far_first']['stable_successes']} "
+            f"< {minimum_control_successes}"
         )
     result = {
         "scenario": SCENE_ID,
@@ -330,8 +368,14 @@ def summarize(
         "formal_authorized": False,
         "verdict": PASS_SMOKE if not failures else "FAIL_L3B_MOKA_POLICY_SMOKE",
         "candidate_status": candidate_status,
+        "scene_labels": {
+            "Eb": "native",
+            "Er": "near_first",
+            "Ec": "far_first",
+        },
         "preregistered_thresholds": {
-            "minimum_native_successes": minimum_native_successes,
+            "minimum_ec_control_successes": minimum_control_successes,
+            "eb_native_is_descriptive_not_a_gate": True,
             "minimum_target_motion_m": MIN_TARGET_MOTION_M,
             "direct_occupant_max_displacement_m": (
                 DIRECT_OCCUPANT_MAX_DISPLACEMENT_M
@@ -342,8 +386,8 @@ def summarize(
             "terminal_max_drift_m": TERMINAL_MAX_DRIFT_M,
         },
         "contrasts": {
-            "far_minus_near_stable_success_rate": gap,
-            "near_minus_far_repair_rate": repair_gap,
+            "Ec_minus_Er_stable_success_rate": gap,
+            "Er_minus_Ec_repair_rate": repair_gap,
         },
         "conditions": conditions,
         "failures": failures,
@@ -364,17 +408,23 @@ def _write_result(path: str | Path | None, result: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--native", required=True)
+    parser.add_argument("--native")
     parser.add_argument("--near-first")
     parser.add_argument("--far-first")
     parser.add_argument("--expected-count", type=int, default=5)
     parser.add_argument("--minimum-native-successes", type=int, default=3)
+    parser.add_argument("--minimum-control-successes", type=int, default=3)
     parser.add_argument("--native-only", action="store_true")
+    parser.add_argument("--control-only", action="store_true")
     parser.add_argument("--preregistration")
     parser.add_argument("--out-json")
     args = parser.parse_args()
     try:
+        if args.native_only and args.control_only:
+            raise ValueError("--native-only and --control-only are exclusive")
         if args.native_only:
+            if not args.native:
+                raise ValueError("--native is required with --native-only")
             result = native_capability(
                 args.native,
                 expected_count=args.expected_count,
@@ -387,18 +437,26 @@ def main() -> None:
                     expected_count=args.expected_count,
                     minimum_successes=args.minimum_native_successes,
                 )
+        elif args.control_only:
+            if not args.far_first:
+                raise ValueError("--far-first is required with --control-only")
+            result = control_capability(
+                args.far_first,
+                expected_count=args.expected_count,
+                minimum_successes=args.minimum_control_successes,
+            )
         else:
-            if not args.near_first or not args.far_first:
+            if not args.native or not args.near_first or not args.far_first:
                 raise ValueError(
-                    "--near-first and --far-first are required unless "
-                    "--native-only is used"
+                    "--native, --near-first, and --far-first are required "
+                    "for the full summary"
                 )
             result = summarize(
                 args.native,
                 args.near_first,
                 args.far_first,
                 expected_count=args.expected_count,
-                minimum_native_successes=args.minimum_native_successes,
+                minimum_control_successes=args.minimum_control_successes,
             )
     except Exception as exc:
         result = {
@@ -411,7 +469,7 @@ def main() -> None:
         raise SystemExit(1)
     _write_result(args.out_json, result)
     print(result["verdict"])
-    if not args.native_only:
+    if not args.native_only and not args.control_only:
         print(result["candidate_status"])
     if str(result.get("verdict", "")).startswith("FAIL_"):
         raise SystemExit(1)

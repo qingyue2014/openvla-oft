@@ -12,7 +12,9 @@ import h5py
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from experiments.robot.libero.tasks.l3b_moka_order_common import (
+    CONDITION_INTERVENTION_BODY,
     CONDITIONS,
+    DESIGN_VERSION,
     EXPECTED_FIXTURE_ROOTS,
     EXPECTED_FIXTURES,
     EXPECTED_MOVABLE_ROOTS,
@@ -56,6 +58,7 @@ def validate_native_task(
     return {
         **evidence,
         "scenario": SCENE_ID,
+        "design_version": DESIGN_VERSION,
         "task_suite_name": SUITE,
         "task_id": TASK_ID,
         "task_file": TASK_FILE,
@@ -72,7 +75,10 @@ def _load_gate(path: str | Path, expected_verdict: str) -> tuple[Path, dict]:
     record = json.loads(path.read_text(encoding="utf-8"))
     if record.get("verdict") != expected_verdict:
         raise ValueError(f"{path} lacks verdict {expected_verdict}")
-    if record.get("scenario") != SCENE_ID:
+    if (
+        record.get("scenario") != SCENE_ID
+        or int(record.get("design_version", -1)) != DESIGN_VERSION
+    ):
         raise ValueError(f"{path} belongs to a different scenario")
     return path, record
 
@@ -84,6 +90,7 @@ def _validate_state_group(path: Path, condition: str) -> None:
         group = handle[TASK_KEY]
         expected = {
             "scenario": SCENE_ID,
+            "design_version": DESIGN_VERSION,
             "condition": condition,
             "task_suite_name": SUITE,
             "task_id": TASK_ID,
@@ -159,8 +166,7 @@ def build_manifest(
         "runtime_replay_gate_path": str(runtime_path),
         "runtime_replay_gate_sha256": sha256_path(runtime_path),
         "allowed_intervention_body": (
-            "" if condition == "native"
-            else ("moka_pot_2_main" if condition == "near_first" else "moka_pot_1_main")
+            CONDITION_INTERVENTION_BODY[condition] or ""
         ),
         "custom_bddl": False,
         "custom_assets": False,

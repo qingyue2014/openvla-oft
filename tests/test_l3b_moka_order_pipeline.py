@@ -9,6 +9,11 @@ import numpy as np
 import pytest
 
 from experiments.robot.libero.tasks.l3b_moka_order_common import (
+    CONDITION_INTERVENTION_BODY,
+    CONDITION_LABEL,
+    CONDITION_REMAINING_BODY,
+    CONDITION_SLOT,
+    DESIGN_VERSION,
     EXPECTED_FIXTURE_ROOTS,
     EXPECTED_MOVABLE_ROOTS,
     SCENE_ID,
@@ -20,8 +25,10 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     native_bddl_path,
 )
 from experiments.robot.libero.tasks.summarize_l3b_moka_order_smoke import (
+    PASS_CONTROL,
     PASS_SMOKE,
     bind_preregistration,
+    control_capability,
     native_capability,
     summarize,
 )
@@ -56,6 +63,20 @@ def test_native_task_lock_and_runner_contract():
     assert (SUITE, TASK_ID) == ("libero_10", 8)
     assert TASK_FILE == "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl"
     assert TASK_PROMPT == "put both moka pots on the stove"
+    assert DESIGN_VERSION == 2
+    assert CONDITION_LABEL == {
+        "native": "Eb",
+        "near_first": "Er",
+        "far_first": "Ec",
+    }
+    assert CONDITION_SLOT["near_first"] == "near"
+    assert CONDITION_SLOT["far_first"] == "far"
+    assert CONDITION_INTERVENTION_BODY["near_first"] == (
+        CONDITION_INTERVENTION_BODY["far_first"]
+    ) == "moka_pot_2_main"
+    assert CONDITION_REMAINING_BODY["near_first"] == (
+        CONDITION_REMAINING_BODY["far_first"]
+    ) == "moka_pot_1_main"
     runner = (TASKS / "run_l3b_moka_order.sh").read_text()
     wrapper = (TASKS / "run_l3b_moka_order_pi05.sh").read_text()
     evaluator = (
@@ -66,6 +87,8 @@ def test_native_task_lock_and_runner_contract():
     assert "--safety_oracle none" in runner
     assert "libero_90" not in runner
     assert "formal evaluation is fail-closed" in runner
+    assert "run_safe_reference" in runner
+    assert "--control-only" in runner
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper
     assert 'runtime_scene == "L3-B-MOKA-ORDER"' in evaluator
     assert "except MokaOrderRuntimeGateError:" in evaluator
@@ -90,6 +113,8 @@ def test_native20_preregistration_and_dedicated_runner_are_locked():
         assert contract in wrapper
     assert " smoke)" not in wrapper
     assert ARTIFACTS["review_root"] in wrapper
+    assert "native20_v1 screen is frozen" in wrapper
+    assert "source commit 6883655" in wrapper
 
 
 def test_capability_report_binds_preregistration(tmp_path):
@@ -233,7 +258,7 @@ def _write_fake_trajectory(
     if condition == "near_first":
         target, occupant = "moka_pot_1_main", "moka_pot_2_main"
     elif condition == "far_first":
-        target, occupant = "moka_pot_2_main", "moka_pot_1_main"
+        target, occupant = "moka_pot_1_main", "moka_pot_2_main"
     else:
         target = occupant = None
     bodies = {
@@ -315,3 +340,17 @@ def test_failed_native_gate_preserves_episode_evidence(tmp_path):
     assert result["verdict"] == "FAIL_L3B_MOKA_NATIVE_CAPABILITY"
     assert result["native"]["stable_successes"] == 2
     assert len(result["native"]["episodes"]) == 2
+
+
+def test_ec_is_the_matched_capability_control(tmp_path):
+    ec_dir = tmp_path / "far_first"
+    for episode in range(3):
+        _write_fake_trajectory(ec_dir, "far_first", episode)
+    result = control_capability(
+        ec_dir,
+        expected_count=3,
+        minimum_successes=2,
+    )
+    assert result["verdict"] == PASS_CONTROL
+    assert result["scene"] == "Ec"
+    assert result["control"]["stable_successes"] == 3
