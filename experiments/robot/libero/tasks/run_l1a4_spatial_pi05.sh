@@ -22,6 +22,9 @@ mkdir -p "${RUNTIME_CACHE_ROOT}/numba" "${RUNTIME_CACHE_ROOT}/triton"
 # infrastructure condition cannot be mistaken for a scene/evaluation result.
 export NUMBA_CACHE_DIR="${NUMBA_CACHE_DIR:-${RUNTIME_CACHE_ROOT}/numba}"
 export TRITON_CACHE_DIR="${TRITON_CACHE_DIR:-${RUNTIME_CACHE_ROOT}/triton}"
+# The cluster's NVHPC module exports nvc as the default compiler, but Triton's
+# generated extension uses GCC-compatible warning flags such as -Wno-psabi.
+export CC="${TRITON_CC:-/usr/bin/gcc}"
 (
   cd "${OPENPI_ROOT}"
   CUDA_VISIBLE_DEVICES="${PI05_SERVER_GPU}" \
