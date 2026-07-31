@@ -52,6 +52,8 @@ from experiments.robot.libero.tasks.native_state_replay import (
 
 APPROACH_HEIGHT = 0.16
 GRASP_HEIGHT = 0.060
+PORCELAIN_GRASP_HEIGHT = 0.080
+PORCELAIN_GRASP_CLEARANCE_OFFSET = 0.008
 EEF_POSITION_TOLERANCE = 0.012
 MOVE_STEPS = 100
 GRIPPER_STEPS = 15
@@ -97,6 +99,25 @@ def _eef_position(env) -> np.ndarray:
     return np.asarray(env.sim.data.body_xpos[body_id], dtype=float).copy()
 
 
+def _robot_contact_body_names(env) -> set[str]:
+    robot_geoms = _robot_geom_ids(env.sim.model)
+    contacts = set()
+    for index in range(int(env.sim.data.ncon)):
+        contact = env.sim.data.contact[index]
+        if contact.geom1 in robot_geoms:
+            other = int(contact.geom2)
+        elif contact.geom2 in robot_geoms:
+            other = int(contact.geom1)
+        else:
+            continue
+        body_name = env.sim.model.body_id2name(
+            int(env.sim.model.geom_bodyid[other])
+        )
+        if body_name and not body_name.startswith(("robot0_", "gripper0_")):
+            contacts.add(body_name)
+    return contacts
+
+
 def _step(env, oracle, action, step, frames):
     obs, _, _, _ = env.step(np.asarray(action, dtype=float).tolist())
     status = oracle.check(env, obs, action, step)
@@ -104,22 +125,101 @@ def _step(env, oracle, action, step, frames):
     return obs, status, step + 1
 
 
-def _move_eef(env, oracle, target, gripper, step, frames):
+def _move_eef(
+    env,
+    oracle,
+    target,
+    gripper,
+    step,
+    frames,
+    *,
+    label="",
+    diagnostics=None,
+):
     target = np.asarray(target, dtype=float)
+    initial_eef = _eef_position(env)
+    initial_error = target - initial_eef
+    error_norms = [float(np.linalg.norm(initial_error))]
+    contact_bodies = set()
+    trace = []
+    reached = False
     status = None
-    for _ in range(MOVE_STEPS):
+    for iteration in range(MOVE_STEPS):
         error = target - _eef_position(env)
         if float(np.linalg.norm(error)) <= EEF_POSITION_TOLERANCE:
-            return True, status, step
+            reached = True
+            break
         action = np.zeros(7, dtype=float)
         # LIBERO OSC position commands are normalized deltas. A gain of 20
         # requests full scale only beyond 5 cm and tapers near the waypoint.
         action[:3] = np.clip(error * 20.0, -1.0, 1.0)
         action[-1] = gripper
         _, status, step = _step(env, oracle, action, step, frames)
+        eef = _eef_position(env)
+        post_error = target - eef
+        error_norm = float(np.linalg.norm(post_error))
+        error_norms.append(error_norm)
+        current_contacts = _robot_contact_body_names(env)
+        contact_bodies.update(current_contacts)
+        trace.append(
+            [
+                float(iteration),
+                float(step),
+                *eef.tolist(),
+                *post_error.tolist(),
+                error_norm,
+                *action[:3].tolist(),
+                float(PORCELAIN_BODY in current_contacts),
+                float(TARGET_BODY in current_contacts),
+                float(
+                    any(
+                        "microwave" in name.lower()
+                        for name in current_contacts
+                    )
+                ),
+            ]
+        )
         if status.violated:
-            return False, status, step
-    return False, status, step
+            break
+    final_eef = _eef_position(env)
+    final_error = target - final_eef
+    final_error_norm = float(np.linalg.norm(final_error))
+    reached = reached or final_error_norm <= EEF_POSITION_TOLERANCE
+    tail = error_norms[-min(20, len(error_norms)):]
+    stalled = bool(
+        not reached
+        and len(tail) >= 2
+        and max(tail) - min(tail) < 0.001
+    )
+    diagnostic = {
+        "label": label,
+        "target_position": target.tolist(),
+        "initial_eef_position": initial_eef.tolist(),
+        "final_eef_position": final_eef.tolist(),
+        "initial_error_vector": initial_error.tolist(),
+        "initial_error_m": float(np.linalg.norm(initial_error)),
+        "final_error_vector": final_error.tolist(),
+        "final_error_m": final_error_norm,
+        "min_error_m": min(error_norms),
+        "steps_executed": len(trace),
+        "reached": reached,
+        "stalled": stalled,
+        "robot_contact_bodies": sorted(contact_bodies),
+        "porcelain_contact_seen": PORCELAIN_BODY in contact_bodies,
+        "target_contact_seen": TARGET_BODY in contact_bodies,
+        "microwave_contact_seen": any(
+            "microwave" in name.lower() for name in contact_bodies
+        ),
+        "trace_columns": (
+            "iteration,global_step,eef_x,eef_y,eef_z,error_x,error_y,"
+            "error_z,error_norm,action_x,action_y,action_z,"
+            "porcelain_contact,target_contact,microwave_contact"
+        ),
+        "trace": trace,
+    }
+    if diagnostics is not None:
+        diagnostics.append(diagnostic)
+    return reached, status, step
 
 
 def _hold_gripper(env, oracle, command, count, step, frames):
@@ -133,57 +233,158 @@ def _hold_gripper(env, oracle, command, count, step, frames):
     return status, step
 
 
-def _robot_park_prefix(env, oracle, park_mug_position, frames, step):
+def _robot_park_prefix(
+    env,
+    oracle,
+    park_mug_position,
+    door_body,
+    frames,
+    step,
+):
     initial_mug, _ = body_pose(env.sim, PORCELAIN_BODY)
-    grasp_point = initial_mug + np.asarray([0.0, 0.0, GRASP_HEIGHT])
     park_mug_position = np.asarray(park_mug_position, dtype=float)
-    park_grasp_point = park_mug_position + np.asarray(
-        [0.0, 0.0, GRASP_HEIGHT]
+    hinge_position, _ = body_pose(env.sim, door_body)
+    clearance_xy = initial_mug[:2] - hinge_position[:2]
+    clearance_norm = float(np.linalg.norm(clearance_xy))
+    if clearance_norm <= np.finfo(float).eps:
+        return False, "grasp clearance direction is degenerate", None, step, {}
+    clearance_xy = clearance_xy / clearance_norm
+    grasp_offset = np.asarray(
+        [
+            clearance_xy[0] * PORCELAIN_GRASP_CLEARANCE_OFFSET,
+            clearance_xy[1] * PORCELAIN_GRASP_CLEARANCE_OFFSET,
+            PORCELAIN_GRASP_HEIGHT,
+        ]
     )
+    grasp_point = initial_mug + grasp_offset
+    park_grasp_point = park_mug_position + grasp_offset
+    move_diagnostics = []
+
+    def prefix_metrics():
+        return {
+            "porcelain_initial_position": initial_mug.tolist(),
+            "porcelain_park_position": park_mug_position.tolist(),
+            "porcelain_grasp_target": grasp_point.tolist(),
+            "porcelain_grasp_height_m": PORCELAIN_GRASP_HEIGHT,
+            "porcelain_grasp_clearance_offset_m": (
+                PORCELAIN_GRASP_CLEARANCE_OFFSET
+            ),
+            "porcelain_grasp_clearance_direction_xy": clearance_xy.tolist(),
+            "move_segments": move_diagnostics,
+        }
+
+    def move_failure_reason(label):
+        diagnostic = move_diagnostics[-1] if move_diagnostics else {}
+        return (
+            f"eef failed {label}; "
+            f"final_error_m={diagnostic.get('final_error_m', float('nan'))}; "
+            f"final_error_vector="
+            f"{diagnostic.get('final_error_vector', [])}; "
+            f"stalled={diagnostic.get('stalled', False)}; "
+            f"contacts={diagnostic.get('robot_contact_bodies', [])}"
+        )
+
     waypoints = (
         (grasp_point + [0.0, 0.0, APPROACH_HEIGHT], -1.0, "approach"),
         (grasp_point, -1.0, "descend"),
     )
     for target, gripper, label in waypoints:
         reached, status, step = _move_eef(
-            env, oracle, target, gripper, step, frames
+            env,
+            oracle,
+            target,
+            gripper,
+            step,
+            frames,
+            label=label,
+            diagnostics=move_diagnostics,
         )
         if not reached:
-            return False, f"eef failed {label}", status, step
+            return (
+                False,
+                move_failure_reason(label),
+                status,
+                step,
+                prefix_metrics(),
+            )
     status, step = _hold_gripper(
         env, oracle, 1.0, GRIPPER_STEPS, step, frames
     )
     if status is not None and status.violated:
-        return False, "oracle violation while grasping", status, step
+        return (
+            False,
+            "oracle violation while grasping",
+            status,
+            step,
+            prefix_metrics(),
+        )
     for target, label in (
         (grasp_point + [0.0, 0.0, APPROACH_HEIGHT], "lift"),
         (park_grasp_point + [0.0, 0.0, APPROACH_HEIGHT], "transport"),
         (park_grasp_point, "lower"),
     ):
         reached, status, step = _move_eef(
-            env, oracle, target, 1.0, step, frames
+            env,
+            oracle,
+            target,
+            1.0,
+            step,
+            frames,
+            label=label,
+            diagnostics=move_diagnostics,
         )
         if not reached:
-            return False, f"eef failed {label}", status, step
+            return (
+                False,
+                move_failure_reason(label),
+                status,
+                step,
+                prefix_metrics(),
+            )
     moved_position, _ = body_pose(env.sim, PORCELAIN_BODY)
     moved_before_release = float(np.linalg.norm(moved_position - initial_mug))
     if moved_before_release < 0.025:
-        return False, "porcelain mug did not move with grasp", status, step
+        return (
+            False,
+            "porcelain mug did not move with grasp",
+            status,
+            step,
+            prefix_metrics(),
+        )
     status, step = _hold_gripper(
         env, oracle, -1.0, GRIPPER_STEPS, step, frames
     )
     retreat = park_grasp_point + np.asarray([0.0, 0.0, APPROACH_HEIGHT])
     reached, status, step = _move_eef(
-        env, oracle, retreat, -1.0, step, frames
+        env,
+        oracle,
+        retreat,
+        -1.0,
+        step,
+        frames,
+        label="retreat",
+        diagnostics=move_diagnostics,
     )
     if not reached:
-        return False, "eef failed retreat", status, step
+        return (
+            False,
+            move_failure_reason("retreat"),
+            status,
+            step,
+            prefix_metrics(),
+        )
     for _ in range(PARK_SETTLE_STEPS):
         _, status, step = _step(
             env, oracle, DUMMY_ACTION, step, frames
         )
         if status.violated:
-            return False, "parked mug became unsafe", status, step
+            return (
+                False,
+                "parked mug became unsafe",
+                status,
+                step,
+                prefix_metrics(),
+            )
     final_mug, _ = body_pose(env.sim, PORCELAIN_BODY)
     final_linear, final_angular = body_speeds(env.sim, PORCELAIN_BODY)
     contacts = contact_body_names(env.sim, PORCELAIN_BODY)
@@ -199,6 +400,7 @@ def _robot_park_prefix(env, oracle, park_mug_position, frames, step):
         "" if stable else f"prefix did not stabilize; contacts={sorted(contacts)}",
         status,
         step,
+        prefix_metrics(),
     )
 
 
@@ -466,6 +668,7 @@ def main() -> None:
     env.reset()
     names = resolve_microwave_names(env.sim.model)
     rows = []
+    episode_diagnostics = []
     review = Path(args.review_dir)
     success_videos = review / "success"
     failure_videos = review / "failure"
@@ -515,8 +718,19 @@ def main() -> None:
         park_position = np.asarray(
             ec_record["initial_state"][ec_qflat:ec_qflat + 3], dtype=float
         )
-        prefix_ok, prefix_reason, status, step = _robot_park_prefix(
-            env, oracle, park_position, frames, step
+        (
+            prefix_ok,
+            prefix_reason,
+            status,
+            step,
+            prefix_metrics,
+        ) = _robot_park_prefix(
+            env,
+            oracle,
+            park_position,
+            names["door_body"],
+            frames,
+            step,
         )
         target_ok = False
         door_ok = False
@@ -546,6 +760,14 @@ def main() -> None:
                 env, oracle, names, frames, step
             )
         metrics = oracle.metrics()
+        prefix_descend = next(
+            (
+                segment
+                for segment in prefix_metrics.get("move_segments", [])
+                if segment.get("label") == "descend"
+            ),
+            {},
+        )
         passed = bool(
             prefix_ok
             and target_ok
@@ -559,6 +781,56 @@ def main() -> None:
             "episode": index,
             "robot_prefix_completed": int(prefix_ok),
             "robot_prefix_reason": prefix_reason,
+            "robot_prefix_descend_final_error_m": prefix_descend.get(
+                "final_error_m", float("nan")
+            ),
+            "robot_prefix_descend_error_x_m": (
+                prefix_descend.get(
+                    "final_error_vector",
+                    [float("nan")] * 3,
+                )[0]
+            ),
+            "robot_prefix_descend_error_y_m": (
+                prefix_descend.get(
+                    "final_error_vector",
+                    [float("nan")] * 3,
+                )[1]
+            ),
+            "robot_prefix_descend_error_z_m": (
+                prefix_descend.get(
+                    "final_error_vector",
+                    [float("nan")] * 3,
+                )[2]
+            ),
+            "robot_prefix_descend_min_error_m": prefix_descend.get(
+                "min_error_m", float("nan")
+            ),
+            "robot_prefix_descend_steps": prefix_descend.get(
+                "steps_executed", 0
+            ),
+            "robot_prefix_descend_reached": int(
+                bool(prefix_descend.get("reached", False))
+            ),
+            "robot_prefix_descend_stalled": int(
+                bool(prefix_descend.get("stalled", False))
+            ),
+            "robot_prefix_descend_porcelain_contact_seen": int(
+                bool(
+                    prefix_descend.get(
+                        "porcelain_contact_seen", False
+                    )
+                )
+            ),
+            "robot_prefix_descend_microwave_contact_seen": int(
+                bool(
+                    prefix_descend.get(
+                        "microwave_contact_seen", False
+                    )
+                )
+            ),
+            "robot_prefix_descend_contact_bodies": ",".join(
+                prefix_descend.get("robot_contact_bodies", [])
+            ),
             "robot_target_placement_completed": int(target_ok),
             "robot_target_reason": target_reason,
             "robot_door_close_completed": int(door_ok),
@@ -585,6 +857,14 @@ def main() -> None:
             "path_pass": int(passed),
         }
         rows.append(row)
+        episode_diagnostics.append(
+            {
+                "episode": index,
+                "robot_prefix_completed": prefix_ok,
+                "robot_prefix_reason": prefix_reason,
+                "robot_prefix": prefix_metrics,
+            }
+        )
         category = "success" if passed else "failure"
         if saved[category] < 10:
             imageio.mimsave(
@@ -618,6 +898,7 @@ def main() -> None:
         "porcelain_prefix_segment": "robot OSC actions via env.step",
         "target_placement_segment": "robot OSC grasp/transport/release via env.step",
         "microwave_close_segment": "robot handle contact and OSC hinge-arc motion via env.step",
+        "episode_diagnostics": episode_diagnostics,
         "input_artifacts": [
             {
                 "path": str(Path(args.bddl).resolve()),

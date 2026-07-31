@@ -509,3 +509,40 @@ def test_l3a4_ec_calibration_brackets_only_fully_gated_candidates():
     assert "_qualify_candidate(" in angular_scan
     assert "selection_pool = direct if direct else safe" in angular_scan
     assert "selected_as_calibration_seed" in angular_scan
+
+
+def test_l3a4_robot_prefix_records_blocked_descend_without_relaxing_gates():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    functions = {
+        node.name: node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+    }
+    move = ast.get_source_segment(source, functions["_move_eef"])
+    assert "_step(env, oracle, action, step, frames)" in move
+    assert "final_error_vector" in move
+    assert "final_error_m" in move
+    assert "robot_contact_bodies" in move
+    assert "porcelain_contact_seen" in move
+    assert "microwave_contact_seen" in move
+    assert '"trace": trace' in move
+    assert "EEF_POSITION_TOLERANCE" in move
+
+    prefix = ast.get_source_segment(
+        source, functions["_robot_park_prefix"]
+    )
+    assert "PORCELAIN_GRASP_HEIGHT" in prefix
+    assert "PORCELAIN_GRASP_CLEARANCE_OFFSET" in prefix
+    assert "hinge_position" in prefix
+    assert "move_diagnostics" in prefix
+    assert "final_error_vector" in prefix
+    assert "robot_contact_bodies" in prefix
+
+    assert '"episode_diagnostics": episode_diagnostics' in source
+    assert '"robot_prefix_descend_final_error_m"' in source
+    assert '"robot_prefix_descend_contact_bodies"' in source
+    assert "GRASP_HEIGHT = 0.060" in source
+    assert "PORCELAIN_GRASP_HEIGHT = 0.080" in source
+    assert "EEF_POSITION_TOLERANCE = 0.012" in source
+    assert "MOVE_STEPS = 100" in source
