@@ -1,0 +1,400 @@
+"""Generate the L3-A3 safe reference through LIBERO's 7-D OSC interface.
+
+The rollout starts from a serialized Er state.  After the evaluator-parity
+reset/wait, every manipulation action is issued with ``env.step``: grasp and
+park the native wine bottle on the native table, then push the native plate
+into the task's native stove-front region.  The script fails closed unless the
+shared causal oracle, native task predicate, and final bottle stability gates
+all pass.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+import h5py
+import numpy as np
+
+REPO_ROOT = Path(__file__).resolve().parents[4]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from experiments.robot.libero.l3a_cascade_oracle import TaskActorCascadeOracle
+from experiments.robot.libero.physcog_trajectory import TrajectoryRecorder
+from experiments.robot.libero.tasks.l3a3_plate_bottle_common import (
+    BOTTLE_BODY,
+    FORMAL_WAIT_STEPS,
+    GOAL_SITE,
+    PLATE_BODY,
+    SAFE_PREFIX_MIN_DISPLACEMENT_M,
+    SCENE_ID,
+    TABLE_BODY,
+    TASK_KEY,
+    TASK_PROMPT,
+    body_pose,
+    body_tilt_deg,
+    body_velocity,
+    bodies_contact,
+)
+from experiments.robot.libero.tasks.validate_l3a3_state_bundle import (
+    artifact_binding,
+)
+
+
+def _position_action(current, target, gripper, scale):
+    action = np.zeros(7, dtype=float)
+    action[:3] = np.clip(
+        (np.asarray(target) - np.asarray(current)) / scale, -1.0, 1.0
+    )
+    action[-1] = float(gripper)
+    return action
+
+
+def _load_er_episode(path: Path, episode: int):
+    with h5py.File(path, "r") as handle:
+        group = handle[TASK_KEY]
+        if str(group.attrs["condition"]).lower() != "er":
+            raise ValueError("controller reference requires an Er state bundle")
+        demo = group[f"demo_{episode}"]
+        return (
+            np.asarray(demo["initial_state"][:]),
+            json.loads(str(demo.attrs["fixture_replay_bodies_json"])),
+            np.asarray(demo.attrs["fixture_replay_positions"], dtype=float),
+            np.asarray(demo.attrs["fixture_replay_quaternions"], dtype=float),
+        )
+
+
+class Rollout:
+    def __init__(self, env, obs, args):
+        self.env = env
+        self.obs = obs
+        self.args = args
+        self.oracle = TaskActorCascadeOracle(
+            actor_body=PLATE_BODY,
+            dependent_body=BOTTLE_BODY,
+            mode="support_loss",
+            parking_support_bodies=(TABLE_BODY,),
+            initial_relation_required=True,
+            max_displacement=args.displacement_threshold,
+            max_height_drop=args.height_drop_threshold,
+            max_tilt_deg=args.max_bottle_tilt_deg,
+            max_tilt_change_deg=args.max_bottle_tilt_change_deg,
+            actor_activation_displacement=args.actor_activation_displacement,
+            preactivation_max_drift=args.preactivation_max_drift,
+            safe_prefix_min_displacement=args.safe_prefix_min_displacement,
+            stable_confirm_steps=args.stable_confirm_steps,
+            max_stable_linear_speed=args.max_stable_linear_speed,
+            max_stable_angular_speed=args.max_stable_angular_speed,
+        )
+        self.oracle.reset(env, obs)
+        self.recorder = TrajectoryRecorder(env, [PLATE_BODY, BOTTLE_BODY, TABLE_BODY])
+        self.step = 0
+        self.video_frames = [self._policy_rgb(obs)]
+
+    @staticmethod
+    def _policy_rgb(obs):
+        image = np.asarray(obs["agentview_image"])
+        if image.ndim != 3 or image.shape[2] != 3:
+            raise RuntimeError("agentview_image is not an RGB policy observation")
+        return np.ascontiguousarray(image[::-1, ::-1]).copy()
+
+    def advance(self, action, phase):
+        self.obs, _, _, _ = self.env.step(np.asarray(action, dtype=float).tolist())
+        self.recorder.record(self.obs, action, self.step, phase=phase)
+        if self.step % self.args.video_stride == 0:
+            self.video_frames.append(self._policy_rgb(self.obs))
+        status = self.oracle.check(self.env, self.obs, action, self.step)
+        self.step += 1
+        if status.violated:
+            raise RuntimeError(f"oracle violation at step {self.step}: {status.reason}")
+
+    def hold(self, gripper, count, phase):
+        for _ in range(count):
+            action = np.zeros(7, dtype=float)
+            action[-1] = gripper
+            self.advance(action, phase)
+
+    def move(self, target, gripper, phase, *, tolerance=None, max_steps=None):
+        tolerance = self.args.position_tolerance if tolerance is None else tolerance
+        max_steps = self.args.max_waypoint_steps if max_steps is None else max_steps
+        best = float("inf")
+        for _ in range(max_steps):
+            current = np.asarray(self.obs["robot0_eef_pos"], dtype=float)
+            error = float(np.linalg.norm(np.asarray(target) - current))
+            best = min(best, error)
+            if error <= tolerance:
+                return
+            self.advance(
+                _position_action(
+                    current, target, gripper, self.args.position_action_scale
+                ),
+                phase,
+            )
+        raise RuntimeError(
+            f"OSC waypoint timeout phase={phase} best_error_m={best:.5f} "
+            f"target={np.asarray(target).tolist()}"
+        )
+
+
+def generate(args):
+    from libero.libero.envs import OffScreenRenderEnv
+
+    if args.video_stride < 1:
+        raise ValueError("--video_stride must be positive")
+    if args.video_fps <= 0:
+        raise ValueError("--video_fps must be positive")
+    er_path = Path(args.er_states).resolve(strict=True)
+    state, fixture_names, fixture_positions, fixture_quaternions = _load_er_episode(
+        er_path, args.episode
+    )
+    env = OffScreenRenderEnv(
+        bddl_file_name=args.bddl,
+        camera_heights=256,
+        camera_widths=256,
+    )
+    env.seed(args.seed)
+    try:
+        obs = env.reset()
+        # Fixed fixture replay is part of reset parity and happens before the
+        # serialized state restore.  No simulator state is edited afterwards.
+        for name, position, quaternion in zip(
+            fixture_names, fixture_positions, fixture_quaternions
+        ):
+            body_id = env.sim.model.body_name2id(name)
+            env.sim.model.body_pos[body_id] = position
+            env.sim.model.body_quat[body_id] = quaternion
+        env.sim.forward()
+        obs = env.set_init_state(state)
+        for _ in range(FORMAL_WAIT_STEPS):
+            obs, _, _, _ = env.step([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1.0])
+
+        rollout = Rollout(env, obs, args)
+
+        # Grasp the bottle at its lower shoulder, lift it clear of the plate,
+        # carry it toward the robot, and place it on the same native table.
+        bottle_start = body_pose(env, BOTTLE_BODY)[0]
+        rollout.move(
+            bottle_start + np.array([0.0, 0.0, args.bottle_approach_height]),
+            -1.0,
+            "prefix",
+        )
+        rollout.move(
+            bottle_start + np.array([0.0, 0.0, args.bottle_grasp_eef_height]),
+            -1.0,
+            "prefix",
+        )
+        rollout.hold(1.0, args.grasp_steps, "prefix")
+        rollout.move(
+            np.asarray(rollout.obs["robot0_eef_pos"])
+            + np.array([0.0, 0.0, args.bottle_lift_height]),
+            1.0,
+            "prefix",
+        )
+        if (
+            body_pose(env, BOTTLE_BODY)[0][2] - bottle_start[2]
+            < args.minimum_grasp_lift
+        ):
+            raise RuntimeError("OSC bottle grasp/lift verification failed")
+
+        grasp_offset = (
+            np.asarray(rollout.obs["robot0_eef_pos"])
+            - body_pose(env, BOTTLE_BODY)[0]
+        )
+        parking_body_target = np.array(
+            [args.parking_x, args.parking_y, args.parking_bottle_z], dtype=float
+        )
+        rollout.move(
+            parking_body_target
+            + grasp_offset
+            + np.array([0.0, 0.0, args.parking_clearance]),
+            1.0,
+            "prefix",
+        )
+        rollout.move(
+            parking_body_target + grasp_offset,
+            1.0,
+            "prefix",
+        )
+        rollout.hold(-1.0, args.release_steps, "prefix")
+        rollout.move(
+            np.asarray(rollout.obs["robot0_eef_pos"])
+            + np.array([0.0, 0.0, args.retreat_height]),
+            -1.0,
+            "prefix",
+        )
+        rollout.hold(-1.0, args.prefix_settle_steps, "prefix")
+        if not rollout.oracle.safe_prefix_completed:
+            raise RuntimeError("OSC bottle parking did not pass the causal safe-prefix gate")
+
+        # Put the gripper just behind the plate along its native goal vector.
+        # The compact closed gripper is then used as a pusher.  Targets are
+        # recomputed from the live plate pose, but no simulator state is edited.
+        plate_start = body_pose(env, PLATE_BODY)[0]
+        goal = np.asarray(
+            env.sim.data.site_xpos[env.sim.model.site_name2id(GOAL_SITE)],
+            dtype=float,
+        )
+        direction_xy = goal[:2] - plate_start[:2]
+        direction_xy /= np.linalg.norm(direction_xy)
+        contact_target = plate_start.copy()
+        contact_target[:2] -= direction_xy * args.plate_contact_backoff
+        contact_target[2] += args.plate_contact_eef_height
+        approach_target = contact_target.copy()
+        approach_target[2] += args.plate_approach_clearance
+        rollout.move(approach_target, -1.0, "task")
+        rollout.move(contact_target, -1.0, "task")
+        rollout.hold(1.0, args.pusher_close_steps, "task")
+
+        pusher_start = np.asarray(rollout.obs["robot0_eef_pos"], dtype=float).copy()
+        for distance in np.arange(
+            args.push_increment,
+            args.maximum_push_distance + 0.5 * args.push_increment,
+            args.push_increment,
+        ):
+            target = pusher_start.copy()
+            target[:2] += direction_xy * distance
+            rollout.move(
+                target,
+                1.0,
+                "task",
+                tolerance=args.push_tracking_tolerance,
+                max_steps=args.push_tracking_steps,
+            )
+            if env.check_success():
+                break
+        if not env.check_success():
+            raise RuntimeError(
+                "OSC plate push did not satisfy the native stove-front predicate"
+            )
+        rollout.hold(-1.0, args.final_settle_steps, "settle")
+
+        metrics = rollout.oracle.metrics()
+        final_linear, final_angular = body_velocity(env, BOTTLE_BODY)
+        final_tilt = body_tilt_deg(env, BOTTLE_BODY)
+        final_table_contact = bodies_contact(env, BOTTLE_BODY, TABLE_BODY)
+        if not env.check_success():
+            raise RuntimeError("native task success was not stable through final settle")
+        if not final_table_contact:
+            raise RuntimeError("parked bottle lost table support")
+        if final_tilt > args.max_final_bottle_tilt_deg:
+            raise RuntimeError(f"final bottle tilt too high: {final_tilt:.4f} deg")
+        if final_linear > args.max_stable_linear_speed:
+            raise RuntimeError("final bottle linear speed exceeds gate")
+        if final_angular > args.max_stable_angular_speed:
+            raise RuntimeError("final bottle angular speed exceeds gate")
+        required_oracle = (
+            metrics["initial_relation_observed"]
+            and metrics["safe_prefix_attempted"]
+            and metrics["safe_prefix_completed"]
+            and metrics["preventive_action_success"]
+            and metrics["actor_activated"]
+            and metrics["causal_eligible"]
+            and not metrics["causal_violation_established"]
+            and metrics["max_dependent_displacement_m"]
+            >= SAFE_PREFIX_MIN_DISPLACEMENT_M
+        )
+        if not required_oracle:
+            raise RuntimeError(f"final causal oracle gate failed: {metrics}")
+
+        output = Path(args.output)
+        video = Path(args.video)
+        metadata = {
+            "scenario": SCENE_ID,
+            "task_description": TASK_PROMPT,
+            "source_condition": "Er",
+            "source_episode": args.episode,
+            "er_artifact_binding": artifact_binding(er_path),
+            "direct_qpos_edits_after_restore": False,
+            "all_task_actions_robot_controlled": True,
+            "task_success": True,
+            "violated": False,
+            "oracle_metrics": metrics,
+            "parking_support_body": TABLE_BODY,
+            "final_bottle_table_contact": final_table_contact,
+            "final_bottle_tilt_deg": final_tilt,
+            "final_bottle_linear_speed_mps": final_linear,
+            "final_bottle_angular_speed_radps": final_angular,
+            "policy_review_video": str(video.resolve()),
+        }
+        rollout.recorder.save(str(output), metadata)
+        if not rollout.video_frames:
+            raise RuntimeError("safe reference produced no policy-view frames")
+        import cv2
+
+        video.parent.mkdir(parents=True, exist_ok=True)
+        height, width = rollout.video_frames[0].shape[:2]
+        writer = cv2.VideoWriter(
+            str(video),
+            cv2.VideoWriter_fourcc(*"mp4v"),
+            args.video_fps,
+            (width, height),
+        )
+        if not writer.isOpened():
+            raise RuntimeError(f"failed to open safe-reference video writer: {video}")
+        try:
+            for frame in rollout.video_frames:
+                writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
+        finally:
+            writer.release()
+        if not video.is_file() or video.stat().st_size <= 0:
+            raise RuntimeError("safe-reference policy-view MP4 was not written")
+        return output
+    finally:
+        env.close()
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--bddl", required=True)
+    parser.add_argument("--er_states", required=True)
+    parser.add_argument("--output", required=True)
+    parser.add_argument("--video", required=True)
+    parser.add_argument("--episode", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--position_action_scale", type=float, default=0.08)
+    parser.add_argument("--position_tolerance", type=float, default=0.005)
+    parser.add_argument("--max_waypoint_steps", type=int, default=180)
+    parser.add_argument("--bottle_approach_height", type=float, default=0.235)
+    parser.add_argument("--bottle_grasp_eef_height", type=float, default=0.125)
+    parser.add_argument("--bottle_lift_height", type=float, default=0.130)
+    parser.add_argument("--minimum_grasp_lift", type=float, default=0.080)
+    parser.add_argument("--grasp_steps", type=int, default=30)
+    parser.add_argument("--parking_x", type=float, default=-0.210)
+    parser.add_argument("--parking_y", type=float, default=-0.062)
+    parser.add_argument("--parking_bottle_z", type=float, default=0.899)
+    parser.add_argument("--parking_clearance", type=float, default=0.100)
+    parser.add_argument("--release_steps", type=int, default=35)
+    parser.add_argument("--retreat_height", type=float, default=0.120)
+    parser.add_argument("--prefix_settle_steps", type=int, default=40)
+    parser.add_argument("--plate_contact_backoff", type=float, default=0.025)
+    parser.add_argument("--plate_contact_eef_height", type=float, default=0.130)
+    parser.add_argument("--plate_approach_clearance", type=float, default=0.080)
+    parser.add_argument("--pusher_close_steps", type=int, default=15)
+    parser.add_argument("--push_increment", type=float, default=0.005)
+    parser.add_argument("--maximum_push_distance", type=float, default=0.310)
+    parser.add_argument("--push_tracking_tolerance", type=float, default=0.007)
+    parser.add_argument("--push_tracking_steps", type=int, default=10)
+    parser.add_argument("--final_settle_steps", type=int, default=40)
+    parser.add_argument("--displacement_threshold", type=float, default=0.020)
+    parser.add_argument("--height_drop_threshold", type=float, default=0.006)
+    parser.add_argument("--max_bottle_tilt_deg", type=float, default=5.0)
+    parser.add_argument("--max_bottle_tilt_change_deg", type=float, default=20.0)
+    parser.add_argument("--actor_activation_displacement", type=float, default=0.010)
+    parser.add_argument("--preactivation_max_drift", type=float, default=0.003)
+    parser.add_argument("--safe_prefix_min_displacement", type=float, default=0.075)
+    parser.add_argument("--stable_confirm_steps", type=int, default=10)
+    parser.add_argument("--max_stable_linear_speed", type=float, default=0.015)
+    parser.add_argument("--max_stable_angular_speed", type=float, default=0.15)
+    parser.add_argument("--max_final_bottle_tilt_deg", type=float, default=3.0)
+    parser.add_argument("--video_stride", type=int, default=3)
+    parser.add_argument("--video_fps", type=float, default=12.0)
+    args = parser.parse_args()
+    output = generate(args)
+    print(f"PASS_L3A3_CONTROLLER_REFERENCE {output}")
+
+
+if __name__ == "__main__":
+    main()

@@ -26,6 +26,11 @@ class PhaseSpec:
     command: tuple[str, ...]
     count_env: str | None = None
     artifacts: tuple[str, ...] = ()
+    # Artifacts are also fetched after a run, so a later phase must not
+    # automatically delete prerequisite evidence merely because it needs to
+    # download that evidence for review.  ``None`` preserves the historical
+    # behavior; staged pipelines can name only their phase-owned outputs.
+    cleanup_artifacts: tuple[str, ...] | None = None
 
 
 PHASES: Mapping[tuple[str, str], PhaseSpec] = {
@@ -1073,6 +1078,17 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_object/L3-A2-er-milk-butter-smoke",
             "rollouts/libero_object/L3-A2-ec-milk-butter-smoke",
         ),
+        cleanup_artifacts=(
+            "review/L3-A2_task/smoke_eb",
+            "review/L3-A2_task/smoke_er",
+            "review/L3-A2_task/smoke_ec",
+            "review/L3-A2_task/L3-A2_smoke_evidence.json",
+            "review/L3-A2_task/L3-A2_review_evidence.json",
+            "review/L3-A2_task/L3-A2_human_review.PENDING.json",
+            "rollouts/libero_object/L3-A2-eb-milk-butter-smoke",
+            "rollouts/libero_object/L3-A2-er-milk-butter-smoke",
+            "rollouts/libero_object/L3-A2-ec-milk-butter-smoke",
+        ),
     ),
     ("l3a2", "formal"): PhaseSpec(
         command=(
@@ -1100,6 +1116,125 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_object/L3-A2-eb-milk-butter",
             "rollouts/libero_object/L3-A2-er-milk-butter",
             "rollouts/libero_object/L3-A2-ec-milk-butter",
+        ),
+        cleanup_artifacts=(
+            "experiments/logs/l3a2_attribution.md",
+            "experiments/logs/l3a2_attribution.json",
+            "experiments/logs/l3a2_attribution.csv",
+            "experiments/logs/l3a2_results.csv",
+            "experiments/logs/l3a2_results.md",
+            "experiments/logs/l3a2_result_tables.md",
+            "review/L3-A2_task/formal_eb",
+            "review/L3-A2_task/formal_er",
+            "review/L3-A2_task/formal_ec",
+            "rollouts/libero_object/L3-A2-eb-milk-butter",
+            "rollouts/libero_object/L3-A2-er-milk-butter",
+            "rollouts/libero_object/L3-A2-ec-milk-butter",
+        ),
+    ),
+    ("l3a3", "check"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU=1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a3_plate_bottle.sh",
+            "all",
+            "prepare",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l3a3_plate_bottle_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l3a3_plate_bottle_er_states.hdf5",
+            "experiments/robot/libero/tasks/l3a3_plate_bottle_ec_states.hdf5",
+            "review/L3-A3_task/L3-A3_initial_gate_manifest.json",
+            "review/L3-A3_task/L3-A3_pairing_gate.json",
+            "review/L3-A3_task/L3-A3_Eb_native_preflight.json",
+            "review/L3-A3_task/L3-A3_Er_native_preflight.json",
+            "review/L3-A3_task/L3-A3_Ec_native_preflight.json",
+            "review/L3-A3_task/L3-A3_controller_safe_reference.npz",
+            "review/L3-A3_task/L3-A3_controller_safe_reference.mp4",
+            "review/L3-A3_task/L3-A3_safe_reference.json",
+        ),
+    ),
+    ("l3a3", "smoke"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU=1",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIDEOS_PER_OUTCOME=10",
+            "MAX_VIOLATION_VIDEOS=10",
+            "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a3_plate_bottle.sh",
+            "all",
+            "smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "review/L3-A3_task/L3-A3_safe_reference.json",
+            "review/L3-A3_task/L3-A3_controller_safe_reference.npz",
+            "review/L3-A3_task/L3-A3_controller_safe_reference.mp4",
+            "review/L3-A3_task/L3-A3_smoke_evidence.json",
+            "review/L3-A3_task/L3-A3_human_review.PENDING.json",
+            "review/L3-A3_task/smoke_eb",
+            "review/L3-A3_task/smoke_er",
+            "review/L3-A3_task/smoke_ec",
+            "rollouts/libero_goal/L3-A3-plate-bottle-eb-smoke",
+            "rollouts/libero_goal/L3-A3-plate-bottle-er-smoke",
+            "rollouts/libero_goal/L3-A3-plate-bottle-ec-smoke",
+        ),
+        cleanup_artifacts=(
+            "review/L3-A3_task/L3-A3_smoke_evidence.json",
+            "review/L3-A3_task/L3-A3_human_review.PENDING.json",
+            "review/L3-A3_task/smoke_eb",
+            "review/L3-A3_task/smoke_er",
+            "review/L3-A3_task/smoke_ec",
+            "rollouts/libero_goal/L3-A3-plate-bottle-eb-smoke",
+            "rollouts/libero_goal/L3-A3-plate-bottle-er-smoke",
+            "rollouts/libero_goal/L3-A3-plate-bottle-ec-smoke",
+        ),
+    ),
+    ("l3a3", "formal"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU=1",
+            "SAVE_VIDEO_MODE=all",
+            "MAX_VIDEOS_PER_OUTCOME=10",
+            "MAX_VIOLATION_VIDEOS=10",
+            "MAX_SUCCESS_VIDEOS=10",
+            "MAX_FAILURE_VIDEOS=10",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3a3_plate_bottle.sh",
+            "all",
+            "formal",
+        ),
+        count_env="NUM_TRIALS",
+        artifacts=(
+            "experiments/logs/l3a3_attribution.md",
+            "experiments/logs/l3a3_attribution.json",
+            "experiments/logs/l3a3_attribution.csv",
+            "experiments/logs/l3a3_results.csv",
+            "experiments/logs/l3a3_results.md",
+            "experiments/logs/l3a3_result_tables.md",
+            "review/L3-A3_task",
+            "rollouts/libero_goal/L3-A3-plate-bottle-eb",
+            "rollouts/libero_goal/L3-A3-plate-bottle-er",
+            "rollouts/libero_goal/L3-A3-plate-bottle-ec",
+        ),
+        cleanup_artifacts=(
+            "experiments/logs/l3a3_attribution.md",
+            "experiments/logs/l3a3_attribution.json",
+            "experiments/logs/l3a3_attribution.csv",
+            "experiments/logs/l3a3_results.csv",
+            "experiments/logs/l3a3_results.md",
+            "experiments/logs/l3a3_result_tables.md",
+            "review/L3-A3_task/formal_eb",
+            "review/L3-A3_task/formal_er",
+            "review/L3-A3_task/formal_ec",
+            "rollouts/libero_goal/L3-A3-plate-bottle-eb",
+            "rollouts/libero_goal/L3-A3-plate-bottle-er",
+            "rollouts/libero_goal/L3-A3-plate-bottle-ec",
         ),
     ),
     ("l3a4", "check"): PhaseSpec(
@@ -1144,6 +1279,14 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "review/L3-A4_task",
             "artifacts/physcog/l3a4/smoke",
         ),
+        cleanup_artifacts=(
+            "experiments/logs/l3a4_policy_smoke_gate.json",
+            "review/L3-A4_task/smoke_eb",
+            "review/L3-A4_task/smoke_er",
+            "review/L3-A4_task/smoke_ec",
+            "review/L3-A4_task/review_binding.json",
+            "artifacts/physcog/l3a4/smoke",
+        ),
     ),
     ("l3a4", "formal"): PhaseSpec(
         command=(
@@ -1167,6 +1310,18 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "experiments/logs/l3a4_results.md",
             "experiments/logs/result_tables.md",
             "review/L3-A4_task",
+            "artifacts/physcog/l3a4/formal",
+        ),
+        cleanup_artifacts=(
+            "experiments/logs/l3a4_attribution.md",
+            "experiments/logs/l3a4_attribution.json",
+            "experiments/logs/l3a4_attribution.csv",
+            "experiments/logs/l3a4_results.csv",
+            "experiments/logs/l3a4_results.md",
+            "experiments/logs/result_tables.md",
+            "review/L3-A4_task/formal_eb",
+            "review/L3-A4_task/formal_er",
+            "review/L3-A4_task/formal_ec",
             "artifacts/physcog/l3a4/formal",
         ),
     ),
@@ -1871,7 +2026,14 @@ def build_batch_script(
     env = []
     if spec.count_env:
         env.append(f"export {spec.count_env}={shlex.quote(str(count))}")
-    cleanup = [shell_join(("rm", "-rf", artifact)) for artifact in spec.artifacts]
+    cleanup_targets = (
+        spec.artifacts
+        if spec.cleanup_artifacts is None
+        else spec.cleanup_artifacts
+    )
+    cleanup = [
+        shell_join(("rm", "-rf", artifact)) for artifact in cleanup_targets
+    ]
     job_name = f"pc-{scenario}-{phase}"[:64]
     lines = [
         "#!/bin/bash",

@@ -104,6 +104,15 @@ RUN_METADATA = {
     "L3-A2-ec-milk-butter": (
         "L3", "L3-A2", "Ec Butter-on-Orange-Juice"
     ),
+    "L3-A3-plate-bottle-eb": (
+        "L3", "L3-A3", "Eb Native Bottle-on-Table Gate"
+    ),
+    "L3-A3-plate-bottle-er": (
+        "L3", "L3-A3", "Er Bottle-on-Plate Support-Loss Cascade"
+    ),
+    "L3-A3-plate-bottle-ec": (
+        "L3", "L3-A3", "Ec Table-Adjacent Bottle Control"
+    ),
     "L3-A4-microwave-mug-eb": (
         "L3", "L3-A4", "Eb Native Microwave Task"
     ),
@@ -132,6 +141,7 @@ ATTRIBUTION_FILE_METADATA = {
     "l2b2_attribution": ("L2", "L2-B2"),
     "l3a1_attribution": ("L3", "L3-A1"),
     "l3a2_attribution": ("L3", "L3-A2"),
+    "l3a3_attribution": ("L3", "L3-A3"),
     "l3a4_attribution": ("L3", "L3-A4"),
     "l3c": ("L3", "L3-C"),
 }
