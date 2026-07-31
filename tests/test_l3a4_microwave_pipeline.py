@@ -17,6 +17,7 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     TASK_KEY,
     TASK_PROMPT,
     closest_point_on_oriented_box,
+    collision_masks_compatible,
     hinge_radius_m,
     radially_adjusted_input_xy,
 )
@@ -389,6 +390,20 @@ def test_l3a4_compiled_box_clearance_uses_world_pose_and_half_extents():
     )
 
 
+def test_l3a4_compiled_collision_filter_uses_bidirectional_masks():
+    # The native microwave collision class is contype=0, conaffinity=1.
+    # It is collision-compatible with a standard robot geom of type=1 even
+    # though its own contype is zero.
+    assert collision_masks_compatible(0, 1, 1, 1)
+    # Native visual geoms have both masks zero and must not enter clearance.
+    assert not collision_masks_compatible(0, 0, 1, 1)
+    # Compatibility can be supplied by either direction of MuJoCo's rule.
+    assert collision_masks_compatible(2, 0, 0, 2)
+    assert not collision_masks_compatible(1, 0, 2, 0)
+    with pytest.raises(ValueError, match="nonnegative"):
+        collision_masks_compatible(-1, 0, 1, 1)
+
+
 def _write_index(path: Path, rows):
     path.mkdir(parents=True)
     (path / "index.jsonl").write_text(
@@ -571,6 +586,12 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "fixture_geoms - door_geoms" in geometry
     assert "geom_group" in geometry
     assert "geom_contype" in geometry
+    assert "geom_conaffinity" in geometry
+    assert "collision_masks_compatible(" in geometry
+    assert "for robot_geom_id in robot_geoms" in geometry
+    assert "geom_group is diagnostic only" in geometry
+    assert "int(model.geom_group[geom_id]) == 0" not in geometry
+    assert "int(model.geom_contype[geom_id]) != 0" not in geometry
     assert "_closest_point_on_compiled_geom(" in geometry
     assert "nearest_compiled_static_microwave_collision_surface" in geometry
     assert "predicted_eef_surface_horizontal_clearance_m" in geometry

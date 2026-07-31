@@ -229,6 +229,27 @@ def closest_point_on_oriented_box(
     return center + rotation @ closest_local, inside
 
 
+def collision_masks_compatible(
+    first_contype: int,
+    first_conaffinity: int,
+    second_contype: int,
+    second_conaffinity: int,
+) -> bool:
+    """Apply MuJoCo's bidirectional geom collision bitmask rule."""
+    values = (
+        int(first_contype),
+        int(first_conaffinity),
+        int(second_contype),
+        int(second_conaffinity),
+    )
+    if any(value < 0 for value in values):
+        raise ValueError("collision masks must be nonnegative integers")
+    return bool(
+        (values[0] & values[3]) != 0
+        or (values[2] & values[1]) != 0
+    )
+
+
 def fixture_local_position(sim, fixture_root: str, world_position) -> np.ndarray:
     root_pos, root_mat = body_pose(sim, fixture_root)
     return root_mat.T @ (np.asarray(world_position, dtype=float) - root_pos)

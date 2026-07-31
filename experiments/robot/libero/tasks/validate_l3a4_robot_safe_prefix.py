@@ -40,6 +40,7 @@ from experiments.robot.libero.tasks.l3a4_microwave_common import (
     body_speeds,
     body_tilt_deg,
     closest_point_on_oriented_box,
+    collision_masks_compatible,
     contact_body_names,
     contacts_between,
     descendant_geom_ids,
@@ -222,14 +223,49 @@ def _compiled_microwave_clearance(env, names, mug_position):
     model = env.sim.model
     fixture_geoms = descendant_geom_ids(model, names["fixture_root"])
     door_geoms = descendant_geom_ids(model, names["door_body"])
+    static_fixture_geoms = sorted(fixture_geoms - door_geoms)
+    robot_geoms = sorted(_robot_geom_ids(model))
+    if not robot_geoms:
+        raise RuntimeError("compiled model has no robot geoms")
     collision_geoms = sorted(
         geom_id
-        for geom_id in fixture_geoms - door_geoms
-        if int(model.geom_group[geom_id]) == 0
-        and int(model.geom_contype[geom_id]) != 0
+        for geom_id in static_fixture_geoms
+        if any(
+            collision_masks_compatible(
+                model.geom_contype[geom_id],
+                model.geom_conaffinity[geom_id],
+                model.geom_contype[robot_geom_id],
+                model.geom_conaffinity[robot_geom_id],
+            )
+            for robot_geom_id in robot_geoms
+        )
     )
     if not collision_geoms:
-        raise RuntimeError("compiled microwave has no static collision geoms")
+        fixture_masks = sorted(
+            {
+                (
+                    int(model.geom_group[geom_id]),
+                    int(model.geom_contype[geom_id]),
+                    int(model.geom_conaffinity[geom_id]),
+                )
+                for geom_id in static_fixture_geoms
+            }
+        )
+        robot_masks = sorted(
+            {
+                (
+                    int(model.geom_group[geom_id]),
+                    int(model.geom_contype[geom_id]),
+                    int(model.geom_conaffinity[geom_id]),
+                )
+                for geom_id in robot_geoms
+            }
+        )
+        raise RuntimeError(
+            "compiled microwave has no robot-compatible static collision "
+            f"geoms; fixture(group,contype,conaffinity)={fixture_masks}; "
+            f"robot(group,contype,conaffinity)={robot_masks}"
+        )
 
     mug_position = np.asarray(mug_position, dtype=float)
     candidates = []
@@ -250,6 +286,11 @@ def _compiled_microwave_clearance(env, names, mug_position):
                 "geom_name": _geom_name(model, geom_id),
                 "body_name": str(body_name),
                 "geom_type": int(model.geom_type[geom_id]),
+                "geom_group": int(model.geom_group[geom_id]),
+                "geom_contype": int(model.geom_contype[geom_id]),
+                "geom_conaffinity": int(
+                    model.geom_conaffinity[geom_id]
+                ),
                 "closest_point": closest.tolist(),
                 "distance_m": float(np.linalg.norm(delta)),
                 "horizontal_distance_m": horizontal_distance,
@@ -290,6 +331,14 @@ def _compiled_microwave_clearance(env, names, mug_position):
         "method": "nearest_compiled_static_microwave_collision_surface",
         "selected": selected,
         "candidate_count": len(candidates),
+        "static_fixture_geom_count": len(static_fixture_geoms),
+        "robot_geom_count": len(robot_geoms),
+        "robot_compatible_collision_geom_count": len(collision_geoms),
+        "collision_filter": (
+            "(fixture.contype & robot.conaffinity) != 0 or "
+            "(robot.contype & fixture.conaffinity) != 0; "
+            "geom_group is diagnostic only"
+        ),
         "hinge_position": hinge_position.tolist(),
         "hinge_away_direction_xy": hinge_direction.tolist(),
         "surface_hinge_direction_dot": float(
