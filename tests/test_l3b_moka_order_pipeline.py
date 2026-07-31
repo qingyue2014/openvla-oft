@@ -36,6 +36,7 @@ from experiments.robot.libero.tasks.validate_l3b_moka_safe_reference import (
     GRASP_REFERENCE_PROVENANCE,
     ORIENTATION_CLEARANCE_DISTANCE_M,
     ORIENTATION_CLEARANCE_HEIGHT_M,
+    SAFE_GRASP_WAYPOINT_START_INDEX,
     SAFE_CONTROLLER_VERSION,
 )
 from experiments.robot.libero.tasks.summarize_l3b_moka_order_smoke import (
@@ -86,6 +87,15 @@ from experiments.robot.libero.tasks.validate_l3b_moka_v6_design import (
     PREREGISTRATION_ID as V6_DESIGN_PREREGISTRATION_ID,
     validate_spec as validate_v6_design_spec,
 )
+from experiments.robot.libero.tasks.validate_l3b_moka_v7_design import (
+    LANDING_AXIS_LOCAL_XY as V7_LANDING_AXIS_LOCAL_XY,
+    MINIMUM_EC_STABLE_SUCCESSES as V7_MINIMUM_EC_STABLE_SUCCESSES,
+    OFFICIAL_STATE_INDICES as V7_OFFICIAL_STATE_INDICES,
+    PREREGISTRATION_ID as V7_DESIGN_PREREGISTRATION_ID,
+    SOURCE_EC_REPORT_SHA256 as V7_SOURCE_EC_REPORT_SHA256,
+    SOURCE_TRAJECTORY_SHA256 as V7_SOURCE_TRAJECTORY_SHA256,
+    validate_spec as validate_v7_design_spec,
+)
 from experiments.robot.libero.tasks.validate_l3b_moka_native_preflight import (
     verify_runtime_asset_inventory,
 )
@@ -109,7 +119,7 @@ def test_native_task_lock_and_runner_contract():
     assert (SUITE, TASK_ID) == ("libero_10", 8)
     assert TASK_FILE == "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl"
     assert TASK_PROMPT == "put both moka pots on the stove"
-    assert DESIGN_VERSION == 6
+    assert DESIGN_VERSION == 7
     assert CONDITION_LABEL == {
         "native": "Eb",
         "near_first": "Er",
@@ -138,13 +148,14 @@ def test_native_task_lock_and_runner_contract():
     assert "summarize_l3b_moka_safe_references.py" in runner
     assert "episode < NUM_STATES" in runner
     assert "--design-preregistration" in runner
-    assert "run_ec_capability" in runner
+    assert "v7 forbids a new Ec rollout" in runner
     assert "run_er_smoke" in runner
+    assert "validate_l3b_moka_v7_frozen_ec.py" in runner
     assert "--control-only" in runner
     assert "--paired-only" in runner
-    assert 'NUM_STATES="${NUM_STATES:-20}"' in runner
-    assert 'SMOKE_TRIALS="${SMOKE_TRIALS:-20}"' in runner
-    assert 'MIN_CONTROL_SUCCESSES="${MIN_CONTROL_SUCCESSES:-12}"' in runner
+    assert 'NUM_STATES="${NUM_STATES:-10}"' in runner
+    assert 'SMOKE_TRIALS="${SMOKE_TRIALS:-10}"' in runner
+    assert 'MIN_CONTROL_SUCCESSES="${MIN_CONTROL_SUCCESSES:-10}"' in runner
     assert "SAFE_MAX_SUCCESS_VIDEOS" in runner
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper
     assert 'runtime_scene == "L3-B-MOKA-ORDER"' in evaluator
@@ -213,6 +224,43 @@ def test_v6_design_locks_fixed_native20_before_rerun():
     ) == 12
     assert result["condition_roles"]["near_first"]["slot"] == (
         "at_default_landing"
+    )
+
+
+def test_v7_design_locks_frozen_ec_capability_subset_before_er():
+    path = TASKS / "l3b_moka_v7_design_prereg.json"
+    result = validate_v7_design_spec(path)
+    assert result["preregistration_id"] == V7_DESIGN_PREREGISTRATION_ID
+    assert result["official_state_indices"] == [
+        0,
+        5,
+        7,
+        8,
+        10,
+        11,
+        12,
+        15,
+        16,
+        17,
+    ]
+    assert result["official_state_indices"] == V7_OFFICIAL_STATE_INDICES
+    assert result["slot_separation_m"] == 0.145
+    assert result["landing_axis_local_xy"] == V7_LANDING_AXIS_LOCAL_XY
+    assert result["minimum_ec_stable_successes"] == (
+        V7_MINIMUM_EC_STABLE_SUCCESSES
+    ) == 10
+    assert result["source_ec_report_sha256"] == (
+        V7_SOURCE_EC_REPORT_SHA256
+    )
+    assert set(result["source_trajectory_sha256"]) == set(
+        V7_OFFICIAL_STATE_INDICES
+    )
+    assert result["source_trajectory_sha256"] == (
+        V7_SOURCE_TRAJECTORY_SHA256
+    )
+    assert result["claim_scope"] == (
+        "conditional_on_frozen_v6_ec_terminal_stable_single_"
+        "placement_capability"
     )
 
 
@@ -291,6 +339,9 @@ def test_safe_batch_summary_binds_every_episode_artifact(tmp_path):
             "native_task_id": TASK_ID,
             "native_prompt": TASK_PROMPT,
             "safe_controller_version": SAFE_CONTROLLER_VERSION,
+            "safe_grasp_waypoint_start_index": (
+                SAFE_GRASP_WAYPOINT_START_INDEX
+            ),
             "orientation_clearance": {
                 "height_m": ORIENTATION_CLEARANCE_HEIGHT_M,
                 "distance_m": ORIENTATION_CLEARANCE_DISTANCE_M,
@@ -329,6 +380,9 @@ def test_safe_batch_summary_binds_every_episode_artifact(tmp_path):
     assert result["episodes"][1]["review_video"] is None
     assert result["minimum_grasp_lift_m"] == pytest.approx(0.11)
     assert result["safe_controller_version"] == SAFE_CONTROLLER_VERSION
+    assert result["safe_grasp_waypoint_start_index"] == (
+        SAFE_GRASP_WAYPOINT_START_INDEX
+    )
     assert result["orientation_clearance_height_m"] == pytest.approx(
         ORIENTATION_CLEARANCE_HEIGHT_M
     )
@@ -432,8 +486,10 @@ def test_generated_pairing_if_artifacts_are_present():
         initial_manifest=manifest,
     )
     assert result["verdict"] == "PASS_L3B_MOKA_EXACT_SERIALIZED_PAIRING"
-    assert result["count"] == 20
-    assert result["official_native_state_indices"] == list(range(20))
+    assert result["count"] == 10
+    assert result["official_native_state_indices"] == (
+        V7_OFFICIAL_STATE_INDICES
+    )
 
 
 def test_state_validator_rejects_non_target_serialized_edit(tmp_path):
@@ -497,6 +553,7 @@ def _write_fake_trajectory(
     episode: int,
     *,
     occupant_displacement: float = 0.0,
+    native_init_state_index: int | None = None,
 ):
     directory.mkdir(parents=True, exist_ok=True)
     if condition == "near_first":
@@ -512,6 +569,11 @@ def _write_fake_trajectory(
     }
     runtime = {
         "condition": condition,
+        "native_init_state_index": (
+            episode
+            if native_init_state_index is None
+            else native_init_state_index
+        ),
         "physical_gate_pass": True,
         "failures": [],
         "first_policy": {
@@ -591,6 +653,33 @@ def test_paired_smoke_does_not_require_or_rerun_native(tmp_path):
     }
     assert set(result["conditions"]) == {"near_first", "far_first"}
     assert "omitted_from_paired_summary" in result["native_baseline"]
+
+
+def test_paired_smoke_rejects_mismatched_official_state_indices(tmp_path):
+    near_dir = tmp_path / "near_first"
+    far_dir = tmp_path / "far_first"
+    for episode, native_index in enumerate((0, 5, 7)):
+        _write_fake_trajectory(
+            near_dir,
+            "near_first",
+            episode,
+            native_init_state_index=native_index,
+        )
+        _write_fake_trajectory(
+            far_dir,
+            "far_first",
+            episode,
+            native_init_state_index=(
+                8 if native_index == 7 else native_index
+            ),
+        )
+    with pytest.raises(ValueError, match="state-index sets do not match"):
+        paired_smoke(
+            near_dir,
+            far_dir,
+            expected_count=3,
+            minimum_control_successes=2,
+        )
 
 
 def test_failed_native_gate_preserves_episode_evidence(tmp_path):

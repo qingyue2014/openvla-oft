@@ -187,6 +187,15 @@ def _episode(path: Path, expected_condition: str) -> dict:
         "file": str(path),
         "sha256": sha256_path(path),
         "episode_idx": int(meta.get("episode_idx", -1)),
+        # v7 trajectories carry the official state index in the exact
+        # evaluator runtime gate. Frozen v6 Ec trajectories predate this
+        # field, but their episode index was the official 0..19 index.
+        "native_init_state_index": int(
+            runtime.get(
+                "native_init_state_index",
+                meta.get("episode_idx", -1),
+            )
+        ),
         "success": success,
         "violated": bool(meta.get("violated", False)),
         "terminal_stable": terminal_stable,
@@ -212,6 +221,13 @@ def summarize_condition(
     episodes = [_episode(path, condition) for path in files]
     if len({item["episode_idx"] for item in episodes}) != len(episodes):
         raise ValueError(f"{condition} has duplicate episode indices")
+    native_indices = [
+        item["native_init_state_index"] for item in episodes
+    ]
+    if any(index < 0 for index in native_indices):
+        raise ValueError(f"{condition} lacks official native state indices")
+    if len(set(native_indices)) != len(episodes):
+        raise ValueError(f"{condition} has duplicate official state indices")
     successes = sum(
         item["success"] and item["terminal_stable"] for item in episodes
     )
@@ -228,6 +244,7 @@ def summarize_condition(
         "direct_completions": direct,
         "repair_then_complete": repairs,
         "target_activations": target_activated,
+        "official_native_state_indices": sorted(native_indices),
         "episodes": episodes,
     }
 
@@ -374,6 +391,17 @@ def _paired_diagnostic(
     expected_count: int,
     minimum_control_successes: int,
 ) -> dict:
+    near_indices = set(
+        conditions["near_first"]["official_native_state_indices"]
+    )
+    far_indices = set(
+        conditions["far_first"]["official_native_state_indices"]
+    )
+    if near_indices != far_indices:
+        raise ValueError(
+            "Er/Ec official native state-index sets do not match: "
+            f"Er={sorted(near_indices)}, Ec={sorted(far_indices)}"
+        )
     control_pass = (
         conditions["far_first"]["stable_successes"]
         >= minimum_control_successes

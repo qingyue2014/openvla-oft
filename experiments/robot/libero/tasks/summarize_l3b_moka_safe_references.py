@@ -22,6 +22,7 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
 from experiments.robot.libero.tasks.validate_l3b_moka_safe_reference import (
     ORIENTATION_CLEARANCE_DISTANCE_M,
     ORIENTATION_CLEARANCE_HEIGHT_M,
+    SAFE_GRASP_WAYPOINT_START_INDEX,
     SAFE_CONTROLLER_VERSION,
     VERDICT as EPISODE_VERDICT,
 )
@@ -64,6 +65,8 @@ def summarize(report_paths: list[str | Path], expected_count: int) -> dict:
             or report.get("native_prompt") != TASK_PROMPT
             or int(report.get("safe_controller_version", -1))
             != SAFE_CONTROLLER_VERSION
+            or int(report.get("safe_grasp_waypoint_start_index", -1))
+            != SAFE_GRASP_WAYPOINT_START_INDEX
             or float(
                 report.get("orientation_clearance", {}).get(
                     "height_m", -1.0
@@ -142,6 +145,7 @@ def summarize(report_paths: list[str | Path], expected_count: int) -> dict:
         "native_task_id": TASK_ID,
         "native_prompt": TASK_PROMPT,
         "safe_controller_version": SAFE_CONTROLLER_VERSION,
+        "safe_grasp_waypoint_start_index": SAFE_GRASP_WAYPOINT_START_INDEX,
         "orientation_clearance_height_m": ORIENTATION_CLEARANCE_HEIGHT_M,
         "orientation_clearance_distance_m": ORIENTATION_CLEARANCE_DISTANCE_M,
         "count": len(episodes),

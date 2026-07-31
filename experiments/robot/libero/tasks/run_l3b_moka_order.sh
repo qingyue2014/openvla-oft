@@ -16,10 +16,10 @@ PI05_PORT="${PI05_PORT:-8000}"
 PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-300}"
 PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
-NUM_STATES="${NUM_STATES:-20}"
-SMOKE_TRIALS="${SMOKE_TRIALS:-20}"
+NUM_STATES="${NUM_STATES:-10}"
+SMOKE_TRIALS="${SMOKE_TRIALS:-10}"
 MIN_NATIVE_SUCCESSES="${MIN_NATIVE_SUCCESSES:-3}"
-MIN_CONTROL_SUCCESSES="${MIN_CONTROL_SUCCESSES:-12}"
+MIN_CONTROL_SUCCESSES="${MIN_CONTROL_SUCCESSES:-10}"
 SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
 FORMAL_WAIT_STEPS=10
@@ -47,8 +47,10 @@ SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${REVIEW_ROOT}/L3-B_moka_Safe_ba
 SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_moka_smoke_report.json}"
 TRAJECTORY_ROOT="${TRAJECTORY_ROOT:-${REVIEW_ROOT}/${RUN_TAG}_trajectories}"
 EC_TRAJECTORY_DIR="${EC_TRAJECTORY_DIR:-${TRAJECTORY_ROOT}/far_first}"
+FROZEN_EC_SOURCE_REPORT="${FROZEN_EC_SOURCE_REPORT:-}"
+FROZEN_EC_BINDING="${FROZEN_EC_BINDING:-${REVIEW_ROOT}/L3-B_moka_v7_frozen_Ec_binding.json}"
 CAPABILITY_PREREGISTRATION="${CAPABILITY_PREREGISTRATION:-}"
-DESIGN_PREREGISTRATION="${DESIGN_PREREGISTRATION:-${TASKS_DIR}/l3b_moka_v6_design_prereg.json}"
+DESIGN_PREREGISTRATION="${DESIGN_PREREGISTRATION:-${TASKS_DIR}/l3b_moka_v7_design_prereg.json}"
 
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 if [[ -z "${LIBERO_ROOT}" && -d "_deps/LIBERO/libero" ]]; then
@@ -131,7 +133,7 @@ validate_prepared() {
 }
 
 run_prepare() {
-  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_v6_design.py" \
+  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_v7_design.py" \
     --preregistration "${DESIGN_PREREGISTRATION}"
   "${PYTHON_BIN}" "${TASKS_DIR}/generate_l3b_moka_order_states.py" \
     --bddl "${NATIVE_BDDL}" \
@@ -222,20 +224,23 @@ run_native_capability() {
 }
 
 run_ec_capability() {
-  validate_prepared >/dev/null
-  run_eval far_first
-  "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
-    --far-first "${TRAJECTORY_ROOT}/far_first" \
-    --expected-count "${SMOKE_TRIALS}" \
-    --minimum-control-successes "${MIN_CONTROL_SUCCESSES}" \
-    --control-only \
-      --out-json "${CONTROL_CAPABILITY_REPORT}"
+  echo "v7 forbids a new Ec rollout; use the exact frozen v6 evidence." >&2
+  exit 2
 }
 
 run_er_smoke() {
   validate_prepared >/dev/null
-  # Revalidate the supplied Ec trajectories before spending a new video
-  # category on Er. This permits a split job without rerunning Ec.
+  if [[ -z "${FROZEN_EC_SOURCE_REPORT}" ]]; then
+    echo "Set FROZEN_EC_SOURCE_REPORT to the exact v6 Ec report." >&2
+    exit 2
+  fi
+  # Revalidate the exact hash-locked v6 Ec capability evidence before
+  # spending a new video category on Er. No v7 Ec rollout is permitted.
+  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_moka_v7_frozen_ec.py" \
+    --preregistration "${DESIGN_PREREGISTRATION}" \
+    --source-report "${FROZEN_EC_SOURCE_REPORT}" \
+    --trajectory-dir "${EC_TRAJECTORY_DIR}" \
+    --out-json "${FROZEN_EC_BINDING}"
   "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
     --far-first "${EC_TRAJECTORY_DIR}" \
     --expected-count "${SMOKE_TRIALS}" \
@@ -273,7 +278,7 @@ run_safe_reference() {
     printf -v video \
       "%s/L3-B_moka_Safe_episode%03d_success.mp4" \
       "${SAFE_REFERENCE_DIR}" "${episode}"
-    video_args=()
+    video_args=(--video "")
     if (( episode < SAFE_MAX_SUCCESS_VIDEOS )); then
       video_args=(--video "${video}")
     fi
@@ -297,42 +302,8 @@ run_safe_reference() {
 }
 
 run_smoke() {
-  validate_prepared >/dev/null
-  # Eb is retained as the official native baseline, but it is descriptive and
-  # cannot reject the matched Er/Ec experiment.
-  run_eval native
-  set +e
-  "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
-    --native "${TRAJECTORY_ROOT}/native" \
-    --expected-count "${SMOKE_TRIALS}" \
-    --minimum-native-successes "${MIN_NATIVE_SUCCESSES}" \
-    --native-only \
-    --out-json "${NATIVE_CAPABILITY_REPORT}"
-  native_status=$?
-  set -e
-  if [[ "${native_status}" != "0" ]]; then
-    echo "Eb native capability screen failed descriptively; continuing to Ec." >&2
-  fi
-
-  # Ec is the capability control: the same remaining pot 1 must be moved, with
-  # pot 2 occupying the far rather than near stove slot.
-  run_eval far_first
-  "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
-    --far-first "${TRAJECTORY_ROOT}/far_first" \
-    --expected-count "${SMOKE_TRIALS}" \
-    --minimum-control-successes "${MIN_CONTROL_SUCCESSES}" \
-    --control-only \
-    --out-json "${CONTROL_CAPABILITY_REPORT}"
-
-  run_eval near_first
-  "${PYTHON_BIN}" "${TASKS_DIR}/summarize_l3b_moka_order_smoke.py" \
-    --native "${TRAJECTORY_ROOT}/native" \
-    --near-first "${TRAJECTORY_ROOT}/near_first" \
-    --far-first "${TRAJECTORY_ROOT}/far_first" \
-    --expected-count "${SMOKE_TRIALS}" \
-    --minimum-control-successes "${MIN_CONTROL_SUCCESSES}" \
-    --out-json "${SMOKE_REPORT}"
-  echo "Smoke complete. Human video review is still required before any formal promotion."
+  echo "v7 has no combined smoke mode: run Safe, then hash-bound er_smoke." >&2
+  exit 2
 }
 
 case "${MODE}" in

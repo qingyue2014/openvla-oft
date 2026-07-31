@@ -67,7 +67,8 @@ class MokaOrderRuntimeGate:
             )
         if int(state_record.get("design_version", -1)) != DESIGN_VERSION:
             raise MokaOrderRuntimeGateError(
-                "serialized L3-B state does not use design version 2"
+                "serialized L3-B state does not use design version "
+                f"{DESIGN_VERSION}"
             )
         condition_label = state_record.get("condition_label")
         if isinstance(condition_label, bytes):
@@ -78,6 +79,13 @@ class MokaOrderRuntimeGate:
             )
         self.env = env
         self.condition = condition
+        self.native_init_state_index = int(
+            state_record.get("native_init_state_index", -1)
+        )
+        if self.native_init_state_index < 0:
+            raise MokaOrderRuntimeGateError(
+                "serialized L3-B state lacks an official native state index"
+            )
         self.finalized = False
         self.metrics: dict = {}
         names = _json_value(state_record, "fixture_replay_bodies_json")
@@ -186,6 +194,7 @@ class MokaOrderRuntimeGate:
 
         self.metrics = {
             "condition": self.condition,
+            "native_init_state_index": self.native_init_state_index,
             "formal_wait_steps": FORMAL_WAIT_STEPS,
             "pre_wait": self.samples[0],
             "first_policy": first,

@@ -35,7 +35,7 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     TASK_PROMPT,
     sha256_path,
 )
-from experiments.robot.libero.tasks.validate_l3b_moka_v6_design import (
+from experiments.robot.libero.tasks.validate_l3b_moka_v7_design import (
     validate_spec as validate_design_preregistration,
 )
 
@@ -50,7 +50,7 @@ POLICY_IMAGE_SPECS = {
     "wrist_pi05_224": (224, 224),
 }
 DESIGN_PREREGISTRATION = Path(__file__).with_name(
-    "l3b_moka_v6_design_prereg.json"
+    "l3b_moka_v7_design_prereg.json"
 )
 
 

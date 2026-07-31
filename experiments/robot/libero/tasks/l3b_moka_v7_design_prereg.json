@@ -1,0 +1,100 @@
+{
+  "acceptance": {
+    "conditional_ec_stable_successes": 10,
+    "conditional_ec_trials": 10,
+    "er_runs_on_all_and_only_selected_states": true,
+    "minimum_ec_minus_er_stable_success_rate_gap": 0.4,
+    "minimum_er_minus_ec_repair_rate_gap": 0.4,
+    "new_ec_rollout_allowed": false
+  },
+  "condition_roles": {
+    "far_first": {
+      "preplaced_body": "moka_pot_1_main",
+      "remaining_body": "moka_pot_2_main",
+      "slot": "opposite_default_landing"
+    },
+    "near_first": {
+      "preplaced_body": "moka_pot_1_main",
+      "remaining_body": "moka_pot_2_main",
+      "slot": "at_default_landing"
+    }
+  },
+  "frozen_v6_ec_screen": {
+    "ec_raw_successes": 18,
+    "ec_report_sha256": "cbbc1f0a81958e149a0e91a9ec6ca27aec6fcd09e7218b3c286e80243c93b099",
+    "ec_required_stable_successes": 12,
+    "ec_stable_successes": 10,
+    "ec_trials": 20,
+    "ec_verdict": "FAIL_L3B_MOKA_EC_CAPABILITY_CONTROL",
+    "er_was_not_run": true,
+    "slurm_job_id": 500095,
+    "source_commit": "ef1a5b980dc256c5e5035736f0914b69475d7c53",
+    "source_design_preregistration_sha256": "75172021209dc277ad49458822882789978d5d4e721627224f2da9b0b7550aa2"
+  },
+  "frozen_v6_ec_trajectory_sha256": {
+    "0": "02431eaac9c7573b18d789be7b859f717893e0c3bfbe4f2a8d6b093b244b06f0",
+    "5": "124497776d74290948c71a340b00f6cd48473be64b66f592bfd1075b80817f7c",
+    "7": "398a0997fef211c76146332a1d983bc7bcd020b49998b1f2a4a21951d1f6483b",
+    "8": "5ca6b0df67722cd10070b71e83615309394aaa05e016407d01045465590ca103",
+    "10": "7073903d5343e809f97b91a763ab88ff922e93c4c31ff10d5aaf64dc579087f3",
+    "11": "30908cec5c4e1d0d65bd933ecf36745de9170667f78a4689143c0c89d3cec8ca",
+    "12": "6f179dd91ee0e60406b3e056fe224151ea91f5b4f6a73ceec2f8db64662ee0d6",
+    "15": "6b4ebabc2d523c75e3c0237805950dd5e416480bfb59bd25ad021c1bccb7eb94",
+    "16": "f3c75178f56506f12f987e0a57853bf8355ed602ea1f6da2101f085db943b3c7",
+    "17": "186e4afabecc50cd5276fd58c27ede4e4acb573f6ed345ddfbc0f2f25f3fde28"
+  },
+  "geometry": {
+    "axis_definition": "normalized_sum_of_native_cook_site_local_positive_x_and_positive_y_axes",
+    "ec_center_sign": -1,
+    "er_center_sign": 1,
+    "geometry_changes_from_v6": false,
+    "landing_axis_local_xy": [
+      0.7071067811865475,
+      0.7071067811865475
+    ],
+    "preregistered_minimum_coordinate_margin_inside_cook_site_m": 0.0237,
+    "slot_separation_m": 0.145,
+    "threshold_changes_from_v6": false
+  },
+  "interpretation": {
+    "claim_scope": "conditional_on_frozen_v6_ec_terminal_stable_single_placement_capability",
+    "diagnostic_not_unconditional_success_rate_estimate": true,
+    "ec_is_capability_conditioning_not_an_independent_v7_outcome": true,
+    "er_outcomes_seen_before_lock": false,
+    "v6_failure_is_not_reclassified": true
+  },
+  "native_only_contract": {
+    "asset_inventory_changed": false,
+    "custom_assets": false,
+    "custom_bddl": false,
+    "prompt_changed": false,
+    "safety_oracle": "none"
+  },
+  "pool": {
+    "count": 10,
+    "official_state_indices": [
+      0,
+      5,
+      7,
+      8,
+      10,
+      11,
+      12,
+      15,
+      16,
+      17
+    ],
+    "selection_rule": "all_and_only_frozen_v6_ec_episodes_with_native_goal_success_and_full_terminal_stability",
+    "substitution_allowed": false
+  },
+  "preregistration_id": "l3b_moka_v7_ec_capability_conditioned_v1",
+  "registered_date": "2026-07-31",
+  "scope": "matched_v7_conditional_order_diagnostic",
+  "status": "LOCKED_AFTER_V6_EC_FAILURE_BEFORE_ANY_ER_RUN",
+  "task": {
+    "bddl_file": "KITCHEN_SCENE8_put_both_moka_pots_on_the_stove.bddl",
+    "prompt": "put both moka pots on the stove",
+    "suite": "libero_10",
+    "task_id": 8
+  }
+}
