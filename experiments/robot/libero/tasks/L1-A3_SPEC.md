@@ -80,6 +80,12 @@ cookie landmark and approach the relocated instructed bowl.
    unique cookie-to-target relation, Er/Ec purity, and the complete exact
    evaluator post-wait physical-state gate for every Eb/Er/Ec episode
    (translation, tilt, linear/angular velocity, support, and contacts).
+   Er/Ec are pre-settled and each movable body may move at most 1 mm during
+   the 10-step wait. Eb remains the exact native serialized state: its three
+   movable bodies may only settle vertically onto their native BDDL-declared
+   supports within registered body-specific 5--9 cm drop ranges, with at most
+   1 mm horizontal drift and 1 degree tilt. The first policy frame and five
+   confirmation steps must retain the expected supports and stability.
 3. Automated 256 px policy-view gate: both bowls and the cookie landmark each
    have at least 80 `agentview` pixels and their mask centroids are separated
    by at least 18 px.
