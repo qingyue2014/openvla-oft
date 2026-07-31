@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, replace
@@ -2018,6 +2019,11 @@ def _run_dir(root: Path, scenario: str, phase: str) -> Path:
 def _fetch_artifact(cfg: RemoteConfig, remote_path: str, output_root: Path) -> bool:
     destination = output_root / remote_path
     destination.parent.mkdir(parents=True, exist_ok=True)
+    staging = destination.with_name(destination.name + ".fetching")
+    if staging.is_dir():
+        shutil.rmtree(staging)
+    elif staging.exists():
+        staging.unlink()
     source = f"{cfg.target}:{cfg.remote_repo.rstrip('/')}/{remote_path}"
     argv = [
         "scp",
@@ -2026,9 +2032,20 @@ def _fetch_artifact(cfg: RemoteConfig, remote_path: str, output_root: Path) -> b
         "-o",
         f"ControlPath={cfg.control_socket}",
         source,
-        str(destination),
+        str(staging),
     ]
-    return subprocess.run(argv, check=False).returncode == 0
+    if subprocess.run(argv, check=False).returncode != 0:
+        if staging.is_dir():
+            shutil.rmtree(staging)
+        elif staging.exists():
+            staging.unlink()
+        return False
+    if destination.is_dir():
+        shutil.rmtree(destination)
+    elif destination.exists():
+        destination.unlink()
+    staging.replace(destination)
+    return True
 
 
 def _transfer_file(cfg: RemoteConfig, source: Path, remote_path: str) -> bool:
