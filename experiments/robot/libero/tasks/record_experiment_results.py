@@ -83,9 +83,9 @@ RUN_METADATA = {
     "L1-C3-occupied-drawer-eb": ("L1", "L1-C3", "Eb Empty Drawer"),
     "L1-C3-occupied-drawer-risk": ("L1", "L1-C3", "Er Occupied Drawer"),
     "L1-C3-occupied-drawer-ec": ("L1", "L1-C3", "Ec Nearby Object"),
-    "L1-C4-occupied-cabinet-top-eb": ("L1", "L1-C4", "Eb Clear Cabinet Top"),
-    "L1-C4-occupied-cabinet-top-risk": ("L1", "L1-C4", "Er Occupied Cabinet Top"),
-    "L1-C4-occupied-cabinet-top-ec": ("L1", "L1-C4", "Ec Nearby Object"),
+    "L1-C4-occupied-basket-eb": ("L1", "L1-C4", "Eb Clear Basket"),
+    "L1-C4-occupied-basket-risk": ("L1", "L1-C4", "Er Occupied Basket"),
+    "L1-C4-occupied-basket-ec": ("L1", "L1-C4", "Ec Nearby Object"),
     "L2-B2-basket-stove": ("L2", "L2-B2", "Er Basket Stove"),
     "L2-B2-basket-stove-off": ("L2", "L2-B2", "Eb Stove Off"),
     "L2-B2-basket-far-stove": ("L2", "L2-B2", "Ec Far Stove"),
@@ -97,8 +97,22 @@ RUN_METADATA = {
     # Legacy pilot identifiers retained so old logs remain readable.
     "L3-A1-bowl-drawer-bottle-support-removal": ("L3", "L3-A1", "Er Support Removal (pilot)"),
     "L3-A1-bowl-drawer-bottle-null-risk": ("L3", "L3-A1", "Ec Static Support (pilot)"),
-    "L3-A2-bowl-drawer": ("L3", "L3-A2", "Er Bowl Drawer"),
-    "L3-A3-stack-tray": ("L3", "L3-A3", "Er Stack Tray"),
+    "L3-A2-eb-milk-butter": ("L3", "L3-A2", "Eb Native Gate"),
+    "L3-A2-er-milk-butter": (
+        "L3", "L3-A2", "Er Butter-on-Milk Cascade"
+    ),
+    "L3-A2-ec-milk-butter": (
+        "L3", "L3-A2", "Ec Butter-on-Orange-Juice"
+    ),
+    "L3-A4-microwave-mug-eb": (
+        "L3", "L3-A4", "Eb Native Microwave Task"
+    ),
+    "L3-A4-microwave-mug-er": (
+        "L3", "L3-A4", "Er Door-to-Mug Contact Cascade"
+    ),
+    "L3-A4-microwave-mug-ec": (
+        "L3", "L3-A4", "Ec Hinge-Distance-Matched Control"
+    ),
     "L3-C-shared-space-eb": ("L3", "L3-C", "Eb Clean Path"),
     "L3-C-shared-space-er": ("L3", "L3-C", "Er On-Path Obstacle"),
     "L3-C-shared-space-ec": ("L3", "L3-C", "Ec Off-Path Obstacle"),
@@ -117,6 +131,8 @@ ATTRIBUTION_FILE_METADATA = {
     "l2b1_attribution": ("L2", "L2-B1"),
     "l2b2_attribution": ("L2", "L2-B2"),
     "l3a1_attribution": ("L3", "L3-A1"),
+    "l3a2_attribution": ("L3", "L3-A2"),
+    "l3a4_attribution": ("L3", "L3-A4"),
     "l3c": ("L3", "L3-C"),
 }
 

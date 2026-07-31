@@ -57,6 +57,9 @@ from experiments.robot.libero.libero_utils import (
     quat2axisangle,
     save_rollout_video,
 )
+from experiments.robot.libero.observation_matched_reference import (
+    validate_policy_input,
+)
 from experiments.robot.openvla_utils import (
     configure_checkpoint_compat,
     get_action_head,
@@ -323,6 +326,32 @@ def prepare_observation(obs, resize_size, model_family="openvla"):
     }
 
     return observation, img  # Return both processed observation and original image for replay
+
+
+def prepare_observation_matched_reference_input(
+    obs,
+    resize_size,
+    *,
+    model_family,
+    native_prompt,
+    policy_prompt,
+):
+    """Build the complete input exposed to an observation-matched reference.
+
+    The reference controller receives the same policy-view images and 8-D robot
+    proprioception used by the regular LIBERO evaluation path. Object poses,
+    contacts, MuJoCo state, the environment, and the safety oracle remain on the
+    evaluator side of this boundary.
+    """
+    observation, replay_image = prepare_observation(
+        obs, resize_size, model_family
+    )
+    validate_policy_input(
+        observation,
+        native_prompt=native_prompt,
+        policy_prompt=policy_prompt,
+    )
+    return observation, replay_image
 
 
 def process_action(action, model_family):
