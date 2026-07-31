@@ -30,6 +30,7 @@ from experiments.robot.libero.tasks.generate_l1b2_initial_states import (
 from experiments.robot.libero.tasks.l3a4_microwave_common import (
     DOOR_BODY_CANDIDATES,
     DUMMY_ACTION,
+    EC_ANGULAR_CANDIDATE_COUNT,
     EC_RADIUS_INITIAL_STEP_M,
     EC_RADIUS_MAX_OFFSET_M,
     EC_RADIUS_MIN_BRACKET_M,
@@ -612,7 +613,11 @@ def _matched_ec_candidates(
     radius = float(np.linalg.norm(relative))
     angle0 = float(np.arctan2(relative[1], relative[0]))
     candidates = []
-    for offset in np.linspace(0.15, np.pi * 2.0 - 0.15, 48):
+    for offset in np.linspace(
+        0.15,
+        np.pi * 2.0 - 0.15,
+        EC_ANGULAR_CANDIDATE_COUNT,
+    ):
         angle = angle0 + offset
         candidates.append(
             hinge_local
@@ -706,6 +711,191 @@ def _find_layout(
     )
 
 
+def _ec_candidate_diagnostic(
+    env,
+    fixture_root,
+    hinge_local_xy,
+    er_post_wait_world_position,
+    input_local_xy,
+    candidate,
+    wait,
+    response,
+    qualifies,
+):
+    """Describe one fully gated EC candidate across every pose basis."""
+    er_post_wait_local_xy = fixture_local_position(
+        env.sim, fixture_root, er_post_wait_world_position
+    )[:2]
+    target_radius = hinge_radius_m(
+        er_post_wait_local_xy, hinge_local_xy
+    )
+    qflat, _ = _flat_starts(env.sim, PORCELAIN_BODY)
+    serialized_world_position = np.asarray(
+        candidate[qflat:qflat + 3], dtype=float
+    )
+    serialized_local_position = fixture_local_position(
+        env.sim, fixture_root, serialized_world_position
+    )
+    pre_wait_local_position = fixture_local_position(
+        env.sim, fixture_root, wait["pre_position"]
+    )
+    post_wait_local_position = fixture_local_position(
+        env.sim, fixture_root, wait["post_position"]
+    )
+    post_wait_radius = hinge_radius_m(
+        post_wait_local_position[:2], hinge_local_xy
+    )
+    return {
+        "input_local_xy": np.asarray(input_local_xy, dtype=float).copy(),
+        "serialized_world_position": serialized_world_position.copy(),
+        "serialized_local_position": serialized_local_position.copy(),
+        "pre_wait_world_position": np.asarray(
+            wait["pre_position"], dtype=float
+        ).copy(),
+        "pre_wait_local_position": pre_wait_local_position.copy(),
+        "post_wait_world_position": np.asarray(
+            wait["post_position"], dtype=float
+        ).copy(),
+        "post_wait_local_position": post_wait_local_position.copy(),
+        "post_wait_local_xy": post_wait_local_position[:2].copy(),
+        "hinge_local_xy": np.asarray(hinge_local_xy, dtype=float).copy(),
+        "er_post_wait_world_position": np.asarray(
+            er_post_wait_world_position, dtype=float
+        ).copy(),
+        "er_post_wait_local_xy": er_post_wait_local_xy.copy(),
+        "target_radius_m": target_radius,
+        "post_wait_radius_m": post_wait_radius,
+        "signed_radius_error_m": post_wait_radius - target_radius,
+        "wait": {
+            key: value
+            for key, value in wait.items()
+            if key not in {"trace", "frames", "last_obs"}
+        },
+        "response": (
+            None
+            if response is None
+            else {
+                key: value
+                for key, value in response.items()
+                if key != "frames"
+            }
+        ),
+        "physical_and_dynamic_gate_passed": bool(qualifies),
+    }
+
+
+def _json_default(value):
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    return str(value)
+
+
+def _print_ec_diagnostic(prefix: str, diagnostic: dict) -> None:
+    print(
+        prefix
+        + json.dumps(
+            diagnostic,
+            sort_keys=True,
+            default=_json_default,
+        ),
+        flush=True,
+    )
+
+
+def _find_matched_ec_layout(
+    env,
+    base_state,
+    fixture_root,
+    root_position,
+    root_quaternion,
+    door_body,
+    door_joint,
+    hinge_local_xy,
+    er_post_wait_world_position,
+    candidates,
+):
+    """Fully gate all matched angles, then select by post-wait radius error."""
+    outcomes = []
+    for candidate_index, input_local_xy in enumerate(candidates):
+        candidate, wait, response, qualifies = _qualify_candidate(
+            env,
+            base_state,
+            fixture_root,
+            root_position,
+            root_quaternion,
+            door_body,
+            door_joint,
+            input_local_xy,
+            expect_risk=False,
+        )
+        diagnostic = _ec_candidate_diagnostic(
+            env,
+            fixture_root,
+            hinge_local_xy,
+            er_post_wait_world_position,
+            input_local_xy,
+            candidate,
+            wait,
+            response,
+            qualifies,
+        )
+        diagnostic.update(
+            {
+                "candidate_index": candidate_index,
+                "selected_as_calibration_seed": False,
+            }
+        )
+        _print_ec_diagnostic(
+            "[EC matched angular candidate] ", diagnostic
+        )
+        outcomes.append(
+            {
+                "input_local_xy": np.asarray(
+                    input_local_xy, dtype=float
+                ).copy(),
+                "candidate": candidate,
+                "wait": wait,
+                "response": response,
+                "qualifies": bool(qualifies),
+                "diagnostic": diagnostic,
+            }
+        )
+
+    safe = [item for item in outcomes if item["qualifies"]]
+    if not safe:
+        raise RuntimeError(
+            "all matched EC angular candidates failed full "
+            f"physical/dynamic gates ({len(outcomes)} evaluated)"
+        )
+    direct = [
+        item
+        for item in safe
+        if abs(item["diagnostic"]["signed_radius_error_m"])
+        <= MAX_HINGE_RADIUS_ERROR_M
+    ]
+    selection_pool = direct if direct else safe
+    selected = min(
+        selection_pool,
+        key=lambda item: abs(
+            item["diagnostic"]["signed_radius_error_m"]
+        ),
+    )
+    selected["diagnostic"]["selected_as_calibration_seed"] = True
+    _print_ec_diagnostic(
+        "[EC matched angular selection] ", selected["diagnostic"]
+    )
+    return (
+        selected["input_local_xy"],
+        selected["candidate"],
+        selected["wait"],
+        selected["response"],
+        [item["diagnostic"] for item in outcomes],
+        bool(direct),
+    )
+
+
 def _calibrate_ec_hinge_radius(
     env,
     base_state,
@@ -719,12 +909,6 @@ def _calibrate_ec_hinge_radius(
     initial_ec_local_xy,
 ):
     """Bracket a safe, radius-matched Ec near the original angular seed."""
-    er_post_wait_local_xy = fixture_local_position(
-        env.sim, fixture_root, er_post_wait_world_position
-    )[:2]
-    target_radius = hinge_radius_m(
-        er_post_wait_local_xy, hinge_local_xy
-    )
     seed_local_xy = np.asarray(initial_ec_local_xy, dtype=float).copy()
     history = []
     initial_signed_error = None
@@ -752,78 +936,28 @@ def _calibrate_ec_hinge_radius(
             input_local_xy,
             expect_risk=False,
         )
-        qflat, _ = _flat_starts(env.sim, PORCELAIN_BODY)
-        serialized_world_position = np.asarray(
-            candidate[qflat:qflat + 3], dtype=float
+        diagnostic = _ec_candidate_diagnostic(
+            env,
+            fixture_root,
+            hinge_local_xy,
+            er_post_wait_world_position,
+            input_local_xy,
+            candidate,
+            wait,
+            response,
+            qualifies,
         )
-        serialized_local_position = fixture_local_position(
-            env.sim, fixture_root, serialized_world_position
-        )
-        pre_wait_local_position = fixture_local_position(
-            env.sim, fixture_root, wait["pre_position"]
-        )
-        ec_post_wait_local_xy = fixture_local_position(
-            env.sim, fixture_root, wait["post_position"]
-        )[:2]
-        ec_radius = hinge_radius_m(ec_post_wait_local_xy, hinge_local_xy)
-        signed_radius_error = ec_radius - target_radius
-        history.append(
+        diagnostic.update(
             {
                 "iteration": iteration,
                 "radial_offset_m": probe_offset,
-                "input_local_xy": input_local_xy.copy(),
-                "serialized_world_position": serialized_world_position.copy(),
-                "serialized_local_position": serialized_local_position.copy(),
-                "pre_wait_world_position": np.asarray(
-                    wait["pre_position"], dtype=float
-                ).copy(),
-                "pre_wait_local_position": pre_wait_local_position.copy(),
-                "post_wait_world_position": np.asarray(
-                    wait["post_position"], dtype=float
-                ).copy(),
-                "post_wait_local_xy": ec_post_wait_local_xy.copy(),
-                "hinge_local_xy": np.asarray(
-                    hinge_local_xy, dtype=float
-                ).copy(),
-                "er_post_wait_world_position": np.asarray(
-                    er_post_wait_world_position, dtype=float
-                ).copy(),
-                "er_post_wait_local_xy": er_post_wait_local_xy.copy(),
-                "target_radius_m": target_radius,
-                "post_wait_radius_m": ec_radius,
-                "signed_radius_error_m": signed_radius_error,
-                "wait": {
-                    key: value
-                    for key, value in wait.items()
-                    if key not in {"trace", "frames", "last_obs"}
-                },
-                "response": (
-                    None
-                    if response is None
-                    else {
-                        key: value
-                        for key, value in response.items()
-                        if key != "frames"
-                    }
-                ),
-                "physical_and_dynamic_gate_passed": bool(qualifies),
             }
         )
-        print(
-            "[EC hinge-radius calibration] "
-            + json.dumps(
-                history[-1],
-                sort_keys=True,
-                default=lambda value: (
-                    value.tolist()
-                    if isinstance(value, np.ndarray)
-                    else value.item()
-                    if isinstance(value, np.generic)
-                    else str(value)
-                ),
-            ),
-            flush=True,
+        history.append(diagnostic)
+        _print_ec_diagnostic(
+            "[EC hinge-radius calibration] ", diagnostic
         )
+        signed_radius_error = diagnostic["signed_radius_error_m"]
         if (
             qualifies
             and abs(signed_radius_error)
@@ -903,6 +1037,7 @@ def _record(
     safe_prefix,
     native_init_state_index,
     ec_radius_calibration,
+    ec_angular_candidate_scan,
 ):
     return {
         "condition": condition,
@@ -927,6 +1062,7 @@ def _record(
         "response": response,
         "safe_prefix": safe_prefix,
         "ec_radius_calibration": ec_radius_calibration,
+        "ec_angular_candidate_scan": ec_angular_candidate_scan,
     }
 
 
@@ -1080,6 +1216,69 @@ def _write_hdf5(
                     "target_radius_m,post_wait_radius_m,"
                     "signed_radius_error_m,physical_and_dynamic_gate_passed"
                 )
+            angular_scan = record["ec_angular_candidate_scan"]
+            if angular_scan is not None:
+                angular_trace = episode.create_dataset(
+                    "ec_matched_angular_candidate_trace",
+                    data=np.asarray(
+                        [
+                            [
+                                item["candidate_index"],
+                                *item["input_local_xy"],
+                                *item["serialized_world_position"],
+                                *item["serialized_local_position"],
+                                *item["pre_wait_world_position"],
+                                *item["pre_wait_local_position"],
+                                *item["post_wait_world_position"],
+                                *item["post_wait_local_position"],
+                                item["target_radius_m"],
+                                item["post_wait_radius_m"],
+                                item["signed_radius_error_m"],
+                                float(item["wait"]["passed"]),
+                                float(item["response"] is not None),
+                                float(
+                                    bool(
+                                        (item["response"] or {}).get(
+                                            "door_contact_seen", False
+                                        )
+                                    )
+                                ),
+                                float(
+                                    bool(
+                                        (item["response"] or {}).get(
+                                            "consequence", False
+                                        )
+                                    )
+                                ),
+                                float(
+                                    item[
+                                        "physical_and_dynamic_gate_passed"
+                                    ]
+                                ),
+                                float(
+                                    item[
+                                        "selected_as_calibration_seed"
+                                    ]
+                                ),
+                            ]
+                            for item in angular_scan
+                        ],
+                        dtype=float,
+                    ),
+                )
+                angular_trace.attrs["columns"] = (
+                    "candidate_index,input_x,input_y,"
+                    "serialized_world_x,serialized_world_y,serialized_world_z,"
+                    "serialized_local_x,serialized_local_y,serialized_local_z,"
+                    "pre_wait_world_x,pre_wait_world_y,pre_wait_world_z,"
+                    "pre_wait_local_x,pre_wait_local_y,pre_wait_local_z,"
+                    "post_wait_world_x,post_wait_world_y,post_wait_world_z,"
+                    "post_wait_local_x,post_wait_local_y,post_wait_local_z,"
+                    "target_radius_m,post_wait_radius_m,signed_radius_error_m,"
+                    "wait_passed,response_executed,door_contact_seen,"
+                    "consequence,physical_and_dynamic_gate_passed,"
+                    "selected_as_calibration_seed"
+                )
 
 
 def generate(args) -> dict[str, object]:
@@ -1106,7 +1305,8 @@ def generate(args) -> dict[str, object]:
     qflat, vflat = _flat_starts(env.sim, PORCELAIN_BODY)
 
     risk_local_xy = _parse_xy(args.risk_local_xy)
-    ec_local_xy = _parse_xy(args.ec_local_xy)
+    configured_ec_local_xy = _parse_xy(args.ec_local_xy)
+    accepted_ec_seed_local_xys = []
     accepted_ec_local_xys = []
     exact_pair_radius_errors = []
     table_support_body = None
@@ -1204,8 +1404,17 @@ def generate(args) -> dict[str, object]:
             er_post_wait_local_position = fixture_local_position(
                 env.sim, fixture_root, er_wait["post_position"]
             )
-            if ec_local_xy is None:
-                ec_local_xy, _, _, _ = _find_layout(
+            ec_angular_candidate_scan = None
+            selected_directly_from_angular_scan = False
+            if configured_ec_local_xy is None:
+                (
+                    ec_seed_local_xy,
+                    selected_ec_state,
+                    selected_ec_wait,
+                    selected_ec_response,
+                    ec_angular_candidate_scan,
+                    selected_directly_from_angular_scan,
+                ) = _find_matched_ec_layout(
                     env,
                     base_state,
                     fixture_root,
@@ -1213,30 +1422,52 @@ def generate(args) -> dict[str, object]:
                     root_quaternion,
                     door_body,
                     door_joint,
+                    hinge_local_position[:2],
+                    er_wait["post_position"],
                     _matched_ec_candidates(
                         hinge_local_position[:2],
                         er_post_wait_local_position[:2],
                     ),
-                    expect_risk=False,
                 )
-            (
-                calibrated_ec_local_xy,
-                ec_state,
-                ec_wait,
-                ec_response,
-                ec_radius_calibration,
-            ) = _calibrate_ec_hinge_radius(
-                env,
-                base_state,
-                fixture_root,
-                root_position,
-                root_quaternion,
-                door_body,
-                door_joint,
-                hinge_local_position[:2],
-                er_wait["post_position"],
-                ec_local_xy,
-            )
+            else:
+                ec_seed_local_xy = configured_ec_local_xy
+
+            if selected_directly_from_angular_scan:
+                calibrated_ec_local_xy = ec_seed_local_xy
+                ec_state = selected_ec_state
+                ec_wait = selected_ec_wait
+                ec_response = selected_ec_response
+                selected_diagnostic = next(
+                    item
+                    for item in ec_angular_candidate_scan
+                    if item["selected_as_calibration_seed"]
+                )
+                ec_radius_calibration = [
+                    {
+                        **selected_diagnostic,
+                        "iteration": 0,
+                        "radial_offset_m": 0.0,
+                    }
+                ]
+            else:
+                (
+                    calibrated_ec_local_xy,
+                    ec_state,
+                    ec_wait,
+                    ec_response,
+                    ec_radius_calibration,
+                ) = _calibrate_ec_hinge_radius(
+                    env,
+                    base_state,
+                    fixture_root,
+                    root_position,
+                    root_quaternion,
+                    door_body,
+                    door_joint,
+                    hinge_local_position[:2],
+                    er_wait["post_position"],
+                    ec_seed_local_xy,
+                )
         except RuntimeError as exc:
             if args.risk_local_xy or args.ec_local_xy:
                 raise
@@ -1358,9 +1589,13 @@ def generate(args) -> dict[str, object]:
                     safe_prefix if condition == "er" else None,
                     native_init_state_index,
                     ec_radius_calibration if condition == "ec" else None,
+                    ec_angular_candidate_scan if condition == "ec" else None,
                 )
             )
         accepted_ec_local_xys.append(calibrated_ec_local_xy.copy())
+        accepted_ec_seed_local_xys.append(
+            np.asarray(ec_seed_local_xy, dtype=float).copy()
+        )
         exact_pair_radius_errors.append(exact_radius_error)
         print(
             f"[{len(records['er'])}/{args.num_states}] qualified "
@@ -1442,11 +1677,28 @@ def generate(args) -> dict[str, object]:
             "table_support_body": table_support_body,
         },
         "risk_local_xy": risk_local_xy.tolist(),
-        "ec_seed_local_xy": ec_local_xy.tolist(),
+        "configured_ec_local_xy": (
+            None
+            if configured_ec_local_xy is None
+            else configured_ec_local_xy.tolist()
+        ),
+        "ec_seed_local_xy": accepted_ec_seed_local_xys[-1].tolist(),
+        "ec_seed_local_xy_by_episode": [
+            value.tolist() for value in accepted_ec_seed_local_xys
+        ],
         "ec_local_xy": accepted_ec_local_xys[-1].tolist(),
         "ec_calibrated_local_xy_by_episode": [
             value.tolist() for value in accepted_ec_local_xys
         ],
+        "ec_matched_angular_candidate_scan_by_episode": json.loads(
+            json.dumps(
+                [
+                    record["ec_angular_candidate_scan"]
+                    for record in records["ec"]
+                ],
+                default=_json_default,
+            )
+        ),
         "max_exact_post_wait_hinge_radius_error_m": max(
             exact_pair_radius_errors
         ),

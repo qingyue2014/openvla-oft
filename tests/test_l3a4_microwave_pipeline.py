@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from experiments.robot.libero.tasks.l3a4_microwave_common import (
+    EC_ANGULAR_CANDIDATE_COUNT,
     EC_RADIUS_INITIAL_STEP_M,
     MAX_HINGE_RADIUS_ERROR_M,
     SCENARIO,
@@ -275,6 +276,24 @@ def _write_states(
                 ),
             )
             calibration.attrs["columns"] = "test"
+            angular = np.zeros(
+                (EC_ANGULAR_CANDIDATE_COUNT, 30), dtype=float
+            )
+            angular[:, 0] = np.arange(EC_ANGULAR_CANDIDATE_COUNT)
+            angular[0, 1:3] = mug[:2]
+            angular[0, 3:6] = mug
+            angular[0, 6:9] = mug
+            angular[0, 9:12] = mug
+            angular[0, 12:15] = mug
+            angular[0, 15:18] = post_wait_mug
+            angular[0, 18:21] = post_wait_mug
+            angular[0, 21:24] = [0.1, 0.1, 0.0]
+            angular[0, 24:26] = 1.0
+            angular[0, 28:30] = 1.0
+            trace = demo.create_dataset(
+                "ec_matched_angular_candidate_trace", data=angular
+            )
+            trace.attrs["columns"] = "test"
 
 
 def test_l3a4_pairing_allows_only_porcelain_state_and_gates_dynamics(tmp_path):
@@ -299,6 +318,21 @@ def test_l3a4_pairing_uses_exact_post_wait_hinge_radius(tmp_path):
         post_wait_mug=np.asarray([-0.1021, 0.0, 0.0]),
     )
     with pytest.raises(ValueError, match="hinge-distance mismatch"):
+        validate_pairing(paths["eb"], paths["er"], paths["ec"])
+
+
+def test_l3a4_pairing_requires_all_matched_angular_candidates(tmp_path):
+    paths = {name: tmp_path / f"{name}.hdf5" for name in ("eb", "er", "ec")}
+    for condition, path in paths.items():
+        _write_states(path, condition)
+    with h5py.File(paths["ec"], "a") as handle:
+        demo = handle[TASK_KEY]["demo_0"]
+        scan = demo["ec_matched_angular_candidate_trace"][:47]
+        del demo["ec_matched_angular_candidate_trace"]
+        demo.create_dataset(
+            "ec_matched_angular_candidate_trace", data=scan
+        )
+    with pytest.raises(ValueError, match="invalid matched-angular"):
         validate_pairing(paths["eb"], paths["er"], paths["ec"])
 
 
@@ -365,6 +399,7 @@ def test_l3a4_generator_and_runner_encode_blocking_gates(tmp_path):
     assert '"formal_wait_trace"' in text
     assert '"kinematic_safe_order_park_wait_trace"' in text
     assert '"ec_hinge_radius_calibration_trace"' in text
+    assert '"ec_matched_angular_candidate_trace"' in text
     assert "env.check_success()" in text
     assert 'policy_image(evaluation["wait"]["last_obs"])' in text
     assert "exact post-wait Er/Ec hinge-distance mismatch" in text
@@ -464,3 +499,13 @@ def test_l3a4_ec_calibration_brackets_only_fully_gated_candidates():
     assert "largest_safe_offset" in calibration
     assert "[EC hinge-radius calibration]" in calibration
     assert "corrected_radial_input_xy" not in calibration
+
+    angular_scan = ast.get_source_segment(
+        source, functions["_find_matched_ec_layout"]
+    )
+    assert "for candidate_index, input_local_xy in enumerate(candidates)" in (
+        angular_scan
+    )
+    assert "_qualify_candidate(" in angular_scan
+    assert "selection_pool = direct if direct else safe" in angular_scan
+    assert "selected_as_calibration_seed" in angular_scan

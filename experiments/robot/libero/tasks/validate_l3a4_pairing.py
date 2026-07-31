@@ -11,6 +11,7 @@ import h5py
 import numpy as np
 
 from experiments.robot.libero.tasks.l3a4_microwave_common import (
+    EC_ANGULAR_CANDIDATE_COUNT,
     MAX_EC_RADIUS_CALIBRATION_STEPS,
     MAX_HINGE_RADIUS_ERROR_M,
     MAX_MUG_TILT_DEG,
@@ -240,6 +241,83 @@ def validate_pairing(
                 raise ValueError(
                     f"Ec final hinge-radius calibration misses target at "
                     f"demo_{index}: {calibration[-1, 8]:.6f}m"
+                )
+            if "ec_matched_angular_candidate_trace" not in ec:
+                raise ValueError(
+                    f"Ec matched-angular candidate trace missing at demo_{index}"
+                )
+            angular_scan = ec["ec_matched_angular_candidate_trace"][:]
+            if (
+                angular_scan.shape
+                != (EC_ANGULAR_CANDIDATE_COUNT, 30)
+                or not np.all(np.isfinite(angular_scan))
+            ):
+                raise ValueError(
+                    f"Ec invalid matched-angular candidate trace at demo_{index}: "
+                    f"{angular_scan.shape}"
+                )
+            if not np.array_equal(
+                angular_scan[:, 0],
+                np.arange(EC_ANGULAR_CANDIDATE_COUNT, dtype=float),
+            ):
+                raise ValueError(
+                    f"Ec angular candidate indices are incomplete at demo_{index}"
+                )
+            wait_passed = angular_scan[:, 24] >= 0.5
+            response_executed = angular_scan[:, 25] >= 0.5
+            door_contact = angular_scan[:, 26] >= 0.5
+            consequence = angular_scan[:, 27] >= 0.5
+            qualified = angular_scan[:, 28] >= 0.5
+            selected = angular_scan[:, 29] >= 0.5
+            expected_qualified = (
+                wait_passed
+                & response_executed
+                & ~door_contact
+                & ~consequence
+            )
+            if not np.array_equal(qualified, expected_qualified):
+                raise ValueError(
+                    f"Ec angular candidate gate flags are inconsistent "
+                    f"at demo_{index}"
+                )
+            if int(np.count_nonzero(selected)) != 1:
+                raise ValueError(
+                    f"Ec angular scan must select exactly one seed "
+                    f"at demo_{index}"
+                )
+            if not bool(qualified[selected][0]):
+                raise ValueError(
+                    f"Ec angular scan selected an unsafe seed at demo_{index}"
+                )
+            safe_indices = np.flatnonzero(qualified)
+            if safe_indices.size == 0:
+                raise ValueError(
+                    f"Ec angular scan has no fully gated seed at demo_{index}"
+                )
+            errors = np.abs(angular_scan[:, 23])
+            direct_indices = safe_indices[
+                errors[safe_indices] <= MAX_HINGE_RADIUS_ERROR_M
+            ]
+            selection_pool = (
+                direct_indices if direct_indices.size else safe_indices
+            )
+            expected_selected = int(
+                selection_pool[
+                    np.argmin(errors[selection_pool])
+                ]
+            )
+            if int(np.flatnonzero(selected)[0]) != expected_selected:
+                raise ValueError(
+                    f"Ec angular scan did not select the best safe seed "
+                    f"at demo_{index}"
+                )
+            if not np.array_equal(
+                calibration[0, 2:4],
+                angular_scan[expected_selected, 1:3],
+            ):
+                raise ValueError(
+                    f"Ec local calibration is not anchored to selected "
+                    f"angular seed at demo_{index}"
                 )
             if not bool(er.attrs.get("kinematic_safe_order_passed", False)):
                 raise ValueError(f"Er kinematic safe-order path failed at demo_{index}")
