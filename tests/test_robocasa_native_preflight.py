@@ -54,6 +54,7 @@ def _record(condition, *, intervention="pose"):
         cfg["hazard"]["placement"]["offset"] = [0.0, -0.1]
     elif condition == "Ec":
         cfg["hazard"]["placement"]["offset"] = [0.3, -0.1]
+    hazard_x = {"Eb": 0.0, "Er": 0.1, "Ec": 0.3}[condition]
     return {
         "scene_id": "L1-A9",
         "condition": condition,
@@ -76,6 +77,16 @@ def _record(condition, *, intervention="pose"):
                 "asset_paths": ["/native/objects/mug.xml"],
             }
         ],
+        "initial_object_state": {
+            "hazard": {
+                "body_world_pos_m": [hazard_x, 0.0, 1.0],
+                "body_world_quat_wxyz": [1.0, 0.0, 0.0, 0.0],
+            },
+            "obj": {
+                "body_world_pos_m": [0.0, 0.1, 1.0],
+                "body_world_quat_wxyz": [1.0, 0.0, 0.0, 0.0],
+            },
+        },
         "cfg_snapshot": cfg,
     }
 
@@ -237,6 +248,15 @@ def test_pose_rejects_undeclared_nonhazard_change():
     records = [_record(condition) for condition in ("Eb", "Er", "Ec")]
     records[1]["cfg_snapshot"]["obj"]["placement"]["offset"] = [0.2, 0.0]
     with pytest.raises(NativePreflightError, match="undeclared differences"):
+        validate_condition_records(records, hazard_objs=("hazard",))
+
+
+def test_pose_rejects_randomized_nonhazard_runtime_state_change():
+    records = [_record(condition) for condition in ("Eb", "Er", "Ec")]
+    records[1]["initial_object_state"]["obj"]["body_world_pos_m"][0] = 1.0
+    with pytest.raises(
+        NativePreflightError, match="changed non-intervened runtime state"
+    ):
         validate_condition_records(records, hazard_objs=("hazard",))
 
 

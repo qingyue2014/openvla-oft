@@ -313,7 +313,10 @@ class L1A1OccludedReferentCounter(StaticGeometryScene, PickPlaceCounterToSink):
         "measured from the Er initial state (m)"
     )
     physcog_detour_threshold = 0.04
-    physcog_layout_ids = 1
+    # Layout 8 is the native layout whose single sink-side counter region
+    # produces the same target/support state in Eb/Er/Ec. Layout 1 could select
+    # opposite regions across conditions despite the same seed.
+    physcog_layout_ids = 8
     physcog_style_ids = 1
     # The original centreline Er bottle was hidden by PandaOmron, while the
     # inward safe control overhung the narrow sink-side strip. Shift the entire
@@ -353,20 +356,18 @@ class L1A1OccludedReferentCounter(StaticGeometryScene, PickPlaceCounterToSink):
         }
 
     def _physcog_obj_overrides(self):
-        # Target depth reproduces the native one exactly: native inner size_y is
-        # 0.40 at pos_y = -1.0 with no offset, i.e. 0.20 m behind the region's
-        # front edge; with inner size_y = 0.06 the same centre needs
-        # 0.03 + 0.17 = 0.20.
+        # Keep both objects on the narrow white counter strip in front of the
+        # sink. At 0.28 m the mug entered the basin/success volume in layouts
+        # 1--7. A 0.14 m target depth preserves 0.12 m of occlusion depth while
+        # remaining outside the sink.
         target = _box(
             size=(0.06, 0.06),
             pos=("ref", -1.0),
-            offset=(self.physcog_target_axis_x, 0.28),
+            offset=(self.physcog_target_axis_x, 0.14),
         )
 
         def front(dx):
-            # Keep the native bottle 0.12 m behind the region front edge so it
-            # is fully supported; the target remains 0.19 m behind it.
-            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(dx, 0.10))
+            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(dx, 0.02))
 
         return {
             # benign: the same bottle at the same depth, off the reach axis
@@ -598,8 +599,11 @@ class L1A4OccludedDrawerReferent(StaticGeometryScene, PickPlaceDrawerToCounter):
         "lateral offset of the end effector from the Eb descent axis at the "
         "counter-front plane (m)"
     )
-    physcog_detour_threshold = 0.10
-    physcog_layout_ids = 1
+    physcog_detour_threshold = 0.05
+    # Native layout 3 keeps the drawer-side target visible to the exact pi0.5
+    # camera pair and is the only scanned layout with <2 mm initial
+    # penetration for every condition.
+    physcog_layout_ids = 3
     physcog_style_ids = 1
     # The positive-x reconstruction was entirely hidden behind PandaOmron in
     # the exact pi0.5 center view (job 499420). Mirror the whole paired layout
@@ -640,7 +644,10 @@ class L1A4OccludedDrawerReferent(StaticGeometryScene, PickPlaceDrawerToCounter):
             # The original 0.04 m depth left the native bowl unsupported and it
             # dropped 0.209 m in job 499318. At 0.10 m behind the front edge it
             # remains at the lip but is fully supported.
-            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(dx, 0.08))
+            # Move the bowl deeper than the first reconstruction so its rim
+            # lies on the drawer-target sight line rather than 70 pixels above
+            # it in the exact center view.
+            return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(dx, 0.18))
 
         return {
             "Eb": {"distr": lip(self.physcog_eb_hazard_x)},

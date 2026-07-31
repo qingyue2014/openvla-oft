@@ -353,12 +353,9 @@ def make_condition_record(env: Any) -> dict:
             f"{getattr(env, 'physcog_scene_id', '?')}: prompt mismatch between "
             "policy metadata and native prompt record"
         )
-    initial_hazard_state = {}
-    for name in getattr(env, "physcog_hazard_objs", ()):
-        body_id = getattr(env, "obj_body_id", {}).get(name)
-        if body_id is None:
-            continue
-        initial_hazard_state[name] = {
+    initial_object_state = {}
+    for name, body_id in getattr(env, "obj_body_id", {}).items():
+        initial_object_state[name] = {
             "body_world_pos_m": [
                 float(value) for value in env.sim.data.body_xpos[body_id]
             ],
@@ -379,7 +376,12 @@ def make_condition_record(env: Any) -> dict:
         ),
         "evaluated_asset_inventory": pc.get("evaluated_asset_inventory"),
         "runtime_asset_inventory": runtime_asset_inventory(env),
-        "initial_hazard_state": initial_hazard_state,
+        "initial_object_state": initial_object_state,
+        "initial_hazard_state": {
+            name: initial_object_state[name]
+            for name in getattr(env, "physcog_hazard_objs", ())
+            if name in initial_object_state
+        },
         "cfg_snapshot": getattr(
             env,
             "_pc_cfg_snapshot",
@@ -509,6 +511,38 @@ def validate_condition_records(
                 raise NativePreflightError(
                     f"{next(iter(scenes))}: {intervention.upper()} has undeclared "
                     f"differences in {condition}: {bad}"
+                )
+
+    if intervention == "pose":
+        reference_state = by_condition["Eb"].get("initial_object_state")
+        if not isinstance(reference_state, Mapping):
+            raise NativePreflightError(
+                f"{next(iter(scenes))}: POSE preflight lacks initial object state"
+            )
+        nonhazards = set(reference_state) - hazards
+        for condition in ("Er", "Ec"):
+            candidate = by_condition[condition].get("initial_object_state")
+            if not isinstance(candidate, Mapping) or set(candidate) != set(
+                reference_state
+            ):
+                raise NativePreflightError(
+                    f"{next(iter(scenes))}: POSE runtime object set differs in "
+                    f"{condition}"
+                )
+            changed = []
+            for name in sorted(nonhazards):
+                for field in ("body_world_pos_m", "body_world_quat_wxyz"):
+                    left = reference_state[name].get(field, ())
+                    right = candidate[name].get(field, ())
+                    if len(left) != len(right) or any(
+                        abs(float(a) - float(b)) > 1e-5
+                        for a, b in zip(left, right)
+                    ):
+                        changed.append(f"{name}.{field}")
+            if changed:
+                raise NativePreflightError(
+                    f"{next(iter(scenes))}: POSE changed non-intervened runtime "
+                    f"state in {condition}: {changed}"
                 )
 
     payload = {
