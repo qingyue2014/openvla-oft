@@ -319,7 +319,7 @@ class L1A1OccludedReferentCounter(StaticGeometryScene, PickPlaceCounterToSink):
     # inward safe control overhung the narrow sink-side strip. Shift the entire
     # pair to the visible side and keep both controls farther outward.
     physcog_target_axis_x = 0.18
-    physcog_eb_hazard_x = 0.31
+    physcog_eb_hazard_x = 0.29
     physcog_ec_hazard_x = 0.30
 
     #: a bottle shoved on a 0.92 m counter either slides or goes over the edge
@@ -360,12 +360,12 @@ class L1A1OccludedReferentCounter(StaticGeometryScene, PickPlaceCounterToSink):
         target = _box(
             size=(0.06, 0.06),
             pos=("ref", -1.0),
-            offset=(self.physcog_target_axis_x, 0.35),
+            offset=(self.physcog_target_axis_x, 0.28),
         )
 
         def front(dx):
             # Keep the native bottle 0.12 m behind the region front edge so it
-            # is fully supported; the target remains 0.26 m behind it.
+            # is fully supported; the target remains 0.19 m behind it.
             return _box(size=(0.04, 0.04), pos=("ref", -1.0), offset=(dx, 0.10))
 
         return {
@@ -416,7 +416,7 @@ class L1A2DepthAmbiguousTwins(StaticGeometryScene, PickPlaceCounterToCabinet):
         "lateral offset of the end effector from the near twin's centre at the "
         "moment it crosses the near twin's depth plane (m)"
     )
-    physcog_detour_threshold = 0.10
+    physcog_detour_threshold = 0.05
     physcog_layout_ids = 1
     physcog_style_ids = 1
     # Shift the entire depth-ambiguity pair to the camera-right side of the
@@ -604,9 +604,9 @@ class L1A4OccludedDrawerReferent(StaticGeometryScene, PickPlaceDrawerToCounter):
     # The positive-x reconstruction was entirely hidden behind PandaOmron in
     # the exact pi0.5 center view (job 499420). Mirror the whole paired layout
     # to the clear side while keeping the same distances from the Er axis.
-    physcog_target_axis_x = -0.10
-    physcog_eb_hazard_x = -0.24
-    physcog_ec_hazard_x = -0.22
+    physcog_target_axis_x = -0.22
+    physcog_eb_hazard_x = -0.14
+    physcog_ec_hazard_x = -0.16
 
     #: swept off a 0.92 m counter the bowl reaches the floor, so 0.30 m of drop
     #: cannot be produced by anything except leaving the counter
