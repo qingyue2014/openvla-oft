@@ -53,6 +53,24 @@ def _position_action(current, target, gripper, scale):
     return action
 
 
+def _bounded_plate_contact_seek_action(
+    current,
+    target,
+    gripper,
+    scale,
+    maximum_vertical_action,
+):
+    """Cap only the downward component of an OSC contact-seek action."""
+    if (
+        not np.isfinite(maximum_vertical_action)
+        or not (0 < maximum_vertical_action <= 1.0)
+    ):
+        raise ValueError("maximum vertical action must be in (0, 1]")
+    action = _position_action(current, target, gripper, scale)
+    action[2] = max(float(action[2]), -float(maximum_vertical_action))
+    return action
+
+
 def _select_reachable_trailing_contact(
     plate_xy, push_direction_xy, eef_xy, backoff
 ):
@@ -446,6 +464,7 @@ def _contact_depth_sample_validity(
     robot_table_contact_bodies,
     plate_linear_speed,
     plate_angular_speed,
+    require_robot_plate_contact,
     require_stable,
     maximum_plate_tilt_deg,
     maximum_plate_xy_drift,
@@ -462,7 +481,7 @@ def _contact_depth_sample_validity(
     )
     if not all(np.isfinite(value) for value in measured_values):
         violations.append("nonfinite_plate_state")
-    if not robot_plate_contact:
+    if require_robot_plate_contact and not robot_plate_contact:
         violations.append("robot_plate_contact_lost")
     if not plate_table_support:
         violations.append("plate_table_support_lost")
@@ -481,6 +500,9 @@ def _contact_depth_sample_validity(
     return {
         "accepted": not violations,
         "violations": violations,
+        "require_robot_plate_contact": bool(
+            require_robot_plate_contact
+        ),
         "require_stable": bool(require_stable),
     }
 
@@ -489,6 +511,7 @@ def _contact_depth_state_diagnostics(
     env,
     plate_reference_position,
     *,
+    require_robot_plate_contact=True,
     require_stable,
     maximum_plate_tilt_deg,
     maximum_plate_xy_drift,
@@ -540,6 +563,7 @@ def _contact_depth_state_diagnostics(
         robot_table_contact_bodies=robot_table_contacts,
         plate_linear_speed=plate_linear,
         plate_angular_speed=plate_angular,
+        require_robot_plate_contact=require_robot_plate_contact,
         require_stable=require_stable,
         maximum_plate_tilt_deg=maximum_plate_tilt_deg,
         maximum_plate_xy_drift=maximum_plate_xy_drift,
@@ -740,6 +764,145 @@ class Rollout:
             f"final_eef={np.asarray(self.obs['robot0_eef_pos']).tolist()} "
             f"diagnostics={json.dumps(extra, sort_keys=True)}"
         )
+
+
+def _seek_stable_plate_contact(
+    rollout,
+    env,
+    args,
+    *,
+    gripper,
+    guard_target,
+    contact_target,
+    source,
+    diagnostics,
+):
+    """Reach first contact through a collision-free guard and bounded Z seek."""
+    plate_reference = body_pose(env, PLATE_BODY)[0].copy()
+    samples = []
+
+    def capture(stage, index, require_contact, require_stable):
+        sample = {
+            "stage": stage,
+            "index": int(index),
+            "eef_position": np.asarray(
+                rollout.obs["robot0_eef_pos"], dtype=float
+            ).tolist(),
+            **_contact_depth_state_diagnostics(
+                env,
+                plate_reference,
+                require_robot_plate_contact=require_contact,
+                require_stable=require_stable,
+                maximum_plate_tilt_deg=(
+                    args.max_contact_calibration_plate_tilt_deg
+                ),
+                maximum_plate_xy_drift=(
+                    args.max_contact_calibration_plate_xy_drift
+                ),
+                maximum_linear_speed=args.max_stable_linear_speed,
+                maximum_angular_speed=args.max_stable_angular_speed,
+            ),
+        }
+        samples.append(sample)
+        if stage == "guard" and sample["robot_plate_contact"]:
+            sample["accepted"] = False
+            sample["violations"].append(
+                "robot_plate_contact_before_bounded_seek"
+            )
+        if not sample["accepted"]:
+            failure = {
+                "source": source,
+                "guard_target": np.asarray(
+                    guard_target, dtype=float
+                ).tolist(),
+                "contact_target": np.asarray(
+                    contact_target, dtype=float
+                ).tolist(),
+                "samples": samples,
+                "scene": diagnostics(),
+            }
+            raise RuntimeError(
+                "bounded plate-contact seek violated a physical or collision "
+                "gate: "
+                f"{json.dumps(failure, sort_keys=True)}"
+            )
+        return sample
+
+    rollout.move(
+        guard_target,
+        gripper,
+        "task",
+        diagnostics=diagnostics,
+    )
+    capture("guard", 0, False, True)
+
+    contact_observed = False
+    for seek_index in range(1, args.plate_contact_seek_max_steps + 1):
+        current_eef = np.asarray(
+            rollout.obs["robot0_eef_pos"], dtype=float
+        )
+        action = _bounded_plate_contact_seek_action(
+            current_eef,
+            contact_target,
+            gripper,
+            args.position_action_scale,
+            args.plate_contact_seek_max_vertical_action,
+        )
+        rollout.advance(action, "task")
+        contact_observed = _robot_contacts_body(env, PLATE_BODY)
+        capture(
+            "bounded_contact_seek",
+            seek_index,
+            contact_observed,
+            False,
+        )
+        if contact_observed:
+            break
+    if not contact_observed:
+        raise RuntimeError(
+            "bounded OSC robot-plate contact not observed: "
+            f"source={source} guard_target="
+            f"{np.asarray(guard_target).tolist()} contact_target="
+            f"{np.asarray(contact_target).tolist()} "
+            f"samples={json.dumps(samples, sort_keys=True)}"
+        )
+
+    for confirm_index in range(
+        1, args.pusher_contact_confirm_steps + 1
+    ):
+        action = np.zeros(7, dtype=float)
+        action[-1] = gripper
+        rollout.advance(action, "task")
+        capture(
+            "stable_contact_confirmation",
+            confirm_index,
+            True,
+            True,
+        )
+
+    result = {
+        "source": source,
+        "guard_target": np.asarray(guard_target, dtype=float).tolist(),
+        "contact_target": np.asarray(
+            contact_target, dtype=float
+        ).tolist(),
+        "maximum_vertical_action": (
+            args.plate_contact_seek_max_vertical_action
+        ),
+        "seek_steps_used": sum(
+            sample["stage"] == "bounded_contact_seek"
+            for sample in samples
+        ),
+        "confirmation_steps": args.pusher_contact_confirm_steps,
+        "samples": samples,
+        "accepted": True,
+    }
+    print(
+        "L3-A3 bounded stable contact seek "
+        + json.dumps(result, sort_keys=True),
+        flush=True,
+    )
+    return result
 
 
 def _calibrate_stable_plate_contact_depth(
@@ -948,6 +1111,28 @@ def generate(args):
     if args.pusher_contact_confirm_steps < 1:
         raise ValueError("--pusher_contact_confirm_steps must be positive")
     if (
+        not np.isfinite(args.plate_contact_guard_eef_height)
+        or args.plate_contact_guard_eef_height <= 0
+    ):
+        raise ValueError(
+            "--plate_contact_guard_eef_height must be positive"
+        )
+    if (
+        not np.isfinite(
+            args.plate_contact_seek_max_vertical_action
+        )
+        or not (
+            0 < args.plate_contact_seek_max_vertical_action <= 0.2
+        )
+    ):
+        raise ValueError(
+            "--plate_contact_seek_max_vertical_action must be in (0, 0.2]"
+        )
+    if args.plate_contact_seek_max_steps < 1:
+        raise ValueError(
+            "--plate_contact_seek_max_steps must be positive"
+        )
+    if (
         not np.isfinite(args.contact_depth_action_step)
         or args.contact_depth_action_step <= 0
         or args.contact_depth_action_step > 0.005
@@ -1140,6 +1325,10 @@ def generate(args):
         line_approach_target[2] = (
             plate_start[2] + args.plate_approach_eef_height
         )
+        contact_guard_target = contact_target.copy()
+        contact_guard_target[2] = (
+            plate_start[2] + args.plate_contact_guard_eef_height
+        )
         center_approach_target = line_approach_target.copy()
         center_approach_target[:2] = plate_start[:2]
         candidate_geometry = _plate_contact_candidate_diagnostics(
@@ -1161,6 +1350,7 @@ def generate(args):
                 "selected_contact_line_xy": contact_target[:2].tolist(),
                 "center_approach_target": center_approach_target.tolist(),
                 "line_approach_target": line_approach_target.tolist(),
+                "contact_guard_target": contact_guard_target.tolist(),
                 "contact_seek_target": contact_target.tolist(),
                 "robot_gripper_body_names": _robot_gripper_body_names(env),
                 "plate_contact_counterparts": _body_contact_counterparts(
@@ -1192,21 +1382,17 @@ def generate(args):
             "task",
             diagnostics=plate_diagnostics,
         )
-        rollout.move(
-            contact_target,
-            pusher_open_sign,
-            "task",
-            stop_when=lambda: _robot_contacts_body(env, PLATE_BODY),
-            stop_label="robot-plate contact",
+        initial_contact_seek = _seek_stable_plate_contact(
+            rollout,
+            env,
+            args,
+            gripper=pusher_open_sign,
+            guard_target=contact_guard_target,
+            contact_target=contact_target,
+            source="initial_contact",
             diagnostics=plate_diagnostics,
         )
-        rollout.hold(
-            pusher_open_sign, args.pusher_contact_confirm_steps, "task"
-        )
-        if not _robot_contacts_body(env, PLATE_BODY):
-            raise RuntimeError(
-                "robot-plate contact was lost during open-gripper confirmation"
-            )
+        contact_seek_events = [initial_contact_seek]
         initial_contact_depth_calibration = (
             _calibrate_stable_plate_contact_depth(
                 rollout,
@@ -1280,6 +1466,7 @@ def generate(args):
                 "latest_contact_depth_calibration": (
                     contact_depth_calibrations[-1]
                 ),
+                "latest_stable_contact_seek": contact_seek_events[-1],
                 "horizon_budget": _horizon_budget(
                     env, final_horizon_reserve_steps
                 ),
@@ -1365,6 +1552,11 @@ def generate(args):
                 recontact_high_target[2] = (
                     recontact_plate[2] + args.plate_approach_eef_height
                 )
+                recontact_guard_target = recontact_seek_target.copy()
+                recontact_guard_target[2] = (
+                    recontact_plate[2]
+                    + args.plate_contact_guard_eef_height
+                )
                 recontact_retreat_target = recontact_eef.copy()
                 recontact_retreat_target[2] = max(
                     recontact_eef[2], recontact_high_target[2]
@@ -1387,6 +1579,9 @@ def generate(args):
                     "retreat_target": recontact_retreat_target.tolist(),
                     "center_target": recontact_center_target.tolist(),
                     "trailing_high_target": recontact_high_target.tolist(),
+                    "contact_guard_target": (
+                        recontact_guard_target.tolist()
+                    ),
                     "contact_seek_target": recontact_seek_target.tolist(),
                 }
 
@@ -1419,24 +1614,17 @@ def generate(args):
                     "task",
                     diagnostics=recontact_diagnostics,
                 )
-                rollout.move(
-                    recontact_seek_target,
-                    pusher_open_sign,
-                    "task",
-                    stop_when=lambda: _robot_contacts_body(env, PLATE_BODY),
-                    stop_label="robot-plate recontact",
+                recontact_stable_seek = _seek_stable_plate_contact(
+                    rollout,
+                    env,
+                    args,
+                    gripper=pusher_open_sign,
+                    guard_target=recontact_guard_target,
+                    contact_target=recontact_seek_target,
+                    source=f"recontact_{recontact_attempts}",
                     diagnostics=recontact_diagnostics,
                 )
-                rollout.hold(
-                    pusher_open_sign,
-                    args.pusher_contact_confirm_steps,
-                    "task",
-                )
-                if not _robot_contacts_body(env, PLATE_BODY):
-                    raise RuntimeError(
-                        "robot-plate recontact was lost during open-gripper "
-                        f"confirmation: {json.dumps(recontact_diagnostics(), sort_keys=True)}"
-                    )
+                contact_seek_events.append(recontact_stable_seek)
                 recontact_depth_calibration = (
                     _calibrate_stable_plate_contact_depth(
                         rollout,
@@ -1494,6 +1682,9 @@ def generate(args):
                         ),
                         "stable_contact_depth_calibration": (
                             recontact_depth_calibration
+                        ),
+                        "bounded_stable_contact_seek": (
+                            recontact_stable_seek
                         ),
                         "post_plate_contact_counterparts": (
                             _body_contact_counterparts(env, PLATE_BODY)
@@ -1926,6 +2117,8 @@ def generate(args):
             "contact_depth_calibration_count": len(
                 contact_depth_calibrations
             ),
+            "stable_contact_seek_events": contact_seek_events,
+            "stable_contact_seek_count": len(contact_seek_events),
             "contact_loss_recontact_transitions": sum(
                 waypoint["recontact_required_after_waypoint"]
                 for waypoint in push_waypoints
@@ -2138,6 +2331,22 @@ def main():
         "--plate_approach_eef_height", type=float, default=0.160
     )
     parser.add_argument("--pusher_contact_confirm_steps", type=int, default=2)
+    # Job 499756: the former saturated descent reached first contact with the
+    # native plate already tilted 1.6767 deg after confirmation.  Move first
+    # to a collision-checked guard above the measured 19.5 mm first-contact
+    # offset, then seek with a bounded vertical OSC action and validate every
+    # policy-observed state.
+    parser.add_argument(
+        "--plate_contact_guard_eef_height", type=float, default=0.025
+    )
+    parser.add_argument(
+        "--plate_contact_seek_max_vertical_action",
+        type=float,
+        default=0.10,
+    )
+    parser.add_argument(
+        "--plate_contact_seek_max_steps", type=int, default=64
+    )
     # Job 499726 showed that first contact at EEF-minus-plate Z ~= 19.5 mm
     # was an unstable upper-edge touch: lateral pushing lifted the EEF by
     # about 2.3 mm and moved the plate less than 1 mm.  After first contact,

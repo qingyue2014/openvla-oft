@@ -10,6 +10,7 @@ from experiments.robot.libero.tasks import write_l3a3_review_template
 from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     Rollout,
     _body_contact_counterparts,
+    _bounded_plate_contact_seek_action,
     _contact_depth_sample_validity,
     _contact_progress_saturation_evidence,
     _derive_horizon_safe_push_increment,
@@ -308,7 +309,8 @@ def test_safe_reference_requires_controller_actions_for_prefix_and_native_task()
     assert "cv2.VideoWriter" in producer
     assert '"policy_review_video": str(video.resolve())' in producer
     assert "plate_contact_stall_tolerance" not in producer
-    assert "stop_when=lambda: _robot_contacts_body(env, PLATE_BODY)" in producer
+    assert "_seek_stable_plate_contact(" in producer
+    assert "rollout.advance(action, \"task\")" in producer
 
 
 def test_plate_contact_uses_reachable_axis_aligned_trailing_line():
@@ -328,6 +330,24 @@ def test_plate_contact_uses_reachable_axis_aligned_trailing_line():
     assert np.linalg.norm(contact - measured_stall_eef_xy) < 0.001
     unit = direction / np.linalg.norm(direction)
     assert float(np.dot(unit, plate - contact)) > 0.0
+
+
+def test_plate_contact_seek_caps_saturated_downward_osc_action():
+    current = np.array([0.0, 0.0, 1.0625])
+    target = np.array([0.04, -0.04, 0.9025])
+    bounded = _bounded_plate_contact_seek_action(
+        current,
+        target,
+        gripper=-1.0,
+        scale=0.08,
+        maximum_vertical_action=0.10,
+    )
+    assert np.allclose(bounded[:3], [0.5, -0.5, -0.10])
+    assert bounded[-1] == pytest.approx(-1.0)
+    with pytest.raises(ValueError, match="maximum vertical action"):
+        _bounded_plate_contact_seek_action(
+            current, target, -1.0, 0.08, 0.0
+        )
 
 
 def test_live_plate_push_target_tracks_plate_instead_of_accumulating_eef():
@@ -417,6 +437,7 @@ def test_contact_depth_samples_fail_closed_on_physics_and_collisions():
         "robot_table_contact_bodies": [],
         "plate_linear_speed": 0.001,
         "plate_angular_speed": 0.01,
+        "require_robot_plate_contact": True,
         "require_stable": True,
         "maximum_plate_tilt_deg": 1.0,
         "maximum_plate_xy_drift": 0.001,
@@ -426,6 +447,7 @@ def test_contact_depth_samples_fail_closed_on_physics_and_collisions():
     assert _contact_depth_sample_validity(**valid) == {
         "accepted": True,
         "violations": [],
+        "require_robot_plate_contact": True,
         "require_stable": True,
     }
 
@@ -463,6 +485,16 @@ def test_contact_depth_samples_fail_closed_on_physics_and_collisions():
     }
     result = _contact_depth_sample_validity(
         **moving_but_not_yet_stabilizing
+    )
+    assert result["accepted"] is True
+
+    guarded_without_contact = {
+        **valid,
+        "robot_plate_contact": False,
+        "require_robot_plate_contact": False,
+    }
+    result = _contact_depth_sample_validity(
+        **guarded_without_contact
     )
     assert result["accepted"] is True
 
@@ -731,16 +763,16 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     assert "center_approach_target[:2] = plate_start[:2]" in producer
     approach = producer[
         producer.index("# Decouple the large workspace translation") :
-        producer.index(
-            "rollout.hold(\n"
-            "            pusher_open_sign, args.pusher_contact_confirm_steps"
-        )
+        producer.index("initial_contact_depth_calibration =")
     ]
     assert approach.index("center_approach_target,") < approach.index(
         "line_approach_target,"
     )
     assert approach.index("line_approach_target,") < approach.index(
-        "contact_target,"
+        "guard_target=contact_guard_target,"
+    )
+    assert approach.index("guard_target=contact_guard_target,") < approach.index(
+        "contact_target=contact_target,"
     )
     assert '"live_eef"' in producer
     assert '"live_plate"' in producer
@@ -773,14 +805,13 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         in producer
     )
     assert "--pusher_contact_confirm_steps must be positive" in producer
-    assert (
-        "rollout.hold(\n"
-        "            pusher_open_sign, args.pusher_contact_confirm_steps, \"task\"\n"
-        "        )"
-        in task_push
-    )
     assert task_push.count("pusher_open_sign,") >= 5
-    assert "lost during open-gripper confirmation" in task_push
+    assert task_push.count("_seek_stable_plate_contact(") == 2
+    initial_seek = task_push.index('source="initial_contact"')
+    assert initial_seek < task_push.index(
+        "_calibrate_stable_plate_contact_depth("
+    )
+    assert '"stable_contact_seek_events"' in task_push
     push_loop = task_push[
         task_push.index("for push_iteration in range(") :
         task_push.index("push_summary = {")
@@ -886,8 +917,9 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "recontact_retreat_target" in push_loop
     assert "recontact_center_target" in push_loop
     assert "recontact_high_target" in push_loop
+    assert "recontact_guard_target" in push_loop
     assert "recontact_seek_target" in push_loop
-    assert 'stop_label="robot-plate recontact"' in push_loop
+    assert "_seek_stable_plate_contact(" in push_loop
     assert "L3-A3 plate recontact" in push_loop
     assert "closed-loop plate push exhausted recontact budget" in push_loop
     recovery_start = push_loop.index(
@@ -895,10 +927,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     recovery = push_loop[
         recovery_start :
-        push_loop.index(
-            "if not _robot_contacts_body(env, PLATE_BODY):",
-            recovery_start,
-        )
+        push_loop.index("recontact_depth_calibration =", recovery_start)
     ]
     assert recovery.index("recontact_retreat_target,") < recovery.index(
         "recontact_center_target,"
@@ -907,7 +936,10 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         "recontact_high_target,"
     )
     assert recovery.index("recontact_high_target,") < recovery.index(
-        "recontact_seek_target,"
+        "guard_target=recontact_guard_target"
+    )
+    assert recovery.index("guard_target=recontact_guard_target") < recovery.index(
+        "contact_target=recontact_seek_target,"
     )
     assert (
         "robot_plate_contact_observed_after_confirmation"
@@ -933,6 +965,20 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert (
         '"--contact_depth_action_step", type=float, default=0.004'
+        in producer
+    )
+    assert (
+        '"--plate_contact_guard_eef_height", type=float, default=0.025'
+        in producer
+    )
+    assert (
+        '"--plate_contact_seek_max_vertical_action",\n'
+        "        type=float,\n"
+        "        default=0.10,"
+        in producer
+    )
+    assert (
+        '"--plate_contact_seek_max_steps", type=int, default=64'
         in producer
     )
     assert (
@@ -963,6 +1009,21 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         producer.index("def _calibrate_stable_plate_contact_depth(") :
         producer.index("\ndef generate(args):")
     ]
+    bounded_seek = producer[
+        producer.index("def _seek_stable_plate_contact(") :
+        producer.index("\ndef _calibrate_stable_plate_contact_depth(")
+    ]
+    assert "rollout.move(" in bounded_seek
+    assert "guard_target" in bounded_seek
+    assert "rollout.advance(action, \"task\")" in bounded_seek
+    assert "plate_contact_seek_max_vertical_action" in bounded_seek
+    assert '"bounded_contact_seek"' in bounded_seek
+    assert '"stable_contact_confirmation"' in bounded_seek
+    assert "require_contact" in bounded_seek
+    assert "require_stable" in bounded_seek
+    assert "robot_plate_contact_before_bounded_seek" in bounded_seek
+    assert "env.set_state" not in bounded_seek
+    assert "set_init_state" not in bounded_seek
     assert "rollout.advance(" in depth_calibration
     assert "env.set_state" not in depth_calibration
     assert "set_init_state" not in depth_calibration
@@ -1005,6 +1066,12 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "--minimum_saturated_waypoint_progress must be positive" in producer
     assert "--maximum_push_iterations must be positive" in producer
     assert "--maximum_recontact_attempts must be positive" in producer
+    assert "--plate_contact_guard_eef_height must be positive" in producer
+    assert (
+        "--plate_contact_seek_max_vertical_action must be in (0, 0.2]"
+        in producer
+    )
+    assert "--plate_contact_seek_max_steps must be positive" in producer
     assert (
         "--maximum_live_contact_offset_xy_drift must be positive"
         in producer
