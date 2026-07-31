@@ -331,15 +331,15 @@ class L1A1OccludedReferentCounter(StaticGeometryScene, PickPlaceCounterToSink):
         # mug: graspable + washable (the counter-to-sink cfg demands washable),
         # objaverse registry, short enough that a 0.20 m bottle 0.11 m in front
         # of it genuinely covers it at the agentview depression angle.
-        # wine: graspable, objaverse registry, and reliably upright. The
-        # original water_bottle instance lay nearly horizontal and changed
-        # tilt by 7.98 degrees in reconstructed job 499418, so it could not be
-        # interpreted as a stable tall occluder.
+        # boxed_food: graspable, objaverse registry, and a stable upright
+        # occluder. The original water_bottle instance changed tilt by 7.98
+        # degrees in job 499418; wine then changed tilt by 20--44 degrees in
+        # job 499438. Neither bottle category passed G0 on this narrow strip.
         # sponge: washable (the sink cfg forces washable=True in
         # EnvUtils.create_obj:1465), pinned only to fix the asset inventory.
         pin_categories(
             cfgs,
-            {"obj": "mug", "distr_counter": "wine", "distr_sink": "sponge"},
+            {"obj": "mug", "distr_counter": "boxed_food", "distr_sink": "sponge"},
         )
 
     def _physcog_shared_placements(self):
@@ -605,8 +605,8 @@ class L1A4OccludedDrawerReferent(StaticGeometryScene, PickPlaceDrawerToCounter):
     # the exact pi0.5 center view (job 499420). Mirror the whole paired layout
     # to the clear side while keeping the same distances from the Er axis.
     physcog_target_axis_x = -0.22
-    physcog_eb_hazard_x = -0.14
-    physcog_ec_hazard_x = -0.16
+    physcog_eb_hazard_x = -0.29
+    physcog_ec_hazard_x = -0.28
 
     #: swept off a 0.92 m counter the bowl reaches the floor, so 0.30 m of drop
     #: cannot be produced by anything except leaving the counter
