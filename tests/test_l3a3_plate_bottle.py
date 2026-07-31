@@ -28,6 +28,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _outside_side_guard_from_world_aabbs,
     _outside_side_lateral_settle_evidence,
     _outside_side_recovery_progress_evidence,
+    _outside_side_staircase_settle_trigger,
     _plate_finger_contact_sides,
     _push_window_timeout_evidence,
     _robot_contacts_body,
@@ -889,7 +890,7 @@ def test_500088_descent_norm_is_strictly_inside_bound_without_inward_action():
     assert evidence["commanded_outward_error_m"] == 0.0
 
 
-def test_500096_inward_coupled_descent_requires_lateral_only_settle():
+def test_500099_every_descent_requires_preventive_lateral_only_settle():
     target = np.array(
         [0.13680639548403947, -0.02850777957668001, 0.917769758]
     )
@@ -909,6 +910,24 @@ def test_500096_inward_coupled_descent_requires_lateral_only_settle():
         **before_guard,
         "minimum_outside_clearance_m": 0.002683149,
     }
+    first_descent_response = {
+        "eef_outward_step_progress_m": 0.000824438,
+        "outside_clearance_step_progress_m": 0.000809111,
+    }
+    preventive_trigger = _outside_side_staircase_settle_trigger(
+        feedback_mode="constraint_prioritized_vertical_descent",
+        guard_step=1,
+        step_response=first_descent_response,
+    )
+    assert preventive_trigger is not None
+    assert preventive_trigger["trigger_guard_step"] == 1
+    assert preventive_trigger["inward_response_observed"] is False
+    assert _outside_side_staircase_settle_trigger(
+        feedback_mode="compiled_outside_lateral_settle",
+        guard_step=2,
+        step_response=first_descent_response,
+    ) is None
+
     evidence = _outside_side_lateral_settle_evidence(
         before_guard=before_guard,
         after_guard=after_guard,
@@ -1984,6 +2003,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"post_action_guard"' in bounded_seek
     assert "_outside_side_recovery_progress_evidence(" in bounded_seek
     assert "_outside_side_lateral_settle_evidence(" in bounded_seek
+    assert "_outside_side_staircase_settle_trigger(" in bounded_seek
     assert "force_lateral_settle=(" in bounded_seek
     assert '"lateral_settle_trigger"' in bounded_seek
     assert "recovery_progress[\"fail_closed\"]" in bounded_seek

@@ -1444,6 +1444,33 @@ def _outside_side_lateral_settle_evidence(
     }
 
 
+def _outside_side_staircase_settle_trigger(
+    *,
+    feedback_mode,
+    guard_step,
+    step_response,
+):
+    """Require a no-Z settle phase after every commanded descent step."""
+    if feedback_mode != "constraint_prioritized_vertical_descent":
+        return None
+    return {
+        "policy": (
+            "preventive staircase: every constraint-prioritized descent "
+            "step is followed by measured no-Z lateral settling before "
+            "another descent can be issued"
+        ),
+        "trigger_guard_step": int(guard_step),
+        "trigger_step_response": step_response,
+        "inward_response_observed": bool(
+            step_response["eef_outward_step_progress_m"] < 0.0
+            or step_response[
+                "outside_clearance_step_progress_m"
+            ]
+            < 0.0
+        ),
+    }
+
+
 def _outside_side_recovery_progress_evidence(
     *,
     baseline_guard,
@@ -2614,23 +2641,19 @@ def _seek_stable_plate_contact(
             )
             if lateral_settle_progress["settled"]:
                 lateral_settle_state = None
-        elif feedback["mode"] == (
-            "constraint_prioritized_vertical_descent"
-        ) and (
-            current_step_response["eef_outward_step_progress_m"]
-            < 0.0
-            or current_step_response[
-                "outside_clearance_step_progress_m"
-            ]
-            < 0.0
-        ):
-            lateral_settle_state = {
-                "trigger_guard_step": int(guard_step),
-                "trigger_step_response": current_step_response,
-            }
-            feedback["lateral_settle_trigger"] = (
-                lateral_settle_state
+        else:
+            staircase_trigger = (
+                _outside_side_staircase_settle_trigger(
+                    feedback_mode=feedback["mode"],
+                    guard_step=guard_step,
+                    step_response=current_step_response,
+                )
             )
+            if staircase_trigger is not None:
+                lateral_settle_state = staircase_trigger
+                feedback["lateral_settle_trigger"] = (
+                    lateral_settle_state
+                )
         outside_side_feedback_steps.append(feedback)
         motion_sample = capture(
             "outside_side_motion",
