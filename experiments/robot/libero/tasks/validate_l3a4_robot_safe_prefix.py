@@ -2243,6 +2243,663 @@ def _compiled_geom_pair_clearance(
     )
 
 
+def _compile_exact_obb_sat_batch(
+    first_centers,
+    first_rotations,
+    first_half_sizes,
+    second_centers,
+    second_rotations,
+    second_half_sizes,
+):
+    """Compile candidate-invariant terms of the exact 15-axis OBB SAT."""
+    first_centers = np.asarray(first_centers, dtype=float)
+    first_rotations = np.asarray(first_rotations, dtype=float)
+    first_half_sizes = np.asarray(first_half_sizes, dtype=float)
+    second_centers = np.asarray(second_centers, dtype=float)
+    second_rotations = np.asarray(second_rotations, dtype=float)
+    second_half_sizes = np.asarray(second_half_sizes, dtype=float)
+    row_count = len(first_centers)
+    expected_shapes = (
+        first_centers.shape == (row_count, 3),
+        first_rotations.shape == (row_count, 3, 3),
+        first_half_sizes.shape == (row_count, 3),
+        second_centers.shape == (row_count, 3),
+        second_rotations.shape == (row_count, 3, 3),
+        second_half_sizes.shape == (row_count, 3),
+    )
+    arrays = (
+        first_centers,
+        first_rotations,
+        first_half_sizes,
+        second_centers,
+        second_rotations,
+        second_half_sizes,
+    )
+    if (
+        row_count == 0
+        or not all(expected_shapes)
+        or not all(np.all(np.isfinite(value)) for value in arrays)
+        or np.any(first_half_sizes <= 0.0)
+        or np.any(second_half_sizes <= 0.0)
+    ):
+        raise ValueError(
+            "compiled OBB batch must contain finite positive-size rows"
+        )
+
+    axes = np.zeros((row_count, 15, 3), dtype=float)
+    projected_radii = np.zeros((row_count, 15), dtype=float)
+    valid_axes = np.zeros((row_count, 15), dtype=bool)
+    axis_epsilon = 32.0 * np.finfo(float).eps
+    for row_index in range(row_count):
+        first_rotation = first_rotations[row_index]
+        second_rotation = second_rotations[row_index]
+        raw_axes = [
+            first_rotation[:, axis] for axis in range(3)
+        ]
+        raw_axes.extend(
+            second_rotation[:, axis] for axis in range(3)
+        )
+        raw_axes.extend(
+            np.cross(
+                first_rotation[:, first_axis],
+                second_rotation[:, second_axis],
+            )
+            for first_axis in range(3)
+            for second_axis in range(3)
+        )
+        for axis_index, raw_axis in enumerate(raw_axes):
+            norm = float(np.linalg.norm(raw_axis))
+            if norm <= axis_epsilon:
+                continue
+            axis = raw_axis / norm
+            axes[row_index, axis_index] = axis
+            valid_axes[row_index, axis_index] = True
+            projected_radii[row_index, axis_index] = float(
+                np.sum(
+                    first_half_sizes[row_index]
+                    * np.abs(first_rotation.T @ axis)
+                )
+                + np.sum(
+                    second_half_sizes[row_index]
+                    * np.abs(second_rotation.T @ axis)
+                )
+            )
+        if not np.any(valid_axes[row_index]):
+            raise ValueError("oriented boxes produced no separating axes")
+    return {
+        "method": "compiled vectorized exact 15-axis OBB SAT",
+        "first_centers": first_centers.copy(),
+        "second_centers": second_centers.copy(),
+        "axes": axes,
+        "projected_radii": projected_radii,
+        "valid_axes": valid_axes,
+        "row_count": int(row_count),
+    }
+
+
+def _evaluate_compiled_exact_obb_sat_batch(
+    compiled_batch, translations, row_indices=None
+):
+    """Evaluate the exact compiled SAT for one or more rigid translations."""
+    translations = np.asarray(translations, dtype=float)
+    if translations.shape == (3,):
+        translations = translations.reshape(1, 3)
+    if translations.ndim != 2 or translations.shape[1] != 3:
+        raise ValueError("compiled OBB translations must have shape (N, 3)")
+    if not np.all(np.isfinite(translations)):
+        raise ValueError("compiled OBB translations must be finite")
+    if row_indices is None:
+        row_indices = np.arange(
+            int(compiled_batch["row_count"]), dtype=int
+        )
+    else:
+        row_indices = np.asarray(row_indices, dtype=int).reshape(-1)
+    if (
+        len(row_indices) == 0
+        or np.any(row_indices < 0)
+        or np.any(row_indices >= int(compiled_batch["row_count"]))
+    ):
+        raise ValueError("compiled OBB row indices are out of range")
+    moving_centers = (
+        compiled_batch["first_centers"][row_indices][None, :, :]
+        + translations[:, None, :]
+    )
+    delta = (
+        compiled_batch["second_centers"][row_indices][None, :, :]
+        - moving_centers
+    )
+    gaps = np.abs(
+        np.einsum(
+            "paj,spj->spa",
+            compiled_batch["axes"][row_indices],
+            delta,
+            optimize=True,
+        )
+    ) - compiled_batch["projected_radii"][row_indices][None, :, :]
+    gaps = np.where(
+        compiled_batch["valid_axes"][row_indices][None, :, :],
+        gaps,
+        -np.inf,
+    )
+    return np.max(gaps, axis=2)
+
+
+def _compiled_obb_needs_scalar_threshold_refinement(
+    clearance, threshold, primitive_clearance, guard_margin, native_margin
+):
+    """Protect exact threshold signs from vector reduction roundoff."""
+    if threshold is None:
+        return False
+    scale = max(
+        1.0,
+        abs(float(clearance)),
+        abs(float(threshold)),
+        abs(float(primitive_clearance)),
+        abs(float(guard_margin)),
+        abs(float(native_margin)),
+    )
+    tolerance = 256.0 * np.finfo(float).eps * scale
+    return abs(float(clearance) - float(threshold)) <= tolerance
+
+
+def _compile_target_door_sweep_geometry(env, names, target_geoms):
+    """Compile exact door poses and OBB SAT terms shared by all candidates."""
+    model = env.sim.model
+    target_geoms = tuple(int(value) for value in target_geoms)
+    door_geoms = _collision_compatible_geom_ids(
+        model,
+        descendant_geom_ids(model, names["door_body"]),
+        target_geoms,
+    )
+    collision_target_geoms = _collision_compatible_geom_ids(
+        model,
+        target_geoms,
+        door_geoms,
+    )
+    if not door_geoms or not collision_target_geoms:
+        raise RuntimeError(
+            "compiled target/door sweep has no compatible collision geoms"
+        )
+    joint_id = int(model.joint_name2id(names["door_joint"]))
+    qadr = int(model.jnt_qposadr[joint_id])
+    start_qpos = float(env.sim.data.qpos[qadr])
+    closed_qpos = float(model.jnt_range[joint_id][1])
+    close_angle = closed_qpos - start_qpos
+    hinge_position, hinge_rotation = body_pose(
+        env.sim, names["door_body"]
+    )
+    hinge_axis = hinge_rotation @ np.asarray(
+        model.jnt_axis[joint_id], dtype=float
+    )
+    hinge_axis = hinge_axis / np.linalg.norm(hinge_axis)
+    fractions = np.linspace(
+        0.0, 1.0, SAFE_PARK_DOOR_SWEEP_SAMPLES
+    )
+    angular_spacing = abs(float(close_angle)) / max(
+        len(fractions) - 1, 1
+    )
+
+    geom_margins = np.asarray(
+        getattr(model, "geom_margin", np.zeros(int(model.ngeom))),
+        dtype=float,
+    )
+    entries = []
+    entry_lookup = {}
+    obb_entry_indices = []
+    obb_first_centers = []
+    obb_first_rotations = []
+    obb_first_half_sizes = []
+    obb_second_centers = []
+    obb_second_rotations = []
+    obb_second_half_sizes = []
+    for door_geom in door_geoms:
+        door_geom = int(door_geom)
+        initial_center = np.asarray(
+            env.sim.data.geom_xpos[door_geom], dtype=float
+        )
+        initial_rotation = np.asarray(
+            env.sim.data.geom_xmat[door_geom], dtype=float
+        ).reshape(3, 3)
+        radial = initial_center - hinge_position
+        axial = hinge_axis * float(np.dot(radial, hinge_axis))
+        swept_radius = float(
+            np.linalg.norm(radial - axial)
+            + model.geom_rbound[door_geom]
+        )
+        continuous_guard = 0.5 * swept_radius * angular_spacing
+        for sample_index, fraction in enumerate(fractions):
+            angle = close_angle * float(fraction)
+            center = hinge_position + _rotation_about_axis(
+                radial, hinge_axis, angle
+            )
+            rotation = np.column_stack(
+                [
+                    _rotation_about_axis(
+                        initial_rotation[:, axis], hinge_axis, angle
+                    )
+                    for axis in range(3)
+                ]
+            )
+            for target_geom in collision_target_geoms:
+                target_geom = int(target_geom)
+                if not collision_masks_compatible(
+                    model.geom_contype[target_geom],
+                    model.geom_conaffinity[target_geom],
+                    model.geom_contype[door_geom],
+                    model.geom_conaffinity[door_geom],
+                ):
+                    continue
+                native_geom_margin = float(
+                    geom_margins[target_geom]
+                    + geom_margins[door_geom]
+                )
+                entry = {
+                    "target_geom_id": target_geom,
+                    "door_geom_id": door_geom,
+                    "sample_index": int(sample_index),
+                    "sample_fraction": float(fraction),
+                    "door_angle_rad": float(angle),
+                    "continuous_guard_m": float(continuous_guard),
+                    "fixture_center": np.asarray(center, dtype=float),
+                    "fixture_rotation": np.asarray(rotation, dtype=float),
+                    "native_geom_margin_m": native_geom_margin,
+                    "obb_batch_row": None,
+                }
+                entry_index = len(entries)
+                entry_lookup[
+                    (target_geom, door_geom, int(sample_index))
+                ] = entry_index
+                if (
+                    int(model.geom_type[target_geom]) == 6
+                    and int(model.geom_type[door_geom]) == 6
+                ):
+                    entry["obb_batch_row"] = len(obb_entry_indices)
+                    obb_entry_indices.append(entry_index)
+                    obb_first_centers.append(
+                        np.asarray(
+                            env.sim.data.geom_xpos[target_geom],
+                            dtype=float,
+                        )
+                    )
+                    obb_first_rotations.append(
+                        np.asarray(
+                            env.sim.data.geom_xmat[target_geom],
+                            dtype=float,
+                        ).reshape(3, 3)
+                    )
+                    obb_first_half_sizes.append(
+                        np.asarray(
+                            model.geom_size[target_geom], dtype=float
+                        )
+                    )
+                    obb_second_centers.append(center)
+                    obb_second_rotations.append(rotation)
+                    obb_second_half_sizes.append(
+                        np.asarray(model.geom_size[door_geom], dtype=float)
+                    )
+                entries.append(entry)
+    if not entries:
+        raise RuntimeError(
+            "compiled target/door sweep produced no compatible pairs"
+        )
+    obb_batch = None
+    if obb_entry_indices:
+        obb_batch = _compile_exact_obb_sat_batch(
+            obb_first_centers,
+            obb_first_rotations,
+            obb_first_half_sizes,
+            obb_second_centers,
+            obb_second_rotations,
+            obb_second_half_sizes,
+        )
+    geom_ids = tuple(
+        sorted(
+            {
+                int(entry["target_geom_id"])
+                for entry in entries
+            }
+            | {
+                int(entry["door_geom_id"])
+                for entry in entries
+            }
+        )
+    )
+    return {
+        "model_identity": id(model),
+        "target_geoms": target_geoms,
+        "door_start_qpos": start_qpos,
+        "door_qpos_address": qadr,
+        "door_closed_qpos": closed_qpos,
+        "door_close_angle_rad": close_angle,
+        "hinge_position": np.asarray(hinge_position, dtype=float),
+        "hinge_axis": np.asarray(hinge_axis, dtype=float),
+        "fractions": fractions,
+        "entries": entries,
+        "entry_lookup": entry_lookup,
+        "obb_entry_indices": tuple(obb_entry_indices),
+        "obb_batch": obb_batch,
+        "door_pose_count": int(len(door_geoms) * len(fractions)),
+        "geom_ids": geom_ids,
+        "geom_xpos": np.asarray(
+            env.sim.data.geom_xpos[list(geom_ids)], dtype=float
+        ).copy(),
+        "geom_xmat": np.asarray(
+            env.sim.data.geom_xmat[list(geom_ids)], dtype=float
+        ).copy(),
+    }
+
+
+def _compiled_target_door_sweep_clearance_from_cache(
+    env,
+    target_geoms,
+    candidate_target_position,
+    current_target_position,
+    compiled_door_sweep,
+    *,
+    stop_at_or_below=None,
+    cached_rejection_witness=None,
+):
+    """Evaluate a precompiled door sweep with exact ordered decisions."""
+    model = env.sim.model
+    if (
+        compiled_door_sweep.get("model_identity") != id(model)
+        or tuple(int(value) for value in target_geoms)
+        != compiled_door_sweep.get("target_geoms")
+    ):
+        raise RuntimeError("compiled door sweep does not match this scene")
+    geom_ids = compiled_door_sweep["geom_ids"]
+    if (
+        float(
+            env.sim.data.qpos[
+                compiled_door_sweep["door_qpos_address"]
+            ]
+        )
+        != compiled_door_sweep["door_start_qpos"]
+        or not np.array_equal(
+            np.asarray(
+                env.sim.data.geom_xpos[list(geom_ids)], dtype=float
+            ),
+            compiled_door_sweep["geom_xpos"],
+        )
+        or not np.array_equal(
+            np.asarray(
+                env.sim.data.geom_xmat[list(geom_ids)], dtype=float
+            ),
+            compiled_door_sweep["geom_xmat"],
+        )
+    ):
+        raise RuntimeError(
+            "compiled door sweep geometry changed after compilation"
+        )
+    entries = compiled_door_sweep["entries"]
+    target_translation = (
+        np.asarray(candidate_target_position, dtype=float)
+        - np.asarray(current_target_position, dtype=float)
+    )
+    minimum = float("inf")
+    limiting = None
+    inspected_evaluations = 0
+    exact_clearances_computed = 0
+    threshold_rejection_seen = False
+    cached_witness_attempted = False
+    cached_witness_rejected = False
+    cached_witness_clearance = None
+    scalar_boundary_refinement_count = 0
+
+    def evaluate_entry(entry):
+        obb_row = entry["obb_batch_row"]
+        if obb_row is not None:
+            primitive = float(
+                _evaluate_compiled_exact_obb_sat_batch(
+                    compiled_door_sweep["obb_batch"],
+                    target_translation,
+                    row_indices=[obb_row],
+                )[0, 0]
+            )
+            clearance = float(
+                primitive
+                - entry["continuous_guard_m"]
+                - entry["native_geom_margin_m"]
+            )
+            return clearance, (
+                "compiled box-box separating-axis gap"
+            ), {
+                "primitive_clearance_m": primitive,
+                "native_geom_margin_m": entry[
+                    "native_geom_margin_m"
+                ],
+                "continuous_guard_m": entry[
+                    "continuous_guard_m"
+                ],
+                "net_clearance_m": clearance,
+            }
+        return _compiled_geom_pair_clearance(
+            env,
+            entry["target_geom_id"],
+            entry["door_geom_id"],
+            target_translation,
+            entry["continuous_guard_m"],
+            fixture_center_override=entry["fixture_center"],
+            fixture_rotation_override=entry["fixture_rotation"],
+        )
+
+    def limiting_record(entry, clearance, method, components):
+        return {
+            "sample_index": entry["sample_index"],
+            "sample_fraction": entry["sample_fraction"],
+            "door_angle_rad": entry["door_angle_rad"],
+            "target_geom_id": entry["target_geom_id"],
+            "target_geom_name": _geom_name(
+                model, entry["target_geom_id"]
+            ),
+            "door_geom_id": entry["door_geom_id"],
+            "door_geom_name": _geom_name(
+                model, entry["door_geom_id"]
+            ),
+            "clearance_m": float(clearance),
+            "continuous_guard_m": entry["continuous_guard_m"],
+            "method": method,
+            "clearance_components": components,
+        }
+
+    if (
+        stop_at_or_below is not None
+        and isinstance(cached_rejection_witness, dict)
+    ):
+        witness_key = (
+            int(cached_rejection_witness.get("target_geom_id", -1)),
+            int(cached_rejection_witness.get("door_geom_id", -1)),
+            int(cached_rejection_witness.get("sample_index", -1)),
+        )
+        entry_index = compiled_door_sweep["entry_lookup"].get(
+            witness_key
+        )
+        if entry_index is not None:
+            cached_witness_attempted = True
+            entry = entries[entry_index]
+            clearance, method, components = evaluate_entry(entry)
+            exact_clearances_computed += 1
+            if (
+                entry["obb_batch_row"] is not None
+                and _compiled_obb_needs_scalar_threshold_refinement(
+                    clearance,
+                    stop_at_or_below,
+                    components["primitive_clearance_m"],
+                    entry["continuous_guard_m"],
+                    entry["native_geom_margin_m"],
+                )
+            ):
+                clearance, method, components = (
+                    _compiled_geom_pair_clearance(
+                        env,
+                        entry["target_geom_id"],
+                        entry["door_geom_id"],
+                        target_translation,
+                        entry["continuous_guard_m"],
+                        fixture_center_override=entry[
+                            "fixture_center"
+                        ],
+                        fixture_rotation_override=entry[
+                            "fixture_rotation"
+                        ],
+                    )
+                )
+                exact_clearances_computed += 1
+                scalar_boundary_refinement_count += 1
+            cached_witness_clearance = float(clearance)
+            if clearance <= float(stop_at_or_below):
+                cached_witness_rejected = True
+                threshold_rejection_seen = True
+                inspected_evaluations = 1
+                minimum = float(clearance)
+                limiting = limiting_record(
+                    entry, clearance, method, components
+                )
+
+    batched_obb_clearances = None
+    if not threshold_rejection_seen:
+        obb_entry_indices = compiled_door_sweep[
+            "obb_entry_indices"
+        ]
+        if obb_entry_indices:
+            primitive_clearances = (
+                _evaluate_compiled_exact_obb_sat_batch(
+                    compiled_door_sweep["obb_batch"],
+                    target_translation,
+                )[0]
+            )
+            batched_obb_clearances = np.asarray(
+                primitive_clearances, dtype=float
+            )
+            exact_clearances_computed += len(obb_entry_indices)
+        for entry in entries:
+            inspected_evaluations += 1
+            obb_row = entry["obb_batch_row"]
+            if obb_row is None:
+                clearance, method, components = evaluate_entry(entry)
+                exact_clearances_computed += 1
+            else:
+                primitive = float(batched_obb_clearances[obb_row])
+                clearance = float(
+                    primitive
+                    - entry["continuous_guard_m"]
+                    - entry["native_geom_margin_m"]
+                )
+                method = "compiled box-box separating-axis gap"
+                components = {
+                    "primitive_clearance_m": primitive,
+                    "native_geom_margin_m": entry[
+                        "native_geom_margin_m"
+                    ],
+                    "continuous_guard_m": entry[
+                        "continuous_guard_m"
+                    ],
+                    "net_clearance_m": clearance,
+                }
+                if _compiled_obb_needs_scalar_threshold_refinement(
+                    clearance,
+                    stop_at_or_below,
+                    primitive,
+                    entry["continuous_guard_m"],
+                    entry["native_geom_margin_m"],
+                ):
+                    clearance, method, components = (
+                        _compiled_geom_pair_clearance(
+                            env,
+                            entry["target_geom_id"],
+                            entry["door_geom_id"],
+                            target_translation,
+                            entry["continuous_guard_m"],
+                            fixture_center_override=entry[
+                                "fixture_center"
+                            ],
+                            fixture_rotation_override=entry[
+                                "fixture_rotation"
+                            ],
+                        )
+                    )
+                    exact_clearances_computed += 1
+                    scalar_boundary_refinement_count += 1
+            if clearance < minimum:
+                minimum = float(clearance)
+                limiting = limiting_record(
+                    entry, clearance, method, components
+                )
+            if (
+                stop_at_or_below is not None
+                and minimum <= float(stop_at_or_below)
+            ):
+                threshold_rejection_seen = True
+                break
+    if inspected_evaluations == 0 or limiting is None:
+        raise RuntimeError(
+            "compiled target/door sweep produced no compatible evaluations"
+        )
+    limiting["target_compiled_geometry"] = _compiled_geom_evidence(
+        model, limiting["target_geom_id"]
+    )
+    limiting["door_compiled_geometry"] = _compiled_geom_evidence(
+        model, limiting["door_geom_id"]
+    )
+    total_pair_evaluations = len(entries)
+    full_sweep_evaluated = (
+        inspected_evaluations == total_pair_evaluations
+    )
+    terminated_early = bool(
+        threshold_rejection_seen and not full_sweep_evaluated
+    )
+    return minimum, {
+        "door_start_qpos": compiled_door_sweep["door_start_qpos"],
+        "door_closed_qpos": compiled_door_sweep["door_closed_qpos"],
+        "door_close_angle_rad": compiled_door_sweep[
+            "door_close_angle_rad"
+        ],
+        "hinge_position": compiled_door_sweep[
+            "hinge_position"
+        ].tolist(),
+        "hinge_axis": compiled_door_sweep["hinge_axis"].tolist(),
+        "samples": len(compiled_door_sweep["fractions"]),
+        "compatible_pair_evaluations": inspected_evaluations,
+        "total_pair_evaluations_without_fail_fast": (
+            total_pair_evaluations
+        ),
+        "exact_pair_clearances_computed": exact_clearances_computed,
+        "scalar_threshold_boundary_refinement_count": (
+            scalar_boundary_refinement_count
+        ),
+        "candidate_invariant_door_pose_count": compiled_door_sweep[
+            "door_pose_count"
+        ],
+        "vectorized_exact_obb_pair_count": len(
+            compiled_door_sweep["obb_entry_indices"]
+        ),
+        "threshold_fail_fast_m": (
+            None
+            if stop_at_or_below is None
+            else float(stop_at_or_below)
+        ),
+        "threshold_rejection_seen": threshold_rejection_seen,
+        "full_sweep_evaluated": full_sweep_evaluated,
+        "terminated_early": terminated_early,
+        "cached_rejection_witness_attempted": (
+            cached_witness_attempted
+        ),
+        "cached_rejection_witness_rejected": cached_witness_rejected,
+        "cached_rejection_witness_clearance_m": (
+            cached_witness_clearance
+        ),
+        "cached_rejection_witness_fell_back_to_full_sweep": bool(
+            cached_witness_attempted and not cached_witness_rejected
+        ),
+        "collision_filter": (
+            "MuJoCo bidirectional contype/conaffinity compatibility; "
+            "native visual-only 0/0 geoms are excluded"
+        ),
+        "minimum_clearance_m": minimum,
+        "limiting_pair": limiting,
+    }
+
+
 def _compiled_target_door_sweep_clearance(
     env,
     names,
@@ -2252,8 +2909,19 @@ def _compiled_target_door_sweep_clearance(
     *,
     stop_at_or_below=None,
     cached_rejection_witness=None,
+    compiled_door_sweep=None,
 ):
     """Check the door arc, with an exact threshold-equivalent fail-fast."""
+    if compiled_door_sweep is not None:
+        return _compiled_target_door_sweep_clearance_from_cache(
+            env,
+            target_geoms,
+            candidate_target_position,
+            current_target_position,
+            compiled_door_sweep,
+            stop_at_or_below=stop_at_or_below,
+            cached_rejection_witness=cached_rejection_witness,
+        )
     model = env.sim.model
     door_geoms = _collision_compatible_geom_ids(
         model,
@@ -2545,29 +3213,13 @@ def _compiled_target_door_sweep_clearance(
     }
 
 
-def _translated_swept_clearance(
-    env,
-    moving_geoms,
-    fixture_geoms,
-    start_position,
-    end_position,
-    reference_position,
-    *,
-    stop_at_or_below=None,
-    compiled_geometry_cache=None,
+def _compile_translated_sweep_geometry(
+    env, moving_geoms, fixture_geoms
 ):
-    """Bound a straight translation, with threshold-equivalent fail-fast."""
+    """Compile static exact OBB terms for repeated translated sweeps."""
     model = env.sim.model
-    start = np.asarray(start_position, dtype=float)
-    end = np.asarray(end_position, dtype=float)
-    reference = np.asarray(reference_position, dtype=float)
-    distance = float(np.linalg.norm(end - start))
-    intervals = max(
-        1, int(np.ceil(distance / TARGET_INSERTION_SWEEP_STEP_M))
-    )
-    spacing = distance / intervals
-    sweep_guard = 0.5 * spacing
-    fractions = np.linspace(0.0, 1.0, intervals + 1)
+    moving_geoms = tuple(int(value) for value in moving_geoms)
+    fixture_geoms = tuple(int(value) for value in fixture_geoms)
     compatible_geom_pairs = [
         (moving_geom, fixture_geom)
         for moving_geom in moving_geoms
@@ -2583,30 +3235,273 @@ def _translated_swept_clearance(
         raise RuntimeError(
             "compiled insertion sweep has no collision-compatible geom pairs"
         )
+    geom_ids = tuple(
+        sorted(
+            {
+                geom_id
+                for pair in compatible_geom_pairs
+                for geom_id in pair
+            }
+        )
+    )
+    obb_pair_indices = []
+    first_centers = []
+    first_rotations = []
+    first_half_sizes = []
+    second_centers = []
+    second_rotations = []
+    second_half_sizes = []
+    for pair_index, (moving_geom, fixture_geom) in enumerate(
+        compatible_geom_pairs
+    ):
+        if (
+            int(model.geom_type[moving_geom]) != 6
+            or int(model.geom_type[fixture_geom]) != 6
+        ):
+            continue
+        obb_pair_indices.append(pair_index)
+        first_centers.append(
+            np.asarray(
+                env.sim.data.geom_xpos[moving_geom], dtype=float
+            )
+        )
+        first_rotations.append(
+            np.asarray(
+                env.sim.data.geom_xmat[moving_geom], dtype=float
+            ).reshape(3, 3)
+        )
+        first_half_sizes.append(
+            np.asarray(model.geom_size[moving_geom], dtype=float)
+        )
+        second_centers.append(
+            np.asarray(
+                env.sim.data.geom_xpos[fixture_geom], dtype=float
+            )
+        )
+        second_rotations.append(
+            np.asarray(
+                env.sim.data.geom_xmat[fixture_geom], dtype=float
+            ).reshape(3, 3)
+        )
+        second_half_sizes.append(
+            np.asarray(model.geom_size[fixture_geom], dtype=float)
+        )
+    obb_batch = None
+    if obb_pair_indices:
+        obb_batch = _compile_exact_obb_sat_batch(
+            first_centers,
+            first_rotations,
+            first_half_sizes,
+            second_centers,
+            second_rotations,
+            second_half_sizes,
+        )
+    pair_to_obb_row = {
+        pair_index: row_index
+        for row_index, pair_index in enumerate(obb_pair_indices)
+    }
+    return {
+        "model_identity": id(model),
+        "moving_geoms": moving_geoms,
+        "fixture_geoms": fixture_geoms,
+        "compatible_geom_pairs": tuple(compatible_geom_pairs),
+        "geom_ids": geom_ids,
+        "geom_xpos": np.asarray(
+            env.sim.data.geom_xpos[list(geom_ids)], dtype=float
+        ).copy(),
+        "geom_xmat": np.asarray(
+            env.sim.data.geom_xmat[list(geom_ids)], dtype=float
+        ).copy(),
+        "obb_pair_indices": tuple(obb_pair_indices),
+        "pair_to_obb_row": pair_to_obb_row,
+        "obb_batch": obb_batch,
+    }
+
+
+def _validate_translated_sweep_geometry(
+    env, moving_geoms, fixture_geoms, compiled_sweep_geometry
+):
+    """Fail closed if supposedly static compiled geometry has changed."""
+    model = env.sim.model
+    if (
+        compiled_sweep_geometry.get("model_identity") != id(model)
+        or tuple(int(value) for value in moving_geoms)
+        != compiled_sweep_geometry.get("moving_geoms")
+        or tuple(int(value) for value in fixture_geoms)
+        != compiled_sweep_geometry.get("fixture_geoms")
+    ):
+        raise RuntimeError(
+            "compiled translated sweep does not match this scene"
+        )
+    geom_ids = compiled_sweep_geometry["geom_ids"]
+    if (
+        not np.array_equal(
+            np.asarray(
+                env.sim.data.geom_xpos[list(geom_ids)], dtype=float
+            ),
+            compiled_sweep_geometry["geom_xpos"],
+        )
+        or not np.array_equal(
+            np.asarray(
+                env.sim.data.geom_xmat[list(geom_ids)], dtype=float
+            ),
+            compiled_sweep_geometry["geom_xmat"],
+        )
+    ):
+        raise RuntimeError(
+            "compiled translated sweep geometry changed after compilation"
+        )
+
+
+def _translated_swept_clearance(
+    env,
+    moving_geoms,
+    fixture_geoms,
+    start_position,
+    end_position,
+    reference_position,
+    *,
+    stop_at_or_below=None,
+    compiled_geometry_cache=None,
+    compiled_sweep_geometry=None,
+):
+    """Bound a straight translation, with threshold-equivalent fail-fast."""
+    model = env.sim.model
+    start = np.asarray(start_position, dtype=float)
+    end = np.asarray(end_position, dtype=float)
+    reference = np.asarray(reference_position, dtype=float)
+    distance = float(np.linalg.norm(end - start))
+    intervals = max(
+        1, int(np.ceil(distance / TARGET_INSERTION_SWEEP_STEP_M))
+    )
+    spacing = distance / intervals
+    sweep_guard = 0.5 * spacing
+    fractions = np.linspace(0.0, 1.0, intervals + 1)
+    if compiled_sweep_geometry is None:
+        compatible_geom_pairs = [
+            (moving_geom, fixture_geom)
+            for moving_geom in moving_geoms
+            for fixture_geom in fixture_geoms
+            if collision_masks_compatible(
+                model.geom_contype[moving_geom],
+                model.geom_conaffinity[moving_geom],
+                model.geom_contype[fixture_geom],
+                model.geom_conaffinity[fixture_geom],
+            )
+        ]
+    else:
+        _validate_translated_sweep_geometry(
+            env,
+            moving_geoms,
+            fixture_geoms,
+            compiled_sweep_geometry,
+        )
+        compatible_geom_pairs = list(
+            compiled_sweep_geometry["compatible_geom_pairs"]
+        )
+    if not compatible_geom_pairs:
+        raise RuntimeError(
+            "compiled insertion sweep has no collision-compatible geom pairs"
+        )
     total_pair_evaluations = len(fractions) * len(compatible_geom_pairs)
     minimum = float("inf")
     limiting = None
     compatible_pairs = 0
     threshold_rejection_seen = False
+    exact_pair_clearances_computed = 0
+    scalar_boundary_refinement_count = 0
+    batched_obb_clearances = None
+    pair_to_obb_row = {}
+    if (
+        compiled_sweep_geometry is not None
+        and compiled_sweep_geometry["obb_pair_indices"]
+    ):
+        translations = (
+            start[None, :]
+            + fractions[:, None] * (end - start)[None, :]
+            - reference[None, :]
+        )
+        batched_obb_clearances = (
+            _evaluate_compiled_exact_obb_sat_batch(
+                compiled_sweep_geometry["obb_batch"], translations
+            )
+        )
+        pair_to_obb_row = compiled_sweep_geometry["pair_to_obb_row"]
+        exact_pair_clearances_computed += int(
+            len(fractions)
+            * len(compiled_sweep_geometry["obb_pair_indices"])
+        )
+    geom_margins = None
+    if pair_to_obb_row:
+        geom_margins = np.asarray(
+            getattr(model, "geom_margin", np.zeros(int(model.ngeom))),
+            dtype=float,
+        )
     for sample_index, fraction in enumerate(fractions):
         translated_position = (
             start + (end - start) * float(fraction)
         )
         translation = translated_position - reference
-        for moving_geom, fixture_geom in compatible_geom_pairs:
+        for pair_index, (moving_geom, fixture_geom) in enumerate(
+            compatible_geom_pairs
+        ):
             compatible_pairs += 1
-            (
-                clearance,
-                method,
-                clearance_components,
-            ) = _compiled_geom_pair_clearance(
-                env,
-                moving_geom,
-                fixture_geom,
-                translation,
-                sweep_guard,
-                compiled_geometry_cache=compiled_geometry_cache,
-            )
+            obb_row = pair_to_obb_row.get(pair_index)
+            if obb_row is None:
+                (
+                    clearance,
+                    method,
+                    clearance_components,
+                ) = _compiled_geom_pair_clearance(
+                    env,
+                    moving_geom,
+                    fixture_geom,
+                    translation,
+                    sweep_guard,
+                    compiled_geometry_cache=compiled_geometry_cache,
+                )
+                exact_pair_clearances_computed += 1
+            else:
+                primitive = float(
+                    batched_obb_clearances[sample_index, obb_row]
+                )
+                native_geom_margin = float(
+                    geom_margins[moving_geom]
+                    + geom_margins[fixture_geom]
+                )
+                clearance = float(
+                    primitive - sweep_guard - native_geom_margin
+                )
+                method = "compiled box-box separating-axis gap"
+                clearance_components = {
+                    "primitive_clearance_m": primitive,
+                    "native_geom_margin_m": native_geom_margin,
+                    "continuous_guard_m": float(sweep_guard),
+                    "net_clearance_m": clearance,
+                }
+                if _compiled_obb_needs_scalar_threshold_refinement(
+                    clearance,
+                    stop_at_or_below,
+                    primitive,
+                    sweep_guard,
+                    native_geom_margin,
+                ):
+                    (
+                        clearance,
+                        method,
+                        clearance_components,
+                    ) = _compiled_geom_pair_clearance(
+                        env,
+                        moving_geom,
+                        fixture_geom,
+                        translation,
+                        sweep_guard,
+                        compiled_geometry_cache=(
+                            compiled_geometry_cache
+                        ),
+                    )
+                    exact_pair_clearances_computed += 1
+                    scalar_boundary_refinement_count += 1
             if clearance < minimum:
                 minimum = clearance
                 limiting = {
@@ -2676,6 +3571,15 @@ def _translated_swept_clearance(
         "continuous_sweep_guard_m": sweep_guard,
         "compatible_pair_evaluations": compatible_pairs,
         "total_pair_evaluations_without_fail_fast": total_pair_evaluations,
+        "exact_pair_clearances_computed": (
+            exact_pair_clearances_computed
+        ),
+        "scalar_threshold_boundary_refinement_count": (
+            scalar_boundary_refinement_count
+        ),
+        "vectorized_exact_obb_pair_count_per_sample": len(
+            pair_to_obb_row
+        ),
         "minimum_clearance_m": minimum,
         "threshold_fail_fast_m": (
             None
@@ -3358,6 +4262,11 @@ def _compact_insertion_sweep_evidence(sweep) -> dict:
         "samples",
         "compatible_pair_evaluations",
         "total_pair_evaluations_without_fail_fast",
+        "exact_pair_clearances_computed",
+        "scalar_threshold_boundary_refinement_count",
+        "candidate_invariant_door_pose_count",
+        "vectorized_exact_obb_pair_count",
+        "vectorized_exact_obb_pair_count_per_sample",
         "minimum_clearance_m",
         "threshold_fail_fast_m",
         "terminated_early",
@@ -3536,6 +4445,24 @@ def _compiled_target_insertion_plan(
         collision_gripper_geoms,
         collision_fixture_geoms,
     )
+    compiled_door_sweep = _compile_target_door_sweep_geometry(
+        env, names, target_geoms
+    )
+    compiled_target_sweep_geometry = (
+        _compile_translated_sweep_geometry(
+            env, target_geoms, target_fixture_geoms
+        )
+    )
+    compiled_gripper_sweep_geometry = (
+        _compile_translated_sweep_geometry(
+            env, collision_gripper_geoms, collision_fixture_geoms
+        )
+    )
+    compiled_geometry_cache = {
+        "convex_mesh": {},
+        "hits": 0,
+        "misses": 0,
+    }
 
     front_search_values = np.arange(
         np.nextafter(front_extent, 0.0),
@@ -3658,6 +4585,7 @@ def _compiled_target_insertion_plan(
                         cached_rejection_witness=(
                             door_rejection_witness
                         ),
+                        compiled_door_sweep=compiled_door_sweep,
                     )
                 )
                 if door_clearance <= 0.0:
@@ -3690,6 +4618,12 @@ def _compiled_target_insertion_plan(
                         candidate,
                         current_target,
                         stop_at_or_below=0.0,
+                        compiled_geometry_cache=(
+                            compiled_geometry_cache
+                        ),
+                        compiled_sweep_geometry=(
+                            compiled_target_sweep_geometry
+                        ),
                     )
                 )
                 if target_clearance <= 0.0:
@@ -3705,6 +4639,12 @@ def _compiled_target_insertion_plan(
                         candidate_eef,
                         current_eef,
                         stop_at_or_below=0.0,
+                        compiled_geometry_cache=(
+                            compiled_geometry_cache
+                        ),
+                        compiled_sweep_geometry=(
+                            compiled_gripper_sweep_geometry
+                        ),
                     )
                 )
                 if gripper_clearance <= 0.0:
@@ -3927,6 +4867,29 @@ def _compiled_target_insertion_plan(
         ],
         "collision_gripper_geom_ids": collision_gripper_geoms,
         "collision_fixture_geom_ids": collision_fixture_geoms,
+        "exact_acceleration": {
+            "candidate_invariant_door_pose_count": (
+                compiled_door_sweep["door_pose_count"]
+            ),
+            "door_vectorized_exact_obb_pair_count": len(
+                compiled_door_sweep["obb_entry_indices"]
+            ),
+            "target_static_vectorized_exact_obb_pair_count": len(
+                compiled_target_sweep_geometry["obb_pair_indices"]
+            ),
+            "gripper_vectorized_exact_obb_pair_count": len(
+                compiled_gripper_sweep_geometry["obb_pair_indices"]
+            ),
+            "convex_mesh_entry_count": len(
+                compiled_geometry_cache["convex_mesh"]
+            ),
+            "convex_mesh_cache_hits": int(
+                compiled_geometry_cache["hits"]
+            ),
+            "convex_mesh_cache_misses": int(
+                compiled_geometry_cache["misses"]
+            ),
+        },
         "selected": selected,
         "execution_endpoint": execution_endpoint,
         "execution_reserve_m": 0.0,

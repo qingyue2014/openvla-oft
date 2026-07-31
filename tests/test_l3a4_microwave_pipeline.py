@@ -560,6 +560,247 @@ def test_l3a4_translated_sweep_fail_fast_preserves_threshold_decision():
     assert full_evidence["full_sweep_evaluated"] is True
 
 
+def test_l3a4_vectorized_obb_sat_matches_scalar_and_touch_boundary():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selected = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name
+        in {
+            "_compile_exact_obb_sat_batch",
+            "_evaluate_compiled_exact_obb_sat_batch",
+        }
+    ]
+    namespace = {"np": np}
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=selected, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    compile_batch = namespace["_compile_exact_obb_sat_batch"]
+    evaluate_batch = namespace["_evaluate_compiled_exact_obb_sat_batch"]
+
+    angles = np.deg2rad([0.0, 17.0, -31.0])
+    first_rotations = []
+    second_rotations = []
+    for angle in angles:
+        first_rotations.append(
+            np.asarray(
+                [
+                    [np.cos(angle), -np.sin(angle), 0.0],
+                    [np.sin(angle), np.cos(angle), 0.0],
+                    [0.0, 0.0, 1.0],
+                ]
+            )
+        )
+        half_angle = -0.5 * angle
+        second_rotations.append(
+            np.asarray(
+                [
+                    [np.cos(half_angle), -np.sin(half_angle), 0.0],
+                    [np.sin(half_angle), np.cos(half_angle), 0.0],
+                    [0.0, 0.0, 1.0],
+                ]
+            )
+        )
+    first_centers = np.asarray(
+        [[0.0, 0.0, 0.0], [0.2, -0.1, 0.3], [-0.4, 0.1, 0.2]]
+    )
+    second_centers = np.asarray(
+        [[1.0, 0.0, 0.0], [0.5, 0.3, 0.2], [-0.1, -0.2, 0.4]]
+    )
+    first_half_sizes = np.asarray(
+        [[0.5, 0.5, 0.5], [0.12, 0.08, 0.10], [0.15, 0.09, 0.07]]
+    )
+    second_half_sizes = np.asarray(
+        [[0.5, 0.5, 0.5], [0.07, 0.11, 0.09], [0.06, 0.10, 0.12]]
+    )
+    compiled = compile_batch(
+        first_centers,
+        np.asarray(first_rotations),
+        first_half_sizes,
+        second_centers,
+        np.asarray(second_rotations),
+        second_half_sizes,
+    )
+    translations = np.asarray(
+        [[0.0, 0.0, 0.0], [-1e-9, 0.0, 0.0], [1e-9, 0.0, 0.0]]
+    )
+    batched = evaluate_batch(compiled, translations)
+    for sample_index, translation in enumerate(translations):
+        for pair_index in range(len(first_centers)):
+            scalar = oriented_box_separating_clearance(
+                first_centers[pair_index] + translation,
+                first_rotations[pair_index],
+                first_half_sizes[pair_index],
+                second_centers[pair_index],
+                second_rotations[pair_index],
+                second_half_sizes[pair_index],
+            )
+            assert batched[sample_index, pair_index] == pytest.approx(
+                scalar, abs=2e-15
+            )
+    assert batched[0, 0] == pytest.approx(0.0, abs=1e-15)
+    assert batched[1, 0] > 0.0
+    assert batched[2, 0] < 0.0
+
+
+def test_l3a4_compiled_translated_sweep_is_exact_and_fails_stale():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selected_names = {
+        "_compile_exact_obb_sat_batch",
+        "_evaluate_compiled_exact_obb_sat_batch",
+        "_compiled_obb_needs_scalar_threshold_refinement",
+        "_compile_translated_sweep_geometry",
+        "_validate_translated_sweep_geometry",
+        "_translated_swept_clearance",
+    }
+    selected = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name in selected_names
+    ]
+
+    class Model:
+        ngeom = 2
+        geom_contype = np.ones(2, dtype=int)
+        geom_conaffinity = np.ones(2, dtype=int)
+        geom_type = np.full(2, 6, dtype=int)
+        geom_size = np.full((2, 3), 0.5, dtype=float)
+        geom_margin = np.zeros(2, dtype=float)
+        geom_bodyid = np.asarray([0, 1], dtype=int)
+
+        @staticmethod
+        def body_id2name(body_id):
+            return ("moving", "fixture")[body_id]
+
+    class Data:
+        geom_xpos = np.asarray(
+            [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]], dtype=float
+        )
+        geom_xmat = np.tile(np.eye(3).reshape(1, 9), (2, 1))
+
+    env = type(
+        "Env",
+        (),
+        {"sim": type("Sim", (), {"model": Model(), "data": Data()})()},
+    )()
+    scalar_calls = []
+
+    def scalar_pair(
+        env,
+        moving_geom,
+        fixture_geom,
+        translation,
+        guard_margin,
+        *,
+        compiled_geometry_cache=None,
+    ):
+        scalar_calls.append((moving_geom, fixture_geom))
+        primitive = oriented_box_separating_clearance(
+            env.sim.data.geom_xpos[moving_geom] + translation,
+            env.sim.data.geom_xmat[moving_geom].reshape(3, 3),
+            env.sim.model.geom_size[moving_geom],
+            env.sim.data.geom_xpos[fixture_geom],
+            env.sim.data.geom_xmat[fixture_geom].reshape(3, 3),
+            env.sim.model.geom_size[fixture_geom],
+        )
+        clearance = primitive - guard_margin
+        return clearance, "compiled box-box separating-axis gap", {
+            "primitive_clearance_m": primitive,
+            "native_geom_margin_m": 0.0,
+            "continuous_guard_m": guard_margin,
+            "net_clearance_m": clearance,
+        }
+
+    namespace = {
+        "np": np,
+        "TARGET_INSERTION_SWEEP_STEP_M": 0.005,
+        "collision_masks_compatible": lambda *args: True,
+        "_compiled_geom_pair_clearance": scalar_pair,
+        "_compiled_geom_evidence": (
+            lambda model, geom_id, compiled_geometry_cache=None: {
+                "geom_id": int(geom_id)
+            }
+        ),
+        "_geom_name": lambda model, geom_id: ("moving", "fixture")[
+            geom_id
+        ],
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=selected, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    compile_geometry = namespace["_compile_translated_sweep_geometry"]
+    sweep = namespace["_translated_swept_clearance"]
+    compiled = compile_geometry(env, [0], [1])
+
+    scalar_minimum, scalar_evidence = sweep(
+        env,
+        [0],
+        [1],
+        np.zeros(3),
+        np.zeros(3),
+        np.zeros(3),
+        stop_at_or_below=0.0,
+    )
+    assert scalar_minimum == pytest.approx(0.0, abs=1e-15)
+    assert scalar_evidence["compatible_pair_evaluations"] == 1
+    assert len(scalar_calls) == 1
+
+    scalar_calls.clear()
+    compiled_minimum, compiled_evidence = sweep(
+        env,
+        [0],
+        [1],
+        np.zeros(3),
+        np.zeros(3),
+        np.zeros(3),
+        stop_at_or_below=0.0,
+        compiled_sweep_geometry=compiled,
+    )
+    assert compiled_minimum == pytest.approx(
+        scalar_minimum, abs=1e-15
+    )
+    assert len(scalar_calls) == 1
+    assert compiled_evidence["threshold_rejection_seen"]
+    assert compiled_evidence["terminated_early"]
+    assert compiled_evidence[
+        "vectorized_exact_obb_pair_count_per_sample"
+    ] == 1
+    assert compiled_evidence["exact_pair_clearances_computed"] == 3
+    assert compiled_evidence[
+        "scalar_threshold_boundary_refinement_count"
+    ] == 1
+
+    env.sim.data.geom_xpos[0, 0] = np.nextafter(0.0, 1.0)
+    with pytest.raises(RuntimeError, match="changed after compilation"):
+        sweep(
+            env,
+            [0],
+            [1],
+            np.zeros(3),
+            np.zeros(3),
+            np.zeros(3),
+            compiled_sweep_geometry=compiled,
+        )
+
+
 def test_l3a4_compiled_convex_mesh_cache_reuses_exact_decoding():
     source = ROBOT_SAFE_PREFIX.read_text()
     module = ast.parse(source)
@@ -1853,6 +2094,189 @@ def test_l3a4_door_sweep_fail_fast_is_threshold_equivalent():
     assert evidence["compatible_pair_evaluations"] == 8
 
 
+def test_l3a4_compiled_door_poses_reuse_exact_obb_sweep():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selected_names = {
+        "_compile_exact_obb_sat_batch",
+        "_evaluate_compiled_exact_obb_sat_batch",
+        "_compiled_obb_needs_scalar_threshold_refinement",
+        "_compile_target_door_sweep_geometry",
+        "_compiled_target_door_sweep_clearance_from_cache",
+    }
+    selected = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name in selected_names
+    ]
+
+    class Model:
+        ngeom = 3
+        geom_contype = np.ones(3, dtype=int)
+        geom_conaffinity = np.ones(3, dtype=int)
+        geom_type = np.full(3, 6, dtype=int)
+        geom_size = np.asarray(
+            [[0.10, 0.10, 0.10], [0.08, 0.09, 0.07], [0.20, 0.05, 0.20]]
+        )
+        geom_rbound = np.linalg.norm(geom_size, axis=1)
+        geom_margin = np.zeros(3, dtype=float)
+        jnt_qposadr = np.asarray([0], dtype=int)
+        jnt_range = np.asarray([[-0.5, 0.0]], dtype=float)
+        jnt_axis = np.asarray([[0.0, 0.0, 1.0]], dtype=float)
+
+        @staticmethod
+        def joint_name2id(name):
+            return 0
+
+    class Data:
+        qpos = np.asarray([-0.5], dtype=float)
+        geom_xpos = np.asarray(
+            [[0.0, 0.0, 0.0], [0.0, 0.3, 0.0], [0.7, 0.0, 0.0]],
+            dtype=float,
+        )
+        geom_xmat = np.tile(np.eye(3).reshape(1, 9), (3, 1))
+
+    env = type(
+        "Env",
+        (),
+        {"sim": type("Sim", (), {"model": Model(), "data": Data()})()},
+    )()
+    rotation_calls = []
+
+    def rotate(vector, axis, angle):
+        rotation_calls.append(float(angle))
+        axis = np.asarray(axis, dtype=float)
+        axis = axis / np.linalg.norm(axis)
+        vector = np.asarray(vector, dtype=float)
+        return (
+            vector * np.cos(angle)
+            + np.cross(axis, vector) * np.sin(angle)
+            + axis
+            * np.dot(axis, vector)
+            * (1.0 - np.cos(angle))
+        )
+
+    namespace = {
+        "np": np,
+        "SAFE_PARK_DOOR_SWEEP_SAMPLES": 4,
+        "_collision_compatible_geom_ids": (
+            lambda model, candidates, references: sorted(candidates)
+        ),
+        "descendant_geom_ids": lambda model, body: {2},
+        "body_pose": lambda sim, body: (np.zeros(3), np.eye(3)),
+        "_rotation_about_axis": rotate,
+        "collision_masks_compatible": lambda *args: True,
+        "_compiled_geom_pair_clearance": (
+            lambda *args, **kwargs: pytest.fail(
+                "all compiled door rows are OBBs"
+            )
+        ),
+        "_geom_name": lambda model, geom_id: f"g{geom_id}",
+        "_compiled_geom_evidence": (
+            lambda model, geom_id: {"geom_id": int(geom_id)}
+        ),
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=selected, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    compile_door = namespace["_compile_target_door_sweep_geometry"]
+    evaluate_door = namespace[
+        "_compiled_target_door_sweep_clearance_from_cache"
+    ]
+    compiled = compile_door(
+        env,
+        {"door_body": "door", "door_joint": "joint"},
+        [0, 1],
+    )
+    compile_rotation_call_count = len(rotation_calls)
+    assert compiled["door_pose_count"] == 4
+    assert len(compiled["entries"]) == 8
+    assert len(compiled["obb_entry_indices"]) == 8
+
+    for candidate in (np.zeros(3), np.asarray([0.2, -0.1, 0.0])):
+        minimum, evidence = evaluate_door(
+            env,
+            [0, 1],
+            candidate,
+            np.zeros(3),
+            compiled,
+        )
+        expected = []
+        for entry in compiled["entries"]:
+            primitive = oriented_box_separating_clearance(
+                env.sim.data.geom_xpos[entry["target_geom_id"]]
+                + candidate,
+                env.sim.data.geom_xmat[
+                    entry["target_geom_id"]
+                ].reshape(3, 3),
+                env.sim.model.geom_size[entry["target_geom_id"]],
+                entry["fixture_center"],
+                entry["fixture_rotation"],
+                env.sim.model.geom_size[entry["door_geom_id"]],
+            )
+            expected.append(
+                primitive
+                - entry["continuous_guard_m"]
+                - entry["native_geom_margin_m"]
+            )
+        assert minimum == pytest.approx(min(expected), abs=2e-15)
+        assert evidence["full_sweep_evaluated"]
+        assert evidence["compatible_pair_evaluations"] == 8
+        assert evidence["exact_pair_clearances_computed"] == 8
+    assert len(rotation_calls) == compile_rotation_call_count
+
+    minimum, evidence = evaluate_door(
+        env,
+        [0, 1],
+        np.asarray([0.5, 0.0, 0.0]),
+        np.zeros(3),
+        compiled,
+        stop_at_or_below=0.0,
+    )
+    assert minimum <= 0.0
+    assert evidence["threshold_rejection_seen"]
+    assert evidence["terminated_early"]
+    assert evidence["compatible_pair_evaluations"] == 1
+    assert evidence["exact_pair_clearances_computed"] == 8
+    limiting = evidence["limiting_pair"]
+
+    cached_minimum, cached_evidence = evaluate_door(
+        env,
+        [0, 1],
+        np.asarray([0.5, 0.0, 0.0]),
+        np.zeros(3),
+        compiled,
+        stop_at_or_below=0.0,
+        cached_rejection_witness={
+            "sample_index": limiting["sample_index"],
+            "target_geom_id": limiting["target_geom_id"],
+            "door_geom_id": limiting["door_geom_id"],
+        },
+    )
+    assert cached_minimum == pytest.approx(minimum, abs=2e-15)
+    assert cached_evidence["cached_rejection_witness_rejected"]
+    assert cached_evidence["exact_pair_clearances_computed"] == 1
+    assert len(rotation_calls) == compile_rotation_call_count
+
+    env.sim.data.qpos[0] = np.nextafter(-0.5, 0.0)
+    with pytest.raises(RuntimeError, match="changed after compilation"):
+        evaluate_door(
+            env,
+            [0, 1],
+            np.zeros(3),
+            np.zeros(3),
+            compiled,
+        )
+
+
 def test_l3a4_planar_park_clearance_checks_table_and_door_sweep():
     metrics = planar_park_clearances(
         candidate_xy=[0.0, -0.30],
@@ -2260,6 +2684,40 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "visual-only 0/0 geoms are excluded" in target_door_sweep
     assert '"limiting_pair": limiting' in target_door_sweep
 
+    compile_obb = ast.get_source_segment(
+        source, functions["_compile_exact_obb_sat_batch"]
+    )
+    evaluate_obb = ast.get_source_segment(
+        source, functions["_evaluate_compiled_exact_obb_sat_batch"]
+    )
+    compile_door = ast.get_source_segment(
+        source, functions["_compile_target_door_sweep_geometry"]
+    )
+    cached_door = ast.get_source_segment(
+        source,
+        functions[
+            "_compiled_target_door_sweep_clearance_from_cache"
+        ],
+    )
+    assert "15, 3" in compile_obb
+    assert "np.cross(" in compile_obb
+    assert "32.0 * np.finfo(float).eps" in compile_obb
+    assert "np.einsum(" in evaluate_obb
+    assert "np.max(gaps, axis=2)" in evaluate_obb
+    threshold_refinement = ast.get_source_segment(
+        source,
+        functions[
+            "_compiled_obb_needs_scalar_threshold_refinement"
+        ],
+    )
+    assert "256.0 * np.finfo(float).eps" in threshold_refinement
+    assert "SAFE_PARK_DOOR_SWEEP_SAMPLES" in compile_door
+    assert '"door_pose_count"' in compile_door
+    assert '"obb_batch_row"' in compile_door
+    assert "_evaluate_compiled_exact_obb_sat_batch(" in cached_door
+    assert '"exact_pair_clearances_computed"' in cached_door
+    assert "changed after compilation" in cached_door
+
     swept_clearance = ast.get_source_segment(
         source, functions["_translated_swept_clearance"]
     )
@@ -2275,6 +2733,12 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"reference_position"' in swept_clearance
     assert '"sample_zero_is_current_pose"' in swept_clearance
     assert "synthetic translated path start" in swept_clearance
+    assert "compiled_sweep_geometry=None" in swept_clearance
+    assert "_validate_translated_sweep_geometry(" in swept_clearance
+    assert "_evaluate_compiled_exact_obb_sat_batch(" in swept_clearance
+    assert '"vectorized_exact_obb_pair_count_per_sample"' in (
+        swept_clearance
+    )
 
     safe_portal = ast.get_source_segment(
         source, functions["_compiled_safe_insertion_portal"]
@@ -2303,6 +2767,13 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "gripper_clearance > 0.0" in insertion_plan
     assert "target_clearance > 0.0" in insertion_plan
     assert "_compiled_target_door_sweep_clearance(" in insertion_plan
+    assert "_compile_target_door_sweep_geometry(" in insertion_plan
+    assert insertion_plan.count(
+        "_compile_translated_sweep_geometry("
+    ) == 2
+    assert "compiled_door_sweep=compiled_door_sweep" in insertion_plan
+    assert insertion_plan.count("compiled_sweep_geometry=(") == 2
+    assert '"exact_acceleration"' in insertion_plan
     assert "door_clearance > 0.0" in insertion_plan
     assert "current_target_tilt > MAX_MUG_TILT_DEG" not in insertion_plan
     assert "_compiled_held_target_support_geometry(" in insertion_plan
