@@ -20,6 +20,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _gate_live_contact_offset_xy,
     _horizon_budget,
     _live_plate_tracking_target,
+    _outside_side_geometry_feedback_action,
     _outside_side_guard_from_world_aabbs,
     _plate_finger_contact_sides,
     _push_window_timeout_evidence,
@@ -582,9 +583,19 @@ def test_499866_outside_side_guard_uses_live_aabbs_not_exact_eef_center():
         rim_bounds=rim_bounds,
         finger_bounds=finger_bounds,
         required_outside_clearance_m=0.005,
+        table_bounds=[
+            (
+                "table_top",
+                np.array([0.0, 0.0, 0.882]),
+                np.array([0.5, 0.5, 0.005]),
+            )
+        ],
     )
     assert guard["accepted"] is True
     assert guard["violations"] == []
+    assert guard["finger_table_vertical_clearance_m"] == pytest.approx(
+        achieved_eef[2] - 0.012 - 0.887
+    )
     for side in ("left", "right"):
         evidence = guard["finger_sides"][side]
         assert evidence["outside_clearance_m"] == pytest.approx(0.005)
@@ -620,6 +631,71 @@ def test_499866_outside_side_guard_uses_live_aabbs_not_exact_eef_center():
     assert "right_finger_does_not_cover_rim_center" in rejected[
         "violations"
     ]
+
+
+def test_499888_feedback_recovers_x_before_bounded_z_and_stops_above_table():
+    current = np.array([0.123946, -0.028254, 0.912431])
+    target = np.array([0.136806, -0.028508, 0.898654])
+    clearance_lost = {
+        "outward_direction_xy": [1.0, 0.0],
+        "required_outside_clearance_m": 0.005,
+        "minimum_outside_clearance_m": -0.004,
+        "finger_table_vertical_clearance_m": 0.012,
+    }
+    action, feedback = _outside_side_geometry_feedback_action(
+        current_eef=current,
+        outside_side_target=target,
+        guard=clearance_lost,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    assert feedback["mode"] == "recover_outside_clearance"
+    assert feedback["clearance_deficit_m"] == pytest.approx(0.009)
+    assert feedback["feedback_target"][0] == pytest.approx(
+        current[0] + 0.009
+    )
+    assert feedback["feedback_target"][2] == pytest.approx(current[2])
+    assert np.allclose(action[:3], [0.10, 0.0, 0.0])
+
+    clearance_restored = {
+        **clearance_lost,
+        "minimum_outside_clearance_m": 0.005,
+    }
+    action, feedback = _outside_side_geometry_feedback_action(
+        current_eef=current,
+        outside_side_target=target,
+        guard=clearance_restored,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+    )
+    assert feedback["mode"] == "bounded_vertical_descent"
+    # Keep the existing 5 mm geometry clearance above the native table:
+    # 12 mm live table clearance permits at most a 7 mm Z target step.
+    assert feedback["available_table_descent_m"] == pytest.approx(0.007)
+    assert feedback["feedback_target"][2] == pytest.approx(
+        current[2] - 0.007
+    )
+    assert np.allclose(action[:2], [0.0, 0.0])
+    assert action[2] == pytest.approx(-0.0875)
+
+    table_margin_exhausted = {
+        **clearance_restored,
+        "finger_table_vertical_clearance_m": 0.004,
+    }
+    with pytest.raises(
+        RuntimeError,
+        match="impossible before native table clearance is exhausted",
+    ):
+        _outside_side_geometry_feedback_action(
+            current_eef=current,
+            outside_side_target=target,
+            guard=table_margin_exhausted,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            maximum_translation_action=0.10,
+        )
 
 
 def test_live_plate_push_target_tracks_plate_instead_of_accumulating_eef():
@@ -1308,12 +1384,20 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "outside_high_target" in bounded_seek
     assert "outside_side_target" in bounded_seek
     assert "_live_outside_side_guard(" in bounded_seek
-    assert "stop_when=outside_side_guard_satisfied" in bounded_seek
     assert (
-        'stop_label="native finger/rim outside-side AABB guard"'
+        "_outside_side_geometry_feedback_action("
         in bounded_seek
     )
-    assert "step_observer=observe_outside_side_motion" in bounded_seek
+    assert (
+        "for guard_step in range(1, args.max_waypoint_steps + 1)"
+        in bounded_seek
+    )
+    assert '"outside_side_feedback"' in bounded_seek
+    assert '"post_action_guard"' in bounded_seek
+    assert (
+        "orientation is infeasible before table contact"
+        in bounded_seek
+    )
     assert 'stage.startswith("outside_")' in bounded_seek
     assert "tolerance=" not in bounded_seek
     assert "rollout.advance(action, \"task\")" in bounded_seek

@@ -509,6 +509,7 @@ def _outside_side_guard_from_world_aabbs(
     rim_bounds,
     finger_bounds,
     required_outside_clearance_m,
+    table_bounds=(),
 ):
     """Validate a live no-contact side guard from native collision AABBs."""
     plate_position = np.asarray(plate_position, dtype=float)
@@ -526,6 +527,7 @@ def _outside_side_guard_from_world_aabbs(
     outward /= outward_norm
     rim_bounds = list(rim_bounds)
     finger_bounds = list(finger_bounds)
+    table_bounds = list(table_bounds)
     if not rim_bounds:
         raise RuntimeError("compiled native plate rim bounds unavailable")
     fingers_by_side = {
@@ -612,6 +614,25 @@ def _outside_side_guard_from_world_aabbs(
             "rim_center_covered": bool(rim_center_covered),
             "finger_geoms": [name for name, _, _, _ in bounds],
         }
+    minimum_outside_clearance = min(
+        record["outside_clearance_m"]
+        for record in side_diagnostics.values()
+    )
+    finger_lowest_z = min(
+        float(center[2] - half_size[2])
+        for _, _, center, half_size in finger_bounds
+    )
+    if table_bounds:
+        table_top_z = max(
+            float(center[2] + half_size[2])
+            for _, center, half_size in table_bounds
+        )
+        finger_table_vertical_clearance = (
+            finger_lowest_z - table_top_z
+        )
+    else:
+        table_top_z = None
+        finger_table_vertical_clearance = None
     return {
         "accepted": not violations,
         "violations": violations,
@@ -620,10 +641,19 @@ def _outside_side_guard_from_world_aabbs(
             required_outside_clearance_m
         ),
         "plate_outward_support_m": plate_outward_support,
+        "minimum_outside_clearance_m": float(
+            minimum_outside_clearance
+        ),
         "rim_center_z": rim_center_z,
         "rim_vertical_interval": [rim_z_min, rim_z_max],
         "rim_geoms": [name for name, _, _ in rim_bounds],
         "finger_sides": side_diagnostics,
+        "finger_lowest_z": finger_lowest_z,
+        "table_top_z": table_top_z,
+        "table_geoms": [name for name, _, _ in table_bounds],
+        "finger_table_vertical_clearance_m": (
+            finger_table_vertical_clearance
+        ),
     }
 
 
@@ -648,6 +678,18 @@ def _live_outside_side_guard(env, geometry):
             model, data, geom_id
         )
         finger_bounds.append((name, side, center, half_size))
+    table_bounds = []
+    for geom_id in _compiled_body_geom_ids(model, TABLE_BODY):
+        if (
+            int(model.geom_contype[geom_id]) == 0
+            and int(model.geom_conaffinity[geom_id]) == 0
+        ):
+            continue
+        name = model.geom_id2name(geom_id) or f"table_geom_{geom_id}"
+        center, half_size = _compiled_geom_world_aabb(
+            model, data, geom_id
+        )
+        table_bounds.append((name, center, half_size))
     return _outside_side_guard_from_world_aabbs(
         plate_position=body_pose(env, PLATE_BODY)[0],
         outward_direction_xy=geometry["outward_direction_xy"],
@@ -656,7 +698,90 @@ def _live_outside_side_guard(env, geometry):
         required_outside_clearance_m=geometry[
             "outside_clearance_m"
         ],
+        table_bounds=table_bounds,
     )
+
+
+def _outside_side_geometry_feedback_action(
+    *,
+    current_eef,
+    outside_side_target,
+    guard,
+    gripper,
+    position_action_scale,
+    maximum_translation_action,
+):
+    """Choose one bounded outward-recovery or vertical-descent OSC action."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    outside_side_target = np.asarray(outside_side_target, dtype=float)
+    outward = np.asarray(guard["outward_direction_xy"], dtype=float)
+    required_clearance = float(
+        guard["required_outside_clearance_m"]
+    )
+    live_clearance = float(guard["minimum_outside_clearance_m"])
+    if current_eef.shape != (3,) or outside_side_target.shape != (3,):
+        raise ValueError("current and outside-side EEF targets must be 3-D")
+    if live_clearance + 1e-9 < required_clearance:
+        clearance_deficit = required_clearance - live_clearance
+        feedback_target = current_eef.copy()
+        feedback_target[:2] += outward * clearance_deficit
+        mode = "recover_outside_clearance"
+        available_table_descent = None
+    else:
+        vertical_remaining = float(
+            current_eef[2] - outside_side_target[2]
+        )
+        table_clearance = guard.get(
+            "finger_table_vertical_clearance_m"
+        )
+        if table_clearance is None or not np.isfinite(table_clearance):
+            raise RuntimeError(
+                "native finger-table AABB clearance unavailable"
+            )
+        available_table_descent = float(
+            table_clearance - required_clearance
+        )
+        if vertical_remaining <= 1e-9:
+            raise RuntimeError(
+                "outside-side target height reached without valid "
+                "finger/rim geometry"
+            )
+        if available_table_descent <= 1e-9:
+            raise RuntimeError(
+                "outside-side geometry impossible before native table "
+                "clearance is exhausted"
+            )
+        maximum_world_step = (
+            float(position_action_scale)
+            * float(maximum_translation_action)
+        )
+        commanded_descent = min(
+            vertical_remaining,
+            maximum_world_step,
+            available_table_descent,
+        )
+        feedback_target = current_eef.copy()
+        feedback_target[2] -= commanded_descent
+        clearance_deficit = 0.0
+        mode = "bounded_vertical_descent"
+    action = _bounded_side_contact_seek_action(
+        current_eef,
+        feedback_target,
+        gripper,
+        position_action_scale,
+        maximum_translation_action,
+    )
+    return action, {
+        "mode": mode,
+        "current_eef": current_eef.tolist(),
+        "feedback_target": feedback_target.tolist(),
+        "outside_side_target": outside_side_target.tolist(),
+        "required_outside_clearance_m": required_clearance,
+        "live_minimum_outside_clearance_m": live_clearance,
+        "clearance_deficit_m": float(clearance_deficit),
+        "available_table_descent_m": available_table_descent,
+        "action": action.tolist(),
+    }
 
 
 def _semantic_finger_side(body_name):
@@ -1383,7 +1508,13 @@ def _seek_stable_plate_contact(
     plate_reference = body_pose(env, PLATE_BODY)[0].copy()
     samples = []
 
-    def capture(stage, index, require_contact, require_stable):
+    def capture(
+        stage,
+        index,
+        require_contact,
+        require_stable,
+        extra=None,
+    ):
         finger_contact_sides = _plate_finger_contact_sides(env)
         sample = {
             "stage": stage,
@@ -1407,6 +1538,8 @@ def _seek_stable_plate_contact(
             ),
             "finger_contact_sides": finger_contact_sides,
         }
+        if extra:
+            sample.update(extra)
         samples.append(sample)
         if (
             stage.startswith("outside_")
@@ -1457,52 +1590,79 @@ def _seek_stable_plate_contact(
         diagnostics=diagnostics,
     )
     capture("outside_high", 0, False, True)
-    outside_side_guard_checks = 0
+    outside_side_guard_checks = 1
     outside_side_motion_steps = 0
-    latest_outside_side_guard = None
-
-    def outside_side_guard_satisfied():
-        nonlocal outside_side_guard_checks
-        nonlocal latest_outside_side_guard
+    latest_outside_side_guard = _live_outside_side_guard(
+        env, geometry
+    )
+    outside_side_feedback_steps = []
+    for guard_step in range(1, args.max_waypoint_steps + 1):
+        if latest_outside_side_guard["accepted"]:
+            break
+        current_eef = np.asarray(
+            rollout.obs["robot0_eef_pos"], dtype=float
+        )
+        try:
+            action, feedback = _outside_side_geometry_feedback_action(
+                current_eef=current_eef,
+                outside_side_target=outside_side_target,
+                guard=latest_outside_side_guard,
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                maximum_translation_action=(
+                    args.plate_contact_seek_max_translation_action
+                ),
+            )
+        except RuntimeError as exc:
+            raise RuntimeError(
+                "outside-side geometry feedback concluded the native "
+                "orientation is infeasible before table contact: "
+                f"source={source} guard_step={guard_step} "
+                f"guard={json.dumps(latest_outside_side_guard, sort_keys=True)} "
+                f"samples={json.dumps(samples, sort_keys=True)} "
+                f"scene={json.dumps(diagnostics(), sort_keys=True)}"
+            ) from exc
+        rollout.advance(action, "task")
+        outside_side_motion_steps += 1
         latest_outside_side_guard = _live_outside_side_guard(
             env, geometry
         )
         outside_side_guard_checks += 1
-        return latest_outside_side_guard["accepted"]
-
-    def observe_outside_side_motion():
-        nonlocal outside_side_motion_steps
-        outside_side_motion_steps += 1
+        feedback["post_action_guard"] = latest_outside_side_guard
+        outside_side_feedback_steps.append(feedback)
         capture(
             "outside_side_motion",
             outside_side_motion_steps,
             False,
             True,
+            extra={
+                "outside_side_feedback": feedback,
+                "outside_side_guard": latest_outside_side_guard,
+            },
         )
-
-    def outside_side_diagnostics():
-        return {
-            "source": source,
-            "outside_side_guard_checks": outside_side_guard_checks,
-            "latest_outside_side_guard": latest_outside_side_guard,
-            "compiled_geometry": geometry,
-            "scene": diagnostics(),
-        }
-
-    rollout.move(
-        outside_side_target,
-        gripper,
-        "task",
-        stop_when=outside_side_guard_satisfied,
-        stop_label="native finger/rim outside-side AABB guard",
-        diagnostics=outside_side_diagnostics,
-        step_observer=observe_outside_side_motion,
+        if latest_outside_side_guard["accepted"]:
+            break
+    else:
+        raise RuntimeError(
+            "outside-side geometry feedback exhausted the unchanged OSC "
+            "waypoint budget: "
+            f"source={source} max_steps={args.max_waypoint_steps} "
+            f"guard={json.dumps(latest_outside_side_guard, sort_keys=True)} "
+            f"samples={json.dumps(samples, sort_keys=True)} "
+            f"scene={json.dumps(diagnostics(), sort_keys=True)}"
+        )
+    final_outside_side_guard = _live_outside_side_guard(
+        env, geometry
     )
-    final_outside_side_guard = _live_outside_side_guard(env, geometry)
+    outside_side_guard_checks += 1
     if not final_outside_side_guard["accepted"]:
         raise RuntimeError(
-            "outside-side AABB guard was not sustained after OSC stop: "
-            f"{json.dumps(outside_side_diagnostics(), sort_keys=True)}"
+            "outside-side AABB guard was not sustained after geometry "
+            "feedback stop: "
+            f"source={source} "
+            f"guard={json.dumps(final_outside_side_guard, sort_keys=True)} "
+            f"samples={json.dumps(samples, sort_keys=True)} "
+            f"scene={json.dumps(diagnostics(), sort_keys=True)}"
         )
     outside_side_sample = capture("outside_side", 0, False, True)
     outside_side_sample["outside_side_guard"] = (
@@ -1574,6 +1734,7 @@ def _seek_stable_plate_contact(
         "outside_side_guard": final_outside_side_guard,
         "outside_side_guard_checks": outside_side_guard_checks,
         "outside_side_motion_steps": outside_side_motion_steps,
+        "outside_side_feedback_steps": outside_side_feedback_steps,
         "maximum_translation_action": (
             args.plate_contact_seek_max_translation_action
         ),
