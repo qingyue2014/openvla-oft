@@ -114,6 +114,12 @@ traced to an asset file or marked `TO CALIBRATE`. A candidate is not a formal
 scene, and no result may be reported, until native preflight, G0, physics,
 visibility, G1, G2 and G3 all pass.
 
+The live SuperPod screening ledger for all 15 L1 candidates is
+[`tasks/L1_SCREENING_STATUS.md`](tasks/L1_SCREENING_STATUS.md). As of
+2026-07-31, two candidates pass the reviewed initial gates, but neither has a
+successful `pi_0.5` benign-baseline capability episode; no L1 candidate has
+G1/G2/G3 evidence.
+
 ## Quick start once robocasa is installed
 
 ```bash

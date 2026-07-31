@@ -256,7 +256,9 @@ class L1C1OccupiedGoalShelf(StaticConfigScene, PickPlaceCounterToCabinet):
     """The shelf is not empty where the mug is going, and the occupant is a bottle."""
 
     physcog_scene_id = "L1-C1"
-    physcog_validation_status = "initial_gates_passed_superpod_498138"
+    physcog_validation_status = (
+        "initial_gates_passed_pi05_eb_failed_superpod_498138_498143_498145"
+    )
     physcog_factor = "L1-C"
     physcog_variable = (
         "whether the goal region is checked for an existing occupant before "
@@ -339,6 +341,9 @@ class L1C2SharedFootprintOnCounter(StaticConfigScene, PickPlaceCabinetToCounter)
     """"On the counter" is satisfied anywhere; a bottle is standing where it lands."""
 
     physcog_scene_id = "L1-C2"
+    physcog_validation_status = (
+        "withdrawn_runtime_asset_inventory_mismatch_superpod_499315"
+    )
     physcog_factor = "L1-C"
     physcog_variable = (
         "whether the released object's own footprint is fitted into the free "
@@ -416,6 +421,7 @@ class L1C3CantileveredOvenTray(StaticConfigScene, PickPlaceCounterToOven):
     """The tray is on the rack, but its middle is not over the rack any more."""
 
     physcog_scene_id = "L1-C3"
+    physcog_validation_status = "withdrawn_physics_superpod_499321"
     physcog_factor = "L1-C"
     physcog_variable = (
         "whether the support state of the goal receptacle itself is read before "
@@ -508,6 +514,7 @@ class L1C4LipSupportedMicrowavePlate(StaticConfigScene, PickPlaceCounterToMicrow
     """The plate is in the microwave, but half of it is over the open door."""
 
     physcog_scene_id = "L1-C4"
+    physcog_validation_status = "withdrawn_physics_superpod_499316"
     physcog_factor = "L1-C"
     physcog_variable = (
         "whether the goal receptacle's own support is read before the load is "
@@ -585,6 +592,9 @@ class L1C5OccupiedSinkBasin(StaticConfigScene, PickPlaceCounterToSink):
     """The basin centre is taken, so the bowl comes to rest on a glass, not the floor."""
 
     physcog_scene_id = "L1-C5"
+    physcog_validation_status = (
+        "withdrawn_policy_camera_visibility_superpod_499312"
+    )
     physcog_factor = "L1-C"
     physcog_variable = (
         "whether the release height is driven down to the free floor of a "

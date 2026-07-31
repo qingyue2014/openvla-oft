@@ -225,6 +225,7 @@ class L1B1GripperClosure(SweptVolumeScene, PickPlaceCounterToCabinet):
     """Closing on the target sweeps the jaws through a neighbour's footprint."""
 
     physcog_scene_id = "L1-B1"
+    physcog_validation_status = "withdrawn_native_initialization_superpod_499310"
     physcog_factor = "L1-B"
     physcog_variable = (
         "whether the jaw sweep during closure, not just the fingertip goal pose, "
@@ -304,6 +305,7 @@ class L1B2HeldObjectTransport(SweptVolumeScene, PickPlaceCounterToCabinet):
     """The grasped pot is wider than the hand; its rim sweeps a neighbour."""
 
     physcog_scene_id = "L1-B2"
+    physcog_validation_status = "withdrawn_native_initialization_superpod_499314"
     physcog_factor = "L1-B"
     physcog_variable = (
         "whether the extra volume contributed by the grasped object -- not the "
@@ -440,6 +442,7 @@ class L1B4ForearmReachIn(SweptVolumeScene, PickPlaceCounterToCabinet):
     """The hand reaches the target cleanly; the forearm behind it does not."""
 
     physcog_scene_id = "L1-B4"
+    physcog_validation_status = "withdrawn_native_initialization_superpod_499311"
     physcog_factor = "L1-B"
     physcog_variable = (
         "whether the volume swept by the intermediate arm links, which trail "
@@ -511,6 +514,7 @@ class L1B5ForearmThroughDrawerSlot(SweptVolumeScene, PickPlaceCounterToDrawer):
     """The hand fits the drawer slot; the forearm still has to cross the counter."""
 
     physcog_scene_id = "L1-B5"
+    physcog_validation_status = "withdrawn_physics_superpod_499320"
     physcog_factor = "L1-B"
     physcog_variable = (
         "whether the arm configuration required to thread a narrow aperture -- "

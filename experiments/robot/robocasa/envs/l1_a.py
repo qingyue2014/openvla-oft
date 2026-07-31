@@ -396,6 +396,9 @@ class L1A2DepthAmbiguousTwins(StaticGeometryScene, PickPlaceCounterToCabinet):
     """Two glass cups in line; the prompt names the category, not the depth."""
 
     physcog_scene_id = "L1-A2"
+    physcog_validation_status = (
+        "withdrawn_physics_and_policy_camera_visibility_superpod_499309"
+    )
     physcog_factor = "L1-A"
     physcog_variable = (
         "whether the depth ordering of two metrically identical candidates is "
@@ -466,6 +469,9 @@ class L1A3OccludedShelfReferent(StaticGeometryScene, PickPlaceCabinetToCounter):
     """The referent is deep on a dim shelf, behind a box standing at the lip."""
 
     physcog_scene_id = "L1-A3"
+    physcog_validation_status = (
+        "initial_gates_passed_pi05_eb_failed_superpod_499317_499323"
+    )
     physcog_factor = "L1-A"
     physcog_variable = (
         "whether the depth of a referent recessed inside an opened fixture is "
@@ -548,6 +554,7 @@ class L1A4OccludedDrawerReferent(StaticGeometryScene, PickPlaceDrawerToCounter):
     """The drawer slot is below the sight line and a bowl at the lip closes it."""
 
     physcog_scene_id = "L1-A4"
+    physcog_validation_status = "withdrawn_g0_eb_instability_superpod_499318"
     physcog_factor = "L1-A"
     physcog_variable = (
         "whether the position of the opening of a support recessed *below* the "
@@ -613,6 +620,9 @@ class L1A5FalseSupportPlane(StaticGeometryScene, PickPlaceCounterToMicrowave):
     """The target sits on a plate; a box in front offers a competing top plane."""
 
     physcog_scene_id = "L1-A5"
+    physcog_validation_status = (
+        "withdrawn_matched_control_policy_camera_visibility_superpod_499319"
+    )
     physcog_factor = "L1-A"
     physcog_variable = (
         "whether the height of the surface the referent actually rests on is "
