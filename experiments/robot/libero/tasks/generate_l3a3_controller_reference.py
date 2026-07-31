@@ -53,6 +53,87 @@ def _position_action(current, target, gripper, scale):
     return action
 
 
+def _select_reachable_trailing_contact(
+    plate_xy, push_direction_xy, eef_xy, backoff
+):
+    """Choose a reachable cardinal rim point that the push moves inward from.
+
+    A point exactly opposite the diagonal goal direction is geometrically
+    natural but unnecessarily couples both workspace axes.  In this native
+    task that point moves the Franka toward its difficult +X reach limit.
+    Cardinal rim candidates preserve a positive inward component of the
+    requested push while allowing the closest reachable trailing side.
+    """
+    plate_xy = np.asarray(plate_xy, dtype=float)
+    direction = np.asarray(push_direction_xy, dtype=float)
+    eef_xy = np.asarray(eef_xy, dtype=float)
+    norm = float(np.linalg.norm(direction))
+    if plate_xy.shape != (2,) or eef_xy.shape != (2,) or direction.shape != (2,):
+        raise ValueError("plate, EEF, and push coordinates must be 2-D")
+    if norm <= 1e-9 or not np.isfinite(norm):
+        raise ValueError("push direction must be finite and nonzero")
+    if backoff <= 0:
+        raise ValueError("plate contact backoff must be positive")
+    direction = direction / norm
+    offsets = (
+        np.array([backoff, 0.0]),
+        np.array([-backoff, 0.0]),
+        np.array([0.0, backoff]),
+        np.array([0.0, -backoff]),
+    )
+    # Moving along ``direction`` must point from the pusher into the plate:
+    # dot(direction, plate - contact) > 0.
+    trailing = [
+        offset for offset in offsets if float(np.dot(direction, -offset)) > 1e-6
+    ]
+    if not trailing:
+        raise ValueError("no cardinal trailing plate contact candidate")
+    offset = min(
+        trailing,
+        key=lambda value: float(
+            np.linalg.norm((plate_xy + value) - eef_xy)
+        ),
+    )
+    return plate_xy + offset
+
+
+def _robot_contacts_body(env, body_name):
+    """Return whether any native robot/gripper geom contacts ``body_name``."""
+    model, data = env.sim.model, env.sim.data
+    root_id = int(model.body_name2id(body_name))
+    descendants = {root_id}
+    changed = True
+    while changed:
+        changed = False
+        for body_id in range(int(model.nbody)):
+            if (
+                int(model.body_parentid[body_id]) in descendants
+                and body_id not in descendants
+            ):
+                descendants.add(body_id)
+                changed = True
+    target_geoms = {
+        geom_id
+        for geom_id in range(int(model.ngeom))
+        if int(model.geom_bodyid[geom_id]) in descendants
+    }
+    for index in range(int(data.ncon)):
+        contact = data.contact[index]
+        geom1, geom2 = int(contact.geom1), int(contact.geom2)
+        if geom1 in target_geoms:
+            other_geom = geom2
+        elif geom2 in target_geoms:
+            other_geom = geom1
+        else:
+            continue
+        other_body = model.body_id2name(
+            int(model.geom_bodyid[other_geom])
+        ) or ""
+        if other_body.startswith(("robot0_", "gripper0_")):
+            return True
+    return False
+
+
 def _load_er_episode(path: Path, episode: int):
     with h5py.File(path, "r") as handle:
         group = handle[TASK_KEY]
@@ -125,7 +206,8 @@ class Rollout:
         *,
         tolerance=None,
         max_steps=None,
-        stall_tolerance=None,
+        stop_when=None,
+        stop_label="stop condition",
     ):
         tolerance = self.args.position_tolerance if tolerance is None else tolerance
         max_steps = self.args.max_waypoint_steps if max_steps is None else max_steps
@@ -134,7 +216,9 @@ class Rollout:
             current = np.asarray(self.obs["robot0_eef_pos"], dtype=float)
             error = float(np.linalg.norm(np.asarray(target) - current))
             best = min(best, error)
-            if error <= tolerance:
+            if stop_when is not None and stop_when():
+                return
+            if stop_when is None and error <= tolerance:
                 return
             self.advance(
                 _position_action(
@@ -142,8 +226,11 @@ class Rollout:
                 ),
                 phase,
             )
-        if stall_tolerance is not None and best <= stall_tolerance:
-            return
+        if stop_when is not None:
+            raise RuntimeError(
+                f"OSC {stop_label} not observed phase={phase} "
+                f"best_error_m={best:.5f} target={np.asarray(target).tolist()}"
+            )
         raise RuntimeError(
             f"OSC waypoint timeout phase={phase} best_error_m={best:.5f} "
             f"target={np.asarray(target).tolist()}"
@@ -240,9 +327,10 @@ def generate(args):
         if not rollout.oracle.safe_prefix_completed:
             raise RuntimeError("OSC bottle parking did not pass the causal safe-prefix gate")
 
-        # Put the gripper just behind the plate along its native goal vector.
-        # The compact closed gripper is then used as a pusher.  Targets are
-        # recomputed from the live plate pose, but no simulator state is edited.
+        # Select a cardinal trailing rim point whose inward push component is
+        # positive and whose XY position is closest to the live EEF.  For this
+        # native diagonal goal this selects the rear (-Y) rim rather than the
+        # hard-to-reach diagonal (+X,-Y) point.
         plate_start = body_pose(env, PLATE_BODY)[0]
         goal = np.asarray(
             env.sim.data.site_xpos[env.sim.model.site_name2id(GOAL_SITE)],
@@ -251,24 +339,30 @@ def generate(args):
         direction_xy = goal[:2] - plate_start[:2]
         direction_xy /= np.linalg.norm(direction_xy)
         contact_target = plate_start.copy()
-        contact_target[:2] -= direction_xy * args.plate_contact_backoff
-        contact_target[2] += args.plate_contact_eef_height
+        contact_target[:2] = _select_reachable_trailing_contact(
+            plate_start[:2],
+            direction_xy,
+            np.asarray(rollout.obs["robot0_eef_pos"], dtype=float)[:2],
+            args.plate_contact_backoff,
+        )
+        # Seek below the nominal fingertip height.  Physical contact, not
+        # Cartesian target error, terminates this motion.
+        contact_target[2] += args.plate_contact_seek_eef_height
         approach_target = contact_target.copy()
         approach_target[2] += args.plate_approach_clearance
         rollout.move(approach_target, -1.0, "task")
-        # The nominal point deliberately penetrates the plate's contact
-        # manifold.  A real OSC controller can stop a few centimetres short
-        # once the closed gripper has already made contact; requiring the
-        # unreachable geometric centre would reject a physically valid push.
-        # Native task success and the causal oracle below still fail closed if
-        # this tolerance does not produce an actual plate push.
         rollout.move(
             contact_target,
             -1.0,
             "task",
-            stall_tolerance=args.plate_contact_stall_tolerance,
+            stop_when=lambda: _robot_contacts_body(env, PLATE_BODY),
+            stop_label="robot-plate contact",
         )
         rollout.hold(1.0, args.pusher_close_steps, "task")
+        if not _robot_contacts_body(env, PLATE_BODY):
+            raise RuntimeError(
+                "robot-plate contact was lost while closing the pusher"
+            )
 
         pusher_start = np.asarray(rollout.obs["robot0_eef_pos"], dtype=float).copy()
         for distance in np.arange(
@@ -403,10 +497,9 @@ def main():
     parser.add_argument("--release_steps", type=int, default=35)
     parser.add_argument("--retreat_height", type=float, default=0.120)
     parser.add_argument("--prefix_settle_steps", type=int, default=40)
-    parser.add_argument("--plate_contact_backoff", type=float, default=0.075)
-    parser.add_argument("--plate_contact_eef_height", type=float, default=0.130)
+    parser.add_argument("--plate_contact_backoff", type=float, default=0.065)
     parser.add_argument(
-        "--plate_contact_stall_tolerance", type=float, default=0.070
+        "--plate_contact_seek_eef_height", type=float, default=0.080
     )
     parser.add_argument("--plate_approach_clearance", type=float, default=0.080)
     parser.add_argument("--pusher_close_steps", type=int, default=15)

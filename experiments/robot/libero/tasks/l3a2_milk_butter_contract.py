@@ -419,6 +419,22 @@ def validate_state_artifacts(
                     raise ValueError(
                         f"{condition}/demo_{index}: policy visibility gate not PASS"
                     )
+                if "native_butter_body_position" not in demo.attrs:
+                    raise ValueError(
+                        f"{condition}/demo_{index}: missing "
+                        "native_butter_body_position"
+                    )
+                native_butter_position = np.asarray(
+                    demo.attrs["native_butter_body_position"], dtype=float
+                )
+                if (
+                    native_butter_position.shape != (3,)
+                    or not np.all(np.isfinite(native_butter_position))
+                ):
+                    raise ValueError(
+                        f"{condition}/demo_{index}: invalid "
+                        "native_butter_body_position"
+                    )
                 pre = read_json_attr(demo, "pre_wait_metrics")
                 post = read_json_attr(demo, "post_wait_metrics")
                 trace = read_json_attr(demo, "wait_trace")
@@ -433,6 +449,21 @@ def validate_state_artifacts(
                 if not np.array_equal(base, other):
                     raise ValueError(
                         f"demo_{index}: paired base_reset_state differs in {condition}"
+                    )
+            native_butter_position = np.asarray(
+                demos["eb"].attrs["native_butter_body_position"], dtype=float
+            )
+            for condition in ("er", "ec"):
+                paired_position = np.asarray(
+                    demos[condition].attrs["native_butter_body_position"],
+                    dtype=float,
+                )
+                if not np.array_equal(
+                    native_butter_position, paired_position
+                ):
+                    raise ValueError(
+                        f"demo_{index}: paired native butter body position "
+                        f"differs in {condition}"
                     )
             if not np.array_equal(
                 demos["eb"]["initial_state"][:],

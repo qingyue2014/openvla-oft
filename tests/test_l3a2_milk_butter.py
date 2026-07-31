@@ -31,6 +31,12 @@ from experiments.robot.libero.tasks.validate_l3a2_milk_butter_smoke import (
 from experiments.robot.libero.tasks.generate_l3a2_milk_butter_initial_states import (
     _collision_vertical_bounds,
 )
+from experiments.robot.libero.tasks.validate_l3a2_milk_butter_osc_reference import (
+    _load_records,
+)
+from experiments.robot.libero.tasks import (
+    generate_l3a2_milk_butter_initial_states as l3a2_generator,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -90,6 +96,9 @@ def _write_artifact(path, condition, bases, *, illegal_initial=False):
             demo.create_dataset("initial_state", data=evaluated)
             demo.attrs["butter_qpos_flat_start"] = 10
             demo.attrs["butter_qvel_flat_start"] = 40
+            demo.attrs["native_butter_body_position"] = (
+                base[10:13] + np.array([0.125, -0.25, 0.375])
+            )
             demo.attrs["formal_state_pass"] = True
             demo.attrs["policy_visibility_pass"] = True
             demo.attrs["pre_wait_metrics"] = '{"objects":{"butter":{}}}'
@@ -156,6 +165,113 @@ def test_pairing_rejects_non_butter_change_in_evaluated_initial_state(tmp_path):
             paths["ec"],
             native_bddl=NATIVE_BDDL,
         )
+
+
+def test_pairing_rejects_mismatched_native_butter_body_position(tmp_path):
+    paths = _triplet(tmp_path)
+    with h5py.File(paths["ec"], "r+") as handle:
+        handle[TASK_KEY]["demo_0"].attrs[
+            "native_butter_body_position"
+        ] += np.array([0.01, 0.0, 0.0])
+    with pytest.raises(
+        ValueError, match="paired native butter body position differs"
+    ):
+        validate_state_artifacts(
+            paths["eb"],
+            paths["er"],
+            paths["ec"],
+            native_bddl=NATIVE_BDDL,
+        )
+
+
+def test_osc_loader_uses_saved_world_body_position_not_free_qpos(tmp_path):
+    paths = _triplet(tmp_path)
+    records = _load_records(str(paths["er"]), 2)
+    with h5py.File(paths["er"], "r") as handle:
+        for index, record in enumerate(records):
+            free_qpos_translation = handle[TASK_KEY][f"demo_{index}"][
+                "base_reset_state"
+            ][10:13]
+            expected_world_position = free_qpos_translation + np.array(
+                [0.125, -0.25, 0.375]
+            )
+            assert record["native_butter_body_position"] == pytest.approx(
+                expected_world_position
+            )
+            assert not np.array_equal(
+                record["native_butter_body_position"],
+                free_qpos_translation,
+            )
+
+
+def test_move_body_linear_converts_world_body_target_to_free_qpos(monkeypatch):
+    offset = np.array([0.18, -0.07, 0.26])
+    qpos_start = np.array([0.7, -0.4, 1.2])
+    destination = np.array([1.13, -0.12, 1.81])
+
+    class Model:
+        njnt = 1
+        jnt_bodyid = np.array([0])
+        jnt_type = np.array([0])
+        jnt_qposadr = np.array([2])
+        jnt_dofadr = np.array([4])
+
+        @staticmethod
+        def body_name2id(name):
+            assert name == "milk_1_main"
+            return 0
+
+    class Data:
+        qpos = np.arange(10, dtype=float)
+        qvel = np.ones(12, dtype=float)
+        body_xpos = np.zeros((1, 3), dtype=float)
+
+    class Sim:
+        model = Model()
+        data = Data()
+
+        def __init__(self):
+            self.body_positions = []
+
+        def forward(self):
+            self.data.body_xpos[0] = self.data.qpos[2:5] + offset
+
+        def step(self):
+            self.forward()
+            self.body_positions.append(self.data.body_xpos[0].copy())
+
+    sim = Sim()
+    sim.data.qpos[2:5] = qpos_start
+    sim.forward()
+    body_start = sim.data.body_xpos[0].copy()
+    env = SimpleNamespace(sim=sim)
+    frames = []
+    monkeypatch.setattr(
+        l3a2_generator,
+        "_capture_frame",
+        lambda _env: np.zeros((1, 1, 3), dtype=np.uint8),
+    )
+
+    l3a2_generator._move_body_linear(
+        env,
+        "milk_1_main",
+        destination,
+        steps=4,
+        frames=frames,
+    )
+
+    expected_qpos = qpos_start + (destination - body_start)
+    assert sim.data.qpos[2:5] == pytest.approx(expected_qpos)
+    assert sim.data.body_xpos[0] == pytest.approx(destination)
+    expected_positions = np.asarray(
+        [
+            body_start + fraction * (destination - body_start)
+            for fraction in (0.25, 0.5, 0.75, 1.0)
+        ]
+    )
+    np.testing.assert_allclose(sim.body_positions, expected_positions)
+    assert sim.data.qvel[4:10] == pytest.approx(np.zeros(6))
+    assert len(frames) == 4
 
 
 def test_runtime_request_and_human_review_are_hash_bound(tmp_path):

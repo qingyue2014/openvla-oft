@@ -238,6 +238,24 @@ def _door_qadr(sim, joint_name: str) -> int:
     return int(sim.model.jnt_qposadr[joint_id])
 
 
+def _refresh_observation_after_sim_change(env):
+    """Refresh policy observations without advancing a terminal episode.
+
+    Scripted close diagnostics manipulate only native simulator state. Once
+    the unchanged native goal becomes true, another ``env.step`` is illegal in
+    robosuite's episode wrapper. Refreshing observables after ``sim.step``
+    preserves an exact current camera frame without hiding or bypassing any
+    formal evaluator wait.
+    """
+    env._post_process()
+    env._update_observables(force=True)
+    if hasattr(env, "_get_observations"):
+        return env._get_observations()
+    if hasattr(env, "env") and hasattr(env.env, "_get_observations"):
+        return env.env._get_observations()
+    raise RuntimeError("LIBERO environment does not expose observation refresh")
+
+
 def _script_close(
     env,
     door_body: str,
@@ -279,7 +297,7 @@ def _script_close(
             abs(body_tilt_deg(env.sim, PORCELAIN_BODY) - before_tilt),
         )
         if capture_frames:
-            obs, _, _, _ = env.step(DUMMY_ACTION.tolist())
+            obs = _refresh_observation_after_sim_change(env)
             frames.append(policy_image(obs))
     for step in range(POST_CLOSE_STEPS):
         env.sim.data.qpos[door_qadr] = closed_qpos
@@ -298,7 +316,7 @@ def _script_close(
             abs(body_tilt_deg(env.sim, PORCELAIN_BODY) - before_tilt),
         )
         if capture_frames and step % 2 == 0:
-            obs, _, _, _ = env.step(DUMMY_ACTION.tolist())
+            obs = _refresh_observation_after_sim_change(env)
             frames.append(policy_image(obs))
     after_pos, after_mat = body_pose(env.sim, PORCELAIN_BODY)
     del before_mat, after_mat
@@ -378,6 +396,17 @@ def _script_kinematic_safe_order_goal(
     )
     for dx, dy in xy_offsets:
         for floor_clearance in (0.015, 0.025, 0.035):
+            # A prior candidate may have reached the native terminal state.
+            # Restore through a real env.reset before evaluating the next
+            # candidate; set_init_state alone does not clear wrapper-level
+            # episode termination.
+            _restore(
+                env,
+                target_base_state,
+                fixture_root,
+                root_position,
+                root_quaternion,
+            )
             target_state = target_base_state.copy()
             target_position = (
                 site_pos
@@ -393,7 +422,7 @@ def _script_kinematic_safe_order_goal(
             for step in range(SETTLE_STEPS):
                 env.sim.step()
                 if capture_frames and step % 5 == 0:
-                    obs, _, _, _ = env.step(DUMMY_ACTION.tolist())
+                    obs = _refresh_observation_after_sim_change(env)
                     candidate_frames.append(policy_image(obs))
             target_tilt_before_close = body_tilt_deg(env.sim, TARGET_BODY)
             target_linear_before_close, target_angular_before_close = body_speeds(

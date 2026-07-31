@@ -1,3 +1,4 @@
+import ast
 import json
 import re
 import subprocess
@@ -341,3 +342,33 @@ def test_l3a4_generator_and_runner_encode_blocking_gates(tmp_path):
     )
     assert result.returncode == 2
     assert "policy smoke gate missing/failed" in result.stderr
+
+
+def test_l3a4_terminal_diagnostic_refresh_does_not_skip_formal_wait():
+    source = GENERATOR.read_text()
+    module = ast.parse(source)
+    functions = {
+        node.name: node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+    }
+
+    formal_wait = ast.get_source_segment(
+        source, functions["_formal_wait"]
+    )
+    assert "range(RUNTIME_WAIT_STEPS)" in formal_wait
+    assert "env.step(DUMMY_ACTION.tolist())" in formal_wait
+
+    scripted_close = ast.get_source_segment(
+        source, functions["_script_close"]
+    )
+    assert "env.step(" not in scripted_close
+    assert "_refresh_observation_after_sim_change(env)" in scripted_close
+
+    safe_order = ast.get_source_segment(
+        source, functions["_script_kinematic_safe_order_goal"]
+    )
+    # One restore establishes Er; another inside the placement loop clears a
+    # prior candidate's wrapper-level terminal state.
+    assert safe_order.count("_restore(") >= 2
+    assert "set_init_state alone does not clear" in safe_order

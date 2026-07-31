@@ -69,6 +69,35 @@ FIXTURE_ROOT_BODIES = (
 )
 
 
+def _free_joint_translation_for_world_target(
+    qpos_translation: np.ndarray,
+    body_world_position: np.ndarray,
+    target_world_position: np.ndarray,
+) -> np.ndarray:
+    """Apply a world body displacement to a free-joint translation.
+
+    The compiled main-body origin need not coincide with the free-joint
+    translation.  Keeping their current offset while applying the desired
+    world-space displacement avoids treating ``body_xpos`` as raw qpos.
+    """
+    qpos_translation = np.asarray(qpos_translation, dtype=float)
+    body_world_position = np.asarray(body_world_position, dtype=float)
+    target_world_position = np.asarray(target_world_position, dtype=float)
+    if (
+        qpos_translation.shape != (3,)
+        or body_world_position.shape != (3,)
+        or target_world_position.shape != (3,)
+    ):
+        raise ValueError("free-joint/body/target translations must be 3-D")
+    if not (
+        np.isfinite(qpos_translation).all()
+        and np.isfinite(body_world_position).all()
+        and np.isfinite(target_world_position).all()
+    ):
+        raise ValueError("free-joint/body/target translations must be finite")
+    return qpos_translation + (target_world_position - body_world_position)
+
+
 def _policy_rgb(obs) -> np.ndarray:
     # Exact orientation transform used by get_libero_image() before policy
     # model-specific resizing.
@@ -132,12 +161,31 @@ def _settled_bottle_transform(
     else:
         raise ValueError(condition)
 
-    env.sim.data.qpos[qadr:qadr + 2] = target_xy
-    env.sim.data.qpos[qadr + 2] = target_z
     # Preserve the native upright yaw while normalizing any accumulated tilt.
     env.sim.data.qpos[qadr + 3:qadr + 7] = np.array([0.0, 0.0, 0.0, 1.0])
+    env.sim.forward()
+    target_world_position = np.array(
+        [target_xy[0], target_xy[1], target_z], dtype=float
+    )
+    bottle_world_position, _ = body_pose(env, BOTTLE_BODY)
+    env.sim.data.qpos[qadr:qadr + 3] = (
+        _free_joint_translation_for_world_target(
+            env.sim.data.qpos[qadr:qadr + 3],
+            bottle_world_position,
+            target_world_position,
+        )
+    )
     env.sim.data.qvel[vadr:vadr + 6] = 0.0
     env.sim.forward()
+    pre_settle_position, _ = body_pose(env, BOTTLE_BODY)
+    pre_settle_world_error = float(
+        np.linalg.norm(pre_settle_position - target_world_position)
+    )
+    if pre_settle_world_error > 1e-6:
+        raise RuntimeError(
+            "wine-bottle world-target conversion failed before settling: "
+            f"error={pre_settle_world_error:.9f}m"
+        )
     for _ in range(SETTLE_STEPS):
         env.sim.step()
 
@@ -152,6 +200,7 @@ def _settled_bottle_transform(
         "bottle_qvel_flat_start": qvel_flat,
         "intervention_target_xy": target_xy.tolist(),
         "intervention_initial_z": float(target_z),
+        "intervention_pre_settle_world_error_m": pre_settle_world_error,
         "settle_steps": SETTLE_STEPS,
     }
 

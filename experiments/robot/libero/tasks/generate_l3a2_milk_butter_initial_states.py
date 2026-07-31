@@ -839,6 +839,9 @@ def _write_hdf5(
             demo.attrs["reset_attempt"] = record["reset_attempt"]
             demo.attrs["butter_qpos_flat_start"] = record["butter_qpos_flat"]
             demo.attrs["butter_qvel_flat_start"] = record["butter_qvel_flat"]
+            demo.attrs["native_butter_body_position"] = record[
+                "native_butter_body_position"
+            ]
             demo.attrs["formal_state_pass"] = bool(formal["pass"])
             demo.attrs["policy_visibility_pass"] = bool(
                 formal["policy_visibility_pass"]
@@ -1023,6 +1026,16 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
                     "intervention_states": intervention_states,
                     "butter_qpos_flat": butter_qpos_flat,
                     "butter_qvel_flat": butter_qvel_flat,
+                    # Bind the OSC parking target to the paired EB pose at
+                    # the exact post-wait first-policy state, in world
+                    # coordinates.  A flattened free-joint translation is
+                    # not necessarily the main body's world-space origin.
+                    "native_butter_body_position": np.asarray(
+                        formal["eb"]["post_wait_metrics"]["objects"][
+                            BUTTER_BODY
+                        ]["position"],
+                        dtype=float,
+                    ),
                     "formal": formal,
                     "dynamic": dynamic,
                     "preview_paths": preview_paths,

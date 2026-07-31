@@ -1,11 +1,19 @@
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 from experiments.robot.libero.tasks import write_l3a3_review_template
+from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
+    Rollout,
+    _select_reachable_trailing_contact,
+)
+from experiments.robot.libero.tasks.generate_l3a3_plate_bottle_states import (
+    _free_joint_translation_for_world_target,
+)
 from experiments.robot.libero.tasks.l3a3_plate_bottle_common import (
     BDDL_PROMPT,
     BOTTLE_BODY,
@@ -177,6 +185,26 @@ def test_generator_uses_actor_frame_consequence_and_relation_loss():
     assert "and relation_lost" in text
     assert "max_bottle_displacement >= CONSEQUENCE_DISPLACEMENT_M" not in text
     assert "scan_offsets" in text
+    assert "_free_joint_translation_for_world_target" in text
+    assert "qpos[qadr:qadr + 2] = target_xy" not in text
+
+
+def test_world_body_target_is_converted_through_free_joint_displacement():
+    qpos_start = np.array([0.4, -0.2, 0.9])
+    fixed_compiled_offset = np.array([0.08, -0.03, 0.12])
+    body_start = qpos_start + fixed_compiled_offset
+    target_world = np.array([-0.1, 0.25, 1.05])
+    qpos_target = _free_joint_translation_for_world_target(
+        qpos_start, body_start, target_world
+    )
+    assert np.allclose(
+        qpos_target,
+        qpos_start + (target_world - body_start),
+    )
+    # Applying the unchanged compiled offset reaches the requested world body
+    # position; assigning target_world directly to qpos would not.
+    assert np.allclose(qpos_target + fixed_compiled_offset, target_world)
+    assert not np.allclose(target_world + fixed_compiled_offset, target_world)
 
 
 def test_runner_phase_order_and_fail_closed_formal_contract():
@@ -268,6 +296,63 @@ def test_safe_reference_requires_controller_actions_for_prefix_and_native_task()
     assert "set_state_from_flattened" not in producer
     assert "cv2.VideoWriter" in producer
     assert '"policy_review_video": str(video.resolve())' in producer
+    assert "plate_contact_stall_tolerance" not in producer
+    assert "stop_when=lambda: _robot_contacts_body(env, PLATE_BODY)" in producer
+
+
+def test_plate_contact_uses_reachable_axis_aligned_trailing_rim():
+    plate = np.array([0.052, -0.028])
+    direction = np.array([-0.394, 0.919])
+    eef = np.array([-0.210, -0.060])
+    contact = _select_reachable_trailing_contact(
+        plate, direction, eef, backoff=0.065
+    )
+    offset = contact - plate
+    # Of the two trailing cardinal sides (+X and -Y), -Y is much closer to
+    # the live EEF and avoids the failed +X reach of the diagonal waypoint.
+    assert np.allclose(offset, [0.0, -0.065])
+    unit = direction / np.linalg.norm(direction)
+    assert float(np.dot(unit, plate - contact)) > 0.0
+
+
+def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
+    class FakeRollout:
+        args = SimpleNamespace(
+            position_tolerance=0.005,
+            max_waypoint_steps=4,
+            position_action_scale=0.08,
+        )
+
+        def __init__(self):
+            self.obs = {"robot0_eef_pos": np.zeros(3)}
+            self.calls = 0
+
+        def advance(self, action, phase):
+            del action, phase
+            self.calls += 1
+
+    reached = FakeRollout()
+    Rollout.move(
+        reached,
+        np.zeros(3),
+        -1.0,
+        "task",
+        stop_when=lambda: reached.calls >= 2,
+        stop_label="robot-plate contact",
+    )
+    assert reached.calls == 2
+
+    missing = FakeRollout()
+    with pytest.raises(RuntimeError, match="robot-plate contact not observed"):
+        Rollout.move(
+            missing,
+            np.zeros(3),
+            -1.0,
+            "task",
+            max_steps=2,
+            stop_when=lambda: False,
+            stop_label="robot-plate contact",
+        )
 
 
 def test_review_template_loads_smoke_and_binds_safe_reference(

@@ -50,12 +50,25 @@ def _load_records(path: str, count: int) -> list[dict[str, Any]]:
         group = handle[TASK_KEY]
         for index in range(min(count, len(group))):
             demo = group[f"demo_{index}"]
+            if "native_butter_body_position" not in demo.attrs:
+                raise ValueError(
+                    f"demo_{index}: missing native_butter_body_position"
+                )
+            native_butter_body_position = np.asarray(
+                demo.attrs["native_butter_body_position"], dtype=float
+            )
+            if (
+                native_butter_body_position.shape != (3,)
+                or not np.all(np.isfinite(native_butter_body_position))
+            ):
+                raise ValueError(
+                    f"demo_{index}: invalid native_butter_body_position"
+                )
             records.append(
                 {
                     "state": demo["initial_state"][:],
-                    "base": demo["base_reset_state"][:],
-                    "butter_qpos_flat_start": int(
-                        demo.attrs["butter_qpos_flat_start"]
+                    "native_butter_body_position": (
+                        native_butter_body_position.copy()
                     ),
                 }
             )
@@ -356,11 +369,7 @@ def _run_attempt(
         )
 
     native_butter_xyz = np.asarray(
-        record["base"][
-            record["butter_qpos_flat_start"] :
-            record["butter_qpos_flat_start"] + 3
-        ],
-        dtype=float,
+        record["native_butter_body_position"], dtype=float
     )
     if failure is None:
         obs, step, failure = _place(
