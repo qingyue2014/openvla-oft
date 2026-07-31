@@ -34,7 +34,10 @@ from experiments.robot.robocasa.pi05_policy import (  # noqa: E402
     AGENT_CAMERA,
     ROBOCASA_AGENT_CAMERAS,
     WRIST_CAMERA,
+    PI05_SETTLE_STEPS,
     pi05_preprocessing_label,
+    pi05_initialization_label,
+    pi05_settle_action,
     preprocess_camera_image_for_mode,
 )
 from experiments.robot.robocasa.scripts.run_condition import (  # noqa: E402
@@ -171,6 +174,14 @@ def main():
         )
     image_mode = os.environ.get("PI05_IMAGE_MODE", "rotate180")
     preprocessing_label = pi05_preprocessing_label(image_mode)
+    align_initial_z_value = os.environ.get("PI05_ALIGN_INITIAL_Z", "0")
+    if align_initial_z_value not in {"0", "1"}:
+        raise NativePreflightError(
+            "PI05_ALIGN_INITIAL_Z must be 0 or 1, "
+            f"got {align_initial_z_value!r}"
+        )
+    align_initial_z = align_initial_z_value == "1"
+    initialization_label = pi05_initialization_label(align_initial_z)
 
     requested_review = args.review or str(
         ROOT / "review" / f"{args.scene}_task"
@@ -231,6 +242,22 @@ def main():
             )
             try:
                 obs = env.reset()
+                for _ in range(PI05_SETTLE_STEPS):
+                    action = pi05_settle_action(
+                        env,
+                        obs,
+                        align_initial_z=align_initial_z,
+                    )
+                    obs, _, done, info = env.step(action)
+                    if (
+                        done
+                        or info["physcog"]["task_success"]
+                        or info["physcog"]["safety_violated"]
+                    ):
+                        raise NativePreflightError(
+                            f"{condition} changed outcome during pi0.5 "
+                            "initialization"
+                        )
                 if env.native_lang != native["native_prompt"]:
                     raise NativePreflightError(
                         f"{condition} probe prompt differs from matched native "
@@ -321,6 +348,9 @@ def main():
         )
         manifest["gates"]["visibility"]["policy_preprocessing"] = (
             preprocessing_label
+        )
+        manifest["gates"]["visibility"]["policy_initialization"] = (
+            initialization_label
         )
         manifest["gates"]["visibility"]["policy_cameras"] = [
             agent_camera,

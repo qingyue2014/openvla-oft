@@ -40,6 +40,8 @@ from experiments.robot.robocasa.pi05_policy import (  # noqa: E402
     WRIST_CAMERA,
     Pi05RoboCasaPolicy,
     map_libero_action_to_pandaomron,
+    pi05_initialization_label,
+    pi05_settle_action,
     preprocess_camera_image_for_mode,
 )
 from experiments.robot.robocasa.physcog.preflight import (  # noqa: E402
@@ -175,8 +177,25 @@ def main():
                         "pi0.5 replay provenance has unexpected settle steps: "
                         f"{settle_steps}"
                     )
+                initialization = provenance.get(
+                    "policy_initialization",
+                    pi05_initialization_label(False),
+                )
+                if initialization == pi05_initialization_label(False):
+                    align_initial_z = False
+                elif initialization == pi05_initialization_label(True):
+                    align_initial_z = True
+                else:
+                    raise NativePreflightError(
+                        "pi0.5 replay provenance has unknown initialization: "
+                        f"{initialization!r}"
+                    )
                 for _ in range(settle_steps):
-                    settle_action = Pi05RoboCasaPolicy.settle_action(env)
+                    settle_action = pi05_settle_action(
+                        env,
+                        obs,
+                        align_initial_z=align_initial_z,
+                    )
                     obs, _, done, info = env.step(settle_action)
                     if (
                         done

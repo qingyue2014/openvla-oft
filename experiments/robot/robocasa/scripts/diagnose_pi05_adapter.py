@@ -195,7 +195,7 @@ def main() -> None:
                 "diagnostic prompt differs from the native preflight prompt"
             )
         for _ in range(policy.settle_steps):
-            obs, _, done, info = env.step(policy.settle_action(env))
+            obs, _, done, info = env.step(policy.settle_action(env, obs))
             if done or info["physcog"]["task_success"] or info["physcog"][
                 "safety_violated"
             ]:

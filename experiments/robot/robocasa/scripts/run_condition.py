@@ -149,6 +149,9 @@ def load_smoke_gate_manifest(
         "robot0_agentview_center",
         "robot0_eye_in_hand",
     ),
+    expected_policy_initialization: str = (
+        "pi05_libero_gripper_wait10_no_eef_alignment"
+    ),
 ) -> dict | None:
     """Require reviewed initial-state gates before a dynamic smoke rollout."""
 
@@ -175,6 +178,13 @@ def load_smoke_gate_manifest(
             f"smoke gate manifest has unpassed prerequisites: {missing}"
         )
     visibility = gates["visibility"]
+    reviewed_initialization = visibility.get("policy_initialization")
+    if reviewed_initialization != expected_policy_initialization:
+        raise NativePreflightError(
+            "smoke gate visibility initialization mismatch: reviewed "
+            f"{reviewed_initialization!r}, policy uses "
+            f"{expected_policy_initialization!r}"
+        )
     if visibility.get("policy_preprocessing") != expected_policy_preprocessing:
         raise NativePreflightError(
             "smoke gate visibility preprocessing mismatch: reviewed "
@@ -260,6 +270,11 @@ def main():
                     ("robot0_agentview_center", "robot0_eye_in_hand"),
                 )
             ),
+            expected_policy_initialization=getattr(
+                policy,
+                "policy_initialization",
+                "pi05_libero_gripper_wait10_no_eef_alignment",
+            ),
         )
         formal_gates = (
             load_formal_gate_manifest(
@@ -297,7 +312,7 @@ def main():
                 for _ in range(settle_steps):
                     settle_action = getattr(policy, "settle_action", None)
                     act = (
-                        np.asarray(settle_action(env), dtype=np.float64)
+                        np.asarray(settle_action(env, obs), dtype=np.float64)
                         if settle_action is not None
                         else np.zeros_like(env.action_spec[0], dtype=np.float64)
                     )
@@ -486,6 +501,11 @@ def main():
             "policy_camera": getattr(policy, "agent_camera", CAMERA),
             "policy_image_mode": getattr(policy, "image_mode", None),
             "policy_settle_steps": int(getattr(policy, "settle_steps", 0)),
+            "policy_initialization": getattr(
+                policy,
+                "policy_initialization",
+                None,
+            ),
         }
         pathlib.Path(f"{actions_path}.preflight.json").write_text(
             json.dumps(provenance, indent=2, sort_keys=True) + "\n"

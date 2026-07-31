@@ -31,6 +31,7 @@ PI05_ACTION_DIM = 7
 ROBOCASA_ACTION_DIM = 12
 LIBERO_PANDA_GRIPPER_SPEED = 0.01
 ROBOCASA_PANDA_GRIPPER_SPEED = 0.2
+PI05_SETTLE_STEPS = 10
 # Mean first-policy pose after the official ten-step wait, measured over the
 # 20 native LIBERO task-8 trajectories in the validated pi0.5 capability run.
 # This is an initial-pose anchor, not the all-timestep dataset mean.
@@ -114,6 +115,19 @@ def pi05_preprocessing_label(mode: str) -> str:
         "PI05_IMAGE_MODE must be 'rotate180' or 'vertical', "
         f"got {mode!r}"
     )
+
+
+def pi05_initialization_label(align_initial_z: bool) -> str:
+    if align_initial_z:
+        return "pi05_libero_gripper_wait10_align_eef_world_z_1.1756006"
+    return "pi05_libero_gripper_wait10_no_eef_alignment"
+
+
+def _env_flag(name: str, default: str = "0") -> bool:
+    value = os.environ.get(name, default)
+    if value not in {"0", "1"}:
+        raise ValueError(f"{name} must be 0 or 1, got {value!r}")
+    return value == "1"
 
 
 def wait_for_server(host: str, port: int, timeout_s: float) -> None:
@@ -398,6 +412,38 @@ def map_libero_action_to_pandaomron(
     return np.clip(mapped, np.asarray(low), np.asarray(high))
 
 
+def pi05_settle_action(
+    env: Any,
+    obs: Mapping[str, Any] | None,
+    *,
+    align_initial_z: bool,
+) -> np.ndarray:
+    """Build one of the ten pre-policy actions used by the adapter.
+
+    The optional z alignment is an explicit cross-embodiment experiment. It
+    uses the native OSC interface to lower the existing PandaOmron hand toward
+    the measured LIBERO first-policy world height; it never writes qpos or
+    simulator state directly.
+    """
+
+    raw = np.array([0.0] * 6 + [-1.0], dtype=np.float32)
+    if align_initial_z:
+        if obs is None or "robot0_eef_pos" not in obs:
+            raise ValueError("initial z alignment requires robot0_eef_pos")
+        current_z = float(np.asarray(obs["robot0_eef_pos"])[2])
+        # The OSC translation channel maps [-1, 1] to [-0.05, 0.05] m.
+        raw[2] = np.clip(
+            (float(LIBERO_INITIAL_EEF_POS[2]) - current_z) / 0.05,
+            -1.0,
+            1.0,
+        )
+    return map_libero_action_to_pandaomron(
+        raw,
+        env,
+        emulate_libero_gripper=True,
+    )
+
+
 class Pi05RoboCasaPolicy:
     """Chunked websocket client for the released ``pi05_libero`` checkpoint."""
 
@@ -410,7 +456,7 @@ class Pi05RoboCasaPolicy:
     )
     # Match examples/libero/main.py: objects settle for ten simulator steps
     # under LIBERO_DUMMY_ACTION before the first policy request.
-    settle_steps = 10
+    settle_steps = PI05_SETTLE_STEPS
 
     def __init__(self) -> None:
         self.host = os.environ.get("PI05_HOST", "127.0.0.1")
@@ -423,11 +469,16 @@ class Pi05RoboCasaPolicy:
             )
         self.camera_names = (self.agent_camera, WRIST_CAMERA)
         self.image_mode = os.environ.get("PI05_IMAGE_MODE", "rotate180")
+        self.align_initial_z = _env_flag("PI05_ALIGN_INITIAL_Z")
         self.policy_preprocessing = pi05_preprocessing_label(self.image_mode)
+        self.policy_initialization = pi05_initialization_label(
+            self.align_initial_z
+        )
         self.model_label = (
             "pi05_libero_cross_sim_initial_pose_world_delta_to_panda_base"
             "_libero_gripper_timing"
             f"_camera_{self.agent_camera}_image_{self.image_mode}"
+            f"_initialization_{self.policy_initialization}"
         )
         self.replan_steps = int(os.environ.get("PI05_REPLAN_STEPS", "5"))
         timeout_s = float(os.environ.get("PI05_CONNECT_TIMEOUT_S", "900"))
@@ -459,12 +510,15 @@ class Pi05RoboCasaPolicy:
         self._state_anchor = None
         self.last_raw_action: np.ndarray | None = None
 
-    @staticmethod
-    def settle_action(env: Any) -> np.ndarray:
-        return map_libero_action_to_pandaomron(
-            np.array([0.0] * 6 + [-1.0], dtype=np.float32),
+    def settle_action(
+        self,
+        env: Any,
+        obs: Mapping[str, Any] | None = None,
+    ) -> np.ndarray:
+        return pi05_settle_action(
             env,
-            emulate_libero_gripper=True,
+            obs,
+            align_initial_z=self.align_initial_z,
         )
 
     def policy_view_image(self, obs: Mapping[str, Any]) -> np.ndarray:
