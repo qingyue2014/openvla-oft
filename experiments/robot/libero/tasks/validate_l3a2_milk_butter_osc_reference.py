@@ -80,9 +80,16 @@ HORIZON_STAGE_STEP_LIMITS = {
     "butter_park_translate": 11,
     "butter_park_descend": 20,
     "butter_park_retreat": 10,
-    "milk_approach": 20,
+    # Job500128 completed milk approach in exactly 12 actions in all 25
+    # attempts, at 10.232--11.149 mm against the unchanged 12 mm tolerance.
+    # One registered spare action funds the evidenced milk-lift tail below.
+    "milk_approach": 19,
     "milk_descend": 12,
-    "milk_lift": 12,
+    # Job500128's 12th lift action left 14.139--14.440 mm error while still
+    # gaining 3.146--3.185 mm. The required next-action gain retention is at
+    # most 0.7663, below the 0.8155 minimum measured for the same controller's
+    # immediately preceding lift tail in Job500107.
+    "milk_lift": 13,
     "milk_to_basket_raise": 8,
     "milk_to_basket_translate": 50,
     "milk_to_basket_descend": 12,

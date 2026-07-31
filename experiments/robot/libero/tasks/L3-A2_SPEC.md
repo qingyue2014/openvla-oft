@@ -252,6 +252,54 @@ safety/hold total remains 56, and the complete static bound remains 278/280.
 The ten-action retreat is still a physical hypothesis until a fresh remote
 reference passes its post-final state and every subsequent stability gate.
 
+Superpod Job500128 provided that fresh evidence across all 25 registered
+episode/offset attempts. The ten-action retreat finished at
+11.816--11.952 mm, inside the unchanged 12 mm tolerance. Every attempt then
+completed the full ten-action butter confirmation window with floor support,
+floor-only contact, zero forbidden contacts, zero measured drift, maximum
+tilt `3.1945284701301985e-06` degrees, maximum linear speed
+`3.0085449419112237e-16` m/s, and maximum angular speed
+`1.4546898636689465e-15` rad/s. The same butter state remained unchanged
+through all 978 subsequent milk-manipulation samples (39--40 per attempt):
+floor-only support, zero forbidden contacts, zero drift, the same maximum
+tilt, maximum linear speed `3.3756547766497907e-16` m/s, and maximum angular
+speed `5.980886314913616e-15` rad/s. This closes the previously unverified
+butter retreat and stability prefix; it does not validate the later native
+milk placement stages.
+
+The first later failure was uniformly `milk_lift/waypoint_timeout`. Milk
+approach completed in exactly 12 actions in every attempt at
+10.232--11.149 mm against the unchanged 12 mm tolerance. Milk descend then
+used 7--8 actions and was accepted by its preregistered contact predicate, so
+it is not an action donor. The 12-action milk lift started at 100 mm error and
+finished at 14.139--14.440 mm; its final action still gained
+3.146--3.185 mm, and the milk body had risen 85.962--86.470 mm. Reaching the
+12 mm tolerance on a thirteenth action requires at most `0.76625654` of the
+observed twelfth-action gain.
+
+Job500107 supplies a same-controller tail check rather than an unbounded
+linear extrapolation. Across its 25 OSC lift traces, action-13 gain retained
+`0.815518416`--`0.816763225` of action-12 gain. Moreover, Job500128's worst
+post-action-12 milk error, 14.440 mm, was smaller than Job500107's best
+post-action-12 butter error, 14.585 mm; the corresponding Job500107 traces
+entered tolerance after action 13 whenever their post-action-12 error was no
+greater than 14.678 mm. The minimum evidence-backed hypothesis is therefore
+one additional milk-lift action, funded by one of milk approach's eight
+observed registered spares:
+
+| Stage | Job500128 allocation | Revised allocation |
+| --- | ---: | ---: |
+| `milk_approach` | 20 | 19 |
+| `milk_lift` | 12 | 13 |
+
+All tolerances, position scales, normalized action caps, grasp-seat actions,
+contact holds, releases, retreats, stabilization windows, and every other
+stage allocation remain unchanged. Registered motion remains 222 actions,
+the fixed safety/hold total remains 56, and the complete static bound remains
+278/280. The thirteenth milk-lift action and all downstream milk-to-basket
+stages remain physical hypotheses until a fresh remote reference executes
+and passes them; Job500128 did not physically reach those downstream stages.
+
 The safe-reference report and per-episode CSV also record the controller
 source SHA-256; the runner rejects a PASS report produced by different
 controller bytes, even when the ER state artifact is unchanged.

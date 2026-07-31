@@ -663,6 +663,132 @@ def test_500120_reallocates_exact_spares_to_butter_park_retreat():
     assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
 
 
+def test_500128_reallocates_exact_milk_approach_spare_to_lift():
+    # Exact Job500128 evidence, ordered episode-major then attempt-major.
+    # The complete butter park, retreat, and ten-step confirmation passed in
+    # all 25 attempts. Milk approach then needed exactly 12 actions, while the
+    # 12-action milk lift remained convergent just outside tolerance.
+    task_steps = [
+        163, 163, 164, 162, 163,
+        164, 164, 164, 163, 164,
+        166, 165, 167, 165, 166,
+        163, 163, 165, 162, 163,
+        161, 161, 161, 161, 162,
+    ]
+    milk_approach_steps = [12] * 25
+    milk_approach_final_error_mm = [
+        10.633414, 11.093956, 10.265997, 10.608700, 10.655214,
+        10.667521, 11.141493, 10.276884, 10.692392, 10.691813,
+        10.626741, 11.126710, 10.254393, 10.635605, 10.680739,
+        10.666574, 11.135810, 10.232073, 10.691811, 10.732355,
+        10.670952, 11.148829, 10.272508, 10.660312, 10.689717,
+    ]
+    milk_lift_steps = [12] * 25
+    milk_lift_final_error_mm = [
+        14.167201, 14.138536, 14.400306, 14.168227, 14.165980,
+        14.169280, 14.147370, 14.202369, 14.171917, 14.167336,
+        14.208339, 14.181672, 14.440392, 14.210499, 14.208054,
+        14.181852, 14.158373, 14.416566, 14.182701, 14.180698,
+        14.170954, 14.149538, 14.199545, 14.171261, 14.172046,
+    ]
+    milk_lift_last_action_gain_mm = [
+        3.151321, 3.146260, 3.175521, 3.151717, 3.150863,
+        3.151514, 3.148059, 3.158855, 3.151849, 3.151221,
+        3.160226, 3.155555, 3.184824, 3.160772, 3.159897,
+        3.154388, 3.150793, 3.179446, 3.154538, 3.154197,
+        3.155451, 3.151843, 3.161041, 3.155377, 3.155539,
+    ]
+
+    assert min(task_steps) == 161
+    assert max(task_steps) == 167
+    assert set(milk_approach_steps) == {12}
+    assert max(milk_approach_final_error_mm) < 12.0
+    assert set(milk_lift_steps) == {12}
+    assert min(milk_lift_final_error_mm) > 12.0
+
+    # One more lift action is the minimum repair. The limiting trace needs
+    # only 76.63% of its 12th-action gain. Job500107 measured 81.55--81.68%
+    # action-to-action gain retention over the same OSC lift tail in all 25
+    # registered episode/offset attempts.
+    required_gain_retention = [
+        (error - 12.0) / gain
+        for error, gain in zip(
+            milk_lift_final_error_mm,
+            milk_lift_last_action_gain_mm,
+        )
+    ]
+    job500107_same_controller_min_gain_retention = 0.815518416
+    job500107_smallest_post_action_12_error_mm = 14.585355
+    assert max(required_gain_retention) == pytest.approx(0.76625654)
+    assert max(required_gain_retention) < (
+        job500107_same_controller_min_gain_retention
+    )
+    assert max(milk_lift_final_error_mm) < (
+        job500107_smallest_post_action_12_error_mm
+    )
+
+    # Lock the full physical evidence that authorized advancing beyond the
+    # parked butter. Each attempt passed all ten confirmation actions, and
+    # every later milk action continued to observe floor-only butter support.
+    confirmation_steps = [10] * 25
+    post_park_monitor_steps = [
+        39, 39, 40, 39, 39,
+        39, 39, 39, 39, 39,
+        39, 39, 40, 39, 39,
+        39, 39, 40, 39, 39,
+        39, 39, 39, 39, 39,
+    ]
+    confirmation_evidence = {
+        "samples": 250,
+        "max_drift_m": 0.0,
+        "max_tilt_deg": 3.1945284701301985e-06,
+        "max_linear_speed_mps": 3.0085449419112237e-16,
+        "max_angular_speed_radps": 1.4546898636689465e-15,
+        "contact_sets": {("floor",)},
+        "floor_support_samples": 250,
+        "forbidden_contact_samples": 0,
+    }
+    post_park_evidence = {
+        "samples": 978,
+        "max_drift_m": 0.0,
+        "max_tilt_deg": 3.1945284701301985e-06,
+        "max_linear_speed_mps": 3.3756547766497907e-16,
+        "max_angular_speed_radps": 5.980886314913616e-15,
+        "contact_sets": {("floor",)},
+        "floor_support_samples": 978,
+        "forbidden_contact_samples": 0,
+    }
+    assert set(confirmation_steps) == {10}
+    assert min(post_park_monitor_steps) == 39
+    assert max(post_park_monitor_steps) == 40
+    assert sum(post_park_monitor_steps) == 978
+    assert confirmation_evidence["samples"] == sum(confirmation_steps)
+    assert post_park_evidence["samples"] == sum(post_park_monitor_steps)
+    for evidence in (confirmation_evidence, post_park_evidence):
+        assert evidence["max_drift_m"] <= 0.005
+        assert evidence["max_tilt_deg"] <= 2.0
+        assert evidence["max_linear_speed_mps"] <= 0.01
+        assert evidence["max_angular_speed_radps"] <= 0.10
+        assert evidence["contact_sets"] == {("floor",)}
+        assert evidence["floor_support_samples"] == evidence["samples"]
+        assert evidence["forbidden_contact_samples"] == 0
+
+    assert HORIZON_STAGE_STEP_LIMITS["milk_approach"] == 19
+    assert HORIZON_STAGE_STEP_LIMITS["milk_lift"] == 13
+    # No action is borrowed from grasp, hold, release, or stability windows.
+    assert sum(HORIZON_STAGE_STEP_LIMITS.values()) == 222
+    budget = _static_plan_budget_diagnostics(
+        grasp_seat_steps=8,
+        contact_hold_steps=2,
+        release_steps=8,
+        settle_steps=10,
+        policy_step_budget=EVALUATION_POLICY_STEP_BUDGET,
+    )
+    assert budget["registered_repeated_hold_steps"] == 56
+    assert budget["static_safe_plan_max_steps"] == 278
+    assert budget["static_safe_plan_budget_margin_steps"] == 2
+
+
 def test_registered_waypoint_accepts_exact_post_final_action_state():
     timeout = SimpleNamespace(reason="waypoint_timeout", stage="butter_lift")
 
