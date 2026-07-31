@@ -99,9 +99,13 @@ def test_build_request_uses_native_prompt_and_eight_dimensional_state():
     assert request["observation/state"].shape == (8,)
 
 
-def test_build_request_accepts_existing_native_side_camera():
+@pytest.mark.parametrize(
+    "camera",
+    ("robot0_agentview_left", "robot0_frontview"),
+)
+def test_build_request_accepts_existing_native_alternate_camera(camera):
     obs = _obs()
-    obs["robot0_agentview_left_image"] = np.full(
+    obs[f"{camera}_image"] = np.full(
         (256, 256, 3),
         17,
         dtype=np.uint8,
@@ -109,7 +113,7 @@ def test_build_request_accepts_existing_native_side_camera():
     request = build_request(
         obs,
         "pick up the mug",
-        agent_camera="robot0_agentview_left",
+        agent_camera=camera,
     )
     assert request["observation/image"].shape == (224, 224, 3)
     assert request["observation/image"].mean() == 17

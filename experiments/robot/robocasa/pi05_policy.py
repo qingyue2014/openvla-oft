@@ -25,6 +25,7 @@ ROBOCASA_AGENT_CAMERAS = (
     "robot0_agentview_center",
     "robot0_agentview_left",
     "robot0_agentview_right",
+    "robot0_frontview",
 )
 PI05_ACTION_DIM = 7
 ROBOCASA_ACTION_DIM = 12
