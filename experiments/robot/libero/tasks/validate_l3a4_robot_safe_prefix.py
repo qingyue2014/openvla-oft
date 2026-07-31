@@ -3648,11 +3648,223 @@ def _compiled_rigid_gripper_fixture_geoms(env, names):
     )
 
 
+def _native_site_grasp_direction_family(
+    env,
+    names,
+    target_geoms,
+    site_position,
+    site_rotation,
+    site_size,
+    existing_direction_records,
+):
+    """Derive additional planar grasps only from native site/floor axes."""
+    site_position = np.asarray(site_position, dtype=float)
+    site_rotation = np.asarray(site_rotation, dtype=float)
+    site_size = np.asarray(site_size, dtype=float)
+    if (
+        site_position.shape != (3,)
+        or site_rotation.shape != (3, 3)
+        or site_size.shape != (3,)
+        or not np.all(np.isfinite(site_position))
+        or not np.all(np.isfinite(site_rotation))
+        or not np.all(np.isfinite(site_size))
+        or np.any(site_size <= 0.0)
+    ):
+        raise RuntimeError(
+            "native heating-site frame is invalid for grasp derivation"
+        )
+    gram = site_rotation.T @ site_rotation
+    determinant = float(np.linalg.det(site_rotation))
+    if (
+        not np.allclose(gram, np.eye(3), rtol=0.0, atol=1e-8)
+        or not np.isclose(determinant, 1.0, rtol=0.0, atol=1e-8)
+    ):
+        raise RuntimeError(
+            "native heating-site rotation is not a proper orthonormal frame"
+        )
+    floor, _ = _compiled_microwave_floor(
+        env,
+        names,
+        site_position,
+        site_rotation,
+        target_geoms,
+    )
+    floor_normal = np.asarray(floor["normal"], dtype=float)
+    floor_normal_norm = float(np.linalg.norm(floor_normal))
+    if (
+        floor_normal.shape != (3,)
+        or not np.all(np.isfinite(floor_normal))
+        or floor_normal_norm <= np.finfo(float).eps
+    ):
+        raise RuntimeError(
+            "compiled microwave floor normal is invalid for grasp derivation"
+        )
+    floor_normal = floor_normal / floor_normal_norm
+
+    # Coefficients are expressed only in the native heating-site frame.
+    # Negative local x is named left and negative local y is the site front,
+    # matching the front axis used by the insertion planner.
+    specifications = (
+        ("native_site_left_front", (-1.0, -1.0, 0.0)),
+        ("native_site_opposite_lateral", (-1.0, 0.0, 0.0)),
+        ("native_site_front", (0.0, -1.0, 0.0)),
+    )
+    accepted = []
+    proposal_evidence = []
+    known_directions = [
+        (
+            f"existing_direction_{index}",
+            np.asarray(record["direction_xy"], dtype=float),
+        )
+        for index, record in enumerate(existing_direction_records)
+    ]
+    for priority, (label, local_coefficients) in enumerate(
+        specifications
+    ):
+        local_coefficients = np.asarray(
+            local_coefficients, dtype=float
+        )
+        raw_world = site_rotation @ local_coefficients
+        floor_tangent_world = raw_world - floor_normal * float(
+            np.dot(raw_world, floor_normal)
+        )
+        planar = floor_tangent_world[:2]
+        planar_norm = float(np.linalg.norm(planar))
+        if (
+            not np.all(np.isfinite(floor_tangent_world))
+            or planar_norm <= np.finfo(float).eps
+        ):
+            raise RuntimeError(
+                "native heating-site/floor axis has no finite planar grasp "
+                f"projection: label={label!r}"
+            )
+        direction = planar / planar_norm
+        duplicate_of = next(
+            (
+                known_label
+                for known_label, known_direction in known_directions
+                if np.allclose(
+                    direction,
+                    known_direction,
+                    rtol=0.0,
+                    atol=1e-12,
+                )
+            ),
+            None,
+        )
+        provenance = {
+            "derivation": (
+                "normalize_xy(project_to_compiled_floor_tangent("
+                "native_site_rotation @ local_site_coefficients))"
+            ),
+            "family_label": label,
+            "family_priority": int(priority),
+            "local_site_coefficients": local_coefficients.tolist(),
+            "native_site_position": site_position.tolist(),
+            "native_site_rotation": site_rotation.tolist(),
+            "native_site_half_size": site_size.tolist(),
+            "raw_world_axis": raw_world.tolist(),
+            "compiled_floor_tangent_world_axis": (
+                floor_tangent_world.tolist()
+            ),
+            "compiled_floor_normal": floor_normal.tolist(),
+            "compiled_floor_geom_id": int(floor["geom_id"]),
+            "compiled_floor_geom_name": str(floor["geom_name"]),
+            "planar_projection_norm": planar_norm,
+            "duplicate_of": duplicate_of,
+        }
+        proposal_evidence.append(
+            {
+                "direction_xy": direction.tolist(),
+                "accepted": duplicate_of is None,
+                "axis_provenance": provenance,
+            }
+        )
+        if duplicate_of is not None:
+            continue
+        record = {
+            "source": (
+                "native heating-site/floor axis family " + label
+            ),
+            "direction_xy": direction.tolist(),
+            "native_axis_provenance": provenance,
+        }
+        accepted.append(record)
+        known_directions.append((label, direction))
+    if not accepted:
+        raise RuntimeError(
+            "native heating-site/floor grasp direction family contains no "
+            "unique extension beyond the legacy candidates"
+        )
+    return accepted, {
+        "method": (
+            "ordered native heating-site local axes projected through the "
+            "selected compiled microwave floor; no world direction is "
+            "hard-coded"
+        ),
+        "priority_order": [label for label, _ in specifications],
+        "symmetry_policy": (
+            "only the native front/left half-plane is proposed; mirrored "
+            "right/back families are omitted, while same-direction matches "
+            "against legacy and accepted records are removed"
+        ),
+        "legacy_direction_count": len(existing_direction_records),
+        "accepted_direction_count": len(accepted),
+        "duplicate_direction_count": sum(
+            not proposal["accepted"] for proposal in proposal_evidence
+        ),
+        "proposals": proposal_evidence,
+    }
+
+
+def _ordered_grasp_direction_offset_specs(
+    offset_values, direction_records, legacy_direction_count
+):
+    """Keep every legacy offset/direction pair before native extensions."""
+    offset_values = tuple(float(value) for value in offset_values)
+    legacy_direction_count = int(legacy_direction_count)
+    if (
+        not offset_values
+        or not all(np.isfinite(value) for value in offset_values)
+        or legacy_direction_count <= 0
+        or legacy_direction_count >= len(direction_records)
+    ):
+        raise RuntimeError(
+            "grasp direction phases require finite offsets plus legacy and "
+            "native direction records"
+        )
+    specs = []
+    for direction_start, direction_stop, family in (
+        (0, legacy_direction_count, "legacy"),
+        (
+            legacy_direction_count,
+            len(direction_records),
+            "native_site_floor_extension",
+        ),
+    ):
+        for offset in offset_values:
+            for direction_index in range(direction_start, direction_stop):
+                specs.append(
+                    {
+                        "offset_m": offset,
+                        "direction_index": int(direction_index),
+                        "direction_record": direction_records[
+                            direction_index
+                        ],
+                        "candidate_family": family,
+                    }
+                )
+    return specs
+
+
 def _compiled_target_grasp_clearance(
     env,
     names,
     target_position,
     outward_direction_xy,
+    site_position,
+    site_rotation,
+    site_size,
 ):
     """Derive a no-contact grasp corridor around every native scene object."""
     model = env.sim.model
@@ -3763,6 +3975,20 @@ def _compiled_target_grasp_clearance(
                 ),
             }
         )
+    legacy_direction_count = len(direction_records)
+    (
+        native_direction_records,
+        native_direction_family_evidence,
+    ) = _native_site_grasp_direction_family(
+        env,
+        names,
+        target_geoms,
+        site_position,
+        site_rotation,
+        site_size,
+        direction_records,
+    )
+    direction_records.extend(native_direction_records)
 
     gripper_origin_bound = max(
         float(
@@ -3810,13 +4036,21 @@ def _compiled_target_grasp_clearance(
     }
     trace = []
     geometry_passes = []
-    for offset in np.arange(
+    offset_values = np.arange(
         first_offset,
         last_offset + 0.5 * TARGET_INSERTION_SEARCH_STEP_M,
         TARGET_INSERTION_SEARCH_STEP_M,
-    ):
-        for direction_index, direction_record in enumerate(
-            direction_records
+    )
+    ordered_candidate_specs = _ordered_grasp_direction_offset_specs(
+        offset_values, direction_records, legacy_direction_count
+    )
+    for candidate_spec in ordered_candidate_specs:
+        for offset, direction_index, direction_record in (
+            (
+                candidate_spec["offset_m"],
+                candidate_spec["direction_index"],
+                candidate_spec["direction_record"],
+            ),
         ):
             direction = np.asarray(
                 direction_record["direction_xy"], dtype=float
@@ -3987,6 +4221,13 @@ def _compiled_target_grasp_clearance(
                 "rejection_stage": rejection_stage,
                 "passed": passed,
             }
+            if candidate_spec["candidate_family"] != "legacy":
+                record["candidate_family"] = candidate_spec[
+                    "candidate_family"
+                ]
+                record["native_axis_provenance"] = (
+                    direction_record["native_axis_provenance"]
+                )
             trace.append(record)
             if passed:
                 geometry_passes.append(
@@ -4009,6 +4250,15 @@ def _compiled_target_grasp_clearance(
         ),
         "outward_direction_xy": outward.tolist(),
         "direction_candidates": direction_records,
+        "legacy_direction_count": legacy_direction_count,
+        "legacy_candidate_phase_count": int(
+            len(offset_values) * legacy_direction_count
+        ),
+        "native_direction_family": native_direction_family_evidence,
+        "candidate_phase_order": [
+            "legacy",
+            "native_site_floor_extension",
+        ],
         "target_to_porcelain_xy": target_to_porcelain.tolist(),
         "target_to_porcelain_distance_m": target_to_porcelain_norm,
         "porcelain_position": porcelain_position.tolist(),
@@ -5963,6 +6213,8 @@ def _select_dynamically_reachable_target_grasp(
             f"started={dynamic_index + 1}/{len(geometry_candidates)} "
             "candidate_trace_index="
             f"{candidate['candidate_trace_index']} "
+            "direction_source="
+            f"{candidate['record']['direction_source']!r} "
             "outward_offset_m="
             f"{candidate['record']['outward_offset_m']}",
             flush=True,
@@ -5994,6 +6246,11 @@ def _select_dynamically_reachable_target_grasp(
         trial["direction_source"] = candidate["record"][
             "direction_source"
         ]
+        if "native_axis_provenance" in candidate["record"]:
+            trial["native_axis_provenance"] = _snapshot_plain_state(
+                candidate["record"]["native_axis_provenance"],
+                "dynamic_candidate_native_axis_provenance",
+            )
         trial["outward_offset_m"] = candidate["record"][
             "outward_offset_m"
         ]
@@ -7012,6 +7269,9 @@ def _robot_place_target(env, oracle, names, frames, step):
             names,
             initial_target,
             target_clearance_xy,
+            site_pos,
+            site_mat,
+            site_size,
         )
     except RuntimeError as error:
         return (

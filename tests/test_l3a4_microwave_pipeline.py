@@ -944,6 +944,44 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
         "_collision_compatible_geom_ids": (
             lambda model, candidates, references: sorted(candidates)
         ),
+        "_native_site_grasp_direction_family": (
+            lambda env,
+            names,
+            target_geoms,
+            site_position,
+            site_rotation,
+            site_size,
+            existing: (
+                [
+                    {
+                        "source": "native extension",
+                        "direction_xy": [-1.0, 0.0],
+                        "native_axis_provenance": {"family_label": "left"},
+                    }
+                ],
+                {"accepted_direction_count": 1},
+            )
+        ),
+        "_ordered_grasp_direction_offset_specs": (
+            lambda offsets, records, legacy_count: [
+                {
+                    "offset_m": float(offset),
+                    "direction_index": direction_index,
+                    "direction_record": records[direction_index],
+                    "candidate_family": family,
+                }
+                for start, stop, family in (
+                    (0, legacy_count, "legacy"),
+                    (
+                        legacy_count,
+                        len(records),
+                        "native_site_floor_extension",
+                    ),
+                )
+                for offset in offsets
+                for direction_index in range(start, stop)
+            ]
+        ),
         "_translated_swept_clearance": swept,
     }
     exec(
@@ -962,6 +1000,9 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
         {"fixture_root": "microwave_1"},
         np.zeros(3),
         np.asarray([1.0, 0.0]),
+        np.zeros(3),
+        np.eye(3),
+        np.ones(3),
     )
     first_candidate = geometry_candidates[0]
     assert first_candidate["clearance_eef_position"].tolist() == pytest.approx(
@@ -997,12 +1038,255 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose():
     ]
     assert first_candidate["record"]["skipped_sweeps"] == []
     assert len(geometry_candidates) >= 1
+    legacy_phase_count = evidence["legacy_candidate_phase_count"]
+    assert all(
+        "candidate_family" not in record
+        and "native_axis_provenance" not in record
+        for record in evidence["candidate_trace"][:legacy_phase_count]
+    )
+    assert all(
+        record["candidate_family"] == "native_site_floor_extension"
+        and record["native_axis_provenance"]["family_label"] == "left"
+        for record in evidence["candidate_trace"][legacy_phase_count:]
+    )
+    candidate_families = [
+        candidate["record"].get("candidate_family", "legacy")
+        for candidate in geometry_candidates
+    ]
+    if "native_site_floor_extension" in candidate_families:
+        first_native = candidate_families.index(
+            "native_site_floor_extension"
+        )
+        assert candidate_families[:first_native] == [
+            "legacy"
+        ] * first_native
+        assert "legacy" not in candidate_families[first_native:]
     assert len(calls) > 14
     assert {call["cache_id"] for call in calls} == {
         calls[0]["cache_id"]
     }
     assert calls[0]["threshold"] == pytest.approx(0.012)
     assert any(call["threshold"] == 0.0 for call in calls)
+
+
+def test_l3a4_native_site_grasp_directions_are_auditable_and_unique():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_native_site_grasp_direction_family"
+    )
+    floor = {
+        "geom_id": 17,
+        "geom_name": "microwave_floor_collision",
+        "normal": [0.0, 0.0, 1.0],
+    }
+    namespace = {
+        "np": np,
+        "_compiled_microwave_floor": (
+            lambda env,
+            names,
+            site_position,
+            site_rotation,
+            target_geoms: (floor, {"selected": floor})
+        ),
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    derive = namespace["_native_site_grasp_direction_family"]
+    yaw = np.deg2rad(90.0)
+    site_rotation = np.asarray(
+        [
+            [np.cos(yaw), -np.sin(yaw), 0.0],
+            [np.sin(yaw), np.cos(yaw), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    existing = [
+        {
+            "source": "legacy outward",
+            # This duplicates native front only after the site
+            # frame is rotated, proving that dedup uses derived world axes.
+            "direction_xy": [1.0, 0.0],
+        }
+    ]
+    accepted, evidence = derive(
+        object(),
+        {"fixture_root": "microwave"},
+        [1, 2],
+        np.asarray([0.2, -0.1, 0.8]),
+        site_rotation,
+        np.asarray([0.2, 0.3, 0.1]),
+        existing,
+    )
+    assert len(accepted) == 2
+    assert evidence["accepted_direction_count"] == 2
+    assert evidence["duplicate_direction_count"] == 1
+    assert "mirrored right/back families are omitted" in evidence[
+        "symmetry_policy"
+    ]
+    assert evidence["priority_order"][:2] == [
+        "native_site_left_front",
+        "native_site_opposite_lateral",
+    ]
+    assert accepted[0]["direction_xy"] == pytest.approx(
+        [np.sqrt(0.5), -np.sqrt(0.5)]
+    )
+    assert accepted[1]["direction_xy"] == pytest.approx([0.0, -1.0])
+    directions = [
+        np.asarray(record["direction_xy"], dtype=float)
+        for record in accepted
+    ]
+    assert all(
+        np.linalg.norm(direction) == pytest.approx(1.0)
+        for direction in directions
+    )
+    assert all(
+        not np.allclose(first, second, rtol=0.0, atol=1e-12)
+        for first_index, first in enumerate(directions)
+        for second in directions[first_index + 1 :]
+    )
+    first_provenance = accepted[0]["native_axis_provenance"]
+    assert first_provenance["local_site_coefficients"] == [
+        -1.0,
+        -1.0,
+        0.0,
+    ]
+    assert first_provenance["compiled_floor_geom_id"] == 17
+    assert first_provenance["compiled_floor_normal"] == [0.0, 0.0, 1.0]
+    assert first_provenance["duplicate_of"] is None
+    duplicate = next(
+        proposal
+        for proposal in evidence["proposals"]
+        if not proposal["accepted"]
+    )
+    assert duplicate["axis_provenance"]["duplicate_of"] == (
+        "existing_direction_0"
+    )
+
+    all_native_directions = existing + accepted
+    with pytest.raises(RuntimeError, match="no unique extension"):
+        derive(
+            object(),
+            {"fixture_root": "microwave"},
+            [1, 2],
+            np.zeros(3),
+            site_rotation,
+            np.ones(3),
+            all_native_directions,
+        )
+    with pytest.raises(RuntimeError, match="proper orthonormal frame"):
+        derive(
+            object(),
+            {"fixture_root": "microwave"},
+            [1, 2],
+            np.zeros(3),
+            np.zeros((3, 3)),
+            np.ones(3),
+            existing,
+        )
+
+
+def test_l3a4_native_grasp_extension_preserves_legacy_prefix_bytes():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_ordered_grasp_direction_offset_specs"
+    )
+    namespace = {"np": np}
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=[function], type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    order = namespace["_ordered_grasp_direction_offset_specs"]
+    directions = [
+        {"source": "legacy0", "direction_xy": [1.0, 0.0]},
+        {"source": "legacy1", "direction_xy": [0.0, 1.0]},
+        {"source": "legacy2", "direction_xy": [0.0, -1.0]},
+        {"source": "native0", "direction_xy": [-1.0, 0.0]},
+        {"source": "native1", "direction_xy": [-0.5, -0.5]},
+    ]
+    offsets = 0.04 + np.arange(35, dtype=float) * 0.005
+    specs = order(offsets, directions, 3)
+    legacy_reference = [
+        {
+            "offset_m": float(offset),
+            "direction_index": direction_index,
+            "direction_record": directions[direction_index],
+            "candidate_family": "legacy",
+        }
+        for offset in offsets
+        for direction_index in range(3)
+    ]
+    prefix = specs[: len(legacy_reference)]
+    reference_bytes = json.dumps(
+        legacy_reference,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    prefix_bytes = json.dumps(
+        prefix,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    assert prefix_bytes == reference_bytes
+    legacy_tangent0 = [
+        spec for spec in prefix if spec["direction_index"] == 1
+    ]
+    legacy_tangent0_reference = [
+        record
+        for record in legacy_reference
+        if record["direction_index"] == 1
+    ]
+    assert len(legacy_tangent0) == 35
+    assert json.dumps(
+        legacy_tangent0,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode() == json.dumps(
+        legacy_tangent0_reference,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    extension_pairs = [
+        (spec["offset_m"], spec["direction_index"])
+        for spec in specs[len(legacy_reference) :]
+    ]
+    assert extension_pairs[:4] == [
+        (pytest.approx(offsets[0]), 3),
+        (pytest.approx(offsets[0]), 4),
+        (pytest.approx(offsets[1]), 3),
+        (pytest.approx(offsets[1]), 4),
+    ]
+    assert extension_pairs[-2:] == [
+        (pytest.approx(offsets[-1]), 3),
+        (pytest.approx(offsets[-1]), 4),
+    ]
+    assert all(
+        spec["candidate_family"] == "native_site_floor_extension"
+        for spec in specs[len(legacy_reference) :]
+    )
+    with pytest.raises(RuntimeError, match="legacy and native"):
+        order(offsets, directions[:3], 3)
 
 
 def test_l3a4_job500143_exact_dynamic_contact_regression():
@@ -2835,7 +3119,33 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     target_grasp_clearance = ast.get_source_segment(
         source, functions["_compiled_target_grasp_clearance"]
     )
+    native_grasp_directions = ast.get_source_segment(
+        source, functions["_native_site_grasp_direction_family"]
+    )
+    phased_grasp_order = ast.get_source_segment(
+        source, functions["_ordered_grasp_direction_offset_specs"]
+    )
+    assert "site_rotation @ local_coefficients" in native_grasp_directions
+    assert "_compiled_microwave_floor(" in native_grasp_directions
+    assert "floor_tangent_world" in native_grasp_directions
+    assert '"native_site_left_front"' in native_grasp_directions
+    assert '"native_site_opposite_lateral"' in native_grasp_directions
+    assert '"local_site_coefficients"' in native_grasp_directions
+    assert '"compiled_floor_geom_id"' in native_grasp_directions
+    assert '"duplicate_of"' in native_grasp_directions
+    assert "atol=1e-12" in native_grasp_directions
+    assert "unique extension beyond" in native_grasp_directions
+    assert phased_grasp_order.index('"legacy"') < phased_grasp_order.index(
+        '"native_site_floor_extension"'
+    )
     assert "_compiled_rigid_gripper_fixture_geoms(" in target_grasp_clearance
+    assert "_native_site_grasp_direction_family(" in target_grasp_clearance
+    assert "_ordered_grasp_direction_offset_specs(" in (
+        target_grasp_clearance
+    )
+    assert '"candidate_family"] != "legacy"' in target_grasp_clearance
+    assert 'record["native_axis_provenance"]' in target_grasp_clearance
+    assert '"candidate_phase_order"' in target_grasp_clearance
     assert target_grasp_clearance.count("_translated_swept_clearance(") == 1
     assert "gripper_origin_bound" in target_grasp_clearance
     assert "target_origin_bound" in target_grasp_clearance
@@ -2986,6 +3296,14 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
         source, functions["_select_dynamically_reachable_target_grasp"]
     )
     assert "[L3-A4 grasp trial progress]" in dynamic_selector
+    assert '"native_axis_provenance" in candidate["record"]' in (
+        dynamic_selector
+    )
+    assert "dynamic_candidate_native_axis_provenance" in dynamic_selector
+    assert "direction_source=" in dynamic_selector
+    assert "site_pos," in target_placement
+    assert "site_mat," in target_placement
+    assert "site_size," in target_placement
     assert "native_site_contains_point(" in target_placement
     assert "final_door_clearance > 0.0" in target_placement
     assert "site_size[2]) - 0.015" not in target_placement
