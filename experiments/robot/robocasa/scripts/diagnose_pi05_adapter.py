@@ -25,7 +25,6 @@ from experiments.robot.robocasa.physcog.preflight import (  # noqa: E402
     NativePreflightError,
 )
 from experiments.robot.robocasa.pi05_policy import (  # noqa: E402
-    AGENT_CAMERA,
     WRIST_CAMERA,
     Pi05RoboCasaPolicy,
     _axis_angle,
@@ -85,14 +84,20 @@ def _request_variant(
     prompt: str,
     state: np.ndarray,
     image_mode: str,
+    agent_camera: str,
 ) -> dict[str, Any]:
-    request = build_request(obs, prompt, state=state)
+    request = build_request(
+        obs,
+        prompt,
+        state=state,
+        agent_camera=agent_camera,
+    )
     if image_mode == "rotate180":
         return request
     if image_mode != "vertical":
         raise ValueError(f"unknown image mode: {image_mode}")
     request["observation/image"] = resize_with_pad(
-        np.asarray(obs[f"{AGENT_CAMERA}_image"])[::-1]
+        np.asarray(obs[f"{agent_camera}_image"])[::-1]
     )
     request["observation/wrist_image"] = resize_with_pad(
         np.asarray(obs[f"{WRIST_CAMERA}_image"])[::-1]
@@ -173,6 +178,7 @@ def main() -> None:
         scene_id=args.scene,
         preflight_sha256=native["preflight_sha256"],
         expected_policy_preprocessing=policy.policy_preprocessing,
+        expected_policy_cameras=tuple(policy.camera_names),
     )
 
     env = make_env(
@@ -180,7 +186,7 @@ def main() -> None:
         args.condition,
         args.seed,
         render=True,
-        camera_names=(AGENT_CAMERA, WRIST_CAMERA),
+        camera_names=policy.camera_names,
     )
     try:
         obs = env.reset()
@@ -234,6 +240,7 @@ def main() -> None:
             "native_preflight_sha256": native["preflight_sha256"],
             "smoke_gate_manifest": str(pathlib.Path(args.smoke_gate_manifest)),
             "policy_metadata": policy.metadata,
+            "agent_camera": policy.agent_camera,
             "settle_steps": policy.settle_steps,
             "eef_position_world": eef_world.tolist(),
             "target_object": target_name,
@@ -252,7 +259,7 @@ def main() -> None:
             "states": {name: state.tolist() for name, state in states.items()},
             "cameras": {
                 name: _camera_pose(env, name)
-                for name in (AGENT_CAMERA, WRIST_CAMERA)
+                for name in policy.camera_names
             },
             "variants": {},
         }
@@ -262,6 +269,7 @@ def main() -> None:
                 native["native_prompt"],
                 states[state_name],
                 image_mode,
+                policy.agent_camera,
             )
             repetitions = []
             for _ in range(args.repeats):

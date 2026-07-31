@@ -31,12 +31,13 @@ from experiments.robot.robocasa.physcog.preflight import (  # noqa: E402
 )
 from experiments.robot.robocasa.physcog.registry import get_scene  # noqa: E402
 from experiments.robot.robocasa.pi05_policy import (  # noqa: E402
+    AGENT_CAMERA,
+    ROBOCASA_AGENT_CAMERAS,
     WRIST_CAMERA,
     pi05_preprocessing_label,
     preprocess_camera_image_for_mode,
 )
 from experiments.robot.robocasa.scripts.run_condition import (  # noqa: E402
-    CAMERA,
     make_env,
     run_native_preflight,
     save_preflight_manifest,
@@ -162,6 +163,12 @@ def main():
     )
     parser.add_argument("--out", default=None, help="initial gate manifest JSON")
     args = parser.parse_args()
+    agent_camera = os.environ.get("PI05_AGENT_CAMERA", AGENT_CAMERA)
+    if agent_camera not in ROBOCASA_AGENT_CAMERAS:
+        raise NativePreflightError(
+            "PI05_AGENT_CAMERA must name an existing native RoboCasa agent "
+            f"camera, got {agent_camera!r}"
+        )
     image_mode = os.environ.get("PI05_IMAGE_MODE", "rotate180")
     preprocessing_label = pi05_preprocessing_label(image_mode)
 
@@ -215,7 +222,7 @@ def main():
                 condition,
                 args.seed,
                 render=True,
-                camera_names=(CAMERA, WRIST_CAMERA),
+                camera_names=(agent_camera, WRIST_CAMERA),
             )
             try:
                 obs = env.reset()
@@ -227,7 +234,7 @@ def main():
                 imageio.imwrite(
                     frame_path,
                     preprocess_camera_image_for_mode(
-                        obs[f"{CAMERA}_image"],
+                        obs[f"{agent_camera}_image"],
                         mode=image_mode,
                     ),
                 )
@@ -263,7 +270,7 @@ def main():
                 "initial_max_penetration_m"
             ],
             max_initial_penetration_m=args.max_initial_penetration_m,
-            policy_camera=CAMERA,
+            policy_camera=agent_camera,
             initial_frame=str(frame_paths[args.condition]),
             paired_initial_frames={
                 condition: str(path) for condition, path in frame_paths.items()
@@ -311,7 +318,7 @@ def main():
             preprocessing_label
         )
         manifest["gates"]["visibility"]["policy_cameras"] = [
-            CAMERA,
+            agent_camera,
             WRIST_CAMERA,
         ]
         manifest["gates"]["visibility"]["wrist_initial_frame"] = str(

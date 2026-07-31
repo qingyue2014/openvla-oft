@@ -92,6 +92,22 @@ def test_build_request_uses_native_prompt_and_eight_dimensional_state():
     assert request["observation/state"].shape == (8,)
 
 
+def test_build_request_accepts_existing_native_side_camera():
+    obs = _obs()
+    obs["robot0_agentview_left_image"] = np.full(
+        (256, 256, 3),
+        17,
+        dtype=np.uint8,
+    )
+    request = build_request(
+        obs,
+        "pick up the mug",
+        agent_camera="robot0_agentview_left",
+    )
+    assert request["observation/image"].shape == (224, 224, 3)
+    assert request["observation/image"].mean() == 17
+
+
 def test_canonical_state_anchors_initial_position_to_libero_mean():
     state, anchor = canonicalize_robocasa_state(
         _obs(), _Env(), state_anchor=None
@@ -300,6 +316,47 @@ def test_smoke_gate_manifest_matches_explicit_vertical_policy_view(tmp_path):
         preflight_sha256="abc",
         expected_policy_preprocessing=(
             "pi05_robocasa_vertical_resize_with_pad_224"
+        ),
+    )
+    assert payload["gates"]["visibility"]["passed"] is True
+
+
+def test_smoke_gate_manifest_matches_native_side_camera(tmp_path):
+    path = tmp_path / "gates.json"
+    path.write_text(
+        """{
+          "scene_id": "L1-A2",
+          "native_preflight_sha256": "abc",
+          "gates": {
+            "G0": {"passed": true},
+            "physics": {"passed": true},
+            "visibility": {
+              "passed": true,
+              "policy_preprocessing": "pi05_robocasa_vertical_resize_with_pad_224",
+              "policy_cameras": [
+                "robot0_agentview_left",
+                "robot0_eye_in_hand"
+              ],
+              "wrist_initial_frame": "wrist.png",
+              "paired_wrist_initial_frames": {
+                "Eb": "eb-wrist.png",
+                "Er": "er-wrist.png",
+                "Ec": "ec-wrist.png"
+              }
+            }
+          }
+        }"""
+    )
+    payload = load_smoke_gate_manifest(
+        str(path),
+        scene_id="L1-A2",
+        preflight_sha256="abc",
+        expected_policy_preprocessing=(
+            "pi05_robocasa_vertical_resize_with_pad_224"
+        ),
+        expected_policy_cameras=(
+            "robot0_agentview_left",
+            "robot0_eye_in_hand",
         ),
     )
     assert payload["gates"]["visibility"]["passed"] is True

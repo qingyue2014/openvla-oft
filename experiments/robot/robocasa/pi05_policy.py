@@ -21,6 +21,11 @@ from PIL import Image
 
 AGENT_CAMERA = "robot0_agentview_center"
 WRIST_CAMERA = "robot0_eye_in_hand"
+ROBOCASA_AGENT_CAMERAS = (
+    "robot0_agentview_center",
+    "robot0_agentview_left",
+    "robot0_agentview_right",
+)
 PI05_ACTION_DIM = 7
 ROBOCASA_ACTION_DIM = 12
 # Mean first-policy pose after the official ten-step wait, measured over the
@@ -261,11 +266,13 @@ def build_request(
     lang: str,
     *,
     state: np.ndarray | None = None,
+    agent_camera: str = AGENT_CAMERA,
+    wrist_camera: str = WRIST_CAMERA,
 ) -> dict[str, Any]:
     """Build the exact request expected by the released pi05_libero server."""
 
-    center_key = f"{AGENT_CAMERA}_image"
-    wrist_key = f"{WRIST_CAMERA}_image"
+    center_key = f"{agent_camera}_image"
+    wrist_key = f"{wrist_camera}_image"
     required = (
         center_key,
         wrist_key,
@@ -358,11 +365,18 @@ class Pi05RoboCasaPolicy:
     def __init__(self) -> None:
         self.host = os.environ.get("PI05_HOST", "127.0.0.1")
         self.port = int(os.environ.get("PI05_PORT", "8000"))
+        self.agent_camera = os.environ.get("PI05_AGENT_CAMERA", AGENT_CAMERA)
+        if self.agent_camera not in ROBOCASA_AGENT_CAMERAS:
+            raise ValueError(
+                "PI05_AGENT_CAMERA must name an existing native RoboCasa "
+                f"agent camera, got {self.agent_camera!r}"
+            )
+        self.camera_names = (self.agent_camera, WRIST_CAMERA)
         self.image_mode = os.environ.get("PI05_IMAGE_MODE", "rotate180")
         self.policy_preprocessing = pi05_preprocessing_label(self.image_mode)
         self.model_label = (
             "pi05_libero_cross_sim_initial_pose_world_delta_to_panda_base"
-            f"_image_{self.image_mode}"
+            f"_camera_{self.agent_camera}_image_{self.image_mode}"
         )
         self.replan_steps = int(os.environ.get("PI05_REPLAN_STEPS", "5"))
         timeout_s = float(os.environ.get("PI05_CONNECT_TIMEOUT_S", "900"))
@@ -403,7 +417,7 @@ class Pi05RoboCasaPolicy:
         """Return the exact center-camera pixels consumed by this policy."""
 
         return preprocess_camera_image_for_mode(
-            obs[f"{AGENT_CAMERA}_image"],
+            obs[f"{self.agent_camera}_image"],
             mode=self.image_mode,
         )
 
@@ -414,10 +428,15 @@ class Pi05RoboCasaPolicy:
                 env,
                 state_anchor=self._state_anchor,
             )
-            request = build_request(obs, lang, state=state)
+            request = build_request(
+                obs,
+                lang,
+                state=state,
+                agent_camera=self.agent_camera,
+            )
             if self.image_mode != "rotate180":
                 request["observation/image"] = preprocess_camera_image_for_mode(
-                    obs[f"{AGENT_CAMERA}_image"],
+                    obs[f"{self.agent_camera}_image"],
                     mode=self.image_mode,
                 )
                 request["observation/wrist_image"] = (

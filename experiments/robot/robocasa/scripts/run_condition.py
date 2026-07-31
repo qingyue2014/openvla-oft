@@ -145,6 +145,10 @@ def load_smoke_gate_manifest(
     expected_policy_preprocessing: str = (
         "pi05_libero_rotate180_resize_with_pad_224"
     ),
+    expected_policy_cameras: tuple[str, ...] = (
+        "robot0_agentview_center",
+        "robot0_eye_in_hand",
+    ),
 ) -> dict | None:
     """Require reviewed initial-state gates before a dynamic smoke rollout."""
 
@@ -177,10 +181,7 @@ def load_smoke_gate_manifest(
             f"{visibility.get('policy_preprocessing')!r}, policy consumes "
             f"{expected_policy_preprocessing!r}"
         )
-    required_cameras = {
-        "robot0_agentview_center",
-        "robot0_eye_in_hand",
-    }
+    required_cameras = set(expected_policy_cameras)
     if set(visibility.get("policy_cameras") or ()) != required_cameras:
         raise NativePreflightError(
             "smoke gate visibility does not cover both pi0.5 policy cameras"
@@ -251,6 +252,13 @@ def main():
                 policy,
                 "policy_preprocessing",
                 "pi05_libero_rotate180_resize_with_pad_224",
+            ),
+            expected_policy_cameras=tuple(
+                getattr(
+                    policy,
+                    "camera_names",
+                    ("robot0_agentview_center", "robot0_eye_in_hand"),
+                )
             ),
         )
         formal_gates = (
@@ -348,7 +356,7 @@ def main():
                     ),
                     formal_gate_manifest=args.gate_manifest if formal_gates else None,
                     initial_max_penetration_m=penetration,
-                    policy_camera=CAMERA,
+                    policy_camera=getattr(policy, "agent_camera", CAMERA),
                     policy_view_initial_frame=(
                         str(initial_frame_path) if initial_frame_path else None
                     ),
