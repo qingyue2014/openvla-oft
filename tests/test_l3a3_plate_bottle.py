@@ -300,17 +300,18 @@ def test_safe_reference_requires_controller_actions_for_prefix_and_native_task()
     assert "stop_when=lambda: _robot_contacts_body(env, PLATE_BODY)" in producer
 
 
-def test_plate_contact_uses_reachable_axis_aligned_trailing_rim():
+def test_plate_contact_uses_reachable_axis_aligned_trailing_line():
     plate = np.array([0.052, -0.028])
     direction = np.array([-0.394, 0.919])
     eef = np.array([-0.210, -0.060])
     contact = _select_reachable_trailing_contact(
-        plate, direction, eef, backoff=0.065
+        plate, direction, eef, backoff=0.025
     )
     offset = contact - plate
-    # Of the two trailing cardinal sides (+X and -Y), -Y is much closer to
-    # the live EEF and avoids the failed +X reach of the diagonal waypoint.
-    assert np.allclose(offset, [0.0, -0.065])
+    # Of the two trailing cardinal lines (+X and -Y), -Y is closer to the live
+    # EEF.  The EEF origin stays inside the plate footprint while its fingers
+    # perform the semantically verified contact seek.
+    assert np.allclose(offset, [0.0, -0.025])
     unit = direction / np.linalg.norm(direction)
     assert float(np.dot(unit, plate - contact)) > 0.0
 
@@ -353,6 +354,26 @@ def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
             stop_when=lambda: False,
             stop_label="robot-plate contact",
         )
+
+
+def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
+    producer = CONTROLLER_REFERENCE.read_text()
+    assert 'default=0.025' in producer
+    assert "center_approach_target[:2] = plate_start[:2]" in producer
+    approach = producer[
+        producer.index("# Decouple the large workspace translation") :
+        producer.index("rollout.hold(1.0, args.pusher_close_steps")
+    ]
+    assert approach.index("center_approach_target,") < approach.index(
+        "line_approach_target,"
+    )
+    assert approach.index("line_approach_target,") < approach.index(
+        "contact_target,"
+    )
+    assert '"live_eef"' in producer
+    assert '"live_plate"' in producer
+    assert '"candidate_geometry"' in producer
+    assert "L3-A3 plate-contact plan" in producer
 
 
 def test_review_template_loads_smoke_and_binds_safe_reference(
