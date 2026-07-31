@@ -406,7 +406,7 @@ def main():
     parser.add_argument("--plate_contact_backoff", type=float, default=0.075)
     parser.add_argument("--plate_contact_eef_height", type=float, default=0.130)
     parser.add_argument(
-        "--plate_contact_stall_tolerance", type=float, default=0.040
+        "--plate_contact_stall_tolerance", type=float, default=0.070
     )
     parser.add_argument("--plate_approach_clearance", type=float, default=0.080)
     parser.add_argument("--pusher_close_steps", type=int, default=15)

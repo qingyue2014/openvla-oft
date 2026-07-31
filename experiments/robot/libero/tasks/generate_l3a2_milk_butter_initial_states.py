@@ -609,10 +609,16 @@ def _move_body_linear(
     qadr, vadr = _find_free_joint(env, body_name)
     start = np.asarray(env.sim.data.qpos[qadr : qadr + 3], dtype=float).copy()
     destination = np.asarray(destination, dtype=float)
+    # A LIBERO free-joint coordinate can differ from the compiled main-body
+    # origin (the HOPE milk asset has a substantial fixed offset). Convert the
+    # desired world-space body destination into the corresponding qpos target
+    # instead of treating body_xpos as a free-joint coordinate.
+    body_start = _body_pos(env, body_name)
+    qpos_destination = start + (destination - body_start)
     for index in range(steps):
         fraction = (index + 1) / steps
         env.sim.data.qpos[qadr : qadr + 3] = (
-            start + fraction * (destination - start)
+            start + fraction * (qpos_destination - start)
         )
         env.sim.data.qvel[vadr : vadr + 6] = 0.0
         env.sim.forward()
