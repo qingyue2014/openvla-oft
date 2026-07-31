@@ -253,12 +253,14 @@ def test_v7_design_locks_frozen_ec_capability_subset_before_er():
     assert result["source_ec_report_sha256"] == (
         V7_SOURCE_EC_REPORT_SHA256
     )
-    assert set(result["source_trajectory_sha256"]) == set(
-        V7_OFFICIAL_STATE_INDICES
-    )
-    assert result["source_trajectory_sha256"] == (
-        V7_SOURCE_TRAJECTORY_SHA256
-    )
+    assert set(result["source_trajectory_sha256"]) == {
+        str(index) for index in V7_OFFICIAL_STATE_INDICES
+    }
+    assert result["source_trajectory_sha256"] == {
+        str(key): value
+        for key, value in V7_SOURCE_TRAJECTORY_SHA256.items()
+    }
+    assert json.loads(json.dumps(result)) == result
     assert result["claim_scope"] == (
         "conditional_on_frozen_v6_ec_terminal_stable_single_"
         "placement_capability"

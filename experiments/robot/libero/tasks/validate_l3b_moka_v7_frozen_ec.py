@@ -25,6 +25,10 @@ def validate_frozen_ec(
     trajectory_dir: str | Path,
 ) -> dict:
     design = validate_spec(preregistration)
+    design_trajectory_hashes = {
+        int(key): value
+        for key, value in design["source_trajectory_sha256"].items()
+    }
     report_path = Path(source_report).resolve(strict=True)
     if sha256_path(report_path) != SOURCE_EC_REPORT_SHA256:
         raise ValueError("frozen v6 Ec source report hash mismatch")
@@ -43,7 +47,7 @@ def validate_frozen_ec(
         if item.get("success") is True
         and item.get("terminal_stable") is True
     }
-    if selected_from_report != design["source_trajectory_sha256"]:
+    if selected_from_report != design_trajectory_hashes:
         raise ValueError(
             "v7 pool is not all and only strict-stable v6 Ec episodes"
         )
@@ -56,7 +60,7 @@ def validate_frozen_ec(
         int(item["native_init_state_index"]): str(item["sha256"])
         for item in actual["episodes"]
     }
-    if actual_hashes != design["source_trajectory_sha256"]:
+    if actual_hashes != design_trajectory_hashes:
         raise ValueError("supplied frozen Ec trajectory inventory mismatch")
     if actual["stable_successes"] != design["count"]:
         raise ValueError("supplied frozen Ec trajectories are not all stable")

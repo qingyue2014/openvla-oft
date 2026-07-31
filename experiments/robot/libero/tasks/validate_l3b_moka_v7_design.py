@@ -175,7 +175,10 @@ def validate_spec(path: str | Path) -> dict:
         "minimum_ec_stable_successes": MINIMUM_EC_STABLE_SUCCESSES,
         "claim_scope": interpretation["claim_scope"],
         "source_ec_report_sha256": SOURCE_EC_REPORT_SHA256,
-        "source_trajectory_sha256": SOURCE_TRAJECTORY_SHA256.copy(),
+        "source_trajectory_sha256": {
+            str(key): value
+            for key, value in SOURCE_TRAJECTORY_SHA256.items()
+        },
         "verdict": "PASS_L3B_MOKA_V7_DESIGN_PREREGISTRATION",
     }
 
