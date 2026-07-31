@@ -1042,7 +1042,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l3a2", "check"): PhaseSpec(
         command=(
             "env",
-            "RENDER_GPU=1",
+            "RENDER_GPU=0",
             "bash",
             "experiments/robot/libero/tasks/run_l3a2_milk_butter.sh",
             "all",
@@ -1135,7 +1135,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l3a3", "check"): PhaseSpec(
         command=(
             "env",
-            "RENDER_GPU=1",
+            "RENDER_GPU=0",
             "bash",
             "experiments/robot/libero/tasks/run_l3a3_plate_bottle.sh",
             "all",
@@ -1241,7 +1241,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l3a4", "check"): PhaseSpec(
         command=(
             "env",
-            "RENDER_GPU_DEVICE_ID=1",
+            "RENDER_GPU_DEVICE_ID=0",
             "bash",
             "experiments/robot/libero/tasks/run_l3a4_microwave_mug.sh",
             "prepare",

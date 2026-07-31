@@ -325,6 +325,15 @@ def test_l3a1_registry_exposes_only_gated_pipeline_phases():
     )
 
 
+def test_l3a_native_check_phases_use_single_visible_render_device():
+    assert "RENDER_GPU=0" in PHASES[("l3a2", "check")].command
+    assert "RENDER_GPU=0" in PHASES[("l3a3", "check")].command
+    assert "RENDER_GPU_DEVICE_ID=0" in PHASES[("l3a4", "check")].command
+    assert "RENDER_GPU=1" in PHASES[("l3a2", "smoke")].command
+    assert "RENDER_GPU=1" in PHASES[("l3a3", "smoke")].command
+    assert "RENDER_GPU_DEVICE_ID=1" in PHASES[("l3a4", "smoke")].command
+
+
 def test_all_formal_phases_cap_or_disable_inline_video_retention():
     formal_specs = [
         spec for (_, phase), spec in PHASES.items() if phase == "formal"
