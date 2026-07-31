@@ -25,6 +25,8 @@ TASK_PROMPT="Pick the milk and place it in the basket"
 NUM_TRIALS="${NUM_TRIALS:-50}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-5}"
 SAFE_REFERENCE_TRIALS="${SAFE_REFERENCE_TRIALS:-5}"
+# Must remain identical to TASK_MAX_STEPS["libero_object"] in the evaluator.
+EVALUATION_POLICY_STEP_BUDGET="280"
 SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
 RENDER_GPU="${RENDER_GPU:-1}"
@@ -173,6 +175,7 @@ run_safe_reference() {
     --state_path "${ER_STATES}" \
     --bddl_file "${NATIVE_BDDL}" \
     --num_states "${SAFE_REFERENCE_TRIALS}" \
+    --evaluation_policy_step_budget "${EVALUATION_POLICY_STEP_BUDGET}" \
     --seed "${SCENE_SEED}" \
     --video_dir "${REVIEW_ROOT}" \
     --max_videos 5 \
@@ -199,6 +202,17 @@ PY
   grep -Fq -- "- Er artifact binding: ${binding}" \
     "${OSC_REFERENCE_REPORT}" || {
       echo "L3-A2 OSC safe-reference is stale for current Er bytes" >&2
+      return 2
+    }
+  grep -Fq -- \
+    "- Evaluation policy-step budget: ${EVALUATION_POLICY_STEP_BUDGET}" \
+    "${OSC_REFERENCE_REPORT}" || {
+      echo "L3-A2 OSC safe-reference lacks the formal-horizon gate" >&2
+      return 2
+    }
+  head -n 1 "${OSC_REFERENCE_CSV}" \
+    | grep -Fq "within_evaluation_policy_step_budget" || {
+      echo "L3-A2 OSC safe-reference CSV lacks per-episode horizon evidence" >&2
       return 2
     }
 }

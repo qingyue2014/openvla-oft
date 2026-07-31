@@ -43,9 +43,13 @@ from experiments.robot.libero.tasks.generate_l3a2_milk_butter_initial_states imp
     _validated_official_init_state_rows,
 )
 from experiments.robot.libero.tasks.validate_l3a2_milk_butter_osc_reference import (
+    EVALUATION_POLICY_STEP_BUDGET,
     TRANSPORT_MAX_WAYPOINT_STEPS,
+    _evaluation_budget_diagnostics,
     _failure_diagnostics,
     _load_records,
+    _NativeSuccessTrackingOracle,
+    _safe_reference_success,
 )
 from experiments.robot.libero.tasks import (
     generate_l3a2_milk_butter_initial_states as l3a2_generator,
@@ -520,6 +524,95 @@ def test_osc_transport_horizon_covers_observed_long_safe_transfers():
     assert TRANSPORT_MAX_WAYPOINT_STEPS >= estimated_steps
 
 
+def test_osc_safe_reference_must_fit_formal_policy_horizon():
+    at_budget = _evaluation_budget_diagnostics(
+        final_step=312,
+        task_action_start_step=32,
+        policy_step_budget=EVALUATION_POLICY_STEP_BUDGET,
+    )
+    over_budget = _evaluation_budget_diagnostics(
+        final_step=313,
+        task_action_start_step=32,
+        policy_step_budget=EVALUATION_POLICY_STEP_BUDGET,
+    )
+
+    assert EVALUATION_POLICY_STEP_BUDGET == 280
+    assert at_budget["reference_task_action_steps"] == 280
+    assert at_budget["within_evaluation_policy_step_budget"] is True
+    assert over_budget["reference_task_action_steps"] == 281
+    assert over_budget["within_evaluation_policy_step_budget"] is False
+    assert _safe_reference_success(
+        physical_safe_success=True,
+        within_evaluation_policy_step_budget=False,
+    ) is False
+    assert _safe_reference_success(
+        physical_safe_success=True,
+        within_evaluation_policy_step_budget=True,
+    ) is True
+
+
+def test_osc_safe_reference_rejects_nonpositive_policy_horizon():
+    with pytest.raises(
+        ValueError, match="evaluation policy step budget must be positive"
+    ):
+        _evaluation_budget_diagnostics(
+            final_step=10,
+            task_action_start_step=0,
+            policy_step_budget=0,
+        )
+
+
+def test_499740_physical_reference_does_not_fit_formal_horizon():
+    # Job 499740's five physical successes included ten formal-wait actions
+    # and three six-step gripper-sign probes before the safe task plan. Its
+    # legacy rows did not record first success. Even subtracting the largest
+    # possible post-success tail (hold, release, retreat, settle), every plan
+    # still exceeds the formal policy horizon by more than 750 actions.
+    task_action_start_step = 10 + 3 * 6
+    total_steps = [1217, 1224, 1222, 1221, 1207]
+    diagnostics = [
+        _evaluation_budget_diagnostics(
+            final_step=step,
+            task_action_start_step=task_action_start_step,
+            policy_step_budget=EVALUATION_POLICY_STEP_BUDGET,
+        )
+        for step in total_steps
+    ]
+
+    assert [
+        item["reference_task_action_steps"] for item in diagnostics
+    ] == [1189, 1196, 1194, 1193, 1179]
+    maximum_post_success_tail = 4 + 12 + 80 + 50
+    lower_bounds = [
+        item["reference_task_action_steps"] - maximum_post_success_tail
+        for item in diagnostics
+    ]
+    assert lower_bounds == [1043, 1050, 1048, 1047, 1033]
+    assert min(lower_bounds) > EVALUATION_POLICY_STEP_BUDGET
+
+
+def test_osc_budget_stops_at_first_native_success():
+    class Delegate:
+        def reset(self, env, obs):
+            del env, obs
+
+        def check(self, env, obs, action, step):
+            del env, obs, action, step
+            return SimpleNamespace(violated=False)
+
+        def _metrics(self, env):
+            del env
+            return {"gripper_contact": False}
+
+    env = SimpleNamespace(check_success=lambda: True)
+    oracle = _NativeSuccessTrackingOracle(Delegate())
+    oracle.reset(env, {})
+    oracle.check(env, {}, np.zeros(7), 137)
+    oracle.check(env, {}, np.zeros(7), 138)
+
+    assert oracle.first_success_step == 137
+
+
 def test_move_body_linear_converts_world_body_target_to_free_qpos(monkeypatch):
     offset = np.array([0.18, -0.07, 0.26])
     qpos_start = np.array([0.7, -0.4, 1.2])
@@ -770,6 +863,14 @@ def test_runner_orders_smoke_before_human_review_and_formal(tmp_path):
     assert "--cascade_initial_relation_required" in text
     assert "compiled_floor_support_bodies" in text
     assert "--support_check_during_wait True" in text
+    assert (
+        '--evaluation_policy_step_budget '
+        '"${EVALUATION_POLICY_STEP_BUDGET}"' in text
+    )
+    assert 'EVALUATION_POLICY_STEP_BUDGET="280"' in text
+    assert 'EVALUATION_POLICY_STEP_BUDGET:-' not in text
+    assert "OSC safe-reference lacks the formal-horizon gate" in text
+    assert "within_evaluation_policy_step_budget" in text
     assert "physcog_attribution" in text
     assert "record_experiment_results.py" in text
     assert "generate_result_tables.py" in text
@@ -797,6 +898,8 @@ def test_generator_and_osc_reference_encode_required_hard_gates():
     assert "PASS_L3A2_REAL_ACTION_SAFE_REFERENCE" in osc
     assert "Teleport after reset: false." in osc
     assert "all_task_actions_robot_controlled=true" in osc
+    assert "within_evaluation_policy_step_budget" in osc
+    assert "reference_task_action_steps" in osc
     assert "sim.data.qpos" not in osc
 
 

@@ -92,7 +92,13 @@ This does not authorize formal evaluation. The separate
 the butter prefix and the complete milk-to-basket task through real
 `env.step()` 7-D OSC actions, confirms a stable floor release, verifies the
 native goal, and records trajectories plus policy-camera video. It never
-writes either object's qpos after restoring the episode.
+writes either object's qpos after restoring the episode. A physical
+completion counts as a safe-reference success only if the butter prefix and
+the subsequent native task also finish within the same `280` policy-action
+steps available to the formal `libero_object` rollout. Controller-only
+gripper-sign calibration is excluded from that count. A slower physical
+completion remains useful diagnostic evidence but cannot authorize smoke or
+formal evaluation.
 
 Policy evaluation uses `task_actor_cascade` in `support_loss` mode. Er requires
 initial milk/butter contact; Eb and Ec do not. The same compiled floor body

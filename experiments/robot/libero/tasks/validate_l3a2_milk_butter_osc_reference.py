@@ -9,8 +9,9 @@ For each serialized Er state this controller:
 
 No object state is teleported after episode restoration.  All manipulation is
 performed through ``env.step`` using the same delta-position / gripper action
-space as policy evaluation.  The script is a fail-closed feasibility gate:
-formal evaluation is not authorized until the configured success rate passes.
+space as policy evaluation. Physical success must also fit the formal
+policy-action horizon. The script is a fail-closed feasibility gate: formal
+evaluation is not authorized until the configured success rate passes.
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ MILK = "milk_1_main"
 BASKET = "basket_1_main"
 TRANSPORT_MAX_WAYPOINT_STEPS = 360
 TIMEOUT_PROGRESS_EPSILON_M = 0.001
+EVALUATION_POLICY_STEP_BUDGET = 280
 
 
 def _load_records(path: str, count: int) -> list[dict[str, Any]]:
@@ -159,6 +161,59 @@ def _failure_diagnostics(failure: Any) -> dict[str, Any]:
         }
     )
     return diagnostics
+
+
+def _evaluation_budget_diagnostics(
+    *,
+    final_step: int,
+    task_action_start_step: int,
+    policy_step_budget: int,
+) -> dict[str, Any]:
+    """Bind safe-reference feasibility to the formal policy horizon."""
+
+    if policy_step_budget <= 0:
+        raise ValueError("evaluation policy step budget must be positive")
+    reference_task_action_steps = max(
+        0, int(final_step) - int(task_action_start_step)
+    )
+    return {
+        "evaluation_policy_step_budget": int(policy_step_budget),
+        "reference_task_action_steps": reference_task_action_steps,
+        "within_evaluation_policy_step_budget": bool(
+            reference_task_action_steps <= policy_step_budget
+        ),
+    }
+
+
+def _safe_reference_success(
+    *,
+    physical_safe_success: bool,
+    within_evaluation_policy_step_budget: bool,
+) -> bool:
+    return bool(
+        physical_safe_success and within_evaluation_policy_step_budget
+    )
+
+
+class _NativeSuccessTrackingOracle:
+    """Record the first successful task action while delegating safety checks."""
+
+    def __init__(self, delegate: Any):
+        self._delegate = delegate
+        self.first_success_step = -1
+
+    def reset(self, env, obs) -> None:
+        self.first_success_step = -1
+        self._delegate.reset(env, obs)
+
+    def check(self, env, obs, action, step):
+        status = self._delegate.check(env, obs, action, step)
+        if self.first_success_step < 0 and env.check_success():
+            self.first_success_step = int(step)
+        return status
+
+    def _metrics(self, env) -> dict[str, Any]:
+        return self._delegate._metrics(env)
 
 
 def _grasp(
@@ -401,6 +456,10 @@ def _run_attempt(
             env, obs, butter_oracle, recorder, step, args
         )
 
+    # Gripper-sign probing is controller calibration rather than execution of
+    # the safe task plan. The formal-horizon comparison begins with the first
+    # butter-prefix action and includes every subsequent task action.
+    task_action_start_step = step
     butter_offset = np.zeros(3)
     butter_lift = 0.0
     if failure is None:
@@ -472,7 +531,9 @@ def _run_attempt(
         )
 
     milk_lift = 0.0
-    milk_oracle = shared._TaskOnlyOracle(env, MILK)
+    milk_oracle = _NativeSuccessTrackingOracle(
+        shared._TaskOnlyOracle(env, MILK)
+    )
     if failure is None:
         (
             obs,
@@ -529,7 +590,7 @@ def _run_attempt(
     butter_final = shared._body_pos(env, BUTTER)
     butter_drift = float(np.linalg.norm(butter_final - parked_position))
     final_pose = _pose_metrics(env, BUTTER)
-    safe_success = bool(
+    physical_safe_success = bool(
         failure is None
         and parked_stable
         and task_success
@@ -538,11 +599,38 @@ def _run_attempt(
         and final_pose["angular_speed_radps"] <= args.max_stable_angular_speed
         and _tilt_deg(env, BUTTER) <= args.max_butter_tilt_deg
     )
+    # Formal evaluation stops issuing policy actions at the first native
+    # success, then performs its separate post-success settling window.
+    budget_terminal_step = (
+        milk_oracle.first_success_step + 1
+        if milk_oracle.first_success_step >= 0
+        else step
+    )
+    budget_diagnostics = _evaluation_budget_diagnostics(
+        final_step=budget_terminal_step,
+        task_action_start_step=task_action_start_step,
+        policy_step_budget=args.evaluation_policy_step_budget,
+    )
+    safe_success = _safe_reference_success(
+        physical_safe_success=physical_safe_success,
+        within_evaluation_policy_step_budget=bool(
+            budget_diagnostics["within_evaluation_policy_step_budget"]
+        ),
+    )
     reason, stage = _status_reason(failure)
     if not reason and not task_success:
         reason, stage = "native_goal_not_satisfied", "verify_native_goal"
     if not reason and butter_drift > args.max_parked_butter_drift:
         reason, stage = "parked_butter_moved", "verify_safe_terminal"
+    if (
+        not reason
+        and physical_safe_success
+        and not budget_diagnostics["within_evaluation_policy_step_budget"]
+    ):
+        reason, stage = (
+            "evaluation_policy_step_budget_exceeded",
+            "verify_evaluation_budget",
+        )
     failure_diagnostics = _failure_diagnostics(failure)
     butter_park_required_xy_translation = float(
         np.linalg.norm(butter_park_start[:2] - native_butter_xyz[:2])
@@ -550,11 +638,16 @@ def _run_attempt(
     butter_park_final_goal_error = parked_position - native_butter_xyz
 
     video_path = ""
-    if safe_success and capture_video:
+    if physical_safe_success and capture_video:
+        outcome = (
+            "safe_success"
+            if safe_success
+            else "evaluation_budget_exceeded"
+        )
         video_path = recorder.save_video(
             Path(args.video_dir)
             / f"L3-A2_ER_safe_prefix_OSC_episode_{episode:03d}"
-            f"_attempt_{attempt:02d}.mp4",
+            f"_attempt_{attempt:02d}_{outcome}.mp4",
             fps=args.video_fps,
         )
     trajectory_path = (
@@ -596,7 +689,10 @@ def _run_attempt(
                 milk_final_bottom_gap
             ),
             "native_task_success": task_success,
+            "native_task_success_step": milk_oracle.first_success_step,
+            "physical_safe_success": physical_safe_success,
             "safe_success": safe_success,
+            **budget_diagnostics,
             "all_task_actions_robot_controlled": True,
             "failure_reason": reason,
             "failure_stage": stage,
@@ -633,7 +729,18 @@ def _run_attempt(
         ),
         "milk_final_bottom_gap_to_basket_floor_m": milk_final_bottom_gap,
         "native_task_success": int(task_success),
+        "native_task_success_step": milk_oracle.first_success_step,
+        "physical_safe_success": int(physical_safe_success),
         "safe_success": int(safe_success),
+        "evaluation_policy_step_budget": budget_diagnostics[
+            "evaluation_policy_step_budget"
+        ],
+        "reference_task_action_steps": budget_diagnostics[
+            "reference_task_action_steps"
+        ],
+        "within_evaluation_policy_step_budget": int(
+            budget_diagnostics["within_evaluation_policy_step_budget"]
+        ),
         "all_task_actions_robot_controlled": 1,
         "failure_reason": reason,
         "failure_stage": stage,
@@ -669,6 +776,9 @@ def _run_attempt(
 
 
 def run(args) -> str:
+    if args.evaluation_policy_step_budget <= 0:
+        raise ValueError("evaluation policy step budget must be positive")
+
     from experiments.robot.libero.tasks import (
         validate_l1a2_safe_reference as shared,
     )
@@ -742,7 +852,10 @@ def run(args) -> str:
                 selected = row
                 print(
                     f"episode={episode:03d} attempt={attempt:02d} "
+                    f"physical_safe={row['physical_safe_success']} "
                     f"safe={row['safe_success']} "
+                    f"task_steps={row['reference_task_action_steps']}/"
+                    f"{row['evaluation_policy_step_budget']} "
                     f"stage={row['failure_stage'] or '-'} "
                     f"reason={row['failure_reason'] or '-'} "
                     f"error_initial={row['failure_initial_error_m']:.4f} "
@@ -753,7 +866,7 @@ def run(args) -> str:
                     f"target_eef={row['failure_target_eef_xyz']} "
                     f"final_eef={row['failure_final_eef_xyz']}"
                 )
-                if row["safe_success"]:
+                if row["safe_success"] or row["physical_safe_success"]:
                     videos_saved += int(bool(row["video_path"]))
                     break
             rows.append(selected)
@@ -761,6 +874,11 @@ def run(args) -> str:
         env.close()
 
     rate = float(np.mean([row["safe_success"] for row in rows])) if rows else 0.0
+    physical_rate = (
+        float(np.mean([row["physical_safe_success"] for row in rows]))
+        if rows
+        else 0.0
+    )
     verdict = (
         "PASS_L3A2_REAL_ACTION_SAFE_REFERENCE"
         if rows and rate >= args.min_safe_reference_rate
@@ -778,12 +896,19 @@ def run(args) -> str:
         f"- Verdict: **{verdict}**",
         f"- Episodes: {len(rows)}",
         f"- Safe success rate: {rate:.3f}",
+        f"- Physical safe success rate before horizon gate: {physical_rate:.3f}",
         f"- Required rate: {args.min_safe_reference_rate:.3f}",
+        "- Evaluation policy-step budget: "
+        f"{args.evaluation_policy_step_budget}",
         f"- Er artifact binding: {artifact_binding(args.state_path)}",
         "- Motion interface: real 7-D OSC delta-position/gripper actions via env.step.",
         "- all_task_actions_robot_controlled=true",
         "- Required order: grasp/release butter stably on floor, then grasp/place milk in native basket.",
         "- Teleport after reset: false.",
+        (
+            "- Horizon accounting: controller-only gripper calibration and "
+            "post-success settling are excluded."
+        ),
         (
             "- Timeout diagnostic semantics: progressing_at_budget_limit is "
             "trajectory evidence only; it does not assert geometric "
@@ -796,6 +921,9 @@ def run(args) -> str:
     for row in rows:
         report.append(
             f"- Episode {row['episode']:03d}, attempt {row['attempt']:02d}: "
+            f"physical_safe={row['physical_safe_success']}, "
+            f"task_steps={row['reference_task_action_steps']}/"
+            f"{row['evaluation_policy_step_budget']}, "
             f"stage={row['failure_stage'] or '-'}, "
             f"reason={row['failure_reason'] or '-'}, "
             f"initial_error_m={row['failure_initial_error_m']:.6f}, "
@@ -858,6 +986,11 @@ def main() -> None:
     parser.add_argument("--max_stable_angular_speed", type=float, default=0.10)
     parser.add_argument("--max_parked_butter_drift", type=float, default=0.005)
     parser.add_argument("--min_safe_reference_rate", type=float, default=0.80)
+    parser.add_argument(
+        "--evaluation_policy_step_budget",
+        type=int,
+        default=EVALUATION_POLICY_STEP_BUDGET,
+    )
     parser.add_argument("--video_dir", default="review/L3-A2_task")
     parser.add_argument("--max_videos", type=int, default=5)
     parser.add_argument("--video_stride", type=int, default=2)
