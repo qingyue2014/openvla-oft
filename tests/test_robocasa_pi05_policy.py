@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from experiments.robot.robocasa.pi05_policy import (
-    LIBERO_STATE_MEAN_POS,
+    LIBERO_INITIAL_EEF_POS,
     Pi05RoboCasaPolicy,
     build_request,
     canonicalize_robocasa_state,
@@ -96,7 +96,12 @@ def test_canonical_state_anchors_initial_position_to_libero_mean():
     state, anchor = canonicalize_robocasa_state(
         _obs(), _Env(), state_anchor=None
     )
-    np.testing.assert_allclose(state[:3], LIBERO_STATE_MEAN_POS)
+    np.testing.assert_allclose(state[:3], LIBERO_INITIAL_EEF_POS)
+    np.testing.assert_allclose(
+        state[3:6],
+        [3.1404691, -0.0022365, -0.08691545],
+        atol=1e-6,
+    )
     np.testing.assert_allclose(anchor.world_position, [0.1, 0.2, 0.3])
 
     moved = _obs()
@@ -106,7 +111,7 @@ def test_canonical_state_anchors_initial_position_to_libero_mean():
     )
     np.testing.assert_allclose(
         moved_state[:3],
-        LIBERO_STATE_MEAN_POS + np.array([0.01, -0.02, 0.03]),
+        LIBERO_INITIAL_EEF_POS + np.array([0.01, -0.02, 0.03]),
     )
     assert reused_anchor is anchor
 
@@ -136,7 +141,7 @@ def test_canonical_state_preserves_world_delta_with_rotated_arm_base():
 
     np.testing.assert_allclose(
         moved_state[:3],
-        LIBERO_STATE_MEAN_POS + np.array([0.01, -0.02, 0.03]),
+        LIBERO_INITIAL_EEF_POS + np.array([0.01, -0.02, 0.03]),
     )
 
 

@@ -23,9 +23,16 @@ AGENT_CAMERA = "robot0_agentview_center"
 WRIST_CAMERA = "robot0_eye_in_hand"
 PI05_ACTION_DIM = 7
 ROBOCASA_ACTION_DIM = 12
-LIBERO_STATE_MEAN_POS = np.array(
-    [-0.043638702, 0.035254877, 0.76370335],
+# Mean first-policy pose after the official ten-step wait, measured over the
+# 20 native LIBERO task-8 trajectories in the validated pi0.5 capability run.
+# This is an initial-pose anchor, not the all-timestep dataset mean.
+LIBERO_INITIAL_EEF_POS = np.array(
+    [-0.20640835, 0.000760356, 1.1756006],
     dtype=np.float32,
+)
+LIBERO_INITIAL_EEF_QUAT = np.array(
+    [0.9996163, -0.000711894, -0.027665326, -0.000039881],
+    dtype=np.float64,
 )
 
 
@@ -206,23 +213,24 @@ def canonicalize_robocasa_state(
 
     LIBERO's robosuite 1.4.1 state and delta actions share world-coordinate
     axes. PandaOmron's absolute world position is far outside the LIBERO state
-    distribution, so the initial position is translated to the LIBERO mean.
-    Subsequent position and orientation changes remain in world coordinates;
+    distribution, so the initial pose is translated to the measured LIBERO
+    first-policy pose. Subsequent position and orientation changes remain in
+    world coordinates;
     rotating those changes into the PandaOmron base would make proprioception
     disagree with the world-frame action emitted by the checkpoint.
     """
 
-    arm = env.robots[0].composite_controller.part_controllers["right"]
-    origin_ori = np.asarray(arm.origin_ori, dtype=np.float64).reshape(3, 3)
     world_pos = np.asarray(obs["robot0_eef_pos"], dtype=np.float64)
     world_ori = _quat_to_mat(np.asarray(obs["robot0_eef_quat"], dtype=np.float64))
     if state_anchor is None:
         state_anchor = CanonicalStateAnchor(
             world_position=world_pos.copy(),
             world_orientation=world_ori.copy(),
-            canonical_initial_orientation=origin_ori.T @ world_ori,
+            canonical_initial_orientation=_quat_to_mat(
+                LIBERO_INITIAL_EEF_QUAT
+            ),
         )
-    canonical_pos = LIBERO_STATE_MEAN_POS + (
+    canonical_pos = LIBERO_INITIAL_EEF_POS + (
         world_pos - state_anchor.world_position
     )
     world_orientation_delta = world_ori @ state_anchor.world_orientation.T
@@ -341,7 +349,7 @@ class Pi05RoboCasaPolicy:
     requires_camera_obs = True
     camera_names = (AGENT_CAMERA, WRIST_CAMERA)
     model_label = (
-        "pi05_libero_cross_sim_world_delta_state_and_action_to_panda_base"
+        "pi05_libero_cross_sim_initial_pose_world_delta_to_panda_base"
     )
     # Match examples/libero/main.py: objects settle for ten simulator steps
     # under LIBERO_DUMMY_ACTION before the first policy request.
@@ -353,7 +361,7 @@ class Pi05RoboCasaPolicy:
         self.image_mode = os.environ.get("PI05_IMAGE_MODE", "rotate180")
         self.policy_preprocessing = pi05_preprocessing_label(self.image_mode)
         self.model_label = (
-            "pi05_libero_cross_sim_world_delta_state_and_action_to_panda_base"
+            "pi05_libero_cross_sim_initial_pose_world_delta_to_panda_base"
             f"_image_{self.image_mode}"
         )
         self.replan_steps = int(os.environ.get("PI05_REPLAN_STEPS", "5"))
