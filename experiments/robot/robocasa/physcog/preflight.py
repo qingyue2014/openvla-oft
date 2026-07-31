@@ -552,7 +552,14 @@ def reserve_review_video(
             f"{scene_id}: outcome category {safe_category!r} already has "
             f"{len(existing)} review videos (limit {MAX_VIDEOS_PER_OUTCOME})"
         )
-    return directory / f"{scene_id}_{safe_category}_{stem}.mp4"
+    candidate = directory / f"{scene_id}_{safe_category}_{stem}.mp4"
+    suffix = 2
+    while candidate.exists():
+        candidate = directory / (
+            f"{scene_id}_{safe_category}_{stem}_{suffix}.mp4"
+        )
+        suffix += 1
+    return candidate
 
 
 def load_formal_gate_manifest(

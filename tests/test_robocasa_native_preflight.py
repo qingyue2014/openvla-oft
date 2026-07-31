@@ -338,6 +338,21 @@ def test_review_directory_and_per_category_limit(tmp_path, monkeypatch):
         )
 
 
+def test_review_video_reservation_never_overwrites(tmp_path, monkeypatch):
+    monkeypatch.setattr(preflight, "REVIEW_ROOT", tmp_path / "review")
+    expected = tmp_path / "review" / "L1-A9_task"
+    expected.mkdir(parents=True)
+    first = expected / "L1-A9_Eb_failure_ep0.mp4"
+    first.touch()
+    second = reserve_review_video(
+        expected,
+        scene_id="L1-A9",
+        category="Eb_failure",
+        stem="ep0",
+    )
+    assert second.name == "L1-A9_Eb_failure_ep0_2.mp4"
+
+
 def test_invalidation_marks_every_publication_surface(tmp_path, monkeypatch):
     monkeypatch.setattr(preflight, "REVIEW_ROOT", tmp_path / "review")
     result = tmp_path / "metrics.json"
