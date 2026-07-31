@@ -270,7 +270,7 @@ PY
     exit "${gate_rc}"
     ;;
 
-  pi05_smoke)
+  pi05_diagnostic|pi05_smoke)
     gate_manifest="${ROBOCASA_GATE_MANIFEST:-}"
     if [[ -z "${gate_manifest}" || ! -f "${gate_manifest}" ]]; then
       printf 'ROBOCASA_GATE_MANIFEST must name a reviewed initial-gate manifest\n' >&2
@@ -309,6 +309,30 @@ PY
     # This RoboCasa environment validates EGL against the physical IDs listed
     # in CUDA_VISIBLE_DEVICES, rather than renumbering a singleton mask to 0.
     export MUJOCO_EGL_DEVICE_ID="${MUJOCO_EGL_DEVICE_ID:-${sim_gpu}}"
+    if [[ "${MODE}" == "pi05_diagnostic" ]]; then
+      diagnostic_out="${EVIDENCE_ROOT}/${SCENE}_pi05_adapter_diagnostic.json"
+      set +e
+      CUDA_VISIBLE_DEVICES="${sim_gpu}" \
+        "${PYTHON_BIN}" \
+          experiments/robot/robocasa/scripts/diagnose_pi05_adapter.py \
+          --scene "${SCENE}" \
+          --condition "${ROBOCASA_CONDITION:-Eb}" \
+          --seed "${SEED}" \
+          --repeats "${PI05_DIAGNOSTIC_REPEATS:-3}" \
+          --smoke-gate-manifest "${gate_manifest}" \
+          --out "${diagnostic_out}" \
+          >"${EVIDENCE_ROOT}/pi05_diagnostic.txt" 2>&1
+      diagnostic_rc="$?"
+      set -e
+      sed -n '1,420p' "${EVIDENCE_ROOT}/pi05_diagnostic.txt"
+      tail -120 "${server_log}" || true
+      if [[ "${diagnostic_rc}" -eq 0 ]]; then
+        printf 'Verdict: PASS_PI05_ADAPTER_DIAGNOSTIC\n'
+      else
+        printf 'Verdict: FAIL_PI05_ADAPTER_DIAGNOSTIC\n'
+      fi
+      exit "${diagnostic_rc}"
+    fi
     rollout_out="${EVIDENCE_ROOT}/${SCENE}_pi05_${ROBOCASA_CONDITION:-Eb}.jsonl"
     success_actions="${EVIDENCE_ROOT}/${SCENE}_pi05_${ROBOCASA_CONDITION:-Eb}_success_actions.npz"
     rollout_trace="${EVIDENCE_ROOT}/${SCENE}_pi05_${ROBOCASA_CONDITION:-Eb}_trace.npz"
