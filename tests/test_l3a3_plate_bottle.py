@@ -20,6 +20,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _gate_live_contact_offset_xy,
     _horizon_budget,
     _live_plate_tracking_target,
+    _outside_side_guard_from_world_aabbs,
     _plate_finger_contact_sides,
     _push_window_timeout_evidence,
     _robot_contacts_body,
@@ -543,6 +544,81 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
     assert rejected["selection_eligible"] is False
     assert rejected["selection_violations"] == [
         "dual_finger_contact_skew_exceeds_outside_clearance",
+    ]
+
+
+def test_499866_outside_side_guard_uses_live_aabbs_not_exact_eef_center():
+    target_eef = np.array([0.136806, -0.028508, 0.898654])
+    achieved_eef = np.array([0.129286, -0.028540, 0.909191])
+    assert np.linalg.norm(target_eef - achieved_eef) == pytest.approx(
+        0.012945,
+        abs=1e-6,
+    )
+    plate = np.array([0.052, -0.0285, 0.9025])
+    rim_bounds = [
+        (
+            "plate_plus_x_rim",
+            np.array([0.120, -0.0285, 0.900]),
+            np.array([0.003, 0.020, 0.004]),
+        )
+    ]
+    finger_bounds = [
+        (
+            "left_finger_collision",
+            "left",
+            np.array([0.130, -0.045, achieved_eef[2]]),
+            np.array([0.002, 0.004, 0.012]),
+        ),
+        (
+            "right_finger_collision",
+            "right",
+            np.array([0.130, -0.012, achieved_eef[2]]),
+            np.array([0.002, 0.004, 0.012]),
+        ),
+    ]
+    guard = _outside_side_guard_from_world_aabbs(
+        plate_position=plate,
+        outward_direction_xy=np.array([1.0, 0.0]),
+        rim_bounds=rim_bounds,
+        finger_bounds=finger_bounds,
+        required_outside_clearance_m=0.005,
+    )
+    assert guard["accepted"] is True
+    assert guard["violations"] == []
+    for side in ("left", "right"):
+        evidence = guard["finger_sides"][side]
+        assert evidence["outside_clearance_m"] == pytest.approx(0.005)
+        assert evidence["maximum_vertical_overlap_m"] > 0.0
+        assert evidence["rim_center_covered"] is True
+
+    # Positive edge overlap alone is insufficient: both fingers must cover
+    # the native rim centre line, preventing an upper-edge guard acceptance.
+    upper_edge_only = [
+        (
+            name,
+            side,
+            np.array([center[0], center[1], 0.913]),
+            np.array([half[0], half[1], 0.010]),
+        )
+        for name, side, center, half in finger_bounds
+    ]
+    rejected = _outside_side_guard_from_world_aabbs(
+        plate_position=plate,
+        outward_direction_xy=np.array([1.0, 0.0]),
+        rim_bounds=rim_bounds,
+        finger_bounds=upper_edge_only,
+        required_outside_clearance_m=0.005,
+    )
+    assert rejected["accepted"] is False
+    assert (
+        rejected["finger_sides"]["left"]["maximum_vertical_overlap_m"]
+        > 0.0
+    )
+    assert "left_finger_does_not_cover_rim_center" in rejected[
+        "violations"
+    ]
+    assert "right_finger_does_not_cover_rim_center" in rejected[
+        "violations"
     ]
 
 
@@ -1231,6 +1307,15 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "rollout.move(" in bounded_seek
     assert "outside_high_target" in bounded_seek
     assert "outside_side_target" in bounded_seek
+    assert "_live_outside_side_guard(" in bounded_seek
+    assert "stop_when=outside_side_guard_satisfied" in bounded_seek
+    assert (
+        'stop_label="native finger/rim outside-side AABB guard"'
+        in bounded_seek
+    )
+    assert "step_observer=observe_outside_side_motion" in bounded_seek
+    assert 'stage.startswith("outside_")' in bounded_seek
+    assert "tolerance=" not in bounded_seek
     assert "rollout.advance(action, \"task\")" in bounded_seek
     assert "plate_contact_seek_max_translation_action" in bounded_seek
     assert '"bounded_lateral_contact_seek"' in bounded_seek

@@ -502,6 +502,163 @@ def _compiled_geom_world_aabb(model, data, geom_id):
     return world_center, world_half_size
 
 
+def _outside_side_guard_from_world_aabbs(
+    *,
+    plate_position,
+    outward_direction_xy,
+    rim_bounds,
+    finger_bounds,
+    required_outside_clearance_m,
+):
+    """Validate a live no-contact side guard from native collision AABBs."""
+    plate_position = np.asarray(plate_position, dtype=float)
+    outward = np.asarray(outward_direction_xy, dtype=float)
+    if plate_position.shape != (3,) or outward.shape != (2,):
+        raise ValueError("plate position must be 3-D and outward direction 2-D")
+    outward_norm = float(np.linalg.norm(outward))
+    if not np.isfinite(outward_norm) or outward_norm <= 1e-9:
+        raise ValueError("outward direction must be finite and nonzero")
+    if (
+        not np.isfinite(required_outside_clearance_m)
+        or required_outside_clearance_m <= 0
+    ):
+        raise ValueError("required outside clearance must be positive")
+    outward /= outward_norm
+    rim_bounds = list(rim_bounds)
+    finger_bounds = list(finger_bounds)
+    if not rim_bounds:
+        raise RuntimeError("compiled native plate rim bounds unavailable")
+    fingers_by_side = {
+        side: [
+            bound
+            for bound in finger_bounds
+            if bound[1] == side
+        ]
+        for side in ("left", "right")
+    }
+    if not all(fingers_by_side.values()):
+        raise RuntimeError(
+            "compiled native left/right finger bounds unavailable"
+        )
+
+    plate_outward_support = max(
+        float(
+            np.dot(center[:2] - plate_position[:2], outward)
+            + np.dot(half_size[:2], np.abs(outward))
+        )
+        for _, center, half_size in rim_bounds
+    )
+    rim_center_z = float(
+        np.median([center[2] for _, center, _ in rim_bounds])
+    )
+    rim_z_min = min(
+        float(center[2] - half_size[2])
+        for _, center, half_size in rim_bounds
+    )
+    rim_z_max = max(
+        float(center[2] + half_size[2])
+        for _, center, half_size in rim_bounds
+    )
+    side_diagnostics = {}
+    violations = []
+    for side, bounds in fingers_by_side.items():
+        inward_support = min(
+            float(
+                np.dot(center[:2] - plate_position[:2], outward)
+                - np.dot(half_size[:2], np.abs(outward))
+            )
+            for _, _, center, half_size in bounds
+        )
+        clearance = inward_support - plate_outward_support
+        maximum_vertical_overlap = max(
+            max(
+                0.0,
+                min(
+                    finger_center[2] + finger_half_size[2],
+                    rim_center[2] + rim_half_size[2],
+                )
+                - max(
+                    finger_center[2] - finger_half_size[2],
+                    rim_center[2] - rim_half_size[2],
+                ),
+            )
+            for _, _, finger_center, finger_half_size in bounds
+            for _, rim_center, rim_half_size in rim_bounds
+        )
+        rim_center_covered = any(
+            float(center[2] - half_size[2])
+            <= rim_center_z
+            <= float(center[2] + half_size[2])
+            for _, _, center, half_size in bounds
+        )
+        if clearance + 1e-9 < required_outside_clearance_m:
+            violations.append(
+                f"{side}_finger_outside_clearance_below_requirement"
+            )
+        if maximum_vertical_overlap <= 1e-9:
+            violations.append(
+                f"{side}_finger_rim_vertical_overlap_missing"
+            )
+        if not rim_center_covered:
+            violations.append(
+                f"{side}_finger_does_not_cover_rim_center"
+            )
+        side_diagnostics[side] = {
+            "finger_inward_support_m": inward_support,
+            "outside_clearance_m": clearance,
+            "maximum_vertical_overlap_m": float(
+                maximum_vertical_overlap
+            ),
+            "rim_center_covered": bool(rim_center_covered),
+            "finger_geoms": [name for name, _, _, _ in bounds],
+        }
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "outward_direction_xy": outward.tolist(),
+        "required_outside_clearance_m": float(
+            required_outside_clearance_m
+        ),
+        "plate_outward_support_m": plate_outward_support,
+        "rim_center_z": rim_center_z,
+        "rim_vertical_interval": [rim_z_min, rim_z_max],
+        "rim_geoms": [name for name, _, _ in rim_bounds],
+        "finger_sides": side_diagnostics,
+    }
+
+
+def _live_outside_side_guard(env, geometry):
+    """Measure the outside-side guard from the current compiled MuJoCo state."""
+    model, data = env.sim.model, env.sim.data
+    rim_bounds = []
+    for name in geometry["plate_rim_geoms"]:
+        geom_id = int(model.geom_name2id(name))
+        center, half_size = _compiled_geom_world_aabb(
+            model, data, geom_id
+        )
+        rim_bounds.append((name, center, half_size))
+    finger_bounds = []
+    for record in geometry["finger_collision_geoms"]:
+        side = record.get("semantic_side")
+        if side not in {"left", "right"}:
+            continue
+        name = record["geom"]
+        geom_id = int(model.geom_name2id(name))
+        center, half_size = _compiled_geom_world_aabb(
+            model, data, geom_id
+        )
+        finger_bounds.append((name, side, center, half_size))
+    return _outside_side_guard_from_world_aabbs(
+        plate_position=body_pose(env, PLATE_BODY)[0],
+        outward_direction_xy=geometry["outward_direction_xy"],
+        rim_bounds=rim_bounds,
+        finger_bounds=finger_bounds,
+        required_outside_clearance_m=geometry[
+            "outside_clearance_m"
+        ],
+    )
+
+
 def _semantic_finger_side(body_name):
     """Map a compiled gripper body name to its native left/right finger."""
     body = str(body_name).lower()
@@ -1252,7 +1409,7 @@ def _seek_stable_plate_contact(
         }
         samples.append(sample)
         if (
-            stage in {"outside_high", "outside_side"}
+            stage.startswith("outside_")
             and sample["robot_plate_contact"]
         ):
             sample["accepted"] = False
@@ -1300,13 +1457,57 @@ def _seek_stable_plate_contact(
         diagnostics=diagnostics,
     )
     capture("outside_high", 0, False, True)
+    outside_side_guard_checks = 0
+    outside_side_motion_steps = 0
+    latest_outside_side_guard = None
+
+    def outside_side_guard_satisfied():
+        nonlocal outside_side_guard_checks
+        nonlocal latest_outside_side_guard
+        latest_outside_side_guard = _live_outside_side_guard(
+            env, geometry
+        )
+        outside_side_guard_checks += 1
+        return latest_outside_side_guard["accepted"]
+
+    def observe_outside_side_motion():
+        nonlocal outside_side_motion_steps
+        outside_side_motion_steps += 1
+        capture(
+            "outside_side_motion",
+            outside_side_motion_steps,
+            False,
+            True,
+        )
+
+    def outside_side_diagnostics():
+        return {
+            "source": source,
+            "outside_side_guard_checks": outside_side_guard_checks,
+            "latest_outside_side_guard": latest_outside_side_guard,
+            "compiled_geometry": geometry,
+            "scene": diagnostics(),
+        }
+
     rollout.move(
         outside_side_target,
         gripper,
         "task",
-        diagnostics=diagnostics,
+        stop_when=outside_side_guard_satisfied,
+        stop_label="native finger/rim outside-side AABB guard",
+        diagnostics=outside_side_diagnostics,
+        step_observer=observe_outside_side_motion,
     )
-    capture("outside_side", 0, False, True)
+    final_outside_side_guard = _live_outside_side_guard(env, geometry)
+    if not final_outside_side_guard["accepted"]:
+        raise RuntimeError(
+            "outside-side AABB guard was not sustained after OSC stop: "
+            f"{json.dumps(outside_side_diagnostics(), sort_keys=True)}"
+        )
+    outside_side_sample = capture("outside_side", 0, False, True)
+    outside_side_sample["outside_side_guard"] = (
+        final_outside_side_guard
+    )
 
     two_finger_contact_observed = False
     for seek_index in range(1, args.plate_contact_seek_max_steps + 1):
@@ -1370,6 +1571,9 @@ def _seek_stable_plate_contact(
             contact_target, dtype=float
         ).tolist(),
         "compiled_geometry": geometry,
+        "outside_side_guard": final_outside_side_guard,
+        "outside_side_guard_checks": outside_side_guard_checks,
+        "outside_side_motion_steps": outside_side_motion_steps,
         "maximum_translation_action": (
             args.plate_contact_seek_max_translation_action
         ),
