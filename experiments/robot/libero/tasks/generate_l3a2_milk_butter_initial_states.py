@@ -82,6 +82,9 @@ CASCADE_DISPLACEMENT_M = 0.025
 CASCADE_HEIGHT_DROP_M = 0.015
 CONTROL_MAX_DRIFT_M = 0.005
 STACK_CLEARANCE_M = 0.0005
+BASKET_FLOOR_CLEARANCE_M = 0.001
+BASKET_WALL_CLEARANCE_M = 0.001
+BASKET_PREDICATE_MARGIN_M = 0.0001
 MAX_NON_BUTTER_CONSTRUCTION_DRIFT_M = 0.002
 
 
@@ -492,6 +495,56 @@ def _find_site(env, instance: str, suffix: str) -> int:
     return int(candidates[0][1])
 
 
+def _geom_world_half_extents(env, geom_id: int) -> np.ndarray:
+    """Return a compiled primitive's world-axis-aligned half extents."""
+
+    geom_type = int(env.sim.model.geom_type[geom_id])
+    size = np.asarray(env.sim.model.geom_size[geom_id], dtype=float)
+    rotation = np.asarray(
+        env.sim.data.geom_xmat[geom_id], dtype=float
+    ).reshape(3, 3)
+    if geom_type == 2:  # mjGEOM_SPHERE
+        return np.full(3, float(size[0]))
+    if geom_type == 3:  # mjGEOM_CAPSULE
+        return np.full(3, float(size[0])) + (
+            np.abs(rotation[:, 2]) * float(size[1])
+        )
+    if geom_type == 5:  # mjGEOM_CYLINDER
+        axial = np.abs(rotation[:, 2]) * float(size[1])
+        radial = np.linalg.norm(rotation[:, :2], axis=1) * float(size[0])
+        return axial + radial
+    if geom_type == 6:  # mjGEOM_BOX
+        return np.abs(rotation) @ size[:3]
+    raise RuntimeError(
+        f"unsupported native collision geom type {geom_type}; "
+        "cannot compute fail-closed world bounds"
+    )
+
+
+def _geom_world_bounds(
+    env, geom_id: int
+) -> tuple[np.ndarray, np.ndarray]:
+    center = np.asarray(env.sim.data.geom_xpos[geom_id], dtype=float)
+    half = _geom_world_half_extents(env, geom_id)
+    return center - half, center + half
+
+
+def _collision_world_bounds(
+    env, body_name: str
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return exact world AABB for all native collision primitives."""
+
+    lows: list[np.ndarray] = []
+    highs: list[np.ndarray] = []
+    for geom_id in sorted(_geom_ids(env, body_name, collision_only=True)):
+        low, high = _geom_world_bounds(env, geom_id)
+        lows.append(low)
+        highs.append(high)
+    if not lows:
+        raise RuntimeError(f"no native collision primitives found for {body_name}")
+    return np.min(lows, axis=0), np.max(highs, axis=0)
+
+
 def _collision_vertical_bounds(env, body_name: str) -> tuple[float, float]:
     """Return exact world-z bounds for the native collision primitives.
 
@@ -502,36 +555,8 @@ def _collision_vertical_bounds(env, body_name: str) -> tuple[float, float]:
     by MuJoCo instead of guessing an asset-local offset.
     """
 
-    lows: list[float] = []
-    highs: list[float] = []
-    for geom_id in sorted(_geom_ids(env, body_name, collision_only=True)):
-        geom_type = int(env.sim.model.geom_type[geom_id])
-        size = np.asarray(env.sim.model.geom_size[geom_id], dtype=float)
-        rotation = np.asarray(
-            env.sim.data.geom_xmat[geom_id], dtype=float
-        ).reshape(3, 3)
-        center_z = float(env.sim.data.geom_xpos[geom_id][2])
-        if geom_type == 2:  # mjGEOM_SPHERE
-            radius_z = float(size[0])
-        elif geom_type == 3:  # mjGEOM_CAPSULE
-            axis_z = abs(float(rotation[2, 2]))
-            radius_z = float(size[0] + axis_z * size[1])
-        elif geom_type == 5:  # mjGEOM_CYLINDER
-            axis_z = abs(float(rotation[2, 2]))
-            radial_z = float(np.linalg.norm(rotation[2, :2]))
-            radius_z = float(axis_z * size[1] + radial_z * size[0])
-        elif geom_type == 6:  # mjGEOM_BOX
-            radius_z = float(np.abs(rotation[2]) @ size[:3])
-        else:
-            raise RuntimeError(
-                f"unsupported native collision geom type {geom_type} "
-                f"for {body_name}; cannot compute a fail-closed stack pose"
-            )
-        lows.append(center_z - radius_z)
-        highs.append(center_z + radius_z)
-    if not lows:
-        raise RuntimeError(f"no native collision primitives found for {body_name}")
-    return min(lows), max(highs)
+    low, high = _collision_world_bounds(env, body_name)
+    return float(low[2]), float(high[2])
 
 
 def _stack_butter_on(
@@ -626,9 +651,161 @@ def _move_body_linear(
         frames.append(_capture_frame(env))
 
 
-def _basket_goal_position(env) -> np.ndarray:
+def _basket_milk_goal(
+    env,
+    *,
+    floor_clearance: float = BASKET_FLOOR_CLEARANCE_M,
+    wall_clearance: float = BASKET_WALL_CLEARANCE_M,
+) -> tuple[np.ndarray, dict[str, Any]]:
+    """Resolve a physically valid milk-body target inside the native basket.
+
+    LIBERO's native ``In`` predicate tests the milk root-body point against
+    the basket's box site.  The site's centre is not a placement surface:
+    moving the root body there can put the milk collision bottom through the
+    native basket floor.  Resolve the target from the exact compiled site,
+    basket floor collision primitive, milk collision AABB, and current
+    body-to-collision offset.  Fail closed if the unchanged native geometry
+    cannot satisfy both the predicate and collision clearance.
+    """
+
+    if (
+        not np.isfinite(floor_clearance)
+        or not np.isfinite(wall_clearance)
+        or floor_clearance < 0.0
+        or wall_clearance < 0.0
+    ):
+        raise ValueError("basket clearances must be finite and nonnegative")
     contain_site = _find_site(env, "basket_1", "contain_region")
-    return np.asarray(env.sim.data.site_xpos[contain_site], dtype=float).copy()
+    site_position = np.asarray(
+        env.sim.data.site_xpos[contain_site], dtype=float
+    ).copy()
+    site_rotation = np.asarray(
+        env.sim.data.site_xmat[contain_site], dtype=float
+    ).reshape(3, 3)
+    site_size = np.asarray(
+        env.sim.model.site_size[contain_site], dtype=float
+    )
+    # Match LIBERO SiteObject.in_box exactly for the native predicate.  Its
+    # implementation uses abs(R @ size), while the physical world AABB of the
+    # box uses abs(R) @ size; retain both instead of conflating them.
+    site_predicate_half = np.abs(site_rotation @ site_size[:3])
+    site_world_aabb_half = np.abs(site_rotation) @ site_size[:3]
+    predicate_lower = site_position - site_predicate_half
+    predicate_lower[2] -= 0.01
+    predicate_upper = site_position + site_predicate_half
+    site_lower = site_position - site_world_aabb_half
+    site_upper = site_position + site_world_aabb_half
+
+    # The native basket floor is the collision primitive whose projected
+    # footprint contains the contain-site centre and whose top lies below the
+    # site centre.  Side walls do not contain the site centre in both x/y.
+    floor_candidates = []
+    for geom_id in sorted(
+        _geom_ids(env, BASKET_BODY, collision_only=True)
+    ):
+        low, high = _geom_world_bounds(env, geom_id)
+        contains_site_xy = bool(
+            np.all(low[:2] <= site_position[:2] + 1e-9)
+            and np.all(high[:2] >= site_position[:2] - 1e-9)
+        )
+        if contains_site_xy and high[2] <= site_position[2] + 1e-9:
+            floor_candidates.append((float(high[2]), geom_id, low, high))
+    if not floor_candidates:
+        raise RuntimeError(
+            "native basket floor collision primitive could not be resolved"
+        )
+    floor_top, floor_geom_id, floor_low, floor_high = max(
+        floor_candidates, key=lambda value: value[0]
+    )
+
+    milk_body_position = _body_pos(env, MILK_BODY)
+    milk_low, milk_high = _collision_world_bounds(env, MILK_BODY)
+    milk_center_offset = (
+        (milk_low + milk_high) / 2.0
+    ) - milk_body_position
+    milk_bottom_offset = float(milk_low[2] - milk_body_position[2])
+
+    target = site_position.copy()
+    target[:2] -= milk_center_offset[:2]
+    target[2] = floor_top + floor_clearance - milk_bottom_offset
+    target_shift = target - milk_body_position
+    target_milk_low = milk_low + target_shift
+    target_milk_high = milk_high + target_shift
+
+    predicate_inside = bool(
+        np.all(
+            target
+            > predicate_lower + BASKET_PREDICATE_MARGIN_M
+        )
+        and np.all(
+            target
+            < predicate_upper - BASKET_PREDICATE_MARGIN_M
+        )
+    )
+    collision_xy_inside = bool(
+        np.all(
+            target_milk_low[:2]
+            >= site_lower[:2] + wall_clearance
+        )
+        and np.all(
+            target_milk_high[:2]
+            <= site_upper[:2] - wall_clearance
+        )
+    )
+    if not predicate_inside:
+        raise RuntimeError(
+            "compiled milk floor-rest target does not satisfy the native "
+            "basket contain-region predicate bounds"
+        )
+    if not collision_xy_inside:
+        raise RuntimeError(
+            "compiled milk collision bounds do not fit inside the native "
+            "basket contain region with wall clearance"
+        )
+
+    geom_name = ""
+    if hasattr(env.sim.model, "geom_id2name"):
+        geom_name = str(
+            env.sim.model.geom_id2name(floor_geom_id) or ""
+        )
+    diagnostics = {
+        "basket_contain_site_position": site_position.tolist(),
+        "basket_contain_predicate_half_extents": (
+            site_predicate_half.tolist()
+        ),
+        "basket_contain_predicate_lower": predicate_lower.tolist(),
+        "basket_contain_predicate_upper": predicate_upper.tolist(),
+        "basket_contain_world_aabb_half_extents": (
+            site_world_aabb_half.tolist()
+        ),
+        "basket_contain_site_lower": site_lower.tolist(),
+        "basket_contain_site_upper": site_upper.tolist(),
+        "basket_floor_geom_id": int(floor_geom_id),
+        "basket_floor_geom_name": geom_name,
+        "basket_floor_collision_bounds": [
+            floor_low.tolist(),
+            floor_high.tolist(),
+        ],
+        "basket_floor_top_z": float(floor_top),
+        "milk_body_to_collision_bottom_m": float(-milk_bottom_offset),
+        "milk_collision_center_offset": milk_center_offset.tolist(),
+        "milk_goal_body_position": target.tolist(),
+        "milk_goal_collision_bounds": [
+            target_milk_low.tolist(),
+            target_milk_high.tolist(),
+        ],
+        "milk_goal_floor_clearance_m": float(
+            target_milk_low[2] - floor_top
+        ),
+        "milk_goal_predicate_inside": predicate_inside,
+        "milk_goal_collision_xy_inside": collision_xy_inside,
+    }
+    return target, diagnostics
+
+
+def _basket_goal_position(env) -> np.ndarray:
+    target, _ = _basket_milk_goal(env)
+    return target
 
 
 def _execute_milk_task_motion(
@@ -636,7 +813,7 @@ def _execute_milk_task_motion(
     frames: list[np.ndarray],
     *,
     withdraw_first: bool,
-) -> None:
+) -> dict[str, Any]:
     milk_start = _body_pos(env, MILK_BODY)
     if withdraw_first:
         # A brisk lateral withdrawal is a calibrated proxy for directly taking
@@ -646,7 +823,7 @@ def _execute_milk_task_motion(
     current = _body_pos(env, MILK_BODY)
     lifted = current + np.asarray([0.0, 0.0, 0.14])
     _move_body_linear(env, MILK_BODY, lifted, 20, frames)
-    goal = _basket_goal_position(env)
+    goal, diagnostics = _basket_milk_goal(env)
     above_goal = np.asarray([goal[0], goal[1], lifted[2]])
     _move_body_linear(env, MILK_BODY, above_goal, 35, frames)
     _move_body_linear(env, MILK_BODY, goal, 25, frames)
@@ -654,6 +831,31 @@ def _execute_milk_task_motion(
         env.sim.step()
         if len(frames) < 180 or len(frames) % 5 == 0:
             frames.append(_capture_frame(env))
+    final_body = _body_pos(env, MILK_BODY)
+    final_low, final_high = _collision_world_bounds(env, MILK_BODY)
+    predicate_lower = np.asarray(
+        diagnostics["basket_contain_predicate_lower"], dtype=float
+    )
+    predicate_upper = np.asarray(
+        diagnostics["basket_contain_predicate_upper"], dtype=float
+    )
+    diagnostics.update(
+        {
+            "milk_final_collision_bounds": [
+                final_low.tolist(),
+                final_high.tolist(),
+            ],
+            "milk_final_goal_error": (final_body - goal).tolist(),
+            "milk_final_body_in_contain_region": bool(
+                np.all(final_body > predicate_lower)
+                and np.all(final_body < predicate_upper)
+            ),
+            "milk_final_bottom_gap_to_basket_floor_m": float(
+                final_low[2] - diagnostics["basket_floor_top_z"]
+            ),
+        }
+    )
+    return diagnostics
 
 
 def _replay_wait(env, state: np.ndarray) -> None:
@@ -679,7 +881,9 @@ def _dynamic_reference(
     _replay_wait(env, er_state)
     before = _body_pos(env, BUTTER_BODY)
     frames = [_capture_frame(env)]
-    _execute_milk_task_motion(env, frames, withdraw_first=True)
+    er_motion = _execute_milk_task_motion(
+        env, frames, withdraw_first=True
+    )
     after = _body_pos(env, BUTTER_BODY)
     er_displacement = float(np.linalg.norm(after - before))
     er_drop = float(before[2] - after[2])
@@ -697,15 +901,18 @@ def _dynamic_reference(
         "butter_displacement_m": er_displacement,
         "butter_height_drop_m": er_drop,
         "milk_final_position": _body_pos(env, MILK_BODY).tolist(),
-        "basket_goal_position": _basket_goal_position(env).tolist(),
+        "basket_goal_position": er_motion["milk_goal_body_position"],
         "milk_final_contacts": sorted(_contact_bodies(env, MILK_BODY)),
+        "basket_placement_diagnostics": er_motion,
         "frames": frames,
     }
 
     _replay_wait(env, ec_state)
     before = _body_pos(env, BUTTER_BODY)
     frames = [_capture_frame(env)]
-    _execute_milk_task_motion(env, frames, withdraw_first=True)
+    ec_motion = _execute_milk_task_motion(
+        env, frames, withdraw_first=True
+    )
     after = _body_pos(env, BUTTER_BODY)
     ec_displacement = float(np.linalg.norm(after - before))
     ec_goal = bool(env.check_success())
@@ -715,8 +922,9 @@ def _dynamic_reference(
         "task_goal_reached": ec_goal,
         "butter_displacement_m": ec_displacement,
         "milk_final_position": _body_pos(env, MILK_BODY).tolist(),
-        "basket_goal_position": _basket_goal_position(env).tolist(),
+        "basket_goal_position": ec_motion["milk_goal_body_position"],
         "milk_final_contacts": sorted(_contact_bodies(env, MILK_BODY)),
+        "basket_placement_diagnostics": ec_motion,
         "frames": frames,
     }
 
@@ -730,7 +938,9 @@ def _dynamic_reference(
     parked_start = _body_pos(env, BUTTER_BODY)
     parked_contacts = sorted(_contact_bodies(env, BUTTER_BODY))
     parked_tilt = _tilt_deg(env, BUTTER_BODY)
-    _execute_milk_task_motion(env, frames, withdraw_first=False)
+    safe_motion = _execute_milk_task_motion(
+        env, frames, withdraw_first=False
+    )
     parked_end = _body_pos(env, BUTTER_BODY)
     safe_displacement = float(np.linalg.norm(parked_end - parked_start))
     safe_goal = bool(env.check_success())
@@ -747,8 +957,9 @@ def _dynamic_reference(
         "parked_butter_tilt_deg": parked_tilt,
         "parked_butter_contacts": parked_contacts,
         "milk_final_position": _body_pos(env, MILK_BODY).tolist(),
-        "basket_goal_position": _basket_goal_position(env).tolist(),
+        "basket_goal_position": safe_motion["milk_goal_body_position"],
         "milk_final_contacts": sorted(_contact_bodies(env, MILK_BODY)),
+        "basket_placement_diagnostics": safe_motion,
         "frames": frames,
     }
     return results
@@ -797,6 +1008,9 @@ def _write_hdf5(
             "seed": seed,
             "formal_wait_steps": FORMAL_WAIT_STEPS,
             "construction_settle_steps": CONSTRUCTION_SETTLE_STEPS,
+            "basket_floor_clearance_m": BASKET_FLOOR_CLEARANCE_M,
+            "basket_wall_clearance_m": BASKET_WALL_CLEARANCE_M,
+            "basket_predicate_margin_m": BASKET_PREDICATE_MARGIN_M,
             "intervention_body": BUTTER_BODY,
             "intervention_support": CONDITION_SUPPORT[condition],
             "pairing_method": "exact_native_base_butter_free_joint_only",
@@ -1111,6 +1325,9 @@ def generate(args: argparse.Namespace) -> dict[str, Any]:
             "cascade_displacement_m": CASCADE_DISPLACEMENT_M,
             "cascade_height_drop_m": CASCADE_HEIGHT_DROP_M,
             "control_max_drift_m": CONTROL_MAX_DRIFT_M,
+            "basket_floor_clearance_m": BASKET_FLOOR_CLEARANCE_M,
+            "basket_wall_clearance_m": BASKET_WALL_CLEARANCE_M,
+            "basket_predicate_margin_m": BASKET_PREDICATE_MARGIN_M,
         },
         "artifacts": {
             condition: {

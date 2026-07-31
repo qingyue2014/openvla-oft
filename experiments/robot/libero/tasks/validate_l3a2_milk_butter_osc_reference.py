@@ -79,22 +79,6 @@ def _load_records(path: str, count: int) -> list[dict[str, Any]]:
     return records
 
 
-def _site_position(env, instance: str, suffix: str) -> np.ndarray:
-    matches = []
-    for site_id in range(int(env.sim.model.nsite)):
-        name = str(env.sim.model.site_id2name(site_id) or "")
-        if instance in name and name.endswith(suffix):
-            matches.append((name, site_id))
-    if not matches:
-        raise RuntimeError(
-            f"site not found: instance={instance!r}, suffix={suffix!r}"
-        )
-    matches.sort()
-    return np.asarray(
-        env.sim.data.site_xpos[matches[0][1]], dtype=float
-    ).copy()
-
-
 def _status_reason(failure: Any) -> tuple[str, str]:
     if failure is None:
         return "", ""
@@ -389,6 +373,8 @@ def _run_attempt(
         )
 
     from experiments.robot.libero.tasks.generate_l3a2_milk_butter_initial_states import (
+        _basket_milk_goal,
+        _collision_world_bounds,
         _contact_bodies,
         _pose_metrics,
         _tilt_deg,
@@ -436,8 +422,10 @@ def _run_attempt(
     else:
         milk_offset = np.zeros(3)
 
+    basket_goal = np.full(3, np.nan)
+    basket_goal_diagnostics: dict[str, Any] = {}
     if failure is None:
-        basket_goal = _site_position(env, "basket_1", "contain_region")
+        basket_goal, basket_goal_diagnostics = _basket_milk_goal(env)
         obs, step, failure = _place(
             shared,
             env,
@@ -456,6 +444,13 @@ def _run_attempt(
         )
 
     task_success = bool(env.check_success())
+    milk_final = shared._body_pos(env, MILK)
+    milk_final_low, milk_final_high = _collision_world_bounds(env, MILK)
+    basket_floor_top = float(
+        basket_goal_diagnostics.get("basket_floor_top_z", np.nan)
+    )
+    milk_final_goal_error = milk_final - basket_goal
+    milk_final_bottom_gap = float(milk_final_low[2] - basket_floor_top)
     butter_final = shared._body_pos(env, BUTTER)
     butter_drift = float(np.linalg.norm(butter_final - parked_position))
     final_pose = _pose_metrics(env, BUTTER)
@@ -500,6 +495,17 @@ def _run_attempt(
             "butter_parked_contacts": ",".join(parked_contacts),
             "butter_post_park_drift_m": butter_drift,
             "milk_grasp_lift_m": milk_lift,
+            "basket_milk_goal_body_xyz": basket_goal.tolist(),
+            "basket_floor_top_z": basket_floor_top,
+            "milk_final_body_xyz": milk_final.tolist(),
+            "milk_final_goal_error_xyz": milk_final_goal_error.tolist(),
+            "milk_final_collision_bounds": [
+                milk_final_low.tolist(),
+                milk_final_high.tolist(),
+            ],
+            "milk_final_bottom_gap_to_basket_floor_m": (
+                milk_final_bottom_gap
+            ),
             "native_task_success": task_success,
             "safe_success": safe_success,
             "all_task_actions_robot_controlled": True,
@@ -518,6 +524,13 @@ def _run_attempt(
         "butter_parked_contacts": ",".join(parked_contacts),
         "butter_post_park_drift_m": butter_drift,
         "milk_grasp_lift_m": milk_lift,
+        "basket_milk_goal_body_xyz": json.dumps(basket_goal.tolist()),
+        "basket_floor_top_z": basket_floor_top,
+        "milk_final_body_xyz": json.dumps(milk_final.tolist()),
+        "milk_final_goal_error_xyz": json.dumps(
+            milk_final_goal_error.tolist()
+        ),
+        "milk_final_bottom_gap_to_basket_floor_m": milk_final_bottom_gap,
         "native_task_success": int(task_success),
         "safe_success": int(safe_success),
         "all_task_actions_robot_controlled": 1,

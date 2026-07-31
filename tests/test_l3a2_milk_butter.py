@@ -29,6 +29,7 @@ from experiments.robot.libero.tasks.validate_l3a2_milk_butter_smoke import (
     validate as validate_smoke,
 )
 from experiments.robot.libero.tasks.generate_l3a2_milk_butter_initial_states import (
+    _basket_milk_goal,
     _collision_vertical_bounds,
 )
 from experiments.robot.libero.tasks.validate_l3a2_milk_butter_osc_reference import (
@@ -500,6 +501,95 @@ def test_compiled_native_box_geometry_replaces_uncompiled_placement_sites():
     )
     assert low == pytest.approx(0.8)
     assert high == pytest.approx(1.2)
+
+
+def _basket_geometry_env(*, milk_half_x=0.025):
+    identity = np.eye(3).reshape(-1)
+    model = SimpleNamespace(
+        nbody=3,
+        ngeom=6,
+        nsite=1,
+        body_parentid=np.array([0, 0, 0]),
+        geom_bodyid=np.array([1, 2, 2, 2, 2, 2]),
+        geom_group=np.zeros(6, dtype=int),
+        geom_type=np.full(6, 6, dtype=int),
+        geom_size=np.array(
+            [
+                [milk_half_x, 0.026, 0.055],
+                [0.070, 0.070, 0.008],
+                [0.006, 0.070, 0.070],
+                [0.006, 0.070, 0.070],
+                [0.070, 0.006, 0.070],
+                [0.070, 0.006, 0.070],
+            ]
+        ),
+        site_size=np.array([[0.061, 0.061, 0.069]]),
+        body_name2id=lambda name: {
+            "milk_1_main": 1,
+            "basket_1_main": 2,
+        }[name],
+        site_id2name=lambda site_id: (
+            "basket_1_contain_region" if site_id == 0 else None
+        ),
+        geom_id2name=lambda geom_id: (
+            "basket_floor" if geom_id == 1 else f"geom_{geom_id}"
+        ),
+    )
+    data = SimpleNamespace(
+        body_xpos=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.2, -0.2, 0.106],
+                [0.0, 0.0, -0.004],
+            ]
+        ),
+        geom_xmat=np.repeat(identity[None, :], 6, axis=0),
+        geom_xpos=np.array(
+            [
+                [0.210, -0.190, 0.106],
+                [0.000, 0.000, 0.012],
+                [-0.068, 0.000, 0.078],
+                [0.068, 0.000, 0.078],
+                [0.000, -0.068, 0.078],
+                [0.000, 0.068, 0.078],
+            ]
+        ),
+        site_xpos=np.array([[0.0, 0.0, 0.067]]),
+        site_xmat=np.array([identity]),
+    )
+    return SimpleNamespace(sim=SimpleNamespace(model=model, data=data))
+
+
+def test_basket_goal_uses_compiled_floor_and_milk_collision_offset():
+    env = _basket_geometry_env()
+    target, diagnostics = _basket_milk_goal(env)
+
+    # The collision AABB is offset +1 cm in x/y from the milk root body, so
+    # centring the physical carton requires an equal body-position correction.
+    assert target == pytest.approx([-0.010, -0.010, 0.076])
+    assert diagnostics["basket_floor_geom_id"] == 1
+    assert diagnostics["basket_floor_top_z"] == pytest.approx(0.020)
+    assert diagnostics["milk_body_to_collision_bottom_m"] == pytest.approx(
+        0.055
+    )
+    assert diagnostics["milk_goal_floor_clearance_m"] == pytest.approx(
+        0.001
+    )
+    assert diagnostics["milk_goal_predicate_inside"] is True
+    assert diagnostics["milk_goal_collision_xy_inside"] is True
+
+    # The raw contain-site centre would penetrate the native floor, which is
+    # exactly the remote failure mode this target calculation prevents.
+    site_center_bottom = 0.067 - 0.055
+    assert site_center_bottom < diagnostics["basket_floor_top_z"]
+
+
+def test_basket_goal_fails_closed_when_native_collision_does_not_fit():
+    env = _basket_geometry_env(milk_half_x=0.061)
+    with pytest.raises(
+        RuntimeError, match="collision bounds do not fit"
+    ):
+        _basket_milk_goal(env)
 
 
 def test_runner_fails_closed_before_formal_when_artifacts_missing(tmp_path):
