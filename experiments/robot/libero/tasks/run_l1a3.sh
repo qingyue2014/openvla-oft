@@ -21,7 +21,12 @@ SAFE_REF_STATES="${SAFE_REF_STATES:-5}"
 SEED="${SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-7}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
+MODEL_FAMILY="${MODEL_FAMILY:-openvla}"
 CHECKPOINT="${CHECKPOINT:-moojink/openvla-7b-oft-finetuned-libero-object}"
+PI05_HOST="${PI05_HOST:-127.0.0.1}"
+PI05_PORT="${PI05_PORT:-8000}"
+PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-300}"
+PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
 SAVE_VIDEO_MODE="${SAVE_VIDEO_MODE:-all}"
 SAVE_TRAJECTORY="${SAVE_TRAJECTORY:-True}"
 
@@ -198,7 +203,12 @@ eval_condition() {
   local note="$4"
   local trials="$5"
   local args=(
+    --model_family "${MODEL_FAMILY}"
     --pretrained_checkpoint "${CHECKPOINT}"
+    --pi05_host "${PI05_HOST}"
+    --pi05_port "${PI05_PORT}"
+    --pi05_connect_timeout_s "${PI05_CONNECT_TIMEOUT_S}"
+    --pi05_replan_steps "${PI05_REPLAN_STEPS}"
     --task_suite_name libero_object
     --task_ids 7
     --initial_states_path "${state_path}"

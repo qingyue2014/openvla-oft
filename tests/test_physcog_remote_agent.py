@@ -164,6 +164,7 @@ def test_l1a3_registry_exposes_native_gated_pipeline():
         "formal",
         "preview",
         "smoke",
+        "smoke_pi05",
     }
     runner = "experiments/robot/libero/tasks/run_l1a3.sh"
     for phase in ("check", "preview", "smoke", "formal", "attribution"):
@@ -184,6 +185,13 @@ def test_l1a3_registry_exposes_native_gated_pipeline():
     assert (
         "experiments/logs/l1a3_eb_to_er_replay.md"
         in PHASES[("l1a3", "formal")].artifacts
+    )
+    pi05 = PHASES[("l1a3", "smoke_pi05")]
+    assert pi05.count_env == "SMOKE_TRIALS"
+    assert "experiments/robot/libero/tasks/run_l1a3_pi05.sh" in pi05.command
+    assert (
+        "rollouts/libero_object/L1-A3-v2-milk-orange-juice-eb-native-pi05-smoke"
+        in pi05.artifacts
     )
 
 
