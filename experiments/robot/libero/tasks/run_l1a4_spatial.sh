@@ -47,6 +47,7 @@ PREFLIGHT_MANIFEST="${TASKS_DIR}/l1a4_spatial_native_preflight.json"
 PREFLIGHT_REPORT="${LOG_DIR}/l1a4_spatial_native_preflight.md"
 PREVIEW_DIR="${TASKS_DIR}/l1a4_spatial_preview"
 VISIBILITY_REVIEW="${TASKS_DIR}/L1-A4-SPATIAL_VISIBILITY_REVIEW.md"
+SMOKE_REVIEW="${TASKS_DIR}/L1-A4-SPATIAL_SMOKE_REVIEW.md"
 REVIEW_DIR="${REVIEW_DIR:-review/L1-A4_task}"
 SAFE_REF_CSV="${LOG_DIR}/l1a4_spatial_safe_reference.csv"
 SAFE_REF_REPORT="${LOG_DIR}/l1a4_spatial_safe_reference.md"
@@ -165,6 +166,20 @@ require_visibility_review() {
       echo "L1-A4 spatial HUMAN_VISIBILITY_REVIEW_REQUIRED."
       echo "Inspect EB/ER/EC agentview and eye-in-hand PNGs under ${PREVIEW_DIR},"
       echo "then record PASS_HUMAN_POLICY_VIEW_VISIBILITY in ${VISIBILITY_REVIEW}."
+    } >&2
+    exit 2
+  fi
+}
+
+require_smoke_review() {
+  require_visibility_review
+  if [[ ! -f "${SMOKE_REVIEW}" ]] \
+    || ! grep -q "PASS_HUMAN_L1A4_V5_SMOKE_REVIEW" "${SMOKE_REVIEW}" \
+    || ! grep -q "Intervention ID: \`${INTERVENTION_ID}\`" "${SMOKE_REVIEW}"; then
+    {
+      echo "L1-A4 spatial HUMAN_SMOKE_REVIEW_REQUIRED."
+      echo "Inspect the v5 EB/ER/EC smoke videos under ${REVIEW_DIR},"
+      echo "then record PASS_HUMAN_L1A4_V5_SMOKE_REVIEW in ${SMOKE_REVIEW}."
     } >&2
     exit 2
   fi
@@ -422,7 +437,7 @@ case "${MODE}" in
     ;;
   formal)
     ensure_states
-    require_visibility_review
+    require_smoke_review
     eval_condition Eb "${EB_STATES}" none "${EB_NOTE}" "${NUM_TRIALS}"
     replay_gate "${EB_NOTE}" 20 "${REPLAY_CSV}" "${REPLAY_REPORT}"
     eval_condition Ec "${EC_STATES}" none "${EC_NOTE}" "${NUM_TRIALS}"
@@ -444,7 +459,7 @@ case "${MODE}" in
     # failed benign-control run to certification-level attribution evidence.
     preflight
     ensure_states
-    require_visibility_review
+    require_smoke_review
     eval_condition Eb "${EB_STATES}" none "${EB_NOTE}" "${NUM_TRIALS}"
     replay_gate "${EB_NOTE}" 20 "${REPLAY_CSV}" "${REPLAY_REPORT}"
     eval_condition Ec "${EC_STATES}" none "${EC_NOTE}" "${NUM_TRIALS}"

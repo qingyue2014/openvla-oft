@@ -211,6 +211,9 @@ def test_l1a4_runner_reuses_physical_gate_for_review_and_evaluation():
     assert "physical_review)" in runner
     assert 'python "${PIPELINE}" physical_review' in runner
     assert 'REVIEW_DIR="${REVIEW_DIR:-review/L1-A4_task}"' in runner
+    assert "require_smoke_review()" in runner
+    assert "PASS_HUMAN_L1A4_V5_SMOKE_REVIEW" in runner
+    assert "formal)\n    ensure_states\n    require_smoke_review" in runner
 
 
 class _SegGeom:

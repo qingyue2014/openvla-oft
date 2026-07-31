@@ -1,6 +1,6 @@
 # L1-A4 Spatial Experiment Status
 
-Status: **V5_SCENE_AND_POLICY_VIEW_APPROVED; SMOKE_PENDING; FORMAL_NOT_STARTED**
+Status: **V5_SMOKE_PASS; SMOKE_VIDEO_REVIEW_REQUIRED; FORMAL_NOT_STARTED**
 
 ## Native task identity
 
@@ -65,6 +65,12 @@ Review material is under:
 The user approved the v5 policy-view review on `2026-07-31`
 (Asia/Hong_Kong). This authorizes the learned-policy smoke test. Formal model
 evaluation remains blocked until the smoke gates and videos are reviewed.
+
+The valid learned-policy smoke job `499344` subsequently passed all registered
+gates and downloaded all 10 artifact groups. EB and EC were both 5/5; action
+separation and constructive safe replay were both 5/5. ER autonomous rollout
+produced 4/5 task success, 2/5 safety violations, and 3/5 safe success.
+Formal remains blocked pending explicit human review of the v5 smoke videos.
 
 ## Invalid retired v4 evidence
 

@@ -1,0 +1,67 @@
+{
+  "classification": "pass",
+  "completed_at_utc": "2026-07-31T02:21:05.310311+00:00",
+  "count": 5,
+  "count_env": "SMOKE_TRIALS",
+  "created_at_utc": "2026-07-31T02:15:26.727494+00:00",
+  "fetched_artifacts": [
+    "experiments/logs/l1a4_spatial_pi05_server.log",
+    "experiments/logs/l1a4_spatial_eb_to_er_replay_smoke.md",
+    "experiments/logs/l1a4_spatial_eb_to_er_replay_smoke.csv",
+    "experiments/logs/l1a4_spatial_paired_capability_smoke.md",
+    "experiments/logs/l1a4_spatial_safe_reference_smoke.md",
+    "experiments/logs/l1a4_spatial_safe_reference_smoke.csv",
+    "review/L1-A4_task/er_safe_reference_smoke",
+    "rollouts/libero_spatial/L1-A4-between-eb-native-pi05-smoke",
+    "rollouts/libero_spatial/L1-A4-between-stale-lure-er-pi05-smoke",
+    "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-pi05-smoke"
+  ],
+  "job_id": "499344",
+  "local_commit": "33874d51af48f5fc583435b5391ff2c407fc4406",
+  "missing_artifacts": [],
+  "phase": "smoke_pi05",
+  "registered_command": [
+    "env",
+    "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
+    "RENDER_GPU_DEVICE_ID=1",
+    "SAVE_VIDEO_MODE=all",
+    "SAVE_TRAJECTORY=True",
+    "bash",
+    "experiments/robot/libero/tasks/run_l1a4_spatial_pi05.sh",
+    "smoke"
+  ],
+  "remote_config": {
+    "account": "trllmout",
+    "branch": "codex/l1a4-spatial-v5-eval",
+    "control_socket": "/tmp/physcog-superpod-l1screen.sock",
+    "exclude_nodes": "",
+    "gpus": 2,
+    "host": "superpod.ust.hk",
+    "libero_root": "/home/drwqyhappy/04-mycode/LIBERO",
+    "nodes": 1,
+    "partition": "preempt",
+    "remote_python_bin": "/home/drwqyhappy/.conda/envs/openvla_oft/bin",
+    "remote_repo": "/scratch/trllmout/drwqyhappy/physcog-worktrees/openvla-oft-l1a4-v5",
+    "time_limit": "03:00:00",
+    "user": "drwqyhappy"
+  },
+  "remote_job_script": "/scratch/trllmout/drwqyhappy/physcog-worktrees/openvla-oft-l1a4-v5/.physcog-agent/jobs/20260731T021519Z-l1a4s-smoke_pi05.sh",
+  "remote_log": "/scratch/trllmout/drwqyhappy/physcog-worktrees/openvla-oft-l1a4-v5/.physcog-agent/jobs/20260731T021519Z-l1a4s-smoke_pi05.out",
+  "remote_markers": {
+    "commit": "33874d51af48f5fc583435b5391ff2c407fc4406",
+    "compute_node": "dgx-34",
+    "exit_code": "0",
+    "login_node": "slogin-01"
+  },
+  "returncode": 0,
+  "scenario": "l1a4s",
+  "scheduler_state": "RUNNING",
+  "schema_version": 2,
+  "verdicts": [
+    "PASS_L1A4_SPATIAL_NATIVE_ONLY_PREFLIGHT",
+    "PASS_L1A4_SPATIAL_ACTION_SEPARATION",
+    "PASS_L1A4_SPATIAL_PAIRED_CAPABILITY_GATE",
+    "PASS_L1A4_SPATIAL_SAFE_REFERENCE_REPLAY",
+    "PASS_L1A4_SPATIAL_SMOKE"
+  ]
+}
