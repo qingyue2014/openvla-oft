@@ -20,6 +20,9 @@ from experiments.robot.libero.tasks.l3b_moka_order_common import (
     sha256_path,
 )
 from experiments.robot.libero.tasks.validate_l3b_moka_safe_reference import (
+    ORIENTATION_CLEARANCE_DISTANCE_M,
+    ORIENTATION_CLEARANCE_HEIGHT_M,
+    SAFE_CONTROLLER_VERSION,
     VERDICT as EPISODE_VERDICT,
 )
 
@@ -58,6 +61,20 @@ def summarize(report_paths: list[str | Path], expected_count: int) -> dict:
             or report.get("native_suite") != SUITE
             or int(report.get("native_task_id", -1)) != TASK_ID
             or report.get("native_prompt") != TASK_PROMPT
+            or int(report.get("safe_controller_version", -1))
+            != SAFE_CONTROLLER_VERSION
+            or float(
+                report.get("orientation_clearance", {}).get(
+                    "height_m", -1.0
+                )
+            )
+            != ORIENTATION_CLEARANCE_HEIGHT_M
+            or float(
+                report.get("orientation_clearance", {}).get(
+                    "distance_m", -1.0
+                )
+            )
+            != ORIENTATION_CLEARANCE_DISTANCE_M
         ):
             raise ValueError(f"invalid Safe episode report: {path}")
         result = report.get("successful_attempt", {})
@@ -119,6 +136,9 @@ def summarize(report_paths: list[str | Path], expected_count: int) -> dict:
         "native_suite": SUITE,
         "native_task_id": TASK_ID,
         "native_prompt": TASK_PROMPT,
+        "safe_controller_version": SAFE_CONTROLLER_VERSION,
+        "orientation_clearance_height_m": ORIENTATION_CLEARANCE_HEIGHT_M,
+        "orientation_clearance_distance_m": ORIENTATION_CLEARANCE_DISTANCE_M,
         "count": len(episodes),
         "expected_count": expected_count,
         "er_states_sha256": next(iter(er_hashes)),

@@ -566,22 +566,53 @@ def _complete_remaining_placement(
         first_target = moving_start + np.asarray(
             first["offset_xyz"], dtype=float
         )
-        reached, best = rollout.move(
-            first_target,
-            -1.0,
-            "reference_approach",
-            max_steps=getattr(args, "reference_approach_max_steps", 240),
-            tolerance=getattr(
-                args, "reference_approach_position_tolerance", 0.0015
-            ),
-            command_limit=getattr(
-                args, "reference_approach_command_limit", 0.8
-            ),
+        clearance_height = float(
+            getattr(args, "reference_orientation_clearance_height", 0.0)
         )
-        if not reached:
-            failure_reason = f"waypoint_timeout_best_{best:.4f}"
-            failure_stage = "reference_approach"
-        if not failure_reason:
+        clearance_distance = float(
+            getattr(args, "reference_orientation_clearance_distance", 0.0)
+        )
+        if clearance_height < 0.0 or clearance_distance < 0.0:
+            raise ValueError(
+                "reference orientation clearance dimensions must be "
+                "non-negative"
+            )
+        use_orientation_clearance = bool(
+            clearance_height > 0.0 or clearance_distance > 0.0
+        )
+        orientation_target = first_target.copy()
+        if use_orientation_clearance:
+            away_xy = moving_start[:2] - placed_start[:2]
+            away_norm = float(np.linalg.norm(away_xy))
+            if clearance_distance > 0.0 and away_norm <= 1e-9:
+                raise ValueError(
+                    "cannot define reference orientation clearance direction"
+                )
+            if clearance_distance > 0.0:
+                orientation_target[:2] += (
+                    away_xy / away_norm * clearance_distance
+                )
+            orientation_target[2] += clearance_height
+            reached, best = rollout.move(
+                orientation_target,
+                -1.0,
+                "reference_orientation_clearance",
+                max_steps=getattr(
+                    args, "reference_clearance_max_steps", 240
+                ),
+                tolerance=getattr(
+                    args, "reference_clearance_position_tolerance", 0.003
+                ),
+                command_limit=getattr(
+                    args, "reference_clearance_command_limit", 0.8
+                ),
+            )
+            if not reached:
+                failure_reason = (
+                    f"clearance_waypoint_timeout_best_{best:.4f}"
+                )
+                failure_stage = "reference_orientation_clearance"
+        if use_orientation_clearance and not failure_reason:
             rollout.orient_to(
                 first["quaternion_xyzw"],
                 -1.0,
@@ -595,6 +626,37 @@ def _complete_remaining_placement(
                     args, "reference_initial_orientation_command_limit", 0.15
                 ),
             )
+        if not failure_reason:
+            reached, best = rollout.move(
+                first_target,
+                -1.0,
+                "reference_approach",
+                max_steps=getattr(args, "reference_approach_max_steps", 240),
+                tolerance=getattr(
+                    args, "reference_approach_position_tolerance", 0.0015
+                ),
+                command_limit=getattr(
+                    args, "reference_approach_command_limit", 0.8
+                ),
+            )
+            if not reached:
+                failure_reason = f"waypoint_timeout_best_{best:.4f}"
+                failure_stage = "reference_approach"
+        if not use_orientation_clearance and not failure_reason:
+            rollout.orient_to(
+                first["quaternion_xyzw"],
+                -1.0,
+                tolerance_rad=getattr(
+                    args, "reference_initial_orientation_tolerance_rad", 0.003
+                ),
+                max_steps=getattr(
+                    args, "reference_initial_orientation_max_steps", 300
+                ),
+                command_limit=getattr(
+                    args, "reference_initial_orientation_command_limit", 0.15
+                ),
+            )
+        if not failure_reason:
             reached, best = rollout.move(
                 first_target,
                 -1.0,

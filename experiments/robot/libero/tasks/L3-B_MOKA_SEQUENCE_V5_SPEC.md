@@ -107,9 +107,13 @@ Safe is an environment-solvability control, not a fifth formal condition. It
 must use only `env.step` actions after the exact Er state is restored. Its
 grasp is a compact set of pose keyframes distilled from a successful native
 π0.5 task-8 trajectory and bound in the report to that source trajectory's
-SHA-256. The controller approaches and sweeps the handle while open, closes
-during the lift, transports above the preplaced pot, releases, withdraws
-laterally from the handle, and then retreats.
+SHA-256. Safe controller v3 first moves the open gripper 0.12 m upward and
+0.08 m away from the preplaced pot, toward the remaining pot, before applying
+the transferred grasp orientation. This keeps the orientation sweep outside
+the preplaced pot's rotation envelope without changing the scene or ignoring
+contacts. The controller then approaches and sweeps the handle while open,
+closes during the lift, transports above the preplaced pot, releases,
+withdraws laterally from the handle, and retreats.
 
 Safe passes only when the native goal is true, no pot-to-pot contact occurs,
 the final object has no robot contact, the preplaced pot moves at most 0.01 m,

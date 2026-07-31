@@ -45,6 +45,9 @@ from experiments.robot.libero.tasks.validate_l3b_moka_state_bundles import (
 VERDICT = "PASS_L3B_MOKA_REAL_ACTION_SAFE_REFERENCE"
 PREPLACED_BODY = CONDITION_INTERVENTION_BODY["near_first"]
 MOVING_BODY = CONDITION_REMAINING_BODY["near_first"]
+SAFE_CONTROLLER_VERSION = 3
+ORIENTATION_CLEARANCE_HEIGHT_M = 0.12
+ORIENTATION_CLEARANCE_DISTANCE_M = 0.08
 GRASP_REFERENCE_LABEL = "pi05_native_ep000_pose_keyframes_symmetry_transfer_v2"
 GRASP_REFERENCE_PROVENANCE = {
     "source_scene": "Eb",
@@ -219,6 +222,17 @@ def _report_base(er_path: Path, episode: int, target: np.ndarray) -> dict:
         "preplaced_body": PREPLACED_BODY,
         "target_slot": "far",
         "target_body_position": target.tolist(),
+        "safe_controller_version": SAFE_CONTROLLER_VERSION,
+        "orientation_clearance": {
+            "height_m": ORIENTATION_CLEARANCE_HEIGHT_M,
+            "distance_m": ORIENTATION_CLEARANCE_DISTANCE_M,
+            "direction": "from preplaced body toward moving body",
+            "purpose": (
+                "move the open gripper outside the preplaced moka pot's "
+                "rotation envelope before applying the transferred grasp "
+                "orientation"
+            ),
+        },
         "grasp_reference_label": GRASP_REFERENCE_LABEL,
         "grasp_reference_provenance": GRASP_REFERENCE_PROVENANCE,
         "direct_qpos_edits_after_restore": False,
@@ -255,6 +269,12 @@ def run(args) -> dict:
     args.grasp_close_start_offset_xy = np.zeros(2, dtype=float)
     args.grasp_yaw_steps = 0
     args.grasp_yaw_command = 0.0
+    args.reference_orientation_clearance_height = (
+        ORIENTATION_CLEARANCE_HEIGHT_M
+    )
+    args.reference_orientation_clearance_distance = (
+        ORIENTATION_CLEARANCE_DISTANCE_M
+    )
     try:
         result, frames, recorder = _complete_remaining_placement(
             env,
@@ -304,6 +324,9 @@ def run(args) -> dict:
         "violated": False,
         "runtime_initial_gate": successful["runtime_initial_gate"],
         "safe_reference_result": successful,
+        "safe_controller_version": SAFE_CONTROLLER_VERSION,
+        "orientation_clearance_height_m": ORIENTATION_CLEARANCE_HEIGHT_M,
+        "orientation_clearance_distance_m": ORIENTATION_CLEARANCE_DISTANCE_M,
         "grasp_reference_label": GRASP_REFERENCE_LABEL,
         "grasp_reference_provenance": GRASP_REFERENCE_PROVENANCE,
         "er_states_sha256": sha256_path(er_path),
@@ -391,6 +414,15 @@ def main() -> None:
     )
     parser.add_argument(
         "--reference-orientation-command-limit", type=float, default=0.20
+    )
+    parser.add_argument("--reference-clearance-max-steps", type=int, default=240)
+    parser.add_argument(
+        "--reference-clearance-position-tolerance",
+        type=float,
+        default=0.003,
+    )
+    parser.add_argument(
+        "--reference-clearance-command-limit", type=float, default=0.8
     )
     parser.add_argument("--video-stride", type=int, default=2)
     parser.add_argument("--video-fps", type=float, default=20.0)

@@ -34,6 +34,9 @@ from experiments.robot.libero.tasks.summarize_l3b_moka_safe_references import (
 from experiments.robot.libero.tasks.validate_l3b_moka_safe_reference import (
     GRASP_POSE_WAYPOINTS,
     GRASP_REFERENCE_PROVENANCE,
+    ORIENTATION_CLEARANCE_DISTANCE_M,
+    ORIENTATION_CLEARANCE_HEIGHT_M,
+    SAFE_CONTROLLER_VERSION,
 )
 from experiments.robot.libero.tasks.summarize_l3b_moka_order_smoke import (
     PASS_CONTROL,
@@ -257,6 +260,11 @@ def test_safe_batch_summary_binds_every_episode_artifact(tmp_path):
             "native_suite": SUITE,
             "native_task_id": TASK_ID,
             "native_prompt": TASK_PROMPT,
+            "safe_controller_version": SAFE_CONTROLLER_VERSION,
+            "orientation_clearance": {
+                "height_m": ORIENTATION_CLEARANCE_HEIGHT_M,
+                "distance_m": ORIENTATION_CLEARANCE_DISTANCE_M,
+            },
             "source_episode": episode,
             "er_states_sha256": "a" * 64,
             "trajectory": str(trajectory),
@@ -282,6 +290,13 @@ def test_safe_batch_summary_binds_every_episode_artifact(tmp_path):
     assert result["verdict"] == PASS_SAFE_BATCH
     assert result["count"] == 2
     assert result["minimum_grasp_lift_m"] == pytest.approx(0.11)
+    assert result["safe_controller_version"] == SAFE_CONTROLLER_VERSION
+    assert result["orientation_clearance_height_m"] == pytest.approx(
+        ORIENTATION_CLEARANCE_HEIGHT_M
+    )
+    assert result["orientation_clearance_distance_m"] == pytest.approx(
+        ORIENTATION_CLEARANCE_DISTANCE_M
+    )
 
 
 def test_native20_preregistration_and_dedicated_runner_are_locked():
