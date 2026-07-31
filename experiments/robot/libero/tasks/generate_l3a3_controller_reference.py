@@ -3679,8 +3679,14 @@ def _compiled_adaptive_workspace_release_action(
     full_downward_z_error = float(
         max(0.0, current_eef[2] - release_target_z)
     )
-    downward_world_request = float(
+    xy_coupled_downward_world_request = float(
         min(full_downward_z_error, xy_remaining)
+    )
+    downward_world_request = float(
+        min(
+            xy_coupled_downward_world_request,
+            worst_case_controller_world_step_m,
+        )
     )
     downward_z_error = float(-downward_world_request)
     requested = np.array(
@@ -3690,8 +3696,23 @@ def _compiled_adaptive_workspace_release_action(
             downward_z_error / position_action_scale,
         ]
     )
+    recovery_route_requested = np.array(
+        [
+            xy_error[0] / position_action_scale,
+            xy_error[1] / position_action_scale,
+            -xy_coupled_downward_world_request / position_action_scale,
+        ]
+    )
     requested_norm = float(np.linalg.norm(requested))
-    if not np.isfinite(requested_norm) or requested_norm <= 0.0:
+    recovery_route_requested_norm = float(
+        np.linalg.norm(recovery_route_requested)
+    )
+    if (
+        not np.isfinite(requested_norm)
+        or requested_norm <= 0.0
+        or not np.isfinite(recovery_route_requested_norm)
+        or recovery_route_requested_norm <= 0.0
+    ):
         raise RuntimeError("workspace release has no positive route error")
     requested_direction = requested / requested_norm
     measured_negative_tail = float(
@@ -3806,7 +3827,7 @@ def _compiled_adaptive_workspace_release_action(
     selected_source = min(capacities, key=capacities.get)
     selected_norm = float(capacities[selected_source])
     desired_route_norm = float(
-        min(requested_norm, strict_native_norm_bound)
+        min(recovery_route_requested_norm, strict_native_norm_bound)
     )
     recovery_required = any(
         record["negative_z_capacity_exhausted_by_buffer16_or_inertia"]
@@ -4082,11 +4103,12 @@ def _compiled_adaptive_workspace_release_action(
         ),
         "formula": (
             "request corridor XY plus negative Z capped in world magnitude "
-            "by remaining corridor XY; authorize negative Z only when every "
-            "current pair remains strictly above fixed buffer16 after the "
-            "latest measured negative-dz inertial reserve; size the literal "
-            "action against the unchanged post-action base8 clearance; if "
-            "pre-action buffer16 is exhausted, prohibit negative Z and issue "
+            "by both remaining corridor XY and the existing one-step world "
+            "reserve; authorize negative Z only when every current pair "
+            "remains strictly above fixed buffer16 after the latest measured "
+            "negative-dz inertial reserve; size the literal action against "
+            "the unchanged post-action base8 clearance; if pre-action "
+            "buffer16 is exhausted, prohibit negative Z and issue "
             "event-driven pure +Z; construct the literal action by a scalar "
             "strict-interior solve along the unchanged route direction"
         ),
@@ -4095,12 +4117,21 @@ def _compiled_adaptive_workspace_release_action(
         "release_target_z_m": float(release_target_z),
         "xy_remaining_m": xy_remaining,
         "full_release_downward_z_error_m": full_downward_z_error,
+        "xy_coupled_downward_world_request_before_one_step_cap_m": (
+            xy_coupled_downward_world_request
+        ),
         "capped_downward_world_request_m": downward_world_request,
         "downward_request_capped_by_xy_remaining": bool(
             downward_world_request <= xy_remaining
         ),
+        "downward_request_capped_by_existing_one_step_world_reserve": bool(
+            downward_world_request <= worst_case_controller_world_step_m
+        ),
         "requested_translation_action": requested.tolist(),
         "requested_translation_action_norm": requested_norm,
+        "recovery_route_requested_translation_action_norm_before_one_step_cap": (
+            recovery_route_requested_norm
+        ),
         "literal_scalar_strict_interior_solver": scalar_solver_evidence,
         "measured_vertical_step_progress_m": float(
             measured_vertical_step_progress_m
