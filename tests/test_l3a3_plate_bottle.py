@@ -301,17 +301,20 @@ def test_safe_reference_requires_controller_actions_for_prefix_and_native_task()
 
 
 def test_plate_contact_uses_reachable_axis_aligned_trailing_line():
-    plate = np.array([0.052, -0.028])
+    plate = np.array([0.0518566, -0.0285078])
     direction = np.array([-0.394, 0.919])
     eef = np.array([-0.210, -0.060])
     contact = _select_reachable_trailing_contact(
-        plate, direction, eef, backoff=0.025
+        plate, direction, eef, backoff=0.010
     )
     offset = contact - plate
     # Of the two trailing cardinal lines (+X and -Y), -Y is closer to the live
     # EEF.  The EEF origin stays inside the plate footprint while its fingers
     # perform the semantically verified contact seek.
-    assert np.allclose(offset, [0.0, -0.025])
+    assert np.allclose(offset, [0.0, -0.010])
+    assert contact[1] == pytest.approx(-0.0385078)
+    measured_stall_eef_xy = np.array([0.052146, -0.039149])
+    assert np.linalg.norm(contact - measured_stall_eef_xy) < 0.001
     unit = direction / np.linalg.norm(direction)
     assert float(np.dot(unit, plate - contact)) > 0.0
 
@@ -358,7 +361,8 @@ def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
 
 def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     producer = CONTROLLER_REFERENCE.read_text()
-    assert 'default=0.025' in producer
+    assert 'default=0.010' in producer
+    assert "0.025 m line stalled at y=-0.039149" in producer
     assert "center_approach_target[:2] = plate_start[:2]" in producer
     approach = producer[
         producer.index("# Decouple the large workspace translation") :

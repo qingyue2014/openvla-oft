@@ -578,7 +578,12 @@ def main():
     parser.add_argument("--release_steps", type=int, default=35)
     parser.add_argument("--retreat_height", type=float, default=0.120)
     parser.add_argument("--prefix_settle_steps", type=int, default=40)
-    parser.add_argument("--plate_contact_backoff", type=float, default=0.025)
+    # Superpod reach calibration: the 0.025 m line stalled at y=-0.039149
+    # while targeting y=-0.053508.  The 0.010 m line targets approximately
+    # y=-0.038508 and remains inside the measured reachable envelope.  This
+    # changes only the high contact-seek centreline; physical robot-plate
+    # contact is still mandatory before any push.
+    parser.add_argument("--plate_contact_backoff", type=float, default=0.010)
     parser.add_argument(
         "--plate_contact_seek_eef_height", type=float, default=0.080
     )
