@@ -2995,6 +2995,91 @@ def test_500206_workspace_recovery_is_recorded_and_thresholds_unchanged():
     )
 
 
+def test_500207_positive_pair_capacity_scales_diagonal_without_recovery():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    pair_action_capacity = 0.997457
+    nominal_world_capacity = 0.08 * pair_action_capacity
+    pairs = [
+        {
+            "gripper_geom": f"gripper_{index // 11}",
+            "counterpart_geom": f"native_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": (
+                strict_clearance + 0.008 + nominal_world_capacity
+            ),
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    guard = {
+        "accepted": True,
+        "one_step_vertical_reserve_m": 0.008,
+        "pairs": pairs,
+    }
+    native = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "runtime_resolved": True,
+    }
+    current = np.array([0.1232338, -0.0285932, 1.0197707])
+    corridor_xy = np.array([0.1448063955, -0.0285077796])
+    requested_norm = 1.3032
+    requested_xy_action = (corridor_xy - current[:2]) / 0.08
+    requested_z_action = -np.sqrt(
+        requested_norm**2 - np.linalg.norm(requested_xy_action) ** 2
+    )
+    release_target_z = float(current[2] + 0.08 * requested_z_action)
+    action, evidence = _compiled_adaptive_workspace_release_action(
+        current_eef=current,
+        corridor_target_xy=corridor_xy,
+        release_target_z=release_target_z,
+        measured_vertical_step_progress_m=0.0,
+        overhead_guard=guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+    )
+    assert evidence["requested_translation_action_norm"] == pytest.approx(
+        requested_norm
+    )
+    assert evidence["candidate_action_norm_capacities"][
+        "compiled_pair_base8_nominal_tail_after_inertia"
+    ] == pytest.approx(pair_action_capacity)
+    assert evidence["selected_envelope_source"] == (
+        "compiled_pair_base8_nominal_tail_after_inertia"
+    )
+    assert evidence["event_driven_positive_z_inertial_recovery"] is False
+    assert np.linalg.norm(action[:3]) == pytest.approx(pair_action_capacity)
+    assert action[0] > 0.0
+    assert action[2] < 0.0
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in evidence["pair_envelopes"]
+    )
+
+
+def test_500207_recovery_trigger_is_exhaustion_not_positive_pair_limiting():
+    controller = CONTROLLER_REFERENCE.read_text()
+    release = controller.split(
+        "def _compiled_adaptive_workspace_release_action(", 1
+    )[1].split("\ndef _compiled_adaptive_lateral_rebuffer_action", 1)[0]
+    assert 'record["downward_capacity_exhausted_by_inertial_tail"]' in release
+    assert (
+        'selected_source == "compiled_pair_base8_nominal_tail_after_inertia"'
+        not in release
+    )
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+
+
 def test_high_first_route_fails_closed_and_rechecks_post_descent_drift():
     strict_clearance = np.nextafter(0.0, np.inf)
     pair = {

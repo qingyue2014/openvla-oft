@@ -3715,9 +3715,9 @@ def _compiled_adaptive_workspace_release_action(
     desired_route_norm = float(
         min(requested_norm, strict_native_norm_bound)
     )
-    recovery_required = bool(
-        selected_source == "compiled_pair_base8_nominal_tail_after_inertia"
-        and selected_norm < desired_route_norm
+    recovery_required = any(
+        record["downward_capacity_exhausted_by_inertial_tail"]
+        for record in pair_envelopes
     )
     minimum_current_surplus = min(
         record["current_base8_surplus_m"] for record in pair_envelopes
