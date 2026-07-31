@@ -90,15 +90,6 @@ POLICY_RESOLUTION = 256
 SETTLE_STEPS = 400
 STABILITY_CONFIRM_STEPS = 80
 PAIR_TOLERANCE = 1e-10
-UPRIGHT_TILT_LIMIT_DEG = {
-    TARGET: 2.0,
-    BASKET: 1.0,
-    HAZARD: 2.0,
-    TOMATO_SAUCE: 2.0,
-    BUTTER: 2.0,
-    ORANGE_JUICE: 2.0,
-    CHOCOLATE_PUDDING: 2.0,
-}
 
 
 def _ensure_libero_importable() -> None:
@@ -174,6 +165,22 @@ def _env(bddl: Path, *, control: bool = False, render: bool = True):
 def _body_pos(env, body: str) -> np.ndarray:
     body_id = env.sim.model.body_name2id(body)
     return np.asarray(env.sim.data.body_xpos[body_id], dtype=float).copy()
+
+
+def _body_quat(env, body: str) -> np.ndarray:
+    body_id = env.sim.model.body_name2id(body)
+    return np.asarray(
+        env.sim.data.body_xquat[body_id], dtype=float
+    ).copy()
+
+
+def _quat_distance_deg(first: np.ndarray, second: np.ndarray) -> float:
+    first = np.asarray(first, dtype=float)
+    second = np.asarray(second, dtype=float)
+    first /= max(float(np.linalg.norm(first)), 1e-12)
+    second /= max(float(np.linalg.norm(second)), 1e-12)
+    cosine = float(np.clip(abs(np.dot(first, second)), -1.0, 1.0))
+    return float(np.degrees(2.0 * np.arccos(cosine)))
 
 
 def _body_tilt_deg(env, body: str) -> float:
@@ -417,6 +424,7 @@ def _physical_snapshot(env) -> dict[str, dict[str, object]]:
     return {
         body: {
             "position": _body_pos(env, body),
+            "quaternion_wxyz": _body_quat(env, body),
             "tilt_deg": _body_tilt_deg(env, body),
             "linear_speed_m_s": _body_twist(env, body)[0],
             "angular_speed_rad_s": _body_twist(env, body)[1],
@@ -432,30 +440,13 @@ def _serializable_snapshot(
         body: {
             name: (
                 np.asarray(value, dtype=float).round(9).tolist()
-                if name == "position"
+                if name in ("position", "quaternion_wxyz")
                 else float(value)
             )
             for name, value in values.items()
         }
         for body, values in snapshot.items()
     }
-
-
-def _check_upright_tilts(
-    condition: str,
-    phase: str,
-    tilts: Mapping[str, float],
-) -> None:
-    excessive = {
-        body: float(tilt)
-        for body, tilt in tilts.items()
-        if float(tilt) > UPRIGHT_TILT_LIMIT_DEG[body]
-    }
-    if excessive:
-        raise RuntimeError(
-            f"{condition}: {phase} upright-object tilt exceeds "
-            f"registered limits: {excessive}"
-        )
 
 
 def _formal_policy_state_gate(
@@ -466,10 +457,11 @@ def _formal_policy_state_gate(
     env.set_init_state(state)
     env.sim.forward()
     pre_wait = _physical_snapshot(env)
-    max_tilt = {
-        body: float(values["tilt_deg"])
+    orientation_origin = {
+        body: np.asarray(values["quaternion_wxyz"], dtype=float).copy()
         for body, values in pre_wait.items()
     }
+    max_orientation_change = {body: 0.0 for body in MOVABLE_BODIES}
     wait_drift_origin = {
         body: np.asarray(values["position"], dtype=float).copy()
         for body, values in pre_wait.items()
@@ -487,19 +479,24 @@ def _formal_policy_state_gate(
                 f"{condition}: forbidden contact during formal wait "
                 f"step {step}: {forbidden}"
             )
-        step_tilts = {
-            body: _body_tilt_deg(env, body) for body in MOVABLE_BODIES
+        step_orientation_change = {
+            body: _quat_distance_deg(
+                _body_quat(env, body), orientation_origin[body]
+            )
+            for body in MOVABLE_BODIES
         }
-        for body, tilt in step_tilts.items():
-            max_tilt[body] = max(max_tilt[body], tilt)
+        for body, change in step_orientation_change.items():
+            max_orientation_change[body] = max(
+                max_orientation_change[body], change
+            )
         excessive_transient = {
-            body: tilt
-            for body, tilt in step_tilts.items()
-            if tilt > MAX_TRANSIENT_WAIT_TILT_DEG
+            body: change
+            for body, change in step_orientation_change.items()
+            if change > MAX_TRANSIENT_WAIT_TILT_DEG
         }
         if excessive_transient:
             raise RuntimeError(
-                f"{condition}: formal-wait step {step} transient tilt "
+                f"{condition}: formal-wait step {step} orientation change "
                 f"exceeds {MAX_TRANSIENT_WAIT_TILT_DEG:.1f}deg: "
                 f"{excessive_transient}"
             )
@@ -580,14 +577,24 @@ def _formal_policy_state_gate(
             f"{condition}: native reset settling did not finish inside "
             f"its registered envelope: {invalid_native_settle}"
         )
-    _check_upright_tilts(
-        condition,
-        "first-policy-frame",
-        {
-            body: float(values["tilt_deg"])
-            for body, values in first_policy.items()
-        },
-    )
+    first_policy_orientation_change = {
+        body: _quat_distance_deg(
+            np.asarray(values["quaternion_wxyz"], dtype=float),
+            orientation_origin[body],
+        )
+        for body, values in first_policy.items()
+    }
+    excessive_orientation_change = {
+        body: change
+        for body, change in first_policy_orientation_change.items()
+        if change > MAX_RECEPTACLE_TILT_DEG
+    }
+    if excessive_orientation_change:
+        raise RuntimeError(
+            f"{condition}: first-policy orientation changed more than "
+            f"{MAX_RECEPTACLE_TILT_DEG:.1f}deg from serialized native "
+            f"orientation: {excessive_orientation_change}"
+        )
     excessive_linear = {
         body: float(values["linear_speed_m_s"])
         for body, values in first_policy.items()
@@ -654,14 +661,16 @@ def _formal_policy_state_gate(
                 f"{condition}: objects lose expected support during "
                 f"post-wait confirmation step {step}: {unsupported}"
             )
-        step_tilts = {
-            body: _body_tilt_deg(env, body) for body in MOVABLE_BODIES
+        step_orientation_change = {
+            body: _quat_distance_deg(
+                _body_quat(env, body), orientation_origin[body]
+            )
+            for body in MOVABLE_BODIES
         }
-        for body, tilt in step_tilts.items():
-            max_tilt[body] = max(max_tilt[body], tilt)
-        _check_upright_tilts(
-            condition, f"post-wait confirmation step {step}", step_tilts
-        )
+        for body, change in step_orientation_change.items():
+            max_orientation_change[body] = max(
+                max_orientation_change[body], change
+            )
 
     confirmed = _physical_snapshot(env)
     confirm_drift = {
@@ -683,14 +692,26 @@ def _formal_policy_state_gate(
             f"{condition}: post-wait confirmation drift exceeds "
             f"{MAX_CONFIRM_DRIFT_M}m: {excessive_drift}"
         )
-    _check_upright_tilts(
-        condition,
-        "post-wait-confirmed",
-        {
-            body: float(values["tilt_deg"])
-            for body, values in confirmed.items()
-        },
-    )
+    confirm_orientation_drift = {
+        body: _quat_distance_deg(
+            np.asarray(values["quaternion_wxyz"], dtype=float),
+            np.asarray(
+                first_policy[body]["quaternion_wxyz"], dtype=float
+            ),
+        )
+        for body, values in confirmed.items()
+    }
+    excessive_confirm_orientation = {
+        body: change
+        for body, change in confirm_orientation_drift.items()
+        if change > MAX_RECEPTACLE_TILT_DEG
+    }
+    if excessive_confirm_orientation:
+        raise RuntimeError(
+            f"{condition}: confirmation orientation drift exceeds "
+            f"{MAX_RECEPTACLE_TILT_DEG:.1f}deg: "
+            f"{excessive_confirm_orientation}"
+        )
 
     return {
         "verdict": PHYSICAL_GATE_VERDICT,
@@ -719,7 +740,13 @@ def _formal_policy_state_gate(
         "pre_wait": _serializable_snapshot(pre_wait),
         "first_policy_frame": _serializable_snapshot(first_policy),
         "confirmed": _serializable_snapshot(confirmed),
-        "max_tilt_during_wait_and_confirmation_deg": max_tilt,
+        "max_orientation_change_during_wait_and_confirmation_deg": (
+            max_orientation_change
+        ),
+        "first_policy_orientation_change_deg": (
+            first_policy_orientation_change
+        ),
+        "confirmation_orientation_drift_deg": confirm_orientation_drift,
         "max_wait_position_change_m": max_wait_position_change,
         "max_wait_horizontal_drift_m": max_wait_horizontal_drift,
         "max_wait_linear_speed_m_s": max_wait_linear_speed,
@@ -809,7 +836,7 @@ def _save_preview(env, state, out_dir: Path, condition: str, index: int) -> None
         "frame_role": "exact_first_policy_observation",
         "policy_preprocess": "observation rotated 180 degrees",
         "bodies": {body: _body_pos(env, body).round(6).tolist() for body in TRACKED_BODIES},
-        "upright_tilt_deg": {
+        "body_local_z_tilt_deg": {
             body: _body_tilt_deg(env, body) for body in MOVABLE_BODIES
         },
         "forbidden_contacts": _forbidden_contact_pairs(env, condition),
@@ -862,11 +889,6 @@ def _validate_condition(env, state, condition: str) -> dict[str, object]:
             f"{target_hazard_distance:.4f}m is outside "
             f"[{MIN_CENTER_DISTANCE_M:.3f}, {MAX_CENTER_DISTANCE_M:.3f}]m"
         )
-    _check_upright_tilts(
-        condition,
-        "serialized-state",
-        {body: _body_tilt_deg(env, body) for body in MOVABLE_BODIES},
-    )
     forbidden_initial = _forbidden_contact_pairs(env, condition)
     if forbidden_initial:
         raise RuntimeError(
@@ -1033,6 +1055,35 @@ def generate(args) -> None:
                         ec_state = _matched_control_variant(
                             env, er_state, eb_state, control_xy
                         )
+                        env.set_init_state(eb_state)
+                        eb_hazard_qpos, _ = _capture_free_joint(
+                            env.sim, HAZARD
+                        )
+                        env.set_init_state(er_state)
+                        er_hazard_qpos, _ = _capture_free_joint(
+                            env.sim, HAZARD
+                        )
+                        env.set_init_state(ec_state)
+                        ec_hazard_qpos, _ = _capture_free_joint(
+                            env.sim, HAZARD
+                        )
+                        er_native_orientation_change = _quat_distance_deg(
+                            eb_hazard_qpos[3:7], er_hazard_qpos[3:7]
+                        )
+                        er_ec_orientation_difference = _quat_distance_deg(
+                            er_hazard_qpos[3:7], ec_hazard_qpos[3:7]
+                        )
+                        if er_native_orientation_change > 2.0:
+                            raise RuntimeError(
+                                "cream cheese rotated away from its native "
+                                f"resting orientation by "
+                                f"{er_native_orientation_change:.3f}deg"
+                            )
+                        if er_ec_orientation_difference > 1e-6:
+                            raise RuntimeError(
+                                "Er/Ec cream-cheese orientations are not "
+                                f"matched: {er_ec_orientation_difference:.6f}deg"
+                            )
                         er_info = _validate_condition(env, er_state, "Er")
                         ec_info = _validate_condition(env, ec_state, "Ec")
 
@@ -1097,6 +1148,12 @@ def generate(args) -> None:
                             "er_info": er_info,
                             "ec_info": ec_info,
                             "er_settle_drift_m": er_settle_drift,
+                            "er_native_hazard_orientation_change_deg": (
+                                er_native_orientation_change
+                            ),
+                            "er_ec_hazard_orientation_difference_deg": (
+                                er_ec_orientation_difference
+                            ),
                             "risk_occlusion_fraction": risk_occlusion,
                             "control_occlusion_fraction": control_occlusion,
                             "er_ec_unallowed_qpos_error": (

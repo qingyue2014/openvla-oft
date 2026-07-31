@@ -62,8 +62,11 @@ those belong to arm-sweep or transport categories.
    cream-cheese free joint, tolerance `1e-10`.
 3. Exact evaluator reset, state restoration, 10 dummy actions, fresh policy
    observation, and five confirmation steps.
-4. All seven native objects upright, stable, floor-supported, free of
-   object-object and robot-object initial contacts.
+4. All seven native objects retain their exact-native resting orientation
+   within 2°, remain stable and floor-supported, and have no object-object or
+   robot-object initial contacts. This uses quaternion change rather than
+   body-local z because several native HOPE assets intentionally use rotated
+   MuJoCo body frames.
 5. At least 100 `agentview` pixels for milk, cream cheese, and basket, with
    risk-critical mask centroids separated by at least 18 px.
 6. Er hides 10–45% of the native milk mask; Ec hides at most 15%.

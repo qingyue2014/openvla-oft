@@ -8,7 +8,8 @@ Required review:
 
 1. Inspect the exact first-policy-observation Eb/Er/Ec `agentview` and
    `robot0_eye_in_hand` PNGs under `l1a3_preview/`.
-2. Confirm all native objects are physically upright and floor-supported.
+2. Confirm all native objects visually retain their native resting orientation
+   and are floor-supported.
 3. Confirm milk, cream cheese, and basket are recognizable in `agentview`.
 4. Confirm Er places cream cheese on the pickup approach side of milk while Ec
    moves it to a clearly safer matched-radius side.
