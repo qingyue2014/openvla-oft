@@ -952,6 +952,220 @@ def _close_gripper_on_porcelain(env, oracle, step, frames):
     return success, reason, status, step, diagnostic
 
 
+def _descend_to_target_contact(env, oracle, step, frames):
+    """Descend until the gripper really contacts the native target mug."""
+    initial_eef = _eef_position(env)
+    initial_target, _ = body_pose(env.sim, TARGET_BODY)
+    initial_waypoint = initial_target + np.asarray(
+        [0.0, 0.0, GRASP_HEIGHT]
+    )
+    initial_error = initial_waypoint - initial_eef
+    error_norms = [float(np.linalg.norm(initial_error))]
+    contact_bodies = _robot_contact_body_names(env)
+    target_contact = TARGET_BODY in contact_bodies
+    target_contact_initial = target_contact
+    microwave_contact = _has_microwave_contact(contact_bodies)
+    reached_tolerance = bool(
+        error_norms[-1] <= EEF_POSITION_TOLERANCE
+    )
+    trace = []
+    status = None
+    for iteration in range(
+        0 if target_contact or microwave_contact else MOVE_STEPS
+    ):
+        target_position, _ = body_pose(env.sim, TARGET_BODY)
+        waypoint = target_position + np.asarray(
+            [0.0, 0.0, GRASP_HEIGHT]
+        )
+        eef = _eef_position(env)
+        error = waypoint - eef
+        action = np.zeros(7, dtype=float)
+        action[:3] = np.clip(error * 20.0, -1.0, 1.0)
+        action[-1] = -1.0
+        _, status, step = _step(env, oracle, action, step, frames)
+        eef = _eef_position(env)
+        target_position, _ = body_pose(env.sim, TARGET_BODY)
+        waypoint = target_position + np.asarray(
+            [0.0, 0.0, GRASP_HEIGHT]
+        )
+        post_error = waypoint - eef
+        error_norm = float(np.linalg.norm(post_error))
+        error_norms.append(error_norm)
+        reached_tolerance = bool(
+            reached_tolerance
+            or error_norm <= EEF_POSITION_TOLERANCE
+        )
+        current_contacts = _robot_contact_body_names(env)
+        contact_bodies.update(current_contacts)
+        current_target = TARGET_BODY in current_contacts
+        current_microwave = _has_microwave_contact(current_contacts)
+        trace.append(
+            [
+                float(iteration),
+                float(step),
+                *waypoint.tolist(),
+                *eef.tolist(),
+                *post_error.tolist(),
+                error_norm,
+                *action[:3].tolist(),
+                float(current_target),
+                float(current_microwave),
+            ]
+        )
+        # Fixture contact always wins, including a simultaneous target contact.
+        if current_microwave:
+            microwave_contact = True
+            break
+        if status.violated:
+            break
+        if current_target:
+            target_contact = True
+            break
+    final_target, _ = body_pose(env.sim, TARGET_BODY)
+    final_waypoint = final_target + np.asarray(
+        [0.0, 0.0, GRASP_HEIGHT]
+    )
+    final_eef = _eef_position(env)
+    final_error = final_waypoint - final_eef
+    final_error_norm = float(np.linalg.norm(final_error))
+    final_contacts = _robot_contact_body_names(env)
+    contact_bodies.update(final_contacts)
+    target_contact_final = TARGET_BODY in final_contacts
+    microwave_contact = bool(
+        microwave_contact or _has_microwave_contact(contact_bodies)
+    )
+    target_contact = bool(target_contact and target_contact_final)
+    tail = error_norms[-min(20, len(error_norms)):]
+    stalled = bool(
+        not target_contact
+        and len(tail) >= 2
+        and max(tail) - min(tail) < 0.001
+    )
+    horizon_exhausted = bool(
+        len(trace) >= MOVE_STEPS
+        and not target_contact
+        and not microwave_contact
+        and not (status is not None and status.violated)
+    )
+    success = bool(
+        target_contact
+        and not microwave_contact
+        and not (status is not None and status.violated)
+    )
+    diagnostic = {
+        "label": "target contact descend",
+        "success": success,
+        "initial_target_waypoint": initial_waypoint.tolist(),
+        "final_target_waypoint": final_waypoint.tolist(),
+        "initial_eef_position": initial_eef.tolist(),
+        "final_eef_position": final_eef.tolist(),
+        "initial_error_vector": initial_error.tolist(),
+        "initial_error_m": float(np.linalg.norm(initial_error)),
+        "final_error_vector": final_error.tolist(),
+        "final_error_m": final_error_norm,
+        "min_error_m": min(error_norms),
+        "steps_executed": len(trace),
+        "reached_eef_tolerance": reached_tolerance,
+        "stalled": stalled,
+        "horizon_exhausted": horizon_exhausted,
+        "target_contact_initial": target_contact_initial,
+        "target_contact": target_contact,
+        "target_contact_final": target_contact_final,
+        "microwave_contact_seen": microwave_contact,
+        "robot_contact_bodies": sorted(contact_bodies),
+        "trace_columns": (
+            "iteration,global_step,target_x,target_y,target_z,eef_x,eef_y,"
+            "eef_z,error_x,error_y,error_z,error_norm,action_x,action_y,"
+            "action_z,target_contact,microwave_contact"
+        ),
+        "trace": trace,
+    }
+    if microwave_contact:
+        reason = "robot contacted microwave during target contact descend"
+    elif status is not None and status.violated:
+        reason = "oracle violation during target contact descend"
+    elif not target_contact:
+        reason = (
+            "target contact descend ended without current mug contact; "
+            f"final_error_m={final_error_norm}; "
+            f"stalled={stalled}; horizon_exhausted={horizon_exhausted}; "
+            f"contacts={sorted(contact_bodies)}"
+        )
+    else:
+        reason = ""
+    return success, reason, status, step, diagnostic
+
+
+def _close_gripper_on_target(env, oracle, step, frames):
+    """Close only from real target contact and retain it after closure."""
+    initial_contacts = _robot_contact_body_names(env)
+    target_initial = TARGET_BODY in initial_contacts
+    microwave_contact = _has_microwave_contact(initial_contacts)
+    target_seen = target_initial
+    contact_bodies = set(initial_contacts)
+    trace = []
+    status = None
+    if target_initial and not microwave_contact:
+        action = np.zeros(7, dtype=float)
+        action[-1] = 1.0
+        for iteration in range(GRIPPER_STEPS):
+            _, status, step = _step(env, oracle, action, step, frames)
+            contacts = _robot_contact_body_names(env)
+            contact_bodies.update(contacts)
+            current_target = TARGET_BODY in contacts
+            current_microwave = _has_microwave_contact(contacts)
+            target_seen = target_seen or current_target
+            microwave_contact = microwave_contact or current_microwave
+            trace.append(
+                [
+                    float(iteration),
+                    float(step),
+                    float(current_target),
+                    float(current_microwave),
+                ]
+            )
+            if current_microwave or status.violated:
+                break
+    final_contacts = _robot_contact_body_names(env)
+    contact_bodies.update(final_contacts)
+    target_final = TARGET_BODY in final_contacts
+    microwave_contact = bool(
+        microwave_contact or _has_microwave_contact(contact_bodies)
+    )
+    success = bool(
+        target_initial
+        and target_seen
+        and target_final
+        and not microwave_contact
+        and not (status is not None and status.violated)
+    )
+    diagnostic = {
+        "label": "target grasp closure",
+        "success": success,
+        "target_contact_initial": target_initial,
+        "target_contact_seen": target_seen,
+        "target_contact_final": target_final,
+        "microwave_contact_seen": microwave_contact,
+        "robot_contact_bodies": sorted(contact_bodies),
+        "steps_executed": len(trace),
+        "trace_columns": (
+            "iteration,global_step,target_contact,microwave_contact"
+        ),
+        "trace": trace,
+    }
+    if microwave_contact:
+        reason = "robot contacted microwave before/during target closure"
+    elif not target_initial:
+        reason = "target closure attempted without initial mug contact"
+    elif status is not None and status.violated:
+        reason = "oracle violation during target closure"
+    elif not target_final:
+        reason = "target contact was not retained after closure"
+    else:
+        reason = ""
+    return success, reason, status, step, diagnostic
+
+
 def _hold_gripper(env, oracle, command, count, step, frames):
     status = None
     action = np.zeros(7, dtype=float)
@@ -1282,25 +1496,112 @@ def _robot_place_target(env, oracle, names, frames, step):
     target_base = site_pos - site_mat[:, 2] * max(
         float(site_size[2]) - 0.015, 0.0
     )
-    target_grasp_point = target_base + site_mat[:, 2] * GRASP_HEIGHT
     front = -site_mat[:, 1]
     status = None
-    for target, gripper, label in (
-        (grasp_point + [0.0, 0.0, APPROACH_HEIGHT], -1.0, "target approach"),
-        (grasp_point, -1.0, "target descend"),
-    ):
-        reached, status, step = _move_eef(
-            env, oracle, target, gripper, step, frames
+    move_diagnostics = []
+    contact_descend_diagnostic = {}
+    closure_diagnostic = {}
+    held_eef_offset = None
+    target_grasp_point = None
+    object_follow_trace = []
+    moved_before_release = None
+
+    def target_metrics():
+        return {
+            "target_initial_position": initial_target.tolist(),
+            "target_nominal_grasp_point": grasp_point.tolist(),
+            "target_desired_base_position": target_base.tolist(),
+            "target_contact_descend": contact_descend_diagnostic,
+            "target_grasp_closure": closure_diagnostic,
+            "held_eef_minus_target_offset": (
+                None
+                if held_eef_offset is None
+                else held_eef_offset.tolist()
+            ),
+            "target_placement_eef_target": (
+                None
+                if target_grasp_point is None
+                else target_grasp_point.tolist()
+            ),
+            "object_follow_tolerance_m": (
+                PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M
+            ),
+            "object_follow_trace": object_follow_trace,
+            "target_displacement_before_release_m": moved_before_release,
+            "move_segments": move_diagnostics,
+        }
+
+    def move_failure_reason(label):
+        diagnostic = move_diagnostics[-1] if move_diagnostics else {}
+        return (
+            f"eef failed {label}; "
+            f"final_error_m={diagnostic.get('final_error_m', float('nan'))}; "
+            f"final_error_vector="
+            f"{diagnostic.get('final_error_vector', [])}; "
+            f"stalled={diagnostic.get('stalled', False)}; "
+            f"forbidden_microwave_contact="
+            f"{diagnostic.get('forbidden_microwave_contact', False)}; "
+            f"contacts={diagnostic.get('robot_contact_bodies', [])}"
         )
-        if not reached:
-            return False, f"eef failed {label}", status, step, {}
-    status, step = _hold_gripper(
-        env, oracle, 1.0, GRIPPER_STEPS, step, frames
+
+    reached, status, step = _move_eef(
+        env,
+        oracle,
+        grasp_point + [0.0, 0.0, APPROACH_HEIGHT],
+        -1.0,
+        step,
+        frames,
+        label="target approach",
+        diagnostics=move_diagnostics,
+        forbid_microwave_contact=True,
     )
-    if status is not None and status.violated:
-        return False, "oracle violation during target grasp", status, step, {}
+    if not reached:
+        return (
+            False,
+            move_failure_reason("target approach"),
+            status,
+            step,
+            target_metrics(),
+        )
+    (
+        contact_ok,
+        contact_reason,
+        status,
+        step,
+        contact_descend_diagnostic,
+    ) = _descend_to_target_contact(env, oracle, step, frames)
+    if not contact_ok:
+        return (
+            False,
+            contact_reason,
+            status,
+            step,
+            target_metrics(),
+        )
+    (
+        closure_ok,
+        closure_reason,
+        status,
+        step,
+        closure_diagnostic,
+    ) = _close_gripper_on_target(env, oracle, step, frames)
+    if not closure_ok:
+        return (
+            False,
+            closure_reason,
+            status,
+            step,
+            target_metrics(),
+        )
+    grasped_target_position, _ = body_pose(env.sim, TARGET_BODY)
+    grasped_eef_position = _eef_position(env)
+    held_eef_offset = grasped_eef_position - grasped_target_position
+    target_grasp_point = target_base + held_eef_offset
     for target, label in (
-        (grasp_point + [0.0, 0.0, APPROACH_HEIGHT], "target lift"),
+        (
+            grasped_eef_position + [0.0, 0.0, APPROACH_HEIGHT],
+            "target lift",
+        ),
         (
             target_grasp_point + front * 0.16 + site_mat[:, 2] * 0.04,
             "target pre-insertion",
@@ -1308,22 +1609,93 @@ def _robot_place_target(env, oracle, names, frames, step):
         (target_grasp_point, "target insertion"),
     ):
         reached, status, step = _move_eef(
-            env, oracle, target, 1.0, step, frames
+            env,
+            oracle,
+            target,
+            1.0,
+            step,
+            frames,
+            label=label,
+            diagnostics=move_diagnostics,
         )
         if not reached:
-            return False, f"eef failed {label}", status, step, {}
+            return (
+                False,
+                move_failure_reason(label),
+                status,
+                step,
+                target_metrics(),
+            )
+        current_eef = _eef_position(env)
+        current_target, _ = body_pose(env.sim, TARGET_BODY)
+        expected_target = current_eef - held_eef_offset
+        follow_error = float(
+            np.linalg.norm(current_target - expected_target)
+        )
+        object_follow_trace.append(
+            {
+                "label": label,
+                "eef_position": current_eef.tolist(),
+                "expected_target_position": expected_target.tolist(),
+                "actual_target_position": current_target.tolist(),
+                "error_m": follow_error,
+                "passed": (
+                    follow_error
+                    <= PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M
+                ),
+            }
+        )
+        if follow_error > PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M:
+            return (
+                False,
+                f"target mug stopped following during {label}; "
+                f"follow_error_m={follow_error}",
+                status,
+                step,
+                target_metrics(),
+            )
     moved_target, _ = body_pose(env.sim, TARGET_BODY)
-    if float(np.linalg.norm(moved_target - initial_target)) < 0.025:
-        return False, "target mug did not move with grasp", status, step, {}
+    moved_before_release = float(
+        np.linalg.norm(moved_target - initial_target)
+    )
+    if moved_before_release < 0.025:
+        return (
+            False,
+            "target mug did not move with grasp",
+            status,
+            step,
+            target_metrics(),
+        )
     status, step = _hold_gripper(
         env, oracle, -1.0, GRIPPER_STEPS, step, frames
     )
+    if status is not None and status.violated:
+        return (
+            False,
+            "oracle violation while releasing target mug",
+            status,
+            step,
+            target_metrics(),
+        )
     retreat = target_grasp_point + front * 0.16 + site_mat[:, 2] * 0.04
     reached, status, step = _move_eef(
-        env, oracle, retreat, -1.0, step, frames
+        env,
+        oracle,
+        retreat,
+        -1.0,
+        step,
+        frames,
+        label="target retreat",
+        diagnostics=move_diagnostics,
     )
     if not reached:
-        return False, "eef failed target retreat", status, step, {}
+        return (
+            False,
+            move_failure_reason("target retreat"),
+            status,
+            step,
+            target_metrics(),
+        )
     max_tilt = 0.0
     max_linear = 0.0
     max_angular = 0.0
@@ -1344,7 +1716,13 @@ def _robot_place_target(env, oracle, names, frames, step):
         )
         stable_streak = stable_streak + 1 if looks_stable else 0
         if status.violated:
-            return False, "oracle violation after target release", status, step, {}
+            return (
+                False,
+                "oracle violation after target release",
+                status,
+                step,
+                target_metrics(),
+            )
     target_pos, _ = body_pose(env.sim, TARGET_BODY)
     target_local = site_mat.T @ (target_pos - site_pos)
     inside = bool(np.all(np.abs(target_local) <= site_size))
@@ -1353,14 +1731,15 @@ def _robot_place_target(env, oracle, names, frames, step):
         and max_tilt <= MAX_MUG_TILT_DEG
         and stable_streak >= 10
     )
-    metrics = {
+    metrics = target_metrics()
+    metrics.update({
         "target_inside_heating_site": inside,
         "target_local_position": target_local.tolist(),
         "target_max_tilt_deg": max_tilt,
         "target_max_linear_speed_mps": max_linear,
         "target_max_angular_speed_radps": max_angular,
         "target_final_stable_streak": stable_streak,
-    }
+    })
     return (
         stable,
         "" if stable else "target did not settle upright inside microwave",
@@ -1657,6 +2036,25 @@ def main() -> None:
             ),
             default=float("nan"),
         )
+        target_descend = target_metrics.get(
+            "target_contact_descend", {}
+        )
+        target_grasp_closure = target_metrics.get(
+            "target_grasp_closure", {}
+        )
+        target_held_eef_offset = target_metrics.get(
+            "held_eef_minus_target_offset"
+        ) or [float("nan")] * 3
+        target_object_follow_trace = target_metrics.get(
+            "object_follow_trace", []
+        )
+        target_max_object_follow_error = max(
+            (
+                float(item.get("error_m", float("nan")))
+                for item in target_object_follow_trace
+            ),
+            default=float("nan"),
+        )
         forbidden_prefix_contact = bool(
             any(
                 segment.get("forbidden_microwave_contact", False)
@@ -1860,6 +2258,74 @@ def main() -> None:
             ),
             "robot_target_placement_completed": int(target_ok),
             "robot_target_reason": target_reason,
+            "robot_target_descend_steps": target_descend.get(
+                "steps_executed", 0
+            ),
+            "robot_target_descend_success": int(
+                bool(target_descend.get("success", False))
+            ),
+            "robot_target_descend_final_error_m": target_descend.get(
+                "final_error_m", float("nan")
+            ),
+            "robot_target_descend_min_error_m": target_descend.get(
+                "min_error_m", float("nan")
+            ),
+            "robot_target_descend_reached_eef_tolerance": int(
+                bool(
+                    target_descend.get(
+                        "reached_eef_tolerance", False
+                    )
+                )
+            ),
+            "robot_target_descend_stalled": int(
+                bool(target_descend.get("stalled", False))
+            ),
+            "robot_target_descend_horizon_exhausted": int(
+                bool(target_descend.get("horizon_exhausted", False))
+            ),
+            "robot_target_descend_contact": int(
+                bool(target_descend.get("target_contact", False))
+            ),
+            "robot_target_descend_microwave_contact_seen": int(
+                bool(
+                    target_descend.get(
+                        "microwave_contact_seen", False
+                    )
+                )
+            ),
+            "robot_target_descend_contact_bodies": ",".join(
+                target_descend.get("robot_contact_bodies", [])
+            ),
+            "robot_target_closure_success": int(
+                bool(target_grasp_closure.get("success", False))
+            ),
+            "robot_target_closure_contact_initial": int(
+                bool(
+                    target_grasp_closure.get(
+                        "target_contact_initial", False
+                    )
+                )
+            ),
+            "robot_target_closure_contact_final": int(
+                bool(
+                    target_grasp_closure.get(
+                        "target_contact_final", False
+                    )
+                )
+            ),
+            "robot_target_closure_microwave_contact_seen": int(
+                bool(
+                    target_grasp_closure.get(
+                        "microwave_contact_seen", False
+                    )
+                )
+            ),
+            "robot_target_held_offset_x_m": target_held_eef_offset[0],
+            "robot_target_held_offset_y_m": target_held_eef_offset[1],
+            "robot_target_held_offset_z_m": target_held_eef_offset[2],
+            "robot_target_max_object_follow_error_m": (
+                target_max_object_follow_error
+            ),
             "robot_door_close_completed": int(door_ok),
             "robot_door_reason": door_reason,
             "door_handle_contact_seen": int(
@@ -1890,6 +2356,9 @@ def main() -> None:
                 "robot_prefix_completed": prefix_ok,
                 "robot_prefix_reason": prefix_reason,
                 "robot_prefix": prefix_metrics,
+                "robot_target_completed": target_ok,
+                "robot_target_reason": target_reason,
+                "target_placement": target_metrics,
             }
         )
         category = "success" if passed else "failure"
@@ -1949,6 +2418,10 @@ def main() -> None:
             "contact fails closed"
         ),
         "target_placement_segment": "robot OSC grasp/transport/release via env.step",
+        "target_grasp_gate": (
+            "current target contact required before and after closure; "
+            "any robot-microwave contact during table approach fails closed"
+        ),
         "microwave_close_segment": "robot handle contact and OSC hinge-arc motion via env.step",
         "episode_diagnostics": episode_diagnostics,
         "input_artifacts": [

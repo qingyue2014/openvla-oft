@@ -667,6 +667,27 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "porcelain_final" in closure
     assert "not microwave_contact" in closure
 
+    target_descend = ast.get_source_segment(
+        source, functions["_descend_to_target_contact"]
+    )
+    assert "_step(env, oracle, action, step, frames)" in target_descend
+    assert "TARGET_BODY in current_contacts" in target_descend
+    assert "if current_microwave:" in target_descend
+    assert "if current_target:" in target_descend
+    assert "target_contact_final" in target_descend
+    assert "and not microwave_contact" in target_descend
+    assert '"horizon_exhausted": horizon_exhausted' in target_descend
+    assert '"reached_eef_tolerance": reached_tolerance' in target_descend
+    assert '"trace": trace' in target_descend
+
+    target_closure = ast.get_source_segment(
+        source, functions["_close_gripper_on_target"]
+    )
+    assert "_step(env, oracle, action, step, frames)" in target_closure
+    assert "target_initial" in target_closure
+    assert "target_final" in target_closure
+    assert "not microwave_contact" in target_closure
+
     prefix = ast.get_source_segment(
         source, functions["_robot_park_prefix"]
     )
@@ -690,6 +711,26 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "final_error_vector" in prefix
     assert "robot_contact_bodies" in prefix
 
+    target_placement = ast.get_source_segment(
+        source, functions["_robot_place_target"]
+    )
+    assert "_descend_to_target_contact(" in target_placement
+    assert "_close_gripper_on_target(" in target_placement
+    assert "forbid_microwave_contact=True" in target_placement
+    assert (
+        "held_eef_offset = grasped_eef_position - grasped_target_position"
+        in target_placement
+    )
+    assert "target_grasp_point = target_base + held_eef_offset" in (
+        target_placement
+    )
+    assert "PORCELAIN_OBJECT_FOLLOW_TOLERANCE_M" in target_placement
+    assert '"target_contact_descend": contact_descend_diagnostic' in (
+        target_placement
+    )
+    assert '"target_grasp_closure": closure_diagnostic' in target_placement
+    assert '"object_follow_trace": object_follow_trace' in target_placement
+
     assert '"episode_diagnostics": episode_diagnostics' in source
     assert '"robot_prefix_descend_final_error_m"' in source
     assert '"robot_prefix_descend_contact_bodies"' in source
@@ -701,6 +742,13 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert '"robot_prefix_safe_park_door_sweep_clearance_m"' in source
     assert '"robot_prefix_safe_park_table_edge_clearance_m"' in source
     assert '"robot_prefix_no_forbidden_microwave_contact"' in source
+    assert '"target_placement": target_metrics' in source
+    assert '"robot_target_descend_final_error_m"' in source
+    assert '"robot_target_descend_horizon_exhausted"' in source
+    assert '"robot_target_descend_contact"' in source
+    assert '"robot_target_closure_contact_initial"' in source
+    assert '"robot_target_closure_contact_final"' in source
+    assert '"robot_target_max_object_follow_error_m"' in source
     assert "GRASP_HEIGHT = 0.060" in source
     assert "PORCELAIN_GRASP_HEIGHT = 0.080" in source
     assert "PORCELAIN_GRASP_CLEARANCE_OFFSET = 0.040" in source
