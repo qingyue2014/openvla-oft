@@ -339,6 +339,7 @@ def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
             self.calls += 1
 
     reached = FakeRollout()
+    observed_steps = []
     Rollout.move(
         reached,
         np.zeros(3),
@@ -346,8 +347,10 @@ def test_contact_seek_requires_semantic_contact_even_at_cartesian_target():
         "task",
         stop_when=lambda: reached.calls >= 2,
         stop_label="robot-plate contact",
+        step_observer=lambda: observed_steps.append(reached.calls),
     )
     assert reached.calls == 2
+    assert observed_steps == [1, 2]
 
     missing = FakeRollout()
     with pytest.raises(RuntimeError, match="robot-plate contact not observed"):
@@ -398,7 +401,7 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     assert "L3-A3 plate-contact plan" in producer
 
 
-def test_plate_push_preserves_established_open_gripper_contact():
+def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     producer = CONTROLLER_REFERENCE.read_text()
     task_push = producer[
         producer.index("# Job 499604 established real plate contact") :
@@ -419,11 +422,34 @@ def test_plate_push_preserves_established_open_gripper_contact():
     )
     assert task_push.count("pusher_open_sign,") >= 5
     assert "lost during open-gripper confirmation" in task_push
-    assert "lost during open-gripper push" in task_push
-    assert task_push.index("if env.check_success():") < task_push.index(
-        "lost during open-gripper push"
+    push_loop = task_push[
+        task_push.index("for distance in np.arange(") :
+        task_push.index("push_summary = {")
+    ]
+    assert "lost during open-gripper push" not in push_loop
+    assert "step_observer=observe_push_step" in push_loop
+    assert '"robot_contact_steps"' in push_loop
+    assert '"plate_displacement_m"' in push_loop
+    assert '"plate_total_displacement_m"' in push_loop
+    assert '"plate_progress_m"' in push_loop
+    assert '"maximum_step_plate_progress_m"' in push_loop
+    assert '"plate_contact_counterparts_at_end"' in push_loop
+    assert "L3-A3 push waypoint" in push_loop
+    assert (
+        "robot_plate_contact_observed_after_confirmation"
+        in task_push
     )
+    assert '"push_start_plate_position"' in task_push
+    assert "live_plate[:2] - push_plate_start[:2]" in task_push
+    assert "native success lacked real robot-plate contact" in task_push
+    assert "native success lacked positive goal-directed plate progress" in task_push
+    assert task_push.index("if not env.check_success():") < task_push.index(
+        "native success lacked real robot-plate contact"
+    )
+    assert '"--minimum_push_progress", type=float, default=0.001' in producer
+    assert "--minimum_push_progress must be positive" in producer
     assert '"pusher_gripper_sign": pusher_open_sign' in producer
+    assert '"push_evidence": push_summary' in producer
 
 
 def test_plate_contact_diagnostics_and_detector_share_compiled_robot_names():

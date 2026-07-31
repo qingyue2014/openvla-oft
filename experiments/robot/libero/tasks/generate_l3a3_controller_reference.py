@@ -276,6 +276,7 @@ class Rollout:
         stop_when=None,
         stop_label="stop condition",
         diagnostics=None,
+        step_observer=None,
     ):
         tolerance = self.args.position_tolerance if tolerance is None else tolerance
         max_steps = self.args.max_waypoint_steps if max_steps is None else max_steps
@@ -294,6 +295,8 @@ class Rollout:
                 ),
                 phase,
             )
+            if step_observer is not None:
+                step_observer()
         if stop_when is not None:
             extra = diagnostics() if callable(diagnostics) else diagnostics
             raise RuntimeError(
@@ -320,6 +323,8 @@ def generate(args):
         raise ValueError("--video_fps must be positive")
     if args.pusher_contact_confirm_steps < 1:
         raise ValueError("--pusher_contact_confirm_steps must be positive")
+    if args.minimum_push_progress <= 0:
+        raise ValueError("--minimum_push_progress must be positive")
     er_path = Path(args.er_states).resolve(strict=True)
     state, fixture_names, fixture_positions, fixture_quaternions = _load_er_episode(
         er_path, args.episode
@@ -498,6 +503,11 @@ def generate(args):
             )
 
         pusher_start = np.asarray(rollout.obs["robot0_eef_pos"], dtype=float).copy()
+        push_plate_start = body_pose(env, PLATE_BODY)[0].copy()
+        push_waypoints = []
+        push_contact_observed = False
+        maximum_plate_progress = 0.0
+        maximum_plate_displacement = 0.0
         for distance in np.arange(
             args.push_increment,
             args.maximum_push_distance + 0.5 * args.push_increment,
@@ -505,21 +515,129 @@ def generate(args):
         ):
             target = pusher_start.copy()
             target[:2] += direction_xy * distance
+            waypoint_evidence = {
+                "controller_steps": 0,
+                "robot_contact_steps": 0,
+                "robot_contact_bodies": set(),
+                "maximum_step_plate_progress_m": 0.0,
+            }
+
+            def observe_push_step():
+                waypoint_evidence["controller_steps"] += 1
+                contacts = _body_contact_counterparts(env, PLATE_BODY)
+                robot_contacts = [
+                    item
+                    for item in contacts
+                    if item["counterpart_is_robot_or_gripper"]
+                ]
+                if robot_contacts:
+                    waypoint_evidence["robot_contact_steps"] += 1
+                    waypoint_evidence["robot_contact_bodies"].update(
+                        item["counterpart_body"] for item in robot_contacts
+                    )
+                live_plate = body_pose(env, PLATE_BODY)[0]
+                progress = float(
+                    np.dot(
+                        live_plate[:2] - push_plate_start[:2], direction_xy
+                    )
+                )
+                waypoint_evidence["maximum_step_plate_progress_m"] = max(
+                    waypoint_evidence["maximum_step_plate_progress_m"],
+                    progress,
+                )
+
+            def push_diagnostics():
+                active = dict(waypoint_evidence)
+                active["robot_contact_bodies"] = sorted(
+                    active["robot_contact_bodies"]
+                )
+                return {
+                    **plate_diagnostics(),
+                    "completed_push_waypoints": push_waypoints,
+                    "active_push_waypoint_distance_m": float(distance),
+                    "active_push_waypoint_evidence": active,
+                }
+
             rollout.move(
                 target,
                 pusher_open_sign,
                 "task",
                 tolerance=args.push_tracking_tolerance,
                 max_steps=args.push_tracking_steps,
+                diagnostics=push_diagnostics,
+                step_observer=observe_push_step,
             )
-            if env.check_success():
+            plate_now = body_pose(env, PLATE_BODY)[0]
+            plate_displacement = float(
+                np.linalg.norm(plate_now[:2] - push_plate_start[:2])
+            )
+            plate_progress = float(
+                np.dot(plate_now[:2] - push_plate_start[:2], direction_xy)
+            )
+            total_plate_displacement = float(
+                np.linalg.norm(plate_now[:2] - plate_start[:2])
+            )
+            end_contacts = _body_contact_counterparts(env, PLATE_BODY)
+            robot_contact_at_end = any(
+                item["counterpart_is_robot_or_gripper"]
+                for item in end_contacts
+            )
+            waypoint_contact_observed = bool(
+                waypoint_evidence["robot_contact_steps"]
+            )
+            push_contact_observed |= waypoint_contact_observed
+            maximum_plate_progress = max(
+                maximum_plate_progress,
+                plate_progress,
+                waypoint_evidence["maximum_step_plate_progress_m"],
+            )
+            maximum_plate_displacement = max(
+                maximum_plate_displacement, plate_displacement
+            )
+            waypoint_record = {
+                "commanded_distance_m": float(distance),
+                "commanded_target": target.tolist(),
+                "controller_steps": waypoint_evidence["controller_steps"],
+                "robot_contact_steps": waypoint_evidence[
+                    "robot_contact_steps"
+                ],
+                "robot_contact_observed": waypoint_contact_observed,
+                "robot_contact_at_end": robot_contact_at_end,
+                "robot_contact_bodies": sorted(
+                    waypoint_evidence["robot_contact_bodies"]
+                ),
+                "plate_position": plate_now.tolist(),
+                "plate_displacement_m": plate_displacement,
+                "plate_total_displacement_m": total_plate_displacement,
+                "plate_progress_m": plate_progress,
+                "maximum_step_plate_progress_m": waypoint_evidence[
+                    "maximum_step_plate_progress_m"
+                ],
+                "goal_xy_error_m": float(
+                    np.linalg.norm(plate_now[:2] - goal[:2])
+                ),
+                "native_success": bool(env.check_success()),
+                "plate_contact_counterparts_at_end": end_contacts,
+            }
+            push_waypoints.append(waypoint_record)
+            print(
+                "L3-A3 push waypoint "
+                + json.dumps(waypoint_record, sort_keys=True),
+                flush=True,
+            )
+            if waypoint_record["native_success"]:
                 break
-            if not _robot_contacts_body(env, PLATE_BODY):
-                raise RuntimeError(
-                    "robot-plate contact was lost during open-gripper push "
-                    f"before native success at distance_m={distance:.5f} "
-                    f"diagnostics={json.dumps(plate_diagnostics(), sort_keys=True)}"
-                )
+        push_summary = {
+            "push_start_plate_position": push_plate_start.tolist(),
+            "waypoints": push_waypoints,
+            "robot_plate_contact_observed_after_confirmation": (
+                push_contact_observed
+            ),
+            "maximum_plate_displacement_m": maximum_plate_displacement,
+            "maximum_plate_progress_m": maximum_plate_progress,
+            "minimum_required_plate_progress_m": args.minimum_push_progress,
+            "native_success": bool(env.check_success()),
+        }
         if not env.check_success():
             plate_final = body_pose(env, PLATE_BODY)[0]
             eef_final = np.asarray(
@@ -534,7 +652,19 @@ def generate(args):
                 f"goal={goal.tolist()} "
                 f"goal_xy_error_m="
                 f"{float(np.linalg.norm(plate_final[:2] - goal[:2])):.5f} "
-                f"eef_final={eef_final.tolist()}"
+                f"eef_final={eef_final.tolist()} "
+                f"push_summary={json.dumps(push_summary, sort_keys=True)}"
+            )
+        if not push_contact_observed:
+            raise RuntimeError(
+                "native success lacked real robot-plate contact during the "
+                "push stage after initial confirmation: "
+                f"{json.dumps(push_summary, sort_keys=True)}"
+            )
+        if maximum_plate_progress < args.minimum_push_progress:
+            raise RuntimeError(
+                "native success lacked positive goal-directed plate progress: "
+                f"{json.dumps(push_summary, sort_keys=True)}"
             )
         rollout.hold(-1.0, args.final_settle_steps, "settle")
 
@@ -578,6 +708,7 @@ def generate(args):
             "all_task_actions_robot_controlled": True,
             "pusher_gripper_sign": pusher_open_sign,
             "pusher_contact_confirm_steps": args.pusher_contact_confirm_steps,
+            "push_evidence": push_summary,
             "task_success": True,
             "violated": False,
             "oracle_metrics": metrics,
@@ -661,6 +792,7 @@ def main():
     parser.add_argument("--maximum_push_distance", type=float, default=0.310)
     parser.add_argument("--push_tracking_tolerance", type=float, default=0.007)
     parser.add_argument("--push_tracking_steps", type=int, default=10)
+    parser.add_argument("--minimum_push_progress", type=float, default=0.001)
     parser.add_argument("--final_settle_steps", type=int, default=40)
     parser.add_argument("--displacement_threshold", type=float, default=0.020)
     parser.add_argument("--height_drop_threshold", type=float, default=0.006)
