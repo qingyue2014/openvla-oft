@@ -300,6 +300,57 @@ the fixed safety/hold total remains 56, and the complete static bound remains
 stages remain physical hypotheses until a fresh remote reference executes
 and passes them; Job500128 did not physically reach those downstream stages.
 
+Superpod Job500138 tested that thirteenth milk-lift action on the exact
+committed controller across all 25 registered episode/offset attempts. Native
+generation and reference gates passed. Every attempt completed milk approach
+in exactly 12 actions, milk descend in 7--8 contact-accepted actions, and milk
+lift in exactly 13 actions; the resulting milk body lift was
+88.490--89.025 mm. The sole terminal failure was then
+`milk_to_basket_raise/waypoint_timeout`. No attempt reached basket translate,
+descend, retreat, release, or native task success, so those stages remain
+unvalidated. Partial trajectories consumed 170--176 task actions, within the
+280-action evaluator horizon but not evidence for the unexecuted complete
+tail.
+
+The basket raise started at 79.786--79.909 mm error. Its full former
+eight-action allocation reduced that error monotonically to
+18.460--18.540 mm, with a final-action gain of 4.176--4.188 mm. One additional
+action is impossible to justify from these observations: even the smallest
+remaining excess above the unchanged 12 mm tolerance, 6.460 mm, exceeds the
+largest final-action gain, 4.188 mm. Two additional actions are also not an
+evidence-backed repair. Across the final three gain transitions in all 25
+raise traces, action-to-action gain retention was
+`0.813147626`--`0.818140253`. Combining the easiest residual, largest final
+gain, and most optimistic observed retention still projects 12.230 mm after
+two actions. Applying the minimum observed retention per trace projects
+12.290--12.374 mm after two actions, but 10.040--10.126 mm after three.
+Therefore three additional raise actions are the minimum repair supported by
+the 25-trace tail, not two.
+
+Job500138 independently reconfirmed the milk-approach donor: all 25 attempts
+again used exactly 12 actions against its then-registered 19-action limit.
+Three of those seven observed reserves fund the raise tail, leaving four
+registered reserve actions:
+
+| Stage | Job500138 allocation | Revised allocation |
+| --- | ---: | ---: |
+| `milk_approach` | 19 | 16 |
+| `milk_to_basket_raise` | 8 | 11 |
+
+The butter safety invariant also remained valid. All 25 ten-action
+confirmation windows passed (250/250 samples), followed by 1,203/1,203 safe
+post-park samples through milk lift and the complete eight-action raise:
+floor-only support, zero forbidden contacts, zero measured drift, maximum
+tilt `3.1945284701301985e-06` degrees, maximum linear speed
+`3.3756547766497907e-16` m/s, and maximum angular speed
+`5.980886314913616e-15` rad/s. All tolerances, position scales, normalized
+action caps, grasp-seat actions, contact holds, releases, retreats,
+stabilization windows, and every other stage allocation remain unchanged.
+Registered motion remains 222 actions, the fixed safety/hold total remains
+56, and the complete static bound remains 278/280. The eleven-action raise
+and every downstream basket stage remain physical hypotheses until a fresh
+remote reference passes them.
+
 The safe-reference report and per-episode CSV also record the controller
 source SHA-256; the runner rejects a PASS report produced by different
 controller bytes, even when the ER state artifact is unchanged.
