@@ -13,6 +13,7 @@ import copy
 import csv
 import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -85,6 +86,7 @@ TARGET_INSERTION_SEARCH_STEP_M = 0.005
 TARGET_INSERTION_SWEEP_STEP_M = 0.005
 TARGET_INSERTION_BATCH_CHUNK_SIZE = 32
 TARGET_INSERTION_BATCH_WORKSPACE_LIMIT_BYTES = 32 * 1024 * 1024
+MAX_GRASP_OBSERVATION_BYTES = 64 * 1024
 EEF_POSITION_TOLERANCE = 0.012
 MOVE_STEPS = 100
 GRIPPER_STEPS = 15
@@ -229,6 +231,224 @@ def _plain_state_sha256(value) -> str:
     digest = hashlib.sha256()
     _update_state_digest(digest, value)
     return digest.hexdigest()
+
+
+def _atomic_write_json(path, payload) -> int:
+    """Replace one JSON artifact atomically after flushing its new bytes."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    encoded = (
+        json.dumps(payload, indent=2, sort_keys=True, allow_nan=True) + "\n"
+    ).encode("utf-8")
+    temporary = path.with_name(f".{path.name}.tmp-{os.getpid()}")
+    try:
+        with temporary.open("wb") as handle:
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+    return len(encoded)
+
+
+def _eligible_grasp_observability(geometry_passes) -> dict:
+    """Serialize every eligible grasp in exact trial order, compactly."""
+    ordered = []
+    for eligible_rank, candidate in enumerate(geometry_passes):
+        record = candidate["record"]
+        ordered.append(
+            {
+                "eligible_rank": int(eligible_rank),
+                "candidate_trace_index": int(
+                    candidate["candidate_trace_index"]
+                ),
+                "candidate_family": str(
+                    record.get("candidate_family", "legacy")
+                ),
+                "direction_index": int(record["direction_index"]),
+                "direction_label": str(record["direction_source"]),
+                "direction_xy": [
+                    float(value) for value in record["direction_xy"]
+                ],
+                "outward_offset_m": float(record["outward_offset_m"]),
+            }
+        )
+
+    def histogram(fields):
+        counts = {}
+        values_by_key = {}
+        for item in ordered:
+            key = tuple(
+                float(round(item[field], 12))
+                if field == "outward_offset_m"
+                else item[field]
+                for field in fields
+            )
+            counts[key] = counts.get(key, 0) + 1
+            values_by_key.setdefault(key, []).append(
+                float(round(item["outward_offset_m"], 12))
+            )
+        return [
+            {
+                **{field: key[index] for index, field in enumerate(fields)},
+                "count": int(counts[key]),
+            }
+            for key in sorted(counts, key=repr)
+        ], values_by_key
+
+    family_histogram, _ = histogram(("candidate_family",))
+    direction_histogram, _ = histogram(("direction_label",))
+    family_direction_histogram, grouped_offsets = histogram(
+        ("candidate_family", "direction_label")
+    )
+    offset_histogram, _ = histogram(("outward_offset_m",))
+    offset_ranges = []
+    for key in sorted(grouped_offsets, key=repr):
+        offsets = grouped_offsets[key]
+        distinct_offsets = sorted(set(offsets))
+        offset_ranges.append(
+            {
+                "candidate_family": key[0],
+                "direction_label": key[1],
+                "count": int(len(offsets)),
+                "distinct_offset_count": int(len(distinct_offsets)),
+                "minimum_offset_m": float(min(offsets)),
+                "maximum_offset_m": float(max(offsets)),
+                "distinct_offsets_m": distinct_offsets,
+            }
+        )
+    histograms = {
+        "candidate_family": family_histogram,
+        "direction_label": direction_histogram,
+        "candidate_family_direction_label": (
+            family_direction_histogram
+        ),
+        "outward_offset_m": offset_histogram,
+        "offset_ranges_by_family_direction": offset_ranges,
+    }
+    evidence = {
+        "schema_version": 1,
+        "eligible_count": int(len(ordered)),
+        "order_fields": [
+            "eligible_rank",
+            "candidate_trace_index",
+            "candidate_family",
+            "direction_index",
+            "direction_label",
+            "direction_xy",
+            "outward_offset_m",
+        ],
+        "ordered_candidates": ordered,
+        "ordered_candidates_sha256": _plain_state_sha256(ordered),
+        "histograms": histograms,
+        "histograms_sha256": _plain_state_sha256(histograms),
+    }
+    evidence["evidence_sha256"] = _plain_state_sha256(evidence)
+    return evidence
+
+
+def _compact_dynamic_grasp_observation(trial) -> dict:
+    """Bound one completed dynamic grasp to audit-relevant evidence."""
+    reason = str(trial.get("reason", ""))
+    restore = trial.get("restore_proof") or {}
+    evidence = {
+        "dynamic_candidate_index": int(
+            trial["dynamic_candidate_index"]
+        ),
+        "candidate_trace_index": int(trial["candidate_trace_index"]),
+        "candidate_family": str(
+            trial.get("candidate_family", "legacy")
+        ),
+        "direction_index": int(trial["direction_index"]),
+        "direction_label": str(trial["direction_source"]),
+        "outward_offset_m": float(trial["outward_offset_m"]),
+        "success": bool(trial["success"]),
+        "contact_gate_passed": bool(trial["contact_gate_passed"]),
+        "grasp_closure_passed": bool(trial["grasp_closure_passed"]),
+        "insertion_plan_passed": bool(trial["insertion_plan_passed"]),
+        "held_eef_minus_target_offset": trial.get(
+            "held_eef_minus_target_offset"
+        ),
+        "insertion_plan_compact_summary": trial.get(
+            "insertion_plan_compact_summary"
+        ),
+        "insertion_plan_selection_sha256": trial.get(
+            "insertion_plan_selection_sha256"
+        ),
+        "restore_passed": bool(restore.get("passed", False)),
+        "trial_snapshot_sha256": restore.get("snapshot_sha256", ""),
+        "trial_restored_sha256": restore.get("restored_sha256", ""),
+        "reason_prefix": reason[:1024],
+        "reason_sha256": hashlib.sha256(reason.encode("utf-8")).hexdigest(),
+    }
+    evidence["evidence_sha256"] = _plain_state_sha256(evidence)
+    encoded_size = len(
+        json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    )
+    evidence["serialized_size_bytes"] = int(encoded_size)
+    evidence["within_size_limit"] = bool(
+        encoded_size < MAX_GRASP_OBSERVATION_BYTES
+    )
+    return evidence
+
+
+def _record_robot_observation_event(
+    report_path, checkpoint, episode_index, event, payload
+) -> int:
+    """Persist one prefilter or grasp event into the live report path."""
+    episode_index = int(episode_index)
+    episode = next(
+        (
+            item
+            for item in checkpoint["episodes"]
+            if int(item["episode"]) == episode_index
+        ),
+        None,
+    )
+    if episode is None:
+        episode = {
+            "episode": episode_index,
+            "grasp_prefilter": None,
+            "completed_grasp_trials": [],
+            "episode_complete": False,
+        }
+        checkpoint["episodes"].append(episode)
+    if event == "episode_started":
+        episode["episode_started"] = True
+    elif event == "grasp_prefilter":
+        episode["grasp_prefilter"] = _snapshot_plain_state(
+            payload, "grasp_prefilter_checkpoint"
+        )
+    elif event == "grasp_trial":
+        episode["completed_grasp_trials"].append(
+            _snapshot_plain_state(payload, "grasp_trial_checkpoint")
+        )
+    elif event == "episode_complete":
+        episode["episode_complete"] = True
+        episode["episode_result"] = _snapshot_plain_state(
+            payload, "episode_result_checkpoint"
+        )
+    else:
+        raise ValueError(f"unknown robot observation event: {event!r}")
+    checkpoint["last_completed_event"] = {
+        "episode": episode_index,
+        "event": str(event),
+        "completed_grasp_trial_count": len(
+            episode["completed_grasp_trials"]
+        ),
+    }
+    checkpoint["checkpoint_sha256"] = _plain_state_sha256(
+        {
+            key: value
+            for key, value in checkpoint.items()
+            if key != "checkpoint_sha256"
+        }
+    )
+    return _atomic_write_json(report_path, checkpoint)
 
 
 def _record_from_demo(demo) -> dict:
@@ -5488,6 +5708,9 @@ def _compiled_target_grasp_clearance(
             candidate["candidate_trace_index"]
             for candidate in geometry_passes
         ],
+        "eligible_grasp_observability": (
+            _eligible_grasp_observability(geometry_passes)
+        ),
         "dynamic_trial_horizon_steps": TARGET_CONTACT_SEEK_STEPS,
         "dynamic_axis_progress_epsilon_m": (
             TARGET_DYNAMIC_AXIS_PROGRESS_EPS_M
@@ -7189,6 +7412,58 @@ def _compiled_target_insertion_plan(
         if gate_name == "last_evaluated":
             continue
         candidate_record = representative["candidate"]
+        sweep_key = {
+            "target_door_clearance": "door_sweep",
+            "target_static_clearance": "target_sweep",
+            "gripper_clearance": "gripper_sweep",
+        }.get(gate_name)
+        sweep = (
+            None if sweep_key is None else representative.get(sweep_key)
+        )
+        compact_sweep = (
+            None
+            if sweep is None
+            else _compact_insertion_sweep_evidence(sweep)
+        )
+        clearance_provenance = {
+            "gate_value_source": {
+                "native_in": "native_in",
+                "support_clearance": "support_clearance_m",
+                "target_door_clearance": (
+                    "target_door_swept_clearance_m"
+                ),
+                "target_static_clearance": (
+                    "target_swept_static_clearance_m"
+                ),
+                "gripper_clearance": "gripper_swept_clearance_m",
+            }[gate_name],
+            "source_sweep": sweep_key,
+            "sample_intervals": (
+                None
+                if compact_sweep is None
+                else compact_sweep.get("sample_intervals")
+            ),
+            "minimum_clearance_m": (
+                None
+                if compact_sweep is None
+                else compact_sweep.get("minimum_clearance_m")
+            ),
+            "threshold_fail_fast_m": (
+                None
+                if compact_sweep is None
+                else compact_sweep.get("threshold_fail_fast_m")
+            ),
+            "full_sweep_evaluated": (
+                None
+                if compact_sweep is None
+                else compact_sweep.get("full_sweep_evaluated")
+            ),
+            "limiting_pair": (
+                None
+                if compact_sweep is None
+                else compact_sweep.get("limiting_pair")
+            ),
+        }
         best_gate_summary[gate_name] = {
             "clearance": float(representative["gate_value"]),
             "search_index": int(candidate_record["search_index"]),
@@ -7202,6 +7477,7 @@ def _compiled_target_insertion_plan(
                 "candidate_target_position"
             ],
             "rejection_stage": candidate_record["rejection_stage"],
+            "clearance_provenance": clearance_provenance,
         }
     batch_prefilter_summary = {
         key: batch_prefilter[key]
@@ -8455,6 +8731,7 @@ def _select_dynamically_reachable_target_grasp(
     site_rotation,
     site_size,
     support_geometry,
+    observation_callback=None,
 ):
     """Select the first exact-restored grasp with a realizable insertion."""
     common_snapshot = _snapshot_target_trial_state(env, oracle, names)
@@ -8516,6 +8793,9 @@ def _select_dynamically_reachable_target_grasp(
         trial["direction_source"] = candidate["record"][
             "direction_source"
         ]
+        trial["candidate_family"] = candidate["record"].get(
+            "candidate_family", "legacy"
+        )
         if "native_axis_provenance" in candidate["record"]:
             trial["native_axis_provenance"] = _snapshot_plain_state(
                 candidate["record"]["native_axis_provenance"],
@@ -8563,6 +8843,11 @@ def _select_dynamically_reachable_target_grasp(
             f"restore={restore_proof.get('passed', False)}",
             flush=True,
         )
+        if observation_callback is not None:
+            observation_callback(
+                "grasp_trial",
+                _compact_dynamic_grasp_observation(trial),
+            )
         if not trial["success"]:
             continue
 
@@ -9424,7 +9709,9 @@ def _robot_park_prefix(
     )
 
 
-def _robot_place_target(env, oracle, names, frames, step):
+def _robot_place_target(
+    env, oracle, names, frames, step, observation_callback=None
+):
     """Grasp, transport, and release the target mug through OSC actions."""
     initial_target, _ = body_pose(env.sim, TARGET_BODY)
     grasp_point = initial_target + np.asarray([0.0, 0.0, GRASP_HEIGHT])
@@ -9543,6 +9830,13 @@ def _robot_place_target(env, oracle, names, frames, step):
             site_mat,
             site_size,
         )
+        if observation_callback is not None:
+            observation_callback(
+                "grasp_prefilter",
+                target_grasp_clearance_derivation[
+                    "eligible_grasp_observability"
+                ],
+            )
     except RuntimeError as error:
         return (
             False,
@@ -9566,6 +9860,7 @@ def _robot_place_target(env, oracle, names, frames, step):
             site_mat,
             site_size,
             support_geometry,
+            observation_callback=observation_callback,
         )
     except DeterministicRestoreError:
         raise
@@ -10120,6 +10415,25 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    report_path = Path(args.out_report)
+    observation_checkpoint = {
+        "schema_version": 1,
+        "verdict": "IN_PROGRESS_L3A4_ROBOT_SAFE_PREFIX",
+        "final_report_complete": False,
+        "candidate_gate_control_semantics_changed": False,
+        "input_paths": {
+            "bddl": str(Path(args.bddl).resolve()),
+            "er_states": str(Path(args.er_states).resolve()),
+            "ec_states": str(Path(args.ec_states).resolve()),
+        },
+        "episodes": [],
+        "last_completed_event": None,
+    }
+    observation_checkpoint["checkpoint_sha256"] = _plain_state_sha256(
+        observation_checkpoint
+    )
+    _atomic_write_json(report_path, observation_checkpoint)
+
     with (
         h5py.File(args.er_states, "r") as er_file,
         h5py.File(args.ec_states, "r") as ec_file,
@@ -10151,6 +10465,23 @@ def main() -> None:
     failure_videos.mkdir(parents=True, exist_ok=True)
     saved = {"success": 0, "failure": 0}
     for index, (er_record, ec_record) in enumerate(records):
+        _record_robot_observation_event(
+            report_path,
+            observation_checkpoint,
+            index,
+            "episode_started",
+            {},
+        )
+
+        def observation_callback(event, payload, episode_index=index):
+            _record_robot_observation_event(
+                report_path,
+                observation_checkpoint,
+                episode_index,
+                event,
+                payload,
+            )
+
         env.reset()
         state = materialize_native_scene_state(env, er_record)
         obs = env.set_init_state(state)
@@ -10223,7 +10554,12 @@ def main() -> None:
                 step,
                 target_metrics,
             ) = _robot_place_target(
-                env, oracle, names, frames, step
+                env,
+                oracle,
+                names,
+                frames,
+                step,
+                observation_callback=observation_callback,
             )
         if target_ok and not (status is not None and status.violated):
             (
@@ -10969,6 +11305,18 @@ def main() -> None:
                 "target_placement": target_metrics,
             }
         )
+        _record_robot_observation_event(
+            report_path,
+            observation_checkpoint,
+            index,
+            "episode_complete",
+            {
+                "robot_prefix_completed": bool(prefix_ok),
+                "robot_target_completed": bool(target_ok),
+                "robot_door_completed": bool(door_ok),
+                "path_passed": bool(passed),
+            },
+        )
         category = "success" if passed else "failure"
         if saved[category] < 10:
             imageio.mimsave(
@@ -11098,6 +11446,7 @@ def main() -> None:
         "target_insertion_sweep_step_m": TARGET_INSERTION_SWEEP_STEP_M,
         "microwave_close_segment": "robot handle contact and OSC hinge-arc motion via env.step",
         "episode_diagnostics": episode_diagnostics,
+        "observation_checkpoint": observation_checkpoint,
         "input_artifacts": [
             {
                 "path": str(Path(args.bddl).resolve()),
@@ -11115,9 +11464,16 @@ def main() -> None:
         "csv": str(output_csv.resolve()),
         "csv_sha256": _sha256(output_csv),
     }
-    report_path = Path(args.out_report)
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    observation_checkpoint["verdict"] = report["verdict"]
+    observation_checkpoint["final_report_complete"] = True
+    observation_checkpoint["checkpoint_sha256"] = _plain_state_sha256(
+        {
+            key: value
+            for key, value in observation_checkpoint.items()
+            if key != "checkpoint_sha256"
+        }
+    )
+    _atomic_write_json(report_path, report)
     print(report["verdict"])
     raise SystemExit(0 if passed else 1)
 

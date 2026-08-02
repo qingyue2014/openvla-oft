@@ -1866,6 +1866,9 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose(
                 "mesh_box_pair_geometry": {},
             }
         ),
+        "_eligible_grasp_observability": lambda candidates: {
+            "eligible_count": len(candidates)
+        },
     }
     exec(
         compile(
@@ -3461,7 +3464,12 @@ def test_l3a4_insertion_batch_1598_trace_and_compact_summary():
         "_translated_swept_clearance": translated_sweep,
         "_batch_insertion_rejection_prefilter": batch_stub,
         "native_site_contains_point": lambda *args: True,
-        "_compact_insertion_sweep_evidence": lambda sweep: {"minimum_clearance_m": sweep["minimum_clearance_m"]},
+        "_compact_insertion_sweep_evidence": lambda sweep: {
+            "minimum_clearance_m": sweep["minimum_clearance_m"],
+            "sample_intervals": sweep["sample_intervals"],
+            "full_sweep_evaluated": sweep["full_sweep_evaluated"],
+            "limiting_pair": sweep["limiting_pair"],
+        },
     }
     exec(
         compile(
@@ -3521,8 +3529,35 @@ def test_l3a4_insertion_batch_1598_trace_and_compact_summary():
         "gripper_sweep": 1,
     }
     assert summary["held_eef_minus_target_offset"] == [0.01, -0.02, 0.03]
+    for gate_name, source_sweep in (
+        ("target_door_clearance", "door_sweep"),
+        ("target_static_clearance", "target_sweep"),
+        ("gripper_clearance", "gripper_sweep"),
+    ):
+        provenance = summary["best_gate_candidates"][gate_name][
+            "clearance_provenance"
+        ]
+        assert provenance["source_sweep"] == source_sweep
+        assert provenance["sample_intervals"] == 1
+        assert provenance["limiting_pair"]["sample_index"] == 0
+        assert provenance["limiting_pair"]["moving_geom_id"] in (0, 1)
+        assert provenance["limiting_pair"]["fixture_geom_id"] in (2, 3)
+        assert provenance["minimum_clearance_m"] == pytest.approx(
+            summary["best_gate_candidates"][gate_name]["clearance"]
+        )
+    assert summary["best_gate_candidates"]["support_clearance"][
+        "clearance_provenance"
+    ] == {
+        "gate_value_source": "support_clearance_m",
+        "source_sweep": None,
+        "sample_intervals": None,
+        "minimum_clearance_m": None,
+        "threshold_fail_fast_m": None,
+        "full_sweep_evaluated": None,
+        "limiting_pair": None,
+    }
     encoded = json.dumps(summary, sort_keys=True)
-    assert len(encoded) < 32768
+    assert len(encoded.encode("utf-8")) < 64 * 1024
     assert "candidate_trace" not in encoded
 
     def all_rejected_batch(env, targets, eefs, *args, **kwargs):
@@ -3552,7 +3587,269 @@ def test_l3a4_insertion_batch_1598_trace_and_compact_summary():
     assert failure.compact_summary["rejection_stage_histogram"][
         "target_door_sweep"
     ] == 1598
-    assert len(json.dumps(failure.compact_summary)) < 32768
+    assert len(json.dumps(failure.compact_summary)) < 64 * 1024
+
+
+def _l3a4_observation_namespace():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selected_names = {
+        "_snapshot_plain_state",
+        "_update_state_digest",
+        "_plain_state_sha256",
+        "_atomic_write_json",
+        "_eligible_grasp_observability",
+        "_compact_dynamic_grasp_observation",
+        "_record_robot_observation_event",
+    }
+    selected = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef) and node.name in selected_names
+    ]
+    namespace = {
+        "np": np,
+        "json": json,
+        "hashlib": __import__("hashlib"),
+        "os": __import__("os"),
+        "Path": Path,
+        "DeterministicRestoreError": RuntimeError,
+        "_PLAIN_SCALARS": (str, bytes, bool, int, float, type(None)),
+        "MAX_GRASP_OBSERVATION_BYTES": 64 * 1024,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=selected, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    return namespace
+
+
+def test_l3a4_eligible_grasp_observation_order_histograms_and_hash():
+    namespace = _l3a4_observation_namespace()
+    observe = namespace["_eligible_grasp_observability"]
+    geometry_passes = []
+    for index in range(48):
+        geometry_passes.append(
+            {
+                "candidate_trace_index": 40 + 3 * index,
+                "record": {
+                    "direction_index": 1,
+                    "direction_source": (
+                        "target-to-parked-porcelain tangent 0"
+                    ),
+                    "direction_xy": [0.6, -0.8],
+                    "outward_offset_m": 0.105 + 0.005 * index,
+                },
+            }
+        )
+    for index in range(33):
+        geometry_passes.append(
+            {
+                "candidate_trace_index": 269 + 3 * index,
+                "record": {
+                    "candidate_family": "native_site_floor_extension",
+                    "direction_index": 5,
+                    "direction_source": (
+                        "native heating-site/floor axis family "
+                        "native_site_front"
+                    ),
+                    "direction_xy": [-1.0, 0.0],
+                    "outward_offset_m": 0.180 + 0.005 * index,
+                },
+            }
+        )
+
+    evidence = observe(geometry_passes)
+    repeated = observe(geometry_passes)
+    assert evidence == repeated
+    assert evidence["eligible_count"] == 81
+    ordered = evidence["ordered_candidates"]
+    assert [item["eligible_rank"] for item in ordered] == list(range(81))
+    assert [item["candidate_trace_index"] for item in ordered] == [
+        candidate["candidate_trace_index"]
+        for candidate in geometry_passes
+    ]
+    assert evidence["ordered_candidates_sha256"] == repeated[
+        "ordered_candidates_sha256"
+    ]
+    assert evidence["histograms_sha256"] == repeated[
+        "histograms_sha256"
+    ]
+    assert evidence["evidence_sha256"] == repeated["evidence_sha256"]
+    reversed_evidence = observe(list(reversed(geometry_passes)))
+    assert reversed_evidence["ordered_candidates_sha256"] != evidence[
+        "ordered_candidates_sha256"
+    ]
+    assert reversed_evidence["histograms_sha256"] == evidence[
+        "histograms_sha256"
+    ]
+
+    family_histogram = {
+        item["candidate_family"]: item["count"]
+        for item in evidence["histograms"]["candidate_family"]
+    }
+    assert family_histogram == {
+        "legacy": 48,
+        "native_site_floor_extension": 33,
+    }
+    direction_histogram = {
+        item["direction_label"]: item["count"]
+        for item in evidence["histograms"]["direction_label"]
+    }
+    assert direction_histogram == {
+        "target-to-parked-porcelain tangent 0": 48,
+        "native heating-site/floor axis family native_site_front": 33,
+    }
+    offset_histogram = {
+        round(float(item["outward_offset_m"]), 3): item["count"]
+        for item in evidence["histograms"]["outward_offset_m"]
+    }
+    assert sum(offset_histogram.values()) == 81
+    assert offset_histogram[0.105] == 1
+    assert offset_histogram[0.175] == 1
+    assert offset_histogram[0.180] == 2
+    assert offset_histogram[0.340] == 2
+    ranges = evidence["histograms"][
+        "offset_ranges_by_family_direction"
+    ]
+    assert [(item["count"], item["minimum_offset_m"], item["maximum_offset_m"]) for item in ranges] == [
+        (48, pytest.approx(0.105), pytest.approx(0.340)),
+        (33, pytest.approx(0.180), pytest.approx(0.340)),
+    ]
+
+
+def test_l3a4_atomic_timeout_checkpoint_preserves_prefilter_and_grasps(
+    tmp_path,
+):
+    namespace = _l3a4_observation_namespace()
+    atomic_write = namespace["_atomic_write_json"]
+    record_event = namespace["_record_robot_observation_event"]
+    compact_trial = namespace["_compact_dynamic_grasp_observation"]
+    report_path = tmp_path / "l3a4_robot_safe_prefix.json"
+    checkpoint = {
+        "schema_version": 1,
+        "verdict": "IN_PROGRESS_L3A4_ROBOT_SAFE_PREFIX",
+        "final_report_complete": False,
+        "candidate_gate_control_semantics_changed": False,
+        "episodes": [],
+        "last_completed_event": None,
+    }
+    checkpoint["checkpoint_sha256"] = namespace[
+        "_plain_state_sha256"
+    ](checkpoint)
+    atomic_write(report_path, checkpoint)
+    record_event(report_path, checkpoint, 0, "episode_started", {})
+
+    prefilter = {
+        "eligible_count": 81,
+        "ordered_candidates": [
+            {
+                "eligible_rank": index,
+                "candidate_trace_index": 40 + 3 * index,
+                "candidate_family": "legacy",
+                "direction_index": 1,
+                "direction_label": "tangent 0",
+                "direction_xy": [1.0, 0.0],
+                "outward_offset_m": 0.105 + 0.005 * index,
+            }
+            for index in range(81)
+        ],
+        "ordered_candidates_sha256": "a" * 64,
+        "histograms": {"candidate_family": [{"legacy": 81}]},
+        "histograms_sha256": "b" * 64,
+        "evidence_sha256": "c" * 64,
+    }
+    record_event(report_path, checkpoint, 0, "grasp_prefilter", prefilter)
+    after_prefilter = json.loads(report_path.read_text())
+    assert after_prefilter["episodes"][0]["grasp_prefilter"] == prefilter
+    assert after_prefilter["last_completed_event"]["event"] == (
+        "grasp_prefilter"
+    )
+
+    insertion_summary = {
+        "candidate_count_evaluated": 1598,
+        "candidate_count_total": 1598,
+        "best_gate_candidates": {
+            gate: {
+                "clearance": -0.001,
+                "search_index": index,
+                "front_search_index": 13,
+                "lateral_search_index": index,
+                "clearance_provenance": {
+                    "sample_intervals": 64,
+                    "limiting_pair": {
+                        "sample_index": 17,
+                        "moving_geom_id": 1,
+                        "moving_geom_name": "gripper",
+                        "fixture_geom_id": 2,
+                        "fixture_geom_name": "microwave",
+                        "clearance_m": -0.001,
+                    },
+                },
+            }
+            for index, gate in enumerate(
+                (
+                    "support_clearance",
+                    "target_door_clearance",
+                    "target_static_clearance",
+                    "gripper_clearance",
+                )
+            )
+        },
+    }
+    for dynamic_index in range(2):
+        trial = compact_trial(
+            {
+                "dynamic_candidate_index": dynamic_index,
+                "candidate_trace_index": 40 + 3 * dynamic_index,
+                "candidate_family": "legacy",
+                "direction_index": 1,
+                "direction_source": "tangent 0",
+                "outward_offset_m": 0.105 + 0.005 * dynamic_index,
+                "success": False,
+                "contact_gate_passed": True,
+                "grasp_closure_passed": True,
+                "insertion_plan_passed": False,
+                "held_eef_minus_target_offset": [0.06, -0.03, 0.065],
+                "insertion_plan_compact_summary": insertion_summary,
+                "insertion_plan_selection_sha256": None,
+                "restore_proof": {
+                    "passed": True,
+                    "snapshot_sha256": "d" * 64,
+                    "restored_sha256": "d" * 64,
+                },
+                "reason": "bounded failure " + "x" * 10000,
+            }
+        )
+        assert trial["within_size_limit"]
+        assert len(
+            json.dumps(trial, sort_keys=True).encode("utf-8")
+        ) < 64 * 1024
+        record_event(report_path, checkpoint, 0, "grasp_trial", trial)
+        recovered = json.loads(report_path.read_text())
+        assert len(recovered["episodes"][0]["completed_grasp_trials"]) == (
+            dynamic_index + 1
+        )
+        assert recovered["last_completed_event"] == {
+            "episode": 0,
+            "event": "grasp_trial",
+            "completed_grasp_trial_count": dynamic_index + 1,
+        }
+        expected_hash = namespace["_plain_state_sha256"](
+            {
+                key: value
+                for key, value in recovered.items()
+                if key != "checkpoint_sha256"
+            }
+        )
+        assert recovered["checkpoint_sha256"] == expected_hash
+    assert not list(tmp_path.glob(".l3a4_robot_safe_prefix.json.tmp-*"))
 
 
 def test_l3a4_dynamic_restore_failure_is_fail_closed():
