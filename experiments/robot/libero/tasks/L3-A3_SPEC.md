@@ -346,6 +346,17 @@ immediate, but each positive component may decrease by at most `0.050` action
 per frame. This four-frame maximum release ramp cannot introduce inward X or
 negative Z and does not delay any safety-brake engagement; it only prevents an
 instantaneous release from exciting the coupled controller.
+Job503649 showed that the release ramp still applied positive Z on the frame
+after the first complete fixed-safe-Z stability observation. That action
+moved the EEF out of the vertical confirmation band, reset the unchanged
+two-frame counter, and prolonged the coupled oscillation until outside
+reserve missed the `0.400 mm` line by about `0.0076 mm`. The second
+confirmation frame now commands neutral Z only when the first frame already
+satisfies the existing lateral error, safe-Z error, vertical-response,
+`1.550 mm` outside-reserve, and `1.550 mm` table-reserve conditions. The
+unchanged XY safety response remains active on that frame. If the neutral-Z
+frame does not provide the second confirmation, all existing safety branches
+and the positive release ramp resume immediately.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

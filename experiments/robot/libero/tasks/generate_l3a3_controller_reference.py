@@ -5153,6 +5153,7 @@ def _fixed_safe_z_lateral_hold_action(
     native_action_spec,
     previous_commanded_action_xyz=None,
     maximum_positive_safety_release_action=None,
+    vertical_stability_confirmation_hold=False,
 ):
     """Hold the captured safe Z throughout the final lateral return."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -5211,6 +5212,12 @@ def _fixed_safe_z_lateral_hold_action(
     ):
         raise ValueError("fixed-safe-Z lateral-hold inputs are invalid")
     outward_direction_xy = outward_direction_xy / outward_norm
+    if not isinstance(
+        vertical_stability_confirmation_hold, (bool, np.bool_)
+    ):
+        raise ValueError(
+            "fixed-safe-Z vertical confirmation hold must be boolean"
+        )
     release_slew_arguments_partial = bool(
         (previous_commanded_action_xyz is None)
         != (maximum_positive_safety_release_action is None)
@@ -5415,6 +5422,22 @@ def _fixed_safe_z_lateral_hold_action(
     inside_safe_z_band = bool(
         abs(position_error_m) <= vertical_position_tolerance_m
     )
+    vertical_stability_confirmation_hold_eligible = bool(
+        lateral_target_reached
+        and inside_safe_z_band
+        and abs(measured_vertical_step_progress_m)
+        <= progress_resolution_m
+        and live_outside_clearance > outside_recovery_exit_clearance
+        and live_table_clearance > outside_recovery_exit_clearance
+    )
+    if (
+        vertical_stability_confirmation_hold
+        and not vertical_stability_confirmation_hold_eligible
+    ):
+        raise RuntimeError(
+            "fixed-safe-Z vertical confirmation hold lacks its "
+            "registered stability reserve"
+        )
     downward_tail_brake_active = measured_downward_tail
     positive_response_unload_active = bool(
         inside_safe_z_band
@@ -5522,6 +5545,12 @@ def _fixed_safe_z_lateral_hold_action(
         minimum_released_outward_action = None
         minimum_released_positive_z_action = None
 
+    vertical_stability_confirmation_hold_applied = bool(
+        vertical_stability_confirmation_hold
+    )
+    if vertical_stability_confirmation_hold_applied:
+        commanded_z_action = 0.0
+
     action = np.zeros(7, dtype=float)
     action[:2] = commanded_xy_action
     action[2] = commanded_z_action
@@ -5617,6 +5646,15 @@ def _fixed_safe_z_lateral_hold_action(
         "positive_z_release_slew_applied": (
             positive_z_release_slew_applied
         ),
+        "vertical_stability_confirmation_hold_requested": bool(
+            vertical_stability_confirmation_hold
+        ),
+        "vertical_stability_confirmation_hold_eligible": (
+            vertical_stability_confirmation_hold_eligible
+        ),
+        "vertical_stability_confirmation_hold_applied": (
+            vertical_stability_confirmation_hold_applied
+        ),
         "commanded_translation_action_norm": translation_norm,
         "maximum_lateral_translation_action": float(
             maximum_lateral_translation_action
@@ -5694,6 +5732,7 @@ def _fixed_safe_z_lateral_hold_action(
             "below_safe_z_recovery_uses_full_outward_brake": True,
             "positive_safety_brake_increase_remains_immediate": True,
             "positive_safety_brake_release_is_rate_limited": True,
+            "first_stable_frame_uses_neutral_z_confirmation": True,
             "noninward_refill_band_uses_exact_nominal_action": True,
             "recovery_release_requires_exit_headroom": True,
             "outside_recovery_suspends_negative_z": True,
@@ -16733,6 +16772,9 @@ def _seek_stable_plate_contact(
                 ),
                 maximum_positive_safety_release_action=(
                     fixed_safe_z_positive_safety_release_action
+                ),
+                vertical_stability_confirmation_hold=bool(
+                    fixed_safe_z_stable_count > 0
                 ),
             )
             fixed_safe_z_previous_commanded_action_xyz = np.asarray(
