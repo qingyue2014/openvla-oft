@@ -9591,8 +9591,9 @@ def _compiled_trailing_side_contact_candidates(
     plate_approach_eef_height,
     position_action_scale,
     reference_outward_direction_xy=None,
+    selection_mode="native_trailing_wrist_yaw",
 ):
-    """Compile push-frame yaw diagnostics and select the native trailing route."""
+    """Compile all candidates and select the registered route family."""
     plate_position = np.asarray(plate_position, dtype=float)
     eef_position = np.asarray(eef_position, dtype=float)
     if plate_position.shape != (3,) or eef_position.shape != (3,):
@@ -9783,7 +9784,14 @@ def _compiled_trailing_side_contact_candidates(
         candidate["hypothetical_wrist_yaw"][
             "reference_outward_source"
         ] = reference_source
-    selected = _select_executable_wrist_yaw_candidate(candidates)
+    if selection_mode == "native_trailing_wrist_yaw":
+        selected = _select_executable_wrist_yaw_candidate(candidates)
+    elif selection_mode == "native_plus_x_front_corridor":
+        selected = _select_native_plus_x_front_candidate(candidates)
+    else:
+        raise ValueError(
+            f"unknown compiled contact selection mode: {selection_mode!r}"
+        )
     return selected, candidates
 
 
@@ -11294,6 +11302,7 @@ def _prepare_native_plus_x_front_corridor(
         plate_approach_eef_height=args.plate_approach_eef_height,
         position_action_scale=args.position_action_scale,
         reference_outward_direction_xy=np.array([1.0, 0.0], dtype=float),
+        selection_mode="native_plus_x_front_corridor",
     )
     realized_candidate = _select_native_plus_x_front_candidate(
         recompiled_candidates
@@ -14712,6 +14721,7 @@ def generate(args):
             outside_clearance_m=args.plate_contact_outside_clearance,
             plate_approach_eef_height=args.plate_approach_eef_height,
             position_action_scale=args.position_action_scale,
+            selection_mode="native_plus_x_front_corridor",
         )
         selected_contact_candidate = _select_native_plus_x_front_candidate(
             candidate_geometry
