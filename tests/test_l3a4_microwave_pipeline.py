@@ -2948,6 +2948,7 @@ def test_l3a4_insertion_witness_lanes_are_exact_and_clear_skipped_gates():
         "TARGET_BODY": "target",
         "TARGET_INSERTION_SEARCH_STEP_M": 0.005,
         "TARGET_INSERTION_SWEEP_STEP_M": 0.005,
+        "TARGET_INSERTION_BATCH_CHUNK_SIZE": 32,
         "body_pose": lambda sim, body: (np.zeros(3), np.eye(3)),
         "body_tilt_deg": lambda sim, body: 0.0,
         "descendant_geom_ids": (
@@ -2989,6 +2990,23 @@ def test_l3a4_insertion_witness_lanes_are_exact_and_clear_skipped_gates():
         ),
         "_compiled_target_door_sweep_clearance": door_sweep,
         "_translated_swept_clearance": translated_sweep,
+        "_batch_insertion_rejection_prefilter": (
+            lambda env, targets, eefs, *args, **kwargs: {
+                "usable": False,
+                "reason": "test scalar fallback",
+                "candidate_count": len(targets),
+                "chunk_size": 32,
+                "chunk_count": 1,
+                "max_candidates_in_chunk": len(targets),
+                "workspace_limit_bytes": 32 * 1024 * 1024,
+                "peak_workspace_bytes": 0,
+                "gate_counters": {},
+                "pass_authority": "none",
+                "door_rejection_witnesses": [None] * len(targets),
+                "target_rejection_witnesses": [None] * len(targets),
+                "gripper_rejection_witnesses": [None] * len(targets),
+            }
+        ),
         "native_site_contains_point": lambda *args: True,
         "_compact_insertion_sweep_evidence": lambda sweep: {
             "minimum_clearance_m": sweep["minimum_clearance_m"]
@@ -3041,6 +3059,500 @@ def test_l3a4_insertion_witness_lanes_are_exact_and_clear_skipped_gates():
         assert witness["source_lateral_rank"] == (
             0 if np.isclose(x_value, 0.0) else 1 if x_value > 0.0 else 2
         )
+
+
+def test_l3a4_insertion_batch_real_mesh_matches_independent_scalar():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selected_names = {
+        "_insertion_candidate_chunks",
+        "_roundoff_lower_bound_envelope",
+        "_batch_translated_rejection_witnesses",
+    }
+    selected = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name in selected_names
+    ]
+    cube = np.asarray(
+        [
+            [-0.011, -0.008, -0.006],
+            [0.011, -0.008, -0.006],
+            [0.011, 0.008, -0.006],
+            [-0.011, 0.008, -0.006],
+            [-0.011, -0.008, 0.006],
+            [0.011, -0.008, 0.006],
+            [0.011, 0.008, 0.006],
+            [-0.011, 0.008, 0.006],
+        ]
+    )
+    faces = np.asarray(
+        [
+            [0, 2, 1], [0, 3, 2], [4, 5, 6], [4, 6, 7],
+            [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
+            [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7],
+        ],
+        dtype=int,
+    )
+    rng = np.random.default_rng(20260802)
+    fixture_rotation, _ = np.linalg.qr(rng.normal(size=(3, 3)))
+    if np.linalg.det(fixture_rotation) < 0.0:
+        fixture_rotation[:, 0] *= -1.0
+
+    class Model:
+        ngeom = 2
+        geom_rbound = np.asarray(
+            [float(np.max(np.linalg.norm(cube, axis=1))), 0.06]
+        )
+        geom_margin = np.zeros(2)
+
+    class Data:
+        geom_xpos = np.zeros((2, 3), dtype=float)
+        geom_xmat = np.asarray(
+            [np.eye(3).reshape(9), fixture_rotation.reshape(9)]
+        )
+
+    env = type(
+        "Env",
+        (),
+        {"sim": type("Sim", (), {"model": Model(), "data": Data()})()},
+    )()
+    fixture_half_size = np.asarray([0.032, 0.027, 0.025])
+
+    def independent_pair(
+        env,
+        moving_geom,
+        fixture_geom,
+        translation,
+        guard_margin,
+        **kwargs,
+    ):
+        world_vertices = cube + np.asarray(translation, dtype=float)
+        fixture_local = (fixture_rotation.T @ world_vertices.T).T
+        primitive = convex_mesh_aabb_distance(
+            fixture_local, faces, fixture_half_size
+        )
+        clearance = float(primitive - guard_margin)
+        return clearance, "independent 12-face mesh scalar", {
+            "net_clearance_m": clearance
+        }
+
+    namespace = {
+        "np": np,
+        "TARGET_INSERTION_SWEEP_STEP_M": 0.01,
+        "TARGET_INSERTION_BATCH_WORKSPACE_LIMIT_BYTES": 32 * 1024 * 1024,
+        "_validate_translated_sweep_geometry": lambda *args: None,
+        "_compiled_geom_pair_clearance": independent_pair,
+        "_compiled_obb_needs_scalar_threshold_refinement": (
+            lambda *args: False
+        ),
+        "_evaluate_compiled_exact_obb_sat_batch": (
+            lambda *args: pytest.fail("no OBB path expected")
+        ),
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=selected, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    helper = namespace["_batch_translated_rejection_witnesses"]
+    start = np.asarray([0.10, 0.0, 0.0])
+    candidates = rng.uniform(-0.08, 0.12, (41, 3))
+    candidates[:, 2] *= 0.25
+    compiled = {
+        "compatible_geom_pairs": ((0, 1),),
+        "pair_to_obb_row": {},
+        "obb_batch": None,
+    }
+
+    expected = []
+    for candidate in candidates:
+        distance = float(np.linalg.norm(candidate - start))
+        intervals = max(1, int(np.ceil(distance / 0.01)))
+        guard = 0.5 * distance / intervals
+        first_reject = None
+        for sample_index, fraction in enumerate(
+            np.linspace(0.0, 1.0, intervals + 1)
+        ):
+            translation = start + (candidate - start) * fraction
+            clearance, _, _ = independent_pair(
+                env, 0, 1, translation, guard
+            )
+            if clearance <= 0.0:
+                first_reject = (intervals, sample_index)
+                break
+        expected.append(first_reject)
+
+    decisions = []
+    for chunk_size in (1, 7, 32):
+        witnesses, counters = helper(
+            env,
+            candidates,
+            start,
+            np.zeros(3),
+            np.ones(len(candidates), dtype=bool),
+            [0],
+            [1],
+            compiled,
+            {},
+            candidate_chunk_size=chunk_size,
+        )
+        actual = [
+            None
+            if witness is None
+            else (witness["sample_intervals"], witness["sample_index"])
+            for witness in witnesses
+        ]
+        assert actual == expected
+        assert counters["peak_workspace_bytes"] <= 32 * 1024 * 1024
+        decisions.append(actual)
+    assert decisions[0] == decisions[1] == decisions[2]
+
+    fixture_axis = fixture_rotation[:, 0]
+    touching_translation = fixture_axis * (
+        fixture_half_size[0]
+        + float(np.max(cube @ fixture_axis))
+    )
+    boundary_witnesses, boundary_counters = helper(
+        env,
+        touching_translation[None, :],
+        touching_translation,
+        np.zeros(3),
+        np.ones(1, dtype=bool),
+        [0],
+        [1],
+        compiled,
+        {},
+        candidate_chunk_size=32,
+    )
+    assert boundary_witnesses[0] is not None
+    assert boundary_counters["scalar_possible_collision_replays"] > 0
+
+    chunks = namespace["_insertion_candidate_chunks"](1598, 32)
+    assert len(chunks) == 50
+    assert [stop - start for start, stop in chunks] == [32] * 49 + [30]
+    assert [
+        index for start, stop in chunks for index in range(start, stop)
+    ] == list(range(1598))
+
+    boundary = np.asarray(
+        [[fixture_half_size[0] + np.ptp(cube[:, 0]), 0, 0]]
+    )
+    with pytest.raises(ValueError, match="malformed finite"):
+        helper(
+            env,
+            np.asarray([[np.nan, 0.0, 0.0]]),
+            start,
+            np.zeros(3),
+            np.ones(1, dtype=bool),
+            [0],
+            [1],
+            compiled,
+            {},
+            candidate_chunk_size=32,
+        )
+    namespace["_validate_translated_sweep_geometry"] = (
+        lambda *args: (_ for _ in ()).throw(RuntimeError("stale pose"))
+    )
+    with pytest.raises(RuntimeError, match="stale pose"):
+        helper(
+            env,
+            boundary,
+            start,
+            np.zeros(3),
+            np.ones(1, dtype=bool),
+            [0],
+            [1],
+            compiled,
+            {},
+            candidate_chunk_size=32,
+        )
+
+
+def test_l3a4_insertion_batch_prefilter_stale_is_full_scalar_fallback():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    selected = [
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name
+        in {
+            "_insertion_candidate_chunks",
+            "_batch_insertion_rejection_prefilter",
+        }
+    ]
+    namespace = {
+        "np": np,
+        "TARGET_INSERTION_BATCH_CHUNK_SIZE": 32,
+        "TARGET_INSERTION_BATCH_WORKSPACE_LIMIT_BYTES": 32 * 1024 * 1024,
+        "_batch_door_rejection_witnesses": (
+            lambda *args, **kwargs: (_ for _ in ()).throw(
+                RuntimeError("stale pose")
+            )
+        ),
+        "_batch_translated_rejection_witnesses": (
+            lambda *args, **kwargs: pytest.fail(
+                "later gates must not run after stale door batch"
+            )
+        ),
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(
+                ast.Module(body=selected, type_ignores=[])
+            ),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    candidates = np.zeros((3, 3), dtype=float)
+    result = namespace["_batch_insertion_rejection_prefilter"](
+        object(),
+        candidates,
+        candidates,
+        np.zeros(3),
+        np.zeros(3),
+        np.zeros(3),
+        np.zeros(3),
+        np.ones(3, dtype=bool),
+        [0],
+        [1],
+        [2],
+        [3],
+        {},
+        {},
+        {},
+        {},
+    )
+    assert not result["usable"]
+    assert result["reason"].startswith(
+        "fail_closed_full_scalar_fallback: RuntimeError: stale pose"
+    )
+    assert result["door_rejection_witnesses"] == [None, None, None]
+
+
+def test_l3a4_insertion_batch_1598_trace_and_compact_summary():
+    source = ROBOT_SAFE_PREFIX.read_text()
+    module = ast.parse(source)
+    function = next(
+        node
+        for node in module.body
+        if isinstance(node, ast.FunctionDef)
+        and node.name == "_compiled_target_insertion_plan"
+    )
+
+    class Model:
+        ngeom = 4
+        geom_type = np.full(4, 6, dtype=int)
+        geom_size = np.full((4, 3), 0.001, dtype=float)
+        geom_rbound = np.full(4, 0.002, dtype=float)
+
+    class Data:
+        geom_xpos = np.zeros((4, 3), dtype=float)
+        geom_xmat = np.tile(np.eye(3).reshape(1, 9), (4, 1))
+
+    env = type(
+        "Env", (), {"sim": type("Sim", (), {"model": Model(), "data": Data()})()}
+    )()
+
+    class TestInsertionPlanSearchError(RuntimeError):
+        def __init__(self, message, compact_summary):
+            super().__init__(message)
+            self.compact_summary = compact_summary
+
+    floor = {
+        "geom_id": 2,
+        "center": [0.0, 0.0, 0.0],
+        "rotation": np.eye(3).tolist(),
+        "half_size": [1.0, 1.0, 0.01],
+        "normal_axis": 2,
+        "normal": [0.0, 0.0, 1.0],
+        "surface_position": [0.0, 0.0, 0.0],
+    }
+
+    def sweep_record(clearance, moving=0, fixture=2):
+        return {
+            "cached_rejection_witness_attempted": True,
+            "cached_rejection_witness_rejected": clearance <= 0.0,
+            "cached_rejection_witness_fell_back_to_full_sweep": False,
+            "cached_rejection_witness_status": (
+                "exact_reject" if clearance <= 0.0 else "exact_above_threshold"
+            ),
+            "sample_intervals": 1,
+            "limiting_pair": {
+                "sample_index": 0,
+                "moving_geom_id": moving,
+                "fixture_geom_id": fixture,
+                "target_geom_id": 0,
+                "door_geom_id": 2,
+            },
+            "minimum_clearance_m": clearance,
+            "full_sweep_evaluated": clearance > 0.0,
+        }
+
+    def door_sweep(env, names, target_geoms, candidate, current, **kwargs):
+        witness = kwargs.get("cached_rejection_witness")
+        clearance = (
+            -0.001
+            if witness is not None and "source_front_index" not in witness
+            else 0.02
+        )
+        return clearance, sweep_record(clearance)
+
+    def translated_sweep(env, moving, fixture, start, end, reference, **kwargs):
+        return 0.02, sweep_record(0.02, moving[0], fixture[0])
+
+    def batch_stub(env, targets, eefs, *args, **kwargs):
+        count = len(targets)
+        door = [
+            {
+                "sample_index": 0,
+                "target_geom_id": 0,
+                "door_geom_id": 2,
+            }
+            for _ in range(count - 1)
+        ] + [None]
+        return {
+            "usable": True,
+            "reason": "test exact witnesses",
+            "candidate_count": count,
+            "chunk_size": 32,
+            "chunk_count": 50,
+            "max_candidates_in_chunk": 32,
+            "workspace_limit_bytes": 32 * 1024 * 1024,
+            "peak_workspace_bytes": 4096,
+            "gate_counters": {},
+            "pass_authority": "none",
+            "door_rejection_witnesses": door,
+            "target_rejection_witnesses": [None] * count,
+            "gripper_rejection_witnesses": [None] * count,
+        }
+
+    signed_lateral = [0.0]
+    for index in range(1, 24):
+        signed_lateral.extend((index * 0.005, -index * 0.005))
+    namespace = {
+        "np": np,
+        "TARGET_BODY": "target",
+        "TARGET_INSERTION_SEARCH_STEP_M": 0.005,
+        "TARGET_INSERTION_SWEEP_STEP_M": 0.005,
+        "TARGET_INSERTION_BATCH_CHUNK_SIZE": 32,
+        "InsertionPlanSearchError": TestInsertionPlanSearchError,
+        "body_pose": lambda sim, body: (np.zeros(3), np.eye(3)),
+        "body_tilt_deg": lambda sim, body: 0.0,
+        "descendant_geom_ids": lambda model, body: {0} if body == "target" else {2, 3},
+        "_compiled_microwave_floor": lambda *args: (floor, {"selected": floor}),
+        "_compiled_held_target_support_geometry": lambda *args: {"held_support_offset_m": 0.0},
+        "_eef_position": lambda env: np.zeros(3),
+        "_compiled_rigid_gripper_fixture_geoms": lambda *args: ([1], [3], {"eef_root_body": "eef", "rigid_gripper_body_names": ["eef"]}),
+        "_deterministic_signed_lateral_offsets": lambda *args: signed_lateral,
+        "_compiled_safe_insertion_portal": lambda *args: (np.asarray([0.0, -0.2, 0.0]), np.asarray([0.0, -0.2, 0.0]), np.asarray([0.0, -0.2, 0.16]), {"selected": True}),
+        "_compile_target_door_sweep_geometry": lambda *args: {"door_pose_count": 8, "obb_entry_indices": ()},
+        "_compile_translated_sweep_geometry": lambda *args: {"obb_pair_indices": (), "mesh_box_pair_geometry": {}},
+        "_compiled_target_door_sweep_clearance": door_sweep,
+        "_translated_swept_clearance": translated_sweep,
+        "_batch_insertion_rejection_prefilter": batch_stub,
+        "native_site_contains_point": lambda *args: True,
+        "_compact_insertion_sweep_evidence": lambda sweep: {"minimum_clearance_m": sweep["minimum_clearance_m"]},
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(ast.Module(body=[function], type_ignores=[])),
+            str(ROBOT_SAFE_PREFIX),
+            "exec",
+        ),
+        namespace,
+    )
+    plan = namespace["_compiled_target_insertion_plan"](
+        env,
+        {"fixture_root": "fixture"},
+        np.zeros(3),
+        np.eye(3),
+        np.asarray([0.119, 0.0825, 0.006]),
+        np.asarray([0.01, -0.02, 0.03]),
+        {"supporting_target_geom_ids": [0]},
+    )
+    assert plan["candidate_count_evaluated"] == 1598
+    assert [record["search_index"] for record in plan["candidate_trace"]] == list(range(1598))
+    assert [
+        (record["front_search_index"], record["lateral_search_index"])
+        for record in plan["candidate_trace"]
+    ] == [(front, lateral) for front in range(34) for lateral in range(47)]
+    for record in plan["candidate_trace"][:-1]:
+        assert record["target_door_swept_clearance_m"] == -0.001
+        assert record["target_swept_static_clearance_m"] is None
+        assert record["gripper_swept_clearance_m"] is None
+        assert record["rejection_stage"] == "target_door_sweep"
+        assert record["skipped_gates"] == [
+            "target_static_sweep",
+            "gripper_sweep",
+        ]
+        assert not record["passed"]
+    final_record = plan["candidate_trace"][-1]
+    assert final_record["target_door_swept_clearance_m"] == 0.02
+    assert final_record["target_swept_static_clearance_m"] == 0.02
+    assert final_record["gripper_swept_clearance_m"] == 0.02
+    assert final_record["rejection_stage"] is None
+    assert final_record["skipped_gates"] == []
+    assert final_record["passed"]
+    assert plan["selected"]["search_index"] == 1597
+    summary = plan["compact_plan_summary"]
+    assert summary["rejection_stage_histogram"] == {
+        "native_in": 0,
+        "support_clearance": 0,
+        "target_door_sweep": 1597,
+        "target_static_sweep": 0,
+        "gripper_sweep": 0,
+        "passed": 1,
+    }
+    assert summary["gate_evaluation_counts"] == {
+        "native_in": 1598,
+        "support_clearance": 1598,
+        "target_door_sweep": 1598,
+        "target_static_sweep": 1,
+        "gripper_sweep": 1,
+    }
+    assert summary["held_eef_minus_target_offset"] == [0.01, -0.02, 0.03]
+    encoded = json.dumps(summary, sort_keys=True)
+    assert len(encoded) < 32768
+    assert "candidate_trace" not in encoded
+
+    def all_rejected_batch(env, targets, eefs, *args, **kwargs):
+        result = batch_stub(env, targets, eefs, *args, **kwargs)
+        result["door_rejection_witnesses"][-1] = {
+            "sample_index": 0,
+            "target_geom_id": 0,
+            "door_geom_id": 2,
+        }
+        return result
+
+    namespace["_batch_insertion_rejection_prefilter"] = all_rejected_batch
+    with pytest.raises(TestInsertionPlanSearchError) as caught:
+        namespace["_compiled_target_insertion_plan"](
+            env,
+            {"fixture_root": "fixture"},
+            np.zeros(3),
+            np.eye(3),
+            np.asarray([0.119, 0.0825, 0.006]),
+            np.asarray([0.01, -0.02, 0.03]),
+            {"supporting_target_geom_ids": [0]},
+        )
+    failure = caught.value
+    assert len(str(failure)) < 2048
+    assert "candidates=" not in str(failure)
+    assert failure.compact_summary["candidate_count_evaluated"] == 1598
+    assert failure.compact_summary["rejection_stage_histogram"][
+        "target_door_sweep"
+    ] == 1598
+    assert len(json.dumps(failure.compact_summary)) < 32768
 
 
 def test_l3a4_dynamic_restore_failure_is_fail_closed():
@@ -4283,6 +4795,28 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     insertion_plan = ast.get_source_segment(
         source, functions["_compiled_target_insertion_plan"]
     )
+    insertion_batch = ast.get_source_segment(
+        source, functions["_batch_insertion_rejection_prefilter"]
+    )
+    translated_batch = ast.get_source_segment(
+        source, functions["_batch_translated_rejection_witnesses"]
+    )
+    door_batch = ast.get_source_segment(
+        source, functions["_batch_door_rejection_witnesses"]
+    )
+    assert "candidate_chunk_size=TARGET_INSERTION_BATCH_CHUNK_SIZE" in (
+        insertion_batch
+    )
+    assert '"pass_authority": "none; original scalar helpers remain mandatory"' in (
+        insertion_batch
+    )
+    assert "fail_closed_full_scalar_fallback" in insertion_batch
+    assert "_validate_translated_sweep_geometry(" in translated_batch
+    assert "_compiled_geom_pair_clearance(" in translated_batch
+    assert "scalar_boundary_replays" in translated_batch
+    assert "TARGET_INSERTION_BATCH_WORKSPACE_LIMIT_BYTES" in translated_batch
+    assert "_validate_compiled_door_batch_state(" in door_batch
+    assert "_compiled_geom_pair_clearance(" in door_batch
     assert "native_site_contains_point(" in insertion_plan
     assert "_compiled_microwave_floor(" in insertion_plan
     assert "_compiled_safe_insertion_portal(" in insertion_plan
@@ -4296,7 +4830,8 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
         "_compile_translated_sweep_geometry("
     ) == 2
     assert insertion_plan.count("compiled_geometry_cache") >= 10
-    assert "compiled_door_sweep=compiled_door_sweep" in insertion_plan
+    assert "compiled_door_sweep=(" in insertion_plan
+    assert 'if batch_prefilter["usable"]' in insertion_plan
     assert insertion_plan.count("compiled_sweep_geometry=(") == 2
     assert '"exact_acceleration"' in insertion_plan
     assert "door_clearance > 0.0" in insertion_plan
@@ -4362,6 +4897,12 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "execution_endpoint = record" in insertion_plan
     assert "required_endpoint_front_distance" not in insertion_plan
     assert '"candidate_trace": trace' in insertion_plan
+    assert '"compact_plan_summary": compact_plan_summary' in insertion_plan
+    assert '"rejection_stage_histogram"' in insertion_plan
+    assert '"gate_evaluation_counts"' in insertion_plan
+    assert '"held_eef_minus_target_offset"' in insertion_plan
+    assert "raise InsertionPlanSearchError(" in insertion_plan
+    assert "candidates={trace}" not in insertion_plan
     assert '"selected": selected' in insertion_plan
     assert '"rigid_gripper_body_names"' in insertion_plan
 

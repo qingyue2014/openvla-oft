@@ -83,6 +83,8 @@ SAFE_PARK_STATIC_MARGIN_M = 0.020
 SAFE_PARK_DOOR_SWEEP_SAMPLES = 49
 TARGET_INSERTION_SEARCH_STEP_M = 0.005
 TARGET_INSERTION_SWEEP_STEP_M = 0.005
+TARGET_INSERTION_BATCH_CHUNK_SIZE = 32
+TARGET_INSERTION_BATCH_WORKSPACE_LIMIT_BYTES = 32 * 1024 * 1024
 EEF_POSITION_TOLERANCE = 0.012
 MOVE_STEPS = 100
 GRIPPER_STEPS = 15
@@ -94,6 +96,16 @@ POST_CLOSE_STEPS = 60
 
 class DeterministicRestoreError(RuntimeError):
     """A counterfactual trial could not restore its exact start state."""
+
+
+class InsertionPlanSearchError(RuntimeError):
+    """No insertion candidate passed, with bounded audit evidence."""
+
+    def __init__(self, message, compact_summary):
+        super().__init__(message)
+        self.compact_summary = _snapshot_plain_state(
+            compact_summary, "insertion_plan_failure_summary"
+        )
 
 
 _PLAIN_SCALARS = (str, bytes, bool, int, float, type(None))
@@ -5734,6 +5746,554 @@ def _compact_insertion_sweep_evidence(sweep) -> dict:
     }
 
 
+def _insertion_candidate_chunks(candidate_count, chunk_size):
+    """Return deterministic contiguous chunks with a hard size bound."""
+    candidate_count = int(candidate_count)
+    chunk_size = int(chunk_size)
+    if candidate_count < 0 or chunk_size <= 0:
+        raise ValueError("candidate count and chunk size must be valid")
+    return tuple(
+        (start, min(start + chunk_size, candidate_count))
+        for start in range(0, candidate_count, chunk_size)
+    )
+
+
+def _roundoff_lower_bound_envelope(*arrays):
+    """Return a conservative floating-point envelope for batch bounds."""
+    scale = 1.0
+    for value in arrays:
+        array = np.asarray(value, dtype=float)
+        if array.size:
+            if not np.all(np.isfinite(array)):
+                raise FloatingPointError(
+                    "nonfinite insertion batch geometry"
+                )
+            scale = max(scale, float(np.max(np.abs(array))))
+    return 4096.0 * np.finfo(float).eps * scale
+
+
+def _validate_compiled_door_batch_state(env, compiled_door_sweep):
+    """Fail closed when a candidate-invariant door batch is stale."""
+    model = env.sim.model
+    if compiled_door_sweep.get("model_identity") != id(model):
+        raise RuntimeError("compiled door batch model identity changed")
+    geom_ids = tuple(compiled_door_sweep.get("geom_ids", ()))
+    if not geom_ids:
+        raise RuntimeError("compiled door batch has no geometry")
+    qadr = int(compiled_door_sweep["door_qpos_address"])
+    if (
+        float(env.sim.data.qpos[qadr])
+        != float(compiled_door_sweep["door_start_qpos"])
+        or not np.array_equal(
+            np.asarray(env.sim.data.geom_xpos[list(geom_ids)], dtype=float),
+            np.asarray(compiled_door_sweep["geom_xpos"], dtype=float),
+        )
+        or not np.array_equal(
+            np.asarray(env.sim.data.geom_xmat[list(geom_ids)], dtype=float),
+            np.asarray(compiled_door_sweep["geom_xmat"], dtype=float),
+        )
+    ):
+        raise RuntimeError("compiled door batch geometry is stale")
+
+
+def _batch_door_rejection_witnesses(
+    env,
+    candidate_positions,
+    current_target_position,
+    eligible_mask,
+    compiled_door_sweep,
+    compiled_geometry_cache,
+    *,
+    candidate_chunk_size,
+):
+    """Find exact door rejection witnesses from conservative batch bounds."""
+    _validate_compiled_door_batch_state(env, compiled_door_sweep)
+    model = env.sim.model
+    candidates = np.asarray(candidate_positions, dtype=float)
+    current_target = np.asarray(current_target_position, dtype=float)
+    eligible = np.asarray(eligible_mask, dtype=bool)
+    entries = tuple(compiled_door_sweep["entries"])
+    if (
+        candidates.ndim != 2
+        or candidates.shape[1:] != (3,)
+        or current_target.shape != (3,)
+        or eligible.shape != (len(candidates),)
+        or not entries
+        or not np.all(np.isfinite(candidates))
+        or not np.all(np.isfinite(current_target))
+    ):
+        raise ValueError("malformed finite door insertion batch")
+    target_ids = np.asarray(
+        [entry["target_geom_id"] for entry in entries], dtype=int
+    )
+    door_ids = np.asarray(
+        [entry["door_geom_id"] for entry in entries], dtype=int
+    )
+    fixture_centers = np.asarray(
+        [entry["fixture_center"] for entry in entries], dtype=float
+    )
+    moving_centers = np.asarray(
+        env.sim.data.geom_xpos[target_ids], dtype=float
+    )
+    guard_and_margin = np.asarray(
+        [
+            float(entry["continuous_guard_m"])
+            + float(entry["native_geom_margin_m"])
+            for entry in entries
+        ],
+        dtype=float,
+    )
+    radius_sum = (
+        np.asarray(model.geom_rbound[target_ids], dtype=float)
+        + np.asarray(model.geom_rbound[door_ids], dtype=float)
+        + guard_and_margin
+    )
+    obb_rows_by_entry = {
+        int(entry_index): int(entry["obb_batch_row"])
+        for entry_index, entry in enumerate(entries)
+        if entry.get("obb_batch_row") is not None
+    }
+    witnesses = [None] * len(candidates)
+    counters = {
+        "eligible_candidates": int(np.count_nonzero(eligible)),
+        "exact_rejections": 0,
+        "certified_positive_pairs": 0,
+        "scalar_possible_collision_replays": 0,
+        "scalar_boundary_replays": 0,
+    }
+    peak_workspace_bytes = 0
+    for start, stop in _insertion_candidate_chunks(
+        len(candidates), candidate_chunk_size
+    ):
+        translations = candidates[start:stop] - current_target
+        delta = fixture_centers[None, :, :] - (
+            moving_centers[None, :, :] + translations[:, None, :]
+        )
+        center_distance = np.linalg.norm(delta, axis=2)
+        envelope = _roundoff_lower_bound_envelope(
+            delta, center_distance, radius_sum
+        )
+        lower_bounds = center_distance - radius_sum[None, :] - envelope
+        exact_obb = None
+        if obb_rows_by_entry:
+            exact_obb = _evaluate_compiled_exact_obb_sat_batch(
+                compiled_door_sweep["obb_batch"], translations
+            )
+            for entry_index, row_index in obb_rows_by_entry.items():
+                entry = entries[entry_index]
+                lower_bounds[:, entry_index] = (
+                    exact_obb[:, row_index]
+                    - float(entry["continuous_guard_m"])
+                    - float(entry["native_geom_margin_m"])
+                )
+        workspace_bytes = int(
+            translations.nbytes
+            + delta.nbytes
+            + center_distance.nbytes
+            + lower_bounds.nbytes
+            + (0 if exact_obb is None else exact_obb.nbytes)
+        )
+        peak_workspace_bytes = max(peak_workspace_bytes, workspace_bytes)
+        if workspace_bytes > TARGET_INSERTION_BATCH_WORKSPACE_LIMIT_BYTES:
+            raise RuntimeError("door insertion batch workspace exceeded")
+        if not np.all(np.isfinite(lower_bounds)):
+            raise FloatingPointError("nonfinite door insertion bounds")
+        for local_index, candidate_index in enumerate(range(start, stop)):
+            if not eligible[candidate_index]:
+                continue
+            translation = translations[local_index]
+            for entry_index, entry in enumerate(entries):
+                obb_row = obb_rows_by_entry.get(entry_index)
+                clearance = float(lower_bounds[local_index, entry_index])
+                needs_scalar = obb_row is None
+                if obb_row is not None and (
+                    _compiled_obb_needs_scalar_threshold_refinement(
+                        clearance,
+                        0.0,
+                        float(exact_obb[local_index, obb_row]),
+                        float(entry["continuous_guard_m"]),
+                        float(entry["native_geom_margin_m"]),
+                    )
+                ):
+                    needs_scalar = True
+                    counters["scalar_boundary_replays"] += 1
+                if needs_scalar:
+                    if clearance > 0.0:
+                        counters["certified_positive_pairs"] += 1
+                        continue
+                    counters["scalar_possible_collision_replays"] += 1
+                    clearance, _, _ = _compiled_geom_pair_clearance(
+                        env,
+                        entry["target_geom_id"],
+                        entry["door_geom_id"],
+                        translation,
+                        entry["continuous_guard_m"],
+                        fixture_center_override=entry["fixture_center"],
+                        fixture_rotation_override=entry[
+                            "fixture_rotation"
+                        ],
+                        compiled_geometry_cache=compiled_geometry_cache,
+                        stop_at_or_below=0.0,
+                    )
+                if clearance <= 0.0:
+                    witnesses[candidate_index] = {
+                        "source": "candidate_batch_exact_rejection",
+                        "sample_index": int(entry["sample_index"]),
+                        "target_geom_id": int(entry["target_geom_id"]),
+                        "door_geom_id": int(entry["door_geom_id"]),
+                    }
+                    counters["exact_rejections"] += 1
+                    break
+    counters["peak_workspace_bytes"] = int(peak_workspace_bytes)
+    return witnesses, counters
+
+
+def _batch_translated_rejection_witnesses(
+    env,
+    candidate_end_positions,
+    start_position,
+    reference_position,
+    eligible_mask,
+    moving_geoms,
+    fixture_geoms,
+    compiled_sweep_geometry,
+    compiled_geometry_cache,
+    *,
+    candidate_chunk_size,
+):
+    """Find exact straight-sweep rejection witnesses in fixed chunks."""
+    _validate_translated_sweep_geometry(
+        env, moving_geoms, fixture_geoms, compiled_sweep_geometry
+    )
+    model = env.sim.model
+    candidates = np.asarray(candidate_end_positions, dtype=float)
+    start_position = np.asarray(start_position, dtype=float)
+    reference_position = np.asarray(reference_position, dtype=float)
+    eligible = np.asarray(eligible_mask, dtype=bool)
+    pairs = tuple(compiled_sweep_geometry["compatible_geom_pairs"])
+    if (
+        candidates.ndim != 2
+        or candidates.shape[1:] != (3,)
+        or start_position.shape != (3,)
+        or reference_position.shape != (3,)
+        or eligible.shape != (len(candidates),)
+        or not pairs
+        or not np.all(np.isfinite(candidates))
+        or not np.all(np.isfinite(start_position))
+        or not np.all(np.isfinite(reference_position))
+    ):
+        raise ValueError("malformed finite translated insertion batch")
+    moving_ids = np.asarray([pair[0] for pair in pairs], dtype=int)
+    fixture_ids = np.asarray([pair[1] for pair in pairs], dtype=int)
+    moving_centers = np.asarray(
+        env.sim.data.geom_xpos[moving_ids], dtype=float
+    )
+    fixture_centers = np.asarray(
+        env.sim.data.geom_xpos[fixture_ids], dtype=float
+    )
+    geom_margins = np.asarray(
+        getattr(model, "geom_margin", np.zeros(int(model.ngeom))),
+        dtype=float,
+    )
+    pair_margins = geom_margins[moving_ids] + geom_margins[fixture_ids]
+    pair_radii = (
+        np.asarray(model.geom_rbound[moving_ids], dtype=float)
+        + np.asarray(model.geom_rbound[fixture_ids], dtype=float)
+    )
+    pair_to_obb_row = dict(compiled_sweep_geometry["pair_to_obb_row"])
+    witnesses = [None] * len(candidates)
+    counters = {
+        "eligible_candidates": int(np.count_nonzero(eligible)),
+        "exact_rejections": 0,
+        "certified_positive_pairs": 0,
+        "scalar_possible_collision_replays": 0,
+        "scalar_boundary_replays": 0,
+    }
+    peak_workspace_bytes = 0
+    for chunk_start, chunk_stop in _insertion_candidate_chunks(
+        len(candidates), candidate_chunk_size
+    ):
+        chunk_indices = np.arange(chunk_start, chunk_stop, dtype=int)
+        chunk_indices = chunk_indices[eligible[chunk_indices]]
+        if not len(chunk_indices):
+            continue
+        distances = np.linalg.norm(
+            candidates[chunk_indices] - start_position[None, :], axis=1
+        )
+        interval_counts = np.maximum(
+            1,
+            np.ceil(distances / TARGET_INSERTION_SWEEP_STEP_M).astype(int),
+        )
+        for interval_count in sorted(set(interval_counts.tolist())):
+            group_mask = interval_counts == interval_count
+            group_indices = chunk_indices[group_mask]
+            group_distances = distances[group_mask]
+            fractions = np.linspace(0.0, 1.0, interval_count + 1)
+            ends = candidates[group_indices]
+            translations = (
+                start_position[None, None, :]
+                + fractions[None, :, None]
+                * (ends[:, None, :] - start_position[None, None, :])
+                - reference_position[None, None, :]
+            )
+            guards = 0.5 * group_distances / float(interval_count)
+            delta = fixture_centers[None, None, :, :] - (
+                moving_centers[None, None, :, :]
+                + translations[:, :, None, :]
+            )
+            center_distance = np.linalg.norm(delta, axis=3)
+            envelope = _roundoff_lower_bound_envelope(
+                delta, center_distance, pair_radii, pair_margins, guards
+            )
+            lower_bounds = (
+                center_distance
+                - pair_radii[None, None, :]
+                - pair_margins[None, None, :]
+                - guards[:, None, None]
+                - envelope
+            )
+            exact_obb = None
+            if pair_to_obb_row:
+                flattened = translations.reshape(-1, 3)
+                exact_obb = _evaluate_compiled_exact_obb_sat_batch(
+                    compiled_sweep_geometry["obb_batch"], flattened
+                ).reshape(
+                    len(group_indices),
+                    len(fractions),
+                    -1,
+                )
+                for pair_index, row_index in pair_to_obb_row.items():
+                    lower_bounds[:, :, pair_index] = (
+                        exact_obb[:, :, row_index]
+                        - pair_margins[pair_index]
+                        - guards[:, None]
+                    )
+            workspace_bytes = int(
+                translations.nbytes
+                + guards.nbytes
+                + delta.nbytes
+                + center_distance.nbytes
+                + lower_bounds.nbytes
+                + (0 if exact_obb is None else exact_obb.nbytes)
+            )
+            peak_workspace_bytes = max(
+                peak_workspace_bytes, workspace_bytes
+            )
+            if (
+                workspace_bytes
+                > TARGET_INSERTION_BATCH_WORKSPACE_LIMIT_BYTES
+            ):
+                raise RuntimeError(
+                    "translated insertion batch workspace exceeded"
+                )
+            if not np.all(np.isfinite(lower_bounds)):
+                raise FloatingPointError(
+                    "nonfinite translated insertion bounds"
+                )
+            for group_row, candidate_index in enumerate(group_indices):
+                guard = float(guards[group_row])
+                rejected = False
+                for sample_index, fraction in enumerate(fractions):
+                    translation = translations[group_row, sample_index]
+                    for pair_index, (moving_geom, fixture_geom) in enumerate(
+                        pairs
+                    ):
+                        obb_row = pair_to_obb_row.get(pair_index)
+                        clearance = float(
+                            lower_bounds[
+                                group_row, sample_index, pair_index
+                            ]
+                        )
+                        needs_scalar = obb_row is None
+                        if obb_row is not None and (
+                            _compiled_obb_needs_scalar_threshold_refinement(
+                                clearance,
+                                0.0,
+                                float(
+                                    exact_obb[
+                                        group_row, sample_index, obb_row
+                                    ]
+                                ),
+                                guard,
+                                float(pair_margins[pair_index]),
+                            )
+                        ):
+                            needs_scalar = True
+                            counters["scalar_boundary_replays"] += 1
+                        if needs_scalar:
+                            if clearance > 0.0:
+                                counters["certified_positive_pairs"] += 1
+                                continue
+                            counters[
+                                "scalar_possible_collision_replays"
+                            ] += 1
+                            clearance, _, _ = _compiled_geom_pair_clearance(
+                                env,
+                                moving_geom,
+                                fixture_geom,
+                                translation,
+                                guard,
+                                compiled_geometry_cache=(
+                                    compiled_geometry_cache
+                                ),
+                                stop_at_or_below=0.0,
+                            )
+                        if clearance <= 0.0:
+                            witnesses[int(candidate_index)] = {
+                                "source": (
+                                    "candidate_batch_exact_rejection"
+                                ),
+                                "sample_intervals": int(interval_count),
+                                "sample_index": int(sample_index),
+                                "moving_geom_id": int(moving_geom),
+                                "fixture_geom_id": int(fixture_geom),
+                            }
+                            counters["exact_rejections"] += 1
+                            rejected = True
+                            break
+                    if rejected:
+                        break
+    counters["peak_workspace_bytes"] = int(peak_workspace_bytes)
+    return witnesses, counters
+
+
+def _batch_insertion_rejection_prefilter(
+    env,
+    candidate_target_positions,
+    candidate_eef_positions,
+    current_target,
+    current_eef,
+    portal_object,
+    portal_eef,
+    support_pass_mask,
+    target_geoms,
+    target_fixture_geoms,
+    collision_gripper_geoms,
+    collision_fixture_geoms,
+    compiled_door_sweep,
+    compiled_target_sweep_geometry,
+    compiled_gripper_sweep_geometry,
+    compiled_geometry_cache,
+    *,
+    candidate_chunk_size=TARGET_INSERTION_BATCH_CHUNK_SIZE,
+):
+    """Batch exact rejection witnesses; never authorize a PASS."""
+    candidates = np.asarray(candidate_target_positions, dtype=float)
+    candidate_eef = np.asarray(candidate_eef_positions, dtype=float)
+    support_pass = np.asarray(support_pass_mask, dtype=bool)
+    chunks = _insertion_candidate_chunks(
+        len(candidates), candidate_chunk_size
+    )
+    empty = [None] * len(candidates)
+    result = {
+        "usable": False,
+        "reason": "not_evaluated",
+        "candidate_count": int(len(candidates)),
+        "chunk_size": int(candidate_chunk_size),
+        "chunk_count": int(len(chunks)),
+        "max_candidates_in_chunk": int(
+            max((stop - start for start, stop in chunks), default=0)
+        ),
+        "workspace_limit_bytes": int(
+            TARGET_INSERTION_BATCH_WORKSPACE_LIMIT_BYTES
+        ),
+        "peak_workspace_bytes": 0,
+        "door_rejection_witnesses": empty.copy(),
+        "target_rejection_witnesses": empty.copy(),
+        "gripper_rejection_witnesses": empty.copy(),
+        "gate_counters": {},
+        "pass_authority": "none; original scalar helpers remain mandatory",
+    }
+    try:
+        if (
+            candidates.shape != candidate_eef.shape
+            or candidates.ndim != 2
+            or candidates.shape[1:] != (3,)
+            or support_pass.shape != (len(candidates),)
+            or not np.all(np.isfinite(candidates))
+            or not np.all(np.isfinite(candidate_eef))
+        ):
+            raise ValueError("malformed insertion candidate batch")
+        door_witnesses, door_counters = (
+            _batch_door_rejection_witnesses(
+                env,
+                candidates,
+                current_target,
+                support_pass,
+                compiled_door_sweep,
+                compiled_geometry_cache,
+                candidate_chunk_size=candidate_chunk_size,
+            )
+        )
+        target_eligible = support_pass & np.asarray(
+            [witness is None for witness in door_witnesses], dtype=bool
+        )
+        target_witnesses, target_counters = (
+            _batch_translated_rejection_witnesses(
+                env,
+                candidates,
+                portal_object,
+                current_target,
+                target_eligible,
+                target_geoms,
+                target_fixture_geoms,
+                compiled_target_sweep_geometry,
+                compiled_geometry_cache,
+                candidate_chunk_size=candidate_chunk_size,
+            )
+        )
+        gripper_eligible = target_eligible & np.asarray(
+            [witness is None for witness in target_witnesses], dtype=bool
+        )
+        gripper_witnesses, gripper_counters = (
+            _batch_translated_rejection_witnesses(
+                env,
+                candidate_eef,
+                portal_eef,
+                current_eef,
+                gripper_eligible,
+                collision_gripper_geoms,
+                collision_fixture_geoms,
+                compiled_gripper_sweep_geometry,
+                compiled_geometry_cache,
+                candidate_chunk_size=candidate_chunk_size,
+            )
+        )
+        gate_counters = {
+            "target_door_sweep": door_counters,
+            "target_static_sweep": target_counters,
+            "gripper_sweep": gripper_counters,
+        }
+        peak = max(
+            counter["peak_workspace_bytes"]
+            for counter in gate_counters.values()
+        )
+        result.update(
+            {
+                "usable": True,
+                "reason": "exact_rejection_witnesses_only",
+                "peak_workspace_bytes": int(peak),
+                "door_rejection_witnesses": door_witnesses,
+                "target_rejection_witnesses": target_witnesses,
+                "gripper_rejection_witnesses": gripper_witnesses,
+                "gate_counters": gate_counters,
+            }
+        )
+    except (
+        FloatingPointError,
+        IndexError,
+        KeyError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+    ) as error:
+        result["reason"] = (
+            "fail_closed_full_scalar_fallback: "
+            f"{type(error).__name__}: {error}"
+        )
+    return result
+
+
 def _compiled_target_insertion_plan(
     env,
     names,
@@ -5964,13 +6524,7 @@ def _compiled_target_insertion_plan(
     total_candidate_count = len(front_search_values) * len(
         lateral_search_values
     )
-    print(
-        "[L3-A4 insertion candidate progress] "
-        f"started total={total_candidate_count} "
-        f"front={len(front_search_values)} "
-        f"lateral={len(lateral_search_values)}",
-        flush=True,
-    )
+    candidate_grid = []
     for front_index, front_distance in enumerate(front_search_values):
         for lateral_offset in lateral_search_values:
             lateral_rank = lateral_rank_by_value[lateral_offset]
@@ -6033,7 +6587,95 @@ def _compiled_target_insertion_plan(
             support_clearance = min(
                 support_axis_clearances, default=float("-inf")
             )
-            candidate_eef = candidate + held_eef_offset
+            candidate_grid.append(
+                {
+                    "front_search_index": int(front_index),
+                    "lateral_search_index": int(lateral_rank),
+                    "candidate": np.asarray(candidate, dtype=float),
+                    "candidate_eef": np.asarray(
+                        candidate + held_eef_offset, dtype=float
+                    ),
+                    "native_inside": bool(native_inside),
+                    "support_clearance": float(support_clearance),
+                }
+            )
+    if len(candidate_grid) != total_candidate_count:
+        raise RuntimeError("insertion candidate grid count changed")
+    candidate_positions = np.asarray(
+        [record["candidate"] for record in candidate_grid], dtype=float
+    )
+    candidate_eef_positions = np.asarray(
+        [record["candidate_eef"] for record in candidate_grid], dtype=float
+    )
+    support_pass_mask = np.asarray(
+        [
+            record["native_inside"]
+            and record["support_clearance"] > 0.0
+            for record in candidate_grid
+        ],
+        dtype=bool,
+    )
+    batch_prefilter = _batch_insertion_rejection_prefilter(
+        env,
+        candidate_positions,
+        candidate_eef_positions,
+        current_target,
+        current_eef,
+        portal_object,
+        portal_eef,
+        support_pass_mask,
+        target_geoms,
+        target_fixture_geoms,
+        collision_gripper_geoms,
+        collision_fixture_geoms,
+        compiled_door_sweep,
+        compiled_target_sweep_geometry,
+        compiled_gripper_sweep_geometry,
+        compiled_geometry_cache,
+        candidate_chunk_size=TARGET_INSERTION_BATCH_CHUNK_SIZE,
+    )
+    gate_evaluation_counts = {
+        "native_in": 0,
+        "support_clearance": 0,
+        "target_door_sweep": 0,
+        "target_static_sweep": 0,
+        "gripper_sweep": 0,
+    }
+    rejection_stage_histogram = {
+        "native_in": 0,
+        "support_clearance": 0,
+        "target_door_sweep": 0,
+        "target_static_sweep": 0,
+        "gripper_sweep": 0,
+        "passed": 0,
+    }
+    print(
+        "[L3-A4 insertion candidate progress] "
+        f"started total={total_candidate_count} "
+        f"front={len(front_search_values)} "
+        f"lateral={len(lateral_search_values)} "
+        f"batch={batch_prefilter['usable']} "
+        f"chunk={batch_prefilter['chunk_size']}/"
+        f"{batch_prefilter['chunk_count']} "
+        f"peak_bytes={batch_prefilter['peak_workspace_bytes']}",
+        flush=True,
+    )
+    for front_index, front_distance in enumerate(front_search_values):
+        for lateral_offset in lateral_search_values:
+            lateral_rank = lateral_rank_by_value[lateral_offset]
+            search_index = len(trace)
+            grid_record = candidate_grid[search_index]
+            if (
+                grid_record["front_search_index"] != front_index
+                or grid_record["lateral_search_index"] != lateral_rank
+            ):
+                raise RuntimeError("insertion batch changed candidate order")
+            candidate = grid_record["candidate"]
+            candidate_eef = grid_record["candidate_eef"]
+            native_inside = grid_record["native_inside"]
+            support_clearance = grid_record["support_clearance"]
+            gate_evaluation_counts["native_in"] += 1
+            gate_evaluation_counts["support_clearance"] += 1
             door_clearance = None
             target_clearance = None
             gripper_clearance = None
@@ -6057,6 +6699,7 @@ def _compiled_target_insertion_plan(
                     "gripper_sweep",
                 ]
             if rejection_stage is None:
+                gate_evaluation_counts["target_door_sweep"] += 1
                 door_prior = rejection_witness_by_lane[
                     "target_door_sweep"
                 ].get(lateral_rank)
@@ -6068,6 +6711,20 @@ def _compiled_target_insertion_plan(
                         "target_door_sweep"
                     ].pop(lateral_rank, None)
                     door_prior = None
+                batch_door_witness = (
+                    batch_prefilter["door_rejection_witnesses"][
+                        search_index
+                    ]
+                    if batch_prefilter["usable"]
+                    else None
+                )
+                provided_door_witness = (
+                    batch_door_witness
+                    if batch_door_witness is not None
+                    else None
+                    if door_prior is None
+                    else door_prior["witness"]
+                )
                 door_clearance, door_sweep = (
                     _compiled_target_door_sweep_clearance(
                         env,
@@ -6076,12 +6733,12 @@ def _compiled_target_insertion_plan(
                         candidate,
                         current_target,
                         stop_at_or_below=0.0,
-                        cached_rejection_witness=(
-                            None
-                            if door_prior is None
-                            else door_prior["witness"]
+                        cached_rejection_witness=provided_door_witness,
+                        compiled_door_sweep=(
+                            compiled_door_sweep
+                            if batch_prefilter["usable"]
+                            else None
                         ),
-                        compiled_door_sweep=compiled_door_sweep,
                     )
                 )
                 door_attempted = bool(
@@ -6099,9 +6756,10 @@ def _compiled_target_insertion_plan(
                 insertion_witness_counters[
                     "target_door_sweep"
                 ]["full_fallbacks"] += int(
-                    door_prior is not None and not door_rejected
+                    provided_door_witness is not None
+                    and not door_rejected
                 )
-                if door_prior is None:
+                if provided_door_witness is None:
                     door_status = "not_provided"
                 elif not door_attempted:
                     door_status = "metadata_mismatch"
@@ -6145,6 +6803,7 @@ def _compiled_target_insertion_plan(
                         "target_door_sweep"
                     ].pop(lateral_rank, None)
             if rejection_stage is None:
+                gate_evaluation_counts["target_static_sweep"] += 1
                 target_prior = rejection_witness_by_lane[
                     "target_static_sweep"
                 ].get(lateral_rank)
@@ -6156,6 +6815,20 @@ def _compiled_target_insertion_plan(
                         "target_static_sweep"
                     ].pop(lateral_rank, None)
                     target_prior = None
+                batch_target_witness = (
+                    batch_prefilter["target_rejection_witnesses"][
+                        search_index
+                    ]
+                    if batch_prefilter["usable"]
+                    else None
+                )
+                provided_target_witness = (
+                    batch_target_witness
+                    if batch_target_witness is not None
+                    else None
+                    if target_prior is None
+                    else target_prior["witness"]
+                )
                 target_clearance, target_sweep = (
                     _translated_swept_clearance(
                         env,
@@ -6170,12 +6843,10 @@ def _compiled_target_insertion_plan(
                         ),
                         compiled_sweep_geometry=(
                             compiled_target_sweep_geometry
+                            if batch_prefilter["usable"]
+                            else None
                         ),
-                        cached_rejection_witness=(
-                            None
-                            if target_prior is None
-                            else target_prior["witness"]
-                        ),
+                        cached_rejection_witness=provided_target_witness,
                     )
                 )
                 target_status = target_sweep[
@@ -6245,6 +6916,7 @@ def _compiled_target_insertion_plan(
                         "target_static_sweep"
                     ].pop(lateral_rank, None)
             if rejection_stage is None:
+                gate_evaluation_counts["gripper_sweep"] += 1
                 gripper_prior = rejection_witness_by_lane[
                     "gripper_sweep"
                 ].get(lateral_rank)
@@ -6256,6 +6928,20 @@ def _compiled_target_insertion_plan(
                         "gripper_sweep"
                     ].pop(lateral_rank, None)
                     gripper_prior = None
+                batch_gripper_witness = (
+                    batch_prefilter["gripper_rejection_witnesses"][
+                        search_index
+                    ]
+                    if batch_prefilter["usable"]
+                    else None
+                )
+                provided_gripper_witness = (
+                    batch_gripper_witness
+                    if batch_gripper_witness is not None
+                    else None
+                    if gripper_prior is None
+                    else gripper_prior["witness"]
+                )
                 gripper_clearance, gripper_sweep = (
                     _translated_swept_clearance(
                         env,
@@ -6270,12 +6956,10 @@ def _compiled_target_insertion_plan(
                         ),
                         compiled_sweep_geometry=(
                             compiled_gripper_sweep_geometry
+                            if batch_prefilter["usable"]
+                            else None
                         ),
-                        cached_rejection_witness=(
-                            None
-                            if gripper_prior is None
-                            else gripper_prior["witness"]
-                        ),
+                        cached_rejection_witness=provided_gripper_witness,
                     )
                 )
                 gripper_status = gripper_sweep[
@@ -6366,6 +7050,9 @@ def _compiled_target_insertion_plan(
                 and gripper_clearance is not None
                 and gripper_clearance > 0.0
             )
+            rejection_stage_histogram[
+                "passed" if passed else str(rejection_stage)
+            ] += 1
             search_index = len(trace)
             record = {
                 "search_index": int(search_index),
@@ -6497,13 +7184,68 @@ def _compiled_target_insertion_plan(
                 break
         if selected is not None:
             break
+    best_gate_summary = {}
+    for gate_name, representative in representative_full_sweeps.items():
+        if gate_name == "last_evaluated":
+            continue
+        candidate_record = representative["candidate"]
+        best_gate_summary[gate_name] = {
+            "clearance": float(representative["gate_value"]),
+            "search_index": int(candidate_record["search_index"]),
+            "front_search_index": int(
+                candidate_record["front_search_index"]
+            ),
+            "lateral_search_index": int(
+                candidate_record["lateral_search_index"]
+            ),
+            "candidate_target_position": candidate_record[
+                "candidate_target_position"
+            ],
+            "rejection_stage": candidate_record["rejection_stage"],
+        }
+    batch_prefilter_summary = {
+        key: batch_prefilter[key]
+        for key in (
+            "usable",
+            "reason",
+            "candidate_count",
+            "chunk_size",
+            "chunk_count",
+            "max_candidates_in_chunk",
+            "workspace_limit_bytes",
+            "peak_workspace_bytes",
+            "gate_counters",
+            "pass_authority",
+        )
+    }
+    compact_plan_summary = {
+        "candidate_count_evaluated": int(len(trace)),
+        "candidate_count_total": int(total_candidate_count),
+        "candidate_gate_evaluation_order": [
+            "native_in",
+            "support_clearance",
+            "target_door_sweep",
+            "target_static_sweep",
+            "gripper_sweep",
+        ],
+        "rejection_stage_histogram": rejection_stage_histogram,
+        "gate_evaluation_counts": gate_evaluation_counts,
+        "best_gate_candidates": best_gate_summary,
+        "held_eef_minus_target_offset": np.asarray(
+            held_eef_offset, dtype=float
+        ).tolist(),
+        "selected_search_index": (
+            None if selected is None else int(selected["search_index"])
+        ),
+        "rejection_witness_counters": insertion_witness_counters,
+        "candidate_batch_prefilter": batch_prefilter_summary,
+    }
     if selected is None or execution_endpoint is None:
-        raise RuntimeError(
+        raise InsertionPlanSearchError(
             "no compiled 2D native-In target release pose has positive "
             "support/gripper/mug/door clearance; "
-            f"candidate_count={len(trace)}; candidates={trace}; "
-            "representative_full_sweeps="
-            f"{representative_full_sweeps}"
+            f"candidate_count={len(trace)}; compact_summary_available",
+            compact_plan_summary,
         )
     return {
         "method": (
@@ -6532,6 +7274,7 @@ def _compiled_target_insertion_plan(
         "lateral_extent_m": lateral_extent,
         "lateral_search_values_m": lateral_search_values,
         "candidate_count_evaluated": len(trace),
+        "compact_plan_summary": compact_plan_summary,
         "candidate_gate_evaluation_order": [
             "native_in",
             "support_clearance",
@@ -6584,6 +7327,7 @@ def _compiled_target_insertion_plan(
         "collision_gripper_geom_ids": collision_gripper_geoms,
         "collision_fixture_geom_ids": collision_fixture_geoms,
         "exact_acceleration": {
+            "candidate_batch_prefilter": batch_prefilter_summary,
             "rejection_witness_reuse_scope": (
                 "same gate and lateral rank in the immediately preceding "
                 "front row only; the current canonical sample and geom "
@@ -7585,6 +8329,7 @@ def _run_target_dynamic_reachability_trial(
             failure_reason = closure_reason
     insertion_plan_passed = False
     insertion_plan_failure_reason = ""
+    insertion_plan_compact_summary = None
     if closure_ok:
         grasped_target_position, _ = body_pose(env.sim, TARGET_BODY)
         grasped_eef_position = _eef_position(env)
@@ -7606,7 +8351,26 @@ def _run_target_dynamic_reachability_trial(
             insertion_plan_selection_sha256 = _plain_state_sha256(
                 insertion_plan_selection_evidence
             )
+            insertion_plan_compact_summary = insertion_plan[
+                "compact_plan_summary"
+            ]
             insertion_plan_passed = True
+        except InsertionPlanSearchError as error:
+            insertion_plan_failure_reason = str(error)
+            insertion_plan_compact_summary = error.compact_summary
+            print(
+                "[L3-A4 insertion plan summary] "
+                + json.dumps(
+                    insertion_plan_compact_summary,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                flush=True,
+            )
+            failure_reason = (
+                "candidate grasp has no compiled insertion plan: "
+                f"{insertion_plan_failure_reason}"
+            )
         except RuntimeError as error:
             insertion_plan_failure_reason = str(error)
             failure_reason = (
@@ -7643,6 +8407,9 @@ def _run_target_dynamic_reachability_trial(
         ),
         "insertion_plan_passed": insertion_plan_passed,
         "insertion_plan_failure_reason": insertion_plan_failure_reason,
+        "insertion_plan_compact_summary": (
+            insertion_plan_compact_summary
+        ),
         "compiled_insertion_plan": insertion_plan,
         "insertion_plan_selection_evidence": (
             insertion_plan_selection_evidence
