@@ -3737,7 +3737,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     )
     assert "if descent_corridor_lateral_violations:" in descent_transition
     assert "strict_corridor_entry_clearance_m=(" in descent_transition
-    assert '"corridor_clearance_m"' in descent_transition
+    assert '"strict_corridor_entry_clearance_m"' in descent_transition
     assert '"eef_outward_step_progress_m"' in descent_transition
     assert '"outside_clearance_step_progress_m"' in descent_transition
     assert (

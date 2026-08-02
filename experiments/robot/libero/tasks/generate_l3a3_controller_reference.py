@@ -12640,10 +12640,12 @@ def _seek_stable_plate_contact(
                 "unchanged position_tolerance"
             ),
             "descent_outside_clearance_brake_threshold_m": float(
-                vertical_staging_corridor["corridor_clearance_m"]
+                vertical_staging_corridor[
+                    "strict_corridor_entry_clearance_m"
+                ]
             ),
             "descent_outside_clearance_brake_threshold_source": (
-                "compiled full corridor clearance"
+                "compiled strict corridor-entry clearance"
             ),
             "descent_corridor_resume_clearance_m": (
                 corridor_rebuffer_acceptance_clearance
@@ -13952,7 +13954,9 @@ def _seek_stable_plate_contact(
                     ),
                     position_tolerance=args.position_tolerance,
                     strict_corridor_entry_clearance_m=(
-                        vertical_staging_corridor["corridor_clearance_m"]
+                        vertical_staging_corridor[
+                            "strict_corridor_entry_clearance_m"
+                        ]
                     ),
                     require_lateral_buffer=False,
                     minimum_eef_z=None,
