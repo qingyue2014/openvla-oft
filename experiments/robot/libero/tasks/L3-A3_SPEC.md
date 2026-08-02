@@ -369,6 +369,16 @@ accepted. It returns immediately to the unchanged brake if either reserve is
 lost. Handoff requires two consecutive neutral frames whose absolute Z,
 EEF-outward, and outside-clearance responses are each at most the existing
 `0.050 mm` progress resolution; sign alone no longer counts as stability.
+Job503653 showed that entering this phase with an immediate full-to-zero XYZ
+transition still created a `0.814 mm` inward clearance tail and forced the
+controller back into full-brake/zero oscillation. Neutral damping remains
+latched under the same guards, but now inherits the last settle command and
+reduces only its positive outward and positive-Z components by at most
+`0.050` normalized action per frame until both reach zero. Residual response
+sign changes do not restore authority while both `1.550 mm` reserves remain
+accepted. The unchanged full brake returns immediately only after a reserve
+or compiled guard loss, and the two-frame absolute-response counter starts
+only on zero-command damping frames.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

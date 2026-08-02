@@ -3783,13 +3783,34 @@ def test_job503651_corridor_settle_requires_neutral_absolute_stop():
         gripper=-1.0,
         native_action_spec=native_spec,
         recovery_exit_clearance_m=0.00155,
+        previous_commanded_action_xyz=np.array(
+            [0.1862769386449508, 0.0, 0.20]
+        ),
+        maximum_positive_release_action=0.05,
     )
-    assert action[:6].tolist() == pytest.approx([0.0] * 6)
+    assert action[:3].tolist() == pytest.approx(
+        [0.1362769386449508, 0.0, 0.15]
+    )
+    assert action[3:6].tolist() == pytest.approx([0.0] * 3)
     assert action[-1] == pytest.approx(-1.0)
-    assert damping["proof"]["zero_xyz_and_rotation"] is True
+    assert damping["damping_ramp_reached_zero"] is False
+    assert damping["proof"][
+        "positive_outward_and_z_release_is_monotonic"
+    ] is True
     assert damping["proof"][
         "outside_recovery_exit_reserve_preaccepted"
     ] is True
+
+    zero_action, zero_damping = _compiled_low_side_neutral_damping_action(
+        outside_side_guard=after_guard,
+        gripper=-1.0,
+        native_action_spec=native_spec,
+        recovery_exit_clearance_m=0.00155,
+        previous_commanded_action_xyz=np.array([0.04, 0.0, 0.03]),
+        maximum_positive_release_action=0.05,
+    )
+    assert zero_action[:6].tolist() == pytest.approx([0.0] * 6)
+    assert zero_damping["damping_ramp_reached_zero"] is True
 
 
 def test_500121_vertical_descent_is_structurally_staged_outside_one_step_reserve():
@@ -10156,6 +10177,10 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_compiled_low_side_neutral_damping_action(" in bounded_seek
     assert "maximum_settled_step_response_m=(" in bounded_seek
     assert '"neutral_damping_active"' in bounded_seek
+    assert "vertical_corridor_neutral_damping_release_action = 0.05" in (
+        bounded_seek
+    )
+    assert '"previous_commanded_action_xyz"' in bounded_seek
     assert '"lateral_settle_trigger"' in bounded_seek
     assert bounded_seek.index("motion_sample = capture(") < (
         bounded_seek.index("if structural_violations:")

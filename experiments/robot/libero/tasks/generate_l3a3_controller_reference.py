@@ -8575,6 +8575,8 @@ def _compiled_low_side_neutral_damping_action(
     gripper,
     native_action_spec,
     recovery_exit_clearance_m,
+    previous_commanded_action_xyz,
+    maximum_positive_release_action,
 ):
     """Dissipate residual OSC motion only inside registered live reserves."""
     try:
@@ -8587,6 +8589,15 @@ def _compiled_low_side_neutral_damping_action(
         live_finger_table_clearance = float(
             outside_side_guard["finger_table_vertical_clearance_m"]
         )
+        outward_direction = np.asarray(
+            outside_side_guard["outward_direction_xy"], dtype=float
+        )
+        previous_commanded_action_xyz = np.asarray(
+            previous_commanded_action_xyz, dtype=float
+        )
+        maximum_positive_release_action = float(
+            maximum_positive_release_action
+        )
     except Exception as exc:
         raise RuntimeError(
             "low-side neutral damping evidence is incomplete"
@@ -8594,6 +8605,18 @@ def _compiled_low_side_neutral_damping_action(
     if (
         not np.isfinite(recovery_exit_clearance_m)
         or recovery_exit_clearance_m <= 0.0
+        or outward_direction.shape != (2,)
+        or not np.all(np.isfinite(outward_direction))
+        or not np.isclose(
+            np.linalg.norm(outward_direction),
+            1.0,
+            rtol=0.0,
+            atol=1e-12,
+        )
+        or previous_commanded_action_xyz.shape != (3,)
+        or not np.all(np.isfinite(previous_commanded_action_xyz))
+        or not np.isfinite(maximum_positive_release_action)
+        or not 0.0 < maximum_positive_release_action < 1.0
         or not native_action_spec.get("runtime_resolved", False)
         or native_action_spec.get("action_dimension") != 7
         or native_low.shape != (7,)
@@ -8613,25 +8636,79 @@ def _compiled_low_side_neutral_damping_action(
         raise RuntimeError(
             "low-side neutral damping lacks its registered live reserve"
         )
+    previous_outward_action = float(
+        np.dot(previous_commanded_action_xyz[:2], outward_direction)
+    )
+    previous_tangential_action = (
+        previous_commanded_action_xyz[:2]
+        - previous_outward_action * outward_direction
+    )
+    previous_positive_z_action = float(
+        previous_commanded_action_xyz[2]
+    )
+    if (
+        previous_outward_action < 0.0
+        or previous_positive_z_action < 0.0
+        or np.linalg.norm(previous_tangential_action) > 1e-12
+        or np.any(previous_commanded_action_xyz < native_low[:3])
+        or np.any(previous_commanded_action_xyz > native_high[:3])
+    ):
+        raise RuntimeError(
+            "low-side neutral damping predecessor is not one-sided safe"
+        )
+    commanded_outward_action = float(
+        max(
+            0.0,
+            previous_outward_action
+            - maximum_positive_release_action,
+        )
+    )
+    commanded_positive_z_action = float(
+        max(
+            0.0,
+            previous_positive_z_action
+            - maximum_positive_release_action,
+        )
+    )
     action = np.zeros(7, dtype=float)
+    action[:2] = outward_direction * commanded_outward_action
+    action[2] = commanded_positive_z_action
     action[-1] = float(gripper)
+    damping_ramp_reached_zero = bool(
+        commanded_outward_action == 0.0
+        and commanded_positive_z_action == 0.0
+    )
     return action, {
         "formula": (
             "after the compiled outward/+Z brake reverses hazard-directed "
-            "motion, command zero XYZ and rotation only while both outside "
-            "and table clearances remain strictly above the unchanged "
-            "recovery-exit line; refreshed live guards remain mandatory"
+            "motion, monotonically reduce only the positive outward and Z "
+            "components by the registered per-frame decrement until zero "
+            "while both outside and table clearances remain strictly above "
+            "the unchanged recovery-exit line"
         ),
         "native_action_spec_source": native_source,
         "commanded_xyz_action": action[:3].tolist(),
         "commanded_rotation_action": action[3:6].tolist(),
+        "previous_commanded_action_xyz": (
+            previous_commanded_action_xyz.tolist()
+        ),
+        "previous_outward_action": previous_outward_action,
+        "previous_positive_z_action": previous_positive_z_action,
+        "maximum_positive_release_action": (
+            maximum_positive_release_action
+        ),
+        "commanded_outward_action": commanded_outward_action,
+        "commanded_positive_z_action": commanded_positive_z_action,
+        "damping_ramp_reached_zero": damping_ramp_reached_zero,
         "live_outside_clearance_m": live_outside_clearance,
         "live_finger_table_clearance_m": live_finger_table_clearance,
         "recovery_exit_clearance_m": float(
             recovery_exit_clearance_m
         ),
         "proof": {
-            "zero_xyz_and_rotation": True,
+            "positive_outward_and_z_release_is_monotonic": True,
+            "release_decrement_is_bounded": True,
+            "zero_rotation": True,
             "strictly_inside_native_action_bounds": True,
             "outside_recovery_exit_reserve_preaccepted": True,
             "table_recovery_exit_reserve_preaccepted": True,
@@ -15549,6 +15626,7 @@ def _seek_stable_plate_contact(
     fixed_safe_z = None
     fixed_safe_z_previous_commanded_action_xyz = None
     fixed_safe_z_positive_safety_release_action = 0.05
+    vertical_corridor_neutral_damping_release_action = 0.05
     fixed_safe_z_stable_count = 0
     fixed_safe_z_required_stable_count = 2
     fixed_safe_z_position_tolerance = float(
@@ -15623,6 +15701,9 @@ def _seek_stable_plate_contact(
             ),
             "fixed_safe_z_positive_safety_release_action": (
                 fixed_safe_z_positive_safety_release_action
+            ),
+            "vertical_corridor_neutral_damping_release_action": (
+                vertical_corridor_neutral_damping_release_action
             ),
         }
     )
@@ -16835,6 +16916,14 @@ def _seek_stable_plate_contact(
                         recovery_exit_clearance_m=(
                             fixed_safe_z_recovery_exit_clearance
                         ),
+                        previous_commanded_action_xyz=(
+                            lateral_settle_state[
+                                "previous_commanded_action_xyz"
+                            ]
+                        ),
+                        maximum_positive_release_action=(
+                            vertical_corridor_neutral_damping_release_action
+                        ),
                     )
                 )
             else:
@@ -17912,6 +18001,7 @@ def _seek_stable_plate_contact(
                         lateral_settle_state.get(
                             "neutral_damping_active", False
                         )
+                        and np.all(np.asarray(action[:3]) == 0.0)
                     ),
                     neutral_damping_reserve_accepted=(
                         neutral_damping_reserves_accepted
@@ -17932,6 +18022,12 @@ def _seek_stable_plate_contact(
             lateral_settle_progress[
                 "neutral_damping_reserves_accepted"
             ] = neutral_damping_reserves_accepted
+            lateral_settle_progress[
+                "previous_commanded_action_xyz"
+            ] = np.asarray(action[:3], dtype=float).tolist()
+            lateral_settle_progress[
+                "neutral_damping_command_reached_zero"
+            ] = bool(np.all(np.asarray(action[:3]) == 0.0))
             feedback["lateral_settle_progress"] = (
                 lateral_settle_progress
             )
