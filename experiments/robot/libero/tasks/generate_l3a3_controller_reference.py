@@ -13357,7 +13357,7 @@ def _seek_stable_plate_contact(
         + 2.0 * maximum_controller_world_step
     )
     vertical_corridor_reserve_recovery_exit_clearance = float(
-        vertical_corridor_reserve_recovery_entry_clearance
+        corridor_rebuffer_acceptance_clearance
         + maximum_controller_world_step
     )
     if not (
@@ -13412,8 +13412,9 @@ def _seek_stable_plate_contact(
                 vertical_corridor_reserve_recovery_exit_clearance
             ),
             "vertical_corridor_reserve_recovery_exit_derivation": (
-                "the conservative recovery-entry gate plus one existing "
-                "0.4 mm maximum structural controller world step; this is "
+                "the unchanged formal 0.9 mm corridor clearance plus one "
+                "existing 0.4 mm maximum structural controller world step; "
+                "this is "
                 "an internal brake-release gate and does not relax the "
                 "unchanged formal 0.9 mm corridor clearance"
             ),

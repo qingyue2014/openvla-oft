@@ -3234,10 +3234,13 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     # that one nominal 0.4 mm structural step is not a conservative trigger.
     # Prioritize 0.095 of the unchanged 0.10 action norm outward, retain the
     # remaining norm for negative-Z descent, and reserve two structural steps
-    # above the unchanged strict gate.  The internal release adds one further
-    # structural step; the formal 0.9 mm corridor gate remains unchanged.
+    # above the unchanged strict gate.  The internal release is the unchanged
+    # formal 0.9 mm corridor clearance plus one structural step; the formal
+    # 0.9 mm corridor gate itself remains unchanged.  Job503232's first Z=0.05
+    # hold frame proved positive Z/outward response and 1.305 mm clearance, so
+    # this 1.3 mm release hands off before its unneeded second hold lost buffer.
     recovery_entry_clearance = 0.0004 + 2.0 * 0.0004
-    recovery_exit_clearance = recovery_entry_clearance + 0.0004
+    recovery_exit_clearance = 0.0009 + 0.0004
     before_trigger = _vertical_corridor_reserve_recovery_evidence(
         live_clearance_m=0.0014115984435881107,
         recovery_entry_clearance_m=recovery_entry_clearance,
@@ -3264,7 +3267,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert job503193_entry["entered_recovery"] is True
     assert job503193_entry["recovery_active_after_decision"] is True
     recovery_hold = _vertical_corridor_reserve_recovery_evidence(
-        live_clearance_m=0.0015,
+        live_clearance_m=0.00125,
         recovery_entry_clearance_m=recovery_entry_clearance,
         recovery_exit_clearance_m=recovery_exit_clearance,
         strict_corridor_entry_clearance_m=0.0004,
