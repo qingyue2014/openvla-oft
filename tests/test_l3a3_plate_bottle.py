@@ -3799,7 +3799,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         'elif stage_before_action == "vertical_corridor_settle":', 1
     )[0]
     assert (
-        '"high_z_corridor_correction_complete_to_"'
+        '"high_z_controller_reserve_complete_to_"'
         in correction_transition
     )
     assert 'structural_stage = "overhead_corridor_descent"' in (
@@ -4177,6 +4177,16 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
         '"formal_corridor_acceptance_target_unchanged": True'
         in post_descent_correction_branch
     )
+    assert "def _high_z_controller_handoff_evidence(" in bounded_seek
+    assert (
+        "corridor_high_target=corridor_correction_handoff_target"
+        in bounded_seek
+    )
+    assert '"applies_only_above_staging_tolerance": True' in bounded_seek
+    assert (
+        '"formal_corridor_acceptance_clearance_unchanged": True'
+        in bounded_seek
+    )
     assert "expected_overhead_pair_count" in bounded_seek
 
 
@@ -4353,6 +4363,50 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
     assert correction_action[2] >= 0.0
     assert np.linalg.norm(correction_action[:3]) < 0.10
     assert np.all(correction_action[3:6] == 0.0)
+
+    handoff_eef = np.array(
+        [
+            correction_hold_target[0],
+            correction_hold_target[1],
+            terminal_hold_z,
+        ]
+    )
+    handoff_buffer = _overhead_lateral_buffer_evidence(
+        guard,
+        worst_case_controller_world_step_m=0.008,
+    )
+    handoff_outside_guard = {
+        "accepted": False,
+        "minimum_outside_clearance_m": 0.010,
+    }
+    formal_gate = _overhead_corridor_entry_evidence(
+        current_eef=handoff_eef,
+        corridor_high_target=np.append(
+            base_correction_target, terminal_hold_z
+        ),
+        outside_side_guard=handoff_outside_guard,
+        overhead_guard=guard,
+        overhead_lateral_buffer=handoff_buffer,
+        position_tolerance=0.002,
+        strict_corridor_entry_clearance_m=0.0009,
+        require_lateral_buffer=False,
+    )
+    controller_handoff_gate = _overhead_corridor_entry_evidence(
+        current_eef=handoff_eef,
+        corridor_high_target=np.append(
+            correction_hold_target, terminal_hold_z
+        ),
+        outside_side_guard=handoff_outside_guard,
+        overhead_guard=guard,
+        overhead_lateral_buffer=handoff_buffer,
+        position_tolerance=0.002,
+        strict_corridor_entry_clearance_m=0.0009,
+        require_lateral_buffer=False,
+    )
+    assert formal_gate["accepted"] is False
+    assert "corridor_xy_tolerance_not_met" in formal_gate["violations"]
+    assert controller_handoff_gate["accepted"] is True
+    assert controller_handoff_gate["corridor_lateral_error_m"] == 0.0
 
     tight_pairs = [
         {
@@ -4607,7 +4661,13 @@ def test_500199_workspace_release_stage_preserves_all_hard_thresholds():
     assert "_compiled_adaptive_workspace_release_action(" in bounded_seek
     assert 'structural_stage = "workspace_release_diagonal"' in bounded_seek
     assert '"compiled_adaptive_workspace_release_envelope"' in bounded_seek
-    assert "workspace_release_reached_full_corridor_to_" in bounded_seek
+    assert (
+        "workspace_release_reached_controller_" in bounded_seek
+    )
+    assert (
+        "workspace_release_reached_formal_corridor_" in bounded_seek
+    )
+    assert "controller_reserve_requires_plane_hold" in bounded_seek
     assert '"overhead_corridor_descent"' in bounded_seek
     assert (
         'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
@@ -6561,7 +6621,16 @@ def test_high_first_route_fails_closed_and_rechecks_post_descent_drift():
         'structural_stage = "overhead_post_descent_corridor_lateral"'
         in zero_transition
     )
-    assert 'if post_descent_corridor_entry["accepted"]:' in zero_transition
+    assert "post_descent_controller_handoff" in zero_transition
+    assert (
+        'post_descent_controller_handoff["accepted"]'
+        in zero_transition
+    )
+    assert (
+        'post_descent_corridor_entry["accepted"]'
+        in zero_transition
+    )
+    assert "above_staging_tolerance" in zero_transition
     correction_action = bounded_seek.split(
         'elif structural_stage == "overhead_post_descent_corridor_lateral":',
         1,

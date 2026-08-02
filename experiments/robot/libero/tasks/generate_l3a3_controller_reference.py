@@ -12702,9 +12702,16 @@ def _seek_stable_plate_contact(
         + corridor_outward_direction
         * maximum_post_descent_lateral_world_step
     )
+    corridor_correction_handoff_target = np.asarray(
+        corridor_rebuffer_target, dtype=float
+    ).copy()
+    corridor_correction_handoff_target[:2] = (
+        corridor_correction_hold_target_xy
+    )
     if not (
         np.all(np.isfinite(corridor_rebuffer_target))
         and np.all(np.isfinite(corridor_correction_hold_target_xy))
+        and np.all(np.isfinite(corridor_correction_handoff_target))
         and np.isfinite(corridor_rebuffer_clearance)
         and np.isfinite(corridor_rebuffer_acceptance_clearance)
         and corridor_rebuffer_clearance
@@ -12713,6 +12720,27 @@ def _seek_stable_plate_contact(
         raise RuntimeError(
             "compiled corridor rebuffer lacks a strict outward measurement-"
             "resolution reserve"
+        )
+
+    def _high_z_controller_handoff_evidence(
+        *,
+        current_eef,
+        outside_side_guard,
+        overhead_guard,
+        overhead_lateral_buffer,
+    ):
+        return _overhead_corridor_entry_evidence(
+            current_eef=current_eef,
+            corridor_high_target=corridor_correction_handoff_target,
+            outside_side_guard=outside_side_guard,
+            overhead_guard=overhead_guard,
+            overhead_lateral_buffer=overhead_lateral_buffer,
+            position_tolerance=args.position_tolerance,
+            strict_corridor_entry_clearance_m=(
+                corridor_rebuffer_acceptance_clearance
+            ),
+            require_lateral_buffer=False,
+            minimum_eef_z=None,
         )
     (
         high_lateral_prebuffer_target,
@@ -12919,6 +12947,20 @@ def _seek_stable_plate_contact(
                 "unchanged corridor_rebuffer_target and compiled full "
                 "corridor clearance"
             ),
+            "post_descent_correction_high_z_handoff_gate": {
+                "controller_target": (
+                    corridor_correction_hold_target_xy.tolist()
+                ),
+                "position_tolerance_m": float(args.position_tolerance),
+                "position_tolerance_source": "unchanged position_tolerance",
+                "required_compiled_pair_count": (
+                    expected_overhead_pair_count
+                ),
+                "requires_live_overhead_base8": True,
+                "applies_only_above_staging_tolerance": True,
+                "formal_corridor_acceptance_target_unchanged": True,
+                "formal_corridor_acceptance_clearance_unchanged": True,
+            },
             "descent_corridor_hold_target_formula": (
                 "corridor_rebuffer_target XY plus normalized registered "
                 "outward direction times the active overhead-descent one-step "
@@ -12958,8 +13000,8 @@ def _seek_stable_plate_contact(
                     "brake"
                 ),
                 "vertical_tail_brake_and_zero_confirmation",
-                "live_corridor_entry_or_xy_nonnegative_z_plane_hold_"
-                "correction",
+                "high_z_controller_reserve_or_staging_formal_entry_via_"
+                "xy_nonnegative_z_plane_hold_correction",
                 "vertical_side_corridor_and_contact",
             ],
             "horizontal_sweep_formula": (
@@ -13011,8 +13053,13 @@ def _seek_stable_plate_contact(
                 "acceptance. The post-descent plane-hold correction similarly "
                 "uses its existing one-step 8 mm world displacement as a "
                 "deterministic outward controller-target reserve to overcome "
-                "the observed proportional static error; its formal target "
-                "and clearance remain unchanged. The unchanged 0.10 "
+                "the observed proportional static error. Above the unchanged "
+                "staging-Z tolerance, do not hand control back to descent at "
+                "the first formal-target crossing; require the actual EEF to "
+                "reach that controller target within the unchanged position "
+                "tolerance and retain live base8. At or below staging, use "
+                "only the unchanged formal target and clearance for the "
+                "vertical-corridor transition. The unchanged 0.10 "
                 "bound remains exclusive to the post-descent XY/nonnegative-Z "
                 "plane-hold correction and contact motion"
             ),
@@ -13377,16 +13424,31 @@ def _seek_stable_plate_contact(
                 require_lateral_buffer=False,
                 minimum_eef_z=None,
             )
-            if pre_action_corridor_entry["accepted"]:
+            pre_action_controller_handoff = (
+                _high_z_controller_handoff_evidence(
+                    current_eef=current_eef,
+                    outside_side_guard=latest_outside_side_guard,
+                    overhead_guard=latest_overhead_guard,
+                    overhead_lateral_buffer=(
+                        latest_overhead_lateral_buffer
+                    ),
+                )
+            )
+            if pre_action_controller_handoff["accepted"]:
                 structural_stage = "overhead_corridor_descent"
                 vertical_tail_events.append(
                     {
                         "guard_step": int(guard_step),
                         "event": (
                             "high_plane_anticooupling_prebuffer_passed_"
-                            "corridor_gate_before_workspace_action"
+                            "controller_handoff_before_workspace_action"
                         ),
-                        **pre_action_corridor_entry,
+                        "formal_corridor_entry": (
+                            pre_action_corridor_entry
+                        ),
+                        "controller_handoff": (
+                            pre_action_controller_handoff
+                        ),
                     }
                 )
         if structural_stage == "overhead_corridor_descent":
@@ -14305,23 +14367,59 @@ def _seek_stable_plate_contact(
             feedback["corridor_entry_after_workspace_release"] = (
                 corridor_entry_after_action
             )
-            if (
-                corridor_entry_after_action["accepted"]
-                and not workspace_release_envelope[
-                    "event_driven_positive_z_inertial_recovery"
-                ]
-            ):
-                structural_stage = "overhead_corridor_descent"
-                vertical_tail_events.append(
-                    {
-                        "guard_step": int(guard_step),
-                        "event": (
-                            "workspace_release_reached_full_corridor_to_"
-                            "adaptive_overhead_descent"
-                        ),
-                        **corridor_entry_after_action,
-                    }
+            workspace_controller_handoff = (
+                _high_z_controller_handoff_evidence(
+                    current_eef=after_eef,
+                    outside_side_guard=latest_outside_side_guard,
+                    overhead_guard=latest_overhead_guard,
+                    overhead_lateral_buffer=(
+                        latest_overhead_lateral_buffer
+                    ),
                 )
+            )
+            feedback["controller_handoff_after_workspace_release"] = (
+                workspace_controller_handoff
+            )
+            if not workspace_release_envelope[
+                "event_driven_positive_z_inertial_recovery"
+            ]:
+                if workspace_controller_handoff["accepted"]:
+                    structural_stage = "overhead_corridor_descent"
+                    vertical_tail_events.append(
+                        {
+                            "guard_step": int(guard_step),
+                            "event": (
+                                "workspace_release_reached_controller_"
+                                "reserve_to_adaptive_overhead_descent"
+                            ),
+                            "formal_corridor_entry": (
+                                corridor_entry_after_action
+                            ),
+                            "controller_handoff": (
+                                workspace_controller_handoff
+                            ),
+                        }
+                    )
+                elif corridor_entry_after_action["accepted"]:
+                    structural_stage = (
+                        "overhead_post_descent_corridor_lateral"
+                    )
+                    overhead_horizontal_z = float(after_eef[2])
+                    vertical_tail_events.append(
+                        {
+                            "guard_step": int(guard_step),
+                            "event": (
+                                "workspace_release_reached_formal_corridor_"
+                                "but_controller_reserve_requires_plane_hold"
+                            ),
+                            "formal_corridor_entry": (
+                                corridor_entry_after_action
+                            ),
+                            "controller_handoff": (
+                                workspace_controller_handoff
+                            ),
+                        }
+                    )
         elif stage_before_action == "overhead_corridor_descent":
             descent_corridor_entry_after_action = (
                 _overhead_corridor_entry_evidence(
@@ -14597,21 +14695,61 @@ def _seek_stable_plate_contact(
                 feedback["post_descent_corridor_entry"] = (
                     post_descent_corridor_entry
                 )
-                if post_descent_corridor_entry["accepted"]:
-                    if after_eef[2] > (
-                        overhead_staging_z + args.position_tolerance
-                    ):
-                        structural_stage = "overhead_corridor_descent"
-                        zero_confirmation_event = (
-                            "zero_confirmation_passed_at_high_z_to_"
-                            "bounded_descent"
-                        )
-                    else:
-                        structural_stage = "vertical_corridor_descent"
-                        zero_confirmation_event = (
-                            "zero_confirmation_passed_at_staging_to_"
-                            "vertical_corridor"
-                        )
+                post_descent_controller_handoff = (
+                    _high_z_controller_handoff_evidence(
+                        current_eef=after_eef,
+                        outside_side_guard=latest_outside_side_guard,
+                        overhead_guard=latest_overhead_guard,
+                        overhead_lateral_buffer=(
+                            latest_overhead_lateral_buffer
+                        ),
+                    )
+                )
+                feedback["post_descent_controller_handoff"] = (
+                    post_descent_controller_handoff
+                )
+                above_staging_tolerance = bool(
+                    after_eef[2]
+                    > overhead_staging_z + args.position_tolerance
+                )
+                if (
+                    above_staging_tolerance
+                    and post_descent_controller_handoff["accepted"]
+                ):
+                    structural_stage = "overhead_corridor_descent"
+                    zero_confirmation_event = (
+                        "zero_confirmation_passed_high_z_controller_"
+                        "handoff_to_bounded_descent"
+                    )
+                    vertical_tail_brake_reason = None
+                    vertical_tail_events.append(
+                        {
+                            "guard_step": int(guard_step),
+                            "event": zero_confirmation_event,
+                            "measured_vertical_step_progress_m": (
+                                measured_vertical_step_progress_m
+                            ),
+                            "overhead_staging_z_m": overhead_staging_z,
+                            "remaining_z_above_staging_m": float(
+                                after_eef[2] - overhead_staging_z
+                            ),
+                            "formal_corridor_entry": (
+                                post_descent_corridor_entry
+                            ),
+                            "controller_handoff": (
+                                post_descent_controller_handoff
+                            ),
+                        }
+                    )
+                elif (
+                    not above_staging_tolerance
+                    and post_descent_corridor_entry["accepted"]
+                ):
+                    structural_stage = "vertical_corridor_descent"
+                    zero_confirmation_event = (
+                        "zero_confirmation_passed_at_staging_to_"
+                        "vertical_corridor"
+                    )
                     vertical_tail_brake_reason = None
                     vertical_tail_events.append(
                         {
@@ -14638,12 +14776,18 @@ def _seek_stable_plate_contact(
                             "guard_step": int(guard_step),
                             "event": (
                                 "zero_confirmation_passed_but_live_corridor_"
-                                "xy_requires_overhead_correction"
+                                "or_high_z_controller_reserve_requires_"
+                                "overhead_correction"
                             ),
                             "measured_vertical_step_progress_m": (
                                 measured_vertical_step_progress_m
                             ),
-                            **post_descent_corridor_entry,
+                            "formal_corridor_entry": (
+                                post_descent_corridor_entry
+                            ),
+                            "controller_handoff": (
+                                post_descent_controller_handoff
+                            ),
                         }
                     )
                 else:
@@ -14719,21 +14863,58 @@ def _seek_stable_plate_contact(
                 feedback["corridor_entry_after_drift_correction"] = (
                     corridor_entry_after_action
                 )
-                if corridor_entry_after_action["accepted"]:
-                    if after_eef[2] > (
-                        overhead_staging_z + args.position_tolerance
-                    ):
-                        structural_stage = "overhead_corridor_descent"
-                        correction_complete_event = (
-                            "high_z_corridor_correction_complete_to_"
-                            "bounded_descent"
-                        )
-                    else:
-                        structural_stage = "vertical_corridor_descent"
-                        correction_complete_event = (
-                            "staging_corridor_correction_complete_to_"
-                            "vertical_corridor"
-                        )
+                correction_controller_handoff = (
+                    _high_z_controller_handoff_evidence(
+                        current_eef=after_eef,
+                        outside_side_guard=latest_outside_side_guard,
+                        overhead_guard=latest_overhead_guard,
+                        overhead_lateral_buffer=(
+                            latest_overhead_lateral_buffer
+                        ),
+                    )
+                )
+                feedback["correction_controller_handoff"] = (
+                    correction_controller_handoff
+                )
+                above_staging_tolerance = bool(
+                    after_eef[2]
+                    > overhead_staging_z + args.position_tolerance
+                )
+                if (
+                    above_staging_tolerance
+                    and correction_controller_handoff["accepted"]
+                ):
+                    structural_stage = "overhead_corridor_descent"
+                    correction_complete_event = (
+                        "high_z_controller_reserve_complete_to_"
+                        "bounded_descent"
+                    )
+                    vertical_tail_brake_reason = None
+                    vertical_tail_events.append(
+                        {
+                            "guard_step": int(guard_step),
+                            "event": correction_complete_event,
+                            "overhead_staging_z_m": overhead_staging_z,
+                            "remaining_z_above_staging_m": float(
+                                after_eef[2] - overhead_staging_z
+                            ),
+                            "formal_corridor_entry": (
+                                corridor_entry_after_action
+                            ),
+                            "controller_handoff": (
+                                correction_controller_handoff
+                            ),
+                        }
+                    )
+                elif (
+                    not above_staging_tolerance
+                    and corridor_entry_after_action["accepted"]
+                ):
+                    structural_stage = "vertical_corridor_descent"
+                    correction_complete_event = (
+                        "staging_corridor_correction_complete_to_"
+                        "vertical_corridor"
+                    )
                     vertical_tail_brake_reason = None
                     vertical_tail_events.append(
                         {
