@@ -4167,7 +4167,7 @@ def _vertical_corridor_reserve_recovery_evidence(
     strict_corridor_entry_clearance_m,
     latest_outward_step_progress_m,
     latest_vertical_step_progress_m,
-    compiled_tail_brake_buffer_accepted,
+    corridor_recovery_guard_accepted,
     recovery_exit_phase_authorized,
     recovery_active_before_decision,
 ):
@@ -4201,7 +4201,7 @@ def _vertical_corridor_reserve_recovery_evidence(
         and live_clearance_m > recovery_exit_clearance_m
         and latest_outward_step_progress_m >= 0.0
         and latest_vertical_step_progress_m >= 0.0
-        and compiled_tail_brake_buffer_accepted
+        and corridor_recovery_guard_accepted
         and recovery_exit_phase_authorized
     )
     recovery_active_after_decision = bool(
@@ -4244,8 +4244,8 @@ def _vertical_corridor_reserve_recovery_evidence(
         "latest_vertical_step_progress_m": float(
             latest_vertical_step_progress_m
         ),
-        "compiled_tail_brake_buffer_accepted": bool(
-            compiled_tail_brake_buffer_accepted
+        "corridor_recovery_guard_accepted": bool(
+            corridor_recovery_guard_accepted
         ),
         "recovery_exit_phase_authorized": bool(
             recovery_exit_phase_authorized
@@ -4253,7 +4253,7 @@ def _vertical_corridor_reserve_recovery_evidence(
         "exit_requirements": (
             "live clearance strictly above the recovery exit gate plus "
             "measured nonnegative outward and vertical progress plus the "
-            "refreshed accepted compiled lateral buffer plus an explicit "
+            "refreshed accepted side-corridor recovery guard plus an explicit "
             "completed exit-brake phase"
         ),
     }
@@ -4307,9 +4307,7 @@ def _vertical_corridor_reserve_recovery_phase_evidence(
         if (
             phase_before_decision == "vertical_brake"
             and vertical_progress >= 0.0
-            and recovery_evidence[
-                "compiled_tail_brake_buffer_accepted"
-            ]
+            and recovery_evidence["corridor_recovery_guard_accepted"]
         ):
             phase_after_decision = "outward_restore"
             transition = "vertical_brake_complete_to_outward_restore"
@@ -4317,9 +4315,7 @@ def _vertical_corridor_reserve_recovery_phase_evidence(
             phase_before_decision == "outward_restore"
             and live_clearance > exit_clearance
             and outward_progress >= 0.0
-            and recovery_evidence[
-                "compiled_tail_brake_buffer_accepted"
-            ]
+            and recovery_evidence["corridor_recovery_guard_accepted"]
         ):
             phase_after_decision = "exit_brake"
             transition = "outward_restore_complete_to_exit_brake"
@@ -7266,6 +7262,231 @@ def _compiled_adaptive_workspace_release_action(
             "all_compiled_pairs_retain_strict_base8_after_worst_case_tail": (
                 True
             ),
+        },
+    }
+
+
+def _compiled_corridor_reserve_action(
+    *,
+    current_eef,
+    overhead_guard,
+    outside_side_guard,
+    gripper,
+    position_action_scale,
+    native_action_spec,
+    expected_pair_count,
+    lateral_target_xy,
+    one_sided_outward_direction_xy,
+    maximum_lateral_translation_action,
+    positive_z_action,
+    strict_corridor_clearance_m,
+):
+    """Recover side-corridor reserve without re-entering high buffer16."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    lateral_target_xy = np.asarray(lateral_target_xy, dtype=float)
+    outward_direction = np.asarray(
+        one_sided_outward_direction_xy, dtype=float
+    )
+    outward_norm = float(np.linalg.norm(outward_direction))
+    scalars = (
+        position_action_scale,
+        maximum_lateral_translation_action,
+        positive_z_action,
+        strict_corridor_clearance_m,
+    )
+    if (
+        current_eef.shape != (3,)
+        or lateral_target_xy.shape != (2,)
+        or outward_direction.shape != (2,)
+        or not np.all(np.isfinite(current_eef))
+        or not np.all(np.isfinite(lateral_target_xy))
+        or not np.all(np.isfinite(outward_direction))
+        or not np.isclose(outward_norm, 1.0, rtol=0.0, atol=1e-12)
+        or not all(np.isfinite(value) and value > 0.0 for value in scalars)
+        or not isinstance(expected_pair_count, (int, np.integer))
+        or expected_pair_count <= 0
+    ):
+        raise ValueError("compiled corridor-reserve inputs are invalid")
+    pairs = list(overhead_guard.get("pairs", ()))
+    pair_identities = [_overhead_pair_identity(pair) for pair in pairs]
+    if (
+        not overhead_guard.get("accepted", False)
+        or len(pairs) != int(expected_pair_count)
+        or len(set(pair_identities)) != len(pair_identities)
+        or not all(pair.get("accepted", False) for pair in pairs)
+    ):
+        raise RuntimeError(
+            "compiled corridor reserve lacks its live all-pair base guard"
+        )
+    try:
+        native_low = np.asarray(native_action_spec["low"], dtype=float)
+        native_high = np.asarray(native_action_spec["high"], dtype=float)
+        native_source = str(native_action_spec["source"])
+    except Exception as exc:
+        raise RuntimeError(
+            "native OSC action-bound evidence is incomplete"
+        ) from exc
+    if (
+        not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(native_low < native_high)
+        or not (native_low[6] <= gripper <= native_high[6])
+        or not (native_low[2] < positive_z_action < native_high[2])
+    ):
+        raise RuntimeError(
+            "native OSC action bounds do not prove corridor recovery"
+        )
+    native_translation_norm_bound = float(
+        min(
+            -native_low[0],
+            native_high[0],
+            -native_low[1],
+            native_high[1],
+            -native_low[2],
+            native_high[2],
+        )
+    )
+    strict_native_translation_norm_bound = float(
+        np.nextafter(native_translation_norm_bound, 0.0)
+    )
+    lateral_cap = float(
+        min(
+            np.nextafter(
+                float(maximum_lateral_translation_action), 0.0
+            ),
+            np.sqrt(
+                max(
+                    0.0,
+                    strict_native_translation_norm_bound**2
+                    - float(positive_z_action) ** 2,
+                )
+            ),
+        )
+    )
+    outward_remaining_m = float(
+        np.dot(
+            lateral_target_xy - current_eef[:2],
+            outward_direction,
+        )
+    )
+    outward_action = float(
+        min(lateral_cap, outward_remaining_m / position_action_scale)
+    )
+    if not (outward_action > 0.0 and lateral_cap > 0.0):
+        raise RuntimeError(
+            "compiled corridor reserve has no strictly outward capacity"
+        )
+    action = np.zeros(7, dtype=float)
+    action[:2] = outward_direction * outward_action
+    action[2] = float(positive_z_action)
+    action[-1] = float(gripper)
+    translation_norm = float(np.linalg.norm(action[:3]))
+    commanded_outward_world_delta = float(
+        position_action_scale * outward_action
+    )
+    live_outside_clearance = float(
+        outside_side_guard["minimum_outside_clearance_m"]
+    )
+    required_outside_clearance = float(
+        outside_side_guard["required_outside_clearance_m"]
+    )
+    predicted_outside_clearance = float(
+        live_outside_clearance + commanded_outward_world_delta
+    )
+    if not (
+        np.isfinite(live_outside_clearance)
+        and np.isfinite(required_outside_clearance)
+        and live_outside_clearance > strict_corridor_clearance_m
+        and predicted_outside_clearance > live_outside_clearance
+        and translation_norm < native_translation_norm_bound
+        and np.all(action[:3] > native_low[:3])
+        and np.all(action[:3] < native_high[:3])
+    ):
+        raise RuntimeError(
+            "compiled corridor reserve violates its outside/native action proof"
+        )
+    base_reserve = float(overhead_guard["one_step_vertical_reserve_m"])
+    commanded_positive_z_world_delta = float(
+        position_action_scale * positive_z_action
+    )
+    pair_envelopes = []
+    minimum_predicted_base_surplus = float("inf")
+    for index, pair in enumerate(pairs):
+        strict_clearance = float(pair["strict_no_contact_clearance_m"])
+        current_clearance = float(pair["vertical_clearance_m"])
+        required_base = float(strict_clearance + base_reserve)
+        predicted_clearance = float(
+            current_clearance + commanded_positive_z_world_delta
+        )
+        predicted_base_surplus = float(
+            predicted_clearance - required_base
+        )
+        if not (
+            np.isfinite(strict_clearance)
+            and strict_clearance >= 0.0
+            and np.isfinite(current_clearance)
+            and current_clearance > required_base
+            and predicted_base_surplus > 0.0
+        ):
+            raise RuntimeError(
+                "compiled corridor reserve lost a base pair proof: "
+                f"index={index}"
+            )
+        minimum_predicted_base_surplus = min(
+            minimum_predicted_base_surplus,
+            predicted_base_surplus,
+        )
+        pair_envelopes.append(
+            {
+                "pair_index": int(index),
+                "gripper_geom": pair["gripper_geom"],
+                "counterpart_geom": pair["counterpart_geom"],
+                "counterpart_kind": pair["counterpart_kind"],
+                "current_vertical_clearance_m": current_clearance,
+                "required_base_clearance_m": required_base,
+                "predicted_vertical_clearance_m": predicted_clearance,
+                "predicted_base_surplus_m": predicted_base_surplus,
+            }
+        )
+    return action, {
+        "formula": (
+            "command only the compiled outward axis plus strictly positive Z, "
+            "remain inside the runtime-native 3-D norm, and prove every live "
+            "base-overhead pair improves vertically without requiring the "
+            "high-route buffer16 envelope"
+        ),
+        "current_eef": current_eef.tolist(),
+        "native_action_spec_source": native_source,
+        "compiled_pair_count": len(pair_envelopes),
+        "compiled_pair_identity_keys": [
+            list(identity) for identity in pair_identities
+        ],
+        "pair_envelopes": pair_envelopes,
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_z_action": float(action[2]),
+        "commanded_outward_world_delta_m": commanded_outward_world_delta,
+        "commanded_positive_z_world_delta_m": (
+            commanded_positive_z_world_delta
+        ),
+        "commanded_translation_action_norm": translation_norm,
+        "live_outside_clearance_m": live_outside_clearance,
+        "strict_corridor_clearance_m": float(strict_corridor_clearance_m),
+        "predicted_outside_clearance_m": predicted_outside_clearance,
+        "minimum_predicted_base_surplus_m": (
+            minimum_predicted_base_surplus
+        ),
+        "high_route_buffer16_required": False,
+        "proof": {
+            "strictly_outward_xy_zero_rotation": True,
+            "strictly_positive_z": True,
+            "strictly_inside_native_3d_action_norm_bound": True,
+            "outside_clearance_statically_improves": True,
+            "all_compiled_pairs_retain_strict_base_reserve": True,
+            "post_action_live_guards_required": True,
         },
     }
 
@@ -14273,7 +14494,7 @@ def _seek_stable_plate_contact(
         correction_lateral_target_xy = None
         correction_requires_pre_descent_controller_reserve = False
         correction_uses_high_z_hold_target = False
-        vertical_corridor_compiled_tail_brake_active = False
+        vertical_corridor_compiled_reserve_action_active = False
         if stage_before_action == "overhead_high_corridor_lateral":
             (
                 prepared_high_lateral_action,
@@ -14878,6 +15099,10 @@ def _seek_stable_plate_contact(
                 "fixed_buffer16_used_for_action_authorization": True,
             }
         elif structural_stage == "vertical_corridor_descent":
+            latest_overhead_guard = _live_compiled_overhead_guard(
+                env, overhead_staging_geometry
+            )
+            overhead_guard_checks += 1
             reserve_recovery_evidence = (
                 _vertical_corridor_reserve_recovery_evidence(
                     live_clearance_m=float(
@@ -14902,8 +15127,8 @@ def _seek_stable_plate_contact(
                     latest_vertical_step_progress_m=(
                         latest_vertical_step_progress_m
                     ),
-                    compiled_tail_brake_buffer_accepted=bool(
-                        latest_overhead_lateral_buffer["accepted"]
+                    corridor_recovery_guard_accepted=bool(
+                        latest_overhead_guard["accepted"]
                     ),
                     recovery_exit_phase_authorized=bool(
                         vertical_corridor_reserve_recovery_phase
@@ -14949,11 +15174,11 @@ def _seek_stable_plate_contact(
                         **reserve_recovery_phase_evidence,
                     }
                 )
-            reserve_recovery_compiled_brake_required = bool(
+            reserve_recovery_compiled_action_required = bool(
                 vertical_corridor_reserve_recovery_active
             )
-            vertical_corridor_compiled_tail_brake_active = bool(
-                reserve_recovery_compiled_brake_required
+            vertical_corridor_compiled_reserve_action_active = bool(
+                reserve_recovery_compiled_action_required
             )
             reserve_recovery_outward_restore_active = bool(
                 vertical_corridor_reserve_recovery_phase
@@ -14979,43 +15204,23 @@ def _seek_stable_plate_contact(
                 if vertical_corridor_reserve_recovery_active
                 else vertical_corridor_balanced_hold_target_xy
             )
-            if vertical_corridor_compiled_tail_brake_active:
-                latest_overhead_guard = _live_compiled_overhead_guard(
-                    env, overhead_staging_geometry
-                )
-                overhead_guard_checks += 1
-                latest_overhead_lateral_buffer = (
-                    _overhead_lateral_buffer_evidence(
-                        latest_overhead_guard,
-                        worst_case_controller_world_step_m=(
-                            maximum_post_descent_lateral_world_step
-                        ),
-                    )
-                )
+            if vertical_corridor_compiled_reserve_action_active:
                 if not latest_overhead_guard["accepted"]:
                     raise RuntimeError(
                         "vertical-corridor reserve recovery lacks its live "
-                        "compiled base-overhead tail-brake proof: "
+                        "compiled base-overhead proof: "
                         f"guard_step={guard_step} overhead_guard="
-                        f"{json.dumps(latest_overhead_guard, sort_keys=True)} "
-                        f"lateral_buffer="
-                        f"{json.dumps(latest_overhead_lateral_buffer, sort_keys=True)}"
+                        f"{json.dumps(latest_overhead_guard, sort_keys=True)}"
                     )
                 action, path_control = (
-                    _compiled_adaptive_lateral_rebuffer_action(
+                    _compiled_corridor_reserve_action(
                         current_eef=current_eef,
                         overhead_guard=latest_overhead_guard,
-                        overhead_lateral_buffer=(
-                            latest_overhead_lateral_buffer
-                        ),
                         outside_side_guard=pre_action_guard,
                         gripper=gripper,
                         position_action_scale=args.position_action_scale,
                         native_action_spec=native_action_spec,
                         expected_pair_count=expected_overhead_pair_count,
-                        worst_case_controller_world_step_m=(
-                            maximum_post_descent_lateral_world_step
-                        ),
                         lateral_target_xy=(
                             corridor_correction_hold_target_xy
                         ),
@@ -15025,11 +15230,16 @@ def _seek_stable_plate_contact(
                         maximum_lateral_translation_action=(
                             post_descent_lateral_max_translation_action
                         ),
-                        positive_z_tail_world_step_m=(
+                        positive_z_action=(
                             0.5
-                            * maximum_post_descent_lateral_world_step
+                            * post_descent_lateral_max_translation_action
                             if reserve_recovery_outward_restore_active
-                            else None
+                            else post_descent_lateral_max_translation_action
+                        ),
+                        strict_corridor_clearance_m=float(
+                            vertical_staging_corridor[
+                                "strict_corridor_entry_clearance_m"
+                            ]
                         ),
                     )
                 )
@@ -15091,8 +15301,8 @@ def _seek_stable_plate_contact(
                 "reserve_recovery_phase": (
                     vertical_corridor_reserve_recovery_phase
                 ),
-                "reserve_recovery_compiled_brake_required": (
-                    reserve_recovery_compiled_brake_required
+                "reserve_recovery_compiled_action_required": (
+                    reserve_recovery_compiled_action_required
                 ),
                 "reserve_recovery_outward_restore_active": (
                     reserve_recovery_outward_restore_active
@@ -15102,26 +15312,20 @@ def _seek_stable_plate_contact(
                     if reserve_recovery_outward_restore_active
                     else None
                 ),
-                "compiled_tail_brake_reused_for_reserve_recovery": (
-                    vertical_corridor_compiled_tail_brake_active
+                "compiled_corridor_reserve_action_used": (
+                    vertical_corridor_compiled_reserve_action_active
                 ),
-                "compiled_reserve_recovery_tail_brake_envelope": (
+                "compiled_corridor_reserve_action_envelope": (
                     path_control
-                    if vertical_corridor_compiled_tail_brake_active
+                    if vertical_corridor_compiled_reserve_action_active
                     else None
                 ),
                 "pre_action_reserve_recovery_overhead_guard": (
                     latest_overhead_guard
-                    if vertical_corridor_compiled_tail_brake_active
+                    if vertical_corridor_compiled_reserve_action_active
                     else None
                 ),
-                "pre_action_reserve_recovery_lateral_buffer": (
-                    _overhead_lateral_buffer_frame_summary(
-                        latest_overhead_lateral_buffer
-                    )
-                    if vertical_corridor_compiled_tail_brake_active
-                    else None
-                ),
+                "high_route_buffer16_required_for_corridor_recovery": False,
                 "negative_z_descent_suspended_for_reserve_recovery": bool(
                     vertical_corridor_reserve_recovery_active
                     and action[2] >= 0.0
@@ -15232,7 +15436,7 @@ def _seek_stable_plate_contact(
             )
         if (
             stage_before_action in overhead_route_stages
-            or vertical_corridor_compiled_tail_brake_active
+            or vertical_corridor_compiled_reserve_action_active
         ):
             latest_overhead_guard = _live_compiled_overhead_guard(
                 env, overhead_staging_geometry
@@ -15247,7 +15451,7 @@ def _seek_stable_plate_contact(
                     worst_case_controller_world_step_m=(
                         maximum_post_descent_lateral_world_step
                         if (
-                            vertical_corridor_compiled_tail_brake_active
+                            vertical_corridor_compiled_reserve_action_active
                             or stage_before_action
                             in fixed_buffer_lateral_stages
                             or (
@@ -16165,7 +16369,7 @@ def _seek_stable_plate_contact(
                     {"compiled_overhead_guard": latest_overhead_guard}
                     if (
                         stage_before_action in overhead_route_stages
-                        or vertical_corridor_compiled_tail_brake_active
+                        or vertical_corridor_compiled_reserve_action_active
                     )
                     else {}
                 ),
@@ -16179,7 +16383,7 @@ def _seek_stable_plate_contact(
                     }
                     if (
                         stage_before_action in overhead_route_stages
-                        or vertical_corridor_compiled_tail_brake_active
+                        or vertical_corridor_compiled_reserve_action_active
                     )
                     else {}
                 ),
@@ -16221,7 +16425,7 @@ def _seek_stable_plate_contact(
         if (
             (
                 stage_before_action in overhead_route_stages
-                or vertical_corridor_compiled_tail_brake_active
+                or vertical_corridor_compiled_reserve_action_active
             )
             and not latest_overhead_guard["accepted"]
         ):

@@ -17,6 +17,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _constraint_prioritized_outside_descent_action,
     _vertical_corridor_reserve_recovery_evidence,
     _vertical_corridor_reserve_recovery_phase_evidence,
+    _compiled_corridor_reserve_action,
     _compiled_adaptive_lateral_rebuffer_action,
     _compiled_adaptive_high_lateral_action,
     _compiled_adaptive_high_plane_action,
@@ -3146,6 +3147,43 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert low_positive_z_hold_evidence[
         "minimum_predicted_post_command_buffer16_surplus_m"
     ] > 0.0
+    corridor_reserve_action, corridor_reserve_evidence = (
+        _compiled_corridor_reserve_action(
+            current_eef=transition_eef,
+            overhead_guard=recovered_guard,
+            outside_side_guard={
+                "minimum_outside_clearance_m": 0.00075,
+                "required_outside_clearance_m": strict_clearance,
+            },
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_spec,
+            expected_pair_count=1,
+            lateral_target_xy=(
+                transition_eef[:2] + np.array([0.01, 0.0])
+            ),
+            one_sided_outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_lateral_translation_action=0.10,
+            positive_z_action=0.05,
+            strict_corridor_clearance_m=0.0004,
+        )
+    )
+    assert corridor_reserve_action[0] > 0.099
+    assert corridor_reserve_action[1] == 0.0
+    assert corridor_reserve_action[2] == pytest.approx(0.05)
+    assert corridor_reserve_evidence["compiled_pair_count"] == 1
+    assert corridor_reserve_evidence["high_route_buffer16_required"] is False
+    assert corridor_reserve_evidence[
+        "minimum_predicted_base_surplus_m"
+    ] > 0.0
+    assert corridor_reserve_evidence["proof"] == {
+        "strictly_outward_xy_zero_rotation": True,
+        "strictly_positive_z": True,
+        "strictly_inside_native_3d_action_norm_bound": True,
+        "outside_clearance_statically_improves": True,
+        "all_compiled_pairs_retain_strict_base_reserve": True,
+        "post_action_live_guards_required": True,
+    }
 
     # Job503168's recovered tail already passed the unchanged formal corridor
     # gate.  The former extra zero-Z frame then fell 0.239 mm and restarted the
@@ -3249,7 +3287,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         strict_corridor_entry_clearance_m=0.0004,
         latest_outward_step_progress_m=1.3378271275732434e-05,
         latest_vertical_step_progress_m=-0.0006499833005025879,
-        compiled_tail_brake_buffer_accepted=True,
+        corridor_recovery_guard_accepted=True,
         recovery_exit_phase_authorized=False,
         recovery_active_before_decision=False,
     )
@@ -3261,7 +3299,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         strict_corridor_entry_clearance_m=0.0004,
         latest_outward_step_progress_m=-0.00019280978843902452,
         latest_vertical_step_progress_m=-0.0018199586431316694,
-        compiled_tail_brake_buffer_accepted=True,
+        corridor_recovery_guard_accepted=True,
         recovery_exit_phase_authorized=False,
         recovery_active_before_decision=False,
     )
@@ -3274,7 +3312,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         strict_corridor_entry_clearance_m=0.0004,
         latest_outward_step_progress_m=-1e-6,
         latest_vertical_step_progress_m=1e-6,
-        compiled_tail_brake_buffer_accepted=True,
+        corridor_recovery_guard_accepted=True,
         recovery_exit_phase_authorized=False,
         recovery_active_before_decision=True,
     )
@@ -3286,7 +3324,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         strict_corridor_entry_clearance_m=0.0004,
         latest_outward_step_progress_m=1e-6,
         latest_vertical_step_progress_m=1e-6,
-        compiled_tail_brake_buffer_accepted=True,
+        corridor_recovery_guard_accepted=True,
         recovery_exit_phase_authorized=True,
         recovery_active_before_decision=True,
     )
@@ -3300,7 +3338,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
             strict_corridor_entry_clearance_m=0.0004,
             latest_outward_step_progress_m=1e-6,
             latest_vertical_step_progress_m=1e-6,
-            compiled_tail_brake_buffer_accepted=True,
+            corridor_recovery_guard_accepted=True,
             recovery_exit_phase_authorized=False,
             recovery_active_before_decision=True,
         )
@@ -3320,7 +3358,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
             strict_corridor_entry_clearance_m=0.0004,
             latest_outward_step_progress_m=1e-6,
             latest_vertical_step_progress_m=1e-6,
-            compiled_tail_brake_buffer_accepted=False,
+            corridor_recovery_guard_accepted=False,
             recovery_exit_phase_authorized=True,
             recovery_active_before_decision=True,
         )
@@ -3381,7 +3419,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
             "latest_vertical_step_progress_m": 0.00024407744120835684,
             "latest_outward_step_progress_m": 0.00009467837885429597,
             "live_clearance_m": 0.000736711298289186,
-            "compiled_tail_brake_buffer_accepted": False,
+            "corridor_recovery_guard_accepted": False,
         }
     )
     job503217_phase_hold = (
@@ -3435,7 +3473,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
             "live_clearance_m": 0.001343332975195899,
             "latest_outward_step_progress_m": 0.000020407306300318506,
             "latest_vertical_step_progress_m": -0.000021264757743555407,
-            "compiled_tail_brake_buffer_accepted": True,
+            "corridor_recovery_guard_accepted": True,
         }
     )
     job503234_exit_brake = (
@@ -3521,17 +3559,17 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "negative_z_descent_suspended_for_reserve_recovery" in (
         vertical_corridor_action
     )
-    assert "reserve_recovery_compiled_brake_required" in (
+    assert "reserve_recovery_compiled_action_required" in (
         vertical_corridor_action
     )
     assert (
-        "reserve_recovery_compiled_brake_required = bool("
+        "reserve_recovery_compiled_action_required = bool("
         in vertical_corridor_action
     )
     assert (
         "vertical_corridor_reserve_recovery_active"
         in vertical_corridor_action.split(
-            "reserve_recovery_compiled_brake_required = bool(", 1
+            "reserve_recovery_compiled_action_required = bool(", 1
         )[1].split(")", 1)[0]
     )
     assert "reserve_recovery_outward_restore_active" in (
@@ -3548,19 +3586,19 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "recovery_exit_phase_authorized" in vertical_corridor_action
     assert '== "outward_restore"' in vertical_corridor_action
     assert "_live_compiled_overhead_guard(" in vertical_corridor_action
-    assert "_overhead_lateral_buffer_evidence(" in vertical_corridor_action
-    assert "_compiled_adaptive_lateral_rebuffer_action(" in (
+    assert "_compiled_corridor_reserve_action(" in (
         vertical_corridor_action
     )
     assert "post_descent_lateral_max_translation_action" in (
         vertical_corridor_action
     )
-    assert "positive_z_tail_world_step_m" in vertical_corridor_action
-    assert "maximum_post_descent_lateral_world_step" in (
+    assert "positive_z_action" in vertical_corridor_action
+    assert "compiled_corridor_reserve_action_used" in (
         vertical_corridor_action
     )
-    assert "compiled_tail_brake_reused_for_reserve_recovery" in (
-        vertical_corridor_action
+    assert (
+        '"high_route_buffer16_required_for_corridor_recovery": False'
+        in vertical_corridor_action
     )
     assert "strictly positive Z" in vertical_corridor_action
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
