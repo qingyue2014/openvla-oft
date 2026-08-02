@@ -14278,6 +14278,7 @@ def _seek_stable_plate_contact(
                     overhead_lateral_buffer=(
                         latest_overhead_lateral_buffer
                     ),
+                    outside_side_guard=pre_action_guard,
                     gripper=gripper,
                     position_action_scale=args.position_action_scale,
                     native_action_spec=native_action_spec,

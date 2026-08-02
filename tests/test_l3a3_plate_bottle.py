@@ -3138,6 +3138,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "_compiled_adaptive_lateral_rebuffer_action(" in (
         brake_action_branch
     )
+    assert "outside_side_guard=pre_action_guard" in brake_action_branch
     assert "active_overhead_descent_world_step" in brake_action_branch
     assert "corridor_correction_hold_target_xy" in brake_action_branch
     assert "corridor_outward_direction" in brake_action_branch
