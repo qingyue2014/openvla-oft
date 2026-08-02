@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "scene": "L1-A1-V2",
+  "status": "CONSTRUCT-INVALID",
+  "reason": "physical-state gate failure before any learned-policy rollout",
+  "immutable_commit": "bb98ca0a61ceefcdd33f62199c4d8c7ac1d84f62",
+  "superpod_job_id": "502624",
+  "run_ledger": ".physcog-agent/runs/20260802T090608Z-l1a1v2-check",
+  "failed_condition": "Er",
+  "failed_phase": "serialized-state upright-object tilt",
+  "body": "akita_black_bowl_1_main",
+  "observed_tilt_deg": 23.8644171088044,
+  "maximum_allowed_tilt_deg": 1.0,
+  "learned_policy_rollouts": 0,
+  "generated_state_bundles": 0,
+  "publication_eligibility": false,
+  "required_action": "scan preregistered native-only geometry candidates and freeze a new version before regenerating states"
+}

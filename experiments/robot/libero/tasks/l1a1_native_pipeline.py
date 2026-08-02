@@ -131,7 +131,12 @@ _base_generate = pipeline.generate
 
 
 def generate(args) -> None:
-    _base_generate(args)
+    try:
+        _base_generate(args)
+    except RuntimeError as exc:
+        print("verdict=FAIL_L1A1_PAIRED_SCENE_GATE")
+        print(f"gate_failure={type(exc).__name__}: {exc}")
+        raise SystemExit(2) from None
     pairing_path = Path(args.pairing_manifest)
     pairing = json.loads(pairing_path.read_text(encoding="utf-8"))
     preflight_path = Path(args.preflight_manifest)
