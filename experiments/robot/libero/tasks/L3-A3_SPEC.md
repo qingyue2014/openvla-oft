@@ -101,8 +101,12 @@ independent remaining Z error share one scalar action norm under the live
 native OSC bound, the configured `0.20` bound, every one of the 55 compiled
 pair base8/buffer16 capacities, and the latest measured negative-Z inertial
 tail. Reaching zero XY error therefore cannot suppress required descent; any
-subsequent lateral drift is corrected during the same high-authority descent
-step. Its positive-Z brake begins when the EEF enters a deterministic
+subsequent outward-safety-axis deficit is corrected during the same
+high-authority descent step. That safety-axis component is one-sided: it may
+command the registered outward direction or zero, but an EEF overshoot never
+authorizes an inward return that would spend corridor clearance; the orthogonal
+XY component remains available for tangential hold. Its positive-Z brake begins
+when the EEF enters a deterministic
 two-command (`0.032 m`) buffer above the compiled staging height and uses the
 same `0.20` cap until measured vertical progress is nonnegative. If braking
 stops above the staging tolerance, the controller returns to bounded coupled

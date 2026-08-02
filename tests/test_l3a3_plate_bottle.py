@@ -3710,6 +3710,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         descent_compilation
     )
     assert "maximum_translation_action=(" in descent_compilation
+    assert "one_sided_outward_direction_xy=(" in descent_compilation
     assert "active_overhead_descent_translation_action" in descent_action
     assert "prepared_high_lateral_action" in descent_action
     assert "compiled_adaptive_corridor_descent_envelope" in descent_action
@@ -3819,9 +3820,10 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         in bounded_seek
     )
     assert (
-        '"corridor_xy_adaptive_coupled_descent_with_position_"'
+        '"corridor_xy_adaptive_one_sided_coupled_descent_with_"'
         in bounded_seek
     )
+    assert '"position_"' in bounded_seek
     assert (
         '"tolerance_full_clearance_or_measured_inward_response_"'
         in bounded_seek
@@ -3876,13 +3878,14 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
             worst_case_controller_world_step_m=0.016,
             couple_downward_to_lateral_remaining=False,
             maximum_translation_action=0.20,
+            one_sided_outward_direction_xy=np.array([1.0, 0.0]),
         )
     )
     assert np.array_equal(exact_action[:2], np.zeros(2))
     assert exact_action[2] < 0.0
     assert np.linalg.norm(exact_action[:3]) < 0.20
     assert exact_evidence["motion_kind"] == (
-        "corridor_holding_downward_descent"
+        "one_sided_corridor_holding_downward_descent"
     )
     assert exact_evidence["downward_coupled_to_lateral_remaining"] is False
     assert exact_evidence["independent_downward_progress_authorized"] is True
@@ -3892,6 +3895,37 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     ] == np.nextafter(0.20, 0.0)
     assert exact_evidence["proof"][
         "corridor_xy_hold_plus_nonpositive_z_zero_rotation"
+    ] is True
+    assert exact_evidence["proof"][
+        "inward_outward_axis_command_prohibited"
+    ] is True
+
+    overshot_corridor = exact_corridor.copy()
+    overshot_corridor[0] += 0.002
+    overshot_action, overshot_evidence = (
+        _compiled_adaptive_workspace_release_action(
+            current_eef=overshot_corridor,
+            corridor_target_xy=corridor_xy,
+            release_target_z=0.94,
+            measured_vertical_step_progress_m=0.0,
+            overhead_guard=overhead_guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_spec,
+            expected_pair_count=55,
+            worst_case_controller_world_step_m=0.016,
+            couple_downward_to_lateral_remaining=False,
+            maximum_translation_action=0.20,
+            one_sided_outward_direction_xy=np.array([1.0, 0.0]),
+        )
+    )
+    assert overshot_action[0] == 0.0
+    assert overshot_action[2] < 0.0
+    assert overshot_evidence[
+        "suppressed_inward_outward_axis_error_m"
+    ] == pytest.approx(0.002)
+    assert overshot_evidence["proof"][
+        "inward_outward_axis_command_prohibited"
     ] is True
 
 
@@ -4371,6 +4405,7 @@ def test_500199_routes_reachable_outside_high_before_workspace_release():
     assert evidence["proof"] == {
         "outward_xy_plus_nonpositive_z_zero_rotation": True,
         "corridor_xy_hold_plus_nonpositive_z_zero_rotation": False,
+        "inward_outward_axis_command_prohibited": False,
         "inward_xy_limited_to_prebuffer_one_ulp_bound": False,
         "pure_positive_z_zero_xy_rotation_recovery": False,
         "strictly_inside_native_3d_action_norm_bound": True,

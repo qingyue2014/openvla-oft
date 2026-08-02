@@ -6012,6 +6012,7 @@ def _compiled_adaptive_workspace_release_action(
     maximum_inward_xy_correction_m=None,
     couple_downward_to_lateral_remaining=True,
     maximum_translation_action=None,
+    one_sided_outward_direction_xy=None,
 ):
     """Move along a corridor/downward route under the live buffer16 proof."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -6025,10 +6026,42 @@ def _compiled_adaptive_workspace_release_action(
     couple_downward_to_lateral_remaining = bool(
         couple_downward_to_lateral_remaining
     )
+    one_sided_outward_direction = None
+    if one_sided_outward_direction_xy is not None:
+        one_sided_outward_direction = np.asarray(
+            one_sided_outward_direction_xy, dtype=float
+        )
+        if (
+            one_sided_outward_direction.shape != (2,)
+            or not np.all(np.isfinite(one_sided_outward_direction))
+        ):
+            raise ValueError(
+                "workspace-release one-sided outward direction is invalid"
+            )
+        one_sided_outward_norm = float(
+            np.linalg.norm(one_sided_outward_direction)
+        )
+        if not np.isfinite(one_sided_outward_norm) or (
+            one_sided_outward_norm <= 1e-9
+        ):
+            raise ValueError(
+                "workspace-release one-sided outward direction is invalid"
+            )
+        one_sided_outward_direction = (
+            one_sided_outward_direction / one_sided_outward_norm
+        )
     native_tangent_return_gate_enabled = bool(
         outward_direction_xy is not None
         or maximum_inward_xy_correction_m is not None
     )
+    if (
+        one_sided_outward_direction is not None
+        and native_tangent_return_gate_enabled
+    ):
+        raise ValueError(
+            "workspace-release one-sided hold conflicts with the native-"
+            "tangent return gate"
+        )
     if (outward_direction_xy is None) != (
         maximum_inward_xy_correction_m is None
     ):
@@ -6148,7 +6181,27 @@ def _compiled_adaptive_workspace_release_action(
     if route_strict_norm_bound <= 0.0 or base_reserve <= 0.0:
         raise RuntimeError("workspace-release native/base8 bound is invalid")
 
-    xy_error = corridor_target_xy - current_eef[:2]
+    raw_xy_error = corridor_target_xy - current_eef[:2]
+    raw_one_sided_outward_error = None
+    suppressed_inward_outward_axis_error = 0.0
+    xy_error = raw_xy_error.copy()
+    if one_sided_outward_direction is not None:
+        raw_one_sided_outward_error = float(
+            np.dot(raw_xy_error, one_sided_outward_direction)
+        )
+        suppressed_inward_outward_axis_error = float(
+            max(0.0, -raw_one_sided_outward_error)
+        )
+        tangential_error = (
+            raw_xy_error
+            - raw_one_sided_outward_error
+            * one_sided_outward_direction
+        )
+        xy_error = (
+            max(0.0, raw_one_sided_outward_error)
+            * one_sided_outward_direction
+            + tangential_error
+        )
     xy_remaining = float(np.linalg.norm(xy_error))
     requested_outward_projection = None
     requested_inward_xy_correction = 0.0
@@ -6483,6 +6536,14 @@ def _compiled_adaptive_workspace_release_action(
             failed_conditions.append("workspace_release_z_direction")
         if not literal_xy_delta <= xy_remaining:
             failed_conditions.append("corridor_xy_no_overshoot")
+        if (
+            one_sided_outward_direction is not None
+            and float(
+                np.dot(translation[:2], one_sided_outward_direction)
+            )
+            < 0.0
+        ):
+            failed_conditions.append("one_sided_outward_axis_reversal")
         if not literal_downward_delta <= abs(downward_z_error):
             failed_conditions.append("release_z_no_overshoot")
         if not all(
@@ -6656,7 +6717,11 @@ def _compiled_adaptive_workspace_release_action(
             "positive_z_inertial_recovery"
             if recovery_required
             else (
-                "corridor_holding_downward_descent"
+                (
+                    "one_sided_corridor_holding_downward_descent"
+                    if one_sided_outward_direction is not None
+                    else "corridor_holding_downward_descent"
+                )
                 if not couple_downward_to_lateral_remaining
                 else (
                     "ulp_bounded_inward_downward_workspace_release"
@@ -6670,7 +6735,9 @@ def _compiled_adaptive_workspace_release_action(
             "by the existing one-step world reserve and, for workspace "
             "release only, by remaining corridor XY; for corridor-holding "
             "descent the negative-Z request remains independent of a zero "
-            "lateral error; then cap only its negative-Z direction "
+            "lateral error and any inward safety-axis error is clamped to "
+            "zero while tangential correction remains active; then cap only "
+            "its negative-Z direction "
             "component by the live minimum all-55-pair pre-action buffer16 "
             "surplus after "
             "the latest measured negative-dz inertial reserve; authorize "
@@ -6685,6 +6752,18 @@ def _compiled_adaptive_workspace_release_action(
         ),
         "current_eef": current_eef.tolist(),
         "corridor_target_xy": corridor_target_xy.tolist(),
+        "raw_corridor_target_xy_error": raw_xy_error.tolist(),
+        "one_sided_outward_direction_xy": (
+            None
+            if one_sided_outward_direction is None
+            else one_sided_outward_direction.tolist()
+        ),
+        "raw_one_sided_outward_axis_error_m": (
+            raw_one_sided_outward_error
+        ),
+        "suppressed_inward_outward_axis_error_m": (
+            suppressed_inward_outward_axis_error
+        ),
         "native_tangent_return_gate_enabled": bool(
             native_tangent_return_gate_enabled
         ),
@@ -6794,6 +6873,16 @@ def _compiled_adaptive_workspace_release_action(
             "corridor_xy_hold_plus_nonpositive_z_zero_rotation": bool(
                 not recovery_required
                 and not couple_downward_to_lateral_remaining
+            ),
+            "inward_outward_axis_command_prohibited": bool(
+                one_sided_outward_direction is not None
+                and float(
+                    np.dot(
+                        action[:2],
+                        one_sided_outward_direction,
+                    )
+                )
+                >= 0.0
             ),
             "inward_xy_limited_to_prebuffer_one_ulp_bound": bool(
                 native_tangent_return_gate_enabled
@@ -12773,7 +12862,8 @@ def _seek_stable_plate_contact(
                     "registered_ulp_bounded_inward_return"
                 ),
                 (
-                    "corridor_xy_adaptive_coupled_descent_with_position_"
+                    "corridor_xy_adaptive_one_sided_coupled_descent_with_"
+                    "position_"
                     "tolerance_full_clearance_or_measured_inward_response_"
                     "brake"
                 ),
@@ -12820,7 +12910,10 @@ def _seek_stable_plate_contact(
                 "corridor-target XY error together with negative Z under that "
                 "same 55-pair buffer16 and measured-inertia proof, capped by "
                 "the registered 0.20 descent bound; a zero XY error never "
-                "suppresses required Z progress. The unchanged 0.10 bound "
+                "suppresses required Z progress, and the registered outward "
+                "safety axis may command only outward or zero motion, never "
+                "an inward return after target overshoot. The unchanged 0.10 "
+                "bound "
                 "remains exclusive to post-descent correction and contact "
                 "motion"
             ),
@@ -13300,6 +13393,9 @@ def _seek_stable_plate_contact(
                 couple_downward_to_lateral_remaining=False,
                 maximum_translation_action=(
                     active_overhead_descent_translation_action
+                ),
+                one_sided_outward_direction_xy=(
+                    geometry["outward_direction_xy"]
                 ),
             )
         adaptive_negative_z_action_requires_buffer16 = bool(
