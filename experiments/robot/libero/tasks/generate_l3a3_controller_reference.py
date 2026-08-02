@@ -3631,6 +3631,7 @@ def _native_osc_rotation_spec_evidence(env, native_action_spec):
 def _compiled_wrist_yaw_action(
     *,
     remaining_yaw_rad,
+    remaining_axis_angle_world=None,
     table_normal_world,
     current_eef_position,
     anchor_eef_position,
@@ -3692,7 +3693,15 @@ def _compiled_wrist_yaw_action(
         )
     else:
         bounded_translation_action = required_translation_action.copy()
-    requested_axis_angle = normal * float(remaining_yaw_rad)
+    requested_axis_angle = (
+        normal * float(remaining_yaw_rad)
+        if remaining_axis_angle_world is None
+        else np.asarray(remaining_axis_angle_world, dtype=float)
+    )
+    if requested_axis_angle.shape != (3,) or not np.all(
+        np.isfinite(requested_axis_angle)
+    ):
+        raise ValueError("wrist-yaw remaining axis-angle must be finite and 3-D")
     required_rotation_action = requested_axis_angle / scale[3:6]
     bounded_rotation_action = np.clip(
         required_rotation_action, low[3:6], high[3:6]
@@ -3721,8 +3730,14 @@ def _compiled_wrist_yaw_action(
     action[6] = float(gripper)
     commanded_axis_angle = scale[3:6] * bounded_rotation_action
     commanded_yaw = float(np.dot(commanded_axis_angle, normal))
-    if remaining_yaw_rad != 0.0 and commanded_yaw * remaining_yaw_rad <= 0.0:
-        raise RuntimeError("native OSC yaw action has the wrong rotation direction")
+    requested_rotation_norm = float(np.linalg.norm(requested_axis_angle))
+    commanded_rotation_alignment = float(
+        np.dot(commanded_axis_angle, requested_axis_angle)
+    )
+    if requested_rotation_norm > 0.0 and commanded_rotation_alignment <= 0.0:
+        raise RuntimeError(
+            "native OSC axis-angle action has the wrong rotation direction"
+        )
     commanded_world_correction = (
         float(position_action_scale) * translation_native_action
     )
@@ -3749,9 +3764,11 @@ def _compiled_wrist_yaw_action(
         "remaining_yaw_rad": float(remaining_yaw_rad),
         "table_normal_world": normal.tolist(),
         "requested_world_axis_angle_rad": requested_axis_angle.tolist(),
+        "requested_world_axis_angle_norm_rad": requested_rotation_norm,
         "required_rotation_action": required_rotation_action.tolist(),
         "bounded_rotation_action": bounded_rotation_action.tolist(),
         "commanded_world_axis_angle_rad": commanded_axis_angle.tolist(),
+        "commanded_rotation_alignment_rad2": commanded_rotation_alignment,
         "commanded_yaw_rad": commanded_yaw,
         "anchor_eef_position_world": anchor_eef.tolist(),
         "current_eef_position_world": current_eef.tolist(),
@@ -3797,7 +3814,7 @@ def _compiled_wrist_yaw_action(
         "position_correction_requested": position_correction_requested,
         "translation_direction_valid": translation_direction_valid,
         "orientation_hold_commanded": bool(
-            remaining_yaw_rad == 0.0
+            requested_rotation_norm == 0.0
             and np.all(bounded_rotation_action == 0.0)
         ),
         "clipped_action_axes": clipped_axes,
@@ -6585,6 +6602,35 @@ def _rotation_matrix_error_angle(rotation):
     return float(np.arccos(cosine))
 
 
+def _rotation_matrix_axis_angle(rotation):
+    """Convert one strict proper rotation to its shortest world axis-angle."""
+    rotation = _validated_rigid_rotation_matrix(
+        rotation, label="remaining rotation axis-angle"
+    )
+    angle = _rotation_matrix_error_angle(rotation)
+    if angle <= 1e-15:
+        return np.zeros(3, dtype=float)
+    sine = float(np.sin(angle))
+    if abs(sine) <= 1e-9:
+        raise RuntimeError(
+            "remaining rotation is too close to pi for a unique strict axis-angle"
+        )
+    skew_vector = np.array(
+        [
+            rotation[2, 1] - rotation[1, 2],
+            rotation[0, 2] - rotation[2, 0],
+            rotation[1, 0] - rotation[0, 1],
+        ],
+        dtype=float,
+    )
+    axis_angle = angle * skew_vector / (2.0 * sine)
+    if not np.all(np.isfinite(axis_angle)) or not np.isclose(
+        np.linalg.norm(axis_angle), angle, rtol=0.0, atol=1e-9
+    ):
+        raise RuntimeError("remaining rotation axis-angle conversion failed")
+    return axis_angle
+
+
 def _wrist_yaw_attainment_evidence(
     *,
     reference_frame,
@@ -6596,6 +6642,7 @@ def _wrist_yaw_attainment_evidence(
     position_progress_epsilon_m,
     anchor_eef_position=None,
     previous_absolute_error_rad=None,
+    previous_rotation_error_rad=None,
     previous_position_drift_m=None,
 ):
     """Measure actual rigid finger rotation against the selected yaw target."""
@@ -6704,9 +6751,12 @@ def _wrist_yaw_attainment_evidence(
         )
     )
     absolute_error = abs(remaining_yaw)
-    target_error_angle = _rotation_matrix_error_angle(
-        target_rotation @ measured_rotation.T
+    remaining_rotation = _validated_rigid_rotation_matrix(
+        target_rotation @ measured_rotation.T,
+        label="remaining wrist-yaw target rotation",
     )
+    remaining_axis_angle = _rotation_matrix_axis_angle(remaining_rotation)
+    target_error_angle = float(np.linalg.norm(remaining_axis_angle))
     position_drift = float(np.linalg.norm(current_eef - anchor_eef))
     anchor_position_error = anchor_eef - current_eef
     axis_error = float(np.linalg.norm(measured_rotation @ normal - normal))
@@ -6722,10 +6772,18 @@ def _wrist_yaw_attainment_evidence(
     )
     progress = None
     progressed = None
-    if previous_absolute_error_rad is not None:
+    progress_source = None
+    if previous_rotation_error_rad is not None:
+        if not np.isfinite(previous_rotation_error_rad):
+            raise ValueError("previous wrist rotation error must be finite")
+        progress = float(previous_rotation_error_rad - target_error_angle)
+        progress_source = "full_target_rotation_error"
+    elif previous_absolute_error_rad is not None:
         if not np.isfinite(previous_absolute_error_rad):
             raise ValueError("previous wrist-yaw error must be finite")
         progress = float(previous_absolute_error_rad - absolute_error)
+        progress_source = "signed_yaw_error"
+    if progress is not None:
         progressed = bool(progress > angular_progress_epsilon_rad)
     position_progress = None
     position_progressed = None
@@ -6755,6 +6813,12 @@ def _wrist_yaw_attainment_evidence(
         "remaining_yaw_rad": remaining_yaw,
         "absolute_error_rad": absolute_error,
         "target_rotation_error_rad": target_error_angle,
+        "measured_rotation_matrix_world": measured_rotation.tolist(),
+        "remaining_rotation_matrix_world": remaining_rotation.tolist(),
+        "remaining_rotation_axis_angle_world_rad": (
+            remaining_axis_angle.tolist()
+        ),
+        "remaining_rotation_axis_angle_norm_rad": target_error_angle,
         "maximum_angle_error_rad": float(maximum_angle_error_rad),
         "reference_eef_position_world": reference_eef.tolist(),
         "anchor_eef_position_world": anchor_eef.tolist(),
@@ -6771,6 +6835,7 @@ def _wrist_yaw_attainment_evidence(
         "rotation_direction_valid": rotation_direction_valid,
         "rigid_frame_valid": rigid_frame_valid,
         "angular_progress_rad": progress,
+        "angular_progress_source": progress_source,
         "angular_progress_epsilon_rad": float(
             angular_progress_epsilon_rad
         ),
@@ -7887,6 +7952,376 @@ def _strict_wrist_yaw_segment_plan(
     }
 
 
+def _strict_axis_angle_action_capacity_evidence(
+    *,
+    axis_angle_world,
+    native_action_spec,
+    rotation_spec,
+):
+    """Prove one arbitrary world axis-angle is strict inside live OSC bounds."""
+    axis_angle = np.asarray(axis_angle_world, dtype=float)
+    action_low = np.asarray(native_action_spec.get("low", ()), dtype=float)
+    action_high = np.asarray(native_action_spec.get("high", ()), dtype=float)
+    rotation_scale = np.asarray(
+        rotation_spec.get("output_axis_angle_rad_per_action", ()), dtype=float
+    )
+    output_min = np.asarray(
+        rotation_spec.get("output_min_axis_angle_rad", ()), dtype=float
+    )
+    output_max = np.asarray(
+        rotation_spec.get("output_max_axis_angle_rad", ()), dtype=float
+    )
+    if (
+        axis_angle.shape != (3,)
+        or action_low.shape != (7,)
+        or action_high.shape != (7,)
+        or rotation_scale.shape != (6,)
+        or output_min.shape != (6,)
+        or output_max.shape != (6,)
+        or not np.all(np.isfinite(axis_angle))
+        or not np.all(np.isfinite(action_low))
+        or not np.all(np.isfinite(action_high))
+        or not np.all(action_low < action_high)
+        or np.any(rotation_scale[3:6] <= 0.0)
+        or np.any(output_min[3:6] >= 0.0)
+        or np.any(output_max[3:6] <= 0.0)
+    ):
+        raise ValueError("strict axis-angle capacity inputs are invalid")
+    if not native_action_spec.get("runtime_resolved", False) or not rotation_spec.get(
+        "runtime_resolved", False
+    ):
+        raise RuntimeError("strict axis-angle capacity requires live OSC bounds")
+    axis_angle_norm = float(np.linalg.norm(axis_angle))
+    native_norm_bound = float(
+        np.min(np.minimum(-output_min[3:6], output_max[3:6]))
+    )
+    if axis_angle_norm <= 1e-15:
+        directional_capacity = native_norm_bound
+        directional_axes = []
+    else:
+        unit_axis = axis_angle / axis_angle_norm
+        action_per_axis_angle_norm = unit_axis / rotation_scale[3:6]
+        directional_axes = []
+        for local_axis, coefficient in enumerate(action_per_axis_angle_norm):
+            if abs(float(coefficient)) <= 1e-15:
+                continue
+            action_index = int(local_axis + 3)
+            action_bound = float(
+                action_high[action_index]
+                if coefficient > 0.0
+                else action_low[action_index]
+            )
+            capacity = float(action_bound / coefficient)
+            if not np.isfinite(capacity) or capacity <= 0.0:
+                raise RuntimeError(
+                    "native OSC has no capacity along the remaining axis-angle"
+                )
+            directional_axes.append(
+                {
+                    "rotation_action_index": action_index,
+                    "unit_axis_component": float(unit_axis[local_axis]),
+                    "directional_action_bound": action_bound,
+                    "directional_axis_angle_capacity_rad": capacity,
+                }
+            )
+        if not directional_axes:
+            raise RuntimeError("remaining axis-angle has no controlled component")
+        directional_capacity = min(
+            record["directional_axis_angle_capacity_rad"]
+            for record in directional_axes
+        )
+    derived_capacity = float(min(native_norm_bound, directional_capacity))
+    strict_capacity = float(np.nextafter(derived_capacity, 0.0))
+    minimum_segment_count = max(
+        1,
+        int(np.ceil(axis_angle_norm / strict_capacity)),
+    )
+    required_rotation_action = axis_angle / rotation_scale[3:6]
+    action_strict = bool(
+        np.all(action_low[3:6] < required_rotation_action)
+        and np.all(required_rotation_action < action_high[3:6])
+    )
+    accepted = bool(
+        minimum_segment_count == 1
+        and axis_angle_norm < derived_capacity
+        and action_strict
+    )
+    return {
+        "accepted": accepted,
+        "formula": (
+            "derive the directional live native-action capacity of the complete "
+            "world axis-angle, intersect it with the existing 0.5 rad axis-angle "
+            "norm bound, and require the command to remain strictly interior"
+        ),
+        "axis_angle_world_rad": axis_angle.tolist(),
+        "axis_angle_norm_rad": axis_angle_norm,
+        "native_axis_angle_norm_bound_rad": native_norm_bound,
+        "directional_action_axis_capacities": directional_axes,
+        "derived_directional_axis_angle_capacity_rad": derived_capacity,
+        "strict_directional_axis_angle_capacity_rad": strict_capacity,
+        "minimum_segment_count": int(minimum_segment_count),
+        "required_rotation_action": required_rotation_action.tolist(),
+        "required_rotation_action_peak": float(
+            np.max(np.abs(required_rotation_action))
+        ),
+        "strictly_inside_native_action_bounds": action_strict,
+        "native_action_spec_source": native_action_spec.get("source"),
+        "native_rotation_spec_source": rotation_spec.get("source"),
+    }
+
+
+def _absolute_wrist_yaw_runtime_target(
+    *,
+    planned_segment,
+    absolute_start_attainment,
+    total_yaw_spec,
+    native_action_spec,
+    rotation_spec,
+):
+    """Derive one live relative command toward a fixed absolute yaw waypoint."""
+    planned_absolute_yaw = float(
+        planned_segment.get("absolute_target_yaw_rad", np.nan)
+    )
+    actual_absolute_yaw = float(
+        absolute_start_attainment.get("actual_yaw_rad", np.nan)
+    )
+    measured_remaining_yaw = float(
+        absolute_start_attainment.get("remaining_yaw_rad", np.nan)
+    )
+    measured_target_yaw = float(
+        absolute_start_attainment.get("target_yaw_rad", np.nan)
+    )
+    normal = np.asarray(
+        total_yaw_spec.get("table_normal_world", ()), dtype=float
+    )
+    original_reference_outward = np.asarray(
+        total_yaw_spec.get("reference_outward_direction_xy", ()), dtype=float
+    )
+    planned_outward = np.asarray(
+        planned_segment.get("target_outward_direction_xy", ()), dtype=float
+    )
+    measured_absolute_rotation = np.asarray(
+        absolute_start_attainment.get("measured_rotation_matrix_world", ()),
+        dtype=float,
+    )
+    measured_remaining_rotation = np.asarray(
+        absolute_start_attainment.get("remaining_rotation_matrix_world", ()),
+        dtype=float,
+    )
+    measured_remaining_axis_angle = np.asarray(
+        absolute_start_attainment.get(
+            "remaining_rotation_axis_angle_world_rad", ()
+        ),
+        dtype=float,
+    )
+    planned_absolute_rotation = np.asarray(
+        planned_segment.get("cumulative_yaw_spec", {}).get(
+            "rotation_matrix_world", ()
+        ),
+        dtype=float,
+    )
+    if (
+        not np.isfinite(planned_absolute_yaw)
+        or not np.isfinite(actual_absolute_yaw)
+        or not np.isfinite(measured_remaining_yaw)
+        or not np.isfinite(measured_target_yaw)
+        or normal.shape != (3,)
+        or original_reference_outward.shape != (2,)
+        or planned_outward.shape != (2,)
+        or measured_absolute_rotation.shape != (3, 3)
+        or measured_remaining_rotation.shape != (3, 3)
+        or measured_remaining_axis_angle.shape != (3,)
+        or planned_absolute_rotation.shape != (3, 3)
+        or not np.all(np.isfinite(normal))
+        or not np.all(np.isfinite(original_reference_outward))
+        or not np.all(np.isfinite(planned_outward))
+        or not np.all(np.isfinite(measured_absolute_rotation))
+        or not np.all(np.isfinite(measured_remaining_rotation))
+        or not np.all(np.isfinite(measured_remaining_axis_angle))
+        or not np.all(np.isfinite(planned_absolute_rotation))
+    ):
+        raise ValueError("absolute wrist-yaw runtime target inputs are invalid")
+    if not (
+        absolute_start_attainment.get("rigid_frame_valid", False)
+        and absolute_start_attainment.get("position_attained", False)
+        and absolute_start_attainment.get("rotation_direction_valid", False)
+    ):
+        raise RuntimeError(
+            "absolute wrist-yaw waypoint requires a valid live native frame and "
+            "anchor before deriving its relative command"
+        )
+
+    measured_absolute_rotation = _validated_rigid_rotation_matrix(
+        measured_absolute_rotation,
+        label="live cumulative wrist-yaw rotation",
+    )
+    planned_absolute_rotation = _validated_rigid_rotation_matrix(
+        planned_absolute_rotation,
+        label="planned absolute wrist-yaw rotation",
+    )
+    expected_remaining_rotation = _validated_rigid_rotation_matrix(
+        planned_absolute_rotation @ measured_absolute_rotation.T,
+        label="live correction to absolute wrist-yaw target",
+    )
+    expected_remaining_axis_angle = _rotation_matrix_axis_angle(
+        expected_remaining_rotation
+    )
+    if not (
+        np.allclose(
+            measured_remaining_rotation,
+            expected_remaining_rotation,
+            rtol=0.0,
+            atol=1e-9,
+        )
+        and np.allclose(
+            measured_remaining_axis_angle,
+            expected_remaining_axis_angle,
+            rtol=0.0,
+            atol=1e-9,
+        )
+    ):
+        raise RuntimeError(
+            "live full axis-angle evidence does not close the absolute native-"
+            "frame wrist target"
+        )
+    expected_remaining_yaw = float(
+        np.arctan2(
+            np.sin(planned_absolute_yaw - actual_absolute_yaw),
+            np.cos(planned_absolute_yaw - actual_absolute_yaw),
+        )
+    )
+    if not (
+        np.isclose(
+            measured_target_yaw,
+            planned_absolute_yaw,
+            rtol=0.0,
+            atol=1e-12,
+        )
+        and np.isclose(
+            measured_remaining_yaw,
+            expected_remaining_yaw,
+            rtol=0.0,
+            atol=1e-12,
+        )
+    ):
+        raise RuntimeError(
+            "live absolute wrist-yaw evidence diverged from the planned native-"
+            "frame waypoint"
+        )
+
+    reference_3d = np.r_[
+        original_reference_outward
+        / float(np.linalg.norm(original_reference_outward)),
+        0.0,
+    ]
+    cross_matrix = np.array(
+        [
+            [0.0, -normal[2], normal[1]],
+            [normal[2], 0.0, -normal[0]],
+            [-normal[1], normal[0], 0.0],
+        ],
+        dtype=float,
+    )
+    live_absolute_rotation = (
+        np.eye(3)
+        + np.sin(actual_absolute_yaw) * cross_matrix
+        + (1.0 - np.cos(actual_absolute_yaw))
+        * (cross_matrix @ cross_matrix)
+    )
+    live_reference_outward = (live_absolute_rotation @ reference_3d)[:2]
+    relative_yaw_spec = _hypothetical_wrist_yaw_specs(
+        reference_outward_direction_xy=live_reference_outward,
+        target_outward_directions_xy=[planned_outward],
+        table_normal_world=normal,
+    )[0]
+    local_reference_3d = np.r_[live_reference_outward, 0.0]
+    full_rotated_reference = expected_remaining_rotation @ local_reference_3d
+    full_rotated_reference_xy_norm = float(
+        np.linalg.norm(full_rotated_reference[:2])
+    )
+    if (
+        not np.all(np.isfinite(full_rotated_reference))
+        or full_rotated_reference_xy_norm <= 1e-9
+    ):
+        raise RuntimeError(
+            "full absolute correction loses the native table-tangent reference"
+        )
+    induced_full_rotation_yaw = float(
+        np.arctan2(
+            np.dot(
+                normal,
+                np.cross(local_reference_3d, full_rotated_reference),
+            ),
+            np.dot(local_reference_3d, full_rotated_reference),
+        )
+    )
+    if not np.isfinite(induced_full_rotation_yaw):
+        raise RuntimeError("full absolute correction has no finite projected yaw")
+    relative_yaw_spec = {
+        **relative_yaw_spec,
+        "target_outward_direction_xy": (
+            full_rotated_reference[:2]
+            / full_rotated_reference_xy_norm
+        ).tolist(),
+        "yaw_angle_rad": induced_full_rotation_yaw,
+        "yaw_angle_deg": float(np.degrees(induced_full_rotation_yaw)),
+        "axis_angle_world_rad": expected_remaining_axis_angle.tolist(),
+        "rotation_matrix_world": expected_remaining_rotation.tolist(),
+        "formula": (
+            "full live relative rotation = fixed absolute cumulative target "
+            "rotation @ measured cumulative rotation.T; convert that exact "
+            "world rotation to its shortest axis-angle"
+        ),
+        "absolute_cumulative_target_derived": True,
+    }
+    live_relative_plan = _strict_axis_angle_action_capacity_evidence(
+        axis_angle_world=expected_remaining_axis_angle,
+        native_action_spec=native_action_spec,
+        rotation_spec=rotation_spec,
+    )
+    if not live_relative_plan["accepted"]:
+        raise RuntimeError(
+            "live absolute wrist-yaw waypoint requires supplemental strict "
+            "segments; this execution is stopped fail-closed instead of clipping: "
+            f"{json.dumps(live_relative_plan, sort_keys=True)}"
+        )
+    return {
+        "formula": (
+            "measure actual cumulative yaw against the initial native finger "
+            "frame, subtract it from this fixed absolute cumulative waypoint, "
+            "derive the complete live world axis-angle that closes the fixed "
+            "absolute rotation, and require a fresh one-segment strict native "
+            "OSC capacity proof"
+        ),
+        "planned_segment_index": int(planned_segment["segment_index"]),
+        "planned_absolute_target_yaw_rad": planned_absolute_yaw,
+        "live_actual_absolute_yaw_rad": actual_absolute_yaw,
+        "measured_remaining_yaw_to_absolute_target_rad": (
+            measured_remaining_yaw
+        ),
+        "full_rotation_induced_local_yaw_rad": induced_full_rotation_yaw,
+        "measured_remaining_full_axis_angle_world_rad": (
+            expected_remaining_axis_angle.tolist()
+        ),
+        "measured_remaining_full_axis_angle_norm_rad": float(
+            np.linalg.norm(expected_remaining_axis_angle)
+        ),
+        "fixed_preregistered_relative_delta_rad": float(
+            planned_segment["relative_target_yaw_rad"]
+        ),
+        "live_reference_outward_direction_xy": (
+            live_reference_outward.tolist()
+        ),
+        "planned_absolute_outward_direction_xy": planned_outward.tolist(),
+        "relative_yaw_spec": relative_yaw_spec,
+        "live_relative_capacity_plan": live_relative_plan,
+        "strictly_inside_live_native_capacity": True,
+        "supplemental_segment_count_required": 0,
+        "over_capacity_policy": "fail_closed_without_clip_or_fallback",
+        "absolute_target_identity_preserved": True,
+    }
+
+
 def _compiled_trailing_side_contact_candidates(
     env,
     *,
@@ -8228,22 +8663,61 @@ def _execute_high_safe_wrist_yaw(
         ),
         "maximum_position_settle_steps": int(args.push_tracking_steps),
     }
+
+    def derive_live_absolute_segment(planned_segment, live_frame):
+        absolute_start_attainment = _wrist_yaw_attainment_evidence(
+            reference_frame=initial_reference_frame,
+            current_frame=live_frame,
+            yaw_spec=planned_segment["cumulative_yaw_spec"],
+            maximum_angle_error_rad=maximum_angle_error,
+            maximum_position_drift_m=args.position_tolerance,
+            angular_progress_epsilon_rad=angular_progress_epsilon,
+            position_progress_epsilon_m=(
+                args.minimum_saturated_waypoint_progress
+            ),
+            anchor_eef_position=anchor_eef,
+        )
+        runtime_target = _absolute_wrist_yaw_runtime_target(
+            planned_segment=planned_segment,
+            absolute_start_attainment=absolute_start_attainment,
+            total_yaw_spec=total_yaw_spec,
+            native_action_spec=native_action_spec,
+            rotation_spec=rotation_spec,
+        )
+        live_segment_reference = live_frame
+        live_segment_spec = runtime_target["relative_yaw_spec"]
+        live_segment_attainment = _wrist_yaw_attainment_evidence(
+            reference_frame=live_segment_reference,
+            current_frame=live_frame,
+            yaw_spec=live_segment_spec,
+            maximum_angle_error_rad=maximum_angle_error,
+            maximum_position_drift_m=args.position_tolerance,
+            angular_progress_epsilon_rad=angular_progress_epsilon,
+            position_progress_epsilon_m=(
+                args.minimum_saturated_waypoint_progress
+            ),
+            anchor_eef_position=anchor_eef,
+        )
+        return (
+            live_segment_reference,
+            live_segment_spec,
+            live_segment_attainment,
+            absolute_start_attainment,
+            runtime_target,
+        )
+
     current_frame = initial_reference_frame
     yaw_segment_index = 0
     active_segment = yaw_segmentation["segments"][yaw_segment_index]
-    segment_reference_frame = current_frame
-    segment_yaw_spec = active_segment["relative_yaw_spec"]
-    attainment = _wrist_yaw_attainment_evidence(
-        reference_frame=segment_reference_frame,
-        current_frame=current_frame,
-        yaw_spec=segment_yaw_spec,
-        maximum_angle_error_rad=maximum_angle_error,
-        maximum_position_drift_m=args.position_tolerance,
-        angular_progress_epsilon_rad=angular_progress_epsilon,
-        position_progress_epsilon_m=(
-            args.minimum_saturated_waypoint_progress
-        ),
-        anchor_eef_position=anchor_eef,
+    (
+        segment_reference_frame,
+        segment_yaw_spec,
+        attainment,
+        absolute_segment_start_attainment,
+        active_runtime_target,
+    ) = derive_live_absolute_segment(
+        active_segment,
+        current_frame,
     )
     frames = []
     yaw_segments = []
@@ -8295,6 +8769,20 @@ def _execute_high_safe_wrist_yaw(
                     "position_settle_steps": int(
                         segment_position_settle_steps
                     ),
+                    "absolute_segment_start_attainment": (
+                        absolute_segment_start_attainment
+                    ),
+                    "live_absolute_runtime_target": active_runtime_target,
+                    "executed_relative_yaw_spec": segment_yaw_spec,
+                    "executed_relative_target_yaw_rad": float(
+                        segment_yaw_spec["yaw_angle_rad"]
+                    ),
+                    "absolute_projected_remaining_yaw_at_start_rad": float(
+                        active_runtime_target[
+                            "measured_remaining_yaw_to_absolute_target_rad"
+                        ]
+                    ),
+                    "absolute_cumulative_target_is_authoritative": True,
                     "local_attainment_evidence": attainment,
                     "cumulative_attainment_evidence": cumulative_attainment,
                     "shared_budget_used_after_segment": len(frames),
@@ -8307,19 +8795,15 @@ def _execute_high_safe_wrist_yaw(
             if yaw_segment_index == len(yaw_segmentation["segments"]):
                 break
             active_segment = yaw_segmentation["segments"][yaw_segment_index]
-            segment_reference_frame = current_frame
-            segment_yaw_spec = active_segment["relative_yaw_spec"]
-            attainment = _wrist_yaw_attainment_evidence(
-                reference_frame=segment_reference_frame,
-                current_frame=current_frame,
-                yaw_spec=segment_yaw_spec,
-                maximum_angle_error_rad=maximum_angle_error,
-                maximum_position_drift_m=args.position_tolerance,
-                angular_progress_epsilon_rad=angular_progress_epsilon,
-                position_progress_epsilon_m=(
-                    args.minimum_saturated_waypoint_progress
-                ),
-                anchor_eef_position=anchor_eef,
+            (
+                segment_reference_frame,
+                segment_yaw_spec,
+                attainment,
+                absolute_segment_start_attainment,
+                active_runtime_target,
+            ) = derive_live_absolute_segment(
+                active_segment,
+                current_frame,
             )
             segment_frame_start = len(frames)
             consecutive_angular_stall_steps = 0
@@ -8344,8 +8828,19 @@ def _execute_high_safe_wrist_yaw(
             if stage == "position_settle"
             else attainment["remaining_yaw_rad"]
         )
+        commanded_remaining_axis_angle = (
+            np.zeros(3, dtype=float)
+            if stage == "position_settle"
+            else np.asarray(
+                attainment[
+                    "remaining_rotation_axis_angle_world_rad"
+                ],
+                dtype=float,
+            )
+        )
         action, action_evidence = _compiled_wrist_yaw_action(
             remaining_yaw_rad=commanded_remaining_yaw,
+            remaining_axis_angle_world=commanded_remaining_axis_angle,
             table_normal_world=table_normal,
             current_eef_position=current_eef,
             anchor_eef_position=anchor_eef,
@@ -8383,6 +8878,9 @@ def _execute_high_safe_wrist_yaw(
                 f"{json.dumps(pre_gate, sort_keys=True)}"
             )
         previous_absolute_error = float(attainment["absolute_error_rad"])
+        previous_rotation_error = float(
+            attainment["target_rotation_error_rad"]
+        )
         previous_position_drift = float(
             attainment["eef_position_drift_m"]
         )
@@ -8409,6 +8907,7 @@ def _execute_high_safe_wrist_yaw(
                 args.minimum_saturated_waypoint_progress
             ),
             previous_absolute_error_rad=previous_absolute_error,
+            previous_rotation_error_rad=previous_rotation_error,
             previous_position_drift_m=previous_position_drift,
             anchor_eef_position=anchor_eef,
         )
@@ -8468,6 +8967,14 @@ def _execute_high_safe_wrist_yaw(
                 active_segment["absolute_target_yaw_rad"]
             ),
             "segment_relative_target_yaw_rad": float(
+                segment_yaw_spec["yaw_angle_rad"]
+            ),
+            "absolute_projected_remaining_yaw_rad": float(
+                active_runtime_target[
+                    "measured_remaining_yaw_to_absolute_target_rad"
+                ]
+            ),
+            "fixed_preregistered_relative_delta_rad": float(
                 active_segment["relative_target_yaw_rad"]
             ),
             "stage": stage,
@@ -8495,9 +9002,17 @@ def _execute_high_safe_wrist_yaw(
             "segment_absolute_target_yaw_rad": active_segment[
                 "absolute_target_yaw_rad"
             ],
-            "segment_relative_target_yaw_rad": active_segment[
+            "segment_relative_target_yaw_rad": active_runtime_target[
+                "full_rotation_induced_local_yaw_rad"
+            ],
+            "fixed_preregistered_relative_delta_rad": active_segment[
                 "relative_target_yaw_rad"
             ],
+            "live_remaining_yaw_to_absolute_target_rad": (
+                active_runtime_target[
+                    "measured_remaining_yaw_to_absolute_target_rad"
+                ]
+            ),
             "stage": stage,
             "position_settle_step": settle_step_index,
             "shared_budget_remaining_after_action": int(
@@ -8523,6 +9038,9 @@ def _execute_high_safe_wrist_yaw(
             ],
             "action_will_clip": action_evidence["action_will_clip"],
             "absolute_yaw_error_rad": attainment["absolute_error_rad"],
+            "remaining_rotation_axis_angle_norm_rad": attainment[
+                "remaining_rotation_axis_angle_norm_rad"
+            ],
             "angular_progress_rad": attainment["angular_progress_rad"],
             "rotation_attained": attainment["rotation_attained"],
             "position_attained": attainment["position_attained"],

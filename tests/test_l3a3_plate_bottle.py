@@ -62,12 +62,14 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _robot_contacts_body,
     _robot_gripper_body_names,
     _robot_nonrobot_contact_evidence,
+    _rotation_matrix_axis_angle,
     _select_reachable_compiled_side_candidate,
     _select_executable_wrist_yaw_candidate,
     _select_reachable_trailing_contact,
     _side_contact_targets_from_compiled_bounds,
     _strict_native_high_prebuffer_target,
     _strict_wrist_yaw_segment_plan,
+    _absolute_wrist_yaw_runtime_target,
     _validated_rigid_rotation_matrix,
     _wrist_yaw_attainment_evidence,
     _wrist_yaw_stage_budget_evidence,
@@ -891,6 +893,26 @@ def test_native_wrist_yaw_action_resolves_scale_and_gates_clip_contact_stall():
     assert bounded["commanded_yaw_rad"] == pytest.approx(0.4)
     assert bounded["translation_direction_valid"] is True
 
+    full_axis_action, full_axis_evidence = _compiled_wrist_yaw_action(
+        remaining_yaw_rad=-0.4,
+        remaining_axis_angle_world=[0.02, -0.03, -0.4],
+        table_normal_world=[0.0, 0.0, 1.0],
+        current_eef_position=[0.0, 0.0, 1.0],
+        anchor_eef_position=[0.0, 0.0, 1.0],
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+        gripper=-1.0,
+        native_action_spec=native_spec,
+        rotation_spec=rotation_spec,
+    )
+    np.testing.assert_allclose(
+        full_axis_action[3:6], [0.04, -0.06, -0.8]
+    )
+    assert full_axis_evidence["action_will_clip"] is False
+    assert full_axis_evidence[
+        "requested_world_axis_angle_norm_rad"
+    ] == pytest.approx(np.linalg.norm([0.02, -0.03, -0.4]))
+
     compensated_action, compensated = _compiled_wrist_yaw_action(
         remaining_yaw_rad=0.2,
         table_normal_world=[0.0, 0.0, 1.0],
@@ -1126,6 +1148,180 @@ def test_trailing_wrist_yaw_segments_are_minimal_strict_and_cumulative():
     with pytest.raises(RuntimeError, match="native-frame wrist-yaw identity"):
         _strict_wrist_yaw_segment_plan(
             yaw_spec=changed_identity,
+            native_action_spec=native_spec,
+            rotation_spec=rotation_spec,
+        )
+
+    # Job 502434 attained segment 1 inside its local tolerance but 0.014923632
+    # rad short of its fixed absolute waypoint.  Segment 2 must close that live
+    # cumulative error, not apply the old fixed -0.389061303 relative delta.
+    segment_1_underrotation = 0.014923632053875311
+    segment_1_actual_absolute_yaw = float(
+        segments[0]["absolute_target_yaw_rad"] + segment_1_underrotation
+    )
+    segment_2_target = float(segments[1]["absolute_target_yaw_rad"])
+    corrected_remaining = float(
+        segment_2_target - segment_1_actual_absolute_yaw
+    )
+    segment_1_actual_spec = _hypothetical_wrist_yaw_specs(
+        reference_outward_direction_xy=[1.0, 0.0],
+        target_outward_directions_xy=[
+            [
+                np.cos(segment_1_actual_absolute_yaw),
+                np.sin(segment_1_actual_absolute_yaw),
+            ]
+        ],
+        table_normal_world=[0.0, 0.0, 1.0],
+    )[0]
+    segment_1_actual_rotation = np.asarray(
+        segment_1_actual_spec["rotation_matrix_world"], dtype=float
+    )
+    segment_2_absolute_rotation = np.asarray(
+        segments[1]["cumulative_yaw_spec"]["rotation_matrix_world"],
+        dtype=float,
+    )
+    segment_2_remaining_rotation = (
+        segment_2_absolute_rotation @ segment_1_actual_rotation.T
+    )
+    job_502434_start_evidence = {
+        "actual_yaw_rad": segment_1_actual_absolute_yaw,
+        "remaining_yaw_rad": corrected_remaining,
+        "target_yaw_rad": segment_2_target,
+        "measured_rotation_matrix_world": (
+            segment_1_actual_rotation.tolist()
+        ),
+        "remaining_rotation_matrix_world": (
+            segment_2_remaining_rotation.tolist()
+        ),
+        "remaining_rotation_axis_angle_world_rad": [
+            0.0,
+            0.0,
+            corrected_remaining,
+        ],
+        "rigid_frame_valid": True,
+        "position_attained": True,
+        "rotation_direction_valid": True,
+    }
+    live_segment_2 = _absolute_wrist_yaw_runtime_target(
+        planned_segment=segments[1],
+        absolute_start_attainment=job_502434_start_evidence,
+        total_yaw_spec=yaw_spec,
+        native_action_spec=native_spec,
+        rotation_spec=rotation_spec,
+    )
+    assert corrected_remaining == pytest.approx(-0.4039849351963284)
+    assert live_segment_2[
+        "measured_remaining_yaw_to_absolute_target_rad"
+    ] == pytest.approx(corrected_remaining)
+    assert live_segment_2["relative_yaw_spec"][
+        "yaw_angle_rad"
+    ] == pytest.approx(corrected_remaining)
+    assert abs(corrected_remaining) < 0.5
+    assert live_segment_2["live_relative_capacity_plan"][
+        "minimum_segment_count"
+    ] == 1
+    assert live_segment_2["live_relative_capacity_plan"][
+        "required_rotation_action_peak"
+    ] == pytest.approx(0.8079698703926568)
+    assert corrected_remaining - segments[1][
+        "relative_target_yaw_rad"
+    ] == pytest.approx(-segment_1_underrotation)
+    assert live_segment_2["absolute_target_identity_preserved"] is True
+    np.testing.assert_allclose(
+        live_segment_2["planned_absolute_outward_direction_xy"],
+        segments[1]["target_outward_direction_xy"],
+        rtol=0.0,
+        atol=1e-12,
+    )
+
+    # A yaw-only correction would preserve accumulated tilt.  The runtime
+    # target must instead emit the complete world axis-angle that left-
+    # multiplies the live orientation exactly onto the absolute waypoint.
+    tilt = 0.03
+    tilt_rotation = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.0, np.cos(tilt), -np.sin(tilt)],
+            [0.0, np.sin(tilt), np.cos(tilt)],
+        ]
+    )
+    tilted_actual_rotation = tilt_rotation @ segment_1_actual_rotation
+    rotated_reference = tilted_actual_rotation @ np.array([1.0, 0.0, 0.0])
+    tilted_actual_yaw = float(
+        np.arctan2(rotated_reference[1], rotated_reference[0])
+    )
+    tilted_remaining_yaw = float(segment_2_target - tilted_actual_yaw)
+    tilted_remaining_rotation = (
+        segment_2_absolute_rotation @ tilted_actual_rotation.T
+    )
+    tilted_remaining_axis_angle = _rotation_matrix_axis_angle(
+        tilted_remaining_rotation
+    )
+    tilted_runtime_target = _absolute_wrist_yaw_runtime_target(
+        planned_segment=segments[1],
+        absolute_start_attainment={
+            "actual_yaw_rad": tilted_actual_yaw,
+            "remaining_yaw_rad": tilted_remaining_yaw,
+            "target_yaw_rad": segment_2_target,
+            "measured_rotation_matrix_world": (
+                tilted_actual_rotation.tolist()
+            ),
+            "remaining_rotation_matrix_world": (
+                tilted_remaining_rotation.tolist()
+            ),
+            "remaining_rotation_axis_angle_world_rad": (
+                tilted_remaining_axis_angle.tolist()
+            ),
+            "rigid_frame_valid": True,
+            "position_attained": True,
+            "rotation_direction_valid": True,
+        },
+        total_yaw_spec=yaw_spec,
+        native_action_spec=native_spec,
+        rotation_spec=rotation_spec,
+    )
+    full_correction = np.asarray(
+        tilted_runtime_target["relative_yaw_spec"]["rotation_matrix_world"]
+    )
+    assert np.linalg.norm(
+        np.asarray(
+            tilted_runtime_target[
+                "measured_remaining_full_axis_angle_world_rad"
+            ]
+        )[:2]
+    ) > 0.0
+    assert tilted_runtime_target[
+        "measured_remaining_full_axis_angle_norm_rad"
+    ] < 0.5
+    np.testing.assert_allclose(
+        full_correction @ tilted_actual_rotation,
+        segment_2_absolute_rotation,
+        rtol=0.0,
+        atol=1e-9,
+    )
+
+    over_capacity_evidence = {
+        "actual_yaw_rad": 0.0,
+        "remaining_yaw_rad": segment_2_target,
+        "target_yaw_rad": segment_2_target,
+        "measured_rotation_matrix_world": np.eye(3).tolist(),
+        "remaining_rotation_matrix_world": (
+            segment_2_absolute_rotation.tolist()
+        ),
+        "remaining_rotation_axis_angle_world_rad": [
+            0.0,
+            0.0,
+            segment_2_target,
+        ],
+        "rigid_frame_valid": True,
+        "position_attained": True,
+        "rotation_direction_valid": True,
+    }
+    with pytest.raises(RuntimeError, match="supplemental strict segments"):
+        _absolute_wrist_yaw_runtime_target(
+            planned_segment=segments[1],
+            absolute_start_attainment=over_capacity_evidence,
+            total_yaw_spec=yaw_spec,
             native_action_spec=native_spec,
             rotation_spec=rotation_spec,
         )
@@ -6572,8 +6768,15 @@ def test_segmented_trailing_wrist_yaw_is_mandatory_for_initial_and_recontact_rou
     assert '"old_plus_x_route_fallback_permitted": False' in executor
     assert '"runtime_tangent_fallback_permitted": False' in executor
     assert "_strict_wrist_yaw_segment_plan(" in executor
+    assert "_absolute_wrist_yaw_runtime_target(" in executor
+    assert 'yaw_spec=planned_segment["cumulative_yaw_spec"]' in executor
     assert '"yaw_segmentation"' in executor
     assert '"yaw_segments"' in executor
+    assert '"absolute_segment_start_attainment"' in executor
+    assert '"live_absolute_runtime_target"' in executor
+    assert '"executed_relative_yaw_spec"' in executor
+    assert '"absolute_cumulative_target_is_authoritative": True' in executor
+    assert "remaining_axis_angle_world=commanded_remaining_axis_angle" in executor
     assert '"cumulative_attainment_evidence"' in executor
     assert '"shared_budget_remaining_after_segment"' in executor
     assert executor.count("_wrist_yaw_step_gate(") == 2
