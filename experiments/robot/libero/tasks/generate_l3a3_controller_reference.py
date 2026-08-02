@@ -9243,20 +9243,56 @@ def _hazard_release_zero_coast_transition_evidence(
             "release_authorized", False
         )
     )
+    hazard_response_triggered = bool(
+        previous_hazard_release_evidence.get(
+            "hazard_response_triggered", False
+        )
+    )
+    release_authorized = bool(
+        previous_hazard_release_evidence.get(
+            "release_authorized", False
+        )
+    )
+    dynamic_release_interlock_accepted = bool(
+        not hazard_response_triggered or release_authorized
+    )
     requested = bool(previously_requested or release_start_authorized)
-    active = bool(requested and reserve_evidence["accepted"])
-    reserve_recovery_active = bool(requested and not active)
+    active = bool(
+        requested
+        and reserve_evidence["accepted"]
+        and dynamic_release_interlock_accepted
+    )
+    reserve_recovery_active = bool(
+        requested and not reserve_evidence["accepted"]
+    )
+    release_recovery_active = bool(
+        requested
+        and reserve_evidence["accepted"]
+        and not dynamic_release_interlock_accepted
+    )
+    recovery_active = bool(
+        reserve_recovery_active or release_recovery_active
+    )
     return {
         "previously_requested": bool(previously_requested),
         "release_start_authorized": release_start_authorized,
         "requested": requested,
         "active": active,
         "reserve_recovery_active": reserve_recovery_active,
+        "release_recovery_active": release_recovery_active,
+        "recovery_active": recovery_active,
+        "hazard_response_triggered": hazard_response_triggered,
+        "release_authorized": release_authorized,
+        "dynamic_release_interlock_accepted": (
+            dynamic_release_interlock_accepted
+        ),
         "reserve_evidence": reserve_evidence,
         "proof": {
             "request_latched_across_reserve_recovery": True,
             "zero_coast_requires_live_reserve_acceptance": True,
             "reserve_loss_selects_existing_full_brake": True,
+            "hazard_response_requires_two_frame_release_again": True,
+            "dynamic_release_reuses_primary_confirmation_schedule": True,
             "thresholds_unchanged": True,
         },
     }
@@ -17964,8 +18000,18 @@ def _seek_stable_plate_contact(
                     "reserve_recovery_active"
                 ]
             )
+            hazard_release_zero_coast_release_recovery_active = bool(
+                hazard_release_zero_coast_transition[
+                    "release_recovery_active"
+                ]
+            )
+            hazard_release_zero_coast_recovery_active = bool(
+                hazard_release_zero_coast_transition[
+                    "recovery_active"
+                ]
+            )
             hazard_outward_brake_active = bool(
-                hazard_release_zero_coast_reserve_recovery_active
+                hazard_release_zero_coast_recovery_active
                 or (
                     settle_trigger_evidence is not None
                     and settle_trigger_evidence.get(
@@ -17989,7 +18035,7 @@ def _seek_stable_plate_contact(
                 )
             elif (
                 neutral_damping_active_before_action
-                and not hazard_release_zero_coast_reserve_recovery_active
+                and not hazard_release_zero_coast_recovery_active
             ):
                 action, path_control = (
                     _compiled_low_side_neutral_damping_action(
@@ -18085,7 +18131,7 @@ def _seek_stable_plate_contact(
                     None
                     if (
                         neutral_damping_active_before_action
-                        and not hazard_release_zero_coast_reserve_recovery_active
+                        and not hazard_release_zero_coast_recovery_active
                     )
                     or hazard_release_zero_coast_active_before_action
                     else path_control
@@ -18094,7 +18140,7 @@ def _seek_stable_plate_contact(
                     path_control
                     if neutral_damping_active_before_action
                     and not hazard_release_zero_coast_active_before_action
-                    and not hazard_release_zero_coast_reserve_recovery_active
+                    and not hazard_release_zero_coast_recovery_active
                     else None
                 ),
                 "compiled_hazard_release_zero_coast_envelope": (
@@ -18110,6 +18156,12 @@ def _seek_stable_plate_contact(
                 ),
                 "hazard_release_zero_coast_reserve_recovery_active": (
                     hazard_release_zero_coast_reserve_recovery_active
+                ),
+                "hazard_release_zero_coast_release_recovery_active": (
+                    hazard_release_zero_coast_release_recovery_active
+                ),
+                "hazard_release_zero_coast_recovery_active": (
+                    hazard_release_zero_coast_recovery_active
                 ),
                 "hazard_release_zero_coast_pre_action_reserve_evidence": (
                     hazard_release_zero_coast_pre_action_reserve_evidence
@@ -18149,6 +18201,10 @@ def _seek_stable_plate_contact(
                     and action[2]
                     == vertical_corridor_hazard_positive_z_brake_action
                 ),
+                "hazard_zero_coast_release_recovery_reuses_schedule": bool(
+                    hazard_release_zero_coast_release_recovery_active
+                    and hazard_positive_z_brake_schedule is not None
+                ),
                 "hazard_positive_z_brake_confirmation_active": bool(
                     hazard_outward_brake_active
                     and hazard_positive_z_brake_schedule is not None
@@ -18170,7 +18226,7 @@ def _seek_stable_plate_contact(
                 "active_positive_z_brake_requested": bool(
                     (
                         not neutral_damping_active_before_action
-                        or hazard_release_zero_coast_reserve_recovery_active
+                        or hazard_release_zero_coast_recovery_active
                     )
                     and not hazard_release_zero_coast_active_before_action
                 ),
@@ -19291,6 +19347,12 @@ def _seek_stable_plate_contact(
             lateral_settle_progress[
                 "hazard_release_zero_coast_reserve_recovery_active"
             ] = hazard_release_zero_coast_reserve_recovery_active
+            lateral_settle_progress[
+                "hazard_release_zero_coast_release_recovery_active"
+            ] = hazard_release_zero_coast_release_recovery_active
+            lateral_settle_progress[
+                "hazard_release_zero_coast_recovery_active"
+            ] = hazard_release_zero_coast_recovery_active
             lateral_settle_progress[
                 "hazard_release_zero_coast_pre_action_reserve_evidence"
             ] = (

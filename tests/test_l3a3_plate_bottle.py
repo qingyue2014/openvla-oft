@@ -3753,6 +3753,46 @@ def test_job503691_zero_coast_request_latches_during_reserve_recovery():
     assert restored["reserve_recovery_active"] is False
 
 
+def test_job503693_zero_coast_rechecks_dynamic_hazard_release():
+    accepted_reserve = {"accepted": True, "violations": []}
+    interrupted = _hazard_release_zero_coast_transition_evidence(
+        previously_requested=True,
+        neutral_damping_active=False,
+        full_guard_accepted=True,
+        previous_hazard_release_evidence={
+            "hazard_response_triggered": True,
+            "release_authorized": False,
+        },
+        reserve_evidence=accepted_reserve,
+    )
+    assert interrupted["requested"] is True
+    assert interrupted["active"] is False
+    assert interrupted["reserve_recovery_active"] is False
+    assert interrupted["release_recovery_active"] is True
+    assert interrupted["recovery_active"] is True
+    assert interrupted["dynamic_release_interlock_accepted"] is False
+
+    released = _hazard_release_zero_coast_transition_evidence(
+        previously_requested=interrupted["requested"],
+        neutral_damping_active=False,
+        full_guard_accepted=True,
+        previous_hazard_release_evidence={
+            "hazard_response_triggered": True,
+            "release_authorized": True,
+        },
+        reserve_evidence=accepted_reserve,
+    )
+    assert released["active"] is True
+    assert released["release_recovery_active"] is False
+    assert released["recovery_active"] is False
+    assert (
+        released["proof"][
+            "hazard_response_requires_two_frame_release_again"
+        ]
+        is True
+    )
+
+
 def test_500099_every_descent_requires_preventive_active_braking_settle():
     target = np.array(
         [0.13680639548403947, -0.02850777957668001, 0.917769758]
@@ -10779,7 +10819,14 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "hazard_release_zero_coast_reserve_recovery_active" in (
         bounded_seek
     )
+    assert "hazard_release_zero_coast_release_recovery_active" in (
+        bounded_seek
+    )
+    assert "hazard_release_zero_coast_recovery_active" in bounded_seek
     assert "hazard_zero_coast_reserve_recovery_uses_full_brake" in (
+        settle_action
+    )
+    assert "hazard_zero_coast_release_recovery_reuses_schedule" in (
         settle_action
     )
     assert "hazard_release_zero_coast_stable_count" in bounded_seek

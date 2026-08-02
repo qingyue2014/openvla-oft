@@ -607,6 +607,21 @@ recovery frame. The exact rejected reserve checks and transition decision are
 serialized. Zero coast resumes only after both reserves again pass the same
 strict line. No task, state, inventory, target, action bound, physical gate,
 waypoint budget, or threshold changes.
+Job503693 verified the static reserve recovery, but a zero-command frame can
+itself reveal a still-hazardous OSC inertial response while the instantaneous
+clearance remains above `1.550 mm`. Five consecutive zero frames reduced the
+outside clearance from `8.825985 mm` to `1.348364 mm`. One full recovery brake
+raised it to `1.927574 mm`, where the static reserve test alone resumed zero
+coast; two further zero frames reduced it to `0.310830 mm` and the unchanged
+`0.400 mm` one-controller-step corridor gate stopped the trajectory. Every
+zero-coast hazard-directed response now invalidates the dynamic release
+interlock. The latched request cannot execute another zero frame until the
+existing primary/confirmation brake schedule again provides two consecutive
+directional reversals and the unchanged `3.050 mm` release reserve. A static
+reserve failure still selects the full `+X=0.40, +Z=0.40` recovery action;
+dynamic release recovery reuses the existing `+Z=0.40` primary and `+Z=0.375`
+confirmation schedule. These states are recorded separately, and no threshold
+or experiment field changes.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
