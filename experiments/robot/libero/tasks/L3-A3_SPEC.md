@@ -447,6 +447,23 @@ unchanged. A paused zero predecessor also requires both unchanged `1.550 mm`
 recovery-exit reserves before its coverage transient can terminate and return
 to floor descent. No formal physical threshold, action bound, geometric floor,
 task field, asset, target, or budget changes.
+Job503663 confirmed that the `0.025` release reduced each action jump but also
+showed that reserve-only continuation was incomplete. In the failed floor
+cycle, three still-positive ramp frames produced consecutive outside-clearance
+responses of `-0.0514238`, `-0.274085`, and `-0.492549 mm`; the ramp continued
+after the first two hazard-directed responses because reserve remained above
+`1.550 mm`. By the time the third frame paused the latch, only `1.194108 mm`
+remained, and full brakes could not reverse the coupled inward motion before
+the unchanged `0.400 mm` line was crossed. Every still-positive damping frame
+now requires the existing kinematic-brake-reversed evidence after execution.
+If Z, EEF-outward, or live-clearance response has the registered hazardous
+sign, the ramp remains latched but becomes inactive immediately and the next
+frame restores unchanged full outward/positive-Z brake authority. It can
+resume only after the same hazard signs reverse and all existing guards and
+reserves pass. Exact-zero damping frames are excluded from this sign
+interlock so their existing two-frame absolute-response stability test remains
+authoritative. No threshold, action bound, task, asset, target, or budget
+changes.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

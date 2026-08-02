@@ -8691,12 +8691,28 @@ def _outside_side_neutral_damping_latch_transition(
         not (damping_latched_before and not damping_active_before)
         or kinematic_brake_reversed
     )
+    positive_ramp_response_confirmed = bool(
+        not (
+            damping_active_before
+            and not damping_ramp_reached_zero
+        )
+        or kinematic_brake_reversed
+    )
     damping_active_after = bool(
         damping_latched_after
         and reserves_accepted
         and paused_ramp_reversal_confirmed
+        and positive_ramp_response_confirmed
     )
     damping_pause_for_reserve_recovery = bool(
+        damping_latched_after and not reserves_accepted
+    )
+    damping_pause_for_hazard_reversal = bool(
+        damping_latched_after
+        and reserves_accepted
+        and not damping_active_after
+    )
+    damping_pause_required = bool(
         damping_latched_after and not damping_active_after
     )
     damping_resumed_after_reserve_recovery = bool(
@@ -8722,6 +8738,10 @@ def _outside_side_neutral_damping_latch_transition(
         "damping_pause_for_reserve_recovery": (
             damping_pause_for_reserve_recovery
         ),
+        "damping_pause_for_hazard_reversal": (
+            damping_pause_for_hazard_reversal
+        ),
+        "damping_pause_required": damping_pause_required,
         "damping_resumed_after_reserve_recovery": (
             damping_resumed_after_reserve_recovery
         ),
@@ -8732,6 +8752,9 @@ def _outside_side_neutral_damping_latch_transition(
         "paused_ramp_reversal_confirmed": (
             paused_ramp_reversal_confirmed
         ),
+        "positive_ramp_response_confirmed": (
+            positive_ramp_response_confirmed
+        ),
         "coverage_gap_zero_release_required": (
             coverage_gap_zero_release_required
         ),
@@ -8741,6 +8764,8 @@ def _outside_side_neutral_damping_latch_transition(
             "reserve_loss_commands_full_brake_without_clearing_latch": True,
             "resume_requires_unchanged_reserves_and_guard": True,
             "resume_after_full_brake_requires_reversed_hazard_motion": True,
+            "positive_ramp_pauses_on_hazard_directed_response": True,
+            "zero_frame_stability_uses_absolute_response_gate": True,
             "paused_full_brake_does_not_replace_ramp_predecessor": True,
             "coverage_transient_ends_when_ramp_reaches_zero": True,
             "zero_ramp_release_requires_unchanged_reserves": True,

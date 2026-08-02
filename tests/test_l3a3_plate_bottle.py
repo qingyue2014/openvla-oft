@@ -3934,7 +3934,36 @@ def test_job503657_damping_latch_survives_reserve_recovery_brake():
     assert not_yet_reversed[
         "paused_ramp_reversal_confirmed"
     ] is False
-    assert not_yet_reversed["damping_pause_for_reserve_recovery"] is True
+    assert not_yet_reversed["damping_pause_for_reserve_recovery"] is False
+    assert not_yet_reversed["damping_pause_for_hazard_reversal"] is True
+    assert not_yet_reversed["damping_pause_required"] is True
+
+    active_ramp_hazard_response = (
+        _outside_side_neutral_damping_latch_transition(
+            damping_guard=transient_guard,
+            damping_latched_before=True,
+            damping_active_before=True,
+            kinematic_brake_reversed=False,
+            reserves_accepted=True,
+            commanded_action_xyz=np.array([0.1654, 0.0, 0.175]),
+            previous_ramp_action_xyz=np.array([0.1904, 0.0, 0.20]),
+        )
+    )
+    assert active_ramp_hazard_response[
+        "positive_ramp_response_confirmed"
+    ] is False
+    assert active_ramp_hazard_response[
+        "neutral_damping_latched"
+    ] is True
+    assert active_ramp_hazard_response[
+        "neutral_damping_active"
+    ] is False
+    assert active_ramp_hazard_response[
+        "damping_pause_for_hazard_reversal"
+    ] is True
+    assert active_ramp_hazard_response[
+        "next_ramp_action_xyz"
+    ] == pytest.approx([0.1654, 0.0, 0.175])
 
     zero_gap = _outside_side_neutral_damping_latch_transition(
         damping_guard=transient_guard,
