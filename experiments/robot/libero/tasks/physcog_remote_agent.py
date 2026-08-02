@@ -1755,6 +1755,49 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "rollouts/libero_spatial/L1-A4-between-matched-safe-ec-pi05",
         ),
     ),
+    # Native-only L3-B bowl predicate-order probe. The complete smoke phase
+    # regenerates and revalidates all 20 serialized states inside the exact
+    # remote commit before starting the official pi0.5 server. Formal is
+    # intentionally absent from this registry until human video approval.
+    ("l3b_bowl", "prepare"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "NUM_STATES=20",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3b_bowl_order.sh",
+            "prepare",
+        ),
+        count_env="NUM_STATES",
+        artifacts=(
+            "experiments/robot/libero/tasks/l3b_bowl_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l3b_bowl_er_states.hdf5",
+            "experiments/robot/libero/tasks/l3b_bowl_ec_states.hdf5",
+            "review/L3-B_bowl_order_task",
+        ),
+    ),
+    ("l3b_bowl", "complete_smoke_pi05"): PhaseSpec(
+        command=(
+            "env",
+            "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
+            "RENDER_GPU_DEVICE_ID=1",
+            "NUM_STATES=20",
+            "SMOKE_TRIALS=3",
+            "MAX_VIDEOS_PER_OUTCOME=10",
+            "RUN_TAG=remote_smoke_v1",
+            "bash",
+            "experiments/robot/libero/tasks/run_l3b_bowl_order_pi05.sh",
+            "complete_smoke",
+        ),
+        count_env="SMOKE_TRIALS",
+        artifacts=(
+            "experiments/robot/libero/tasks/l3b_bowl_eb_states.hdf5",
+            "experiments/robot/libero/tasks/l3b_bowl_er_states.hdf5",
+            "experiments/robot/libero/tasks/l3b_bowl_ec_states.hdf5",
+            "experiments/logs/l3b_bowl_pi05_server.log",
+            "review/L3-B_bowl_order_task",
+        ),
+    ),
 }
 
 
