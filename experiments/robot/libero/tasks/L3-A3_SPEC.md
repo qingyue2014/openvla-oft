@@ -622,6 +622,23 @@ reserve failure still selects the full `+X=0.40, +Z=0.40` recovery action;
 dynamic release recovery reuses the existing `+Z=0.40` primary and `+Z=0.375`
 confirmation schedule. These states are recorded separately, and no threshold
 or experiment field changes.
+Job503694 verified that dynamic re-release prevents corridor loss, but it also
+showed a deterministic one-zero/three-brake limit cycle. Each discontinuous
+drop from the `+Z=0.375` confirmation action to zero produced roughly
+`0.7-1.3 mm` of hazard-directed clearance response, so 74 safe settle frames
+expired with `6.569 mm` outside and `7.230 mm` table reserve still retained.
+The post-release phase now uses per-axis response balancing. Its maximum
+decrement is exactly half the registered `0.025` damping decrement (`0.0125`):
+outward action decreases only while either EEF-outward or live-clearance
+response is above the unchanged `0.050 mm` tolerance, and positive-Z action
+decreases only while vertical response is above that same tolerance. An axis
+is held once its absolute response enters tolerance. A response more negative
+than tolerance restores the existing dynamic brake/release gate. Two
+consecutive full-guard frames must still keep all three absolute responses
+inside `0.050 mm` before handoff. The action remains one-sided outward/+Z,
+zero-rotation, runtime-native bounded, and protected by the unchanged
+`1.550 mm` live reserves. No formal threshold, task field, inventory, state,
+target, or structural budget changes.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

@@ -9210,6 +9210,7 @@ def _hazard_release_zero_coast_transition_evidence(
     previously_requested,
     neutral_damping_active,
     full_guard_accepted,
+    previous_balance_response_accepted,
     previous_hazard_release_evidence,
     reserve_evidence,
 ):
@@ -9218,6 +9219,9 @@ def _hazard_release_zero_coast_transition_evidence(
         "previously_requested": previously_requested,
         "neutral_damping_active": neutral_damping_active,
         "full_guard_accepted": full_guard_accepted,
+        "previous_balance_response_accepted": (
+            previous_balance_response_accepted
+        ),
     }
     if not all(
         isinstance(value, (bool, np.bool_))
@@ -9254,7 +9258,9 @@ def _hazard_release_zero_coast_transition_evidence(
         )
     )
     dynamic_release_interlock_accepted = bool(
-        not hazard_response_triggered or release_authorized
+        not hazard_response_triggered
+        or release_authorized
+        or previous_balance_response_accepted
     )
     requested = bool(previously_requested or release_start_authorized)
     active = bool(
@@ -9286,6 +9292,9 @@ def _hazard_release_zero_coast_transition_evidence(
         "dynamic_release_interlock_accepted": (
             dynamic_release_interlock_accepted
         ),
+        "previous_balance_response_accepted": bool(
+            previous_balance_response_accepted
+        ),
         "reserve_evidence": reserve_evidence,
         "proof": {
             "request_latched_across_reserve_recovery": True,
@@ -9293,6 +9302,7 @@ def _hazard_release_zero_coast_transition_evidence(
             "reserve_loss_selects_existing_full_brake": True,
             "hazard_response_requires_two_frame_release_again": True,
             "dynamic_release_reuses_primary_confirmation_schedule": True,
+            "tolerance_balanced_response_can_continue_damping": True,
             "thresholds_unchanged": True,
         },
     }
@@ -9384,6 +9394,198 @@ def _compiled_hazard_release_zero_coast_action(
             "outside_recovery_exit_reserve_preaccepted": True,
             "table_recovery_exit_reserve_preaccepted": True,
             "post_action_live_guards_required": True,
+        },
+    }
+
+
+def _compiled_hazard_release_response_balance_action(
+    *,
+    outside_side_guard,
+    gripper,
+    native_action_spec,
+    recovery_exit_clearance_m,
+    previous_commanded_action_xyz,
+    previous_step_response,
+    maximum_settled_step_response_m,
+    maximum_axis_decrement_action,
+):
+    """Damp each safe action axis only while its response remains positive."""
+    try:
+        native_low = np.asarray(native_action_spec["low"], dtype=float)
+        native_high = np.asarray(native_action_spec["high"], dtype=float)
+        native_source = str(native_action_spec["source"])
+        outward_direction = np.asarray(
+            outside_side_guard["outward_direction_xy"], dtype=float
+        )
+        previous_action = np.asarray(
+            previous_commanded_action_xyz, dtype=float
+        )
+        vertical_response = float(
+            previous_step_response["vertical_step_progress_m"]
+        )
+        eef_outward_response = float(
+            previous_step_response["eef_outward_step_progress_m"]
+        )
+        clearance_response = float(
+            previous_step_response[
+                "outside_clearance_step_progress_m"
+            ]
+        )
+        maximum_settled_step_response_m = float(
+            maximum_settled_step_response_m
+        )
+        maximum_axis_decrement_action = float(
+            maximum_axis_decrement_action
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "hazard-release response-balance evidence is incomplete"
+        ) from exc
+    reserve_evidence = _hazard_release_zero_coast_reserve_evidence(
+        outside_side_guard=outside_side_guard,
+        recovery_exit_clearance_m=recovery_exit_clearance_m,
+    )
+    damping_guard = _outside_side_neutral_damping_guard_evidence(
+        outside_side_guard, damping_active_before=True
+    )
+    if (
+        not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or previous_action.shape != (3,)
+        or outward_direction.shape != (2,)
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(np.isfinite(previous_action))
+        or not np.all(np.isfinite(outward_direction))
+        or not np.all(native_low < native_high)
+        or not np.all(native_low[:6] < 0.0)
+        or not np.all(native_high[:6] > 0.0)
+        or not (native_low[6] <= gripper <= native_high[6])
+        or not reserve_evidence["accepted"]
+        or not damping_guard["damping_guard_authorized"]
+        or not np.isfinite(vertical_response)
+        or not np.isfinite(eef_outward_response)
+        or not np.isfinite(clearance_response)
+        or not np.isfinite(maximum_settled_step_response_m)
+        or maximum_settled_step_response_m <= 0.0
+        or not np.isfinite(maximum_axis_decrement_action)
+        or maximum_axis_decrement_action <= 0.0
+    ):
+        raise RuntimeError(
+            "hazard-release response balance lacks registered evidence"
+        )
+    outward_norm = float(np.linalg.norm(outward_direction))
+    if abs(outward_norm - 1.0) > 1e-7:
+        raise RuntimeError(
+            "hazard-release response-balance outward axis is not unit"
+        )
+    previous_outward_action = float(
+        np.dot(previous_action[:2], outward_direction)
+    )
+    previous_tangential_action = (
+        previous_action[:2]
+        - previous_outward_action * outward_direction
+    )
+    previous_positive_z_action = float(previous_action[2])
+    if (
+        previous_outward_action < 0.0
+        or previous_positive_z_action < 0.0
+        or np.linalg.norm(previous_tangential_action) > 1e-12
+        or np.any(previous_action < native_low[:3])
+        or np.any(previous_action > native_high[:3])
+    ):
+        raise RuntimeError(
+            "hazard-release response-balance predecessor is not one-sided"
+        )
+    response_tolerance = maximum_settled_step_response_m
+    hazard_violations = []
+    for label, response in (
+        ("vertical", vertical_response),
+        ("eef_outward", eef_outward_response),
+        ("outside_clearance", clearance_response),
+    ):
+        if response < -response_tolerance:
+            hazard_violations.append(
+                f"{label}_response_below_negative_settle_tolerance"
+            )
+    if hazard_violations:
+        raise RuntimeError(
+            "hazard-release response balance requires brake recovery: "
+            + json.dumps(hazard_violations)
+        )
+    outward_axis_balanced = bool(
+        abs(eef_outward_response) <= response_tolerance
+        and abs(clearance_response) <= response_tolerance
+    )
+    vertical_axis_balanced = bool(
+        abs(vertical_response) <= response_tolerance
+    )
+    commanded_outward_action = float(
+        previous_outward_action
+        if outward_axis_balanced
+        else max(
+            0.0,
+            previous_outward_action
+            - maximum_axis_decrement_action,
+        )
+    )
+    commanded_positive_z_action = float(
+        previous_positive_z_action
+        if vertical_axis_balanced
+        else max(
+            0.0,
+            previous_positive_z_action
+            - maximum_axis_decrement_action,
+        )
+    )
+    action = np.zeros(7, dtype=float)
+    action[:2] = outward_direction * commanded_outward_action
+    action[2] = commanded_positive_z_action
+    action[-1] = float(gripper)
+    if np.any(action < native_low) or np.any(action > native_high):
+        raise RuntimeError(
+            "hazard-release response-balance action exceeds native bounds"
+        )
+    return action, {
+        "formula": (
+            "after dynamic hazard release, decrease each one-sided safe "
+            "action axis by half the registered 0.025 damping decrement "
+            "only while its measured response remains above the unchanged "
+            "settle tolerance; hold an axis once its absolute response is "
+            "inside tolerance and restore the existing brake for any more-"
+            "negative response"
+        ),
+        "native_action_spec_source": native_source,
+        "commanded_xyz_action": action[:3].tolist(),
+        "commanded_rotation_action": action[3:6].tolist(),
+        "previous_commanded_action_xyz": previous_action.tolist(),
+        "previous_step_response": {
+            "vertical_step_progress_m": vertical_response,
+            "eef_outward_step_progress_m": eef_outward_response,
+            "outside_clearance_step_progress_m": clearance_response,
+        },
+        "maximum_settled_step_response_m": response_tolerance,
+        "maximum_axis_decrement_action": (
+            maximum_axis_decrement_action
+        ),
+        "previous_outward_action": previous_outward_action,
+        "previous_positive_z_action": previous_positive_z_action,
+        "commanded_outward_action": commanded_outward_action,
+        "commanded_positive_z_action": commanded_positive_z_action,
+        "outward_axis_balanced_before_action": outward_axis_balanced,
+        "vertical_axis_balanced_before_action": vertical_axis_balanced,
+        "reserve_evidence": reserve_evidence,
+        "damping_guard": damping_guard,
+        "proof": {
+            "one_sided_outward_and_positive_z_only": True,
+            "per_axis_decrement_bounded": True,
+            "negative_beyond_tolerance_requires_brake": True,
+            "two_frame_absolute_response_confirmation_required": True,
+            "zero_rotation": True,
+            "native_action_bounds_retained": True,
+            "thresholds_unchanged": True,
         },
     }
 
@@ -17954,6 +18156,36 @@ def _seek_stable_plate_contact(
                     "hazard_brake_release_evidence", {}
                 )
             )
+            previous_hazard_release_balance_active = bool(
+                lateral_settle_state.get(
+                    "hazard_release_response_balance_active",
+                    lateral_settle_state.get(
+                        "hazard_release_zero_coast_active", False
+                    ),
+                )
+            )
+            previous_hazard_release_balance_response = (
+                lateral_settle_state.get("step_response", {})
+            )
+            previous_hazard_release_balance_response_accepted = bool(
+                previous_hazard_release_balance_active
+                and all(
+                    key in previous_hazard_release_balance_response
+                    and abs(
+                        float(
+                            previous_hazard_release_balance_response[key]
+                        )
+                    )
+                    <= float(
+                        args.minimum_saturated_waypoint_progress
+                    )
+                    for key in (
+                        "vertical_step_progress_m",
+                        "eef_outward_step_progress_m",
+                        "outside_clearance_step_progress_m",
+                    )
+                )
+            )
             hazard_release_zero_coast_previously_requested = bool(
                 lateral_settle_state.get(
                     "hazard_release_zero_coast_requested",
@@ -17980,6 +18212,9 @@ def _seek_stable_plate_contact(
                     ),
                     full_guard_accepted=bool(
                         pre_action_guard.get("accepted", False)
+                    ),
+                    previous_balance_response_accepted=(
+                        previous_hazard_release_balance_response_accepted
                     ),
                     previous_hazard_release_evidence=(
                         previous_hazard_release_evidence
@@ -18024,12 +18259,27 @@ def _seek_stable_plate_contact(
             hazard_positive_z_brake_schedule = None
             if hazard_release_zero_coast_active_before_action:
                 action, path_control = (
-                    _compiled_hazard_release_zero_coast_action(
+                    _compiled_hazard_release_response_balance_action(
                         outside_side_guard=pre_action_guard,
                         gripper=gripper,
                         native_action_spec=native_action_spec,
                         recovery_exit_clearance_m=(
                             fixed_safe_z_recovery_exit_clearance
+                        ),
+                        previous_commanded_action_xyz=(
+                            lateral_settle_state.get(
+                                "previous_commanded_action_xyz"
+                            )
+                        ),
+                        previous_step_response=(
+                            previous_hazard_release_balance_response
+                        ),
+                        maximum_settled_step_response_m=(
+                            args.minimum_saturated_waypoint_progress
+                        ),
+                        maximum_axis_decrement_action=(
+                            0.5
+                            * vertical_corridor_neutral_damping_release_action
                         ),
                     )
                 )
@@ -18143,11 +18393,12 @@ def _seek_stable_plate_contact(
                     and not hazard_release_zero_coast_recovery_active
                     else None
                 ),
-                "compiled_hazard_release_zero_coast_envelope": (
+                "compiled_hazard_release_response_balance_envelope": (
                     path_control
                     if hazard_release_zero_coast_active_before_action
                     else None
                 ),
+                "compiled_hazard_release_zero_coast_envelope": None,
                 "hazard_release_zero_coast_requested_before_action": (
                     hazard_release_zero_coast_requested_before_action
                 ),
@@ -18168,6 +18419,12 @@ def _seek_stable_plate_contact(
                 ),
                 "hazard_release_zero_coast_transition": (
                     hazard_release_zero_coast_transition
+                ),
+                "previous_hazard_release_balance_active": (
+                    previous_hazard_release_balance_active
+                ),
+                "previous_hazard_release_balance_response_accepted": (
+                    previous_hazard_release_balance_response_accepted
                 ),
                 "neutral_damping_active_before_action": (
                     neutral_damping_active_before_action
@@ -19260,10 +19517,15 @@ def _seek_stable_plate_contact(
                         args.minimum_saturated_waypoint_progress
                     ),
                     neutral_damping_frame=bool(
-                        lateral_settle_state.get(
-                            "neutral_damping_active", False
+                        hazard_release_zero_coast_active_before_action
+                        or (
+                            lateral_settle_state.get(
+                                "neutral_damping_active", False
+                            )
+                            and np.all(
+                                np.asarray(action[:3]) == 0.0
+                            )
                         )
-                        and np.all(np.asarray(action[:3]) == 0.0)
                     ),
                     neutral_damping_reserve_accepted=(
                         neutral_damping_reserves_accepted
@@ -19343,6 +19605,9 @@ def _seek_stable_plate_contact(
             ] = hazard_release_zero_coast_requested_before_action
             lateral_settle_progress[
                 "hazard_release_zero_coast_active"
+            ] = hazard_release_zero_coast_active_before_action
+            lateral_settle_progress[
+                "hazard_release_response_balance_active"
             ] = hazard_release_zero_coast_active_before_action
             lateral_settle_progress[
                 "hazard_release_zero_coast_reserve_recovery_active"
