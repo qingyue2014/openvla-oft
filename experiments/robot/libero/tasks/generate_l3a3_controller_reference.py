@@ -13083,13 +13083,13 @@ def _seek_stable_plate_contact(
             "post_descent_correction_controller_hold_target_formula": (
                 "corridor_rebuffer_target XY plus normalized registered "
                 "outward direction times the existing post-descent one-step "
-                "world displacement; above staging this is the correction "
-                "action target, while at or below staging correction switches "
-                "back to the unchanged formal corridor_rebuffer_target. Only "
-                "before the first overhead descent does transition require "
-                "reaching the shifted controller target; after descent begins "
-                "the unchanged formal target and compiled full corridor "
-                "clearance alone gate continued descent"
+                "world displacement. Before the first descent this is the "
+                "above-staging correction target. After any descent, first "
+                "hold the measured current Z and use a bounded XY action to "
+                "restore that same shifted controller target; only then may "
+                "XY/nonnegative-Z plane recovery resume. Every post-descent "
+                "handoff requires the shifted controller target, unchanged "
+                "formal target and clearance, and registered Z-tail deadband"
             ),
             "post_descent_correction_high_z_handoff_gate": {
                 "controller_target": (
@@ -13142,7 +13142,14 @@ def _seek_stable_plate_contact(
                     "55-pair base8 proof; the complete XY/+Z norm is reserved "
                     "as worst-case downward tail"
                 ),
-                "controller_handoff_applies_only_before_first_overhead_descent": True,
+                "post_descent_xy_only_rebuffer_rule": (
+                    "until the shifted controller target is within its "
+                    "existing handoff tolerance, set the correction plane to "
+                    "the measured current EEF Z, disable plane/tail recovery "
+                    "triggers, and issue bounded XY with zero commanded Z "
+                    "under the same exact 55-pair measured-tail proof"
+                ),
+                "controller_handoff_applies_before_and_after_overhead_descent": True,
                 "plane_recovery_applies_only_above_staging_tolerance": True,
                 "post_descent_formal_handoff_vertical_tail_deadband_m": (
                     -float(args.minimum_saturated_waypoint_progress)
@@ -13253,9 +13260,13 @@ def _seek_stable_plate_contact(
                 "deterministic half-one-step handoff tolerance and retain live "
                 "base8, thereby physically realizing at least half the "
                 "existing 8 mm reserve. After any overhead descent action, "
-                "the shifted target remains only an action target and the "
-                "unchanged formal corridor target and clearance alone gate "
-                "continued descent, together with a measured vertical-step "
+                "first hold the measured current Z and use the same bounded "
+                "zero-Z XY action to restore the shifted controller target "
+                "under the exact measured-tail/base8 proof. Only then resume "
+                "XY/nonnegative-Z recovery. Continued descent or vertical-"
+                "corridor handoff requires that shifted target together with "
+                "the unchanged formal corridor target and clearance and a "
+                "measured vertical-step "
                 "handoff interlock using the existing negative vertical-"
                 "staging minimum_saturated_waypoint_progress deadband so "
                 "descent cannot resume with an observed downward tail outside "
@@ -13266,12 +13277,11 @@ def _seek_stable_plate_contact(
                 "During post-descent correction, also reserve "
                 "the complete action for proved outward XY/+Z recovery whenever "
                 "the latest measured negative Z step exceeds the existing "
-                "minimum_saturated_waypoint_progress threshold, and resume "
-                "XY only inside that deadband. At or below staging, switch "
-                "the correction "
-                "action back to the unchanged formal target and use only the "
-                "unchanged formal target and clearance for the vertical-"
-                "corridor transition. The unchanged 0.10 "
+                "minimum_saturated_waypoint_progress threshold. At or below "
+                "staging, retain the shifted target until the same controller "
+                "handoff reserve is restored; the unchanged formal target and "
+                "clearance remain mandatory for the vertical-corridor "
+                "transition. The unchanged 0.10 "
                 "bound remains exclusive to the post-descent XY/nonnegative-Z "
                 "plane-hold correction and contact motion"
             ),
@@ -13793,10 +13803,29 @@ def _seek_stable_plate_contact(
                 current_eef[2]
                 > overhead_staging_z + args.position_tolerance
             )
+            correction_controller_reserve_error_m = float(
+                np.linalg.norm(
+                    corridor_correction_hold_target_xy - current_eef[:2]
+                )
+            )
+            correction_requires_post_descent_controller_rebuffer = bool(
+                not correction_requires_pre_descent_controller_reserve
+                and correction_controller_reserve_error_m
+                > high_z_controller_handoff_tolerance
+            )
             correction_lateral_target_xy = (
                 corridor_correction_hold_target_xy
-                if correction_uses_high_z_hold_target
+                if (
+                    correction_requires_pre_descent_controller_reserve
+                    or correction_uses_high_z_hold_target
+                    or correction_requires_post_descent_controller_rebuffer
+                )
                 else corridor_rebuffer_target[:2]
+            )
+            correction_plane_target_z = float(
+                current_eef[2]
+                if correction_requires_post_descent_controller_rebuffer
+                else overhead_horizontal_z
             )
             (
                 prepared_high_lateral_action,
@@ -13804,7 +13833,7 @@ def _seek_stable_plate_contact(
             ) = _compiled_adaptive_high_plane_action(
                 current_eef=current_eef,
                 lateral_target_xy=correction_lateral_target_xy,
-                overhead_horizontal_z=overhead_horizontal_z,
+                overhead_horizontal_z=correction_plane_target_z,
                 measured_vertical_step_progress_m=(
                     latest_vertical_step_progress_m
                 ),
@@ -13818,11 +13847,18 @@ def _seek_stable_plate_contact(
                 ),
                 plane_recovery_tolerance_m=(
                     args.position_tolerance
-                    if correction_uses_high_z_hold_target
+                    if (
+                        correction_uses_high_z_hold_target
+                        and not (
+                            correction_requires_post_descent_controller_rebuffer
+                        )
+                    )
                     else None
                 ),
                 negative_tail_recovery_threshold_m=(
-                    args.minimum_saturated_waypoint_progress
+                    None
+                    if correction_requires_post_descent_controller_rebuffer
+                    else args.minimum_saturated_waypoint_progress
                 ),
             )
         adaptive_negative_z_action_requires_buffer16 = bool(
@@ -14173,6 +14209,18 @@ def _seek_stable_plate_contact(
                 "correction_requires_pre_descent_controller_reserve": (
                     correction_requires_pre_descent_controller_reserve
                 ),
+                "correction_requires_post_descent_controller_rebuffer": (
+                    correction_requires_post_descent_controller_rebuffer
+                ),
+                "correction_controller_reserve_error_m": (
+                    correction_controller_reserve_error_m
+                ),
+                "correction_controller_handoff_tolerance_m": (
+                    high_z_controller_handoff_tolerance
+                ),
+                "correction_rebuffer_holds_current_z": (
+                    correction_requires_post_descent_controller_rebuffer
+                ),
                 "correction_uses_high_z_hold_target": (
                     correction_uses_high_z_hold_target
                 ),
@@ -14201,7 +14249,7 @@ def _seek_stable_plate_contact(
                     corridor_rebuffer_acceptance_clearance
                 ),
                 "overhead_horizontal_z_m": float(
-                    overhead_horizontal_z
+                    correction_plane_target_z
                 ),
                 "pre_action_measured_vertical_step_progress_m": (
                     latest_vertical_step_progress_m
@@ -15166,6 +15214,7 @@ def _seek_stable_plate_contact(
                         )
                         or (
                             not correction_requires_pre_descent_controller_reserve
+                            and correction_controller_handoff["accepted"]
                             and corridor_entry_after_action["accepted"]
                             and post_descent_vertical_tail_handoff_accepted
                         )
@@ -15192,7 +15241,7 @@ def _seek_stable_plate_contact(
                                 corridor_entry_after_action
                             ),
                             "controller_handoff_required": (
-                                correction_requires_pre_descent_controller_reserve
+                                True
                             ),
                             "controller_handoff_evidence": (
                                 correction_controller_handoff
@@ -15202,6 +15251,8 @@ def _seek_stable_plate_contact(
                 elif (
                     not above_staging_tolerance
                     and corridor_entry_after_action["accepted"]
+                    and correction_controller_handoff["accepted"]
+                    and post_descent_vertical_tail_handoff_accepted
                 ):
                     structural_stage = "vertical_corridor_descent"
                     correction_complete_event = (

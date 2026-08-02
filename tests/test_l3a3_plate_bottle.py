@@ -4172,7 +4172,7 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
     assert "post_descent_lateral_max_translation_action" in (
         post_descent_compilation
     )
-    assert "overhead_horizontal_z=overhead_horizontal_z" in (
+    assert "overhead_horizontal_z=correction_plane_target_z" in (
         post_descent_compilation
     )
     assert "maximum_translation_action=(" in post_descent_compilation
@@ -4190,6 +4190,14 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
         "correction_requires_pre_descent_controller_reserve = bool("
         in bounded_seek
     )
+    assert (
+        "correction_requires_post_descent_controller_rebuffer = bool("
+        in post_descent_compilation
+    )
+    assert "correction_plane_target_z = float(" in (
+        post_descent_compilation
+    )
+    assert "current_eef[2]" in post_descent_compilation
     assert (
         'structural_stage_action_counts[\n'
         '                    "overhead_corridor_descent"\n'
@@ -4223,9 +4231,10 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
         in bounded_seek
     )
     assert (
-        '"controller_handoff_applies_only_before_first_overhead_descent": True'
+        '"controller_handoff_applies_before_and_after_overhead_descent": True'
         in bounded_seek
     )
+    assert 'and correction_controller_handoff["accepted"]' in bounded_seek
     assert (
         '"plane_recovery_applies_only_above_staging_tolerance": True'
         in bounded_seek
@@ -4550,6 +4559,37 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
     assert tail_deadband_action[0] > 0.0
     assert tail_deadband_action[2] > 0.0
     assert np.linalg.norm(tail_deadband_action[:3]) < 0.10
+
+    post_descent_rebuffer_action, post_descent_rebuffer = (
+        _compiled_adaptive_high_plane_action(
+            current_eef=recovered_plane_eef,
+            lateral_target_xy=correction_hold_target,
+            overhead_horizontal_z=recovered_plane_eef[2],
+            measured_vertical_step_progress_m=-0.0005,
+            overhead_guard=guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native,
+            expected_pair_count=55,
+            maximum_translation_action=0.10,
+            plane_recovery_tolerance_m=None,
+            negative_tail_recovery_threshold_m=None,
+        )
+    )
+    assert post_descent_rebuffer_action[0] > 0.0
+    assert post_descent_rebuffer_action[2] == 0.0
+    assert np.linalg.norm(post_descent_rebuffer_action[:3]) < 0.10
+    assert post_descent_rebuffer[
+        "measured_negative_inertial_tail_reserve_m"
+    ] > 0.0005
+    assert post_descent_rebuffer[
+        "dynamic_xy_positive_z_recovery"
+    ] is False
+    assert post_descent_rebuffer["pure_positive_z_recovery"] is False
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in post_descent_rebuffer["pair_envelopes"]
+    )
 
     handoff_eef = np.array(
         [
