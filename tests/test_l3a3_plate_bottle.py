@@ -3909,7 +3909,7 @@ def test_job503865_balance_predicts_and_brakes_confirmation_tail():
         maximum_settled_step_response_m=0.00005,
         maximum_axis_decrement_action=0.0125,
     )
-    assert action[:3].tolist() == [0.3625, 0.0, 0.325]
+    assert action[:3].tolist() == [0.3625, 0.0, 0.3375]
     assert evidence["outward_confirmation_increment_requested"] is False
     assert evidence["vertical_confirmation_increment_requested"] is True
     assert evidence["linearly_predicted_next_step_response"][
@@ -3917,9 +3917,12 @@ def test_job503865_balance_predicts_and_brakes_confirmation_tail():
     ] == pytest.approx(-0.000142)
     assert (
         evidence["proof"][
-            "confirmation_increment_bounded_to_one_decrement"
+            "confirmation_increment_bounded_to_registered_full_decrement"
         ]
         is True
+    )
+    assert evidence["confirmation_increment_action"] == pytest.approx(
+        0.025
     )
 
 

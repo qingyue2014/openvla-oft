@@ -691,6 +691,20 @@ side global minimum can no longer reject that proof. A violating side without
 finite evidence or whose own minimum is not strictly above rim still fails
 closed. The four-predicate allowlist and every response, reserve, collision,
 action, task, and budget threshold remain unchanged.
+
+Job503868 verified the side-specific proof and transitioned back to shielded
+descent, but only on structural step 240. At the first earlier stability
+opportunity, action `X/Z=0.375/0.3125` produced
+`+0.027/+0.023/-0.024 mm` EEF-outward/clearance/vertical response. The
+half-decrement confirmation increased Z only to `0.325` and unnecessarily
+decreased the already-balanced outward axis; the next vertical response was
+`-0.072 mm`. A balanced axis is now held for a positive prediction. If its
+two-frame extrapolation instead crosses negative tolerance, confirmation may
+add the full already-registered `0.025` damping decrement (two half-steps) for
+one frame. This remains one-sided, zero-rotation, native-bounded, and subject
+to the same measured `-0.050 mm` brake restore and two-real-frame acceptance
+gates. The 240-step budget is unchanged.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
