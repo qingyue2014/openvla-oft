@@ -12212,9 +12212,11 @@ def _seek_stable_plate_contact(
             f"eef={initial_eef.tolist()} "
             f"plate={live_plate_center.tolist()}"
         )
+    structural_max_translation_action = float(
+        args.structural_near_plate_max_translation_action
+    )
     maximum_controller_world_step = float(
-        args.position_action_scale
-        * args.plate_contact_seek_max_translation_action
+        args.position_action_scale * structural_max_translation_action
     )
     detour_native_low = np.asarray(native_action_spec["low"], dtype=float)
     detour_native_high = np.asarray(native_action_spec["high"], dtype=float)
@@ -12329,9 +12331,7 @@ def _seek_stable_plate_contact(
             "required_outside_clearance_m"
         ],
         position_action_scale=args.position_action_scale,
-        maximum_translation_action=(
-            args.plate_contact_seek_max_translation_action
-        ),
+        maximum_translation_action=structural_max_translation_action,
     )
     (
         high_lateral_prebuffer_target,
@@ -13112,9 +13112,7 @@ def _seek_stable_plate_contact(
                 ),
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
-                maximum_translation_action=(
-                    args.plate_contact_seek_max_translation_action
-                ),
+                maximum_translation_action=structural_max_translation_action,
             )
             if action[2] <= 0.0:
                 raise RuntimeError(
@@ -13263,9 +13261,7 @@ def _seek_stable_plate_contact(
                 lateral_target_xy=corridor_high_target[:2],
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
-                maximum_translation_action=(
-                    args.plate_contact_seek_max_translation_action
-                ),
+                maximum_translation_action=structural_max_translation_action,
             )
             feedback = {
                 "mode": structural_stage,
@@ -13312,7 +13308,7 @@ def _seek_stable_plate_contact(
                     gripper=gripper,
                     position_action_scale=args.position_action_scale,
                     maximum_translation_action=(
-                        args.plate_contact_seek_max_translation_action
+                        structural_max_translation_action
                     ),
                 )
             )
@@ -13346,7 +13342,7 @@ def _seek_stable_plate_contact(
                     gripper=gripper,
                     position_action_scale=args.position_action_scale,
                     maximum_translation_action=(
-                        args.plate_contact_seek_max_translation_action
+                        structural_max_translation_action
                     ),
                     active_positive_z_brake=active_brake,
                 )
@@ -13374,9 +13370,7 @@ def _seek_stable_plate_contact(
                 )[:2],
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
-                maximum_translation_action=(
-                    args.plate_contact_seek_max_translation_action
-                ),
+                maximum_translation_action=structural_max_translation_action,
             )
             feedback = {
                 "mode": structural_stage,
@@ -14519,6 +14513,20 @@ def generate(args):
         raise ValueError(
             "--plate_contact_seek_max_translation_action must be in (0, 0.2]"
         )
+    if (
+        not np.isfinite(
+            args.structural_near_plate_max_translation_action
+        )
+        or not (
+            0
+            < args.structural_near_plate_max_translation_action
+            <= args.plate_contact_seek_max_translation_action
+        )
+    ):
+        raise ValueError(
+            "--structural_near_plate_max_translation_action must be positive "
+            "and no greater than --plate_contact_seek_max_translation_action"
+        )
     if args.plate_contact_seek_max_steps < 1:
         raise ValueError(
             "--plate_contact_seek_max_steps must be positive"
@@ -14828,7 +14836,7 @@ def generate(args):
             "compiled_geometry"
         ]
         print(
-            "L3-A3 wrist-yaw attained and real geometry recompiled "
+            "L3-A3 native +X front corridor recompiled "
             + json.dumps(plate_diagnostics(), sort_keys=True),
             flush=True,
         )
@@ -15017,6 +15025,7 @@ def generate(args):
                     reference_outward_direction_xy=(
                         active_wrist_approach_outward
                     ),
+                    selection_mode="native_plus_x_front_corridor",
                 )
                 recontact_center_target = np.asarray(
                     recontact_selected_candidate[
@@ -15074,9 +15083,9 @@ def generate(args):
                     }
 
                 # Every recovery waypoint uses OSC env.step.  Retreat and
-                # cross above the live plate, execute and verify the new
-                # relative wrist yaw at center-high, directly recompile the
-                # attained geometry, descend outside its rim, then seek inward.
+                # cross above the live plate, retain the native wrist at
+                # center-high, recompile the +X front corridor, descend outside
+                # its rim, then seek inward.
                 rollout.move(
                     recontact_retreat_target,
                     pusher_open_sign,
@@ -15090,15 +15099,13 @@ def generate(args):
                     diagnostics=recontact_diagnostics,
                 )
                 recontact_wrist_yaw_execution = (
-                    _execute_high_safe_wrist_yaw(
+                    _prepare_native_plus_x_front_corridor(
                         rollout,
                         env,
                         args,
-                        selected_candidate=(
-                            recontact_selected_candidate
-                        ),
+                        plate_position=body_pose(env, PLATE_BODY)[0],
+                        push_direction_xy=recontact_direction,
                         center_high_target=recontact_center_target,
-                        gripper=pusher_open_sign,
                         diagnostics=recontact_diagnostics,
                     )
                 )
@@ -15906,6 +15913,11 @@ def main():
         "--plate_contact_seek_max_translation_action",
         type=float,
         default=0.10,
+    )
+    parser.add_argument(
+        "--structural_near_plate_max_translation_action",
+        type=float,
+        default=0.005,
     )
     parser.add_argument(
         "--plate_contact_seek_max_steps", type=int, default=64

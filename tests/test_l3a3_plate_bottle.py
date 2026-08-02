@@ -3862,7 +3862,7 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
     assert "_fixed_z_lateral_approach_action(" in (
         post_descent_correction_branch
     )
-    assert "plate_contact_seek_max_translation_action" in (
+    assert "structural_max_translation_action" in (
         post_descent_correction_branch
     )
     assert "expected_overhead_pair_count" in bounded_seek
@@ -6968,14 +6968,14 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     assert '"initial_realized_contact_candidate"' in producer
 
 
-def test_native_plus_x_front_corridor_is_initial_and_yaw_remains_for_recontact():
+def test_native_plus_x_front_corridor_is_used_for_initial_and_recontact():
     producer = CONTROLLER_REFERENCE.read_text()
     task_push = producer[
         producer.index("# Job 499604 established real plate contact") :
         producer.index('rollout.hold(-1.0, args.final_settle_steps, "settle")')
     ]
-    assert task_push.count("_prepare_native_plus_x_front_corridor(") == 1
-    assert task_push.count("_execute_high_safe_wrist_yaw(") == 1
+    assert task_push.count("_prepare_native_plus_x_front_corridor(") == 2
+    assert task_push.count("_execute_high_safe_wrist_yaw(") == 0
     initial_route = task_push[: task_push.index("for push_iteration in range(")]
     assert initial_route.index("_prepare_native_plus_x_front_corridor(") < (
         initial_route.index("_seek_stable_plate_contact(")
@@ -6984,7 +6984,7 @@ def test_native_plus_x_front_corridor_is_initial_and_yaw_remains_for_recontact()
     recontact_route = task_push[
         task_push.index("recontact_wrist_yaw_execution =") :
     ]
-    assert recontact_route.index("_execute_high_safe_wrist_yaw(") < (
+    assert recontact_route.index("_prepare_native_plus_x_front_corridor(") < (
         recontact_route.index("_seek_stable_plate_contact(")
     )
     assert "remaining_structural_waypoint_steps" in initial_route
@@ -7263,6 +7263,12 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         in producer
     )
     assert (
+        '"--structural_near_plate_max_translation_action",\n'
+        "        type=float,\n"
+        "        default=0.005,"
+        in producer
+    )
+    assert (
         '"--plate_contact_seek_max_steps", type=int, default=64'
         in producer
     )
@@ -7436,6 +7442,10 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert (
         "--plate_contact_seek_max_translation_action must be in (0, 0.2]"
+        in producer
+    )
+    assert (
+        "--structural_near_plate_max_translation_action must be positive"
         in producer
     )
     assert "--plate_contact_seek_max_steps must be positive" in producer

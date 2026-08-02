@@ -82,8 +82,11 @@ robot/native structural-contact allowlist, plate support/tilt/drift/velocity
 checks, native OSC action bounds, and finite action budget before every action
 and again after every action. The `0.0005 m` outside-rim clearance is an exact
 precontact separation threshold, not permission to contact the plate early;
-the low-speed contact-seek action remains capped at `0.10`, or `0.0008 m` in
-world space, and precontact plate contact still fails closed.
+the structural near-plate action is capped at `0.005`, or `0.0004 m` in world
+space, so the compiled corridor reserve exceeds a complete permitted step.
+Only after the guarded outside-side pose is attained may the explicit lateral
+contact-seek stage use its existing `0.10` action cap. Precontact plate contact
+still fails closed.
 
 This controller route is not an EB/ER/EC intervention. It does not alter the
 task prompt, goal, BDDL, inventory, serialized states, policy, camera, oracle,
