@@ -1286,6 +1286,16 @@ def _compiled_native_front_right_low_detour_plan(
             )
         return value
 
+    structural_native_geoms = [
+        record
+        for record in native_geoms
+        if record.get("body") not in {TABLE_BODY, "world"}
+    ]
+    if not structural_native_geoms:
+        raise RuntimeError(
+            "native cabinet detour lacks structural native obstacle geoms"
+        )
+
     maximum_hand_x_offset = float(
         max(
             vector(record, "world_aabb_max_offset_from_eef")[0]
@@ -1316,40 +1326,90 @@ def _compiled_native_front_right_low_detour_plan(
             for record in rigid_hand_geoms
         )
     )
+    start_high = current_eef.copy()
     cabinet_min_z = float(
         min(vector(record, "world_aabb_min")[2] for record in cabinet_top_geoms)
     )
     wine_rack_max_x = float(
         max(vector(record, "world_aabb_max")[0] for record in wine_rack_geoms)
     )
-    front_obstacle_max_y = float(
-        max(
-            vector(record, "world_aabb_max")[1]
-            for record in cabinet_top_geoms + wine_rack_geoms + plate_geoms
-        )
-    )
     right_obstacle_max_x = float(
         max(
             vector(record, "world_aabb_max")[0]
-            for record in wine_rack_geoms + plate_geoms
+            for record in structural_native_geoms
         )
     )
     plate_max_z = float(
         max(vector(record, "world_aabb_max")[2] for record in plate_geoms)
     )
-    selected_front_y = float(
+    selected_right_x = float(
         np.nextafter(
-            front_obstacle_max_y
-            - minimum_hand_y_offset
+            right_obstacle_max_x
+            - minimum_hand_x_offset
             + maximum_controller_world_step_m
             + position_tolerance_m,
             np.inf,
         )
     )
-    selected_right_x = float(
+    low_route_z_interval = (
+        float(outside_side_target[2] + minimum_hand_z_offset),
+        float(outside_side_target[2] + maximum_hand_z_offset),
+    )
+    route_z_sweep_interval = (
+        min(
+            low_route_z_interval[0],
+            float(start_high[2] + minimum_hand_z_offset),
+        ),
+        max(
+            low_route_z_interval[1],
+            float(start_high[2] + maximum_hand_z_offset),
+        ),
+    )
+    low_route_x_sweep_interval = (
+        float(min(start_high[0], selected_right_x) + minimum_hand_x_offset),
+        float(max(start_high[0], selected_right_x) + maximum_hand_x_offset),
+    )
+
+    def intervals_within_clearance(first, second, clearance):
+        return not (
+            first[1] + clearance < second[0]
+            or second[1] + clearance < first[0]
+        )
+
+    front_obstacle_geoms = [
+        record
+        for record in structural_native_geoms
+        if intervals_within_clearance(
+            (
+                float(vector(record, "world_aabb_min")[0]),
+                float(vector(record, "world_aabb_max")[0]),
+            ),
+            low_route_x_sweep_interval,
+            maximum_controller_world_step_m,
+        )
+        and intervals_within_clearance(
+            (
+                float(vector(record, "world_aabb_min")[2]),
+                float(vector(record, "world_aabb_max")[2]),
+            ),
+            route_z_sweep_interval,
+            maximum_controller_world_step_m,
+        )
+    ]
+    if not front_obstacle_geoms:
+        raise RuntimeError(
+            "native cabinet detour compiled an empty front obstacle sweep"
+        )
+    front_obstacle_max_y = float(
+        max(
+            vector(record, "world_aabb_max")[1]
+            for record in front_obstacle_geoms
+        )
+    )
+    selected_front_y = float(
         np.nextafter(
-            right_obstacle_max_x
-            - minimum_hand_x_offset
+            front_obstacle_max_y
+            - minimum_hand_y_offset
             + maximum_controller_world_step_m
             + position_tolerance_m,
             np.inf,
@@ -1410,7 +1470,6 @@ def _compiled_native_front_right_low_detour_plan(
             "near-contact action bound"
         )
 
-    start_high = current_eef.copy()
     predicted_high_above_plate_clearance = float(
         start_high[2] + minimum_hand_z_offset - plate_max_z
     )
@@ -1468,8 +1527,8 @@ def _compiled_native_front_right_low_detour_plan(
         "selected": True,
         "route_authorized": True,
         "authorization_basis": (
-            "exact live compiled rigid-hand and native plate/cabinet/wine-rack "
-            "bounds; "
+            "exact live compiled rigid-hand and complete native structural "
+            "obstacle bounds; "
             "five axis-separated OSC segments; per-action live front/right/"
             "under bounds, "
             "empty robot/native contact allowlist, plate stability, and table "
@@ -1488,6 +1547,12 @@ def _compiled_native_front_right_low_detour_plan(
             record["name"] for record in wine_rack_geoms
         ],
         "plate_geom_names": [record["name"] for record in plate_geoms],
+        "front_obstacle_geom_names": [
+            record["name"] for record in front_obstacle_geoms
+        ],
+        "right_obstacle_geom_names": [
+            record["name"] for record in structural_native_geoms
+        ],
         "cabinet_top_body": L3A3_CABINET_TOP_BODY,
         "wine_rack_body": L3A3_WINE_RACK_BODY,
         "maximum_controller_world_step_m": (
@@ -1510,6 +1575,9 @@ def _compiled_native_front_right_low_detour_plan(
         "wine_rack_max_x_m": wine_rack_max_x,
         "front_obstacle_max_y_m": front_obstacle_max_y,
         "right_obstacle_max_x_m": right_obstacle_max_x,
+        "low_route_x_sweep_interval_m": list(low_route_x_sweep_interval),
+        "low_route_z_interval_m": list(low_route_z_interval),
+        "route_z_sweep_interval_m": list(route_z_sweep_interval),
         "plate_max_z_m": plate_max_z,
         "selected_front_eef_y_m": selected_front_y,
         "selected_right_eef_x_m": selected_right_x,
@@ -1542,14 +1610,16 @@ def _compiled_native_front_right_low_detour_plan(
         ],
         "runtime_requirements": {
             "front_high_and_low_route": (
-                "the high approach moves away from the fixtures; descent and "
-                "low +X motion retain strict front separation from the native "
-                "plate, cabinet top, and wine rack"
+                "the high approach preserves a separating front/right/left/"
+                "above axis for every swept native obstacle; descent and low "
+                "+X motion retain strict front separation from every live "
+                "obstacle whose X/Z bounds intersect the compiled sweep"
             ),
             "right_trailing_and_terminal_return": (
-                "the low trailing pass stays strictly right of the plate and "
-                "wine rack and under the cabinet; the terminal return remains "
-                "right of the wine rack and under the cabinet"
+                "the low trailing pass stays strictly right of the complete "
+                "native structural obstacle set and under the cabinet; the "
+                "terminal return remains right of the wine rack and under "
+                "the cabinet"
             ),
             "all_segments": (
                 "empty structural robot/native contact allowlist plus unchanged "
@@ -1576,6 +1646,8 @@ def _live_native_cabinet_detour_guard(env, *, eef_position, plan, stage):
     cabinet_names = set(plan.get("cabinet_top_geom_names", ()))
     wine_rack_names = set(plan.get("wine_rack_geom_names", ()))
     plate_names = set(plan.get("plate_geom_names", ()))
+    front_obstacle_names = set(plan.get("front_obstacle_geom_names", ()))
+    right_obstacle_names = set(plan.get("right_obstacle_geom_names", ()))
     rigid = [
         record
         for record in inventory["robot_collision_geoms"]
@@ -1599,11 +1671,23 @@ def _live_native_cabinet_detour_guard(env, *, eef_position, plan, stage):
         if record.get("name") in plate_names
         and record.get("body") == PLATE_BODY
     ]
+    front_obstacles = [
+        record
+        for record in inventory["native_nonrobot_collision_geoms"]
+        if record.get("name") in front_obstacle_names
+    ]
+    right_obstacles = [
+        record
+        for record in inventory["native_nonrobot_collision_geoms"]
+        if record.get("name") in right_obstacle_names
+    ]
     if (
         len(rigid) != len(rigid_names)
         or len(cabinet) != len(cabinet_names)
         or len(wine_rack) != len(wine_rack_names)
         or len(plate) != len(plate_names)
+        or len(front_obstacles) != len(front_obstacle_names)
+        or len(right_obstacles) != len(right_obstacle_names)
     ):
         raise RuntimeError("native cabinet detour live geom identity changed")
     required = float(plan["required_strict_clearance_m"])
@@ -1625,22 +1709,16 @@ def _live_native_cabinet_detour_guard(env, *, eef_position, plan, stage):
     minimum_cabinet_z = float(
         min(record["world_aabb_min"][2] for record in cabinet)
     )
-    maximum_fixture_y = float(
-        max(
-            record["world_aabb_max"][1]
-            for record in cabinet + wine_rack
-        )
-    )
     maximum_front_obstacle_y = float(
         max(
             record["world_aabb_max"][1]
-            for record in cabinet + wine_rack + plate
+            for record in front_obstacles
         )
     )
     maximum_right_obstacle_x = float(
         max(
             record["world_aabb_max"][0]
-            for record in wine_rack + plate
+            for record in right_obstacles
         )
     )
     maximum_wine_rack_x = float(
@@ -1650,7 +1728,6 @@ def _live_native_cabinet_detour_guard(env, *, eef_position, plan, stage):
         max(record["world_aabb_max"][2] for record in plate)
     )
     under_clearance = float(minimum_cabinet_z - maximum_hand_z)
-    fixture_front_clearance = float(minimum_hand_y - maximum_fixture_y)
     front_clearance = float(
         minimum_hand_y - maximum_front_obstacle_y
     )
@@ -1661,8 +1738,33 @@ def _live_native_cabinet_detour_guard(env, *, eef_position, plan, stage):
         minimum_hand_x - maximum_wine_rack_x
     )
     above_plate_clearance = float(minimum_hand_z - maximum_plate_z)
-    require_fixture_front = stage == "front_high_lateral"
-    require_above_plate = stage == "front_high_lateral"
+    high_route_obstacle_separations = []
+    for record in front_obstacles:
+        obstacle_min = np.asarray(record["world_aabb_min"], dtype=float)
+        obstacle_max = np.asarray(record["world_aabb_max"], dtype=float)
+        axis_clearances = {
+            "front_y_m": float(minimum_hand_y - obstacle_max[1]),
+            "right_x_m": float(minimum_hand_x - obstacle_max[0]),
+            "left_x_m": float(obstacle_min[0] - maximum_hand_x),
+            "above_z_m": float(minimum_hand_z - obstacle_max[2]),
+        }
+        high_route_obstacle_separations.append(
+            {
+                "geom": record["name"],
+                "body": record["body"],
+                "maximum_separating_axis_clearance_m": float(
+                    max(axis_clearances.values())
+                ),
+                "axis_clearances": axis_clearances,
+            }
+        )
+    minimum_high_route_separation = float(
+        min(
+            record["maximum_separating_axis_clearance_m"]
+            for record in high_route_obstacle_separations
+        )
+    )
+    require_high_route_separation = stage == "front_high_lateral"
     require_front = stage in {
         "front_vertical_descent",
         "low_front_right_lateral",
@@ -1676,10 +1778,9 @@ def _live_native_cabinet_detour_guard(env, *, eef_position, plan, stage):
     require_right_of_rack = stage == "trailing_low_terminal_return"
     accepted = bool(
         (
-            not require_fixture_front
-            or fixture_front_clearance > required
+            not require_high_route_separation
+            or minimum_high_route_separation > required
         )
-        and (not require_above_plate or above_plate_clearance > required)
         and (not require_front or front_clearance > required)
         and (not require_under or under_clearance > required)
         and (not require_right or right_clearance > required)
@@ -1689,12 +1790,13 @@ def _live_native_cabinet_detour_guard(env, *, eef_position, plan, stage):
         )
     )
     violations = []
-    if require_fixture_front and not fixture_front_clearance > required:
+    if (
+        require_high_route_separation
+        and not minimum_high_route_separation > required
+    ):
         violations.append(
-            "rigid_hand_not_strictly_in_front_of_native_fixtures"
+            "rigid_hand_high_route_lacks_native_obstacle_separation"
         )
-    if require_above_plate and not above_plate_clearance > required:
-        violations.append("rigid_hand_not_strictly_above_native_plate")
     if require_front and not front_clearance > required:
         violations.append(
             "rigid_hand_not_strictly_in_front_of_native_obstacles"
@@ -1720,9 +1822,10 @@ def _live_native_cabinet_detour_guard(env, *, eef_position, plan, stage):
         "blocking_cabinet_geom_count": len(cabinet),
         "blocking_wine_rack_geom_count": len(wine_rack),
         "blocking_plate_geom_count": len(plate),
+        "front_obstacle_geom_count": len(front_obstacles),
+        "right_obstacle_geom_count": len(right_obstacles),
         "required_strict_clearance_m": required,
-        "require_fixture_front_clearance": require_fixture_front,
-        "require_above_plate_clearance": require_above_plate,
+        "require_high_route_separation": require_high_route_separation,
         "require_under_clearance": require_under,
         "require_front_clearance": require_front,
         "require_right_clearance": require_right,
@@ -1733,17 +1836,19 @@ def _live_native_cabinet_detour_guard(env, *, eef_position, plan, stage):
         "minimum_rigid_hand_z_m": minimum_hand_z,
         "minimum_rigid_hand_y_m": minimum_hand_y,
         "minimum_cabinet_z_m": minimum_cabinet_z,
-        "maximum_fixture_y_m": maximum_fixture_y,
         "maximum_front_obstacle_y_m": maximum_front_obstacle_y,
         "maximum_right_obstacle_x_m": maximum_right_obstacle_x,
         "maximum_wine_rack_x_m": maximum_wine_rack_x,
         "maximum_plate_z_m": maximum_plate_z,
         "under_clearance_m": under_clearance,
-        "fixture_front_clearance_m": fixture_front_clearance,
         "front_clearance_m": front_clearance,
         "right_clearance_m": right_clearance,
         "right_of_rack_clearance_m": right_of_rack_clearance,
         "above_plate_clearance_m": above_plate_clearance,
+        "minimum_high_route_separation_m": minimum_high_route_separation,
+        "high_route_obstacle_separations": (
+            high_route_obstacle_separations
+        ),
         "violations": violations,
     }
 

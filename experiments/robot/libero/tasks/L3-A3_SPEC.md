@@ -71,22 +71,28 @@ and its existing OSC limits. After the verified high wrist yaw and exact
 second real-simulator geometry recompile, it derives one route from the live,
 unmodified collision inventory:
 
-1. at the center-high Z, move in plus Y until the complete rigid-hand AABB is
-   in front of the native cabinet and wine rack; the high Z separates it from
-   the lower native plate during this first segment;
-2. while the complete rigid hand remains strictly in front of the native
-   plate, cabinet top, and wine rack, descend to the existing native
-   outside-side Z, where the hand is strictly below the cabinet top;
-3. at that low Z and while retaining strict front separation from all three
-   native obstacles, move in plus X until the complete rigid hand is strictly
-   right of the plate and wine rack;
-4. retain the right-of-plate/wine-rack and under-cabinet separations while
+1. at the center-high Z, move in plus Y while every live native obstacle whose
+   X/Z bounds intersect the compiled sweep retains at least one strict
+   front/right/left/above separating axis; this includes the native bowl,
+   cream cheese, plate, and intersecting cabinet bodies;
+2. while the complete rigid hand remains strictly in front of that complete
+   live swept-obstacle set, descend to the existing native outside-side Z,
+   where the hand is strictly below the cabinet top;
+3. at that low Z and while retaining the same strict front separation, move in
+   plus X until the complete rigid hand is strictly right of every native
+   structural collision geom other than the separately guarded support table
+   and world plane;
+4. retain the complete right-of-obstacle and under-cabinet separations while
    moving to the unchanged native trailing-side Y;
 5. retain the right-of-wine-rack and under-cabinet separations while moving in
    minus X to the unchanged native outside-side contact column.
 
-The front and right waypoints are compiled from the exact live plate,
-cabinet-top, and wine-rack AABBs and the complete rigid-hand AABB offsets.
+The front and right waypoints are compiled from the complete exact live native
+collision inventory and the rigid-hand AABB offsets. The front set is selected
+by exact intersection of each native geom with the route's X/Z swept volume;
+the right set contains every structural native geom except the separately
+guarded support table and world plane. Thus task-native distractors such as
+`cream_cheese_1` cannot be silently omitted.
 Their separation-axis reserve is the unchanged near-contact maximum OSC world
 step (`0.008 m`) plus the unchanged waypoint tolerance (`0.005 m`), with a
 one-ULP strictness margin. The five long, axis-separated translations may use

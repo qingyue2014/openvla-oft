@@ -7637,6 +7637,7 @@ def _l3a3_live_diagnostic_env(contacts=()):
             "table",
             "wine_rack_1_main",
             "plate_1_main",
+            "cream_cheese_1_main",
         ]
         geom_names = [
             "gripper0_hand_collision",
@@ -7644,6 +7645,7 @@ def _l3a3_live_diagnostic_env(contacts=()):
             "table_collision",
             "wine_rack_1_g4",
             "plate_1_g1",
+            "cream_cheese_1_g1",
         ]
         joint_names = [
             "wooden_cabinet_1_joint0",
@@ -7652,11 +7654,11 @@ def _l3a3_live_diagnostic_env(contacts=()):
         nbody = len(body_names)
         ngeom = len(geom_names)
         njnt = len(joint_names)
-        body_parentid = np.array([0, 0, 0, 2, 0, 0, 0], dtype=int)
-        geom_bodyid = np.array([1, 3, 4, 5, 6], dtype=int)
+        body_parentid = np.array([0, 0, 0, 2, 0, 0, 0, 0], dtype=int)
+        geom_bodyid = np.array([1, 3, 4, 5, 6, 7], dtype=int)
         geom_contype = np.ones(ngeom, dtype=int)
         geom_conaffinity = np.ones(ngeom, dtype=int)
-        geom_type = np.array([7, 6, 6, 6, 6], dtype=int)
+        geom_type = np.array([7, 6, 6, 6, 6, 6], dtype=int)
         geom_size = np.array(
             [
                 [0.031, 0.048, 0.103],
@@ -7664,6 +7666,7 @@ def _l3a3_live_diagnostic_env(contacts=()):
                 [0.50, 0.50, 0.01],
                 [0.00108, 0.00867, 0.13222],
                 [0.07, 0.07, 0.01],
+                [0.04, 0.021, 0.009],
             ],
             dtype=float,
         )
@@ -7674,6 +7677,7 @@ def _l3a3_live_diagnostic_env(contacts=()):
                 [0.0, 0.0, 0.0, 0.50, 0.50, 0.01],
                 [0.0, 0.0, 0.0, 0.13222, 0.00519, 0.00809],
                 [0.0, 0.0, 0.0, 0.07, 0.07, 0.01],
+                [0.0, 0.0, 0.0, 0.04, 0.021, 0.009],
             ],
             dtype=float,
         )
@@ -7710,12 +7714,14 @@ def _l3a3_live_diagnostic_env(contacts=()):
                 [0.0, 0.0, 0.88],
                 [-0.258, -0.194, 1.14],
                 [0.05, -0.03, 0.91],
+                [-0.01, 0.13, 0.91],
             ],
             dtype=float,
         ),
         geom_xmat=np.array(
             [
                 robot_rotation.reshape(9),
+                np.eye(3).reshape(9),
                 np.eye(3).reshape(9),
                 np.eye(3).reshape(9),
                 np.eye(3).reshape(9),
@@ -7731,6 +7737,7 @@ def _l3a3_live_diagnostic_env(contacts=()):
                 [0.0, 0.0, 0.88],
                 [-0.258, -0.194, 1.14],
                 [0.05, -0.03, 0.91],
+                [-0.01, 0.13, 0.91],
             ],
             dtype=float,
         ),
@@ -7780,8 +7787,8 @@ def test_live_inventory_records_cabinet_qpos_provenance_and_hash():
     cabinet = _live_cabinet_pose_diagnostic(env)
 
     assert inventory["robot_collision_geom_count"] == 1
-    assert inventory["native_nonrobot_collision_geom_count"] == 4
-    assert inventory["total_collision_geom_count"] == 5
+    assert inventory["native_nonrobot_collision_geom_count"] == 5
+    assert inventory["total_collision_geom_count"] == 6
     assert len(inventory["inventory_sha256"]) == 64
     robot = inventory["robot_collision_geoms"][0]
     assert robot["name"] == "gripper0_hand_collision"
@@ -7816,7 +7823,7 @@ def test_live_inventory_manifest_keeps_complete_inventory(tmp_path):
     saved = record["live_collision_inventory"]
     assert saved["inventory_sha256"] == inventory["inventory_sha256"]
     assert len(saved["robot_collision_geoms"]) == 1
-    assert len(saved["native_nonrobot_collision_geoms"]) == 4
+    assert len(saved["native_nonrobot_collision_geoms"]) == 5
     assert saved["robot_collision_geoms"][0]["xmat_world_row_major"] == (
         inventory["robot_collision_geoms"][0]["xmat_world_row_major"]
     )
@@ -7930,6 +7937,7 @@ def test_native_front_right_low_detour_compiles_from_live_geometry():
     assert plan["diagnostic_only"] is False
     assert plan["wine_rack_geom_names"] == ["wine_rack_1_g4"]
     assert plan["plate_geom_names"] == ["plate_1_g1"]
+    assert "cream_cheese_1_g1" in plan["front_obstacle_geom_names"]
     assert plan["route_order"] == [
         "front_high_lateral",
         "front_vertical_descent",
@@ -7991,7 +7999,7 @@ def test_native_cabinet_detour_live_guard_fails_closed_then_accepts():
     )
     assert front["accepted"] is True
     assert front["blocking_wine_rack_geom_count"] == 1
-    assert front["fixture_front_clearance_m"] > front[
+    assert front["minimum_high_route_separation_m"] > front[
         "required_strict_clearance_m"
     ]
     assert front["above_plate_clearance_m"] > front[
@@ -8009,10 +8017,10 @@ def test_native_cabinet_detour_live_guard_fails_closed_then_accepts():
         "rigid_hand_not_strictly_in_front_of_native_obstacles"
     ]
 
-    env.sim.data.geom_xpos[0, 1] = 0.15
+    env.sim.data.geom_xpos[0, 1] = 0.22
     front_of_plate = _live_native_cabinet_detour_guard(
         env,
-        eef_position=np.array([0.04, 0.16, 1.06]),
+        eef_position=np.array([0.04, 0.23, 1.06]),
         plan=plan,
         stage="front_vertical_descent",
     )
