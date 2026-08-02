@@ -11197,6 +11197,214 @@ def _execute_high_safe_wrist_yaw(
     }
 
 
+def _select_native_plus_x_front_candidate(candidates):
+    """Select the unchanged native-orientation +X plate approach.
+
+    The +X candidate is the only compiled cardinal approach that stays in
+    front of the native cabinet while the hand is high.  Selection remains
+    fail-closed: the live compiler must mark the candidate eligible, its two
+    finger contact skew must fit strictly inside the registered outside-rim
+    clearance, and no wrist-yaw route may have been attached to it.
+    """
+    matches = [
+        candidate
+        for candidate in candidates
+        if "legacy_cardinal:+x"
+        in candidate.get("candidate_provenance", ())
+    ]
+    if len(matches) != 1:
+        raise RuntimeError(
+            "native +X front corridor requires exactly one compiled candidate"
+        )
+    selected = matches[0]
+    outside_clearance = float(
+        selected.get("maximum_dual_finger_contact_skew_m", np.nan)
+    )
+    dual_finger_skew = float(
+        selected.get("dual_finger_contact_skew_m", np.nan)
+    )
+    if not (
+        selected.get("route_selection_candidate", False)
+        and selected.get("compiled_geometry_eligible", False)
+        and selected.get("selection_eligible", False)
+        and not selected.get("wrist_yaw_route_selected", False)
+        and np.isfinite(outside_clearance)
+        and np.isfinite(dual_finger_skew)
+        and 0.0 <= dual_finger_skew < outside_clearance
+        and np.allclose(
+            selected.get("outward_direction_xy", ()),
+            [1.0, 0.0],
+            rtol=0.0,
+            atol=1e-12,
+        )
+    ):
+        raise RuntimeError(
+            "compiled native +X front corridor is not strictly eligible"
+        )
+    return selected
+
+
+def _prepare_native_plus_x_front_corridor(
+    rollout,
+    env,
+    args,
+    *,
+    plate_position,
+    push_direction_xy,
+    center_high_target,
+    diagnostics,
+):
+    """Recompile and authorize a zero-yaw route in front of the cabinet."""
+    current_eef = np.asarray(
+        rollout.obs["robot0_eef_pos"], dtype=float
+    )
+    center_high_target = np.asarray(center_high_target, dtype=float)
+    plate_position = np.asarray(plate_position, dtype=float)
+    if any(
+        value.shape != (3,) or not np.all(np.isfinite(value))
+        for value in (current_eef, center_high_target, plate_position)
+    ):
+        raise RuntimeError("native +X front corridor inputs must be finite 3-D")
+    center_error = float(np.linalg.norm(current_eef - center_high_target))
+    center_xy_error = float(
+        np.linalg.norm(current_eef[:2] - plate_position[:2])
+    )
+    contact_gate = _robot_nonrobot_contact_evidence(
+        env, allowed_body_pairs=()
+    )
+    if not (
+        center_error <= float(args.position_tolerance)
+        and center_xy_error <= float(args.position_tolerance)
+        and contact_gate["accepted"]
+    ):
+        raise RuntimeError(
+            "native +X front corridor lacks a collision-free center-high start: "
+            f"center_error_m={center_error} "
+            f"center_xy_error_m={center_xy_error} "
+            f"contact_gate={json.dumps(contact_gate, sort_keys=True)}"
+        )
+
+    _, recompiled_candidates = _compiled_trailing_side_contact_candidates(
+        env,
+        plate_position=plate_position,
+        push_direction_xy=push_direction_xy,
+        eef_position=current_eef,
+        backoff=args.plate_contact_backoff,
+        outside_clearance_m=args.plate_contact_outside_clearance,
+        plate_approach_eef_height=args.plate_approach_eef_height,
+        position_action_scale=args.position_action_scale,
+        reference_outward_direction_xy=np.array([1.0, 0.0], dtype=float),
+    )
+    realized_candidate = _select_native_plus_x_front_candidate(
+        recompiled_candidates
+    )
+    live_inventory = _live_collision_inventory(
+        env, eef_position=current_eef
+    )
+    live_inventory["capture_stage"] = (
+        "post_center_high_zero_yaw_front_corridor_recompile"
+    )
+    cabinet_pose = _live_cabinet_pose_diagnostic(env)
+    route_evidence = {
+        "candidate_id": "native_plus_x_front_corridor",
+        "diagnostic_only": False,
+        "selection_eligible": True,
+        "selected": True,
+        "route_authorized": True,
+        "wrist_yaw_executed": False,
+        "outward_direction_xy": [1.0, 0.0],
+        "center_high_target": center_high_target.tolist(),
+        "outside_high_target": realized_candidate[
+            "outside_high_target"
+        ],
+        "outside_side_target": realized_candidate[
+            "outside_side_target"
+        ],
+        "side_contact_target": realized_candidate[
+            "side_contact_target"
+        ],
+        "outside_clearance_m": float(
+            args.plate_contact_outside_clearance
+        ),
+        "dual_finger_contact_skew_m": float(
+            realized_candidate["dual_finger_contact_skew_m"]
+        ),
+        "authorization_basis": (
+            "live native-orientation +X candidate, exact two-finger skew, "
+            "collision-free center-high start, and the existing per-action "
+            "55-pair overhead/outside/table/contact gates"
+        ),
+    }
+    diagnostic_manifest_value = getattr(args, "diagnostic_manifest", None)
+    if diagnostic_manifest_value is None:
+        output_value = getattr(args, "output", None)
+        if not output_value:
+            raise RuntimeError(
+                "controller diagnostic manifest requires an output path"
+            )
+        diagnostic_manifest_value = str(
+            Path(output_value).with_suffix(".controller_diagnostic.json")
+        )
+    diagnostic_manifest = _write_controller_diagnostic_manifest(
+        diagnostic_manifest_value,
+        {
+            "schema_version": 1,
+            "scenario": SCENE_ID,
+            "task_description": TASK_PROMPT,
+            "diagnostic_only": False,
+            "route_authorized": True,
+            "capture_stage": live_inventory["capture_stage"],
+            "live_collision_inventory": live_inventory,
+            "live_cabinet_pose_and_qpos": cabinet_pose,
+            "authorized_front_corridor": route_evidence,
+            "authorized_detour_plan": None,
+            "unexpected_contact_events": [],
+            "latest_status": "NATIVE_PLUS_X_FRONT_CORRIDOR_AUTHORIZED",
+        },
+    )
+    controller_context = {
+        "diagnostic_only": False,
+        "executed": False,
+        "selection_eligible": True,
+        "selected": True,
+        "route_authorized": True,
+        "capture_stage": live_inventory["capture_stage"],
+        "inventory_sha256": live_inventory["inventory_sha256"],
+        "robot_collision_geom_count": live_inventory[
+            "robot_collision_geom_count"
+        ],
+        "native_nonrobot_collision_geom_count": live_inventory[
+            "native_nonrobot_collision_geom_count"
+        ],
+        "total_collision_geom_count": live_inventory[
+            "total_collision_geom_count"
+        ],
+        "authorized_front_corridor": route_evidence,
+        "authorized_detour_plan": None,
+        "manifest_path": str(diagnostic_manifest.resolve()),
+    }
+    print(
+        "L3-A3 native +X front corridor authorized "
+        + json.dumps(controller_context, sort_keys=True),
+        flush=True,
+    )
+    return {
+        "selected_native_push_direction_relation": "legacy_cardinal:+x",
+        "selected_outward_direction_xy": [1.0, 0.0],
+        "legacy_plus_x_route_selected": True,
+        "wrist_yaw_executed": False,
+        "runtime_tangent_fallback_permitted": False,
+        "center_high_target": center_high_target.tolist(),
+        "real_sim_recompiled_candidate": realized_candidate,
+        "controller_live_collision_diagnostic": controller_context,
+        "yaw_steps": 0,
+        "total_structural_actions_before_contact_seek": 0,
+        "remaining_structural_waypoint_steps": int(
+            args.max_waypoint_steps
+        ),
+    }
+
+
 def _body_contact_counterparts(env, body_name):
     """Describe every current MuJoCo contact involving ``body_name``."""
     model, data = env.sim.model, env.sim.data
@@ -14505,6 +14713,9 @@ def generate(args):
             plate_approach_eef_height=args.plate_approach_eef_height,
             position_action_scale=args.position_action_scale,
         )
+        selected_contact_candidate = _select_native_plus_x_front_candidate(
+            candidate_geometry
+        )
         center_approach_target = np.asarray(
             selected_contact_candidate["center_high_target"],
             dtype=float,
@@ -14571,23 +14782,24 @@ def generate(args):
             flush=True,
         )
         # Decouple the large workspace translation from the native-geometry
-        # side-contact path.  First reach center-high, execute the selected
-        # relative wrist yaw under live free-space/contact gates, and directly
-        # recompile the attained geometry.  Only then move high outside the
-        # plate, lower with no contact, and seek dual-finger lateral contact.
+        # side-contact path.  First reach center-high, retain the unchanged
+        # native wrist orientation, and directly recompile the low-skew +X
+        # candidate.  That route remains in front of the cabinet; the existing
+        # per-action overhead, outside-rim, table, stability, and empty-contact
+        # gates still authorize every structural action before contact.
         rollout.move(
             center_approach_target,
             pusher_open_sign,
             "task",
             diagnostics=plate_diagnostics,
         )
-        wrist_yaw_execution = _execute_high_safe_wrist_yaw(
+        wrist_yaw_execution = _prepare_native_plus_x_front_corridor(
             rollout,
             env,
             args,
-            selected_candidate=selected_contact_candidate,
+            plate_position=body_pose(env, PLATE_BODY)[0],
+            push_direction_xy=direction_xy,
             center_high_target=center_approach_target,
-            gripper=pusher_open_sign,
             diagnostics=plate_diagnostics,
         )
         realized_contact_candidate = wrist_yaw_execution[
@@ -15678,7 +15890,7 @@ def main():
     # compiled plate/finger collision AABBs, descend with no contact, then
     # seek laterally until both native fingers contact.
     parser.add_argument(
-        "--plate_contact_outside_clearance", type=float, default=0.005
+        "--plate_contact_outside_clearance", type=float, default=0.001
     )
     parser.add_argument(
         "--plate_contact_seek_max_translation_action",

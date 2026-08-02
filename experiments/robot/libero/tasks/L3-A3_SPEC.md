@@ -64,60 +64,34 @@ The safe prefix is:
    angular velocity for 10 consecutive checks;
 4. push the plate to the native goal.
 
-### Preregistered controller-only cabinet route
+### Preregistered controller-only front corridor
 
-The controller reference keeps the selected native trailing-side plate push
-and its existing OSC limits. After the verified high wrist yaw and exact
-second real-simulator geometry recompile, it derives one route from the live,
-unmodified collision inventory:
+The controller reference uses the compiled native-orientation `+X` cardinal
+plate approach. It does not rotate the wrist before the initial plate contact.
+This keeps the complete hand in front of the native cabinet while the EEF moves
+from center-high to the plate's right side. The route is selected only when the
+live compiler finds exactly one `legacy_cardinal:+x` candidate, that candidate
+passes the existing reachability and two-finger geometry gates, and its measured
+dual-finger contact skew is strictly smaller than the registered `0.001 m`
+outside-rim clearance.
 
-1. at the center-high Z, move in plus X while every native structural geom
-   retains at least one strict front/right/left/above separating axis;
-2. after the complete rigid hand is strictly right of every native structural
-   collision geom other than the separately guarded support table and world
-   plane, retain that right separation while moving at high Z to the unchanged
-   native trailing-side Y;
-3. retain the complete right-of-obstacle separation while descending on that
-   column to the existing native outside-side Z;
-4. retain the right-of-wine-rack and under-cabinet separations while moving in
-   minus X to the unchanged native outside-side contact column.
+After reaching center-high, the controller recompiles the candidate and the
+complete live native collision inventory. The structural approach continues to
+use the existing 55-pair overhead/outside/table clearance calculations, empty
+robot/native structural-contact allowlist, plate support/tilt/drift/velocity
+checks, native OSC action bounds, and finite action budget before every action
+and again after every action. The `0.001 m` outside-rim clearance is an exact
+precontact separation threshold, not permission to contact the plate early;
+the low-speed contact-seek action remains capped at `0.10`, or `0.0008 m` in
+world space, and precontact plate contact still fails closed.
 
-The high-route and right waypoints are compiled from the complete exact live
-native collision inventory and the rigid-hand AABB offsets. The obstacle set
-contains every structural native geom except the separately guarded support
-table and world plane, so task-native distractors such as `cream_cheese_1`
-cannot be silently omitted. The right separation-axis reserve is the unchanged
-near-contact maximum OSC world
-step (`0.008 m`) plus the unchanged waypoint tolerance (`0.005 m`), with a
-one-ULP strictness margin. The four axis-separated translations may use the
-strict interior of the native OSC
-translation-action bound; the unchanged `0.10` action cap remains in force for
-post-route correction and plate-contact motion. Every executed action
-recompiles the live separating-axis/right/under inequality, enforces the empty
-structural robot/native contact allowlist, retains native table clearance, and rechecks
-plate support, tilt, drift, and velocities. Any identity change, contact, lost
-separation, lost support, instability, action-budget overrun, or terminal
-outside-side guard failure invalidates the reference. These controller
-waypoints are not an EB/ER/EC intervention and do not alter the task prompt,
-goal, inventory, serialized states, evaluation policy, camera, oracle, or
-thresholds.
-
-The descent-to-low-lateral transition does not use the generic `0.005 m`
-waypoint tolerance blindly. Its live Z tolerance is the smaller of that bound
-and one quarter of the compiled terminal under-cabinet headroom above the
-`0.008 m` hard gate. This preserves at least 75% of the certified headroom
-before the first zero-Z lateral action; the live under-cabinet guard still runs
-before and after every action and fails closed on any loss.
-The switch requires the EEF to lie inside that tolerance on either side of the
-target; otherwise the unchanged vertical OSC controller continues toward the
-same target.
-
-Both high lateral segments use the existing live adaptive high-plane OSC
-envelope rather than treating a zero Z command as measured height retention.
-The action allocates nonnegative Z recovery from the observed vertical tail,
-is capped by every exact live plate/table collision-pair surplus, and is
-recompiled before and after each action. The complete native-obstacle
-separation guard remains an additional independent requirement.
+This controller route is not an EB/ER/EC intervention. It does not alter the
+task prompt, goal, BDDL, inventory, serialized states, policy, camera, oracle,
+or formal thresholds. Any unexpected robot/native contact, lost clearance,
+lost support, plate instability, action-bound violation, or budget exhaustion
+invalidates the reference. The prior yaw-aligned right-of-all-obstacles detour
+is retained only as historical diagnostic code; its compiled `+X` waypoint was
+outside the observed native OSC workspace and is not selected or executed.
 
 ## Hard physical and visual gates
 

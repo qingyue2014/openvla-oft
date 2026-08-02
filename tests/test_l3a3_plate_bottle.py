@@ -6968,17 +6968,19 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
     assert '"initial_realized_contact_candidate"' in producer
 
 
-def test_segmented_trailing_wrist_yaw_is_mandatory_for_initial_and_recontact_routes():
+def test_native_plus_x_front_corridor_is_initial_and_yaw_remains_for_recontact():
     producer = CONTROLLER_REFERENCE.read_text()
     task_push = producer[
         producer.index("# Job 499604 established real plate contact") :
         producer.index('rollout.hold(-1.0, args.final_settle_steps, "settle")')
     ]
-    assert task_push.count("_execute_high_safe_wrist_yaw(") == 2
+    assert task_push.count("_prepare_native_plus_x_front_corridor(") == 1
+    assert task_push.count("_execute_high_safe_wrist_yaw(") == 1
     initial_route = task_push[: task_push.index("for push_iteration in range(")]
-    assert initial_route.index("_execute_high_safe_wrist_yaw(") < (
+    assert initial_route.index("_prepare_native_plus_x_front_corridor(") < (
         initial_route.index("_seek_stable_plate_contact(")
     )
+    assert "_execute_high_safe_wrist_yaw(" not in initial_route
     recontact_route = task_push[
         task_push.index("recontact_wrist_yaw_execution =") :
     ]
@@ -6987,6 +6989,19 @@ def test_segmented_trailing_wrist_yaw_is_mandatory_for_initial_and_recontact_rou
     )
     assert "remaining_structural_waypoint_steps" in initial_route
     assert "remaining_structural_waypoint_steps" in recontact_route
+
+    front_corridor = producer.split(
+        "def _prepare_native_plus_x_front_corridor(", 1
+    )[1].split("\ndef _body_contact_counterparts(", 1)[0]
+    assert "_select_native_plus_x_front_candidate(" in front_corridor
+    assert "reference_outward_direction_xy=np.array([1.0, 0.0]" in (
+        front_corridor
+    )
+    assert '"wrist_yaw_executed": False' in front_corridor
+    assert '"authorized_detour_plan": None' in front_corridor
+    assert '"NATIVE_PLUS_X_FRONT_CORRIDOR_AUTHORIZED"' in front_corridor
+    assert "_live_collision_inventory(" in front_corridor
+    assert "_robot_nonrobot_contact_evidence(" in front_corridor
 
     executor = producer.split(
         "def _execute_high_safe_wrist_yaw(", 1
@@ -7238,7 +7253,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         in producer
     )
     assert (
-        '"--plate_contact_outside_clearance", type=float, default=0.005'
+        '"--plate_contact_outside_clearance", type=float, default=0.001'
         in producer
     )
     assert (
