@@ -3044,14 +3044,14 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         "pairs": [
             {
                 **base_guard["pairs"][0],
-                "vertical_clearance_m": 0.020,
+                "vertical_clearance_m": 0.030,
                 "accepted": True,
             }
         ],
     }
     recovered_buffer = _overhead_lateral_buffer_evidence(
         recovered_guard,
-        worst_case_controller_world_step_m=0.008,
+        worst_case_controller_world_step_m=0.016,
     )
     native_spec = {
         "source": "env.action_spec",
@@ -3073,7 +3073,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
             position_action_scale=0.08,
             native_action_spec=native_spec,
             expected_pair_count=1,
-            worst_case_controller_world_step_m=0.008,
+            worst_case_controller_world_step_m=0.016,
             lateral_target_xy=(
                 transition_eef[:2] + np.array([0.01, 0.0])
             ),
@@ -3139,7 +3139,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         brake_action_branch
     )
     assert "outside_side_guard=pre_action_guard" in brake_action_branch
-    assert "active_overhead_descent_world_step" in brake_action_branch
+    assert "maximum_overhead_descent_world_step" in brake_action_branch
     assert "corridor_correction_hold_target_xy" in brake_action_branch
     assert "corridor_outward_direction" in brake_action_branch
     assert "post_descent_lateral_max_translation_action" in (
@@ -3148,14 +3148,32 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "compiled_outward_xy_positive_z_tail_brake_envelope" in (
         brake_action_branch
     )
+    assert "maximum_tail_brake_translation_action_bound" in (
+        brake_action_branch
+    )
+    assert "maximum_tail_brake_world_step_m" in brake_action_branch
     assert "_fixed_xy_vertical_approach_action(" not in brake_action_branch
-    post_action_buffer_refresh = bounded_seek.split(
+    post_action_buffer_refresh = bounded_seek.rsplit(
         "if stage_before_action in overhead_route_stages:", 1
     )[1].split("current_step_response = (", 1)[0]
-    assert '"overhead_corridor_descent",' in post_action_buffer_refresh
-    assert '"vertical_tail_brake",' in post_action_buffer_refresh
+    assert '== "overhead_corridor_descent"' in post_action_buffer_refresh
+    assert '== "vertical_tail_brake"' in post_action_buffer_refresh
+    assert "maximum_overhead_descent_world_step" in (
+        post_action_buffer_refresh
+    )
     assert "active_overhead_descent_world_step" in (
         post_action_buffer_refresh
+    )
+    pre_action_buffer_refresh = bounded_seek.split(
+        "for guard_step in range(1, structural_waypoint_budget + 1):", 1
+    )[1].split(
+        'if (\n            structural_stage == "vertical_tail_brake"', 1
+    )[0]
+    assert 'structural_stage == "vertical_tail_brake"' in (
+        pre_action_buffer_refresh
+    )
+    assert "maximum_overhead_descent_world_step" in (
+        pre_action_buffer_refresh
     )
     assert (
         'elif structural_stage == "vertical_tail_zero_confirmation"'

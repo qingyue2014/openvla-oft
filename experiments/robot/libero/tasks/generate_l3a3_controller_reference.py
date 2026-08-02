@@ -13714,6 +13714,15 @@ def _seek_stable_plate_contact(
                     ),
                 )
             )
+        if structural_stage == "vertical_tail_brake":
+            latest_overhead_lateral_buffer = (
+                _overhead_lateral_buffer_evidence(
+                    latest_overhead_guard,
+                    worst_case_controller_world_step_m=(
+                        maximum_overhead_descent_world_step
+                    ),
+                )
+            )
         if (
             structural_stage == "vertical_tail_brake"
             and vertical_tail_brake_reason != "lateral_drift"
@@ -14260,6 +14269,15 @@ def _seek_stable_plate_contact(
                 "active_overhead_descent_translation_action_bound": (
                     active_overhead_descent_translation_action
                 ),
+                "maximum_tail_brake_translation_action_bound": (
+                    overhead_descent_max_translation_action
+                ),
+                "maximum_tail_brake_world_step_m": (
+                    maximum_overhead_descent_world_step
+                ),
+                "maximum_tail_brake_bound_source": (
+                    "existing overhead_descent_max_translation_action"
+                ),
                 "corridor_descent_hold_target_xy": (
                     corridor_descent_hold_target_xy.tolist()
                 ),
@@ -14284,7 +14302,7 @@ def _seek_stable_plate_contact(
                     native_action_spec=native_action_spec,
                     expected_pair_count=expected_overhead_pair_count,
                     worst_case_controller_world_step_m=(
-                        active_overhead_descent_world_step
+                        maximum_overhead_descent_world_step
                     ),
                     lateral_target_xy=(
                         corridor_correction_hold_target_xy
@@ -14315,6 +14333,15 @@ def _seek_stable_plate_contact(
                 "retains_registered_outward_correction_drive": True,
                 "active_overhead_descent_translation_action_bound": (
                     active_overhead_descent_translation_action
+                ),
+                "maximum_tail_brake_translation_action_bound": (
+                    overhead_descent_max_translation_action
+                ),
+                "maximum_tail_brake_world_step_m": (
+                    maximum_overhead_descent_world_step
+                ),
+                "maximum_tail_brake_bound_source": (
+                    "existing overhead_descent_max_translation_action"
                 ),
                 "active_overhead_descent_brake_trigger_buffer_m": (
                     active_overhead_descent_brake_trigger_buffer
@@ -14725,13 +14752,15 @@ def _seek_stable_plate_contact(
                             )
                         )
                         else (
-                            active_overhead_descent_world_step
+                            maximum_overhead_descent_world_step
                             if stage_before_action
-                            in {
-                                "overhead_corridor_descent",
-                                "vertical_tail_brake",
-                            }
-                            else maximum_controller_world_step
+                            == "vertical_tail_brake"
+                            else (
+                                active_overhead_descent_world_step
+                                if stage_before_action
+                                == "overhead_corridor_descent"
+                                else maximum_controller_world_step
+                            )
                         )
                     ),
                 )
