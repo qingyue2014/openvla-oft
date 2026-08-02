@@ -12708,10 +12708,25 @@ def _seek_stable_plate_contact(
     corridor_correction_handoff_target[:2] = (
         corridor_correction_hold_target_xy
     )
+    high_z_controller_handoff_tolerance = float(
+        min(
+            float(args.position_tolerance),
+            0.5 * maximum_post_descent_lateral_world_step,
+        )
+    )
+    minimum_realized_controller_reserve = float(
+        maximum_post_descent_lateral_world_step
+        - high_z_controller_handoff_tolerance
+    )
     if not (
         np.all(np.isfinite(corridor_rebuffer_target))
         and np.all(np.isfinite(corridor_correction_hold_target_xy))
         and np.all(np.isfinite(corridor_correction_handoff_target))
+        and np.isfinite(high_z_controller_handoff_tolerance)
+        and 0.0 < high_z_controller_handoff_tolerance
+        < maximum_post_descent_lateral_world_step
+        and np.isfinite(minimum_realized_controller_reserve)
+        and minimum_realized_controller_reserve > 0.0
         and np.isfinite(corridor_rebuffer_clearance)
         and np.isfinite(corridor_rebuffer_acceptance_clearance)
         and corridor_rebuffer_clearance
@@ -12735,7 +12750,7 @@ def _seek_stable_plate_contact(
             outside_side_guard=outside_side_guard,
             overhead_guard=overhead_guard,
             overhead_lateral_buffer=overhead_lateral_buffer,
-            position_tolerance=args.position_tolerance,
+            position_tolerance=high_z_controller_handoff_tolerance,
             strict_corridor_entry_clearance_m=(
                 corridor_rebuffer_acceptance_clearance
             ),
@@ -12951,8 +12966,21 @@ def _seek_stable_plate_contact(
                 "controller_target": (
                     corridor_correction_hold_target_xy.tolist()
                 ),
-                "position_tolerance_m": float(args.position_tolerance),
-                "position_tolerance_source": "unchanged position_tolerance",
+                "controller_handoff_tolerance_m": (
+                    high_z_controller_handoff_tolerance
+                ),
+                "controller_handoff_tolerance_source": (
+                    "minimum of the unchanged formal position_tolerance and "
+                    "one half of the existing post-descent one-step world "
+                    "displacement"
+                ),
+                "minimum_realized_outward_controller_reserve_m": (
+                    minimum_realized_controller_reserve
+                ),
+                "formal_position_tolerance_m": float(
+                    args.position_tolerance
+                ),
+                "formal_position_tolerance_unchanged": True,
                 "required_compiled_pair_count": (
                     expected_overhead_pair_count
                 ),
@@ -13056,8 +13084,10 @@ def _seek_stable_plate_contact(
                 "the observed proportional static error. Above the unchanged "
                 "staging-Z tolerance, do not hand control back to descent at "
                 "the first formal-target crossing; require the actual EEF to "
-                "reach that controller target within the unchanged position "
-                "tolerance and retain live base8. At or below staging, use "
+                "reach that controller target within the deterministic half-"
+                "one-step handoff tolerance and retain live base8, thereby "
+                "physically realizing at least half the existing 8 mm "
+                "reserve. At or below staging, use "
                 "only the unchanged formal target and clearance for the "
                 "vertical-corridor transition. The unchanged 0.10 "
                 "bound remains exclusive to the post-descent XY/nonnegative-Z "

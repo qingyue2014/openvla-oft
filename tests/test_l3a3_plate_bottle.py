@@ -4183,6 +4183,9 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
         in bounded_seek
     )
     assert '"applies_only_above_staging_tolerance": True' in bounded_seek
+    assert "0.5 * maximum_post_descent_lateral_world_step" in bounded_seek
+    assert '"formal_position_tolerance_unchanged": True' in bounded_seek
+    assert '"minimum_realized_outward_controller_reserve_m"' in bounded_seek
     assert (
         '"formal_corridor_acceptance_clearance_unchanged": True'
         in bounded_seek
@@ -4407,6 +4410,40 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
     assert "corridor_xy_tolerance_not_met" in formal_gate["violations"]
     assert controller_handoff_gate["accepted"] is True
     assert controller_handoff_gate["corridor_lateral_error_m"] == 0.0
+
+    half_step_handoff_tolerance = 0.5 * 0.008
+    under_reserved_eef = handoff_eef.copy()
+    under_reserved_eef[0] -= half_step_handoff_tolerance + 0.0001
+    sufficient_reserved_eef = handoff_eef.copy()
+    sufficient_reserved_eef[0] -= half_step_handoff_tolerance - 0.0001
+    under_reserved_gate = _overhead_corridor_entry_evidence(
+        current_eef=under_reserved_eef,
+        corridor_high_target=handoff_eef,
+        outside_side_guard=handoff_outside_guard,
+        overhead_guard=guard,
+        overhead_lateral_buffer=handoff_buffer,
+        position_tolerance=half_step_handoff_tolerance,
+        strict_corridor_entry_clearance_m=0.0009,
+        require_lateral_buffer=False,
+    )
+    sufficient_reserved_gate = _overhead_corridor_entry_evidence(
+        current_eef=sufficient_reserved_eef,
+        corridor_high_target=handoff_eef,
+        outside_side_guard=handoff_outside_guard,
+        overhead_guard=guard,
+        overhead_lateral_buffer=handoff_buffer,
+        position_tolerance=half_step_handoff_tolerance,
+        strict_corridor_entry_clearance_m=0.0009,
+        require_lateral_buffer=False,
+    )
+    assert under_reserved_gate["accepted"] is False
+    assert under_reserved_gate["corridor_lateral_error_m"] == pytest.approx(
+        0.0041
+    )
+    assert sufficient_reserved_gate["accepted"] is True
+    assert sufficient_reserved_gate[
+        "corridor_lateral_error_m"
+    ] == pytest.approx(0.0039)
 
     tight_pairs = [
         {
