@@ -3736,7 +3736,8 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         in descent_transition
     )
     assert "if descent_corridor_lateral_violations:" in descent_transition
-    assert '"strict_corridor_entry_clearance_m"' in descent_transition
+    assert "strict_corridor_entry_clearance_m=(" in descent_transition
+    assert '"corridor_clearance_m"' in descent_transition
     assert (
         'vertical_tail_brake_reason = "lateral_drift"'
         in descent_transition
@@ -3766,7 +3767,8 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert 'structural_stage = "overhead_corridor_descent"' in (
         zero_transition
     )
-    assert '"corridor_clearance_m"' in zero_transition
+    assert "corridor_rebuffer_target" in zero_transition
+    assert "corridor_rebuffer_clearance" in zero_transition
     correction_transition = bounded_seek.split(
         'elif stage_before_action == "overhead_post_descent_corridor_lateral":',
         1,
@@ -3780,7 +3782,8 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert 'structural_stage = "overhead_corridor_descent"' in (
         correction_transition
     )
-    assert '"corridor_clearance_m"' in correction_transition
+    assert "corridor_rebuffer_target" in correction_transition
+    assert "corridor_rebuffer_clearance" in correction_transition
     assert bounded_seek.index(
         'structural_stage = "overhead_high_corridor_lateral"'
     ) < bounded_seek.index(
@@ -3798,9 +3801,16 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         '"corridor_xy_adaptive_pure_z_descent_with_position_"'
         in bounded_seek
     )
-    assert '"tolerance_or_outside_clearance_drift_brake"' in bounded_seek
+    assert (
+        '"tolerance_or_full_corridor_clearance_drift_brake"'
+        in bounded_seek
+    )
     assert '"descent_corridor_resume_clearance_m"' in bounded_seek
-    assert '"compiled full corridor clearance"' in bounded_seek
+    assert (
+        '"compiled full corridor clearance plus one structural "'
+        in bounded_seek
+    )
+    assert "corridor_rebuffer_target[:2] += (" in bounded_seek
     controller = CONTROLLER_REFERENCE.read_text()
     assert "after the monotone pure-Z sweep, command pure XY" not in controller
     assert "internal controller substeps" in controller

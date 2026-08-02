@@ -12444,6 +12444,30 @@ def _seek_stable_plate_contact(
         position_action_scale=args.position_action_scale,
         maximum_translation_action=structural_max_translation_action,
     )
+    corridor_rebuffer_target = np.asarray(
+        corridor_high_target, dtype=float
+    ).copy()
+    corridor_rebuffer_target[:2] += (
+        np.asarray(geometry["outward_direction_xy"], dtype=float)
+        * maximum_controller_world_step
+    )
+    corridor_rebuffer_clearance = float(
+        np.nextafter(
+            vertical_staging_corridor["corridor_clearance_m"]
+            + maximum_controller_world_step,
+            np.inf,
+        )
+    )
+    if not (
+        np.all(np.isfinite(corridor_rebuffer_target))
+        and np.isfinite(corridor_rebuffer_clearance)
+        and corridor_rebuffer_clearance
+        > vertical_staging_corridor["corridor_clearance_m"]
+    ):
+        raise RuntimeError(
+            "compiled corridor rebuffer lacks a strict outward controller-"
+            "step reserve"
+        )
     (
         high_lateral_prebuffer_target,
         high_lateral_prebuffer_evidence,
@@ -12612,18 +12636,20 @@ def _seek_stable_plate_contact(
                 "unchanged position_tolerance"
             ),
             "descent_outside_clearance_brake_threshold_m": float(
-                vertical_staging_corridor[
-                    "strict_corridor_entry_clearance_m"
-                ]
-            ),
-            "descent_outside_clearance_brake_threshold_source": (
-                "compiled strict corridor-entry clearance"
-            ),
-            "descent_corridor_resume_clearance_m": float(
                 vertical_staging_corridor["corridor_clearance_m"]
             ),
-            "descent_corridor_resume_clearance_source": (
+            "descent_outside_clearance_brake_threshold_source": (
                 "compiled full corridor clearance"
+            ),
+            "descent_corridor_resume_clearance_m": (
+                corridor_rebuffer_clearance
+            ),
+            "descent_corridor_resume_clearance_source": (
+                "compiled full corridor clearance plus one structural "
+                "controller world step"
+            ),
+            "descent_corridor_rebuffer_target": (
+                corridor_rebuffer_target.tolist()
             ),
             "structural_route_order": [
                 (
@@ -12636,7 +12662,7 @@ def _seek_stable_plate_contact(
                 ),
                 (
                     "corridor_xy_adaptive_pure_z_descent_with_position_"
-                    "tolerance_or_outside_clearance_drift_brake"
+                    "tolerance_or_full_corridor_clearance_drift_brake"
                 ),
                 "vertical_tail_brake_and_zero_confirmation",
                 "live_corridor_entry_or_xy_drift_correction",
@@ -13432,7 +13458,7 @@ def _seek_stable_plate_contact(
         elif structural_stage == "overhead_post_descent_corridor_lateral":
             action, path_control = _fixed_z_lateral_approach_action(
                 current_eef=current_eef,
-                lateral_target_xy=corridor_high_target[:2],
+                lateral_target_xy=corridor_rebuffer_target[:2],
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
                 maximum_translation_action=(
@@ -13444,6 +13470,12 @@ def _seek_stable_plate_contact(
                 "action": action.tolist(),
                 "fixed_z_lateral_path_control": path_control,
                 "lateral_route_phase": "post_descent_xy_drift_correction",
+                "corridor_rebuffer_target": (
+                    corridor_rebuffer_target.tolist()
+                ),
+                "corridor_rebuffer_clearance_m": (
+                    corridor_rebuffer_clearance
+                ),
                 "overhead_horizontal_z_m": float(
                     overhead_horizontal_z
                 ),
@@ -13662,11 +13694,15 @@ def _seek_stable_plate_contact(
                 lateral_post_action_interlock
             )
         if stage_before_action in overhead_lateral_stages:
-            lateral_feedback_target = (
-                high_lateral_prebuffer_target[:2]
-                if stage_before_action == "overhead_high_corridor_lateral"
-                else corridor_high_target[:2]
-            )
+            if stage_before_action == "overhead_high_corridor_lateral":
+                lateral_feedback_target = high_lateral_prebuffer_target[:2]
+            elif (
+                stage_before_action
+                == "overhead_post_descent_corridor_lateral"
+            ):
+                lateral_feedback_target = corridor_rebuffer_target[:2]
+            else:
+                lateral_feedback_target = corridor_high_target[:2]
             feedback["corridor_lateral_error_m"] = float(
                 np.linalg.norm(after_eef[:2] - lateral_feedback_target)
             )
@@ -13889,9 +13925,7 @@ def _seek_stable_plate_contact(
                     ),
                     position_tolerance=args.position_tolerance,
                     strict_corridor_entry_clearance_m=(
-                        vertical_staging_corridor[
-                            "strict_corridor_entry_clearance_m"
-                        ]
+                        vertical_staging_corridor["corridor_clearance_m"]
                     ),
                     require_lateral_buffer=False,
                     minimum_eef_z=None,
@@ -14099,7 +14133,7 @@ def _seek_stable_plate_contact(
                 post_descent_corridor_entry = (
                     _overhead_corridor_entry_evidence(
                         current_eef=after_eef,
-                        corridor_high_target=corridor_high_target,
+                        corridor_high_target=corridor_rebuffer_target,
                         outside_side_guard=latest_outside_side_guard,
                         overhead_guard=latest_overhead_guard,
                         overhead_lateral_buffer=(
@@ -14107,9 +14141,7 @@ def _seek_stable_plate_contact(
                         ),
                         position_tolerance=args.position_tolerance,
                         strict_corridor_entry_clearance_m=(
-                            vertical_staging_corridor[
-                                "corridor_clearance_m"
-                            ]
+                            corridor_rebuffer_clearance
                         ),
                     )
                 )
@@ -14223,7 +14255,7 @@ def _seek_stable_plate_contact(
                 corridor_entry_after_action = (
                     _overhead_corridor_entry_evidence(
                         current_eef=after_eef,
-                        corridor_high_target=corridor_high_target,
+                        corridor_high_target=corridor_rebuffer_target,
                         outside_side_guard=latest_outside_side_guard,
                         overhead_guard=latest_overhead_guard,
                         overhead_lateral_buffer=(
@@ -14231,9 +14263,7 @@ def _seek_stable_plate_contact(
                         ),
                         position_tolerance=args.position_tolerance,
                         strict_corridor_entry_clearance_m=(
-                            vertical_staging_corridor[
-                                "corridor_clearance_m"
-                            ]
+                            corridor_rebuffer_clearance
                         ),
                     )
                 )
