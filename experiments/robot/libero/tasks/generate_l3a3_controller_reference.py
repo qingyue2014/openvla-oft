@@ -9782,6 +9782,55 @@ def _vertical_corridor_hazard_brake_release_evidence(
     }
 
 
+def _vertical_corridor_hazard_positive_z_brake_schedule(
+    *,
+    previous_reversal_count,
+    primary_positive_z_action,
+    confirmation_positive_z_action,
+):
+    """Reduce Z only after one complete hazard-direction reversal."""
+    if (
+        isinstance(previous_reversal_count, bool)
+        or not isinstance(previous_reversal_count, (int, np.integer))
+        or previous_reversal_count < 0
+        or not np.isfinite(primary_positive_z_action)
+        or not np.isfinite(confirmation_positive_z_action)
+        or not (
+            0.0
+            < confirmation_positive_z_action
+            < primary_positive_z_action
+            < 1.0
+        )
+    ):
+        raise ValueError(
+            "hazard positive-Z brake schedule inputs are invalid"
+        )
+    confirmation_active = bool(previous_reversal_count >= 1)
+    selected_action = float(
+        confirmation_positive_z_action
+        if confirmation_active
+        else primary_positive_z_action
+    )
+    return selected_action, {
+        "previous_reversal_count": int(previous_reversal_count),
+        "primary_positive_z_action": float(primary_positive_z_action),
+        "confirmation_positive_z_action": float(
+            confirmation_positive_z_action
+        ),
+        "confirmation_active": confirmation_active,
+        "selected_positive_z_action": selected_action,
+        "negative_response_restores_primary_action": True,
+        "two_frame_release_requirement_unchanged": True,
+        "formula": (
+            "use the strengthened positive-Z action until one complete "
+            "vertical/EEF-outward/live-clearance reversal is observed; "
+            "use the unchanged nominal positive-Z action only for later "
+            "confirmation frames, while any negative response resets the "
+            "reversal count and restores the strengthened action"
+        ),
+    }
+
+
 def _outside_side_lateral_settle_evidence(
     *,
     before_guard,
@@ -16002,6 +16051,9 @@ def _seek_stable_plate_contact(
     vertical_corridor_hazard_positive_z_brake_action = float(
         2.0 * vertical_corridor_outward_hold_max_translation_action
     )
+    vertical_corridor_hazard_positive_z_confirmation_action = float(
+        vertical_corridor_outward_hold_max_translation_action
+    )
     fixed_safe_z_stable_count = 0
     fixed_safe_z_required_stable_count = 2
     fixed_safe_z_position_tolerance = float(
@@ -16069,6 +16121,9 @@ def _seek_stable_plate_contact(
         + vertical_corridor_hazard_inward_tail_bound
         and vertical_corridor_hazard_outward_brake_action
         > vertical_corridor_outward_hold_max_translation_action
+        and vertical_corridor_hazard_positive_z_brake_action
+        > vertical_corridor_hazard_positive_z_confirmation_action
+        > 0.0
         and np.hypot(
             vertical_corridor_hazard_outward_brake_action,
             vertical_corridor_hazard_positive_z_brake_action,
@@ -16138,6 +16193,16 @@ def _seek_stable_plate_contact(
                 "responses under Z=0.20; the combined X=0.40, Z=0.40 "
                 "action norm is 0.565686 and "
                 "remains strictly inside the runtime-native 1.0 bound"
+            ),
+            "vertical_corridor_hazard_positive_z_confirmation_action": (
+                vertical_corridor_hazard_positive_z_confirmation_action
+            ),
+            "vertical_corridor_hazard_positive_z_confirmation_derivation": (
+                "after one jointly nonnegative hazard-brake response, "
+                "retain outward X=0.40 but use the unchanged nominal "
+                "positive Z=0.20 only for the second confirmation frame; "
+                "any negative direction resets the count and restores "
+                "positive Z=0.40"
             ),
         }
     )
@@ -17383,6 +17448,7 @@ def _seek_stable_plate_contact(
                 )
                 and not neutral_damping_active_before_action
             )
+            hazard_positive_z_brake_schedule = None
             if neutral_damping_active_before_action:
                 action, path_control = (
                     _compiled_low_side_neutral_damping_action(
@@ -17427,8 +17493,23 @@ def _seek_stable_plate_contact(
                     settle_maximum_lateral_translation_action = (
                         vertical_corridor_hazard_outward_brake_action
                     )
-                    settle_positive_z_action = (
-                        vertical_corridor_hazard_positive_z_brake_action
+                    (
+                        settle_positive_z_action,
+                        hazard_positive_z_brake_schedule,
+                    ) = (
+                        _vertical_corridor_hazard_positive_z_brake_schedule(
+                            previous_reversal_count=int(
+                                lateral_settle_state.get(
+                                    "hazard_brake_reversal_count", 0
+                                )
+                            ),
+                            primary_positive_z_action=(
+                                vertical_corridor_hazard_positive_z_brake_action
+                            ),
+                            confirmation_positive_z_action=(
+                                vertical_corridor_hazard_positive_z_confirmation_action
+                            ),
+                        )
                     )
                 action, path_control = (
                     _compiled_low_side_settle_brake_action(
@@ -17494,8 +17575,18 @@ def _seek_stable_plate_contact(
                     and action[2]
                     == vertical_corridor_hazard_positive_z_brake_action
                 ),
+                "hazard_positive_z_brake_confirmation_active": bool(
+                    hazard_outward_brake_active
+                    and hazard_positive_z_brake_schedule is not None
+                    and hazard_positive_z_brake_schedule[
+                        "confirmation_active"
+                    ]
+                ),
+                "hazard_positive_z_brake_schedule": (
+                    hazard_positive_z_brake_schedule
+                ),
                 "hazard_positive_z_brake_action": (
-                    vertical_corridor_hazard_positive_z_brake_action
+                    float(action[2])
                     if hazard_outward_brake_active
                     else None
                 ),

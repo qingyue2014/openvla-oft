@@ -542,6 +542,19 @@ about `0.565686`, still strictly inside the runtime-native `1.0` bound. The
 stronger Z command remains statically monotonic away from the table and is
 required to pass the same live post-action guard; it changes no geometric-only
 settle behavior, release rule, task, asset, target, budget, or formal threshold.
+Job503687 verified that `+Z=0.40` reverses the downward response, but retaining
+it for both confirmation frames produced a non-convergent four-frame cycle:
+one reduced descent frame, one still-negative brake response, and two positive
+full-brake responses. Table and outside clearances remained safe, but the net
+upward displacement raised the fingers above the rim and exhausted the
+unchanged 240-step budget. Hazard settle now keeps `+Z=0.40` until the first
+frame whose vertical, EEF-outward, and live-clearance responses are all
+nonnegative. Only the following confirmation frame uses the unchanged nominal
+`+Z=0.20`, while retaining live-target `+X=0.40`. Any negative response resets
+the reversal count and therefore restores `+Z=0.40`; release still requires two
+consecutive jointly nonnegative frames and the same strict `3.050 mm` reserve.
+The primary and confirmation translation norms remain about `0.565686` and
+`0.447214`, respectively, both strictly inside the native `1.0` bound.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

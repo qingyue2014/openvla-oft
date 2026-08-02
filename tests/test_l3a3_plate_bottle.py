@@ -18,6 +18,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _constraint_prioritized_outside_descent_action,
     _vertical_corridor_descent_settle_trigger_evidence,
     _vertical_corridor_hazard_brake_release_evidence,
+    _vertical_corridor_hazard_positive_z_brake_schedule,
     _vertical_corridor_reserve_recovery_evidence,
     _vertical_corridor_reserve_recovery_phase_evidence,
     _compiled_corridor_reserve_action,
@@ -3526,6 +3527,60 @@ def test_job503686_hazard_brake_doubles_positive_z_authority():
     assert evidence["proof"][
         "strictly_inside_native_3d_action_norm_bound"
     ] is True
+
+
+def test_job503687_hazard_brake_reduces_only_confirmation_z_action():
+    primary, primary_evidence = (
+        _vertical_corridor_hazard_positive_z_brake_schedule(
+            previous_reversal_count=0,
+            primary_positive_z_action=0.40,
+            confirmation_positive_z_action=0.20,
+        )
+    )
+    confirmation, confirmation_evidence = (
+        _vertical_corridor_hazard_positive_z_brake_schedule(
+            previous_reversal_count=1,
+            primary_positive_z_action=0.40,
+            confirmation_positive_z_action=0.20,
+        )
+    )
+    restored, restored_evidence = (
+        _vertical_corridor_hazard_positive_z_brake_schedule(
+            previous_reversal_count=0,
+            primary_positive_z_action=0.40,
+            confirmation_positive_z_action=0.20,
+        )
+    )
+    assert primary == pytest.approx(0.40)
+    assert primary_evidence["confirmation_active"] is False
+    assert confirmation == pytest.approx(0.20)
+    assert confirmation_evidence["confirmation_active"] is True
+    assert restored == pytest.approx(0.40)
+    assert restored_evidence[
+        "negative_response_restores_primary_action"
+    ] is True
+    assert np.hypot(0.40, primary) < 1.0
+    assert np.hypot(0.40, confirmation) < 1.0
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {
+            "previous_reversal_count": -1,
+            "primary_positive_z_action": 0.40,
+            "confirmation_positive_z_action": 0.20,
+        },
+        {
+            "previous_reversal_count": 0,
+            "primary_positive_z_action": 0.20,
+            "confirmation_positive_z_action": 0.40,
+        },
+    ],
+)
+def test_job503687_hazard_brake_schedule_rejects_invalid_inputs(kwargs):
+    with pytest.raises(ValueError):
+        _vertical_corridor_hazard_positive_z_brake_schedule(**kwargs)
 
 
 def test_500099_every_descent_requires_preventive_active_braking_settle():
@@ -10535,6 +10590,12 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         settle_action
     )
     assert '"hazard_positive_z_brake_strengthened"' in settle_action
+    assert '"hazard_positive_z_brake_confirmation_active"' in (
+        settle_action
+    )
+    assert "_vertical_corridor_hazard_positive_z_brake_schedule(" in (
+        settle_action
+    )
     assert "vertical_corridor_settle_brake_trigger_buffer" in bounded_seek
     assert "maximum_vertical_corridor_outward_hold_world_step" in (
         bounded_seek.split(
