@@ -89,6 +89,19 @@ Once the controller has stopped inside that reachable corridor, its pure-Z
 side-height descent and positive-Z settle brake use a separate `0.10` action
 cap; this changes no lateral reserve and every step remains subject to the live
 outside/table/plate guards before and after execution.
+During the constrained side-corridor descent, a separate pre-loss recovery
+latched at `0.0009 m` outside clearance commands only the registered outward
+axis (`0.10` action) plus positive Z (`0.10` action), with zero tangential or
+rotational command. This combined action is required to remain strictly inside
+the runtime-native 3-D translation norm and is authorized only while all 55
+live plate/table overhead pairs retain their base reserve. It does not require
+re-entry into the higher-route buffer16 envelope. Every recovery phase retains
+the same positive-Z command because the lower `0.05` command produced negative
+measured Z response in Job503245. Release requires clearance strictly above
+`0.00095 m` (the pre-loss entry plus the existing `0.00005 m` measured-progress
+resolution), measured nonnegative outward and vertical progress, a refreshed
+accepted all-pair base guard, and an explicit exit-brake phase. The unchanged
+`0.0004 m` strict physical gate remains enforced before and after every action.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

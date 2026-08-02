@@ -3273,13 +3273,16 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     # Prioritize 0.095 of the unchanged 0.10 action norm outward, retain the
     # remaining norm for negative-Z descent, and reserve a rounded-up 0.5 mm
     # closed-loop response bound above the unchanged strict gate.  The internal
-    # release is the unchanged formal 0.9 mm corridor clearance plus one
-    # structural step; the formal
-    # 0.9 mm corridor gate itself remains unchanged.  Job503232's first Z=0.05
-    # hold frame proved positive Z/outward response and 1.305 mm clearance, so
-    # this 1.3 mm release hands off before its unneeded second hold lost buffer.
+    # release is the same 0.9 mm pre-loss reserve plus the existing 0.05 mm
+    # measured-progress resolution; the formal 0.9 mm corridor gate itself
+    # remains unchanged.  Job503245 then proved that Z=0.05 responds with
+    # negative real Z on every outward-restore frame, while the compiled
+    # Z=0.10 command retains the live base guard and positive response.
     recovery_entry_clearance = 0.0004 + 0.0005
-    recovery_exit_clearance = 0.0009 + 0.0004
+    recovery_exit_clearance = np.nextafter(
+        recovery_entry_clearance + 0.00005, np.inf
+    )
+    assert recovery_exit_clearance > 0.00095
     before_trigger = _vertical_corridor_reserve_recovery_evidence(
         live_clearance_m=0.0014115984435881107,
         recovery_entry_clearance_m=recovery_entry_clearance,
@@ -3306,7 +3309,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert job503193_entry["entered_recovery"] is True
     assert job503193_entry["recovery_active_after_decision"] is True
     recovery_hold = _vertical_corridor_reserve_recovery_evidence(
-        live_clearance_m=0.00125,
+        live_clearance_m=0.000925,
         recovery_entry_clearance_m=recovery_entry_clearance,
         recovery_exit_clearance_m=recovery_exit_clearance,
         strict_corridor_entry_clearance_m=0.0004,
@@ -3318,7 +3321,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     )
     assert recovery_hold["exit_accepted"] is False
     recovery_exit = _vertical_corridor_reserve_recovery_evidence(
-        live_clearance_m=0.0017,
+        live_clearance_m=0.0010,
         recovery_entry_clearance_m=recovery_entry_clearance,
         recovery_exit_clearance_m=recovery_exit_clearance,
         strict_corridor_entry_clearance_m=0.0004,
@@ -3332,7 +3335,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert recovery_exit["recovery_active_after_decision"] is False
     recovery_exit_before_exit_brake = (
         _vertical_corridor_reserve_recovery_evidence(
-            live_clearance_m=0.0017,
+            live_clearance_m=0.0010,
             recovery_entry_clearance_m=recovery_entry_clearance,
             recovery_exit_clearance_m=recovery_exit_clearance,
             strict_corridor_entry_clearance_m=0.0004,
@@ -3352,7 +3355,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     )
     recovery_exit_without_buffer = (
         _vertical_corridor_reserve_recovery_evidence(
-            live_clearance_m=0.0017,
+            live_clearance_m=0.0010,
             recovery_entry_clearance_m=recovery_entry_clearance,
             recovery_exit_clearance_m=recovery_exit_clearance,
             strict_corridor_entry_clearance_m=0.0004,
@@ -3593,6 +3596,15 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         vertical_corridor_action
     )
     assert "positive_z_action" in vertical_corridor_action
+    positive_z_call = vertical_corridor_action.split(
+        "positive_z_action=(", 1
+    )[1].split("),", 1)[0]
+    assert "post_descent_lateral_max_translation_action" in positive_z_call
+    assert "0.5" not in positive_z_call
+    assert (
+        "reserve_recovery_positive_z_action_constant_across_phases"
+        in vertical_corridor_action
+    )
     assert "compiled_corridor_reserve_action_used" in (
         vertical_corridor_action
     )

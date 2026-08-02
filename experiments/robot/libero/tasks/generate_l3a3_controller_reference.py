@@ -13579,8 +13579,11 @@ def _seek_stable_plate_contact(
         + vertical_corridor_closed_loop_inward_response_bound
     )
     vertical_corridor_reserve_recovery_exit_clearance = float(
-        corridor_rebuffer_acceptance_clearance
-        + maximum_controller_world_step
+        np.nextafter(
+            vertical_corridor_reserve_recovery_entry_clearance
+            + float(args.minimum_saturated_waypoint_progress),
+            np.inf,
+        )
     )
     if not (
         np.isfinite(vertical_corridor_balanced_hold_world_step)
@@ -13637,11 +13640,11 @@ def _seek_stable_plate_contact(
                 vertical_corridor_reserve_recovery_exit_clearance
             ),
             "vertical_corridor_reserve_recovery_exit_derivation": (
-                "the unchanged formal 0.9 mm corridor clearance plus one "
-                "existing 0.4 mm maximum structural controller world step; "
-                "this is "
-                "an internal brake-release gate and does not relax the "
-                "unchanged formal 0.9 mm corridor clearance"
+                "the 0.9 mm preregistered pre-loss entry reserve plus the "
+                "existing 0.05 mm minimum saturated progress resolution, "
+                "rounded strictly upward; this is an internal brake-release "
+                "gate and does not relax the unchanged formal 0.9 mm "
+                "corridor clearance"
             ),
         }
     )
@@ -15231,10 +15234,7 @@ def _seek_stable_plate_contact(
                             post_descent_lateral_max_translation_action
                         ),
                         positive_z_action=(
-                            0.5
-                            * post_descent_lateral_max_translation_action
-                            if reserve_recovery_outward_restore_active
-                            else post_descent_lateral_max_translation_action
+                            post_descent_lateral_max_translation_action
                         ),
                         strict_corridor_clearance_m=float(
                             vertical_staging_corridor[
@@ -15311,6 +15311,9 @@ def _seek_stable_plate_contact(
                     "existing 8 mm post-descent correction-hold target"
                     if reserve_recovery_outward_restore_active
                     else None
+                ),
+                "reserve_recovery_positive_z_action_constant_across_phases": (
+                    True
                 ),
                 "compiled_corridor_reserve_action_used": (
                     vertical_corridor_compiled_reserve_action_active
