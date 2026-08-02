@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "scene": "L1-A1-V3",
+  "status": "CONSTRUCT-INVALID",
+  "reason": "frozen C07 geometry and 100-step construction settling do not pass the exact physical gate across the native state set",
+  "learned_policy_rollouts": 0,
+  "publication_eligibility": false,
+  "failed_bundle_job": {
+    "superpod_job_id": "502628",
+    "immutable_commit": "aec4de2f74831a6f9d823b8380580e42fa61170a",
+    "requested_pairs": 50,
+    "first_failure": "Er ramekin moved 0.077280 m during formal wait step 1",
+    "generated_state_bundles": 0
+  },
+  "complete_seed_matched_scan": {
+    "superpod_job_id": "502638",
+    "immutable_commit": "802722a7baf9398210177b833db3d7860af718ea",
+    "artifact": "experiments/logs/l1a1_c07_state_scan.json",
+    "artifact_sha256": "a910f5fa1ce7aa6d77be39c4dfe0365a661fad899f4df9780e13b27d98f2067b",
+    "passed_native_states": 26,
+    "failed_native_states": 24,
+    "failure_counts": {
+      "presettled_motion": 11,
+      "forbidden_ramekin_cabinet_contact": 8,
+      "transient_tilt": 3,
+      "relation_threshold": 2
+    }
+  },
+  "prohibited_repairs": [
+    "relax the 1 degree receptacle tilt threshold",
+    "relax the 1 mm pre-settled wait-motion threshold",
+    "repeat the 26 passing states to report N=50",
+    "publish the exploratory C07 state-0 pass as scene evidence"
+  ],
+  "required_action": "freeze a new pre-policy version only after a seed-matched all-state scan of cabinet-clear candidates with adequate construction settling"
+}

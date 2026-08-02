@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "scene": "L1-A1-V3",
-  "status": "FROZEN_PRE_POLICY",
+  "status": "CONSTRUCT-INVALID",
   "selected_native_task": {
     "suite": "libero_spatial",
     "task_id": 1,
@@ -81,5 +81,6 @@
       "publication_eligibility": false
     }
   ],
-  "next_gate": "N=50 exact-state generation and first-policy-view validation; no learned-policy rollout before explicit human visibility approval"
+  "invalidation_record": "experiments/robot/libero/tasks/l1a1_v3_invalidation.json",
+  "next_gate": "none; do not generate policy rollouts from v3"
 }

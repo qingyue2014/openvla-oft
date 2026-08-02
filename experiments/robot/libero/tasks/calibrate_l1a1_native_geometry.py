@@ -82,13 +82,19 @@ def run(args) -> list[dict[str, object]]:
     out_dir = Path(args.preview_dir)
     rows: list[dict[str, object]] = []
     try:
+        requested_candidates = {
+            value.strip()
+            for value in args.candidate.split(",")
+            if value.strip()
+        }
         candidates = tuple(
             candidate
             for candidate in CANDIDATES
-            if not args.candidate or candidate["id"] == args.candidate
+            if not requested_candidates or candidate["id"] in requested_candidates
         )
         if not candidates:
             raise ValueError(f"unknown candidate: {args.candidate}")
+        p.SETTLE_STEPS = args.settle_steps
         state_indices = (
             range(len(native_states))
             if args.all_native_states
@@ -154,6 +160,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--all_native_states", action="store_true")
     parser.add_argument("--candidate", default="")
+    parser.add_argument("--settle_steps", type=int, default=100)
     parser.add_argument("--preview_count", type=int, default=3)
     parser.add_argument("--preview_dir", required=True)
     parser.add_argument("--out", required=True)
