@@ -14,6 +14,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import h5py
 import numpy as np
@@ -5645,6 +5646,525 @@ def _finger_inward_extents_by_semantic_side(
     )
 
 
+def _validated_rigid_rotation_matrix(rotation, *, label):
+    """Fail closed unless ``rotation`` is a finite proper 3-D rotation."""
+    rotation = np.asarray(rotation, dtype=float)
+    if rotation.shape != (3, 3) or not np.all(np.isfinite(rotation)):
+        raise ValueError(f"{label} rotation matrix must be finite and 3-D")
+    orthogonality_error = float(
+        np.max(np.abs(rotation.T @ rotation - np.eye(3)))
+    )
+    determinant = float(np.linalg.det(rotation))
+    if (
+        orthogonality_error > 1e-7
+        or not np.isfinite(determinant)
+        or abs(determinant - 1.0) > 1e-7
+    ):
+        raise RuntimeError(
+            f"{label} frame is not a proper rigid rotation: "
+            f"orthogonality_error={orthogonality_error} "
+            f"determinant={determinant}"
+        )
+    return rotation
+
+
+def _hypothetical_wrist_yaw_specs(
+    *,
+    reference_outward_direction_xy,
+    target_outward_directions_xy,
+    table_normal_world,
+):
+    """Derive unique signed table-normal yaws without issuing an action."""
+    reference_xy = np.asarray(
+        reference_outward_direction_xy, dtype=float
+    )
+    normal = np.asarray(table_normal_world, dtype=float)
+    targets = [
+        np.asarray(target, dtype=float)
+        for target in target_outward_directions_xy
+    ]
+    if reference_xy.shape != (2,) or not np.all(np.isfinite(reference_xy)):
+        raise ValueError("reference outward direction must be finite and 2-D")
+    if normal.shape != (3,) or not np.all(np.isfinite(normal)):
+        raise ValueError("table normal must be finite and 3-D")
+    normal_norm = float(np.linalg.norm(normal))
+    if not np.isfinite(normal_norm) or abs(normal_norm - 1.0) > 1e-7:
+        raise RuntimeError("table normal must be a unit vector")
+    if normal[2] <= 0.0:
+        raise RuntimeError("table normal must use the upward orientation")
+    reference_norm = float(np.linalg.norm(reference_xy))
+    if not np.isfinite(reference_norm) or reference_norm <= 1e-9:
+        raise ValueError("reference outward direction must be nonzero")
+    reference = np.array(
+        [reference_xy[0], reference_xy[1], 0.0], dtype=float
+    ) / reference_norm
+    if abs(float(np.dot(reference, normal))) > 1e-7:
+        raise RuntimeError(
+            "reference outward direction is not tangent to the native table"
+        )
+
+    specs = []
+    for index, target_xy in enumerate(targets):
+        if target_xy.shape != (2,) or not np.all(np.isfinite(target_xy)):
+            raise ValueError("target outward directions must be finite and 2-D")
+        target_norm = float(np.linalg.norm(target_xy))
+        if not np.isfinite(target_norm) or target_norm <= 1e-9:
+            raise ValueError("target outward direction must be nonzero")
+        target = np.array(
+            [target_xy[0], target_xy[1], 0.0], dtype=float
+        ) / target_norm
+        if abs(float(np.dot(target, normal))) > 1e-7:
+            raise RuntimeError(
+                "target outward direction is not tangent to the native table"
+            )
+        sine = float(np.dot(normal, np.cross(reference, target)))
+        cosine = float(np.dot(reference, target))
+        yaw = float(np.arctan2(sine, cosine))
+        if abs(yaw) <= 1e-15:
+            yaw = 0.0
+            rotation = np.eye(3)
+        else:
+            cross_matrix = np.array(
+                [
+                    [0.0, -normal[2], normal[1]],
+                    [normal[2], 0.0, -normal[0]],
+                    [-normal[1], normal[0], 0.0],
+                ],
+                dtype=float,
+            )
+            rotation = (
+                np.eye(3)
+                + np.sin(yaw) * cross_matrix
+                + (1.0 - np.cos(yaw)) * (cross_matrix @ cross_matrix)
+            )
+        rotation = _validated_rigid_rotation_matrix(
+            rotation,
+            label=f"hypothetical wrist yaw {index}",
+        )
+        if not np.allclose(
+            rotation @ reference,
+            target,
+            rtol=0.0,
+            atol=1e-9,
+        ):
+            raise RuntimeError(
+                "hypothetical wrist yaw does not map the reference approach "
+                "to its target outward direction"
+            )
+        if any(
+            abs(
+                float(
+                    np.arctan2(
+                        np.sin(yaw - previous["yaw_angle_rad"]),
+                        np.cos(yaw - previous["yaw_angle_rad"]),
+                    )
+                )
+            )
+            <= 1e-9
+            for previous in specs
+        ):
+            raise RuntimeError(
+                "duplicate hypothetical wrist yaw derived from native directions"
+            )
+        specs.append(
+            {
+                "reference_outward_direction_xy": reference[:2].tolist(),
+                "target_outward_direction_xy": target[:2].tolist(),
+                "table_normal_world": normal.tolist(),
+                "yaw_angle_rad": yaw,
+                "yaw_angle_deg": float(np.degrees(yaw)),
+                "axis_angle_world_rad": (normal * yaw).tolist(),
+                "rotation_matrix_world": rotation.tolist(),
+                "formula": (
+                    "signed yaw = atan2(table_normal dot (reference cross "
+                    "target), reference dot target); rotate about the exact "
+                    "current EEF pivot"
+                ),
+                "provenance": {
+                    "reference": (
+                        "current selected low-skew legacy +X approach"
+                    ),
+                    "target": (
+                        "normalized outward direction derived from the native "
+                        "push frame"
+                    ),
+                    "axis": (
+                        "upward table normal derived from compiled native "
+                        "table geom frames"
+                    ),
+                },
+            }
+        )
+    return specs
+
+
+def _compiled_table_normal_evidence(env):
+    """Derive one upward normal from the native table collision frames."""
+    model, data = env.sim.model, env.sim.data
+    table_geom_ids = [
+        geom_id
+        for geom_id in _compiled_body_geom_ids(model, TABLE_BODY)
+        if (
+            int(model.geom_contype[geom_id]) != 0
+            or int(model.geom_conaffinity[geom_id]) != 0
+        )
+    ]
+    if not table_geom_ids:
+        raise RuntimeError("compiled native table collision geoms unavailable")
+    frames = []
+    for geom_id in table_geom_ids:
+        rotation = _validated_rigid_rotation_matrix(
+            np.asarray(data.geom_xmat[geom_id], dtype=float).reshape(3, 3),
+            label=f"table geom {model.geom_id2name(geom_id) or geom_id}",
+        )
+        raw_normal = rotation[:, 2].copy()
+        upward_normal = raw_normal.copy()
+        orientation_flipped = False
+        if upward_normal[2] < 0.0:
+            upward_normal *= -1.0
+            orientation_flipped = True
+        if upward_normal[2] <= 0.0:
+            raise RuntimeError("compiled table geom has no upward-facing normal")
+        frames.append(
+            {
+                "geom": model.geom_id2name(geom_id) or f"geom_{geom_id}",
+                "geom_id": int(geom_id),
+                "rotation_matrix_world": rotation.tolist(),
+                "raw_local_z_world": raw_normal.tolist(),
+                "upward_normal_world": upward_normal.tolist(),
+                "orientation_flipped": orientation_flipped,
+            }
+        )
+    normal = np.asarray(frames[0]["upward_normal_world"], dtype=float)
+    for frame in frames[1:]:
+        if not np.allclose(
+            frame["upward_normal_world"], normal, rtol=0.0, atol=1e-7
+        ):
+            raise RuntimeError(
+                "compiled native table collision geoms disagree on the table normal"
+            )
+    if not np.allclose(normal, [0.0, 0.0, 1.0], rtol=0.0, atol=1e-7):
+        raise RuntimeError(
+            "compiled table normal is incompatible with the controller XY/Z frame"
+        )
+    return normal, {
+        "table_normal_world": normal.tolist(),
+        "table_collision_geom_frames": frames,
+        "formula": (
+            "use each collidable native table geom's compiled local +Z axis, "
+            "orient it upward, require all normals to agree, and require the "
+            "result to match the controller's world +Z table-normal frame"
+        ),
+    }
+
+
+def _hypothetical_finger_yaw_env(env, *, eef_position, rotation):
+    """Return a read-only proxy with every finger geom rigidly yawed."""
+    model, data = env.sim.model, env.sim.data
+    eef_position = np.asarray(eef_position, dtype=float)
+    rotation = _validated_rigid_rotation_matrix(
+        rotation, label="hypothetical wrist yaw"
+    )
+    if eef_position.shape != (3,) or not np.all(np.isfinite(eef_position)):
+        raise ValueError("hypothetical yaw EEF pivot must be finite and 3-D")
+    geom_xpos = np.asarray(data.geom_xpos, dtype=float)
+    geom_xmat = np.asarray(data.geom_xmat, dtype=float)
+    if (
+        geom_xpos.shape != (int(model.ngeom), 3)
+        or geom_xmat.shape != (int(model.ngeom), 9)
+        or not np.all(np.isfinite(geom_xpos))
+        or not np.all(np.isfinite(geom_xmat))
+    ):
+        raise RuntimeError("compiled geom poses are unavailable or invalid")
+    hypothetical_xpos = geom_xpos.copy()
+    hypothetical_xmat = geom_xmat.copy()
+    finger_geom_ids = []
+    for geom_id in range(int(model.ngeom)):
+        body_name = model.body_id2name(int(model.geom_bodyid[geom_id])) or ""
+        if "finger" not in body_name.lower():
+            continue
+        if (
+            int(model.geom_contype[geom_id]) == 0
+            and int(model.geom_conaffinity[geom_id]) == 0
+        ):
+            continue
+        if _semantic_finger_side(body_name) is None:
+            raise RuntimeError(
+                "compiled finger collision geom lacks left/right provenance"
+            )
+        finger_geom_ids.append(geom_id)
+    if not finger_geom_ids:
+        raise RuntimeError("compiled finger collision geoms unavailable")
+
+    transforms = []
+    before_origins = []
+    after_origins = []
+    for geom_id in finger_geom_ids:
+        body_name = model.body_id2name(int(model.geom_bodyid[geom_id])) or ""
+        current_rotation = _validated_rigid_rotation_matrix(
+            geom_xmat[geom_id].reshape(3, 3),
+            label=f"finger geom {model.geom_id2name(geom_id) or geom_id}",
+        )
+        current_origin = geom_xpos[geom_id].copy()
+        hypothetical_origin = (
+            eef_position + rotation @ (current_origin - eef_position)
+        )
+        hypothetical_rotation = _validated_rigid_rotation_matrix(
+            rotation @ current_rotation,
+            label=(
+                "hypothetical finger geom "
+                f"{model.geom_id2name(geom_id) or geom_id}"
+            ),
+        )
+        hypothetical_xpos[geom_id] = hypothetical_origin
+        hypothetical_xmat[geom_id] = hypothetical_rotation.reshape(9)
+        before_origins.append(current_origin)
+        after_origins.append(hypothetical_origin)
+        transforms.append(
+            {
+                "geom": model.geom_id2name(geom_id) or f"geom_{geom_id}",
+                "geom_id": int(geom_id),
+                "body": body_name,
+                "semantic_side": _semantic_finger_side(body_name),
+                "current_origin_world": current_origin.tolist(),
+                "hypothetical_origin_world": hypothetical_origin.tolist(),
+                "current_rotation_matrix_world": current_rotation.tolist(),
+                "hypothetical_rotation_matrix_world": (
+                    hypothetical_rotation.tolist()
+                ),
+            }
+        )
+    before_origins = np.asarray(before_origins, dtype=float)
+    after_origins = np.asarray(after_origins, dtype=float)
+    radial_error = float(
+        np.max(
+            np.abs(
+                np.linalg.norm(after_origins - eef_position, axis=1)
+                - np.linalg.norm(before_origins - eef_position, axis=1)
+            )
+        )
+    )
+    pairwise_error = 0.0
+    for left in range(len(finger_geom_ids)):
+        for right in range(left + 1, len(finger_geom_ids)):
+            before_distance = float(
+                np.linalg.norm(before_origins[left] - before_origins[right])
+            )
+            after_distance = float(
+                np.linalg.norm(after_origins[left] - after_origins[right])
+            )
+            pairwise_error = max(
+                pairwise_error, abs(after_distance - before_distance)
+            )
+    if radial_error > 1e-9 or pairwise_error > 1e-9:
+        raise RuntimeError(
+            "hypothetical wrist transform is not rigid: "
+            f"radial_error={radial_error} pairwise_error={pairwise_error}"
+        )
+    hypothetical_data = SimpleNamespace(
+        geom_xpos=hypothetical_xpos,
+        geom_xmat=hypothetical_xmat,
+    )
+    hypothetical_env = SimpleNamespace(
+        sim=SimpleNamespace(model=model, data=hypothetical_data)
+    )
+    return hypothetical_env, {
+        "pivot_eef_position_world": eef_position.tolist(),
+        "rotation_matrix_world": rotation.tolist(),
+        "finger_geom_transforms": transforms,
+        "maximum_eef_radial_distance_error_m": radial_error,
+        "maximum_pairwise_distance_error_m": pairwise_error,
+        "rigid_transform_verified": True,
+        "executed": False,
+    }
+
+
+def _compiled_hypothetical_wrist_yaw_plan(
+    env,
+    *,
+    plate_position,
+    eef_position,
+    contact_xy,
+    outside_clearance_m,
+    plate_approach_eef_height,
+    position_action_scale,
+    yaw_spec,
+    table_normal_evidence,
+):
+    """Compile one diagnostic-only rigid wrist-yaw counterfactual."""
+    plate_position = np.asarray(plate_position, dtype=float)
+    eef_position = np.asarray(eef_position, dtype=float)
+    contact_xy = np.asarray(contact_xy, dtype=float)
+    outward = np.asarray(
+        yaw_spec["target_outward_direction_xy"], dtype=float
+    )
+    rotation = np.asarray(yaw_spec["rotation_matrix_world"], dtype=float)
+    hypothetical_env, rigid_transform = _hypothetical_finger_yaw_env(
+        env,
+        eef_position=eef_position,
+        rotation=rotation,
+    )
+    outside_side, side_contact, compiled = (
+        _compiled_native_side_contact_plan(
+            hypothetical_env,
+            plate_position,
+            eef_position,
+            outward,
+            contact_xy,
+            outside_clearance_m,
+        )
+    )
+    model, data = hypothetical_env.sim.model, hypothetical_env.sim.data
+    rim_names = set(compiled["plate_rim_geoms"])
+    table_names = set(compiled["table_geoms"])
+    rim_bounds = []
+    table_bounds = []
+    finger_bounds = []
+    for geom_id in range(int(model.ngeom)):
+        name = model.geom_id2name(geom_id) or f"geom_{geom_id}"
+        body_name = model.body_id2name(int(model.geom_bodyid[geom_id])) or ""
+        if name in rim_names:
+            rim_bounds.append(
+                (name, *_compiled_geom_world_aabb(model, data, geom_id))
+            )
+        if name in table_names:
+            table_bounds.append(
+                (name, *_compiled_geom_world_aabb(model, data, geom_id))
+            )
+        semantic_side = _semantic_finger_side(body_name)
+        if semantic_side is not None and (
+            int(model.geom_contype[geom_id]) != 0
+            or int(model.geom_conaffinity[geom_id]) != 0
+        ):
+            finger_bounds.append(
+                (
+                    name,
+                    semantic_side,
+                    *_compiled_geom_world_aabb(model, data, geom_id),
+                )
+            )
+    if not rim_bounds or not table_bounds or not finger_bounds:
+        raise RuntimeError(
+            "hypothetical wrist-yaw compiled bound inventory is incomplete"
+        )
+
+    def translated_finger_bounds(target_eef):
+        delta = np.asarray(target_eef, dtype=float) - eef_position
+        return [
+            (name, side, center + delta, half_size.copy())
+            for name, side, center, half_size in finger_bounds
+        ]
+
+    outside_guard = _outside_side_guard_from_world_aabbs(
+        plate_position=plate_position,
+        outward_direction_xy=outward,
+        rim_bounds=rim_bounds,
+        finger_bounds=translated_finger_bounds(outside_side),
+        required_outside_clearance_m=outside_clearance_m,
+        table_bounds=table_bounds,
+        required_finger_table_clearance_m=compiled[
+            "finger_table_clearance_derivation"
+        ]["required_clearance_m"],
+        outside_clearance_derivation={
+            "source": "hypothetical rigid-yaw compiled support",
+            "executed": False,
+        },
+        finger_table_clearance_derivation=compiled[
+            "finger_table_clearance_derivation"
+        ],
+    )
+    side_finger_bounds = translated_finger_bounds(side_contact)
+    plate_outward_support = float(compiled["plate_outward_support_m"])
+    side_contact_plate_clearance_by_side = {}
+    for side in ("left", "right"):
+        side_inward_support = min(
+            float(
+                np.dot(center[:2] - plate_position[:2], outward)
+                - np.dot(half_size[:2], np.abs(outward))
+            )
+            for _, semantic_side, center, half_size in side_finger_bounds
+            if semantic_side == side
+        )
+        side_contact_plate_clearance_by_side[side] = float(
+            side_inward_support - plate_outward_support
+        )
+
+    outside_high = outside_side.copy()
+    outside_high[2] = plate_position[2] + plate_approach_eef_height
+    center_high = outside_high.copy()
+    center_high[:2] = plate_position[:2]
+    required_action = (
+        outside_high - center_high
+    ) / float(position_action_scale)
+    bounded_action = _position_action(
+        center_high,
+        outside_high,
+        0.0,
+        position_action_scale,
+    )[:3]
+    clipped_axes = [
+        int(axis)
+        for axis in np.flatnonzero(np.abs(required_action) > 1.0 + 1e-9)
+    ]
+    violations = []
+    if compiled["dual_finger_contact_skew_m"] > outside_clearance_m:
+        violations.append(
+            "hypothetical_dual_finger_contact_skew_exceeds_outside_clearance"
+        )
+    violations.extend(
+        f"hypothetical_outside_guard:{violation}"
+        for violation in outside_guard["violations"]
+    )
+    return {
+        "diagnostic_only": True,
+        "executed": False,
+        "route_selection_candidate": False,
+        "selection_eligible": False,
+        "yaw": yaw_spec,
+        "table_normal_derivation": table_normal_evidence,
+        "rigid_finger_transform": rigid_transform,
+        "compiled_geometry": compiled,
+        "dual_finger_contact_skew_m": float(
+            compiled["dual_finger_contact_skew_m"]
+        ),
+        "maximum_dual_finger_contact_skew_m": float(
+            outside_clearance_m
+        ),
+        "outside_high_target": outside_high.tolist(),
+        "outside_side_target": outside_side.tolist(),
+        "side_contact_target": side_contact.tolist(),
+        "outside_guard": outside_guard,
+        "side_contact_signed_plate_clearance_by_side_m": (
+            side_contact_plate_clearance_by_side
+        ),
+        "selected_finger_table_clearance_m": float(
+            compiled["vertical_feasibility"][
+                "selected_finger_table_clearance_m"
+            ]
+        ),
+        "outside_high_required_action": required_action.tolist(),
+        "outside_high_bounded_action": bounded_action.tolist(),
+        "outside_high_action_peak": float(
+            np.max(np.abs(required_action))
+        ),
+        "outside_high_action_norm": float(np.linalg.norm(required_action)),
+        "outside_high_clipped_action_axes": clipped_axes,
+        "outside_high_action_will_clip": bool(clipped_axes),
+        "hypothetical_compiled_geometry_violations": violations,
+        "hypothetical_compiled_geometry_eligible": not violations,
+        "provenance": {
+            "native_pose_source": (
+                "current compiled geom_xpos, geom_xmat, and geom_aabb"
+            ),
+            "counterfactual": (
+                "rigid yaw of collidable finger geoms about the current EEF "
+                "and compiled native table normal"
+            ),
+            "policy_or_controller_action_executed": False,
+        },
+    }
+
+
 def _compiled_native_side_contact_plan(
     env,
     plate_position,
@@ -5997,6 +6517,72 @@ def _compiled_trailing_side_contact_candidates(
             }
         )
     selected = _select_reachable_compiled_side_candidate(candidates)
+    reference_outward = np.asarray(
+        selected["outward_direction_xy"], dtype=float
+    )
+    if (
+        not selected["compiled_geometry_eligible"]
+        or not np.allclose(
+            reference_outward,
+            [1.0, 0.0],
+            rtol=0.0,
+            atol=1e-9,
+        )
+    ):
+        raise RuntimeError(
+            "hypothetical yaw requires the current compiled low-skew +X "
+            "legacy approach to remain selected"
+        )
+    diagnostic_candidates = [
+        candidate for candidate in candidates if candidate["diagnostic_only"]
+    ]
+    expected_relations = [
+        "trailing_minus_push",
+        "tangent_counterclockwise",
+        "tangent_clockwise",
+    ]
+    observed_relations = [
+        candidate["native_push_direction_relations"]
+        for candidate in diagnostic_candidates
+    ]
+    if observed_relations != [[relation] for relation in expected_relations]:
+        raise RuntimeError(
+            "native push-frame yaw diagnostics require three unique derived "
+            f"directions in preregistered order: observed={observed_relations}"
+        )
+    table_normal, table_normal_evidence = (
+        _compiled_table_normal_evidence(env)
+    )
+    yaw_specs = _hypothetical_wrist_yaw_specs(
+        reference_outward_direction_xy=reference_outward,
+        target_outward_directions_xy=[
+            candidate["outward_direction_xy"]
+            for candidate in diagnostic_candidates
+        ],
+        table_normal_world=table_normal,
+    )
+    for relation, candidate, yaw_spec in zip(
+        expected_relations,
+        diagnostic_candidates,
+        yaw_specs,
+    ):
+        yaw_spec = {
+            **yaw_spec,
+            "native_push_direction_relation": relation,
+        }
+        candidate["hypothetical_wrist_yaw"] = (
+            _compiled_hypothetical_wrist_yaw_plan(
+                env,
+                plate_position=plate_position,
+                eef_position=eef_position,
+                contact_xy=np.asarray(candidate["point_xy"], dtype=float),
+                outside_clearance_m=outside_clearance_m,
+                plate_approach_eef_height=plate_approach_eef_height,
+                position_action_scale=position_action_scale,
+                yaw_spec=yaw_spec,
+                table_normal_evidence=table_normal_evidence,
+            )
+        )
     return selected, candidates
 
 

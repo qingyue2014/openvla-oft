@@ -21,8 +21,11 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_adaptive_workspace_release_action,
     _compiled_adaptive_vertical_descent_action,
     _compiled_collision_pair_clearance,
+    _compiled_hypothetical_wrist_yaw_plan,
+    _compiled_native_side_contact_plan,
     _compiled_pair_set_clearance,
     _compiled_side_contact_eef_z_feasibility,
+    _compiled_table_normal_evidence,
     _compiled_trailing_side_contact_candidates,
     _compiled_vertical_staging_corridor,
     _derive_horizon_safe_push_increment,
@@ -35,6 +38,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _high_plane_native_boundary_crossing_evidence,
     _high_plane_native_workspace_saturation_evidence,
     _horizon_budget,
+    _hypothetical_wrist_yaw_specs,
     _live_plate_tracking_target,
     _native_osc_action_spec_evidence,
     _outside_side_geometry_feedback_action,
@@ -57,6 +61,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _select_reachable_compiled_side_candidate,
     _select_reachable_trailing_contact,
     _side_contact_targets_from_compiled_bounds,
+    _validated_rigid_rotation_matrix,
 )
 from experiments.robot.libero.tasks.generate_l3a3_plate_bottle_states import (
     _free_joint_translation_for_world_target,
@@ -624,6 +629,76 @@ def test_native_push_direction_candidate_inputs_fail_closed(
         )
 
 
+def test_hypothetical_wrist_yaws_are_strict_native_frame_rotations():
+    push_direction = np.array([-0.394, 0.919], dtype=float)
+    push_direction /= np.linalg.norm(push_direction)
+    targets = [
+        -push_direction,
+        np.array([-push_direction[1], push_direction[0]]),
+        np.array([push_direction[1], -push_direction[0]]),
+    ]
+    specs = _hypothetical_wrist_yaw_specs(
+        reference_outward_direction_xy=np.array([1.0, 0.0]),
+        target_outward_directions_xy=targets,
+        table_normal_world=np.array([0.0, 0.0, 1.0]),
+    )
+
+    assert len(specs) == 3
+    assert len({round(spec["yaw_angle_rad"], 12) for spec in specs}) == 3
+    for spec, target in zip(specs, targets):
+        target = target / np.linalg.norm(target)
+        rotation = np.asarray(spec["rotation_matrix_world"], dtype=float)
+        np.testing.assert_allclose(
+            rotation @ np.array([1.0, 0.0, 0.0]),
+            np.array([target[0], target[1], 0.0]),
+            rtol=0.0,
+            atol=1e-9,
+        )
+        assert spec["yaw_angle_rad"] == pytest.approx(
+            np.arctan2(target[1], target[0])
+        )
+        np.testing.assert_allclose(
+            spec["axis_angle_world_rad"],
+            np.array([0.0, 0.0, spec["yaw_angle_rad"]]),
+            rtol=0.0,
+            atol=1e-12,
+        )
+        assert spec["provenance"]["reference"] == (
+            "current selected low-skew legacy +X approach"
+        )
+
+
+def test_hypothetical_wrist_yaw_frames_fail_closed():
+    with pytest.raises(RuntimeError, match="duplicate hypothetical wrist yaw"):
+        _hypothetical_wrist_yaw_specs(
+            reference_outward_direction_xy=[1.0, 0.0],
+            target_outward_directions_xy=[[0.0, 1.0], [0.0, 1.0]],
+            table_normal_world=[0.0, 0.0, 1.0],
+        )
+    with pytest.raises(RuntimeError, match="unit vector"):
+        _hypothetical_wrist_yaw_specs(
+            reference_outward_direction_xy=[1.0, 0.0],
+            target_outward_directions_xy=[[0.0, 1.0]],
+            table_normal_world=[0.0, 0.0, 2.0],
+        )
+    with pytest.raises(RuntimeError, match="proper rigid rotation"):
+        _validated_rigid_rotation_matrix(
+            np.array(
+                [
+                    [1.0, 0.2, 0.0],
+                    [0.0, 1.0, 0.0],
+                    [0.0, 0.0, 1.0],
+                ]
+            ),
+            label="nonrigid test",
+        )
+    with pytest.raises(RuntimeError, match="proper rigid rotation"):
+        _validated_rigid_rotation_matrix(
+            np.diag([-1.0, 1.0, 1.0]),
+            label="reflection test",
+        )
+
+
 def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
     class Model:
         body_names = [
@@ -748,6 +823,75 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
         assert isinstance(diagnostic["dual_finger_contact_skew_m"], float)
         assert isinstance(diagnostic["outside_high_action_peak"], float)
         assert isinstance(diagnostic["outside_high_action_will_clip"], bool)
+        yaw_diagnostic = diagnostic["hypothetical_wrist_yaw"]
+        assert yaw_diagnostic["diagnostic_only"] is True
+        assert yaw_diagnostic["executed"] is False
+        assert yaw_diagnostic["selection_eligible"] is False
+        assert yaw_diagnostic["hypothetical_compiled_geometry_eligible"] is True
+        assert yaw_diagnostic["hypothetical_compiled_geometry_violations"] == []
+        assert yaw_diagnostic["outside_guard"]["accepted"] is True
+        assert yaw_diagnostic["rigid_finger_transform"][
+            "rigid_transform_verified"
+        ] is True
+        assert yaw_diagnostic["dual_finger_contact_skew_m"] == pytest.approx(
+            selected["dual_finger_contact_skew_m"], abs=1e-12
+        )
+        yaw = yaw_diagnostic["yaw"]
+        assert yaw["native_push_direction_relation"] == diagnostic[
+            "native_push_direction_relations"
+        ][0]
+        np.testing.assert_allclose(
+            np.asarray(yaw["rotation_matrix_world"])
+            @ np.array([1.0, 0.0, 0.0]),
+            np.r_[diagnostic["outward_direction_xy"], 0.0],
+            rtol=0.0,
+            atol=1e-9,
+        )
+
+    plate_position = np.array([0.050, 0.000, 0.900])
+    eef_position = np.array([0.000, 0.000, 0.950])
+    contact_xy = np.array([0.060, 0.000])
+    baseline_outside, baseline_contact, baseline_plan = (
+        _compiled_native_side_contact_plan(
+            env,
+            plate_position,
+            eef_position,
+            np.array([1.0, 0.0]),
+            contact_xy,
+            0.005,
+        )
+    )
+    table_normal, table_evidence = _compiled_table_normal_evidence(env)
+    zero_yaw = _hypothetical_wrist_yaw_specs(
+        reference_outward_direction_xy=[1.0, 0.0],
+        target_outward_directions_xy=[[1.0, 0.0]],
+        table_normal_world=table_normal,
+    )[0]
+    zero_replay = _compiled_hypothetical_wrist_yaw_plan(
+        env,
+        plate_position=plate_position,
+        eef_position=eef_position,
+        contact_xy=contact_xy,
+        outside_clearance_m=0.005,
+        plate_approach_eef_height=0.160,
+        position_action_scale=0.080,
+        yaw_spec=zero_yaw,
+        table_normal_evidence=table_evidence,
+    )
+    assert zero_yaw["yaw_angle_rad"] == 0.0
+    assert zero_yaw["rotation_matrix_world"] == np.eye(3).tolist()
+    assert zero_replay["outside_side_target"] == baseline_outside.tolist()
+    assert zero_replay["side_contact_target"] == baseline_contact.tolist()
+    assert zero_replay["compiled_geometry"] == baseline_plan
+    for transform in zero_replay["rigid_finger_transform"][
+        "finger_geom_transforms"
+    ]:
+        assert transform["hypothetical_origin_world"] == transform[
+            "current_origin_world"
+        ]
+        assert transform["hypothetical_rotation_matrix_world"] == transform[
+            "current_rotation_matrix_world"
+        ]
 
 
 def test_499866_outside_side_guard_uses_live_aabbs_not_exact_eef_center():
