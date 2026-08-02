@@ -12872,8 +12872,11 @@ def _seek_stable_plate_contact(
                 ),
                 "threshold_rule": (
                     "brake when either measured outward or clearance "
-                    "progress is below the negative deadband; no empirical "
-                    "Z threshold"
+                    "progress is below the negative deadband after the "
+                    "unchanged full corridor clearance is no longer retained; "
+                    "while that reserve remains strict, the registered "
+                    "one-sided hold continues instead of discarding safe "
+                    "outward margin; no empirical Z threshold"
                 ),
             },
             "structural_route_order": [
@@ -12888,7 +12891,8 @@ def _seek_stable_plate_contact(
                 (
                     "corridor_xy_adaptive_one_sided_coupled_descent_with_"
                     "position_"
-                    "tolerance_full_clearance_or_measured_inward_response_"
+                    "tolerance_strict_clearance_or_unbuffered_measured_"
+                    "inward_response_"
                     "brake"
                 ),
                 "vertical_tail_brake_and_zero_confirmation",
@@ -14239,15 +14243,32 @@ def _seek_stable_plate_contact(
             }.intersection(
                 descent_corridor_entry_after_action["violations"]
             )
-            if current_step_response[
-                "eef_outward_step_progress_m"
-            ] < -float(args.minimum_saturated_waypoint_progress):
+            full_corridor_clearance_retained = bool(
+                descent_corridor_entry_after_action[
+                    "minimum_outside_clearance_m"
+                ]
+                > corridor_rebuffer_acceptance_clearance
+            )
+            feedback["full_corridor_clearance_retained_after_descent"] = (
+                full_corridor_clearance_retained
+            )
+            if (
+                not full_corridor_clearance_retained
+                and current_step_response[
+                    "eef_outward_step_progress_m"
+                ]
+                < -float(args.minimum_saturated_waypoint_progress)
+            ):
                 descent_corridor_lateral_violations.add(
                     "eef_inward_step_during_corridor_holding_descent"
                 )
-            if current_step_response[
-                "outside_clearance_step_progress_m"
-            ] < -float(args.minimum_saturated_waypoint_progress):
+            if (
+                not full_corridor_clearance_retained
+                and current_step_response[
+                    "outside_clearance_step_progress_m"
+                ]
+                < -float(args.minimum_saturated_waypoint_progress)
+            ):
                 descent_corridor_lateral_violations.add(
                     "outside_clearance_decreased_during_corridor_holding_"
                     "descent"
@@ -14286,6 +14307,9 @@ def _seek_stable_plate_contact(
                             descent_corridor_entry_after_action
                         ),
                         "descent_step_response": current_step_response,
+                        "full_corridor_clearance_retained_before_brake": (
+                            full_corridor_clearance_retained
+                        ),
                     }
                 )
             elif after_eef[2] <= (

@@ -3826,9 +3826,10 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     )
     assert '"position_"' in bounded_seek
     assert (
-        '"tolerance_full_clearance_or_measured_inward_response_"'
+        '"tolerance_strict_clearance_or_unbuffered_measured_"'
         in bounded_seek
     )
+    assert '"inward_response_"' in bounded_seek
     assert '"brake"' in bounded_seek
     assert '"descent_corridor_resume_clearance_m"' in bounded_seek
     assert '"descent_corridor_rebuffer_requested_clearance_m"' in (
@@ -3842,9 +3843,14 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert "* float(args.minimum_saturated_waypoint_progress)" in (
         bounded_seek
     )
-    assert '"Z threshold"' in bounded_seek
-    assert '"progress is below the negative deadband; no empirical "' in (
+    assert '"outward margin; no empirical Z threshold"' in bounded_seek
+    assert '"progress is below the negative deadband after the "' in (
         bounded_seek
+    )
+    assert "not full_corridor_clearance_retained" in descent_transition
+    assert (
+        'feedback["full_corridor_clearance_retained_after_descent"]'
+        in descent_transition
     )
     assert '"existing minimum_saturated_waypoint_progress"' in (
         bounded_seek

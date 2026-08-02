@@ -126,22 +126,26 @@ After every far-field coupled XY/Z descent action, the controller also
 recomputes the full live lateral corridor-entry evidence: XY error to the
 unchanged compiled target must remain within the existing `position_tolerance`
 (`0.005 m`), and the live outside clearance must remain strictly above the
-compiled
-`strict_corridor_entry_clearance_m` (`0.0004 m`). The measured EEF outward step
-progress and outside-clearance step progress are also checked against the existing
-`minimum_saturated_waypoint_progress` (`0.00005 m`) resolution. A response below
-`-0.00005 m` is an event-driven controller-authority reversal; smaller signed
-changes remain inside that existing measurement deadband, and no empirical Z
-threshold is introduced. If any lateral predicate fails, the same positive-Z
+compiled `strict_corridor_entry_clearance_m` (`0.0004 m`). The measured EEF
+outward step progress and outside-clearance step progress are also checked
+against the existing `minimum_saturated_waypoint_progress` (`0.00005 m`)
+resolution. Once the unchanged full `corridor_clearance_m` reserve is no longer
+strictly retained, a response below `-0.00005 m` is an event-driven
+controller-authority reversal; smaller signed changes remain inside that
+existing measurement deadband. While the full reserve remains strict, a signed
+response does not discard known-safe clearance by invoking the pure-Z brake;
+the one-sided outward hold continues, and no empirical Z threshold is
+introduced. If any unbuffered lateral predicate fails, the same positive-Z
 brake starts immediately, even above the staging-height brake buffer. Once
 measured vertical progress is nonnegative, a zero-translation confirmation is
 required and the XY correction runs at that higher stopped Z under the same
-all-55-pair `0.008 m`-step buffer. A meaningful lateral reversal outside the
-deadband and a staging-height vertical-tail recovery above the staging tolerance
-both apply the same geometric cap-halving schedule; motion inside the deadband
-does not trigger a brake or a reduction. The brake and resume thresholds form
-explicit hysteresis: descent stops when strict corridor-entry clearance is lost
-or a measured inward response exceeds the deadband, but
+all-55-pair `0.008 m`-step buffer. An unbuffered meaningful lateral reversal
+outside the deadband and a staging-height vertical-tail recovery above the
+staging tolerance both apply the same geometric cap-halving schedule; motion
+inside the deadband or while the full clearance remains strict does not trigger
+a lateral brake or reduction. The brake and resume thresholds form explicit
+hysteresis: descent stops when strict corridor-entry clearance is lost or an
+inward response exceeds the deadband after full clearance is lost, but
 cannot resume merely by recrossing that boundary; zero confirmation or lateral
 correction continues to request `corridor_clearance_m` plus the existing
 `minimum_saturated_waypoint_progress` measurement resolution (`0.00005 m`) at a
