@@ -12627,8 +12627,13 @@ def _seek_stable_plate_contact(
                 cabinet_detour_plan["waypoints"]["front_low"],
                 dtype=float,
             )
-            if current_eef[2] <= detour_target[2] + float(
+            low_route_z_tolerance = float(
                 cabinet_detour_plan["low_route_entry_z_tolerance_m"]
+            )
+            if (
+                abs(current_eef[2] - detour_target[2])
+                <= low_route_z_tolerance
+                and latest_vertical_step_progress_m >= 0.0
             ):
                 next_guard = _live_native_cabinet_detour_guard(
                     env,

@@ -115,6 +115,11 @@ and one quarter of the compiled terminal under-cabinet headroom above the
 `0.008 m` hard gate. This preserves at least 75% of the certified headroom
 before the first zero-Z lateral action; the live under-cabinet guard still runs
 before and after every action and fails closed on any loss.
+The switch also requires the EEF to lie inside that tolerance on either side
+of the target and the most recent measured Z displacement to be nonnegative.
+If the descent still has a negative dynamic tail, the unchanged vertical OSC
+controller continues toward the same target and provides an event-driven brake
+until this measured condition is satisfied.
 
 ## Hard physical and visual gates
 

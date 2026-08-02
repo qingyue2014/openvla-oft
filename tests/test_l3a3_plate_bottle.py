@@ -7976,6 +7976,8 @@ def test_native_front_right_low_detour_compiles_from_live_geometry():
     assert "minus_x_front_vertical_descent" not in bounded_seek
     assert "low_front_x_return" not in bounded_seek
     assert "right_of_rack_low_y_pass" not in bounded_seek
+    assert "abs(current_eef[2] - detour_target[2])" in bounded_seek
+    assert "latest_vertical_step_progress_m >= 0.0" in bounded_seek
 
 
 def test_native_cabinet_detour_live_guard_fails_closed_then_accepts():
