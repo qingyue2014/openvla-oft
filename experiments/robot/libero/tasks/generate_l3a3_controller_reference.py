@@ -4168,6 +4168,7 @@ def _vertical_corridor_reserve_recovery_evidence(
     latest_outward_step_progress_m,
     latest_vertical_step_progress_m,
     compiled_tail_brake_buffer_accepted,
+    recovery_exit_phase_authorized,
     recovery_active_before_decision,
 ):
     """Latch a positive-Z/outward brake before corridor reserve is lost."""
@@ -4201,6 +4202,7 @@ def _vertical_corridor_reserve_recovery_evidence(
         and latest_outward_step_progress_m >= 0.0
         and latest_vertical_step_progress_m >= 0.0
         and compiled_tail_brake_buffer_accepted
+        and recovery_exit_phase_authorized
     )
     recovery_active_after_decision = bool(
         (recovery_active_before_decision or entered) and not exit_accepted
@@ -4245,10 +4247,14 @@ def _vertical_corridor_reserve_recovery_evidence(
         "compiled_tail_brake_buffer_accepted": bool(
             compiled_tail_brake_buffer_accepted
         ),
+        "recovery_exit_phase_authorized": bool(
+            recovery_exit_phase_authorized
+        ),
         "exit_requirements": (
             "live clearance strictly above the recovery exit gate plus "
             "measured nonnegative outward and vertical progress plus the "
-            "refreshed accepted compiled lateral buffer"
+            "refreshed accepted compiled lateral buffer plus an explicit "
+            "completed exit-brake phase"
         ),
     }
 
@@ -4330,9 +4336,7 @@ def _vertical_corridor_reserve_recovery_phase_evidence(
         "outward_restore_hysteresis_active": bool(
             phase_after_decision == "outward_restore"
         ),
-        "outward_restore_ignores_uncommanded_negative_z_until_clearance_gate": (
-            True
-        ),
+        "outward_restore_retains_compiled_positive_z_brake": True,
     }
 
 
@@ -14851,6 +14855,10 @@ def _seek_stable_plate_contact(
                     compiled_tail_brake_buffer_accepted=bool(
                         latest_overhead_lateral_buffer["accepted"]
                     ),
+                    recovery_exit_phase_authorized=bool(
+                        vertical_corridor_reserve_recovery_phase
+                        == "exit_brake"
+                    ),
                     recovery_active_before_decision=(
                         vertical_corridor_reserve_recovery_active
                     ),
@@ -14891,14 +14899,13 @@ def _seek_stable_plate_contact(
                         **reserve_recovery_phase_evidence,
                     }
                 )
-            reserve_recovery_vertical_brake_required = bool(
-                vertical_corridor_reserve_recovery_phase
-                in {"vertical_brake", "exit_brake"}
+            reserve_recovery_compiled_brake_required = bool(
+                vertical_corridor_reserve_recovery_active
             )
             vertical_corridor_compiled_tail_brake_active = bool(
-                reserve_recovery_vertical_brake_required
+                reserve_recovery_compiled_brake_required
             )
-            reserve_recovery_outward_only_active = bool(
+            reserve_recovery_outward_restore_active = bool(
                 vertical_corridor_reserve_recovery_phase
                 == "outward_restore"
             )
@@ -14919,7 +14926,7 @@ def _seek_stable_plate_contact(
             ).copy()
             vertical_corridor_control_target[:2] = (
                 corridor_correction_hold_target_xy
-                if reserve_recovery_outward_only_active
+                if vertical_corridor_reserve_recovery_active
                 else vertical_corridor_balanced_hold_target_xy
             )
             if vertical_corridor_compiled_tail_brake_active:
@@ -15028,15 +15035,15 @@ def _seek_stable_plate_contact(
                 "reserve_recovery_phase": (
                     vertical_corridor_reserve_recovery_phase
                 ),
-                "reserve_recovery_vertical_brake_required": (
-                    reserve_recovery_vertical_brake_required
+                "reserve_recovery_compiled_brake_required": (
+                    reserve_recovery_compiled_brake_required
                 ),
-                "reserve_recovery_outward_only_active": (
-                    reserve_recovery_outward_only_active
+                "reserve_recovery_outward_restore_active": (
+                    reserve_recovery_outward_restore_active
                 ),
-                "reserve_recovery_outward_only_target_source": (
+                "reserve_recovery_outward_restore_target_source": (
                     "existing 8 mm post-descent correction-hold target"
-                    if reserve_recovery_outward_only_active
+                    if reserve_recovery_outward_restore_active
                     else None
                 ),
                 "compiled_tail_brake_reused_for_reserve_recovery": (

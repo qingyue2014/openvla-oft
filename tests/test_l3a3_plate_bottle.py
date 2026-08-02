@@ -3203,6 +3203,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         latest_outward_step_progress_m=1.3378271275732434e-05,
         latest_vertical_step_progress_m=-0.0006499833005025879,
         compiled_tail_brake_buffer_accepted=True,
+        recovery_exit_phase_authorized=False,
         recovery_active_before_decision=False,
     )
     assert before_trigger["recovery_active_after_decision"] is False
@@ -3214,6 +3215,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         latest_outward_step_progress_m=-0.00019280978843902452,
         latest_vertical_step_progress_m=-0.0018199586431316694,
         compiled_tail_brake_buffer_accepted=True,
+        recovery_exit_phase_authorized=False,
         recovery_active_before_decision=False,
     )
     assert job503193_entry["entered_recovery"] is True
@@ -3226,6 +3228,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         latest_outward_step_progress_m=-1e-6,
         latest_vertical_step_progress_m=1e-6,
         compiled_tail_brake_buffer_accepted=True,
+        recovery_exit_phase_authorized=False,
         recovery_active_before_decision=True,
     )
     assert recovery_hold["exit_accepted"] is False
@@ -3237,10 +3240,31 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         latest_outward_step_progress_m=1e-6,
         latest_vertical_step_progress_m=1e-6,
         compiled_tail_brake_buffer_accepted=True,
+        recovery_exit_phase_authorized=True,
         recovery_active_before_decision=True,
     )
     assert recovery_exit["exit_accepted"] is True
     assert recovery_exit["recovery_active_after_decision"] is False
+    recovery_exit_before_exit_brake = (
+        _vertical_corridor_reserve_recovery_evidence(
+            live_clearance_m=0.0017,
+            recovery_entry_clearance_m=recovery_entry_clearance,
+            recovery_exit_clearance_m=recovery_exit_clearance,
+            strict_corridor_entry_clearance_m=0.0004,
+            latest_outward_step_progress_m=1e-6,
+            latest_vertical_step_progress_m=1e-6,
+            compiled_tail_brake_buffer_accepted=True,
+            recovery_exit_phase_authorized=False,
+            recovery_active_before_decision=True,
+        )
+    )
+    assert recovery_exit_before_exit_brake["exit_accepted"] is False
+    assert (
+        recovery_exit_before_exit_brake[
+            "recovery_active_after_decision"
+        ]
+        is True
+    )
     recovery_exit_without_buffer = (
         _vertical_corridor_reserve_recovery_evidence(
             live_clearance_m=0.0017,
@@ -3250,6 +3274,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
             latest_outward_step_progress_m=1e-6,
             latest_vertical_step_progress_m=1e-6,
             compiled_tail_brake_buffer_accepted=False,
+            recovery_exit_phase_authorized=True,
             recovery_active_before_decision=True,
         )
     )
@@ -3422,17 +3447,31 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "negative_z_descent_suspended_for_reserve_recovery" in (
         vertical_corridor_action
     )
-    assert "reserve_recovery_vertical_brake_required" in (
+    assert "reserve_recovery_compiled_brake_required" in (
         vertical_corridor_action
     )
-    assert "reserve_recovery_outward_only_active" in (
+    assert (
+        "reserve_recovery_compiled_brake_required = bool("
+        in vertical_corridor_action
+    )
+    assert (
+        "vertical_corridor_reserve_recovery_active"
+        in vertical_corridor_action.split(
+            "reserve_recovery_compiled_brake_required = bool(", 1
+        )[1].split(")", 1)[0]
+    )
+    assert "reserve_recovery_outward_restore_active" in (
         vertical_corridor_action
     )
     assert "corridor_correction_hold_target_xy" in vertical_corridor_action
     assert "_vertical_corridor_reserve_recovery_phase_evidence(" in (
         vertical_corridor_action
     )
-    assert '"vertical_brake", "exit_brake"' in vertical_corridor_action
+    assert (
+        "vertical_corridor_reserve_recovery_active"
+        in vertical_corridor_action
+    )
+    assert "recovery_exit_phase_authorized" in vertical_corridor_action
     assert '== "outward_restore"' in vertical_corridor_action
     assert "_live_compiled_overhead_guard(" in vertical_corridor_action
     assert "_overhead_lateral_buffer_evidence(" in vertical_corridor_action
