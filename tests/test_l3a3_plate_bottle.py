@@ -4169,7 +4169,7 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
     assert (
         "corridor_rebuffer_target[:2]\n"
         "        + corridor_outward_direction\n"
-        "        * maximum_overhead_descent_world_step"
+        "        * maximum_post_descent_lateral_world_step"
         in bounded_seek
     )
     assert "correction_uses_high_z_hold_target = bool(" in bounded_seek
@@ -4333,7 +4333,7 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
     base_correction_target = np.array(
         [0.13287111676914737, -0.02850806703327148]
     )
-    correction_hold_target = base_correction_target + np.array([0.016, 0.0])
+    correction_hold_target = base_correction_target + np.array([0.008, 0.0])
     terminal_hold_z = 0.9503643006811242
     base_action, base_evidence = _compiled_adaptive_high_plane_action(
         current_eef=terminal_eef,

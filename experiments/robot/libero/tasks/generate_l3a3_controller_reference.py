@@ -12732,7 +12732,7 @@ def _seek_stable_plate_contact(
     corridor_correction_hold_target_xy = (
         corridor_rebuffer_target[:2]
         + corridor_outward_direction
-        * maximum_overhead_descent_world_step
+        * maximum_post_descent_lateral_world_step
     )
     corridor_correction_handoff_target = np.asarray(
         corridor_rebuffer_target, dtype=float
@@ -12747,7 +12747,7 @@ def _seek_stable_plate_contact(
         )
     )
     minimum_realized_controller_reserve = float(
-        maximum_overhead_descent_world_step
+        maximum_post_descent_lateral_world_step
         - high_z_controller_handoff_tolerance
     )
     if not (
@@ -12984,17 +12984,16 @@ def _seek_stable_plate_contact(
                 corridor_correction_hold_target_xy.tolist()
             ),
             "post_descent_correction_controller_outward_reserve_m": (
-                maximum_overhead_descent_world_step
+                maximum_post_descent_lateral_world_step
             ),
             "post_descent_correction_controller_hold_target_formula": (
                 "corridor_rebuffer_target XY plus normalized registered "
-                "outward direction times the existing maximum overhead-"
-                "descent one-step world displacement; above staging this "
-                "aligns correction with the initial far-descent hold target, "
-                "while at or below staging correction switches back to the "
-                "unchanged formal corridor_rebuffer_target; formal acceptance "
-                "continues to use the unchanged target and compiled full "
-                "corridor clearance"
+                "outward direction times the existing post-descent one-step "
+                "world displacement; above staging this is the controller "
+                "hold target, while at or below staging correction switches "
+                "back to the unchanged formal corridor_rebuffer_target; "
+                "formal acceptance continues to use the unchanged target and "
+                "compiled full corridor clearance"
             ),
             "post_descent_correction_high_z_handoff_gate": {
                 "controller_target": (
@@ -13132,8 +13131,8 @@ def _seek_stable_plate_contact(
                 "the first formal-target crossing; require the actual EEF to "
                 "reach that controller target within the deterministic half-"
                 "one-step handoff tolerance and retain live base8, thereby "
-                "physically realizing the maximum-descent one-step reserve "
-                "minus that tolerance. If high-plane Z error exceeds the "
+                "physically realizing at least half the existing 8 mm "
+                "reserve. If high-plane Z error exceeds the "
                 "unchanged formal position tolerance, reserve the complete "
                 "configured action norm for proved pure +Z recovery before "
                 "resuming XY. At or below staging, switch the "
@@ -14032,11 +14031,10 @@ def _seek_stable_plate_contact(
                     correction_uses_high_z_hold_target
                 ),
                 "correction_controller_outward_reserve_m": (
-                    maximum_overhead_descent_world_step
+                    maximum_post_descent_lateral_world_step
                 ),
                 "correction_controller_outward_reserve_source": (
-                    "existing maximum overhead-descent one-step world "
-                    "displacement"
+                    "existing post-descent one-step world displacement"
                 ),
                 "correction_per_action_maximum_world_step_m": (
                     maximum_post_descent_lateral_world_step
