@@ -219,6 +219,16 @@ runtime-native 3-D norm. The stage cannot release until lateral position,
 safe-Z error, and vertical response pass for two consecutive frames with both
 outside and table recovery headroom. The later `0.10` contact-seek stabilizer
 remains as a redundant live gate.
+Job503459 confirmed that the Z brake reversed the tail, but exposed an
+unnecessary inward command after the EEF was already only `1.24 mm` from the
+lateral target—well inside the unchanged `5 mm` tolerance. Coupling reduced
+outside clearance from `1.516 mm` to `0.379 mm`, and the newly strict structural
+gate correctly rejected it. The fixed-safe-Z hold now commands no inward XY
+once lateral tolerance is reached. Any vertical response above the existing
+`0.05 mm` stability tolerance forces the full registered outward structural
+brake while Z is captured; a stable low-clearance frame uses only the exact
+outward increment needed to restore the controller recovery threshold. No
+formal threshold or target pose is changed.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
