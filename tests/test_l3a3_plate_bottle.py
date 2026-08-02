@@ -3298,6 +3298,23 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         )
     )
     assert recovery_entry_phase["phase_after_decision"] == "vertical_brake"
+    job503217_unfilled_buffer = dict(job503193_entry)
+    job503217_unfilled_buffer.update(
+        {
+            "entered_recovery": False,
+            "latest_vertical_step_progress_m": 0.00024407744120835684,
+            "latest_outward_step_progress_m": 0.00009467837885429597,
+            "live_clearance_m": 0.000736711298289186,
+            "compiled_tail_brake_buffer_accepted": False,
+        }
+    )
+    job503217_phase_hold = (
+        _vertical_corridor_reserve_recovery_phase_evidence(
+            recovery_evidence=job503217_unfilled_buffer,
+            phase_before_decision="vertical_brake",
+        )
+    )
+    assert job503217_phase_hold["phase_after_decision"] == "vertical_brake"
     vertical_brake_complete = dict(job503193_entry)
     vertical_brake_complete.update(
         {

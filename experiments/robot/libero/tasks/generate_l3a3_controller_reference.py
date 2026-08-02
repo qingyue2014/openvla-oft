@@ -4301,6 +4301,9 @@ def _vertical_corridor_reserve_recovery_phase_evidence(
         if (
             phase_before_decision == "vertical_brake"
             and vertical_progress >= 0.0
+            and recovery_evidence[
+                "compiled_tail_brake_buffer_accepted"
+            ]
         ):
             phase_after_decision = "outward_restore"
             transition = "vertical_brake_complete_to_outward_restore"
@@ -4308,6 +4311,9 @@ def _vertical_corridor_reserve_recovery_phase_evidence(
             phase_before_decision == "outward_restore"
             and live_clearance > exit_clearance
             and outward_progress >= 0.0
+            and recovery_evidence[
+                "compiled_tail_brake_buffer_accepted"
+            ]
         ):
             phase_after_decision = "exit_brake"
             transition = "outward_restore_complete_to_exit_brake"
