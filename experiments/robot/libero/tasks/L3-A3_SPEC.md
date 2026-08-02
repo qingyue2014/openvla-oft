@@ -581,6 +581,20 @@ finger-table clearance strictly positive, use zero rotation, and pass all live
 post-action guards. It remains active until the unchanged geometric or measured
 hazard trigger returns to settle; a hazardous measured response therefore still
 hard-stops the shielded descent and restores the full brake.
+Job503690 confirmed that the shielded descent retains positive outward response
+for consecutive frames and reaches the geometric trigger band. The remaining
+budget was spent by the inherited `0.025` positive-action damping ramp: a small
+reversed response paused each ramp, forced another two-frame release, and then
+resumed the next decrement. After a fully authorized hazard release with the
+full side guard and both existing recovery-exit reserves accepted, the hazard
+path now commands zero XYZ and rotation directly. It requires two consecutive
+zero-command frames whose absolute vertical, EEF-outward, and live-clearance
+responses are each within the unchanged `0.050 mm` settle tolerance. If the
+full guard remains accepted, the existing fixed-safe-Z stage follows. If the
+coast is stable and only above-rim coverage predicates remain false, it returns
+to the already compiled shielded descent. Strict outside/table guards, post-
+action collision checks, the waypoint budget, and all formal thresholds remain
+unchanged.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

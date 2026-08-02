@@ -9119,6 +9119,95 @@ def _compiled_low_side_neutral_damping_action(
     }
 
 
+def _compiled_hazard_release_zero_coast_action(
+    *,
+    outside_side_guard,
+    gripper,
+    native_action_spec,
+    recovery_exit_clearance_m,
+):
+    """Hold zero motion after a fully authorized hazard release."""
+    try:
+        native_low = np.asarray(native_action_spec["low"], dtype=float)
+        native_high = np.asarray(native_action_spec["high"], dtype=float)
+        native_source = str(native_action_spec["source"])
+        live_outside_clearance = float(
+            outside_side_guard["minimum_outside_clearance_m"]
+        )
+        required_outside_clearance = float(
+            outside_side_guard["required_outside_clearance_m"]
+        )
+        live_finger_table_clearance = float(
+            outside_side_guard["finger_table_vertical_clearance_m"]
+        )
+        required_finger_table_clearance = float(
+            outside_side_guard["required_finger_table_clearance_m"]
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "hazard-release zero-coast evidence is incomplete"
+        ) from exc
+    if (
+        not np.isfinite(recovery_exit_clearance_m)
+        or recovery_exit_clearance_m <= 0.0
+        or not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(native_low < native_high)
+        or not np.all(native_low[:6] < 0.0)
+        or not np.all(native_high[:6] > 0.0)
+        or not (native_low[6] <= gripper <= native_high[6])
+        or not np.isfinite(live_outside_clearance)
+        or live_outside_clearance <= recovery_exit_clearance_m
+        or live_outside_clearance < required_outside_clearance
+        or not np.isfinite(live_finger_table_clearance)
+        or live_finger_table_clearance <= recovery_exit_clearance_m
+        or live_finger_table_clearance
+        < required_finger_table_clearance
+    ):
+        raise RuntimeError(
+            "hazard-release zero coast lacks its registered live reserve"
+        )
+    action = np.zeros(7, dtype=float)
+    action[-1] = float(gripper)
+    return action, {
+        "formula": (
+            "after the dedicated two-frame hazard release, command zero "
+            "XYZ and rotation while both outside and table clearances remain "
+            "strictly above the unchanged recovery-exit reserve; require "
+            "live post-action guards and absolute-response confirmation"
+        ),
+        "native_action_spec_source": native_source,
+        "commanded_xyz_action": action[:3].tolist(),
+        "commanded_rotation_action": action[3:6].tolist(),
+        "live_outside_clearance_m": live_outside_clearance,
+        "required_outside_clearance_m": required_outside_clearance,
+        "live_finger_table_clearance_m": live_finger_table_clearance,
+        "required_finger_table_clearance_m": (
+            required_finger_table_clearance
+        ),
+        "recovery_exit_clearance_m": float(
+            recovery_exit_clearance_m
+        ),
+        "full_outside_side_guard_accepted": bool(
+            outside_side_guard.get("accepted", False)
+        ),
+        "guard_violations": list(
+            outside_side_guard.get("violations", ())
+        ),
+        "proof": {
+            "zero_translation_and_rotation": True,
+            "strictly_inside_native_action_bounds": True,
+            "outside_recovery_exit_reserve_preaccepted": True,
+            "table_recovery_exit_reserve_preaccepted": True,
+            "post_action_live_guards_required": True,
+        },
+    }
+
+
 def _compiled_adaptive_lateral_rebuffer_action(
     *,
     current_eef,
@@ -16394,6 +16483,13 @@ def _seek_stable_plate_contact(
                 "native norm, live outside/table proofs, and post-action "
                 "guards"
             ),
+            "vertical_corridor_hazard_release_zero_coast": (
+                "after a dedicated hazard release with the full side guard "
+                "and recovery-exit reserves accepted, command zero XYZ and "
+                "rotation until two unchanged 0.050 mm absolute-response "
+                "confirmation frames; stable above-rim coverage gaps return "
+                "to the shielded descent"
+            ),
         }
     )
     structural_stage_action_counts = {
@@ -17673,15 +17769,47 @@ def _seek_stable_plate_contact(
             settle_trigger_evidence = lateral_settle_state.get(
                 "trigger_evidence"
             )
+            previous_hazard_release_evidence = (
+                lateral_settle_state.get(
+                    "hazard_brake_release_evidence", {}
+                )
+            )
+            hazard_release_zero_coast_active_before_action = bool(
+                lateral_settle_state.get(
+                    "hazard_release_zero_coast_active", False
+                )
+                or (
+                    neutral_damping_active_before_action
+                    and pre_action_guard.get("accepted", False)
+                    and previous_hazard_release_evidence.get(
+                        "hazard_response_triggered", False
+                    )
+                    and previous_hazard_release_evidence.get(
+                        "release_authorized", False
+                    )
+                )
+            )
             hazard_outward_brake_active = bool(
                 settle_trigger_evidence is not None
                 and settle_trigger_evidence.get(
                     "hazard_response_triggered", False
                 )
                 and not neutral_damping_active_before_action
+                and not hazard_release_zero_coast_active_before_action
             )
             hazard_positive_z_brake_schedule = None
-            if neutral_damping_active_before_action:
+            if hazard_release_zero_coast_active_before_action:
+                action, path_control = (
+                    _compiled_hazard_release_zero_coast_action(
+                        outside_side_guard=pre_action_guard,
+                        gripper=gripper,
+                        native_action_spec=native_action_spec,
+                        recovery_exit_clearance_m=(
+                            fixed_safe_z_recovery_exit_clearance
+                        ),
+                    )
+                )
+            elif neutral_damping_active_before_action:
                 action, path_control = (
                     _compiled_low_side_neutral_damping_action(
                         outside_side_guard=pre_action_guard,
@@ -17773,12 +17901,22 @@ def _seek_stable_plate_contact(
                 "compiled_low_side_settle_brake_envelope": (
                     None
                     if neutral_damping_active_before_action
+                    or hazard_release_zero_coast_active_before_action
                     else path_control
                 ),
                 "compiled_low_side_neutral_damping_envelope": (
                     path_control
                     if neutral_damping_active_before_action
+                    and not hazard_release_zero_coast_active_before_action
                     else None
+                ),
+                "compiled_hazard_release_zero_coast_envelope": (
+                    path_control
+                    if hazard_release_zero_coast_active_before_action
+                    else None
+                ),
+                "hazard_release_zero_coast_active_before_action": (
+                    hazard_release_zero_coast_active_before_action
                 ),
                 "neutral_damping_active_before_action": (
                     neutral_damping_active_before_action
@@ -17827,6 +17965,7 @@ def _seek_stable_plate_contact(
                 ),
                 "active_positive_z_brake_requested": bool(
                     not neutral_damping_active_before_action
+                    and not hazard_release_zero_coast_active_before_action
                 ),
                 "active_positive_z_brake_commanded": bool(
                     action[2] > 0.0
@@ -18908,6 +19047,46 @@ def _seek_stable_plate_contact(
             lateral_settle_progress[
                 "hazard_brake_release_evidence"
             ] = hazard_brake_release_evidence
+            if hazard_release_zero_coast_active_before_action:
+                zero_coast_response = lateral_settle_progress[
+                    "step_response"
+                ]
+                zero_coast_instantaneous_stable = bool(
+                    all(
+                        abs(float(zero_coast_response[key]))
+                        <= float(
+                            args.minimum_saturated_waypoint_progress
+                        )
+                        for key in (
+                            "vertical_step_progress_m",
+                            "eef_outward_step_progress_m",
+                            "outside_clearance_step_progress_m",
+                        )
+                    )
+                )
+                zero_coast_stable_count = int(
+                    lateral_settle_state.get(
+                        "hazard_release_zero_coast_stable_count", 0
+                    )
+                    + 1
+                    if zero_coast_instantaneous_stable
+                    else 0
+                )
+            else:
+                zero_coast_instantaneous_stable = False
+                zero_coast_stable_count = 0
+            lateral_settle_progress[
+                "hazard_release_zero_coast_active"
+            ] = hazard_release_zero_coast_active_before_action
+            lateral_settle_progress[
+                "hazard_release_zero_coast_instantaneous_stable"
+            ] = zero_coast_instantaneous_stable
+            lateral_settle_progress[
+                "hazard_release_zero_coast_stable_count"
+            ] = zero_coast_stable_count
+            lateral_settle_progress[
+                "hazard_release_zero_coast_required_stable_count"
+            ] = 2
             neutral_damping_reversal_authorized = bool(
                 lateral_settle_progress[
                     "kinematic_brake_reversed"
@@ -18996,6 +19175,53 @@ def _seek_stable_plate_contact(
                     action[:3], dtype=float
                 ).copy()
             elif (
+                hazard_release_zero_coast_active_before_action
+                and zero_coast_stable_count >= 2
+                and not latest_outside_side_guard["accepted"]
+            ):
+                zero_coast_allowed_coverage_violations = {
+                    "left_finger_rim_vertical_overlap_missing",
+                    "left_finger_does_not_cover_rim_center",
+                    "right_finger_rim_vertical_overlap_missing",
+                    "right_finger_does_not_cover_rim_center",
+                }
+                zero_coast_observed_violations = set(
+                    latest_outside_side_guard.get("violations", ())
+                )
+                zero_coast_above_rim = bool(
+                    latest_outside_side_guard["finger_lowest_z"]
+                    > latest_outside_side_guard["rim_center_z"]
+                )
+                if (
+                    not zero_coast_observed_violations
+                    or not zero_coast_observed_violations.issubset(
+                        zero_coast_allowed_coverage_violations
+                    )
+                    or not zero_coast_above_rim
+                ):
+                    raise RuntimeError(
+                        "stable hazard-release zero coast cannot safely "
+                        "return to the above-rim descent"
+                    )
+                lateral_settle_state = None
+                structural_stage = "vertical_corridor_descent"
+                vertical_corridor_hazard_release_descent_active = True
+                feedback["hazard_release_zero_coast_handoff"] = {
+                    "event": (
+                        "stable_zero_coast_above_rim_to_shielded_descent"
+                    ),
+                    "stable_count": zero_coast_stable_count,
+                    "required_stable_count": 2,
+                    "guard_violations": sorted(
+                        zero_coast_observed_violations
+                    ),
+                    "above_rim": zero_coast_above_rim,
+                    "shielded_descent_activated": True,
+                    "formal_thresholds_unchanged": True,
+                }
+            elif (
+                not hazard_release_zero_coast_active_before_action
+                and
                 lateral_settle_progress["kinematic_brake_reversed"]
                 and not latest_outside_side_guard["accepted"]
                 and (

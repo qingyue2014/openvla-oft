@@ -24,6 +24,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_corridor_reserve_action,
     _compiled_low_side_settle_brake_action,
     _compiled_hazard_release_descent_action,
+    _compiled_hazard_release_zero_coast_action,
     _compiled_low_side_neutral_damping_action,
     _outside_side_neutral_damping_guard_evidence,
     _outside_side_neutral_damping_latch_transition,
@@ -3652,6 +3653,44 @@ def test_job503689_hazard_release_descent_rejects_table_crossing():
             maximum_descent_m=0.002,
             maximum_negative_z_action=0.025,
             strict_corridor_clearance_m=0.0004,
+        )
+
+
+def test_job503690_hazard_release_zero_coast_requires_live_reserves():
+    native = {
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "source": "test_runtime",
+        "runtime_resolved": True,
+        "action_dimension": 7,
+    }
+    guard = {
+        "accepted": False,
+        "violations": ["left_finger_does_not_cover_rim_center"],
+        "minimum_outside_clearance_m": 0.0088,
+        "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+        "finger_table_vertical_clearance_m": 0.0091,
+        "required_finger_table_clearance_m": np.nextafter(0.0, np.inf),
+    }
+    action, evidence = _compiled_hazard_release_zero_coast_action(
+        outside_side_guard=guard,
+        gripper=-1.0,
+        native_action_spec=native,
+        recovery_exit_clearance_m=0.00155,
+    )
+    assert action[:6].tolist() == [0.0] * 6
+    assert action[6] == -1.0
+    assert evidence["full_outside_side_guard_accepted"] is False
+    assert evidence["proof"]["zero_translation_and_rotation"] is True
+
+    insufficient = copy.deepcopy(guard)
+    insufficient["finger_table_vertical_clearance_m"] = 0.00155
+    with pytest.raises(RuntimeError):
+        _compiled_hazard_release_zero_coast_action(
+            outside_side_guard=insufficient,
+            gripper=-1.0,
+            native_action_spec=native,
+            recovery_exit_clearance_m=0.00155,
         )
 
 
@@ -10670,6 +10709,11 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert "_compiled_hazard_release_descent_action(" in bounded_seek
     assert "hazard_release_descent_active_before_action" in bounded_seek
+    assert "_compiled_hazard_release_zero_coast_action(" in bounded_seek
+    assert "hazard_release_zero_coast_stable_count" in bounded_seek
+    assert "stable_zero_coast_above_rim_to_shielded_descent" in (
+        bounded_seek
+    )
     settle_transition = bounded_seek.split(
         'elif stage_before_action == "vertical_corridor_settle":', 1
     )[1].split(
