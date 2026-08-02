@@ -20001,7 +20001,58 @@ def _seek_stable_plate_contact(
                 ):
                     raise RuntimeError(
                         "stable hazard-release zero coast cannot safely "
-                        "return to the above-rim descent"
+                        "return to the above-rim descent: "
+                        + json.dumps(
+                            {
+                                "stable_count": zero_coast_stable_count,
+                                "required_stable_count": 2,
+                                "observed_guard_violations": sorted(
+                                    zero_coast_observed_violations
+                                ),
+                                "allowed_guard_violations": sorted(
+                                    zero_coast_allowed_coverage_violations
+                                ),
+                                "observed_violations_nonempty": bool(
+                                    zero_coast_observed_violations
+                                ),
+                                "observed_violations_allowed_subset": bool(
+                                    zero_coast_observed_violations.issubset(
+                                        zero_coast_allowed_coverage_violations
+                                    )
+                                ),
+                                "finger_lowest_z_m": float(
+                                    latest_outside_side_guard[
+                                        "finger_lowest_z"
+                                    ]
+                                ),
+                                "rim_center_z_m": float(
+                                    latest_outside_side_guard[
+                                        "rim_center_z"
+                                    ]
+                                ),
+                                "above_rim": zero_coast_above_rim,
+                                "action_xyz": np.asarray(
+                                    action[:3], dtype=float
+                                ).tolist(),
+                                "step_response": zero_coast_response,
+                                "full_guard_accepted": bool(
+                                    latest_outside_side_guard.get(
+                                        "accepted", False
+                                    )
+                                ),
+                                "outside_clearance_m": float(
+                                    latest_outside_side_guard[
+                                        "minimum_outside_clearance_m"
+                                    ]
+                                ),
+                                "finger_table_clearance_m": float(
+                                    latest_outside_side_guard[
+                                        "finger_table_vertical_clearance_m"
+                                    ]
+                                ),
+                            },
+                            sort_keys=True,
+                        )
                     )
                 lateral_settle_state = None
                 structural_stage = "vertical_corridor_descent"

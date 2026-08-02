@@ -672,6 +672,14 @@ existing `0.0125` half-decrement; any measured response below `-0.050 mm`
 still restores the full dynamic release gate. Two actual consecutive frames,
 not predicted frames, remain mandatory for handoff. No formal or structural
 threshold changes.
+Job503866 reached two actual response-balanced stable frames, then the existing
+above-rim handoff rejected its post-action state. The generic handoff exception
+did not identify whether the observed violation subset or strict
+finger-lowest-Z-above-rim-center predicate failed. No predicate changes for the
+diagnostic rerun: the exception now serializes the complete observed/shared
+allowlists, both Z scalars, the derived above-rim boolean, action, response,
+stable count, and live reserves. Those diagnostics cannot authorize a failed
+handoff.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
