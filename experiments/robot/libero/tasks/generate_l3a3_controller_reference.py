@@ -13288,10 +13288,13 @@ def _seek_stable_plate_contact(
         + corridor_outward_direction
         * maximum_post_descent_lateral_world_step
     )
+    vertical_corridor_outward_priority_action = float(
+        vertical_corridor_descent_max_translation_action
+        - structural_max_translation_action
+    )
     vertical_corridor_balanced_hold_world_step = float(
         args.position_action_scale
-        * vertical_corridor_descent_max_translation_action
-        / np.sqrt(2.0)
+        * vertical_corridor_outward_priority_action
     )
     vertical_corridor_balanced_hold_target_xy = (
         corridor_rebuffer_target[:2]
@@ -13302,10 +13305,11 @@ def _seek_stable_plate_contact(
         vertical_staging_corridor[
             "strict_corridor_entry_clearance_m"
         ]
-        + maximum_controller_world_step
+        + 2.0 * maximum_controller_world_step
     )
     vertical_corridor_reserve_recovery_exit_clearance = float(
-        corridor_rebuffer_acceptance_clearance
+        vertical_corridor_reserve_recovery_entry_clearance
+        + maximum_controller_world_step
     )
     if not (
         np.isfinite(vertical_corridor_balanced_hold_world_step)
@@ -13341,21 +13345,28 @@ def _seek_stable_plate_contact(
             ),
             "vertical_corridor_balanced_hold_derivation": (
                 "position action scale times the existing vertical-corridor "
-                "translation-action bound divided by sqrt(2), retaining "
-                "equal strict action-norm capacity for outward XY and Z"
+                "translation-action bound minus the unchanged structural "
+                "near-plate bound, prioritizing a 0.095-action-equivalent "
+                "outward target offset while "
+                "the unchanged 0.10 Euclidean bound leaves strict negative-Z "
+                "descent authority"
             ),
             "vertical_corridor_reserve_recovery_entry_clearance_m": (
                 vertical_corridor_reserve_recovery_entry_clearance
             ),
             "vertical_corridor_reserve_recovery_entry_derivation": (
-                "the unchanged strict 0.4 mm corridor gate plus the existing "
-                "0.4 mm maximum structural controller world step"
+                "the unchanged strict 0.4 mm corridor gate plus two existing "
+                "0.4 mm maximum structural controller world steps, covering "
+                "the measured 0.490 mm closed-loop inward response"
             ),
             "vertical_corridor_reserve_recovery_exit_clearance_m": (
                 vertical_corridor_reserve_recovery_exit_clearance
             ),
             "vertical_corridor_reserve_recovery_exit_derivation": (
-                "the unchanged formal 0.9 mm corridor clearance"
+                "the conservative recovery-entry gate plus one existing "
+                "0.4 mm maximum structural controller world step; this is "
+                "an internal brake-release gate and does not relax the "
+                "unchanged formal 0.9 mm corridor clearance"
             ),
         }
     )
@@ -15003,8 +15014,9 @@ def _seek_stable_plate_contact(
                     vertical_corridor_balanced_hold_world_step
                 ),
                 "balanced_outward_controller_hold_source": (
-                    "equal XY/Z norm allocation derived from the existing "
-                    "vertical-corridor translation-action bound"
+                    "outward-priority allocation derived from the existing "
+                    "vertical-corridor bound minus the unchanged structural "
+                    "near-plate action bound"
                 ),
                 "reserve_recovery_evidence": reserve_recovery_evidence,
                 "reserve_recovery_phase_evidence": (

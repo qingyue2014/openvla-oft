@@ -3151,15 +3151,15 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     # and the real OSC erased the corridor reserve in three frames.  Above the
     # compiled staging plane, retain a balanced outward hold.  Job503189 then
     # showed that consuming the entire 0.10 norm with the 8 mm target left no Z
-    # authority and still drifted inward after the staging switch.  Derive the
-    # fixed hold from action_scale * 0.10 / sqrt(2), leaving equal XY/Z norm.
+    # authority and still drifted inward after the staging switch.  The next
+    # fixed hold initially split the norm equally between XY and Z.
     job503186_eef = np.array(
         [0.13300229707876983, -0.0281777465755566, 0.9470836934130403]
     )
     formal_side_target = np.array(
         [0.13282106705090635, -0.02850777957668001, 0.9178414056548501]
     )
-    balanced_hold_world_step = 0.08 * 0.10 / np.sqrt(2.0)
+    balanced_hold_world_step = 0.08 * (0.10 - 0.005)
     reserve_side_target = formal_side_target.copy()
     reserve_side_target[0] = (
         0.13287106705090635 + balanced_hold_world_step
@@ -3177,20 +3177,24 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
             maximum_translation_action=0.10,
         )
     )
-    assert 0.06 < reserve_action[0] < 0.08
+    assert 0.09 < reserve_action[0] < 0.095
     assert reserve_action[2] < 0.0
-    assert -0.08 < reserve_action[2] < -0.06
+    assert -0.04 < reserve_action[2] < -0.03
     assert reserve_path["raw_outward_error_m"] > 0.005
     assert np.linalg.norm(reserve_action[:3]) < 0.10
 
     # Job503193 proved that equal XY/Z action allocation alone is not a live
     # reserve guarantee: despite 0.081 outward action, the real OSC continued
     # 0.188 mm inward and crossed the 0.4 mm one-step gate.  Job503209 then
-    # showed that a shared 1.3 mm entry/exit threshold was unreachable.  Enter
-    # at the strict 0.4 mm gate plus the existing 0.4 mm controller world step,
-    # and exit at the unchanged formal 0.9 mm corridor clearance.
-    recovery_entry_clearance = 0.0004 + 0.0004
-    recovery_exit_clearance = 0.0009
+    # showed that a shared 1.3 mm entry/exit threshold was unreachable.
+    # Job503219 later measured a 0.490 mm inward closed-loop response, proving
+    # that one nominal 0.4 mm structural step is not a conservative trigger.
+    # Prioritize 0.095 of the unchanged 0.10 action norm outward, retain the
+    # remaining norm for negative-Z descent, and reserve two structural steps
+    # above the unchanged strict gate.  The internal release adds one further
+    # structural step; the formal 0.9 mm corridor gate remains unchanged.
+    recovery_entry_clearance = 0.0004 + 2.0 * 0.0004
+    recovery_exit_clearance = recovery_entry_clearance + 0.0004
     before_trigger = _vertical_corridor_reserve_recovery_evidence(
         live_clearance_m=0.0014115984435881107,
         recovery_entry_clearance_m=recovery_entry_clearance,
@@ -3215,7 +3219,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert job503193_entry["entered_recovery"] is True
     assert job503193_entry["recovery_active_after_decision"] is True
     recovery_hold = _vertical_corridor_reserve_recovery_evidence(
-        live_clearance_m=0.00085,
+        live_clearance_m=0.0015,
         recovery_entry_clearance_m=recovery_entry_clearance,
         recovery_exit_clearance_m=recovery_exit_clearance,
         strict_corridor_entry_clearance_m=0.0004,
@@ -3226,7 +3230,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     )
     assert recovery_hold["exit_accepted"] is False
     recovery_exit = _vertical_corridor_reserve_recovery_evidence(
-        live_clearance_m=0.001,
+        live_clearance_m=0.0017,
         recovery_entry_clearance_m=recovery_entry_clearance,
         recovery_exit_clearance_m=recovery_exit_clearance,
         strict_corridor_entry_clearance_m=0.0004,
@@ -3239,7 +3243,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert recovery_exit["recovery_active_after_decision"] is False
     recovery_exit_without_buffer = (
         _vertical_corridor_reserve_recovery_evidence(
-            live_clearance_m=0.001,
+            live_clearance_m=0.0017,
             recovery_entry_clearance_m=recovery_entry_clearance,
             recovery_exit_clearance_m=recovery_exit_clearance,
             strict_corridor_entry_clearance_m=0.0004,
@@ -3350,7 +3354,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     restored_clearance = dict(job503204_one_frame_tail)
     restored_clearance.update(
         {
-            "live_clearance_m": 0.001,
+            "live_clearance_m": 0.0017,
             "latest_outward_step_progress_m": 1e-6,
         }
     )
