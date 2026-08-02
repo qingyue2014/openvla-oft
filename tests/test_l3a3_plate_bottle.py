@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -31,6 +32,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _fixed_z_lateral_approach_action,
     _fixed_xy_vertical_approach_action,
     _gate_live_contact_offset_xy,
+    _high_plane_native_workspace_saturation_evidence,
     _horizon_budget,
     _live_plate_tracking_target,
     _native_osc_action_spec_evidence,
@@ -4093,6 +4095,257 @@ def test_500251_manifest_records_true_high_target_without_gate_changes():
         "        default=0.10,"
         in controller
     )
+
+
+def _job500261_saturation_fixture():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    pairs = [
+        {
+            "gripper_geom": f"gripper_{index // 11}",
+            "counterpart_geom": f"native_{index % 11}",
+            "counterpart_kind": (
+                "table" if index % 11 == 10 else "plate"
+            ),
+            "strict_no_contact_clearance_m": strict_clearance,
+            "vertical_clearance_m": 0.12,
+            "accepted": True,
+        }
+        for index in range(55)
+    ]
+    pair_identity_keys = [
+        [
+            pair["gripper_geom"],
+            pair["counterpart_geom"],
+            pair["counterpart_kind"],
+        ]
+        for pair in pairs
+    ]
+    envelope_pairs = [
+        {
+            **pair,
+            "predicted_post_worst_case_base_reserve_surplus_m": 0.10,
+        }
+        for pair in pairs
+    ]
+    high_target = np.array(
+        [0.14480639548403948, -0.02850777957668001, 1.0654223455054406]
+    )
+    outside_high = np.array(
+        [0.13680639548403947, -0.02850777957668001, 1.0654223455054406]
+    )
+    initial_eef = np.array(
+        [0.05554037906914336, -0.029154933875409465, 1.0654223455054406]
+    )
+    observations = []
+    for index in range(10):
+        before_x = 0.1384 + index * 0.000002
+        after_x = before_x + 0.000002
+        before_clearance = 0.0068 + index * 0.000002
+        after_clearance = before_clearance + 0.000002
+        observations.append(
+            {
+                "before_eef": np.array(
+                    [before_x, -0.02836, 1.05979]
+                ),
+                "after_eef": np.array(
+                    [after_x, -0.02836, 1.059792]
+                ),
+                "action": np.array(
+                    [0.079, 0.0, 0.070, 0.0, 0.0, 0.0, -1.0]
+                ),
+                "high_plane_envelope": {
+                    "accepted": True,
+                    "lateral_target_xy": high_target[:2].tolist(),
+                    "compiled_pair_count": 55,
+                    "pair_identity_keys": pair_identity_keys,
+                    "pair_envelopes": envelope_pairs,
+                },
+                "pre_overhead_guard": {
+                    "accepted": True,
+                    "pairs": pairs,
+                },
+                "post_overhead_guard": {
+                    "accepted": True,
+                    "pairs": pairs,
+                },
+                "before_outside_guard": {
+                    "minimum_outside_clearance_m": before_clearance,
+                    "required_outside_clearance_m": strict_clearance,
+                },
+                "after_outside_guard": {
+                    "minimum_outside_clearance_m": after_clearance,
+                    "required_outside_clearance_m": strict_clearance,
+                },
+                "step_response": {
+                    "eef_outward_step_progress_m": 0.000002,
+                    "outside_clearance_step_progress_m": 0.000002,
+                },
+            }
+        )
+    kwargs = {
+        "observations": observations,
+        "initial_eef": initial_eef,
+        "high_lateral_target": high_target,
+        "native_outside_high_target": outside_high,
+        "outward_direction_xy": np.array([1.0, 0.0]),
+        "position_action_scale": 0.08,
+        "position_tolerance": 0.005,
+        "progress_epsilon": 0.00005,
+        "required_window_frames": 10,
+        "native_action_spec": {
+            "source": "env.action_spec",
+            "action_dimension": 7,
+            "low": [-1.0] * 7,
+            "high": [1.0] * 7,
+            "runtime_resolved": True,
+        },
+        "expected_pair_count": 55,
+    }
+    return observations, kwargs
+
+
+def test_500261_native_workspace_saturation_boundary_is_fail_closed_proof():
+    _, kwargs = _job500261_saturation_fixture()
+    evidence = _high_plane_native_workspace_saturation_evidence(**kwargs)
+    assert evidence["accepted"] is True
+    assert evidence["violations"] == []
+    assert evidence["registered_target_requires_native_clipping"] is True
+    assert evidence["bounded_action_clipped_axes"] == [0]
+    assert evidence["observed_window_frames"] == 10
+    assert evidence["required_window_source"] == "push_tracking_steps"
+    assert evidence["progress_epsilon_source"] == (
+        "minimum_saturated_waypoint_progress"
+    )
+    assert abs(evidence["window_net_eef_outward_progress_m"]) <= evidence[
+        "progress_epsilon_m"
+    ]
+    assert abs(
+        evidence["window_net_outside_clearance_progress_m"]
+    ) <= evidence["progress_epsilon_m"]
+    assert evidence[
+        "actual_eef_outward_of_native_outside_target_m"
+    ] > 0.0
+    assert len(evidence["frames"]) == 10
+    assert all(frame["persistent_outward_request"] for frame in evidence["frames"])
+    assert all(
+        frame["all_55_pair_high_plane_base8_strict"]
+        for frame in evidence["frames"]
+    )
+
+
+def test_500261_saturation_boundary_rejects_every_missing_prerequisite():
+    observations, kwargs = _job500261_saturation_fixture()
+
+    incomplete = _high_plane_native_workspace_saturation_evidence(
+        **{**kwargs, "observations": observations[:-1]}
+    )
+    assert incomplete["accepted"] is False
+    assert "saturation_observation_window_incomplete" in incomplete[
+        "violations"
+    ]
+
+    no_request = copy.deepcopy(observations)
+    no_request[-1]["action"][0] = 0.0
+    no_request_evidence = _high_plane_native_workspace_saturation_evidence(
+        **{**kwargs, "observations": no_request}
+    )
+    assert no_request_evidence["accepted"] is False
+    assert "outward_request_not_persistent" in no_request_evidence[
+        "violations"
+    ]
+
+    moving = copy.deepcopy(observations)
+    moving[-1]["step_response"][
+        "eef_outward_step_progress_m"
+    ] = 0.0001
+    moving_evidence = _high_plane_native_workspace_saturation_evidence(
+        **{**kwargs, "observations": moving}
+    )
+    assert moving_evidence["accepted"] is False
+    assert "eef_outward_step_not_saturated" in moving_evidence[
+        "violations"
+    ]
+
+    unsafe_pairs = copy.deepcopy(observations)
+    unsafe_pairs[-1]["post_overhead_guard"]["accepted"] = False
+    unsafe_pair_evidence = _high_plane_native_workspace_saturation_evidence(
+        **{**kwargs, "observations": unsafe_pairs}
+    )
+    assert unsafe_pair_evidence["accepted"] is False
+    assert "all_55_pair_high_plane_base8_not_strict" in unsafe_pair_evidence[
+        "violations"
+    ]
+
+    not_beyond = copy.deepcopy(observations)
+    for observation in not_beyond:
+        observation["before_eef"][0] = 0.1367
+        observation["after_eef"][0] = 0.136702
+    not_beyond_evidence = _high_plane_native_workspace_saturation_evidence(
+        **{**kwargs, "observations": not_beyond}
+    )
+    assert not_beyond_evidence["accepted"] is False
+    assert "actual_eef_not_outward_of_native_outside_target" in (
+        not_beyond_evidence["violations"]
+    )
+
+    reachable_target_evidence = (
+        _high_plane_native_workspace_saturation_evidence(
+            **{
+                **kwargs,
+                "initial_eef": np.array(
+                    [0.10, -0.02850777957668001, 1.0654223455054406]
+                ),
+            }
+        )
+    )
+    assert reachable_target_evidence["accepted"] is False
+    assert "registered_high_target_not_native_action_clipped" in (
+        reachable_target_evidence["violations"]
+    )
+
+
+def test_500261_saturation_fallback_reuses_existing_constants_and_exact_gates():
+    controller = CONTROLLER_REFERENCE.read_text()
+    bounded_seek = controller.split(
+        "def _seek_stable_plate_contact(", 1
+    )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    release = controller.split(
+        "def _compiled_adaptive_workspace_release_action(", 1
+    )[1].split("\ndef _compiled_adaptive_lateral_rebuffer_action", 1)[0]
+    assert "_high_plane_native_workspace_saturation_evidence(" in bounded_seek
+    assert "args.minimum_saturated_waypoint_progress" in bounded_seek
+    assert "required_window_frames=args.push_tracking_steps" in bounded_seek
+    assert '"accepted_native_high_workspace_saturation_boundary"' in (
+        bounded_seek
+    )
+    assert (
+        '"proved_native_high_workspace_saturation_to_"'
+        in bounded_seek
+    )
+    assert (
+        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        in controller
+    )
+    assert (
+        'parser.add_argument("--position_tolerance", type=float, default=0.005)'
+        in controller
+    )
+    assert (
+        '"--minimum_saturated_waypoint_progress",\n'
+        "        type=float,\n"
+        "        default=0.00005,"
+        in controller
+    )
+    assert 'parser.add_argument("--push_tracking_steps", type=int, default=10)' in (
+        controller
+    )
+    assert "pre_action_buffer16_surplus_after_inertia_m" in release
+    assert (
+        'required_clearance_key = "required_clearance_with_base_reserve_m"'
+        in release
+    )
+    assert "clearance > record[required_clearance_key]" in release
+    assert "clearance >= record[required_clearance_key]" not in release
 
 
 def test_high_first_route_fails_closed_and_rechecks_post_descent_drift():

@@ -1828,6 +1828,353 @@ def _overhead_outside_high_entry_evidence(
     }
 
 
+def _high_plane_native_workspace_saturation_evidence(
+    *,
+    observations,
+    initial_eef,
+    high_lateral_target,
+    native_outside_high_target,
+    outward_direction_xy,
+    position_action_scale,
+    position_tolerance,
+    progress_epsilon,
+    required_window_frames,
+    native_action_spec,
+    expected_pair_count,
+):
+    """Prove a persistent, clipped high-plane request has stalled safely."""
+    initial_eef = np.asarray(initial_eef, dtype=float)
+    high_lateral_target = np.asarray(high_lateral_target, dtype=float)
+    native_outside_high_target = np.asarray(
+        native_outside_high_target, dtype=float
+    )
+    outward = np.asarray(outward_direction_xy, dtype=float)
+    native_low = np.asarray(native_action_spec.get("low", ()), dtype=float)
+    native_high = np.asarray(
+        native_action_spec.get("high", ()), dtype=float
+    )
+    if (
+        initial_eef.shape != (3,)
+        or high_lateral_target.shape != (3,)
+        or native_outside_high_target.shape != (3,)
+        or outward.shape != (2,)
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or not np.all(np.isfinite(initial_eef))
+        or not np.all(np.isfinite(high_lateral_target))
+        or not np.all(np.isfinite(native_outside_high_target))
+        or not np.all(np.isfinite(outward))
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(native_low < native_high)
+        or not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or not np.isfinite(position_action_scale)
+        or position_action_scale <= 0.0
+        or not np.isfinite(position_tolerance)
+        or position_tolerance <= 0.0
+        or not np.isfinite(progress_epsilon)
+        or progress_epsilon <= 0.0
+        or not isinstance(required_window_frames, (int, np.integer))
+        or required_window_frames < 1
+        or not isinstance(expected_pair_count, (int, np.integer))
+        or expected_pair_count < 1
+    ):
+        raise ValueError("high-plane workspace-saturation inputs are invalid")
+    outward_norm = float(np.linalg.norm(outward))
+    if not np.isfinite(outward_norm) or outward_norm <= 0.0:
+        raise ValueError("high-plane outward direction is invalid")
+    outward /= outward_norm
+
+    required_initial_action_xy = (
+        high_lateral_target[:2] - initial_eef[:2]
+    ) / position_action_scale
+    native_outward_corner = np.where(
+        outward >= 0.0,
+        native_high[:2],
+        native_low[:2],
+    )
+    native_outward_action_bound = float(
+        np.dot(native_outward_corner, outward)
+    )
+    required_initial_outward_action = float(
+        np.dot(required_initial_action_xy, outward)
+    )
+    clipped_axes = [
+        int(axis)
+        for axis in range(2)
+        if (
+            required_initial_action_xy[axis] < native_low[axis]
+            or required_initial_action_xy[axis] > native_high[axis]
+        )
+    ]
+    bounded_initial_action_xy = np.clip(
+        required_initial_action_xy,
+        native_low[:2],
+        native_high[:2],
+    )
+    target_requires_native_clipping = bool(
+        clipped_axes
+        and required_initial_outward_action > native_outward_action_bound
+    )
+    target_outward_of_native_outside = float(
+        np.dot(
+            high_lateral_target[:2] - native_outside_high_target[:2],
+            outward,
+        )
+    )
+
+    window = list(observations)[-int(required_window_frames) :]
+    summaries = []
+    for offset, observation in enumerate(window):
+        before_eef = np.asarray(observation["before_eef"], dtype=float)
+        after_eef = np.asarray(observation["after_eef"], dtype=float)
+        action = np.asarray(observation["action"], dtype=float)
+        envelope = observation["high_plane_envelope"]
+        pre_overhead_guard = observation["pre_overhead_guard"]
+        post_overhead_guard = observation["post_overhead_guard"]
+        before_outside_guard = observation["before_outside_guard"]
+        after_outside_guard = observation["after_outside_guard"]
+        step_response = observation["step_response"]
+        if (
+            before_eef.shape != (3,)
+            or after_eef.shape != (3,)
+            or action.shape != (7,)
+            or not np.all(np.isfinite(before_eef))
+            or not np.all(np.isfinite(after_eef))
+            or not np.all(np.isfinite(action))
+        ):
+            raise ValueError(
+                "high-plane workspace-saturation observation is invalid"
+            )
+        commanded_outward_action = float(np.dot(action[:2], outward))
+        remaining_xy_error = float(
+            np.linalg.norm(high_lateral_target[:2] - before_eef[:2])
+        )
+        remaining_outward_error = float(
+            np.dot(high_lateral_target[:2] - before_eef[:2], outward)
+        )
+        eef_outward_progress = float(
+            step_response["eef_outward_step_progress_m"]
+        )
+        clearance_progress = float(
+            step_response["outside_clearance_step_progress_m"]
+        )
+        pre_pairs = list(pre_overhead_guard.get("pairs", ()))
+        post_pairs = list(post_overhead_guard.get("pairs", ()))
+        envelope_pairs = list(envelope.get("pair_envelopes", ()))
+        pre_identities = [_overhead_pair_identity(pair) for pair in pre_pairs]
+        post_identities = [
+            _overhead_pair_identity(pair) for pair in post_pairs
+        ]
+        envelope_identities = [
+            tuple(identity) for identity in envelope.get("pair_identity_keys", ())
+        ]
+        pair_inventory_exact = bool(
+            len(pre_pairs) == int(expected_pair_count)
+            and len(post_pairs) == int(expected_pair_count)
+            and len(envelope_pairs) == int(expected_pair_count)
+            and len(set(pre_identities)) == int(expected_pair_count)
+            and pre_identities == post_identities == envelope_identities
+        )
+        all_pair_base8_strict = bool(
+            pair_inventory_exact
+            and pre_overhead_guard.get("accepted", False)
+            and post_overhead_guard.get("accepted", False)
+            and envelope.get("accepted", False)
+            and all(pair.get("accepted", False) for pair in pre_pairs)
+            and all(pair.get("accepted", False) for pair in post_pairs)
+            and all(
+                float(
+                    pair[
+                        "predicted_post_worst_case_base_reserve_surplus_m"
+                    ]
+                )
+                > 0.0
+                for pair in envelope_pairs
+            )
+        )
+        before_clearance = float(
+            before_outside_guard["minimum_outside_clearance_m"]
+        )
+        after_clearance = float(
+            after_outside_guard["minimum_outside_clearance_m"]
+        )
+        required_outside_clearance = float(
+            after_outside_guard["required_outside_clearance_m"]
+        )
+        finite_scalars = all(
+            np.isfinite(value)
+            for value in (
+                commanded_outward_action,
+                remaining_xy_error,
+                remaining_outward_error,
+                eef_outward_progress,
+                clearance_progress,
+                before_clearance,
+                after_clearance,
+                required_outside_clearance,
+            )
+        )
+        summaries.append(
+            {
+                "window_offset": int(offset),
+                "commanded_outward_action": commanded_outward_action,
+                "remaining_xy_error_m": remaining_xy_error,
+                "remaining_outward_error_m": remaining_outward_error,
+                "eef_outward_step_progress_m": eef_outward_progress,
+                "outside_clearance_step_progress_m": clearance_progress,
+                "before_outside_clearance_m": before_clearance,
+                "after_outside_clearance_m": after_clearance,
+                "required_outside_clearance_m": required_outside_clearance,
+                "persistent_outward_request": bool(
+                    commanded_outward_action > 0.0
+                    and remaining_outward_error > 0.0
+                    and remaining_xy_error > position_tolerance
+                    and np.array_equal(
+                        np.asarray(envelope["lateral_target_xy"], dtype=float),
+                        high_lateral_target[:2],
+                    )
+                    and action[2] >= 0.0
+                    and np.all(action[3:6] == 0.0)
+                ),
+                "eef_step_below_existing_progress_epsilon": bool(
+                    abs(eef_outward_progress) <= progress_epsilon
+                ),
+                "clearance_step_below_existing_progress_epsilon": bool(
+                    abs(clearance_progress) <= progress_epsilon
+                ),
+                "pair_inventory_exact": pair_inventory_exact,
+                "all_55_pair_high_plane_base8_strict": (
+                    all_pair_base8_strict
+                ),
+                "finite": finite_scalars,
+            }
+        )
+
+    window_complete = len(window) == int(required_window_frames)
+    if summaries:
+        first_before_eef = np.asarray(window[0]["before_eef"], dtype=float)
+        last_after_eef = np.asarray(window[-1]["after_eef"], dtype=float)
+        net_eef_outward_progress = float(
+            np.dot(last_after_eef[:2] - first_before_eef[:2], outward)
+        )
+        first_before_clearance = float(
+            window[0]["before_outside_guard"][
+                "minimum_outside_clearance_m"
+            ]
+        )
+        last_after_clearance = float(
+            window[-1]["after_outside_guard"][
+                "minimum_outside_clearance_m"
+            ]
+        )
+        net_clearance_progress = float(
+            last_after_clearance - first_before_clearance
+        )
+        actual_outward_beyond_native_outside = float(
+            np.dot(
+                last_after_eef[:2] - native_outside_high_target[:2],
+                outward,
+            )
+        )
+        final_required_outside_clearance = float(
+            window[-1]["after_outside_guard"][
+                "required_outside_clearance_m"
+            ]
+        )
+    else:
+        net_eef_outward_progress = float("inf")
+        net_clearance_progress = float("inf")
+        actual_outward_beyond_native_outside = float("-inf")
+        last_after_clearance = float("-inf")
+        final_required_outside_clearance = float("inf")
+    violations = []
+    if not target_requires_native_clipping:
+        violations.append("registered_high_target_not_native_action_clipped")
+    if target_outward_of_native_outside <= 0.0:
+        violations.append("registered_high_target_not_outward_of_native_target")
+    if not window_complete:
+        violations.append("saturation_observation_window_incomplete")
+    if not all(summary["finite"] for summary in summaries):
+        violations.append("saturation_observation_nonfinite")
+    if not all(summary["persistent_outward_request"] for summary in summaries):
+        violations.append("outward_request_not_persistent")
+    if not all(
+        summary["eef_step_below_existing_progress_epsilon"]
+        for summary in summaries
+    ):
+        violations.append("eef_outward_step_not_saturated")
+    if not all(
+        summary["clearance_step_below_existing_progress_epsilon"]
+        for summary in summaries
+    ):
+        violations.append("outside_clearance_step_not_saturated")
+    if abs(net_eef_outward_progress) > progress_epsilon:
+        violations.append("window_net_eef_outward_progress_not_saturated")
+    if abs(net_clearance_progress) > progress_epsilon:
+        violations.append("window_net_clearance_progress_not_saturated")
+    if not all(
+        summary["all_55_pair_high_plane_base8_strict"]
+        for summary in summaries
+    ):
+        violations.append("all_55_pair_high_plane_base8_not_strict")
+    if actual_outward_beyond_native_outside <= 0.0:
+        violations.append("actual_eef_not_outward_of_native_outside_target")
+    if last_after_clearance <= final_required_outside_clearance:
+        violations.append("actual_outside_clearance_not_strict")
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "decision": (
+            "native_high_workspace_saturated_at_actual_reachable_boundary"
+            if not violations
+            else "continue_fail_closed_high_plane_request"
+        ),
+        "formula": (
+            "over the existing push_tracking_steps window, require every "
+            "high-plane action to request the registered target outward while "
+            "both signed EEF and live-clearance step responses and their net "
+            "window responses remain within the existing "
+            "minimum_saturated_waypoint_progress; also require the registered "
+            "target's initial action to exceed the runtime native outward "
+            "bound, the actual EEF to lie strictly outward of the unchanged "
+            "native outside-high target, and every pre/envelope/post compiled "
+            "pair to retain strict high-plane base8"
+        ),
+        "progress_epsilon_m": float(progress_epsilon),
+        "progress_epsilon_source": "minimum_saturated_waypoint_progress",
+        "required_window_frames": int(required_window_frames),
+        "required_window_source": "push_tracking_steps",
+        "observed_window_frames": len(window),
+        "window_complete": window_complete,
+        "initial_eef": initial_eef.tolist(),
+        "native_outside_high_target": native_outside_high_target.tolist(),
+        "registered_high_lateral_target": high_lateral_target.tolist(),
+        "outward_direction_xy": outward.tolist(),
+        "required_initial_action_xy": required_initial_action_xy.tolist(),
+        "bounded_initial_action_xy": bounded_initial_action_xy.tolist(),
+        "native_outward_action_bound": native_outward_action_bound,
+        "required_initial_outward_action": required_initial_outward_action,
+        "bounded_action_clipped_axes": clipped_axes,
+        "registered_target_requires_native_clipping": (
+            target_requires_native_clipping
+        ),
+        "registered_target_outward_of_native_target_m": (
+            target_outward_of_native_outside
+        ),
+        "window_net_eef_outward_progress_m": net_eef_outward_progress,
+        "window_net_outside_clearance_progress_m": net_clearance_progress,
+        "actual_eef_outward_of_native_outside_target_m": (
+            actual_outward_beyond_native_outside
+        ),
+        "actual_minimum_outside_clearance_m": last_after_clearance,
+        "required_outside_clearance_m": final_required_outside_clearance,
+        "compiled_pair_count": int(expected_pair_count),
+        "frames": summaries,
+    }
+
+
 def _overhead_lateral_interlock_evidence(
     lateral_buffer,
     *,
@@ -6199,6 +6546,22 @@ def _seek_stable_plate_contact(
                 "strict required clearance, and the existing maximum "
                 "controller world step"
             ),
+            "native_high_workspace_saturation_gate": {
+                "progress_epsilon_m": float(
+                    args.minimum_saturated_waypoint_progress
+                ),
+                "progress_epsilon_source": (
+                    "minimum_saturated_waypoint_progress"
+                ),
+                "required_window_frames": int(args.push_tracking_steps),
+                "required_window_source": "push_tracking_steps",
+                "native_action_bounds_source": native_action_spec["source"],
+                "required_compiled_pair_count": (
+                    expected_overhead_pair_count
+                ),
+                "position_tolerance_m": float(args.position_tolerance),
+                "position_tolerance_is_unchanged": True,
+            },
             "corridor_adaptive_descent_target": (
                 corridor_high_target.tolist()
             ),
@@ -6222,7 +6585,14 @@ def _seek_stable_plate_contact(
                 "redefining the native outside-high target; only after that "
                 "target passes, command residual outward XY plus nonpositive Z "
                 "toward the same strict corridor XY and outside-side Z to "
-                "release the high workspace; "
+                "release the high workspace; if that registered target is "
+                "outside the runtime native action bound, permit the same "
+                "release only after the existing push-tracking window proves "
+                "persistent outward requests with EEF and live-clearance "
+                "responses within the existing saturated-waypoint progress "
+                "epsilon, the actual EEF lies strictly beyond the unchanged "
+                "native outside-high target, and all 55 high-plane pre/post "
+                "base8 checks remain strict; "
                 "if the latest negative-dz inertia exhausts diagonal downward "
                 "capacity, prohibit negative Z and issue a 55-pair-proved pure "
                 "+Z recovery before recomputing the diagonal; "
@@ -6316,6 +6686,7 @@ def _seek_stable_plate_contact(
     latest_vertical_step_progress_m = 0.0
     lateral_resume_stage = None
     vertical_tail_events = []
+    high_plane_workspace_saturation_observations = []
     fixed_safe_z = None
     structural_stage_action_counts = {
         "overhead_high_corridor_lateral": 0,
@@ -6975,16 +7346,77 @@ def _seek_stable_plate_contact(
             feedback["outside_high_entry_after_high_lateral"] = (
                 outside_high_entry
             )
+            high_plane_workspace_saturation_observations.append(
+                {
+                    "before_eef": current_eef.copy(),
+                    "after_eef": after_eef.copy(),
+                    "action": action.copy(),
+                    "high_plane_envelope": path_control,
+                    "pre_overhead_guard": feedback[
+                        "pre_action_overhead_guard"
+                    ],
+                    "post_overhead_guard": latest_overhead_guard,
+                    "before_outside_guard": pre_action_guard,
+                    "after_outside_guard": latest_outside_side_guard,
+                    "step_response": current_step_response,
+                }
+            )
+            high_plane_workspace_saturation_observations[:] = (
+                high_plane_workspace_saturation_observations[
+                    -int(args.push_tracking_steps) :
+                ]
+            )
+            workspace_saturation = (
+                _high_plane_native_workspace_saturation_evidence(
+                    observations=(
+                        high_plane_workspace_saturation_observations
+                    ),
+                    initial_eef=initial_eef,
+                    high_lateral_target=high_lateral_prebuffer_target,
+                    native_outside_high_target=(
+                        overhead_outside_high_target
+                    ),
+                    outward_direction_xy=geometry[
+                        "outward_direction_xy"
+                    ],
+                    position_action_scale=args.position_action_scale,
+                    position_tolerance=args.position_tolerance,
+                    progress_epsilon=(
+                        args.minimum_saturated_waypoint_progress
+                    ),
+                    required_window_frames=args.push_tracking_steps,
+                    native_action_spec=native_action_spec,
+                    expected_pair_count=expected_overhead_pair_count,
+                )
+            )
+            feedback["high_plane_native_workspace_saturation"] = (
+                workspace_saturation
+            )
             if outside_high_entry["accepted"]:
                 structural_stage = "workspace_release_diagonal"
                 vertical_tail_events.append(
                     {
                         "guard_step": int(guard_step),
                         "event": (
-                            "reachable_outside_high_complete_to_workspace_"
-                            "release_diagonal"
+                            "registered_corridor_high_tolerance_complete_to_"
+                            "workspace_release_diagonal"
                         ),
                         **outside_high_entry,
+                    }
+                )
+            elif workspace_saturation["accepted"]:
+                structural_stage = "workspace_release_diagonal"
+                structural_seek_context[
+                    "accepted_native_high_workspace_saturation_boundary"
+                ] = workspace_saturation
+                vertical_tail_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        "event": (
+                            "proved_native_high_workspace_saturation_to_"
+                            "adaptive_workspace_release"
+                        ),
+                        **workspace_saturation,
                     }
                 )
         elif stage_before_action == "workspace_release_diagonal":
@@ -7877,6 +8309,8 @@ def generate(args):
         raise ValueError(
             "--minimum_saturated_waypoint_progress must be positive"
         )
+    if args.push_tracking_steps < 1:
+        raise ValueError("--push_tracking_steps must be positive")
     if args.maximum_push_iterations < 1:
         raise ValueError("--maximum_push_iterations must be positive")
     if args.maximum_recontact_attempts < 1:
