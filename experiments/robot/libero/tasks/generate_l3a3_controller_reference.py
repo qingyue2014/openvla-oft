@@ -5129,6 +5129,276 @@ def _fixed_z_lateral_approach_action(
     }
 
 
+def _fixed_safe_z_lateral_hold_action(
+    *,
+    current_eef,
+    lateral_target_xy,
+    fixed_safe_z_m,
+    measured_vertical_step_progress_m,
+    outside_side_guard,
+    outward_direction_xy,
+    gripper,
+    position_action_scale,
+    maximum_lateral_translation_action,
+    maximum_safety_brake_action,
+    strict_outside_clearance_m,
+    strict_table_clearance_m,
+    closed_loop_hazard_response_bound_m,
+    progress_resolution_m,
+    derivative_gain,
+    native_action_spec,
+):
+    """Hold the captured safe Z throughout the final lateral return."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    lateral_target_xy = np.asarray(lateral_target_xy, dtype=float)
+    outward_direction_xy = np.asarray(
+        outward_direction_xy, dtype=float
+    )
+    native_low = np.asarray(native_action_spec.get("low", ()), dtype=float)
+    native_high = np.asarray(native_action_spec.get("high", ()), dtype=float)
+    outward_norm = float(np.linalg.norm(outward_direction_xy))
+    scalars = (
+        fixed_safe_z_m,
+        measured_vertical_step_progress_m,
+        position_action_scale,
+        maximum_lateral_translation_action,
+        maximum_safety_brake_action,
+        strict_outside_clearance_m,
+        strict_table_clearance_m,
+        closed_loop_hazard_response_bound_m,
+        progress_resolution_m,
+        derivative_gain,
+    )
+    if (
+        current_eef.shape != (3,)
+        or lateral_target_xy.shape != (2,)
+        or outward_direction_xy.shape != (2,)
+        or not np.all(np.isfinite(current_eef))
+        or not np.all(np.isfinite(lateral_target_xy))
+        or not np.all(np.isfinite(outward_direction_xy))
+        or not np.isfinite(outward_norm)
+        or outward_norm <= 0.0
+        or not all(np.isfinite(value) for value in scalars)
+        or position_action_scale <= 0.0
+        or not 0.0 < maximum_lateral_translation_action < (
+            maximum_safety_brake_action
+        )
+        or maximum_safety_brake_action > 1.0
+        or min(
+            strict_outside_clearance_m,
+            strict_table_clearance_m,
+            closed_loop_hazard_response_bound_m,
+            progress_resolution_m,
+            derivative_gain,
+        )
+        <= 0.0
+        or not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+    ):
+        raise ValueError("fixed-safe-Z lateral-hold inputs are invalid")
+    outward_direction_xy = outward_direction_xy / outward_norm
+    live_outside_clearance = float(
+        outside_side_guard["minimum_outside_clearance_m"]
+    )
+    required_outside_clearance = float(
+        outside_side_guard["required_outside_clearance_m"]
+    )
+    live_table_clearance = float(
+        outside_side_guard["finger_table_vertical_clearance_m"]
+    )
+    required_table_clearance = float(
+        outside_side_guard["required_finger_table_clearance_m"]
+    )
+    outside_recovery_clearance = float(
+        max(
+            required_outside_clearance,
+            strict_outside_clearance_m
+            + closed_loop_hazard_response_bound_m,
+        )
+    )
+    table_recovery_clearance = float(
+        max(
+            required_table_clearance,
+            strict_table_clearance_m
+            + closed_loop_hazard_response_bound_m,
+        )
+    )
+    if not (
+        np.isfinite(live_outside_clearance)
+        and np.isfinite(required_outside_clearance)
+        and live_outside_clearance > required_outside_clearance
+        and np.isfinite(live_table_clearance)
+        and np.isfinite(required_table_clearance)
+        and live_table_clearance > required_table_clearance
+    ):
+        raise RuntimeError(
+            "fixed-safe-Z lateral hold lacks its live physical reserve"
+        )
+    strict_lateral_bound = float(
+        np.nextafter(maximum_lateral_translation_action, 0.0)
+    )
+    strict_safety_brake_bound = float(
+        np.nextafter(maximum_safety_brake_action, 0.0)
+    )
+    requested_xy_action = (
+        lateral_target_xy - current_eef[:2]
+    ) / position_action_scale
+    requested_xy_norm = float(np.linalg.norm(requested_xy_action))
+    if requested_xy_norm > strict_lateral_bound:
+        commanded_xy_action = (
+            requested_xy_action
+            * strict_lateral_bound
+            / requested_xy_norm
+        )
+    else:
+        commanded_xy_action = requested_xy_action.copy()
+    predicted_outside_after_lateral = float(
+        live_outside_clearance
+        + position_action_scale
+        * np.dot(commanded_xy_action, outward_direction_xy)
+    )
+    outside_recovery_active = bool(
+        live_outside_clearance <= outside_recovery_clearance
+        or predicted_outside_after_lateral <= outside_recovery_clearance
+    )
+    if outside_recovery_active:
+        commanded_xy_action = (
+            outward_direction_xy * strict_safety_brake_bound
+        )
+
+    position_error_m = float(fixed_safe_z_m - current_eef[2])
+    requested_vertical_world_delta_m = float(
+        position_error_m
+        - derivative_gain * measured_vertical_step_progress_m
+    )
+    requested_z_action = float(
+        requested_vertical_world_delta_m / position_action_scale
+    )
+    downward_tail_brake_active = bool(
+        measured_vertical_step_progress_m < -progress_resolution_m
+    )
+    table_recovery_active = bool(
+        live_table_clearance <= table_recovery_clearance
+    )
+    if downward_tail_brake_active or table_recovery_active:
+        commanded_z_action = strict_safety_brake_bound
+    else:
+        commanded_z_action = float(
+            np.clip(
+                requested_z_action,
+                -strict_safety_brake_bound,
+                strict_safety_brake_bound,
+            )
+        )
+    available_downward_world_step = float(
+        live_table_clearance - strict_table_clearance_m
+    )
+    maximum_safe_negative_z_action = float(
+        max(
+            0.0,
+            min(
+                strict_safety_brake_bound,
+                0.5
+                * available_downward_world_step
+                / position_action_scale,
+            ),
+        )
+    )
+    if commanded_z_action < -maximum_safe_negative_z_action:
+        commanded_z_action = -maximum_safe_negative_z_action
+
+    action = np.zeros(7, dtype=float)
+    action[:2] = commanded_xy_action
+    action[2] = commanded_z_action
+    action[-1] = float(gripper)
+    translation_norm = float(np.linalg.norm(action[:3]))
+    predicted_outside_clearance = float(
+        live_outside_clearance
+        + position_action_scale
+        * np.dot(action[:2], outward_direction_xy)
+    )
+    predicted_table_clearance = float(
+        live_table_clearance
+        + position_action_scale * action[2]
+    )
+    native_translation_norm_bound = float(
+        min(
+            -native_low[0],
+            native_high[0],
+            -native_low[1],
+            native_high[1],
+            -native_low[2],
+            native_high[2],
+        )
+    )
+    if not (
+        predicted_outside_clearance > strict_outside_clearance_m
+        and predicted_table_clearance > strict_table_clearance_m
+        and translation_norm < native_translation_norm_bound
+        and np.all(action >= native_low)
+        and np.all(action <= native_high)
+    ):
+        raise RuntimeError(
+            "fixed-safe-Z lateral hold violates its nominal live proof"
+        )
+    return action, {
+        "formula": (
+            "retain the unchanged strict lateral-return bound while a "
+            "position-plus-velocity Z hold independently uses the existing "
+            "structural positive-Z brake authority; suspend inward return "
+            "and use the same authority outward before live reserve is spent"
+        ),
+        "current_eef": current_eef.tolist(),
+        "lateral_target_xy": lateral_target_xy.tolist(),
+        "fixed_safe_z_m": float(fixed_safe_z_m),
+        "position_error_m": position_error_m,
+        "measured_vertical_step_progress_m": float(
+            measured_vertical_step_progress_m
+        ),
+        "progress_resolution_m": float(progress_resolution_m),
+        "derivative_gain": float(derivative_gain),
+        "requested_xy_action": requested_xy_action.tolist(),
+        "requested_xy_action_norm": requested_xy_norm,
+        "requested_vertical_world_delta_m": (
+            requested_vertical_world_delta_m
+        ),
+        "requested_z_action": requested_z_action,
+        "commanded_xy_action": action[:2].tolist(),
+        "commanded_z_action": float(action[2]),
+        "commanded_translation_action_norm": translation_norm,
+        "maximum_lateral_translation_action": float(
+            maximum_lateral_translation_action
+        ),
+        "maximum_safety_brake_action": float(
+            maximum_safety_brake_action
+        ),
+        "live_outside_clearance_m": live_outside_clearance,
+        "outside_recovery_clearance_m": outside_recovery_clearance,
+        "predicted_outside_clearance_m": predicted_outside_clearance,
+        "outside_recovery_active": outside_recovery_active,
+        "live_table_clearance_m": live_table_clearance,
+        "table_recovery_clearance_m": table_recovery_clearance,
+        "predicted_table_clearance_m": predicted_table_clearance,
+        "table_recovery_active": table_recovery_active,
+        "downward_tail_brake_active": downward_tail_brake_active,
+        "maximum_safe_negative_z_action": (
+            maximum_safe_negative_z_action
+        ),
+        "native_action_spec_source": native_action_spec.get("source"),
+        "proof": {
+            "lateral_return_bound_unchanged": True,
+            "fixed_safe_z_held_during_every_lateral_frame": True,
+            "downward_tail_uses_full_existing_positive_z_brake": True,
+            "low_outside_reserve_suspends_inward_return": True,
+            "negative_z_uses_at_most_half_live_table_reserve": True,
+            "strictly_inside_runtime_native_translation_norm": True,
+            "post_action_live_guards_required": True,
+        },
+    }
+
+
 def _native_osc_action_spec_evidence(env):
     """Resolve the live environment's native 7-D action bounds or fail closed."""
     queue = [(env, "env")]
@@ -14784,6 +15054,13 @@ def _seek_stable_plate_contact(
     vertical_tail_events = []
     high_plane_workspace_saturation_observations = []
     fixed_safe_z = None
+    fixed_safe_z_stable_count = 0
+    fixed_safe_z_required_stable_count = 2
+    fixed_safe_z_position_tolerance = float(
+        vertical_staging_corridor[
+            "strict_corridor_entry_clearance_m"
+        ]
+    )
     structural_stage_action_counts = {
         "right_high_lateral": 0,
         "right_high_trailing_pass": 0,
@@ -15008,7 +15285,34 @@ def _seek_stable_plate_contact(
                     - np.asarray(outside_side_target, dtype=float)[:2]
                 )
             )
-            if lateral_error <= args.position_tolerance:
+            fixed_safe_z_error = float(
+                abs(current_eef[2] - float(fixed_safe_z))
+            )
+            fixed_safe_z_instantaneous_stable = bool(
+                lateral_error <= args.position_tolerance
+                and fixed_safe_z_error
+                <= fixed_safe_z_position_tolerance
+                and abs(latest_vertical_step_progress_m)
+                <= args.minimum_saturated_waypoint_progress
+                and pre_action_guard["minimum_outside_clearance_m"]
+                > vertical_corridor_reserve_recovery_entry_clearance
+                and pre_action_guard[
+                    "finger_table_vertical_clearance_m"
+                ]
+                > (
+                    fixed_safe_z_position_tolerance
+                    + vertical_corridor_closed_loop_inward_response_bound
+                )
+            )
+            fixed_safe_z_stable_count = (
+                fixed_safe_z_stable_count + 1
+                if fixed_safe_z_instantaneous_stable
+                else 0
+            )
+            if (
+                fixed_safe_z_stable_count
+                >= fixed_safe_z_required_stable_count
+            ):
                 if not pre_action_guard["accepted"]:
                     raise RuntimeError(
                         "fixed-safe-Z lateral approach reached the compiled "
@@ -16001,20 +16305,51 @@ def _seek_stable_plate_contact(
                 ),
             }
         elif structural_stage == "fixed_safe_z_lateral_approach":
-            action, path_control = _fixed_z_lateral_approach_action(
+            action, path_control = _fixed_safe_z_lateral_hold_action(
                 current_eef=current_eef,
                 lateral_target_xy=np.asarray(
                     outside_side_target, dtype=float
                 )[:2],
+                fixed_safe_z_m=fixed_safe_z,
+                measured_vertical_step_progress_m=(
+                    latest_vertical_step_progress_m
+                ),
+                outside_side_guard=pre_action_guard,
+                outward_direction_xy=corridor_outward_direction,
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
-                maximum_translation_action=structural_max_translation_action,
+                maximum_lateral_translation_action=(
+                    structural_max_translation_action
+                ),
+                maximum_safety_brake_action=(
+                    vertical_corridor_outward_hold_max_translation_action
+                ),
+                strict_outside_clearance_m=(
+                    fixed_safe_z_position_tolerance
+                ),
+                strict_table_clearance_m=(
+                    fixed_safe_z_position_tolerance
+                ),
+                closed_loop_hazard_response_bound_m=(
+                    vertical_corridor_closed_loop_inward_response_bound
+                ),
+                progress_resolution_m=(
+                    args.minimum_saturated_waypoint_progress
+                ),
+                derivative_gain=2.0,
+                native_action_spec=native_action_spec,
             )
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
                 "fixed_z_lateral_path_control": path_control,
                 "fixed_safe_z_m": float(fixed_safe_z),
+                "fixed_safe_z_stable_count": int(
+                    fixed_safe_z_stable_count
+                ),
+                "fixed_safe_z_required_stable_count": int(
+                    fixed_safe_z_required_stable_count
+                ),
             }
         else:
             raise RuntimeError(
@@ -17139,6 +17474,7 @@ def _seek_stable_plate_contact(
         if stage_before_action in {
             "vertical_corridor_descent",
             "vertical_corridor_settle",
+            "fixed_safe_z_lateral_approach",
         } and (
             latest_outside_side_guard[
                 "minimum_outside_clearance_m"
@@ -17149,6 +17485,16 @@ def _seek_stable_plate_contact(
         ):
             structural_violations.append(
                 "one_controller_step_corridor_reserve_lost"
+            )
+        if (
+            stage_before_action == "fixed_safe_z_lateral_approach"
+            and latest_outside_side_guard[
+                "finger_table_vertical_clearance_m"
+            ]
+            <= fixed_safe_z_position_tolerance
+        ):
+            structural_violations.append(
+                "fixed_safe_z_strict_table_reserve_lost"
             )
         if (
             stage_before_action == "fixed_safe_z_lateral_approach"

@@ -203,6 +203,22 @@ step (`8 mm`); all remaining strict 3-D norm stays on the registered outward
 axis. This is a controller-only recovery envelope: it does not relax the live
 outside-side acceptance threshold, table threshold, contact definition, task,
 or formal evaluation criteria.
+Job503456 showed that allocating actions inside the later contact-seek
+stabilizer was still too late: by its fifth frame the inherited downward tail
+was `1.479 mm/frame`, and a pure outward action ended with only `0.385 mm`
+finger-table clearance. The upstream `fixed_safe_z_lateral_approach` had been
+holding commanded Z at zero during roughly forty small inward lateral-return
+frames, despite its recorded safe-Z anchor. That stage now closes the loop on
+the recorded anchor with the same position-minus-two-times-response formula.
+Its inward XY component retains the unchanged strict `0.005` bound. A measured
+downward tail or low table reserve independently receives the existing `0.20`
+positive-Z structural brake, while a predicted outside-reserve deficit
+suspends the inward return and applies the same existing `0.20` authority on
+the registered outward axis. The combined action remains strictly within the
+runtime-native 3-D norm. The stage cannot release until lateral position,
+safe-Z error, and vertical response pass for two consecutive frames with both
+outside and table recovery headroom. The later `0.10` contact-seek stabilizer
+remains as a redundant live gate.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
