@@ -3097,6 +3097,8 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         'structural_stage = "vertical_tail_zero_confirmation"'
         in brake_transition
     )
+    assert "previous_active_translation_action / 2.0" in brake_transition
+    assert "structural_max_translation_action" in brake_transition
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
     assert (
         'elif structural_stage == "vertical_tail_zero_confirmation"'
@@ -3363,7 +3365,7 @@ def test_500161_adaptive_descent_uses_native_bound_then_tightens_near_base8():
     assert "_compiled_adaptive_vertical_descent_action(" in descent_branch
     assert (
         "maximum_translation_action=(\n"
-        "                        overhead_descent_max_translation_action"
+        "                        active_overhead_descent_translation_action"
         in descent_branch
     )
     assert "event_driven_brake_trigger_buffer_m" in descent_branch
@@ -3701,7 +3703,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         'if structural_stage == "overhead_corridor_descent":', 1
     )[1].split('elif structural_stage == "vertical_tail_brake":', 1)[0]
     assert "_compiled_adaptive_vertical_descent_action(" in descent_action
-    assert "overhead_descent_max_translation_action" in descent_action
+    assert "active_overhead_descent_translation_action" in descent_action
     assert "_fixed_z_lateral_approach_action(" not in descent_action
     descent_transition = bounded_seek.split(
         'elif stage_before_action == "overhead_corridor_descent":', 1
@@ -7310,7 +7312,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert (
         '"--structural_near_plate_max_translation_action",\n'
         "        type=float,\n"
-        "        default=0.005,"
+        "        default=0.05,"
         in producer
     )
     assert (
