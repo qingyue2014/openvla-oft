@@ -3729,6 +3729,7 @@ def _translated_swept_clearance(
     cached_witness_attempted = False
     cached_witness_rejected = False
     cached_witness_clearance = None
+    cached_witness_status = "not_provided"
 
     def limiting_record(
         sample_index,
@@ -3770,22 +3771,47 @@ def _translated_swept_clearance(
     if (
         stop_at_or_below is not None
         and isinstance(cached_rejection_witness, dict)
-        and int(
-            cached_rejection_witness.get("sample_intervals", -1)
-        )
-        == intervals
     ):
-        cached_pair = (
-            int(cached_rejection_witness.get("moving_geom_id", -1)),
-            int(cached_rejection_witness.get("fixture_geom_id", -1)),
-        )
-        cached_sample_index = int(
-            cached_rejection_witness.get("sample_index", -1)
-        )
-        if (
-            cached_pair in compatible_geom_pairs
-            and 0 <= cached_sample_index < len(fractions)
-        ):
+        try:
+            cached_sample_intervals = int(
+                cached_rejection_witness.get("sample_intervals", -1)
+            )
+        except (TypeError, ValueError):
+            cached_sample_intervals = -1
+        if cached_sample_intervals != intervals:
+            cached_witness_status = "interval_mismatch"
+        else:
+            try:
+                cached_pair = (
+                    int(
+                        cached_rejection_witness.get(
+                            "moving_geom_id", -1
+                        )
+                    ),
+                    int(
+                        cached_rejection_witness.get(
+                            "fixture_geom_id", -1
+                        )
+                    ),
+                )
+            except (TypeError, ValueError):
+                cached_pair = (-1, -1)
+            if cached_pair not in compatible_geom_pairs:
+                cached_witness_status = "pair_missing"
+            else:
+                try:
+                    cached_sample_index = int(
+                        cached_rejection_witness.get(
+                            "sample_index", -1
+                        )
+                    )
+                except (TypeError, ValueError):
+                    cached_sample_index = -1
+                if not 0 <= cached_sample_index < len(fractions):
+                    cached_witness_status = "sample_invalid"
+                else:
+                    cached_witness_status = "exact_above_threshold"
+        if cached_witness_status == "exact_above_threshold":
             cached_witness_attempted = True
             fraction = fractions[cached_sample_index]
             translated_position = (
@@ -3827,6 +3853,7 @@ def _translated_swept_clearance(
             exact_pair_clearances_computed += 1
             cached_witness_clearance = float(clearance)
             if clearance <= float(stop_at_or_below):
+                cached_witness_status = "exact_reject"
                 cached_witness_rejected = True
                 threshold_rejection_seen = True
                 compatible_pairs = 1
@@ -4029,8 +4056,10 @@ def _translated_swept_clearance(
         "cached_rejection_witness_clearance_m": (
             cached_witness_clearance
         ),
+        "cached_rejection_witness_status": cached_witness_status,
         "cached_rejection_witness_fell_back_to_full_sweep": bool(
-            cached_witness_attempted and not cached_witness_rejected
+            cached_witness_status
+            not in ("not_provided", "exact_reject")
         ),
         "minimum_clearance_m": minimum,
         "threshold_fail_fast_m": (
@@ -4559,7 +4588,15 @@ def _compiled_target_grasp_clearance(
         f"{compiled_mesh_box_pair_count}",
         flush=True,
     )
-    rejection_witness_by_sweep = {}
+    rejection_witness_by_lane = {}
+    witness_status_names = (
+        "not_provided",
+        "interval_mismatch",
+        "pair_missing",
+        "sample_invalid",
+        "exact_reject",
+        "exact_above_threshold",
+    )
     prefilter_counters = {
         "candidates_total": int(total_candidates),
         "candidates_evaluated": 0,
@@ -4574,6 +4611,9 @@ def _compiled_target_grasp_clearance(
         "cached_rejection_witness_attempts": 0,
         "cached_rejection_witness_rejections": 0,
         "cached_rejection_witness_full_fallbacks": 0,
+        "cached_rejection_witness_status_counts": {
+            status: 0 for status in witness_status_names
+        },
     }
     for candidate_index, candidate_spec in enumerate(
         ordered_candidate_specs
@@ -4678,15 +4718,18 @@ def _compiled_target_grasp_clearance(
                 sweep_end,
                 required_clearance,
             ) in sweep_specs:
-                prior_witness = rejection_witness_by_sweep.get(
-                    sweep_name
+                witness_lane = (
+                    str(candidate_spec["candidate_family"]),
+                    int(direction_index),
+                    str(sweep_name),
+                )
+                prior_witness = rejection_witness_by_lane.get(
+                    witness_lane
                 )
                 cached_rejection_witness = (
-                    prior_witness["witness"]
-                    if prior_witness is not None
-                    and prior_witness["candidate_index"]
-                    == candidate_index - 1
-                    else None
+                    None
+                    if prior_witness is None
+                    else prior_witness["witness"]
                 )
                 clearance, evidence = _translated_swept_clearance(
                     env,
@@ -4742,6 +4785,17 @@ def _compiled_target_grasp_clearance(
                         "cached_rejection_witness_fell_back_to_full_sweep"
                     ]
                 )
+                witness_status = evidence[
+                    "cached_rejection_witness_status"
+                ]
+                if witness_status not in witness_status_names:
+                    raise RuntimeError(
+                        "translated sweep returned an unknown cached "
+                        f"witness status: {witness_status!r}"
+                    )
+                prefilter_counters[
+                    "cached_rejection_witness_status_counts"
+                ][witness_status] += 1
                 if evidence["full_sweep_evaluated"]:
                     prefilter_counters["full_sweeps"] += 1
                     prefilter_counters[
@@ -4757,9 +4811,26 @@ def _compiled_target_grasp_clearance(
                 sweep_evidence[sweep_name] = evidence
                 if clearance <= required_clearance:
                     limiting_pair = evidence["limiting_pair"]
-                    rejection_witness_by_sweep[sweep_name] = {
+                    rejection_witness_by_lane[witness_lane] = {
                         "candidate_index": int(candidate_index),
+                        "candidate_family": str(
+                            candidate_spec["candidate_family"]
+                        ),
+                        "direction_index": int(direction_index),
+                        "offset_m": float(offset),
+                        "sweep_name": str(sweep_name),
                         "witness": {
+                            "source_candidate_index": int(
+                                candidate_index
+                            ),
+                            "source_candidate_family": str(
+                                candidate_spec["candidate_family"]
+                            ),
+                            "source_direction_index": int(
+                                direction_index
+                            ),
+                            "source_offset_m": float(offset),
+                            "source_sweep_name": str(sweep_name),
                             "sample_intervals": evidence[
                                 "sample_intervals"
                             ],
@@ -4776,7 +4847,7 @@ def _compiled_target_grasp_clearance(
                     }
                     rejection_stage = sweep_name
                     break
-                rejection_witness_by_sweep.pop(sweep_name, None)
+                rejection_witness_by_lane.pop(witness_lane, None)
             target_clearances = {
                 name: clearance_values[name]
                 for name in (
@@ -4856,7 +4927,14 @@ def _compiled_target_grasp_clearance(
             evaluated_sweep_names = set(sweep_evidence)
             for sweep_name in compiled_sweep_geometry_by_name:
                 if sweep_name not in evaluated_sweep_names:
-                    rejection_witness_by_sweep.pop(sweep_name, None)
+                    rejection_witness_by_lane.pop(
+                        (
+                            str(candidate_spec["candidate_family"]),
+                            int(direction_index),
+                            str(sweep_name),
+                        ),
+                        None,
+                    )
             prefilter_counters["candidates_evaluated"] = int(
                 candidate_index + 1
             )
@@ -4883,7 +4961,13 @@ def _compiled_target_grasp_clearance(
                     "witness="
                     f"{prefilter_counters['cached_rejection_witness_attempts']}/"
                     f"{prefilter_counters['cached_rejection_witness_rejections']}/"
-                    f"{prefilter_counters['cached_rejection_witness_full_fallbacks']}",
+                    f"{prefilter_counters['cached_rejection_witness_full_fallbacks']} "
+                    "witness_status="
+                    + ",".join(
+                        f"{status}:"
+                        f"{prefilter_counters['cached_rejection_witness_status_counts'][status]}"
+                        for status in witness_status_names
+                    ),
                     flush=True,
                 )
     if not geometry_passes:
@@ -4926,8 +5010,9 @@ def _compiled_target_grasp_clearance(
         },
         "prefilter_acceleration": {
             "witness_reuse_scope": (
-                "same sweep in the immediately preceding candidate only; "
-                "the exact canonical sample and geom pair are re-evaluated"
+                "same candidate phase, direction index, and sweep lane from "
+                "the preceding offset in that lane; the exact canonical "
+                "sample and geom pair are re-evaluated"
             ),
             "compiled_target_pair_count": len(
                 compiled_target_sweep_geometry[

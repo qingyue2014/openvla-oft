@@ -709,6 +709,9 @@ def test_l3a4_translated_sweep_fail_fast_preserves_threshold_decision():
     assert calls[0]["translation"] == pytest.approx([0.001, 0.0, 0.0])
     assert cached_evidence["cached_rejection_witness_attempted"] is True
     assert cached_evidence["cached_rejection_witness_rejected"] is True
+    assert cached_evidence["cached_rejection_witness_status"] == (
+        "exact_reject"
+    )
     assert cached_evidence["full_sweep_evaluated"] is False
 
     calls.clear()
@@ -731,6 +734,9 @@ def test_l3a4_translated_sweep_fail_fast_preserves_threshold_decision():
     assert passing_evidence[
         "cached_rejection_witness_fell_back_to_full_sweep"
     ] is True
+    assert passing_evidence["cached_rejection_witness_status"] == (
+        "exact_above_threshold"
+    )
 
     calls.clear()
     force_pass[0] = False
@@ -750,6 +756,52 @@ def test_l3a4_translated_sweep_fail_fast_preserves_threshold_decision():
     assert changed_grid_evidence[
         "cached_rejection_witness_attempted"
     ] is False
+    assert changed_grid_evidence["cached_rejection_witness_status"] == (
+        "interval_mismatch"
+    )
+    assert changed_grid_evidence[
+        "cached_rejection_witness_fell_back_to_full_sweep"
+    ] is True
+
+    malformed_witnesses = (
+        (
+            {
+                **witness,
+                "moving_geom_id": "missing",
+            },
+            "pair_missing",
+        ),
+        (
+            {
+                **witness,
+                "sample_index": "invalid",
+            },
+            "sample_invalid",
+        ),
+    )
+    for malformed_witness, expected_status in malformed_witnesses:
+        calls.clear()
+        malformed_minimum, malformed_evidence = sweep(
+            Env(),
+            [0],
+            [1],
+            np.zeros(3),
+            np.asarray([0.004, 0.0, 0.0]),
+            np.zeros(3),
+            stop_at_or_below=0.0,
+            compiled_geometry_cache=cache,
+            cached_rejection_witness=malformed_witness,
+        )
+        assert malformed_minimum == pytest.approx(-0.001)
+        assert malformed_evidence[
+            "cached_rejection_witness_status"
+        ] == expected_status
+        assert not malformed_evidence[
+            "cached_rejection_witness_attempted"
+        ]
+        assert malformed_evidence[
+            "cached_rejection_witness_fell_back_to_full_sweep"
+        ]
 
     calls.clear()
     full_minimum, full_evidence = sweep(
@@ -1355,6 +1407,8 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose(
                 "cache_id": id(compiled_geometry_cache),
                 "compiled_id": id(compiled_sweep_geometry),
                 "witness": cached_rejection_witness,
+                "start": start.tolist(),
+                "end": end.tolist(),
             }
         )
         if tuple(fixture_geoms) == (1,):
@@ -1371,6 +1425,13 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose(
             clearance = 0.020
         rejected = clearance <= float(stop_at_or_below)
         attempted = cached_rejection_witness is not None
+        witness_status = (
+            "exact_reject"
+            if attempted and rejected
+            else "exact_above_threshold"
+            if attempted
+            else "not_provided"
+        )
         compatible_pair_evaluations = 1 if rejected else 2
         return clearance, {
             "minimum_clearance_m": clearance,
@@ -1383,6 +1444,7 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose(
             "scalar_threshold_boundary_refinement_count": 0,
             "cached_rejection_witness_attempted": attempted,
             "cached_rejection_witness_rejected": attempted and rejected,
+            "cached_rejection_witness_status": witness_status,
             "cached_rejection_witness_fell_back_to_full_sweep": (
                 attempted and not rejected
             ),
@@ -1556,6 +1618,35 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose(
     assert first_candidate["record"]["skipped_sweeps"] == []
     assert len(geometry_candidates) >= 1
     legacy_phase_count = evidence["legacy_candidate_phase_count"]
+    offset_values = sorted(
+        {
+            record["outward_offset_m"]
+            for record in evidence["candidate_trace"]
+        }
+    )
+    direction_count = len(evidence["direction_candidates"])
+    expected_candidate_signature = [
+        (family, offset, direction_index)
+        for family, direction_start, direction_stop in (
+            ("legacy", 0, evidence["legacy_direction_count"]),
+            (
+                "native_site_floor_extension",
+                evidence["legacy_direction_count"],
+                direction_count,
+            ),
+        )
+        for offset in offset_values
+        for direction_index in range(direction_start, direction_stop)
+    ]
+    actual_candidate_signature = [
+        (
+            record.get("candidate_family", "legacy"),
+            record["outward_offset_m"],
+            record["direction_index"],
+        )
+        for record in evidence["candidate_trace"]
+    ]
+    assert actual_candidate_signature == expected_candidate_signature
     assert all(
         "candidate_family" not in record
         and "native_axis_provenance" not in record
@@ -1586,6 +1677,30 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose(
     assert any(call["threshold"] == 0.0 for call in calls)
     assert len({call["compiled_id"] for call in calls}) == 3
     assert any(call["witness"] is not None for call in calls)
+    target_lane_replays = [
+        call
+        for call in calls
+        if call["fixture"] == (1,) and call["witness"] is not None
+    ]
+    assert target_lane_replays
+    for call in target_lane_replays:
+        witness = call["witness"]
+        expected_direction = np.asarray(
+            evidence["direction_candidates"][
+                witness["source_direction_index"]
+            ]["direction_xy"],
+            dtype=float,
+        )
+        current_xy = np.asarray(call["end"][:2], dtype=float)
+        current_offset = float(np.linalg.norm(current_xy))
+        assert current_xy / current_offset == pytest.approx(
+            expected_direction
+        )
+        assert witness["source_offset_m"] < current_offset
+        assert witness["source_sweep_name"] in (
+            "target_descend",
+            "target_approach",
+        )
     acceleration = evidence["prefilter_acceleration"]
     assert acceleration["candidates_evaluated"] == len(
         evidence["candidate_trace"]
@@ -1595,6 +1710,12 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose(
     )
     assert acceleration["sweep_calls"] == len(calls)
     assert acceleration["cached_rejection_witness_attempts"] > 0
+    assert acceleration["cached_rejection_witness_rejections"] > 0
+    status_counts = acceleration[
+        "cached_rejection_witness_status_counts"
+    ]
+    assert status_counts["exact_reject"] > 0
+    assert sum(status_counts.values()) == len(calls)
     progress = capsys.readouterr().out
     assert "[L3-A4 grasp prefilter progress] started total=" in progress
     assert "[L3-A4 grasp prefilter progress] compiled target_pairs=" in (
@@ -1608,6 +1729,7 @@ def test_l3a4_target_grasp_clearance_search_skips_tolerance_contact_pose(
     assert "full_pairs=" in progress
     assert "boundary_refinements=" in progress
     assert "witness=" in progress
+    assert "witness_status=" in progress
 
 
 def test_l3a4_native_site_grasp_directions_are_auditable_and_unique():
@@ -3577,9 +3699,15 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
         swept_clearance
     )
     assert "cached_rejection_witness" in swept_clearance
-    assert "cached_pair in compatible_geom_pairs" in swept_clearance
+    assert "cached_pair not in compatible_geom_pairs" in swept_clearance
     assert "_compiled_translated_mesh_box_clearance(" in swept_clearance
     assert '"cached_rejection_witness_attempted"' in swept_clearance
+    assert '"cached_rejection_witness_status"' in swept_clearance
+    assert '"interval_mismatch"' in swept_clearance
+    assert '"pair_missing"' in swept_clearance
+    assert '"sample_invalid"' in swept_clearance
+    assert '"exact_reject"' in swept_clearance
+    assert '"exact_above_threshold"' in swept_clearance
     assert '"candidate_invariant_mesh_box_pair_count"' in (
         swept_clearance
     )
@@ -3749,8 +3877,11 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
         "_compile_translated_sweep_geometry("
     ) == 3
     assert "compiled_sweep_geometry_by_name" in target_grasp_clearance
-    assert "rejection_witness_by_sweep" in target_grasp_clearance
-    assert "== candidate_index - 1" in target_grasp_clearance
+    assert "rejection_witness_by_lane" in target_grasp_clearance
+    assert 'str(candidate_spec["candidate_family"])' in (
+        target_grasp_clearance
+    )
+    assert "int(direction_index)" in target_grasp_clearance
     assert "cached_rejection_witness=(" in target_grasp_clearance
     assert '"sample_intervals": evidence[' in target_grasp_clearance
     assert '"sample_index": limiting_pair[' in target_grasp_clearance
@@ -3760,6 +3891,9 @@ def test_l3a4_robot_prefix_uses_compiled_clearance_and_contact_gates():
     assert "[L3-A4 grasp prefilter progress]" in target_grasp_clearance
     assert "(candidate_index + 1) % 25 == 0" in target_grasp_clearance
     assert '"cached_rejection_witness_attempts"' in (
+        target_grasp_clearance
+    )
+    assert '"cached_rejection_witness_status_counts"' in (
         target_grasp_clearance
     )
     assert '"full_sweep_pair_evaluations"' in target_grasp_clearance
