@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "scene_candidate": "L1-A1-V4",
+  "status": "FROZEN_PRE_POLICY_SELECTION_RULE",
+  "created_before_complete_scan": true,
+  "learned_policy_rollouts_observed": 0,
+  "native_task": "libero_spatial/1",
+  "generator_seed": 42,
+  "construction_settle_steps": 500,
+  "formal_wait_steps": 10,
+  "candidates": {
+    "C01": {
+      "target_xy": [-0.08, 0.07],
+      "ramekin_xy": [-0.245, 0.07],
+      "ec_lure_xy": [0.22, -0.15]
+    },
+    "C02": {
+      "target_xy": [-0.06, 0.04],
+      "ramekin_xy": [-0.225, 0.04],
+      "ec_lure_xy": [0.22, -0.15]
+    },
+    "C04": {
+      "target_xy": [-0.1, 0.02],
+      "ramekin_xy": [-0.265, 0.02],
+      "ec_lure_xy": [0.22, -0.15]
+    }
+  },
+  "hard_eligibility": [
+    "50 of 50 native source states pass in Eb, Er, and Ec",
+    "every Er/Ec diff outside the lure free joint is at most 1e-10",
+    "every receptacle tilt remains at most 1 degree throughout evaluator wait and confirmation",
+    "every pre-settled object moves at most 1 mm during evaluator wait",
+    "all expected supports remain present and all forbidden contacts remain absent",
+    "every tracked referent has at least 80 agentview pixels",
+    "minimum referent centroid separation is at least 18 pixels"
+  ],
+  "selection_score": {
+    "definition": "maximize the worst normalized robustness factor across all 50 states and Er/Ec conditions",
+    "factors": [
+      "relation margin / 0.06 m",
+      "minimum bowl distance / 0.16 m",
+      "minimum policy-view centroid separation / 18 px",
+      "minimum referent pixels / 80 px"
+    ],
+    "tie_breaker": "larger minimum relation margin, then lexical candidate id"
+  },
+  "failure_rule": "if no candidate passes 50/50, do not create L1-A1-v4 evaluated states",
+  "scan_job": {
+    "superpod_job_id": "502640",
+    "immutable_commit": "5818ecf498f12017a901e91004c99cd19485b526",
+    "artifact": "experiments/logs/l1a1_robust_geometry_scan.json"
+  }
+}
