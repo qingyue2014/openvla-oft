@@ -112,6 +112,13 @@ The switch requires the EEF to lie inside that tolerance on either side of the
 target; otherwise the unchanged vertical OSC controller continues toward the
 same target.
 
+Both high lateral segments use the existing live adaptive high-plane OSC
+envelope rather than treating a zero Z command as measured height retention.
+The action allocates nonnegative Z recovery from the observed vertical tail,
+is capped by every exact live plate/table collision-pair surplus, and is
+recompiled before and after each action. The complete native-obstacle
+separation guard remains an additional independent requirement.
+
 ## Hard physical and visual gates
 
 Every episode and condition is restored through the evaluator sequence:

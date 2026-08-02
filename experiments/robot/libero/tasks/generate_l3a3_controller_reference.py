@@ -12448,8 +12448,13 @@ def _seek_stable_plate_contact(
     fixed_buffer_lateral_stages = {
         "overhead_post_descent_corridor_lateral",
     }
+    cabinet_detour_high_lateral_stages = {
+        "right_high_lateral",
+        "right_high_trailing_pass",
+    }
     overhead_route_stages = {
         *overhead_lateral_stages,
+        *cabinet_detour_high_lateral_stages,
         "overhead_corridor_descent",
         "vertical_tail_brake",
         "lateral_rebuffer_brake",
@@ -12705,6 +12710,32 @@ def _seek_stable_plate_contact(
                 native_action_spec=native_action_spec,
                 expected_pair_count=expected_overhead_pair_count,
             )
+        elif stage_before_action in cabinet_detour_high_lateral_stages:
+            adaptive_lateral_target_xy = np.asarray(
+                cabinet_detour_plan["waypoints"][
+                    {
+                        "right_high_lateral": "right_high",
+                        "right_high_trailing_pass": "right_trailing_high",
+                    }[stage_before_action]
+                ],
+                dtype=float,
+            )[:2]
+            (
+                prepared_high_lateral_action,
+                prepared_high_lateral_envelope,
+            ) = _compiled_adaptive_high_plane_action(
+                current_eef=current_eef,
+                lateral_target_xy=adaptive_lateral_target_xy,
+                overhead_horizontal_z=overhead_horizontal_z,
+                measured_vertical_step_progress_m=(
+                    latest_vertical_step_progress_m
+                ),
+                overhead_guard=latest_overhead_guard,
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                native_action_spec=native_action_spec,
+                expected_pair_count=expected_overhead_pair_count,
+            )
         elif stage_before_action == "workspace_release_diagonal":
             (
                 prepared_high_lateral_action,
@@ -12774,17 +12805,33 @@ def _seek_stable_plate_contact(
                 cabinet_detour_plan["waypoints"][waypoint_key],
                 dtype=float,
             )
-            action, path_control = _fixed_z_lateral_approach_action(
-                current_eef=current_eef,
-                lateral_target_xy=detour_target[:2],
-                gripper=gripper,
-                position_action_scale=args.position_action_scale,
-                maximum_translation_action=(
-                    cabinet_detour_plan[
-                        "maximum_route_translation_action"
-                    ]
-                ),
-            )
+            if structural_stage in cabinet_detour_high_lateral_stages:
+                if (
+                    prepared_high_lateral_action is None
+                    or prepared_high_lateral_envelope is None
+                ):
+                    raise RuntimeError(
+                        "native cabinet high detour lacks its live adaptive "
+                        "high-plane action envelope"
+                    )
+                action = prepared_high_lateral_action
+                path_control = prepared_high_lateral_envelope
+                path_control_key = (
+                    "compiled_adaptive_high_plane_action_envelope"
+                )
+            else:
+                action, path_control = _fixed_z_lateral_approach_action(
+                    current_eef=current_eef,
+                    lateral_target_xy=detour_target[:2],
+                    gripper=gripper,
+                    position_action_scale=args.position_action_scale,
+                    maximum_translation_action=(
+                        cabinet_detour_plan[
+                            "maximum_route_translation_action"
+                        ]
+                    ),
+                )
+                path_control_key = "fixed_z_lateral_path_control"
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
@@ -12793,7 +12840,7 @@ def _seek_stable_plate_contact(
                 "native_cabinet_detour_pre_guard": (
                     cabinet_detour_pre_guard
                 ),
-                "fixed_z_lateral_path_control": path_control,
+                path_control_key: path_control,
             }
         elif structural_stage == "right_trailing_vertical_descent":
             detour_target = np.asarray(

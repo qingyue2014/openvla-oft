@@ -7975,6 +7975,10 @@ def test_native_right_high_then_low_return_compiles_from_live_geometry():
     assert "low_front_x_return" not in bounded_seek
     assert "right_of_rack_low_y_pass" not in bounded_seek
     assert "abs(current_eef[2] - detour_target[2])" in bounded_seek
+    assert '"right_high_lateral",\n        "right_high_trailing_pass"' in (
+        bounded_seek
+    )
+    assert "_compiled_adaptive_high_plane_action(" in bounded_seek
 
 
 def test_native_cabinet_detour_live_guard_fails_closed_then_accepts():
