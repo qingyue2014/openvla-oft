@@ -105,8 +105,14 @@ subsequent outward-safety-axis deficit is corrected during the same
 high-authority descent step. That safety-axis component is one-sided: it may
 command the registered outward direction or zero, but an EEF overshoot never
 authorizes an inward return that would spend corridor clearance; the orthogonal
-XY component remains available for tangential hold. Its positive-Z brake begins
-when the EEF enters a deterministic
+XY component remains available for tangential hold. The descent-only hold
+target is the unchanged rebuffer target plus exactly one current active descent
+world step in the registered outward direction (`0.016 m` initially). Whenever
+the existing descent action/brake cap is halved, this reserve is halved with it.
+It is only a controller target for maintaining outward authority; the compiled
+corridor target, full-clearance resume gate, strict-entry brake gate, and formal
+acceptance geometry are unchanged. Its positive-Z brake begins when the EEF
+enters a deterministic
 two-command (`0.032 m`) buffer above the compiled staging height and uses the
 same `0.20` cap until measured vertical progress is nonnegative. If braking
 stops above the staging tolerance, the controller returns to bounded coupled

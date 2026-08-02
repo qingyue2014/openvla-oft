@@ -3703,9 +3703,10 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         "_compiled_adaptive_workspace_release_action("
         in descent_compilation
     )
-    assert "corridor_target_xy=corridor_rebuffer_target[:2]" in (
+    assert "corridor_target_xy=corridor_descent_hold_target_xy" in (
         descent_compilation
     )
+    assert "* active_overhead_descent_world_step" in bounded_seek
     assert "couple_downward_to_lateral_remaining=False" in (
         descent_compilation
     )
@@ -3863,11 +3864,14 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         "high": [1.0] * 7,
         "runtime_resolved": True,
     }
-    exact_corridor = np.array([corridor_xy[0], corridor_xy[1], 1.03])
+    corridor_descent_hold_xy = corridor_xy + np.array([0.016, 0.0])
+    exact_corridor = np.array(
+        [corridor_descent_hold_xy[0], corridor_descent_hold_xy[1], 1.03]
+    )
     exact_action, exact_evidence = (
         _compiled_adaptive_workspace_release_action(
             current_eef=exact_corridor,
-            corridor_target_xy=corridor_xy,
+            corridor_target_xy=corridor_descent_hold_xy,
             release_target_z=0.94,
             measured_vertical_step_progress_m=0.0,
             overhead_guard=overhead_guard,
@@ -3905,7 +3909,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     overshot_action, overshot_evidence = (
         _compiled_adaptive_workspace_release_action(
             current_eef=overshot_corridor,
-            corridor_target_xy=corridor_xy,
+            corridor_target_xy=corridor_descent_hold_xy,
             release_target_z=0.94,
             measured_vertical_step_progress_m=0.0,
             overhead_guard=overhead_guard,
@@ -3927,6 +3931,32 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert overshot_evidence["proof"][
         "inward_outward_axis_command_prohibited"
     ] is True
+
+    base_corridor_eef = exact_corridor.copy()
+    base_corridor_eef[0] -= 0.016
+    held_action, held_evidence = (
+        _compiled_adaptive_workspace_release_action(
+            current_eef=base_corridor_eef,
+            corridor_target_xy=corridor_descent_hold_xy,
+            release_target_z=0.94,
+            measured_vertical_step_progress_m=0.0,
+            overhead_guard=overhead_guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_spec,
+            expected_pair_count=55,
+            worst_case_controller_world_step_m=0.016,
+            couple_downward_to_lateral_remaining=False,
+            maximum_translation_action=0.20,
+            one_sided_outward_direction_xy=np.array([1.0, 0.0]),
+        )
+    )
+    assert held_action[0] > 0.0
+    assert held_action[2] < 0.0
+    assert np.linalg.norm(held_action[:3]) < 0.20
+    assert held_evidence["corridor_target_xy"] == (
+        corridor_descent_hold_xy.tolist()
+    )
 
 
 def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():

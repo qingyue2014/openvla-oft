@@ -12620,11 +12620,29 @@ def _seek_stable_plate_contact(
         position_action_scale=args.position_action_scale,
         maximum_translation_action=structural_max_translation_action,
     )
+    corridor_outward_direction = np.asarray(
+        geometry["outward_direction_xy"], dtype=float
+    )
+    corridor_outward_norm = float(
+        np.linalg.norm(corridor_outward_direction)
+    )
+    if (
+        corridor_outward_direction.shape != (2,)
+        or not np.all(np.isfinite(corridor_outward_direction))
+        or not np.isfinite(corridor_outward_norm)
+        or corridor_outward_norm <= 1e-9
+    ):
+        raise RuntimeError(
+            "compiled corridor outward direction is invalid"
+        )
+    corridor_outward_direction = (
+        corridor_outward_direction / corridor_outward_norm
+    )
     corridor_rebuffer_target = np.asarray(
         corridor_high_target, dtype=float
     ).copy()
     corridor_rebuffer_target[:2] += (
-        np.asarray(geometry["outward_direction_xy"], dtype=float)
+        corridor_outward_direction
         * float(args.minimum_saturated_waypoint_progress)
     )
     corridor_rebuffer_clearance = float(
@@ -12839,6 +12857,12 @@ def _seek_stable_plate_contact(
             "descent_corridor_rebuffer_target": (
                 corridor_rebuffer_target.tolist()
             ),
+            "descent_corridor_hold_target_formula": (
+                "corridor_rebuffer_target XY plus normalized registered "
+                "outward direction times the active overhead-descent one-step "
+                "world displacement; the formal corridor acceptance target "
+                "and clearance remain unchanged"
+            ),
             "descent_motion_reversal_brake": {
                 "maximum_permitted_inward_step_m": float(
                     args.minimum_saturated_waypoint_progress
@@ -12912,7 +12936,12 @@ def _seek_stable_plate_contact(
                 "the registered 0.20 descent bound; a zero XY error never "
                 "suppresses required Z progress, and the registered outward "
                 "safety axis may command only outward or zero motion, never "
-                "an inward return after target overshoot. The unchanged 0.10 "
+                "an inward return after target overshoot. The descent-only "
+                "hold target adds exactly the active one-step world "
+                "displacement in that outward direction, so the same "
+                "geometric cap-halving schedule also shrinks this deterministic "
+                "inertia reserve; it does not change formal corridor "
+                "acceptance. The unchanged 0.10 "
                 "bound "
                 "remains exclusive to post-descent correction and contact "
                 "motion"
@@ -13372,12 +13401,17 @@ def _seek_stable_plate_contact(
                 ),
             )
         elif stage_before_action == "overhead_corridor_descent":
+            corridor_descent_hold_target_xy = (
+                corridor_rebuffer_target[:2]
+                + corridor_outward_direction
+                * active_overhead_descent_world_step
+            )
             (
                 prepared_high_lateral_action,
                 prepared_high_lateral_envelope,
             ) = _compiled_adaptive_workspace_release_action(
                 current_eef=current_eef,
-                corridor_target_xy=corridor_rebuffer_target[:2],
+                corridor_target_xy=corridor_descent_hold_target_xy,
                 release_target_z=overhead_staging_z,
                 measured_vertical_step_progress_m=(
                     latest_vertical_step_progress_m
@@ -13395,7 +13429,7 @@ def _seek_stable_plate_contact(
                     active_overhead_descent_translation_action
                 ),
                 one_sided_outward_direction_xy=(
-                    geometry["outward_direction_xy"]
+                    corridor_outward_direction
                 ),
             )
         adaptive_negative_z_action_requires_buffer16 = bool(
@@ -13529,6 +13563,15 @@ def _seek_stable_plate_contact(
                 ),
                 "active_overhead_descent_translation_action_bound": (
                     active_overhead_descent_translation_action
+                ),
+                "corridor_descent_hold_target_xy": (
+                    corridor_descent_hold_target_xy.tolist()
+                ),
+                "corridor_descent_hold_outward_reserve_m": (
+                    active_overhead_descent_world_step
+                ),
+                "corridor_descent_hold_outward_reserve_source": (
+                    "active overhead-descent one-step world displacement"
                 ),
             }
         elif structural_stage == "vertical_tail_brake":
