@@ -432,6 +432,21 @@ transition now accepts equality at the unchanged action floor; its existing
 and cannot lower or bypass the preregistered floor. All physical reserves,
 formal guards, task fields, inventories, targets, budgets, and action
 authorities remain unchanged.
+Job503662 verified the machine-zero and action-floor transitions and completed
+two additional floor descent/settle cycles. In the third cycle, the `0.050`
+neutral-damping decrement changed outward/positive-Z action from
+`0.1909/0.2000` to `0.1409/0.1500` and then `0.0909/0.1000`; the second frame
+created a `0.601199 mm` inward clearance response and reduced reserve from
+`1.797293 mm` to `1.196094 mm`. The latch correctly paused and restored full
+brake authority, but the coupled inward response did not reverse before
+clearance reached `0.093330 mm`, below the unchanged `0.400 mm` one-step
+corridor line. The internal positive-action release decrement is now `0.025`
+per frame. This changes only the monotonic decay rate after hazard motion has
+already reversed; full brake engagement and magnitude remain immediate and
+unchanged. A paused zero predecessor also requires both unchanged `1.550 mm`
+recovery-exit reserves before its coverage transient can terminate and return
+to floor descent. No formal physical threshold, action bound, geometric floor,
+task field, asset, target, or budget changes.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

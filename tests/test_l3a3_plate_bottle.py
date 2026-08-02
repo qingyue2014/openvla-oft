@@ -3965,6 +3965,27 @@ def test_job503657_damping_latch_survives_reserve_recovery_brake():
     assert paused_zero_gap["neutral_damping_latched"] is False
     assert paused_zero_gap["neutral_damping_active"] is False
 
+    paused_zero_without_reserve = (
+        _outside_side_neutral_damping_latch_transition(
+            damping_guard=transient_guard,
+            damping_latched_before=True,
+            damping_active_before=False,
+            kinematic_brake_reversed=True,
+            reserves_accepted=False,
+            commanded_action_xyz=np.array([0.20, 0.0, 0.20]),
+            previous_ramp_action_xyz=np.zeros(3, dtype=float),
+        )
+    )
+    assert paused_zero_without_reserve[
+        "coverage_gap_zero_release_required"
+    ] is False
+    assert paused_zero_without_reserve[
+        "neutral_damping_latched"
+    ] is True
+    assert paused_zero_without_reserve[
+        "damping_pause_for_reserve_recovery"
+    ] is True
+
     overlap_missing_guard = {
         "full_guard_accepted": False,
         "transient_rim_coverage_gap_authorized": False,
@@ -10351,7 +10372,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_compiled_low_side_neutral_damping_action(" in bounded_seek
     assert "maximum_settled_step_response_m=(" in bounded_seek
     assert '"neutral_damping_active"' in bounded_seek
-    assert "vertical_corridor_neutral_damping_release_action = 0.05" in (
+    assert "vertical_corridor_neutral_damping_release_action = 0.025" in (
         bounded_seek
     )
     assert '"previous_commanded_action_xyz"' in bounded_seek

@@ -8680,6 +8680,7 @@ def _outside_side_neutral_damping_latch_transition(
         )
         and transient_gap_authorized
         and not full_guard_accepted
+        and reserves_accepted
     )
     damping_latched_after = bool(
         ramp_had_authority
@@ -8742,6 +8743,7 @@ def _outside_side_neutral_damping_latch_transition(
             "resume_after_full_brake_requires_reversed_hazard_motion": True,
             "paused_full_brake_does_not_replace_ramp_predecessor": True,
             "coverage_transient_ends_when_ramp_reaches_zero": True,
+            "zero_ramp_release_requires_unchanged_reserves": True,
         },
     }
 
@@ -15828,7 +15830,7 @@ def _seek_stable_plate_contact(
     fixed_safe_z = None
     fixed_safe_z_previous_commanded_action_xyz = None
     fixed_safe_z_positive_safety_release_action = 0.05
-    vertical_corridor_neutral_damping_release_action = 0.05
+    vertical_corridor_neutral_damping_release_action = 0.025
     fixed_safe_z_stable_count = 0
     fixed_safe_z_required_stable_count = 2
     fixed_safe_z_position_tolerance = float(
