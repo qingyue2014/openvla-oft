@@ -7168,8 +7168,23 @@ def _real_recompile_wrist_yaw_candidate(
     position_action_scale,
     attainment_evidence,
     table_normal_evidence,
+    recompile_stage="post_wrist_yaw",
 ):
     """Compile the descent route directly from the attained live sim pose."""
+    if recompile_stage not in {
+        "post_wrist_yaw",
+        "post_center_high_reacquire",
+    }:
+        raise ValueError("real wrist-yaw recompile stage is invalid")
+    plate_position = np.asarray(plate_position, dtype=float)
+    eef_position = np.asarray(eef_position, dtype=float)
+    if (
+        plate_position.shape != (3,)
+        or eef_position.shape != (3,)
+        or not np.all(np.isfinite(plate_position))
+        or not np.all(np.isfinite(eef_position))
+    ):
+        raise ValueError("real wrist-yaw recompile poses must be finite and 3-D")
     final_position_drift = float(
         attainment_evidence.get("eef_position_drift_m", np.inf)
     )
@@ -7350,10 +7365,18 @@ def _real_recompile_wrist_yaw_candidate(
         )
     direct_revalidation = {
         "performed": True,
+        "recompile_stage": recompile_stage,
         "source": (
             "direct live compiled geom_xpos/geom_xmat after measured "
-            "wrist-yaw attainment"
+            + (
+                "wrist-yaw attainment"
+                if recompile_stage == "post_wrist_yaw"
+                else "orientation-hold center-high reacquisition"
+            )
         ),
+        "live_eef_position_world": eef_position.tolist(),
+        "live_plate_position_world": plate_position.tolist(),
+        "live_center_high_target_world": center_high.tolist(),
         "attainment_evidence": attainment_evidence,
         "table_normal_derivation": live_table_normal_evidence,
         "selected_native_push_direction_relation": relation[0],
@@ -7379,6 +7402,7 @@ def _real_recompile_wrist_yaw_candidate(
         "route_selection_candidate": True,
         "selection_eligible": True,
         "selection_violations": [],
+        "center_high_target": center_high.tolist(),
         "outside_high_target": outside_high.tolist(),
         "outside_side_target": outside_side.tolist(),
         "side_contact_target": side_contact.tolist(),
@@ -8529,6 +8553,593 @@ def _compiled_trailing_side_contact_candidates(
     return selected, candidates
 
 
+def _center_high_target_from_live_plate(
+    live_plate_position, plate_approach_eef_height
+):
+    """Rebuild center-high from the exact live plate pose and fixed geometry."""
+    live_plate = np.asarray(live_plate_position, dtype=float)
+    if (
+        live_plate.shape != (3,)
+        or not np.all(np.isfinite(live_plate))
+        or not np.isfinite(plate_approach_eef_height)
+        or plate_approach_eef_height <= 0.0
+    ):
+        raise ValueError("live plate center-high inputs are invalid")
+    target = live_plate.copy()
+    target[2] = live_plate[2] + float(plate_approach_eef_height)
+    return target
+
+
+def _center_high_reacquire_budget_evidence(
+    *,
+    structural_actions_used,
+    maximum_structural_actions,
+    reacquire_steps,
+    maximum_reacquire_steps,
+):
+    """Authorize one reacquire action under both unchanged hard limits."""
+    values = (
+        structural_actions_used,
+        maximum_structural_actions,
+        reacquire_steps,
+        maximum_reacquire_steps,
+    )
+    if (
+        any(
+            not isinstance(value, (int, np.integer))
+            or isinstance(value, (bool, np.bool_))
+            for value in values
+        )
+        or structural_actions_used < 0
+        or maximum_structural_actions < 1
+        or reacquire_steps < 0
+        or maximum_reacquire_steps < 1
+        or reacquire_steps > structural_actions_used
+    ):
+        raise ValueError("center-high reacquire budgets are invalid")
+    violations = []
+    if structural_actions_used >= maximum_structural_actions:
+        violations.append("shared_structural_waypoint_budget_exhausted")
+    if reacquire_steps >= maximum_reacquire_steps:
+        violations.append("center_high_reacquire_step_budget_exhausted")
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "structural_actions_used": int(structural_actions_used),
+        "maximum_structural_actions": int(maximum_structural_actions),
+        "remaining_structural_actions": int(
+            maximum_structural_actions - structural_actions_used
+        ),
+        "reacquire_steps": int(reacquire_steps),
+        "maximum_reacquire_steps": int(maximum_reacquire_steps),
+        "remaining_reacquire_steps": int(
+            maximum_reacquire_steps - reacquire_steps
+        ),
+    }
+
+
+def _center_high_reacquire_step_gate(
+    *,
+    overhead_guard,
+    robot_nonrobot_contact_gate,
+    action_evidence,
+    attainment_evidence,
+    consecutive_position_stall_steps,
+    maximum_stall_steps,
+):
+    """Fail closed on every orientation-hold live center-high frame."""
+    if (
+        not isinstance(consecutive_position_stall_steps, (int, np.integer))
+        or isinstance(consecutive_position_stall_steps, (bool, np.bool_))
+        or not isinstance(maximum_stall_steps, (int, np.integer))
+        or isinstance(maximum_stall_steps, (bool, np.bool_))
+        or consecutive_position_stall_steps < 0
+        or maximum_stall_steps < 1
+    ):
+        raise ValueError("center-high reacquire stall counters are invalid")
+    violations = []
+    if not overhead_guard.get("accepted", False):
+        violations.append("center_high_reacquire_overhead_guard_failed")
+    if not robot_nonrobot_contact_gate.get("accepted", False):
+        violations.append(
+            "forbidden_robot_native_contact_during_center_high_reacquire"
+        )
+    if action_evidence.get("action_will_clip", False):
+        violations.append("center_high_reacquire_action_would_clip")
+    if not action_evidence.get("translation_direction_valid", False):
+        violations.append("center_high_reacquire_direction_invalid")
+    if not action_evidence.get("orientation_hold_commanded", False):
+        violations.append("center_high_reacquire_changed_orientation")
+    if not attainment_evidence.get("rotation_attained", False):
+        violations.append("center_high_reacquire_trailing_orientation_drifted")
+    if not attainment_evidence.get("rigid_frame_valid", False):
+        violations.append("center_high_reacquire_finger_frame_not_rigid")
+    if (
+        action_evidence.get("position_correction_requested", False)
+        and not attainment_evidence.get("position_attained", False)
+        and consecutive_position_stall_steps >= maximum_stall_steps
+    ):
+        violations.append("center_high_reacquire_position_progress_stalled")
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "consecutive_position_stall_steps": int(
+            consecutive_position_stall_steps
+        ),
+        "maximum_stall_steps": int(maximum_stall_steps),
+    }
+
+
+def _second_real_recompile_identity_evidence(
+    *,
+    first_candidate,
+    second_candidate,
+    terminal_eef_position,
+    live_plate_position,
+    center_high_target,
+    plate_approach_eef_height,
+):
+    """Bind the descent geometry to the exact post-reacquire live state."""
+    terminal_eef = np.asarray(terminal_eef_position, dtype=float)
+    live_plate = np.asarray(live_plate_position, dtype=float)
+    center_high = np.asarray(center_high_target, dtype=float)
+    if (
+        terminal_eef.shape != (3,)
+        or live_plate.shape != (3,)
+        or center_high.shape != (3,)
+        or not np.all(np.isfinite(terminal_eef))
+        or not np.all(np.isfinite(live_plate))
+        or not np.all(np.isfinite(center_high))
+    ):
+        raise ValueError("second real recompile identity poses are invalid")
+    expected_center_high = _center_high_target_from_live_plate(
+        live_plate, plate_approach_eef_height
+    )
+    first = first_candidate.get("real_sim_geometry_recompile", {})
+    second = second_candidate.get("real_sim_geometry_recompile", {})
+    violations = []
+    if not (
+        first.get("performed", False)
+        and first.get("eligible", False)
+        and first.get("recompile_stage") == "post_wrist_yaw"
+    ):
+        violations.append("first_live_recompile_identity_invalid")
+    if not (
+        second.get("performed", False)
+        and second.get("eligible", False)
+        and second.get("recompile_stage")
+        == "post_center_high_reacquire"
+    ):
+        violations.append("second_live_recompile_identity_invalid")
+    exact_vector_checks = {
+        "second_recompile_eef_not_terminal_reacquire_eef": (
+            second.get("live_eef_position_world"),
+            terminal_eef,
+        ),
+        "second_recompile_plate_not_terminal_live_plate": (
+            second.get("live_plate_position_world"),
+            live_plate,
+        ),
+        "reacquire_target_not_live_plate_center_high": (
+            center_high,
+            expected_center_high,
+        ),
+        "second_recompile_center_high_not_reacquire_target": (
+            second.get("live_center_high_target_world"),
+            center_high,
+        ),
+        "second_candidate_center_high_not_reacquire_target": (
+            second_candidate.get("center_high_target"),
+            center_high,
+        ),
+    }
+    for violation, (observed, expected) in exact_vector_checks.items():
+        try:
+            observed_array = np.asarray(observed, dtype=float)
+        except (TypeError, ValueError):
+            violations.append(violation)
+            continue
+        if observed_array.shape != (3,) or not np.array_equal(
+            observed_array, np.asarray(expected, dtype=float)
+        ):
+            violations.append(violation)
+    if not second.get("strict_dual_finger_skew_accepted", False):
+        violations.append("second_recompile_skew_gate_failed")
+    outside_guard = second.get("planned_outside_guard", {})
+    if not outside_guard.get("accepted", False):
+        violations.append("second_recompile_outside_guard_failed")
+    selected_clearance = float(
+        second.get("selected_finger_table_clearance_m", -np.inf)
+    )
+    planned_clearance = float(
+        second.get("planned_finger_table_clearance_m", -np.inf)
+    )
+    required_clearance = float(
+        second.get("required_finger_table_clearance_m", np.inf)
+    )
+    if not selected_clearance > required_clearance:
+        violations.append("second_recompile_selected_table_clearance_failed")
+    if not planned_clearance > required_clearance:
+        violations.append("second_recompile_planned_table_clearance_failed")
+    rim_coverage = second.get("selected_rim_overlap_by_side", {})
+    for side in ("left", "right"):
+        coverage = rim_coverage.get(side, {})
+        if not (
+            float(coverage.get("overlap_m", 0.0)) > 0.0
+            and coverage.get("rim_center_covered", False)
+        ):
+            violations.append(f"second_recompile_{side}_rim_gate_failed")
+    if second.get("hypothetical_geometry_used_for_descent", True):
+        violations.append("second_recompile_used_hypothetical_geometry")
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "required_recompile_order": [
+            "post_wrist_yaw",
+            "post_center_high_reacquire",
+        ],
+        "first_recompile_stage": first.get("recompile_stage"),
+        "second_recompile_stage": second.get("recompile_stage"),
+        "terminal_reacquire_eef_position_world": terminal_eef.tolist(),
+        "terminal_live_plate_position_world": live_plate.tolist(),
+        "terminal_center_high_target_world": center_high.tolist(),
+        "second_recompile_uses_exact_terminal_eef": bool(
+            np.array_equal(
+                np.asarray(
+                    second.get("live_eef_position_world", ()), dtype=float
+                ),
+                terminal_eef,
+            )
+        ),
+        "second_recompile_uses_exact_terminal_plate": bool(
+            np.array_equal(
+                np.asarray(
+                    second.get("live_plate_position_world", ()), dtype=float
+                ),
+                live_plate,
+            )
+        ),
+        "all_second_geometry_gates_revalidated": not any(
+            violation.startswith("second_recompile_")
+            for violation in violations
+        ),
+        "hypothetical_geometry_used_for_descent": second.get(
+            "hypothetical_geometry_used_for_descent"
+        ),
+    }
+
+
+def _execute_center_high_reacquire(
+    rollout,
+    env,
+    args,
+    *,
+    initial_reference_frame,
+    total_yaw_spec,
+    table_normal_world,
+    maximum_angle_error_rad,
+    angular_progress_epsilon_rad,
+    overhead_geometry,
+    native_action_spec,
+    rotation_spec,
+    gripper,
+    structural_actions_used,
+    diagnostics,
+):
+    """Hold attained trailing yaw while reacquiring the live plate center-high."""
+    current_eef = np.asarray(
+        rollout.obs["robot0_eef_pos"], dtype=float
+    ).copy()
+    reacquire_start_eef = current_eef.copy()
+    live_plate = body_pose(env, PLATE_BODY)[0].copy()
+    center_high_target = _center_high_target_from_live_plate(
+        live_plate, args.plate_approach_eef_height
+    )
+    initial_live_plate = live_plate.copy()
+    initial_center_high_target = center_high_target.copy()
+    current_frame = _compiled_finger_yaw_frame(
+        env, eef_position=current_eef
+    )
+    attainment = _wrist_yaw_attainment_evidence(
+        reference_frame=initial_reference_frame,
+        current_frame=current_frame,
+        yaw_spec=total_yaw_spec,
+        maximum_angle_error_rad=maximum_angle_error_rad,
+        maximum_position_drift_m=args.position_tolerance,
+        angular_progress_epsilon_rad=angular_progress_epsilon_rad,
+        position_progress_epsilon_m=args.minimum_saturated_waypoint_progress,
+        anchor_eef_position=center_high_target,
+    )
+    if not attainment["rotation_attained"]:
+        raise RuntimeError(
+            "center-high reacquire may begin only with the attained trailing "
+            "wrist orientation"
+        )
+    initial_error = float(attainment["eef_position_drift_m"])
+    initial_xy_error = float(
+        np.linalg.norm(current_eef[:2] - center_high_target[:2])
+    )
+    maximum_center_high_error = initial_error
+    maximum_eef_drift_from_start = 0.0
+    maximum_orientation_error = float(
+        attainment["target_rotation_error_rad"]
+    )
+    frames = []
+    consecutive_position_stall_steps = 0
+    while not attainment["attained"]:
+        budget_evidence = _center_high_reacquire_budget_evidence(
+            structural_actions_used=structural_actions_used + len(frames),
+            maximum_structural_actions=args.max_waypoint_steps,
+            reacquire_steps=len(frames),
+            maximum_reacquire_steps=args.push_tracking_steps,
+        )
+        if not budget_evidence["accepted"]:
+            raise RuntimeError(
+                "center-high reacquire budget failed closed: "
+                f"{json.dumps(budget_evidence, sort_keys=True)}"
+            )
+        action, action_evidence = _compiled_wrist_yaw_action(
+            remaining_yaw_rad=0.0,
+            remaining_axis_angle_world=np.zeros(3, dtype=float),
+            table_normal_world=table_normal_world,
+            current_eef_position=current_eef,
+            anchor_eef_position=center_high_target,
+            position_action_scale=args.position_action_scale,
+            maximum_translation_action=(
+                args.plate_contact_seek_max_translation_action
+            ),
+            gripper=gripper,
+            native_action_spec=native_action_spec,
+            rotation_spec=rotation_spec,
+        )
+        pre_gate = _center_high_reacquire_step_gate(
+            overhead_guard=_live_compiled_overhead_guard(
+                env, overhead_geometry
+            ),
+            robot_nonrobot_contact_gate=(
+                _robot_nonrobot_contact_evidence(
+                    env, allowed_body_pairs=()
+                )
+            ),
+            action_evidence=action_evidence,
+            attainment_evidence=attainment,
+            consecutive_position_stall_steps=(
+                consecutive_position_stall_steps
+            ),
+            maximum_stall_steps=args.push_tracking_steps,
+        )
+        if not pre_gate["accepted"]:
+            raise RuntimeError(
+                "center-high reacquire pre-action gate failed closed: "
+                f"{json.dumps(pre_gate, sort_keys=True)}"
+            )
+        previous_position_error = float(
+            attainment["eef_position_drift_m"]
+        )
+        commanded_target = center_high_target.copy()
+        commanded_plate = live_plate.copy()
+        rollout.advance(action, "task_center_high_reacquire")
+        current_eef = np.asarray(
+            rollout.obs["robot0_eef_pos"], dtype=float
+        ).copy()
+        live_plate = body_pose(env, PLATE_BODY)[0].copy()
+        center_high_target = _center_high_target_from_live_plate(
+            live_plate, args.plate_approach_eef_height
+        )
+        current_frame = _compiled_finger_yaw_frame(
+            env, eef_position=current_eef
+        )
+        attainment = _wrist_yaw_attainment_evidence(
+            reference_frame=initial_reference_frame,
+            current_frame=current_frame,
+            yaw_spec=total_yaw_spec,
+            maximum_angle_error_rad=maximum_angle_error_rad,
+            maximum_position_drift_m=args.position_tolerance,
+            angular_progress_epsilon_rad=angular_progress_epsilon_rad,
+            position_progress_epsilon_m=(
+                args.minimum_saturated_waypoint_progress
+            ),
+            anchor_eef_position=center_high_target,
+            previous_position_drift_m=previous_position_error,
+        )
+        if attainment["position_attained"]:
+            consecutive_position_stall_steps = 0
+        else:
+            consecutive_position_stall_steps = (
+                0
+                if attainment["position_progressed"]
+                else consecutive_position_stall_steps + 1
+            )
+        maximum_center_high_error = max(
+            maximum_center_high_error,
+            float(attainment["eef_position_drift_m"]),
+        )
+        maximum_eef_drift_from_start = max(
+            maximum_eef_drift_from_start,
+            float(np.linalg.norm(current_eef - reacquire_start_eef)),
+        )
+        maximum_orientation_error = max(
+            maximum_orientation_error,
+            float(attainment["target_rotation_error_rad"]),
+        )
+        post_overhead_guard = _live_compiled_overhead_guard(
+            env, overhead_geometry
+        )
+        post_contact_gate = _robot_nonrobot_contact_evidence(
+            env, allowed_body_pairs=()
+        )
+        post_gate = _center_high_reacquire_step_gate(
+            overhead_guard=post_overhead_guard,
+            robot_nonrobot_contact_gate=post_contact_gate,
+            action_evidence=action_evidence,
+            attainment_evidence=attainment,
+            consecutive_position_stall_steps=(
+                consecutive_position_stall_steps
+            ),
+            maximum_stall_steps=args.push_tracking_steps,
+        )
+        frame = {
+            "reacquire_step": len(frames) + 1,
+            "shared_structural_action_index": int(
+                structural_actions_used + len(frames) + 1
+            ),
+            "budget_before_action": budget_evidence,
+            "commanded_live_plate_position_world": commanded_plate.tolist(),
+            "commanded_center_high_target_world": commanded_target.tolist(),
+            "observed_live_plate_position_world": live_plate.tolist(),
+            "observed_center_high_target_world": center_high_target.tolist(),
+            "eef_position_world": current_eef.tolist(),
+            "action": action.tolist(),
+            "action_evidence": action_evidence,
+            "attainment_evidence": attainment,
+            "pre_gate": pre_gate,
+            "post_overhead_guard": post_overhead_guard,
+            "post_robot_nonrobot_contact_gate": post_contact_gate,
+            "post_gate": post_gate,
+        }
+        frames.append(frame)
+        print(
+            "L3-A3 center-high reacquire frame "
+            + json.dumps(
+                {
+                    "reacquire_step": len(frames),
+                    "shared_structural_action_index": frame[
+                        "shared_structural_action_index"
+                    ],
+                    "center_high_error_m": attainment[
+                        "eef_position_drift_m"
+                    ],
+                    "center_high_xy_error_m": float(
+                        np.linalg.norm(
+                            current_eef[:2] - center_high_target[:2]
+                        )
+                    ),
+                    "target_rotation_error_rad": attainment[
+                        "target_rotation_error_rad"
+                    ],
+                    "translation_action_peak": action_evidence[
+                        "commanded_translation_action_peak"
+                    ],
+                    "translation_action_norm": action_evidence[
+                        "commanded_translation_action_norm"
+                    ],
+                    "translation_bound_saturated": action_evidence[
+                        "translation_bound_saturated"
+                    ],
+                    "orientation_hold_commanded": action_evidence[
+                        "orientation_hold_commanded"
+                    ],
+                    "action_will_clip": action_evidence[
+                        "action_will_clip"
+                    ],
+                    "position_progressed": attainment[
+                        "position_progressed"
+                    ],
+                    "position_stall_steps": (
+                        consecutive_position_stall_steps
+                    ),
+                    "overhead_accepted": post_overhead_guard["accepted"],
+                    "contact_gate_accepted": post_contact_gate["accepted"],
+                    "unexpected_contact_count": len(
+                        post_contact_gate["unexpected_contacts"]
+                    ),
+                    "post_gate_accepted": post_gate["accepted"],
+                    "post_gate_violations": post_gate["violations"],
+                    "shared_budget_remaining_after_action": int(
+                        args.max_waypoint_steps
+                        - structural_actions_used
+                        - len(frames)
+                    ),
+                },
+                sort_keys=True,
+            ),
+            flush=True,
+        )
+        if not post_gate["accepted"]:
+            raise RuntimeError(
+                "center-high reacquire post-action gate failed closed: "
+                f"frame={json.dumps(frame, sort_keys=True)} "
+                f"scene={json.dumps(diagnostics(), sort_keys=True)}"
+            )
+    final_error = float(attainment["eef_position_drift_m"])
+    final_xy_error = float(
+        np.linalg.norm(current_eef[:2] - center_high_target[:2])
+    )
+    remaining_structural_actions = int(
+        args.max_waypoint_steps - structural_actions_used - len(frames)
+    )
+    if (
+        not final_error < float(args.position_tolerance)
+        or not final_xy_error < float(args.position_tolerance)
+        or not attainment["rotation_attained"]
+        or not attainment["rigid_frame_valid"]
+        or remaining_structural_actions < 1
+    ):
+        raise RuntimeError(
+            "center-high reacquire did not leave a strict verified pose and "
+            "downstream structural budget"
+        )
+    evidence = {
+        "performed": bool(frames),
+        "stage": "orientation_hold_center_high_reacquire",
+        "target_definition": (
+            "exact current live plate position with Z replaced by live plate "
+            "Z plus the unchanged plate_approach_eef_height"
+        ),
+        "uses_old_wrist_yaw_anchor": False,
+        "orientation_hold_required": True,
+        "initial_live_plate_position_world": initial_live_plate.tolist(),
+        "initial_center_high_target_world": (
+            initial_center_high_target.tolist()
+        ),
+        "initial_eef_position_world": reacquire_start_eef.tolist(),
+        "initial_center_high_error_m": initial_error,
+        "initial_center_high_xy_error_m": initial_xy_error,
+        "terminal_live_plate_position_world": live_plate.tolist(),
+        "terminal_center_high_target_world": center_high_target.tolist(),
+        "terminal_eef_position_world": current_eef.tolist(),
+        "final_center_high_error_m": final_error,
+        "final_center_high_xy_error_m": final_xy_error,
+        "maximum_center_high_error_m": maximum_center_high_error,
+        "maximum_eef_drift_from_reacquire_start_m": (
+            maximum_eef_drift_from_start
+        ),
+        "maximum_trailing_rotation_error_rad": maximum_orientation_error,
+        "maximum_center_high_error_tolerance_m": float(
+            args.position_tolerance
+        ),
+        "strict_final_center_high_attainment": True,
+        "steps": len(frames),
+        "maximum_steps": int(args.push_tracking_steps),
+        "shared_budget_used_before_reacquire": int(
+            structural_actions_used
+        ),
+        "shared_budget_used_after_reacquire": int(
+            structural_actions_used + len(frames)
+        ),
+        "shared_budget_remaining_after_reacquire": (
+            remaining_structural_actions
+        ),
+        "position_action_scale_m_per_action": float(
+            args.position_action_scale
+        ),
+        "strict_translation_action_norm_bound": float(
+            np.nextafter(
+                args.plate_contact_seek_max_translation_action, 0.0
+            )
+        ),
+        "frames": frames,
+        "final_attainment_evidence": attainment,
+    }
+    return (
+        evidence,
+        current_eef,
+        current_frame,
+        live_plate,
+        center_high_target,
+    )
+
+
 def _execute_high_safe_wrist_yaw(
     rollout,
     env,
@@ -8539,7 +9150,7 @@ def _execute_high_safe_wrist_yaw(
     gripper,
     diagnostics,
 ):
-    """Execute selected yaw at center-high, then recompile real geometry."""
+    """Execute yaw, reacquire live center-high, and recompile twice."""
     if selected_candidate.get("native_push_direction_relations") != [
         "trailing_minus_push"
     ] or not selected_candidate.get("wrist_yaw_route_selected", False):
@@ -9103,7 +9714,7 @@ def _execute_high_safe_wrist_yaw(
             + outward * float(args.plate_contact_backoff)
         ).tolist(),
     }
-    realized_candidate = _real_recompile_wrist_yaw_candidate(
+    pre_reacquire_realized_candidate = _real_recompile_wrist_yaw_candidate(
         env,
         selected_candidate=live_selected_candidate,
         plate_position=live_plate,
@@ -9113,13 +9724,72 @@ def _execute_high_safe_wrist_yaw(
         position_action_scale=args.position_action_scale,
         attainment_evidence=final_attainment,
         table_normal_evidence=table_normal_evidence,
+        recompile_stage="post_wrist_yaw",
     )
+    (
+        center_high_reacquire,
+        current_eef,
+        current_frame,
+        live_plate,
+        live_center_high_target,
+    ) = _execute_center_high_reacquire(
+        rollout,
+        env,
+        args,
+        initial_reference_frame=initial_reference_frame,
+        total_yaw_spec=total_yaw_spec,
+        table_normal_world=table_normal,
+        maximum_angle_error_rad=maximum_angle_error,
+        angular_progress_epsilon_rad=angular_progress_epsilon,
+        overhead_geometry=overhead_geometry,
+        native_action_spec=native_action_spec,
+        rotation_spec=rotation_spec,
+        gripper=gripper,
+        structural_actions_used=yaw_steps,
+        diagnostics=diagnostics,
+    )
+    post_reacquire_selected_candidate = {
+        **selected_candidate,
+        "point_xy": (
+            live_plate[:2]
+            + outward * float(args.plate_contact_backoff)
+        ).tolist(),
+    }
+    realized_candidate = _real_recompile_wrist_yaw_candidate(
+        env,
+        selected_candidate=post_reacquire_selected_candidate,
+        plate_position=live_plate,
+        eef_position=current_eef,
+        outside_clearance_m=args.plate_contact_outside_clearance,
+        plate_approach_eef_height=args.plate_approach_eef_height,
+        position_action_scale=args.position_action_scale,
+        attainment_evidence=center_high_reacquire[
+            "final_attainment_evidence"
+        ],
+        table_normal_evidence=table_normal_evidence,
+        recompile_stage="post_center_high_reacquire",
+    )
+    second_recompile_identity = _second_real_recompile_identity_evidence(
+        first_candidate=pre_reacquire_realized_candidate,
+        second_candidate=realized_candidate,
+        terminal_eef_position=current_eef,
+        live_plate_position=live_plate,
+        center_high_target=live_center_high_target,
+        plate_approach_eef_height=args.plate_approach_eef_height,
+    )
+    if not second_recompile_identity["accepted"]:
+        raise RuntimeError(
+            "post-reacquire real geometry identity failed closed: "
+            f"{json.dumps(second_recompile_identity, sort_keys=True)}"
+        )
+    reacquire_steps = int(center_high_reacquire["steps"])
     return {
         "selected_native_push_direction_relation": "trailing_minus_push",
         "selected_outward_direction_xy": outward.tolist(),
         "old_plus_x_route_fallback_permitted": False,
         "runtime_tangent_fallback_permitted": False,
-        "center_high_target": center_high_target.tolist(),
+        "prereacquire_center_high_target": center_high_target.tolist(),
+        "center_high_target": live_center_high_target.tolist(),
         "anchor_eef_position_world": anchor_eef.tolist(),
         "native_osc_action_spec": native_action_spec,
         "native_osc_rotation_spec": rotation_spec,
@@ -9151,9 +9821,20 @@ def _execute_high_safe_wrist_yaw(
         ),
         "simultaneous_yaw_and_position_attainment_required": True,
         "final_attainment_evidence": final_attainment,
+        "pre_reacquire_real_sim_recompiled_candidate": (
+            pre_reacquire_realized_candidate
+        ),
+        "center_high_reacquire": center_high_reacquire,
+        "post_reacquire_final_attainment_evidence": (
+            center_high_reacquire["final_attainment_evidence"]
+        ),
         "real_sim_recompiled_candidate": realized_candidate,
+        "second_real_sim_recompile_identity": second_recompile_identity,
+        "total_structural_actions_before_contact_seek": int(
+            yaw_steps + reacquire_steps
+        ),
         "remaining_structural_waypoint_steps": int(
-            args.max_waypoint_steps - yaw_steps
+            args.max_waypoint_steps - yaw_steps - reacquire_steps
         ),
     }
 

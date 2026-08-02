@@ -30,6 +30,9 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_trailing_side_contact_candidates,
     _compiled_wrist_yaw_action,
     _compiled_vertical_staging_corridor,
+    _center_high_reacquire_budget_evidence,
+    _center_high_reacquire_step_gate,
+    _center_high_target_from_live_plate,
     _derive_horizon_safe_push_increment,
     _derive_overhead_staging_from_compiled_pairs,
     _environment_horizon_diagnostics,
@@ -67,6 +70,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _select_executable_wrist_yaw_candidate,
     _select_reachable_trailing_contact,
     _side_contact_targets_from_compiled_bounds,
+    _second_real_recompile_identity_evidence,
     _strict_native_high_prebuffer_target,
     _strict_wrist_yaw_segment_plan,
     _absolute_wrist_yaw_runtime_target,
@@ -1365,6 +1369,223 @@ def test_wrist_yaw_settle_and_shared_structural_budgets_fail_closed():
     assert shared_exhausted["violations"] == [
         "shared_structural_waypoint_budget_exhausted"
     ]
+
+
+def test_job502443_center_high_reacquire_uses_live_plate_and_orientation_hold():
+    live_plate = np.array(
+        [0.051856632092207214, -0.02850777957668001, 0.902506338529415]
+    )
+    failed_live_eef = np.array(
+        [0.05604713598990556, -0.032688247947315716, 1.065917307690024]
+    )
+    center_high = _center_high_target_from_live_plate(live_plate, 0.160)
+    np.testing.assert_array_equal(
+        center_high,
+        [0.051856632092207214, -0.02850777957668001, 1.062506338529415],
+    )
+    assert np.linalg.norm(
+        failed_live_eef[:2] - center_high[:2]
+    ) == pytest.approx(0.0059191755096897215)
+    assert np.linalg.norm(failed_live_eef - center_high) > 0.005
+
+    native_spec = {
+        "source": "job502443.native.action_spec",
+        "low": (-np.ones(7)).tolist(),
+        "high": np.ones(7).tolist(),
+    }
+    rotation_spec = {
+        "source": "job502443.native.osc",
+        "output_axis_angle_rad_per_action": [
+            0.05,
+            0.05,
+            0.05,
+            0.5,
+            0.5,
+            0.5,
+        ],
+    }
+    action, evidence = _compiled_wrist_yaw_action(
+        remaining_yaw_rad=0.0,
+        remaining_axis_angle_world=np.zeros(3),
+        table_normal_world=[0.0, 0.0, 1.0],
+        current_eef_position=failed_live_eef,
+        anchor_eef_position=center_high,
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+        gripper=-1.0,
+        native_action_spec=native_spec,
+        rotation_spec=rotation_spec,
+    )
+    assert evidence["orientation_hold_commanded"] is True
+    assert evidence["action_will_clip"] is False
+    assert evidence["translation_direction_valid"] is True
+    assert evidence["commanded_translation_action_norm"] < 0.10
+    assert action[3:6] == pytest.approx([0.0, 0.0, 0.0])
+    np.testing.assert_allclose(
+        failed_live_eef + 0.08 * action[:3],
+        center_high,
+        rtol=0.0,
+        atol=1e-15,
+    )
+
+    budget = _center_high_reacquire_budget_evidence(
+        structural_actions_used=33,
+        maximum_structural_actions=180,
+        reacquire_steps=0,
+        maximum_reacquire_steps=10,
+    )
+    assert budget["accepted"] is True
+    assert budget["remaining_structural_actions"] == 147
+    assert budget["remaining_reacquire_steps"] == 10
+
+
+def test_center_high_reacquire_gates_collision_clip_stall_budget_and_yaw_drift():
+    action_evidence = {
+        "action_will_clip": False,
+        "translation_direction_valid": True,
+        "orientation_hold_commanded": True,
+        "position_correction_requested": True,
+    }
+    attainment = {
+        "rotation_attained": True,
+        "position_attained": False,
+        "rigid_frame_valid": True,
+    }
+    accepted = _center_high_reacquire_step_gate(
+        overhead_guard={"accepted": True},
+        robot_nonrobot_contact_gate={"accepted": True},
+        action_evidence=action_evidence,
+        attainment_evidence=attainment,
+        consecutive_position_stall_steps=0,
+        maximum_stall_steps=10,
+    )
+    assert accepted["accepted"] is True
+
+    rejected = _center_high_reacquire_step_gate(
+        overhead_guard={"accepted": False},
+        robot_nonrobot_contact_gate={"accepted": False},
+        action_evidence={
+            **action_evidence,
+            "action_will_clip": True,
+            "translation_direction_valid": False,
+            "orientation_hold_commanded": False,
+        },
+        attainment_evidence={
+            **attainment,
+            "rotation_attained": False,
+            "rigid_frame_valid": False,
+        },
+        consecutive_position_stall_steps=10,
+        maximum_stall_steps=10,
+    )
+    assert rejected["violations"] == [
+        "center_high_reacquire_overhead_guard_failed",
+        "forbidden_robot_native_contact_during_center_high_reacquire",
+        "center_high_reacquire_action_would_clip",
+        "center_high_reacquire_direction_invalid",
+        "center_high_reacquire_changed_orientation",
+        "center_high_reacquire_trailing_orientation_drifted",
+        "center_high_reacquire_finger_frame_not_rigid",
+        "center_high_reacquire_position_progress_stalled",
+    ]
+
+    tracking_exhausted = _center_high_reacquire_budget_evidence(
+        structural_actions_used=43,
+        maximum_structural_actions=180,
+        reacquire_steps=10,
+        maximum_reacquire_steps=10,
+    )
+    assert tracking_exhausted["accepted"] is False
+    assert tracking_exhausted["violations"] == [
+        "center_high_reacquire_step_budget_exhausted"
+    ]
+    fully_exhausted = _center_high_reacquire_budget_evidence(
+        structural_actions_used=180,
+        maximum_structural_actions=180,
+        reacquire_steps=10,
+        maximum_reacquire_steps=10,
+    )
+    assert fully_exhausted["violations"] == [
+        "shared_structural_waypoint_budget_exhausted",
+        "center_high_reacquire_step_budget_exhausted",
+    ]
+
+
+def test_center_high_second_live_recompile_identity_fails_closed():
+    plate = np.array([0.051856632092207214, -0.02850777957668001, 0.9025])
+    center = _center_high_target_from_live_plate(plate, 0.160)
+    terminal_eef = center + np.array([0.001, -0.001, 0.0005])
+    first = {
+        "real_sim_geometry_recompile": {
+            "performed": True,
+            "eligible": True,
+            "recompile_stage": "post_wrist_yaw",
+        }
+    }
+    second_revalidation = {
+        "performed": True,
+        "eligible": True,
+        "recompile_stage": "post_center_high_reacquire",
+        "live_eef_position_world": terminal_eef.tolist(),
+        "live_plate_position_world": plate.tolist(),
+        "live_center_high_target_world": center.tolist(),
+        "strict_dual_finger_skew_accepted": True,
+        "planned_outside_guard": {"accepted": True},
+        "selected_finger_table_clearance_m": 0.0047,
+        "planned_finger_table_clearance_m": 0.0047,
+        "required_finger_table_clearance_m": 0.0,
+        "selected_rim_overlap_by_side": {
+            "left": {"overlap_m": 0.014, "rim_center_covered": True},
+            "right": {"overlap_m": 0.014, "rim_center_covered": True},
+        },
+        "hypothetical_geometry_used_for_descent": False,
+    }
+    second = {
+        "center_high_target": center.tolist(),
+        "real_sim_geometry_recompile": second_revalidation,
+    }
+    identity = _second_real_recompile_identity_evidence(
+        first_candidate=first,
+        second_candidate=second,
+        terminal_eef_position=terminal_eef,
+        live_plate_position=plate,
+        center_high_target=center,
+        plate_approach_eef_height=0.160,
+    )
+    assert identity["accepted"] is True
+    assert identity["second_recompile_uses_exact_terminal_eef"] is True
+    assert identity["second_recompile_uses_exact_terminal_plate"] is True
+    assert identity["all_second_geometry_gates_revalidated"] is True
+
+    corrupted = copy.deepcopy(second)
+    corrupted_revalidation = corrupted["real_sim_geometry_recompile"]
+    corrupted_revalidation["live_eef_position_world"][0] += 1e-12
+    corrupted_revalidation["strict_dual_finger_skew_accepted"] = False
+    corrupted_revalidation["planned_outside_guard"] = {"accepted": False}
+    corrupted_revalidation["selected_finger_table_clearance_m"] = 0.0
+    corrupted_revalidation["selected_rim_overlap_by_side"]["left"] = {
+        "overlap_m": 0.0,
+        "rim_center_covered": False,
+    }
+    rejected = _second_real_recompile_identity_evidence(
+        first_candidate=first,
+        second_candidate=corrupted,
+        terminal_eef_position=terminal_eef,
+        live_plate_position=plate,
+        center_high_target=center,
+        plate_approach_eef_height=0.160,
+    )
+    assert rejected["accepted"] is False
+    assert "second_recompile_eef_not_terminal_reacquire_eef" in rejected[
+        "violations"
+    ]
+    assert "second_recompile_skew_gate_failed" in rejected["violations"]
+    assert "second_recompile_outside_guard_failed" in rejected["violations"]
+    assert (
+        "second_recompile_selected_table_clearance_failed"
+        in rejected["violations"]
+    )
+    assert "second_recompile_left_rim_gate_failed" in rejected["violations"]
 
 
 def test_compiled_trailing_candidates_select_sole_native_trailing_route(monkeypatch):
@@ -6763,6 +6984,8 @@ def test_segmented_trailing_wrist_yaw_is_mandatory_for_initial_and_recontact_rou
         "def _execute_high_safe_wrist_yaw(", 1
     )[1].split("\ndef _body_contact_counterparts(", 1)[0]
     assert 'rollout.advance(action, "task_wrist_yaw")' in executor
+    assert "_execute_center_high_reacquire(" in executor
+    assert 'rollout.advance(action, "task_center_high_reacquire")' in producer
     assert executor.count("allowed_body_pairs=()") >= 3
     assert '!= [\n        "trailing_minus_push"\n    ]' in executor
     assert '"old_plus_x_route_fallback_permitted": False' in executor
@@ -6801,6 +7024,22 @@ def test_segmented_trailing_wrist_yaw_is_mandatory_for_initial_and_recontact_rou
     )
     assert executor.index("if attainment[\"attained\"]:") < executor.index(
         "_real_recompile_wrist_yaw_candidate("
+    )
+    assert executor.count("_real_recompile_wrist_yaw_candidate(") == 2
+    first_recompile = executor.index('recompile_stage="post_wrist_yaw"')
+    reacquire = executor.index("_execute_center_high_reacquire(")
+    second_recompile = executor.index(
+        'recompile_stage="post_center_high_reacquire"'
+    )
+    assert first_recompile < reacquire < second_recompile
+    assert executor.index("_second_real_recompile_identity_evidence(") > (
+        second_recompile
+    )
+    assert '"center_high_reacquire"' in executor
+    assert '"second_real_sim_recompile_identity"' in executor
+    assert (
+        "args.max_waypoint_steps - yaw_steps - reacquire_steps"
+        in executor
     )
     gate = producer.split("def _wrist_yaw_step_gate(", 1)[1].split(
         "\ndef _compiled_hypothetical_wrist_yaw_plan(", 1
