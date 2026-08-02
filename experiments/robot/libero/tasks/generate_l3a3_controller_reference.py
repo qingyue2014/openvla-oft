@@ -5389,6 +5389,38 @@ def _fixed_safe_z_lateral_hold_action(
         abs(measured_vertical_step_progress_m)
         > closed_loop_hazard_response_bound_m
     )
+    projected_lateral_error_after_measured_outward_response_m = float(
+        np.linalg.norm(
+            lateral_target_xy
+            - (
+                current_eef[:2]
+                + outward_direction_xy
+                * max(0.0, measured_outward_step_progress_m)
+            )
+        )
+    )
+    previous_full_outward_recovery_action = bool(
+        release_slew_enabled
+        and float(
+            np.dot(
+                previous_commanded_action_xyz[:2],
+                outward_direction_xy,
+            )
+        )
+        >= strict_safety_brake_bound
+    )
+    sticky_full_outward_recovery_requested = bool(
+        previous_full_outward_recovery_action
+        and lateral_target_reached
+        and abs(fixed_safe_z_m - current_eef[2])
+        <= vertical_position_tolerance_m
+        and live_outside_clearance < outside_refill_target_clearance
+        and live_outside_clearance > strict_outside_clearance_m
+        and live_table_clearance > outside_recovery_exit_clearance
+        and projected_lateral_error_after_measured_outward_response_m
+        <= lateral_position_tolerance_m
+        and not severe_vertical_response
+    )
     stability_pending_outside_recovery_requested = bool(
         release_slew_enabled
         and lateral_target_reached
@@ -5406,6 +5438,7 @@ def _fixed_safe_z_lateral_hold_action(
         or live_outside_recovery_active
         or predicted_outside_after_lateral <= outside_recovery_clearance
         or stability_pending_outside_recovery_requested
+        or sticky_full_outward_recovery_requested
     )
     if outside_recovery_active:
         required_outward_recovery_action = float(
@@ -5430,6 +5463,7 @@ def _fixed_safe_z_lateral_hold_action(
                 or below_safe_z_for_outside_brake
                 or severe_vertical_response
                 or stability_pending_outside_recovery_requested
+                or sticky_full_outward_recovery_requested
             )
             else min(
                 strict_safety_brake_bound,
@@ -5903,6 +5937,15 @@ def _fixed_safe_z_lateral_hold_action(
         "stability_pending_outside_recovery_requested": (
             stability_pending_outside_recovery_requested
         ),
+        "previous_full_outward_recovery_action": (
+            previous_full_outward_recovery_action
+        ),
+        "sticky_full_outward_recovery_requested": (
+            sticky_full_outward_recovery_requested
+        ),
+        "projected_lateral_error_after_measured_outward_response_m": (
+            projected_lateral_error_after_measured_outward_response_m
+        ),
         "below_safe_z_band": below_safe_z_band,
         "above_safe_z_band": above_safe_z_band,
         "inside_safe_z_band": inside_safe_z_band,
@@ -5940,6 +5983,8 @@ def _fixed_safe_z_lateral_hold_action(
                 True
             ),
             "pending_confirmation_uses_full_outward_recovery": True,
+            "full_outward_recovery_releases_at_existing_refill_target": True,
+            "sticky_outward_recovery_respects_lateral_tolerance": True,
             "strict_outside_loss_disables_inside_band_z_tracking": True,
             "projected_outside_band_downward_tail_retains_full_brake": True,
             "projected_below_band_downward_tail_retains_full_brake": True,

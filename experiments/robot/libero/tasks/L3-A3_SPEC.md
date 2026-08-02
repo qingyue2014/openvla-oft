@@ -902,6 +902,19 @@ after outside/table reserve also passes may the unchanged neutral Z
 confirmation begin. No threshold, route, budget, task, inventory, state,
 prompt, goal, or intervention changes.
 
+Job503903 retained Z tracking while outside reserve recovered, but the outward
+controller released as soon as clearance reached `1.572620 mm`, only
+`0.022620 mm` above the existing `1.55 mm` recovery exit line and still below
+the already defined `1.65 mm` refill target. Releasing the preceding full
+outward action from `0.20` to `0.15` produced a real `-0.115245 mm` inward
+response, recrossed the exit line to `1.430674 mm`, and the following recovery
+reacquisition perturbed Z. An already active full outward recovery now remains
+active until the existing refill target is reached, but only while strict
+outside/table reserves pass and the one-response outward projection remains
+inside the unchanged `5 mm` lateral tolerance. This uses existing hysteresis
+and acceptance values; no threshold, route, budget, task, inventory, state,
+prompt, goal, or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
