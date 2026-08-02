@@ -125,9 +125,12 @@ does not trigger a brake or a reduction. The brake and resume thresholds form
 explicit hysteresis: descent stops when full corridor
 clearance is lost or a measured inward response exceeds the deadband, but
 cannot resume merely by recrossing that boundary; zero confirmation or lateral
-correction must restore `corridor_clearance_m` plus the existing
+correction continues to request `corridor_clearance_m` plus the existing
 `minimum_saturated_waypoint_progress` measurement resolution (`0.00005 m`) at a
 target shifted only that distance in the already-registered outward direction.
+Transition acceptance remains the unchanged full physical
+`corridor_clearance_m`; a residual request error smaller than the existing
+measurement resolution is not promoted into a stricter physical threshold.
 A successful correction above staging
 then resumes the bounded pure-Z descent with the already-halved cap; only a
 correction at the staging height may enter the vertical side corridor. Thus

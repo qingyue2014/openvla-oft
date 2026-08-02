@@ -3777,7 +3777,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         zero_transition
     )
     assert "corridor_rebuffer_target" in zero_transition
-    assert "corridor_rebuffer_clearance" in zero_transition
+    assert "corridor_rebuffer_acceptance_clearance" in zero_transition
     correction_transition = bounded_seek.split(
         'elif stage_before_action == "overhead_post_descent_corridor_lateral":',
         1,
@@ -3792,7 +3792,9 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         correction_transition
     )
     assert "corridor_rebuffer_target" in correction_transition
-    assert "corridor_rebuffer_clearance" in correction_transition
+    assert "corridor_rebuffer_acceptance_clearance" in (
+        correction_transition
+    )
     assert bounded_seek.index(
         'structural_stage = "overhead_high_corridor_lateral"'
     ) < bounded_seek.index(
@@ -3816,6 +3818,9 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     )
     assert '"brake"' in bounded_seek
     assert '"descent_corridor_resume_clearance_m"' in bounded_seek
+    assert '"descent_corridor_rebuffer_requested_clearance_m"' in (
+        bounded_seek
+    )
     assert (
         '"compiled full corridor clearance plus the existing "'
         in bounded_seek

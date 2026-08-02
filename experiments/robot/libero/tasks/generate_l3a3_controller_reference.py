@@ -12458,11 +12458,15 @@ def _seek_stable_plate_contact(
             np.inf,
         )
     )
+    corridor_rebuffer_acceptance_clearance = float(
+        vertical_staging_corridor["corridor_clearance_m"]
+    )
     if not (
         np.all(np.isfinite(corridor_rebuffer_target))
         and np.isfinite(corridor_rebuffer_clearance)
+        and np.isfinite(corridor_rebuffer_acceptance_clearance)
         and corridor_rebuffer_clearance
-        > vertical_staging_corridor["corridor_clearance_m"]
+        > corridor_rebuffer_acceptance_clearance
     ):
         raise RuntimeError(
             "compiled corridor rebuffer lacks a strict outward measurement-"
@@ -12642,12 +12646,17 @@ def _seek_stable_plate_contact(
                 "compiled full corridor clearance"
             ),
             "descent_corridor_resume_clearance_m": (
-                corridor_rebuffer_clearance
+                corridor_rebuffer_acceptance_clearance
             ),
             "descent_corridor_resume_clearance_source": (
+                "unchanged compiled full corridor clearance"
+            ),
+            "descent_corridor_rebuffer_requested_clearance_m": (
+                corridor_rebuffer_clearance
+            ),
+            "descent_corridor_rebuffer_request_source": (
                 "compiled full corridor clearance plus the existing "
-                "minimum_saturated_waypoint_progress measurement "
-                "resolution"
+                "minimum_saturated_waypoint_progress measurement resolution"
             ),
             "descent_corridor_rebuffer_target": (
                 corridor_rebuffer_target.tolist()
@@ -13491,6 +13500,9 @@ def _seek_stable_plate_contact(
                 "corridor_rebuffer_clearance_m": (
                     corridor_rebuffer_clearance
                 ),
+                "corridor_rebuffer_acceptance_clearance_m": (
+                    corridor_rebuffer_acceptance_clearance
+                ),
                 "overhead_horizontal_z_m": float(
                     overhead_horizontal_z
                 ),
@@ -14173,7 +14185,7 @@ def _seek_stable_plate_contact(
                         ),
                         position_tolerance=args.position_tolerance,
                         strict_corridor_entry_clearance_m=(
-                            corridor_rebuffer_clearance
+                            corridor_rebuffer_acceptance_clearance
                         ),
                     )
                 )
@@ -14295,7 +14307,7 @@ def _seek_stable_plate_contact(
                         ),
                         position_tolerance=args.position_tolerance,
                         strict_corridor_entry_clearance_m=(
-                            corridor_rebuffer_clearance
+                            corridor_rebuffer_acceptance_clearance
                         ),
                     )
                 )
