@@ -9370,6 +9370,14 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "no_inward_xy_after_lateral_tolerance" in producer
     assert "below_height_band_retains_positive_z_floor" in producer
     assert "healthy_outside_reserve_avoids_outward_saturation" in producer
+    high_plane_call = bounded_seek.split(
+        "_compiled_adaptive_high_plane_action(", 1
+    )[1].split("overhead_guard=latest_overhead_guard", 1)[0]
+    fixed_safe_z_call = bounded_seek.split(
+        "_fixed_safe_z_lateral_hold_action(", 1
+    )[1].split("outside_side_guard=pre_action_guard", 1)[0]
+    assert "measured_outward_step_progress_m=" not in high_plane_call
+    assert "measured_outward_step_progress_m=" in fixed_safe_z_call
     assert (
         "for guard_step in range(1, structural_waypoint_budget + 1)"
         in bounded_seek

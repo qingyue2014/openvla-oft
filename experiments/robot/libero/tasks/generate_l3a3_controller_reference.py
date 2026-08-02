@@ -15504,9 +15504,6 @@ def _seek_stable_plate_contact(
                 measured_vertical_step_progress_m=(
                     latest_vertical_step_progress_m
                 ),
-                measured_outward_step_progress_m=(
-                    latest_outward_step_progress_m
-                ),
                 overhead_guard=latest_overhead_guard,
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
@@ -16427,6 +16424,9 @@ def _seek_stable_plate_contact(
                 ),
                 measured_vertical_step_progress_m=(
                     latest_vertical_step_progress_m
+                ),
+                measured_outward_step_progress_m=(
+                    latest_outward_step_progress_m
                 ),
                 outside_side_guard=pre_action_guard,
                 outward_direction_xy=corridor_outward_direction,
