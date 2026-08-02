@@ -12449,12 +12449,12 @@ def _seek_stable_plate_contact(
     ).copy()
     corridor_rebuffer_target[:2] += (
         np.asarray(geometry["outward_direction_xy"], dtype=float)
-        * maximum_controller_world_step
+        * float(args.minimum_saturated_waypoint_progress)
     )
     corridor_rebuffer_clearance = float(
         np.nextafter(
             vertical_staging_corridor["corridor_clearance_m"]
-            + maximum_controller_world_step,
+            + float(args.minimum_saturated_waypoint_progress),
             np.inf,
         )
     )
@@ -12465,8 +12465,8 @@ def _seek_stable_plate_contact(
         > vertical_staging_corridor["corridor_clearance_m"]
     ):
         raise RuntimeError(
-            "compiled corridor rebuffer lacks a strict outward controller-"
-            "step reserve"
+            "compiled corridor rebuffer lacks a strict outward measurement-"
+            "resolution reserve"
         )
     (
         high_lateral_prebuffer_target,
@@ -12645,8 +12645,9 @@ def _seek_stable_plate_contact(
                 corridor_rebuffer_clearance
             ),
             "descent_corridor_resume_clearance_source": (
-                "compiled full corridor clearance plus one structural "
-                "controller world step"
+                "compiled full corridor clearance plus the existing "
+                "minimum_saturated_waypoint_progress measurement "
+                "resolution"
             ),
             "descent_corridor_rebuffer_target": (
                 corridor_rebuffer_target.tolist()

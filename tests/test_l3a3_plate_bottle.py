@@ -3817,10 +3817,13 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert '"brake"' in bounded_seek
     assert '"descent_corridor_resume_clearance_m"' in bounded_seek
     assert (
-        '"compiled full corridor clearance plus one structural "'
+        '"compiled full corridor clearance plus the existing "'
         in bounded_seek
     )
     assert "corridor_rebuffer_target[:2] += (" in bounded_seek
+    assert "* float(args.minimum_saturated_waypoint_progress)" in (
+        bounded_seek
+    )
     assert '"Z threshold"' in bounded_seek
     assert '"progress is below the negative deadband; no empirical "' in (
         bounded_seek
