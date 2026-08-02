@@ -8615,6 +8615,126 @@ def _outside_side_neutral_damping_guard_evidence(
     }
 
 
+def _outside_side_neutral_damping_latch_transition(
+    *,
+    damping_guard,
+    damping_latched_before,
+    damping_active_before,
+    kinematic_brake_reversed,
+    reserves_accepted,
+    commanded_action_xyz,
+    previous_ramp_action_xyz,
+):
+    """Retain a damping ramp while a full brake restores its reserves."""
+    boolean_inputs = {
+        "damping_latched_before": damping_latched_before,
+        "damping_active_before": damping_active_before,
+        "kinematic_brake_reversed": kinematic_brake_reversed,
+        "reserves_accepted": reserves_accepted,
+    }
+    if not all(
+        isinstance(value, (bool, np.bool_))
+        for value in boolean_inputs.values()
+    ):
+        raise ValueError("neutral damping latch inputs must be boolean")
+    commanded_action_xyz = np.asarray(
+        commanded_action_xyz, dtype=float
+    )
+    previous_ramp_action_xyz = np.asarray(
+        previous_ramp_action_xyz, dtype=float
+    )
+    if (
+        commanded_action_xyz.shape != (3,)
+        or previous_ramp_action_xyz.shape != (3,)
+        or not np.all(np.isfinite(commanded_action_xyz))
+        or not np.all(np.isfinite(previous_ramp_action_xyz))
+    ):
+        raise ValueError("neutral damping latch actions must be finite XYZ")
+    full_guard_accepted = bool(
+        damping_guard.get("full_guard_accepted", False)
+    )
+    transient_gap_authorized = bool(
+        damping_guard.get(
+            "transient_rim_coverage_gap_authorized", False
+        )
+    )
+    guard_authorized = bool(
+        damping_guard.get("damping_guard_authorized", False)
+    )
+    ramp_had_authority = bool(
+        damping_latched_before or kinematic_brake_reversed
+    )
+    damping_ramp_reached_zero = bool(
+        damping_active_before
+        and np.all(commanded_action_xyz == 0.0)
+    )
+    coverage_gap_zero_release_required = bool(
+        damping_ramp_reached_zero
+        and transient_gap_authorized
+        and not full_guard_accepted
+    )
+    damping_latched_after = bool(
+        ramp_had_authority
+        and guard_authorized
+        and not coverage_gap_zero_release_required
+    )
+    paused_ramp_reversal_confirmed = bool(
+        not (damping_latched_before and not damping_active_before)
+        or kinematic_brake_reversed
+    )
+    damping_active_after = bool(
+        damping_latched_after
+        and reserves_accepted
+        and paused_ramp_reversal_confirmed
+    )
+    damping_pause_for_reserve_recovery = bool(
+        damping_latched_after and not damping_active_after
+    )
+    damping_resumed_after_reserve_recovery = bool(
+        damping_latched_before
+        and not damping_active_before
+        and damping_active_after
+    )
+    if damping_active_before or not damping_latched_before:
+        next_ramp_action_xyz = commanded_action_xyz.copy()
+        next_ramp_action_source = (
+            "executed_damping_action"
+            if damping_active_before
+            else "brake_reversal_latch_action"
+        )
+    else:
+        next_ramp_action_xyz = previous_ramp_action_xyz.copy()
+        next_ramp_action_source = (
+            "preserved_across_full_brake_reserve_recovery"
+        )
+    return {
+        "neutral_damping_latched": damping_latched_after,
+        "neutral_damping_active": damping_active_after,
+        "damping_pause_for_reserve_recovery": (
+            damping_pause_for_reserve_recovery
+        ),
+        "damping_resumed_after_reserve_recovery": (
+            damping_resumed_after_reserve_recovery
+        ),
+        "damping_ramp_reached_zero": damping_ramp_reached_zero,
+        "paused_ramp_reversal_confirmed": (
+            paused_ramp_reversal_confirmed
+        ),
+        "coverage_gap_zero_release_required": (
+            coverage_gap_zero_release_required
+        ),
+        "next_ramp_action_xyz": next_ramp_action_xyz.tolist(),
+        "next_ramp_action_source": next_ramp_action_source,
+        "proof": {
+            "reserve_loss_commands_full_brake_without_clearing_latch": True,
+            "resume_requires_unchanged_reserves_and_guard": True,
+            "resume_after_full_brake_requires_reversed_hazard_motion": True,
+            "paused_full_brake_does_not_replace_ramp_predecessor": True,
+            "coverage_transient_ends_when_ramp_reaches_zero": True,
+        },
+    }
+
+
 def _compiled_low_side_neutral_damping_action(
     *,
     outside_side_guard,
@@ -16952,10 +17072,28 @@ def _seek_stable_plate_contact(
                         "vertical_step_progress_m"
                     ]
                 )
+            neutral_damping_latched_before_action = bool(
+                lateral_settle_state.get(
+                    "neutral_damping_latched",
+                    lateral_settle_state.get(
+                        "neutral_damping_active", False
+                    ),
+                )
+            )
             neutral_damping_active_before_action = bool(
                 lateral_settle_state.get(
                     "neutral_damping_active", False
                 )
+            )
+            neutral_damping_ramp_action_before = np.asarray(
+                lateral_settle_state.get(
+                    "neutral_damping_ramp_action_xyz",
+                    lateral_settle_state.get(
+                        "previous_commanded_action_xyz",
+                        np.zeros(3, dtype=float).tolist(),
+                    ),
+                ),
+                dtype=float,
             )
             if neutral_damping_active_before_action:
                 action, path_control = (
@@ -16967,9 +17105,7 @@ def _seek_stable_plate_contact(
                             fixed_safe_z_recovery_exit_clearance
                         ),
                         previous_commanded_action_xyz=(
-                            lateral_settle_state[
-                                "previous_commanded_action_xyz"
-                            ]
+                            neutral_damping_ramp_action_before
                         ),
                         maximum_positive_release_action=(
                             vertical_corridor_neutral_damping_release_action
@@ -17024,6 +17160,12 @@ def _seek_stable_plate_contact(
                 ),
                 "neutral_damping_active_before_action": (
                     neutral_damping_active_before_action
+                ),
+                "neutral_damping_latched_before_action": (
+                    neutral_damping_latched_before_action
+                ),
+                "neutral_damping_ramp_action_before": (
+                    neutral_damping_ramp_action_before.tolist()
                 ),
                 "previous_settle_vertical_step_progress_m": (
                     previous_vertical_step_progress
@@ -18024,7 +18166,10 @@ def _seek_stable_plate_contact(
                     latest_outside_side_guard,
                     damping_active_before=bool(
                         lateral_settle_state.get(
-                            "neutral_damping_active", False
+                            "neutral_damping_latched",
+                            lateral_settle_state.get(
+                                "neutral_damping_active", False
+                            ),
                         )
                     ),
                 )
@@ -18068,16 +18213,40 @@ def _seek_stable_plate_contact(
                     ),
                 )
             )
-            lateral_settle_progress["neutral_damping_active"] = bool(
-                neutral_damping_reserves_accepted
-                and (
-                    lateral_settle_state.get(
-                        "neutral_damping_active", False
-                    )
-                    or lateral_settle_progress[
-                        "kinematic_brake_reversed"
-                    ]
+            neutral_damping_latch_transition = (
+                _outside_side_neutral_damping_latch_transition(
+                    damping_guard=neutral_damping_guard,
+                    damping_latched_before=(
+                        neutral_damping_latched_before_action
+                    ),
+                    damping_active_before=(
+                        neutral_damping_active_before_action
+                    ),
+                    kinematic_brake_reversed=bool(
+                        lateral_settle_progress[
+                            "kinematic_brake_reversed"
+                        ]
+                    ),
+                    reserves_accepted=(
+                        neutral_damping_reserves_accepted
+                    ),
+                    commanded_action_xyz=np.asarray(
+                        action[:3], dtype=float
+                    ),
+                    previous_ramp_action_xyz=(
+                        neutral_damping_ramp_action_before
+                    ),
                 )
+            )
+            lateral_settle_progress["neutral_damping_active"] = bool(
+                neutral_damping_latch_transition[
+                    "neutral_damping_active"
+                ]
+            )
+            lateral_settle_progress["neutral_damping_latched"] = bool(
+                neutral_damping_latch_transition[
+                    "neutral_damping_latched"
+                ]
             )
             lateral_settle_progress[
                 "neutral_damping_reserves_accepted"
@@ -18089,8 +18258,18 @@ def _seek_stable_plate_contact(
                 "previous_commanded_action_xyz"
             ] = np.asarray(action[:3], dtype=float).tolist()
             lateral_settle_progress[
+                "neutral_damping_ramp_action_xyz"
+            ] = neutral_damping_latch_transition[
+                "next_ramp_action_xyz"
+            ]
+            lateral_settle_progress[
+                "neutral_damping_latch_transition"
+            ] = neutral_damping_latch_transition
+            lateral_settle_progress[
                 "neutral_damping_command_reached_zero"
-            ] = bool(np.all(np.asarray(action[:3]) == 0.0))
+            ] = neutral_damping_latch_transition[
+                "damping_ramp_reached_zero"
+            ]
             feedback["lateral_settle_progress"] = (
                 lateral_settle_progress
             )
@@ -18108,9 +18287,14 @@ def _seek_stable_plate_contact(
             elif (
                 lateral_settle_progress["kinematic_brake_reversed"]
                 and not latest_outside_side_guard["accepted"]
-                and not neutral_damping_guard[
-                    "transient_rim_coverage_gap_authorized"
-                ]
+                and (
+                    not neutral_damping_guard[
+                        "transient_rim_coverage_gap_authorized"
+                    ]
+                    or neutral_damping_latch_transition[
+                        "coverage_gap_zero_release_required"
+                    ]
+                )
                 and active_vertical_corridor_geometric_height_action
                 > vertical_corridor_geometric_height_action_floor
             ):

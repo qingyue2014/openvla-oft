@@ -22,6 +22,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_low_side_settle_brake_action,
     _compiled_low_side_neutral_damping_action,
     _outside_side_neutral_damping_guard_evidence,
+    _outside_side_neutral_damping_latch_transition,
     _compiled_adaptive_lateral_rebuffer_action,
     _compiled_adaptive_high_lateral_action,
     _compiled_adaptive_high_plane_action,
@@ -3849,6 +3850,100 @@ def test_job503651_corridor_settle_requires_neutral_absolute_stop():
     assert transient_damping["damping_guard"][
         "transient_rim_coverage_gap_authorized"
     ] is True
+
+
+def test_job503657_damping_latch_survives_reserve_recovery_brake():
+    transient_guard = {
+        "full_guard_accepted": False,
+        "transient_rim_coverage_gap_authorized": True,
+        "damping_guard_authorized": True,
+    }
+    interrupted = _outside_side_neutral_damping_latch_transition(
+        damping_guard=transient_guard,
+        damping_latched_before=True,
+        damping_active_before=True,
+        kinematic_brake_reversed=False,
+        reserves_accepted=False,
+        commanded_action_xyz=np.array([0.0953, 0.0, 0.10]),
+        previous_ramp_action_xyz=np.array([0.1453, 0.0, 0.15]),
+    )
+    assert interrupted["neutral_damping_latched"] is True
+    assert interrupted["neutral_damping_active"] is False
+    assert interrupted["damping_pause_for_reserve_recovery"] is True
+    assert interrupted["next_ramp_action_xyz"] == pytest.approx(
+        [0.0953, 0.0, 0.10]
+    )
+
+    recovered = _outside_side_neutral_damping_latch_transition(
+        damping_guard=transient_guard,
+        damping_latched_before=interrupted[
+            "neutral_damping_latched"
+        ],
+        damping_active_before=interrupted["neutral_damping_active"],
+        kinematic_brake_reversed=True,
+        reserves_accepted=True,
+        commanded_action_xyz=np.array([0.1948, 0.0, 0.20]),
+        previous_ramp_action_xyz=np.asarray(
+            interrupted["next_ramp_action_xyz"], dtype=float
+        ),
+    )
+    assert recovered["neutral_damping_latched"] is True
+    assert recovered["neutral_damping_active"] is True
+    assert recovered["damping_resumed_after_reserve_recovery"] is True
+    assert recovered["next_ramp_action_xyz"] == pytest.approx(
+        [0.0953, 0.0, 0.10]
+    )
+    assert recovered["next_ramp_action_source"] == (
+        "preserved_across_full_brake_reserve_recovery"
+    )
+
+    not_yet_reversed = (
+        _outside_side_neutral_damping_latch_transition(
+            damping_guard=transient_guard,
+            damping_latched_before=True,
+            damping_active_before=False,
+            kinematic_brake_reversed=False,
+            reserves_accepted=True,
+            commanded_action_xyz=np.array([0.20, 0.0, 0.20]),
+            previous_ramp_action_xyz=np.array([0.0953, 0.0, 0.10]),
+        )
+    )
+    assert not_yet_reversed["neutral_damping_latched"] is True
+    assert not_yet_reversed["neutral_damping_active"] is False
+    assert not_yet_reversed[
+        "paused_ramp_reversal_confirmed"
+    ] is False
+    assert not_yet_reversed["damping_pause_for_reserve_recovery"] is True
+
+    zero_gap = _outside_side_neutral_damping_latch_transition(
+        damping_guard=transient_guard,
+        damping_latched_before=True,
+        damping_active_before=True,
+        kinematic_brake_reversed=True,
+        reserves_accepted=True,
+        commanded_action_xyz=np.zeros(3, dtype=float),
+        previous_ramp_action_xyz=np.array([0.0453, 0.0, 0.05]),
+    )
+    assert zero_gap["coverage_gap_zero_release_required"] is True
+    assert zero_gap["neutral_damping_latched"] is False
+    assert zero_gap["neutral_damping_active"] is False
+
+    overlap_missing_guard = {
+        "full_guard_accepted": False,
+        "transient_rim_coverage_gap_authorized": False,
+        "damping_guard_authorized": False,
+    }
+    disallowed = _outside_side_neutral_damping_latch_transition(
+        damping_guard=overlap_missing_guard,
+        damping_latched_before=True,
+        damping_active_before=False,
+        kinematic_brake_reversed=True,
+        reserves_accepted=True,
+        commanded_action_xyz=np.array([0.20, 0.0, 0.20]),
+        previous_ramp_action_xyz=np.array([0.0953, 0.0, 0.10]),
+    )
+    assert disallowed["neutral_damping_latched"] is False
+    assert disallowed["neutral_damping_active"] is False
 
 
 def test_500121_vertical_descent_is_structurally_staged_outside_one_step_reserve():
@@ -10221,6 +10316,14 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"previous_commanded_action_xyz"' in bounded_seek
     assert "_outside_side_neutral_damping_guard_evidence(" in bounded_seek
     assert '"neutral_damping_guard"' in bounded_seek
+    assert "neutral_damping_latched_before_action" in bounded_seek
+    assert "neutral_damping_ramp_action_before" in bounded_seek
+    assert (
+        "_outside_side_neutral_damping_latch_transition("
+        in bounded_seek
+    )
+    assert '"neutral_damping_ramp_action_xyz"' in bounded_seek
+    assert '"coverage_gap_zero_release_required"' in bounded_seek
     assert '"lateral_settle_trigger"' in bounded_seek
     assert bounded_seek.index("motion_sample = capture(") < (
         bounded_seek.index("if structural_violations:")

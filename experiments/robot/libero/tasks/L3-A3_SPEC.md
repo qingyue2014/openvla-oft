@@ -390,6 +390,28 @@ continue across a guard rejection only when every reported violation is
 reserves remain accepted. A rejected guard can never initiate damping, any
 other violation restores the full brake, and the full guard remains mandatory
 for both stability counting and handoff.
+Job503657 showed that the coverage-only continuation was still cleared when
+its second ramp frame reached `1.531869 mm`, only `0.018131 mm` below the
+unchanged `1.550 mm` recovery-exit line. The mandatory full outward/positive-Z
+brake restored the reserve to `1.597894 mm` in one frame, with only the same
+registered rim-center coverage gaps, but the cleared ramp could not resume.
+Repeated full brakes then lifted both fingers entirely above the rim and
+excited a long coupled lateral oscillation; step 230 reduced the outside
+clearance from `0.783708 mm` to `0.018179 mm` and correctly failed the
+unchanged `0.400 mm` one-step corridor gate. A damping ramp that was already
+latched now retains its last executed ramp command while the unchanged full
+brake restores either recovery-exit reserve. That brake is not allowed to
+replace the stored ramp predecessor. The ramp resumes only after both
+unchanged `1.550 mm` reserves and the existing active-ramp guard are accepted;
+the recovery brake must also have reversed all registered hazard-directed
+response signs before that resumption.
+rim-overlap loss or any other non-coverage violation still clears the latch.
+If the ramp reaches zero while only a coverage transient remains, that
+transient authorization ends immediately and control returns to the existing
+reduced geometric descent instead of holding above the rim. Full guard
+acceptance remains mandatory for neutral stability counting and handoff, and
+no physical, controller-authority, inventory, task, target, or budget
+threshold changes.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
