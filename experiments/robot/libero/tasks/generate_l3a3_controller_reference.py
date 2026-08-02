@@ -3370,6 +3370,170 @@ def _native_osc_action_spec_evidence(env):
     )
 
 
+def _native_osc_rotation_spec_evidence(env, native_action_spec):
+    """Resolve live OSC axis-angle scaling without hardcoded controller data."""
+    queue = [(env, "env")]
+    visited = set()
+    candidates = []
+    while queue and len(visited) < 12:
+        current, source = queue.pop(0)
+        if current is None or id(current) in visited:
+            continue
+        visited.add(id(current))
+        controller = getattr(current, "controller", None)
+        if controller is not None:
+            candidates.append((controller, f"{source}.controller"))
+        robots = getattr(current, "robots", None)
+        if robots is not None:
+            for index, robot in enumerate(robots):
+                queue.append((robot, f"{source}.robots[{index}]"))
+        for attribute in ("env", "_env"):
+            child = getattr(current, attribute, None)
+            if child is not None:
+                queue.append((child, f"{source}.{attribute}"))
+    if len(candidates) != 1:
+        raise RuntimeError(
+            "native wrist-yaw execution requires exactly one live OSC "
+            f"controller: observed={len(candidates)}"
+        )
+    controller, source = candidates[0]
+    try:
+        control_dim = int(controller.control_dim)
+        input_min = np.asarray(controller.input_min, dtype=float)
+        input_max = np.asarray(controller.input_max, dtype=float)
+        output_min = np.asarray(controller.output_min, dtype=float)
+        output_max = np.asarray(controller.output_max, dtype=float)
+        use_delta = bool(controller.use_delta)
+        use_ori = bool(controller.use_ori)
+    except Exception as exc:
+        raise RuntimeError(
+            "live OSC controller scaling fields are unavailable"
+        ) from exc
+    if (
+        control_dim != 6
+        or input_min.shape != (6,)
+        or input_max.shape != (6,)
+        or output_min.shape != (6,)
+        or output_max.shape != (6,)
+        or not all(
+            np.all(np.isfinite(values))
+            for values in (input_min, input_max, output_min, output_max)
+        )
+        or not np.all(input_min < input_max)
+        or not np.all(output_min < output_max)
+        or not use_delta
+        or not use_ori
+    ):
+        raise RuntimeError(
+            "live controller is not a finite 6-D delta OSC pose controller"
+        )
+    action_low = np.asarray(native_action_spec.get("low", ()), dtype=float)
+    action_high = np.asarray(native_action_spec.get("high", ()), dtype=float)
+    if (
+        action_low.shape != (7,)
+        or action_high.shape != (7,)
+        or not np.allclose(input_min, action_low[:6], rtol=0.0, atol=1e-12)
+        or not np.allclose(input_max, action_high[:6], rtol=0.0, atol=1e-12)
+    ):
+        raise RuntimeError(
+            "live OSC controller input range diverges from native action_spec"
+        )
+    scale = (output_max - output_min) / (input_max - input_min)
+    input_transform = 0.5 * (input_max + input_min)
+    output_transform = 0.5 * (output_max + output_min)
+    if (
+        np.any(scale[3:6] <= 0.0)
+        or not np.allclose(input_transform[3:6], 0.0, rtol=0.0, atol=1e-12)
+        or not np.allclose(output_transform[3:6], 0.0, rtol=0.0, atol=1e-12)
+    ):
+        raise RuntimeError(
+            "native OSC rotational scaling is not zero-centred and signed"
+        )
+    orientation_limits = getattr(controller, "orientation_limits", None)
+    if orientation_limits is not None and np.asarray(
+        orientation_limits
+    ).any():
+        raise RuntimeError(
+            "native OSC orientation limits could silently clip wrist yaw"
+        )
+    return {
+        "source": source,
+        "controller_class": type(controller).__name__,
+        "control_dim": control_dim,
+        "use_delta": use_delta,
+        "use_orientation": use_ori,
+        "input_min": input_min.tolist(),
+        "input_max": input_max.tolist(),
+        "output_min_axis_angle_rad": output_min.tolist(),
+        "output_max_axis_angle_rad": output_max.tolist(),
+        "output_axis_angle_rad_per_action": scale.tolist(),
+        "rotation_action_indices": [3, 4, 5],
+        "world_axis_angle_pre_multiplies_current_orientation": True,
+        "runtime_resolved": True,
+    }
+
+
+def _compiled_wrist_yaw_action(
+    *,
+    remaining_yaw_rad,
+    table_normal_world,
+    gripper,
+    native_action_spec,
+    rotation_spec,
+):
+    """Map a live remaining world yaw into one bounded native OSC action."""
+    normal = np.asarray(table_normal_world, dtype=float)
+    low = np.asarray(native_action_spec.get("low", ()), dtype=float)
+    high = np.asarray(native_action_spec.get("high", ()), dtype=float)
+    scale = np.asarray(
+        rotation_spec.get("output_axis_angle_rad_per_action", ()),
+        dtype=float,
+    )
+    if (
+        not np.isfinite(remaining_yaw_rad)
+        or normal.shape != (3,)
+        or not np.all(np.isfinite(normal))
+        or abs(np.linalg.norm(normal) - 1.0) > 1e-7
+        or low.shape != (7,)
+        or high.shape != (7,)
+        or scale.shape != (6,)
+        or np.any(scale[3:6] <= 0.0)
+        or not (low[6] <= gripper <= high[6])
+    ):
+        raise ValueError("wrist-yaw action inputs are invalid")
+    requested_axis_angle = normal * float(remaining_yaw_rad)
+    required_rotation_action = requested_axis_angle / scale[3:6]
+    bounded_rotation_action = np.clip(
+        required_rotation_action, low[3:6], high[3:6]
+    )
+    clipped_axes = [
+        int(axis + 3)
+        for axis in np.flatnonzero(
+            np.abs(required_rotation_action - bounded_rotation_action) > 1e-12
+        )
+    ]
+    action = np.zeros(7, dtype=float)
+    action[3:6] = bounded_rotation_action
+    action[6] = float(gripper)
+    commanded_axis_angle = scale[3:6] * bounded_rotation_action
+    commanded_yaw = float(np.dot(commanded_axis_angle, normal))
+    if remaining_yaw_rad != 0.0 and commanded_yaw * remaining_yaw_rad <= 0.0:
+        raise RuntimeError("native OSC yaw action has the wrong rotation direction")
+    return action, {
+        "remaining_yaw_rad": float(remaining_yaw_rad),
+        "table_normal_world": normal.tolist(),
+        "requested_world_axis_angle_rad": requested_axis_angle.tolist(),
+        "required_rotation_action": required_rotation_action.tolist(),
+        "bounded_rotation_action": bounded_rotation_action.tolist(),
+        "commanded_world_axis_angle_rad": commanded_axis_angle.tolist(),
+        "commanded_yaw_rad": commanded_yaw,
+        "clipped_action_axes": clipped_axes,
+        "action_will_clip": bool(clipped_axes),
+        "zero_translation": bool(np.all(action[:3] == 0.0)),
+        "native_rotation_spec_source": rotation_spec.get("source"),
+    }
+
+
 def _compiled_adaptive_vertical_descent_action(
     *,
     current_eef,
@@ -5979,6 +6143,277 @@ def _hypothetical_finger_yaw_env(env, *, eef_position, rotation):
     }
 
 
+def _compiled_finger_yaw_frame(env, *, eef_position):
+    """Capture the live compiled finger rigid frame for yaw feedback."""
+    model, data = env.sim.model, env.sim.data
+    eef_position = np.asarray(eef_position, dtype=float)
+    if eef_position.shape != (3,) or not np.all(np.isfinite(eef_position)):
+        raise ValueError("live yaw-frame EEF position must be finite and 3-D")
+    records = []
+    for geom_id in range(int(model.ngeom)):
+        body_name = model.body_id2name(int(model.geom_bodyid[geom_id])) or ""
+        semantic_side = _semantic_finger_side(body_name)
+        if semantic_side is None or (
+            int(model.geom_contype[geom_id]) == 0
+            and int(model.geom_conaffinity[geom_id]) == 0
+        ):
+            continue
+        name = model.geom_id2name(geom_id) or f"geom_{geom_id}"
+        rotation = _validated_rigid_rotation_matrix(
+            np.asarray(data.geom_xmat[geom_id], dtype=float).reshape(3, 3),
+            label=f"live yaw-frame finger geom {name}",
+        )
+        center, half_size = _compiled_geom_world_aabb(
+            model, data, geom_id
+        )
+        records.append(
+            {
+                "geom": name,
+                "geom_id": int(geom_id),
+                "body": body_name,
+                "semantic_side": semantic_side,
+                "origin_world": np.asarray(
+                    data.geom_xpos[geom_id], dtype=float
+                ).tolist(),
+                "center_world": center.tolist(),
+                "world_aabb_half_size": half_size.tolist(),
+                "rotation_matrix_world": rotation.tolist(),
+            }
+        )
+    if {
+        record["semantic_side"] for record in records
+    } != {"left", "right"}:
+        raise RuntimeError(
+            "live yaw frame lacks compiled left/right finger collision geoms"
+        )
+    maximum_radius = max(
+        float(
+            np.linalg.norm(
+                np.asarray(record["center_world"], dtype=float)
+                - eef_position
+            )
+            + np.linalg.norm(
+                np.asarray(record["world_aabb_half_size"], dtype=float)
+            )
+        )
+        for record in records
+    )
+    if not np.isfinite(maximum_radius) or maximum_radius <= 0.0:
+        raise RuntimeError("live finger yaw-frame radius is invalid")
+    return {
+        "eef_position_world": eef_position.tolist(),
+        "finger_geoms": records,
+        "maximum_finger_radius_from_eef_m": maximum_radius,
+    }
+
+
+def _rotation_matrix_error_angle(rotation):
+    rotation = _validated_rigid_rotation_matrix(
+        rotation, label="relative yaw error"
+    )
+    cosine = float(np.clip(0.5 * (np.trace(rotation) - 1.0), -1.0, 1.0))
+    return float(np.arccos(cosine))
+
+
+def _wrist_yaw_attainment_evidence(
+    *,
+    reference_frame,
+    current_frame,
+    yaw_spec,
+    maximum_angle_error_rad,
+    maximum_position_drift_m,
+    angular_progress_epsilon_rad,
+    previous_absolute_error_rad=None,
+):
+    """Measure actual rigid finger rotation against the selected yaw target."""
+    if (
+        not np.isfinite(maximum_angle_error_rad)
+        or maximum_angle_error_rad <= 0.0
+        or not np.isfinite(maximum_position_drift_m)
+        or maximum_position_drift_m <= 0.0
+        or not np.isfinite(angular_progress_epsilon_rad)
+        or angular_progress_epsilon_rad <= 0.0
+    ):
+        raise ValueError("wrist-yaw attainment thresholds must be positive")
+    reference_eef = np.asarray(
+        reference_frame["eef_position_world"], dtype=float
+    )
+    current_eef = np.asarray(
+        current_frame["eef_position_world"], dtype=float
+    )
+    target_rotation = _validated_rigid_rotation_matrix(
+        yaw_spec["rotation_matrix_world"], label="selected wrist yaw"
+    )
+    normal = np.asarray(yaw_spec["table_normal_world"], dtype=float)
+    reference_outward = np.r_[
+        np.asarray(yaw_spec["reference_outward_direction_xy"], dtype=float),
+        0.0,
+    ]
+    reference_records = {
+        record["geom"]: record for record in reference_frame["finger_geoms"]
+    }
+    current_records = {
+        record["geom"]: record for record in current_frame["finger_geoms"]
+    }
+    if (
+        set(reference_records) != set(current_records)
+        or not reference_records
+    ):
+        raise RuntimeError(
+            "live finger geom inventory changed during wrist yaw"
+        )
+    relative_rotations = []
+    maximum_rigid_origin_error = 0.0
+    for name in sorted(reference_records):
+        reference = reference_records[name]
+        current = current_records[name]
+        if (
+            reference["body"] != current["body"]
+            or reference["semantic_side"] != current["semantic_side"]
+        ):
+            raise RuntimeError(
+                "live finger geom provenance changed during wrist yaw"
+            )
+        reference_rotation = _validated_rigid_rotation_matrix(
+            reference["rotation_matrix_world"],
+            label=f"reference finger {name}",
+        )
+        current_rotation = _validated_rigid_rotation_matrix(
+            current["rotation_matrix_world"],
+            label=f"current finger {name}",
+        )
+        relative = _validated_rigid_rotation_matrix(
+            current_rotation @ reference_rotation.T,
+            label=f"relative finger {name}",
+        )
+        relative_rotations.append((name, relative))
+    measured_rotation = relative_rotations[0][1]
+    maximum_rotation_disagreement = max(
+        _rotation_matrix_error_angle(relative @ measured_rotation.T)
+        for _, relative in relative_rotations
+    )
+    for name in sorted(reference_records):
+        reference_origin = np.asarray(
+            reference_records[name]["origin_world"], dtype=float
+        )
+        current_origin = np.asarray(
+            current_records[name]["origin_world"], dtype=float
+        )
+        predicted_origin = (
+            current_eef
+            + measured_rotation @ (reference_origin - reference_eef)
+        )
+        maximum_rigid_origin_error = max(
+            maximum_rigid_origin_error,
+            float(np.linalg.norm(current_origin - predicted_origin)),
+        )
+    rotated_reference = measured_rotation @ reference_outward
+    actual_yaw = float(
+        np.arctan2(
+            np.dot(normal, np.cross(reference_outward, rotated_reference)),
+            np.dot(reference_outward, rotated_reference),
+        )
+    )
+    target_yaw = float(yaw_spec["yaw_angle_rad"])
+    remaining_yaw = float(
+        np.arctan2(
+            np.sin(target_yaw - actual_yaw),
+            np.cos(target_yaw - actual_yaw),
+        )
+    )
+    absolute_error = abs(remaining_yaw)
+    target_error_angle = _rotation_matrix_error_angle(
+        target_rotation @ measured_rotation.T
+    )
+    position_drift = float(np.linalg.norm(current_eef - reference_eef))
+    axis_error = float(np.linalg.norm(measured_rotation @ normal - normal))
+    rotation_direction_valid = bool(
+        actual_yaw * target_yaw >= -angular_progress_epsilon_rad
+        and abs(actual_yaw)
+        <= abs(target_yaw) + maximum_angle_error_rad
+    )
+    rigid_frame_valid = bool(
+        maximum_rotation_disagreement < maximum_angle_error_rad
+        and maximum_rigid_origin_error < maximum_position_drift_m
+        and axis_error < maximum_angle_error_rad
+    )
+    progress = None
+    progressed = None
+    if previous_absolute_error_rad is not None:
+        if not np.isfinite(previous_absolute_error_rad):
+            raise ValueError("previous wrist-yaw error must be finite")
+        progress = float(previous_absolute_error_rad - absolute_error)
+        progressed = bool(progress > angular_progress_epsilon_rad)
+    attained = bool(
+        absolute_error < maximum_angle_error_rad
+        and target_error_angle < maximum_angle_error_rad
+        and position_drift < maximum_position_drift_m
+        and rotation_direction_valid
+        and rigid_frame_valid
+    )
+    return {
+        "attained": attained,
+        "actual_yaw_rad": actual_yaw,
+        "target_yaw_rad": target_yaw,
+        "remaining_yaw_rad": remaining_yaw,
+        "absolute_error_rad": absolute_error,
+        "target_rotation_error_rad": target_error_angle,
+        "maximum_angle_error_rad": float(maximum_angle_error_rad),
+        "eef_position_drift_m": position_drift,
+        "maximum_position_drift_m": float(maximum_position_drift_m),
+        "maximum_finger_rotation_disagreement_rad": (
+            maximum_rotation_disagreement
+        ),
+        "maximum_finger_rigid_origin_error_m": maximum_rigid_origin_error,
+        "table_normal_axis_error": axis_error,
+        "rotation_direction_valid": rotation_direction_valid,
+        "rigid_frame_valid": rigid_frame_valid,
+        "angular_progress_rad": progress,
+        "angular_progress_epsilon_rad": float(
+            angular_progress_epsilon_rad
+        ),
+        "progressed": progressed,
+    }
+
+
+def _wrist_yaw_step_gate(
+    *,
+    overhead_guard,
+    robot_nonrobot_contact_gate,
+    action_evidence,
+    attainment_evidence,
+    consecutive_stall_steps,
+    maximum_stall_steps,
+):
+    """Fail-closed gate for one measured high-space wrist-yaw frame."""
+    if maximum_stall_steps < 1 or consecutive_stall_steps < 0:
+        raise ValueError("wrist-yaw stall counters are invalid")
+    violations = []
+    if not overhead_guard.get("accepted", False):
+        violations.append("high_free_space_overhead_guard_failed")
+    if not robot_nonrobot_contact_gate.get("accepted", False):
+        violations.append("forbidden_robot_native_contact_during_wrist_yaw")
+    if action_evidence.get("action_will_clip", False):
+        violations.append("wrist_yaw_action_would_clip")
+    if not action_evidence.get("zero_translation", False):
+        violations.append("wrist_yaw_action_contains_translation")
+    if not attainment_evidence.get("rotation_direction_valid", False):
+        violations.append("wrist_yaw_rotation_direction_invalid")
+    if not attainment_evidence.get("rigid_frame_valid", False):
+        violations.append("wrist_yaw_finger_frame_not_rigid")
+    if (
+        not attainment_evidence.get("attained", False)
+        and consecutive_stall_steps >= maximum_stall_steps
+    ):
+        violations.append("wrist_yaw_progress_stalled")
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "consecutive_stall_steps": int(consecutive_stall_steps),
+        "maximum_stall_steps": int(maximum_stall_steps),
+    }
+
+
 def _compiled_hypothetical_wrist_yaw_plan(
     env,
     *,
@@ -6162,6 +6597,226 @@ def _compiled_hypothetical_wrist_yaw_plan(
             ),
             "policy_or_controller_action_executed": False,
         },
+    }
+
+
+def _real_recompile_wrist_yaw_candidate(
+    env,
+    *,
+    selected_candidate,
+    plate_position,
+    eef_position,
+    outside_clearance_m,
+    plate_approach_eef_height,
+    position_action_scale,
+    attainment_evidence,
+    table_normal_evidence,
+):
+    """Compile the descent route directly from the attained live sim pose."""
+    if not attainment_evidence.get("attained", False):
+        raise RuntimeError(
+            "real wrist-yaw geometry recompile requires measured pose attainment"
+        )
+    relation = selected_candidate.get("native_push_direction_relations")
+    if relation != ["tangent_clockwise"] or not selected_candidate.get(
+        "wrist_yaw_route_selected", False
+    ):
+        raise RuntimeError(
+            "real wrist-yaw recompile received an unselected direction"
+        )
+    outward = np.asarray(
+        selected_candidate["outward_direction_xy"], dtype=float
+    )
+    live_table_normal, live_table_normal_evidence = (
+        _compiled_table_normal_evidence(env)
+    )
+    if not np.allclose(
+        live_table_normal,
+        table_normal_evidence["table_normal_world"],
+        rtol=0.0,
+        atol=1e-9,
+    ):
+        raise RuntimeError(
+            "native table frame changed before real wrist-yaw recompile"
+        )
+    outside_side, side_contact, compiled = (
+        _compiled_native_side_contact_plan(
+            env,
+            plate_position,
+            eef_position,
+            outward,
+            np.asarray(selected_candidate["point_xy"], dtype=float),
+            outside_clearance_m,
+        )
+    )
+    outside_high = outside_side.copy()
+    outside_high[2] = plate_position[2] + plate_approach_eef_height
+    center_high = outside_high.copy()
+    center_high[:2] = plate_position[:2]
+    required_action = (
+        outside_high - center_high
+    ) / float(position_action_scale)
+    bounded_action = _position_action(
+        center_high,
+        outside_high,
+        0.0,
+        position_action_scale,
+    )[:3]
+    clipped_axes = [
+        int(axis)
+        for axis in np.flatnonzero(np.abs(required_action) > 1.0 + 1e-9)
+    ]
+
+    # Rebuild the planned outside-side guard from the actual post-yaw geom
+    # frames.  The only projection is a rigid translation to the compiled
+    # target; no hypothetical orientation is used for this route.
+    model, data = env.sim.model, env.sim.data
+    rim_names = set(compiled["plate_rim_geoms"])
+    table_names = set(compiled["table_geoms"])
+    rim_bounds = []
+    table_bounds = []
+    finger_bounds = []
+    for geom_id in range(int(model.ngeom)):
+        name = model.geom_id2name(geom_id) or f"geom_{geom_id}"
+        body_name = model.body_id2name(int(model.geom_bodyid[geom_id])) or ""
+        if name in rim_names:
+            rim_bounds.append(
+                (name, *_compiled_geom_world_aabb(model, data, geom_id))
+            )
+        if name in table_names:
+            table_bounds.append(
+                (name, *_compiled_geom_world_aabb(model, data, geom_id))
+            )
+        semantic_side = _semantic_finger_side(body_name)
+        if semantic_side is not None and (
+            int(model.geom_contype[geom_id]) != 0
+            or int(model.geom_conaffinity[geom_id]) != 0
+        ):
+            finger_bounds.append(
+                (
+                    name,
+                    semantic_side,
+                    *_compiled_geom_world_aabb(model, data, geom_id),
+                )
+            )
+    if not rim_bounds or not table_bounds or not finger_bounds:
+        raise RuntimeError(
+            "attained live wrist pose has incomplete native bound inventory"
+        )
+    translation = outside_side - np.asarray(eef_position, dtype=float)
+    planned_finger_bounds = [
+        (name, side, center + translation, half_size.copy())
+        for name, side, center, half_size in finger_bounds
+    ]
+    planned_outside_guard = _outside_side_guard_from_world_aabbs(
+        plate_position=plate_position,
+        outward_direction_xy=outward,
+        rim_bounds=rim_bounds,
+        finger_bounds=planned_finger_bounds,
+        required_outside_clearance_m=outside_clearance_m,
+        table_bounds=table_bounds,
+        required_finger_table_clearance_m=compiled[
+            "finger_table_clearance_derivation"
+        ]["required_clearance_m"],
+        outside_clearance_derivation={
+            "source": (
+                "attained live geom frames rigidly translated to the direct "
+                "compiled outside-side target"
+            ),
+            "hypothetical_orientation_used": False,
+        },
+        finger_table_clearance_derivation=compiled[
+            "finger_table_clearance_derivation"
+        ],
+    )
+    skew = float(compiled["dual_finger_contact_skew_m"])
+    vertical = compiled["vertical_feasibility"]
+    selected_table_clearance = float(
+        vertical["selected_finger_table_clearance_m"]
+    )
+    required_table_clearance = float(
+        vertical["required_finger_table_clearance_m"]
+    )
+    planned_table_clearance = float(
+        planned_outside_guard["finger_table_vertical_clearance_m"]
+    )
+    rim_coverage = vertical["selected_rim_overlap_by_side"]
+    violations = []
+    if not skew < float(outside_clearance_m):
+        violations.append("real_dual_finger_contact_skew_not_strictly_below_5mm")
+    violations.extend(
+        f"real_planned_outside_guard:{violation}"
+        for violation in planned_outside_guard["violations"]
+    )
+    if selected_table_clearance <= required_table_clearance:
+        violations.append("real_selected_finger_table_clearance_not_strict")
+    if planned_table_clearance <= required_table_clearance:
+        violations.append("real_planned_finger_table_clearance_not_strict")
+    for side in ("left", "right"):
+        evidence = rim_coverage.get(side, {})
+        if (
+            float(evidence.get("overlap_m", 0.0)) <= 0.0
+            or not evidence.get("rim_center_covered", False)
+        ):
+            violations.append(f"real_{side}_finger_plate_rim_coverage_failed")
+    if violations:
+        raise RuntimeError(
+            "attained wrist pose failed direct live 5 mm skew or "
+            "table/plate geometry revalidation: "
+            + json.dumps(
+                {
+                    "violations": violations,
+                    "dual_finger_contact_skew_m": skew,
+                    "maximum_dual_finger_contact_skew_m": float(
+                        outside_clearance_m
+                    ),
+                    "planned_outside_guard": planned_outside_guard,
+                    "vertical_feasibility": vertical,
+                },
+                sort_keys=True,
+            )
+        )
+    direct_revalidation = {
+        "performed": True,
+        "source": (
+            "direct live compiled geom_xpos/geom_xmat after measured "
+            "wrist-yaw attainment"
+        ),
+        "attainment_evidence": attainment_evidence,
+        "table_normal_derivation": live_table_normal_evidence,
+        "dual_finger_contact_skew_m": skew,
+        "maximum_dual_finger_contact_skew_m": float(
+            outside_clearance_m
+        ),
+        "strict_dual_finger_skew_accepted": bool(
+            skew < float(outside_clearance_m)
+        ),
+        "planned_outside_guard": planned_outside_guard,
+        "selected_finger_table_clearance_m": selected_table_clearance,
+        "planned_finger_table_clearance_m": planned_table_clearance,
+        "required_finger_table_clearance_m": required_table_clearance,
+        "selected_rim_overlap_by_side": rim_coverage,
+        "eligible": True,
+        "hypothetical_geometry_used_for_descent": False,
+    }
+    return {
+        **selected_candidate,
+        "diagnostic_only": False,
+        "route_selection_candidate": True,
+        "selection_eligible": True,
+        "selection_violations": [],
+        "outside_high_target": outside_high.tolist(),
+        "outside_side_target": outside_side.tolist(),
+        "side_contact_target": side_contact.tolist(),
+        "compiled_geometry": compiled,
+        "dual_finger_contact_skew_m": skew,
+        "outside_high_required_action": required_action.tolist(),
+        "outside_high_bounded_action": bounded_action.tolist(),
+        "outside_high_action_peak": float(np.max(np.abs(required_action))),
+        "outside_high_action_norm": float(np.linalg.norm(required_action)),
+        "outside_high_clipped_action_axes": clipped_axes,
+        "outside_high_action_will_clip": bool(clipped_axes),
+        "real_sim_geometry_recompile": direct_revalidation,
     }
 
 
@@ -6408,6 +7063,74 @@ def _select_reachable_compiled_side_candidate(candidates):
     )
 
 
+def _select_executable_wrist_yaw_candidate(candidates):
+    """Select the preregistered minimum-yaw native push-frame route."""
+    candidates = list(candidates)
+    clockwise = [
+        candidate
+        for candidate in candidates
+        if candidate.get("native_push_direction_relations")
+        == ["tangent_clockwise"]
+    ]
+    if len(clockwise) != 1:
+        raise RuntimeError(
+            "wrist-yaw route requires exactly one native tangent_clockwise "
+            "candidate"
+        )
+    selected = clockwise[0]
+    yaw_diagnostic = selected.get("hypothetical_wrist_yaw", {})
+    if not yaw_diagnostic.get(
+        "hypothetical_compiled_geometry_eligible", False
+    ):
+        raise RuntimeError(
+            "preregistered tangent_clockwise wrist-yaw route failed its "
+            "hypothetical compiled geometry gate"
+        )
+    eligible = [
+        candidate
+        for candidate in candidates
+        if candidate.get("hypothetical_wrist_yaw", {}).get(
+            "hypothetical_compiled_geometry_eligible", False
+        )
+    ]
+    selected_magnitude = abs(
+        float(yaw_diagnostic["yaw"]["yaw_angle_rad"])
+    )
+    if any(
+        abs(
+            float(
+                candidate["hypothetical_wrist_yaw"]["yaw"][
+                    "yaw_angle_rad"
+                ]
+            )
+        )
+        < selected_magnitude
+        for candidate in eligible
+        if candidate is not selected
+    ):
+        raise RuntimeError(
+            "tangent_clockwise is no longer the minimum-magnitude eligible "
+            "native push-frame wrist yaw"
+        )
+    selected["wrist_yaw_route_selected"] = True
+    selected["wrist_yaw_route_selection_basis"] = {
+        "required_relation": "tangent_clockwise",
+        "minimum_absolute_yaw_among_hypothetically_eligible": True,
+        "absolute_yaw_rad": selected_magnitude,
+        "superpod_diagnostic_authorization": {
+            "job_id": "502381",
+            "commit": "3376794",
+            "observed_minimum_amplitude_relation": "tangent_clockwise",
+            "runtime_revalidation_still_required": True,
+        },
+        "old_plus_x_route_fallback_permitted": False,
+        "requires_high_free_space_execution": True,
+        "requires_real_pose_attainment": True,
+        "requires_real_sim_geometry_recompile_before_descent": True,
+    }
+    return selected
+
+
 def _compiled_trailing_side_contact_candidates(
     env,
     *,
@@ -6418,8 +7141,9 @@ def _compiled_trailing_side_contact_candidates(
     outside_clearance_m,
     plate_approach_eef_height,
     position_action_scale,
+    reference_outward_direction_xy=None,
 ):
-    """Compile legacy route candidates plus native-direction diagnostics."""
+    """Compile push-frame yaw diagnostics and select the clockwise route."""
     plate_position = np.asarray(plate_position, dtype=float)
     eef_position = np.asarray(eef_position, dtype=float)
     if plate_position.shape != (3,) or eef_position.shape != (3,):
@@ -6516,22 +7240,43 @@ def _compiled_trailing_side_contact_candidates(
                 ),
             }
         )
-    selected = _select_reachable_compiled_side_candidate(candidates)
-    reference_outward = np.asarray(
-        selected["outward_direction_xy"], dtype=float
+    if reference_outward_direction_xy is None:
+        reference_outward = np.array([1.0, 0.0], dtype=float)
+        reference_source = "initial_native_low_skew_plus_x"
+    else:
+        reference_outward = np.asarray(
+            reference_outward_direction_xy, dtype=float
+        )
+        if (
+            reference_outward.shape != (2,)
+            or not np.all(np.isfinite(reference_outward))
+            or np.linalg.norm(reference_outward) <= 1e-9
+        ):
+            raise ValueError(
+                "live wrist-yaw reference outward direction is invalid"
+            )
+        reference_outward /= np.linalg.norm(reference_outward)
+        reference_source = "previous_real_recompiled_wrist_approach"
+    reference_contact_xy = (
+        plate_position[:2] + reference_outward * float(backoff)
+    )
+    _, _, reference_compiled_geometry = (
+        _compiled_native_side_contact_plan(
+            env,
+            plate_position,
+            eef_position,
+            reference_outward,
+            reference_contact_xy,
+            outside_clearance_m,
+        )
     )
     if (
-        not selected["compiled_geometry_eligible"]
-        or not np.allclose(
-            reference_outward,
-            [1.0, 0.0],
-            rtol=0.0,
-            atol=1e-9,
-        )
+        reference_compiled_geometry["dual_finger_contact_skew_m"]
+        > outside_clearance_m
     ):
         raise RuntimeError(
-            "hypothetical yaw requires the current compiled low-skew +X "
-            "legacy approach to remain selected"
+            "live wrist orientation no longer has the registered low-skew "
+            "reference approach"
         )
     diagnostic_candidates = [
         candidate for candidate in candidates if candidate["diagnostic_only"]
@@ -6583,7 +7328,281 @@ def _compiled_trailing_side_contact_candidates(
                 table_normal_evidence=table_normal_evidence,
             )
         )
+        candidate["hypothetical_wrist_yaw"][
+            "reference_compiled_geometry"
+        ] = reference_compiled_geometry
+        candidate["hypothetical_wrist_yaw"][
+            "reference_outward_source"
+        ] = reference_source
+    selected = _select_executable_wrist_yaw_candidate(candidates)
     return selected, candidates
+
+
+def _execute_high_safe_wrist_yaw(
+    rollout,
+    env,
+    args,
+    *,
+    selected_candidate,
+    center_high_target,
+    gripper,
+    diagnostics,
+):
+    """Execute selected yaw at center-high, then recompile real geometry."""
+    if selected_candidate.get("native_push_direction_relations") != [
+        "tangent_clockwise"
+    ] or not selected_candidate.get("wrist_yaw_route_selected", False):
+        raise RuntimeError(
+            "high-safe wrist yaw cannot silently execute an unselected direction"
+        )
+    current_eef = np.asarray(
+        rollout.obs["robot0_eef_pos"], dtype=float
+    )
+    center_high_target = np.asarray(center_high_target, dtype=float)
+    center_error = float(np.linalg.norm(current_eef - center_high_target))
+    if center_error > args.position_tolerance:
+        raise RuntimeError(
+            "wrist yaw may execute only after reaching verified center-high "
+            f"free space: error={center_error}"
+        )
+    native_action_spec = _native_osc_action_spec_evidence(env)
+    rotation_spec = _native_osc_rotation_spec_evidence(
+        env, native_action_spec
+    )
+    table_normal, table_normal_evidence = (
+        _compiled_table_normal_evidence(env)
+    )
+    yaw_spec = selected_candidate["hypothetical_wrist_yaw"]["yaw"]
+    if not np.allclose(
+        yaw_spec["table_normal_world"],
+        table_normal,
+        rtol=0.0,
+        atol=1e-9,
+    ):
+        raise RuntimeError(
+            "selected yaw axis diverged from the live native table normal"
+        )
+    maximum_controller_world_step = float(
+        args.position_action_scale
+        * args.plate_contact_seek_max_translation_action
+    )
+    _, overhead_geometry = _compiled_overhead_staging_geometry(
+        env,
+        start_eef_position=current_eef,
+        one_step_vertical_reserve_m=maximum_controller_world_step,
+    )
+    initial_overhead_guard = _live_compiled_overhead_guard(
+        env, overhead_geometry
+    )
+    initial_contact_gate = _robot_nonrobot_contact_evidence(
+        env, allowed_body_pairs=()
+    )
+    if (
+        not initial_overhead_guard["accepted"]
+        or not initial_contact_gate["accepted"]
+    ):
+        raise RuntimeError(
+            "center-high wrist-yaw free-space gate failed before rotation: "
+            f"overhead={json.dumps(initial_overhead_guard, sort_keys=True)} "
+            f"contacts={json.dumps(initial_contact_gate, sort_keys=True)}"
+        )
+    reference_frame = _compiled_finger_yaw_frame(
+        env, eef_position=current_eef
+    )
+    hypothetical = selected_candidate["hypothetical_wrist_yaw"]
+    skew_margin = float(
+        hypothetical["maximum_dual_finger_contact_skew_m"]
+        - hypothetical["dual_finger_contact_skew_m"]
+    )
+    maximum_radius = float(
+        reference_frame["maximum_finger_radius_from_eef_m"]
+    )
+    target_yaw_magnitude = abs(float(yaw_spec["yaw_angle_rad"]))
+    maximum_angle_error = float(
+        np.nextafter(
+            min(
+                skew_margin / maximum_radius,
+                target_yaw_magnitude / 4.0,
+            ),
+            0.0,
+        )
+    )
+    angular_progress_epsilon = float(
+        args.minimum_saturated_waypoint_progress / maximum_radius
+    )
+    if (
+        skew_margin <= 0.0
+        or maximum_angle_error <= 0.0
+        or angular_progress_epsilon <= 0.0
+        or maximum_angle_error <= angular_progress_epsilon
+    ):
+        raise RuntimeError(
+            "selected yaw lacks a positive geometry-derived attainment margin"
+        )
+    tolerance_derivation = {
+        "unchanged_dual_finger_skew_limit_m": float(
+            hypothetical["maximum_dual_finger_contact_skew_m"]
+        ),
+        "hypothetical_dual_finger_skew_m": float(
+            hypothetical["dual_finger_contact_skew_m"]
+        ),
+        "strict_skew_margin_m": skew_margin,
+        "maximum_finger_radius_from_eef_m": maximum_radius,
+        "maximum_angle_error_rad": maximum_angle_error,
+        "angular_progress_epsilon_rad": angular_progress_epsilon,
+        "angular_progress_epsilon_source": (
+            "existing minimum_saturated_waypoint_progress divided by the "
+            "live maximum finger radius"
+        ),
+        "position_drift_limit_m": float(args.position_tolerance),
+    }
+    current_frame = reference_frame
+    attainment = _wrist_yaw_attainment_evidence(
+        reference_frame=reference_frame,
+        current_frame=current_frame,
+        yaw_spec=yaw_spec,
+        maximum_angle_error_rad=maximum_angle_error,
+        maximum_position_drift_m=args.position_tolerance,
+        angular_progress_epsilon_rad=angular_progress_epsilon,
+    )
+    frames = []
+    consecutive_stall_steps = 0
+    for yaw_step in range(1, args.max_waypoint_steps + 1):
+        if attainment["attained"]:
+            break
+        action, action_evidence = _compiled_wrist_yaw_action(
+            remaining_yaw_rad=attainment["remaining_yaw_rad"],
+            table_normal_world=table_normal,
+            gripper=gripper,
+            native_action_spec=native_action_spec,
+            rotation_spec=rotation_spec,
+        )
+        pre_gate = _wrist_yaw_step_gate(
+            overhead_guard=_live_compiled_overhead_guard(
+                env, overhead_geometry
+            ),
+            robot_nonrobot_contact_gate=(
+                _robot_nonrobot_contact_evidence(
+                    env, allowed_body_pairs=()
+                )
+            ),
+            action_evidence=action_evidence,
+            attainment_evidence=attainment,
+            consecutive_stall_steps=consecutive_stall_steps,
+            maximum_stall_steps=args.push_tracking_steps,
+        )
+        if not pre_gate["accepted"]:
+            raise RuntimeError(
+                "wrist-yaw pre-action gate failed closed: "
+                f"{json.dumps(pre_gate, sort_keys=True)}"
+            )
+        previous_absolute_error = float(attainment["absolute_error_rad"])
+        rollout.advance(action, "task_wrist_yaw")
+        current_eef = np.asarray(
+            rollout.obs["robot0_eef_pos"], dtype=float
+        )
+        current_frame = _compiled_finger_yaw_frame(
+            env, eef_position=current_eef
+        )
+        attainment = _wrist_yaw_attainment_evidence(
+            reference_frame=reference_frame,
+            current_frame=current_frame,
+            yaw_spec=yaw_spec,
+            maximum_angle_error_rad=maximum_angle_error,
+            maximum_position_drift_m=args.position_tolerance,
+            angular_progress_epsilon_rad=angular_progress_epsilon,
+            previous_absolute_error_rad=previous_absolute_error,
+        )
+        consecutive_stall_steps = (
+            0
+            if attainment["progressed"] or attainment["attained"]
+            else consecutive_stall_steps + 1
+        )
+        post_overhead_guard = _live_compiled_overhead_guard(
+            env, overhead_geometry
+        )
+        post_contact_gate = _robot_nonrobot_contact_evidence(
+            env, allowed_body_pairs=()
+        )
+        post_gate = _wrist_yaw_step_gate(
+            overhead_guard=post_overhead_guard,
+            robot_nonrobot_contact_gate=post_contact_gate,
+            action_evidence=action_evidence,
+            attainment_evidence=attainment,
+            consecutive_stall_steps=consecutive_stall_steps,
+            maximum_stall_steps=args.push_tracking_steps,
+        )
+        frame = {
+            "yaw_step": int(yaw_step),
+            "action": action.tolist(),
+            "action_evidence": action_evidence,
+            "attainment_evidence": attainment,
+            "pre_gate": pre_gate,
+            "post_gate": post_gate,
+            "post_overhead_guard": post_overhead_guard,
+            "post_robot_nonrobot_contact_gate": post_contact_gate,
+        }
+        frames.append(frame)
+        if not post_gate["accepted"]:
+            raise RuntimeError(
+                "wrist-yaw post-action gate failed closed: "
+                f"frame={json.dumps(frame, sort_keys=True)} "
+                f"scene={json.dumps(diagnostics(), sort_keys=True)}"
+            )
+        if attainment["attained"]:
+            break
+    else:
+        raise RuntimeError(
+            "wrist yaw exhausted the unchanged 180-step waypoint budget "
+            f"without pose attainment: frames={json.dumps(frames, sort_keys=True)}"
+        )
+    yaw_steps = len(frames)
+    if not attainment["attained"] or yaw_steps >= args.max_waypoint_steps:
+        raise RuntimeError(
+            "wrist yaw left no verified pose or structural waypoint budget"
+        )
+    live_plate = body_pose(env, PLATE_BODY)[0].copy()
+    outward = np.asarray(
+        selected_candidate["outward_direction_xy"], dtype=float
+    )
+    live_selected_candidate = {
+        **selected_candidate,
+        "point_xy": (
+            live_plate[:2]
+            + outward * float(args.plate_contact_backoff)
+        ).tolist(),
+    }
+    realized_candidate = _real_recompile_wrist_yaw_candidate(
+        env,
+        selected_candidate=live_selected_candidate,
+        plate_position=live_plate,
+        eef_position=current_eef,
+        outside_clearance_m=args.plate_contact_outside_clearance,
+        plate_approach_eef_height=args.plate_approach_eef_height,
+        position_action_scale=args.position_action_scale,
+        attainment_evidence=attainment,
+        table_normal_evidence=table_normal_evidence,
+    )
+    return {
+        "selected_native_push_direction_relation": "tangent_clockwise",
+        "selected_outward_direction_xy": outward.tolist(),
+        "old_plus_x_route_fallback_permitted": False,
+        "center_high_target": center_high_target.tolist(),
+        "native_osc_action_spec": native_action_spec,
+        "native_osc_rotation_spec": rotation_spec,
+        "table_normal_derivation": table_normal_evidence,
+        "overhead_geometry": overhead_geometry,
+        "initial_overhead_guard": initial_overhead_guard,
+        "initial_robot_nonrobot_contact_gate": initial_contact_gate,
+        "tolerance_derivation": tolerance_derivation,
+        "yaw_frames": frames,
+        "yaw_steps": yaw_steps,
+        "final_attainment_evidence": attainment,
+        "real_sim_recompiled_candidate": realized_candidate,
+        "remaining_structural_waypoint_steps": int(
+            args.max_waypoint_steps - yaw_steps
+        ),
+    }
 
 
 def _body_contact_counterparts(env, body_name):
@@ -7148,8 +8167,20 @@ def _seek_stable_plate_contact(
     geometry,
     source,
     diagnostics,
+    structural_waypoint_budget=None,
 ):
     """Descend outside the plate, then establish two-finger side contact."""
+    if structural_waypoint_budget is None:
+        structural_waypoint_budget = int(args.max_waypoint_steps)
+    if (
+        not isinstance(structural_waypoint_budget, (int, np.integer))
+        or structural_waypoint_budget < 1
+        or structural_waypoint_budget > int(args.max_waypoint_steps)
+    ):
+        raise ValueError(
+            "structural waypoint budget must be in the unchanged configured range"
+        )
+    structural_waypoint_budget = int(structural_waypoint_budget)
     plate_reference = body_pose(env, PLATE_BODY)[0].copy()
     samples = []
     native_action_spec = _native_osc_action_spec_evidence(env)
@@ -7390,7 +8421,7 @@ def _seek_stable_plate_contact(
     minimum_full_scale_actions_from_geometry = int(
         np.ceil(total_structural_action_lower_bound)
     )
-    if minimum_full_scale_actions_from_geometry > args.max_waypoint_steps:
+    if minimum_full_scale_actions_from_geometry > structural_waypoint_budget:
         raise RuntimeError(
             "compiled overhead route geometric lower bound alone exceeds "
             "the unchanged structural waypoint hard loop: "
@@ -7398,7 +8429,7 @@ def _seek_stable_plate_contact(
             f"{total_structural_action_lower_bound} "
             f"minimum_full_scale_actions="
             f"{minimum_full_scale_actions_from_geometry} "
-            f"maximum_steps={args.max_waypoint_steps}"
+            f"maximum_steps={structural_waypoint_budget}"
         )
     overhead_staging_geometry.update(
         {
@@ -7542,8 +8573,8 @@ def _seek_stable_plate_contact(
                 "Adaptive responses, brakes, zero confirmation, and XY drift "
                 "correction are enforced at runtime by the unchanged 180-step hard loop"
             ),
-            "maximum_structural_waypoint_steps": int(
-                args.max_waypoint_steps
+            "maximum_structural_waypoint_steps": (
+                structural_waypoint_budget
             ),
         }
     )
@@ -7630,7 +8661,7 @@ def _seek_stable_plate_contact(
             ),
         },
     )
-    for guard_step in range(1, args.max_waypoint_steps + 1):
+    for guard_step in range(1, structural_waypoint_budget + 1):
         lateral_pre_action_interlock = None
         pre_action_guard = latest_outside_side_guard
         current_eef = np.asarray(
@@ -8798,7 +9829,7 @@ def _seek_stable_plate_contact(
         raise RuntimeError(
             "structurally decoupled outside-side approach exhausted the "
             "unchanged OSC waypoint budget: "
-            f"source={source} max_steps={args.max_waypoint_steps} "
+            f"source={source} max_steps={structural_waypoint_budget} "
             f"stage={structural_stage} "
             f"stage_action_counts={json.dumps(structural_stage_action_counts, sort_keys=True)} "
             f"guard={json.dumps(latest_outside_side_guard, sort_keys=True)} "
@@ -8915,10 +9946,10 @@ def _seek_stable_plate_contact(
             structural_stage_action_counts
         ),
         "structural_waypoint_budget": {
-            "maximum_steps": int(args.max_waypoint_steps),
+            "maximum_steps": structural_waypoint_budget,
             "used_steps": int(outside_side_motion_steps),
             "remaining_steps": int(
-                args.max_waypoint_steps - outside_side_motion_steps
+                structural_waypoint_budget - outside_side_motion_steps
             ),
         },
         "maximum_translation_action": (
@@ -9382,25 +10413,16 @@ def generate(args):
             plate_approach_eef_height=args.plate_approach_eef_height,
             position_action_scale=args.position_action_scale,
         )
-        outside_high_target = np.asarray(
-            selected_contact_candidate["outside_high_target"],
-            dtype=float,
-        )
-        outside_side_target = np.asarray(
-            selected_contact_candidate["outside_side_target"],
-            dtype=float,
-        )
-        contact_target = np.asarray(
-            selected_contact_candidate["side_contact_target"],
-            dtype=float,
-        )
-        compiled_side_contact_geometry = (
-            selected_contact_candidate["compiled_geometry"]
-        )
         center_approach_target = np.asarray(
             selected_contact_candidate["center_high_target"],
             dtype=float,
         )
+        wrist_yaw_execution = None
+        realized_contact_candidate = None
+        outside_high_target = None
+        outside_side_target = None
+        contact_target = None
+        compiled_side_contact_geometry = None
 
         def plate_diagnostics():
             return {
@@ -9414,11 +10436,29 @@ def generate(args):
                 "selected_contact_candidate": (
                     selected_contact_candidate
                 ),
-                "selected_contact_line_xy": contact_target[:2].tolist(),
+                "wrist_yaw_execution": wrist_yaw_execution,
+                "realized_contact_candidate": realized_contact_candidate,
+                "selected_contact_line_xy": (
+                    None
+                    if contact_target is None
+                    else contact_target[:2].tolist()
+                ),
                 "center_approach_target": center_approach_target.tolist(),
-                "outside_high_target": outside_high_target.tolist(),
-                "outside_side_target": outside_side_target.tolist(),
-                "side_contact_target": contact_target.tolist(),
+                "outside_high_target": (
+                    None
+                    if outside_high_target is None
+                    else outside_high_target.tolist()
+                ),
+                "outside_side_target": (
+                    None
+                    if outside_side_target is None
+                    else outside_side_target.tolist()
+                ),
+                "side_contact_target": (
+                    None
+                    if contact_target is None
+                    else contact_target.tolist()
+                ),
                 "compiled_side_contact_geometry": (
                     compiled_side_contact_geometry
                 ),
@@ -9439,13 +10479,44 @@ def generate(args):
             flush=True,
         )
         # Decouple the large workspace translation from the native-geometry
-        # side-contact path.  The helper moves high outside the plate, lowers
-        # with no contact, then seeks laterally until both fingers contact.
+        # side-contact path.  First reach center-high, execute the selected
+        # relative wrist yaw under live free-space/contact gates, and directly
+        # recompile the attained geometry.  Only then move high outside the
+        # plate, lower with no contact, and seek dual-finger lateral contact.
         rollout.move(
             center_approach_target,
             pusher_open_sign,
             "task",
             diagnostics=plate_diagnostics,
+        )
+        wrist_yaw_execution = _execute_high_safe_wrist_yaw(
+            rollout,
+            env,
+            args,
+            selected_candidate=selected_contact_candidate,
+            center_high_target=center_approach_target,
+            gripper=pusher_open_sign,
+            diagnostics=plate_diagnostics,
+        )
+        realized_contact_candidate = wrist_yaw_execution[
+            "real_sim_recompiled_candidate"
+        ]
+        outside_high_target = np.asarray(
+            realized_contact_candidate["outside_high_target"], dtype=float
+        )
+        outside_side_target = np.asarray(
+            realized_contact_candidate["outside_side_target"], dtype=float
+        )
+        contact_target = np.asarray(
+            realized_contact_candidate["side_contact_target"], dtype=float
+        )
+        compiled_side_contact_geometry = realized_contact_candidate[
+            "compiled_geometry"
+        ]
+        print(
+            "L3-A3 wrist-yaw attained and real geometry recompiled "
+            + json.dumps(plate_diagnostics(), sort_keys=True),
+            flush=True,
         )
         initial_contact_seek = _seek_stable_plate_contact(
             rollout,
@@ -9458,6 +10529,9 @@ def generate(args):
             geometry=compiled_side_contact_geometry,
             source="initial_contact",
             diagnostics=plate_diagnostics,
+            structural_waypoint_budget=wrist_yaw_execution[
+                "remaining_structural_waypoint_steps"
+            ],
         )
         contact_seek_events = [initial_contact_seek]
         initial_contact_depth_calibration = (
@@ -9478,6 +10552,9 @@ def generate(args):
             rollout.obs["robot0_eef_pos"], dtype=float
         ).copy()
         push_plate_start = body_pose(env, PLATE_BODY)[0].copy()
+        active_wrist_approach_outward = np.asarray(
+            realized_contact_candidate["outward_direction_xy"], dtype=float
+        )
         confirmed_contact_offset = push_eef_start - push_plate_start
         explicit_contact_anchor_offset = confirmed_contact_offset.copy()
         explicit_contact_anchor_source = (
@@ -9620,31 +10697,9 @@ def generate(args):
                         args.plate_approach_eef_height
                     ),
                     position_action_scale=args.position_action_scale,
-                )
-                recontact_high_target = np.asarray(
-                    recontact_selected_candidate[
-                        "outside_high_target"
-                    ],
-                    dtype=float,
-                )
-                recontact_outside_side_target = np.asarray(
-                    recontact_selected_candidate[
-                        "outside_side_target"
-                    ],
-                    dtype=float,
-                )
-                recontact_side_contact_target = np.asarray(
-                    recontact_selected_candidate[
-                        "side_contact_target"
-                    ],
-                    dtype=float,
-                )
-                recontact_compiled_geometry = (
-                    recontact_selected_candidate["compiled_geometry"]
-                )
-                recontact_retreat_target = recontact_eef.copy()
-                recontact_retreat_target[2] = max(
-                    recontact_eef[2], recontact_high_target[2]
+                    reference_outward_direction_xy=(
+                        active_wrist_approach_outward
+                    ),
                 )
                 recontact_center_target = np.asarray(
                     recontact_selected_candidate[
@@ -9652,6 +10707,16 @@ def generate(args):
                     ],
                     dtype=float,
                 )
+                recontact_retreat_target = recontact_eef.copy()
+                recontact_retreat_target[2] = max(
+                    recontact_eef[2], recontact_center_target[2]
+                )
+                recontact_wrist_yaw_execution = None
+                recontact_realized_candidate = None
+                recontact_high_target = None
+                recontact_outside_side_target = None
+                recontact_side_contact_target = None
+                recontact_compiled_geometry = None
                 recontact_event = {
                     "attempt": recontact_attempts,
                     "push_iteration": push_iteration,
@@ -9669,17 +10734,15 @@ def generate(args):
                     "selected_contact_candidate": (
                         recontact_selected_candidate
                     ),
+                    "wrist_yaw_execution": recontact_wrist_yaw_execution,
+                    "realized_contact_candidate": (
+                        recontact_realized_candidate
+                    ),
                     "retreat_target": recontact_retreat_target.tolist(),
                     "center_target": recontact_center_target.tolist(),
-                    "outside_high_target": (
-                        recontact_high_target.tolist()
-                    ),
-                    "outside_side_target": (
-                        recontact_outside_side_target.tolist()
-                    ),
-                    "side_contact_target": (
-                        recontact_side_contact_target.tolist()
-                    ),
+                    "outside_high_target": None,
+                    "outside_side_target": None,
+                    "side_contact_target": None,
                     "compiled_side_contact_geometry": (
                         recontact_compiled_geometry
                     ),
@@ -9693,9 +10756,10 @@ def generate(args):
                         "active_recontact_event": recontact_event,
                     }
 
-                # Every recovery waypoint uses OSC env.step.  Retreat
-                # vertically first, cross above the live plate, descend
-                # outside its compiled rim, then seek inward at rim height.
+                # Every recovery waypoint uses OSC env.step.  Retreat and
+                # cross above the live plate, execute and verify the new
+                # relative wrist yaw at center-high, directly recompile the
+                # attained geometry, descend outside its rim, then seek inward.
                 rollout.move(
                     recontact_retreat_target,
                     pusher_open_sign,
@@ -9707,6 +10771,73 @@ def generate(args):
                     pusher_open_sign,
                     "task",
                     diagnostics=recontact_diagnostics,
+                )
+                recontact_wrist_yaw_execution = (
+                    _execute_high_safe_wrist_yaw(
+                        rollout,
+                        env,
+                        args,
+                        selected_candidate=(
+                            recontact_selected_candidate
+                        ),
+                        center_high_target=recontact_center_target,
+                        gripper=pusher_open_sign,
+                        diagnostics=recontact_diagnostics,
+                    )
+                )
+                recontact_realized_candidate = (
+                    recontact_wrist_yaw_execution[
+                        "real_sim_recompiled_candidate"
+                    ]
+                )
+                recontact_high_target = np.asarray(
+                    recontact_realized_candidate[
+                        "outside_high_target"
+                    ],
+                    dtype=float,
+                )
+                recontact_outside_side_target = np.asarray(
+                    recontact_realized_candidate[
+                        "outside_side_target"
+                    ],
+                    dtype=float,
+                )
+                recontact_side_contact_target = np.asarray(
+                    recontact_realized_candidate[
+                        "side_contact_target"
+                    ],
+                    dtype=float,
+                )
+                recontact_compiled_geometry = (
+                    recontact_realized_candidate["compiled_geometry"]
+                )
+                active_wrist_approach_outward = np.asarray(
+                    recontact_realized_candidate[
+                        "outward_direction_xy"
+                    ],
+                    dtype=float,
+                )
+                recontact_event.update(
+                    {
+                        "wrist_yaw_execution": (
+                            recontact_wrist_yaw_execution
+                        ),
+                        "realized_contact_candidate": (
+                            recontact_realized_candidate
+                        ),
+                        "outside_high_target": (
+                            recontact_high_target.tolist()
+                        ),
+                        "outside_side_target": (
+                            recontact_outside_side_target.tolist()
+                        ),
+                        "side_contact_target": (
+                            recontact_side_contact_target.tolist()
+                        ),
+                        "compiled_side_contact_geometry": (
+                            recontact_compiled_geometry
+                        ),
+                    }
                 )
                 recontact_stable_seek = _seek_stable_plate_contact(
                     rollout,
@@ -9721,6 +10852,11 @@ def generate(args):
                     geometry=recontact_compiled_geometry,
                     source=f"recontact_{recontact_attempts}",
                     diagnostics=recontact_diagnostics,
+                    structural_waypoint_budget=(
+                        recontact_wrist_yaw_execution[
+                            "remaining_structural_waypoint_steps"
+                        ]
+                    ),
                 )
                 contact_seek_events.append(recontact_stable_seek)
                 recontact_depth_calibration = (
@@ -10187,6 +11323,14 @@ def generate(args):
         push_summary = {
             "push_start_plate_position": push_plate_start.tolist(),
             "push_start_eef_position": push_eef_start.tolist(),
+            "initial_contact_candidate_diagnostics": candidate_geometry,
+            "initial_selected_contact_candidate": (
+                selected_contact_candidate
+            ),
+            "initial_wrist_yaw_execution": wrist_yaw_execution,
+            "initial_realized_contact_candidate": (
+                realized_contact_candidate
+            ),
             "initial_confirmed_contact_offset": (
                 push_eef_start - push_plate_start
             ).tolist(),

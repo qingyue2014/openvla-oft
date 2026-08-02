@@ -22,11 +22,13 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_adaptive_vertical_descent_action,
     _compiled_collision_pair_clearance,
     _compiled_hypothetical_wrist_yaw_plan,
+    _compiled_finger_yaw_frame,
     _compiled_native_side_contact_plan,
     _compiled_pair_set_clearance,
     _compiled_side_contact_eef_z_feasibility,
     _compiled_table_normal_evidence,
     _compiled_trailing_side_contact_candidates,
+    _compiled_wrist_yaw_action,
     _compiled_vertical_staging_corridor,
     _derive_horizon_safe_push_increment,
     _derive_overhead_staging_from_compiled_pairs,
@@ -38,9 +40,11 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _high_plane_native_boundary_crossing_evidence,
     _high_plane_native_workspace_saturation_evidence,
     _horizon_budget,
+    _hypothetical_finger_yaw_env,
     _hypothetical_wrist_yaw_specs,
     _live_plate_tracking_target,
     _native_osc_action_spec_evidence,
+    _native_osc_rotation_spec_evidence,
     _outside_side_geometry_feedback_action,
     _outside_side_guard_from_world_aabbs,
     _outside_side_lateral_settle_evidence,
@@ -59,9 +63,13 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _robot_gripper_body_names,
     _robot_nonrobot_contact_evidence,
     _select_reachable_compiled_side_candidate,
+    _select_executable_wrist_yaw_candidate,
     _select_reachable_trailing_contact,
     _side_contact_targets_from_compiled_bounds,
     _validated_rigid_rotation_matrix,
+    _wrist_yaw_attainment_evidence,
+    _wrist_yaw_step_gate,
+    _real_recompile_wrist_yaw_candidate,
 )
 from experiments.robot.libero.tasks.generate_l3a3_plate_bottle_states import (
     _free_joint_translation_for_world_target,
@@ -699,7 +707,160 @@ def test_hypothetical_wrist_yaw_frames_fail_closed():
         )
 
 
-def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
+def test_live_wrist_yaw_frame_attainment_and_direction_are_measured():
+    angle = 0.4
+    rotation = np.array(
+        [
+            [np.cos(angle), -np.sin(angle), 0.0],
+            [np.sin(angle), np.cos(angle), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    reference_origins = {
+        "left_finger": np.array([0.0, -0.05, 0.0]),
+        "right_finger": np.array([0.0, 0.05, 0.0]),
+    }
+
+    def frame(relative_rotation, *, origin_error=0.0):
+        records = []
+        for index, (name, origin) in enumerate(reference_origins.items()):
+            current_origin = relative_rotation @ origin
+            if index == 0:
+                current_origin[0] += origin_error
+            records.append(
+                {
+                    "geom": name,
+                    "geom_id": index,
+                    "body": f"gripper0_{name}",
+                    "semantic_side": "left" if index == 0 else "right",
+                    "origin_world": current_origin.tolist(),
+                    "center_world": current_origin.tolist(),
+                    "world_aabb_half_size": [0.004, 0.005, 0.010],
+                    "rotation_matrix_world": relative_rotation.tolist(),
+                }
+            )
+        return {
+            "eef_position_world": [0.0, 0.0, 0.0],
+            "finger_geoms": records,
+            "maximum_finger_radius_from_eef_m": 0.062,
+        }
+
+    reference = frame(np.eye(3))
+    yaw_spec = _hypothetical_wrist_yaw_specs(
+        reference_outward_direction_xy=[1.0, 0.0],
+        target_outward_directions_xy=[
+            [np.cos(angle), np.sin(angle)]
+        ],
+        table_normal_world=[0.0, 0.0, 1.0],
+    )[0]
+    attained = _wrist_yaw_attainment_evidence(
+        reference_frame=reference,
+        current_frame=frame(rotation),
+        yaw_spec=yaw_spec,
+        maximum_angle_error_rad=0.01,
+        maximum_position_drift_m=0.01,
+        angular_progress_epsilon_rad=0.001,
+        previous_absolute_error_rad=angle,
+    )
+    assert attained["attained"] is True
+    assert attained["rotation_direction_valid"] is True
+    assert attained["rigid_frame_valid"] is True
+    assert attained["progressed"] is True
+
+    wrong_rotation = np.array(
+        [
+            [np.cos(0.1), np.sin(0.1), 0.0],
+            [-np.sin(0.1), np.cos(0.1), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    wrong_direction = _wrist_yaw_attainment_evidence(
+        reference_frame=reference,
+        current_frame=frame(wrong_rotation),
+        yaw_spec=yaw_spec,
+        maximum_angle_error_rad=0.01,
+        maximum_position_drift_m=0.01,
+        angular_progress_epsilon_rad=0.001,
+    )
+    assert wrong_direction["attained"] is False
+    assert wrong_direction["rotation_direction_valid"] is False
+
+    nonrigid = _wrist_yaw_attainment_evidence(
+        reference_frame=reference,
+        current_frame=frame(rotation, origin_error=0.02),
+        yaw_spec=yaw_spec,
+        maximum_angle_error_rad=0.01,
+        maximum_position_drift_m=0.01,
+        angular_progress_epsilon_rad=0.001,
+    )
+    assert nonrigid["attained"] is False
+    assert nonrigid["rigid_frame_valid"] is False
+
+
+def test_native_wrist_yaw_action_resolves_scale_and_gates_clip_contact_stall():
+    controller = SimpleNamespace(
+        control_dim=6,
+        input_min=-np.ones(6),
+        input_max=np.ones(6),
+        output_min=np.array([-0.05, -0.05, -0.05, -0.5, -0.5, -0.5]),
+        output_max=np.array([0.05, 0.05, 0.05, 0.5, 0.5, 0.5]),
+        use_delta=True,
+        use_ori=True,
+        orientation_limits=None,
+    )
+    env = SimpleNamespace(
+        env=SimpleNamespace(robots=[SimpleNamespace(controller=controller)])
+    )
+    native_spec = {
+        "low": (-np.ones(7)).tolist(),
+        "high": np.ones(7).tolist(),
+    }
+    rotation_spec = _native_osc_rotation_spec_evidence(env, native_spec)
+    assert rotation_spec["source"] == "env.env.robots[0].controller"
+    assert rotation_spec["output_axis_angle_rad_per_action"][5] == 0.5
+
+    action, bounded = _compiled_wrist_yaw_action(
+        remaining_yaw_rad=0.4,
+        table_normal_world=[0.0, 0.0, 1.0],
+        gripper=-1.0,
+        native_action_spec=native_spec,
+        rotation_spec=rotation_spec,
+    )
+    assert action[:5] == pytest.approx([0.0, 0.0, 0.0, 0.0, 0.0])
+    assert action[5] == pytest.approx(0.8)
+    assert bounded["action_will_clip"] is False
+    assert bounded["commanded_yaw_rad"] == pytest.approx(0.4)
+
+    _, clipped = _compiled_wrist_yaw_action(
+        remaining_yaw_rad=0.8,
+        table_normal_world=[0.0, 0.0, 1.0],
+        gripper=-1.0,
+        native_action_spec=native_spec,
+        rotation_spec=rotation_spec,
+    )
+    assert clipped["action_will_clip"] is True
+    assert clipped["clipped_action_axes"] == [5]
+    gate = _wrist_yaw_step_gate(
+        overhead_guard={"accepted": True},
+        robot_nonrobot_contact_gate={"accepted": False},
+        action_evidence=clipped,
+        attainment_evidence={
+            "attained": False,
+            "rotation_direction_valid": True,
+            "rigid_frame_valid": True,
+        },
+        consecutive_stall_steps=4,
+        maximum_stall_steps=4,
+    )
+    assert gate["accepted"] is False
+    assert gate["violations"] == [
+        "forbidden_robot_native_contact_during_wrist_yaw",
+        "wrist_yaw_action_would_clip",
+        "wrist_yaw_progress_stalled",
+    ]
+
+
+def test_compiled_trailing_candidates_select_live_clockwise_route(monkeypatch):
     class Model:
         body_names = [
             "world",
@@ -767,6 +928,10 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
         ),
     )
     env = SimpleNamespace(sim=SimpleNamespace(model=Model(), data=data))
+    initial_frame = _compiled_finger_yaw_frame(
+        env, eef_position=np.array([0.000, 0.000, 0.950])
+    )
+    assert len(initial_frame["finger_geoms"]) == 2
     selected, candidates = _compiled_trailing_side_contact_candidates(
         env,
         plate_position=np.array([0.050, 0.000, 0.900]),
@@ -782,17 +947,41 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
         [candidate["offset_xy"] for candidate in candidates[:2]],
         [[0.010, 0.000], [0.000, -0.010]],
     )
-    assert selected["offset_xy"] == pytest.approx([0.010, 0.000])
-    assert selected["selection_eligible"] is True
-    assert selected["dual_finger_contact_skew_m"] == pytest.approx(
+    legacy_plus_x = candidates[0]
+    assert legacy_plus_x["offset_xy"] == pytest.approx([0.010, 0.000])
+    assert legacy_plus_x["selection_eligible"] is True
+    assert legacy_plus_x["dual_finger_contact_skew_m"] == pytest.approx(
         0.000213
     )
-    assert selected["outside_high_action_peak"] == pytest.approx(
+    assert legacy_plus_x["outside_high_action_peak"] == pytest.approx(
         1.061875
     )
-    assert selected["outside_high_clipped_action_axes"] == [0]
-    assert selected["outside_high_action_will_clip"] is True
-    assert selected["selection_violations"] == []
+    assert legacy_plus_x["outside_high_clipped_action_axes"] == [0]
+    assert legacy_plus_x["outside_high_action_will_clip"] is True
+    assert legacy_plus_x["selection_violations"] == []
+    assert selected is candidates[4]
+    assert selected["native_push_direction_relations"] == [
+        "tangent_clockwise"
+    ]
+    assert selected["wrist_yaw_route_selected"] is True
+    assert selected["wrist_yaw_route_selection_basis"][
+        "old_plus_x_route_fallback_permitted"
+    ] is False
+    assert selected["wrist_yaw_route_selection_basis"][
+        "superpod_diagnostic_authorization"
+    ] == {
+        "job_id": "502381",
+        "commit": "3376794",
+        "observed_minimum_amplitude_relation": "tangent_clockwise",
+        "runtime_revalidation_still_required": True,
+    }
+    assert _select_executable_wrist_yaw_candidate(candidates) is selected
+    failed_clockwise = copy.deepcopy(candidates)
+    failed_clockwise[4]["hypothetical_wrist_yaw"][
+        "hypothetical_compiled_geometry_eligible"
+    ] = False
+    with pytest.raises(RuntimeError, match="tangent_clockwise wrist-yaw route"):
+        _select_executable_wrist_yaw_candidate(failed_clockwise)
     rejected = next(
         candidate
         for candidate in candidates
@@ -834,7 +1023,7 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
             "rigid_transform_verified"
         ] is True
         assert yaw_diagnostic["dual_finger_contact_skew_m"] == pytest.approx(
-            selected["dual_finger_contact_skew_m"], abs=1e-12
+            legacy_plus_x["dual_finger_contact_skew_m"], abs=1e-12
         )
         yaw = yaw_diagnostic["yaw"]
         assert yaw["native_push_direction_relation"] == diagnostic[
@@ -892,6 +1081,96 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
         assert transform["hypothetical_rotation_matrix_world"] == transform[
             "current_rotation_matrix_world"
         ]
+
+    with pytest.raises(RuntimeError, match="requires measured pose attainment"):
+        _real_recompile_wrist_yaw_candidate(
+            env,
+            selected_candidate=selected,
+            plate_position=plate_position,
+            eef_position=eef_position,
+            outside_clearance_m=0.005,
+            plate_approach_eef_height=0.160,
+            position_action_scale=0.080,
+            attainment_evidence={"attained": False},
+            table_normal_evidence=table_evidence,
+        )
+    selected_yaw_rotation = np.asarray(
+        selected["hypothetical_wrist_yaw"]["yaw"][
+            "rotation_matrix_world"
+        ],
+        dtype=float,
+    )
+    rotated_env, _ = _hypothetical_finger_yaw_env(
+        env,
+        eef_position=eef_position,
+        rotation=selected_yaw_rotation,
+    )
+    realized = _real_recompile_wrist_yaw_candidate(
+        rotated_env,
+        selected_candidate=selected,
+        plate_position=plate_position,
+        eef_position=eef_position,
+        outside_clearance_m=0.005,
+        plate_approach_eef_height=0.160,
+        position_action_scale=0.080,
+        attainment_evidence={"attained": True},
+        table_normal_evidence=table_evidence,
+    )
+    assert realized["diagnostic_only"] is False
+    assert realized["selection_eligible"] is True
+    assert realized["dual_finger_contact_skew_m"] == pytest.approx(
+        legacy_plus_x["dual_finger_contact_skew_m"], abs=1e-12
+    )
+    assert realized["real_sim_geometry_recompile"]["performed"] is True
+    assert realized["real_sim_geometry_recompile"]["eligible"] is True
+    assert realized["real_sim_geometry_recompile"][
+        "strict_dual_finger_skew_accepted"
+    ] is True
+    assert realized["real_sim_geometry_recompile"][
+        "planned_outside_guard"
+    ]["accepted"] is True
+    assert realized["real_sim_geometry_recompile"][
+        "hypothetical_geometry_used_for_descent"
+    ] is False
+
+    real_recompile_source = CONTROLLER_REFERENCE.read_text().split(
+        "def _real_recompile_wrist_yaw_candidate(", 1
+    )[1].split("\ndef _compiled_native_side_contact_plan(", 1)[0]
+    assert "_compiled_hypothetical_wrist_yaw_plan(" not in (
+        real_recompile_source
+    )
+    assert "_compiled_native_side_contact_plan(" in real_recompile_source
+    assert "if not skew < float(outside_clearance_m):" in (
+        real_recompile_source
+    )
+
+    original_compiler = _real_recompile_wrist_yaw_candidate.__globals__[
+        "_compiled_native_side_contact_plan"
+    ]
+
+    def exact_limit_compiler(*args, **kwargs):
+        outside, contact, geometry = original_compiler(*args, **kwargs)
+        geometry = copy.deepcopy(geometry)
+        geometry["dual_finger_contact_skew_m"] = 0.005
+        return outside, contact, geometry
+
+    monkeypatch.setitem(
+        _real_recompile_wrist_yaw_candidate.__globals__,
+        "_compiled_native_side_contact_plan",
+        exact_limit_compiler,
+    )
+    with pytest.raises(RuntimeError, match="direct live 5 mm skew"):
+        _real_recompile_wrist_yaw_candidate(
+            rotated_env,
+            selected_candidate=selected,
+            plate_position=plate_position,
+            eef_position=eef_position,
+            outside_clearance_m=0.005,
+            plate_approach_eef_height=0.160,
+            position_action_scale=0.080,
+            attainment_evidence={"attained": True},
+            table_normal_evidence=table_evidence,
+        )
 
 
 def test_499866_outside_side_guard_uses_live_aabbs_not_exact_eef_center():
@@ -1909,7 +2188,7 @@ def test_500137_timeout_trace_is_replaced_by_auditable_overhead_state_machine():
     assert "samples={json.dumps(samples, sort_keys=True)}" in bounded_seek
     assert "overhead_geometry={json.dumps(" in bounded_seek
     assert (
-        "for guard_step in range(1, args.max_waypoint_steps + 1)"
+        "for guard_step in range(1, structural_waypoint_budget + 1)"
         in bounded_seek
     )
     assert "_overhead_corridor_entry_evidence(" in bounded_seek
@@ -2251,7 +2530,7 @@ def test_500161_adaptive_descent_uses_native_bound_then_tightens_near_base8():
     )
     assert "compiled_overhead_one_step_vertical_reserve_lost" in bounded_seek
     assert (
-        "for guard_step in range(1, args.max_waypoint_steps + 1)"
+        "for guard_step in range(1, structural_waypoint_budget + 1)"
         in bounded_seek
     )
     assert (
@@ -5652,6 +5931,50 @@ def test_plate_approach_is_segmented_and_emits_live_geometry_diagnostics():
         in producer
     )
     assert "L3-A3 plate-contact plan" in producer
+    assert '"initial_contact_candidate_diagnostics"' in producer
+    assert '"initial_selected_contact_candidate"' in producer
+    assert '"initial_wrist_yaw_execution"' in producer
+    assert '"initial_realized_contact_candidate"' in producer
+
+
+def test_clockwise_wrist_yaw_is_mandatory_for_initial_and_recontact_routes():
+    producer = CONTROLLER_REFERENCE.read_text()
+    task_push = producer[
+        producer.index("# Job 499604 established real plate contact") :
+        producer.index('rollout.hold(-1.0, args.final_settle_steps, "settle")')
+    ]
+    assert task_push.count("_execute_high_safe_wrist_yaw(") == 2
+    initial_route = task_push[: task_push.index("for push_iteration in range(")]
+    assert initial_route.index("_execute_high_safe_wrist_yaw(") < (
+        initial_route.index("_seek_stable_plate_contact(")
+    )
+    recontact_route = task_push[
+        task_push.index("recontact_wrist_yaw_execution =") :
+    ]
+    assert recontact_route.index("_execute_high_safe_wrist_yaw(") < (
+        recontact_route.index("_seek_stable_plate_contact(")
+    )
+    assert "remaining_structural_waypoint_steps" in initial_route
+    assert "remaining_structural_waypoint_steps" in recontact_route
+
+    executor = producer.split(
+        "def _execute_high_safe_wrist_yaw(", 1
+    )[1].split("\ndef _body_contact_counterparts(", 1)[0]
+    assert 'rollout.advance(action, "task_wrist_yaw")' in executor
+    assert executor.count("allowed_body_pairs=()") >= 3
+    assert '!= [\n        "tangent_clockwise"\n    ]' in executor
+    assert '"old_plus_x_route_fallback_permitted": False' in executor
+    assert executor.count("_wrist_yaw_step_gate(") == 2
+    assert "consecutive_stall_steps" in executor
+    assert executor.index("if attainment[\"attained\"]:") < executor.index(
+        "_real_recompile_wrist_yaw_candidate("
+    )
+    gate = producer.split("def _wrist_yaw_step_gate(", 1)[1].split(
+        "\ndef _compiled_hypothetical_wrist_yaw_plan(", 1
+    )[0]
+    assert 'action_evidence.get("action_will_clip", False)' in gate
+    assert "forbidden_robot_native_contact_during_wrist_yaw" in gate
+    assert "wrist_yaw_progress_stalled" in gate
 
 
 def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
@@ -5930,7 +6253,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"vertical_corridor_settle"' in bounded_seek
     assert '"fixed_safe_z_lateral_approach"' in bounded_seek
     assert (
-        "for guard_step in range(1, args.max_waypoint_steps + 1)"
+        "for guard_step in range(1, structural_waypoint_budget + 1)"
         in bounded_seek
     )
     assert '"outside_side_feedback"' in bounded_seek
