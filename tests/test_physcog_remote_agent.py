@@ -369,6 +369,11 @@ def test_l3b1_policy_phases_pin_grpo_checkpoint_and_sampling_protocol():
     assert "MAX_FAILURE_VIDEOS=10" in native_formal.command
 
 
+def test_l3b_bowl_openvla_v2_phases_pin_gcc_for_triton():
+    for phase in ("smoke_v2_openvla_oft", "formal_v2_openvla_oft"):
+        assert "CC=/usr/bin/gcc" in PHASES[("l3b_bowl", phase)].command
+
+
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     spec = PhaseSpec(command=("bash", "path with space/runner.sh", "phase"), count_env="N")
     script = build_batch_script(
@@ -497,6 +502,14 @@ __PHYSCOG_EXIT_CODE__=0
 """
     verdicts = extract_verdicts(text)
     assert classify_result(0, text, verdicts) == "pass"
+
+
+def test_classification_treats_triton_compiler_mismatch_as_infrastructure():
+    text = """nvc-Error-Unknown switch: -Wno-psabi
+Traceback (most recent call last):
+subprocess.CalledProcessError: Command returned non-zero exit status 1.
+"""
+    assert classify_result(1, text, []) == "infrastructure_failure"
 
 
 def test_fetch_artifact_replaces_an_existing_directory_without_nesting(

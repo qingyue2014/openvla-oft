@@ -1872,6 +1872,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l3b_bowl", "smoke_v2_openvla_oft"): PhaseSpec(
         command=(
             "env",
+            "CC=/usr/bin/gcc",
             "RENDER_GPU_DEVICE_ID=1",
             "SMOKE_TRIALS=3",
             "bash",
@@ -1910,6 +1911,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
     ("l3b_bowl", "formal_v2_openvla_oft"): PhaseSpec(
         command=(
             "env",
+            "CC=/usr/bin/gcc",
             "RENDER_GPU_DEVICE_ID=1",
             "bash",
             "experiments/robot/libero/tasks/run_l3b_bowl_order_v2.sh",
@@ -2142,11 +2144,12 @@ def classify_result(returncode: int, text: str, verdicts: Sequence[str]) -> str:
         "srun: error:",
         "Unable to allocate resources",
         "Repository Not Found",
+        "nvc-Error-Unknown switch:",
     )
-    if fatal_traceback or any(signature in text for signature in validator_signatures):
-        return "validator_bug"
     if any(signature in text for signature in infrastructure_signatures):
         return "infrastructure_failure"
+    if fatal_traceback or any(signature in text for signature in validator_signatures):
+        return "validator_bug"
     if any(v.startswith(("FAIL", "NEEDS_", "BENCHMARK_INCOMPLETE")) for v in verdicts):
         return "gate_failure"
     if returncode != 0:
