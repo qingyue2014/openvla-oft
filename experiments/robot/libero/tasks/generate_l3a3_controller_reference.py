@@ -5317,6 +5317,10 @@ def _fixed_safe_z_lateral_hold_action(
     live_full_outward_brake_active = bool(
         live_outside_clearance <= full_outward_brake_clearance_m
     )
+    severe_vertical_response = bool(
+        abs(measured_vertical_step_progress_m)
+        > closed_loop_hazard_response_bound_m
+    )
     outside_recovery_active = bool(
         measured_inward_response
         or live_outside_recovery_active
@@ -5341,6 +5345,7 @@ def _fixed_safe_z_lateral_hold_action(
             if (
                 measured_inward_response
                 or live_full_outward_brake_active
+                or severe_vertical_response
             )
             else min(
                 strict_safety_brake_bound,
@@ -5522,6 +5527,7 @@ def _fixed_safe_z_lateral_hold_action(
         "live_full_outward_brake_active": (
             live_full_outward_brake_active
         ),
+        "severe_vertical_response": severe_vertical_response,
         "required_outward_recovery_action": (
             required_outward_recovery_action
             if outside_recovery_active
@@ -5567,6 +5573,7 @@ def _fixed_safe_z_lateral_hold_action(
             "healthy_outside_reserve_avoids_outward_saturation": True,
             "measured_inward_tail_uses_full_outward_brake": True,
             "live_low_reserve_uses_full_outward_brake": True,
+            "severe_vertical_response_uses_full_outward_brake": True,
             "noninward_refill_band_uses_exact_nominal_action": True,
             "recovery_release_requires_exit_headroom": True,
             "outside_recovery_suspends_negative_z": True,

@@ -1012,6 +1012,59 @@ def test_fixed_safe_z_lateral_hold_retains_job503642_downward_z_brake():
     ] is True
 
 
+def test_fixed_safe_z_lateral_hold_brakes_job503643_severe_vertical_tail():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13236737084398184, -0.026141607051486555, 0.9204874155493346]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.9196513910416114,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=-0.0013942257332443253,
+        measured_outward_step_progress_m=0.0002610902939860771,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0010217803913379203,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.0076293466372879815,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+    )
+    strict_brake = np.nextafter(0.20, 0.0)
+    assert action[:3].tolist() == pytest.approx(
+        [strict_brake, 0.0, strict_brake]
+    )
+    assert evidence["live_full_outward_brake_active"] is False
+    assert evidence["measured_inward_response"] is False
+    assert evidence["severe_vertical_response"] is True
+    assert evidence["proof"][
+        "severe_vertical_response_uses_full_outward_brake"
+    ] is True
+
+
 def test_fixed_safe_z_lateral_hold_uses_job503637_final_stage_envelope():
     native_spec = {
         "source": "env.action_spec",

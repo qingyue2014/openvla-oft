@@ -308,6 +308,15 @@ unchanged `0.050 mm` progress-resolution increment above the `1.550 mm`
 release line. This adds discrete controller headroom without changing the
 `1.500 mm` entry, `1.550 mm` release condition, `0.400 mm` formal thresholds,
 or any other gate.
+Job503643 then reached a later nominal-refill frame with a measured vertical
+response of `-1.394 mm/frame`, already beyond the final stage's registered
+`1.100 mm` closed-loop hazard-response bound. Despite positive measured X
+response, that severe vertical tail coupled into a `0.752 mm` outside loss.
+While outside recovery is active, an absolute vertical response beyond the
+existing `1.100 mm` bound now independently selects the existing full outward
+brake. Non-inward frames within the registered vertical-response envelope
+continue to use the nominal `1.600 mm` refill, so the change does not restore
+continuous X saturation.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
