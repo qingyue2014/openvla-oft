@@ -68,6 +68,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _side_contact_targets_from_compiled_bounds,
     _validated_rigid_rotation_matrix,
     _wrist_yaw_attainment_evidence,
+    _wrist_yaw_stage_budget_evidence,
     _wrist_yaw_step_gate,
     _real_recompile_wrist_yaw_candidate,
 )
@@ -721,10 +722,16 @@ def test_live_wrist_yaw_frame_attainment_and_direction_are_measured():
         "right_finger": np.array([0.0, 0.05, 0.0]),
     }
 
-    def frame(relative_rotation, *, origin_error=0.0):
+    def frame(
+        relative_rotation,
+        *,
+        origin_error=0.0,
+        eef_position=(0.0, 0.0, 0.0),
+    ):
+        eef_position = np.asarray(eef_position, dtype=float)
         records = []
         for index, (name, origin) in enumerate(reference_origins.items()):
-            current_origin = relative_rotation @ origin
+            current_origin = eef_position + relative_rotation @ origin
             if index == 0:
                 current_origin[0] += origin_error
             records.append(
@@ -740,7 +747,7 @@ def test_live_wrist_yaw_frame_attainment_and_direction_are_measured():
                 }
             )
         return {
-            "eef_position_world": [0.0, 0.0, 0.0],
+            "eef_position_world": eef_position.tolist(),
             "finger_geoms": records,
             "maximum_finger_radius_from_eef_m": 0.062,
         }
@@ -760,12 +767,16 @@ def test_live_wrist_yaw_frame_attainment_and_direction_are_measured():
         maximum_angle_error_rad=0.01,
         maximum_position_drift_m=0.01,
         angular_progress_epsilon_rad=0.001,
+        position_progress_epsilon_m=0.00005,
         previous_absolute_error_rad=angle,
+        previous_position_drift_m=0.001,
     )
     assert attained["attained"] is True
     assert attained["rotation_direction_valid"] is True
     assert attained["rigid_frame_valid"] is True
     assert attained["progressed"] is True
+    assert attained["rotation_attained"] is True
+    assert attained["position_attained"] is True
 
     wrong_rotation = np.array(
         [
@@ -781,6 +792,7 @@ def test_live_wrist_yaw_frame_attainment_and_direction_are_measured():
         maximum_angle_error_rad=0.01,
         maximum_position_drift_m=0.01,
         angular_progress_epsilon_rad=0.001,
+        position_progress_epsilon_m=0.00005,
     )
     assert wrong_direction["attained"] is False
     assert wrong_direction["rotation_direction_valid"] is False
@@ -792,9 +804,50 @@ def test_live_wrist_yaw_frame_attainment_and_direction_are_measured():
         maximum_angle_error_rad=0.01,
         maximum_position_drift_m=0.01,
         angular_progress_epsilon_rad=0.001,
+        position_progress_epsilon_m=0.00005,
     )
     assert nonrigid["attained"] is False
     assert nonrigid["rigid_frame_valid"] is False
+
+    coupled_drift = _wrist_yaw_attainment_evidence(
+        reference_frame=reference,
+        current_frame=frame(
+            rotation, eef_position=[0.016420214729910794, 0.0, 0.0]
+        ),
+        yaw_spec=yaw_spec,
+        maximum_angle_error_rad=0.01,
+        maximum_position_drift_m=0.005,
+        angular_progress_epsilon_rad=0.001,
+        position_progress_epsilon_m=0.00005,
+        previous_absolute_error_rad=angle,
+        previous_position_drift_m=0.0,
+    )
+    assert coupled_drift["rotation_attained"] is True
+    assert coupled_drift["position_attained"] is False
+    assert coupled_drift["attained"] is False
+    assert coupled_drift["eef_position_drift_m"] == pytest.approx(
+        0.016420214729910794
+    )
+    np.testing.assert_allclose(
+        coupled_drift["anchor_position_error_world_m"],
+        [-0.016420214729910794, 0.0, 0.0],
+    )
+
+    corrected = _wrist_yaw_attainment_evidence(
+        reference_frame=reference,
+        current_frame=frame(rotation, eef_position=[0.004, 0.0, 0.0]),
+        yaw_spec=yaw_spec,
+        maximum_angle_error_rad=0.01,
+        maximum_position_drift_m=0.005,
+        angular_progress_epsilon_rad=0.001,
+        position_progress_epsilon_m=0.00005,
+        previous_absolute_error_rad=0.0,
+        previous_position_drift_m=0.016420214729910794,
+    )
+    assert corrected["rotation_attained"] is True
+    assert corrected["position_attained"] is True
+    assert corrected["attained"] is True
+    assert corrected["position_progressed"] is True
 
 
 def test_native_wrist_yaw_action_resolves_scale_and_gates_clip_contact_stall():
@@ -822,6 +875,10 @@ def test_native_wrist_yaw_action_resolves_scale_and_gates_clip_contact_stall():
     action, bounded = _compiled_wrist_yaw_action(
         remaining_yaw_rad=0.4,
         table_normal_world=[0.0, 0.0, 1.0],
+        current_eef_position=[0.0, 0.0, 1.0],
+        anchor_eef_position=[0.0, 0.0, 1.0],
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
         gripper=-1.0,
         native_action_spec=native_spec,
         rotation_spec=rotation_spec,
@@ -830,33 +887,174 @@ def test_native_wrist_yaw_action_resolves_scale_and_gates_clip_contact_stall():
     assert action[5] == pytest.approx(0.8)
     assert bounded["action_will_clip"] is False
     assert bounded["commanded_yaw_rad"] == pytest.approx(0.4)
+    assert bounded["translation_direction_valid"] is True
+
+    compensated_action, compensated = _compiled_wrist_yaw_action(
+        remaining_yaw_rad=0.2,
+        table_normal_world=[0.0, 0.0, 1.0],
+        current_eef_position=[0.016420214729910794, 0.0, 1.0],
+        anchor_eef_position=[0.0, 0.0, 1.0],
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+        gripper=-1.0,
+        native_action_spec=native_spec,
+        rotation_spec=rotation_spec,
+    )
+    assert compensated_action[0] == pytest.approx(-0.10)
+    assert np.linalg.norm(compensated_action[:3]) < 0.10
+    assert compensated["translation_bound_saturated"] is True
+    assert compensated["translation_direction_valid"] is True
+    assert compensated["action_will_clip"] is False
+    assert compensated["predicted_anchor_error_reduction_m"] > 0.0
+    assert compensated["predicted_anchor_position_error_norm_m"] < (
+        compensated["anchor_position_error_norm_m"]
+    )
+
+    settle_action, settle = _compiled_wrist_yaw_action(
+        remaining_yaw_rad=0.0,
+        table_normal_world=[0.0, 0.0, 1.0],
+        current_eef_position=[0.008, 0.0, 1.0],
+        anchor_eef_position=[0.0, 0.0, 1.0],
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+        gripper=-1.0,
+        native_action_spec=native_spec,
+        rotation_spec=rotation_spec,
+    )
+    assert np.all(settle_action[3:6] == 0.0)
+    assert settle["orientation_hold_commanded"] is True
+    assert settle["translation_direction_valid"] is True
+    settle_gate = _wrist_yaw_step_gate(
+        stage="position_settle",
+        overhead_guard={"accepted": True},
+        robot_nonrobot_contact_gate={"accepted": True},
+        action_evidence=settle,
+        attainment_evidence={
+            "rotation_attained": True,
+            "position_attained": False,
+            "rotation_direction_valid": True,
+            "rigid_frame_valid": True,
+        },
+        consecutive_angular_stall_steps=0,
+        consecutive_position_stall_steps=0,
+        maximum_stall_steps=10,
+    )
+    assert settle_gate["accepted"] is True
+    changed_orientation = _wrist_yaw_step_gate(
+        stage="position_settle",
+        overhead_guard={"accepted": True},
+        robot_nonrobot_contact_gate={"accepted": True},
+        action_evidence={**settle, "orientation_hold_commanded": False},
+        attainment_evidence={
+            "rotation_attained": True,
+            "position_attained": False,
+            "rotation_direction_valid": True,
+            "rigid_frame_valid": True,
+        },
+        consecutive_angular_stall_steps=0,
+        consecutive_position_stall_steps=0,
+        maximum_stall_steps=10,
+    )
+    assert changed_orientation["violations"] == [
+        "wrist_yaw_position_settle_changed_orientation"
+    ]
 
     _, clipped = _compiled_wrist_yaw_action(
         remaining_yaw_rad=0.8,
         table_normal_world=[0.0, 0.0, 1.0],
+        current_eef_position=[0.0, 0.0, 1.0],
+        anchor_eef_position=[0.0, 0.0, 1.0],
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
         gripper=-1.0,
         native_action_spec=native_spec,
         rotation_spec=rotation_spec,
     )
     assert clipped["action_will_clip"] is True
     assert clipped["clipped_action_axes"] == [5]
+
+    narrow_native_spec = copy.deepcopy(native_spec)
+    narrow_native_spec["low"][0] = -0.05
+    narrow_native_spec["high"][0] = 0.05
+    _, translation_clipped = _compiled_wrist_yaw_action(
+        remaining_yaw_rad=0.2,
+        table_normal_world=[0.0, 0.0, 1.0],
+        current_eef_position=[0.016420214729910794, 0.0, 1.0],
+        anchor_eef_position=[0.0, 0.0, 1.0],
+        position_action_scale=0.08,
+        maximum_translation_action=0.10,
+        gripper=-1.0,
+        native_action_spec=narrow_native_spec,
+        rotation_spec=rotation_spec,
+    )
+    assert translation_clipped["action_will_clip"] is True
+    assert translation_clipped["translation_native_clipped_axes"] == [0]
     gate = _wrist_yaw_step_gate(
+        stage="rotation_with_anchor_compensation",
         overhead_guard={"accepted": True},
         robot_nonrobot_contact_gate={"accepted": False},
-        action_evidence=clipped,
+        action_evidence={
+            **translation_clipped,
+            "translation_direction_valid": False,
+        },
         attainment_evidence={
             "attained": False,
+            "rotation_attained": False,
+            "position_attained": False,
             "rotation_direction_valid": True,
             "rigid_frame_valid": True,
         },
-        consecutive_stall_steps=4,
+        consecutive_angular_stall_steps=4,
+        consecutive_position_stall_steps=4,
         maximum_stall_steps=4,
     )
     assert gate["accepted"] is False
     assert gate["violations"] == [
         "forbidden_robot_native_contact_during_wrist_yaw",
         "wrist_yaw_action_would_clip",
-        "wrist_yaw_progress_stalled",
+        "wrist_yaw_anchor_correction_direction_invalid",
+        "wrist_yaw_angular_progress_stalled",
+        "wrist_yaw_anchor_position_progress_stalled",
+    ]
+
+
+def test_wrist_yaw_settle_and_shared_structural_budgets_fail_closed():
+    settle = _wrist_yaw_stage_budget_evidence(
+        actions_used=28,
+        maximum_actions=180,
+        position_settle_steps=0,
+        maximum_position_settle_steps=10,
+        rotation_attained=True,
+        position_attained=False,
+    )
+    assert settle["accepted"] is True
+    assert settle["next_stage"] == "position_settle"
+    assert settle["remaining_actions"] == 152
+
+    settle_exhausted = _wrist_yaw_stage_budget_evidence(
+        actions_used=38,
+        maximum_actions=180,
+        position_settle_steps=10,
+        maximum_position_settle_steps=10,
+        rotation_attained=True,
+        position_attained=False,
+    )
+    assert settle_exhausted["accepted"] is False
+    assert settle_exhausted["violations"] == [
+        "wrist_yaw_position_settle_budget_exhausted"
+    ]
+
+    shared_exhausted = _wrist_yaw_stage_budget_evidence(
+        actions_used=180,
+        maximum_actions=180,
+        position_settle_steps=0,
+        maximum_position_settle_steps=10,
+        rotation_attained=False,
+        position_attained=True,
+    )
+    assert shared_exhausted["accepted"] is False
+    assert shared_exhausted["violations"] == [
+        "shared_structural_waypoint_budget_exhausted"
     ]
 
 
@@ -1082,7 +1280,7 @@ def test_compiled_trailing_candidates_select_live_clockwise_route(monkeypatch):
             "current_rotation_matrix_world"
         ]
 
-    with pytest.raises(RuntimeError, match="requires measured pose attainment"):
+    with pytest.raises(RuntimeError, match="simultaneous measured yaw"):
         _real_recompile_wrist_yaw_candidate(
             env,
             selected_candidate=selected,
@@ -1091,7 +1289,31 @@ def test_compiled_trailing_candidates_select_live_clockwise_route(monkeypatch):
             outside_clearance_m=0.005,
             plate_approach_eef_height=0.160,
             position_action_scale=0.080,
-            attainment_evidence={"attained": False},
+            attainment_evidence={
+                "attained": False,
+                "rotation_attained": True,
+                "position_attained": False,
+                "eef_position_drift_m": 0.01642,
+                "maximum_position_drift_m": 0.005,
+            },
+            table_normal_evidence=table_evidence,
+        )
+    with pytest.raises(RuntimeError, match="strict anchor-position"):
+        _real_recompile_wrist_yaw_candidate(
+            env,
+            selected_candidate=selected,
+            plate_position=plate_position,
+            eef_position=eef_position,
+            outside_clearance_m=0.005,
+            plate_approach_eef_height=0.160,
+            position_action_scale=0.080,
+            attainment_evidence={
+                "attained": True,
+                "rotation_attained": True,
+                "position_attained": True,
+                "eef_position_drift_m": 0.005,
+                "maximum_position_drift_m": 0.005,
+            },
             table_normal_evidence=table_evidence,
         )
     selected_yaw_rotation = np.asarray(
@@ -1113,7 +1335,13 @@ def test_compiled_trailing_candidates_select_live_clockwise_route(monkeypatch):
         outside_clearance_m=0.005,
         plate_approach_eef_height=0.160,
         position_action_scale=0.080,
-        attainment_evidence={"attained": True},
+        attainment_evidence={
+            "attained": True,
+            "rotation_attained": True,
+            "position_attained": True,
+            "eef_position_drift_m": 0.004,
+            "maximum_position_drift_m": 0.005,
+        },
         table_normal_evidence=table_evidence,
     )
     assert realized["diagnostic_only"] is False
@@ -1168,7 +1396,13 @@ def test_compiled_trailing_candidates_select_live_clockwise_route(monkeypatch):
             outside_clearance_m=0.005,
             plate_approach_eef_height=0.160,
             position_action_scale=0.080,
-            attainment_evidence={"attained": True},
+            attainment_evidence={
+                "attained": True,
+                "rotation_attained": True,
+                "position_attained": True,
+                "eef_position_drift_m": 0.004,
+                "maximum_position_drift_m": 0.005,
+            },
             table_normal_evidence=table_evidence,
         )
 
@@ -5965,7 +6199,25 @@ def test_clockwise_wrist_yaw_is_mandatory_for_initial_and_recontact_routes():
     assert '!= [\n        "tangent_clockwise"\n    ]' in executor
     assert '"old_plus_x_route_fallback_permitted": False' in executor
     assert executor.count("_wrist_yaw_step_gate(") == 2
-    assert "consecutive_stall_steps" in executor
+    assert "consecutive_angular_stall_steps" in executor
+    assert "consecutive_position_stall_steps" in executor
+    assert "anchor_eef_position=anchor_eef" in executor
+    assert 'stage == "position_settle"' in executor
+    assert "_wrist_yaw_stage_budget_evidence(" in executor
+    assert '"maximum_position_settle_steps"' in executor
+    assert '"maximum_observed_position_drift_m"' in executor
+    assert '"final_position_drift_m"' in executor
+    assert '"maximum_commanded_translation_action_peak"' in executor
+    assert '"position_error_before_action_m"' in executor
+    assert '"position_error_after_action_m"' in executor
+    assert '"commanded_translation_action_peak"' in executor
+    assert '"unexpected_contact_count"' in executor
+    assert '"shared_budget_remaining_after_action"' in executor
+    assert '"L3-A3 wrist-yaw frame "' in executor
+    assert (
+        '"simultaneous_yaw_and_position_attainment_required": True'
+        in executor
+    )
     assert executor.index("if attainment[\"attained\"]:") < executor.index(
         "_real_recompile_wrist_yaw_candidate("
     )
@@ -5974,7 +6226,9 @@ def test_clockwise_wrist_yaw_is_mandatory_for_initial_and_recontact_routes():
     )[0]
     assert 'action_evidence.get("action_will_clip", False)' in gate
     assert "forbidden_robot_native_contact_during_wrist_yaw" in gate
-    assert "wrist_yaw_progress_stalled" in gate
+    assert "wrist_yaw_angular_progress_stalled" in gate
+    assert "wrist_yaw_anchor_position_progress_stalled" in gate
+    assert "wrist_yaw_anchor_correction_direction_invalid" in gate
 
 
 def test_plate_push_allows_contact_gaps_but_requires_push_evidence():

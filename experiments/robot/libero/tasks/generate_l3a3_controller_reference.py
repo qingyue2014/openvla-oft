@@ -3477,12 +3477,18 @@ def _compiled_wrist_yaw_action(
     *,
     remaining_yaw_rad,
     table_normal_world,
+    current_eef_position,
+    anchor_eef_position,
+    position_action_scale,
+    maximum_translation_action,
     gripper,
     native_action_spec,
     rotation_spec,
 ):
-    """Map a live remaining world yaw into one bounded native OSC action."""
+    """Combine bounded anchor correction with one relative OSC yaw action."""
     normal = np.asarray(table_normal_world, dtype=float)
+    current_eef = np.asarray(current_eef_position, dtype=float)
+    anchor_eef = np.asarray(anchor_eef_position, dtype=float)
     low = np.asarray(native_action_spec.get("low", ()), dtype=float)
     high = np.asarray(native_action_spec.get("high", ()), dtype=float)
     scale = np.asarray(
@@ -3494,6 +3500,14 @@ def _compiled_wrist_yaw_action(
         or normal.shape != (3,)
         or not np.all(np.isfinite(normal))
         or abs(np.linalg.norm(normal) - 1.0) > 1e-7
+        or current_eef.shape != (3,)
+        or anchor_eef.shape != (3,)
+        or not np.all(np.isfinite(current_eef))
+        or not np.all(np.isfinite(anchor_eef))
+        or not np.isfinite(position_action_scale)
+        or position_action_scale <= 0.0
+        or not np.isfinite(maximum_translation_action)
+        or not (0.0 < maximum_translation_action <= 1.0)
         or low.shape != (7,)
         or high.shape != (7,)
         or scale.shape != (6,)
@@ -3501,24 +3515,81 @@ def _compiled_wrist_yaw_action(
         or not (low[6] <= gripper <= high[6])
     ):
         raise ValueError("wrist-yaw action inputs are invalid")
+    anchor_error = anchor_eef - current_eef
+    anchor_error_norm = float(np.linalg.norm(anchor_error))
+    required_translation_action = anchor_error / float(
+        position_action_scale
+    )
+    required_translation_norm = float(
+        np.linalg.norm(required_translation_action)
+    )
+    strict_translation_bound = float(
+        np.nextafter(maximum_translation_action, 0.0)
+    )
+    translation_bound_saturated = bool(
+        required_translation_norm > strict_translation_bound
+    )
+    if translation_bound_saturated:
+        bounded_translation_action = (
+            required_translation_action
+            * strict_translation_bound
+            / required_translation_norm
+        )
+    else:
+        bounded_translation_action = required_translation_action.copy()
     requested_axis_angle = normal * float(remaining_yaw_rad)
     required_rotation_action = requested_axis_angle / scale[3:6]
     bounded_rotation_action = np.clip(
         required_rotation_action, low[3:6], high[3:6]
     )
-    clipped_axes = [
+    translation_native_action = np.clip(
+        bounded_translation_action, low[:3], high[:3]
+    )
+    translation_clipped_axes = [
+        int(axis)
+        for axis in np.flatnonzero(
+            np.abs(
+                bounded_translation_action - translation_native_action
+            )
+            > 1e-12
+        )
+    ]
+    rotation_clipped_axes = [
         int(axis + 3)
         for axis in np.flatnonzero(
             np.abs(required_rotation_action - bounded_rotation_action) > 1e-12
         )
     ]
     action = np.zeros(7, dtype=float)
+    action[:3] = translation_native_action
     action[3:6] = bounded_rotation_action
     action[6] = float(gripper)
     commanded_axis_angle = scale[3:6] * bounded_rotation_action
     commanded_yaw = float(np.dot(commanded_axis_angle, normal))
     if remaining_yaw_rad != 0.0 and commanded_yaw * remaining_yaw_rad <= 0.0:
         raise RuntimeError("native OSC yaw action has the wrong rotation direction")
+    commanded_world_correction = (
+        float(position_action_scale) * translation_native_action
+    )
+    predicted_anchor_error = anchor_error - commanded_world_correction
+    predicted_anchor_error_norm = float(
+        np.linalg.norm(predicted_anchor_error)
+    )
+    position_correction_requested = bool(anchor_error_norm > 1e-12)
+    if position_correction_requested:
+        correction_direction_dot = float(
+            np.dot(anchor_error, commanded_world_correction)
+        )
+        translation_direction_valid = bool(
+            correction_direction_dot > 0.0
+            and predicted_anchor_error_norm < anchor_error_norm
+        )
+    else:
+        correction_direction_dot = 0.0
+        translation_direction_valid = bool(
+            np.linalg.norm(translation_native_action) <= 1e-12
+        )
+    clipped_axes = translation_clipped_axes + rotation_clipped_axes
     return action, {
         "remaining_yaw_rad": float(remaining_yaw_rad),
         "table_normal_world": normal.tolist(),
@@ -3527,6 +3598,53 @@ def _compiled_wrist_yaw_action(
         "bounded_rotation_action": bounded_rotation_action.tolist(),
         "commanded_world_axis_angle_rad": commanded_axis_angle.tolist(),
         "commanded_yaw_rad": commanded_yaw,
+        "anchor_eef_position_world": anchor_eef.tolist(),
+        "current_eef_position_world": current_eef.tolist(),
+        "anchor_position_error_world_m": anchor_error.tolist(),
+        "anchor_position_error_norm_m": anchor_error_norm,
+        "position_action_scale_m_per_action": float(
+            position_action_scale
+        ),
+        "required_translation_action": (
+            required_translation_action.tolist()
+        ),
+        "required_translation_action_norm": required_translation_norm,
+        "bounded_translation_action": (
+            bounded_translation_action.tolist()
+        ),
+        "commanded_translation_action": (
+            translation_native_action.tolist()
+        ),
+        "commanded_translation_action_norm": float(
+            np.linalg.norm(translation_native_action)
+        ),
+        "commanded_translation_action_peak": float(
+            np.max(np.abs(translation_native_action))
+        ),
+        "strict_translation_action_norm_bound": strict_translation_bound,
+        "maximum_translation_action": float(
+            maximum_translation_action
+        ),
+        "translation_bound_saturated": translation_bound_saturated,
+        "translation_native_clipped_axes": translation_clipped_axes,
+        "commanded_world_position_correction_m": (
+            commanded_world_correction.tolist()
+        ),
+        "predicted_anchor_position_error_norm_m": (
+            predicted_anchor_error_norm
+        ),
+        "predicted_anchor_error_reduction_m": float(
+            anchor_error_norm - predicted_anchor_error_norm
+        ),
+        "anchor_error_correction_direction_dot_m2": (
+            correction_direction_dot
+        ),
+        "position_correction_requested": position_correction_requested,
+        "translation_direction_valid": translation_direction_valid,
+        "orientation_hold_commanded": bool(
+            remaining_yaw_rad == 0.0
+            and np.all(bounded_rotation_action == 0.0)
+        ),
         "clipped_action_axes": clipped_axes,
         "action_will_clip": bool(clipped_axes),
         "zero_translation": bool(np.all(action[:3] == 0.0)),
@@ -6223,7 +6341,9 @@ def _wrist_yaw_attainment_evidence(
     maximum_angle_error_rad,
     maximum_position_drift_m,
     angular_progress_epsilon_rad,
+    position_progress_epsilon_m,
     previous_absolute_error_rad=None,
+    previous_position_drift_m=None,
 ):
     """Measure actual rigid finger rotation against the selected yaw target."""
     if (
@@ -6233,6 +6353,8 @@ def _wrist_yaw_attainment_evidence(
         or maximum_position_drift_m <= 0.0
         or not np.isfinite(angular_progress_epsilon_rad)
         or angular_progress_epsilon_rad <= 0.0
+        or not np.isfinite(position_progress_epsilon_m)
+        or position_progress_epsilon_m <= 0.0
     ):
         raise ValueError("wrist-yaw attainment thresholds must be positive")
     reference_eef = np.asarray(
@@ -6326,6 +6448,7 @@ def _wrist_yaw_attainment_evidence(
         target_rotation @ measured_rotation.T
     )
     position_drift = float(np.linalg.norm(current_eef - reference_eef))
+    anchor_position_error = reference_eef - current_eef
     axis_error = float(np.linalg.norm(measured_rotation @ normal - normal))
     rotation_direction_valid = bool(
         actual_yaw * target_yaw >= -angular_progress_epsilon_rad
@@ -6344,15 +6467,29 @@ def _wrist_yaw_attainment_evidence(
             raise ValueError("previous wrist-yaw error must be finite")
         progress = float(previous_absolute_error_rad - absolute_error)
         progressed = bool(progress > angular_progress_epsilon_rad)
-    attained = bool(
+    position_progress = None
+    position_progressed = None
+    if previous_position_drift_m is not None:
+        if not np.isfinite(previous_position_drift_m):
+            raise ValueError("previous wrist-yaw position drift must be finite")
+        position_progress = float(
+            previous_position_drift_m - position_drift
+        )
+        position_progressed = bool(
+            position_progress > position_progress_epsilon_m
+        )
+    rotation_attained = bool(
         absolute_error < maximum_angle_error_rad
         and target_error_angle < maximum_angle_error_rad
-        and position_drift < maximum_position_drift_m
         and rotation_direction_valid
         and rigid_frame_valid
     )
+    position_attained = bool(position_drift < maximum_position_drift_m)
+    attained = bool(rotation_attained and position_attained)
     return {
         "attained": attained,
+        "rotation_attained": rotation_attained,
+        "position_attained": position_attained,
         "actual_yaw_rad": actual_yaw,
         "target_yaw_rad": target_yaw,
         "remaining_yaw_rad": remaining_yaw,
@@ -6360,6 +6497,9 @@ def _wrist_yaw_attainment_evidence(
         "target_rotation_error_rad": target_error_angle,
         "maximum_angle_error_rad": float(maximum_angle_error_rad),
         "eef_position_drift_m": position_drift,
+        "anchor_position_error_world_m": (
+            anchor_position_error.tolist()
+        ),
         "maximum_position_drift_m": float(maximum_position_drift_m),
         "maximum_finger_rotation_disagreement_rad": (
             maximum_rotation_disagreement
@@ -6373,20 +6513,94 @@ def _wrist_yaw_attainment_evidence(
             angular_progress_epsilon_rad
         ),
         "progressed": progressed,
+        "angular_progressed": progressed,
+        "position_progress_m": position_progress,
+        "position_progress_epsilon_m": float(
+            position_progress_epsilon_m
+        ),
+        "position_progressed": position_progressed,
+    }
+
+
+def _wrist_yaw_stage_budget_evidence(
+    *,
+    actions_used,
+    maximum_actions,
+    position_settle_steps,
+    maximum_position_settle_steps,
+    rotation_attained,
+    position_attained,
+):
+    """Authorize the next yaw or settle action under the shared hard budget."""
+    values = (
+        actions_used,
+        maximum_actions,
+        position_settle_steps,
+        maximum_position_settle_steps,
+    )
+    if (
+        any(
+            not isinstance(value, (int, np.integer))
+            or isinstance(value, (bool, np.bool_))
+            for value in values
+        )
+        or actions_used < 0
+        or maximum_actions < 1
+        or position_settle_steps < 0
+        or maximum_position_settle_steps < 1
+        or position_settle_steps > actions_used
+    ):
+        raise ValueError("wrist-yaw stage budgets are invalid")
+    violations = []
+    if actions_used >= maximum_actions:
+        violations.append("shared_structural_waypoint_budget_exhausted")
+    if (
+        rotation_attained
+        and not position_attained
+        and position_settle_steps >= maximum_position_settle_steps
+    ):
+        violations.append("wrist_yaw_position_settle_budget_exhausted")
+    return {
+        "accepted": not violations,
+        "violations": violations,
+        "actions_used": int(actions_used),
+        "maximum_actions": int(maximum_actions),
+        "remaining_actions": int(maximum_actions - actions_used),
+        "position_settle_steps": int(position_settle_steps),
+        "maximum_position_settle_steps": int(
+            maximum_position_settle_steps
+        ),
+        "rotation_attained": bool(rotation_attained),
+        "position_attained": bool(position_attained),
+        "next_stage": (
+            "position_settle"
+            if rotation_attained and not position_attained
+            else "rotation_with_anchor_compensation"
+        ),
     }
 
 
 def _wrist_yaw_step_gate(
     *,
+    stage,
     overhead_guard,
     robot_nonrobot_contact_gate,
     action_evidence,
     attainment_evidence,
-    consecutive_stall_steps,
+    consecutive_angular_stall_steps,
+    consecutive_position_stall_steps,
     maximum_stall_steps,
 ):
     """Fail-closed gate for one measured high-space wrist-yaw frame."""
-    if maximum_stall_steps < 1 or consecutive_stall_steps < 0:
+    if (
+        stage not in {
+            "rotation_with_anchor_compensation",
+            "position_settle",
+        }
+        or maximum_stall_steps < 1
+        or consecutive_angular_stall_steps < 0
+        or consecutive_position_stall_steps < 0
+    ):
         raise ValueError("wrist-yaw stall counters are invalid")
     violations = []
     if not overhead_guard.get("accepted", False):
@@ -6395,21 +6609,37 @@ def _wrist_yaw_step_gate(
         violations.append("forbidden_robot_native_contact_during_wrist_yaw")
     if action_evidence.get("action_will_clip", False):
         violations.append("wrist_yaw_action_would_clip")
-    if not action_evidence.get("zero_translation", False):
-        violations.append("wrist_yaw_action_contains_translation")
+    if not action_evidence.get("translation_direction_valid", False):
+        violations.append("wrist_yaw_anchor_correction_direction_invalid")
+    if stage == "position_settle" and not action_evidence.get(
+        "orientation_hold_commanded", False
+    ):
+        violations.append("wrist_yaw_position_settle_changed_orientation")
     if not attainment_evidence.get("rotation_direction_valid", False):
         violations.append("wrist_yaw_rotation_direction_invalid")
     if not attainment_evidence.get("rigid_frame_valid", False):
         violations.append("wrist_yaw_finger_frame_not_rigid")
     if (
-        not attainment_evidence.get("attained", False)
-        and consecutive_stall_steps >= maximum_stall_steps
+        not attainment_evidence.get("rotation_attained", False)
+        and consecutive_angular_stall_steps >= maximum_stall_steps
     ):
-        violations.append("wrist_yaw_progress_stalled")
+        violations.append("wrist_yaw_angular_progress_stalled")
+    if (
+        action_evidence.get("position_correction_requested", False)
+        and not attainment_evidence.get("position_attained", False)
+        and consecutive_position_stall_steps >= maximum_stall_steps
+    ):
+        violations.append("wrist_yaw_anchor_position_progress_stalled")
     return {
         "accepted": not violations,
         "violations": violations,
-        "consecutive_stall_steps": int(consecutive_stall_steps),
+        "stage": stage,
+        "consecutive_angular_stall_steps": int(
+            consecutive_angular_stall_steps
+        ),
+        "consecutive_position_stall_steps": int(
+            consecutive_position_stall_steps
+        ),
         "maximum_stall_steps": int(maximum_stall_steps),
     }
 
@@ -6613,9 +6843,24 @@ def _real_recompile_wrist_yaw_candidate(
     table_normal_evidence,
 ):
     """Compile the descent route directly from the attained live sim pose."""
-    if not attainment_evidence.get("attained", False):
+    final_position_drift = float(
+        attainment_evidence.get("eef_position_drift_m", np.inf)
+    )
+    final_position_limit = float(
+        attainment_evidence.get("maximum_position_drift_m", -np.inf)
+    )
+    if not (
+        attainment_evidence.get("attained", False)
+        and attainment_evidence.get("rotation_attained", False)
+        and attainment_evidence.get("position_attained", False)
+        and np.isfinite(final_position_drift)
+        and np.isfinite(final_position_limit)
+        and final_position_limit > 0.0
+        and final_position_drift < final_position_limit
+    ):
         raise RuntimeError(
-            "real wrist-yaw geometry recompile requires measured pose attainment"
+            "real wrist-yaw geometry recompile requires simultaneous measured "
+            "yaw and strict anchor-position attainment"
         )
     relation = selected_candidate.get("native_push_direction_relations")
     if relation != ["tangent_clockwise"] or not selected_candidate.get(
@@ -7409,6 +7654,7 @@ def _execute_high_safe_wrist_yaw(
     reference_frame = _compiled_finger_yaw_frame(
         env, eef_position=current_eef
     )
+    anchor_eef = current_eef.copy()
     hypothetical = selected_candidate["hypothetical_wrist_yaw"]
     skew_margin = float(
         hypothetical["maximum_dual_finger_contact_skew_m"]
@@ -7455,6 +7701,16 @@ def _execute_high_safe_wrist_yaw(
             "live maximum finger radius"
         ),
         "position_drift_limit_m": float(args.position_tolerance),
+        "position_progress_epsilon_m": float(
+            args.minimum_saturated_waypoint_progress
+        ),
+        "anchor_compensation_translation_action_norm_bound": float(
+            args.plate_contact_seek_max_translation_action
+        ),
+        "anchor_compensation_maximum_world_step_m": (
+            maximum_controller_world_step
+        ),
+        "maximum_position_settle_steps": int(args.push_tracking_steps),
     }
     current_frame = reference_frame
     attainment = _wrist_yaw_attainment_evidence(
@@ -7464,20 +7720,55 @@ def _execute_high_safe_wrist_yaw(
         maximum_angle_error_rad=maximum_angle_error,
         maximum_position_drift_m=args.position_tolerance,
         angular_progress_epsilon_rad=angular_progress_epsilon,
+        position_progress_epsilon_m=(
+            args.minimum_saturated_waypoint_progress
+        ),
     )
     frames = []
-    consecutive_stall_steps = 0
+    consecutive_angular_stall_steps = 0
+    consecutive_position_stall_steps = 0
+    position_settle_steps = 0
+    maximum_observed_position_drift = float(
+        attainment["eef_position_drift_m"]
+    )
+    maximum_commanded_translation_action_peak = 0.0
     for yaw_step in range(1, args.max_waypoint_steps + 1):
         if attainment["attained"]:
             break
+        budget_evidence = _wrist_yaw_stage_budget_evidence(
+            actions_used=len(frames),
+            maximum_actions=args.max_waypoint_steps,
+            position_settle_steps=position_settle_steps,
+            maximum_position_settle_steps=args.push_tracking_steps,
+            rotation_attained=attainment["rotation_attained"],
+            position_attained=attainment["position_attained"],
+        )
+        if not budget_evidence["accepted"]:
+            raise RuntimeError(
+                "wrist-yaw stage budget failed closed: "
+                f"{json.dumps(budget_evidence, sort_keys=True)}"
+            )
+        stage = budget_evidence["next_stage"]
+        commanded_remaining_yaw = (
+            0.0
+            if stage == "position_settle"
+            else attainment["remaining_yaw_rad"]
+        )
         action, action_evidence = _compiled_wrist_yaw_action(
-            remaining_yaw_rad=attainment["remaining_yaw_rad"],
+            remaining_yaw_rad=commanded_remaining_yaw,
             table_normal_world=table_normal,
+            current_eef_position=current_eef,
+            anchor_eef_position=anchor_eef,
+            position_action_scale=args.position_action_scale,
+            maximum_translation_action=(
+                args.plate_contact_seek_max_translation_action
+            ),
             gripper=gripper,
             native_action_spec=native_action_spec,
             rotation_spec=rotation_spec,
         )
         pre_gate = _wrist_yaw_step_gate(
+            stage=stage,
             overhead_guard=_live_compiled_overhead_guard(
                 env, overhead_geometry
             ),
@@ -7488,7 +7779,12 @@ def _execute_high_safe_wrist_yaw(
             ),
             action_evidence=action_evidence,
             attainment_evidence=attainment,
-            consecutive_stall_steps=consecutive_stall_steps,
+            consecutive_angular_stall_steps=(
+                consecutive_angular_stall_steps
+            ),
+            consecutive_position_stall_steps=(
+                consecutive_position_stall_steps
+            ),
             maximum_stall_steps=args.push_tracking_steps,
         )
         if not pre_gate["accepted"]:
@@ -7497,6 +7793,13 @@ def _execute_high_safe_wrist_yaw(
                 f"{json.dumps(pre_gate, sort_keys=True)}"
             )
         previous_absolute_error = float(attainment["absolute_error_rad"])
+        previous_position_drift = float(
+            attainment["eef_position_drift_m"]
+        )
+        settle_step_index = None
+        if stage == "position_settle":
+            position_settle_steps += 1
+            settle_step_index = int(position_settle_steps)
         rollout.advance(action, "task_wrist_yaw")
         current_eef = np.asarray(
             rollout.obs["robot0_eef_pos"], dtype=float
@@ -7511,12 +7814,39 @@ def _execute_high_safe_wrist_yaw(
             maximum_angle_error_rad=maximum_angle_error,
             maximum_position_drift_m=args.position_tolerance,
             angular_progress_epsilon_rad=angular_progress_epsilon,
+            position_progress_epsilon_m=(
+                args.minimum_saturated_waypoint_progress
+            ),
             previous_absolute_error_rad=previous_absolute_error,
+            previous_position_drift_m=previous_position_drift,
         )
-        consecutive_stall_steps = (
+        consecutive_angular_stall_steps = (
             0
-            if attainment["progressed"] or attainment["attained"]
-            else consecutive_stall_steps + 1
+            if attainment["angular_progressed"]
+            or attainment["rotation_attained"]
+            else consecutive_angular_stall_steps + 1
+        )
+        if attainment["position_attained"] or not action_evidence[
+            "position_correction_requested"
+        ]:
+            consecutive_position_stall_steps = 0
+        else:
+            consecutive_position_stall_steps = (
+                0
+                if attainment["position_progressed"]
+                else consecutive_position_stall_steps + 1
+            )
+        maximum_observed_position_drift = max(
+            maximum_observed_position_drift,
+            float(attainment["eef_position_drift_m"]),
+        )
+        maximum_commanded_translation_action_peak = max(
+            maximum_commanded_translation_action_peak,
+            float(
+                action_evidence[
+                    "commanded_translation_action_peak"
+                ]
+            ),
         )
         post_overhead_guard = _live_compiled_overhead_guard(
             env, overhead_geometry
@@ -7525,17 +7855,32 @@ def _execute_high_safe_wrist_yaw(
             env, allowed_body_pairs=()
         )
         post_gate = _wrist_yaw_step_gate(
+            stage=stage,
             overhead_guard=post_overhead_guard,
             robot_nonrobot_contact_gate=post_contact_gate,
             action_evidence=action_evidence,
             attainment_evidence=attainment,
-            consecutive_stall_steps=consecutive_stall_steps,
+            consecutive_angular_stall_steps=(
+                consecutive_angular_stall_steps
+            ),
+            consecutive_position_stall_steps=(
+                consecutive_position_stall_steps
+            ),
             maximum_stall_steps=args.push_tracking_steps,
         )
         frame = {
             "yaw_step": int(yaw_step),
+            "stage": stage,
+            "position_settle_step": settle_step_index,
+            "budget_before_action": budget_evidence,
             "action": action.tolist(),
             "action_evidence": action_evidence,
+            "position_error_before_action_m": (
+                previous_position_drift
+            ),
+            "position_error_after_action_m": float(
+                attainment["eef_position_drift_m"]
+            ),
             "attainment_evidence": attainment,
             "pre_gate": pre_gate,
             "post_gate": post_gate,
@@ -7543,6 +7888,55 @@ def _execute_high_safe_wrist_yaw(
             "post_robot_nonrobot_contact_gate": post_contact_gate,
         }
         frames.append(frame)
+        frame_log = {
+            "yaw_step": int(yaw_step),
+            "stage": stage,
+            "position_settle_step": settle_step_index,
+            "shared_budget_remaining_after_action": int(
+                args.max_waypoint_steps - len(frames)
+            ),
+            "position_error_before_action_m": previous_position_drift,
+            "position_error_after_action_m": float(
+                attainment["eef_position_drift_m"]
+            ),
+            "position_progress_m": attainment["position_progress_m"],
+            "position_progressed": attainment["position_progressed"],
+            "commanded_translation_action_peak": action_evidence[
+                "commanded_translation_action_peak"
+            ],
+            "commanded_translation_action_norm": action_evidence[
+                "commanded_translation_action_norm"
+            ],
+            "translation_bound_saturated": action_evidence[
+                "translation_bound_saturated"
+            ],
+            "translation_direction_valid": action_evidence[
+                "translation_direction_valid"
+            ],
+            "action_will_clip": action_evidence["action_will_clip"],
+            "absolute_yaw_error_rad": attainment["absolute_error_rad"],
+            "angular_progress_rad": attainment["angular_progress_rad"],
+            "rotation_attained": attainment["rotation_attained"],
+            "position_attained": attainment["position_attained"],
+            "simultaneous_attained": attainment["attained"],
+            "angular_stall_steps": consecutive_angular_stall_steps,
+            "position_stall_steps": consecutive_position_stall_steps,
+            "overhead_accepted": post_overhead_guard["accepted"],
+            "overhead_minimum_reserve_surplus_m": post_overhead_guard[
+                "minimum_reserve_surplus_m"
+            ],
+            "contact_gate_accepted": post_contact_gate["accepted"],
+            "unexpected_contact_count": len(
+                post_contact_gate["unexpected_contacts"]
+            ),
+            "post_gate_accepted": post_gate["accepted"],
+            "post_gate_violations": post_gate["violations"],
+        }
+        print(
+            "L3-A3 wrist-yaw frame "
+            + json.dumps(frame_log, sort_keys=True),
+            flush=True,
+        )
         if not post_gate["accepted"]:
             raise RuntimeError(
                 "wrist-yaw post-action gate failed closed: "
@@ -7588,6 +7982,7 @@ def _execute_high_safe_wrist_yaw(
         "selected_outward_direction_xy": outward.tolist(),
         "old_plus_x_route_fallback_permitted": False,
         "center_high_target": center_high_target.tolist(),
+        "anchor_eef_position_world": anchor_eef.tolist(),
         "native_osc_action_spec": native_action_spec,
         "native_osc_rotation_spec": rotation_spec,
         "table_normal_derivation": table_normal_evidence,
@@ -7597,6 +7992,22 @@ def _execute_high_safe_wrist_yaw(
         "tolerance_derivation": tolerance_derivation,
         "yaw_frames": frames,
         "yaw_steps": yaw_steps,
+        "rotation_with_anchor_compensation_steps": sum(
+            frame["stage"] == "rotation_with_anchor_compensation"
+            for frame in frames
+        ),
+        "position_settle_steps": int(position_settle_steps),
+        "maximum_position_settle_steps": int(args.push_tracking_steps),
+        "maximum_observed_position_drift_m": float(
+            maximum_observed_position_drift
+        ),
+        "final_position_drift_m": float(
+            attainment["eef_position_drift_m"]
+        ),
+        "maximum_commanded_translation_action_peak": float(
+            maximum_commanded_translation_action_peak
+        ),
+        "simultaneous_yaw_and_position_attainment_required": True,
         "final_attainment_evidence": attainment,
         "real_sim_recompiled_candidate": realized_candidate,
         "remaining_structural_waypoint_steps": int(
