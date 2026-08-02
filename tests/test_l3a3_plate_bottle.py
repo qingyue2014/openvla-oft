@@ -948,6 +948,66 @@ def test_fixed_safe_z_lateral_hold_uses_job503639_nominal_refill_band():
     ] is True
 
 
+def test_fixed_safe_z_lateral_hold_avoids_job503641_wrong_way_z_brake():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    live_clearance = 0.0009863286345992844
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.1323385791769622, -0.026296222117468356, 0.9203868341226829]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.9196513910416114,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=-0.00016480525514472877,
+        measured_outward_step_progress_m=0.00039605915454962726,
+        outside_side_guard={
+            "minimum_outside_clearance_m": live_clearance,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.007547398544214379,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+    )
+    exit_clearance = np.nextafter(0.00155, np.inf)
+    nominal_refill = np.nextafter(
+        (exit_clearance - live_clearance) / 0.08,
+        np.inf,
+    )
+    assert action[:3].tolist() == pytest.approx(
+        [nominal_refill, 0.0, 0.0]
+    )
+    assert evidence["above_safe_z_band"] is True
+    assert evidence["measured_downward_tail"] is True
+    assert evidence["downward_tail_brake_active"] is False
+    assert evidence["downward_tail_correction_above_safe_z"] is True
+    assert evidence["negative_z_suspended_for_outside_recovery"] is True
+    assert evidence["proof"][
+        "corrective_descent_above_band_avoids_positive_z_brake"
+    ] is True
+
+
 def test_fixed_safe_z_lateral_hold_uses_job503637_final_stage_envelope():
     native_spec = {
         "source": "env.action_spec",

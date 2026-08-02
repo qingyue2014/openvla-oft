@@ -5353,7 +5353,7 @@ def _fixed_safe_z_lateral_hold_action(
     requested_z_action = float(
         requested_vertical_world_delta_m / position_action_scale
     )
-    downward_tail_brake_active = bool(
+    measured_downward_tail = bool(
         measured_vertical_step_progress_m < -progress_resolution_m
     )
     table_recovery_active = bool(
@@ -5362,8 +5362,19 @@ def _fixed_safe_z_lateral_hold_action(
     below_safe_z_band = bool(
         position_error_m > vertical_position_tolerance_m
     )
+    above_safe_z_band = bool(
+        position_error_m < -vertical_position_tolerance_m
+    )
     inside_safe_z_band = bool(
         abs(position_error_m) <= vertical_position_tolerance_m
+    )
+    downward_tail_brake_active = bool(
+        measured_downward_tail and not above_safe_z_band
+    )
+    downward_tail_correction_above_safe_z = bool(
+        measured_downward_tail
+        and above_safe_z_band
+        and not table_recovery_active
     )
     positive_response_unload_active = bool(
         inside_safe_z_band
@@ -5531,8 +5542,13 @@ def _fixed_safe_z_lateral_hold_action(
         "table_recovery_clearance_m": table_recovery_clearance,
         "predicted_table_clearance_m": predicted_table_clearance,
         "table_recovery_active": table_recovery_active,
+        "measured_downward_tail": measured_downward_tail,
         "downward_tail_brake_active": downward_tail_brake_active,
+        "downward_tail_correction_above_safe_z": (
+            downward_tail_correction_above_safe_z
+        ),
         "below_safe_z_band": below_safe_z_band,
+        "above_safe_z_band": above_safe_z_band,
         "inside_safe_z_band": inside_safe_z_band,
         "positive_response_unload_active": (
             positive_response_unload_active
@@ -5557,7 +5573,8 @@ def _fixed_safe_z_lateral_hold_action(
             "outside_recovery_suspends_negative_z": True,
             "below_height_band_retains_positive_z_floor": True,
             "inside_band_positive_response_unloads_without_negative_z": True,
-            "downward_tail_uses_full_existing_positive_z_brake": True,
+            "downward_tail_at_or_below_band_uses_full_positive_z": True,
+            "corrective_descent_above_band_avoids_positive_z_brake": True,
             "low_outside_reserve_suspends_inward_return": True,
             "negative_z_uses_at_most_half_live_table_reserve": True,
             "strictly_inside_runtime_native_translation_norm": True,

@@ -299,6 +299,18 @@ line, the controller requests only the exact nominal outward increment needed
 to refill the release line. Outside recovery still suspends negative Z, while
 positive-Z safety capture remains independent and all strict gates remain
 unchanged.
+Job503641 isolated the remaining vertical coupling. A frame already
+`0.735 mm` above the fixed-safe-Z anchor was descending toward that anchor
+with `7.548 mm` live table clearance, but the unconditional downward-tail rule
+overrode its small negative position-plus-velocity request with full
+`+Z=0.20`. That wrong-direction brake coupled a nominal X refill into a
+`0.588 mm` outside-clearance loss. Downward-tail braking now retains full
+positive-Z authority only at or below the unchanged safe-Z band, or whenever
+the table recovery gate is active. Above the band with healthy table reserve,
+the existing position-plus-velocity correction is retained; active outside
+recovery still suspends a negative Z command to zero. Thus no downward motion
+is newly permitted while outside reserve is being refilled, and all formal
+thresholds remain unchanged.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
