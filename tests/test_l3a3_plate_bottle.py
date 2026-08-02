@@ -3126,6 +3126,21 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert job503168_formal_entry["violations"] == []
     assert -0.00023933083913896258 < 0.0
 
+    # Job503176 then showed why the bounded descent must not keep halving to
+    # the 0.005 structural floor: its exact 0.05 descent/tail window made
+    # 2.554 mm net downward progress, while the later 0.005 limit cycle made
+    # only 0.901 mm over 66 actions.  Keep the existing 0.10 post-descent bound
+    # and derive the descent floor from half of it; no action limit is raised.
+    tail_recovery_descent_floor = 0.5 * 0.10
+    assert tail_recovery_descent_floor == pytest.approx(0.05)
+    assert 0.005 < tail_recovery_descent_floor < 0.10
+    assert 0.9445294804725799 - 0.9470836934130403 == pytest.approx(
+        -0.002554212940460432
+    )
+    assert 0.9395550014633565 - 0.9404564007049626 == pytest.approx(
+        -0.0009013992416061489
+    )
+
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
     )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
@@ -3160,6 +3175,10 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "vertical_tail_zero_confirmation" not in brake_transition
     assert "previous_active_translation_action / 2.0" in brake_transition
     assert "structural_max_translation_action" in brake_transition
+    assert "tail_recovery_descent_translation_action_floor" in (
+        brake_transition
+    )
+    assert "one half of the existing post-descent lateral" in brake_transition
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
     brake_action_branch = bounded_seek.split(
         'elif structural_stage == "vertical_tail_brake":', 1

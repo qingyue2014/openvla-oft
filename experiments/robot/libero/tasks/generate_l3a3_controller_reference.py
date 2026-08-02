@@ -12897,6 +12897,19 @@ def _seek_stable_plate_contact(
         args.position_action_scale
         * post_descent_lateral_max_translation_action
     )
+    tail_recovery_descent_translation_action_floor = float(
+        0.5 * post_descent_lateral_max_translation_action
+    )
+    if not (
+        structural_max_translation_action
+        < tail_recovery_descent_translation_action_floor
+        <= post_descent_lateral_max_translation_action
+        < overhead_descent_max_translation_action
+    ):
+        raise RuntimeError(
+            "tail-recovery descent floor is not strictly nested inside the "
+            "existing structural, post-descent, and overhead action bounds"
+        )
     overhead_descent_brake_trigger_buffer = float(
         2.0 * maximum_overhead_descent_world_step
     )
@@ -12934,6 +12947,12 @@ def _seek_stable_plate_contact(
             ),
             "post_descent_lateral_maximum_world_step_m": (
                 maximum_post_descent_lateral_world_step
+            ),
+            "tail_recovery_descent_translation_action_floor": (
+                tail_recovery_descent_translation_action_floor
+            ),
+            "tail_recovery_descent_floor_derivation": (
+                "one half of the existing post-descent lateral action bound"
             ),
         }
     )
@@ -15186,6 +15205,7 @@ def _seek_stable_plate_contact(
                     active_overhead_descent_translation_action = float(
                         max(
                             structural_max_translation_action,
+                            tail_recovery_descent_translation_action_floor,
                             previous_active_translation_action / 2.0,
                         )
                     )
@@ -15252,6 +15272,13 @@ def _seek_stable_plate_contact(
                         ),
                         "next_brake_trigger_buffer_m": (
                             active_overhead_descent_brake_trigger_buffer
+                        ),
+                        "tail_recovery_descent_translation_action_floor": (
+                            tail_recovery_descent_translation_action_floor
+                        ),
+                        "tail_recovery_descent_floor_source": (
+                            "one half of the existing post-descent lateral "
+                            "action bound"
                         ),
                         "minimum_lateral_entry_buffer_surplus_m": (
                             latest_overhead_lateral_buffer[
