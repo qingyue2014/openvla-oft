@@ -3103,6 +3103,47 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert recovered_buffer[
         "minimum_lateral_entry_buffer_surplus_m"
     ] > 0.0
+    # Job503226 proved that keeping the full 8 mm positive-Z tail after the
+    # buffer recovered was safe but consumed the 240-step waypoint budget.
+    # The outward-restore hold keeps a strict 0.4 mm positive-Z structural
+    # step and remains inside the same native full-action and per-pair proof.
+    low_positive_z_hold_action, low_positive_z_hold_evidence = (
+        _compiled_adaptive_lateral_rebuffer_action(
+            current_eef=transition_eef,
+            overhead_guard=recovered_guard,
+            overhead_lateral_buffer=recovered_buffer,
+            outside_side_guard={
+                "minimum_outside_clearance_m": 0.0013,
+                "required_outside_clearance_m": strict_clearance,
+            },
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_spec,
+            expected_pair_count=1,
+            worst_case_controller_world_step_m=0.008,
+            lateral_target_xy=(
+                transition_eef[:2] + np.array([0.01, 0.0])
+            ),
+            one_sided_outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_lateral_translation_action=0.10,
+            positive_z_tail_world_step_m=0.0004,
+        )
+    )
+    assert low_positive_z_hold_action[0] > 0.099
+    assert low_positive_z_hold_action[2] == pytest.approx(0.005)
+    assert np.linalg.norm(low_positive_z_hold_action[:3]) < 1.0
+    assert low_positive_z_hold_evidence[
+        "active_positive_z_tail_world_step_m"
+    ] == pytest.approx(0.0004)
+    assert (
+        low_positive_z_hold_evidence[
+            "full_controller_step_positive_z_tail_retained"
+        ]
+        is False
+    )
+    assert low_positive_z_hold_evidence[
+        "minimum_predicted_post_command_buffer16_surplus_m"
+    ] > 0.0
 
     # Job503168's recovered tail already passed the unchanged formal corridor
     # gate.  The former extra zero-Z frame then fell 0.239 mm and restarted the
@@ -3374,13 +3415,18 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     )
     assert (
         outward_phase_latched["phase_after_decision"]
-        == "outward_restore"
+        == "vertical_brake"
+    )
+    assert (
+        outward_phase_latched["phase_transition"]
+        == "outward_restore_negative_z_to_vertical_brake"
     )
     restored_clearance = dict(job503204_one_frame_tail)
     restored_clearance.update(
         {
             "live_clearance_m": 0.0017,
             "latest_outward_step_progress_m": 1e-6,
+            "latest_vertical_step_progress_m": 1e-6,
         }
     )
     exit_brake_phase = _vertical_corridor_reserve_recovery_phase_evidence(
@@ -3481,6 +3527,8 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "post_descent_lateral_max_translation_action" in (
         vertical_corridor_action
     )
+    assert "positive_z_tail_world_step_m" in vertical_corridor_action
+    assert "maximum_controller_world_step" in vertical_corridor_action
     assert "compiled_tail_brake_reused_for_reserve_recovery" in (
         vertical_corridor_action
     )
@@ -3982,6 +4030,7 @@ def test_500174_lateral_rebuffer_is_adaptive_and_skips_repeat_zero():
         "does_not_cross_lateral_target": True,
         "inward_outward_axis_command_prohibited": True,
         "positive_z_static_geometry_does_not_reduce_clearance": True,
+        "reduced_positive_z_tail_requires_preaccepted_buffer16": False,
         "all_compiled_pairs_retain_strict_no_contact": True,
         "all_compiled_pairs_retain_strict_base8": True,
         "all_compiled_pairs_reach_strict_buffer16": True,

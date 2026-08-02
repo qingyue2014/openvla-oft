@@ -4315,6 +4315,12 @@ def _vertical_corridor_reserve_recovery_phase_evidence(
             transition = "vertical_brake_complete_to_outward_restore"
         elif (
             phase_before_decision == "outward_restore"
+            and vertical_progress < 0.0
+        ):
+            phase_after_decision = "vertical_brake"
+            transition = "outward_restore_negative_z_to_vertical_brake"
+        elif (
+            phase_before_decision == "outward_restore"
             and live_clearance > exit_clearance
             and outward_progress >= 0.0
             and recovery_evidence[
@@ -7278,6 +7284,7 @@ def _compiled_adaptive_lateral_rebuffer_action(
     lateral_target_xy=None,
     one_sided_outward_direction_xy=None,
     maximum_lateral_translation_action=None,
+    positive_z_tail_world_step_m=None,
 ):
     """Refill every pair's exact buffer deficit, optionally retaining XY."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -7292,6 +7299,19 @@ def _compiled_adaptive_lateral_rebuffer_action(
         raise ValueError("adaptive lateral-rebuffer scales are invalid")
     if not isinstance(expected_pair_count, (int, np.integer)):
         raise ValueError("expected compiled pair count must be an integer")
+    if positive_z_tail_world_step_m is not None:
+        positive_z_tail_world_step_m = float(
+            positive_z_tail_world_step_m
+        )
+        if not (
+            np.isfinite(positive_z_tail_world_step_m)
+            and 0.0 < positive_z_tail_world_step_m
+            <= worst_case_controller_world_step_m
+        ):
+            raise ValueError(
+                "adaptive lateral-rebuffer positive-Z tail override must "
+                "be positive and no larger than the compiled controller step"
+            )
     optional_lateral_values = (
         lateral_target_xy,
         one_sided_outward_direction_xy,
@@ -7485,16 +7505,32 @@ def _compiled_adaptive_lateral_rebuffer_action(
                 "live_buffer16_deficit_m": buffer_deficit,
             }
         )
-    # Refill the exact worst live deficit and one unchanged controller-step
-    # tail.  If buffer16 is already positive but a delayed negative dz remains,
-    # the deficit is zero and this still supplies the unchanged +Z tail brake.
-    # The tail is not a relaxed threshold: it is the same 8 mm term already
-    # used to derive buffer16 and protects the immediately resumed XY action
-    # against its proved worst-case downward response.
+    # Refill the exact worst live deficit and a positive-Z tail.  The default
+    # retains the unchanged full controller-step tail.  A smaller explicitly
+    # proved hold is permitted only after buffer16 is already accepted; static
+    # positive Z cannot reduce any compiled vertical clearance, and the live
+    # post-action checks remain fail-closed.
+    active_positive_z_tail_world_step = float(
+        worst_case_controller_world_step_m
+        if positive_z_tail_world_step_m is None
+        else positive_z_tail_world_step_m
+    )
+    if (
+        positive_z_tail_world_step_m is not None
+        and (
+            maximum_buffer_deficit > 0.0
+            or not overhead_lateral_buffer.get("accepted", False)
+            or not all(pair.get("accepted", False) for pair in buffer_pairs)
+        )
+    ):
+        raise RuntimeError(
+            "reduced positive-Z hold requires an already accepted live "
+            "buffer16 envelope"
+        )
     requested_delta = float(
         np.nextafter(
             maximum_buffer_deficit
-            + float(worst_case_controller_world_step_m),
+            + active_positive_z_tail_world_step,
             np.inf,
         )
     )
@@ -7509,8 +7545,8 @@ def _compiled_adaptive_lateral_rebuffer_action(
         or native_world_capacity < requested_delta
     ):
         raise RuntimeError(
-            "runtime native +Z action bound cannot prove one-step recovery "
-            "of the live buffer16 deficit plus the unchanged lateral tail: "
+            "runtime native +Z action bound cannot prove recovery of the "
+            "live buffer16 deficit plus the selected positive-Z tail: "
             f"requested_m={requested_delta} capacity_m={native_world_capacity}"
         )
     commanded_delta = requested_delta
@@ -7705,7 +7741,7 @@ def _compiled_adaptive_lateral_rebuffer_action(
         formula = (
             "take the maximum live deficit to the unchanged strict+base8+"
             "one-controller-step buffer16 envelope over every compiled pair, "
-            "add the same unchanged +Z controller-step tail, and retain a "
+            "add the selected strictly positive +Z tail, and retain a "
             "one-sided outward XY correction toward the existing shifted "
             "target capped by its remaining error, the configured lateral "
             "bound, and the strict runtime-native 3-D norm remainder"
@@ -7726,6 +7762,9 @@ def _compiled_adaptive_lateral_rebuffer_action(
                 >= 0.0
             ),
             "positive_z_static_geometry_does_not_reduce_clearance": True,
+            "reduced_positive_z_tail_requires_preaccepted_buffer16": bool(
+                positive_z_tail_world_step_m is not None
+            ),
             "all_compiled_pairs_retain_strict_no_contact": True,
             "all_compiled_pairs_retain_strict_base8": True,
             "all_compiled_pairs_reach_strict_buffer16": True,
@@ -7771,6 +7810,12 @@ def _compiled_adaptive_lateral_rebuffer_action(
         "maximum_live_buffer_deficit_m": maximum_buffer_deficit,
         "requested_positive_world_delta_m": requested_delta,
         "commanded_positive_world_delta_m": commanded_delta,
+        "active_positive_z_tail_world_step_m": (
+            active_positive_z_tail_world_step
+        ),
+        "full_controller_step_positive_z_tail_retained": bool(
+            positive_z_tail_world_step_m is None
+        ),
         "commanded_xy_action": action[:2].tolist(),
         "commanded_z_action": commanded_z_action,
         "retain_outward_lateral_drive": retain_outward_lateral_drive,
@@ -14974,6 +15019,11 @@ def _seek_stable_plate_contact(
                         ),
                         maximum_lateral_translation_action=(
                             post_descent_lateral_max_translation_action
+                        ),
+                        positive_z_tail_world_step_m=(
+                            maximum_controller_world_step
+                            if reserve_recovery_outward_restore_active
+                            else None
                         ),
                     )
                 )
