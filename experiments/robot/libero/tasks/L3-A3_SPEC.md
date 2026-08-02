@@ -89,6 +89,16 @@ Once the controller has stopped inside that reachable corridor, its pure-Z
 side-height descent and positive-Z settle brake use a separate `0.10` action
 cap; this changes no lateral reserve and every step remains subject to the live
 outside/table/plate guards before and after execution.
+The normal constraint-prioritized side-corridor XY/Z descent separately reuses
+the existing `0.20` overhead-descent total translation-action norm. Its
+one-sided outward hold target is therefore the unchanged corridor target plus
+`0.195` action-equivalent outward reserve (`0.20` minus the unchanged `0.005`
+near-plate cap). Job503251 showed that the former `0.10` total norm devoted
+almost all authority to outward hold, still drifted inward, and restored in Z
+exactly as much as three normal frames descended. The `0.20` reuse changes no
+recovery, settle, contact-seek, native-action, or formal-acceptance threshold;
+the strict outside/table/plate and unexpected-contact gates are still checked
+before and after every action.
 During the constrained side-corridor descent, a separate pre-loss recovery
 latched at `0.0009 m` outside clearance commands only the registered outward
 axis (`0.10` action) plus positive Z (`0.10` action), with zero tangential or

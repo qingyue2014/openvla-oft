@@ -13330,6 +13330,9 @@ def _seek_stable_plate_contact(
     vertical_corridor_descent_max_translation_action = float(
         args.vertical_corridor_descent_max_translation_action
     )
+    vertical_corridor_outward_hold_max_translation_action = float(
+        overhead_descent_max_translation_action
+    )
     post_descent_lateral_max_translation_action = float(
         args.post_descent_lateral_max_translation_action
     )
@@ -13352,10 +13355,14 @@ def _seek_stable_plate_contact(
         < tail_recovery_descent_translation_action_floor
         <= post_descent_lateral_max_translation_action
         < overhead_descent_max_translation_action
+        and vertical_corridor_descent_max_translation_action
+        < vertical_corridor_outward_hold_max_translation_action
+        == overhead_descent_max_translation_action
     ):
         raise RuntimeError(
-            "tail-recovery descent floor is not strictly nested inside the "
-            "existing structural, post-descent, and overhead action bounds"
+            "tail-recovery and side-corridor outward-hold bounds are not "
+            "strictly nested inside the existing structural, post-descent, "
+            "vertical, and overhead action bounds"
         )
     overhead_descent_brake_trigger_buffer = float(
         2.0 * maximum_overhead_descent_world_step
@@ -13388,6 +13395,12 @@ def _seek_stable_plate_contact(
             ),
             "vertical_corridor_descent_max_translation_action": (
                 vertical_corridor_descent_max_translation_action
+            ),
+            "vertical_corridor_outward_hold_max_translation_action": (
+                vertical_corridor_outward_hold_max_translation_action
+            ),
+            "vertical_corridor_outward_hold_bound_source": (
+                "existing overhead_descent_max_translation_action"
             ),
             "post_descent_lateral_max_translation_action": (
                 post_descent_lateral_max_translation_action
@@ -13559,7 +13572,7 @@ def _seek_stable_plate_contact(
         * maximum_post_descent_lateral_world_step
     )
     vertical_corridor_outward_priority_action = float(
-        vertical_corridor_descent_max_translation_action
+        vertical_corridor_outward_hold_max_translation_action
         - structural_max_translation_action
     )
     vertical_corridor_balanced_hold_world_step = float(
@@ -13619,11 +13632,11 @@ def _seek_stable_plate_contact(
             ),
             "vertical_corridor_balanced_hold_derivation": (
                 "position action scale times the existing vertical-corridor "
-                "translation-action bound minus the unchanged structural "
-                "near-plate bound, prioritizing a 0.095-action-equivalent "
-                "outward target offset while "
-                "the unchanged 0.10 Euclidean bound leaves strict negative-Z "
-                "descent authority"
+                "outward-hold bound (the existing 0.20 overhead-descent "
+                "bound) minus the unchanged structural near-plate bound, "
+                "prioritizing a 0.195-action-equivalent outward target "
+                "offset while the unchanged runtime-native Euclidean bound "
+                "leaves strict negative-Z descent authority"
             ),
             "vertical_corridor_reserve_recovery_entry_clearance_m": (
                 vertical_corridor_reserve_recovery_entry_clearance
@@ -15266,7 +15279,7 @@ def _seek_stable_plate_contact(
                         gripper=gripper,
                         position_action_scale=args.position_action_scale,
                         maximum_translation_action=(
-                            vertical_corridor_descent_max_translation_action
+                            vertical_corridor_outward_hold_max_translation_action
                         ),
                     )
                 )

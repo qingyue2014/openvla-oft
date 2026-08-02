@@ -3240,7 +3240,11 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     formal_side_target = np.array(
         [0.13282106705090635, -0.02850777957668001, 0.9178414056548501]
     )
-    balanced_hold_world_step = 0.08 * (0.10 - 0.005)
+    # Job503251 proved that the 0.10 total side-corridor norm re-entered
+    # recovery after three frames and exactly cancelled descent.  Reuse only
+    # the existing 0.20 overhead-descent norm for the normal outward-priority
+    # XY/Z allocation; recovery, settle and contact-seek bounds stay at 0.10.
+    balanced_hold_world_step = 0.08 * (0.20 - 0.005)
     reserve_side_target = formal_side_target.copy()
     reserve_side_target[0] = (
         0.13287106705090635 + balanced_hold_world_step
@@ -3255,14 +3259,14 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
             ),
             gripper=-1.0,
             position_action_scale=0.08,
-            maximum_translation_action=0.10,
+            maximum_translation_action=0.20,
         )
     )
-    assert 0.09 < reserve_action[0] < 0.095
+    assert 0.19 < reserve_action[0] < 0.195
     assert reserve_action[2] < 0.0
-    assert -0.04 < reserve_action[2] < -0.03
-    assert reserve_path["raw_outward_error_m"] > 0.005
-    assert np.linalg.norm(reserve_action[:3]) < 0.10
+    assert -0.06 < reserve_action[2] < -0.05
+    assert reserve_path["raw_outward_error_m"] > 0.015
+    assert np.linalg.norm(reserve_action[:3]) < 0.20
 
     # Job503193 proved that equal XY/Z action allocation alone is not a live
     # reserve guarantee: despite 0.081 outward action, the real OSC continued
@@ -3270,9 +3274,10 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     # showed that a shared 1.3 mm entry/exit threshold was unreachable.
     # Job503219 later measured a 0.490 mm inward closed-loop response, proving
     # that one nominal 0.4 mm structural step is not a conservative trigger.
-    # Prioritize 0.095 of the unchanged 0.10 action norm outward, retain the
-    # remaining norm for negative-Z descent, and reserve a rounded-up 0.5 mm
-    # closed-loop response bound above the unchanged strict gate.  The internal
+    # Prioritize 0.195 of the already-registered 0.20 action norm outward,
+    # retain the remaining norm for negative-Z descent, and reserve a
+    # rounded-up 0.5 mm closed-loop response bound above the unchanged strict
+    # gate.  The internal
     # release is the same 0.9 mm pre-loss reserve plus the existing 0.05 mm
     # measured-progress resolution; the formal 0.9 mm corridor gate itself
     # remains unchanged.  Job503245 then proved that Z=0.05 responds with
@@ -3371,12 +3376,16 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         recovery_exit_without_buffer["recovery_active_after_decision"]
         is True
     )
+    legacy_positive_z_brake_target = formal_side_target.copy()
+    legacy_positive_z_brake_target[0] = (
+        0.13287106705090635 + 0.08 * (0.10 - 0.005)
+    )
     recovery_action, recovery_path = (
         _constraint_prioritized_outside_descent_action(
             current_eef=np.array(
                 [0.13285385483001622, -0.028214750624792236, 0.9448090606919402]
             ),
-            outside_side_target=reserve_side_target,
+            outside_side_target=legacy_positive_z_brake_target,
             outward_direction_xy=np.array([1.0, 0.0]),
             maximum_descent_m=0.0,
             gripper=-1.0,
@@ -4405,7 +4414,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         'elif structural_stage == "vertical_corridor_descent":', 1
     )[1].split('elif structural_stage == "vertical_corridor_settle":', 1)[0]
     assert (
-        "vertical_corridor_descent_max_translation_action"
+        "vertical_corridor_outward_hold_max_translation_action"
         in vertical_corridor_action
     )
     post_descent_lateral_action = bounded_seek.split(
