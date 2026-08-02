@@ -287,6 +287,18 @@ two-frame stage-release check requires both outside and table clearance to be
 strictly above it. The `1.500 mm` predicted-response entry, `0.400 mm` formal
 acceptance thresholds, all native task fields, and every other stage remain
 unchanged.
+Job503639 showed that the wider release headroom alone was insufficient:
+continuing full `+X=0.20` throughout the entire refill band, together with the
+independent positive-Z capture, eventually produced another inward coupled
+response despite the continuing outward command. Full outward braking is now
+limited to either a measured inward response above the unchanged `0.050 mm`
+resolution or live clearance at or below `0.950 mm`. That low-reserve line is
+derived from the unchanged earlier `0.900 mm` recovery entry plus one progress
+resolution. On non-inward frames between `0.950 mm` and the `1.550 mm` release
+line, the controller requests only the exact nominal outward increment needed
+to refill the release line. Outside recovery still suspends negative Z, while
+positive-Z safety capture remains independent and all strict gates remain
+unchanged.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

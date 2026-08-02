@@ -5147,6 +5147,7 @@ def _fixed_safe_z_lateral_hold_action(
     strict_outside_clearance_m,
     strict_table_clearance_m,
     closed_loop_hazard_response_bound_m,
+    full_outward_brake_clearance_m,
     progress_resolution_m,
     derivative_gain,
     native_action_spec,
@@ -5172,6 +5173,7 @@ def _fixed_safe_z_lateral_hold_action(
         strict_outside_clearance_m,
         strict_table_clearance_m,
         closed_loop_hazard_response_bound_m,
+        full_outward_brake_clearance_m,
         progress_resolution_m,
         derivative_gain,
     )
@@ -5232,6 +5234,14 @@ def _fixed_safe_z_lateral_hold_action(
             np.inf,
         )
     )
+    if not (
+        strict_outside_clearance_m
+        < full_outward_brake_clearance_m
+        <= outside_recovery_exit_clearance
+    ):
+        raise ValueError(
+            "fixed-safe-Z full-brake clearance is outside its envelope"
+        )
     table_recovery_clearance = float(
         max(
             required_table_clearance,
@@ -5298,6 +5308,9 @@ def _fixed_safe_z_lateral_hold_action(
     live_outside_recovery_active = bool(
         live_outside_clearance <= outside_recovery_exit_clearance
     )
+    live_full_outward_brake_active = bool(
+        live_outside_clearance <= full_outward_brake_clearance_m
+    )
     outside_recovery_active = bool(
         measured_inward_response
         or live_outside_recovery_active
@@ -5309,7 +5322,7 @@ def _fixed_safe_z_lateral_hold_action(
                 max(
                     0.0,
                     (
-                        outside_recovery_clearance
+                        outside_recovery_exit_clearance
                         - live_outside_clearance
                     )
                     / position_action_scale,
@@ -5321,7 +5334,7 @@ def _fixed_safe_z_lateral_hold_action(
             strict_safety_brake_bound
             if (
                 measured_inward_response
-                or live_outside_recovery_active
+                or live_full_outward_brake_active
             )
             else min(
                 strict_safety_brake_bound,
@@ -5485,10 +5498,26 @@ def _fixed_safe_z_lateral_hold_action(
         "outside_recovery_exit_clearance_m": (
             outside_recovery_exit_clearance
         ),
+        "full_outward_brake_clearance_m": float(
+            full_outward_brake_clearance_m
+        ),
         "predicted_outside_clearance_m": predicted_outside_clearance,
         "outside_recovery_active": outside_recovery_active,
         "live_outside_recovery_active": (
             live_outside_recovery_active
+        ),
+        "live_full_outward_brake_active": (
+            live_full_outward_brake_active
+        ),
+        "required_outward_recovery_action": (
+            required_outward_recovery_action
+            if outside_recovery_active
+            else None
+        ),
+        "selected_outward_recovery_action": (
+            selected_outward_recovery_action
+            if outside_recovery_active
+            else None
         ),
         "vertical_capture_active": vertical_capture_active,
         "inward_suspended_for_vertical_capture": (
@@ -5523,6 +5552,7 @@ def _fixed_safe_z_lateral_hold_action(
             "healthy_outside_reserve_avoids_outward_saturation": True,
             "measured_inward_tail_uses_full_outward_brake": True,
             "live_low_reserve_uses_full_outward_brake": True,
+            "noninward_refill_band_uses_exact_nominal_action": True,
             "recovery_release_requires_exit_headroom": True,
             "outside_recovery_suspends_negative_z": True,
             "below_height_band_retains_positive_z_floor": True,
@@ -15210,6 +15240,13 @@ def _seek_stable_plate_contact(
             np.inf,
         )
     )
+    fixed_safe_z_full_outward_brake_clearance = float(
+        np.nextafter(
+            vertical_corridor_reserve_recovery_entry_clearance
+            + args.minimum_saturated_waypoint_progress,
+            np.inf,
+        )
+    )
     if not (
         fixed_safe_z_closed_loop_hazard_response_bound
         > vertical_corridor_closed_loop_inward_response_bound
@@ -15217,6 +15254,8 @@ def _seek_stable_plate_contact(
         > vertical_corridor_reserve_recovery_entry_clearance
         and fixed_safe_z_recovery_exit_clearance
         > fixed_safe_z_recovery_entry_clearance
+        and fixed_safe_z_recovery_entry_clearance
+        > fixed_safe_z_full_outward_brake_clearance
     ):
         raise RuntimeError(
             "fixed-safe-Z recovery envelope is not strictly conservative"
@@ -15231,6 +15270,9 @@ def _seek_stable_plate_contact(
             ),
             "fixed_safe_z_recovery_exit_clearance_m": (
                 fixed_safe_z_recovery_exit_clearance
+            ),
+            "fixed_safe_z_full_outward_brake_clearance_m": (
+                fixed_safe_z_full_outward_brake_clearance
             ),
             "fixed_safe_z_recovery_derivation": (
                 "unchanged 0.400 mm strict corridor threshold plus a "
@@ -16518,6 +16560,9 @@ def _seek_stable_plate_contact(
                 ),
                 closed_loop_hazard_response_bound_m=(
                     fixed_safe_z_closed_loop_hazard_response_bound
+                ),
+                full_outward_brake_clearance_m=(
+                    fixed_safe_z_full_outward_brake_clearance
                 ),
                 progress_resolution_m=(
                     args.minimum_saturated_waypoint_progress
