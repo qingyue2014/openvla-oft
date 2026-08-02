@@ -3813,7 +3813,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         correction_transition
     )
     assert (
-        ">= -maximum_controller_world_step"
+        ">= -float(args.minimum_saturated_waypoint_progress)"
         in correction_transition
     )
     assert 'structural_stage = "overhead_corridor_descent"' in (
@@ -4208,7 +4208,7 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
         post_descent_compilation
     )
     assert (
-        '"event_driven_positive_z_negative_tail_recovery"'
+        '"event_driven_xy_positive_z_negative_tail_recovery"'
         in CONTROLLER_REFERENCE.read_text()
     )
     assert '"unchanged formal position_tolerance"' in bounded_seek
@@ -4240,7 +4240,7 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
     )
     assert '"post_descent_vertical_tail_handoff_gate"' in bounded_seek
     assert (
-        '"existing vertical-staging maximum_controller_world_step"'
+        '"existing minimum_saturated_waypoint_progress"'
         in bounded_seek
     )
     assert "0.5 * maximum_post_descent_lateral_world_step" in bounded_seek
@@ -4444,13 +4444,25 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
             plane_recovery_tolerance_m=0.005,
         )
     )
-    assert np.array_equal(plane_recovery_action[:2], np.zeros(2))
+    assert plane_recovery_action[0] > 0.0
     assert plane_recovery_action[2] > 0.0
     assert np.linalg.norm(plane_recovery_action[:3]) < 0.10
     assert plane_recovery["plane_tolerance_recovery_required"] is True
     assert plane_recovery["pair_capacity_recovery_required"] is False
     assert plane_recovery["selected_envelope_source"] == (
-        "event_driven_positive_z_plane_tolerance_recovery"
+        "event_driven_xy_positive_z_plane_tolerance_recovery"
+    )
+    assert plane_recovery["dynamic_xy_positive_z_recovery"] is True
+    assert plane_recovery["pure_positive_z_recovery"] is False
+    assert plane_recovery[
+        "commanded_nominal_norm_downward_tail_m"
+    ] > 0.0
+    assert plane_recovery[
+        "commanded_worst_case_downward_world_tail_m"
+    ] >= plane_recovery["commanded_nominal_norm_downward_tail_m"]
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in plane_recovery["pair_envelopes"]
     )
 
     recovered_plane_eef = plane_lag_eef.copy()
@@ -4489,9 +4501,7 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
             negative_tail_recovery_threshold_m=0.00005,
         )
     )
-    assert np.array_equal(
-        negative_tail_recovery_action[:2], np.zeros(2)
-    )
+    assert negative_tail_recovery_action[0] > 0.0
     assert negative_tail_recovery_action[2] > 0.0
     assert np.linalg.norm(negative_tail_recovery_action[:3]) < 0.10
     assert negative_tail_recovery[
@@ -4504,7 +4514,20 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
         "pair_capacity_recovery_required"
     ] is False
     assert negative_tail_recovery["selected_envelope_source"] == (
-        "event_driven_positive_z_negative_tail_recovery"
+        "event_driven_xy_positive_z_negative_tail_recovery"
+    )
+    assert negative_tail_recovery[
+        "dynamic_xy_positive_z_recovery"
+    ] is True
+    assert negative_tail_recovery["pure_positive_z_recovery"] is False
+    assert negative_tail_recovery[
+        "commanded_worst_case_downward_world_tail_m"
+    ] > negative_tail_recovery[
+        "commanded_nominal_norm_downward_tail_m"
+    ]
+    assert all(
+        pair["predicted_post_worst_case_base_reserve_surplus_m"] > 0.0
+        for pair in negative_tail_recovery["pair_envelopes"]
     )
 
     tail_deadband_action, tail_deadband = (
@@ -4627,6 +4650,8 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
         expected_pair_count=55,
     )
     assert recovery["event_driven_positive_z_recovery"] is True
+    assert recovery["pure_positive_z_recovery"] is True
+    assert recovery["dynamic_xy_positive_z_recovery"] is False
     assert recovery["selected_envelope_source"] == (
         "event_driven_positive_z_plane_recovery"
     )

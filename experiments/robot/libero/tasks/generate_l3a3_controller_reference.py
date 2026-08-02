@@ -5904,9 +5904,16 @@ def _compiled_adaptive_high_plane_action(
         or plane_tolerance_recovery_required
         or negative_tail_recovery_required
     )
+    pure_positive_z_recovery = bool(pair_capacity_recovery_required)
+    dynamic_xy_positive_z_recovery = bool(
+        recovery_required and not pure_positive_z_recovery
+    )
     minimum_current_surplus = min(
         record["current_base8_surplus_m"] for record in pair_envelopes
     )
+    recovery_requested_translation_action = None
+    recovery_requested_translation_action_norm = None
+    recovery_action_norm_capacities = None
     if recovery_required:
         requested_nominal_tail = float(
             position_action_scale
@@ -5921,29 +5928,70 @@ def _compiled_adaptive_high_plane_action(
                 - minimum_current_surplus,
             )
         )
-        recovery_z_action = float(
-            min(
-                route_strict_norm_bound,
-                recovery_world_delta / position_action_scale,
+        if pure_positive_z_recovery:
+            recovery_z_action = float(
+                min(
+                    route_strict_norm_bound,
+                    recovery_world_delta / position_action_scale,
+                )
             )
-        )
-        if recovery_z_action <= 0.0:
-            raise RuntimeError(
-                "event-driven high-plane recovery has no positive +Z action"
-            )
-        translation = np.array([0.0, 0.0, recovery_z_action])
-        nominal_tail = 0.0
-        total_tail = inertial_tail_reserve
-        if negative_tail_recovery_required:
-            selected_source = (
-                "event_driven_positive_z_negative_tail_recovery"
-            )
-        elif plane_tolerance_recovery_required:
-            selected_source = (
-                "event_driven_positive_z_plane_tolerance_recovery"
-            )
-        else:
+            if recovery_z_action <= 0.0:
+                raise RuntimeError(
+                    "event-driven high-plane recovery has no positive +Z "
+                    "action"
+                )
+            translation = np.array([0.0, 0.0, recovery_z_action])
+            nominal_tail = 0.0
+            total_tail = inertial_tail_reserve
             selected_source = "event_driven_positive_z_plane_recovery"
+        else:
+            recovery_requested_translation_action = np.array(
+                [
+                    requested[0],
+                    requested[1],
+                    recovery_world_delta / position_action_scale,
+                ],
+                dtype=float,
+            )
+            recovery_requested_translation_action_norm = float(
+                np.linalg.norm(recovery_requested_translation_action)
+            )
+            if recovery_requested_translation_action_norm <= 0.0:
+                raise RuntimeError(
+                    "event-driven high-plane XY/+Z recovery has no positive "
+                    "action"
+                )
+            recovery_action_norm_capacities = {
+                "requested_xy_plus_recovery_z_action_norm": (
+                    recovery_requested_translation_action_norm
+                ),
+                "compiled_pair_base8_nominal_tail_after_inertia": (
+                    pair_norm_capacity
+                ),
+                "route_strict_3d_translation_action_norm_bound": (
+                    route_strict_norm_bound
+                ),
+            }
+            recovery_selected_norm = float(
+                min(recovery_action_norm_capacities.values())
+            )
+            translation = (
+                recovery_requested_translation_action
+                / recovery_requested_translation_action_norm
+                * recovery_selected_norm
+            )
+            nominal_tail = float(
+                position_action_scale * np.linalg.norm(translation)
+            )
+            total_tail = float(nominal_tail + inertial_tail_reserve)
+            if negative_tail_recovery_required:
+                selected_source = (
+                    "event_driven_xy_positive_z_negative_tail_recovery"
+                )
+            else:
+                selected_source = (
+                    "event_driven_xy_positive_z_plane_tolerance_recovery"
+                )
     else:
         translation = requested_direction * selected_norm
         nominal_tail = float(
@@ -5979,7 +6027,7 @@ def _compiled_adaptive_high_plane_action(
             )
         ):
             break
-        if recovery_required:
+        if pure_positive_z_recovery:
             raise RuntimeError(
                 "event-driven +Z recovery cannot retain measured inertial "
                 "tail and base8"
@@ -6028,7 +6076,9 @@ def _compiled_adaptive_high_plane_action(
             "capacity after reserving at least the latest measured negative-dz "
             "inertial tail; a pair-limited action becomes pure +Z recovery, "
             "and optional registered plane-error or measured-negative-tail "
-            "thresholds similarly require pure +Z before XY resumes"
+            "thresholds require outward XY/+Z recovery under the same full-"
+            "norm proof so real-controller inward coupling is not left "
+            "unopposed"
         ),
         "current_eef": current_eef.tolist(),
         "lateral_target_xy": lateral_target_xy.tolist(),
@@ -6047,6 +6097,21 @@ def _compiled_adaptive_high_plane_action(
         ),
         "pair_capacity_recovery_required": (
             pair_capacity_recovery_required
+        ),
+        "pure_positive_z_recovery": pure_positive_z_recovery,
+        "dynamic_xy_positive_z_recovery": (
+            dynamic_xy_positive_z_recovery
+        ),
+        "recovery_requested_translation_action": (
+            None
+            if recovery_requested_translation_action is None
+            else recovery_requested_translation_action.tolist()
+        ),
+        "recovery_requested_translation_action_norm": (
+            recovery_requested_translation_action_norm
+        ),
+        "recovery_action_norm_capacities": (
+            recovery_action_norm_capacities
         ),
         "requested_translation_action": requested.tolist(),
         "requested_translation_action_norm": requested_norm,
@@ -13058,9 +13123,11 @@ def _seek_stable_plate_contact(
                 "plane_recovery_rule": (
                     "while the above-staging shifted correction target is "
                     "active, if nonnegative-Z plane error exceeds the "
-                    "unchanged formal position tolerance, issue pure +Z under "
+                    "unchanged formal position tolerance, issue outward "
+                    "XY/+Z under "
                     "the same native/configured norm and 55-pair base8 proof "
-                    "before resuming XY"
+                    "so the measured real-controller inward coupling remains "
+                    "opposed"
                 ),
                 "negative_tail_recovery_threshold_m": float(
                     args.minimum_saturated_waypoint_progress
@@ -13071,16 +13138,17 @@ def _seek_stable_plate_contact(
                 "negative_tail_recovery_rule": (
                     "during post-descent correction, if the latest measured "
                     "negative Z step exceeds the registered threshold, issue "
-                    "pure +Z under the same native/configured norm and "
-                    "55-pair base8 proof before resuming XY"
+                    "outward XY/+Z under the same native/configured norm and "
+                    "55-pair base8 proof; the complete XY/+Z norm is reserved "
+                    "as worst-case downward tail"
                 ),
                 "controller_handoff_applies_only_before_first_overhead_descent": True,
                 "plane_recovery_applies_only_above_staging_tolerance": True,
                 "post_descent_formal_handoff_vertical_tail_deadband_m": (
-                    -maximum_controller_world_step
+                    -float(args.minimum_saturated_waypoint_progress)
                 ),
                 "post_descent_formal_handoff_vertical_tail_deadband_source": (
-                    "existing vertical-staging maximum_controller_world_step"
+                    "existing minimum_saturated_waypoint_progress"
                 ),
                 "formal_corridor_acceptance_target_unchanged": True,
                 "formal_corridor_acceptance_clearance_unchanged": True,
@@ -13189,14 +13257,14 @@ def _seek_stable_plate_contact(
                 "unchanged formal corridor target and clearance alone gate "
                 "continued descent, together with a measured vertical-step "
                 "handoff interlock using the existing negative vertical-"
-                "staging maximum_controller_world_step bound so descent "
-                "cannot resume with an observed downward tail larger than one "
-                "registered vertical-corridor controller step. If high-plane "
+                "staging minimum_saturated_waypoint_progress deadband so "
+                "descent cannot resume with an observed downward tail outside "
+                "that registered deadband. If high-plane "
                 "Z error exceeds the "
                 "unchanged formal position tolerance, reserve the complete "
-                "configured action norm for proved pure +Z recovery before "
-                "resuming XY. During post-descent correction, also reserve "
-                "the complete action for proved pure +Z recovery whenever "
+                "configured action norm for proved outward XY/+Z recovery. "
+                "During post-descent correction, also reserve "
+                "the complete action for proved outward XY/+Z recovery whenever "
                 "the latest measured negative Z step exceeds the existing "
                 "minimum_saturated_waypoint_progress threshold, and resume "
                 "XY only inside that deadband. At or below staging, switch "
@@ -15068,7 +15136,7 @@ def _seek_stable_plate_contact(
                 )
                 post_descent_vertical_tail_handoff_accepted = bool(
                     measured_vertical_step_progress_m
-                    >= -maximum_controller_world_step
+                    >= -float(args.minimum_saturated_waypoint_progress)
                 )
                 feedback["post_descent_vertical_tail_handoff_gate"] = {
                     "accepted": (
@@ -15078,11 +15146,10 @@ def _seek_stable_plate_contact(
                         measured_vertical_step_progress_m
                     ),
                     "minimum_accepted_vertical_step_progress_m": (
-                        -maximum_controller_world_step
+                        -float(args.minimum_saturated_waypoint_progress)
                     ),
                     "threshold_source": (
-                        "existing vertical-staging "
-                        "maximum_controller_world_step"
+                        "existing minimum_saturated_waypoint_progress"
                     ),
                     "formal_corridor_acceptance_unchanged": True,
                 }
