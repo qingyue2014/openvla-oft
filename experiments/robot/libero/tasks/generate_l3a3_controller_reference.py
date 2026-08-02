@@ -15900,7 +15900,7 @@ def main():
     # compiled plate/finger collision AABBs, descend with no contact, then
     # seek laterally until both native fingers contact.
     parser.add_argument(
-        "--plate_contact_outside_clearance", type=float, default=0.001
+        "--plate_contact_outside_clearance", type=float, default=0.0005
     )
     parser.add_argument(
         "--plate_contact_seek_max_translation_action",

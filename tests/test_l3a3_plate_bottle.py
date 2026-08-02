@@ -7253,7 +7253,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         in producer
     )
     assert (
-        '"--plate_contact_outside_clearance", type=float, default=0.001'
+        '"--plate_contact_outside_clearance", type=float, default=0.0005'
         in producer
     )
     assert (

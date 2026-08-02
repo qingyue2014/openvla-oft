@@ -72,7 +72,7 @@ This keeps the complete hand in front of the native cabinet while the EEF moves
 from center-high to the plate's right side. The route is selected only when the
 live compiler finds exactly one `legacy_cardinal:+x` candidate, that candidate
 passes the existing reachability and two-finger geometry gates, and its measured
-dual-finger contact skew is strictly smaller than the registered `0.001 m`
+dual-finger contact skew is strictly smaller than the registered `0.0005 m`
 outside-rim clearance.
 
 After reaching center-high, the controller recompiles the candidate and the
@@ -80,7 +80,7 @@ complete live native collision inventory. The structural approach continues to
 use the existing 55-pair overhead/outside/table clearance calculations, empty
 robot/native structural-contact allowlist, plate support/tilt/drift/velocity
 checks, native OSC action bounds, and finite action budget before every action
-and again after every action. The `0.001 m` outside-rim clearance is an exact
+and again after every action. The `0.0005 m` outside-rim clearance is an exact
 precontact separation threshold, not permission to contact the plate early;
 the low-speed contact-seek action remains capped at `0.10`, or `0.0008 m` in
 world space, and precontact plate contact still fails closed.
