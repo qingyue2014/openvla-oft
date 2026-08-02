@@ -71,37 +71,30 @@ and its existing OSC limits. After the verified high wrist yaw and exact
 second real-simulator geometry recompile, it derives one route from the live,
 unmodified collision inventory:
 
-1. at the center-high Z, move in plus Y while every live native obstacle whose
-   X/Z bounds intersect the compiled sweep retains at least one strict
-   front/right/left/above separating axis; this includes the native bowl,
-   cream cheese, plate, and intersecting cabinet bodies;
-2. while the complete rigid hand remains strictly in front of that complete
-   live swept-obstacle set, descend to the existing native outside-side Z,
-   where the hand is strictly below the cabinet top;
-3. at that low Z and while retaining the same strict front separation, move in
-   plus X until the complete rigid hand is strictly right of every native
-   structural collision geom other than the separately guarded support table
-   and world plane;
-4. retain the complete right-of-obstacle and under-cabinet separations while
-   moving to the unchanged native trailing-side Y;
-5. retain the right-of-wine-rack and under-cabinet separations while moving in
+1. at the center-high Z, move in plus X while every native structural geom
+   retains at least one strict front/right/left/above separating axis;
+2. after the complete rigid hand is strictly right of every native structural
+   collision geom other than the separately guarded support table and world
+   plane, retain that right separation while moving at high Z to the unchanged
+   native trailing-side Y;
+3. retain the complete right-of-obstacle separation while descending on that
+   column to the existing native outside-side Z;
+4. retain the right-of-wine-rack and under-cabinet separations while moving in
    minus X to the unchanged native outside-side contact column.
 
-The front and right waypoints are compiled from the complete exact live native
-collision inventory and the rigid-hand AABB offsets. The front set is selected
-by exact intersection of each native geom with the route's X/Z swept volume;
-the right set contains every structural native geom except the separately
-guarded support table and world plane. Thus task-native distractors such as
-`cream_cheese_1` cannot be silently omitted.
-Their separation-axis reserve is the unchanged near-contact maximum OSC world
+The high-route and right waypoints are compiled from the complete exact live
+native collision inventory and the rigid-hand AABB offsets. The obstacle set
+contains every structural native geom except the separately guarded support
+table and world plane, so task-native distractors such as `cream_cheese_1`
+cannot be silently omitted. The right separation-axis reserve is the unchanged
+near-contact maximum OSC world
 step (`0.008 m`) plus the unchanged waypoint tolerance (`0.005 m`), with a
-one-ULP strictness margin. The five long, axis-separated translations may use
-the strict interior of the native OSC
+one-ULP strictness margin. The four axis-separated translations may use the
+strict interior of the native OSC
 translation-action bound; the unchanged `0.10` action cap remains in force for
 post-route correction and plate-contact motion. Every executed action
-recompiles the live above/front/right/under inequality, enforces the empty
-structural
-robot/native contact allowlist, retains native table clearance, and rechecks
+recompiles the live separating-axis/right/under inequality, enforces the empty
+structural robot/native contact allowlist, retains native table clearance, and rechecks
 plate support, tilt, drift, and velocities. Any identity change, contact, lost
 separation, lost support, instability, action-budget overrun, or terminal
 outside-side guard failure invalidates the reference. These controller
@@ -115,11 +108,9 @@ and one quarter of the compiled terminal under-cabinet headroom above the
 `0.008 m` hard gate. This preserves at least 75% of the certified headroom
 before the first zero-Z lateral action; the live under-cabinet guard still runs
 before and after every action and fails closed on any loss.
-The switch also requires the EEF to lie inside that tolerance on either side
-of the target and the most recent measured Z displacement to be nonnegative.
-If the descent still has a negative dynamic tail, the unchanged vertical OSC
-controller continues toward the same target and provides an event-driven brake
-until this measured condition is satisfied.
+The switch requires the EEF to lie inside that tolerance on either side of the
+target; otherwise the unchanged vertical OSC controller continues toward the
+same target.
 
 ## Hard physical and visual gates
 

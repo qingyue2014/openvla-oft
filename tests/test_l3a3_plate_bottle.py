@@ -22,7 +22,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_adaptive_vertical_descent_action,
     _compiled_collision_pair_clearance,
     _compiled_hypothetical_wrist_yaw_plan,
-    _compiled_native_front_right_low_detour_plan,
+    _compiled_native_right_high_then_low_return_plan,
     _compiled_finger_yaw_frame,
     _compiled_native_side_contact_plan,
     _compiled_pair_set_clearance,
@@ -7836,7 +7836,7 @@ def test_native_cabinet_detour_completion_is_hash_bound(tmp_path):
     env = _l3a3_live_diagnostic_env()
     eef = np.array([0.04, -0.07, 1.06])
     inventory = _live_collision_inventory(env, eef_position=eef)
-    plan = _compiled_native_front_right_low_detour_plan(
+    plan = _compiled_native_right_high_then_low_return_plan(
         live_inventory=inventory,
         current_eef=eef,
         outside_high_target=np.array([0.10, -0.14, 1.06]),
@@ -7876,7 +7876,7 @@ def test_native_cabinet_detour_completion_is_hash_bound(tmp_path):
     assert saved["route_executed"] is True
     assert saved["route_completion"] == completion
     assert saved["latest_status"] == (
-        "NATIVE_FRONT_RIGHT_LOW_DETOUR_EXECUTED_AND_GUARDED"
+        "NATIVE_RIGHT_HIGH_THEN_LOW_RETURN_EXECUTED_AND_GUARDED"
     )
     assert context["executed"] is True
 
@@ -7918,11 +7918,11 @@ def test_live_detour_candidates_cannot_select_or_execute():
     assert all(candidate["aabb_authorization_prohibited"] for candidate in candidates)
 
 
-def test_native_front_right_low_detour_compiles_from_live_geometry():
+def test_native_right_high_then_low_return_compiles_from_live_geometry():
     env = _l3a3_live_diagnostic_env()
     eef = np.array([0.04, -0.07, 1.06])
     inventory = _live_collision_inventory(env, eef_position=eef)
-    plan = _compiled_native_front_right_low_detour_plan(
+    plan = _compiled_native_right_high_then_low_return_plan(
         live_inventory=inventory,
         current_eef=eef,
         outside_high_target=np.array([0.10, -0.14, 1.06]),
@@ -7937,15 +7937,14 @@ def test_native_front_right_low_detour_compiles_from_live_geometry():
     assert plan["diagnostic_only"] is False
     assert plan["wine_rack_geom_names"] == ["wine_rack_1_g4"]
     assert plan["plate_geom_names"] == ["plate_1_g1"]
-    assert "cream_cheese_1_g1" in plan["front_obstacle_geom_names"]
+    assert "cream_cheese_1_g1" in plan["high_route_obstacle_geom_names"]
     assert plan["route_order"] == [
-        "front_high_lateral",
-        "front_vertical_descent",
-        "low_front_right_lateral",
-        "right_low_trailing_pass",
+        "right_high_lateral",
+        "right_high_trailing_pass",
+        "right_trailing_vertical_descent",
         "trailing_low_terminal_return",
     ]
-    assert plan["predicted_front_clearance_m"] > 0.013
+    assert plan["predicted_initial_high_route_separation_m"] > 0.008
     assert plan["predicted_right_clearance_m"] > 0.013
     assert plan["predicted_high_above_plate_clearance_m"] > 0.008
     assert plan["predicted_under_clearance_at_terminal_m"] > 0.008
@@ -7964,10 +7963,9 @@ def test_native_front_right_low_detour_compiles_from_live_geometry():
         "def _seek_stable_plate_contact(", 1
     )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
     for stage, waypoint in (
-        ("front_high_lateral", "front_high"),
-        ("front_vertical_descent", "front_low"),
-        ("low_front_right_lateral", "right_front_low"),
-        ("right_low_trailing_pass", "right_trailing_low"),
+        ("right_high_lateral", "right_high"),
+        ("right_high_trailing_pass", "right_trailing_high"),
+        ("right_trailing_vertical_descent", "right_trailing_low"),
         ("trailing_low_terminal_return", "terminal_outside_side_low"),
     ):
         assert stage in bounded_seek
@@ -7977,14 +7975,13 @@ def test_native_front_right_low_detour_compiles_from_live_geometry():
     assert "low_front_x_return" not in bounded_seek
     assert "right_of_rack_low_y_pass" not in bounded_seek
     assert "abs(current_eef[2] - detour_target[2])" in bounded_seek
-    assert "latest_vertical_step_progress_m >= 0.0" in bounded_seek
 
 
 def test_native_cabinet_detour_live_guard_fails_closed_then_accepts():
     env = _l3a3_live_diagnostic_env()
     initial_eef = np.array([0.04, -0.07, 1.06])
     inventory = _live_collision_inventory(env, eef_position=initial_eef)
-    plan = _compiled_native_front_right_low_detour_plan(
+    plan = _compiled_native_right_high_then_low_return_plan(
         live_inventory=inventory,
         current_eef=initial_eef,
         outside_high_target=np.array([0.10, -0.14, 1.06]),
@@ -7995,18 +7992,18 @@ def test_native_cabinet_detour_live_guard_fails_closed_then_accepts():
         position_tolerance_m=0.005,
     )
 
-    front = _live_native_cabinet_detour_guard(
+    high_route = _live_native_cabinet_detour_guard(
         env,
         eef_position=initial_eef,
         plan=plan,
-        stage="front_high_lateral",
+        stage="right_high_lateral",
     )
-    assert front["accepted"] is True
-    assert front["blocking_wine_rack_geom_count"] == 1
-    assert front["minimum_high_route_separation_m"] > front[
+    assert high_route["accepted"] is True
+    assert high_route["blocking_wine_rack_geom_count"] == 1
+    assert high_route["minimum_high_route_separation_m"] > high_route[
         "required_strict_clearance_m"
     ]
-    assert front["above_plate_clearance_m"] > front[
+    assert high_route["above_plate_clearance_m"] > high_route[
         "required_strict_clearance_m"
     ]
 
@@ -8014,37 +8011,34 @@ def test_native_cabinet_detour_live_guard_fails_closed_then_accepts():
         env,
         eef_position=initial_eef,
         plan=plan,
-        stage="front_vertical_descent",
+        stage="right_high_trailing_pass",
     )
     assert rejected["accepted"] is False
     assert rejected["violations"] == [
-        "rigid_hand_not_strictly_in_front_of_native_obstacles"
+        "rigid_hand_not_strictly_right_of_plate_and_wine_rack"
     ]
 
-    env.sim.data.geom_xpos[0, 1] = 0.22
-    front_of_plate = _live_native_cabinet_detour_guard(
+    env.sim.data.geom_xpos[0, 0] = 0.25
+    right_of_all = _live_native_cabinet_detour_guard(
         env,
-        eef_position=np.array([0.04, 0.23, 1.06]),
+        eef_position=np.array([0.24, -0.06, 1.06]),
         plan=plan,
-        stage="front_vertical_descent",
+        stage="right_high_trailing_pass",
     )
-    assert front_of_plate["accepted"] is True
-    assert front_of_plate["front_clearance_m"] > front_of_plate[
+    assert right_of_all["accepted"] is True
+    assert right_of_all["right_clearance_m"] > right_of_all[
         "required_strict_clearance_m"
     ]
 
     env.sim.data.geom_xpos[0] = [0.25, -0.14, 0.95]
-    right_and_under = _live_native_cabinet_detour_guard(
+    right_descent = _live_native_cabinet_detour_guard(
         env,
         eef_position=np.array([0.24, -0.13, 0.96]),
         plan=plan,
-        stage="right_low_trailing_pass",
+        stage="right_trailing_vertical_descent",
     )
-    assert right_and_under["accepted"] is True
-    assert right_and_under["under_clearance_m"] > right_and_under[
-        "required_strict_clearance_m"
-    ]
-    assert right_and_under["right_clearance_m"] > right_and_under[
+    assert right_descent["accepted"] is True
+    assert right_descent["right_clearance_m"] > right_descent[
         "required_strict_clearance_m"
     ]
 
