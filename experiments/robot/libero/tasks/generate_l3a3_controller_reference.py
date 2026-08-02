@@ -9269,7 +9269,7 @@ def _hazard_release_zero_coast_transition_evidence(
     previously_requested,
     neutral_damping_active,
     full_guard_accepted,
-    previous_balance_response_accepted,
+    previous_balance_response_admissible,
     previous_hazard_release_evidence,
     reserve_evidence,
 ):
@@ -9278,8 +9278,8 @@ def _hazard_release_zero_coast_transition_evidence(
         "previously_requested": previously_requested,
         "neutral_damping_active": neutral_damping_active,
         "full_guard_accepted": full_guard_accepted,
-        "previous_balance_response_accepted": (
-            previous_balance_response_accepted
+        "previous_balance_response_admissible": (
+            previous_balance_response_admissible
         ),
     }
     if not all(
@@ -9319,7 +9319,7 @@ def _hazard_release_zero_coast_transition_evidence(
     dynamic_release_interlock_accepted = bool(
         not hazard_response_triggered
         or release_authorized
-        or previous_balance_response_accepted
+        or previous_balance_response_admissible
     )
     requested = bool(previously_requested or release_start_authorized)
     active = bool(
@@ -9351,8 +9351,8 @@ def _hazard_release_zero_coast_transition_evidence(
         "dynamic_release_interlock_accepted": (
             dynamic_release_interlock_accepted
         ),
-        "previous_balance_response_accepted": bool(
-            previous_balance_response_accepted
+        "previous_balance_response_admissible": bool(
+            previous_balance_response_admissible
         ),
         "reserve_evidence": reserve_evidence,
         "proof": {
@@ -9361,7 +9361,7 @@ def _hazard_release_zero_coast_transition_evidence(
             "reserve_loss_selects_existing_full_brake": True,
             "hazard_response_requires_two_frame_release_again": True,
             "dynamic_release_reuses_primary_confirmation_schedule": True,
-            "tolerance_balanced_response_can_continue_damping": True,
+            "response_above_negative_tolerance_can_continue_damping": True,
             "thresholds_unchanged": True,
         },
     }
@@ -9465,6 +9465,7 @@ def _compiled_hazard_release_response_balance_action(
     recovery_exit_clearance_m,
     previous_commanded_action_xyz,
     previous_step_response,
+    preceding_step_response,
     maximum_settled_step_response_m,
     maximum_axis_decrement_action,
 ):
@@ -9487,6 +9488,17 @@ def _compiled_hazard_release_response_balance_action(
         )
         clearance_response = float(
             previous_step_response[
+                "outside_clearance_step_progress_m"
+            ]
+        )
+        preceding_vertical_response = float(
+            preceding_step_response["vertical_step_progress_m"]
+        )
+        preceding_eef_outward_response = float(
+            preceding_step_response["eef_outward_step_progress_m"]
+        )
+        preceding_clearance_response = float(
+            preceding_step_response[
                 "outside_clearance_step_progress_m"
             ]
         )
@@ -9561,6 +9573,15 @@ def _compiled_hazard_release_response_balance_action(
         "clearance_response_finite": bool(
             np.isfinite(clearance_response)
         ),
+        "preceding_vertical_response_finite": bool(
+            np.isfinite(preceding_vertical_response)
+        ),
+        "preceding_eef_outward_response_finite": bool(
+            np.isfinite(preceding_eef_outward_response)
+        ),
+        "preceding_clearance_response_finite": bool(
+            np.isfinite(preceding_clearance_response)
+        ),
         "settle_tolerance_positive_finite": bool(
             np.isfinite(maximum_settled_step_response_m)
             and maximum_settled_step_response_m > 0.0
@@ -9594,6 +9615,17 @@ def _compiled_hazard_release_response_balance_action(
                         ),
                         "outside_clearance_step_progress_m": (
                             clearance_response
+                        ),
+                    },
+                    "preceding_step_response": {
+                        "vertical_step_progress_m": (
+                            preceding_vertical_response
+                        ),
+                        "eef_outward_step_progress_m": (
+                            preceding_eef_outward_response
+                        ),
+                        "outside_clearance_step_progress_m": (
+                            preceding_clearance_response
                         ),
                     },
                     "maximum_settled_step_response_m": (
@@ -9654,23 +9686,69 @@ def _compiled_hazard_release_response_balance_action(
     vertical_axis_balanced = bool(
         abs(vertical_response) <= response_tolerance
     )
+    predicted_vertical_response = float(
+        2.0 * vertical_response - preceding_vertical_response
+    )
+    predicted_eef_outward_response = float(
+        2.0 * eef_outward_response
+        - preceding_eef_outward_response
+    )
+    predicted_clearance_response = float(
+        2.0 * clearance_response - preceding_clearance_response
+    )
+    outward_confirmation_increment_requested = bool(
+        outward_axis_balanced
+        and min(
+            predicted_eef_outward_response,
+            predicted_clearance_response,
+        )
+        < -response_tolerance
+    )
+    outward_confirmation_decrement_requested = bool(
+        outward_axis_balanced
+        and not outward_confirmation_increment_requested
+        and max(
+            predicted_eef_outward_response,
+            predicted_clearance_response,
+        )
+        > response_tolerance
+    )
+    vertical_confirmation_increment_requested = bool(
+        vertical_axis_balanced
+        and predicted_vertical_response < -response_tolerance
+    )
+    vertical_confirmation_decrement_requested = bool(
+        vertical_axis_balanced
+        and not vertical_confirmation_increment_requested
+        and predicted_vertical_response > response_tolerance
+    )
     commanded_outward_action = float(
-        previous_outward_action
-        if outward_axis_balanced
+        previous_outward_action + maximum_axis_decrement_action
+        if outward_confirmation_increment_requested
         else max(
             0.0,
             previous_outward_action
             - maximum_axis_decrement_action,
         )
+        if (
+            not outward_axis_balanced
+            or outward_confirmation_decrement_requested
+        )
+        else previous_outward_action
     )
     commanded_positive_z_action = float(
-        previous_positive_z_action
-        if vertical_axis_balanced
+        previous_positive_z_action + maximum_axis_decrement_action
+        if vertical_confirmation_increment_requested
         else max(
             0.0,
             previous_positive_z_action
             - maximum_axis_decrement_action,
         )
+        if (
+            not vertical_axis_balanced
+            or vertical_confirmation_decrement_requested
+        )
+        else previous_positive_z_action
     )
     action = np.zeros(7, dtype=float)
     action[:2] = outward_direction * commanded_outward_action
@@ -9685,9 +9763,11 @@ def _compiled_hazard_release_response_balance_action(
             "after dynamic hazard release, decrease each one-sided safe "
             "action axis by half the registered 0.025 damping decrement "
             "only while its measured response remains above the unchanged "
-            "settle tolerance; hold an axis once its absolute response is "
-            "inside tolerance and restore the existing brake for any more-"
-            "negative response"
+            "settle tolerance; once an axis enters tolerance, linearly "
+            "predict its next response from the latest two measured frames "
+            "and add or subtract at most that same half-decrement only if "
+            "the prediction would leave tolerance; restore the existing "
+            "brake for any measured response below negative tolerance"
         ),
         "native_action_spec_source": native_source,
         "commanded_xyz_action": action[:3].tolist(),
@@ -9697,6 +9777,24 @@ def _compiled_hazard_release_response_balance_action(
             "vertical_step_progress_m": vertical_response,
             "eef_outward_step_progress_m": eef_outward_response,
             "outside_clearance_step_progress_m": clearance_response,
+        },
+        "preceding_step_response": {
+            "vertical_step_progress_m": preceding_vertical_response,
+            "eef_outward_step_progress_m": (
+                preceding_eef_outward_response
+            ),
+            "outside_clearance_step_progress_m": (
+                preceding_clearance_response
+            ),
+        },
+        "linearly_predicted_next_step_response": {
+            "vertical_step_progress_m": predicted_vertical_response,
+            "eef_outward_step_progress_m": (
+                predicted_eef_outward_response
+            ),
+            "outside_clearance_step_progress_m": (
+                predicted_clearance_response
+            ),
         },
         "maximum_settled_step_response_m": response_tolerance,
         "maximum_axis_decrement_action": (
@@ -9708,11 +9806,25 @@ def _compiled_hazard_release_response_balance_action(
         "commanded_positive_z_action": commanded_positive_z_action,
         "outward_axis_balanced_before_action": outward_axis_balanced,
         "vertical_axis_balanced_before_action": vertical_axis_balanced,
+        "outward_confirmation_increment_requested": (
+            outward_confirmation_increment_requested
+        ),
+        "outward_confirmation_decrement_requested": (
+            outward_confirmation_decrement_requested
+        ),
+        "vertical_confirmation_increment_requested": (
+            vertical_confirmation_increment_requested
+        ),
+        "vertical_confirmation_decrement_requested": (
+            vertical_confirmation_decrement_requested
+        ),
         "reserve_evidence": reserve_evidence,
         "response_balance_guard": response_balance_guard,
         "proof": {
             "one_sided_outward_and_positive_z_only": True,
             "per_axis_decrement_bounded": True,
+            "confirmation_increment_bounded_to_one_decrement": True,
+            "confirmation_uses_two_frame_linear_response_prediction": True,
             "negative_beyond_tolerance_requires_brake": True,
             "two_frame_absolute_response_confirmation_required": True,
             "zero_rotation": True,
@@ -18299,16 +18411,20 @@ def _seek_stable_plate_contact(
             previous_hazard_release_balance_response = (
                 lateral_settle_state.get("step_response", {})
             )
-            previous_hazard_release_balance_response_accepted = bool(
+            preceding_hazard_release_balance_response = (
+                lateral_settle_state.get(
+                    "hazard_release_response_balance_input_step_response",
+                    previous_hazard_release_balance_response,
+                )
+            )
+            previous_hazard_release_balance_response_admissible = bool(
                 previous_hazard_release_balance_active
                 and all(
                     key in previous_hazard_release_balance_response
-                    and abs(
-                        float(
-                            previous_hazard_release_balance_response[key]
-                        )
+                    and float(
+                        previous_hazard_release_balance_response[key]
                     )
-                    <= float(
+                    >= -float(
                         args.minimum_saturated_waypoint_progress
                     )
                     for key in (
@@ -18345,8 +18461,8 @@ def _seek_stable_plate_contact(
                     full_guard_accepted=bool(
                         pre_action_guard.get("accepted", False)
                     ),
-                    previous_balance_response_accepted=(
-                        previous_hazard_release_balance_response_accepted
+                    previous_balance_response_admissible=(
+                        previous_hazard_release_balance_response_admissible
                     ),
                     previous_hazard_release_evidence=(
                         previous_hazard_release_evidence
@@ -18405,6 +18521,9 @@ def _seek_stable_plate_contact(
                         ),
                         previous_step_response=(
                             previous_hazard_release_balance_response
+                        ),
+                        preceding_step_response=(
+                            preceding_hazard_release_balance_response
                         ),
                         maximum_settled_step_response_m=(
                             args.minimum_saturated_waypoint_progress
@@ -18555,8 +18674,11 @@ def _seek_stable_plate_contact(
                 "previous_hazard_release_balance_active": (
                     previous_hazard_release_balance_active
                 ),
-                "previous_hazard_release_balance_response_accepted": (
-                    previous_hazard_release_balance_response_accepted
+                "previous_hazard_release_balance_response_admissible": (
+                    previous_hazard_release_balance_response_admissible
+                ),
+                "preceding_hazard_release_balance_response": (
+                    preceding_hazard_release_balance_response
                 ),
                 "neutral_damping_active_before_action": (
                     neutral_damping_active_before_action
@@ -19741,6 +19863,10 @@ def _seek_stable_plate_contact(
             lateral_settle_progress[
                 "hazard_release_response_balance_active"
             ] = hazard_release_zero_coast_active_before_action
+            if hazard_release_zero_coast_active_before_action:
+                lateral_settle_progress[
+                    "hazard_release_response_balance_input_step_response"
+                ] = previous_hazard_release_balance_response
             lateral_settle_progress[
                 "hazard_release_zero_coast_reserve_recovery_active"
             ] = hazard_release_zero_coast_reserve_recovery_active

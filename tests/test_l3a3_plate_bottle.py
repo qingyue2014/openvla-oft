@@ -3732,7 +3732,7 @@ def test_job503691_zero_coast_request_latches_during_reserve_recovery():
         previously_requested=True,
         neutral_damping_active=True,
         full_guard_accepted=False,
-        previous_balance_response_accepted=False,
+        previous_balance_response_admissible=False,
         previous_hazard_release_evidence={},
         reserve_evidence=insufficient_reserve,
     )
@@ -3748,7 +3748,7 @@ def test_job503691_zero_coast_request_latches_during_reserve_recovery():
         previously_requested=recovery["requested"],
         neutral_damping_active=False,
         full_guard_accepted=False,
-        previous_balance_response_accepted=False,
+        previous_balance_response_admissible=False,
         previous_hazard_release_evidence={},
         reserve_evidence={"accepted": True, "violations": []},
     )
@@ -3763,7 +3763,7 @@ def test_job503693_zero_coast_rechecks_dynamic_hazard_release():
         previously_requested=True,
         neutral_damping_active=False,
         full_guard_accepted=True,
-        previous_balance_response_accepted=False,
+        previous_balance_response_admissible=False,
         previous_hazard_release_evidence={
             "hazard_response_triggered": True,
             "release_authorized": False,
@@ -3781,7 +3781,7 @@ def test_job503693_zero_coast_rechecks_dynamic_hazard_release():
         previously_requested=interrupted["requested"],
         neutral_damping_active=False,
         full_guard_accepted=True,
-        previous_balance_response_accepted=False,
+        previous_balance_response_admissible=False,
         previous_hazard_release_evidence={
             "hazard_response_triggered": True,
             "release_authorized": True,
@@ -3829,6 +3829,11 @@ def test_job503694_response_balance_damps_axes_independently():
             "eef_outward_step_progress_m": 0.0003,
             "outside_clearance_step_progress_m": 0.0002,
         },
+        preceding_step_response={
+            "vertical_step_progress_m": 0.00004,
+            "eef_outward_step_progress_m": 0.0003,
+            "outside_clearance_step_progress_m": 0.0002,
+        },
         maximum_settled_step_response_m=0.00005,
         maximum_axis_decrement_action=0.0125,
     )
@@ -3849,9 +3854,66 @@ def test_job503694_response_balance_damps_axes_independently():
                 "eef_outward_step_progress_m": -0.000051,
                 "outside_clearance_step_progress_m": 0.00001,
             },
+            preceding_step_response={
+                "vertical_step_progress_m": 0.00001,
+                "eef_outward_step_progress_m": 0.00001,
+                "outside_clearance_step_progress_m": 0.00001,
+            },
             maximum_settled_step_response_m=0.00005,
             maximum_axis_decrement_action=0.0125,
         )
+
+
+def test_job503865_balance_predicts_and_brakes_confirmation_tail():
+    native = {
+        "low": [-1.0] * 7,
+        "high": [1.0] * 7,
+        "source": "test_runtime",
+        "runtime_resolved": True,
+        "action_dimension": 7,
+    }
+    guard = {
+        "accepted": True,
+        "violations": [],
+        "outward_direction_xy": [1.0, 0.0],
+        "minimum_outside_clearance_m": 0.01,
+        "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+        "finger_table_vertical_clearance_m": 0.01,
+        "required_finger_table_clearance_m": np.nextafter(
+            0.0, np.inf
+        ),
+    }
+    action, evidence = _compiled_hazard_release_response_balance_action(
+        outside_side_guard=guard,
+        gripper=-1.0,
+        native_action_spec=native,
+        recovery_exit_clearance_m=0.00155,
+        previous_commanded_action_xyz=[0.3625, 0.0, 0.3125],
+        previous_step_response={
+            "vertical_step_progress_m": 0.000006,
+            "eef_outward_step_progress_m": -0.000014,
+            "outside_clearance_step_progress_m": -0.000009,
+        },
+        preceding_step_response={
+            "vertical_step_progress_m": 0.000154,
+            "eef_outward_step_progress_m": 0.0,
+            "outside_clearance_step_progress_m": 0.000007,
+        },
+        maximum_settled_step_response_m=0.00005,
+        maximum_axis_decrement_action=0.0125,
+    )
+    assert action[:3].tolist() == [0.3625, 0.0, 0.325]
+    assert evidence["outward_confirmation_increment_requested"] is False
+    assert evidence["vertical_confirmation_increment_requested"] is True
+    assert evidence["linearly_predicted_next_step_response"][
+        "vertical_step_progress_m"
+    ] == pytest.approx(-0.000142)
+    assert (
+        evidence["proof"][
+            "confirmation_increment_bounded_to_one_decrement"
+        ]
+        is True
+    )
 
 
 def test_job503694_tolerance_balanced_response_continues_damping():
@@ -3859,7 +3921,7 @@ def test_job503694_tolerance_balanced_response_continues_damping():
         previously_requested=True,
         neutral_damping_active=False,
         full_guard_accepted=True,
-        previous_balance_response_accepted=True,
+        previous_balance_response_admissible=True,
         previous_hazard_release_evidence={
             "hazard_response_triggered": True,
             "release_authorized": False,
@@ -10942,7 +11004,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert "hazard_release_zero_coast_recovery_active" in bounded_seek
     assert "hazard_release_response_balance_active" in bounded_seek
-    assert "previous_hazard_release_balance_response_accepted" in (
+    assert "previous_hazard_release_balance_response_admissible" in (
         bounded_seek
     )
     assert "hazard_zero_coast_reserve_recovery_uses_full_brake" in (

@@ -657,6 +657,21 @@ predicates. Response balance now shares that exact allowlist. It may continue
 only when already active, every violation belongs to that four-predicate set,
 and all unchanged live reserves pass. Full guard remains mandatory for normal
 stability completion, and any noncoverage violation still fails closed.
+Job503865 passed that shared guard and repeatedly reached one balance frame
+inside the unchanged `0.050 mm` absolute tolerance. At step 177, the
+EEF-outward/clearance/vertical responses were approximately
+`-0.014/-0.009/+0.006 mm`; holding the same Z action for confirmation then
+produced `-0.087 mm` vertical response. A later pair similarly changed from
+`-0.032 mm` to `-0.119 mm`. Active balance now remains admissible while every
+measured response is at or above the existing `-0.050 mm` boundary, so a small
+in-tolerance negative lateral component does not discard safe positive-axis
+damping. Once an axis is inside absolute tolerance, its next response is
+linearly extrapolated from the latest two measured frames. Only when that
+prediction would cross a tolerance boundary may the axis add or subtract one
+existing `0.0125` half-decrement; any measured response below `-0.050 mm`
+still restores the full dynamic release gate. Two actual consecutive frames,
+not predicted frames, remain mandatory for handoff. No formal or structural
+threshold changes.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
