@@ -5289,9 +5289,12 @@ def _fixed_safe_z_lateral_hold_action(
     measured_inward_response = bool(
         measured_outward_step_progress_m < -progress_resolution_m
     )
+    live_outside_recovery_active = bool(
+        live_outside_clearance <= outside_recovery_clearance
+    )
     outside_recovery_active = bool(
         measured_inward_response
-        or live_outside_clearance <= outside_recovery_clearance
+        or live_outside_recovery_active
         or predicted_outside_after_lateral <= outside_recovery_clearance
     )
     if outside_recovery_active:
@@ -5310,7 +5313,10 @@ def _fixed_safe_z_lateral_hold_action(
         )
         selected_outward_recovery_action = float(
             strict_safety_brake_bound
-            if measured_inward_response
+            if (
+                measured_inward_response
+                or live_outside_recovery_active
+            )
             else min(
                 strict_safety_brake_bound,
                 required_outward_recovery_action,
@@ -5386,6 +5392,11 @@ def _fixed_safe_z_lateral_hold_action(
     )
     if commanded_z_action < -maximum_safe_negative_z_action:
         commanded_z_action = -maximum_safe_negative_z_action
+    negative_z_suspended_for_outside_recovery = bool(
+        outside_recovery_active and commanded_z_action < 0.0
+    )
+    if negative_z_suspended_for_outside_recovery:
+        commanded_z_action = 0.0
 
     action = np.zeros(7, dtype=float)
     action[:2] = commanded_xy_action
@@ -5467,11 +5478,17 @@ def _fixed_safe_z_lateral_hold_action(
         "outside_recovery_clearance_m": outside_recovery_clearance,
         "predicted_outside_clearance_m": predicted_outside_clearance,
         "outside_recovery_active": outside_recovery_active,
+        "live_outside_recovery_active": (
+            live_outside_recovery_active
+        ),
         "vertical_capture_active": vertical_capture_active,
         "inward_suspended_for_vertical_capture": (
             inward_suspended_for_vertical_capture
         ),
         "measured_inward_response": measured_inward_response,
+        "negative_z_suspended_for_outside_recovery": (
+            negative_z_suspended_for_outside_recovery
+        ),
         "live_table_clearance_m": live_table_clearance,
         "table_recovery_clearance_m": table_recovery_clearance,
         "predicted_table_clearance_m": predicted_table_clearance,
@@ -5496,6 +5513,8 @@ def _fixed_safe_z_lateral_hold_action(
             "unstable_vertical_response_suspends_inward_return": True,
             "healthy_outside_reserve_avoids_outward_saturation": True,
             "measured_inward_tail_uses_full_outward_brake": True,
+            "live_low_reserve_uses_full_outward_brake": True,
+            "outside_recovery_suspends_negative_z": True,
             "below_height_band_retains_positive_z_floor": True,
             "inside_band_positive_response_unloads_without_negative_z": True,
             "downward_tail_uses_full_existing_positive_z_brake": True,

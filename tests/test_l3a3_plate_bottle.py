@@ -821,6 +821,64 @@ def test_fixed_safe_z_lateral_hold_brakes_job503463_only_at_low_reserve():
     ] is True
 
 
+def test_fixed_safe_z_lateral_hold_prioritizes_job503467_live_recovery():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13182813906246585, -0.02685300525710793, 0.9203520218593972]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.9196513910416114,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.0011844784392165408,
+        measured_outward_step_progress_m=-0.000011337715928871894,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.00045590680613190326,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.0075844921434991,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0005,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+    )
+    strict_brake = np.nextafter(0.20, 0.0)
+    assert action[:3].tolist() == pytest.approx(
+        [strict_brake, 0.0, 0.0]
+    )
+    assert evidence["measured_inward_response"] is False
+    assert evidence["live_outside_recovery_active"] is True
+    assert evidence["outside_recovery_active"] is True
+    assert evidence[
+        "negative_z_suspended_for_outside_recovery"
+    ] is True
+    assert evidence["proof"][
+        "live_low_reserve_uses_full_outward_brake"
+    ] is True
+    assert evidence["proof"][
+        "outside_recovery_suspends_negative_z"
+    ] is True
+
+
 def test_native_geometry_side_contact_targets_descend_outside_plate():
     plate = np.array([0.052, -0.0285, 0.9025])
     outside, contact, plan = _side_contact_targets_from_compiled_bounds(
@@ -9372,6 +9430,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "no_inward_xy_after_lateral_tolerance" in producer
     assert "below_height_band_retains_positive_z_floor" in producer
     assert "healthy_outside_reserve_avoids_outward_saturation" in producer
+    assert "outside_recovery_suspends_negative_z" in producer
     high_plane_call = bounded_seek.split(
         "_compiled_adaptive_high_plane_action(", 1
     )[1].split("overhead_guard=latest_overhead_guard", 1)[0]

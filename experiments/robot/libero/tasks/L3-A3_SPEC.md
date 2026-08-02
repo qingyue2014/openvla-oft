@@ -262,6 +262,13 @@ response larger than the existing `0.05 mm` progress resolution now
 independently activates the full registered outward brake, regardless of
 current clearance. The brake releases as soon as measured response is no
 longer inward and the recovery envelope is healthy.
+Job503467 showed that an already-low live clearance requires the same full
+brake even after measured inward speed falls below `0.05 mm`: at `0.456 mm`
+clearance, an exact nominal recovery action paired with negative Z left only
+`0.00047 mm`. Live clearance at or below the existing `0.900 mm` recovery
+threshold now always receives the full registered outward brake. Negative Z
+is suspended throughout outside recovery and resumes only after the live
+outside reserve is restored; positive Z safety braking remains available.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
