@@ -3799,8 +3799,15 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         'elif stage_before_action == "vertical_corridor_settle":', 1
     )[0]
     assert (
-        '"high_z_controller_reserve_complete_to_"'
+        '"pre_descent_controller_reserve_complete_to_"'
         in correction_transition
+    )
+    assert (
+        '"post_descent_formal_corridor_entry_complete_to_"'
+        in correction_transition
+    )
+    assert "correction_requires_pre_descent_controller_reserve" in (
+        correction_transition
     )
     assert 'structural_stage = "overhead_corridor_descent"' in (
         correction_transition
@@ -4172,7 +4179,17 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
         "        * maximum_post_descent_lateral_world_step"
         in bounded_seek
     )
-    assert "correction_uses_high_z_hold_target = bool(" in bounded_seek
+    assert (
+        "correction_requires_pre_descent_controller_reserve = bool("
+        in bounded_seek
+    )
+    assert (
+        'structural_stage_action_counts[\n'
+        '                    "overhead_corridor_descent"\n'
+        "                ]\n"
+        "                == 0"
+        in post_descent_compilation
+    )
     assert "else corridor_rebuffer_target[:2]" in post_descent_compilation
     assert '"active_correction_lateral_target_xy"' in bounded_seek
     assert "plane_recovery_tolerance_m=(" in post_descent_compilation
@@ -4187,7 +4204,18 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
         "corridor_high_target=corridor_correction_handoff_target"
         in bounded_seek
     )
-    assert '"applies_only_above_staging_tolerance": True' in bounded_seek
+    assert (
+        '"applies_only_before_first_overhead_descent": True'
+        in bounded_seek
+    )
+    assert (
+        'and post_descent_corridor_entry["accepted"]'
+        in bounded_seek
+    )
+    assert (
+        "not correction_requires_pre_descent_controller_reserve"
+        in bounded_seek
+    )
     assert "0.5 * maximum_post_descent_lateral_world_step" in bounded_seek
     assert '"formal_position_tolerance_unchanged": True' in bounded_seek
     assert '"minimum_realized_outward_controller_reserve_m"' in bounded_seek
@@ -6711,8 +6739,11 @@ def test_high_first_route_fails_closed_and_rechecks_post_descent_drift():
     )
     assert "post_descent_controller_handoff" in zero_transition
     assert (
-        'post_descent_controller_handoff["accepted"]'
+        '"controller_handoff_diagnostic_only"'
         in zero_transition
+    )
+    assert 'post_descent_controller_handoff["accepted"]' not in (
+        zero_transition
     )
     assert (
         'post_descent_corridor_entry["accepted"]'
