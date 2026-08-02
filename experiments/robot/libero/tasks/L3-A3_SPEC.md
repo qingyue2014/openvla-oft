@@ -733,6 +733,19 @@ only an action amount inside the previously registered bound; measured
 negative-response recovery, two-frame acceptance, native action limits,
 collision guards, task fields, and the 240-step budget remain unchanged.
 
+Job503871 sustained the full outside-side guard and entered fixed-safe-Z
+lateral return at step 224, but only 16 actions remained. The terminal state
+was still in conservative Z/outside-reserve capture with `8.255 mm` lateral
+error. Applying proportional confirmation during the earlier above-rim
+coverage-gap phase had delayed the first shielded-descent handoff from Job
+503870's step 174 to step 194. Proportional shallow confirmation is therefore
+now authorized only after the full outside-side guard is accepted. While the
+existing above-rim coverage-gap allowlist is active, a shallow negative
+prediction retains the registered `0.0125` half-decrement that produced the
+earlier valid handoff. Predictions below `-0.100 mm` retain the full `0.025`
+confirmation in either phase. All measured-response, collision, task, action,
+and budget gates remain unchanged.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

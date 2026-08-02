@@ -9819,7 +9819,10 @@ def _compiled_hazard_release_response_balance_action(
     vertical_confirmation_increment_requested = bool(
         predicted_vertical_response < -response_tolerance
     )
-    outward_shallow_confirmation_fraction = float(
+    full_guard_accepted = bool(
+        response_balance_guard["full_guard_accepted"]
+    )
+    outward_raw_shallow_confirmation_fraction = float(
         min(
             1.0,
             max(
@@ -9832,7 +9835,7 @@ def _compiled_hazard_release_response_balance_action(
             ),
         )
     )
-    vertical_shallow_confirmation_fraction = float(
+    vertical_raw_shallow_confirmation_fraction = float(
         min(
             1.0,
             max(
@@ -9844,6 +9847,20 @@ def _compiled_hazard_release_response_balance_action(
                 / response_tolerance,
             ),
         )
+    )
+    outward_shallow_confirmation_fraction = float(
+        outward_raw_shallow_confirmation_fraction
+        if full_guard_accepted
+        else 1.0
+        if outward_confirmation_increment_requested
+        else 0.0
+    )
+    vertical_shallow_confirmation_fraction = float(
+        vertical_raw_shallow_confirmation_fraction
+        if full_guard_accepted
+        else 1.0
+        if vertical_confirmation_increment_requested
+        else 0.0
     )
     outward_confirmation_increment_action = float(
         full_confirmation_increment_action
@@ -9919,12 +9936,12 @@ def _compiled_hazard_release_response_balance_action(
             "only while its measured response remains above the unchanged "
             "settle tolerance and its two-frame linear prediction remains "
             "above that tolerance; hold before the predicted crossing, add "
-            "an amount linearly interpolated from zero to the existing "
-            "0.0125 half-decrement for a shallow prediction below negative "
-            "tolerance, or add the registered full 0.025 decrement only "
-            "when the deficit exceeds one further tolerance width; restore "
-            "the existing brake for any measured response below negative "
-            "tolerance"
+            "the existing 0.0125 half-decrement while only the above-rim "
+            "coverage-gap allowlist is active, or linearly interpolate from "
+            "zero to that half-decrement once the full guard is accepted; "
+            "add the registered full 0.025 decrement only when the deficit "
+            "exceeds one further tolerance width; restore the existing "
+            "brake for any measured response below negative tolerance"
         ),
         "native_action_spec_source": native_source,
         "commanded_xyz_action": action[:3].tolist(),
@@ -9972,6 +9989,16 @@ def _compiled_hazard_release_response_balance_action(
         "vertical_shallow_confirmation_fraction": (
             vertical_shallow_confirmation_fraction
         ),
+        "full_guard_proportional_confirmation_authorized": (
+            full_guard_accepted
+        ),
+        "coverage_gap_fixed_half_confirmation_active": bool(
+            not full_guard_accepted
+            and (
+                outward_confirmation_increment_requested
+                or vertical_confirmation_increment_requested
+            )
+        ),
         "previous_outward_action": previous_outward_action,
         "previous_positive_z_action": previous_positive_z_action,
         "commanded_outward_action": commanded_outward_action,
@@ -10003,6 +10030,8 @@ def _compiled_hazard_release_response_balance_action(
                 True
             ),
             "shallow_confirmation_scales_with_prediction_deficit": True,
+            "proportional_confirmation_requires_full_guard": True,
+            "coverage_gap_retains_registered_half_decrement": True,
             "full_confirmation_requires_extra_tolerance_width": True,
             "confirmation_uses_two_frame_linear_response_prediction": True,
             "negative_beyond_tolerance_requires_brake": True,

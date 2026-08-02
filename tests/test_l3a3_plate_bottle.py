@@ -3980,6 +3980,35 @@ def test_job503869_balance_holds_before_predicted_tolerance_crossing():
         is True
     )
 
+    coverage_action, coverage_evidence = (
+        _compiled_hazard_release_response_balance_action(
+            outside_side_guard=guard,
+            gripper=-1.0,
+            native_action_spec=native,
+            recovery_exit_clearance_m=0.00155,
+            previous_commanded_action_xyz=[0.375, 0.0, 0.325],
+            previous_step_response={
+                "vertical_step_progress_m": 0.0000941805,
+                "eef_outward_step_progress_m": 0.0000256422,
+                "outside_clearance_step_progress_m": 0.0000261729,
+            },
+            preceding_step_response={
+                "vertical_step_progress_m": 0.0002527751,
+                "eef_outward_step_progress_m": 0.0001262399,
+                "outside_clearance_step_progress_m": 0.0001068972,
+            },
+            maximum_settled_step_response_m=0.00005,
+            maximum_axis_decrement_action=0.0125,
+        )
+    )
+    assert coverage_action[:3].tolist() == [0.3875, 0.0, 0.3375]
+    assert coverage_evidence[
+        "coverage_gap_fixed_half_confirmation_active"
+    ] is True
+    assert coverage_evidence[
+        "vertical_confirmation_increment_action"
+    ] == pytest.approx(0.0125)
+
 
 def test_job503870_balance_interpolates_shallow_confirmation_increment():
     native = {
@@ -4035,6 +4064,9 @@ def test_job503870_balance_interpolates_shallow_confirmation_increment():
     assert evidence[
         "vertical_shallow_confirmation_fraction"
     ] == pytest.approx(expected_fraction)
+    assert evidence[
+        "full_guard_proportional_confirmation_authorized"
+    ] is True
     assert (
         evidence["proof"][
             "shallow_confirmation_bounded_by_registered_half_decrement"
