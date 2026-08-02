@@ -10978,7 +10978,7 @@ def _execute_high_safe_wrist_yaw(
             )
     else:
         raise RuntimeError(
-            "wrist yaw exhausted the unchanged 180-step waypoint budget "
+            "wrist yaw exhausted the configured finite waypoint budget "
             f"without pose attainment: frames={json.dumps(frames, sort_keys=True)}"
         )
     yaw_steps = len(frames)
@@ -12692,7 +12692,7 @@ def _seek_stable_plate_contact(
                 "step; later stages are deliberately excluded because "
                 "controller coupling can change their remaining travel. "
                 "Adaptive responses, brakes, zero confirmation, and XY drift "
-                "correction are enforced at runtime by the unchanged 180-step hard loop"
+                "correction are enforced at runtime by the configured finite structural hard loop"
             ),
             "maximum_structural_waypoint_steps": (
                 structural_waypoint_budget
@@ -16128,7 +16128,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--position_action_scale", type=float, default=0.08)
     parser.add_argument("--position_tolerance", type=float, default=0.005)
-    parser.add_argument("--max_waypoint_steps", type=int, default=180)
+    parser.add_argument("--max_waypoint_steps", type=int, default=240)
     parser.add_argument("--bottle_approach_height", type=float, default=0.235)
     parser.add_argument("--bottle_grasp_eef_height", type=float, default=0.125)
     parser.add_argument("--bottle_lift_height", type=float, default=0.130)

@@ -105,6 +105,9 @@ bound. This geometric schedule prevents a symmetric descent/brake limit cycle;
 the controller proceeds to zero confirmation only after stopping at the staging
 height. Every action still retains all 55 compiled pair guards and is rechecked
 after execution.
+The complete precontact structural route has a finite default budget of `240`
+actions; native episode termination and horizon-reserve checks remain
+fail-closed and are not bypassed by this route budget.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

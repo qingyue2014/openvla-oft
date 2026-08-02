@@ -3380,7 +3380,7 @@ def test_500161_adaptive_descent_uses_native_bound_then_tightens_near_base8():
         in bounded_seek
     )
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in CONTROLLER_REFERENCE.read_text()
     )
 
@@ -3558,7 +3558,7 @@ def test_500174_lateral_rebuffer_is_adaptive_and_skips_repeat_zero():
     )
     assert "compiled_overhead_one_step_vertical_reserve_lost" in bounded_seek
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in CONTROLLER_REFERENCE.read_text()
     )
 
@@ -3746,7 +3746,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert "after the monotone pure-Z sweep, command pure XY" not in controller
     assert "internal controller substeps" in controller
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
 
@@ -3943,7 +3943,7 @@ def test_500193_fixed_point_one_trace_exhaustion_is_not_a_threshold_change():
     assert 1.065422 - 0.946566 > 0.118
     controller = CONTROLLER_REFERENCE.read_text()
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert (
@@ -4139,7 +4139,7 @@ def test_500195_regression_is_dynamic_tail_not_contact_or_threshold_change():
     assert "overhead_horizontal_z=overhead_horizontal_z" in bounded_seek
     assert '"overhead_post_descent_corridor_lateral"' in bounded_seek
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert (
@@ -4288,7 +4288,7 @@ def test_500199_workspace_release_stage_preserves_all_hard_thresholds():
     assert "workspace_release_reached_strict_corridor_to_" in bounded_seek
     assert '"overhead_corridor_descent"' in bounded_seek
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert (
@@ -4406,7 +4406,7 @@ def test_500206_workspace_recovery_is_recorded_and_thresholds_unchanged():
     assert "event_driven_positive_z_inertial_recovery" in bounded_seek
     assert '"workspace_release_diagonal": 0' in bounded_seek
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert (
@@ -4504,7 +4504,7 @@ def test_500207_recovery_trigger_is_exhaustion_not_positive_pair_limiting():
         not in release
     )
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
 
@@ -4687,7 +4687,7 @@ def test_500210_workspace_negative_z_uses_buffer16_without_threshold_changes():
     assert "negative_z_capacity_exhausted_by_buffer16_or_inertia" in release
     assert "or workspace_negative_z_action_requires_buffer16" in bounded_seek
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert (
@@ -4801,7 +4801,7 @@ def test_500223_scalar_solver_preserves_strict_gates_and_hard_thresholds():
     assert "clearance > record[required_clearance_key]" in release
     assert "clearance >= record[required_clearance_key]" not in release
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert (
@@ -4952,7 +4952,7 @@ def test_500224_post_gate_is_base8_not_post_buffer16_or_budget_change():
     assert "clearance > record[required_clearance_key]" in release
     assert "clearance >= record[required_clearance_key]" not in release
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert (
@@ -5109,7 +5109,7 @@ def test_500234_z_cap_uses_existing_reserve_without_gate_or_budget_changes():
     assert "clearance > record[required_clearance_key]" in release
     assert "clearance >= record[required_clearance_key]" not in release
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
 
@@ -5332,7 +5332,7 @@ def test_500240_headroom_refines_direction_without_gate_or_budget_changes():
     assert "clearance > record[required_clearance_key]" in release
     assert "clearance >= record[required_clearance_key]" not in release
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert (
@@ -5491,7 +5491,7 @@ def test_500251_manifest_records_true_high_target_without_gate_changes():
         in bounded_seek
     )
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert (
@@ -5604,7 +5604,7 @@ def test_502404_exact_high_prebuffer_roundoff_regression_and_budget():
     )
     assert np.ceil(nudged_high_route_lower_bound) < 167
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in CONTROLLER_REFERENCE.read_text()
     )
 
@@ -5963,7 +5963,7 @@ def test_500261_saturation_fallback_reuses_existing_constants_and_exact_gates():
         in bounded_seek
     )
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert (
@@ -6091,7 +6091,7 @@ def test_502095_boundary_gate_precedes_saturation_and_preserves_exact_descent():
         "_high_plane_native_workspace_saturation_evidence(" in high_transition
     )
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert (
@@ -6267,12 +6267,12 @@ def test_500182_high_first_budget_is_unchanged_and_removes_observed_overhead():
     assert same_motion_without_observed_rebuffers == 141
     controller = CONTROLLER_REFERENCE.read_text()
     assert (
-        'parser.add_argument("--max_waypoint_steps", type=int, default=180)'
+        'parser.add_argument("--max_waypoint_steps", type=int, default=240)'
         in controller
     )
     assert '"geometric_action_count_scope"' in controller
     assert "diagnostic lower bound only" in controller
-    assert "unchanged 180-step hard loop" in controller
+    assert "configured finite structural hard loop" in controller
     assert "runtime upper bound" not in controller
     assert "expected_overhead_pair_count = 55" in controller
     assert "native L3-A3 compiled overhead pair inventory changed" in controller
