@@ -4175,6 +4175,8 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
     assert "correction_uses_high_z_hold_target = bool(" in bounded_seek
     assert "else corridor_rebuffer_target[:2]" in post_descent_compilation
     assert '"active_correction_lateral_target_xy"' in bounded_seek
+    assert "plane_recovery_tolerance_m=(" in post_descent_compilation
+    assert '"unchanged formal position_tolerance"' in bounded_seek
     assert 'corridor_high_target=corridor_rebuffer_target' in bounded_seek
     assert (
         '"formal_corridor_acceptance_target_unchanged": True'
@@ -4369,6 +4371,52 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
     assert correction_action[2] >= 0.0
     assert np.linalg.norm(correction_action[:3]) < 0.10
     assert np.all(correction_action[3:6] == 0.0)
+
+    plane_lag_eef = terminal_eef.copy()
+    plane_lag_eef[2] = terminal_hold_z - 0.0093
+    plane_recovery_action, plane_recovery = (
+        _compiled_adaptive_high_plane_action(
+            current_eef=plane_lag_eef,
+            lateral_target_xy=correction_hold_target,
+            overhead_horizontal_z=terminal_hold_z,
+            measured_vertical_step_progress_m=0.0,
+            overhead_guard=guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native,
+            expected_pair_count=55,
+            maximum_translation_action=0.10,
+            plane_recovery_tolerance_m=0.005,
+        )
+    )
+    assert np.array_equal(plane_recovery_action[:2], np.zeros(2))
+    assert plane_recovery_action[2] > 0.0
+    assert np.linalg.norm(plane_recovery_action[:3]) < 0.10
+    assert plane_recovery["plane_tolerance_recovery_required"] is True
+    assert plane_recovery["pair_capacity_recovery_required"] is False
+    assert plane_recovery["selected_envelope_source"] == (
+        "event_driven_positive_z_plane_tolerance_recovery"
+    )
+
+    recovered_plane_eef = plane_lag_eef.copy()
+    recovered_plane_eef[2] = terminal_hold_z - 0.0049
+    resumed_xy_action, resumed_xy = _compiled_adaptive_high_plane_action(
+        current_eef=recovered_plane_eef,
+        lateral_target_xy=correction_hold_target,
+        overhead_horizontal_z=terminal_hold_z,
+        measured_vertical_step_progress_m=0.0,
+        overhead_guard=guard,
+        gripper=-1.0,
+        position_action_scale=0.08,
+        native_action_spec=native,
+        expected_pair_count=55,
+        maximum_translation_action=0.10,
+        plane_recovery_tolerance_m=0.005,
+    )
+    assert resumed_xy["plane_tolerance_recovery_required"] is False
+    assert resumed_xy_action[0] > 0.0
+    assert resumed_xy_action[2] > 0.0
+    assert np.linalg.norm(resumed_xy_action[:3]) < 0.10
 
     handoff_eef = np.array(
         [

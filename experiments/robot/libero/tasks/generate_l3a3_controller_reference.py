@@ -5656,6 +5656,7 @@ def _compiled_adaptive_high_plane_action(
     native_action_spec,
     expected_pair_count,
     maximum_translation_action=None,
+    plane_recovery_tolerance_m=None,
 ):
     """Hold the initial high plane with XY/+Z under live pair reserves."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -5676,6 +5677,16 @@ def _compiled_adaptive_high_plane_action(
         raise ValueError("adaptive high-plane geometry is invalid")
     if not isinstance(expected_pair_count, (int, np.integer)):
         raise ValueError("expected compiled pair count must be an integer")
+    if plane_recovery_tolerance_m is not None:
+        plane_recovery_tolerance_m = float(plane_recovery_tolerance_m)
+        if (
+            not np.isfinite(plane_recovery_tolerance_m)
+            or plane_recovery_tolerance_m <= 0.0
+        ):
+            raise ValueError(
+                "adaptive high-plane recovery tolerance must be finite and "
+                "positive"
+            )
     pairs = list(overhead_guard.get("pairs", ()))
     if expected_pair_count <= 0 or len(pairs) != int(expected_pair_count):
         raise RuntimeError(
@@ -5861,11 +5872,19 @@ def _compiled_adaptive_high_plane_action(
         )
     selected_source = min(capacities, key=capacities.get)
     selected_norm = float(capacities[selected_source])
-    recovery_required = bool(
+    pair_capacity_recovery_required = bool(
         selected_source
         == "compiled_pair_base8_nominal_tail_after_inertia"
         and selected_norm
         < min(requested_norm, route_strict_norm_bound)
+    )
+    plane_tolerance_recovery_required = bool(
+        plane_recovery_tolerance_m is not None
+        and plane_hold_z_error > plane_recovery_tolerance_m
+    )
+    recovery_required = bool(
+        pair_capacity_recovery_required
+        or plane_tolerance_recovery_required
     )
     minimum_current_surplus = min(
         record["current_base8_surplus_m"] for record in pair_envelopes
@@ -5897,7 +5916,11 @@ def _compiled_adaptive_high_plane_action(
         translation = np.array([0.0, 0.0, recovery_z_action])
         nominal_tail = 0.0
         total_tail = inertial_tail_reserve
-        selected_source = "event_driven_positive_z_plane_recovery"
+        selected_source = (
+            "event_driven_positive_z_plane_tolerance_recovery"
+            if plane_tolerance_recovery_required
+            else "event_driven_positive_z_plane_recovery"
+        )
     else:
         translation = requested_direction * selected_norm
         nominal_tail = float(
@@ -5980,13 +6003,22 @@ def _compiled_adaptive_high_plane_action(
             "over position_action_scale; intersect its norm with the strict "
             "runtime-native 3-D norm and every exact pair's strict+base8 "
             "capacity after reserving at least the latest measured negative-dz "
-            "inertial tail; a pair-limited action becomes pure +Z recovery"
+            "inertial tail; a pair-limited action becomes pure +Z recovery, "
+            "and an optional registered plane-error tolerance similarly "
+            "requires pure +Z before XY resumes"
         ),
         "current_eef": current_eef.tolist(),
         "lateral_target_xy": lateral_target_xy.tolist(),
         "overhead_horizontal_z_m": float(overhead_horizontal_z),
         "lateral_remaining_m": lateral_remaining,
         "plane_hold_z_error_m": plane_hold_z_error,
+        "plane_recovery_tolerance_m": plane_recovery_tolerance_m,
+        "plane_tolerance_recovery_required": (
+            plane_tolerance_recovery_required
+        ),
+        "pair_capacity_recovery_required": (
+            pair_capacity_recovery_required
+        ),
         "requested_translation_action": requested.tolist(),
         "requested_translation_action_norm": requested_norm,
         "position_action_scale_m_per_normalized_action": float(
@@ -12987,6 +13019,18 @@ def _seek_stable_plate_contact(
                     expected_overhead_pair_count
                 ),
                 "requires_live_overhead_base8": True,
+                "plane_recovery_tolerance_m": float(
+                    args.position_tolerance
+                ),
+                "plane_recovery_tolerance_source": (
+                    "unchanged formal position_tolerance"
+                ),
+                "plane_recovery_rule": (
+                    "while above staging, if nonnegative-Z plane error "
+                    "exceeds the unchanged formal position tolerance, issue "
+                    "pure +Z under the same native/configured norm and 55-pair "
+                    "base8 proof before resuming XY"
+                ),
                 "applies_only_above_staging_tolerance": True,
                 "formal_corridor_acceptance_target_unchanged": True,
                 "formal_corridor_acceptance_clearance_unchanged": True,
@@ -13089,7 +13133,10 @@ def _seek_stable_plate_contact(
                 "reach that controller target within the deterministic half-"
                 "one-step handoff tolerance and retain live base8, thereby "
                 "physically realizing the maximum-descent one-step reserve "
-                "minus that tolerance. At or below staging, switch the "
+                "minus that tolerance. If high-plane Z error exceeds the "
+                "unchanged formal position tolerance, reserve the complete "
+                "configured action norm for proved pure +Z recovery before "
+                "resuming XY. At or below staging, switch the "
                 "correction action back to the unchanged formal target and use "
                 "only the unchanged formal target and clearance for the "
                 "vertical-corridor transition. The unchanged 0.10 "
@@ -13630,6 +13677,11 @@ def _seek_stable_plate_contact(
                 maximum_translation_action=(
                     post_descent_lateral_max_translation_action
                 ),
+                plane_recovery_tolerance_m=(
+                    args.position_tolerance
+                    if correction_uses_high_z_hold_target
+                    else None
+                ),
             )
         adaptive_negative_z_action_requires_buffer16 = bool(
             stage_before_action in {
@@ -13988,6 +14040,14 @@ def _seek_stable_plate_contact(
                 ),
                 "correction_per_action_maximum_world_step_m": (
                     maximum_post_descent_lateral_world_step
+                ),
+                "high_z_plane_recovery_tolerance_m": (
+                    float(args.position_tolerance)
+                    if correction_uses_high_z_hold_target
+                    else None
+                ),
+                "high_z_plane_recovery_tolerance_source": (
+                    "unchanged formal position_tolerance"
                 ),
                 "formal_corridor_acceptance_target_unchanged": True,
                 "corridor_rebuffer_clearance_m": (
