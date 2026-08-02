@@ -887,6 +887,21 @@ pass. The projected-band, severe-response, exact post-action physical, neutral
 confirmation, threshold, route, budget, task, inventory, state, prompt, goal,
 and intervention gates remain unchanged.
 
+Job503901 made the recovery-coupled response stable at step 211: the measured
+vertical response was `-0.018056 mm`, height error was `0.145076 mm`, and
+lateral error was `4.706418 mm`, all inside their unchanged limits. Outside
+clearance was still only `1.428896 mm`, below the unchanged `1.55 mm` recovery
+exit line, so the complete stability-confirmation predicate correctly remained
+false. Captured Z tracking nevertheless handed off on the partial
+height/lateral/response tuple, released the baseline by `0.05`, and produced a
+`-0.303690 mm` response. The handoff now uses the existing complete
+confirmation-eligibility predicate. When only outside reserve remains pending,
+the controller requests the existing full outward recovery through the same
+exit line and retains guarded inside-band captured-action Z tracking. Only
+after outside/table reserve also passes may the unchanged neutral Z
+confirmation begin. No threshold, route, budget, task, inventory, state,
+prompt, goal, or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

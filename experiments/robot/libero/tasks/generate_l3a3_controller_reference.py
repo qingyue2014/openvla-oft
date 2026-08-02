@@ -5389,10 +5389,23 @@ def _fixed_safe_z_lateral_hold_action(
         abs(measured_vertical_step_progress_m)
         > closed_loop_hazard_response_bound_m
     )
+    stability_pending_outside_recovery_requested = bool(
+        release_slew_enabled
+        and lateral_target_reached
+        and abs(fixed_safe_z_m - current_eef[2])
+        <= vertical_position_tolerance_m
+        and abs(measured_vertical_step_progress_m)
+        <= progress_resolution_m
+        and live_outside_clearance <= outside_recovery_exit_clearance
+        and live_outside_clearance > strict_outside_clearance_m
+        and live_table_clearance > outside_recovery_exit_clearance
+        and previous_commanded_action_xyz[2] >= 0.0
+    )
     outside_recovery_active = bool(
         measured_inward_response
         or live_outside_recovery_active
         or predicted_outside_after_lateral <= outside_recovery_clearance
+        or stability_pending_outside_recovery_requested
     )
     if outside_recovery_active:
         required_outward_recovery_action = float(
@@ -5416,6 +5429,7 @@ def _fixed_safe_z_lateral_hold_action(
                 or downward_vertical_response
                 or below_safe_z_for_outside_brake
                 or severe_vertical_response
+                or stability_pending_outside_recovery_requested
             )
             else min(
                 strict_safety_brake_bound,
@@ -5582,12 +5596,7 @@ def _fixed_safe_z_lateral_hold_action(
     captured_safe_z_response_hold_requested = bool(
         release_slew_enabled
         and captured_safe_z_response_tracking_band_active
-        and not (
-            inside_safe_z_band
-            and lateral_target_reached
-            and abs(measured_vertical_step_progress_m)
-            <= progress_resolution_m
-        )
+        and not vertical_stability_confirmation_hold_eligible
         and not downward_tail_brake_active
         and not severe_vertical_response
         and not table_recovery_active
@@ -5891,6 +5900,9 @@ def _fixed_safe_z_lateral_hold_action(
         "inside_band_tracking_outside_reserve_accepted": (
             inside_band_tracking_outside_reserve_accepted
         ),
+        "stability_pending_outside_recovery_requested": (
+            stability_pending_outside_recovery_requested
+        ),
         "below_safe_z_band": below_safe_z_band,
         "above_safe_z_band": above_safe_z_band,
         "inside_safe_z_band": inside_safe_z_band,
@@ -5924,6 +5936,10 @@ def _fixed_safe_z_lateral_hold_action(
             "shallow_inside_band_downward_tail_uses_incremental_pd": True,
             "full_outward_recovery_preserves_inside_band_z_tracking": True,
             "recovery_coupled_z_tracking_is_response_sign_invariant": True,
+            "stable_response_waits_for_complete_confirmation_eligibility": (
+                True
+            ),
+            "pending_confirmation_uses_full_outward_recovery": True,
             "strict_outside_loss_disables_inside_band_z_tracking": True,
             "projected_outside_band_downward_tail_retains_full_brake": True,
             "projected_below_band_downward_tail_retains_full_brake": True,
