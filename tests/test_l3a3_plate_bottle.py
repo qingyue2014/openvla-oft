@@ -46,6 +46,9 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _hypothetical_finger_yaw_env,
     _hypothetical_wrist_yaw_specs,
     _live_plate_tracking_target,
+    _live_cabinet_pose_diagnostic,
+    _live_collision_geom_record,
+    _live_collision_inventory,
     _native_osc_action_spec_evidence,
     _native_osc_rotation_spec_evidence,
     _outside_side_geometry_feedback_action,
@@ -65,6 +68,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _robot_contacts_body,
     _robot_gripper_body_names,
     _robot_nonrobot_contact_evidence,
+    _diagnostic_only_live_detour_candidates,
     _rotation_matrix_axis_angle,
     _select_reachable_compiled_side_candidate,
     _select_executable_wrist_yaw_candidate,
@@ -79,6 +83,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _wrist_yaw_stage_budget_evidence,
     _wrist_yaw_step_gate,
     _real_recompile_wrist_yaw_candidate,
+    _write_controller_diagnostic_manifest,
 )
 from experiments.robot.libero.tasks.generate_l3a3_plate_bottle_states import (
     _free_joint_translation_for_world_target,
@@ -7535,6 +7540,12 @@ def test_robot_native_contact_gate_uses_exact_body_pair_allowlist():
         geom_bodyid = np.array([2, 3, 4, 5, 6])
         geom_contype = np.ones(ngeom, dtype=int)
         geom_conaffinity = np.ones(ngeom, dtype=int)
+        geom_type = np.array([6, 6, 7, 6, 6], dtype=int)
+        geom_size = np.full((ngeom, 3), 0.01, dtype=float)
+        geom_aabb = np.tile(
+            np.array([0.0, 0.0, 0.0, 0.01, 0.01, 0.01]),
+            (ngeom, 1),
+        )
 
         @classmethod
         def body_id2name(cls, body_id):
@@ -7546,7 +7557,21 @@ def test_robot_native_contact_gate_uses_exact_body_pair_allowlist():
 
     data = SimpleNamespace(
         ncon=1,
-        contact=[SimpleNamespace(geom1=3, geom2=0)],
+        contact=[
+            SimpleNamespace(
+                geom1=3,
+                geom2=0,
+                pos=np.array([0.0, 0.0, 0.9]),
+                frame=np.array(
+                    [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+                ),
+                dist=-0.0002,
+            )
+        ],
+        geom_xpos=np.zeros((Model.ngeom, 3), dtype=float),
+        geom_xmat=np.tile(
+            np.eye(3).reshape(1, 9), (Model.ngeom, 1)
+        ),
     )
     env = SimpleNamespace(sim=SimpleNamespace(model=Model(), data=data))
     structural = _robot_nonrobot_contact_evidence(
@@ -7578,7 +7603,17 @@ def test_robot_native_contact_gate_uses_exact_body_pair_allowlist():
     assert contact_seek["contacts"][0]["allowed"] is True
 
     data.ncon = 2
-    data.contact.append(SimpleNamespace(geom1=3, geom2=1))
+    data.contact.append(
+        SimpleNamespace(
+            geom1=3,
+            geom2=1,
+            pos=np.array([0.0, 0.0, 0.89]),
+            frame=np.array(
+                [0.0, 0.0, -1.0, 1.0, 0.0, 0.0, 0.0, -1.0, 0.0]
+            ),
+            dist=-0.0001,
+        )
+    )
     with_table_contact = _robot_nonrobot_contact_evidence(
         env,
         allowed_body_pairs=(exact_plate_finger_pair,),
@@ -7587,6 +7622,279 @@ def test_robot_native_contact_gate_uses_exact_body_pair_allowlist():
     assert with_table_contact["unexpected_contacts"][0]["native_body"] == (
         "table"
     )
+
+
+def _l3a3_live_diagnostic_env(contacts=()):
+    class Model:
+        body_names = [
+            "world",
+            "robot0_link7",
+            "wooden_cabinet_1_main",
+            "wooden_cabinet_1_cabinet_top",
+            "table",
+        ]
+        geom_names = [
+            "gripper0_hand_collision",
+            "wooden_cabinet_1_g18",
+            "table_collision",
+        ]
+        joint_names = [
+            "wooden_cabinet_1_joint0",
+            "wooden_cabinet_1_top_level",
+        ]
+        nbody = len(body_names)
+        ngeom = len(geom_names)
+        njnt = len(joint_names)
+        body_parentid = np.array([0, 0, 0, 2, 0], dtype=int)
+        geom_bodyid = np.array([1, 3, 4], dtype=int)
+        geom_contype = np.ones(ngeom, dtype=int)
+        geom_conaffinity = np.ones(ngeom, dtype=int)
+        geom_type = np.array([7, 6, 6], dtype=int)
+        geom_size = np.array(
+            [
+                [0.031, 0.048, 0.103],
+                [0.00770, 0.00817, 0.04445],
+                [0.50, 0.50, 0.01],
+            ],
+            dtype=float,
+        )
+        geom_aabb = np.array(
+            [
+                [0.01, 0.0, 0.0, 0.02, 0.03, 0.04],
+                [0.0, 0.0, 0.0, 0.04445, 0.00770, 0.00817],
+                [0.0, 0.0, 0.0, 0.50, 0.50, 0.01],
+            ],
+            dtype=float,
+        )
+        jnt_bodyid = np.array([2, 3], dtype=int)
+        jnt_type = np.array([0, 2], dtype=int)
+        jnt_qposadr = np.array([0, 7], dtype=int)
+
+        @classmethod
+        def body_name2id(cls, name):
+            return cls.body_names.index(name)
+
+        @classmethod
+        def body_id2name(cls, body_id):
+            return cls.body_names[body_id]
+
+        @classmethod
+        def geom_id2name(cls, geom_id):
+            return cls.geom_names[geom_id]
+
+        @classmethod
+        def joint_id2name(cls, joint_id):
+            return cls.joint_names[joint_id]
+
+    robot_rotation = np.array(
+        [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
+    )
+    data = SimpleNamespace(
+        ncon=len(contacts),
+        contact=list(contacts),
+        geom_xpos=np.array(
+            [[0.05, -0.08, 1.05], [0.04, -0.13, 1.04], [0.0, 0.0, 0.88]],
+            dtype=float,
+        ),
+        geom_xmat=np.array(
+            [robot_rotation.reshape(9), np.eye(3).reshape(9), np.eye(3).reshape(9)]
+        ),
+        body_xpos=np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.05, -0.08, 1.05],
+                [0.03, -0.24, 0.88],
+                [0.03, -0.24, 0.88],
+                [0.0, 0.0, 0.88],
+            ],
+            dtype=float,
+        ),
+        body_xmat=np.tile(np.eye(3).reshape(1, 9), (Model.nbody, 1)),
+        qpos=np.array(
+            [0.03, -0.24, 0.88, 1.0, 0.0, 0.0, 0.0, -0.01],
+            dtype=float,
+        ),
+    )
+    return SimpleNamespace(sim=SimpleNamespace(model=Model(), data=data))
+
+
+def test_live_collision_records_mesh_and_box_world_aabbs():
+    env = _l3a3_live_diagnostic_env()
+    model, data = env.sim.model, env.sim.data
+    eef = np.array([0.04, -0.07, 1.06])
+    mesh = _live_collision_geom_record(
+        model, data, 0, eef_position=eef
+    )
+    box = _live_collision_geom_record(model, data, 1)
+
+    assert mesh["type"] == 7
+    np.testing.assert_allclose(
+        mesh["world_aabb_center"], [0.05, -0.07, 1.05]
+    )
+    np.testing.assert_allclose(
+        mesh["world_aabb_half_size"], [0.03, 0.02, 0.04]
+    )
+    np.testing.assert_allclose(
+        mesh["world_aabb_min_offset_from_eef"], [-0.02, -0.02, -0.05]
+    )
+    assert box["type"] == 6
+    np.testing.assert_allclose(
+        box["world_aabb_min"],
+        [0.04 - 0.04445, -0.13 - 0.00770, 1.04 - 0.00817],
+    )
+    np.testing.assert_allclose(
+        box["world_aabb_max"],
+        [0.04 + 0.04445, -0.13 + 0.00770, 1.04 + 0.00817],
+    )
+
+
+def test_live_inventory_records_cabinet_qpos_provenance_and_hash():
+    env = _l3a3_live_diagnostic_env()
+    eef = np.array([0.04, -0.07, 1.06])
+    inventory = _live_collision_inventory(env, eef_position=eef)
+    cabinet = _live_cabinet_pose_diagnostic(env)
+
+    assert inventory["robot_collision_geom_count"] == 1
+    assert inventory["native_nonrobot_collision_geom_count"] == 2
+    assert inventory["total_collision_geom_count"] == 3
+    assert len(inventory["inventory_sha256"]) == 64
+    robot = inventory["robot_collision_geoms"][0]
+    assert robot["name"] == "gripper0_hand_collision"
+    assert "world_aabb_min_offset_from_eef" in robot
+    assert cabinet["root_body"]["name"] == "wooden_cabinet_1_main"
+    assert cabinet["root_body_attached_joints"][0]["qpos_width"] == 7
+    assert cabinet["top_drawer_joint"]["name"] == (
+        "wooden_cabinet_1_top_level"
+    )
+    assert cabinet["top_drawer_joint"]["qpos_address"] == 7
+    assert cabinet["top_drawer_joint"]["qpos"] == [-0.01]
+    assert "env.sim.data.qpos" in cabinet["top_drawer_joint"][
+        "qpos_provenance"
+    ]
+
+
+def test_live_inventory_manifest_keeps_complete_inventory(tmp_path):
+    env = _l3a3_live_diagnostic_env()
+    inventory = _live_collision_inventory(
+        env, eef_position=np.array([0.04, -0.07, 1.06])
+    )
+    path = tmp_path / "controller_live_diagnostic.json"
+    _write_controller_diagnostic_manifest(
+        path,
+        {
+            "diagnostic_only": True,
+            "route_authorized": False,
+            "live_collision_inventory": inventory,
+        },
+    )
+    record = json.loads(path.read_text())
+    saved = record["live_collision_inventory"]
+    assert saved["inventory_sha256"] == inventory["inventory_sha256"]
+    assert len(saved["robot_collision_geoms"]) == 1
+    assert len(saved["native_nonrobot_collision_geoms"]) == 2
+    assert saved["robot_collision_geoms"][0]["xmat_world_row_major"] == (
+        inventory["robot_collision_geoms"][0]["xmat_world_row_major"]
+    )
+    assert saved["native_nonrobot_collision_geoms"][0][
+        "world_aabb_min"
+    ] == inventory["native_nonrobot_collision_geoms"][0]["world_aabb_min"]
+
+
+def test_live_collision_inventory_nonfinite_geometry_fails_closed():
+    env = _l3a3_live_diagnostic_env()
+    env.sim.data.geom_xpos[1, 2] = np.nan
+    with pytest.raises(
+        RuntimeError,
+        match="live collision geom type/size/pose/AABB evidence is invalid",
+    ):
+        _live_collision_inventory(
+            env, eef_position=np.array([0.04, -0.07, 1.06])
+        )
+
+
+def test_live_detour_candidates_cannot_select_or_execute():
+    env = _l3a3_live_diagnostic_env()
+    eef = np.array([0.04, -0.07, 1.06])
+    inventory = _live_collision_inventory(env, eef_position=eef)
+    candidates = _diagnostic_only_live_detour_candidates(
+        live_inventory=inventory,
+        cabinet_pose=_live_cabinet_pose_diagnostic(env),
+        current_eef=eef,
+        outside_high_target=np.array([0.10, -0.14, 1.06]),
+        outside_side_target=np.array([0.10, -0.14, 0.94]),
+    )
+
+    assert [candidate["candidate_id"] for candidate in candidates] == [
+        "vertical_first",
+        "minus_x_detour",
+        "plus_x_detour",
+    ]
+    assert all(candidate["diagnostic_only"] for candidate in candidates)
+    assert all(not candidate["executed"] for candidate in candidates)
+    assert all(not candidate["selection_eligible"] for candidate in candidates)
+    assert all(not candidate["selected"] for candidate in candidates)
+    assert all(not candidate["route_authorized"] for candidate in candidates)
+    assert all(candidate["aabb_authorization_prohibited"] for candidate in candidates)
+
+
+def test_robot_native_contact_normal_is_canonical_under_geom_order_flip():
+    frame_forward = np.array(
+        [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+    )
+    frame_reverse = frame_forward.copy()
+    frame_reverse[:3] *= -1.0
+    contacts = [
+        SimpleNamespace(
+            geom1=0,
+            geom2=1,
+            pos=np.array([0.045, -0.105, 1.045]),
+            frame=frame_forward,
+            dist=-0.0004,
+        ),
+        SimpleNamespace(
+            geom1=1,
+            geom2=0,
+            pos=np.array([0.045, -0.105, 1.045]),
+            frame=frame_reverse,
+            dist=-0.0004,
+        ),
+    ]
+    env = _l3a3_live_diagnostic_env(contacts)
+    evidence = _robot_nonrobot_contact_evidence(
+        env, allowed_body_pairs=()
+    )
+
+    assert evidence["accepted"] is False
+    assert len(evidence["contacts"]) == 2
+    first, second = evidence["contacts"]
+    assert first["sorted_geom_ids"] == second["sorted_geom_ids"] == [0, 1]
+    assert first["sorted_normal_was_flipped"] is False
+    assert second["sorted_normal_was_flipped"] is True
+    np.testing.assert_allclose(
+        first["normal_from_sorted_geom0_to_geom1_world"],
+        second["normal_from_sorted_geom0_to_geom1_world"],
+    )
+    np.testing.assert_allclose(
+        first["robot_to_native_normal_world"],
+        second["robot_to_native_normal_world"],
+    )
+    assert first["distance_m"] == pytest.approx(-0.0004)
+    assert first["penetration_m"] == pytest.approx(0.0004)
+
+
+def test_robot_native_contact_nonfinite_evidence_fails_closed():
+    contact = SimpleNamespace(
+        geom1=0,
+        geom2=1,
+        pos=np.array([np.nan, 0.0, 1.0]),
+        frame=np.array(
+            [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+        ),
+        dist=-0.001,
+    )
+    env = _l3a3_live_diagnostic_env([contact])
+    with pytest.raises(RuntimeError, match="pos/frame/dist evidence is invalid"):
+        _robot_nonrobot_contact_evidence(env, allowed_body_pairs=())
 
 
 def test_review_template_loads_smoke_and_binds_safe_reference(

@@ -40,6 +40,7 @@ EC_PREFLIGHT="${EC_PREFLIGHT:-${REVIEW_ROOT}/L3-A3_Ec_native_preflight.json}"
 SAFE_REFERENCE_REPORT="${SAFE_REFERENCE_REPORT:-${REVIEW_ROOT}/L3-A3_safe_reference.json}"
 SAFE_REFERENCE_TRAJECTORY="${SAFE_REFERENCE_TRAJECTORY:-${REVIEW_ROOT}/L3-A3_controller_safe_reference.npz}"
 SAFE_REFERENCE_VIDEO="${SAFE_REFERENCE_VIDEO:-${REVIEW_ROOT}/L3-A3_controller_safe_reference.mp4}"
+SAFE_REFERENCE_DIAGNOSTIC_MANIFEST="${SAFE_REFERENCE_DIAGNOSTIC_MANIFEST:-${REVIEW_ROOT}/L3-A3_controller_live_diagnostic.json}"
 SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-A3_smoke_evidence.json}"
 REVIEW_PENDING="${REVIEW_PENDING:-${REVIEW_ROOT}/L3-A3_human_review.PENDING.json}"
 REVIEW_VERDICT="${REVIEW_VERDICT:-${REVIEW_ROOT}/L3-A3_human_review.json}"
@@ -184,6 +185,7 @@ generate_and_validate_safe_reference() {
     --er_states "${ER_STATES}" \
     --output "${SAFE_REFERENCE_TRAJECTORY}" \
     --video "${SAFE_REFERENCE_VIDEO}" \
+    --diagnostic_manifest "${SAFE_REFERENCE_DIAGNOSTIC_MANIFEST}" \
     --seed "${SCENE_SEED}"
   "${PYTHON_BIN}" experiments/robot/libero/tasks/validate_l3a3_reference_evidence.py \
     --trajectory "${SAFE_REFERENCE_TRAJECTORY}" \

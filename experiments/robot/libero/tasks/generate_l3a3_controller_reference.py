@@ -11,6 +11,7 @@ all pass.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -43,6 +44,11 @@ from experiments.robot.libero.tasks.l3a3_plate_bottle_common import (
 from experiments.robot.libero.tasks.validate_l3a3_state_bundle import (
     artifact_binding,
 )
+
+
+L3A3_CABINET_ROOT_BODY = "wooden_cabinet_1_main"
+L3A3_CABINET_TOP_BODY = "wooden_cabinet_1_cabinet_top"
+L3A3_CABINET_TOP_JOINT = "wooden_cabinet_1_top_level"
 
 def _position_action(current, target, gripper, scale):
     action = np.zeros(7, dtype=float)
@@ -811,6 +817,515 @@ def _compiled_geom_world_aabb(model, data, geom_id):
     world_center = geom_position + rotation @ local_aabb[:3]
     world_half_size = np.abs(rotation) @ local_aabb[3:]
     return world_center, world_half_size
+
+
+def _live_collision_geom_record(
+    model,
+    data,
+    geom_id,
+    *,
+    eef_position=None,
+):
+    """Serialize one exact compiled collision geom at the current live state."""
+    geom_id = int(geom_id)
+    if not 0 <= geom_id < int(model.ngeom):
+        raise RuntimeError("live collision geom id is out of bounds")
+    body_id = int(model.geom_bodyid[geom_id])
+    if not 0 <= body_id < int(model.nbody):
+        raise RuntimeError("live collision geom body id is out of bounds")
+    geom_name = model.geom_id2name(geom_id) or ""
+    body_name = model.body_id2name(body_id) or ""
+    if not geom_name or not body_name:
+        raise RuntimeError("live collision geom or body name is unavailable")
+
+    geom_type = int(model.geom_type[geom_id])
+    geom_size = np.asarray(model.geom_size[geom_id], dtype=float)
+    geom_xpos = np.asarray(data.geom_xpos[geom_id], dtype=float)
+    geom_xmat = np.asarray(data.geom_xmat[geom_id], dtype=float)
+    local_aabb = np.asarray(model.geom_aabb[geom_id], dtype=float)
+    if (
+        geom_size.shape != (3,)
+        or geom_xpos.shape != (3,)
+        or geom_xmat.shape != (9,)
+        or local_aabb.shape != (6,)
+        or not np.all(np.isfinite(geom_size))
+        or not np.all(np.isfinite(geom_xpos))
+        or not np.all(np.isfinite(geom_xmat))
+        or not np.all(np.isfinite(local_aabb))
+        or np.any(geom_size < 0.0)
+        or np.any(local_aabb[3:] < 0.0)
+    ):
+        raise RuntimeError(
+            "live collision geom type/size/pose/AABB evidence is invalid"
+        )
+    world_center, world_half_size = _compiled_geom_world_aabb(
+        model, data, geom_id
+    )
+    world_min = world_center - world_half_size
+    world_max = world_center + world_half_size
+    record = {
+        "geom_id": geom_id,
+        "name": geom_name,
+        "body_id": body_id,
+        "body": body_name,
+        "type": geom_type,
+        "size": geom_size.tolist(),
+        "xpos_world": geom_xpos.tolist(),
+        "xmat_world_row_major": geom_xmat.tolist(),
+        "compiled_local_aabb_center": local_aabb[:3].tolist(),
+        "compiled_local_aabb_half_size": local_aabb[3:].tolist(),
+        "world_aabb_center": world_center.tolist(),
+        "world_aabb_half_size": world_half_size.tolist(),
+        "world_aabb_min": world_min.tolist(),
+        "world_aabb_max": world_max.tolist(),
+    }
+    if eef_position is not None:
+        eef_position = np.asarray(eef_position, dtype=float)
+        if eef_position.shape != (3,) or not np.all(
+            np.isfinite(eef_position)
+        ):
+            raise RuntimeError("live EEF position is invalid")
+        record["eef_position_world"] = eef_position.tolist()
+        record["world_aabb_min_offset_from_eef"] = (
+            world_min - eef_position
+        ).tolist()
+        record["world_aabb_max_offset_from_eef"] = (
+            world_max - eef_position
+        ).tolist()
+    return record
+
+
+def _joint_qpos_width(joint_type):
+    """Return MuJoCo qpos width for free, ball, slide, or hinge joints."""
+    widths = {0: 7, 1: 4, 2: 1, 3: 1}
+    try:
+        return widths[int(joint_type)]
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("unsupported compiled cabinet joint type") from exc
+
+
+def _live_body_pose_record(model, data, body_name):
+    """Record an exact live body pose with explicit compiled-body provenance."""
+    try:
+        body_id = int(model.body_name2id(body_name))
+    except Exception as exc:
+        raise RuntimeError(
+            f"required compiled cabinet body is unavailable: {body_name}"
+        ) from exc
+    xpos = np.asarray(data.body_xpos[body_id], dtype=float)
+    xmat = np.asarray(data.body_xmat[body_id], dtype=float)
+    if (
+        xpos.shape != (3,)
+        or xmat.shape != (9,)
+        or not np.all(np.isfinite(xpos))
+        or not np.all(np.isfinite(xmat))
+    ):
+        raise RuntimeError(f"compiled cabinet body pose is invalid: {body_name}")
+    return {
+        "body_id": body_id,
+        "name": body_name,
+        "xpos_world": xpos.tolist(),
+        "xmat_world_row_major": xmat.tolist(),
+        "pose_provenance": (
+            "env.sim.data.body_xpos/body_xmat after the exact second live "
+            "geometry recompile"
+        ),
+    }
+
+
+def _live_joint_qpos_record(model, data, joint_id):
+    """Record exact qpos values and address provenance for one compiled joint."""
+    joint_id = int(joint_id)
+    if not 0 <= joint_id < int(model.njnt):
+        raise RuntimeError("compiled cabinet joint id is out of bounds")
+    joint_name = model.joint_id2name(joint_id) or ""
+    if not joint_name:
+        raise RuntimeError("compiled cabinet joint name is unavailable")
+    body_id = int(model.jnt_bodyid[joint_id])
+    qpos_address = int(model.jnt_qposadr[joint_id])
+    qpos_width = _joint_qpos_width(model.jnt_type[joint_id])
+    qpos = np.take(
+        np.asarray(data.qpos, dtype=float),
+        np.arange(qpos_address, qpos_address + qpos_width),
+    )
+    if qpos.shape != (qpos_width,) or not np.all(np.isfinite(qpos)):
+        raise RuntimeError(f"compiled cabinet joint qpos is invalid: {joint_name}")
+    return {
+        "joint_id": joint_id,
+        "name": joint_name,
+        "type": int(model.jnt_type[joint_id]),
+        "body_id": body_id,
+        "body": model.body_id2name(body_id) or "",
+        "qpos_address": qpos_address,
+        "qpos_width": qpos_width,
+        "qpos": qpos.tolist(),
+        "qpos_provenance": (
+            "np.take(env.sim.data.qpos, the range beginning at "
+            "model.jnt_qposadr[joint_id] with compiled joint-type width) at "
+            "the exact second live geometry recompile"
+        ),
+    }
+
+
+def _live_cabinet_pose_diagnostic(env):
+    """Capture native cabinet root/top-drawer live pose and qpos provenance."""
+    model, data = env.sim.model, env.sim.data
+    root = _live_body_pose_record(model, data, L3A3_CABINET_ROOT_BODY)
+    top = _live_body_pose_record(model, data, L3A3_CABINET_TOP_BODY)
+    attached_joint_ids = [
+        joint_id
+        for joint_id in range(int(model.njnt))
+        if int(model.jnt_bodyid[joint_id]) in {
+            int(root["body_id"]),
+            int(top["body_id"]),
+        }
+    ]
+    joints = [
+        _live_joint_qpos_record(model, data, joint_id)
+        for joint_id in attached_joint_ids
+    ]
+    top_joint = next(
+        (joint for joint in joints if joint["name"] == L3A3_CABINET_TOP_JOINT),
+        None,
+    )
+    if top_joint is None:
+        raise RuntimeError(
+            "required compiled native cabinet top drawer joint is unavailable"
+        )
+    return {
+        "root_body": root,
+        "top_drawer_body": top,
+        "root_body_attached_joints": [
+            joint
+            for joint in joints
+            if joint["body_id"] == root["body_id"]
+        ],
+        "top_drawer_joint": top_joint,
+        "root_pose_qpos_provenance": (
+            "the native fixture root may have no qpos joint; its authoritative "
+            "live pose is data.body_xpos/body_xmat, while every attached root "
+            "joint qpos is enumerated explicitly above"
+        ),
+    }
+
+
+def _live_collision_inventory(env, *, eef_position):
+    """Capture every live robot and native collision geom, fail-closed."""
+    model, data = env.sim.model, env.sim.data
+    eef_position = np.asarray(eef_position, dtype=float)
+    if eef_position.shape != (3,) or not np.all(np.isfinite(eef_position)):
+        raise RuntimeError("live collision inventory EEF position is invalid")
+    robot_bodies = set(_robot_gripper_body_names(env))
+    robot_geoms = []
+    native_geoms = []
+    for geom_id in range(int(model.ngeom)):
+        collision_enabled = bool(
+            getattr(model, "geom_contype", None) is None
+            or getattr(model, "geom_conaffinity", None) is None
+            or int(model.geom_contype[geom_id]) != 0
+            or int(model.geom_conaffinity[geom_id]) != 0
+        )
+        if not collision_enabled:
+            continue
+        body_name = model.body_id2name(
+            int(model.geom_bodyid[geom_id])
+        ) or ""
+        is_robot = body_name in robot_bodies
+        record = _live_collision_geom_record(
+            model,
+            data,
+            geom_id,
+            eef_position=eef_position if is_robot else None,
+        )
+        (robot_geoms if is_robot else native_geoms).append(record)
+    if not robot_geoms or not native_geoms:
+        raise RuntimeError(
+            "live collision inventory lacks robot or native collision geoms"
+        )
+    canonical_inventory = {
+        "robot_collision_geoms": robot_geoms,
+        "native_nonrobot_collision_geoms": native_geoms,
+    }
+    inventory_json = json.dumps(
+        canonical_inventory,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    )
+    return {
+        "schema_version": 1,
+        "capture_stage": "post_center_high_reacquire_second_recompile_pre_seek",
+        "eef_position_world": eef_position.tolist(),
+        **canonical_inventory,
+        "robot_collision_geom_count": len(robot_geoms),
+        "native_nonrobot_collision_geom_count": len(native_geoms),
+        "total_collision_geom_count": len(robot_geoms) + len(native_geoms),
+        "inventory_sha256": hashlib.sha256(
+            inventory_json.encode("utf-8")
+        ).hexdigest(),
+        "hash_payload": (
+            "canonical compact JSON of robot_collision_geoms and "
+            "native_nonrobot_collision_geoms only"
+        ),
+    }
+
+
+def _diagnostic_only_live_detour_candidates(
+    *,
+    live_inventory,
+    cabinet_pose,
+    current_eef,
+    outside_high_target,
+    outside_side_target,
+):
+    """Describe unresolved sweep candidates without selecting or executing one."""
+    current_eef = np.asarray(current_eef, dtype=float)
+    outside_high_target = np.asarray(outside_high_target, dtype=float)
+    outside_side_target = np.asarray(outside_side_target, dtype=float)
+    if (
+        current_eef.shape != (3,)
+        or outside_high_target.shape != (3,)
+        or outside_side_target.shape != (3,)
+        or not np.all(np.isfinite(current_eef))
+        or not np.all(np.isfinite(outside_high_target))
+        or not np.all(np.isfinite(outside_side_target))
+        or not isinstance(live_inventory.get("inventory_sha256"), str)
+        or len(live_inventory["inventory_sha256"]) != 64
+        or cabinet_pose.get("top_drawer_joint") is None
+    ):
+        raise RuntimeError("diagnostic-only detour candidate inputs are invalid")
+    common = {
+        "diagnostic_only": True,
+        "executed": False,
+        "selection_eligible": False,
+        "selected": False,
+        "route_authorized": False,
+        "live_inventory_sha256": live_inventory["inventory_sha256"],
+        "live_robot_collision_geom_count": live_inventory[
+            "robot_collision_geom_count"
+        ],
+        "live_native_collision_geom_count": live_inventory[
+            "native_nonrobot_collision_geom_count"
+        ],
+        "known_start_eef_world": current_eef.tolist(),
+        "known_registered_outside_high_target_world": (
+            outside_high_target.tolist()
+        ),
+        "known_registered_outside_side_target_world": (
+            outside_side_target.tolist()
+        ),
+        "aabb_authorization_prohibited": True,
+        "exact_sweep_required_inputs": [
+            "all robot collision geom live transforms and EEF-relative bounds",
+            "all native nonrobot collision geom live transforms and bounds",
+            "cabinet root and top-drawer live pose plus qpos provenance",
+            "continuous exact collision-distance sweep over every robot/native pair",
+            "native workspace reachability and saturation evidence at every segment",
+            "measured controller tracking and inertial-tail reserve",
+            "downstream structural/contact/push step budget",
+        ],
+    }
+    candidates = [
+        {
+            **common,
+            "candidate_id": "vertical_first",
+            "candidate_description": (
+                "hold current XY and orientation, solve an unresolved exact-sweep "
+                "over-cabinet Z, move laterally above the obstacle, then validate "
+                "the complete terminal descent column"
+            ),
+            "unresolved_waypoint_fields": [
+                "exact_sweep_over_cabinet_z",
+                "terminal_descent_column_clearance",
+            ],
+        },
+        {
+            **common,
+            "candidate_id": "minus_x_detour",
+            "candidate_description": (
+                "solve an unresolved -X exact-sweep side waypoint, pass the full "
+                "inflated native cabinet extent, then return only after exact "
+                "terminal-column validation"
+            ),
+            "unresolved_waypoint_fields": [
+                "exact_sweep_minus_x_clearance_waypoint",
+                "cabinet_y_pass_waypoint",
+                "terminal_descent_column_clearance",
+            ],
+        },
+        {
+            **common,
+            "candidate_id": "plus_x_detour",
+            "candidate_description": (
+                "solve an unresolved +X exact-sweep side waypoint with a blocking "
+                "native workspace-saturation gate, pass the cabinet extent, then "
+                "validate the complete return and descent path"
+            ),
+            "unresolved_waypoint_fields": [
+                "exact_sweep_plus_x_clearance_waypoint",
+                "plus_x_native_workspace_margin",
+                "cabinet_y_pass_waypoint",
+                "terminal_descent_column_clearance",
+            ],
+        },
+    ]
+    if any(
+        not candidate["diagnostic_only"]
+        or candidate["executed"]
+        or candidate["selection_eligible"]
+        or candidate["selected"]
+        or candidate["route_authorized"]
+        for candidate in candidates
+    ):
+        raise RuntimeError("diagnostic-only detour candidate selected or executed")
+    return candidates
+
+
+def _write_controller_diagnostic_manifest(path, record):
+    """Persist complete controller diagnostics without printing the inventory."""
+    path = Path(path)
+    if not path.name:
+        raise RuntimeError("controller diagnostic manifest path is invalid")
+    payload = json.dumps(
+        record,
+        sort_keys=True,
+        indent=2,
+        allow_nan=False,
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(payload + "\n", encoding="utf-8")
+    temporary.replace(path)
+    return path
+
+
+def _compact_unexpected_contact_diagnostic(
+    contact_gate,
+    *,
+    diagnostic_context,
+):
+    """Build a bounded stdout record for an unexpected robot/native contact."""
+    unexpected = list(contact_gate.get("unexpected_contacts", ()))
+    if not unexpected:
+        return None
+
+    def compact_geom(record):
+        return {
+            key: record[key]
+            for key in (
+                "geom_id",
+                "name",
+                "body_id",
+                "body",
+                "type",
+                "size",
+                "xpos_world",
+                "world_aabb_min",
+                "world_aabb_max",
+            )
+        }
+
+    return {
+        "diagnostic_only": True,
+        "route_authorized": False,
+        "inventory_sha256": diagnostic_context.get("inventory_sha256"),
+        "robot_collision_geom_count": diagnostic_context.get(
+            "robot_collision_geom_count"
+        ),
+        "native_nonrobot_collision_geom_count": diagnostic_context.get(
+            "native_nonrobot_collision_geom_count"
+        ),
+        "controller_diagnostic_manifest": diagnostic_context.get(
+            "manifest_path"
+        ),
+        "unexpected_contact_count": len(unexpected),
+        "contacts": [
+            {
+                key: contact[key]
+                for key in (
+                    "contact_index",
+                    "geom1_id",
+                    "geom1_name",
+                    "geom1_body",
+                    "geom2_id",
+                    "geom2_name",
+                    "geom2_body",
+                    "robot_geom_id",
+                    "robot_geom",
+                    "robot_body",
+                    "native_geom_id",
+                    "native_geom",
+                    "native_body",
+                    "position_world",
+                    "frame_normal_geom1_to_geom2_world",
+                    "sorted_geom_ids",
+                    "normal_from_sorted_geom0_to_geom1_world",
+                    "robot_to_native_normal_world",
+                    "distance_m",
+                    "penetration_m",
+                )
+            }
+            | {
+                "robot_live_geom": compact_geom(
+                    contact["robot_live_geom"]
+                ),
+                "native_live_geom": compact_geom(
+                    contact["native_live_geom"]
+                ),
+            }
+            for contact in unexpected
+        ],
+    }
+
+
+def _record_unexpected_contact_in_controller_manifest(
+    *,
+    diagnostic_context,
+    source,
+    stage,
+    sample,
+):
+    """Append full live contact evidence to the standalone diagnostic JSON."""
+    path_value = diagnostic_context.get("manifest_path")
+    if not path_value:
+        raise RuntimeError(
+            "controller diagnostic manifest path is missing at contact failure"
+        )
+    path = Path(path_value)
+    if not path.is_file():
+        raise RuntimeError(
+            "controller diagnostic manifest is missing at contact failure"
+        )
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            "controller diagnostic manifest cannot be read at contact failure"
+        ) from exc
+    if record.get("live_collision_inventory", {}).get(
+        "inventory_sha256"
+    ) != diagnostic_context.get("inventory_sha256"):
+        raise RuntimeError(
+            "controller diagnostic manifest inventory hash changed before contact"
+        )
+    events = list(record.get("unexpected_contact_events", ()))
+    events.append(
+        {
+            "source": str(source),
+            "stage": str(stage),
+            "sample_index": int(sample["index"]),
+            "eef_position_world": list(sample["eef_position"]),
+            "plate_position_world": list(sample["plate_position"]),
+            "plate_tilt_deg": float(sample["plate_tilt_deg"]),
+            "plate_xy_drift_m": float(sample["plate_xy_drift_m"]),
+            "robot_nonrobot_contact_gate": sample[
+                "robot_nonrobot_contact_gate"
+            ],
+        }
+    )
+    record["unexpected_contact_events"] = events
+    record["latest_status"] = "UNEXPECTED_ROBOT_NATIVE_CONTACT_FAIL_CLOSED"
+    _write_controller_diagnostic_manifest(path, record)
 
 
 def _compiled_collision_pair_clearance(model, geom1, geom2):
@@ -9782,6 +10297,81 @@ def _execute_high_safe_wrist_yaw(
             "post-reacquire real geometry identity failed closed: "
             f"{json.dumps(second_recompile_identity, sort_keys=True)}"
         )
+    live_collision_inventory = _live_collision_inventory(
+        env, eef_position=current_eef
+    )
+    live_cabinet_pose = _live_cabinet_pose_diagnostic(env)
+    diagnostic_only_detour_candidates = (
+        _diagnostic_only_live_detour_candidates(
+            live_inventory=live_collision_inventory,
+            cabinet_pose=live_cabinet_pose,
+            current_eef=current_eef,
+            outside_high_target=realized_candidate["outside_high_target"],
+            outside_side_target=realized_candidate["outside_side_target"],
+        )
+    )
+    diagnostic_manifest_value = getattr(args, "diagnostic_manifest", None)
+    if diagnostic_manifest_value is None:
+        output_value = getattr(args, "output", None)
+        if not output_value:
+            raise RuntimeError(
+                "controller diagnostic manifest requires an output path"
+            )
+        diagnostic_manifest_value = str(
+            Path(output_value).with_suffix(".controller_diagnostic.json")
+        )
+    diagnostic_manifest = _write_controller_diagnostic_manifest(
+        diagnostic_manifest_value,
+        {
+            "schema_version": 1,
+            "scenario": SCENE_ID,
+            "task_description": TASK_PROMPT,
+            "diagnostic_only": True,
+            "route_authorized": False,
+            "capture_stage": (
+                "post_center_high_reacquire_second_recompile_pre_seek"
+            ),
+            "second_real_sim_recompile_identity": second_recompile_identity,
+            "live_collision_inventory": live_collision_inventory,
+            "live_cabinet_pose_and_qpos": live_cabinet_pose,
+            "detour_candidates": diagnostic_only_detour_candidates,
+            "unexpected_contact_events": [],
+            "latest_status": "LIVE_BOUNDS_CAPTURED_NO_ROUTE_AUTHORIZATION",
+        },
+    )
+    controller_live_collision_diagnostic = {
+        "diagnostic_only": True,
+        "executed": False,
+        "selection_eligible": False,
+        "selected": False,
+        "route_authorized": False,
+        "capture_stage": live_collision_inventory["capture_stage"],
+        "inventory_sha256": live_collision_inventory["inventory_sha256"],
+        "robot_collision_geom_count": live_collision_inventory[
+            "robot_collision_geom_count"
+        ],
+        "native_nonrobot_collision_geom_count": live_collision_inventory[
+            "native_nonrobot_collision_geom_count"
+        ],
+        "total_collision_geom_count": live_collision_inventory[
+            "total_collision_geom_count"
+        ],
+        "cabinet_root_body": L3A3_CABINET_ROOT_BODY,
+        "cabinet_top_body": L3A3_CABINET_TOP_BODY,
+        "cabinet_top_joint": L3A3_CABINET_TOP_JOINT,
+        "candidate_ids": [
+            candidate["candidate_id"]
+            for candidate in diagnostic_only_detour_candidates
+        ],
+        "manifest_path": str(diagnostic_manifest.resolve()),
+    }
+    print(
+        "L3-A3 live collision diagnostic "
+        + json.dumps(
+            controller_live_collision_diagnostic, sort_keys=True
+        ),
+        flush=True,
+    )
     reacquire_steps = int(center_high_reacquire["steps"])
     return {
         "selected_native_push_direction_relation": "trailing_minus_push",
@@ -9830,6 +10420,9 @@ def _execute_high_safe_wrist_yaw(
         ),
         "real_sim_recompiled_candidate": realized_candidate,
         "second_real_sim_recompile_identity": second_recompile_identity,
+        "controller_live_collision_diagnostic": (
+            controller_live_collision_diagnostic
+        ),
         "total_structural_actions_before_contact_seek": int(
             yaw_steps + reacquire_steps
         ),
@@ -9940,6 +10533,14 @@ def _robot_nonrobot_contact_evidence(env, *, allowed_body_pairs):
     for index in range(int(data.ncon)):
         contact = data.contact[index]
         geom1, geom2 = int(contact.geom1), int(contact.geom2)
+        if not (
+            0 <= geom1 < int(model.ngeom)
+            and 0 <= geom2 < int(model.ngeom)
+            and geom1 != geom2
+        ):
+            raise RuntimeError(
+                "robot/native contact has invalid compiled geom ids"
+            )
         body1 = model.body_id2name(
             int(model.geom_bodyid[geom1])
         ) or ""
@@ -9956,14 +10557,82 @@ def _robot_nonrobot_contact_evidence(env, *, allowed_body_pairs):
         else:
             robot_geom, robot_body = geom2, body2
             native_geom, native_body = geom1, body1
+        position = np.asarray(contact.pos, dtype=float)
+        frame = np.asarray(contact.frame, dtype=float)
+        try:
+            distance = float(contact.dist)
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                "robot/native contact distance is unavailable or invalid"
+            ) from exc
+        if (
+            position.shape != (3,)
+            or frame.shape != (9,)
+            or not np.all(np.isfinite(position))
+            or not np.all(np.isfinite(frame))
+            or not np.isfinite(distance)
+        ):
+            raise RuntimeError(
+                "robot/native contact pos/frame/dist evidence is invalid"
+            )
+        raw_normal = frame[:3]
+        normal_norm = float(np.linalg.norm(raw_normal))
+        if not np.isfinite(normal_norm) or not np.isclose(
+            normal_norm, 1.0, rtol=0.0, atol=1e-6
+        ):
+            raise RuntimeError(
+                "robot/native contact frame normal is not finite unit length"
+            )
+        sorted_geom_ids = sorted((geom1, geom2))
+        normal_from_sorted_geom0_to_geom1 = (
+            raw_normal if geom1 == sorted_geom_ids[0] else -raw_normal
+        )
+        robot_to_native_normal = (
+            raw_normal if robot_geom == geom1 else -raw_normal
+        )
         pair = (robot_body, native_body)
         contacts.append(
             {
                 "contact_index": int(index),
+                "geom1_id": geom1,
+                "geom1_name": model.geom_id2name(geom1) or "",
+                "geom1_body": body1,
+                "geom2_id": geom2,
+                "geom2_name": model.geom_id2name(geom2) or "",
+                "geom2_body": body2,
                 "robot_geom": model.geom_id2name(robot_geom) or "",
+                "robot_geom_id": robot_geom,
                 "robot_body": robot_body,
                 "native_geom": model.geom_id2name(native_geom) or "",
+                "native_geom_id": native_geom,
                 "native_body": native_body,
+                "position_world": position.tolist(),
+                "frame_normal_geom1_to_geom2_world": raw_normal.tolist(),
+                "frame_normal_semantics": (
+                    "MuJoCo contact.frame[0:3], from geom1 to geom2; geom ids "
+                    "and names above preserve the exact compiled ordering"
+                ),
+                "sorted_geom_ids": sorted_geom_ids,
+                "normal_from_sorted_geom0_to_geom1_world": (
+                    normal_from_sorted_geom0_to_geom1.tolist()
+                ),
+                "sorted_normal_was_flipped": bool(
+                    geom1 != sorted_geom_ids[0]
+                ),
+                "robot_to_native_normal_world": (
+                    robot_to_native_normal.tolist()
+                ),
+                "robot_to_native_normal_was_flipped": bool(
+                    robot_geom != geom1
+                ),
+                "distance_m": distance,
+                "penetration_m": float(max(0.0, -distance)),
+                "robot_live_geom": _live_collision_geom_record(
+                    model, data, robot_geom
+                ),
+                "native_live_geom": _live_collision_geom_record(
+                    model, data, native_geom
+                ),
                 "allowed": pair in allowed,
             }
         )
@@ -10402,6 +11071,7 @@ def _seek_stable_plate_contact(
     source,
     diagnostics,
     structural_waypoint_budget=None,
+    controller_live_diagnostic=None,
 ):
     """Descend outside the plate, then establish two-finger side contact."""
     if structural_waypoint_budget is None:
@@ -10497,6 +11167,29 @@ def _seek_stable_plate_contact(
                 "two_finger_side_contact_not_sustained"
             )
         if not sample["accepted"]:
+            contact_gate = sample["robot_nonrobot_contact_gate"]
+            compact_contact = None
+            if contact_gate["unexpected_contacts"]:
+                if not isinstance(controller_live_diagnostic, dict):
+                    raise RuntimeError(
+                        "unexpected robot/native contact lacks the required "
+                        "controller live diagnostic context"
+                    )
+                compact_contact = _compact_unexpected_contact_diagnostic(
+                    contact_gate,
+                    diagnostic_context=controller_live_diagnostic,
+                )
+                _record_unexpected_contact_in_controller_manifest(
+                    diagnostic_context=controller_live_diagnostic,
+                    source=source,
+                    stage=stage,
+                    sample=sample,
+                )
+                print(
+                    "L3-A3 unexpected robot/native contact diagnostic "
+                    + json.dumps(compact_contact, sort_keys=True),
+                    flush=True,
+                )
             failure = {
                 "source": source,
                 "outside_high_target": np.asarray(
@@ -10510,6 +11203,7 @@ def _seek_stable_plate_contact(
                 ).tolist(),
                 "compiled_geometry": geometry,
                 "structural_seek_context": structural_seek_context,
+                "unexpected_contact_compact_diagnostic": compact_contact,
                 "samples": samples,
                 "scene": diagnostics(),
             }
@@ -12803,6 +13497,9 @@ def generate(args):
             structural_waypoint_budget=wrist_yaw_execution[
                 "remaining_structural_waypoint_steps"
             ],
+            controller_live_diagnostic=wrist_yaw_execution[
+                "controller_live_collision_diagnostic"
+            ],
         )
         contact_seek_events = [initial_contact_seek]
         initial_contact_depth_calibration = (
@@ -13126,6 +13823,11 @@ def generate(args):
                     structural_waypoint_budget=(
                         recontact_wrist_yaw_execution[
                             "remaining_structural_waypoint_steps"
+                        ]
+                    ),
+                    controller_live_diagnostic=(
+                        recontact_wrist_yaw_execution[
+                            "controller_live_collision_diagnostic"
                         ]
                     ),
                 )
@@ -13808,6 +14510,14 @@ def main():
     parser.add_argument("--er_states", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--video", required=True)
+    parser.add_argument(
+        "--diagnostic_manifest",
+        default=None,
+        help=(
+            "standalone diagnostic-only live collision inventory JSON; "
+            "defaults beside --output"
+        ),
+    )
     parser.add_argument("--episode", type=int, default=0)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--position_action_scale", type=float, default=0.08)
