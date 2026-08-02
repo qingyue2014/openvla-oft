@@ -3082,8 +3082,20 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         )
     ]
     assert 'structural_stage = "vertical_tail_brake"' in descent_transition
+    assert "overhead_descent_brake_trigger_buffer" in descent_transition
     assert 'structural_stage = "overhead_high_corridor_lateral"' not in (
         descent_transition
+    )
+    brake_transition = bounded_seek.split(
+        'elif stage_before_action == "vertical_tail_brake":', 1
+    )[1].split('elif stage_before_action == "lateral_rebuffer_brake":', 1)[0]
+    assert (
+        'structural_stage = "overhead_corridor_descent"'
+        in brake_transition
+    )
+    assert (
+        'structural_stage = "vertical_tail_zero_confirmation"'
+        in brake_transition
     )
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
     assert (
@@ -3267,9 +3279,8 @@ def test_500161_adaptive_descent_uses_native_bound_then_tightens_near_base8():
         for pair in far_proof["pair_envelopes"]
     )
 
-    # The near-plate structural route applies its small action cap from the
-    # first adaptive descent action so OSC inertia is never built by larger
-    # far-field commands before the event-driven tail brake.
+    # The far-field descent has an explicit controller cap below the native
+    # bound; the live caller separately switches to its small near-plate cap.
     capped_action, capped_proof = (
         _compiled_adaptive_vertical_descent_action(
             current_eef=far_eef,
@@ -3279,20 +3290,20 @@ def test_500161_adaptive_descent_uses_native_bound_then_tightens_near_base8():
             position_action_scale=0.08,
             native_action_spec=native_spec,
             expected_pair_count=55,
-            maximum_translation_action=0.005,
+            maximum_translation_action=0.20,
         )
     )
     assert np.array_equal(capped_action[:2], np.zeros(2))
-    assert abs(capped_action[2]) < 0.005
+    assert abs(capped_action[2]) < 0.20
     assert capped_proof["selected_envelope_source"] == (
         "configured_translation_action_norm_bound"
     )
     assert capped_proof[
         "configured_strict_translation_action_capacity"
-    ] == np.nextafter(0.005, 0.0)
+    ] == np.nextafter(0.20, 0.0)
     assert capped_proof[
         "commanded_negative_world_delta_m"
-    ] == pytest.approx(0.0004)
+    ] == pytest.approx(0.016)
 
     # Exact Job500161 frame 88. Remaining target error tightens the action
     # below 0.10 and its direct all-pair proof remains strictly above base8.
@@ -3352,9 +3363,10 @@ def test_500161_adaptive_descent_uses_native_bound_then_tightens_near_base8():
     assert "_compiled_adaptive_vertical_descent_action(" in descent_branch
     assert (
         "maximum_translation_action=(\n"
-        "                        structural_max_translation_action"
+        "                        overhead_descent_max_translation_action"
         in descent_branch
     )
+    assert "event_driven_brake_trigger_buffer_m" in descent_branch
     assert "_fixed_xy_vertical_approach_action(" not in descent_branch
     assert '"compiled_adaptive_vertical_action_envelope"' in descent_branch
     assert "native_action_spec = _native_osc_action_spec_evidence(env)" in (
@@ -3689,7 +3701,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         'if structural_stage == "overhead_corridor_descent":', 1
     )[1].split('elif structural_stage == "vertical_tail_brake":', 1)[0]
     assert "_compiled_adaptive_vertical_descent_action(" in descent_action
-    assert "structural_max_translation_action" in descent_action
+    assert "overhead_descent_max_translation_action" in descent_action
     assert "_fixed_z_lateral_approach_action(" not in descent_action
     descent_transition = bounded_seek.split(
         'elif stage_before_action == "overhead_corridor_descent":', 1
@@ -7302,6 +7314,12 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         in producer
     )
     assert (
+        '"--overhead_descent_max_translation_action",\n'
+        "        type=float,\n"
+        "        default=0.20,"
+        in producer
+    )
+    assert (
         '"--plate_contact_seek_max_steps", type=int, default=64'
         in producer
     )
@@ -7479,6 +7497,10 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert (
         "--structural_near_plate_max_translation_action must be positive"
+        in producer
+    )
+    assert (
+        "--overhead_descent_max_translation_action must be greater than"
         in producer
     )
     assert "--plate_contact_seek_max_steps must be positive" in producer

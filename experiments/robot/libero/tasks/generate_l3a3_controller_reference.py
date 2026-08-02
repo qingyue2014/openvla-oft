@@ -12269,8 +12269,37 @@ def _seek_stable_plate_contact(
     structural_max_translation_action = float(
         args.structural_near_plate_max_translation_action
     )
+    overhead_descent_max_translation_action = float(
+        args.overhead_descent_max_translation_action
+    )
     maximum_controller_world_step = float(
         args.position_action_scale * structural_max_translation_action
+    )
+    maximum_overhead_descent_world_step = float(
+        args.position_action_scale
+        * overhead_descent_max_translation_action
+    )
+    overhead_descent_brake_trigger_buffer = float(
+        2.0 * maximum_overhead_descent_world_step
+    )
+    structural_seek_context.update(
+        {
+            "structural_near_plate_max_translation_action": (
+                structural_max_translation_action
+            ),
+            "structural_near_plate_maximum_world_step_m": (
+                maximum_controller_world_step
+            ),
+            "overhead_descent_max_translation_action": (
+                overhead_descent_max_translation_action
+            ),
+            "overhead_descent_maximum_world_step_m": (
+                maximum_overhead_descent_world_step
+            ),
+            "overhead_descent_brake_trigger_buffer_m": (
+                overhead_descent_brake_trigger_buffer
+            ),
+        }
     )
     detour_native_low = np.asarray(native_action_spec["low"], dtype=float)
     detour_native_high = np.asarray(native_action_spec["high"], dtype=float)
@@ -13152,7 +13181,7 @@ def _seek_stable_plate_contact(
                     native_action_spec=native_action_spec,
                     expected_pair_count=expected_overhead_pair_count,
                     maximum_translation_action=(
-                        structural_max_translation_action
+                        overhead_descent_max_translation_action
                     ),
                 )
             )
@@ -13160,16 +13189,22 @@ def _seek_stable_plate_contact(
                 "mode": structural_stage,
                 "action": action.tolist(),
                 "compiled_adaptive_vertical_action_envelope": path_control,
+                "event_driven_brake_trigger_buffer_m": (
+                    overhead_descent_brake_trigger_buffer
+                ),
             }
         elif structural_stage == "vertical_tail_brake":
             action, path_control = _fixed_xy_vertical_approach_action(
                 current_eef=current_eef,
                 target_z=float(
-                    current_eef[2] + maximum_controller_world_step
+                    current_eef[2]
+                    + maximum_overhead_descent_world_step
                 ),
                 gripper=gripper,
                 position_action_scale=args.position_action_scale,
-                maximum_translation_action=structural_max_translation_action,
+                maximum_translation_action=(
+                    overhead_descent_max_translation_action
+                ),
             )
             if action[2] <= 0.0:
                 raise RuntimeError(
@@ -13750,7 +13785,10 @@ def _seek_stable_plate_contact(
                     }
                 )
         elif stage_before_action == "overhead_corridor_descent":
-            if after_eef[2] <= overhead_staging_z + args.position_tolerance:
+            if after_eef[2] <= (
+                overhead_staging_z
+                + overhead_descent_brake_trigger_buffer
+            ):
                 structural_stage = "vertical_tail_brake"
                 vertical_tail_events.append(
                     {
@@ -13760,6 +13798,13 @@ def _seek_stable_plate_contact(
                         ),
                         "measured_vertical_step_progress_m": (
                             measured_vertical_step_progress_m
+                        ),
+                        "overhead_staging_z_m": overhead_staging_z,
+                        "brake_trigger_buffer_m": (
+                            overhead_descent_brake_trigger_buffer
+                        ),
+                        "remaining_z_above_staging_m": float(
+                            after_eef[2] - overhead_staging_z
                         ),
                         "minimum_lateral_entry_buffer_surplus_m": (
                             latest_overhead_lateral_buffer[
@@ -13773,13 +13818,28 @@ def _seek_stable_plate_contact(
                 measured_vertical_step_progress_m >= 0.0
                 and latest_overhead_lateral_buffer["accepted"]
             ):
-                structural_stage = "vertical_tail_zero_confirmation"
+                if after_eef[2] > (
+                    overhead_staging_z + args.position_tolerance
+                ):
+                    structural_stage = "overhead_corridor_descent"
+                    recovered_event = (
+                        "brake_recovered_above_staging_to_bounded_descent"
+                    )
+                else:
+                    structural_stage = "vertical_tail_zero_confirmation"
+                    recovered_event = (
+                        "brake_recovered_to_zero_confirmation"
+                    )
                 vertical_tail_events.append(
                     {
                         "guard_step": int(guard_step),
-                        "event": "brake_recovered_to_zero_confirmation",
+                        "event": recovered_event,
                         "measured_vertical_step_progress_m": (
                             measured_vertical_step_progress_m
+                        ),
+                        "overhead_staging_z_m": overhead_staging_z,
+                        "remaining_z_above_staging_m": float(
+                            after_eef[2] - overhead_staging_z
                         ),
                         "minimum_lateral_entry_buffer_surplus_m": (
                             latest_overhead_lateral_buffer[
@@ -14583,6 +14643,18 @@ def generate(args):
         raise ValueError(
             "--structural_near_plate_max_translation_action must be positive "
             "and no greater than --plate_contact_seek_max_translation_action"
+        )
+    if (
+        not np.isfinite(args.overhead_descent_max_translation_action)
+        or not (
+            args.structural_near_plate_max_translation_action
+            < args.overhead_descent_max_translation_action
+            <= 1.0
+        )
+    ):
+        raise ValueError(
+            "--overhead_descent_max_translation_action must be greater than "
+            "the near-plate bound and no greater than 1.0"
         )
     if args.plate_contact_seek_max_steps < 1:
         raise ValueError(
@@ -15975,6 +16047,11 @@ def main():
         "--structural_near_plate_max_translation_action",
         type=float,
         default=0.005,
+    )
+    parser.add_argument(
+        "--overhead_descent_max_translation_action",
+        type=float,
+        default=0.20,
     )
     parser.add_argument(
         "--plate_contact_seek_max_steps", type=int, default=64

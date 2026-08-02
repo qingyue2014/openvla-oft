@@ -84,9 +84,14 @@ and again after every action. The `0.0005 m` outside-rim clearance is an exact
 precontact separation threshold, not permission to contact the plate early;
 the structural near-plate action is capped at `0.005`, or `0.0004 m` in world
 space, so the compiled corridor reserve exceeds a complete permitted step.
-That cap applies from the first adaptive pure-Z descent action, not only to its
-terminal correction and brake stages, preventing a larger far-field command
-from accumulating a downward OSC inertial tail before the outside-side pose.
+The preceding far-field pure-Z descent is separately capped at `0.20`, or
+`0.016 m` nominal world displacement. Its positive-Z brake begins when the EEF
+enters a deterministic two-command (`0.032 m`) buffer above the compiled
+staging height and uses the same `0.20` cap until measured vertical progress is
+nonnegative. If braking stops above the staging tolerance, the controller
+returns to bounded descent and repeats this live-measurement cycle; it proceeds
+to zero confirmation only after stopping at the staging height. Every action
+still retains all 55 compiled pair guards and is rechecked after execution.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.
