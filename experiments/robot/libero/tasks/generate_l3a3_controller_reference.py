@@ -5236,7 +5236,8 @@ def _fixed_safe_z_lateral_hold_action(
     )
     outside_refill_target_clearance = float(
         np.nextafter(
-            outside_recovery_exit_clearance + progress_resolution_m,
+            outside_recovery_exit_clearance
+            + 2.0 * progress_resolution_m,
             np.inf,
         )
     )
@@ -15268,7 +15269,7 @@ def _seek_stable_plate_contact(
     fixed_safe_z_refill_target_clearance = float(
         np.nextafter(
             fixed_safe_z_recovery_exit_clearance
-            + args.minimum_saturated_waypoint_progress,
+            + 2.0 * args.minimum_saturated_waypoint_progress,
             np.inf,
         )
     )

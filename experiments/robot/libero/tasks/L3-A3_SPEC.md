@@ -303,7 +303,7 @@ used its full downward-tail brake. Job503642 tested suppressing that brake
 above the safe-Z band, but the vertical tail then grew from `0.199 mm` to
 `1.371 mm` and outside reserve fell further to `0.328 mm`. Full positive-Z
 braking is therefore retained for every measured downward tail. Instead, the
-non-saturated X refill target is now `1.600 mm`, derived by adding one more
+non-saturated X refill target was set to `1.600 mm`, derived by adding one more
 unchanged `0.050 mm` progress-resolution increment above the `1.550 mm`
 release line. This adds discrete controller headroom without changing the
 `1.500 mm` entry, `1.550 mm` release condition, `0.400 mm` formal thresholds,
@@ -315,7 +315,7 @@ response, that severe vertical tail coupled into a `0.752 mm` outside loss.
 While outside recovery is active, an absolute vertical response beyond the
 existing `1.100 mm` bound now independently selects the existing full outward
 brake. Non-inward frames within the registered vertical-response envelope
-continue to use the nominal `1.600 mm` refill, so the change does not restore
+continued to use the nominal `1.600 mm` refill, so the change did not restore
 continuous X saturation.
 Job503644 showed that direction must also be considered inside that magnitude
 bound: a `-0.713 mm/frame` vertical response paired with nominal X refill still
@@ -324,6 +324,12 @@ downward response beyond the unchanged `0.050 mm` progress resolution now
 selects the full outward brake. Upward or stable responses below the severe
 `1.100 mm` bound continue to use nominal refill, preserving the earlier fix
 against prolonged saturation.
+Job503645 passed the new downward-response branch but left `0.39694 mm` on a
+later below-band positive-Z frame, a `3.1 micrometre` miss analogous to
+Job503641's `1.7 micrometre` miss. The nominal refill target therefore uses
+two progress-resolution increments above the unchanged release line, yielding
+`1.650 mm`. This remains a small non-saturated allocation; the recovery entry,
+release condition, and formal thresholds do not change.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
