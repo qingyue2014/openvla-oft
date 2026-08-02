@@ -13347,6 +13347,10 @@ def _seek_stable_plate_contact(
         args.position_action_scale
         * post_descent_lateral_max_translation_action
     )
+    maximum_vertical_corridor_outward_hold_world_step = float(
+        args.position_action_scale
+        * vertical_corridor_outward_hold_max_translation_action
+    )
     tail_recovery_descent_translation_action_floor = float(
         post_descent_lateral_max_translation_action
     )
@@ -13401,6 +13405,9 @@ def _seek_stable_plate_contact(
             ),
             "vertical_corridor_outward_hold_bound_source": (
                 "existing overhead_descent_max_translation_action"
+            ),
+            "vertical_corridor_outward_hold_maximum_world_step_m": (
+                maximum_vertical_corridor_outward_hold_world_step
             ),
             "post_descent_lateral_max_translation_action": (
                 post_descent_lateral_max_translation_action
@@ -13601,7 +13608,7 @@ def _seek_stable_plate_contact(
     if not (
         np.isfinite(vertical_corridor_balanced_hold_world_step)
         and 0.0 < vertical_corridor_balanced_hold_world_step
-        < maximum_post_descent_lateral_world_step
+        < maximum_vertical_corridor_outward_hold_world_step
         and np.all(
             np.isfinite(vertical_corridor_balanced_hold_target_xy)
         )
@@ -13618,8 +13625,8 @@ def _seek_stable_plate_contact(
         ]
     ):
         raise RuntimeError(
-            "vertical corridor balanced hold is not strictly inside the "
-            "existing post-descent controller reserve, or its pre-loss "
+            "vertical corridor balanced hold is not strictly inside its "
+            "registered outward-hold controller reserve, or its pre-loss "
             "recovery hysteresis is invalid"
         )
     structural_seek_context.update(

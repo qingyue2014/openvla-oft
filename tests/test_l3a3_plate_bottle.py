@@ -3604,6 +3604,11 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "post_descent_lateral_max_translation_action" in (
         vertical_corridor_action
     )
+    assert "maximum_vertical_corridor_outward_hold_world_step" in bounded_seek
+    assert (
+        "< maximum_vertical_corridor_outward_hold_world_step"
+        in bounded_seek
+    )
     assert "positive_z_action" in vertical_corridor_action
     positive_z_call = vertical_corridor_action.split(
         "positive_z_action=(", 1
