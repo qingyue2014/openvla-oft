@@ -3028,37 +3028,24 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     ] == pytest.approx(-0.0036950631847410315)
 
     # Exact Job500146 endpoint of the adaptive overhead descent.  The measured
-    # response was still downward, so the next action must be pure +Z brake,
-    # not the old pure-XY action observed at frame 90.
+    # response was still downward, so the next action must include a strict
+    # positive-Z brake.  Job503010 established that pure +Z has a large inward
+    # real-OSC response, so the brake now retains the registered outward drive
+    # under the same compiled pair and native full-norm proof.
     before_transition_z = 0.9453538149129818
     transition_eef = np.array(
         [0.0458628425888722, -0.029186391480972046, 0.9443449236168449]
     )
     measured_dz = transition_eef[2] - before_transition_z
     assert measured_dz == pytest.approx(-0.0010088912961369045)
-    brake_action, brake_evidence = _fixed_xy_vertical_approach_action(
-        current_eef=transition_eef,
-        target_z=transition_eef[2] + 0.08 * 0.10,
-        gripper=-1.0,
-        position_action_scale=0.08,
-        maximum_translation_action=0.10,
-    )
-    old_first_lateral_action = np.array(
-        [0.09999764807955064, 0.0006858414965135461, 0.0]
-    )
-    assert np.array_equal(brake_action[:2], np.zeros(2))
-    assert brake_action[2] > 0.0
-    assert np.linalg.norm(brake_action[:3]) < 0.10
-    assert old_first_lateral_action[0] > 0.0
-    assert old_first_lateral_action[2] == 0.0
-    assert brake_evidence["commanded_xy_action"] == [0.0, 0.0]
-
     recovered_guard = {
         **base_guard,
+        "accepted": True,
         "pairs": [
             {
                 **base_guard["pairs"][0],
-                "vertical_clearance_m": np.nextafter(0.016, np.inf),
+                "vertical_clearance_m": 0.020,
+                "accepted": True,
             }
         ],
     }
@@ -3066,6 +3053,49 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         recovered_guard,
         worst_case_controller_world_step_m=0.008,
     )
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    brake_action, brake_evidence = (
+        _compiled_adaptive_lateral_rebuffer_action(
+            current_eef=transition_eef,
+            overhead_guard=recovered_guard,
+            overhead_lateral_buffer=recovered_buffer,
+            outside_side_guard={
+                "minimum_outside_clearance_m": 0.001,
+                "required_outside_clearance_m": strict_clearance,
+            },
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_spec,
+            expected_pair_count=1,
+            worst_case_controller_world_step_m=0.008,
+            lateral_target_xy=(
+                transition_eef[:2] + np.array([0.01, 0.0])
+            ),
+            one_sided_outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_lateral_translation_action=0.10,
+        )
+    )
+    old_first_lateral_action = np.array(
+        [0.09999764807955064, 0.0006858414965135461, 0.0]
+    )
+    assert brake_action[0] > 0.0
+    assert brake_action[1] == 0.0
+    assert brake_action[2] > 0.0
+    assert np.linalg.norm(brake_action[:2]) < 0.10
+    assert np.linalg.norm(brake_action[:3]) < 1.0
+    assert old_first_lateral_action[0] > 0.0
+    assert old_first_lateral_action[2] == 0.0
+    assert brake_evidence["commanded_xy_action"][0] > 0.0
+    assert brake_evidence["commanded_z_action"] > 0.0
+    assert brake_evidence["proof"][
+        "outward_xy_plus_positive_z_zero_rotation"
+    ] is True
     assert recovered_buffer["accepted"] is True
     assert recovered_buffer[
         "minimum_lateral_entry_buffer_surplus_m"
@@ -3100,6 +3130,24 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "previous_active_translation_action / 2.0" in brake_transition
     assert "structural_max_translation_action" in brake_transition
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
+    brake_action_branch = bounded_seek.split(
+        'elif structural_stage == "vertical_tail_brake":', 1
+    )[1].split(
+        'elif structural_stage == "lateral_rebuffer_brake":', 1
+    )[0]
+    assert "_compiled_adaptive_lateral_rebuffer_action(" in (
+        brake_action_branch
+    )
+    assert "active_overhead_descent_world_step" in brake_action_branch
+    assert "corridor_correction_hold_target_xy" in brake_action_branch
+    assert "corridor_outward_direction" in brake_action_branch
+    assert "post_descent_lateral_max_translation_action" in (
+        brake_action_branch
+    )
+    assert "compiled_outward_xy_positive_z_tail_brake_envelope" in (
+        brake_action_branch
+    )
+    assert "_fixed_xy_vertical_approach_action(" not in brake_action_branch
     assert (
         'elif structural_stage == "vertical_tail_zero_confirmation"'
         in bounded_seek

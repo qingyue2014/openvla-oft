@@ -14271,17 +14271,30 @@ def _seek_stable_plate_contact(
                 ),
             }
         elif structural_stage == "vertical_tail_brake":
-            action, path_control = _fixed_xy_vertical_approach_action(
-                current_eef=current_eef,
-                target_z=float(
-                    current_eef[2]
-                    + active_overhead_descent_world_step
-                ),
-                gripper=gripper,
-                position_action_scale=args.position_action_scale,
-                maximum_translation_action=(
-                    active_overhead_descent_translation_action
-                ),
+            action, path_control = (
+                _compiled_adaptive_lateral_rebuffer_action(
+                    current_eef=current_eef,
+                    overhead_guard=latest_overhead_guard,
+                    overhead_lateral_buffer=(
+                        latest_overhead_lateral_buffer
+                    ),
+                    gripper=gripper,
+                    position_action_scale=args.position_action_scale,
+                    native_action_spec=native_action_spec,
+                    expected_pair_count=expected_overhead_pair_count,
+                    worst_case_controller_world_step_m=(
+                        active_overhead_descent_world_step
+                    ),
+                    lateral_target_xy=(
+                        corridor_correction_hold_target_xy
+                    ),
+                    one_sided_outward_direction_xy=(
+                        corridor_outward_direction
+                    ),
+                    maximum_lateral_translation_action=(
+                        post_descent_lateral_max_translation_action
+                    ),
+                )
             )
             if action[2] <= 0.0:
                 raise RuntimeError(
@@ -14295,7 +14308,10 @@ def _seek_stable_plate_contact(
                     vertical_tail_brake_reason
                     or "vertical_tail_recovery"
                 ),
-                "fixed_xy_positive_z_brake_control": path_control,
+                "compiled_outward_xy_positive_z_tail_brake_envelope": (
+                    path_control
+                ),
+                "retains_registered_outward_correction_drive": True,
                 "active_overhead_descent_translation_action_bound": (
                     active_overhead_descent_translation_action
                 ),
