@@ -842,6 +842,20 @@ existing lower position band. Every other downward tail retains the full
 positive brake. No threshold, route, budget, task, inventory, state, prompt,
 goal, or intervention changes.
 
+Job503898 confirmed that shallow downward tracking operated at step 207, but
+its `-0.147711 mm` response moved the EEF from `0.477024 mm` above safe Z into
+the unchanged `+/-0.4 mm` position band. The previous rule applied only while
+strictly above that band, so step 208 replaced the incremental `0.151643` Z
+baseline with the full `+0.20` downward-tail brake even though the one-response
+projection remained inside the band at `0.181602 mm` above safe Z. The response
+reversed and the limit cycle resumed. Incremental captured-action PD now
+continues for an inside-band downward response only when the previous Z action
+is native-bounded and nonnegative, the response is non-severe, all live
+reserves pass, and the one-response projection remains inside the same
+position band. A projection outside either edge retains the full positive
+brake. The neutral stability confirmation, thresholds, route, budget, task,
+inventory, states, prompt, goal, and intervention remain unchanged.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

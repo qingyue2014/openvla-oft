@@ -5477,9 +5477,25 @@ def _fixed_safe_z_lateral_hold_action(
         and downward_tail_projected_position_error_m
         <= vertical_position_tolerance_m
     )
+    shallow_inside_band_downward_tracking_requested = bool(
+        release_slew_enabled
+        and inside_safe_z_band
+        and measured_downward_tail
+        and not severe_vertical_response
+        and not table_recovery_active
+        and live_outside_clearance > outside_recovery_exit_clearance
+        and live_table_clearance > table_recovery_clearance
+        and previous_commanded_action_xyz[2] >= 0.0
+        and abs(downward_tail_projected_position_error_m)
+        <= vertical_position_tolerance_m
+    )
+    shallow_safe_band_downward_tracking_requested = bool(
+        shallow_above_band_downward_tracking_requested
+        or shallow_inside_band_downward_tracking_requested
+    )
     downward_tail_brake_active = bool(
         measured_downward_tail
-        and not shallow_above_band_downward_tracking_requested
+        and not shallow_safe_band_downward_tracking_requested
     )
     positive_response_unload_active = bool(
         inside_safe_z_band
@@ -5847,6 +5863,12 @@ def _fixed_safe_z_lateral_hold_action(
         "shallow_above_band_downward_tracking_requested": (
             shallow_above_band_downward_tracking_requested
         ),
+        "shallow_inside_band_downward_tracking_requested": (
+            shallow_inside_band_downward_tracking_requested
+        ),
+        "shallow_safe_band_downward_tracking_requested": (
+            shallow_safe_band_downward_tracking_requested
+        ),
         "below_safe_z_band": below_safe_z_band,
         "above_safe_z_band": above_safe_z_band,
         "inside_safe_z_band": inside_safe_z_band,
@@ -5877,6 +5899,8 @@ def _fixed_safe_z_lateral_hold_action(
             "safe_z_upward_overshoot_uses_guard_bounded_pd_command": True,
             "downward_tail_retains_positive_release_slew": True,
             "shallow_above_band_downward_tail_uses_incremental_pd": True,
+            "shallow_inside_band_downward_tail_uses_incremental_pd": True,
+            "projected_outside_band_downward_tail_retains_full_brake": True,
             "projected_below_band_downward_tail_retains_full_brake": True,
             "captured_safe_z_stable_response_retains_predecessor": True,
             "captured_safe_z_hold_uses_incremental_pd_correction": True,
