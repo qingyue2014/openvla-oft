@@ -791,6 +791,20 @@ outside recovery preserves the orthogonal bounded tangential component while
 retaining its full outward authority. The physical thresholds, budget, task,
 inventory, states, prompt, goal, and intervention remain unchanged.
 
+Job503891 confirmed the tangential correction: 25 of 57 fixed-stage actions
+carried nonzero Y commands, and the final post-action position entered the
+unchanged `5 mm` XY tolerance. It remained invalid because vertical stability
+never accrued one confirmation frame; the last response was `+0.766726 mm`.
+The incremental captured-action PD had stopped as soon as XY entered tolerance,
+so the controller returned to coarse positive-brake release steps. The same
+incremental correction now continues after XY entry until the existing
+two-frame stability confirmation. For an above-band nonnegative response, the
+positive action retains the existing `0.05` release limit unless the overshoot
+exceeds three existing `0.4 mm` safe-Z position tolerances. Beyond that derived
+`1.2 mm` boundary, the Job503872 guard-bounded unload remains mandatory. This
+changes no acceptance threshold, route, budget, task, inventory, state, prompt,
+goal, or intervention.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

@@ -5520,8 +5520,12 @@ def _fixed_safe_z_lateral_hold_action(
     )
     captured_safe_z_response_hold_requested = bool(
         release_slew_enabled
-        and not lateral_target_reached
         and inside_safe_z_band
+        and not (
+            lateral_target_reached
+            and abs(measured_vertical_step_progress_m)
+            <= progress_resolution_m
+        )
         and not downward_tail_brake_active
         and not severe_vertical_response
         and not table_recovery_active
@@ -5547,9 +5551,14 @@ def _fixed_safe_z_lateral_hold_action(
     pre_release_slew_z_action = float(commanded_z_action)
     outward_release_slew_applied = False
     positive_z_release_slew_applied = False
+    positive_z_release_slew_bypass_overshoot_threshold_m = float(
+        3.0 * vertical_position_tolerance_m
+    )
     positive_z_release_slew_bypass_requested = bool(
         above_safe_z_band
         and measured_vertical_step_progress_m >= 0.0
+        and -position_error_m
+        > positive_z_release_slew_bypass_overshoot_threshold_m
     )
     if release_slew_enabled:
         previous_outward_action = float(
@@ -5720,12 +5729,12 @@ def _fixed_safe_z_lateral_hold_action(
         "positive_z_release_slew_bypass_requested": (
             positive_z_release_slew_bypass_requested
         ),
+        "positive_z_release_slew_bypass_overshoot_threshold_m": (
+            positive_z_release_slew_bypass_overshoot_threshold_m
+        ),
         "positive_z_release_slew_bypass_reason": (
             "above_band_nonnegative_response"
-            if (
-                above_safe_z_band
-                and measured_vertical_step_progress_m >= 0.0
-            )
+            if positive_z_release_slew_bypass_requested
             else None
         ),
         "vertical_stability_confirmation_hold_requested": bool(
@@ -5827,6 +5836,12 @@ def _fixed_safe_z_lateral_hold_action(
             "captured_safe_z_stable_response_retains_predecessor": True,
             "captured_safe_z_hold_uses_incremental_pd_correction": True,
             "captured_safe_z_hold_requires_live_clearance_reserve": True,
+            "captured_safe_z_hold_continues_until_stability_confirmation": (
+                True
+            ),
+            "above_band_unload_bypass_requires_three_tolerance_overshoot": (
+                True
+            ),
             "vertical_capture_removes_only_inward_component": True,
             "outside_recovery_preserves_bounded_tangential_return": True,
             "first_stable_frame_uses_neutral_z_confirmation": True,
