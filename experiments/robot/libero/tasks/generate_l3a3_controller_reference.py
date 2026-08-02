@@ -15999,6 +15999,9 @@ def _seek_stable_plate_contact(
     vertical_corridor_hazard_outward_brake_action = float(
         2.0 * vertical_corridor_outward_hold_max_translation_action
     )
+    vertical_corridor_hazard_positive_z_brake_action = float(
+        2.0 * vertical_corridor_outward_hold_max_translation_action
+    )
     fixed_safe_z_stable_count = 0
     fixed_safe_z_required_stable_count = 2
     fixed_safe_z_position_tolerance = float(
@@ -16068,7 +16071,7 @@ def _seek_stable_plate_contact(
         > vertical_corridor_outward_hold_max_translation_action
         and np.hypot(
             vertical_corridor_hazard_outward_brake_action,
-            vertical_corridor_outward_hold_max_translation_action,
+            vertical_corridor_hazard_positive_z_brake_action,
         )
         < 1.0
     ):
@@ -16124,8 +16127,16 @@ def _seek_stable_plate_contact(
                 vertical_corridor_hazard_outward_brake_action
             ),
             "vertical_corridor_hazard_outward_brake_derivation": (
-                "twice the unchanged 0.20 low-side outward cap; retain "
-                "positive Z=0.20 so the combined 0.447214 action norm "
+                "twice the unchanged 0.20 low-side outward cap"
+            ),
+            "vertical_corridor_hazard_positive_z_brake_action": (
+                vertical_corridor_hazard_positive_z_brake_action
+            ),
+            "vertical_corridor_hazard_positive_z_brake_derivation": (
+                "twice the unchanged 0.20 low-side positive-Z cap after "
+                "Job503686 observed 13 consecutive negative vertical "
+                "responses under Z=0.20; the combined X=0.40, Z=0.40 "
+                "action norm is 0.565686 and "
                 "remains strictly inside the runtime-native 1.0 bound"
             ),
         }
@@ -17401,6 +17412,11 @@ def _seek_stable_plate_contact(
                         "fixed_outward_translation_action_bound"
                     ]
                 )
+                settle_positive_z_action = float(
+                    active_vertical_corridor_envelope[
+                        "positive_z_settle_action"
+                    ]
+                )
                 if hazard_outward_brake_active:
                     settle_lateral_target_xy = (
                         np.asarray(current_eef[:2], dtype=float)
@@ -17410,6 +17426,9 @@ def _seek_stable_plate_contact(
                     )
                     settle_maximum_lateral_translation_action = (
                         vertical_corridor_hazard_outward_brake_action
+                    )
+                    settle_positive_z_action = (
+                        vertical_corridor_hazard_positive_z_brake_action
                     )
                 action, path_control = (
                     _compiled_low_side_settle_brake_action(
@@ -17427,11 +17446,7 @@ def _seek_stable_plate_contact(
                         maximum_lateral_translation_action=(
                             settle_maximum_lateral_translation_action
                         ),
-                        positive_z_action=(
-                            active_vertical_corridor_envelope[
-                                "positive_z_settle_action"
-                            ]
-                        ),
+                        positive_z_action=settle_positive_z_action,
                         strict_corridor_clearance_m=float(
                             vertical_staging_corridor[
                                 "strict_corridor_entry_clearance_m"
@@ -17474,12 +17489,15 @@ def _seek_stable_plate_contact(
                     if hazard_outward_brake_active
                     else None
                 ),
-                "hazard_positive_z_brake_action_unchanged": bool(
+                "hazard_positive_z_brake_strengthened": bool(
                     hazard_outward_brake_active
                     and action[2]
-                    == active_vertical_corridor_envelope[
-                        "positive_z_settle_action"
-                    ]
+                    == vertical_corridor_hazard_positive_z_brake_action
+                ),
+                "hazard_positive_z_brake_action": (
+                    vertical_corridor_hazard_positive_z_brake_action
+                    if hazard_outward_brake_active
+                    else None
                 ),
                 "previous_settle_vertical_step_progress_m": (
                     previous_vertical_step_progress

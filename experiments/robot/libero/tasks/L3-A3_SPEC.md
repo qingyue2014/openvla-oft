@@ -531,6 +531,17 @@ combined action norm is about `0.447214`, strictly inside the runtime-native
 `1.0` bound, and both directions statically increase plate/table separation.
 Geometric-only settle, damping, release reserve, task, asset, target, budget,
 and formal physical thresholds remain unchanged.
+Job503686 confirmed that persistent `+X=0.40` corrected the outside-clearance
+tail, increasing it from `2.992388 mm` at the hazard trigger to a maximum of
+`8.769312 mm`. However, the simultaneous `+Z=0.20` command produced 13
+consecutive negative vertical responses and the finger-table clearance crossed
+from `1.491712 mm` to `-0.537903 mm` on the terminal action. Hazard-triggered
+settle therefore retains the live-target `+X=0.40` brake and raises only its
+positive-Z component to `+Z=0.40`. The resulting translation-action norm is
+about `0.565686`, still strictly inside the runtime-native `1.0` bound. The
+stronger Z command remains statically monotonic away from the table and is
+required to pass the same live post-action guard; it changes no geometric-only
+settle behavior, release rule, task, asset, target, budget, or formal threshold.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
