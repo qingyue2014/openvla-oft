@@ -20,11 +20,33 @@ from experiments.robot.libero.tasks.l3b_bowl_order_common import (
     TASK_PROMPT,
     sha256_path,
 )
+from experiments.robot.libero.tasks.validate_l3b_bowl_design import validate_spec
 
 
 VERDICT = "PASS_L3B_BOWL_POLICY_DIAGNOSTIC_SUMMARY"
 TERMINAL_WINDOW_STEPS = 30
 TERMINAL_MAX_DRIFT_M = 0.003
+WILSON_Z_95 = 1.959963984540054
+
+
+def _wilson_interval(successes: int, total: int) -> dict:
+    if total <= 0 or not 0 <= successes <= total:
+        raise ValueError("invalid binomial count")
+    z2 = WILSON_Z_95**2
+    rate = successes / total
+    denominator = 1.0 + z2 / total
+    center = (rate + z2 / (2.0 * total)) / denominator
+    half_width = (
+        WILSON_Z_95
+        * ((rate * (1.0 - rate) / total + z2 / (4.0 * total**2)) ** 0.5)
+        / denominator
+    )
+    return {
+        "method": "Wilson score",
+        "confidence": 0.95,
+        "lower": max(0.0, center - half_width),
+        "upper": min(1.0, center + half_width),
+    }
 
 
 def _tilt_deg(quaternions: np.ndarray) -> np.ndarray:
@@ -77,9 +99,21 @@ def _terminal_stability(trajectory: dict, success: bool) -> dict:
     }
 
 
-def _episode(path: Path, condition: str) -> dict:
+def _episode(
+    path: Path,
+    condition: str,
+    *,
+    expected_model_family: str,
+    expected_checkpoint: str,
+    require_model_identity: bool,
+) -> dict:
     trajectory = load_trajectory(str(path))
     meta = trajectory["metadata"]
+    if require_model_identity and (
+        meta.get("model_family") != expected_model_family
+        or meta.get("pretrained_checkpoint") != expected_checkpoint
+    ):
+        raise ValueError(f"{path} model/checkpoint identity mismatch")
     if (
         meta.get("task_suite_name") != SUITE
         or int(meta.get("task_id", -1)) != TASK_ID
@@ -128,21 +162,49 @@ def _episode(path: Path, condition: str) -> dict:
     }
 
 
-def _condition(condition: str, directory: str | Path, expected_count: int) -> dict:
+def _condition(
+    condition: str,
+    directory: str | Path,
+    expected_count: int,
+    expected_native_indices: list[int],
+    expected_model_family: str,
+    expected_checkpoint: str,
+    require_model_identity: bool,
+) -> dict:
     files = _files(directory)
     if len(files) != expected_count:
         raise ValueError(f"{condition} has {len(files)} trajectories, expected {expected_count}")
-    episodes = [_episode(path, condition) for path in files]
+    episodes = [
+        _episode(
+            path,
+            condition,
+            expected_model_family=expected_model_family,
+            expected_checkpoint=expected_checkpoint,
+            require_model_identity=require_model_identity,
+        )
+        for path in files
+    ]
     if len({item["episode_idx"] for item in episodes}) != len(episodes):
         raise ValueError(f"{condition} duplicate episode indices")
     if any(item["native_init_state_index"] < 0 for item in episodes):
         raise ValueError(f"{condition} missing official state index")
+    actual_native_indices = [
+        item["native_init_state_index"]
+        for item in sorted(episodes, key=lambda item: item["episode_idx"])
+    ]
+    if actual_native_indices != expected_native_indices:
+        raise ValueError(
+            f"{condition} official state indices {actual_native_indices} "
+            f"!= registered {expected_native_indices}"
+        )
+    strict_successes = sum(item["strict_success"] for item in episodes)
     result = {
         "condition": condition,
         "condition_label": CONDITION_LABEL[condition],
         "count": len(episodes),
-        "strict_successes": sum(item["strict_success"] for item in episodes),
-        "strict_success_rate": sum(item["strict_success"] for item in episodes) / len(episodes),
+        "strict_successes": strict_successes,
+        "strict_success_rate": strict_successes / len(episodes),
+        "strict_success_ci95": _wilson_interval(strict_successes, len(episodes)),
         "outcomes": {},
         "episodes": episodes,
     }
@@ -158,6 +220,9 @@ def _condition(condition: str, directory: str | Path, expected_count: int) -> di
             }
         )
         result["full_ordered_repair_rate"] = result["full_ordered_repair_count"] / len(episodes)
+        result["full_ordered_repair_ci95"] = _wilson_interval(
+            result["full_ordered_repair_count"], len(episodes)
+        )
     return result
 
 
@@ -168,11 +233,39 @@ def summarize(
     *,
     expected_count: int,
     formal_approval: dict | None = None,
+    design_preregistration: str | Path | None = None,
+    model_label: str = "pi05",
+    model_family: str = "pi05",
+    checkpoint: str = "gs://openpi-assets/checkpoints/pi05_libero",
 ) -> dict:
+    if design_preregistration is None:
+        design_preregistration = Path(__file__).with_name(
+            "l3b_bowl_v1_design_prereg.json"
+        )
+    design = validate_spec(design_preregistration)
+    require_model_identity = int(design.get("evaluation_version", 1)) >= 2
+    if require_model_identity:
+        registered_checkpoint = design.get("model_matrix", {}).get(model_label)
+        if registered_checkpoint != checkpoint:
+            raise ValueError(
+                f"model {model_label!r} checkpoint {checkpoint!r} is not registered"
+            )
+    if expected_count > design["count"]:
+        raise ValueError("expected rollout count exceeds registered native pool")
+    expected_native_indices = design["official_state_indices"][:expected_count]
     conditions = {
-        "native": _condition("native", eb, expected_count),
-        "premature_close": _condition("premature_close", er, expected_count),
-        "prerequisite_done": _condition("prerequisite_done", ec, expected_count),
+        "native": _condition(
+            "native", eb, expected_count, expected_native_indices,
+            model_family, checkpoint, require_model_identity,
+        ),
+        "premature_close": _condition(
+            "premature_close", er, expected_count, expected_native_indices,
+            model_family, checkpoint, require_model_identity,
+        ),
+        "prerequisite_done": _condition(
+            "prerequisite_done", ec, expected_count, expected_native_indices,
+            model_family, checkpoint, require_model_identity,
+        ),
     }
     human_review = None
     if formal_approval is not None:
@@ -189,6 +282,13 @@ def summarize(
         "native_task_id": TASK_ID,
         "native_prompt": TASK_PROMPT,
         "expected_count_per_condition": expected_count,
+        "evaluation_design": design,
+        "model": {
+            "label": model_label,
+            "family": model_family,
+            "checkpoint": checkpoint,
+            "trajectory_identity_verified": require_model_identity,
+        },
         "primary_metric": "Er full_ordered_repair_rate",
         "primary_value": conditions["premature_close"]["full_ordered_repair_rate"],
         "conditions": conditions,
@@ -210,8 +310,18 @@ def main() -> None:
     parser.add_argument("--ec", required=True)
     parser.add_argument("--expected-count", type=int, required=True)
     parser.add_argument("--out-json", required=True)
+    parser.add_argument(
+        "--design-preregistration",
+        default=str(Path(__file__).with_name("l3b_bowl_v1_design_prereg.json")),
+    )
     parser.add_argument("--human-approval")
     parser.add_argument("--smoke-report")
+    parser.add_argument("--model-label", default="pi05")
+    parser.add_argument("--model-family", default="pi05")
+    parser.add_argument(
+        "--checkpoint",
+        default="gs://openpi-assets/checkpoints/pi05_libero",
+    )
     args = parser.parse_args()
     if bool(args.human_approval) != bool(args.smoke_report):
         parser.error("--human-approval and --smoke-report must be provided together")
@@ -231,6 +341,10 @@ def main() -> None:
         args.ec,
         expected_count=args.expected_count,
         formal_approval=formal_approval,
+        design_preregistration=args.design_preregistration,
+        model_label=args.model_label,
+        model_family=args.model_family,
+        checkpoint=args.checkpoint,
     )
     output = Path(args.out_json)
     output.parent.mkdir(parents=True, exist_ok=True)

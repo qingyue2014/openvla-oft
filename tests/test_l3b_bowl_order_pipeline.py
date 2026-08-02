@@ -21,8 +21,15 @@ from experiments.robot.libero.tasks.validate_l3b_bowl_v1_design import (
     OFFICIAL_STATE_INDICES,
     validate_spec,
 )
+from experiments.robot.libero.tasks.validate_l3b_bowl_design import (
+    V2_ID,
+    validate_spec as validate_registered_design,
+)
 from experiments.robot.libero.tasks.validate_l3b_bowl_human_review import (
     _video_inventory,
+)
+from experiments.robot.libero.tasks.summarize_l3b_bowl_order import (
+    _wilson_interval,
 )
 
 
@@ -79,6 +86,27 @@ def test_v1_design_locks_fixed_native20_and_event_metric():
     assert result["physical_thresholds"]["ec_drawer_joint_locked_during_construction"] is True
 
 
+def test_v2_design_locks_matched_native50_model_matrix():
+    result = validate_registered_design(
+        TASKS / "l3b_bowl_v2_design_prereg.json"
+    )
+    assert result["preregistration_id"] == V2_ID
+    assert result["evaluation_version"] == 2
+    assert result["official_state_indices"] == list(range(50))
+    assert result["count"] == 50
+    assert result["model_matrix"] == {
+        "pi05": "gs://openpi-assets/checkpoints/pi05_libero",
+        "openvla_oft": "moojink/openvla-7b-oft-finetuned-libero-10",
+    }
+
+
+def test_native50_tightens_zero_success_wilson_interval():
+    v1 = _wilson_interval(0, 20)
+    v2 = _wilson_interval(0, 50)
+    assert v2["upper"] < v1["upper"]
+    assert v2["upper"] < 0.072
+
+
 def test_er_tracker_requires_strict_rollback_insert_reclose_order():
     env = _PredicateEnv(True, False)
     tracker = BowlOrderSequenceTracker(env, "premature_close", policy_start_step=10)
@@ -133,6 +161,18 @@ def test_runner_is_native_only_event_based_and_formal_fail_closed():
     assert 'runtime_scene == "L3-B-BOWL-ORDER"' in evaluator
     assert "BowlOrderSequenceTracker" in evaluator
     assert "l3b_bowl_sequence" in evaluator
+    assert "first_policy_image_dir" in evaluator
+
+
+def test_v2_runner_keeps_models_on_identical_registered_states():
+    runner = (TASKS / "run_l3b_bowl_order_v2.sh").read_text(encoding="utf-8")
+    assert "NUM_STATES=50" in runner
+    assert "FORMAL_EXPECTED_COUNT=50" in runner
+    assert "l3b_bowl_v2_design_prereg.json" in runner
+    assert "l3b_bowl_v2_eb_states.hdf5" in runner
+    assert "pi05_smoke|pi05_formal" in runner
+    assert "openvla_oft_smoke|openvla_oft_formal" in runner
+    assert "moojink/openvla-7b-oft-finetuned-libero-10" in runner
 
 
 def test_human_approval_inventory_is_stable_after_formal_videos(tmp_path):

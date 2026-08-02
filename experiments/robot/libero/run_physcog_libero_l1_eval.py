@@ -14,6 +14,7 @@ then reused with custom PhysCogSafe-LIBERO BDDL suites.
 """
 
 import faulthandler
+import hashlib
 import json
 import os
 import sys
@@ -31,6 +32,7 @@ from typing import Optional
 import draccus
 import tqdm
 import wandb
+from PIL import Image
 
 
 def _ensure_libero_importable() -> None:
@@ -59,7 +61,10 @@ from experiments.robot.libero.observation_matched_reference import (
     validate_reference_config,
     write_reference_report,
 )
-from experiments.robot.openvla_utils import configure_checkpoint_compat
+from experiments.robot.openvla_utils import (
+    configure_checkpoint_compat,
+    prepare_images_for_vla,
+)
 from experiments.robot.pi05_utils import normalize_model_family
 from experiments.robot.libero.physcog_oracles import SafetyStatus, make_safety_oracle
 from experiments.robot.libero.physcog_trajectory import (
@@ -160,6 +165,7 @@ class PhysCogGenerateConfig(LiberoGenerateConfig):
     max_success_videos: int = 10            # max safe-success videos per task (0 = unlimited)
     max_failure_videos: int = 10            # max task-failure (no violation) videos per task (0 = unlimited)
     review_video_dir: str = ""              # optional required review/<task_name>_task/ video destination
+    first_policy_image_dir: str = ""         # exact model-input first frames for policy-view review
     bddl_file: Optional[str] = None        # L1-B-2: path to a custom BDDL file; bypasses task_suite lookup
     retraction_intro_timing: str = "after_grasp"  # L1-B-4: before_grasp | during_grasp | after_grasp
     retraction_bystander_xyz: Optional[str] = None # L1-B-4: "x,y" or "x,y,z" insertion pose
@@ -477,6 +483,57 @@ def run_episode_with_safety(
     success = False
     raw_gripper_commands = []
     env_gripper_commands = []
+    first_policy_images_saved = False
+
+    def save_first_policy_images(observation: dict, step: int) -> None:
+        nonlocal first_policy_images_saved
+        if first_policy_images_saved or not cfg.first_policy_image_dir:
+            return
+        output = Path(cfg.first_policy_image_dir)
+        output.mkdir(parents=True, exist_ok=True)
+        condition = str((initial_state_record or {}).get("condition", "unknown"))
+        episode_index = int((initial_state_record or {}).get("episode_index", -1))
+        native_index = int(
+            (initial_state_record or {}).get("native_init_state_index", -1)
+        )
+        images = [observation["full_image"], observation["wrist_image"]]
+        if cfg.model_family == "openvla":
+            images = prepare_images_for_vla(images, cfg)
+        else:
+            images = [Image.fromarray(image).convert("RGB") for image in images]
+        paths = {}
+        for label, image in zip(("agent", "wrist"), images):
+            path = output / (
+                f"{condition}_ep{episode_index:03d}_native{native_index:03d}_"
+                f"{cfg.model_family}_{label}_first_policy_224.png"
+            )
+            image.save(path)
+            paths[label] = {
+                "path": str(path.resolve()),
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        manifest = {
+            "scenario": "L3-B-BOWL-ORDER",
+            "condition": condition,
+            "episode_index": episode_index,
+            "native_init_state_index": native_index,
+            "first_policy_step": step,
+            "model_family": cfg.model_family,
+            "pretrained_checkpoint": str(cfg.pretrained_checkpoint),
+            "center_crop": bool(cfg.center_crop),
+            "num_images_in_input": int(cfg.num_images_in_input),
+            "native_prompt": task_description,
+            "images": paths,
+        }
+        manifest_path = output / (
+            f"{condition}_ep{episode_index:03d}_native{native_index:03d}_"
+            f"{cfg.model_family}_first_policy.json"
+        )
+        manifest_path.write_text(
+            json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        first_policy_images_saved = True
 
     def check_safety(obs, action, step: int) -> bool:
         nonlocal safety, oracle_ready
@@ -558,6 +615,7 @@ def run_episode_with_safety(
                 observation, img = prepare_observation(
                     obs, resize_size, cfg.model_family
                 )
+            save_first_policy_images(observation, t)
             replay_images.append(img)
             if cfg.save_wrist_video:
                 wrist_images.append(get_libero_wrist_image(obs))
@@ -1186,6 +1244,10 @@ def _save_episode_trajectory(
     filename = f"task{task_id}_ep{episode_idx:03d}.npz"
     metadata = {
         "run_id_note": cfg.run_id_note or "default",
+        "model_family": cfg.model_family,
+        "pretrained_checkpoint": str(cfg.pretrained_checkpoint),
+        "center_crop": bool(cfg.center_crop),
+        "num_images_in_input": int(cfg.num_images_in_input),
         "task_suite_name": cfg.task_suite_name,
         "task_id": task_id,
         "episode_idx": episode_idx,

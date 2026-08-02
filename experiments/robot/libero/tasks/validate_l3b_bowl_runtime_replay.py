@@ -26,6 +26,7 @@ from experiments.robot.libero.tasks.l3b_bowl_order_common import (
 from experiments.robot.libero.tasks.l3b_bowl_runtime_gate import BowlOrderRuntimeGate
 from experiments.robot.libero.tasks.native_state_replay import materialize_native_scene_state
 from experiments.robot.libero.tasks.validate_l3b_bowl_state_bundles import validate_one
+from experiments.robot.libero.tasks.validate_l3b_bowl_design import validate_spec
 
 
 MAX_MEAN_ABSOLUTE_PIXEL_ERROR = 0.5
@@ -63,10 +64,24 @@ def _compare_image(observed: np.ndarray, expected_path: str) -> dict:
     return metrics
 
 
-def validate(paths: dict[str, Path], *, render_gpu_device_id: int, seed: int) -> dict:
+def validate(
+    paths: dict[str, Path],
+    *,
+    render_gpu_device_id: int,
+    seed: int,
+    design_preregistration: str | Path,
+) -> dict:
     from libero.libero.envs import OffScreenRenderEnv
 
-    bundles = {condition: validate_one(path, condition) for condition, path in paths.items()}
+    design = validate_spec(design_preregistration)
+    bundles = {
+        condition: validate_one(
+            path,
+            condition,
+            design_preregistration=design_preregistration,
+        )
+        for condition, path in paths.items()
+    }
     env = OffScreenRenderEnv(
         bddl_file_name=str(native_bddl_path().resolve(strict=True)),
         camera_heights=256,
@@ -123,6 +138,7 @@ def validate(paths: dict[str, Path], *, render_gpu_device_id: int, seed: int) ->
         "native_task_id": TASK_ID,
         "native_prompt": TASK_PROMPT,
         "formal_wait_steps": FORMAL_WAIT_STEPS,
+        "design_preregistration": design,
         "count_per_condition": len(bundles["native"]),
         "episode_count": len(episodes),
         "episodes": episodes,
@@ -146,6 +162,7 @@ def main() -> None:
     parser.add_argument("--ec", required=True)
     parser.add_argument("--render-gpu-device-id", type=int, default=-1)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--design-preregistration", required=True)
     parser.add_argument("--out-json", required=True)
     args = parser.parse_args()
     paths = {
@@ -154,7 +171,10 @@ def main() -> None:
         "prerequisite_done": Path(args.ec).resolve(strict=True),
     }
     result = validate(
-        paths, render_gpu_device_id=args.render_gpu_device_id, seed=args.seed
+        paths,
+        render_gpu_device_id=args.render_gpu_device_id,
+        seed=args.seed,
+        design_preregistration=args.design_preregistration,
     )
     output = Path(args.out_json)
     output.parent.mkdir(parents=True, exist_ok=True)

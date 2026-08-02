@@ -65,7 +65,7 @@ from experiments.robot.libero.tasks.l3b_bowl_order_common import (
     state_sha256,
     validate_native_bddl,
 )
-from experiments.robot.libero.tasks.validate_l3b_bowl_v1_design import (
+from experiments.robot.libero.tasks.validate_l3b_bowl_design import (
     validate_spec as validate_design_preregistration,
 )
 from experiments.robot.pi05_utils import PI05_IMAGE_SIZE, resize_with_pad

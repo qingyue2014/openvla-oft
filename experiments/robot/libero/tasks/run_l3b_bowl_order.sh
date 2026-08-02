@@ -8,6 +8,7 @@ set -euo pipefail
 MODE="${1:-prepare}"
 PYTHON_BIN="${PYTHON_BIN:-python}"
 MODEL_FAMILY="${MODEL_FAMILY:-pi05}"
+MODEL_LABEL="${MODEL_LABEL:-${MODEL_FAMILY}}"
 CHECKPOINT="${CHECKPOINT:-gs://openpi-assets/checkpoints/pi05_libero}"
 PI05_HOST="${PI05_HOST:-127.0.0.1}"
 PI05_PORT="${PI05_PORT:-8000}"
@@ -15,6 +16,7 @@ PI05_CONNECT_TIMEOUT_S="${PI05_CONNECT_TIMEOUT_S:-300}"
 PI05_REPLAN_STEPS="${PI05_REPLAN_STEPS:-5}"
 RENDER_GPU_DEVICE_ID="${RENDER_GPU_DEVICE_ID:--1}"
 NUM_STATES="${NUM_STATES:-20}"
+FORMAL_EXPECTED_COUNT="${FORMAL_EXPECTED_COUNT:-20}"
 SMOKE_TRIALS="${SMOKE_TRIALS:-3}"
 SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
@@ -42,6 +44,7 @@ TRAJECTORY_ROOT="${TRAJECTORY_ROOT:-${REVIEW_ROOT}/${RUN_TAG}_trajectories}"
 SMOKE_REPORT="${SMOKE_REPORT:-${REVIEW_ROOT}/L3-B_bowl_smoke_report.json}"
 FORMAL_REPORT="${FORMAL_REPORT:-${REVIEW_ROOT}/L3-B_bowl_formal_report.json}"
 HUMAN_APPROVAL="${HUMAN_APPROVAL:-${REVIEW_ROOT}/L3-B_bowl_human_approval.json}"
+REVIEW_SHEET="${REVIEW_SHEET:-${REVIEW_ROOT}/L3-B_bowl_policy_view_review_sheet.png}"
 
 LIBERO_ROOT="${LIBERO_ROOT:-}"
 if [[ -z "${LIBERO_ROOT}" && -d "_deps/LIBERO/libero" ]]; then
@@ -106,9 +109,11 @@ run_preflight() {
 validate_prepared() {
   "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_bowl_state_bundles.py" \
     --eb "${EB_STATES}" --er "${ER_STATES}" --ec "${EC_STATES}" \
+    --design-preregistration "${DESIGN_PREREGISTRATION}" \
     --initial-manifest "${INITIAL_GATE}" --out-json "${PAIRING_GATE}"
   "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_bowl_runtime_replay.py" \
     --eb "${EB_STATES}" --er "${ER_STATES}" --ec "${EC_STATES}" \
+    --design-preregistration "${DESIGN_PREREGISTRATION}" \
     --render-gpu-device-id "${RENDER_GPU_DEVICE_ID}" \
     --seed "${SCENE_SEED}" --out-json "${RUNTIME_REPLAY_GATE}"
   for condition in native premature_close prerequisite_done; do
@@ -117,7 +122,7 @@ validate_prepared() {
 }
 
 run_prepare() {
-  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_bowl_v1_design.py" \
+  "${PYTHON_BIN}" "${TASKS_DIR}/validate_l3b_bowl_design.py" \
     --preregistration "${DESIGN_PREREGISTRATION}"
   "${PYTHON_BIN}" "${TASKS_DIR}/generate_l3b_bowl_order_states.py" \
     --bddl "${NATIVE_BDDL}" \
@@ -126,6 +131,8 @@ run_prepare() {
     --num-states "${NUM_STATES}" --design-preregistration "${DESIGN_PREREGISTRATION}" \
     --seed "${SCENE_SEED}" --render-gpu-device-id "${RENDER_GPU_DEVICE_ID}"
   validate_prepared
+  "${PYTHON_BIN}" "${TASKS_DIR}/build_l3b_bowl_review_sheet.py" \
+    --manifest "${INITIAL_GATE}" --output "${REVIEW_SHEET}" --rows 5
   echo "L3-B bowl prepare PASS; formal remains unauthorized."
 }
 
@@ -142,9 +149,11 @@ run_eval() {
   local condition="$1" count="$2" stage="$3"
   local trajectory="${TRAJECTORY_ROOT}/${stage}/${condition}"
   local videos="${REVIEW_ROOT}/${stage}/${condition}"
+  local first_policy_images="${REVIEW_ROOT}/${stage}/first_policy/${condition}"
   require_empty_output "${trajectory}"
   require_empty_output "${videos}"
-  mkdir -p "${trajectory}" "${videos}"
+  require_empty_output "${first_policy_images}"
+  mkdir -p "${trajectory}" "${videos}" "${first_policy_images}"
   "${PYTHON_BIN}" -m experiments.robot.libero.run_physcog_libero_l1_eval \
     --model_family "${MODEL_FAMILY}" \
     --pretrained_checkpoint "${CHECKPOINT}" \
@@ -164,6 +173,7 @@ run_eval() {
     --seed "${EVAL_SEED}" --render_gpu_device_id "${RENDER_GPU_DEVICE_ID}" \
     --local_log_dir "${LOG_DIR}" --save_video_mode all --save_wrist_video True \
     --review_video_dir "${videos}" \
+    --first_policy_image_dir "${first_policy_images}" \
     --max_violation_videos 0 \
     --max_success_videos "${MAX_VIDEOS_PER_OUTCOME}" \
     --max_failure_videos "${MAX_VIDEOS_PER_OUTCOME}" \
@@ -180,7 +190,11 @@ run_smoke() {
     --eb "${TRAJECTORY_ROOT}/smoke/native" \
     --er "${TRAJECTORY_ROOT}/smoke/premature_close" \
     --ec "${TRAJECTORY_ROOT}/smoke/prerequisite_done" \
-    --expected-count "${SMOKE_TRIALS}" --out-json "${SMOKE_REPORT}"
+    --expected-count "${SMOKE_TRIALS}" \
+    --design-preregistration "${DESIGN_PREREGISTRATION}" \
+    --model-label "${MODEL_LABEL}" --model-family "${MODEL_FAMILY}" \
+    --checkpoint "${CHECKPOINT}" \
+    --out-json "${SMOKE_REPORT}"
   echo "Smoke complete. Human policy-view/video approval is still required."
 }
 
@@ -191,8 +205,8 @@ verify_human_approval() {
 run_formal() {
   validate_prepared >/dev/null
   verify_human_approval
-  if [[ "${NUM_STATES}" != "20" ]]; then
-    echo "Formal requires the preregistered 20-state pool." >&2
+  if [[ "${NUM_STATES}" != "${FORMAL_EXPECTED_COUNT}" ]]; then
+    echo "Formal requires the registered ${FORMAL_EXPECTED_COUNT}-state pool." >&2
     exit 2
   fi
   for condition in native premature_close prerequisite_done; do
@@ -203,6 +217,9 @@ run_formal() {
     --er "${TRAJECTORY_ROOT}/formal/premature_close" \
     --ec "${TRAJECTORY_ROOT}/formal/prerequisite_done" \
     --expected-count "${NUM_STATES}" \
+    --design-preregistration "${DESIGN_PREREGISTRATION}" \
+    --model-label "${MODEL_LABEL}" --model-family "${MODEL_FAMILY}" \
+    --checkpoint "${CHECKPOINT}" \
     --human-approval "${HUMAN_APPROVAL}" --smoke-report "${SMOKE_REPORT}" \
     --out-json "${FORMAL_REPORT}"
 }
@@ -216,7 +233,11 @@ case "${MODE}" in
       --eb "${TRAJECTORY_ROOT}/smoke/native" \
       --er "${TRAJECTORY_ROOT}/smoke/premature_close" \
       --ec "${TRAJECTORY_ROOT}/smoke/prerequisite_done" \
-      --expected-count "${SMOKE_TRIALS}" --out-json "${SMOKE_REPORT}"
+      --expected-count "${SMOKE_TRIALS}" \
+      --design-preregistration "${DESIGN_PREREGISTRATION}" \
+      --model-label "${MODEL_LABEL}" --model-family "${MODEL_FAMILY}" \
+      --checkpoint "${CHECKPOINT}" \
+      --out-json "${SMOKE_REPORT}"
     ;;
   formal) run_formal ;;
   *) echo "Usage: $0 prepare|check|smoke|summarize|formal" >&2; exit 2 ;;

@@ -35,8 +35,7 @@ from experiments.robot.libero.tasks.l3b_bowl_order_common import (
     sha256_path,
     state_sha256,
 )
-from experiments.robot.libero.tasks.validate_l3b_bowl_v1_design import (
-    OFFICIAL_STATE_INDICES,
+from experiments.robot.libero.tasks.validate_l3b_bowl_design import (
     validate_spec as validate_design_preregistration,
 )
 
@@ -135,11 +134,17 @@ def _expected_group(condition: str) -> dict:
     }
 
 
-def validate_one(path: str | Path, condition: str) -> list[dict]:
+def validate_one(
+    path: str | Path,
+    condition: str,
+    *,
+    design_preregistration: str | Path = DESIGN_PATH,
+) -> list[dict]:
     if condition not in CONDITIONS:
         raise ValueError(condition)
     path = Path(path).resolve(strict=True)
-    validate_design_preregistration(DESIGN_PATH)
+    design = validate_design_preregistration(design_preregistration)
+    official_state_indices = design["official_state_indices"]
     with h5py.File(path, "r") as handle:
         if set(handle) != {TASK_KEY}:
             raise ValueError(f"{path} has unexpected task keys")
@@ -152,7 +157,7 @@ def validate_one(path: str | Path, condition: str) -> list[dict]:
         if mismatches:
             raise ValueError(f"{path} group metadata mismatch: {mismatches}")
         count = int(group.attrs.get("count", -1))
-        if count != len(OFFICIAL_STATE_INDICES) or count != len(group):
+        if count != len(official_state_indices) or count != len(group):
             raise ValueError(f"{path} count mismatch")
         records = []
         for index in range(count):
@@ -172,7 +177,7 @@ def validate_one(path: str | Path, condition: str) -> list[dict]:
                 "condition_label": CONDITION_LABEL[condition],
                 "design_version": DESIGN_VERSION,
                 "episode_index": index,
-                "native_init_state_index": OFFICIAL_STATE_INDICES[index],
+                "native_init_state_index": official_state_indices[index],
                 "base_state_sha256": state_sha256(base),
                 "initial_state_sha256": state_sha256(initial),
                 "intervention_body": CONDITION_INTERVENTION_BODY[condition],
@@ -226,7 +231,7 @@ def validate_one(path: str | Path, condition: str) -> list[dict]:
                 {
                     "initial": initial,
                     "base": base,
-                    "native_index": OFFICIAL_STATE_INDICES[index],
+                    "native_index": official_state_indices[index],
                     "fixture_names": names,
                     "fixture_positions": positions,
                     "fixture_quaternions": quaternions,
@@ -239,10 +244,16 @@ def validate_one(path: str | Path, condition: str) -> list[dict]:
     return records
 
 
-def _validate_manifest(path: str | Path, bindings: dict[str, Path]) -> dict:
+def _validate_manifest(
+    path: str | Path,
+    bindings: dict[str, Path],
+    *,
+    design_preregistration: str | Path,
+) -> dict:
     path = Path(path).resolve(strict=True)
     record = json.loads(path.read_text(encoding="utf-8"))
-    design = validate_design_preregistration(DESIGN_PATH)
+    design = validate_design_preregistration(design_preregistration)
+    official_state_indices = design["official_state_indices"]
     if (
         record.get("verdict") != INITIAL_GATE_VERDICT
         or record.get("scenario") != SCENE_ID
@@ -250,7 +261,7 @@ def _validate_manifest(path: str | Path, bindings: dict[str, Path]) -> dict:
         or record.get("native_suite") != SUITE
         or int(record.get("native_task_id", -1)) != TASK_ID
         or record.get("native_prompt") != TASK_PROMPT
-        or record.get("official_native_state_indices") != OFFICIAL_STATE_INDICES
+        or record.get("official_native_state_indices") != official_state_indices
         or record.get("design_preregistration") != design
     ):
         raise ValueError("initial manifest identity/design mismatch")
@@ -271,13 +282,29 @@ def _validate_manifest(path: str | Path, bindings: dict[str, Path]) -> dict:
     return record
 
 
-def validate_pairing(eb_path, er_path, ec_path, *, initial_manifest) -> dict:
+def validate_pairing(
+    eb_path,
+    er_path,
+    ec_path,
+    *,
+    initial_manifest,
+    design_preregistration: str | Path = DESIGN_PATH,
+) -> dict:
     paths = {
         "native": Path(eb_path).resolve(strict=True),
         "premature_close": Path(er_path).resolve(strict=True),
         "prerequisite_done": Path(ec_path).resolve(strict=True),
     }
-    bundles = {condition: validate_one(path, condition) for condition, path in paths.items()}
+    design = validate_design_preregistration(design_preregistration)
+    official_state_indices = design["official_state_indices"]
+    bundles = {
+        condition: validate_one(
+            path,
+            condition,
+            design_preregistration=design_preregistration,
+        )
+        for condition, path in paths.items()
+    }
     count = len(bundles["native"])
     if any(len(records) != count for records in bundles.values()):
         raise ValueError("paired condition counts differ")
@@ -294,14 +321,17 @@ def validate_pairing(eb_path, er_path, ec_path, *, initial_manifest) -> dict:
         for field in ("fixture_positions", "fixture_quaternions"):
             if not np.array_equal(eb[field], er[field]) or not np.array_equal(eb[field], ec[field]):
                 raise ValueError(f"fixture pose mismatch at demo_{index}")
-    _validate_manifest(initial_manifest, paths)
-    design = validate_design_preregistration(DESIGN_PATH)
+    _validate_manifest(
+        initial_manifest,
+        paths,
+        design_preregistration=design_preregistration,
+    )
     return {
         "scenario": SCENE_ID,
         "design_version": DESIGN_VERSION,
         "verdict": PAIRING_VERDICT,
         "count": count,
-        "official_native_state_indices": OFFICIAL_STATE_INDICES,
+        "official_native_state_indices": official_state_indices,
         "design_preregistration": design,
         "initial_manifest": {
             "path": str(Path(initial_manifest).resolve(strict=True)),
@@ -325,9 +355,19 @@ def main() -> None:
     parser.add_argument("--er", required=True)
     parser.add_argument("--ec", required=True)
     parser.add_argument("--initial-manifest", required=True)
+    parser.add_argument(
+        "--design-preregistration",
+        default=str(DESIGN_PATH),
+    )
     parser.add_argument("--out-json", required=True)
     args = parser.parse_args()
-    result = validate_pairing(args.eb, args.er, args.ec, initial_manifest=args.initial_manifest)
+    result = validate_pairing(
+        args.eb,
+        args.er,
+        args.ec,
+        initial_manifest=args.initial_manifest,
+        design_preregistration=args.design_preregistration,
+    )
     output = Path(args.out_json)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")

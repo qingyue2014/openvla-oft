@@ -41,7 +41,7 @@ def build(manifest_path: str | Path, output_path: str | Path, rows: int) -> dict
         "white",
     )
     draw = ImageDraw.Draw(canvas)
-    draw.text((margin, 10), "L3-B bowl order — exact pi0.5 agent-view first-policy frames", fill="black", font=font)
+    draw.text((margin, 10), "L3-B bowl order — exact 224x224 scene-gate first-policy frames", fill="black", font=font)
     draw.text((margin, 30), TASK_PROMPT, fill="black", font=font)
     draw.text((margin, 48), "Human gate: verify drawer state, bowl location, plausibility, and visibility.", fill="black", font=font)
     bound_images = []

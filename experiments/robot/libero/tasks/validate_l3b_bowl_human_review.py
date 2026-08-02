@@ -43,6 +43,19 @@ def _video_inventory(review_root: Path) -> list[dict]:
     return result
 
 
+def _first_policy_image_inventory(review_root: Path) -> list[dict]:
+    image_root = review_root / "smoke" / "first_policy"
+    if not image_root.is_dir():
+        return []
+    return [
+        {
+            "relative_path": str(path.relative_to(review_root)),
+            "sha256": sha256_path(path),
+        }
+        for path in sorted(image_root.rglob("*.png"))
+    ]
+
+
 def create(*, review_root, smoke_report, reviewer, notes, out_json) -> dict:
     review_root = Path(review_root).resolve(strict=True)
     smoke_path = Path(smoke_report).resolve(strict=True)
@@ -51,6 +64,12 @@ def create(*, review_root, smoke_report, reviewer, notes, out_json) -> dict:
         raise ValueError("human approval must bind a valid L3-B bowl smoke report")
     if not reviewer.strip() or not notes.strip():
         raise ValueError("reviewer and non-empty review notes are required")
+    first_policy_images = _first_policy_image_inventory(review_root)
+    evaluation_version = int(
+        smoke.get("evaluation_design", {}).get("evaluation_version", 1)
+    )
+    if evaluation_version >= 2 and not first_policy_images:
+        raise ValueError("v2 human approval requires exact first-policy model inputs")
     result = {
         "scenario": SCENE_ID,
         "verdict": APPROVAL_VERDICT,
@@ -61,6 +80,7 @@ def create(*, review_root, smoke_report, reviewer, notes, out_json) -> dict:
         "smoke_report": str(smoke_path),
         "smoke_report_sha256": sha256_path(smoke_path),
         "videos": _video_inventory(review_root),
+        "first_policy_images": first_policy_images,
         "human_review_approved": True,
         "formal_authorized": True,
     }
@@ -87,6 +107,10 @@ def verify(path: str | Path, *, smoke_report: str | Path) -> dict:
     current = _video_inventory(root)
     if current != record.get("videos"):
         raise ValueError("review video inventory changed after approval")
+    if "first_policy_images" in record:
+        current_images = _first_policy_image_inventory(root)
+        if current_images != record.get("first_policy_images"):
+            raise ValueError("first-policy image inventory changed after approval")
     return record
 
 

@@ -1,0 +1,50 @@
+{
+  "preregistration_id": "l3b-bowl-order-v2-native50-20260802",
+  "scenario": "L3-B-BOWL-ORDER",
+  "design_version": 1,
+  "evaluation_version": 2,
+  "native_suite": "libero_10",
+  "native_task_id": 3,
+  "native_prompt": "put the black bowl in the bottom drawer of the cabinet and close it",
+  "official_state_indices": [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+    10, 11, 12, 13, 14, 15, 16, 17, 18, 19,
+    20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
+    30, 31, 32, 33, 34, 35, 36, 37, 38, 39,
+    40, 41, 42, 43, 44, 45, 46, 47, 48, 49
+  ],
+  "model_matrix": {
+    "pi05": "gs://openpi-assets/checkpoints/pi05_libero",
+    "openvla_oft": "moojink/openvla-7b-oft-finetuned-libero-10"
+  },
+  "conditions": {
+    "Eb": "native open drawer with bowl outside",
+    "Er": "empty bottom drawer prematurely closed",
+    "Ec": "bowl already in the open bottom drawer",
+    "Safe": "scripted real-action open, insert, close reference from Er"
+  },
+  "primary_er_event": "Close must transition true-to-false before In becomes true, then transition false-to-true after In",
+  "primary_metric": "fraction of Er episodes with full ordered rollback-and-repair trace",
+  "secondary_metrics": [
+    "native task success",
+    "rollback recognition rate",
+    "post-rollback insertion rate",
+    "post-insertion reclose rate"
+  ],
+  "physical_thresholds": {
+    "bowl_max_tilt_deg_throughout": 1.0,
+    "bottle_max_tilt_deg_throughout": 5.0,
+    "native_ten_step_spawn_settle_max_translation_m": 0.08,
+    "native_ten_step_spawn_settle_max_linear_speed_mps": 1.1,
+    "post_wait_hold_max_translation_m": 0.003,
+    "post_wait_hold_max_linear_speed_mps": 0.015,
+    "post_wait_hold_steps": 100,
+    "ec_construction_settle_steps": 100,
+    "ec_bowl_spawn_offset_above_bottom_region_center_m": 0.0,
+    "ec_drawer_joint_locked_during_construction": true
+  },
+  "threshold_scope": "physical calibration fixed before any policy rollout; native objects fall from the official serialized spawn height during the evaluator wait",
+  "comparison_design": "paired 50-state evaluation: both pi0.5 and OpenVLA-OFT use identical native indices and condition interventions",
+  "collision_oracle": false,
+  "formal_authorized": false
+}
