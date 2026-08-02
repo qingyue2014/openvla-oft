@@ -2306,6 +2306,7 @@ def test_500099_every_descent_requires_preventive_active_braking_settle():
         after_eef=after_eef,
     )
     assert evidence["settled"] is False
+    assert evidence["kinematic_brake_reversed"] is False
     assert evidence["violations"] == [
         "eef_still_descending_during_lateral_settle",
         "eef_still_moving_inward_during_lateral_settle",
@@ -2578,6 +2579,7 @@ def test_500111_one_positive_brake_response_cannot_release_settle_state():
         ),
     }
     assert first_confirmation["instantaneous_stable_response"] is True
+    assert first_confirmation["kinematic_brake_reversed"] is True
     assert first_confirmation["stable_response_count"] == 1
     assert first_confirmation["required_stable_response_count"] == 2
     assert first_confirmation["settled"] is False
@@ -3598,7 +3600,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         'elif structural_stage == "vertical_corridor_descent":', 1
     )[1].split('elif structural_stage == "vertical_corridor_settle":', 1)[0]
     assert "vertical_corridor_control_target" in vertical_corridor_action
-    assert "vertical_corridor_balanced_hold_target_xy" in (
+    assert 'active_vertical_corridor_envelope[' in (
         vertical_corridor_action
     )
     assert "balanced_outward_controller_hold_active" in (
@@ -4460,10 +4462,7 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     vertical_corridor_action = bounded_seek.split(
         'elif structural_stage == "vertical_corridor_descent":', 1
     )[1].split('elif structural_stage == "vertical_corridor_settle":', 1)[0]
-    assert (
-        "vertical_corridor_outward_hold_max_translation_action"
-        in vertical_corridor_action
-    )
+    assert "active_translation_action_bound" in vertical_corridor_action
     post_descent_lateral_action = bounded_seek.split(
         'elif structural_stage == "overhead_post_descent_corridor_lateral":',
         1,
@@ -8830,6 +8829,14 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert '"overhead_post_descent_corridor_lateral"' in bounded_seek
     assert '"vertical_corridor_descent"' in bounded_seek
     assert '"vertical_corridor_settle"' in bounded_seek
+    assert bounded_seek.count(
+        "active_vertical_corridor_envelope = ("
+    ) == 1
+    wrist_yaw = producer[
+        producer.index("def _execute_high_safe_wrist_yaw(") :
+        producer.index("\ndef _seek_stable_plate_contact(")
+    ]
+    assert "active_vertical_corridor_envelope" not in wrist_yaw
     settle_action = bounded_seek.split(
         'elif structural_stage == "vertical_corridor_settle":', 1
     )[1].split(
@@ -8837,7 +8844,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )[0]
     assert "_compiled_low_side_settle_brake_action(" in settle_action
     assert settle_action.count(
-        "vertical_corridor_outward_hold_max_translation_action"
+        'active_vertical_corridor_envelope['
     ) >= 2
     assert "compiled_low_side_settle_brake_envelope" in settle_action
     assert '"active_positive_z_brake_requested": True' in settle_action
@@ -8850,10 +8857,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     settle_transition = bounded_seek.split(
         'elif stage_before_action == "vertical_corridor_descent":', 1
     )[1].split('feedback["stage_after_action"]', 1)[0]
-    assert (
-        "after_eef[2] <= vertical_corridor_settle_brake_trigger_z"
-        in settle_transition
-    )
+    assert "settle_brake_trigger_z_m" in settle_transition
     trigger_condition = settle_transition.split(
         "if (", 1
     )[1].split("):", 1)[0]
@@ -8864,6 +8868,17 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert "full_outside_side_guard_not_accepted_during_settle" in (
         CONTROLLER_REFERENCE.read_text()
+    )
+    settle_transition_logic = bounded_seek.split(
+        'elif stage_before_action == "vertical_corridor_settle":', 1
+    )[1].split(
+        'elif stage_before_action == "vertical_corridor_descent":', 1
+    )[0]
+    assert "kinematic_brake_reversed" in settle_transition_logic
+    assert "settle_geometric_authority_release" in settle_transition_logic
+    assert "0.5 * previous_active_authority" in settle_transition_logic
+    assert "vertical_corridor_outward_hold_action_floor" in (
+        settle_transition_logic
     )
     assert '"fixed_safe_z_lateral_approach"' in bounded_seek
     assert (

@@ -140,6 +140,17 @@ Job503265 showed both that the old full-coverage entry prerequisite delayed the
 configured early trigger and that `Z=0.10` could not reverse the tail while
 `X≈0.195`; matching `Z=0.20` remains strictly inside the native 3-D norm and
 does not alter the contact-seek action limit.
+Once a settle frame above rim overlap measures nonnegative outward,
+outside-clearance, and Z response, the controller does not continue climbing.
+It halves the active side-corridor authority geometrically from `0.20` to
+`0.10` to a preregistered `0.05` floor, recomputes the outward hold and
+pre-brake height from that active bound, and resumes bounded descent. Positive-Z
+settle authority is `max(active_bound, 0.10)`. Job503269 showed that the
+unreleased `0.20` brake had already reversed inertia on its second response but
+then climbed for the remaining 84 actions because full rim coverage correctly
+remained false. The geometric schedule is allowed only after measured
+kinematic reversal and never substitutes for the final full-coverage plus
+two-frame settle gate.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
