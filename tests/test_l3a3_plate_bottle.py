@@ -3140,6 +3140,8 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert 0.9397046835577004 - 0.9403726320041634 == pytest.approx(
         -0.000667948446463007
     )
+    job503184_tail_handoff_upper_z = 0.9325011680386681 + 2.0 * 0.008
+    assert 0.9470836934130403 <= job503184_tail_handoff_upper_z
 
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
@@ -3166,11 +3168,10 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "tail_brake_formal_corridor_entry" in brake_transition
     assert "_overhead_corridor_entry_evidence(" in brake_transition
     assert 'structural_stage = "vertical_corridor_descent"' in brake_transition
-    assert (
-        'structural_stage = (\n'
-        '                            "overhead_post_descent_corridor_lateral"'
-        in brake_transition
-    )
+    assert '"overhead_post_descent_corridor_lateral"' in brake_transition
+    assert "within_tail_handoff_band" in brake_transition
+    assert "active_overhead_descent_brake_trigger_buffer" in brake_transition
+    assert "the existing event-driven overhead-descent" in brake_transition
     assert '"controller_handoff_diagnostic_only"' in brake_transition
     assert "vertical_tail_zero_confirmation" not in brake_transition
     assert "previous_active_translation_action / 2.0" in brake_transition

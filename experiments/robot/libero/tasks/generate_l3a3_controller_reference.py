@@ -15216,37 +15216,32 @@ def _seek_stable_plate_contact(
                     active_overhead_descent_brake_trigger_buffer = float(
                         2.0 * active_overhead_descent_world_step
                     )
-                    if tail_brake_formal_corridor_entry["accepted"]:
-                        structural_stage = "overhead_corridor_descent"
-                        recovered_event = (
-                            "tail_brake_formal_corridor_passed_to_bounded_"
-                            "overhead_descent"
-                        )
-                    else:
-                        structural_stage = (
-                            "overhead_post_descent_corridor_lateral"
-                        )
-                        overhead_horizontal_z = float(after_eef[2])
-                        recovered_event = (
-                            "tail_brake_recovered_above_staging_to_formal_"
-                            "corridor_correction"
-                        )
-                else:
-                    if tail_brake_formal_corridor_entry["accepted"]:
+                within_tail_handoff_band = bool(
+                    after_eef[2]
+                    <= overhead_staging_z
+                    + active_overhead_descent_brake_trigger_buffer
+                )
+                if tail_brake_formal_corridor_entry["accepted"]:
+                    if within_tail_handoff_band:
                         structural_stage = "vertical_corridor_descent"
                         recovered_event = (
-                            "tail_brake_formal_corridor_passed_at_staging_to_"
-                            "vertical_corridor"
+                            "tail_brake_formal_corridor_passed_inside_brake_"
+                            "band_to_vertical_corridor"
                         )
                     else:
-                        structural_stage = (
-                            "overhead_post_descent_corridor_lateral"
-                        )
-                        overhead_horizontal_z = float(after_eef[2])
+                        structural_stage = "overhead_corridor_descent"
                         recovered_event = (
-                            "tail_brake_recovered_at_staging_to_formal_"
-                            "corridor_correction"
+                            "tail_brake_formal_corridor_passed_above_brake_"
+                            "band_to_bounded_overhead_descent"
                         )
+                else:
+                    structural_stage = (
+                        "overhead_post_descent_corridor_lateral"
+                    )
+                    overhead_horizontal_z = float(after_eef[2])
+                    recovered_event = (
+                        "tail_brake_recovered_to_formal_corridor_correction"
+                    )
                 vertical_tail_brake_reason = None
                 vertical_tail_events.append(
                     {
@@ -15272,6 +15267,17 @@ def _seek_stable_plate_contact(
                         ),
                         "next_brake_trigger_buffer_m": (
                             active_overhead_descent_brake_trigger_buffer
+                        ),
+                        "within_tail_handoff_band": (
+                            within_tail_handoff_band
+                        ),
+                        "tail_handoff_band_upper_z_m": float(
+                            overhead_staging_z
+                            + active_overhead_descent_brake_trigger_buffer
+                        ),
+                        "tail_handoff_band_source": (
+                            "the existing event-driven overhead-descent "
+                            "brake-trigger buffer"
                         ),
                         "tail_recovery_descent_translation_action_floor": (
                             tail_recovery_descent_translation_action_floor
@@ -15334,19 +15340,20 @@ def _seek_stable_plate_contact(
                     lateral_rebuffer_controller_handoff
                 )
                 if lateral_rebuffer_formal_corridor_entry["accepted"]:
-                    above_staging_tolerance = bool(
+                    above_tail_handoff_band = bool(
                         after_eef[2]
-                        > overhead_staging_z + args.position_tolerance
+                        > overhead_staging_z
+                        + active_overhead_descent_brake_trigger_buffer
                     )
                     structural_stage = (
                         "overhead_corridor_descent"
-                        if above_staging_tolerance
+                        if above_tail_handoff_band
                         else "vertical_corridor_descent"
                     )
                     recovered_event = (
                         "lateral_rebuffer_formal_corridor_passed_to_bounded_"
                         "overhead_descent"
-                        if above_staging_tolerance
+                        if above_tail_handoff_band
                         else "lateral_rebuffer_formal_corridor_passed_to_"
                         "vertical_corridor"
                     )
@@ -15479,12 +15486,13 @@ def _seek_stable_plate_contact(
                     ),
                     "formal_corridor_acceptance_unchanged": True,
                 }
-                above_staging_tolerance = bool(
+                above_tail_handoff_band = bool(
                     after_eef[2]
-                    > overhead_staging_z + args.position_tolerance
+                    > overhead_staging_z
+                    + active_overhead_descent_brake_trigger_buffer
                 )
                 if (
-                    above_staging_tolerance
+                    above_tail_handoff_band
                     and (
                         (
                             correction_requires_pre_descent_controller_reserve
@@ -15527,7 +15535,7 @@ def _seek_stable_plate_contact(
                         }
                     )
                 elif (
-                    not above_staging_tolerance
+                    not above_tail_handoff_band
                     and corridor_entry_after_action["accepted"]
                     and correction_controller_handoff["accepted"]
                     and post_descent_vertical_tail_handoff_accepted
