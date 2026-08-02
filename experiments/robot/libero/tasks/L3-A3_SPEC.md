@@ -243,6 +243,16 @@ the safety brake. Job503462 showed that a half-strength below-band floor still
 extended the saturated outward-hold window to thirty frames before the
 controller entered the band. Authority is therefore reduced only after the
 live EEF is inside the unchanged height band.
+Job503463 showed that continuously pairing every vertically unstable frame with
+saturated `+X=0.20` was itself unsafe after the lateral target was accepted: a
+long outward command sequence developed an inward response tail and crossed
+the rim guard. Vertical capture now suspends any pending inward return to
+neutral XY while outside reserve is healthy. Outward action is activated only
+inside the existing recovery envelope. A measured inward EEF response there
+receives the full existing outward structural brake; otherwise the allocator
+requests only the exact nominal increment needed to refill the recovery
+threshold. This preserves the lateral-tolerance interlock without creating a
+new saturated outward tail.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

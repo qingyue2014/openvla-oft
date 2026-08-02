@@ -5137,6 +5137,7 @@ def _fixed_safe_z_lateral_hold_action(
     fixed_safe_z_m,
     vertical_position_tolerance_m,
     measured_vertical_step_progress_m,
+    measured_outward_step_progress_m,
     outside_side_guard,
     outward_direction_xy,
     gripper,
@@ -5164,6 +5165,7 @@ def _fixed_safe_z_lateral_hold_action(
         lateral_position_tolerance_m,
         vertical_position_tolerance_m,
         measured_vertical_step_progress_m,
+        measured_outward_step_progress_m,
         position_action_scale,
         maximum_lateral_translation_action,
         maximum_safety_brake_action,
@@ -5268,24 +5270,30 @@ def _fixed_safe_z_lateral_hold_action(
         commanded_xy_action = requested_xy_action.copy()
     if lateral_target_reached:
         commanded_xy_action = np.zeros(2, dtype=float)
+    vertical_capture_active = bool(
+        abs(measured_vertical_step_progress_m) > progress_resolution_m
+    )
+    commanded_inward_component = float(
+        np.dot(commanded_xy_action, outward_direction_xy)
+    )
+    inward_suspended_for_vertical_capture = bool(
+        vertical_capture_active and commanded_inward_component < 0.0
+    )
+    if inward_suspended_for_vertical_capture:
+        commanded_xy_action = np.zeros(2, dtype=float)
     predicted_outside_after_lateral = float(
         live_outside_clearance
         + position_action_scale
         * np.dot(commanded_xy_action, outward_direction_xy)
     )
-    vertical_capture_active = bool(
-        abs(measured_vertical_step_progress_m) > progress_resolution_m
-    )
     outside_recovery_active = bool(
-        vertical_capture_active
-        or live_outside_clearance <= outside_recovery_clearance
+        live_outside_clearance <= outside_recovery_clearance
         or predicted_outside_after_lateral <= outside_recovery_clearance
     )
-    if vertical_capture_active:
-        commanded_xy_action = (
-            outward_direction_xy * strict_safety_brake_bound
-        )
-    elif outside_recovery_active:
+    measured_inward_response = bool(
+        measured_outward_step_progress_m < -progress_resolution_m
+    )
+    if outside_recovery_active:
         required_outward_recovery_action = float(
             np.nextafter(
                 max(
@@ -5299,12 +5307,16 @@ def _fixed_safe_z_lateral_hold_action(
                 np.inf,
             )
         )
-        commanded_xy_action = (
-            outward_direction_xy
-            * min(
+        selected_outward_recovery_action = float(
+            strict_safety_brake_bound
+            if measured_inward_response
+            else min(
                 strict_safety_brake_bound,
                 required_outward_recovery_action,
             )
+        )
+        commanded_xy_action = (
+            outward_direction_xy * selected_outward_recovery_action
         )
 
     position_error_m = float(fixed_safe_z_m - current_eef[2])
@@ -5430,6 +5442,9 @@ def _fixed_safe_z_lateral_hold_action(
         "measured_vertical_step_progress_m": float(
             measured_vertical_step_progress_m
         ),
+        "measured_outward_step_progress_m": float(
+            measured_outward_step_progress_m
+        ),
         "progress_resolution_m": float(progress_resolution_m),
         "derivative_gain": float(derivative_gain),
         "requested_xy_action": requested_xy_action.tolist(),
@@ -5452,6 +5467,10 @@ def _fixed_safe_z_lateral_hold_action(
         "predicted_outside_clearance_m": predicted_outside_clearance,
         "outside_recovery_active": outside_recovery_active,
         "vertical_capture_active": vertical_capture_active,
+        "inward_suspended_for_vertical_capture": (
+            inward_suspended_for_vertical_capture
+        ),
+        "measured_inward_response": measured_inward_response,
         "live_table_clearance_m": live_table_clearance,
         "table_recovery_clearance_m": table_recovery_clearance,
         "predicted_table_clearance_m": predicted_table_clearance,
@@ -5473,7 +5492,9 @@ def _fixed_safe_z_lateral_hold_action(
             "lateral_return_bound_unchanged": True,
             "fixed_safe_z_held_during_every_lateral_frame": True,
             "no_inward_xy_after_lateral_tolerance": True,
-            "unstable_vertical_response_forces_outward_brake": True,
+            "unstable_vertical_response_suspends_inward_return": True,
+            "healthy_outside_reserve_avoids_outward_saturation": True,
+            "low_reserve_measured_inward_tail_uses_full_outward_brake": True,
             "below_height_band_retains_positive_z_floor": True,
             "inside_band_positive_response_unloads_without_negative_z": True,
             "downward_tail_uses_full_existing_positive_z_brake": True,
@@ -15482,6 +15503,9 @@ def _seek_stable_plate_contact(
                 overhead_horizontal_z=overhead_horizontal_z,
                 measured_vertical_step_progress_m=(
                     latest_vertical_step_progress_m
+                ),
+                measured_outward_step_progress_m=(
+                    latest_outward_step_progress_m
                 ),
                 overhead_guard=latest_overhead_guard,
                 gripper=gripper,
