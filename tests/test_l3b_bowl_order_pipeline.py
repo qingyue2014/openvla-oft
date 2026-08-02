@@ -238,6 +238,23 @@ def test_v2r1_runner_is_pi05_only_and_uses_fresh_evidence_paths():
     assert "openvla" not in runner.lower()
 
 
+def test_v2r2_runner_freezes_cross_platform_qpos_and_pi05_only():
+    runner = (TASKS / "run_l3b_bowl_order_v2r2.sh").read_text(encoding="utf-8")
+    design = validate_registered_design(TASKS / "l3b_bowl_v2r2_design_prereg.json")
+    assert design["preregistration_id"] == "l3b-bowl-order-v2r2-native50-20260802"
+    assert design["evaluation_version"] == 4
+    assert design["physical_thresholds"]["er_closed_drawer_target_qpos"] == 0.001
+    assert design["model_matrix"] == {
+        "pi05": "gs://openpi-assets/checkpoints/pi05_libero"
+    }
+    assert design["official_state_indices"] == list(range(50))
+    assert design["safe_witness_episode_indices"] == [0, 1, 2, 3, 4]
+    assert "NUM_STATES=50" in runner
+    assert "L3-B_bowl_order_v2r2_pi05_task" in runner
+    assert "pi05_smoke|pi05_formal" in runner
+    assert "openvla" not in runner.lower()
+
+
 def test_human_approval_inventory_is_stable_after_formal_videos(tmp_path):
     smoke = tmp_path / "smoke" / "native"
     formal = tmp_path / "formal" / "native"

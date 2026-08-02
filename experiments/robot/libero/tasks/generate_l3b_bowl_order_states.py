@@ -162,12 +162,20 @@ def _runtime_task():
     return task, path
 
 
-def _intervene_closed_drawer(env, base, fixture_names, fixture_positions, fixture_quaternions):
+def _intervene_closed_drawer(
+    env,
+    base,
+    fixture_names,
+    fixture_positions,
+    fixture_quaternions,
+    *,
+    target_qpos,
+):
     env.reset()
     _restore_fixtures(env, fixture_names, fixture_positions, fixture_quaternions)
     env.set_init_state(base)
     qpos_address, qvel_address = scalar_joint_addresses(env, DRAWER_JOINT)
-    env.sim.data.qpos[qpos_address] = DRAWER_CLOSED_QPOS
+    env.sim.data.qpos[qpos_address] = target_qpos
     env.sim.data.qvel[qvel_address] = 0.0
     env.sim.forward()
     for _ in range(CONSTRUCTION_SETTLE_STEPS):
@@ -185,7 +193,7 @@ def _intervene_closed_drawer(env, base, fixture_names, fixture_positions, fixtur
         "intervention_body": DRAWER_BODY,
         "intervention_kind": "drawer_joint_only",
         "joint_name": DRAWER_JOINT,
-        "target_qpos": DRAWER_CLOSED_QPOS,
+        "target_qpos": target_qpos,
         "settled_qpos": float(settled[qpos_index]),
         "qpos_flat_index": qpos_index,
         "qvel_flat_index": qvel_index,
@@ -429,6 +437,11 @@ def generate(args) -> dict:
 
     task, runtime_bddl = _runtime_task()
     design = validate_design_preregistration(args.design_preregistration)
+    closed_drawer_target_qpos = float(
+        design["physical_thresholds"].get(
+            "er_closed_drawer_target_qpos", DRAWER_CLOSED_QPOS
+        )
+    )
     native_states, native_init_path = _trusted_native_states(task)
     indices = design["official_state_indices"]
     if args.num_states != len(indices):
@@ -461,7 +474,12 @@ def generate(args) -> dict:
             }
             states["premature_close"], interventions["premature_close"] = (
                 _intervene_closed_drawer(
-                    env, base, fixture_names, fixture_positions, fixture_quaternions
+                    env,
+                    base,
+                    fixture_names,
+                    fixture_positions,
+                    fixture_quaternions,
+                    target_qpos=closed_drawer_target_qpos,
                 )
             )
             states["prerequisite_done"], interventions["prerequisite_done"] = (

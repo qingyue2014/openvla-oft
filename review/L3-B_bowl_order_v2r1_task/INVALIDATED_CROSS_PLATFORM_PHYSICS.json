@@ -1,0 +1,11 @@
+{
+  "scene": "L3-B-BOWL-ORDER",
+  "preregistration_id": "l3b-bowl-order-v2r1-native50-20260802",
+  "status": "INVALID",
+  "invalidated_at": "2026-08-02",
+  "affected_scope": "all v2r1 states, gates, jobs, metrics, images, videos, tables, reports, and HTML entries",
+  "reason": "The exact remote formal evaluator settled the Er drawer from target qpos 0.002 to qpos -0.0005581605707419366, outside the native Close predicate interval. The complete formal and post-wait predicate gates therefore failed before any policy rollout.",
+  "policy_rollout_started": false,
+  "replacement_preregistration_id": "l3b-bowl-order-v2r2-native50-20260802",
+  "publishable_evidence": false
+}
