@@ -14431,8 +14431,37 @@ def _seek_stable_plate_contact(
                 ),
             }
         elif structural_stage == "vertical_tail_zero_confirmation":
-            action = np.zeros(7, dtype=float)
-            action[-1] = float(gripper)
+            zero_z_confirmation_target_xy = np.asarray(
+                corridor_correction_hold_target_xy, dtype=float
+            ).copy()
+            if float(
+                np.dot(
+                    zero_z_confirmation_target_xy - current_eef[:2],
+                    corridor_outward_direction,
+                )
+            ) <= 0.0:
+                zero_z_confirmation_target_xy = current_eef[:2].copy()
+            action, path_control = _fixed_z_lateral_approach_action(
+                current_eef=current_eef,
+                lateral_target_xy=zero_z_confirmation_target_xy,
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                maximum_translation_action=(
+                    post_descent_lateral_max_translation_action
+                ),
+            )
+            if (
+                action[2] != 0.0
+                or np.any(action[3:6] != 0.0)
+                or float(
+                    np.dot(action[:2], corridor_outward_direction)
+                )
+                < 0.0
+            ):
+                raise RuntimeError(
+                    "vertical-tail zero-Z confirmation violated its "
+                    "one-sided outward action proof"
+                )
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
@@ -14442,13 +14471,31 @@ def _seek_stable_plate_contact(
                 "zero_z_confirmation": {
                     "formula": (
                         "after measured dz is nonnegative and every compiled "
-                        "pair exceeds the 16 mm lateral-entry buffer, issue "
-                        "one zero-translation action and require its measured "
-                        "dz to remain nonnegative; this is an event response, "
+                        "pair exceeds the registered lateral-entry buffer, "
+                        "issue one zero-Z, zero-rotation, one-sided outward "
+                        "XY action toward the existing correction target and "
+                        "require its measured dz to remain nonnegative; this "
+                        "confirms the control mode that will actually resume, "
                         "not a fixed-N settling window"
+                    ),
+                    "fixed_z_lateral_path_control": path_control,
+                    "target_xy": zero_z_confirmation_target_xy.tolist(),
+                    "outward_direction_xy": (
+                        corridor_outward_direction.tolist()
                     ),
                     "commanded_xy_action": action[:2].tolist(),
                     "commanded_z_action": float(action[2]),
+                    "one_sided_outward_command": bool(
+                        float(
+                            np.dot(
+                                action[:2], corridor_outward_direction
+                            )
+                        )
+                        >= 0.0
+                    ),
+                    "pre_action_buffer16_authorized": bool(
+                        latest_overhead_lateral_buffer["accepted"]
+                    ),
                     "pre_action_measured_vertical_step_progress_m": (
                         latest_vertical_step_progress_m
                     ),
@@ -14744,6 +14791,8 @@ def _seek_stable_plate_contact(
                         if (
                             stage_before_action
                             in fixed_buffer_lateral_stages
+                            or stage_before_action
+                            == "vertical_tail_zero_confirmation"
                             or (
                                 stage_before_action
                                 == "lateral_rebuffer_brake"

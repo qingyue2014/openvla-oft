@@ -3158,6 +3158,12 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     )[1].split("current_step_response = (", 1)[0]
     assert '== "overhead_corridor_descent"' in post_action_buffer_refresh
     assert '== "vertical_tail_brake"' in post_action_buffer_refresh
+    assert '== "vertical_tail_zero_confirmation"' in (
+        post_action_buffer_refresh
+    )
+    assert "maximum_post_descent_lateral_world_step" in (
+        post_action_buffer_refresh
+    )
     assert "maximum_overhead_descent_world_step" in (
         post_action_buffer_refresh
     )
@@ -3179,6 +3185,20 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         'elif structural_stage == "vertical_tail_zero_confirmation"'
         in bounded_seek
     )
+    zero_z_action_branch = bounded_seek.split(
+        'elif structural_stage == "vertical_tail_zero_confirmation":', 1
+    )[1].split(
+        'elif structural_stage == "overhead_high_corridor_lateral":', 1
+    )[0]
+    assert "_fixed_z_lateral_approach_action(" in zero_z_action_branch
+    assert "corridor_correction_hold_target_xy" in zero_z_action_branch
+    assert "corridor_outward_direction" in zero_z_action_branch
+    assert "post_descent_lateral_max_translation_action" in (
+        zero_z_action_branch
+    )
+    assert '"one_sided_outward_command"' in zero_z_action_branch
+    assert "action[2] != 0.0" in zero_z_action_branch
+    assert "action = np.zeros(7" not in zero_z_action_branch
     assert '"commanded_z_action": float(action[2])' in bounded_seek
     assert "measured_vertical_step_progress_m >= 0.0" in bounded_seek
     assert 'latest_overhead_lateral_buffer["accepted"]' in bounded_seek
