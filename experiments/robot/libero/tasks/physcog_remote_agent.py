@@ -1805,7 +1805,7 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "OPENPI_ROOT=/home/drwqyhappy/04-mycode/openpi-15a9616",
             "RENDER_GPU_DEVICE_ID=1",
             "NUM_STATES=20",
-            "MAX_VIDEOS_PER_OUTCOME=10",
+            "MAX_VIDEOS_PER_OUTCOME=5",
             "RUN_TAG=remote_formal_v1",
             "SERVER_LOG=experiments/logs/l3b_bowl_pi05_formal_server.log",
             "bash",

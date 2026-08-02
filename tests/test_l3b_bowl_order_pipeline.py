@@ -21,6 +21,9 @@ from experiments.robot.libero.tasks.validate_l3b_bowl_v1_design import (
     OFFICIAL_STATE_INDICES,
     validate_spec,
 )
+from experiments.robot.libero.tasks.validate_l3b_bowl_human_review import (
+    _video_inventory,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,10 +128,25 @@ def test_runner_is_native_only_event_based_and_formal_fail_closed():
     assert '--smoke-report "${SMOKE_REPORT}"' in runner
     assert 'NUM_STATES="${NUM_STATES:-20}"' in runner
     assert 'FORMAL_WAIT_STEPS=10' in runner
+    assert 'MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-5}"' in runner
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper
     assert 'runtime_scene == "L3-B-BOWL-ORDER"' in evaluator
     assert "BowlOrderSequenceTracker" in evaluator
     assert "l3b_bowl_sequence" in evaluator
+
+
+def test_human_approval_inventory_is_stable_after_formal_videos(tmp_path):
+    smoke = tmp_path / "smoke" / "native"
+    formal = tmp_path / "formal" / "native"
+    smoke.mkdir(parents=True)
+    formal.mkdir(parents=True)
+    for index in range(6):
+        (smoke / f"smoke_{index}.mp4").write_bytes(bytes([index]))
+    for index in range(12):
+        (formal / f"formal_{index}.mp4").write_bytes(bytes([index]))
+    inventory = _video_inventory(tmp_path)
+    assert len(inventory) == 6
+    assert all(item["relative_path"].startswith("smoke/native/") for item in inventory)
 
 
 def test_spec_states_workload_limit_and_non_memory_claim():

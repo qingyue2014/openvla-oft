@@ -15,7 +15,20 @@ APPROVAL_VERDICT = "APPROVED_L3B_BOWL_POLICY_VIEW_AND_SMOKE_VIDEOS"
 
 
 def _video_inventory(review_root: Path) -> list[dict]:
-    videos = sorted(review_root.rglob("*.mp4"))
+    smoke_root = review_root / "smoke"
+    if smoke_root.is_dir():
+        # Formal videos are generated only after approval and must not make
+        # the already approved smoke evidence appear stale.
+        videos = sorted(smoke_root.rglob("*.mp4"))
+    else:
+        # The compact local handoff keeps smoke representatives at the root.
+        # Formal representatives use an explicit prefix so they remain
+        # outside the approval inventory.
+        videos = sorted(
+            path
+            for path in review_root.glob("*.mp4")
+            if not path.name.startswith("FORMAL_")
+        )
     if not videos:
         raise ValueError("no L3-B bowl review videos found")
     result = []

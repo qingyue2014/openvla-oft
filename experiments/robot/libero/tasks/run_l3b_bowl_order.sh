@@ -20,7 +20,9 @@ SCENE_SEED="${SCENE_SEED:-42}"
 EVAL_SEED="${EVAL_SEED:-42}"
 FORMAL_WAIT_STEPS=10
 POST_SUCCESS_SETTLE_STEPS="${POST_SUCCESS_SETTLE_STEPS:-100}"
-MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-10}"
+# The evaluator writes both agent-view and wrist videos. Five episode pairs
+# therefore enforce the repository policy of at most ten videos per outcome.
+MAX_VIDEOS_PER_OUTCOME="${MAX_VIDEOS_PER_OUTCOME:-5}"
 RUN_TAG="${RUN_TAG:-pi05_v1}"
 
 TASKS_DIR="experiments/robot/libero/tasks"
