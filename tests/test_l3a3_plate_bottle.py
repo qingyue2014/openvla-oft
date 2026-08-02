@@ -3377,7 +3377,6 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert "_vertical_corridor_reserve_recovery_evidence(" in (
         vertical_corridor_action
     )
-    assert "active_positive_z_brake" in vertical_corridor_action
     assert "negative_z_descent_suspended_for_reserve_recovery" in (
         vertical_corridor_action
     )
@@ -3393,6 +3392,18 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     )
     assert '"vertical_brake", "exit_brake"' in vertical_corridor_action
     assert '== "outward_restore"' in vertical_corridor_action
+    assert "_live_compiled_overhead_guard(" in vertical_corridor_action
+    assert "_overhead_lateral_buffer_evidence(" in vertical_corridor_action
+    assert "_compiled_adaptive_lateral_rebuffer_action(" in (
+        vertical_corridor_action
+    )
+    assert "post_descent_lateral_max_translation_action" in (
+        vertical_corridor_action
+    )
+    assert "compiled_tail_brake_reused_for_reserve_recovery" in (
+        vertical_corridor_action
+    )
+    assert "strictly positive Z" in vertical_corridor_action
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
     brake_action_branch = bounded_seek.split(
         'elif structural_stage == "vertical_tail_brake":', 1

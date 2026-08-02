@@ -14196,6 +14196,7 @@ def _seek_stable_plate_contact(
         correction_lateral_target_xy = None
         correction_requires_pre_descent_controller_reserve = False
         correction_uses_high_z_hold_target = False
+        vertical_corridor_compiled_tail_brake_active = False
         if stage_before_action == "overhead_high_corridor_lateral":
             (
                 prepared_high_lateral_action,
@@ -14868,6 +14869,9 @@ def _seek_stable_plate_contact(
                 vertical_corridor_reserve_recovery_phase
                 in {"vertical_brake", "exit_brake"}
             )
+            vertical_corridor_compiled_tail_brake_active = bool(
+                reserve_recovery_vertical_brake_required
+            )
             reserve_recovery_outward_only_active = bool(
                 vertical_corridor_reserve_recovery_phase
                 == "outward_restore"
@@ -14892,28 +14896,84 @@ def _seek_stable_plate_contact(
                 if reserve_recovery_outward_only_active
                 else vertical_corridor_balanced_hold_target_xy
             )
-            action, path_control = (
-                _constraint_prioritized_outside_descent_action(
-                    current_eef=current_eef,
-                    outside_side_target=vertical_corridor_control_target,
-                    outward_direction_xy=geometry[
-                        "outward_direction_xy"
-                    ],
-                    maximum_descent_m=(
-                        0.0
-                        if vertical_corridor_reserve_recovery_active
-                        else maximum_descent
-                    ),
-                    gripper=gripper,
-                    position_action_scale=args.position_action_scale,
-                    maximum_translation_action=(
-                        vertical_corridor_descent_max_translation_action
-                    ),
-                    active_positive_z_brake=(
-                        reserve_recovery_vertical_brake_required
-                    ),
+            if vertical_corridor_compiled_tail_brake_active:
+                latest_overhead_guard = _live_compiled_overhead_guard(
+                    env, overhead_staging_geometry
                 )
-            )
+                overhead_guard_checks += 1
+                latest_overhead_lateral_buffer = (
+                    _overhead_lateral_buffer_evidence(
+                        latest_overhead_guard,
+                        worst_case_controller_world_step_m=(
+                            maximum_post_descent_lateral_world_step
+                        ),
+                    )
+                )
+                if not (
+                    latest_overhead_guard["accepted"]
+                    and latest_overhead_lateral_buffer["accepted"]
+                ):
+                    raise RuntimeError(
+                        "vertical-corridor reserve recovery lacks its live "
+                        "compiled overhead tail-brake proof: "
+                        f"guard_step={guard_step} overhead_guard="
+                        f"{json.dumps(latest_overhead_guard, sort_keys=True)} "
+                        f"lateral_buffer="
+                        f"{json.dumps(latest_overhead_lateral_buffer, sort_keys=True)}"
+                    )
+                action, path_control = (
+                    _compiled_adaptive_lateral_rebuffer_action(
+                        current_eef=current_eef,
+                        overhead_guard=latest_overhead_guard,
+                        overhead_lateral_buffer=(
+                            latest_overhead_lateral_buffer
+                        ),
+                        outside_side_guard=pre_action_guard,
+                        gripper=gripper,
+                        position_action_scale=args.position_action_scale,
+                        native_action_spec=native_action_spec,
+                        expected_pair_count=expected_overhead_pair_count,
+                        worst_case_controller_world_step_m=(
+                            maximum_post_descent_lateral_world_step
+                        ),
+                        lateral_target_xy=(
+                            corridor_correction_hold_target_xy
+                        ),
+                        one_sided_outward_direction_xy=(
+                            corridor_outward_direction
+                        ),
+                        maximum_lateral_translation_action=(
+                            post_descent_lateral_max_translation_action
+                        ),
+                    )
+                )
+                if action[2] <= 0.0:
+                    raise RuntimeError(
+                        "vertical-corridor compiled reserve brake failed "
+                        "to command strictly positive Z"
+                    )
+            else:
+                action, path_control = (
+                    _constraint_prioritized_outside_descent_action(
+                        current_eef=current_eef,
+                        outside_side_target=(
+                            vertical_corridor_control_target
+                        ),
+                        outward_direction_xy=geometry[
+                            "outward_direction_xy"
+                        ],
+                        maximum_descent_m=(
+                            0.0
+                            if vertical_corridor_reserve_recovery_active
+                            else maximum_descent
+                        ),
+                        gripper=gripper,
+                        position_action_scale=args.position_action_scale,
+                        maximum_translation_action=(
+                            vertical_corridor_descent_max_translation_action
+                        ),
+                    )
+                )
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
@@ -14924,7 +14984,9 @@ def _seek_stable_plate_contact(
                 "active_vertical_corridor_control_target": (
                     vertical_corridor_control_target.tolist()
                 ),
-                "balanced_outward_controller_hold_active": True,
+                "balanced_outward_controller_hold_active": bool(
+                    not vertical_corridor_reserve_recovery_active
+                ),
                 "balanced_outward_controller_hold_world_step_m": (
                     vertical_corridor_balanced_hold_world_step
                 ),
@@ -14951,6 +15013,26 @@ def _seek_stable_plate_contact(
                 "reserve_recovery_outward_only_target_source": (
                     "existing 8 mm post-descent correction-hold target"
                     if reserve_recovery_outward_only_active
+                    else None
+                ),
+                "compiled_tail_brake_reused_for_reserve_recovery": (
+                    vertical_corridor_compiled_tail_brake_active
+                ),
+                "compiled_reserve_recovery_tail_brake_envelope": (
+                    path_control
+                    if vertical_corridor_compiled_tail_brake_active
+                    else None
+                ),
+                "pre_action_reserve_recovery_overhead_guard": (
+                    latest_overhead_guard
+                    if vertical_corridor_compiled_tail_brake_active
+                    else None
+                ),
+                "pre_action_reserve_recovery_lateral_buffer": (
+                    _overhead_lateral_buffer_frame_summary(
+                        latest_overhead_lateral_buffer
+                    )
+                    if vertical_corridor_compiled_tail_brake_active
                     else None
                 ),
                 "negative_z_descent_suspended_for_reserve_recovery": bool(
@@ -15061,7 +15143,10 @@ def _seek_stable_plate_contact(
             feedback["native_cabinet_detour_post_guard"] = (
                 cabinet_detour_post_guard
             )
-        if stage_before_action in overhead_route_stages:
+        if (
+            stage_before_action in overhead_route_stages
+            or vertical_corridor_compiled_tail_brake_active
+        ):
             latest_overhead_guard = _live_compiled_overhead_guard(
                 env, overhead_staging_geometry
             )
@@ -15075,7 +15160,8 @@ def _seek_stable_plate_contact(
                     worst_case_controller_world_step_m=(
                         maximum_post_descent_lateral_world_step
                         if (
-                            stage_before_action
+                            vertical_corridor_compiled_tail_brake_active
+                            or stage_before_action
                             in fixed_buffer_lateral_stages
                             or (
                                 stage_before_action
@@ -15990,7 +16076,10 @@ def _seek_stable_plate_contact(
                 "outside_side_guard": latest_outside_side_guard,
                 **(
                     {"compiled_overhead_guard": latest_overhead_guard}
-                    if stage_before_action in overhead_route_stages
+                    if (
+                        stage_before_action in overhead_route_stages
+                        or vertical_corridor_compiled_tail_brake_active
+                    )
                     else {}
                 ),
                 **(
@@ -16001,7 +16090,10 @@ def _seek_stable_plate_contact(
                             )
                         )
                     }
-                    if stage_before_action in overhead_route_stages
+                    if (
+                        stage_before_action in overhead_route_stages
+                        or vertical_corridor_compiled_tail_brake_active
+                    )
                     else {}
                 ),
                 **(
@@ -16040,7 +16132,10 @@ def _seek_stable_plate_contact(
             ]
         )
         if (
-            stage_before_action in overhead_route_stages
+            (
+                stage_before_action in overhead_route_stages
+                or vertical_corridor_compiled_tail_brake_active
+            )
             and not latest_overhead_guard["accepted"]
         ):
             structural_violations.append(
