@@ -829,6 +829,19 @@ the same derived `1.2 mm` boundary. The Job503895 state therefore requests
 overshoot hard unload remain unchanged, as do all physical thresholds, route,
 budget, task, inventory, state, prompt, goal, and intervention fields.
 
+Job503896 demonstrated monotonic convergence under that extension. From steps
+202 through 206, Z actions decreased from `0.195646` to `0.155825` and response
+fell from `+0.365971 mm` to `+0.050858 mm`, only `0.000858 mm` above the
+unchanged stability limit. The next `-0.071219 mm` response projected the EEF
+to remain `0.405805 mm` above safe Z, but the generic downward-tail rule issued
+the full `+0.20` brake and restarted the oscillation. A downward response now
+continues incremental PD only when the EEF is above safe Z, the previous Z
+action is native-bounded and nonnegative, the response is non-severe, all live
+reserves pass, and its one-response projection does not cross below the
+existing lower position band. Every other downward tail retains the full
+positive brake. No threshold, route, budget, task, inventory, state, prompt,
+goal, or intervention changes.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

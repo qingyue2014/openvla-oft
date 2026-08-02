@@ -1016,7 +1016,7 @@ def test_fixed_safe_z_lateral_hold_retains_job503642_downward_z_brake():
     assert evidence["downward_tail_brake_active"] is True
     assert evidence["negative_z_suspended_for_outside_recovery"] is False
     assert evidence["proof"][
-        "every_measured_downward_tail_uses_full_positive_z"
+        "every_untracked_downward_tail_uses_full_positive_z"
     ] is True
 
 
@@ -1763,6 +1763,74 @@ def test_fixed_safe_z_lateral_hold_tracks_job503895_near_zero_response():
     assert evidence["positive_z_release_slew_applied"] is False
     assert evidence["proof"][
         "captured_safe_z_hold_tracks_shallow_projected_overshoot"
+    ] is True
+
+
+def test_fixed_safe_z_lateral_hold_tracks_job503896_shallow_downward_tail():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13308893554659804, -0.023956066354463425, 0.9210583125346704]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=-0.00007121941511323282,
+        measured_outward_step_progress_m=-0.00007284970849391614,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0018083458778041933,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.00841571660159568,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array(
+            [0.20, 0.0, 0.15582544466440065]
+        ),
+        maximum_positive_safety_release_action=0.05,
+    )
+    assert action[:3] == pytest.approx(
+        [0.20, 0.0, 0.15164312956357626]
+    )
+    assert evidence["measured_downward_tail"] is True
+    assert evidence[
+        "shallow_above_band_downward_tracking_requested"
+    ] is True
+    assert evidence["downward_tail_brake_active"] is False
+    assert evidence[
+        "downward_tail_projected_position_error_m"
+    ] == pytest.approx(-0.00040580462317918453)
+    assert evidence["captured_safe_z_response_hold_requested"] is True
+    assert evidence[
+        "captured_safe_z_response_hold_correction"
+    ] == pytest.approx(-0.004182315100824396)
+    assert evidence["proof"][
+        "shallow_above_band_downward_tail_uses_incremental_pd"
+    ] is True
+    assert evidence["proof"][
+        "projected_below_band_downward_tail_retains_full_brake"
     ] is True
 
 

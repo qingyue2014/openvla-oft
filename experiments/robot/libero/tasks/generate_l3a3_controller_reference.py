@@ -5462,7 +5462,25 @@ def _fixed_safe_z_lateral_hold_action(
             "fixed-safe-Z vertical confirmation hold lacks its "
             "registered stability reserve"
         )
-    downward_tail_brake_active = measured_downward_tail
+    downward_tail_projected_position_error_m = float(
+        position_error_m - measured_vertical_step_progress_m
+    )
+    shallow_above_band_downward_tracking_requested = bool(
+        release_slew_enabled
+        and above_safe_z_band
+        and measured_downward_tail
+        and not severe_vertical_response
+        and not table_recovery_active
+        and live_outside_clearance > outside_recovery_exit_clearance
+        and live_table_clearance > table_recovery_clearance
+        and previous_commanded_action_xyz[2] >= 0.0
+        and downward_tail_projected_position_error_m
+        <= vertical_position_tolerance_m
+    )
+    downward_tail_brake_active = bool(
+        measured_downward_tail
+        and not shallow_above_band_downward_tracking_requested
+    )
     positive_response_unload_active = bool(
         inside_safe_z_band
         and measured_vertical_step_progress_m > progress_resolution_m
@@ -5823,6 +5841,12 @@ def _fixed_safe_z_lateral_hold_action(
         "table_recovery_active": table_recovery_active,
         "measured_downward_tail": measured_downward_tail,
         "downward_tail_brake_active": downward_tail_brake_active,
+        "downward_tail_projected_position_error_m": (
+            downward_tail_projected_position_error_m
+        ),
+        "shallow_above_band_downward_tracking_requested": (
+            shallow_above_band_downward_tracking_requested
+        ),
         "below_safe_z_band": below_safe_z_band,
         "above_safe_z_band": above_safe_z_band,
         "inside_safe_z_band": inside_safe_z_band,
@@ -5852,6 +5876,8 @@ def _fixed_safe_z_lateral_hold_action(
             "safe_z_unload_is_required": True,
             "safe_z_upward_overshoot_uses_guard_bounded_pd_command": True,
             "downward_tail_retains_positive_release_slew": True,
+            "shallow_above_band_downward_tail_uses_incremental_pd": True,
+            "projected_below_band_downward_tail_retains_full_brake": True,
             "captured_safe_z_stable_response_retains_predecessor": True,
             "captured_safe_z_hold_uses_incremental_pd_correction": True,
             "captured_safe_z_hold_requires_live_clearance_reserve": True,
@@ -5869,7 +5895,7 @@ def _fixed_safe_z_lateral_hold_action(
             "outside_recovery_suspends_negative_z": True,
             "below_height_band_retains_positive_z_floor": True,
             "inside_band_positive_response_unloads_without_negative_z": True,
-            "every_measured_downward_tail_uses_full_positive_z": True,
+            "every_untracked_downward_tail_uses_full_positive_z": True,
             "low_outside_reserve_suspends_inward_return": True,
             "negative_z_uses_at_most_half_live_table_reserve": True,
             "strictly_inside_runtime_native_translation_norm": True,
