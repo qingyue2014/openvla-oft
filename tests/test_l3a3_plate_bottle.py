@@ -3514,11 +3514,66 @@ def test_500174_lateral_rebuffer_is_adaptive_and_skips_repeat_zero():
         "minimum_predicted_post_command_buffer16_surplus_m"
     ] > 0.008
 
+    # When the rebuffer will resume the registered post-descent correction,
+    # retain its one-sided outward drive while the exact +Z deficit/tail is
+    # refilled.  The lateral component is independently capped and the whole
+    # translation remains strictly inside the runtime-native 3-D norm.
+    correction_current = np.array(
+        [0.13058111691187727, -0.028505282763058467, 0.9400816244000332]
+    )
+    correction_target = np.array([0.140871, -0.028508])
+    combined_action, combined_proof = (
+        _compiled_adaptive_lateral_rebuffer_action(
+            current_eef=correction_current,
+            overhead_guard=overhead_guard,
+            overhead_lateral_buffer=lateral_buffer,
+            outside_side_guard=outside_guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native_spec,
+            expected_pair_count=55,
+            worst_case_controller_world_step_m=0.008,
+            lateral_target_xy=correction_target,
+            one_sided_outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_lateral_translation_action=0.10,
+        )
+    )
+    assert combined_action[0] > 0.0
+    assert combined_action[1] < 0.0
+    assert combined_action[2] == pytest.approx(action[2])
+    assert np.linalg.norm(combined_action[:2]) < 0.10
+    assert np.linalg.norm(combined_action[:3]) < 1.0
+    assert combined_proof["retain_outward_lateral_drive"] is True
+    assert combined_proof["commanded_lateral_world_delta_m"] <= (
+        np.linalg.norm(correction_target - correction_current[:2])
+    )
+    assert combined_proof[
+        "minimum_predicted_post_command_buffer16_surplus_m"
+    ] > 0.0
+    assert combined_proof["proof"] == {
+        "outward_xy_plus_positive_z_zero_rotation": True,
+        "strictly_inside_native_3d_action_norm_bound": True,
+        "inside_configured_lateral_action_norm_bound": True,
+        "does_not_cross_lateral_target": True,
+        "inward_outward_axis_command_prohibited": True,
+        "positive_z_static_geometry_does_not_reduce_clearance": True,
+        "all_compiled_pairs_retain_strict_no_contact": True,
+        "all_compiled_pairs_retain_strict_base8": True,
+        "all_compiled_pairs_reach_strict_buffer16": True,
+    }
+
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
     )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
     assert '"lateral_rebuffer_brake": 0' in bounded_seek
     assert "_compiled_adaptive_lateral_rebuffer_action(" in bounded_seek
+    assert "lateral_target_xy=(" in bounded_seek
+    assert "corridor_correction_hold_target_xy" in bounded_seek
+    assert "one_sided_outward_direction_xy=(" in bounded_seek
+    assert "corridor_outward_direction" in bounded_seek
+    assert "maximum_lateral_translation_action=(" in bounded_seek
+    assert "post_descent_lateral_max_translation_action" in bounded_seek
+    assert '"retains_registered_outward_correction_drive"' in bounded_seek
     assert bounded_seek.count(
         'structural_stage = "lateral_rebuffer_brake"'
     ) >= 2
@@ -3610,6 +3665,21 @@ def test_adaptive_lateral_rebuffer_fails_closed_on_invalid_live_geometry():
     with pytest.raises(RuntimeError, match="pair inventory changed"):
         _compiled_adaptive_lateral_rebuffer_action(
             **{**kwargs, "expected_pair_count": 55}
+        )
+    with pytest.raises(
+        ValueError, match="outward-drive inputs must be supplied together"
+    ):
+        _compiled_adaptive_lateral_rebuffer_action(
+            **{**kwargs, "lateral_target_xy": np.array([0.14, -0.03])}
+        )
+    with pytest.raises(ValueError, match="outward-drive geometry is invalid"):
+        _compiled_adaptive_lateral_rebuffer_action(
+            **{
+                **kwargs,
+                "lateral_target_xy": np.array([0.14, -0.03]),
+                "one_sided_outward_direction_xy": np.array([2.0, 0.0]),
+                "maximum_lateral_translation_action": 0.10,
+            }
         )
 
 

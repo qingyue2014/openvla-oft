@@ -7094,8 +7094,11 @@ def _compiled_adaptive_lateral_rebuffer_action(
     native_action_spec,
     expected_pair_count,
     worst_case_controller_world_step_m,
+    lateral_target_xy=None,
+    one_sided_outward_direction_xy=None,
+    maximum_lateral_translation_action=None,
 ):
-    """Lift in pure Z from every live pair's exact buffer deficit."""
+    """Refill every pair's exact buffer deficit, optionally retaining XY."""
     current_eef = np.asarray(current_eef, dtype=float)
     if current_eef.shape != (3,) or not np.all(np.isfinite(current_eef)):
         raise ValueError("adaptive lateral-rebuffer current EEF is invalid")
@@ -7108,6 +7111,47 @@ def _compiled_adaptive_lateral_rebuffer_action(
         raise ValueError("adaptive lateral-rebuffer scales are invalid")
     if not isinstance(expected_pair_count, (int, np.integer)):
         raise ValueError("expected compiled pair count must be an integer")
+    optional_lateral_values = (
+        lateral_target_xy,
+        one_sided_outward_direction_xy,
+        maximum_lateral_translation_action,
+    )
+    retain_outward_lateral_drive = bool(
+        all(value is not None for value in optional_lateral_values)
+    )
+    if any(value is not None for value in optional_lateral_values) and not (
+        retain_outward_lateral_drive
+    ):
+        raise ValueError(
+            "adaptive lateral-rebuffer outward-drive inputs must be supplied "
+            "together"
+        )
+    if retain_outward_lateral_drive:
+        lateral_target_xy = np.asarray(lateral_target_xy, dtype=float)
+        one_sided_outward_direction_xy = np.asarray(
+            one_sided_outward_direction_xy, dtype=float
+        )
+        outward_direction_norm = float(
+            np.linalg.norm(one_sided_outward_direction_xy)
+        )
+        maximum_lateral_translation_action = float(
+            maximum_lateral_translation_action
+        )
+        if (
+            lateral_target_xy.shape != (2,)
+            or one_sided_outward_direction_xy.shape != (2,)
+            or not np.all(np.isfinite(lateral_target_xy))
+            or not np.all(np.isfinite(one_sided_outward_direction_xy))
+            or not np.isfinite(outward_direction_norm)
+            or not np.isclose(
+                outward_direction_norm, 1.0, rtol=0.0, atol=1e-12
+            )
+            or not np.isfinite(maximum_lateral_translation_action)
+            or maximum_lateral_translation_action <= 0.0
+        ):
+            raise ValueError(
+                "adaptive lateral-rebuffer outward-drive geometry is invalid"
+            )
     overhead_pairs = list(overhead_guard.get("pairs", ()))
     buffer_pairs = list(overhead_lateral_buffer.get("pairs", ()))
     if (
@@ -7142,12 +7186,44 @@ def _compiled_adaptive_lateral_rebuffer_action(
         or not np.all(np.isfinite(native_low))
         or not np.all(np.isfinite(native_high))
         or not np.all(native_low < native_high)
-        or native_high[2] <= 0.0
+        or not np.all(native_low[:6] < 0.0)
+        or not np.all(native_high[:6] > 0.0)
         or not (native_low[6] <= gripper <= native_high[6])
     ):
         raise RuntimeError(
-            "native OSC action bounds do not prove the requested pure +Z "
-            "lateral rebuffer"
+            "native OSC action bounds do not prove the requested lateral "
+            "rebuffer"
+        )
+
+    native_translation_norm_bound = float(
+        min(
+            -native_low[0],
+            native_high[0],
+            -native_low[1],
+            native_high[1],
+            -native_low[2],
+            native_high[2],
+        )
+    )
+    strict_native_translation_norm_bound = float(
+        np.nextafter(native_translation_norm_bound, 0.0)
+    )
+    if strict_native_translation_norm_bound <= 0.0:
+        raise RuntimeError(
+            "native OSC translation action norm has no strict interior"
+        )
+    strict_configured_lateral_action_bound = None
+    if retain_outward_lateral_drive:
+        if (
+            maximum_lateral_translation_action
+            > strict_native_translation_norm_bound
+        ):
+            raise ValueError(
+                "adaptive lateral-rebuffer lateral action bound exceeds the "
+                "strict runtime-native translation capacity"
+            )
+        strict_configured_lateral_action_bound = float(
+            np.nextafter(maximum_lateral_translation_action, 0.0)
         )
 
     base_reserve = float(overhead_guard["one_step_vertical_reserve_m"])
@@ -7328,14 +7404,169 @@ def _compiled_adaptive_lateral_rebuffer_action(
     action = np.zeros(7, dtype=float)
     action[2] = commanded_z_action
     action[-1] = float(gripper)
-    return action, {
-        "formula": (
+    lateral_remaining = None
+    lateral_target_outward_error = None
+    lateral_action_norm_capacities = None
+    selected_lateral_envelope_source = None
+    commanded_lateral_action_norm = 0.0
+    commanded_lateral_world_delta = 0.0
+    full_translation_action_norm = float(abs(commanded_z_action))
+    if retain_outward_lateral_drive:
+        lateral_delta = lateral_target_xy - current_eef[:2]
+        lateral_remaining = float(np.linalg.norm(lateral_delta))
+        lateral_target_outward_error = float(
+            np.dot(lateral_delta, one_sided_outward_direction_xy)
+        )
+        native_lateral_capacity_after_positive_z = float(
+            np.sqrt(
+                max(
+                    0.0,
+                    strict_native_translation_norm_bound**2
+                    - commanded_z_action**2,
+                )
+            )
+        )
+        lateral_action_norm_capacities = {
+            "lateral_target_remaining_action_norm": float(
+                lateral_remaining / position_action_scale
+            ),
+            "configured_strict_lateral_action_norm_bound": (
+                strict_configured_lateral_action_bound
+            ),
+            "native_full_norm_lateral_capacity_after_positive_z": (
+                native_lateral_capacity_after_positive_z
+            ),
+        }
+        if lateral_target_outward_error > 0.0 and lateral_remaining > 0.0:
+            selected_lateral_envelope_source = min(
+                lateral_action_norm_capacities,
+                key=lateral_action_norm_capacities.get,
+            )
+            commanded_lateral_action_norm = float(
+                lateral_action_norm_capacities[
+                    selected_lateral_envelope_source
+                ]
+            )
+            if commanded_lateral_action_norm <= 0.0:
+                raise RuntimeError(
+                    "adaptive lateral-rebuffer has no positive lateral "
+                    "capacity beside the required +Z action"
+                )
+            lateral_direction = lateral_delta / lateral_remaining
+            for _ in range(128):
+                commanded_xy = (
+                    lateral_direction * commanded_lateral_action_norm
+                )
+                commanded_lateral_world_delta = float(
+                    position_action_scale * np.linalg.norm(commanded_xy)
+                )
+                full_translation_action_norm = float(
+                    np.linalg.norm(
+                        np.array(
+                            [
+                                commanded_xy[0],
+                                commanded_xy[1],
+                                commanded_z_action,
+                            ],
+                            dtype=float,
+                        )
+                    )
+                )
+                if (
+                    0.0 < commanded_lateral_action_norm
+                    <= strict_configured_lateral_action_bound
+                    and commanded_lateral_world_delta <= lateral_remaining
+                    and float(
+                        np.dot(
+                            commanded_xy,
+                            one_sided_outward_direction_xy,
+                        )
+                    )
+                    > 0.0
+                    and full_translation_action_norm
+                    < native_translation_norm_bound
+                    and native_low[0] < commanded_xy[0] < native_high[0]
+                    and native_low[1] < commanded_xy[1] < native_high[1]
+                ):
+                    break
+                commanded_lateral_action_norm = float(
+                    np.nextafter(commanded_lateral_action_norm, 0.0)
+                )
+            else:
+                raise RuntimeError(
+                    "adaptive lateral-rebuffer outward XY/+Z action has no "
+                    "strict native-action interior"
+                )
+            if commanded_lateral_action_norm <= 0.0:
+                raise RuntimeError(
+                    "adaptive lateral-rebuffer outward XY action collapsed "
+                    "to zero while proving safety"
+                )
+            action[:2] = commanded_xy
+        else:
+            selected_lateral_envelope_source = (
+                "already_at_or_beyond_outward_lateral_target"
+            )
+        if (
+            float(
+                np.dot(action[:2], one_sided_outward_direction_xy)
+            )
+            < 0.0
+            or full_translation_action_norm
+            >= native_translation_norm_bound
+            or commanded_lateral_world_delta > lateral_remaining
+        ):
+            raise RuntimeError(
+                "adaptive lateral-rebuffer action violated its one-sided "
+                "outward/full-norm/target hard proof"
+            )
+    if retain_outward_lateral_drive:
+        formula = (
+            "take the maximum live deficit to the unchanged strict+base8+"
+            "one-controller-step buffer16 envelope over every compiled pair, "
+            "add the same unchanged +Z controller-step tail, and retain a "
+            "one-sided outward XY correction toward the existing shifted "
+            "target capped by its remaining error, the configured lateral "
+            "bound, and the strict runtime-native 3-D norm remainder"
+        )
+        proof = {
+            "outward_xy_plus_positive_z_zero_rotation": True,
+            "strictly_inside_native_3d_action_norm_bound": True,
+            "inside_configured_lateral_action_norm_bound": True,
+            "does_not_cross_lateral_target": bool(
+                commanded_lateral_world_delta <= lateral_remaining
+            ),
+            "inward_outward_axis_command_prohibited": bool(
+                float(
+                    np.dot(
+                        action[:2], one_sided_outward_direction_xy
+                    )
+                )
+                >= 0.0
+            ),
+            "positive_z_static_geometry_does_not_reduce_clearance": True,
+            "all_compiled_pairs_retain_strict_no_contact": True,
+            "all_compiled_pairs_retain_strict_base8": True,
+            "all_compiled_pairs_reach_strict_buffer16": True,
+        }
+    else:
+        formula = (
             "take the maximum live deficit to the unchanged strict+base8+"
             "one-controller-step buffer16 envelope over every compiled pair, "
             "add that same unchanged controller-step tail for the immediately "
             "resumed XY action, and require the resulting pure +Z command to "
             "remain strictly inside the runtime native action bound"
-        ),
+        )
+        proof = {
+            "pure_positive_z": True,
+            "strictly_inside_native_z_action_bound": True,
+            "outside_xy_clearance_not_worsened_by_pure_z": True,
+            "all_compiled_pairs_retain_strict_no_contact": True,
+            "all_compiled_pairs_retain_strict_base8": True,
+            "all_compiled_pairs_reach_strict_buffer16": True,
+        }
+    return action, {
+        "formula": formula,
         "current_eef": current_eef.tolist(),
         "position_action_scale_m_per_normalized_action": float(
             position_action_scale
@@ -7345,6 +7576,12 @@ def _compiled_adaptive_lateral_rebuffer_action(
             float(native_low[2]),
             float(native_high[2]),
         ],
+        "native_3d_translation_action_norm_bound": (
+            native_translation_norm_bound
+        ),
+        "strict_native_3d_translation_action_norm_bound": (
+            strict_native_translation_norm_bound
+        ),
         "strict_native_positive_z_world_delta_capacity_m": (
             native_world_capacity
         ),
@@ -7355,6 +7592,40 @@ def _compiled_adaptive_lateral_rebuffer_action(
         "commanded_positive_world_delta_m": commanded_delta,
         "commanded_xy_action": action[:2].tolist(),
         "commanded_z_action": commanded_z_action,
+        "retain_outward_lateral_drive": retain_outward_lateral_drive,
+        "lateral_target_xy": (
+            None
+            if lateral_target_xy is None
+            else lateral_target_xy.tolist()
+        ),
+        "one_sided_outward_direction_xy": (
+            None
+            if one_sided_outward_direction_xy is None
+            else one_sided_outward_direction_xy.tolist()
+        ),
+        "lateral_remaining_m": lateral_remaining,
+        "lateral_target_outward_error_m": lateral_target_outward_error,
+        "configured_maximum_lateral_translation_action": (
+            maximum_lateral_translation_action
+        ),
+        "strict_configured_lateral_translation_action_bound": (
+            strict_configured_lateral_action_bound
+        ),
+        "lateral_action_norm_capacities": (
+            lateral_action_norm_capacities
+        ),
+        "selected_lateral_envelope_source": (
+            selected_lateral_envelope_source
+        ),
+        "commanded_lateral_action_norm": (
+            commanded_lateral_action_norm
+        ),
+        "commanded_lateral_world_delta_m": (
+            commanded_lateral_world_delta
+        ),
+        "commanded_translation_action_norm": (
+            full_translation_action_norm
+        ),
         "pre_action_outside_side_guard": dict(outside_side_guard),
         "minimum_predicted_post_command_contact_surplus_m": (
             minimum_contact_surplus
@@ -7365,14 +7636,7 @@ def _compiled_adaptive_lateral_rebuffer_action(
         "minimum_predicted_post_command_buffer16_surplus_m": (
             minimum_buffer_surplus
         ),
-        "proof": {
-            "pure_positive_z": True,
-            "strictly_inside_native_z_action_bound": True,
-            "outside_xy_clearance_not_worsened_by_pure_z": True,
-            "all_compiled_pairs_retain_strict_no_contact": True,
-            "all_compiled_pairs_retain_strict_base8": True,
-            "all_compiled_pairs_reach_strict_buffer16": True,
-        },
+        "proof": proof,
     }
 
 
@@ -14075,12 +14339,33 @@ def _seek_stable_plate_contact(
                         in fixed_buffer_lateral_stages
                         else maximum_controller_world_step
                     ),
+                    lateral_target_xy=(
+                        corridor_correction_hold_target_xy
+                        if lateral_resume_stage
+                        == "overhead_post_descent_corridor_lateral"
+                        else None
+                    ),
+                    one_sided_outward_direction_xy=(
+                        corridor_outward_direction
+                        if lateral_resume_stage
+                        == "overhead_post_descent_corridor_lateral"
+                        else None
+                    ),
+                    maximum_lateral_translation_action=(
+                        post_descent_lateral_max_translation_action
+                        if lateral_resume_stage
+                        == "overhead_post_descent_corridor_lateral"
+                        else None
+                    ),
                 )
             )
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
                 "compiled_adaptive_lateral_rebuffer_envelope": path_control,
+                "retains_registered_outward_correction_drive": bool(
+                    path_control["retain_outward_lateral_drive"]
+                ),
                 "pre_action_measured_vertical_step_progress_m": (
                     latest_vertical_step_progress_m
                 ),
