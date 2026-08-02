@@ -16,6 +16,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _contact_progress_saturation_evidence,
     _constraint_prioritized_outside_descent_action,
     _vertical_corridor_reserve_recovery_evidence,
+    _vertical_corridor_reserve_recovery_phase_evidence,
     _compiled_adaptive_lateral_rebuffer_action,
     _compiled_adaptive_high_lateral_action,
     _compiled_adaptive_high_plane_action,
@@ -3263,6 +3264,57 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert job503197_outward_action[2] == 0.0
     assert np.linalg.norm(job503197_outward_action[:3]) < 0.10
     assert job503197_outward_path["maximum_descent_m"] == 0.0
+    recovery_entry_phase = (
+        _vertical_corridor_reserve_recovery_phase_evidence(
+            recovery_evidence=job503193_entry,
+            phase_before_decision=None,
+        )
+    )
+    assert recovery_entry_phase["phase_after_decision"] == "vertical_brake"
+    vertical_brake_complete = dict(job503193_entry)
+    vertical_brake_complete.update(
+        {
+            "entered_recovery": False,
+            "latest_vertical_step_progress_m": 3.790651829160829e-05,
+            "latest_outward_step_progress_m": -2.7702950653407665e-05,
+            "live_clearance_m": 0.0010067760367388906,
+        }
+    )
+    outward_phase = _vertical_corridor_reserve_recovery_phase_evidence(
+        recovery_evidence=vertical_brake_complete,
+        phase_before_decision="vertical_brake",
+    )
+    assert outward_phase["phase_after_decision"] == "outward_restore"
+    job503204_one_frame_tail = dict(vertical_brake_complete)
+    job503204_one_frame_tail.update(
+        {
+            "latest_vertical_step_progress_m": -0.0003909564934183596,
+            "latest_outward_step_progress_m": 0.00006840830888554805,
+            "live_clearance_m": 0.0010835501079612397,
+        }
+    )
+    outward_phase_latched = (
+        _vertical_corridor_reserve_recovery_phase_evidence(
+            recovery_evidence=job503204_one_frame_tail,
+            phase_before_decision="outward_restore",
+        )
+    )
+    assert (
+        outward_phase_latched["phase_after_decision"]
+        == "outward_restore"
+    )
+    restored_clearance = dict(job503204_one_frame_tail)
+    restored_clearance.update(
+        {
+            "live_clearance_m": 0.00131,
+            "latest_outward_step_progress_m": 1e-6,
+        }
+    )
+    exit_brake_phase = _vertical_corridor_reserve_recovery_phase_evidence(
+        recovery_evidence=restored_clearance,
+        phase_before_decision="outward_restore",
+    )
+    assert exit_brake_phase["phase_after_decision"] == "exit_brake"
 
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
@@ -3330,6 +3382,11 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         vertical_corridor_action
     )
     assert "corridor_correction_hold_target_xy" in vertical_corridor_action
+    assert "_vertical_corridor_reserve_recovery_phase_evidence(" in (
+        vertical_corridor_action
+    )
+    assert '"vertical_brake", "exit_brake"' in vertical_corridor_action
+    assert '== "outward_restore"' in vertical_corridor_action
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
     brake_action_branch = bounded_seek.split(
         'elif structural_stage == "vertical_tail_brake":', 1

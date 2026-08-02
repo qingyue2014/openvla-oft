@@ -4241,6 +4241,80 @@ def _vertical_corridor_reserve_recovery_evidence(
     }
 
 
+def _vertical_corridor_reserve_recovery_phase_evidence(
+    *, recovery_evidence, phase_before_decision
+):
+    """Apply hysteresis across vertical brake, outward restore, and exit."""
+    if not isinstance(recovery_evidence, dict):
+        raise ValueError("vertical-corridor recovery evidence must be a dict")
+    valid_phases = {"vertical_brake", "outward_restore", "exit_brake"}
+    if (
+        phase_before_decision is not None
+        and phase_before_decision not in valid_phases
+    ):
+        raise ValueError("unknown vertical-corridor recovery phase")
+    active = bool(
+        recovery_evidence["recovery_active_after_decision"]
+    )
+    if not active:
+        phase_after_decision = None
+        transition = (
+            "recovery_complete"
+            if phase_before_decision is not None
+            else "recovery_inactive"
+        )
+    elif recovery_evidence["entered_recovery"]:
+        phase_after_decision = "vertical_brake"
+        transition = "entered_vertical_brake"
+    else:
+        if phase_before_decision is None:
+            raise RuntimeError(
+                "active vertical-corridor recovery lacks a latched phase"
+            )
+        phase_after_decision = phase_before_decision
+        transition = "phase_held"
+        vertical_progress = float(
+            recovery_evidence["latest_vertical_step_progress_m"]
+        )
+        outward_progress = float(
+            recovery_evidence["latest_outward_step_progress_m"]
+        )
+        live_clearance = float(recovery_evidence["live_clearance_m"])
+        trigger_clearance = float(
+            recovery_evidence["recovery_trigger_clearance_m"]
+        )
+        if (
+            phase_before_decision == "vertical_brake"
+            and vertical_progress >= 0.0
+        ):
+            phase_after_decision = "outward_restore"
+            transition = "vertical_brake_complete_to_outward_restore"
+        elif (
+            phase_before_decision == "outward_restore"
+            and live_clearance > trigger_clearance
+            and outward_progress >= 0.0
+        ):
+            phase_after_decision = "exit_brake"
+            transition = "outward_restore_complete_to_exit_brake"
+        elif (
+            phase_before_decision == "exit_brake"
+            and live_clearance <= trigger_clearance
+        ):
+            phase_after_decision = "vertical_brake"
+            transition = "exit_brake_clearance_loss_to_vertical_brake"
+    return {
+        "phase_before_decision": phase_before_decision,
+        "phase_after_decision": phase_after_decision,
+        "phase_transition": transition,
+        "outward_restore_hysteresis_active": bool(
+            phase_after_decision == "outward_restore"
+        ),
+        "outward_restore_ignores_uncommanded_negative_z_until_clearance_gate": (
+            True
+        ),
+    }
+
+
 def _outside_side_geometry_feedback_action(
     *,
     current_eef,
@@ -13800,6 +13874,7 @@ def _seek_stable_plate_contact(
     latest_vertical_step_progress_m = 0.0
     latest_outward_step_progress_m = 0.0
     vertical_corridor_reserve_recovery_active = False
+    vertical_corridor_reserve_recovery_phase = None
     vertical_corridor_reserve_recovery_events = []
     lateral_resume_stage = None
     vertical_tail_brake_reason = None
@@ -14733,22 +14808,43 @@ def _seek_stable_plate_contact(
                     "recovery_active_after_decision"
                 ]
             )
-            if reserve_recovery_evidence["entered_recovery"] or (
-                reserve_recovery_evidence["exit_accepted"]
+            reserve_recovery_phase_evidence = (
+                _vertical_corridor_reserve_recovery_phase_evidence(
+                    recovery_evidence=reserve_recovery_evidence,
+                    phase_before_decision=(
+                        vertical_corridor_reserve_recovery_phase
+                    ),
+                )
+            )
+            vertical_corridor_reserve_recovery_phase = (
+                reserve_recovery_phase_evidence[
+                    "phase_after_decision"
+                ]
+            )
+            if (
+                reserve_recovery_evidence["entered_recovery"]
+                or reserve_recovery_evidence["exit_accepted"]
+                or reserve_recovery_phase_evidence[
+                    "phase_before_decision"
+                ]
+                != reserve_recovery_phase_evidence[
+                    "phase_after_decision"
+                ]
             ):
                 vertical_corridor_reserve_recovery_events.append(
                     {
                         "guard_step": int(guard_step),
                         **reserve_recovery_evidence,
+                        **reserve_recovery_phase_evidence,
                     }
                 )
             reserve_recovery_vertical_brake_required = bool(
-                vertical_corridor_reserve_recovery_active
-                and latest_vertical_step_progress_m < 0.0
+                vertical_corridor_reserve_recovery_phase
+                in {"vertical_brake", "exit_brake"}
             )
             reserve_recovery_outward_only_active = bool(
-                vertical_corridor_reserve_recovery_active
-                and not reserve_recovery_vertical_brake_required
+                vertical_corridor_reserve_recovery_phase
+                == "outward_restore"
             )
             maximum_descent = max(
                 0.0,
@@ -14811,8 +14907,14 @@ def _seek_stable_plate_contact(
                     "vertical-corridor translation-action bound"
                 ),
                 "reserve_recovery_evidence": reserve_recovery_evidence,
+                "reserve_recovery_phase_evidence": (
+                    reserve_recovery_phase_evidence
+                ),
                 "reserve_recovery_active": (
                     vertical_corridor_reserve_recovery_active
+                ),
+                "reserve_recovery_phase": (
+                    vertical_corridor_reserve_recovery_phase
                 ),
                 "reserve_recovery_vertical_brake_required": (
                     reserve_recovery_vertical_brake_required
