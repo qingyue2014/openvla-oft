@@ -229,6 +229,17 @@ once lateral tolerance is reached. Any vertical response above the existing
 brake while Z is captured; a stable low-clearance frame uses only the exact
 outward increment needed to restore the controller recovery threshold. No
 formal threshold or target pose is changed.
+Job503461 then exposed a delayed vertical limit cycle: two full positive-Z
+frames produced one positive response, but immediately reducing Z to
+`0.01-0.06` while still several millimetres below the safe anchor restarted
+the descent. The fixed-safe-Z controller now uses the unchanged `0.400 mm`
+height tolerance as a hysteresis band. A negative response still receives the
+full `0.20` brake; while below the band, a positive response retains at least
+half of that existing authority. Inside the band, a positive response unloads
+to zero rather than immediately requesting negative Z. Negative Z remains
+available only for a genuine above-band correction and remains limited by half
+the live table reserve. This prevents a one-frame sign reversal from releasing
+the safety brake.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

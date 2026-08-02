@@ -580,6 +580,7 @@ def test_fixed_safe_z_lateral_hold_brakes_job503456_tail_before_return():
         ),
         lateral_position_tolerance_m=0.005,
         fixed_safe_z_m=0.919651391,
+        vertical_position_tolerance_m=0.0004,
         measured_vertical_step_progress_m=-0.001479232869910807,
         outside_side_guard={
             "minimum_outside_clearance_m": 0.00017634874436972536,
@@ -628,6 +629,7 @@ def test_fixed_safe_z_lateral_hold_keeps_original_lateral_bound_when_safe():
         lateral_target_xy=np.array([0.132, -0.0285]),
         lateral_position_tolerance_m=0.005,
         fixed_safe_z_m=0.91965,
+        vertical_position_tolerance_m=0.0004,
         measured_vertical_step_progress_m=0.0,
         outside_side_guard={
             "minimum_outside_clearance_m": 0.016,
@@ -671,6 +673,7 @@ def test_fixed_safe_z_lateral_hold_stops_job503459_redundant_inward_step():
         ),
         lateral_position_tolerance_m=0.005,
         fixed_safe_z_m=0.9196513910416114,
+        vertical_position_tolerance_m=0.0004,
         measured_vertical_step_progress_m=-0.00037622546898175013,
         outside_side_guard={
             "minimum_outside_clearance_m": 0.0015159166988197165,
@@ -704,6 +707,60 @@ def test_fixed_safe_z_lateral_hold_stops_job503459_redundant_inward_step():
     assert evidence["outside_recovery_active"] is True
     assert evidence["proof"][
         "no_inward_xy_after_lateral_tolerance"
+    ] is True
+
+
+def test_fixed_safe_z_lateral_hold_retains_job503461_below_band_z_floor():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.132, -0.026, 0.9138723983666764]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.9196513910416114,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.00033679011255227653,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0013698377956139346,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.0012068246516190317,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0005,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+    )
+    strict_brake = np.nextafter(0.20, 0.0)
+    assert action[0] == pytest.approx(strict_brake)
+    assert action[1] == 0.0
+    assert action[2] == pytest.approx(0.5 * strict_brake)
+    assert evidence["below_safe_z_band"] is True
+    assert evidence["inside_safe_z_band"] is False
+    assert evidence["positive_response_unload_active"] is False
+    assert evidence["minimum_below_band_positive_z_action"] == (
+        pytest.approx(0.5 * strict_brake)
+    )
+    assert evidence["proof"][
+        "below_height_band_retains_positive_z_floor"
     ] is True
 
 
@@ -9254,7 +9311,9 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "lateral_position_tolerance_m=args.position_tolerance" in (
         bounded_seek
     )
+    assert "vertical_position_tolerance_m=(" in bounded_seek
     assert "no_inward_xy_after_lateral_tolerance" in producer
+    assert "below_height_band_retains_positive_z_floor" in producer
     assert (
         "for guard_step in range(1, structural_waypoint_budget + 1)"
         in bounded_seek

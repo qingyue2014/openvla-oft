@@ -5135,6 +5135,7 @@ def _fixed_safe_z_lateral_hold_action(
     lateral_target_xy,
     lateral_position_tolerance_m,
     fixed_safe_z_m,
+    vertical_position_tolerance_m,
     measured_vertical_step_progress_m,
     outside_side_guard,
     outward_direction_xy,
@@ -5161,6 +5162,7 @@ def _fixed_safe_z_lateral_hold_action(
     scalars = (
         fixed_safe_z_m,
         lateral_position_tolerance_m,
+        vertical_position_tolerance_m,
         measured_vertical_step_progress_m,
         position_action_scale,
         maximum_lateral_translation_action,
@@ -5183,6 +5185,7 @@ def _fixed_safe_z_lateral_hold_action(
         or not all(np.isfinite(value) for value in scalars)
         or position_action_scale <= 0.0
         or lateral_position_tolerance_m <= 0.0
+        or vertical_position_tolerance_m <= 0.0
         or not 0.0 < maximum_lateral_translation_action < (
             maximum_safety_brake_action
         )
@@ -5318,8 +5321,34 @@ def _fixed_safe_z_lateral_hold_action(
     table_recovery_active = bool(
         live_table_clearance <= table_recovery_clearance
     )
+    below_safe_z_band = bool(
+        position_error_m > vertical_position_tolerance_m
+    )
+    inside_safe_z_band = bool(
+        abs(position_error_m) <= vertical_position_tolerance_m
+    )
+    positive_response_unload_active = bool(
+        inside_safe_z_band
+        and measured_vertical_step_progress_m > progress_resolution_m
+    )
+    minimum_below_band_positive_z_action = float(
+        0.5 * strict_safety_brake_bound
+    )
     if downward_tail_brake_active or table_recovery_active:
         commanded_z_action = strict_safety_brake_bound
+    elif below_safe_z_band:
+        commanded_z_action = float(
+            max(
+                minimum_below_band_positive_z_action,
+                np.clip(
+                    requested_z_action,
+                    0.0,
+                    strict_safety_brake_bound,
+                ),
+            )
+        )
+    elif positive_response_unload_active:
+        commanded_z_action = 0.0
     else:
         commanded_z_action = float(
             np.clip(
@@ -5394,6 +5423,9 @@ def _fixed_safe_z_lateral_hold_action(
         "lateral_error_m": lateral_error_m,
         "lateral_target_reached": lateral_target_reached,
         "fixed_safe_z_m": float(fixed_safe_z_m),
+        "vertical_position_tolerance_m": float(
+            vertical_position_tolerance_m
+        ),
         "position_error_m": position_error_m,
         "measured_vertical_step_progress_m": float(
             measured_vertical_step_progress_m
@@ -5425,6 +5457,14 @@ def _fixed_safe_z_lateral_hold_action(
         "predicted_table_clearance_m": predicted_table_clearance,
         "table_recovery_active": table_recovery_active,
         "downward_tail_brake_active": downward_tail_brake_active,
+        "below_safe_z_band": below_safe_z_band,
+        "inside_safe_z_band": inside_safe_z_band,
+        "positive_response_unload_active": (
+            positive_response_unload_active
+        ),
+        "minimum_below_band_positive_z_action": (
+            minimum_below_band_positive_z_action
+        ),
         "maximum_safe_negative_z_action": (
             maximum_safe_negative_z_action
         ),
@@ -5434,6 +5474,8 @@ def _fixed_safe_z_lateral_hold_action(
             "fixed_safe_z_held_during_every_lateral_frame": True,
             "no_inward_xy_after_lateral_tolerance": True,
             "unstable_vertical_response_forces_outward_brake": True,
+            "below_height_band_retains_positive_z_floor": True,
+            "inside_band_positive_response_unloads_without_negative_z": True,
             "downward_tail_uses_full_existing_positive_z_brake": True,
             "low_outside_reserve_suspends_inward_return": True,
             "negative_z_uses_at_most_half_live_table_reserve": True,
@@ -16356,6 +16398,9 @@ def _seek_stable_plate_contact(
                 )[:2],
                 lateral_position_tolerance_m=args.position_tolerance,
                 fixed_safe_z_m=fixed_safe_z,
+                vertical_position_tolerance_m=(
+                    fixed_safe_z_position_tolerance
+                ),
                 measured_vertical_step_progress_m=(
                     latest_vertical_step_progress_m
                 ),
