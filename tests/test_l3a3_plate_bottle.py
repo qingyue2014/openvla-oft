@@ -3143,6 +3143,38 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     job503184_tail_handoff_upper_z = 0.9325011680386681 + 2.0 * 0.008
     assert 0.9470836934130403 <= job503184_tail_handoff_upper_z
 
+    # Job503186 reached vertical descent, but the exact first control action
+    # targeted the formal corridor point that the EEF was already 0.181 mm
+    # outside of.  Its one-sided allocator therefore commanded zero outward X
+    # and the real OSC erased the corridor reserve in three frames.  Above the
+    # compiled staging plane, use the already registered 8 mm correction-hold
+    # target so the same prioritized allocator retains outward authority.
+    job503186_eef = np.array(
+        [0.13300229707876983, -0.0281777465755566, 0.9470836934130403]
+    )
+    formal_side_target = np.array(
+        [0.13282106705090635, -0.02850777957668001, 0.9178414056548501]
+    )
+    reserve_side_target = formal_side_target.copy()
+    reserve_side_target[0] = 0.14087106705090635
+    reserve_action, reserve_path = (
+        _constraint_prioritized_outside_descent_action(
+            current_eef=job503186_eef,
+            outside_side_target=reserve_side_target,
+            outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_descent_m=float(
+                job503186_eef[2] - formal_side_target[2]
+            ),
+            gripper=-1.0,
+            position_action_scale=0.08,
+            maximum_translation_action=0.10,
+        )
+    )
+    assert reserve_action[0] > 0.09
+    assert reserve_action[2] < 0.0
+    assert reserve_path["raw_outward_error_m"] > 0.007
+    assert np.linalg.norm(reserve_action[:3]) < 0.10
+
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
     )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
@@ -3181,6 +3213,15 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     )
     assert "the existing post-descent lateral action bound" in (
         brake_transition
+    )
+    vertical_corridor_action = bounded_seek.split(
+        'elif structural_stage == "vertical_corridor_descent":', 1
+    )[1].split('elif structural_stage == "vertical_corridor_settle":', 1)[0]
+    assert "vertical_corridor_control_target" in vertical_corridor_action
+    assert "corridor_correction_hold_target_xy" in vertical_corridor_action
+    assert "current_eef[2] > overhead_staging_z" in vertical_corridor_action
+    assert '"formal_corridor_target_unchanged": True' in (
+        vertical_corridor_action
     )
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek
     brake_action_branch = bounded_seek.split(

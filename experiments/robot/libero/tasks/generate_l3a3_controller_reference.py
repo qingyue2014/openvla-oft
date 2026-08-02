@@ -14572,10 +14572,20 @@ def _seek_stable_plate_contact(
                     f"guard={json.dumps(pre_action_guard, sort_keys=True)} "
                     f"samples={json.dumps(samples, sort_keys=True)}"
                 )
+            vertical_corridor_control_target = np.asarray(
+                corridor_side_target, dtype=float
+            ).copy()
+            vertical_corridor_pre_staging_reserve_active = bool(
+                current_eef[2] > overhead_staging_z
+            )
+            if vertical_corridor_pre_staging_reserve_active:
+                vertical_corridor_control_target[:2] = (
+                    corridor_correction_hold_target_xy
+                )
             action, path_control = (
                 _constraint_prioritized_outside_descent_action(
                     current_eef=current_eef,
-                    outside_side_target=corridor_side_target,
+                    outside_side_target=vertical_corridor_control_target,
                     outward_direction_xy=geometry[
                         "outward_direction_xy"
                     ],
@@ -14591,6 +14601,24 @@ def _seek_stable_plate_contact(
                 "mode": structural_stage,
                 "action": action.tolist(),
                 "descent_path_control": path_control,
+                "formal_corridor_side_target": (
+                    corridor_side_target.tolist()
+                ),
+                "active_vertical_corridor_control_target": (
+                    vertical_corridor_control_target.tolist()
+                ),
+                "pre_staging_outward_controller_reserve_active": (
+                    vertical_corridor_pre_staging_reserve_active
+                ),
+                "pre_staging_outward_controller_reserve_m": (
+                    maximum_post_descent_lateral_world_step
+                    if vertical_corridor_pre_staging_reserve_active
+                    else 0.0
+                ),
+                "pre_staging_outward_controller_reserve_source": (
+                    "existing post-descent lateral maximum world step"
+                ),
+                "formal_corridor_target_unchanged": True,
             }
         elif structural_stage == "vertical_corridor_settle":
             if "trigger_step_response" in lateral_settle_state:
