@@ -15,6 +15,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _contact_depth_sample_validity,
     _contact_progress_saturation_evidence,
     _constraint_prioritized_outside_descent_action,
+    _vertical_corridor_reserve_recovery_evidence,
     _compiled_adaptive_lateral_rebuffer_action,
     _compiled_adaptive_high_lateral_action,
     _compiled_adaptive_high_plane_action,
@@ -3181,6 +3182,69 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     assert reserve_path["raw_outward_error_m"] > 0.005
     assert np.linalg.norm(reserve_action[:3]) < 0.10
 
+    # Job503193 proved that equal XY/Z action allocation alone is not a live
+    # reserve guarantee: despite 0.081 outward action, the real OSC continued
+    # 0.188 mm inward and crossed the 0.4 mm one-step gate.  Trigger braking at
+    # formal 0.9 mm clearance plus the existing 0.4 mm controller world step,
+    # suspend descent, and latch until both measured axes recover.
+    recovery_trigger = 0.0009 + 0.0004
+    before_trigger = _vertical_corridor_reserve_recovery_evidence(
+        live_clearance_m=0.0014115984435881107,
+        recovery_trigger_clearance_m=recovery_trigger,
+        strict_corridor_entry_clearance_m=0.0004,
+        latest_outward_step_progress_m=1.3378271275732434e-05,
+        latest_vertical_step_progress_m=-0.0006499833005025879,
+        recovery_active_before_decision=False,
+    )
+    assert before_trigger["recovery_active_after_decision"] is False
+    job503193_entry = _vertical_corridor_reserve_recovery_evidence(
+        live_clearance_m=0.0012511771753540152,
+        recovery_trigger_clearance_m=recovery_trigger,
+        strict_corridor_entry_clearance_m=0.0004,
+        latest_outward_step_progress_m=-0.00016120507354072666,
+        latest_vertical_step_progress_m=-0.0016246494205975903,
+        recovery_active_before_decision=False,
+    )
+    assert job503193_entry["entered_recovery"] is True
+    assert job503193_entry["recovery_active_after_decision"] is True
+    recovery_hold = _vertical_corridor_reserve_recovery_evidence(
+        live_clearance_m=0.0014,
+        recovery_trigger_clearance_m=recovery_trigger,
+        strict_corridor_entry_clearance_m=0.0004,
+        latest_outward_step_progress_m=-1e-6,
+        latest_vertical_step_progress_m=1e-6,
+        recovery_active_before_decision=True,
+    )
+    assert recovery_hold["exit_accepted"] is False
+    recovery_exit = _vertical_corridor_reserve_recovery_evidence(
+        live_clearance_m=0.0014,
+        recovery_trigger_clearance_m=recovery_trigger,
+        strict_corridor_entry_clearance_m=0.0004,
+        latest_outward_step_progress_m=1e-6,
+        latest_vertical_step_progress_m=1e-6,
+        recovery_active_before_decision=True,
+    )
+    assert recovery_exit["exit_accepted"] is True
+    assert recovery_exit["recovery_active_after_decision"] is False
+    recovery_action, recovery_path = (
+        _constraint_prioritized_outside_descent_action(
+            current_eef=np.array(
+                [0.13285385483001622, -0.028214750624792236, 0.9448090606919402]
+            ),
+            outside_side_target=reserve_side_target,
+            outward_direction_xy=np.array([1.0, 0.0]),
+            maximum_descent_m=0.0,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            maximum_translation_action=0.10,
+            active_positive_z_brake=True,
+        )
+    )
+    assert recovery_action[0] > 0.0
+    assert recovery_action[2] > 0.0
+    assert np.linalg.norm(recovery_action[:3]) < 0.10
+    assert recovery_path["active_positive_z_brake"] is True
+
     bounded_seek = CONTROLLER_REFERENCE.read_text().split(
         "def _seek_stable_plate_contact(", 1
     )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
@@ -3231,6 +3295,13 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         vertical_corridor_action
     )
     assert '"formal_corridor_target_unchanged": True' in (
+        vertical_corridor_action
+    )
+    assert "_vertical_corridor_reserve_recovery_evidence(" in (
+        vertical_corridor_action
+    )
+    assert "active_positive_z_brake" in vertical_corridor_action
+    assert "negative_z_descent_suspended_for_reserve_recovery" in (
         vertical_corridor_action
     )
     assert 'elif structural_stage == "vertical_tail_brake"' in bounded_seek

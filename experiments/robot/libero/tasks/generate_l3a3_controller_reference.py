@@ -4159,6 +4159,88 @@ def _constraint_prioritized_outside_descent_action(
     }
 
 
+def _vertical_corridor_reserve_recovery_evidence(
+    *,
+    live_clearance_m,
+    recovery_trigger_clearance_m,
+    strict_corridor_entry_clearance_m,
+    latest_outward_step_progress_m,
+    latest_vertical_step_progress_m,
+    recovery_active_before_decision,
+):
+    """Latch a positive-Z/outward brake before corridor reserve is lost."""
+    scalars = (
+        live_clearance_m,
+        recovery_trigger_clearance_m,
+        strict_corridor_entry_clearance_m,
+        latest_outward_step_progress_m,
+        latest_vertical_step_progress_m,
+    )
+    if not all(np.isfinite(value) for value in scalars):
+        raise ValueError("vertical-corridor recovery evidence must be finite")
+    if not (
+        recovery_trigger_clearance_m
+        > strict_corridor_entry_clearance_m
+        >= 0.0
+    ):
+        raise ValueError(
+            "vertical-corridor recovery trigger must strictly exceed the "
+            "corridor-entry clearance"
+        )
+    entered = bool(
+        not recovery_active_before_decision
+        and live_clearance_m <= recovery_trigger_clearance_m
+    )
+    exit_accepted = bool(
+        recovery_active_before_decision
+        and live_clearance_m > recovery_trigger_clearance_m
+        and latest_outward_step_progress_m >= 0.0
+        and latest_vertical_step_progress_m >= 0.0
+    )
+    recovery_active_after_decision = bool(
+        (recovery_active_before_decision or entered) and not exit_accepted
+    )
+    if entered:
+        event = "entered_pre_loss_reserve_recovery"
+    elif exit_accepted:
+        event = "exited_after_measured_outward_and_vertical_brake_recovery"
+    elif recovery_active_after_decision:
+        event = "continued_reserve_recovery"
+    else:
+        event = "descent_remains_authorized"
+    return {
+        "event": event,
+        "recovery_active_before_decision": bool(
+            recovery_active_before_decision
+        ),
+        "recovery_active_after_decision": (
+            recovery_active_after_decision
+        ),
+        "entered_recovery": entered,
+        "exit_accepted": exit_accepted,
+        "live_clearance_m": float(live_clearance_m),
+        "recovery_trigger_clearance_m": float(
+            recovery_trigger_clearance_m
+        ),
+        "strict_corridor_entry_clearance_m": float(
+            strict_corridor_entry_clearance_m
+        ),
+        "clearance_above_strict_threshold_m": float(
+            live_clearance_m - strict_corridor_entry_clearance_m
+        ),
+        "latest_outward_step_progress_m": float(
+            latest_outward_step_progress_m
+        ),
+        "latest_vertical_step_progress_m": float(
+            latest_vertical_step_progress_m
+        ),
+        "exit_requirements": (
+            "live clearance strictly above the recovery trigger plus "
+            "measured nonnegative outward and vertical progress"
+        ),
+    }
+
+
 def _outside_side_geometry_feedback_action(
     *,
     current_eef,
@@ -13121,6 +13203,10 @@ def _seek_stable_plate_contact(
         + corridor_outward_direction
         * vertical_corridor_balanced_hold_world_step
     )
+    vertical_corridor_reserve_recovery_trigger_clearance = float(
+        corridor_rebuffer_acceptance_clearance
+        + maximum_controller_world_step
+    )
     if not (
         np.isfinite(vertical_corridor_balanced_hold_world_step)
         and 0.0 < vertical_corridor_balanced_hold_world_step
@@ -13128,10 +13214,19 @@ def _seek_stable_plate_contact(
         and np.all(
             np.isfinite(vertical_corridor_balanced_hold_target_xy)
         )
+        and np.isfinite(
+            vertical_corridor_reserve_recovery_trigger_clearance
+        )
+        and vertical_corridor_reserve_recovery_trigger_clearance
+        > corridor_rebuffer_acceptance_clearance
+        > vertical_staging_corridor[
+            "strict_corridor_entry_clearance_m"
+        ]
     ):
         raise RuntimeError(
             "vertical corridor balanced hold is not strictly inside the "
-            "existing post-descent controller reserve"
+            "existing post-descent controller reserve, or its pre-loss "
+            "recovery trigger is invalid"
         )
     structural_seek_context.update(
         {
@@ -13145,6 +13240,13 @@ def _seek_stable_plate_contact(
                 "position action scale times the existing vertical-corridor "
                 "translation-action bound divided by sqrt(2), retaining "
                 "equal strict action-norm capacity for outward XY and Z"
+            ),
+            "vertical_corridor_reserve_recovery_trigger_clearance_m": (
+                vertical_corridor_reserve_recovery_trigger_clearance
+            ),
+            "vertical_corridor_reserve_recovery_trigger_derivation": (
+                "the unchanged formal 0.9 mm corridor clearance plus the "
+                "existing 0.4 mm maximum structural controller world step"
             ),
         }
     )
@@ -13696,6 +13798,9 @@ def _seek_stable_plate_contact(
         structural_stage = "overhead_high_corridor_lateral"
     overhead_horizontal_z = float(initial_eef[2])
     latest_vertical_step_progress_m = 0.0
+    latest_outward_step_progress_m = 0.0
+    vertical_corridor_reserve_recovery_active = False
+    vertical_corridor_reserve_recovery_events = []
     lateral_resume_stage = None
     vertical_tail_brake_reason = None
     vertical_tail_events = []
@@ -14597,6 +14702,46 @@ def _seek_stable_plate_contact(
                 "fixed_buffer16_used_for_action_authorization": True,
             }
         elif structural_stage == "vertical_corridor_descent":
+            reserve_recovery_evidence = (
+                _vertical_corridor_reserve_recovery_evidence(
+                    live_clearance_m=float(
+                        pre_action_guard[
+                            "minimum_outside_clearance_m"
+                        ]
+                    ),
+                    recovery_trigger_clearance_m=(
+                        vertical_corridor_reserve_recovery_trigger_clearance
+                    ),
+                    strict_corridor_entry_clearance_m=float(
+                        vertical_staging_corridor[
+                            "strict_corridor_entry_clearance_m"
+                        ]
+                    ),
+                    latest_outward_step_progress_m=(
+                        latest_outward_step_progress_m
+                    ),
+                    latest_vertical_step_progress_m=(
+                        latest_vertical_step_progress_m
+                    ),
+                    recovery_active_before_decision=(
+                        vertical_corridor_reserve_recovery_active
+                    ),
+                )
+            )
+            vertical_corridor_reserve_recovery_active = bool(
+                reserve_recovery_evidence[
+                    "recovery_active_after_decision"
+                ]
+            )
+            if reserve_recovery_evidence["entered_recovery"] or (
+                reserve_recovery_evidence["exit_accepted"]
+            ):
+                vertical_corridor_reserve_recovery_events.append(
+                    {
+                        "guard_step": int(guard_step),
+                        **reserve_recovery_evidence,
+                    }
+                )
             maximum_descent = max(
                 0.0,
                 float(current_eef[2] - corridor_side_target[2]),
@@ -14628,6 +14773,9 @@ def _seek_stable_plate_contact(
                     maximum_translation_action=(
                         vertical_corridor_descent_max_translation_action
                     ),
+                    active_positive_z_brake=(
+                        vertical_corridor_reserve_recovery_active
+                    ),
                 )
             )
             feedback = {
@@ -14647,6 +14795,14 @@ def _seek_stable_plate_contact(
                 "balanced_outward_controller_hold_source": (
                     "equal XY/Z norm allocation derived from the existing "
                     "vertical-corridor translation-action bound"
+                ),
+                "reserve_recovery_evidence": reserve_recovery_evidence,
+                "reserve_recovery_active": (
+                    vertical_corridor_reserve_recovery_active
+                ),
+                "negative_z_descent_suspended_for_reserve_recovery": bool(
+                    vertical_corridor_reserve_recovery_active
+                    and action[2] >= 0.0
                 ),
                 "formal_corridor_target_unchanged": True,
             }
@@ -14801,6 +14957,9 @@ def _seek_stable_plate_contact(
                 before_eef=current_eef,
                 after_eef=after_eef,
             )
+        )
+        latest_outward_step_progress_m = float(
+            current_step_response["eef_outward_step_progress_m"]
         )
         feedback["step_response"] = current_step_response
         feedback["vertical_staging_corridor"] = (
@@ -15938,6 +16097,12 @@ def _seek_stable_plate_contact(
         "overhead_horizontal_z_m": float(overhead_horizontal_z),
         "latest_measured_vertical_step_progress_m": float(
             latest_vertical_step_progress_m
+        ),
+        "latest_measured_outward_step_progress_m": float(
+            latest_outward_step_progress_m
+        ),
+        "vertical_corridor_reserve_recovery_events": (
+            vertical_corridor_reserve_recovery_events
         ),
         "latest_overhead_lateral_buffer": (
             latest_overhead_lateral_buffer
