@@ -5234,6 +5234,12 @@ def _fixed_safe_z_lateral_hold_action(
             np.inf,
         )
     )
+    outside_refill_target_clearance = float(
+        np.nextafter(
+            outside_recovery_exit_clearance + progress_resolution_m,
+            np.inf,
+        )
+    )
     if not (
         strict_outside_clearance_m
         < full_outward_brake_clearance_m
@@ -5322,7 +5328,7 @@ def _fixed_safe_z_lateral_hold_action(
                 max(
                     0.0,
                     (
-                        outside_recovery_exit_clearance
+                        outside_refill_target_clearance
                         - live_outside_clearance
                     )
                     / position_action_scale,
@@ -5368,14 +5374,7 @@ def _fixed_safe_z_lateral_hold_action(
     inside_safe_z_band = bool(
         abs(position_error_m) <= vertical_position_tolerance_m
     )
-    downward_tail_brake_active = bool(
-        measured_downward_tail and not above_safe_z_band
-    )
-    downward_tail_correction_above_safe_z = bool(
-        measured_downward_tail
-        and above_safe_z_band
-        and not table_recovery_active
-    )
+    downward_tail_brake_active = measured_downward_tail
     positive_response_unload_active = bool(
         inside_safe_z_band
         and measured_vertical_step_progress_m > progress_resolution_m
@@ -5509,6 +5508,9 @@ def _fixed_safe_z_lateral_hold_action(
         "outside_recovery_exit_clearance_m": (
             outside_recovery_exit_clearance
         ),
+        "outside_refill_target_clearance_m": (
+            outside_refill_target_clearance
+        ),
         "full_outward_brake_clearance_m": float(
             full_outward_brake_clearance_m
         ),
@@ -5544,9 +5546,6 @@ def _fixed_safe_z_lateral_hold_action(
         "table_recovery_active": table_recovery_active,
         "measured_downward_tail": measured_downward_tail,
         "downward_tail_brake_active": downward_tail_brake_active,
-        "downward_tail_correction_above_safe_z": (
-            downward_tail_correction_above_safe_z
-        ),
         "below_safe_z_band": below_safe_z_band,
         "above_safe_z_band": above_safe_z_band,
         "inside_safe_z_band": inside_safe_z_band,
@@ -5573,8 +5572,7 @@ def _fixed_safe_z_lateral_hold_action(
             "outside_recovery_suspends_negative_z": True,
             "below_height_band_retains_positive_z_floor": True,
             "inside_band_positive_response_unloads_without_negative_z": True,
-            "downward_tail_at_or_below_band_uses_full_positive_z": True,
-            "corrective_descent_above_band_avoids_positive_z_brake": True,
+            "every_measured_downward_tail_uses_full_positive_z": True,
             "low_outside_reserve_suspends_inward_return": True,
             "negative_z_uses_at_most_half_live_table_reserve": True,
             "strictly_inside_runtime_native_translation_norm": True,
@@ -15257,6 +15255,13 @@ def _seek_stable_plate_contact(
             np.inf,
         )
     )
+    fixed_safe_z_refill_target_clearance = float(
+        np.nextafter(
+            fixed_safe_z_recovery_exit_clearance
+            + args.minimum_saturated_waypoint_progress,
+            np.inf,
+        )
+    )
     fixed_safe_z_full_outward_brake_clearance = float(
         np.nextafter(
             vertical_corridor_reserve_recovery_entry_clearance
@@ -15271,6 +15276,8 @@ def _seek_stable_plate_contact(
         > vertical_corridor_reserve_recovery_entry_clearance
         and fixed_safe_z_recovery_exit_clearance
         > fixed_safe_z_recovery_entry_clearance
+        and fixed_safe_z_refill_target_clearance
+        > fixed_safe_z_recovery_exit_clearance
         and fixed_safe_z_recovery_entry_clearance
         > fixed_safe_z_full_outward_brake_clearance
     ):
@@ -15287,6 +15294,9 @@ def _seek_stable_plate_contact(
             ),
             "fixed_safe_z_recovery_exit_clearance_m": (
                 fixed_safe_z_recovery_exit_clearance
+            ),
+            "fixed_safe_z_refill_target_clearance_m": (
+                fixed_safe_z_refill_target_clearance
             ),
             "fixed_safe_z_full_outward_brake_clearance_m": (
                 fixed_safe_z_full_outward_brake_clearance

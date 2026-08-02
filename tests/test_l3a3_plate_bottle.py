@@ -929,8 +929,9 @@ def test_fixed_safe_z_lateral_hold_uses_job503639_nominal_refill_band():
         native_action_spec=native_spec,
     )
     exit_clearance = np.nextafter(0.00155, np.inf)
+    refill_target = np.nextafter(exit_clearance + 0.00005, np.inf)
     nominal_refill = np.nextafter(
-        (exit_clearance - live_clearance) / 0.08,
+        (refill_target - live_clearance) / 0.08,
         np.inf,
     )
     assert action[:3].tolist() == pytest.approx(
@@ -940,6 +941,9 @@ def test_fixed_safe_z_lateral_hold_uses_job503639_nominal_refill_band():
     assert evidence["live_outside_recovery_active"] is True
     assert evidence["live_full_outward_brake_active"] is False
     assert evidence["measured_inward_response"] is False
+    assert evidence["outside_refill_target_clearance_m"] == pytest.approx(
+        refill_target
+    )
     assert evidence["selected_outward_recovery_action"] == pytest.approx(
         nominal_refill
     )
@@ -948,7 +952,7 @@ def test_fixed_safe_z_lateral_hold_uses_job503639_nominal_refill_band():
     ] is True
 
 
-def test_fixed_safe_z_lateral_hold_avoids_job503641_wrong_way_z_brake():
+def test_fixed_safe_z_lateral_hold_retains_job503642_downward_z_brake():
     native_spec = {
         "source": "env.action_spec",
         "action_dimension": 7,
@@ -956,10 +960,10 @@ def test_fixed_safe_z_lateral_hold_avoids_job503641_wrong_way_z_brake():
         "high": np.ones(7, dtype=float).tolist(),
         "runtime_resolved": True,
     }
-    live_clearance = 0.0009863286345992844
+    live_clearance = 0.0009749753150044976
     action, evidence = _fixed_safe_z_lateral_hold_action(
         current_eef=np.array(
-            [0.1323385791769622, -0.026296222117468356, 0.9203868341226829]
+            [0.1323272727317591, -0.026305187799701472, 0.9203120079482806]
         ),
         lateral_target_xy=np.array(
             [0.13242106705090634, -0.02850777957668001]
@@ -967,12 +971,12 @@ def test_fixed_safe_z_lateral_hold_avoids_job503641_wrong_way_z_brake():
         lateral_position_tolerance_m=0.005,
         fixed_safe_z_m=0.9196513910416114,
         vertical_position_tolerance_m=0.0004,
-        measured_vertical_step_progress_m=-0.00016480525514472877,
-        measured_outward_step_progress_m=0.00039605915454962726,
+        measured_vertical_step_progress_m=-0.00019948232421351797,
+        measured_outward_step_progress_m=0.0003901149684915617,
         outside_side_guard={
             "minimum_outside_clearance_m": live_clearance,
             "required_outside_clearance_m": np.nextafter(0.0, np.inf),
-            "finger_table_vertical_clearance_m": 0.007547398544214379,
+            "finger_table_vertical_clearance_m": 0.007472123446334189,
             "required_finger_table_clearance_m": np.nextafter(
                 0.0, np.inf
             ),
@@ -991,20 +995,20 @@ def test_fixed_safe_z_lateral_hold_avoids_job503641_wrong_way_z_brake():
         native_action_spec=native_spec,
     )
     exit_clearance = np.nextafter(0.00155, np.inf)
+    refill_target = np.nextafter(exit_clearance + 0.00005, np.inf)
     nominal_refill = np.nextafter(
-        (exit_clearance - live_clearance) / 0.08,
+        (refill_target - live_clearance) / 0.08,
         np.inf,
     )
     assert action[:3].tolist() == pytest.approx(
-        [nominal_refill, 0.0, 0.0]
+        [nominal_refill, 0.0, np.nextafter(0.20, 0.0)]
     )
     assert evidence["above_safe_z_band"] is True
     assert evidence["measured_downward_tail"] is True
-    assert evidence["downward_tail_brake_active"] is False
-    assert evidence["downward_tail_correction_above_safe_z"] is True
-    assert evidence["negative_z_suspended_for_outside_recovery"] is True
+    assert evidence["downward_tail_brake_active"] is True
+    assert evidence["negative_z_suspended_for_outside_recovery"] is False
     assert evidence["proof"][
-        "corrective_descent_above_band_avoids_positive_z_brake"
+        "every_measured_downward_tail_uses_full_positive_z"
     ] is True
 
 
@@ -1102,8 +1106,9 @@ def test_fixed_safe_z_lateral_hold_retains_job503638_recovery_to_exit():
     )
     strict_brake = np.nextafter(0.20, 0.0)
     exit_clearance = np.nextafter(0.00155, np.inf)
+    refill_target = np.nextafter(exit_clearance + 0.00005, np.inf)
     nominal_refill = np.nextafter(
-        (exit_clearance - 0.001536) / 0.08,
+        (refill_target - 0.001536) / 0.08,
         np.inf,
     )
     assert action[:3].tolist() == pytest.approx(
@@ -9681,6 +9686,7 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     )
     assert "fixed_safe_z_recovery_entry_clearance" in bounded_seek
     assert "fixed_safe_z_recovery_exit_clearance" in bounded_seek
+    assert "fixed_safe_z_refill_target_clearance" in bounded_seek
     assert (
         '"fixed_safe_z_recovery_exit_clearance_m"'
         in bounded_seek
