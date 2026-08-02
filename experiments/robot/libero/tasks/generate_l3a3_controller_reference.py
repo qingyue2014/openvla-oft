@@ -639,28 +639,125 @@ def _plate_contact_candidate_diagnostics(
 ):
     plate_xy = np.asarray(plate_xy, dtype=float)
     direction = np.asarray(push_direction_xy, dtype=float)
-    direction = direction / np.linalg.norm(direction)
     eef_xy = np.asarray(eef_xy, dtype=float)
-    offsets = (
-        np.array([backoff, 0.0]),
-        np.array([-backoff, 0.0]),
-        np.array([0.0, backoff]),
-        np.array([0.0, -backoff]),
+    if plate_xy.shape != (2,) or eef_xy.shape != (2,):
+        raise ValueError("plate and EEF coordinates must be 2-D")
+    if direction.shape != (2,):
+        raise ValueError("push direction must be 2-D")
+    if (
+        not np.all(np.isfinite(plate_xy))
+        or not np.all(np.isfinite(eef_xy))
+    ):
+        raise ValueError("plate and EEF coordinates must be finite")
+    direction_norm = float(np.linalg.norm(direction))
+    if not np.isfinite(direction_norm) or direction_norm <= 1e-9:
+        raise ValueError("push direction must be finite and nonzero")
+    try:
+        backoff = float(backoff)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("plate contact backoff must be a finite scalar") from exc
+    if not np.isfinite(backoff) or backoff <= 0:
+        raise ValueError("plate contact backoff must be positive and finite")
+    direction /= direction_norm
+
+    cardinal_offsets = (
+        ("+x", np.array([backoff, 0.0])),
+        ("-x", np.array([-backoff, 0.0])),
+        ("+y", np.array([0.0, backoff])),
+        ("-y", np.array([0.0, -backoff])),
     )
-    return [
-        {
+    derived_offsets = (
+        ("trailing_minus_push", -direction * backoff),
+        (
+            "tangent_counterclockwise",
+            np.array([-direction[1], direction[0]]) * backoff,
+        ),
+        (
+            "tangent_clockwise",
+            np.array([direction[1], -direction[0]]) * backoff,
+        ),
+    )
+
+    def candidate_record(
+        offset,
+        *,
+        provenance,
+        native_relation,
+        route_selection_candidate,
+    ):
+        offset = np.asarray(offset, dtype=float)
+        if offset.shape != (2,) or not np.all(np.isfinite(offset)):
+            raise ValueError("derived plate contact offset must be finite and 2-D")
+        offset_norm = float(np.linalg.norm(offset))
+        if not np.isfinite(offset_norm) or offset_norm <= 1e-9:
+            raise ValueError("derived plate contact offset must be nonzero")
+        inward_component = float(np.dot(direction, -offset))
+        return {
             "point_xy": (plate_xy + offset).tolist(),
             "offset_xy": offset.tolist(),
-            "inward_component_m": float(np.dot(direction, -offset)),
+            "inward_component_m": inward_component,
             "eef_xy_distance_m": float(
                 np.linalg.norm((plate_xy + offset) - eef_xy)
             ),
-            "trailing_eligible": bool(
-                float(np.dot(direction, -offset)) > 1e-6
+            "trailing_eligible": bool(inward_component > 1e-6),
+            "route_selection_candidate": bool(route_selection_candidate),
+            "diagnostic_only": not bool(route_selection_candidate),
+            "candidate_provenance": [provenance],
+            "deduplicated_provenance": [],
+            "native_push_direction_relations": (
+                [] if native_relation is None else [native_relation]
             ),
         }
-        for offset in offsets
-    ]
+
+    # Preserve the historical cardinal candidate order and selection domain.
+    # Only semantically trailing cardinals reached the compiled plan before
+    # native-direction audit candidates were added.
+    candidates = []
+    for label, offset in cardinal_offsets:
+        if float(np.dot(direction, -offset)) <= 1e-6:
+            continue
+        candidates.append(
+            candidate_record(
+                offset,
+                provenance=f"legacy_cardinal:{label}",
+                native_relation=None,
+                route_selection_candidate=True,
+            )
+        )
+
+    # Append directions derived strictly from the normalized native push.
+    # These are diagnostic-only until native reset evidence authorizes a
+    # route-selection change.  Exact duplicates merge provenance into the
+    # existing candidate instead of changing its position in the list.
+    for relation, offset in derived_offsets:
+        provenance = f"native_push_direction:{relation}"
+        duplicate = next(
+            (
+                candidate
+                for candidate in candidates
+                if np.allclose(
+                    candidate["offset_xy"],
+                    offset,
+                    rtol=0.0,
+                    atol=1e-9,
+                )
+            ),
+            None,
+        )
+        if duplicate is not None:
+            duplicate["candidate_provenance"].append(provenance)
+            duplicate["deduplicated_provenance"].append(provenance)
+            duplicate["native_push_direction_relations"].append(relation)
+            continue
+        candidates.append(
+            candidate_record(
+                offset,
+                provenance=provenance,
+                native_relation=relation,
+                route_selection_candidate=False,
+            )
+        )
+    return candidates
 
 
 def _robot_gripper_body_names(env):
@@ -5802,7 +5899,7 @@ def _compiled_trailing_side_contact_candidates(
     plate_approach_eef_height,
     position_action_scale,
 ):
-    """Compile and gate every cardinal side that can push toward the goal."""
+    """Compile legacy route candidates plus native-direction diagnostics."""
     plate_position = np.asarray(plate_position, dtype=float)
     eef_position = np.asarray(eef_position, dtype=float)
     if plate_position.shape != (3,) or eef_position.shape != (3,):
@@ -5819,8 +5916,6 @@ def _compiled_trailing_side_contact_candidates(
         eef_position[:2],
         backoff,
     ):
-        if not geometry["trailing_eligible"]:
-            continue
         outward = np.asarray(geometry["offset_xy"], dtype=float)
         outward /= np.linalg.norm(outward)
         outside_side, contact_target, compiled = (
@@ -5857,10 +5952,15 @@ def _compiled_trailing_side_contact_candidates(
         dual_finger_skew = float(
             compiled["dual_finger_contact_skew_m"]
         )
-        violations = []
+        geometry_violations = []
         if dual_finger_skew > outside_clearance_m:
-            violations.append(
+            geometry_violations.append(
                 "dual_finger_contact_skew_exceeds_outside_clearance"
+            )
+        selection_violations = list(geometry_violations)
+        if not geometry["route_selection_candidate"]:
+            selection_violations.append(
+                "native_push_derived_candidate_is_diagnostic_only"
             )
         candidates.append(
             {
@@ -5887,8 +5987,13 @@ def _compiled_trailing_side_contact_candidates(
                 ),
                 "outside_high_clipped_action_axes": clipped_axes,
                 "outside_high_action_will_clip": bool(clipped_axes),
-                "selection_violations": violations,
-                "selection_eligible": not violations,
+                "compiled_geometry_violations": geometry_violations,
+                "compiled_geometry_eligible": not geometry_violations,
+                "selection_violations": selection_violations,
+                "selection_eligible": bool(
+                    geometry["route_selection_candidate"]
+                    and not geometry_violations
+                ),
             }
         )
     selected = _select_reachable_compiled_side_candidate(candidates)

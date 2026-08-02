@@ -48,6 +48,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _outside_side_recovery_progress_evidence,
     _outside_side_step_response_evidence,
     _outside_side_staircase_settle_trigger,
+    _plate_contact_candidate_diagnostics,
     _plate_finger_contact_sides,
     _push_window_timeout_evidence,
     _robot_contacts_body,
@@ -525,6 +526,104 @@ def test_compiled_side_selection_accepts_499848_mild_action_clipping():
         )
 
 
+def test_native_push_direction_candidates_append_after_legacy_cardinals():
+    direction = np.array([-0.394, 0.919], dtype=float)
+    direction /= np.linalg.norm(direction)
+    candidates = _plate_contact_candidate_diagnostics(
+        plate_xy=np.array([0.050, 0.000]),
+        push_direction_xy=direction,
+        eef_xy=np.array([0.000, 0.000]),
+        backoff=0.010,
+    )
+
+    assert len(candidates) == 5
+    np.testing.assert_allclose(
+        [candidate["offset_xy"] for candidate in candidates[:2]],
+        [[0.010, 0.000], [0.000, -0.010]],
+    )
+    assert [
+        candidate["candidate_provenance"] for candidate in candidates[:2]
+    ] == [["legacy_cardinal:+x"], ["legacy_cardinal:-y"]]
+    assert all(
+        candidate["route_selection_candidate"]
+        for candidate in candidates[:2]
+    )
+
+    derived = candidates[2:]
+    assert [
+        candidate["native_push_direction_relations"][0]
+        for candidate in derived
+    ] == [
+        "trailing_minus_push",
+        "tangent_counterclockwise",
+        "tangent_clockwise",
+    ]
+    np.testing.assert_allclose(
+        [candidate["offset_xy"] for candidate in derived],
+        [
+            -direction * 0.010,
+            np.array([-direction[1], direction[0]]) * 0.010,
+            np.array([direction[1], -direction[0]]) * 0.010,
+        ],
+    )
+    assert derived[0]["trailing_eligible"] is True
+    assert derived[1]["trailing_eligible"] is False
+    assert derived[2]["trailing_eligible"] is False
+    assert all(candidate["diagnostic_only"] for candidate in derived)
+    assert not any(
+        candidate["route_selection_candidate"] for candidate in derived
+    )
+
+
+def test_native_push_direction_candidate_dedup_preserves_legacy_position():
+    candidates = _plate_contact_candidate_diagnostics(
+        plate_xy=np.array([0.050, 0.000]),
+        push_direction_xy=np.array([1.000, 0.000]),
+        eef_xy=np.array([0.000, 0.000]),
+        backoff=0.010,
+    )
+
+    assert len(candidates) == 3
+    assert candidates[0]["offset_xy"] == pytest.approx([-0.010, 0.000])
+    assert candidates[0]["route_selection_candidate"] is True
+    assert candidates[0]["candidate_provenance"] == [
+        "legacy_cardinal:-x",
+        "native_push_direction:trailing_minus_push",
+    ]
+    assert candidates[0]["deduplicated_provenance"] == [
+        "native_push_direction:trailing_minus_push",
+    ]
+    assert candidates[0]["native_push_direction_relations"] == [
+        "trailing_minus_push",
+    ]
+    assert [
+        candidate["native_push_direction_relations"][0]
+        for candidate in candidates[1:]
+    ] == ["tangent_counterclockwise", "tangent_clockwise"]
+
+
+@pytest.mark.parametrize(
+    ("plate_xy", "direction", "eef_xy", "backoff", "message"),
+    [
+        ([0.0, 0.0], [0.0, 0.0], [0.0, 0.0], 0.01, "nonzero"),
+        ([0.0, 0.0], [np.nan, 1.0], [0.0, 0.0], 0.01, "nonzero"),
+        ([np.inf, 0.0], [1.0, 0.0], [0.0, 0.0], 0.01, "finite"),
+        ([0.0, 0.0], [1.0, 0.0], [0.0, 0.0], 0.0, "positive"),
+        ([0.0, 0.0], [1.0, 0.0], [0.0, 0.0], np.nan, "positive"),
+    ],
+)
+def test_native_push_direction_candidate_inputs_fail_closed(
+    plate_xy, direction, eef_xy, backoff, message
+):
+    with pytest.raises(ValueError, match=message):
+        _plate_contact_candidate_diagnostics(
+            plate_xy=plate_xy,
+            push_direction_xy=direction,
+            eef_xy=eef_xy,
+            backoff=backoff,
+        )
+
+
 def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
     class Model:
         body_names = [
@@ -603,7 +702,11 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
         plate_approach_eef_height=0.160,
         position_action_scale=0.080,
     )
-    assert len(candidates) == 2
+    assert len(candidates) == 5
+    np.testing.assert_allclose(
+        [candidate["offset_xy"] for candidate in candidates[:2]],
+        [[0.010, 0.000], [0.000, -0.010]],
+    )
     assert selected["offset_xy"] == pytest.approx([0.010, 0.000])
     assert selected["selection_eligible"] is True
     assert selected["dual_finger_contact_skew_m"] == pytest.approx(
@@ -626,6 +729,25 @@ def test_compiled_trailing_candidates_choose_dual_finger_reachable_plus_x():
     assert rejected["selection_violations"] == [
         "dual_finger_contact_skew_exceeds_outside_clearance",
     ]
+    assert [
+        candidate["native_push_direction_relations"][0]
+        for candidate in candidates[2:]
+    ] == [
+        "trailing_minus_push",
+        "tangent_counterclockwise",
+        "tangent_clockwise",
+    ]
+    for diagnostic in candidates[2:]:
+        assert diagnostic["diagnostic_only"] is True
+        assert diagnostic["selection_eligible"] is False
+        assert (
+            "native_push_derived_candidate_is_diagnostic_only"
+            in diagnostic["selection_violations"]
+        )
+        assert isinstance(diagnostic["compiled_geometry_eligible"], bool)
+        assert isinstance(diagnostic["dual_finger_contact_skew_m"], float)
+        assert isinstance(diagnostic["outside_high_action_peak"], float)
+        assert isinstance(diagnostic["outside_high_action_will_clip"], bool)
 
 
 def test_499866_outside_side_guard_uses_live_aabbs_not_exact_eef_center():
