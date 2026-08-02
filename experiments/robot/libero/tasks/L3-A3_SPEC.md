@@ -71,25 +71,30 @@ and its existing OSC limits. After the verified high wrist yaw and exact
 second real-simulator geometry recompile, it derives one route from the live,
 unmodified collision inventory:
 
-1. at the center-high Z, move in minus X while the complete rigid-hand AABB
-   remains more than one maximum controller world step in front of every
-   `wooden_cabinet_1_cabinet_top` and `wine_rack_1_main` collision geom;
-2. while the complete rigid hand remains both strictly left of the cabinet top
-   and strictly in front of the cabinet/wine-rack obstacle set, descend to the
-   existing native outside-side Z;
-3. only after the complete rigid hand is strictly below every cabinet-top and
-   wine-rack geom, traverse to the native trailing-side Y;
-4. retain that strict under-obstacle separation while returning in plus X to
-   the unchanged native outside-side contact column.
+1. at the center-high Z, move in plus Y until the complete rigid-hand AABB is
+   in front of the native cabinet and wine rack; the high Z separates it from
+   the lower native plate during this first segment;
+2. while the complete rigid hand remains strictly in front of the native
+   plate, cabinet top, and wine rack, descend to the existing native
+   outside-side Z, where the hand is strictly below the cabinet top;
+3. at that low Z and while retaining strict front separation from all three
+   native obstacles, move in plus X until the complete rigid hand is strictly
+   right of the plate and wine rack;
+4. retain the right-of-plate/wine-rack and under-cabinet separations while
+   moving to the unchanged native trailing-side Y;
+5. retain the right-of-wine-rack and under-cabinet separations while moving in
+   minus X to the unchanged native outside-side contact column.
 
-The minus-X waypoint is compiled from the exact live cabinet minimum X and
-maximum rigid-hand X offset. Its separation-axis reserve is the unchanged
-near-contact maximum OSC world step (`0.008 m`) plus the unchanged waypoint
-tolerance (`0.005 m`), with a one-ULP strictness margin. The four long,
-axis-separated translations may use the strict interior of the native OSC
+The front and right waypoints are compiled from the exact live plate,
+cabinet-top, and wine-rack AABBs and the complete rigid-hand AABB offsets.
+Their separation-axis reserve is the unchanged near-contact maximum OSC world
+step (`0.008 m`) plus the unchanged waypoint tolerance (`0.005 m`), with a
+one-ULP strictness margin. The five long, axis-separated translations may use
+the strict interior of the native OSC
 translation-action bound; the unchanged `0.10` action cap remains in force for
 post-route correction and plate-contact motion. Every executed action
-recompiles the live front/left/under inequality, enforces the empty structural
+recompiles the live above/front/right/under inequality, enforces the empty
+structural
 robot/native contact allowlist, retains native table clearance, and rechecks
 plate support, tilt, drift, and velocities. Any identity change, contact, lost
 separation, lost support, instability, action-budget overrun, or terminal

@@ -22,7 +22,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _compiled_adaptive_vertical_descent_action,
     _compiled_collision_pair_clearance,
     _compiled_hypothetical_wrist_yaw_plan,
-    _compiled_native_cabinet_minus_x_detour_plan,
+    _compiled_native_front_right_low_detour_plan,
     _compiled_finger_yaw_frame,
     _compiled_native_side_contact_plan,
     _compiled_pair_set_clearance,
@@ -7636,12 +7636,14 @@ def _l3a3_live_diagnostic_env(contacts=()):
             "wooden_cabinet_1_cabinet_top",
             "table",
             "wine_rack_1_main",
+            "plate_1_main",
         ]
         geom_names = [
             "gripper0_hand_collision",
             "wooden_cabinet_1_g18",
             "table_collision",
             "wine_rack_1_g4",
+            "plate_1_g1",
         ]
         joint_names = [
             "wooden_cabinet_1_joint0",
@@ -7650,17 +7652,18 @@ def _l3a3_live_diagnostic_env(contacts=()):
         nbody = len(body_names)
         ngeom = len(geom_names)
         njnt = len(joint_names)
-        body_parentid = np.array([0, 0, 0, 2, 0, 0], dtype=int)
-        geom_bodyid = np.array([1, 3, 4, 5], dtype=int)
+        body_parentid = np.array([0, 0, 0, 2, 0, 0, 0], dtype=int)
+        geom_bodyid = np.array([1, 3, 4, 5, 6], dtype=int)
         geom_contype = np.ones(ngeom, dtype=int)
         geom_conaffinity = np.ones(ngeom, dtype=int)
-        geom_type = np.array([7, 6, 6, 6], dtype=int)
+        geom_type = np.array([7, 6, 6, 6, 6], dtype=int)
         geom_size = np.array(
             [
                 [0.031, 0.048, 0.103],
                 [0.00770, 0.00817, 0.04445],
                 [0.50, 0.50, 0.01],
                 [0.00108, 0.00867, 0.13222],
+                [0.07, 0.07, 0.01],
             ],
             dtype=float,
         )
@@ -7670,6 +7673,7 @@ def _l3a3_live_diagnostic_env(contacts=()):
                 [0.0, 0.0, 0.0, 0.04445, 0.00770, 0.00817],
                 [0.0, 0.0, 0.0, 0.50, 0.50, 0.01],
                 [0.0, 0.0, 0.0, 0.13222, 0.00519, 0.00809],
+                [0.0, 0.0, 0.0, 0.07, 0.07, 0.01],
             ],
             dtype=float,
         )
@@ -7705,12 +7709,14 @@ def _l3a3_live_diagnostic_env(contacts=()):
                 [0.04, -0.13, 1.04],
                 [0.0, 0.0, 0.88],
                 [-0.258, -0.194, 1.14],
+                [0.05, -0.03, 0.91],
             ],
             dtype=float,
         ),
         geom_xmat=np.array(
             [
                 robot_rotation.reshape(9),
+                np.eye(3).reshape(9),
                 np.eye(3).reshape(9),
                 np.eye(3).reshape(9),
                 np.eye(3).reshape(9),
@@ -7724,6 +7730,7 @@ def _l3a3_live_diagnostic_env(contacts=()):
                 [0.03, -0.24, 0.88],
                 [0.0, 0.0, 0.88],
                 [-0.258, -0.194, 1.14],
+                [0.05, -0.03, 0.91],
             ],
             dtype=float,
         ),
@@ -7773,8 +7780,8 @@ def test_live_inventory_records_cabinet_qpos_provenance_and_hash():
     cabinet = _live_cabinet_pose_diagnostic(env)
 
     assert inventory["robot_collision_geom_count"] == 1
-    assert inventory["native_nonrobot_collision_geom_count"] == 3
-    assert inventory["total_collision_geom_count"] == 4
+    assert inventory["native_nonrobot_collision_geom_count"] == 4
+    assert inventory["total_collision_geom_count"] == 5
     assert len(inventory["inventory_sha256"]) == 64
     robot = inventory["robot_collision_geoms"][0]
     assert robot["name"] == "gripper0_hand_collision"
@@ -7809,7 +7816,7 @@ def test_live_inventory_manifest_keeps_complete_inventory(tmp_path):
     saved = record["live_collision_inventory"]
     assert saved["inventory_sha256"] == inventory["inventory_sha256"]
     assert len(saved["robot_collision_geoms"]) == 1
-    assert len(saved["native_nonrobot_collision_geoms"]) == 3
+    assert len(saved["native_nonrobot_collision_geoms"]) == 4
     assert saved["robot_collision_geoms"][0]["xmat_world_row_major"] == (
         inventory["robot_collision_geoms"][0]["xmat_world_row_major"]
     )
@@ -7822,7 +7829,7 @@ def test_native_cabinet_detour_completion_is_hash_bound(tmp_path):
     env = _l3a3_live_diagnostic_env()
     eef = np.array([0.04, -0.07, 1.06])
     inventory = _live_collision_inventory(env, eef_position=eef)
-    plan = _compiled_native_cabinet_minus_x_detour_plan(
+    plan = _compiled_native_front_right_low_detour_plan(
         live_inventory=inventory,
         current_eef=eef,
         outside_high_target=np.array([0.10, -0.14, 1.06]),
@@ -7862,7 +7869,7 @@ def test_native_cabinet_detour_completion_is_hash_bound(tmp_path):
     assert saved["route_executed"] is True
     assert saved["route_completion"] == completion
     assert saved["latest_status"] == (
-        "NATIVE_CABINET_MINUS_X_DETOUR_EXECUTED_AND_GUARDED"
+        "NATIVE_FRONT_RIGHT_LOW_DETOUR_EXECUTED_AND_GUARDED"
     )
     assert context["executed"] is True
 
@@ -7904,11 +7911,11 @@ def test_live_detour_candidates_cannot_select_or_execute():
     assert all(candidate["aabb_authorization_prohibited"] for candidate in candidates)
 
 
-def test_native_cabinet_minus_x_detour_compiles_from_live_geometry():
+def test_native_front_right_low_detour_compiles_from_live_geometry():
     env = _l3a3_live_diagnostic_env()
     eef = np.array([0.04, -0.07, 1.06])
     inventory = _live_collision_inventory(env, eef_position=eef)
-    plan = _compiled_native_cabinet_minus_x_detour_plan(
+    plan = _compiled_native_front_right_low_detour_plan(
         live_inventory=inventory,
         current_eef=eef,
         outside_high_target=np.array([0.10, -0.14, 1.06]),
@@ -7922,14 +7929,19 @@ def test_native_cabinet_minus_x_detour_compiles_from_live_geometry():
     assert plan["route_authorized"] is True
     assert plan["diagnostic_only"] is False
     assert plan["wine_rack_geom_names"] == ["wine_rack_1_g4"]
+    assert plan["plate_geom_names"] == ["plate_1_g1"]
     assert plan["route_order"] == [
-        "minus_x_high_lateral",
-        "minus_x_front_vertical_descent",
-        "under_obstacles_low_y_pass",
-        "under_cabinet_low_x_return",
+        "front_high_lateral",
+        "front_vertical_descent",
+        "low_front_right_lateral",
+        "right_low_trailing_pass",
+        "trailing_low_terminal_return",
     ]
-    assert plan["predicted_left_clearance_m"] > 0.013
+    assert plan["predicted_front_clearance_m"] > 0.013
+    assert plan["predicted_right_clearance_m"] > 0.013
+    assert plan["predicted_high_above_plate_clearance_m"] > 0.008
     assert plan["predicted_under_clearance_at_terminal_m"] > 0.008
+    assert plan["predicted_right_of_rack_clearance_at_terminal_m"] > 0.008
     assert plan["maximum_route_translation_action"] > 0.99
     assert plan["maximum_route_world_command_m"] == pytest.approx(0.08)
     assert plan["minimum_full_step_action_lower_bound"] < 180
@@ -7938,12 +7950,29 @@ def test_native_cabinet_minus_x_detour_compiles_from_live_geometry():
         [0.10, -0.14, 0.90],
     )
 
+    bounded_seek = CONTROLLER_REFERENCE.read_text().split(
+        "def _seek_stable_plate_contact(", 1
+    )[1].split("\ndef _calibrate_stable_plate_contact_depth", 1)[0]
+    for stage, waypoint in (
+        ("front_high_lateral", "front_high"),
+        ("front_vertical_descent", "front_low"),
+        ("low_front_right_lateral", "right_front_low"),
+        ("right_low_trailing_pass", "right_trailing_low"),
+        ("trailing_low_terminal_return", "terminal_outside_side_low"),
+    ):
+        assert stage in bounded_seek
+        assert waypoint in bounded_seek
+    assert "minus_x_high_lateral" not in bounded_seek
+    assert "minus_x_front_vertical_descent" not in bounded_seek
+    assert "low_front_x_return" not in bounded_seek
+    assert "right_of_rack_low_y_pass" not in bounded_seek
+
 
 def test_native_cabinet_detour_live_guard_fails_closed_then_accepts():
     env = _l3a3_live_diagnostic_env()
     initial_eef = np.array([0.04, -0.07, 1.06])
     inventory = _live_collision_inventory(env, eef_position=initial_eef)
-    plan = _compiled_native_cabinet_minus_x_detour_plan(
+    plan = _compiled_native_front_right_low_detour_plan(
         live_inventory=inventory,
         current_eef=initial_eef,
         outside_high_target=np.array([0.10, -0.14, 1.06]),
@@ -7958,11 +7987,14 @@ def test_native_cabinet_detour_live_guard_fails_closed_then_accepts():
         env,
         eef_position=initial_eef,
         plan=plan,
-        stage="minus_x_high_lateral",
+        stage="front_high_lateral",
     )
     assert front["accepted"] is True
     assert front["blocking_wine_rack_geom_count"] == 1
-    assert front["front_clearance_m"] > front[
+    assert front["fixture_front_clearance_m"] > front[
+        "required_strict_clearance_m"
+    ]
+    assert front["above_plate_clearance_m"] > front[
         "required_strict_clearance_m"
     ]
 
@@ -7970,32 +8002,49 @@ def test_native_cabinet_detour_live_guard_fails_closed_then_accepts():
         env,
         eef_position=initial_eef,
         plan=plan,
-        stage="minus_x_front_vertical_descent",
+        stage="front_vertical_descent",
     )
     assert rejected["accepted"] is False
     assert rejected["violations"] == [
-        "rigid_hand_not_strictly_left_of_native_cabinet"
+        "rigid_hand_not_strictly_in_front_of_native_obstacles"
     ]
 
-    env.sim.data.geom_xpos[0, 0] = -0.10
-    left = _live_native_cabinet_detour_guard(
+    env.sim.data.geom_xpos[0, 1] = 0.15
+    front_of_plate = _live_native_cabinet_detour_guard(
         env,
-        eef_position=np.array([-0.10, -0.07, 1.06]),
+        eef_position=np.array([0.04, 0.16, 1.06]),
         plan=plan,
-        stage="minus_x_front_vertical_descent",
+        stage="front_vertical_descent",
     )
-    assert left["accepted"] is True
-    assert left["left_clearance_m"] > left["required_strict_clearance_m"]
+    assert front_of_plate["accepted"] is True
+    assert front_of_plate["front_clearance_m"] > front_of_plate[
+        "required_strict_clearance_m"
+    ]
 
-    env.sim.data.geom_xpos[0, 2] = 0.95
-    under = _live_native_cabinet_detour_guard(
+    env.sim.data.geom_xpos[0] = [0.25, -0.14, 0.95]
+    right_and_under = _live_native_cabinet_detour_guard(
         env,
-        eef_position=np.array([-0.10, -0.14, 0.95]),
+        eef_position=np.array([0.24, -0.13, 0.96]),
         plan=plan,
-        stage="under_cabinet_low_x_return",
+        stage="right_low_trailing_pass",
     )
-    assert under["accepted"] is True
-    assert under["under_clearance_m"] > under[
+    assert right_and_under["accepted"] is True
+    assert right_and_under["under_clearance_m"] > right_and_under[
+        "required_strict_clearance_m"
+    ]
+    assert right_and_under["right_clearance_m"] > right_and_under[
+        "required_strict_clearance_m"
+    ]
+
+    env.sim.data.geom_xpos[0] = [0.05, -0.14, 0.95]
+    terminal = _live_native_cabinet_detour_guard(
+        env,
+        eef_position=np.array([0.04, -0.13, 0.96]),
+        plan=plan,
+        stage="trailing_low_terminal_return",
+    )
+    assert terminal["accepted"] is True
+    assert terminal["right_of_rack_clearance_m"] > terminal[
         "required_strict_clearance_m"
     ]
 
