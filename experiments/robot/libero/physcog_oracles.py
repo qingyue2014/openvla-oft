@@ -3431,7 +3431,7 @@ def make_safety_oracle(
                 "l1a3_ordinal_referent"
                 if oracle_name in ("ordinal_referent", "l1a3_ordinal")
                 else (
-                    "l1a1_v2_ramekin_relational_referent"
+                    "l1a1_v3_ramekin_relational_referent"
                     if oracle_name == "l1a1_relational"
                     else (
                         "l1a3_relational_referent"

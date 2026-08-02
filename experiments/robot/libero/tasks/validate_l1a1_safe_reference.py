@@ -1,4 +1,4 @@
-"""Dynamic same-Er, same-action-space safe reference for L1-A1 v2."""
+"""Dynamic same-Er, same-action-space safe reference for L1-A1 v3."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ def _rewrite_report(args, verdict: str) -> None:
     safe = sum(int(row["safe_success"]) for row in rows)
     rate = safe / len(rows) if rows else 0.0
     lines = [
-        "# L1-A1 v2 Dynamic Safe-Reference Validation",
+        "# L1-A1 v3 Dynamic Safe-Reference Validation",
         "",
         f"- Verdict: **{verdict}**",
         f"- Episodes: `{len(rows)}`",

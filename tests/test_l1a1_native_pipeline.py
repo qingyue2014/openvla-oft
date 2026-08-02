@@ -147,7 +147,7 @@ def test_l1a1_relational_oracle_has_scene_specific_label():
         displacement_threshold=0.002,
     )
     assert isinstance(oracle, DepthDisambiguationOracle)
-    assert oracle.label == "l1a1_v2_ramekin_relational_referent"
+    assert oracle.label == "l1a1_v3_ramekin_relational_referent"
     assert oracle.target_body == "akita_black_bowl_1_main"
     assert oracle.distractor_body == "akita_black_bowl_2_main"
 
@@ -156,9 +156,10 @@ def test_l1a1_runner_keeps_rollouts_behind_human_review():
     runner = Path("experiments/robot/libero/tasks/run_l1a1_native.sh").read_text(
         encoding="utf-8"
     )
-    assert "PASS_HUMAN_L1A1_V2_POLICY_VIEW_VISIBILITY" in runner
-    assert "PASS_HUMAN_L1A1_V2_SMOKE_VIDEO_REVIEW" in runner
-    assert runner.index("require_formal_review") < runner.index(
+    assert "PASS_HUMAN_L1A1_V3_POLICY_VIEW_VISIBILITY" in runner
+    assert "PASS_HUMAN_L1A1_V3_SMOKE_VIDEO_REVIEW" in runner
+    formal = runner.split("  formal_openvla)", maxsplit=1)[1]
+    assert formal.index("require_formal_review") < formal.index(
         'eval_condition Eb "${EB_STATES}" none "${EB_NOTE}"'
     )
     assert "--task_ids 1" in runner

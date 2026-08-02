@@ -1,4 +1,4 @@
-"""Paired native-only L1-A1 v2 ramekin-relative risk pipeline.
+"""Paired native-only L1-A1 v3 ramekin-relative risk pipeline.
 
 Eb is the exact native ``libero_spatial`` task-1 state.  Er and Ec share the
 same relocated target-bowl / ramekin relation.  Er places the native non-target
@@ -36,9 +36,13 @@ STOVE = "flat_stove_1_main"
 # that invalidated the historical L1-A1 Ec control.  These coordinates may be
 # rejected by the Superpod check gate, but must not be silently tuned after a
 # formal policy result is observed.
-TARGET_XY = np.array([0.03, 0.10])
-LANDMARK_XY = np.array([-0.10, 0.10])
-EC_LURE_XY = np.array([0.22, -0.15])
+# C07 was selected before any learned-policy rollout from the immutable
+# pre-policy scan in ``l1a1_geometry_calibration.json``. It passed the exact
+# physical and policy-view gates and had a 37.3 px minimum referent separation
+# with a 0.267 m Er relation margin on native state 0.
+TARGET_XY = np.array([0.10, -0.10])
+LANDMARK_XY = np.array([-0.065, -0.10])
+EC_LURE_XY = np.array([0.26, 0.06])
 
 
 def _state_sha256(path: Path) -> str:
@@ -54,13 +58,13 @@ def _expected_supports(_condition: str) -> dict[str, str]:
 
 
 def _configure() -> None:
-    pipeline.SCENE_LABEL = "L1-A1-v2"
+    pipeline.SCENE_LABEL = "L1-A1-v3"
     pipeline.RELATION_LABEL = "ramekin"
     pipeline.LANDMARK_JOINT_LABEL = "native ramekin-landmark"
-    pipeline.PAIRED_SCENE_GATE_VERDICT = "PASS_L1A1_PAIRED_SCENE_GATE"
-    pipeline.ACTION_SEPARATION_PASS = "PASS_L1A1_ACTION_SEPARATION"
-    pipeline.ACTION_SEPARATION_FAIL = "FAIL_L1A1_ACTION_SEPARATION"
-    pipeline.REPLAY_ORACLE_LABEL = "l1a1_v2_ramekin_relational_referent"
+    pipeline.PAIRED_SCENE_GATE_VERDICT = "PASS_L1A1_V3_PAIRED_SCENE_GATE"
+    pipeline.ACTION_SEPARATION_PASS = "PASS_L1A1_V3_ACTION_SEPARATION"
+    pipeline.ACTION_SEPARATION_FAIL = "FAIL_L1A1_V3_ACTION_SEPARATION"
+    pipeline.REPLAY_ORACLE_LABEL = "l1a1_v3_ramekin_relational_referent"
     pipeline.INTERVENTION_ER_DESCRIPTION = (
         "target and native ramekin shift together; native wrong bowl is placed "
         "at the paired Eb target pose"
@@ -107,7 +111,7 @@ def _configure() -> None:
     pipeline.TARGET_XY = TARGET_XY
     pipeline.LANDMARK_XY = LANDMARK_XY
     pipeline.EC_LURE_XY = EC_LURE_XY
-    pipeline.MAX_TARGET_LANDMARK_DISTANCE = 0.150
+    pipeline.MAX_TARGET_LANDMARK_DISTANCE = 0.190
     pipeline.MIN_RELATION_MARGIN = 0.060
     pipeline.MIN_BOWL_DISTANCE = 0.160
     pipeline.MAX_TRANSIENT_WAIT_TILT_DEG = 1.0
@@ -134,7 +138,7 @@ def generate(args) -> None:
     try:
         _base_generate(args)
     except RuntimeError as exc:
-        print("verdict=FAIL_L1A1_PAIRED_SCENE_GATE")
+        print("verdict=FAIL_L1A1_V3_PAIRED_SCENE_GATE")
         print(f"gate_failure={type(exc).__name__}: {exc}")
         raise SystemExit(2) from None
     pairing_path = Path(args.pairing_manifest)
@@ -193,7 +197,7 @@ def generate(args) -> None:
                 "max_Eb_Er_unallowed_qpos_error": max_eb_er_qpos,
                 "max_Eb_Er_unallowed_qvel_error": max_eb_er_qvel,
                 "tolerance": pipeline.PAIR_TOLERANCE,
-                "verdict": "PASS_L1A1_INTERVENTION_ALLOWLIST",
+                "verdict": "PASS_L1A1_V3_INTERVENTION_ALLOWLIST",
             },
             "condition_state_files": {
                 condition: {
@@ -212,8 +216,8 @@ def generate(args) -> None:
     contract.bind_generated_artifacts(
         preflight_path, pairing_path, condition_paths
     )
-    print("Verdict: PASS_L1A1_INTERVENTION_ALLOWLIST")
-    print("Verdict: PASS_L1A1_ARTIFACT_BINDING")
+    print("Verdict: PASS_L1A1_V3_INTERVENTION_ALLOWLIST")
+    print("Verdict: PASS_L1A1_V3_ARTIFACT_BINDING")
 
 
 pipeline.generate = generate
