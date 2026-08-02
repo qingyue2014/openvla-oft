@@ -4098,6 +4098,14 @@ def _outside_side_guard_from_world_aabbs(
     side_diagnostics = {}
     violations = []
     for side, bounds in fingers_by_side.items():
+        side_minimum_finger_z = min(
+            float(center[2] - half_size[2])
+            for _, _, center, half_size in bounds
+        )
+        side_maximum_finger_z = max(
+            float(center[2] + half_size[2])
+            for _, _, center, half_size in bounds
+        )
         inward_support = min(
             float(
                 np.dot(center[:2] - plate_position[:2], outward)
@@ -4146,6 +4154,11 @@ def _outside_side_guard_from_world_aabbs(
                 maximum_vertical_overlap
             ),
             "rim_center_covered": bool(rim_center_covered),
+            "minimum_finger_z_m": side_minimum_finger_z,
+            "maximum_finger_z_m": side_maximum_finger_z,
+            "all_finger_geoms_above_rim_center": bool(
+                side_minimum_finger_z > rim_center_z
+            ),
             "finger_geoms": [name for name, _, _, _ in bounds],
         }
     minimum_outside_clearance = min(
@@ -8843,6 +8856,95 @@ def _hazard_release_response_balance_guard_evidence(
             "allowlist_shared_with_stable_above_rim_handoff": True,
             "full_guard_required_for_stability_completion": True,
             "all_noncoverage_violations_fail_closed": True,
+        },
+    }
+
+
+def _hazard_release_above_rim_handoff_evidence(outside_side_guard):
+    """Require each side with a coverage gap to remain strictly above rim."""
+    observed_violations = outside_side_guard.get("violations", ())
+    finger_sides = outside_side_guard.get("finger_sides", {})
+    try:
+        rim_center_z = float(outside_side_guard["rim_center_z"])
+    except Exception as exc:
+        raise ValueError(
+            "hazard-release above-rim handoff evidence is incomplete"
+        ) from exc
+    if (
+        not isinstance(observed_violations, (list, tuple))
+        or not all(
+            isinstance(value, str) for value in observed_violations
+        )
+        or not isinstance(finger_sides, dict)
+        or not np.isfinite(rim_center_z)
+    ):
+        raise ValueError(
+            "hazard-release above-rim handoff evidence is invalid"
+        )
+    observed_set = set(observed_violations)
+    violating_sides = sorted(
+        side
+        for side in ("left", "right")
+        if any(
+            violation.startswith(f"{side}_finger_")
+            for violation in observed_set
+        )
+    )
+    side_evidence = {}
+    for side in violating_sides:
+        record = finger_sides.get(side, {})
+        try:
+            minimum_finger_z = float(record["minimum_finger_z_m"])
+        except Exception:
+            minimum_finger_z = float("nan")
+        side_evidence[side] = {
+            "minimum_finger_z_m": minimum_finger_z,
+            "rim_center_z_m": rim_center_z,
+            "finite": bool(np.isfinite(minimum_finger_z)),
+            "strictly_above_rim_center": bool(
+                np.isfinite(minimum_finger_z)
+                and minimum_finger_z > rim_center_z
+            ),
+        }
+    observed_nonempty = bool(observed_set)
+    observed_allowed_subset = bool(
+        observed_set.issubset(
+            _HAZARD_RELEASE_ABOVE_RIM_COVERAGE_VIOLATIONS
+        )
+    )
+    every_violating_side_strictly_above_rim = bool(
+        violating_sides
+        and all(
+            record["strictly_above_rim_center"]
+            for record in side_evidence.values()
+        )
+    )
+    return {
+        "accepted": bool(
+            observed_nonempty
+            and observed_allowed_subset
+            and every_violating_side_strictly_above_rim
+        ),
+        "observed_guard_violations": sorted(observed_set),
+        "allowed_guard_violations": sorted(
+            _HAZARD_RELEASE_ABOVE_RIM_COVERAGE_VIOLATIONS
+        ),
+        "observed_violations_nonempty": observed_nonempty,
+        "observed_violations_allowed_subset": observed_allowed_subset,
+        "violating_sides": violating_sides,
+        "side_evidence": side_evidence,
+        "every_violating_side_strictly_above_rim": (
+            every_violating_side_strictly_above_rim
+        ),
+        "global_finger_lowest_z_m": float(
+            outside_side_guard.get("finger_lowest_z", float("nan"))
+        ),
+        "rim_center_z_m": rim_center_z,
+        "proof": {
+            "only_sides_named_by_coverage_violations_are_tested": True,
+            "each_violating_side_uses_its_compiled_geom_minimum_z": True,
+            "opposite_side_global_minimum_cannot_reject_handoff": True,
+            "strict_above_rim_comparison_retained": True,
         },
     }
 
@@ -19982,23 +20084,12 @@ def _seek_stable_plate_contact(
                 and zero_coast_stable_count >= 2
                 and not latest_outside_side_guard["accepted"]
             ):
-                zero_coast_allowed_coverage_violations = set(
-                    _HAZARD_RELEASE_ABOVE_RIM_COVERAGE_VIOLATIONS
-                )
-                zero_coast_observed_violations = set(
-                    latest_outside_side_guard.get("violations", ())
-                )
-                zero_coast_above_rim = bool(
-                    latest_outside_side_guard["finger_lowest_z"]
-                    > latest_outside_side_guard["rim_center_z"]
-                )
-                if (
-                    not zero_coast_observed_violations
-                    or not zero_coast_observed_violations.issubset(
-                        zero_coast_allowed_coverage_violations
+                zero_coast_above_rim_handoff = (
+                    _hazard_release_above_rim_handoff_evidence(
+                        latest_outside_side_guard
                     )
-                    or not zero_coast_above_rim
-                ):
+                )
+                if not zero_coast_above_rim_handoff["accepted"]:
                     raise RuntimeError(
                         "stable hazard-release zero coast cannot safely "
                         "return to the above-rim descent: "
@@ -20006,31 +20097,9 @@ def _seek_stable_plate_contact(
                             {
                                 "stable_count": zero_coast_stable_count,
                                 "required_stable_count": 2,
-                                "observed_guard_violations": sorted(
-                                    zero_coast_observed_violations
+                                "above_rim_handoff_evidence": (
+                                    zero_coast_above_rim_handoff
                                 ),
-                                "allowed_guard_violations": sorted(
-                                    zero_coast_allowed_coverage_violations
-                                ),
-                                "observed_violations_nonempty": bool(
-                                    zero_coast_observed_violations
-                                ),
-                                "observed_violations_allowed_subset": bool(
-                                    zero_coast_observed_violations.issubset(
-                                        zero_coast_allowed_coverage_violations
-                                    )
-                                ),
-                                "finger_lowest_z_m": float(
-                                    latest_outside_side_guard[
-                                        "finger_lowest_z"
-                                    ]
-                                ),
-                                "rim_center_z_m": float(
-                                    latest_outside_side_guard[
-                                        "rim_center_z"
-                                    ]
-                                ),
-                                "above_rim": zero_coast_above_rim,
                                 "action_xyz": np.asarray(
                                     action[:3], dtype=float
                                 ).tolist(),
@@ -20063,10 +20132,9 @@ def _seek_stable_plate_contact(
                     ),
                     "stable_count": zero_coast_stable_count,
                     "required_stable_count": 2,
-                    "guard_violations": sorted(
-                        zero_coast_observed_violations
+                    "above_rim_handoff_evidence": (
+                        zero_coast_above_rim_handoff
                     ),
-                    "above_rim": zero_coast_above_rim,
                     "shielded_descent_activated": True,
                     "formal_thresholds_unchanged": True,
                 }

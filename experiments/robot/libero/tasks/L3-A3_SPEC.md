@@ -680,6 +680,17 @@ diagnostic rerun: the exception now serializes the complete observed/shared
 allowlists, both Z scalars, the derived above-rim boolean, action, response,
 stable count, and live reserves. Those diagnostics cannot authorize a failed
 handoff.
+Job503867 showed that the allowlist and both stable frames passed. The only
+rejection was the global minimum over both fingers: `0.909320169 m`, just
+`0.145670 mm` below rim center, while the sole observed failure was
+`left_finger_does_not_cover_rim_center`. The live guard now records minimum and
+maximum world Z independently for the native left and right collision geoms.
+The stable coverage-only handoff tests strict above-rim height only for each
+semantic side named by an observed coverage violation. The unrelated opposite
+side global minimum can no longer reject that proof. A violating side without
+finite evidence or whose own minimum is not strictly above rim still fails
+closed. The four-predicate allowlist and every response, reserve, collision,
+action, task, and budget threshold remain unchanged.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

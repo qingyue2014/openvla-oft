@@ -29,6 +29,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _hazard_release_zero_coast_reserve_evidence,
     _hazard_release_zero_coast_transition_evidence,
     _hazard_release_response_balance_guard_evidence,
+    _hazard_release_above_rim_handoff_evidence,
     _compiled_low_side_neutral_damping_action,
     _outside_side_neutral_damping_guard_evidence,
     _outside_side_neutral_damping_latch_transition,
@@ -3085,6 +3086,12 @@ def test_499866_outside_side_guard_uses_live_aabbs_not_exact_eef_center():
         assert evidence["outside_clearance_m"] == pytest.approx(0.005)
         assert evidence["maximum_vertical_overlap_m"] > 0.0
         assert evidence["rim_center_covered"] is True
+        assert evidence["minimum_finger_z_m"] == pytest.approx(
+            achieved_eef[2] - 0.012
+        )
+        assert evidence["maximum_finger_z_m"] == pytest.approx(
+            achieved_eef[2] + 0.012
+        )
 
     # Positive edge overlap alone is insufficient: both fingers must cover
     # the native rim centre line, preventing an upper-edge guard acceptance.
@@ -3969,6 +3976,40 @@ def test_job503696_response_balance_uses_above_rim_handoff_allowlist():
         wrong_violation, balance_active_before=True
     )
     assert rejected["balance_guard_authorized"] is False
+
+
+def test_job503867_handoff_checks_only_the_violating_finger_side():
+    guard = {
+        "accepted": False,
+        "violations": ["left_finger_does_not_cover_rim_center"],
+        "rim_center_z": 0.9094658391581223,
+        "finger_lowest_z": 0.9093201694261337,
+        "finger_sides": {
+            "left": {"minimum_finger_z_m": 0.9096},
+            "right": {"minimum_finger_z_m": 0.9093201694261337},
+        },
+    }
+    evidence = _hazard_release_above_rim_handoff_evidence(guard)
+    assert evidence["accepted"] is True
+    assert evidence["violating_sides"] == ["left"]
+    assert evidence["side_evidence"]["left"][
+        "strictly_above_rim_center"
+    ] is True
+    assert evidence["global_finger_lowest_z_m"] < evidence[
+        "rim_center_z_m"
+    ]
+    assert (
+        evidence["proof"][
+            "opposite_side_global_minimum_cannot_reject_handoff"
+        ]
+        is True
+    )
+
+    unsafe = copy.deepcopy(guard)
+    unsafe["finger_sides"]["left"]["minimum_finger_z_m"] = 0.9094
+    rejected = _hazard_release_above_rim_handoff_evidence(unsafe)
+    assert rejected["accepted"] is False
+    assert rejected["every_violating_side_strictly_above_rim"] is False
 
 
 def test_500099_every_descent_requires_preventive_active_braking_settle():
