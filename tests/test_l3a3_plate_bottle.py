@@ -20,6 +20,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _vertical_corridor_reserve_recovery_phase_evidence,
     _compiled_corridor_reserve_action,
     _compiled_low_side_settle_brake_action,
+    _compiled_low_side_neutral_damping_action,
     _compiled_adaptive_lateral_rebuffer_action,
     _compiled_adaptive_high_lateral_action,
     _compiled_adaptive_high_plane_action,
@@ -3689,6 +3690,106 @@ def test_500111_one_positive_brake_response_cannot_release_settle_state():
         "eef_still_moving_inward_during_lateral_settle",
         "outside_clearance_still_decreasing_during_lateral_settle",
     ]
+
+
+def test_job503651_corridor_settle_requires_neutral_absolute_stop():
+    strict_clearance = np.nextafter(0.0, np.inf)
+    before_guard = {
+        "accepted": True,
+        "outward_direction_xy": [1.0, 0.0],
+        "required_outside_clearance_m": strict_clearance,
+        "minimum_outside_clearance_m": 0.002281870680168163,
+        "required_finger_table_clearance_m": strict_clearance,
+        "finger_table_vertical_clearance_m": 0.006348436526681156,
+    }
+    after_guard = {
+        **before_guard,
+        "minimum_outside_clearance_m": 0.0023427962178772382,
+        "finger_table_vertical_clearance_m": 0.00694713686428039,
+    }
+    evidence = _outside_side_lateral_settle_evidence(
+        before_guard=before_guard,
+        after_guard=after_guard,
+        before_eef=np.array(
+            [0.13356891195931028, -0.027503127951257672, 0.9190528958692876]
+        ),
+        after_eef=np.array(
+            [0.13363086644325808, -0.027418708951760223, 0.9196513910416114]
+        ),
+        previous_stable_response_count=1,
+        maximum_settled_step_response_m=0.00005,
+        neutral_damping_frame=False,
+        neutral_damping_reserve_accepted=True,
+    )
+    assert evidence["kinematic_brake_reversed"] is True
+    assert evidence["instantaneous_stable_response"] is False
+    assert evidence["stable_response_count"] == 0
+    assert evidence["settled"] is False
+    assert evidence["violations"] == [
+        "vertical_response_exceeds_settle_tolerance",
+        "eef_outward_response_exceeds_settle_tolerance",
+        "outside_clearance_response_exceeds_settle_tolerance",
+        "settle_confirmation_requires_neutral_damping_frame",
+    ]
+    assert evidence["maximum_settled_step_response_m"] == pytest.approx(
+        0.00005
+    )
+
+    neutral_start = np.array(
+        [0.13363086644325808, -0.027418708951760223, 0.9196513910416114]
+    )
+    first_neutral_guard = {
+        **after_guard,
+        "minimum_outside_clearance_m": 0.002352796217877238,
+    }
+    first_neutral = _outside_side_lateral_settle_evidence(
+        before_guard=after_guard,
+        after_guard=first_neutral_guard,
+        before_eef=neutral_start,
+        after_eef=neutral_start + np.array([0.00001, 0.0, 0.00001]),
+        maximum_settled_step_response_m=0.00005,
+        neutral_damping_frame=True,
+        neutral_damping_reserve_accepted=True,
+    )
+    assert first_neutral["stable_response_count"] == 1
+    assert first_neutral["settled"] is False
+    second_neutral = _outside_side_lateral_settle_evidence(
+        before_guard=first_neutral_guard,
+        after_guard={
+            **first_neutral_guard,
+            "minimum_outside_clearance_m": 0.002362796217877238,
+        },
+        before_eef=neutral_start + np.array([0.00001, 0.0, 0.00001]),
+        after_eef=neutral_start + np.array([0.00002, 0.0, 0.00002]),
+        previous_stable_response_count=first_neutral[
+            "stable_response_count"
+        ],
+        maximum_settled_step_response_m=0.00005,
+        neutral_damping_frame=True,
+        neutral_damping_reserve_accepted=True,
+    )
+    assert second_neutral["stable_response_count"] == 2
+    assert second_neutral["settled"] is True
+
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, damping = _compiled_low_side_neutral_damping_action(
+        outside_side_guard=after_guard,
+        gripper=-1.0,
+        native_action_spec=native_spec,
+        recovery_exit_clearance_m=0.00155,
+    )
+    assert action[:6].tolist() == pytest.approx([0.0] * 6)
+    assert action[-1] == pytest.approx(-1.0)
+    assert damping["proof"]["zero_xyz_and_rotation"] is True
+    assert damping["proof"][
+        "outside_recovery_exit_reserve_preaccepted"
+    ] is True
 
 
 def test_500121_vertical_descent_is_structurally_staged_outside_one_step_reserve():
@@ -9958,7 +10059,8 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         'active_vertical_corridor_envelope['
     ) >= 2
     assert "compiled_low_side_settle_brake_envelope" in settle_action
-    assert '"active_positive_z_brake_requested": True' in settle_action
+    assert '"active_positive_z_brake_requested": bool(' in settle_action
+    assert "neutral_damping_active_before_action" in settle_action
     assert "vertical_corridor_settle_brake_trigger_buffer" in bounded_seek
     assert "maximum_vertical_corridor_outward_hold_world_step" in (
         bounded_seek.split(
@@ -10051,6 +10153,9 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "_outside_side_staircase_settle_trigger(" in bounded_seek
     assert "previous_stable_response_count=int(" in bounded_seek
     assert "lateral_settle_state = lateral_settle_progress" in bounded_seek
+    assert "_compiled_low_side_neutral_damping_action(" in bounded_seek
+    assert "maximum_settled_step_response_m=(" in bounded_seek
+    assert '"neutral_damping_active"' in bounded_seek
     assert '"lateral_settle_trigger"' in bounded_seek
     assert bounded_seek.index("motion_sample = capture(") < (
         bounded_seek.index("if structural_violations:")

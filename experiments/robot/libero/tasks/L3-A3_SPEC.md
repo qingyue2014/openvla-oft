@@ -357,6 +357,18 @@ satisfies the existing lateral error, safe-Z error, vertical-response,
 unchanged XY safety response remains active on that frame. If the neutral-Z
 frame does not provide the second confirmation, all existing safety branches
 and the positive release ramp resume immediately.
+Job503651 confirmed that this later confirmation could not repair the actual
+handoff error: the corridor-settle stage had treated merely nonnegative
+responses as rest and captured fixed safe Z while the EEF was still rising by
+`0.598 mm/frame`. Corridor settling now has an explicit neutral-damping
+phase. Once the unchanged compiled outward/positive-Z brake reverses all
+hazard-directed response signs, the controller latches zero XYZ and rotation
+while both outside and finger-table clearance remain strictly above the
+unchanged `1.550 mm` recovery-exit line and the full compiled guard remains
+accepted. It returns immediately to the unchanged brake if either reserve is
+lost. Handoff requires two consecutive neutral frames whose absolute Z,
+EEF-outward, and outside-clearance responses are each at most the existing
+`0.050 mm` progress resolution; sign alone no longer counts as stability.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

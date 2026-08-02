@@ -8569,6 +8569,77 @@ def _compiled_low_side_settle_brake_action(
     }
 
 
+def _compiled_low_side_neutral_damping_action(
+    *,
+    outside_side_guard,
+    gripper,
+    native_action_spec,
+    recovery_exit_clearance_m,
+):
+    """Dissipate residual OSC motion only inside registered live reserves."""
+    try:
+        native_low = np.asarray(native_action_spec["low"], dtype=float)
+        native_high = np.asarray(native_action_spec["high"], dtype=float)
+        native_source = str(native_action_spec["source"])
+        live_outside_clearance = float(
+            outside_side_guard["minimum_outside_clearance_m"]
+        )
+        live_finger_table_clearance = float(
+            outside_side_guard["finger_table_vertical_clearance_m"]
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "low-side neutral damping evidence is incomplete"
+        ) from exc
+    if (
+        not np.isfinite(recovery_exit_clearance_m)
+        or recovery_exit_clearance_m <= 0.0
+        or not native_action_spec.get("runtime_resolved", False)
+        or native_action_spec.get("action_dimension") != 7
+        or native_low.shape != (7,)
+        or native_high.shape != (7,)
+        or not np.all(np.isfinite(native_low))
+        or not np.all(np.isfinite(native_high))
+        or not np.all(native_low < native_high)
+        or not (native_low[6] <= gripper <= native_high[6])
+        or not np.all(native_low[:6] < 0.0)
+        or not np.all(native_high[:6] > 0.0)
+        or not outside_side_guard.get("accepted", False)
+        or not np.isfinite(live_outside_clearance)
+        or live_outside_clearance <= recovery_exit_clearance_m
+        or not np.isfinite(live_finger_table_clearance)
+        or live_finger_table_clearance <= recovery_exit_clearance_m
+    ):
+        raise RuntimeError(
+            "low-side neutral damping lacks its registered live reserve"
+        )
+    action = np.zeros(7, dtype=float)
+    action[-1] = float(gripper)
+    return action, {
+        "formula": (
+            "after the compiled outward/+Z brake reverses hazard-directed "
+            "motion, command zero XYZ and rotation only while both outside "
+            "and table clearances remain strictly above the unchanged "
+            "recovery-exit line; refreshed live guards remain mandatory"
+        ),
+        "native_action_spec_source": native_source,
+        "commanded_xyz_action": action[:3].tolist(),
+        "commanded_rotation_action": action[3:6].tolist(),
+        "live_outside_clearance_m": live_outside_clearance,
+        "live_finger_table_clearance_m": live_finger_table_clearance,
+        "recovery_exit_clearance_m": float(
+            recovery_exit_clearance_m
+        ),
+        "proof": {
+            "zero_xyz_and_rotation": True,
+            "strictly_inside_native_action_bounds": True,
+            "outside_recovery_exit_reserve_preaccepted": True,
+            "table_recovery_exit_reserve_preaccepted": True,
+            "post_action_live_guards_required": True,
+        },
+    }
+
+
 def _compiled_adaptive_lateral_rebuffer_action(
     *,
     current_eef,
@@ -9274,6 +9345,9 @@ def _outside_side_lateral_settle_evidence(
     after_eef,
     previous_stable_response_count=0,
     required_stable_response_count=2,
+    maximum_settled_step_response_m=None,
+    neutral_damping_frame=None,
+    neutral_damping_reserve_accepted=None,
 ):
     """Require lateral and vertical motion to stop trending toward hazards."""
     before_eef = np.asarray(before_eef, dtype=float)
@@ -9292,6 +9366,28 @@ def _outside_side_lateral_settle_evidence(
             "outside-side settle confirmation counts must be integers "
             "with a required count of at least two"
         )
+    if (
+        maximum_settled_step_response_m is not None
+        and (
+            not np.isfinite(maximum_settled_step_response_m)
+            or maximum_settled_step_response_m <= 0.0
+        )
+    ):
+        raise ValueError(
+            "outside-side settled response tolerance must be positive"
+        )
+    if (
+        neutral_damping_frame is not None
+        and not isinstance(neutral_damping_frame, (bool, np.bool_))
+    ) or (
+        neutral_damping_reserve_accepted is not None
+        and not isinstance(
+            neutral_damping_reserve_accepted, (bool, np.bool_)
+        )
+    ):
+        raise ValueError(
+            "outside-side neutral damping evidence must be boolean"
+        )
     step_response = _outside_side_step_response_evidence(
         before_guard=before_guard,
         after_guard=after_guard,
@@ -9307,20 +9403,59 @@ def _outside_side_lateral_settle_evidence(
     live_clearance = float(
         after_guard["minimum_outside_clearance_m"]
     )
-    violations = []
+    directional_violations = []
     if vertical_step_progress < 0.0:
-        violations.append("eef_still_descending_during_lateral_settle")
+        directional_violations.append(
+            "eef_still_descending_during_lateral_settle"
+        )
     if step_response["eef_outward_step_progress_m"] < 0.0:
-        violations.append("eef_still_moving_inward_during_lateral_settle")
+        directional_violations.append(
+            "eef_still_moving_inward_during_lateral_settle"
+        )
     if step_response["outside_clearance_step_progress_m"] < 0.0:
-        violations.append(
+        directional_violations.append(
             "outside_clearance_still_decreasing_during_lateral_settle"
         )
     if live_clearance < required_clearance:
-        violations.append(
+        directional_violations.append(
             "outside_clearance_below_compiled_requirement_during_settle"
         )
-    kinematic_brake_reversed = not violations
+    kinematic_brake_reversed = not directional_violations
+    if maximum_settled_step_response_m is None:
+        violations = list(directional_violations)
+    else:
+        violations = []
+        response_checks = (
+            (
+                "vertical",
+                vertical_step_progress,
+            ),
+            (
+                "eef_outward",
+                step_response["eef_outward_step_progress_m"],
+            ),
+            (
+                "outside_clearance",
+                step_response["outside_clearance_step_progress_m"],
+            ),
+        )
+        for response_name, response_value in response_checks:
+            if abs(response_value) > maximum_settled_step_response_m:
+                violations.append(
+                    f"{response_name}_response_exceeds_settle_tolerance"
+                )
+        if live_clearance < required_clearance:
+            violations.append(
+                "outside_clearance_below_compiled_requirement_during_settle"
+            )
+        if neutral_damping_frame is False:
+            violations.append(
+                "settle_confirmation_requires_neutral_damping_frame"
+            )
+        if neutral_damping_reserve_accepted is False:
+            violations.append(
+                "neutral_damping_recovery_exit_reserve_not_accepted"
+            )
     if not after_guard.get("accepted", False):
         violations.append(
             "full_outside_side_guard_not_accepted_during_settle"
@@ -9349,16 +9484,26 @@ def _outside_side_lateral_settle_evidence(
         "violations": violations,
         "formula": (
             "after every descent step, retain the compiled strictly outward "
-            "plus positive-Z low-side inertial brake; require at least two "
-            "consecutive settle frames where measured Z, EEF-outward, and "
-            "live-clearance step progress are all nonnegative and compiled "
-            "clearance plus the full outside-side guard are accepted before "
-            "permitting lateral approach"
+            "plus positive-Z low-side inertial brake until hazard-directed "
+            "motion reverses; then require at least two consecutive neutral "
+            "damping frames where the absolute measured Z, EEF-outward, and "
+            "live-clearance responses fit the registered tolerance and the "
+            "compiled clearance plus full outside-side guard remain accepted"
         ),
         "vertical_step_progress_m": vertical_step_progress,
         "step_response": step_response,
         "required_outside_clearance_m": required_clearance,
         "live_outside_clearance_m": live_clearance,
+        "maximum_settled_step_response_m": (
+            None
+            if maximum_settled_step_response_m is None
+            else float(maximum_settled_step_response_m)
+        ),
+        "directional_violations": directional_violations,
+        "neutral_damping_frame": neutral_damping_frame,
+        "neutral_damping_reserve_accepted": (
+            neutral_damping_reserve_accepted
+        ),
     }
 
 
@@ -16676,46 +16821,77 @@ def _seek_stable_plate_contact(
                         "vertical_step_progress_m"
                     ]
                 )
-            action, path_control = (
-                _compiled_low_side_settle_brake_action(
-                    current_eef=current_eef,
-                    outside_side_guard=pre_action_guard,
-                    gripper=gripper,
-                    position_action_scale=args.position_action_scale,
-                    native_action_spec=native_action_spec,
-                    lateral_target_xy=(
-                        active_vertical_corridor_envelope[
-                            "balanced_hold_target_xy"
-                        ]
-                    ),
-                    one_sided_outward_direction_xy=(
-                        corridor_outward_direction
-                    ),
-                    maximum_lateral_translation_action=(
-                        active_vertical_corridor_envelope[
-                            "fixed_outward_translation_action_bound"
-                        ]
-                    ),
-                    positive_z_action=(
-                        active_vertical_corridor_envelope[
-                            "positive_z_settle_action"
-                        ]
-                    ),
-                    strict_corridor_clearance_m=float(
-                        vertical_staging_corridor[
-                            "strict_corridor_entry_clearance_m"
-                        ]
-                    ),
+            neutral_damping_active_before_action = bool(
+                lateral_settle_state.get(
+                    "neutral_damping_active", False
                 )
             )
+            if neutral_damping_active_before_action:
+                action, path_control = (
+                    _compiled_low_side_neutral_damping_action(
+                        outside_side_guard=pre_action_guard,
+                        gripper=gripper,
+                        native_action_spec=native_action_spec,
+                        recovery_exit_clearance_m=(
+                            fixed_safe_z_recovery_exit_clearance
+                        ),
+                    )
+                )
+            else:
+                action, path_control = (
+                    _compiled_low_side_settle_brake_action(
+                        current_eef=current_eef,
+                        outside_side_guard=pre_action_guard,
+                        gripper=gripper,
+                        position_action_scale=args.position_action_scale,
+                        native_action_spec=native_action_spec,
+                        lateral_target_xy=(
+                            active_vertical_corridor_envelope[
+                                "balanced_hold_target_xy"
+                            ]
+                        ),
+                        one_sided_outward_direction_xy=(
+                            corridor_outward_direction
+                        ),
+                        maximum_lateral_translation_action=(
+                            active_vertical_corridor_envelope[
+                                "fixed_outward_translation_action_bound"
+                            ]
+                        ),
+                        positive_z_action=(
+                            active_vertical_corridor_envelope[
+                                "positive_z_settle_action"
+                            ]
+                        ),
+                        strict_corridor_clearance_m=float(
+                            vertical_staging_corridor[
+                                "strict_corridor_entry_clearance_m"
+                            ]
+                        ),
+                    )
+                )
             feedback = {
                 "mode": structural_stage,
                 "action": action.tolist(),
-                "compiled_low_side_settle_brake_envelope": path_control,
+                "compiled_low_side_settle_brake_envelope": (
+                    None
+                    if neutral_damping_active_before_action
+                    else path_control
+                ),
+                "compiled_low_side_neutral_damping_envelope": (
+                    path_control
+                    if neutral_damping_active_before_action
+                    else None
+                ),
+                "neutral_damping_active_before_action": (
+                    neutral_damping_active_before_action
+                ),
                 "previous_settle_vertical_step_progress_m": (
                     previous_vertical_step_progress
                 ),
-                "active_positive_z_brake_requested": True,
+                "active_positive_z_brake_requested": bool(
+                    not neutral_damping_active_before_action
+                ),
                 "active_positive_z_brake_commanded": bool(
                     action[2] > 0.0
                 ),
@@ -17704,6 +17880,17 @@ def _seek_stable_plate_contact(
                         }
                     )
         elif stage_before_action == "vertical_corridor_settle":
+            neutral_damping_reserves_accepted = bool(
+                latest_outside_side_guard.get("accepted", False)
+                and latest_outside_side_guard[
+                    "minimum_outside_clearance_m"
+                ]
+                > fixed_safe_z_recovery_exit_clearance
+                and latest_outside_side_guard[
+                    "finger_table_vertical_clearance_m"
+                ]
+                > fixed_safe_z_recovery_exit_clearance
+            )
             lateral_settle_progress = (
                 _outside_side_lateral_settle_evidence(
                     before_guard=pre_action_guard,
@@ -17718,8 +17905,33 @@ def _seek_stable_plate_contact(
                             "stable_response_count", 0
                         )
                     ),
+                    maximum_settled_step_response_m=(
+                        args.minimum_saturated_waypoint_progress
+                    ),
+                    neutral_damping_frame=bool(
+                        lateral_settle_state.get(
+                            "neutral_damping_active", False
+                        )
+                    ),
+                    neutral_damping_reserve_accepted=(
+                        neutral_damping_reserves_accepted
+                    ),
                 )
             )
+            lateral_settle_progress["neutral_damping_active"] = bool(
+                neutral_damping_reserves_accepted
+                and (
+                    lateral_settle_state.get(
+                        "neutral_damping_active", False
+                    )
+                    or lateral_settle_progress[
+                        "kinematic_brake_reversed"
+                    ]
+                )
+            )
+            lateral_settle_progress[
+                "neutral_damping_reserves_accepted"
+            ] = neutral_damping_reserves_accepted
             feedback["lateral_settle_progress"] = (
                 lateral_settle_progress
             )
