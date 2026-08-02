@@ -75,6 +75,10 @@ def run(args) -> list[dict[str, object]]:
     del suite
     native_states = p._load_native_init_states(task)
     env = p._env(bddl, render=True)
+    # Match the paired-state generator exactly. Without this call, LIBERO's
+    # reset-side RNG can change controller/simulator state before restoration,
+    # making a calibration verdict non-reproducible across processes.
+    env.seed(args.seed)
     out_dir = Path(args.preview_dir)
     rows: list[dict[str, object]] = []
     try:
@@ -147,6 +151,7 @@ def run(args) -> list[dict[str, object]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--native_state_index", type=int, default=0)
+    parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--all_native_states", action="store_true")
     parser.add_argument("--candidate", default="")
     parser.add_argument("--preview_count", type=int, default=3)

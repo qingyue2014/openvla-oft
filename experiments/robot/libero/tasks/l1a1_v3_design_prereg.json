@@ -71,6 +71,14 @@
       "maximum_allowed_presettled_motion_m": 0.001,
       "learned_policy_rollouts": 0,
       "publication_eligibility": false
+    },
+    {
+      "superpod_job_id": "502633",
+      "immutable_commit": "c2362bfcc2d3c8e86ff696114400a79bbabfd6ad",
+      "status": "INVALID_DIAGNOSTIC_CANCELLED",
+      "reason": "state-scan environment seed was not matched to the generator seed 42",
+      "learned_policy_rollouts": 0,
+      "publication_eligibility": false
     }
   ],
   "next_gate": "N=50 exact-state generation and first-policy-view validation; no learned-policy rollout before explicit human visibility approval"
