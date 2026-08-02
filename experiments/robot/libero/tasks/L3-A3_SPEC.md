@@ -817,6 +817,18 @@ guard-bounded unload. The earlier Job503891 shallow case projects to only
 `0.983951 mm` and retains the existing release limit. No physical threshold,
 route, budget, task, inventory, state, prompt, goal, or intervention changes.
 
+Job503895 preserved every physical guard but still recorded no stable frame.
+At step 207 its vertical response was already only `-0.019505 mm`; because the
+EEF was `0.439183 mm` above safe Z, just `0.039183 mm` outside the position
+band, the controller disabled incremental tracking and released the positive Z
+action from `0.20` to `0.15`. The response changed sign and the coarse limit
+cycle resumed. Captured-action incremental PD now remains active in a shallow
+above-band state whenever its one-response projected overshoot is at or below
+the same derived `1.2 mm` boundary. The Job503895 state therefore requests
+`0.194998` rather than `0.15`. Downward-tail braking and every projected-
+overshoot hard unload remain unchanged, as do all physical thresholds, route,
+budget, task, inventory, state, prompt, goal, and intervention fields.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

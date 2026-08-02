@@ -5518,11 +5518,27 @@ def _fixed_safe_z_lateral_hold_action(
     guard_bounded_z_action_before_response_hold = float(
         commanded_z_action
     )
+    positive_z_release_slew_bypass_overshoot_threshold_m = float(
+        3.0 * vertical_position_tolerance_m
+    )
+    positive_z_release_slew_bypass_projected_overshoot_m = float(
+        max(0.0, -position_error_m)
+        + max(0.0, measured_vertical_step_progress_m)
+    )
+    captured_safe_z_response_tracking_band_active = bool(
+        inside_safe_z_band
+        or (
+            above_safe_z_band
+            and positive_z_release_slew_bypass_projected_overshoot_m
+            <= positive_z_release_slew_bypass_overshoot_threshold_m
+        )
+    )
     captured_safe_z_response_hold_requested = bool(
         release_slew_enabled
-        and inside_safe_z_band
+        and captured_safe_z_response_tracking_band_active
         and not (
-            lateral_target_reached
+            inside_safe_z_band
+            and lateral_target_reached
             and abs(measured_vertical_step_progress_m)
             <= progress_resolution_m
         )
@@ -5551,13 +5567,6 @@ def _fixed_safe_z_lateral_hold_action(
     pre_release_slew_z_action = float(commanded_z_action)
     outward_release_slew_applied = False
     positive_z_release_slew_applied = False
-    positive_z_release_slew_bypass_overshoot_threshold_m = float(
-        3.0 * vertical_position_tolerance_m
-    )
-    positive_z_release_slew_bypass_projected_overshoot_m = float(
-        max(0.0, -position_error_m)
-        + max(0.0, measured_vertical_step_progress_m)
-    )
     positive_z_release_slew_bypass_requested = bool(
         above_safe_z_band
         and measured_vertical_step_progress_m >= 0.0
@@ -5711,6 +5720,9 @@ def _fixed_safe_z_lateral_hold_action(
         "captured_safe_z_response_hold_requested": (
             captured_safe_z_response_hold_requested
         ),
+        "captured_safe_z_response_tracking_band_active": (
+            captured_safe_z_response_tracking_band_active
+        ),
         "captured_safe_z_response_hold_correction": (
             captured_safe_z_response_hold_correction
         ),
@@ -5846,6 +5858,7 @@ def _fixed_safe_z_lateral_hold_action(
             "captured_safe_z_hold_continues_until_stability_confirmation": (
                 True
             ),
+            "captured_safe_z_hold_tracks_shallow_projected_overshoot": True,
             "above_band_unload_bypass_requires_projected_three_tolerance_"
             "overshoot": True,
             "vertical_capture_removes_only_inward_component": True,
