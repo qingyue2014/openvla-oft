@@ -170,14 +170,22 @@ be cancelled before the lateral contact search. Job503292 completed every
 structural gate at `z=0.91965 m`, but the ordinary `0.10`-norm contact command
 allocated almost all authority to its `70 mm` lateral error and climbed to
 `z=0.95141 m` over 64 frames without contacting the plate. A separate pure-Z
-tail-damping loop is therefore permitted only while measured vertical response
-exceeds the existing `0.05 mm` progress resolution. Each action has zero XY and
-rotation, remains inside the unchanged `0.10` contact-seek norm and runtime
-native bounds, and uses at most half of the live table reserve above the strict
-`0.400 mm` post-action clearance. The full outside-side and all physical/contact
-gates are recomputed after every frame. The loop reuses the existing 64-step
-contact-seek limit as a fail-closed bound; the following lateral contact search
-keeps its original independent 64-step limit.
+stabilization loop therefore aligns both height and measured velocity before
+lateral motion. Job503303 showed that merely reversing the velocity sign for
+one frame was insufficient: the first damping command changed the response
+from `+0.599 mm` to `-0.536 mm`, but released `1.274 mm` above the target and
+rebuilt the upward oscillation during contact seek. The stabilization command
+uses the deterministic world-delta formula
+`target_z - current_z - 2 * measured_vertical_response`. Each action has zero
+XY and rotation, remains inside the unchanged `0.10` contact-seek norm and
+runtime native bounds, and any negative-Z command uses at most half of the live
+table reserve above the strict `0.400 mm` post-action clearance. Release
+requires both absolute target-height error at most `0.400 mm` and absolute
+vertical response at most the existing `0.05 mm` progress resolution for two
+consecutive frames. The full outside-side and all physical/contact gates are
+recomputed after every frame. The loop reuses the existing 64-step contact-seek
+limit as a fail-closed bound; the following lateral contact search keeps its
+original independent 64-step limit.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

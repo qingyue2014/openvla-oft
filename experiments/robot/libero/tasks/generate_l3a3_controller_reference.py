@@ -80,8 +80,10 @@ def _bounded_side_contact_seek_action(
     return action
 
 
-def _bounded_contact_seek_vertical_tail_damping_action(
+def _bounded_contact_seek_vertical_stabilization_action(
     *,
+    current_eef_z_m,
+    target_eef_z_m,
     vertical_step_progress_m,
     outside_side_guard,
     gripper,
@@ -89,9 +91,12 @@ def _bounded_contact_seek_vertical_tail_damping_action(
     maximum_translation_action,
     progress_resolution_m,
     strict_post_action_table_clearance_m,
+    derivative_gain,
     native_action_spec,
 ):
-    """Cancel a measured upward OSC tail before lateral contact seek."""
+    """Damp vertical error and velocity before lateral contact seek."""
+    current_eef_z_m = float(current_eef_z_m)
+    target_eef_z_m = float(target_eef_z_m)
     vertical_step_progress_m = float(vertical_step_progress_m)
     position_action_scale = float(position_action_scale)
     maximum_translation_action = float(maximum_translation_action)
@@ -99,10 +104,13 @@ def _bounded_contact_seek_vertical_tail_damping_action(
     strict_post_action_table_clearance_m = float(
         strict_post_action_table_clearance_m
     )
+    derivative_gain = float(derivative_gain)
     native_low = np.asarray(native_action_spec.get("low", ()), dtype=float)
     native_high = np.asarray(native_action_spec.get("high", ()), dtype=float)
     if not (
-        np.isfinite(vertical_step_progress_m)
+        np.isfinite(current_eef_z_m)
+        and np.isfinite(target_eef_z_m)
+        and np.isfinite(vertical_step_progress_m)
         and np.isfinite(position_action_scale)
         and position_action_scale > 0.0
         and np.isfinite(maximum_translation_action)
@@ -111,16 +119,14 @@ def _bounded_contact_seek_vertical_tail_damping_action(
         and progress_resolution_m > 0.0
         and np.isfinite(strict_post_action_table_clearance_m)
         and strict_post_action_table_clearance_m > 0.0
+        and np.isfinite(derivative_gain)
+        and derivative_gain > 0.0
         and native_action_spec.get("runtime_resolved", False)
         and native_action_spec.get("action_dimension") == 7
         and native_low.shape == (7,)
         and native_high.shape == (7,)
     ):
-        raise ValueError("invalid contact-seek tail-damping inputs")
-    if vertical_step_progress_m <= progress_resolution_m:
-        raise RuntimeError(
-            "contact-seek tail damping requires a measured positive-Z tail"
-        )
+        raise ValueError("invalid contact-seek vertical-stabilization inputs")
     live_table_clearance = float(
         outside_side_guard["finger_table_vertical_clearance_m"]
     )
@@ -141,41 +147,60 @@ def _bounded_contact_seek_vertical_tail_damping_action(
     )
     if available_downward_world_step <= 0.0:
         raise RuntimeError(
-            "contact-seek tail damping lacks strict finger-table reserve"
+            "contact-seek vertical stabilization lacks strict "
+            "finger-table reserve"
         )
-    commanded_downward_world_step = float(
+    position_error_m = float(target_eef_z_m - current_eef_z_m)
+    requested_world_delta_m = float(
+        position_error_m
+        - derivative_gain * vertical_step_progress_m
+    )
+    requested_z_action = float(
+        requested_world_delta_m / position_action_scale
+    )
+    bounded_z_action = float(
+        np.clip(
+            requested_z_action,
+            -maximum_translation_action,
+            maximum_translation_action,
+        )
+    )
+    maximum_safe_negative_z_action = float(
         min(
-            maximum_configured_world_step,
-            0.5 * available_downward_world_step,
+            maximum_translation_action,
+            0.5
+            * available_downward_world_step
+            / position_action_scale,
         )
     )
-    commanded_negative_z_action = float(
-        commanded_downward_world_step / position_action_scale
+    if bounded_z_action < -maximum_safe_negative_z_action:
+        bounded_z_action = -maximum_safe_negative_z_action
+    commanded_world_delta_m = float(
+        position_action_scale * bounded_z_action
     )
-    if not (
-        0.0 < commanded_negative_z_action
-        <= maximum_translation_action
-    ):
-        raise RuntimeError(
-            "contact-seek tail damping could not compile a bounded action"
-        )
     action = np.zeros(7, dtype=float)
-    action[2] = -commanded_negative_z_action
+    action[2] = bounded_z_action
     action[-1] = float(gripper)
     if np.any(action < native_low) or np.any(action > native_high):
         raise RuntimeError(
-            "contact-seek tail damping exceeds the runtime-native action spec"
+            "contact-seek vertical stabilization exceeds the "
+            "runtime-native action spec"
         )
     predicted_table_clearance = float(
-        live_table_clearance - commanded_downward_world_step
+        live_table_clearance + commanded_world_delta_m
     )
     if not predicted_table_clearance > required_post_action_clearance:
         raise RuntimeError(
-            "contact-seek tail damping lost its nominal table proof"
+            "contact-seek vertical stabilization lost its nominal "
+            "table proof"
         )
     return action, {
+        "current_eef_z_m": current_eef_z_m,
+        "target_eef_z_m": target_eef_z_m,
+        "position_error_m": position_error_m,
         "vertical_step_progress_m": vertical_step_progress_m,
         "progress_resolution_m": progress_resolution_m,
+        "derivative_gain": derivative_gain,
         "live_finger_table_clearance_m": live_table_clearance,
         "compiled_required_finger_table_clearance_m": (
             compiled_required_clearance
@@ -186,18 +211,22 @@ def _bounded_contact_seek_vertical_tail_damping_action(
         "maximum_configured_world_step_m": (
             maximum_configured_world_step
         ),
-        "commanded_downward_world_step_m": (
-            commanded_downward_world_step
+        "requested_world_delta_m": requested_world_delta_m,
+        "requested_z_action": requested_z_action,
+        "maximum_safe_negative_z_action": (
+            maximum_safe_negative_z_action
         ),
-        "commanded_negative_z_action": commanded_negative_z_action,
+        "commanded_world_delta_m": commanded_world_delta_m,
+        "commanded_z_action": bounded_z_action,
         "native_action_spec_source": native_action_spec.get("source"),
         "predicted_finger_table_clearance_m": (
             predicted_table_clearance
         ),
         "proof": {
             "zero_xy_and_rotation": True,
-            "strictly_negative_z": True,
+            "position_plus_velocity_vertical_feedback": True,
             "inside_unchanged_contact_seek_translation_bound": True,
+            "negative_z_uses_at_most_half_live_table_reserve": True,
             "nominal_post_action_table_clearance_strict": True,
             "post_action_live_guards_required": True,
         },
@@ -17089,117 +17118,153 @@ def _seek_stable_plate_contact(
         )
 
     two_finger_contact_observed = False
-    contact_seek_vertical_tail_damping_events = []
-    vertical_tail_damping_complete = bool(
-        latest_vertical_step_progress_m
-        <= args.minimum_saturated_waypoint_progress
+    contact_seek_vertical_stabilization_events = []
+    vertical_stabilization_complete = False
+    vertical_stabilization_stable_count = 0
+    vertical_stabilization_required_stable_count = 2
+    vertical_stabilization_position_tolerance = float(
+        vertical_staging_corridor[
+            "strict_corridor_entry_clearance_m"
+        ]
     )
-    if not vertical_tail_damping_complete:
-        for damping_index in range(
-            1, args.plate_contact_seek_max_steps + 1
-        ):
-            before_eef = np.asarray(
-                rollout.obs["robot0_eef_pos"], dtype=float
-            ).copy()
-            pre_damping_guard = _live_outside_side_guard(env, geometry)
-            outside_side_guard_checks += 1
-            if not pre_damping_guard["accepted"]:
-                raise RuntimeError(
-                    "contact-seek vertical tail damping lacks its full "
-                    "outside-side guard: "
-                    f"source={source} damping_index={damping_index} "
-                    f"guard={json.dumps(pre_damping_guard, sort_keys=True)}"
-                )
-            action, damping_evidence = (
-                _bounded_contact_seek_vertical_tail_damping_action(
-                    vertical_step_progress_m=(
-                        latest_vertical_step_progress_m
-                    ),
-                    outside_side_guard=pre_damping_guard,
-                    gripper=gripper,
-                    position_action_scale=args.position_action_scale,
-                    maximum_translation_action=(
-                        args.plate_contact_seek_max_translation_action
-                    ),
-                    progress_resolution_m=(
-                        args.minimum_saturated_waypoint_progress
-                    ),
-                    strict_post_action_table_clearance_m=float(
-                        vertical_staging_corridor[
-                            "strict_corridor_entry_clearance_m"
-                        ]
-                    ),
-                    native_action_spec=native_action_spec,
-                )
-            )
-            rollout.advance(action, "task")
-            after_eef = np.asarray(
-                rollout.obs["robot0_eef_pos"], dtype=float
-            ).copy()
-            measured_vertical_response = float(
-                after_eef[2] - before_eef[2]
-            )
-            post_damping_guard = _live_outside_side_guard(env, geometry)
-            outside_side_guard_checks += 1
-            damping_sample = capture(
-                "outside_contact_seek_vertical_tail_damping",
-                damping_index,
-                False,
-                False,
-                extra={
-                    "action": action.tolist(),
-                    "tail_damping_evidence": damping_evidence,
-                    "measured_vertical_response_m": (
-                        measured_vertical_response
-                    ),
-                    "pre_action_outside_side_guard": (
-                        pre_damping_guard
-                    ),
-                    "post_action_outside_side_guard": (
-                        post_damping_guard
-                    ),
-                },
-            )
-            if not post_damping_guard["accepted"]:
-                damping_sample["accepted"] = False
-                damping_sample["violations"].append(
-                    "full_outside_side_guard_lost_during_tail_damping"
-                )
-                raise RuntimeError(
-                    "contact-seek vertical tail damping lost its full "
-                    "outside-side guard: "
-                    f"source={source} damping_index={damping_index} "
-                    f"sample={json.dumps(damping_sample, sort_keys=True)}"
-                )
-            latest_vertical_step_progress_m = measured_vertical_response
-            contact_seek_vertical_tail_damping_events.append(
-                {
-                    "index": int(damping_index),
-                    "action": action.tolist(),
-                    "measured_vertical_response_m": (
-                        measured_vertical_response
-                    ),
-                    "post_action_finger_table_clearance_m": (
-                        post_damping_guard[
-                            "finger_table_vertical_clearance_m"
-                        ]
-                    ),
-                }
-            )
-            if (
-                measured_vertical_response
-                <= args.minimum_saturated_waypoint_progress
-            ):
-                vertical_tail_damping_complete = True
-                break
-        if not vertical_tail_damping_complete:
+    vertical_stabilization_derivative_gain = 2.0
+    for stabilization_index in range(
+        1, args.plate_contact_seek_max_steps + 1
+    ):
+        before_eef = np.asarray(
+            rollout.obs["robot0_eef_pos"], dtype=float
+        ).copy()
+        pre_stabilization_guard = _live_outside_side_guard(env, geometry)
+        outside_side_guard_checks += 1
+        if not pre_stabilization_guard["accepted"]:
             raise RuntimeError(
-                "contact-seek vertical tail damping exhausted the "
-                "unchanged contact-seek step bound: "
-                f"source={source} max_steps="
-                f"{args.plate_contact_seek_max_steps} events="
-                f"{json.dumps(contact_seek_vertical_tail_damping_events, sort_keys=True)}"
+                "contact-seek vertical stabilization lacks its full "
+                "outside-side guard: "
+                f"source={source} stabilization_index="
+                f"{stabilization_index} guard="
+                f"{json.dumps(pre_stabilization_guard, sort_keys=True)}"
             )
+        action, stabilization_evidence = (
+            _bounded_contact_seek_vertical_stabilization_action(
+                current_eef_z_m=before_eef[2],
+                target_eef_z_m=float(contact_target[2]),
+                vertical_step_progress_m=(
+                    latest_vertical_step_progress_m
+                ),
+                outside_side_guard=pre_stabilization_guard,
+                gripper=gripper,
+                position_action_scale=args.position_action_scale,
+                maximum_translation_action=(
+                    args.plate_contact_seek_max_translation_action
+                ),
+                progress_resolution_m=(
+                    args.minimum_saturated_waypoint_progress
+                ),
+                strict_post_action_table_clearance_m=(
+                    vertical_stabilization_position_tolerance
+                ),
+                derivative_gain=vertical_stabilization_derivative_gain,
+                native_action_spec=native_action_spec,
+            )
+        )
+        rollout.advance(action, "task")
+        after_eef = np.asarray(
+            rollout.obs["robot0_eef_pos"], dtype=float
+        ).copy()
+        measured_vertical_response = float(
+            after_eef[2] - before_eef[2]
+        )
+        absolute_position_error = float(
+            abs(after_eef[2] - float(contact_target[2]))
+        )
+        instantaneous_stable = bool(
+            absolute_position_error
+            <= vertical_stabilization_position_tolerance
+            and abs(measured_vertical_response)
+            <= args.minimum_saturated_waypoint_progress
+        )
+        vertical_stabilization_stable_count = (
+            vertical_stabilization_stable_count + 1
+            if instantaneous_stable
+            else 0
+        )
+        post_stabilization_guard = _live_outside_side_guard(env, geometry)
+        outside_side_guard_checks += 1
+        stabilization_sample = capture(
+            "outside_contact_seek_vertical_stabilization",
+            stabilization_index,
+            False,
+            False,
+            extra={
+                "action": action.tolist(),
+                "vertical_stabilization_evidence": (
+                    stabilization_evidence
+                ),
+                "measured_vertical_response_m": (
+                    measured_vertical_response
+                ),
+                "absolute_position_error_m": absolute_position_error,
+                "instantaneous_stable": instantaneous_stable,
+                "stable_response_count": (
+                    vertical_stabilization_stable_count
+                ),
+                "required_stable_response_count": (
+                    vertical_stabilization_required_stable_count
+                ),
+                "pre_action_outside_side_guard": (
+                    pre_stabilization_guard
+                ),
+                "post_action_outside_side_guard": (
+                    post_stabilization_guard
+                ),
+            },
+        )
+        if not post_stabilization_guard["accepted"]:
+            stabilization_sample["accepted"] = False
+            stabilization_sample["violations"].append(
+                "full_outside_side_guard_lost_during_vertical_stabilization"
+            )
+            raise RuntimeError(
+                "contact-seek vertical stabilization lost its full "
+                "outside-side guard: "
+                f"source={source} stabilization_index="
+                f"{stabilization_index} sample="
+                f"{json.dumps(stabilization_sample, sort_keys=True)}"
+            )
+        latest_vertical_step_progress_m = measured_vertical_response
+        contact_seek_vertical_stabilization_events.append(
+            {
+                "index": int(stabilization_index),
+                "action": action.tolist(),
+                "measured_vertical_response_m": (
+                    measured_vertical_response
+                ),
+                "absolute_position_error_m": absolute_position_error,
+                "instantaneous_stable": instantaneous_stable,
+                "stable_response_count": (
+                    vertical_stabilization_stable_count
+                ),
+                "post_action_finger_table_clearance_m": (
+                    post_stabilization_guard[
+                        "finger_table_vertical_clearance_m"
+                    ]
+                ),
+            }
+        )
+        if (
+            vertical_stabilization_stable_count
+            >= vertical_stabilization_required_stable_count
+        ):
+            vertical_stabilization_complete = True
+            break
+    if not vertical_stabilization_complete:
+        raise RuntimeError(
+            "contact-seek vertical stabilization exhausted the "
+            "unchanged contact-seek step bound: "
+            f"source={source} max_steps="
+            f"{args.plate_contact_seek_max_steps} events="
+            f"{json.dumps(contact_seek_vertical_stabilization_events, sort_keys=True)}"
+        )
     for seek_index in range(1, args.plate_contact_seek_max_steps + 1):
         current_eef = np.asarray(
             rollout.obs["robot0_eef_pos"], dtype=float
@@ -17306,15 +17371,21 @@ def _seek_stable_plate_contact(
         "maximum_translation_action": (
             args.plate_contact_seek_max_translation_action
         ),
-        "contact_seek_vertical_tail_damping": {
-            "required": bool(
-                contact_seek_vertical_tail_damping_events
-            ),
-            "completed": bool(vertical_tail_damping_complete),
-            "events": contact_seek_vertical_tail_damping_events,
+        "contact_seek_vertical_stabilization": {
+            "completed": bool(vertical_stabilization_complete),
+            "events": contact_seek_vertical_stabilization_events,
             "maximum_steps": int(args.plate_contact_seek_max_steps),
+            "position_tolerance_m": float(
+                vertical_stabilization_position_tolerance
+            ),
             "progress_resolution_m": float(
                 args.minimum_saturated_waypoint_progress
+            ),
+            "required_stable_response_count": int(
+                vertical_stabilization_required_stable_count
+            ),
+            "derivative_gain": float(
+                vertical_stabilization_derivative_gain
             ),
         },
         "seek_steps_used": sum(

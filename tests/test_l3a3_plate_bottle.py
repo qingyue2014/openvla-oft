@@ -11,7 +11,7 @@ from experiments.robot.libero.tasks import write_l3a3_review_template
 from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     Rollout,
     _body_contact_counterparts,
-    _bounded_contact_seek_vertical_tail_damping_action,
+    _bounded_contact_seek_vertical_stabilization_action,
     _bounded_side_contact_seek_action,
     _contact_depth_sample_validity,
     _contact_progress_saturation_evidence,
@@ -423,7 +423,7 @@ def test_plate_side_contact_seek_caps_lateral_osc_action():
         )
 
 
-def test_contact_seek_vertical_tail_damping_retains_table_reserve():
+def test_contact_seek_vertical_stabilization_retains_table_reserve():
     native_spec = {
         "source": "env.action_spec",
         "action_dimension": 7,
@@ -432,8 +432,10 @@ def test_contact_seek_vertical_tail_damping_retains_table_reserve():
         "runtime_resolved": True,
     }
     action, evidence = (
-        _bounded_contact_seek_vertical_tail_damping_action(
-            vertical_step_progress_m=0.000316,
+        _bounded_contact_seek_vertical_stabilization_action(
+            current_eef_z_m=0.9191152632668791,
+            target_eef_z_m=0.9178414056548501,
+            vertical_step_progress_m=-0.0005361277747323312,
             outside_side_guard={
                 "finger_table_vertical_clearance_m": 0.006,
                 "required_finger_table_clearance_m": np.nextafter(
@@ -445,29 +447,33 @@ def test_contact_seek_vertical_tail_damping_retains_table_reserve():
             maximum_translation_action=0.10,
             progress_resolution_m=0.00005,
             strict_post_action_table_clearance_m=0.0004,
+            derivative_gain=2.0,
             native_action_spec=native_spec,
         )
     )
     assert np.all(action[:2] == 0.0)
-    assert action[2] == pytest.approx(-0.035)
+    assert action[2] == pytest.approx(-0.00252002452830457)
     assert np.all(action[3:6] == 0.0)
     assert np.linalg.norm(action[:3]) < 0.10
-    assert evidence["commanded_downward_world_step_m"] == pytest.approx(
-        0.0028
+    assert evidence["commanded_world_delta_m"] == pytest.approx(
+        -0.0002016019622643656
     )
     assert evidence[
         "predicted_finger_table_clearance_m"
-    ] == pytest.approx(0.0032)
+    ] == pytest.approx(0.005798398037735634)
     assert evidence["proof"] == {
         "zero_xy_and_rotation": True,
-        "strictly_negative_z": True,
+        "position_plus_velocity_vertical_feedback": True,
         "inside_unchanged_contact_seek_translation_bound": True,
+        "negative_z_uses_at_most_half_live_table_reserve": True,
         "nominal_post_action_table_clearance_strict": True,
         "post_action_live_guards_required": True,
     }
-    with pytest.raises(RuntimeError, match="measured positive-Z tail"):
-        _bounded_contact_seek_vertical_tail_damping_action(
-            vertical_step_progress_m=0.00005,
+    positive_action, positive_evidence = (
+        _bounded_contact_seek_vertical_stabilization_action(
+            current_eef_z_m=0.9177752232890954,
+            target_eef_z_m=0.9178414056548501,
+            vertical_step_progress_m=-0.00035196973401552256,
             outside_side_guard={
                 "finger_table_vertical_clearance_m": 0.006,
                 "required_finger_table_clearance_m": 0.0,
@@ -477,8 +483,13 @@ def test_contact_seek_vertical_tail_damping_retains_table_reserve():
             maximum_translation_action=0.10,
             progress_resolution_m=0.00005,
             strict_post_action_table_clearance_m=0.0004,
+            derivative_gain=2.0,
             native_action_spec=native_spec,
         )
+    )
+    assert positive_action[2] > 0.0
+    assert positive_action[2] < 0.10
+    assert positive_evidence["commanded_world_delta_m"] > 0.0
 
 
 def test_native_geometry_side_contact_targets_descend_outside_plate():
@@ -9046,15 +9057,19 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
     assert "rollout.advance(action, \"task\")" in bounded_seek
     assert "plate_contact_seek_max_translation_action" in bounded_seek
     assert (
-        "_bounded_contact_seek_vertical_tail_damping_action("
+        "_bounded_contact_seek_vertical_stabilization_action("
         in bounded_seek
     )
-    assert '"outside_contact_seek_vertical_tail_damping"' in bounded_seek
+    assert '"outside_contact_seek_vertical_stabilization"' in bounded_seek
     assert "minimum_saturated_waypoint_progress" in bounded_seek
-    assert "vertical_tail_damping_complete" in bounded_seek
-    assert "post_damping_guard[\"accepted\"]" in bounded_seek
+    assert "vertical_stabilization_complete" in bounded_seek
+    assert "vertical_stabilization_derivative_gain = 2.0" in bounded_seek
+    assert "vertical_stabilization_required_stable_count = 2" in bounded_seek
+    assert "absolute_position_error" in bounded_seek
+    assert "abs(measured_vertical_response)" in bounded_seek
+    assert "post_stabilization_guard[\"accepted\"]" in bounded_seek
     assert (
-        "contact-seek vertical tail damping exhausted the "
+        "contact-seek vertical stabilization exhausted the "
         in bounded_seek
     )
     assert '"bounded_lateral_contact_seek"' in bounded_seek
