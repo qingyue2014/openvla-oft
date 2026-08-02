@@ -390,6 +390,17 @@ def test_l3b_bowl_v2r1_remote_phases_are_pi05_only_and_isolated():
     )
 
 
+def test_l3b_bowl_remote_qpos_diagnostic_is_pre_policy_and_auditable():
+    diagnostic = PHASES[("l3b_bowl", "diagnose_er_qpos")]
+    command = " ".join(diagnostic.command)
+    assert "diagnose_l3b_bowl_er_qpos.py" in command
+    assert "run_physcog_libero_l1_eval.py" not in command
+    assert "openpi" not in command.lower()
+    assert diagnostic.artifacts == (
+        "review/L3-B_bowl_order_calibration_task/er_qpos_sweep.json",
+    )
+
+
 def test_batch_script_has_required_slurm_header_modules_and_fresh_artifacts():
     spec = PhaseSpec(command=("bash", "path with space/runner.sh", "phase"), count_env="N")
     script = build_batch_script(

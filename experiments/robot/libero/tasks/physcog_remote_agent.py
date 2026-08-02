@@ -1951,6 +1951,22 @@ PHASES: Mapping[tuple[str, str], PhaseSpec] = {
             "review/L3-B_bowl_order_v2r1_task",
         ),
     ),
+    ("l3b_bowl", "diagnose_er_qpos"): PhaseSpec(
+        command=(
+            "env",
+            "RENDER_GPU_DEVICE_ID=1",
+            "python",
+            "experiments/robot/libero/tasks/diagnose_l3b_bowl_er_qpos.py",
+            "--render-gpu-device-id",
+            "1",
+        ),
+        cleanup_artifacts=(
+            "review/L3-B_bowl_order_calibration_task/er_qpos_sweep.json",
+        ),
+        artifacts=(
+            "review/L3-B_bowl_order_calibration_task/er_qpos_sweep.json",
+        ),
+    ),
     ("l3b_bowl", "smoke_v2r1_pi05"): PhaseSpec(
         command=(
             "env",
