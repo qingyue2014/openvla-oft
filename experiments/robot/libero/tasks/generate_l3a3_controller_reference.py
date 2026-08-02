@@ -5657,6 +5657,7 @@ def _compiled_adaptive_high_plane_action(
     expected_pair_count,
     maximum_translation_action=None,
     plane_recovery_tolerance_m=None,
+    negative_tail_recovery_threshold_m=None,
 ):
     """Hold the initial high plane with XY/+Z under live pair reserves."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -5686,6 +5687,18 @@ def _compiled_adaptive_high_plane_action(
             raise ValueError(
                 "adaptive high-plane recovery tolerance must be finite and "
                 "positive"
+            )
+    if negative_tail_recovery_threshold_m is not None:
+        negative_tail_recovery_threshold_m = float(
+            negative_tail_recovery_threshold_m
+        )
+        if (
+            not np.isfinite(negative_tail_recovery_threshold_m)
+            or negative_tail_recovery_threshold_m <= 0.0
+        ):
+            raise ValueError(
+                "adaptive high-plane negative-tail recovery threshold must "
+                "be finite and positive"
             )
     pairs = list(overhead_guard.get("pairs", ()))
     if expected_pair_count <= 0 or len(pairs) != int(expected_pair_count):
@@ -5882,9 +5895,14 @@ def _compiled_adaptive_high_plane_action(
         plane_recovery_tolerance_m is not None
         and plane_hold_z_error > plane_recovery_tolerance_m
     )
+    negative_tail_recovery_required = bool(
+        negative_tail_recovery_threshold_m is not None
+        and measured_negative_tail > negative_tail_recovery_threshold_m
+    )
     recovery_required = bool(
         pair_capacity_recovery_required
         or plane_tolerance_recovery_required
+        or negative_tail_recovery_required
     )
     minimum_current_surplus = min(
         record["current_base8_surplus_m"] for record in pair_envelopes
@@ -5916,11 +5934,16 @@ def _compiled_adaptive_high_plane_action(
         translation = np.array([0.0, 0.0, recovery_z_action])
         nominal_tail = 0.0
         total_tail = inertial_tail_reserve
-        selected_source = (
-            "event_driven_positive_z_plane_tolerance_recovery"
-            if plane_tolerance_recovery_required
-            else "event_driven_positive_z_plane_recovery"
-        )
+        if negative_tail_recovery_required:
+            selected_source = (
+                "event_driven_positive_z_negative_tail_recovery"
+            )
+        elif plane_tolerance_recovery_required:
+            selected_source = (
+                "event_driven_positive_z_plane_tolerance_recovery"
+            )
+        else:
+            selected_source = "event_driven_positive_z_plane_recovery"
     else:
         translation = requested_direction * selected_norm
         nominal_tail = float(
@@ -6004,8 +6027,8 @@ def _compiled_adaptive_high_plane_action(
             "runtime-native 3-D norm and every exact pair's strict+base8 "
             "capacity after reserving at least the latest measured negative-dz "
             "inertial tail; a pair-limited action becomes pure +Z recovery, "
-            "and an optional registered plane-error tolerance similarly "
-            "requires pure +Z before XY resumes"
+            "and optional registered plane-error or measured-negative-tail "
+            "thresholds similarly require pure +Z before XY resumes"
         ),
         "current_eef": current_eef.tolist(),
         "lateral_target_xy": lateral_target_xy.tolist(),
@@ -6015,6 +6038,12 @@ def _compiled_adaptive_high_plane_action(
         "plane_recovery_tolerance_m": plane_recovery_tolerance_m,
         "plane_tolerance_recovery_required": (
             plane_tolerance_recovery_required
+        ),
+        "negative_tail_recovery_threshold_m": (
+            negative_tail_recovery_threshold_m
+        ),
+        "negative_tail_recovery_required": (
+            negative_tail_recovery_required
         ),
         "pair_capacity_recovery_required": (
             pair_capacity_recovery_required
@@ -13033,6 +13062,18 @@ def _seek_stable_plate_contact(
                     "the same native/configured norm and 55-pair base8 proof "
                     "before resuming XY"
                 ),
+                "negative_tail_recovery_threshold_m": float(
+                    args.minimum_saturated_waypoint_progress
+                ),
+                "negative_tail_recovery_threshold_source": (
+                    "existing minimum_saturated_waypoint_progress"
+                ),
+                "negative_tail_recovery_rule": (
+                    "during post-descent correction, if the latest measured "
+                    "negative Z step exceeds the registered threshold, issue "
+                    "pure +Z under the same native/configured norm and "
+                    "55-pair base8 proof before resuming XY"
+                ),
                 "controller_handoff_applies_only_before_first_overhead_descent": True,
                 "plane_recovery_applies_only_above_staging_tolerance": True,
                 "post_descent_formal_handoff_vertical_tail_deadband_m": (
@@ -13154,7 +13195,12 @@ def _seek_stable_plate_contact(
                 "Z error exceeds the "
                 "unchanged formal position tolerance, reserve the complete "
                 "configured action norm for proved pure +Z recovery before "
-                "resuming XY. At or below staging, switch the correction "
+                "resuming XY. During post-descent correction, also reserve "
+                "the complete action for proved pure +Z recovery whenever "
+                "the latest measured negative Z step exceeds the existing "
+                "minimum_saturated_waypoint_progress threshold, and resume "
+                "XY only inside that deadband. At or below staging, switch "
+                "the correction "
                 "action back to the unchanged formal target and use only the "
                 "unchanged formal target and clearance for the vertical-"
                 "corridor transition. The unchanged 0.10 "
@@ -13706,6 +13752,9 @@ def _seek_stable_plate_contact(
                     args.position_tolerance
                     if correction_uses_high_z_hold_target
                     else None
+                ),
+                negative_tail_recovery_threshold_m=(
+                    args.minimum_saturated_waypoint_progress
                 ),
             )
         adaptive_negative_z_action_requires_buffer16 = bool(

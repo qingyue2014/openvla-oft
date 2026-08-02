@@ -4200,6 +4200,17 @@ def test_500193_high_lateral_uses_compiled_dynamic_action_envelope():
     assert "else corridor_rebuffer_target[:2]" in post_descent_compilation
     assert '"active_correction_lateral_target_xy"' in bounded_seek
     assert "plane_recovery_tolerance_m=(" in post_descent_compilation
+    assert (
+        "negative_tail_recovery_threshold_m=("
+        in post_descent_compilation
+    )
+    assert "args.minimum_saturated_waypoint_progress" in (
+        post_descent_compilation
+    )
+    assert (
+        '"event_driven_positive_z_negative_tail_recovery"'
+        in CONTROLLER_REFERENCE.read_text()
+    )
     assert '"unchanged formal position_tolerance"' in bounded_seek
     assert 'corridor_high_target=corridor_rebuffer_target' in bounded_seek
     assert (
@@ -4461,6 +4472,61 @@ def test_500195_high_plane_hold_reserves_measured_negative_dz_tail():
     assert resumed_xy_action[0] > 0.0
     assert resumed_xy_action[2] > 0.0
     assert np.linalg.norm(resumed_xy_action[:3]) < 0.10
+
+    negative_tail_recovery_action, negative_tail_recovery = (
+        _compiled_adaptive_high_plane_action(
+            current_eef=recovered_plane_eef,
+            lateral_target_xy=correction_hold_target,
+            overhead_horizontal_z=terminal_hold_z,
+            measured_vertical_step_progress_m=-0.00006,
+            overhead_guard=guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native,
+            expected_pair_count=55,
+            maximum_translation_action=0.10,
+            plane_recovery_tolerance_m=0.005,
+            negative_tail_recovery_threshold_m=0.00005,
+        )
+    )
+    assert np.array_equal(
+        negative_tail_recovery_action[:2], np.zeros(2)
+    )
+    assert negative_tail_recovery_action[2] > 0.0
+    assert np.linalg.norm(negative_tail_recovery_action[:3]) < 0.10
+    assert negative_tail_recovery[
+        "negative_tail_recovery_required"
+    ] is True
+    assert negative_tail_recovery[
+        "plane_tolerance_recovery_required"
+    ] is False
+    assert negative_tail_recovery[
+        "pair_capacity_recovery_required"
+    ] is False
+    assert negative_tail_recovery["selected_envelope_source"] == (
+        "event_driven_positive_z_negative_tail_recovery"
+    )
+
+    tail_deadband_action, tail_deadband = (
+        _compiled_adaptive_high_plane_action(
+            current_eef=recovered_plane_eef,
+            lateral_target_xy=correction_hold_target,
+            overhead_horizontal_z=terminal_hold_z,
+            measured_vertical_step_progress_m=-0.00004,
+            overhead_guard=guard,
+            gripper=-1.0,
+            position_action_scale=0.08,
+            native_action_spec=native,
+            expected_pair_count=55,
+            maximum_translation_action=0.10,
+            plane_recovery_tolerance_m=0.005,
+            negative_tail_recovery_threshold_m=0.00005,
+        )
+    )
+    assert tail_deadband["negative_tail_recovery_required"] is False
+    assert tail_deadband_action[0] > 0.0
+    assert tail_deadband_action[2] > 0.0
+    assert np.linalg.norm(tail_deadband_action[:3]) < 0.10
 
     handoff_eef = np.array(
         [
