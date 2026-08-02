@@ -278,6 +278,15 @@ registers its own `1.100 mm` closed-loop hazard-response bound and derives a
 threshold. The earlier corridor bound remains unchanged in its original stage.
 This is controller headroom only: the formal outside and table acceptance
 thresholds remain `0.400 mm`.
+Job503638 then showed that releasing the full outward brake on a single frame
+just above the `1.500 mm` entry caused repeated on/off cycles and a later
+reverse tail. The final stage now derives a distinct `1.550 mm` release line
+by adding the unchanged `0.050 mm` progress resolution to the recovery entry.
+Live clearance at or below that line retains the full outward brake, and the
+two-frame stage-release check requires both outside and table clearance to be
+strictly above it. The `1.500 mm` predicted-response entry, `0.400 mm` formal
+acceptance thresholds, all native task fields, and every other stage remain
+unchanged.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

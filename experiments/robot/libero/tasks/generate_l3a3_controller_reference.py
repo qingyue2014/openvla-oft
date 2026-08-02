@@ -5226,6 +5226,12 @@ def _fixed_safe_z_lateral_hold_action(
             + closed_loop_hazard_response_bound_m,
         )
     )
+    outside_recovery_exit_clearance = float(
+        np.nextafter(
+            outside_recovery_clearance + progress_resolution_m,
+            np.inf,
+        )
+    )
     table_recovery_clearance = float(
         max(
             required_table_clearance,
@@ -5290,7 +5296,7 @@ def _fixed_safe_z_lateral_hold_action(
         measured_outward_step_progress_m < -progress_resolution_m
     )
     live_outside_recovery_active = bool(
-        live_outside_clearance <= outside_recovery_clearance
+        live_outside_clearance <= outside_recovery_exit_clearance
     )
     outside_recovery_active = bool(
         measured_inward_response
@@ -5476,6 +5482,9 @@ def _fixed_safe_z_lateral_hold_action(
         ),
         "live_outside_clearance_m": live_outside_clearance,
         "outside_recovery_clearance_m": outside_recovery_clearance,
+        "outside_recovery_exit_clearance_m": (
+            outside_recovery_exit_clearance
+        ),
         "predicted_outside_clearance_m": predicted_outside_clearance,
         "outside_recovery_active": outside_recovery_active,
         "live_outside_recovery_active": (
@@ -5514,6 +5523,7 @@ def _fixed_safe_z_lateral_hold_action(
             "healthy_outside_reserve_avoids_outward_saturation": True,
             "measured_inward_tail_uses_full_outward_brake": True,
             "live_low_reserve_uses_full_outward_brake": True,
+            "recovery_release_requires_exit_headroom": True,
             "outside_recovery_suspends_negative_z": True,
             "below_height_band_retains_positive_z_floor": True,
             "inside_band_positive_response_unloads_without_negative_z": True,
@@ -15193,11 +15203,20 @@ def _seek_stable_plate_contact(
         fixed_safe_z_position_tolerance
         + fixed_safe_z_closed_loop_hazard_response_bound
     )
+    fixed_safe_z_recovery_exit_clearance = float(
+        np.nextafter(
+            fixed_safe_z_recovery_entry_clearance
+            + args.minimum_saturated_waypoint_progress,
+            np.inf,
+        )
+    )
     if not (
         fixed_safe_z_closed_loop_hazard_response_bound
         > vertical_corridor_closed_loop_inward_response_bound
         and fixed_safe_z_recovery_entry_clearance
         > vertical_corridor_reserve_recovery_entry_clearance
+        and fixed_safe_z_recovery_exit_clearance
+        > fixed_safe_z_recovery_entry_clearance
     ):
         raise RuntimeError(
             "fixed-safe-Z recovery envelope is not strictly conservative"
@@ -15210,10 +15229,15 @@ def _seek_stable_plate_contact(
             "fixed_safe_z_recovery_entry_clearance_m": (
                 fixed_safe_z_recovery_entry_clearance
             ),
+            "fixed_safe_z_recovery_exit_clearance_m": (
+                fixed_safe_z_recovery_exit_clearance
+            ),
             "fixed_safe_z_recovery_derivation": (
                 "unchanged 0.400 mm strict corridor threshold plus a "
                 "final-stage-only 1.100 mm bound strictly above the "
-                "maximum 1.061 mm measured inward response tail"
+                "maximum 1.061 mm measured inward response tail; release "
+                "requires one additional 0.050 mm progress-resolution "
+                "increment"
             ),
         }
     )
@@ -15451,12 +15475,12 @@ def _seek_stable_plate_contact(
                 and abs(latest_vertical_step_progress_m)
                 <= args.minimum_saturated_waypoint_progress
                 and pre_action_guard["minimum_outside_clearance_m"]
-                > fixed_safe_z_recovery_entry_clearance
+                > fixed_safe_z_recovery_exit_clearance
                 and pre_action_guard[
                     "finger_table_vertical_clearance_m"
                 ]
                 > (
-                    fixed_safe_z_recovery_entry_clearance
+                    fixed_safe_z_recovery_exit_clearance
                 )
             )
             fixed_safe_z_stable_count = (
