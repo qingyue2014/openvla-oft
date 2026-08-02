@@ -13036,10 +13036,10 @@ def _seek_stable_plate_contact(
                 "controller_handoff_applies_only_before_first_overhead_descent": True,
                 "plane_recovery_applies_only_above_staging_tolerance": True,
                 "post_descent_formal_handoff_vertical_tail_deadband_m": (
-                    -float(args.minimum_saturated_waypoint_progress)
+                    -maximum_controller_world_step
                 ),
                 "post_descent_formal_handoff_vertical_tail_deadband_source": (
-                    "existing minimum_saturated_waypoint_progress"
+                    "existing vertical-staging maximum_controller_world_step"
                 ),
                 "formal_corridor_acceptance_target_unchanged": True,
                 "formal_corridor_acceptance_clearance_unchanged": True,
@@ -13147,10 +13147,11 @@ def _seek_stable_plate_contact(
                 "the shifted target remains only an action target and the "
                 "unchanged formal corridor target and clearance alone gate "
                 "continued descent, together with a measured vertical-step "
-                "handoff interlock using the existing negative "
-                "minimum_saturated_waypoint_progress deadband so descent "
-                "cannot resume with a larger observed downward tail. If high-"
-                "plane Z error exceeds the "
+                "handoff interlock using the existing negative vertical-"
+                "staging maximum_controller_world_step bound so descent "
+                "cannot resume with an observed downward tail larger than one "
+                "registered vertical-corridor controller step. If high-plane "
+                "Z error exceeds the "
                 "unchanged formal position tolerance, reserve the complete "
                 "configured action norm for proved pure +Z recovery before "
                 "resuming XY. At or below staging, switch the correction "
@@ -15018,7 +15019,7 @@ def _seek_stable_plate_contact(
                 )
                 post_descent_vertical_tail_handoff_accepted = bool(
                     measured_vertical_step_progress_m
-                    >= -float(args.minimum_saturated_waypoint_progress)
+                    >= -maximum_controller_world_step
                 )
                 feedback["post_descent_vertical_tail_handoff_gate"] = {
                     "accepted": (
@@ -15028,10 +15029,11 @@ def _seek_stable_plate_contact(
                         measured_vertical_step_progress_m
                     ),
                     "minimum_accepted_vertical_step_progress_m": (
-                        -float(args.minimum_saturated_waypoint_progress)
+                        -maximum_controller_world_step
                     ),
                     "threshold_source": (
-                        "existing minimum_saturated_waypoint_progress"
+                        "existing vertical-staging "
+                        "maximum_controller_world_step"
                     ),
                     "formal_corridor_acceptance_unchanged": True,
                 }
