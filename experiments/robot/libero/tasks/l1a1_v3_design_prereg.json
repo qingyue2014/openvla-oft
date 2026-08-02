@@ -61,5 +61,17 @@
     ],
     "all_other_state_fields": "paired within 1e-10"
   },
+  "state_bundle_attempts": [
+    {
+      "superpod_job_id": "502628",
+      "immutable_commit": "aec4de2f74831a6f9d823b8380580e42fa61170a",
+      "requested_pairs": 50,
+      "status": "FAIL_PHYSICAL_GATE_NO_ARTIFACTS",
+      "first_failure": "Er ramekin moved 0.077280 m during formal wait step 1",
+      "maximum_allowed_presettled_motion_m": 0.001,
+      "learned_policy_rollouts": 0,
+      "publication_eligibility": false
+    }
+  ],
   "next_gate": "N=50 exact-state generation and first-policy-view validation; no learned-policy rollout before explicit human visibility approval"
 }

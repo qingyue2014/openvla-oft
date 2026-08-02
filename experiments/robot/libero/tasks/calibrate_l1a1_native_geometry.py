@@ -78,45 +78,67 @@ def run(args) -> list[dict[str, object]]:
     out_dir = Path(args.preview_dir)
     rows: list[dict[str, object]] = []
     try:
-        native_state = native_states[args.native_state_index]
-        for candidate in CANDIDATES:
-            row: dict[str, object] = {**candidate, "native_state_index": args.native_state_index}
-            try:
-                states = _paired_states(env, native_state, candidate)
-                diagnostics = {
-                    condition: p._validate_condition(env, state, condition)
-                    for condition, state in states.items()
+        candidates = tuple(
+            candidate
+            for candidate in CANDIDATES
+            if not args.candidate or candidate["id"] == args.candidate
+        )
+        if not candidates:
+            raise ValueError(f"unknown candidate: {args.candidate}")
+        state_indices = (
+            range(len(native_states))
+            if args.all_native_states
+            else (args.native_state_index,)
+        )
+        for state_index in state_indices:
+            native_state = native_states[state_index]
+            for candidate in candidates:
+                row: dict[str, object] = {
+                    **candidate,
+                    "native_state_index": state_index,
                 }
-                er_ec_qpos, er_ec_qvel = p._purity_error(
-                    env, states["Er"], states["Ec"], (scene.LURE,)
-                )
-                if max(er_ec_qpos, er_ec_qvel) > p.PAIR_TOLERANCE:
-                    raise RuntimeError(
-                        "Er/Ec differs outside the lure joint: "
-                        f"qpos={er_ec_qpos:.3e}, qvel={er_ec_qvel:.3e}"
+                try:
+                    states = _paired_states(env, native_state, candidate)
+                    diagnostics = {
+                        condition: p._validate_condition(env, state, condition)
+                        for condition, state in states.items()
+                    }
+                    er_ec_qpos, er_ec_qvel = p._purity_error(
+                        env, states["Er"], states["Ec"], (scene.LURE,)
                     )
-                row.update(
-                    {
-                        "verdict": "PASS_L1A1_GEOMETRY_CANDIDATE",
-                        "er_ec_unallowed_qpos_error": er_ec_qpos,
-                        "er_ec_unallowed_qvel_error": er_ec_qvel,
-                        "diagnostics": diagnostics,
-                    }
+                    if max(er_ec_qpos, er_ec_qvel) > p.PAIR_TOLERANCE:
+                        raise RuntimeError(
+                            "Er/Ec differs outside the lure joint: "
+                            f"qpos={er_ec_qpos:.3e}, qvel={er_ec_qvel:.3e}"
+                        )
+                    row.update(
+                        {
+                            "verdict": "PASS_L1A1_GEOMETRY_CANDIDATE",
+                            "er_ec_unallowed_qpos_error": er_ec_qpos,
+                            "er_ec_unallowed_qvel_error": er_ec_qvel,
+                            "diagnostics": diagnostics,
+                        }
+                    )
+                    if state_index < args.preview_count:
+                        candidate_dir = out_dir / str(candidate["id"])
+                        for condition, state in states.items():
+                            p._save_preview(
+                                env, state, candidate_dir, condition, state_index
+                            )
+                except Exception as exc:  # fail each pair independently
+                    row.update(
+                        {
+                            "verdict": "FAIL_L1A1_GEOMETRY_CANDIDATE",
+                            "failure_type": type(exc).__name__,
+                            "failure": str(exc),
+                            "traceback": traceback.format_exc(),
+                        }
+                    )
+                rows.append(row)
+                print(
+                    f"candidate={candidate['id']} state={state_index} "
+                    f"verdict={row['verdict']} reason={row.get('failure', '--')}"
                 )
-                candidate_dir = out_dir / str(candidate["id"])
-                for condition, state in states.items():
-                    p._save_preview(env, state, candidate_dir, condition, 0)
-            except Exception as exc:  # fail each candidate independently
-                row.update(
-                    {
-                        "verdict": "FAIL_L1A1_GEOMETRY_CANDIDATE",
-                        "failure_type": type(exc).__name__,
-                        "failure": str(exc),
-                        "traceback": traceback.format_exc(),
-                    }
-                )
-            rows.append(row)
-            print(f"candidate={candidate['id']} verdict={row['verdict']} reason={row.get('failure', '--')}")
     finally:
         env.close()
     return rows
@@ -125,6 +147,9 @@ def run(args) -> list[dict[str, object]]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--native_state_index", type=int, default=0)
+    parser.add_argument("--all_native_states", action="store_true")
+    parser.add_argument("--candidate", default="")
+    parser.add_argument("--preview_count", type=int, default=3)
     parser.add_argument("--preview_dir", required=True)
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
