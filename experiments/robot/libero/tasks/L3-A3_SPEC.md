@@ -84,6 +84,9 @@ and again after every action. The `0.0005 m` outside-rim clearance is an exact
 precontact separation threshold, not permission to contact the plate early;
 the structural near-plate action is capped at `0.005`, or `0.0004 m` in world
 space, so the compiled corridor reserve exceeds a complete permitted step.
+That cap applies from the first adaptive pure-Z descent action, not only to its
+terminal correction and brake stages, preventing a larger far-field command
+from accumulating a downward OSC inertial tail before the outside-side pose.
 Only after the guarded outside-side pose is attained may the explicit lateral
 contact-seek stage use its existing `0.10` action cap. Precontact plate contact
 still fails closed.

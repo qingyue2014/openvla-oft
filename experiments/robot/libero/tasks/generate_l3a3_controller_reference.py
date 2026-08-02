@@ -5067,6 +5067,7 @@ def _compiled_adaptive_vertical_descent_action(
     position_action_scale,
     native_action_spec,
     expected_pair_count,
+    maximum_translation_action=None,
 ):
     """Derive one pure-Z descent from every live compiled overhead pair."""
     current_eef = np.asarray(current_eef, dtype=float)
@@ -5179,11 +5180,44 @@ def _compiled_adaptive_vertical_descent_action(
         raise RuntimeError(
             "native OSC negative-Z action bound has no strict interior"
         )
+    configured_strict_action_capacity = None
+    configured_world_capacity = None
+    if maximum_translation_action is not None:
+        maximum_translation_action = float(maximum_translation_action)
+        if (
+            not np.isfinite(maximum_translation_action)
+            or maximum_translation_action <= 0.0
+            or maximum_translation_action
+            > strict_native_negative_z_action
+        ):
+            raise ValueError(
+                "adaptive vertical translation-action bound must be finite, "
+                "positive, and strictly inside the runtime native negative-Z "
+                "action capacity"
+            )
+        configured_strict_action_capacity = float(
+            np.nextafter(maximum_translation_action, 0.0)
+        )
+        configured_world_capacity = float(
+            configured_strict_action_capacity * position_action_scale
+        )
+        if (
+            configured_strict_action_capacity <= 0.0
+            or configured_world_capacity <= 0.0
+        ):
+            raise RuntimeError(
+                "adaptive vertical configured action bound has no strict "
+                "interior"
+            )
     capacities = {
         "target_remaining_z_error": target_remaining,
         "compiled_pair_base8_envelope": pair_world_capacity,
         "native_negative_z_action_bound": native_world_capacity,
     }
+    if configured_world_capacity is not None:
+        capacities["configured_translation_action_norm_bound"] = (
+            configured_world_capacity
+        )
     selected_source = min(capacities, key=capacities.get)
     commanded_delta = float(capacities[selected_source])
     if not np.isfinite(commanded_delta) or commanded_delta <= 0.0:
@@ -5203,6 +5237,11 @@ def _compiled_adaptive_vertical_descent_action(
         ]
         if (
             native_low[2] < commanded_z_action < 0.0
+            and (
+                configured_strict_action_capacity is None
+                or abs(commanded_z_action)
+                <= configured_strict_action_capacity
+            )
             and commanded_delta <= target_remaining
             and all(
                 clearance
@@ -5242,6 +5281,10 @@ def _compiled_adaptive_vertical_descent_action(
         or action[1] != 0.0
         or not native_low[2] < action[2] < 0.0
         or action[2] > native_high[2]
+        or (
+            configured_strict_action_capacity is not None
+            and abs(action[2]) > configured_strict_action_capacity
+        )
         or minimum_predicted_surplus <= 0.0
     ):
         raise RuntimeError(
@@ -5253,7 +5296,9 @@ def _compiled_adaptive_vertical_descent_action(
             "strict pair clearance and the unchanged 8 mm base reserve from "
             "current vertical clearance; select the strict minimum of all-pair "
             "capacity, remaining target-Z error, and the runtime-resolved native "
-            "negative-Z action capacity times position_action_scale"
+            "negative-Z action capacity times position_action_scale; when "
+            "configured, also intersect the strict structural translation-"
+            "action bound from the first descent action"
         ),
         "current_eef": current_eef.tolist(),
         "target_z_m": float(target_z),
@@ -5271,6 +5316,15 @@ def _compiled_adaptive_vertical_descent_action(
         ),
         "strict_native_negative_z_world_delta_capacity_m": (
             native_world_capacity
+        ),
+        "configured_maximum_translation_action": (
+            maximum_translation_action
+        ),
+        "configured_strict_translation_action_capacity": (
+            configured_strict_action_capacity
+        ),
+        "configured_strict_world_delta_capacity_m": (
+            configured_world_capacity
         ),
         "compiled_pair_count": len(pair_envelopes),
         "pair_envelopes": pair_envelopes,
@@ -13097,6 +13151,9 @@ def _seek_stable_plate_contact(
                     position_action_scale=args.position_action_scale,
                     native_action_spec=native_action_spec,
                     expected_pair_count=expected_overhead_pair_count,
+                    maximum_translation_action=(
+                        structural_max_translation_action
+                    ),
                 )
             )
             feedback = {
