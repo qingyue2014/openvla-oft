@@ -3185,13 +3185,16 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
 
     # Job503193 proved that equal XY/Z action allocation alone is not a live
     # reserve guarantee: despite 0.081 outward action, the real OSC continued
-    # 0.188 mm inward and crossed the 0.4 mm one-step gate.  Trigger braking at
-    # formal 0.9 mm clearance plus the existing 0.4 mm controller world step,
-    # suspend descent, and latch until both measured axes recover.
-    recovery_trigger = 0.0009 + 0.0004
+    # 0.188 mm inward and crossed the 0.4 mm one-step gate.  Job503209 then
+    # showed that a shared 1.3 mm entry/exit threshold was unreachable.  Enter
+    # at the strict 0.4 mm gate plus the existing 0.4 mm controller world step,
+    # and exit at the unchanged formal 0.9 mm corridor clearance.
+    recovery_entry_clearance = 0.0004 + 0.0004
+    recovery_exit_clearance = 0.0009
     before_trigger = _vertical_corridor_reserve_recovery_evidence(
         live_clearance_m=0.0014115984435881107,
-        recovery_trigger_clearance_m=recovery_trigger,
+        recovery_entry_clearance_m=recovery_entry_clearance,
+        recovery_exit_clearance_m=recovery_exit_clearance,
         strict_corridor_entry_clearance_m=0.0004,
         latest_outward_step_progress_m=1.3378271275732434e-05,
         latest_vertical_step_progress_m=-0.0006499833005025879,
@@ -3199,18 +3202,20 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     )
     assert before_trigger["recovery_active_after_decision"] is False
     job503193_entry = _vertical_corridor_reserve_recovery_evidence(
-        live_clearance_m=0.0012511771753540152,
-        recovery_trigger_clearance_m=recovery_trigger,
+        live_clearance_m=0.000667534143986015,
+        recovery_entry_clearance_m=recovery_entry_clearance,
+        recovery_exit_clearance_m=recovery_exit_clearance,
         strict_corridor_entry_clearance_m=0.0004,
-        latest_outward_step_progress_m=-0.00016120507354072666,
-        latest_vertical_step_progress_m=-0.0016246494205975903,
+        latest_outward_step_progress_m=-0.00019280978843902452,
+        latest_vertical_step_progress_m=-0.0018199586431316694,
         recovery_active_before_decision=False,
     )
     assert job503193_entry["entered_recovery"] is True
     assert job503193_entry["recovery_active_after_decision"] is True
     recovery_hold = _vertical_corridor_reserve_recovery_evidence(
-        live_clearance_m=0.0014,
-        recovery_trigger_clearance_m=recovery_trigger,
+        live_clearance_m=0.00085,
+        recovery_entry_clearance_m=recovery_entry_clearance,
+        recovery_exit_clearance_m=recovery_exit_clearance,
         strict_corridor_entry_clearance_m=0.0004,
         latest_outward_step_progress_m=-1e-6,
         latest_vertical_step_progress_m=1e-6,
@@ -3218,8 +3223,9 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     )
     assert recovery_hold["exit_accepted"] is False
     recovery_exit = _vertical_corridor_reserve_recovery_evidence(
-        live_clearance_m=0.0014,
-        recovery_trigger_clearance_m=recovery_trigger,
+        live_clearance_m=0.001,
+        recovery_entry_clearance_m=recovery_entry_clearance,
+        recovery_exit_clearance_m=recovery_exit_clearance,
         strict_corridor_entry_clearance_m=0.0004,
         latest_outward_step_progress_m=1e-6,
         latest_vertical_step_progress_m=1e-6,
@@ -3290,7 +3296,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
         {
             "latest_vertical_step_progress_m": -0.0003909564934183596,
             "latest_outward_step_progress_m": 0.00006840830888554805,
-            "live_clearance_m": 0.0010835501079612397,
+            "live_clearance_m": 0.00085,
         }
     )
     outward_phase_latched = (
@@ -3306,7 +3312,7 @@ def test_500146_negative_vertical_tail_brakes_before_first_lateral_action():
     restored_clearance = dict(job503204_one_frame_tail)
     restored_clearance.update(
         {
-            "live_clearance_m": 0.00131,
+            "live_clearance_m": 0.001,
             "latest_outward_step_progress_m": 1e-6,
         }
     )

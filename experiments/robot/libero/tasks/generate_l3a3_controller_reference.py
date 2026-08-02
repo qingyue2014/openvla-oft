@@ -4162,7 +4162,8 @@ def _constraint_prioritized_outside_descent_action(
 def _vertical_corridor_reserve_recovery_evidence(
     *,
     live_clearance_m,
-    recovery_trigger_clearance_m,
+    recovery_entry_clearance_m,
+    recovery_exit_clearance_m,
     strict_corridor_entry_clearance_m,
     latest_outward_step_progress_m,
     latest_vertical_step_progress_m,
@@ -4171,7 +4172,8 @@ def _vertical_corridor_reserve_recovery_evidence(
     """Latch a positive-Z/outward brake before corridor reserve is lost."""
     scalars = (
         live_clearance_m,
-        recovery_trigger_clearance_m,
+        recovery_entry_clearance_m,
+        recovery_exit_clearance_m,
         strict_corridor_entry_clearance_m,
         latest_outward_step_progress_m,
         latest_vertical_step_progress_m,
@@ -4179,21 +4181,22 @@ def _vertical_corridor_reserve_recovery_evidence(
     if not all(np.isfinite(value) for value in scalars):
         raise ValueError("vertical-corridor recovery evidence must be finite")
     if not (
-        recovery_trigger_clearance_m
+        recovery_exit_clearance_m
+        > recovery_entry_clearance_m
         > strict_corridor_entry_clearance_m
         >= 0.0
     ):
         raise ValueError(
-            "vertical-corridor recovery trigger must strictly exceed the "
-            "corridor-entry clearance"
+            "vertical-corridor recovery exit must strictly exceed its "
+            "entry and strict corridor clearances"
         )
     entered = bool(
         not recovery_active_before_decision
-        and live_clearance_m <= recovery_trigger_clearance_m
+        and live_clearance_m <= recovery_entry_clearance_m
     )
     exit_accepted = bool(
         recovery_active_before_decision
-        and live_clearance_m > recovery_trigger_clearance_m
+        and live_clearance_m > recovery_exit_clearance_m
         and latest_outward_step_progress_m >= 0.0
         and latest_vertical_step_progress_m >= 0.0
     )
@@ -4219,8 +4222,11 @@ def _vertical_corridor_reserve_recovery_evidence(
         "entered_recovery": entered,
         "exit_accepted": exit_accepted,
         "live_clearance_m": float(live_clearance_m),
-        "recovery_trigger_clearance_m": float(
-            recovery_trigger_clearance_m
+        "recovery_entry_clearance_m": float(
+            recovery_entry_clearance_m
+        ),
+        "recovery_exit_clearance_m": float(
+            recovery_exit_clearance_m
         ),
         "strict_corridor_entry_clearance_m": float(
             strict_corridor_entry_clearance_m
@@ -4235,7 +4241,7 @@ def _vertical_corridor_reserve_recovery_evidence(
             latest_vertical_step_progress_m
         ),
         "exit_requirements": (
-            "live clearance strictly above the recovery trigger plus "
+            "live clearance strictly above the recovery exit gate plus "
             "measured nonnegative outward and vertical progress"
         ),
     }
@@ -4280,8 +4286,11 @@ def _vertical_corridor_reserve_recovery_phase_evidence(
             recovery_evidence["latest_outward_step_progress_m"]
         )
         live_clearance = float(recovery_evidence["live_clearance_m"])
-        trigger_clearance = float(
-            recovery_evidence["recovery_trigger_clearance_m"]
+        entry_clearance = float(
+            recovery_evidence["recovery_entry_clearance_m"]
+        )
+        exit_clearance = float(
+            recovery_evidence["recovery_exit_clearance_m"]
         )
         if (
             phase_before_decision == "vertical_brake"
@@ -4291,14 +4300,14 @@ def _vertical_corridor_reserve_recovery_phase_evidence(
             transition = "vertical_brake_complete_to_outward_restore"
         elif (
             phase_before_decision == "outward_restore"
-            and live_clearance > trigger_clearance
+            and live_clearance > exit_clearance
             and outward_progress >= 0.0
         ):
             phase_after_decision = "exit_brake"
             transition = "outward_restore_complete_to_exit_brake"
         elif (
             phase_before_decision == "exit_brake"
-            and live_clearance <= trigger_clearance
+            and live_clearance <= entry_clearance
         ):
             phase_after_decision = "vertical_brake"
             transition = "exit_brake_clearance_loss_to_vertical_brake"
@@ -13277,9 +13286,14 @@ def _seek_stable_plate_contact(
         + corridor_outward_direction
         * vertical_corridor_balanced_hold_world_step
     )
-    vertical_corridor_reserve_recovery_trigger_clearance = float(
-        corridor_rebuffer_acceptance_clearance
+    vertical_corridor_reserve_recovery_entry_clearance = float(
+        vertical_staging_corridor[
+            "strict_corridor_entry_clearance_m"
+        ]
         + maximum_controller_world_step
+    )
+    vertical_corridor_reserve_recovery_exit_clearance = float(
+        corridor_rebuffer_acceptance_clearance
     )
     if not (
         np.isfinite(vertical_corridor_balanced_hold_world_step)
@@ -13289,10 +13303,13 @@ def _seek_stable_plate_contact(
             np.isfinite(vertical_corridor_balanced_hold_target_xy)
         )
         and np.isfinite(
-            vertical_corridor_reserve_recovery_trigger_clearance
+            vertical_corridor_reserve_recovery_entry_clearance
         )
-        and vertical_corridor_reserve_recovery_trigger_clearance
-        > corridor_rebuffer_acceptance_clearance
+        and np.isfinite(
+            vertical_corridor_reserve_recovery_exit_clearance
+        )
+        and vertical_corridor_reserve_recovery_exit_clearance
+        > vertical_corridor_reserve_recovery_entry_clearance
         > vertical_staging_corridor[
             "strict_corridor_entry_clearance_m"
         ]
@@ -13300,7 +13317,7 @@ def _seek_stable_plate_contact(
         raise RuntimeError(
             "vertical corridor balanced hold is not strictly inside the "
             "existing post-descent controller reserve, or its pre-loss "
-            "recovery trigger is invalid"
+            "recovery hysteresis is invalid"
         )
     structural_seek_context.update(
         {
@@ -13315,12 +13332,18 @@ def _seek_stable_plate_contact(
                 "translation-action bound divided by sqrt(2), retaining "
                 "equal strict action-norm capacity for outward XY and Z"
             ),
-            "vertical_corridor_reserve_recovery_trigger_clearance_m": (
-                vertical_corridor_reserve_recovery_trigger_clearance
+            "vertical_corridor_reserve_recovery_entry_clearance_m": (
+                vertical_corridor_reserve_recovery_entry_clearance
             ),
-            "vertical_corridor_reserve_recovery_trigger_derivation": (
-                "the unchanged formal 0.9 mm corridor clearance plus the "
-                "existing 0.4 mm maximum structural controller world step"
+            "vertical_corridor_reserve_recovery_entry_derivation": (
+                "the unchanged strict 0.4 mm corridor gate plus the existing "
+                "0.4 mm maximum structural controller world step"
+            ),
+            "vertical_corridor_reserve_recovery_exit_clearance_m": (
+                vertical_corridor_reserve_recovery_exit_clearance
+            ),
+            "vertical_corridor_reserve_recovery_exit_derivation": (
+                "the unchanged formal 0.9 mm corridor clearance"
             ),
         }
     )
@@ -14784,8 +14807,11 @@ def _seek_stable_plate_contact(
                             "minimum_outside_clearance_m"
                         ]
                     ),
-                    recovery_trigger_clearance_m=(
-                        vertical_corridor_reserve_recovery_trigger_clearance
+                    recovery_entry_clearance_m=(
+                        vertical_corridor_reserve_recovery_entry_clearance
+                    ),
+                    recovery_exit_clearance_m=(
+                        vertical_corridor_reserve_recovery_exit_clearance
                     ),
                     strict_corridor_entry_clearance_m=float(
                         vertical_staging_corridor[
