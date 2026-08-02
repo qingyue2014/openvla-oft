@@ -487,6 +487,18 @@ action cannot exceed `0.025` before norm allocation. The same cap remains the
 settle trigger, while the unchanged `0.20` total action bound and full
 outward/positive-Z settle brake retain their prior authority. No task, asset,
 target, reserve, physical threshold, or budget changes.
+Job503666 verified that the floor cap operated: each final descent command was
+exactly `-0.025` Z and the first-brake downward tail fell from `1.467453` to
+`1.179202 mm`. The descent nevertheless continued after both lateral safety
+responses first reversed sign at step 194 (`-0.019085 mm` EEF-outward and
+`-0.006655 mm` live clearance). Two more negative-Z commands spent another
+`0.289 mm` of reserve before the absolute height trigger entered settle. The
+vertical-corridor descent now enters the existing full outward/positive-Z
+settle brake as soon as either executed lateral response becomes negative, or
+at the unchanged geometric height line, whichever occurs first. The trigger
+source and both response scalars are recorded. This adds no tolerance: zero is
+the exact directional boundary, and all action bounds, physical reserves,
+tasks, assets, targets, and budgets remain unchanged.
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

@@ -9643,6 +9643,75 @@ def _outside_side_step_response_evidence(
     }
 
 
+def _vertical_corridor_descent_settle_trigger_evidence(
+    *,
+    after_eef_z,
+    settle_brake_trigger_z_m,
+    step_response,
+):
+    """Trigger full braking at the height line or first lateral reversal."""
+    scalars = (
+        after_eef_z,
+        settle_brake_trigger_z_m,
+        step_response["eef_outward_step_progress_m"],
+        step_response["outside_clearance_step_progress_m"],
+    )
+    if not all(np.isfinite(value) for value in scalars):
+        raise ValueError(
+            "vertical-corridor descent trigger evidence must be finite"
+        )
+    geometric_height_triggered = bool(
+        after_eef_z <= settle_brake_trigger_z_m
+    )
+    eef_outward_hazard_response = bool(
+        step_response["eef_outward_step_progress_m"] < 0.0
+    )
+    outside_clearance_hazard_response = bool(
+        step_response["outside_clearance_step_progress_m"] < 0.0
+    )
+    hazard_response_triggered = bool(
+        eef_outward_hazard_response
+        or outside_clearance_hazard_response
+    )
+    trigger_sources = []
+    if geometric_height_triggered:
+        trigger_sources.append("geometric_height_line")
+    if eef_outward_hazard_response:
+        trigger_sources.append("eef_outward_response_reversed")
+    if outside_clearance_hazard_response:
+        trigger_sources.append("outside_clearance_response_reversed")
+    return {
+        "triggered": bool(
+            geometric_height_triggered or hazard_response_triggered
+        ),
+        "geometric_height_triggered": geometric_height_triggered,
+        "hazard_response_triggered": hazard_response_triggered,
+        "eef_outward_hazard_response": (
+            eef_outward_hazard_response
+        ),
+        "outside_clearance_hazard_response": (
+            outside_clearance_hazard_response
+        ),
+        "after_eef_z_m": float(after_eef_z),
+        "settle_brake_trigger_z_m": float(
+            settle_brake_trigger_z_m
+        ),
+        "eef_outward_step_progress_m": float(
+            step_response["eef_outward_step_progress_m"]
+        ),
+        "outside_clearance_step_progress_m": float(
+            step_response["outside_clearance_step_progress_m"]
+        ),
+        "trigger_sources": trigger_sources,
+        "formula": (
+            "enter the existing full outward/positive-Z settle brake at "
+            "the geometric height line or immediately after the first "
+            "executed descent frame whose EEF-outward or live-clearance "
+            "response has the registered hazardous sign"
+        ),
+    }
+
+
 def _outside_side_lateral_settle_evidence(
     *,
     before_guard,
@@ -9824,8 +9893,8 @@ def _outside_side_staircase_settle_trigger(
         return None
     return {
         "policy": (
-            "preventive staircase: every constraint-prioritized descent "
-            "step is followed by measured outside-XY-prioritized active "
+            "preventive staircase: a geometric-height or hazard-response "
+            "trigger is followed by measured outside-XY-prioritized active "
             "braking before another descent can be issued"
         ),
         "trigger_guard_step": int(guard_step),
@@ -18423,12 +18492,21 @@ def _seek_stable_plate_contact(
             after_eef = np.asarray(
                 rollout.obs["robot0_eef_pos"], dtype=float
             )
-            if (
-                after_eef[2]
-                <= active_vertical_corridor_envelope[
-                    "settle_brake_trigger_z_m"
-                ]
-            ):
+            descent_settle_trigger_evidence = (
+                _vertical_corridor_descent_settle_trigger_evidence(
+                    after_eef_z=float(after_eef[2]),
+                    settle_brake_trigger_z_m=float(
+                        active_vertical_corridor_envelope[
+                            "settle_brake_trigger_z_m"
+                        ]
+                    ),
+                    step_response=current_step_response,
+                )
+            )
+            feedback["descent_settle_trigger_evidence"] = (
+                descent_settle_trigger_evidence
+            )
+            if descent_settle_trigger_evidence["triggered"]:
                 lateral_settle_state = (
                     _outside_side_staircase_settle_trigger(
                         feedback_mode=(
@@ -18440,6 +18518,9 @@ def _seek_stable_plate_contact(
                 )
                 feedback["lateral_settle_trigger"] = (
                     lateral_settle_state
+                )
+                lateral_settle_state["trigger_evidence"] = (
+                    descent_settle_trigger_evidence
                 )
                 structural_stage = "vertical_corridor_settle"
         feedback["stage_after_action"] = structural_stage

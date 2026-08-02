@@ -16,6 +16,7 @@ from experiments.robot.libero.tasks.generate_l3a3_controller_reference import (
     _contact_depth_sample_validity,
     _contact_progress_saturation_evidence,
     _constraint_prioritized_outside_descent_action,
+    _vertical_corridor_descent_settle_trigger_evidence,
     _vertical_corridor_reserve_recovery_evidence,
     _vertical_corridor_reserve_recovery_phase_evidence,
     _compiled_corridor_reserve_action,
@@ -3331,6 +3332,48 @@ def test_job503665_geometric_floor_caps_literal_descent_action():
         floor_action
     )
     assert np.linalg.norm(action[:3]) < 0.20
+
+
+def test_job503666_descent_hazard_response_triggers_full_settle():
+    evidence = _vertical_corridor_descent_settle_trigger_evidence(
+        after_eef_z=0.9243295177336848,
+        settle_brake_trigger_z_m=0.9198414056548501,
+        step_response={
+            "eef_outward_step_progress_m": -0.000019084574608418947,
+            "outside_clearance_step_progress_m": -0.000006655239689928871,
+        },
+    )
+    assert evidence["triggered"] is True
+    assert evidence["geometric_height_triggered"] is False
+    assert evidence["hazard_response_triggered"] is True
+    assert evidence["eef_outward_hazard_response"] is True
+    assert evidence["outside_clearance_hazard_response"] is True
+    assert evidence["trigger_sources"] == [
+        "eef_outward_response_reversed",
+        "outside_clearance_response_reversed",
+    ]
+
+    safe_above_line = _vertical_corridor_descent_settle_trigger_evidence(
+        after_eef_z=0.924,
+        settle_brake_trigger_z_m=0.919,
+        step_response={
+            "eef_outward_step_progress_m": 0.0001,
+            "outside_clearance_step_progress_m": 0.0001,
+        },
+    )
+    assert safe_above_line["triggered"] is False
+
+    geometric = _vertical_corridor_descent_settle_trigger_evidence(
+        after_eef_z=0.918,
+        settle_brake_trigger_z_m=0.919,
+        step_response={
+            "eef_outward_step_progress_m": 0.0001,
+            "outside_clearance_step_progress_m": 0.0001,
+        },
+    )
+    assert geometric["triggered"] is True
+    assert geometric["geometric_height_triggered"] is True
+    assert geometric["hazard_response_triggered"] is False
 
 
 def test_500099_every_descent_requires_preventive_active_braking_settle():
@@ -10340,9 +10383,19 @@ def test_plate_push_allows_contact_gaps_but_requires_push_evidence():
         'elif stage_before_action == "vertical_corridor_descent":', 1
     )[1].split('feedback["stage_after_action"]', 1)[0]
     assert "settle_brake_trigger_z_m" in settle_transition
+    assert (
+        "_vertical_corridor_descent_settle_trigger_evidence("
+        in settle_transition
+    )
+    assert 'descent_settle_trigger_evidence["triggered"]' in (
+        settle_transition
+    )
+    assert 'lateral_settle_state["trigger_evidence"]' in (
+        settle_transition
+    )
     trigger_condition = settle_transition.split(
-        "if (", 1
-    )[1].split("):", 1)[0]
+        'if descent_settle_trigger_evidence["triggered"]:', 1
+    )[0]
     assert "latest_outside_side_guard" not in trigger_condition
     assert (
         'stage_before_action == "fixed_safe_z_lateral_approach"'
