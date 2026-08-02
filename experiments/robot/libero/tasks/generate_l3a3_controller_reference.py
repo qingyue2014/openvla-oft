@@ -5508,6 +5508,13 @@ def _fixed_safe_z_lateral_hold_action(
     pre_release_slew_z_action = float(commanded_z_action)
     outward_release_slew_applied = False
     positive_z_release_slew_applied = False
+    positive_z_release_slew_bypass_requested = bool(
+        positive_response_unload_active
+        or (
+            above_safe_z_band
+            and measured_vertical_step_progress_m >= 0.0
+        )
+    )
     if release_slew_enabled:
         previous_outward_action = float(
             np.dot(
@@ -5550,6 +5557,7 @@ def _fixed_safe_z_lateral_hold_action(
         if (
             previous_commanded_action_xyz[2] > 0.0
             and commanded_z_action < minimum_released_positive_z_action
+            and not positive_z_release_slew_bypass_requested
         ):
             positive_z_release_slew_applied = True
             commanded_z_action = minimum_released_positive_z_action
@@ -5659,6 +5667,19 @@ def _fixed_safe_z_lateral_hold_action(
         "positive_z_release_slew_applied": (
             positive_z_release_slew_applied
         ),
+        "positive_z_release_slew_bypass_requested": (
+            positive_z_release_slew_bypass_requested
+        ),
+        "positive_z_release_slew_bypass_reason": (
+            "inside_band_positive_response_unload"
+            if positive_response_unload_active
+            else "above_band_nonnegative_response"
+            if (
+                above_safe_z_band
+                and measured_vertical_step_progress_m >= 0.0
+            )
+            else None
+        ),
         "vertical_stability_confirmation_hold_requested": bool(
             vertical_stability_confirmation_hold
         ),
@@ -5744,7 +5765,10 @@ def _fixed_safe_z_lateral_hold_action(
             "downward_vertical_response_uses_full_outward_brake": True,
             "below_safe_z_recovery_uses_full_outward_brake": True,
             "positive_safety_brake_increase_remains_immediate": True,
-            "positive_safety_brake_release_is_rate_limited": True,
+            "positive_safety_brake_release_is_rate_limited_unless_"
+            "safe_z_unload_is_required": True,
+            "safe_z_upward_overshoot_uses_guard_bounded_pd_command": True,
+            "downward_tail_retains_positive_release_slew": True,
             "first_stable_frame_uses_neutral_z_confirmation": True,
             "noninward_refill_band_uses_exact_nominal_action": True,
             "recovery_release_requires_exit_headroom": True,

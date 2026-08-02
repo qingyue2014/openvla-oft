@@ -746,6 +746,20 @@ earlier valid handoff. Predictions below `-0.100 mm` retain the full `0.025`
 confirmation in either phase. All measured-response, collision, task, action,
 and budget gates remain unchanged.
 
+Job503872 reached fixed-safe-Z return early enough to execute 44 lateral-stage
+actions, but exposed a prohibited coverage loss at step 227. The EEF was
+already `1.201 mm` above its captured safe Z and rising by `0.595 mm`; the
+guard-bounded PD command requested `-0.029885` Z action. The generic positive-Z
+release slew overrode it with `+0.15`, after which the EEF rose another
+`0.703 mm` and both fingers moved fully above the rim center. The hard stop
+correctly invalidated the run. Positive-Z release slew is now bypassed only
+when the EEF is inside the safe-Z band with a measured positive response, or
+above the band with a nonnegative response. The already computed PD command
+still passes its table-reserve, outside-recovery, native-bound, and negative-Z
+caps. Every downward response and every below-band state retains the positive
+release slew and full brake behavior. Rim coverage and all other formal gates
+remain unchanged.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.

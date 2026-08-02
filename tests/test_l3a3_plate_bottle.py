@@ -1276,7 +1276,8 @@ def test_fixed_safe_z_lateral_hold_slews_job503647_positive_release():
     assert evidence["outward_release_slew_applied"] is True
     assert evidence["positive_z_release_slew_applied"] is True
     assert evidence["proof"][
-        "positive_safety_brake_release_is_rate_limited"
+        "positive_safety_brake_release_is_rate_limited_unless_"
+        "safe_z_unload_is_required"
     ] is True
 
     released_action, released_evidence = _fixed_safe_z_lateral_hold_action(
@@ -1312,6 +1313,71 @@ def test_fixed_safe_z_lateral_hold_slews_job503647_positive_release():
         np.nextafter(-0.005, 0.0)
     )
     assert released_evidence["outward_release_slew_applied"] is False
+
+
+def test_fixed_safe_z_lateral_hold_unloads_job503872_upward_overshoot():
+    native_spec = {
+        "source": "env.action_spec",
+        "action_dimension": 7,
+        "low": (-np.ones(7, dtype=float)).tolist(),
+        "high": np.ones(7, dtype=float).tolist(),
+        "runtime_resolved": True,
+    }
+    action, evidence = _fixed_safe_z_lateral_hold_action(
+        current_eef=np.array(
+            [0.13310556347028446, -0.023017811544468393, 0.9217823050405874]
+        ),
+        lateral_target_xy=np.array(
+            [0.13242106705090634, -0.02850777957668001]
+        ),
+        lateral_position_tolerance_m=0.005,
+        fixed_safe_z_m=0.920581288496378,
+        vertical_position_tolerance_m=0.0004,
+        measured_vertical_step_progress_m=0.0005949002649012769,
+        measured_outward_step_progress_m=0.00008131013812057164,
+        outside_side_guard={
+            "minimum_outside_clearance_m": 0.0017099488915500033,
+            "required_outside_clearance_m": np.nextafter(0.0, np.inf),
+            "finger_table_vertical_clearance_m": 0.00909988155965491,
+            "required_finger_table_clearance_m": np.nextafter(
+                0.0, np.inf
+            ),
+        },
+        outward_direction_xy=np.array([1.0, 0.0]),
+        gripper=-1.0,
+        position_action_scale=0.08,
+        maximum_lateral_translation_action=0.005,
+        maximum_safety_brake_action=0.20,
+        strict_outside_clearance_m=0.0004,
+        strict_table_clearance_m=0.0004,
+        closed_loop_hazard_response_bound_m=0.0011,
+        full_outward_brake_clearance_m=0.00095,
+        progress_resolution_m=0.00005,
+        derivative_gain=2.0,
+        native_action_spec=native_spec,
+        previous_commanded_action_xyz=np.array([0.15, 0.0, 0.20]),
+        maximum_positive_safety_release_action=0.05,
+    )
+    expected_guard_bounded_z = (
+        0.920581288496378
+        - 0.9217823050405874
+        - 2.0 * 0.0005949002649012769
+    ) / 0.08
+    assert action[:3] == pytest.approx(
+        [0.10, 0.0, expected_guard_bounded_z]
+    )
+    assert evidence["above_safe_z_band"] is True
+    assert evidence["positive_z_release_slew_applied"] is False
+    assert evidence[
+        "positive_z_release_slew_bypass_requested"
+    ] is True
+    assert evidence[
+        "positive_z_release_slew_bypass_reason"
+    ] == "above_band_nonnegative_response"
+    assert evidence["predicted_table_clearance_m"] > 0.0004
+    assert evidence["proof"][
+        "safe_z_upward_overshoot_uses_guard_bounded_pd_command"
+    ] is True
 
 
 def test_fixed_safe_z_lateral_hold_confirms_job503649_with_neutral_z():
