@@ -121,6 +121,8 @@ def test_runner_is_native_only_event_based_and_formal_fail_closed():
     assert "libero_90" not in runner
     assert "verify_human_approval" in runner
     assert "formal) run_formal" in runner
+    assert '--human-approval "${HUMAN_APPROVAL}"' in runner
+    assert '--smoke-report "${SMOKE_REPORT}"' in runner
     assert 'NUM_STATES="${NUM_STATES:-20}"' in runner
     assert 'FORMAL_WAIT_STEPS=10' in runner
     assert "gs://openpi-assets/checkpoints/pi05_libero" in wrapper

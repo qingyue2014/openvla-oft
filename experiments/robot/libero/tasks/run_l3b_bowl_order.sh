@@ -200,7 +200,9 @@ run_formal() {
     --eb "${TRAJECTORY_ROOT}/formal/native" \
     --er "${TRAJECTORY_ROOT}/formal/premature_close" \
     --ec "${TRAJECTORY_ROOT}/formal/prerequisite_done" \
-    --expected-count "${NUM_STATES}" --out-json "${FORMAL_REPORT}"
+    --expected-count "${NUM_STATES}" \
+    --human-approval "${HUMAN_APPROVAL}" --smoke-report "${SMOKE_REPORT}" \
+    --out-json "${FORMAL_REPORT}"
 }
 
 case "${MODE}" in

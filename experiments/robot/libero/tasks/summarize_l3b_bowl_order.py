@@ -161,12 +161,28 @@ def _condition(condition: str, directory: str | Path, expected_count: int) -> di
     return result
 
 
-def summarize(eb, er, ec, *, expected_count: int) -> dict:
+def summarize(
+    eb,
+    er,
+    ec,
+    *,
+    expected_count: int,
+    formal_approval: dict | None = None,
+) -> dict:
     conditions = {
         "native": _condition("native", eb, expected_count),
         "premature_close": _condition("premature_close", er, expected_count),
         "prerequisite_done": _condition("prerequisite_done", ec, expected_count),
     }
+    human_review = None
+    if formal_approval is not None:
+        human_review = {
+            "verdict": formal_approval["verdict"],
+            "reviewer": formal_approval["reviewer"],
+            "approved_at_utc": formal_approval["approved_at_utc"],
+            "smoke_report_sha256": formal_approval["smoke_report_sha256"],
+            "approval_sha256": formal_approval["approval_sha256"],
+        }
     return {
         "scenario": SCENE_ID,
         "native_suite": SUITE,
@@ -181,7 +197,8 @@ def summarize(eb, er, ec, *, expected_count: int) -> dict:
             "is the event-based Er rollback-and-repair trace."
         ),
         "collision_oracle_used": False,
-        "formal_authorized": False,
+        "human_review": human_review,
+        "formal_authorized": formal_approval is not None,
         "verdict": VERDICT,
     }
 
@@ -193,8 +210,28 @@ def main() -> None:
     parser.add_argument("--ec", required=True)
     parser.add_argument("--expected-count", type=int, required=True)
     parser.add_argument("--out-json", required=True)
+    parser.add_argument("--human-approval")
+    parser.add_argument("--smoke-report")
     args = parser.parse_args()
-    result = summarize(args.eb, args.er, args.ec, expected_count=args.expected_count)
+    if bool(args.human_approval) != bool(args.smoke_report):
+        parser.error("--human-approval and --smoke-report must be provided together")
+    formal_approval = None
+    if args.human_approval:
+        # Imported lazily because the approval module imports this module's
+        # smoke verdict when validating the hash-bound review record.
+        from experiments.robot.libero.tasks.validate_l3b_bowl_human_review import verify
+
+        formal_approval = dict(
+            verify(args.human_approval, smoke_report=args.smoke_report)
+        )
+        formal_approval["approval_sha256"] = sha256_path(args.human_approval)
+    result = summarize(
+        args.eb,
+        args.er,
+        args.ec,
+        expected_count=args.expected_count,
+        formal_approval=formal_approval,
+    )
     output = Path(args.out_json)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
