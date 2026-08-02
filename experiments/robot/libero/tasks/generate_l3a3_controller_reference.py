@@ -12652,11 +12652,16 @@ def _seek_stable_plate_contact(
                 corridor_rebuffer_target.tolist()
             ),
             "descent_motion_reversal_brake": {
-                "eef_outward_step_progress_threshold_m": 0.0,
-                "outside_clearance_step_progress_threshold_m": 0.0,
+                "maximum_permitted_inward_step_m": float(
+                    args.minimum_saturated_waypoint_progress
+                ),
+                "threshold_source": (
+                    "existing minimum_saturated_waypoint_progress"
+                ),
                 "threshold_rule": (
-                    "brake on either strictly negative measured response; "
-                    "no empirical Z threshold"
+                    "brake when either measured outward or clearance "
+                    "progress is below the negative deadband; no empirical "
+                    "Z threshold"
                 ),
             },
             "structural_route_order": [
@@ -13951,13 +13956,13 @@ def _seek_stable_plate_contact(
             )
             if current_step_response[
                 "eef_outward_step_progress_m"
-            ] < 0.0:
+            ] < -float(args.minimum_saturated_waypoint_progress):
                 descent_corridor_lateral_violations.add(
                     "eef_inward_step_during_pure_z_descent"
                 )
             if current_step_response[
                 "outside_clearance_step_progress_m"
-            ] < 0.0:
+            ] < -float(args.minimum_saturated_waypoint_progress):
                 descent_corridor_lateral_violations.add(
                     "outside_clearance_decreased_during_pure_z_descent"
                 )
@@ -14044,19 +14049,20 @@ def _seek_stable_plate_contact(
                 if after_eef[2] > (
                     overhead_staging_z + args.position_tolerance
                 ):
-                    active_overhead_descent_translation_action = float(
-                        max(
-                            structural_max_translation_action,
-                            previous_active_translation_action / 2.0,
+                    if brake_reason_before_recovery != "lateral_drift":
+                        active_overhead_descent_translation_action = float(
+                            max(
+                                structural_max_translation_action,
+                                previous_active_translation_action / 2.0,
+                            )
                         )
-                    )
-                    active_overhead_descent_world_step = float(
-                        args.position_action_scale
-                        * active_overhead_descent_translation_action
-                    )
-                    active_overhead_descent_brake_trigger_buffer = float(
-                        2.0 * active_overhead_descent_world_step
-                    )
+                        active_overhead_descent_world_step = float(
+                            args.position_action_scale
+                            * active_overhead_descent_translation_action
+                        )
+                        active_overhead_descent_brake_trigger_buffer = float(
+                            2.0 * active_overhead_descent_world_step
+                        )
                     if brake_reason_before_recovery == "lateral_drift":
                         structural_stage = "vertical_tail_zero_confirmation"
                         recovered_event = (
@@ -14092,6 +14098,10 @@ def _seek_stable_plate_contact(
                         ),
                         "next_translation_action_bound": (
                             active_overhead_descent_translation_action
+                        ),
+                        "translation_action_bound_reduced": bool(
+                            active_overhead_descent_translation_action
+                            < previous_active_translation_action
                         ),
                         "next_brake_trigger_buffer_m": (
                             active_overhead_descent_brake_trigger_buffer

@@ -110,15 +110,19 @@ live lateral corridor-entry evidence: XY error to the unchanged compiled target
 must remain within the existing `position_tolerance` (`0.005 m`), and the live
 outside clearance must remain strictly above the compiled full
 `corridor_clearance_m`. The measured EEF outward step progress and outside-
-clearance step progress must also both remain nonnegative; either strictly
-negative response is an event-driven controller-authority reversal, with no
-empirical Z threshold. If any of these lateral predicates fails, the same
-positive-Z brake starts immediately, even above the staging-height brake
-buffer. Once measured vertical progress is nonnegative, a zero-translation
-confirmation is required and the XY correction runs at that higher stopped Z
-under the same all-55-pair `0.008 m`-step buffer. The brake threshold and resume
-threshold form explicit hysteresis: descent stops when full corridor clearance
-is lost or a measured inward response begins, but
+clearance step progress are also checked against the existing
+`minimum_saturated_waypoint_progress` (`0.00005 m`) resolution. A response below
+`-0.00005 m` is an event-driven controller-authority reversal; smaller signed
+changes remain inside that existing measurement deadband, and no empirical Z
+threshold is introduced. If any lateral predicate fails, the same positive-Z
+brake starts immediately, even above the staging-height brake buffer. Once
+measured vertical progress is nonnegative, a zero-translation confirmation is
+required and the XY correction runs at that higher stopped Z under the same
+all-55-pair `0.008 m`-step buffer. A lateral-reversal brake preserves the current
+bounded descent action cap; only a staging-height vertical-tail recovery above
+the staging tolerance applies the geometric cap-halving schedule. The brake and
+resume thresholds form explicit hysteresis: descent stops when full corridor
+clearance is lost or a measured inward response exceeds the deadband, but
 cannot resume merely by recrossing that boundary; zero confirmation or lateral
 correction must restore `corridor_clearance_m` plus one existing structural
 controller world step (`0.0004 m`) at a target shifted only that distance in the

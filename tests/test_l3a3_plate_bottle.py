@@ -3740,6 +3740,10 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
     assert '"corridor_clearance_m"' in descent_transition
     assert '"eef_outward_step_progress_m"' in descent_transition
     assert '"outside_clearance_step_progress_m"' in descent_transition
+    assert (
+        "-float(args.minimum_saturated_waypoint_progress)"
+        in descent_transition
+    )
     assert '"eef_inward_step_during_pure_z_descent"' in (
         descent_transition
     )
@@ -3755,6 +3759,9 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         'elif stage_before_action == "vertical_tail_brake":', 1
     )[1].split('elif stage_before_action == "lateral_rebuffer_brake":', 1)[0]
     assert 'brake_reason_before_recovery == "lateral_drift"' in (
+        brake_transition
+    )
+    assert 'brake_reason_before_recovery != "lateral_drift"' in (
         brake_transition
     )
     assert 'structural_stage = "vertical_tail_zero_confirmation"' in (
@@ -3817,7 +3824,13 @@ def test_500182_high_first_route_orders_xy_before_adaptive_descent():
         in bounded_seek
     )
     assert "corridor_rebuffer_target[:2] += (" in bounded_seek
-    assert '"no empirical Z threshold"' in bounded_seek
+    assert '"Z threshold"' in bounded_seek
+    assert '"progress is below the negative deadband; no empirical "' in (
+        bounded_seek
+    )
+    assert '"existing minimum_saturated_waypoint_progress"' in (
+        bounded_seek
+    )
     controller = CONTROLLER_REFERENCE.read_text()
     assert "after the monotone pure-Z sweep, command pure XY" not in controller
     assert "internal controller substeps" in controller
