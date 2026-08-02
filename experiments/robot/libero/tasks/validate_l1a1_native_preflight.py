@@ -1,4 +1,4 @@
-"""Fail-closed native-task and asset-closure contract for L1-A1 v3.
+"""Fail-closed native-task and asset-closure contract for L1-A1 v4.
 
 The evaluated task is the unmodified ``libero_spatial`` task whose benchmark
 prompt is ``pick up the black bowl next to the ramekin and place it on the
@@ -29,7 +29,7 @@ from experiments.robot.libero.tasks.validate_l1a3_native_preflight import (
 )
 
 
-SCENE_ID = "L1-A1-V3"
+SCENE_ID = "L1-A1-V4"
 TASK_SUITE = "libero_spatial"
 TASK_ID = 1
 TASK_FILE = (
@@ -61,9 +61,9 @@ EXPECTED_RUNTIME_BODIES = (
     "plate_1_main",
 )
 
-VERDICT = "PASS_L1A1_V3_NATIVE_ONLY_PREFLIGHT"
-INTERVENTION_ID = "l1a1_native_ramekin_relation_postwait_v3_c07"
-PHYSICAL_GATE_VERDICT = "PASS_L1A1_V3_POSTWAIT_PHYSICAL_GATE"
+VERDICT = "PASS_L1A1_V4_NATIVE_ONLY_PREFLIGHT"
+INTERVENTION_ID = "l1a1_native_ramekin_relation_postwait_v4_c02_settle500"
+PHYSICAL_GATE_VERDICT = "PASS_L1A1_V4_POSTWAIT_PHYSICAL_GATE"
 FORMAL_WAIT_STEPS = 10
 MAX_RECEPTACLE_TILT_DEG = 1.0
 
@@ -287,7 +287,7 @@ def write_preflight(manifest_path: Path, report_path: Path) -> dict[str, object]
     report_path.write_text(
         "\n".join(
             (
-                "# L1-A1 v3 Native-Only Preflight",
+                "# L1-A1 v4 Native-Only Preflight",
                 "",
                 f"- Verdict: **{VERDICT}**",
                 f"- Selected native task: `{TASK_SUITE}/{TASK_FILE}` (id `{TASK_ID}`)",
@@ -356,7 +356,7 @@ def bind_generated_artifacts(
 
     record = json.loads(manifest_path.read_text(encoding="utf-8"))
     if record.get("verdict") != VERDICT:
-        raise ValueError("cannot bind artifacts to an invalid L1-A1-v3 preflight")
+        raise ValueError("cannot bind artifacts to an invalid L1-A1-v4 preflight")
     evaluated: dict[str, dict[str, object]] = {}
     signatures = set()
     for condition, path in condition_paths.items():
@@ -393,7 +393,7 @@ def verify_evaluation_request(
     path = Path(manifest_path).resolve(strict=True)
     record = json.loads(path.read_text(encoding="utf-8"))
     if record.get("verdict") != VERDICT:
-        raise ValueError(f"invalid L1-A1-v3 preflight verdict in {path}")
+        raise ValueError(f"invalid L1-A1-v4 preflight verdict in {path}")
     fresh = validate_native_task(resolve_native_bddl(), Path(task_bddl), task_language)
     for key in (
         "task_suite_name",
@@ -407,14 +407,14 @@ def verify_evaluation_request(
         "libero_commit",
     ):
         if record.get(key) != fresh.get(key):
-            raise ValueError(f"stale or mismatched L1-A1-v3 preflight field: {key}")
+            raise ValueError(f"stale or mismatched L1-A1-v4 preflight field: {key}")
     if (task_suite_name, int(task_id), task_language, policy_prompt) != (
         TASK_SUITE,
         TASK_ID,
         TASK_PROMPT,
         TASK_PROMPT,
     ):
-        raise ValueError("L1-A1-v3 runtime task or prompt mismatch")
+        raise ValueError("L1-A1-v4 runtime task or prompt mismatch")
     states = Path(initial_states_path).resolve(strict=True)
     matched = [
         evidence
@@ -422,10 +422,10 @@ def verify_evaluation_request(
         if Path(evidence["path"]) == states
     ]
     if len(matched) != 1 or matched[0].get("sha256") != _file_sha256(states):
-        raise ValueError("L1-A1-v3 runtime state artifact is not bound to the preflight")
+        raise ValueError("L1-A1-v4 runtime state artifact is not bound to the preflight")
     pairing = Path(record["pairing_manifest"]).resolve(strict=True)
     if _file_sha256(pairing) != record.get("pairing_manifest_sha256"):
-        raise ValueError("L1-A1-v3 pairing manifest changed after preflight binding")
+        raise ValueError("L1-A1-v4 pairing manifest changed after preflight binding")
     verify_state_file(states, fresh)
     print(f"Verdict: {VERDICT} (runtime recheck)")
     return record
@@ -436,13 +436,13 @@ def verify_runtime_asset_inventory(manifest_path: str | Path, model) -> dict[str
     if record.get("asset_inventory_sha256") != _json_sha256(
         {"fixtures": EXPECTED_FIXTURES, "objects": EXPECTED_OBJECTS}
     ):
-        raise ValueError("L1-A1-v3 native asset inventory signature mismatch")
+        raise ValueError("L1-A1-v4 native asset inventory signature mismatch")
     resolved: dict[str, int] = {}
     for body in EXPECTED_RUNTIME_BODIES:
         try:
             resolved[body] = int(model.body_name2id(body))
         except Exception as exc:
-            raise ValueError(f"L1-A1-v3 native body missing at runtime: {body}") from exc
+            raise ValueError(f"L1-A1-v4 native body missing at runtime: {body}") from exc
     return resolved
 
 
@@ -450,10 +450,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--manifest",
-        default="experiments/robot/libero/tasks/l1a1_v3_native_preflight.json",
+        default="experiments/robot/libero/tasks/l1a1_v4_native_preflight.json",
     )
     parser.add_argument(
-        "--report", default="experiments/logs/l1a1_v3_native_preflight.md"
+        "--report", default="experiments/logs/l1a1_v4_native_preflight.md"
     )
     args = parser.parse_args()
     write_preflight(Path(args.manifest), Path(args.report))

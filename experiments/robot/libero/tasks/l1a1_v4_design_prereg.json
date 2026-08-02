@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "scene": "L1-A1-V4",
+  "status": "FROZEN_PRE_POLICY",
+  "learned_policy_rollouts_observed": 0,
+  "native_task": {
+    "suite": "libero_spatial",
+    "task_id": 1,
+    "bddl": "pick_up_the_black_bowl_next_to_the_ramekin_and_place_it_on_the_plate.bddl",
+    "prompt": "pick up the black bowl next to the ramekin and place it on the plate",
+    "goal_predicates": [
+      "On akita_black_bowl_1 plate_1"
+    ]
+  },
+  "predecessors": [
+    "experiments/robot/libero/tasks/l1a1_v2_invalidation.json",
+    "experiments/robot/libero/tasks/l1a1_v3_invalidation.json"
+  ],
+  "candidate_selection": {
+    "rule": "experiments/robot/libero/tasks/l1a1_v4_candidate_selection_prereg.json",
+    "superpod_job_id": "502640",
+    "immutable_commit": "5818ecf498f12017a901e91004c99cd19485b526",
+    "artifact": "experiments/logs/l1a1_robust_geometry_scan.json",
+    "artifact_sha256": "e41bd66cc92da4b9e2793ceb46ffe57996af6215d8d8d2f006a80765d12b4bf3",
+    "result": "150/150 candidate-state pairs pass",
+    "selected_candidate": "C02",
+    "scores": {
+      "C01": 1.3549766284104612,
+      "C02": 1.5356130108313355,
+      "C04": 1.4340463551972533
+    },
+    "C02_across_state_minima": {
+      "relation_margin_m": 0.10583642603109064,
+      "bowl_distance_m": 0.28821890611551565,
+      "policy_view_centroid_separation_px": 27.64103419496404,
+      "referent_pixels": 415
+    }
+  },
+  "frozen_intervention": {
+    "generator_seed": 42,
+    "construction_settle_steps": 500,
+    "target_xy": [-0.06, 0.04],
+    "ramekin_xy": [-0.225, 0.04],
+    "ec_lure_xy": [0.22, -0.15],
+    "er_lure_xy": "paired Eb target XY",
+    "target_landmark_max_distance_m": 0.19,
+    "minimum_relation_margin_m": 0.06,
+    "minimum_bowl_distance_m": 0.16
+  },
+  "intervention_allowlist": {
+    "Eb_to_Er": [
+      "akita_black_bowl_1_main free joint",
+      "akita_black_bowl_2_main free joint",
+      "glazed_rim_porcelain_ramekin_1_main free joint"
+    ],
+    "Er_to_Ec": [
+      "akita_black_bowl_2_main free joint"
+    ],
+    "all_other_state_fields": "paired within 1e-10"
+  },
+  "acceptance_thresholds": {
+    "formal_wait_steps": 10,
+    "confirmation_steps": 5,
+    "maximum_receptacle_tilt_deg": 1.0,
+    "maximum_presettled_wait_motion_m": 0.001,
+    "minimum_agentview_pixels": 80,
+    "minimum_centroid_separation_px": 18,
+    "maximum_unallowed_qpos_qvel_error": 1e-10
+  },
+  "next_gate": "generate and validate all 50 frozen Eb/Er/Ec state pairs, download exact first-policy-observation images, and stop for explicit human review"
+}
