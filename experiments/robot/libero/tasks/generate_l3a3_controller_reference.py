@@ -5261,6 +5261,10 @@ def _fixed_safe_z_lateral_hold_action(
             raise ValueError(
                 "fixed-safe-Z positive safety release inputs are invalid"
             )
+    previous_xy_action_neutral = bool(
+        release_slew_enabled
+        and np.all(previous_commanded_action_xyz[:2] == 0.0)
+    )
     live_outside_clearance = float(
         outside_side_guard["minimum_outside_clearance_m"]
     )
@@ -5499,8 +5503,12 @@ def _fixed_safe_z_lateral_hold_action(
         and inside_safe_z_band
         and abs(measured_vertical_step_progress_m)
         <= progress_resolution_m
+        and abs(measured_outward_step_progress_m)
+        <= progress_resolution_m
         and live_outside_clearance > outside_recovery_exit_clearance
         and live_table_clearance > outside_recovery_exit_clearance
+        and not outside_recovery_active
+        and previous_xy_action_neutral
     )
     if (
         vertical_stability_confirmation_hold
@@ -5857,6 +5865,7 @@ def _fixed_safe_z_lateral_hold_action(
         "vertical_stability_confirmation_hold_eligible": (
             vertical_stability_confirmation_hold_eligible
         ),
+        "previous_xy_action_neutral": previous_xy_action_neutral,
         "vertical_stability_confirmation_hold_applied": (
             vertical_stability_confirmation_hold_applied
         ),
@@ -6000,6 +6009,9 @@ def _fixed_safe_z_lateral_hold_action(
             "vertical_capture_removes_only_inward_component": True,
             "outside_recovery_preserves_bounded_tangential_return": True,
             "first_stable_frame_uses_neutral_z_confirmation": True,
+            "neutral_z_confirmation_requires_stable_outward_response": True,
+            "neutral_z_confirmation_requires_neutral_preceding_xy": True,
+            "neutral_z_confirmation_excludes_active_outside_recovery": True,
             "noninward_refill_band_uses_exact_nominal_action": True,
             "recovery_release_requires_exit_headroom": True,
             "outside_recovery_suspends_negative_z": True,
@@ -17814,6 +17826,8 @@ def _seek_stable_plate_contact(
                 <= fixed_safe_z_position_tolerance
                 and abs(latest_vertical_step_progress_m)
                 <= args.minimum_saturated_waypoint_progress
+                and abs(latest_outward_step_progress_m)
+                <= args.minimum_saturated_waypoint_progress
                 and pre_action_guard["minimum_outside_clearance_m"]
                 > fixed_safe_z_recovery_exit_clearance
                 and pre_action_guard[
@@ -17821,6 +17835,12 @@ def _seek_stable_plate_contact(
                 ]
                 > (
                     fixed_safe_z_recovery_exit_clearance
+                )
+                and fixed_safe_z_previous_commanded_action_xyz
+                is not None
+                and np.all(
+                    fixed_safe_z_previous_commanded_action_xyz[:2]
+                    == 0.0
                 )
             )
             fixed_safe_z_stable_count = (

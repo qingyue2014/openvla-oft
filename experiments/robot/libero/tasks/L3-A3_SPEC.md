@@ -915,6 +915,20 @@ inside the unchanged `5 mm` lateral tolerance. This uses existing hysteresis
 and acceptance values; no threshold, route, budget, task, inventory, state,
 prompt, goal, or intervention changes.
 
+Job503904 reached the first stable-count frame and executed the mandatory
+neutral Z confirmation. The pre-state passed the unchanged height, vertical-
+response, lateral-position, outside/table, and physical guards, but its
+preceding XY action was still `+0.15` and its outward response was a meaningful
+`-0.052273 mm`. The confirmation frame therefore reactivated full `+0.20`
+outward recovery at the same instant that Z changed from `0.145627` to exact
+zero, producing a `-0.797109 mm` vertical response. Neutral Z confirmation now
+additionally requires the same existing `0.05 mm` response resolution on the
+outward axis, no active outside recovery, and an exactly neutral preceding XY
+command. Captured Z tracking remains active until those stricter decoupling
+conditions pass. The neutral Z action itself and every threshold, route,
+budget, task, inventory, state, prompt, goal, and intervention remain
+unchanged.
+
 If that descent creates controller-coupled XY drift, the still-overhead return
 to the corridor uses a separate `0.10` three-dimensional action-norm cap only
 after the all-pair buffer is recomputed for its `0.008 m` nominal world step.
